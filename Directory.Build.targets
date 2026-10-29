@@ -1,0 +1,13 @@
+<Project>
+  <!-- Release builds are self-contained: they carry the .NET runtime of the SDK that built them.
+       Refuse an SDK whose runtime is older than the last security fix that touches Provenance:
+       10.0.14 fixes the Brotli decoder (CVE-2026-111497) that reads patch-mirror packs.
+       Raise MinimumBundledRuntime when a later .NET security update matters. -->
+  <PropertyGroup>
+    <MinimumBundledRuntime>10.0.14</MinimumBundledRuntime>
+  </PropertyGroup>
+  <Target Name="RequirePatchedRuntime" BeforeTargets="Build;Publish">
+    <Error Condition="$([System.Version]::Parse('$(BundledNETCoreAppPackageVersion.Split(`-`)[0])').CompareTo($([System.Version]::Parse('$(MinimumBundledRuntime)')))) &lt; 0"
+           Text="This SDK ($(NETCoreSdkVersion)) bundles .NET $(BundledNETCoreAppPackageVersion), older than $(MinimumBundledRuntime). Install the current .NET 10 SDK before you build Provenance." />
+  </Target>
+</Project>

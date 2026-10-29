@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Provenance.Common/Provenance.Common.csproj" />
+    <Project Path="src/Provenance.Launcher/Provenance.Launcher.csproj" />
+    <Project Path="src/Provenance.Wpf/Provenance.Wpf.csproj" />
+  </Folder>
+</Solution>

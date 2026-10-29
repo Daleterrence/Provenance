@@ -1,0 +1,72 @@
+<Window x:Class="Provenance.Wpf.Views.AccountDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        Title="Account" Width="440" SizeToContent="Height"
+        WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True"
+        Background="Transparent" WindowStartupLocation="CenterOwner" Icon="/Assets/provenance.ico"
+        TextElement.Foreground="{DynamicResource Text.1}" FontFamily="{DynamicResource Font.Body}"
+        MouseLeftButtonDown="OnDrag">
+
+    <Border Margin="12" CornerRadius="8" Padding="26,22" Background="{DynamicResource Surface.2}"
+            BorderBrush="{DynamicResource Border.Window}" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.55" Color="#000000" />
+        </Border.Effect>
+        <StackPanel>
+            <TextBlock x:Name="HeaderText" Text="Add account" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock x:Name="AgainText" Visibility="Collapsed" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="13"
+                       Text="Provenance needs this account's login details again." />
+            <TextBlock Margin="0,6,0,16" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
+                       Text="Your IDs and passwords are kept in Windows Credential Manager, and Provenance never shows them again. Once you've logged in, the main screen shows your PlayOnline handle and picture instead." />
+
+            <TextBox x:Name="PolIdBox" Margin="0,0,0,10" MaxLength="8" CharacterCasing="Upper"
+                     materialDesign:HintAssist.Hint="PlayOnline ID" materialDesign:HintAssist.Background="{DynamicResource Surface.2}"
+                     materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
+                     Style="{StaticResource DialogTextBox}" />
+            <PasswordBox x:Name="PolPasswordBox" Margin="0,0,0,10"
+                         materialDesign:HintAssist.Hint="PlayOnline password" materialDesign:HintAssist.Background="{DynamicResource Surface.2}"
+                         Style="{StaticResource DialogRevealPasswordBox}" />
+            <TextBox x:Name="SeaIdBox" Margin="0,0,0,10"
+                     materialDesign:HintAssist.Hint="Square Enix ID" materialDesign:HintAssist.Background="{DynamicResource Surface.2}"
+                     Style="{StaticResource DialogTextBox}" />
+            <PasswordBox x:Name="SeaPasswordBox" Margin="0,0,0,8"
+                         materialDesign:HintAssist.Hint="Square Enix password" materialDesign:HintAssist.Background="{DynamicResource Surface.2}"
+                         Style="{StaticResource DialogRevealPasswordBox}" />
+            <TextBlock x:Name="KeepHint" Visibility="Collapsed" Margin="2,0,0,8" FontSize="11"
+                       Foreground="{DynamicResource Text.3}"
+                       Text="Leave a field empty to keep what's already saved." />
+
+            <CheckBox x:Name="OtpBox" Content="This account uses a one-time password (authenticator)"
+                      Foreground="{DynamicResource Text.2}" Margin="0,4,0,0" />
+            <StackPanel x:Name="OtpSourcePanel" Margin="26,10,0,0"
+                        IsEnabled="{Binding IsChecked, ElementName=OtpBox}">
+                <TextBlock Text="Get the code from" FontSize="12" Foreground="{DynamicResource Text.3}" Margin="0,0,0,4" />
+                <ComboBox x:Name="OtpSourceBox" Width="240" HorizontalAlignment="Left"
+                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Padding="10,6"
+                          SelectionChanged="OnOtpSourceChanged">
+                    <ComboBoxItem Content="Type it in each time" Tag="" />
+                    <ComboBoxItem Content="Bitwarden" Tag="bitwarden" />
+                    <ComboBoxItem Content="1Password" Tag="1password" />
+                    <ComboBoxItem Content="KeePassXC" Tag="keepassxc" />
+                </ComboBox>
+                <TextBox x:Name="OtpItemBox" Margin="0,10,0,0" Style="{StaticResource DialogTextBox}"
+                         Padding="10,8" MaxLength="200" Visibility="Collapsed"
+                         materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
+                         materialDesign:HintAssist.Hint="Item name or ID" materialDesign:HintAssist.IsFloating="True" />
+                <TextBlock x:Name="OtpSourceHelp" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Text.3}" Visibility="Collapsed" />
+            </StackPanel>
+
+            <TextBlock x:Name="ErrorText" Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12"
+                       Foreground="{DynamicResource State.Down}" Visibility="Collapsed" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                <Button Content="CANCEL" Width="100" Margin="0,0,10,0" IsCancel="True"
+                        Style="{StaticResource MaterialDesignFlatButton}" Click="OnCancel" />
+                <Button Content="SAVE" Width="100" IsDefault="True"
+                        Style="{StaticResource AccentRaisedButton}" Click="OnSave" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

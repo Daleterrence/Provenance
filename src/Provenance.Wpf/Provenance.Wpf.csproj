@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+    <UseWPF>true</UseWPF>
+    <!-- the tray icon only (NotifyIcon, fully qualified) -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- WFO0003 wants the DPI setting out of app.manifest, but WPF wants it in there -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Provenance.Wpf</RootNamespace>
+    <AssemblyName>Provenance</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\provenance.ico</ApplicationIcon>
+    <Product>Provenance</Product>
+    <!-- Program.Main, so Velopack runs before WPF starts -->
+    <StartupObject>Provenance.Wpf.Program</StartupObject>
+    <!-- native\build-native.ps1 builds these, tools/pack-release.ps1 points this at its own fresh build -->
+    <NativeToolsDir Condition="'$(NativeToolsDir)' == ''">..\..\native\bin</NativeToolsDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <TieredPGO>true</TieredPGO>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <!-- so WinForms names never clash with WPF's (Application, MessageBox...) -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\provenance.ico" />
+    <Resource Include="Assets\provenance-256.png" />
+    <Resource Include="Assets\bg-logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MaterialDesignThemes" Version="5.1.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Serilog" Version="4.2.0" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <!-- same version as vpk, tools/pack-release.ps1 checks -->
+    <PackageReference Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Provenance.Common\Provenance.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="provenance-app-tests" />
+  </ItemGroup>
+
+  <!-- pol_launch.exe injects pol_hook.dll, which it expects next to itself -->
+  <ItemGroup>
+    <None Include="$(NativeToolsDir)\pol_launch.exe" Link="native\pol_launch.exe" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NativeToolsDir)\pol_uninstall.exe" Link="native\pol_uninstall.exe" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NativeToolsDir)\pol_hook.dll" Link="native\pol_hook.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="RequireNatives" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(NativeToolsDir)\pol_hook.dll') or !Exists('$(NativeToolsDir)\pol_launch.exe') or !Exists('$(NativeToolsDir)\pol_uninstall.exe')"
+           Text="pol_hook.dll, pol_launch.exe or pol_uninstall.exe is missing from $([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(NativeToolsDir)')). Run native\build-native.ps1 first to build them." />
+  </Target>
+
+</Project>

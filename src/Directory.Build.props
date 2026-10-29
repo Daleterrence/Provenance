@@ -1,0 +1,16 @@
+<Project>
+  <!-- SemVer 2, bumped and committed before each release (tools/pack-release.ps1 refuses any other -Version). The
+       exe's file version keeps just the numbers (1.0.0.0) -->
+  <PropertyGroup>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionSuffix>beta.1</VersionSuffix>
+  </PropertyGroup>
+
+  <!-- the SDK tacks the full 40-character commit onto the product version, 7 is plenty to find it again -->
+  <Target Name="ShortSourceRevision" BeforeTargets="AddSourceRevisionToInformationalVersion"
+          Condition="$(SourceRevisionId.Length) &gt; 7">
+    <PropertyGroup>
+      <SourceRevisionId>$(SourceRevisionId.Substring(0, 7))</SourceRevisionId>
+    </PropertyGroup>
+  </Target>
+</Project>

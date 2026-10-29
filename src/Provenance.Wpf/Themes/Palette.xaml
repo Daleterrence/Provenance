@@ -1,0 +1,35 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="Bg.Base"        Color="#0A0E14" />
+    <SolidColorBrush x:Key="Surface.1"      Color="#121824" />
+    <Color x:Key="Surface.2.Color">#18202E</Color>
+    <SolidColorBrush x:Key="Surface.2"      Color="{StaticResource Surface.2.Color}" />
+    <SolidColorBrush x:Key="Surface.3"      Color="#202A3A" />
+
+    <SolidColorBrush x:Key="Primary"        Color="#1BC7D6" />
+    <SolidColorBrush x:Key="Primary.Glow"   Color="#2DE6F2" />
+    <SolidColorBrush x:Key="Primary.Muted"  Color="#0E5A64" />
+
+    <SolidColorBrush x:Key="Accent.Gold"    Color="#C9A227" />
+
+    <SolidColorBrush x:Key="Text.1"         Color="#ECF1F7" />
+    <SolidColorBrush x:Key="Text.2"         Color="#A7B2C2" />
+    <SolidColorBrush x:Key="Text.3"         Color="#8A95A6" /><!-- 5.4:1 on Surface.2, AA for small text -->
+    <SolidColorBrush x:Key="Text.OnPrimary" Color="#04161A" />
+
+    <SolidColorBrush x:Key="State.Online"   Color="#3FD07F" />
+    <SolidColorBrush x:Key="State.Warn"     Color="#E6B13E" />
+    <SolidColorBrush x:Key="State.Down"     Color="#FF5C64" />
+
+    <SolidColorBrush x:Key="Badge.Neutral"     Color="#2A3A4A" />
+    <SolidColorBrush x:Key="Badge.Alert"       Color="#5A2A2E" />
+    <SolidColorBrush x:Key="Badge.Maintenance" Color="#4E4120" />
+    <SolidColorBrush x:Key="Badge.Event"       Color="#1F4652" />
+    <SolidColorBrush x:Key="Badge.Update"      Color="#24452E" />
+
+    <SolidColorBrush x:Key="Border.Hair"    Color="White" Opacity="0.08" />
+    <!-- every window's edge. DWM draws it from 24H2 on, so it has to be solid -->
+    <SolidColorBrush x:Key="Border.Window"  Color="#263041" />
+
+    <FontFamily x:Key="Font.Body">Segoe UI</FontFamily>
+</ResourceDictionary>

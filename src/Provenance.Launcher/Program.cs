@@ -1,0 +1,139 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
+using Velopack;
+using Velopack.Locators;
+using Velopack.Logging;
+
+namespace Provenance.Launcher;
+
+internal static class Program
+{
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        // the install, update and uninstall hooks exit in here, so none of them needs admin. Updates only get applied
+        // from Provenance.exe, where the update window is
+        try
+        {
+            VelopackApp.Build()
+                .SetAutoApplyOnStartup(false)
+                .OnBeforeUninstallFastCallback(_ => CloseRunningCopies())
+                .Run();
+        }
+        catch (Exception ex) { Note("Velopack start-up failed", ex); }
+
+        // Run() normally exits on a hook. If it threw instead, a hook still mustn't start the app (UAC mid-uninstall)
+        if (args.Length > 0 && (args[0].StartsWith("--veloapp-", StringComparison.OrdinalIgnoreCase) ||
+                                args[0].StartsWith("--squirrel-", StringComparison.OrdinalIgnoreCase)))
+            return 0;
+
+        // ShellExecute so Provenance.exe's manifest gets its UAC prompt, CreateProcess just fails with 740
+        var psi = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "Provenance.exe")) { UseShellExecute = true };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        try
+        {
+            Process.Start(psi)?.Dispose();
+            return 0;
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+        {
+            return 1;   // UAC prompt cancelled, nothing to say
+        }
+        catch (Exception ex)
+        {
+            Note("Could not start Provenance.exe", ex);
+            Message("Provenance couldn't start. If this keeps happening, install Provenance again.", MbIconError);
+            return 1;
+        }
+    }
+
+    // uninstall runs without admin and can't stop an elevated copy, so its open files would stay. Each copy gets asked
+    // to close the normal way instead, like its tray's Exit
+    private static void CloseRunningCopies()
+    {
+        var asked = new List<string>();
+        bool unreachable = false;
+        foreach (var p in Process.GetProcessesByName("Provenance"))
+        {
+            using (p)
+            {
+                var name = CloseRequestName(p.Id);
+                var h = OpenEventW(EventModifyState | Synchronize, false, name);
+                if (h == IntPtr.Zero)
+                {
+                    // denied means ours but run as another account (an admin's password at the UAC prompt), so it
+                    // can't be asked. Not found means another install's copy
+                    if (Marshal.GetLastWin32Error() == ErrorAccessDenied) unreachable = true;
+                    continue;
+                }
+                SetEvent(h);
+                CloseHandle(h);
+                asked.Add(name);
+            }
+        }
+        if (!unreachable && (asked.Count == 0 || AllClosed(asked, TimeSpan.FromSeconds(20)))) return;
+        Message("Provenance is still running, so the uninstall can't remove all of its files. Close Provenance " +
+                "(if it's in the system tray, right-click its icon and choose Exit), then press OK.", MbIconWarning);
+        AllClosed(asked, TimeSpan.FromSeconds(5));
+    }
+
+    // a copy's event goes when the copy does
+    private static bool AllClosed(List<string> names, TimeSpan limit)
+    {
+        long until = Environment.TickCount64 + (long)limit.TotalMilliseconds;
+        while (true)
+        {
+            bool open = false;
+            foreach (var name in names)
+            {
+                var h = OpenEventW(Synchronize, false, name);
+                if (h == IntPtr.Zero) continue;
+                CloseHandle(h);
+                open = true;
+            }
+            if (!open) return true;
+            if (Environment.TickCount64 >= until) return false;
+            Thread.Sleep(250);
+        }
+    }
+
+    // same name as Provenance.Wpf's CloseRequest. Both exes sit in the same folder, so the hash matches
+    private static string CloseRequestName(int pid)
+    {
+        var dir = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory).ToUpperInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(dir)), 0, 8);
+        return $@"Local\Provenance-close-{hash}-{pid}";
+    }
+
+    private static void Message(string text, uint icon) =>
+        MessageBoxW(IntPtr.Zero, text, "Provenance", MbOk | icon | MbTopmost | MbSetForeground);
+
+    // lands in Velopack's own log (%LocalAppData%\velopack), there's nowhere else to put it
+    private static void Note(string what, Exception ex)
+    {
+        try
+        {
+            if (VelopackLocator.IsCurrentSet) VelopackLocator.Current.Log.Warn(ex, what);
+        }
+        catch { }
+    }
+
+    private const int ErrorCancelled = 1223, ErrorAccessDenied = 5;
+    private const uint EventModifyState = 0x0002, Synchronize = 0x00100000;
+    private const uint MbOk = 0x0, MbIconError = 0x10, MbIconWarning = 0x30, MbTopmost = 0x40000, MbSetForeground = 0x10000;
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern IntPtr OpenEventW(uint access, bool inherit, string name);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetEvent(IntPtr handle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int MessageBoxW(IntPtr owner, string text, string caption, uint type);
+}

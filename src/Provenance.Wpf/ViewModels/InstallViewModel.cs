@@ -1,0 +1,495 @@
+using System.Diagnostics;
+using System.IO;
+using System.Net.Http;
+using System.Runtime.InteropServices;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Serilog;
+using Provenance.Common;
+using Provenance.Common.Game;
+using Provenance.Common.Install;
+using Provenance.Common.Mirror;
+using Provenance.Common.Patcher;
+using Provenance.Common.PolFormat;
+using Provenance.Wpf.Services;
+
+namespace Provenance.Wpf.ViewModels;
+
+// The mirror goes first (current files straight into the game folders), then SE's five parts as the fallback,
+// unpacked here and installed with no installer windows
+public partial class InstallViewModel : ObservableObject
+{
+    private const long GameDriveBytes = 16_500_000_000;       // the installed and updated game, with update temp files
+    private const long DownloadDriveBytes = 15_500_000_000;   // the parts and their unpacked copy
+    private const string MirrorFolder = "mirror";
+    private const uint EsContinuous = 0x80000000, EsSystemRequired = 0x00000001;
+    private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
+
+    private readonly PolRegion _region;
+    private readonly Action? _holdPrestarts, _releasePrestarts;
+    private readonly GameInstaller _installer = new();
+    private readonly DownloadMeter _meter;
+    private CancellationTokenSource? _cts;
+
+    public InstallViewModel(PolRegion? region, Action? holdPrestarts = null, Action? releasePrestarts = null)
+    {
+        _region = region ?? PolRegion.UnitedStates;
+        _holdPrestarts = holdPrestarts;
+        _releasePrestarts = releasePrestarts;
+        _meter = new DownloadMeter(text => DownloadText = text, text => TimeLeftText = text);
+        // the MSIs' own default INSTALLDIR for these 32-bit packages
+        InstallFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "PlayOnline");
+        // the installer files run as admin, so they live in an admin-only folder (LockWorkFolder), never %TEMP%
+        DownloadFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Provenance");
+        TotalGib = $"{GameInstaller.TotalBytes(_region) / 1024.0 / 1024 / 1024:0.0} GiB";
+        UpdateSpace();
+    }
+
+    public event Action? Installed;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(GameFolderText))]
+    private string _installFolder = "";
+
+    public string GameFolderText => string.IsNullOrWhiteSpace(InstallFolder) ? "" :
+        $"The game will be installed in {Path.Combine(InstallFolder, "SquareEnix")}.";
+
+    [ObservableProperty] private string _downloadFolder = "";
+    [ObservableProperty] private string _totalGib = "";
+    [ObservableProperty] private string _freeSpaceText = "";
+    [ObservableProperty] private bool _keepInstaller;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    private bool _enoughSpace = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanStart), nameof(StepText))]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    private bool _running;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanStart))]
+    private bool _done;
+
+    public bool CanStart => !Running && !Done;
+
+    [ObservableProperty] private string _startLabel = "DOWNLOAD AND INSTALL";
+    [ObservableProperty] private string _stage = "Ready to install";
+    [ObservableProperty] private string _detail = "";
+    [ObservableProperty] private double _downloadFraction;
+    [ObservableProperty] private string _downloadText = "";
+    [ObservableProperty] private string _timeLeftText = "";
+    [ObservableProperty] private bool _stageIndeterminate;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StepText))]
+    private int _currentStep;    // 0 download, 1 unpack, 2 install, 3 done
+
+    public string StepText => !Running ? "" : CurrentStep switch
+    {
+        0 => "Step 1 of 3: Download",
+        1 => "Step 2 of 3: Unpack",
+        2 => "Step 3 of 3: Install",
+        _ => "Finishing",
+    };
+
+    private bool CanStartInstall() => !Running && !Done && EnoughSpace;
+
+    partial void OnInstallFolderChanged(string value) => UpdateSpace();
+    partial void OnDownloadFolderChanged(string value) => UpdateSpace();
+
+    private void UpdateSpace()
+    {
+        // a relative or empty path would resolve against this elevated process's working folder
+        if (InstallFolder is not { } install || DownloadFolder is not { } download ||
+            !Path.IsPathFullyQualified(install) || !Path.IsPathFullyQualified(download))
+        {
+            EnoughSpace = false;
+            FreeSpaceText = "Choose full folder paths, such as C:\\Program Files (x86)\\PlayOnline.";
+            return;
+        }
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(install));
+            if (root != null && root.StartsWith(@"\\", StringComparison.Ordinal))
+            {
+                EnoughSpace = true;
+                FreeSpaceText = "Provenance can't check the free space on a network folder.";
+            }
+            else if (root != null)
+            {
+                var d = new DriveInfo(root);
+                var dlRoot = string.IsNullOrWhiteSpace(download) ? null : Path.GetPathRoot(Path.GetFullPath(download));
+                bool split = dlRoot != null && !dlRoot.StartsWith(@"\\", StringComparison.Ordinal) &&
+                             !string.Equals(dlRoot, root, StringComparison.OrdinalIgnoreCase);
+                static string Gib(long b) => (b / 1024.0 / 1024 / 1024).ToString("0.0");
+                if (!split)
+                {
+                    EnoughSpace = d.AvailableFreeSpace >= GameInstaller.RequiredFreeBytes;
+                    FreeSpaceText = $"There's {Gib(d.AvailableFreeSpace)} GiB free on {root}, and the install needs about {GameInstaller.RequiredFreeBytes / 1024.0 / 1024 / 1024:0} GiB.";
+                }
+                else
+                {
+                    long dlFree = new DriveInfo(dlRoot!).AvailableFreeSpace;
+                    EnoughSpace = d.AvailableFreeSpace >= GameDriveBytes && dlFree >= DownloadDriveBytes;
+                    FreeSpaceText = $"There's {Gib(d.AvailableFreeSpace)} GiB free on {root} for the game, which needs about {Gib(GameDriveBytes)} GiB. " +
+                                    $"There's {Gib(dlFree)} GiB free on {dlRoot} for the download, which needs about {Gib(DownloadDriveBytes)} GiB.";
+                }
+            }
+        }
+        catch
+        {
+            EnoughSpace = false;
+            FreeSpaceText = "Provenance can't read how much space is free on that drive.";
+        }
+    }
+
+    [RelayCommand]
+    private void BrowseInstall()
+    {
+        if (SettingsViewModel.PickFolder("Choose where to install FINAL FANTASY XI") is { } d) InstallFolder = d;
+    }
+
+    [RelayCommand]
+    private void BrowseDownload()
+    {
+        if (SettingsViewModel.PickFolder("Choose where to keep the downloaded installer") is { } d) DownloadFolder = d;
+    }
+
+    // its files run as admin, so it's an admin-only ffxi-download folder (the chosen one if it's already that), and a
+    // stranger's folder with the same name gets skipped
+    private string LockWorkFolder(IEnumerable<string> ownNames)
+    {
+        var chosen = Path.TrimEndingDirectorySeparator(Path.GetFullPath(DownloadFolder));
+        var candidates = new List<string>();
+        if (Path.GetFileName(chosen).Equals("ffxi-download", StringComparison.OrdinalIgnoreCase)) candidates.Add(chosen);
+        candidates.Add(Path.Combine(chosen, "ffxi-download"));
+        for (int i = 2; i <= 9; i++) candidates.Add(Path.Combine(chosen, $"ffxi-download-{i}"));
+        var names = ownNames.ToList();
+        foreach (var c in candidates)
+        {
+            if (SecureFiles.LockFolder(c, names)) return c;
+            Log.Warning("{Folder} was not made by Provenance; it is left alone", c);
+        }
+        throw Shown.Mark(new InvalidOperationException($"Provenance couldn't make its own folder in {chosen}. Choose another download folder."));
+    }
+
+    private object? _barStep;
+
+    // a retry takes bytes back, so within one step the bar holds until it's passed again. A new step starts it over
+    private void ShowFraction(object step, double fraction)
+    {
+        if (!Equals(step, _barStep)) { _barStep = step; DownloadFraction = fraction; }
+        else DownloadFraction = Math.Max(DownloadFraction, fraction);
+    }
+
+    // the bytes the held bar stands for, so the text under it doesn't drop back on a retry either
+    private long Held(long done, long total) => Math.Clamp((long)(DownloadFraction * total), done, Math.Max(done, total));
+
+    // the detail already has the sizes, so the meter only adds the time left. Each package is its own step, Windows
+    // Installer's retries and rollback included
+    private Progress<InstallProgress> InstallStepProgress() => new(p =>
+    {
+        Detail = p.Detail;
+        StageIndeterminate = p.Fraction < 0;
+        if (p.Fraction >= 0)
+            ShowFraction(p.Detail.Contains("FINAL FANTASY XI") ? "ffxi" : p.Detail.Contains("PlayOnline") ? "viewer" : p.Detail, p.Fraction);
+        if (p.TotalBytes > 0) _meter.Update(p.DoneBytes, p.TotalBytes, download: false, amount: false);
+        else _meter.Clear();
+    });
+
+    private Progress<(long Done, long Total)> LocalProgress(string? detail = null)
+    {
+        var step = new object();
+        return new(p =>
+        {
+            if (detail != null) Detail = detail;
+            ShowFraction(step, p.Total > 0 ? (double)p.Done / p.Total : 0);
+            _meter.Update(p.Done, p.Total, download: false);
+        });
+    }
+
+    private static void RemoveDir(string dir)
+    {
+        try { Directory.Delete(dir, recursive: true); } catch (Exception e) { Log.Warning(e, "Could not remove {Dir}", dir); }
+    }
+
+    private void Finished(string next, IReadOnlyList<string> warnings)
+    {
+        CurrentStep = 3;
+        StageIndeterminate = false;
+        Stage = "Installed";
+        Detail = "FINAL FANTASY XI is installed. " + next + (warnings.Count == 0 ? "" : " " + string.Join(" ", warnings));
+        Done = true;
+        Installed?.Invoke();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanStartInstall))]
+    private async Task Start()
+    {
+        if (Running) return;
+        Running = true;
+        Done = false;
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+        // the download takes hours on a slow line, and Windows mustn't sleep in the middle of it
+        SetThreadExecutionState(EsContinuous | EsSystemRequired);
+        bool held = false;
+        try
+        {
+            StageIndeterminate = true;
+            Stage = "Preparing";
+            Detail = "Checking this PC...";
+            // my own waiting pol.exe would fail the check below, and none may start while the files go in
+            if (_holdPrestarts is not null)
+            {
+                held = true;
+                await Task.Run(() =>
+                {
+                    _holdPrestarts();
+                    for (int i = 0; i < 10 && PolUpdates.ViewerRunning(); i++) Thread.Sleep(300);
+                });
+            }
+            var running = Process.GetProcesses()
+                .Where(p => p.ProcessName.Equals("pol", StringComparison.OrdinalIgnoreCase) ||
+                            p.ProcessName.Equals("polboot", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            running.ForEach(p => p.Dispose());
+            if (running.Count > 0)
+                throw Shown.Mark(new InvalidOperationException("PlayOnline or FINAL FANTASY XI is running. Close it, then press Try again."));
+
+            var parts = GameInstaller.PartsFor(_region).ToList();
+            var ownNames = parts.SelectMany(p => new[] { p.FileName, p.FileName + ".part" }).Concat(new[] { "unpacked", "logs", MirrorFolder });
+            Detail = "Checking the download folder...";
+            var work = await Task.Run(() => LockWorkFolder(ownNames), ct);
+            if (await InstallFromMirrorAsync(work, ct)) return;
+            var unpacked = Path.Combine(work, "unpacked");
+            string root;
+            for (int attempt = 1; ; attempt++)
+            {
+                CurrentStep = 0;
+                Stage = "Downloading FINAL FANTASY XI";
+                Detail = "Checking the files on Square Enix's server...";
+                foreach (var part in parts) await _installer.CheckServerAsync(part, ct);
+                StageIndeterminate = false;
+                long grandTotal = parts.Sum(p => p.Size);
+                long doneBefore = 0;
+                for (int i = 0; i < parts.Count; i++)
+                {
+                    Detail = $"Part {i + 1} of {parts.Count}";
+                    var captured = doneBefore;
+                    var progress = new Progress<long>(b =>
+                    {
+                        long overall = captured + b;
+                        ShowFraction("parts", (double)overall / grandTotal);
+                        _meter.Update(Held(overall, grandTotal), grandTotal);
+                    });
+                    await _installer.DownloadPartAsync(parts[i], work, progress, ct);
+                    doneBefore += parts[i].Size;
+                }
+
+                CurrentStep = 1;
+                Stage = "Unpacking";
+                Detail = "Checking the downloaded files...";
+                DownloadFraction = 0;
+                try
+                {
+                    root = await _installer.ExtractAsync(work, unpacked, _region, LocalProgress("Unpacking the installer..."), ct,
+                                                         LocalProgress());
+                    break;
+                }
+                catch (DamagedPartException e) when (attempt < 2)
+                {
+                    // the bad part's been deleted, so it downloads again (once)
+                    Log.Warning("{Part} failed its MD5 check before unpacking; downloading it again", e.Part);
+                }
+            }
+
+            CurrentStep = 2;
+            Stage = "Installing";
+            _meter.Clear();
+            IReadOnlyList<string> warnings;
+            using (await UpdateLockAsync(ct))
+            {
+                warnings = await _installer.RunInstallAsync(root, InstallFolder, Path.Combine(work, "logs"), InstallStepProgress(), ct);
+                WriteFirstStartSettings(_region);
+            }
+
+            StageIndeterminate = true;
+            Detail = "Removing the installer files...";
+            await Task.Run(() =>
+            {
+                RemoveDir(unpacked);
+                if (!KeepInstaller)
+                    foreach (var part in parts)
+                        try { File.Delete(Path.Combine(work, part.FileName)); } catch (Exception e) { Log.Warning(e, "Could not remove {Part}", part.FileName); }
+            }, CancellationToken.None);
+
+            // SE's files are from 2019, so the first sign-in updates POL and the first Play the game
+            Log.Information("Install finished in {Folder}; warnings: {Warnings}", InstallFolder, warnings);
+            Finished("PlayOnline updates itself the first time you log in, and the game updates the first time you press Play (about 1.7 GB).", warnings);
+        }
+        catch (RestartRequiredException e)
+        {
+            Log.Information("Install waits for a Windows restart (DirectPlay)");
+            Stage = "Restart Windows";
+            StartLabel = "CONTINUE";
+            Detail = e.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            Stage = "Cancelled";
+            StartLabel = "CONTINUE";
+            Detail = CurrentStep switch
+            {
+                0 => "The download was stopped. It'll carry on from where it left off.",
+                1 => "Unpacking was stopped. The download is kept, so press Continue to unpack it.",
+                _ => "The install was stopped before it finished. Press Continue to finish it.",
+            };
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Install failed");
+            Stage = "The install didn't finish";
+            StartLabel = "TRY AGAIN";
+            Detail = ErrorText.Of(ex, "Provenance ran into a problem during the install. Press Try again.");
+        }
+        finally
+        {
+            if (held && _releasePrestarts is not null)
+            {
+                try { _releasePrestarts(); }
+                catch (Exception e) { Log.Warning(e, "Could not let pre-starts go again after the install"); }
+            }
+            SetThreadExecutionState(EsContinuous);
+            _meter.Clear();
+            StageIndeterminate = false;
+            Running = false;
+        }
+    }
+
+    // verified current files from the mirror, the installer's steps without the copy, then patch.ver last. False sends
+    // it to SE's parts, but a problem on this PC is an error
+    private async Task<bool> InstallFromMirrorAsync(string work, CancellationToken ct)
+    {
+        if (_region != PolRegion.UnitedStates)
+        {
+            Log.Information("Install source: Square Enix's parts (the Provenance mirror has the US client only; region {Region})", _region);
+            return false;
+        }
+        CurrentStep = 0;
+        Stage = "Preparing";
+        Detail = MirrorInstall.PrepareText;
+        Log.Information("Install source: trying the Provenance mirror");
+        var staging = Path.Combine(work, MirrorFolder);
+        var mirror = new MirrorInstall(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), "us",
+                                       m => Log.Warning("Mirror install: {Message}", m));
+        var progress = new Progress<InstallProgress>(p =>
+        {
+            Stage = p.Stage;
+            Detail = p.Detail;
+            StageIndeterminate = p.Fraction < 0;
+            if (p.Fraction < 0) { _meter.Clear(); return; }
+            ShowFraction((p.Stage, p.TotalBytes), p.Fraction);
+            _meter.Update(Held(p.DoneBytes, p.TotalBytes), p.TotalBytes, download: p.Download);
+        });
+        async Task<bool> SquareEnixAsync(string reason)
+        {
+            Log.Information("Install source: Square Enix's parts ({Reason})", reason);
+            StageIndeterminate = true;
+            DownloadFraction = 0;
+            _meter.Clear();
+            await Task.Run(() => { if (Directory.Exists(staging)) RemoveDir(staging); }, CancellationToken.None);
+            return false;
+        }
+        string? staged;
+        IReadOnlyList<string> warnings;
+        // the game files go straight into the game folders, so the whole way to patch.ver is under the lock
+        using (await UpdateLockAsync(ct))
+        {
+            try
+            {
+                staged = await Task.Run(() => mirror.StageAsync(staging, InstallFolder, progress, ct), ct);
+            }
+            catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
+            {
+                return await SquareEnixAsync($"the Provenance mirror is unreachable: {ex.Message}");
+            }
+            catch (MirrorUnusableException ex)
+            {
+                return await SquareEnixAsync(ex.Message);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Error("Install source: the Provenance mirror, which failed: {Reason}", ex.Message);
+                throw;
+            }
+            if (staged is null) return await SquareEnixAsync(mirror.SkipReason ?? "the mirror cannot serve this install");
+            Log.Information("Install source: the Provenance mirror ({Products})",
+                            string.Join(", ", mirror.Staged.Select(s => $"{s.Product.Name} {s.Version}{(s.Current ? "" : ", older than PlayOnline's")}")));
+
+            CurrentStep = 2;
+            Stage = "Installing";
+            _meter.Clear();
+            try
+            {
+                warnings = await _installer.RunInstallAsync(staged, InstallFolder, Path.Combine(work, "logs"), InstallStepProgress(), ct, payloadInPlace: true);
+                WriteFirstStartSettings(_region);
+                mirror.WriteVersions();   // last, so a stopped install never claims a version
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Error("Install source: the Provenance mirror, whose install steps failed: {Reason}", ex.Message);
+                throw;
+            }
+        }
+
+        StageIndeterminate = true;
+        Detail = "Removing the installer files...";
+        await Task.Run(() => RemoveDir(staged), CancellationToken.None);
+
+        Log.Information("Install finished in {Folder} from the Provenance mirror; warnings: {Warnings}", InstallFolder, warnings);
+        var next = mirror.Staged.All(s => s.Current)
+            ? "It's up to date."
+            : "PlayOnline and the game finish updating the first time you log in and press Play.";
+        Finished(next, warnings);
+        return true;
+    }
+
+    // the lock updates and repairs take, so another copy can't write into the same folders meanwhile
+    private async Task<IDisposable> UpdateLockAsync(CancellationToken ct)
+    {
+        var waiting = new Progress<PatchProgress>(p =>
+        {
+            StageIndeterminate = true;
+            Detail = p.Text;
+        });
+        return await Task.Run(() => PolUpdates.Lock(ct, waiting), ct);
+    }
+
+    // SE's installer only writes 3 of the game's settings, and the game just closes without the rest
+    public static void WriteFirstStartSettings(PolRegion region)
+    {
+        try
+        {
+            if (!FfxiConfig.NeedsFirstStart(region)) return;
+            int n = FfxiConfig.WriteFirstStart(region);
+            var d = FfxiConfig.PrimaryDisplay();
+            Log.Information("FINAL FANTASY XI first-start settings: {Count} values written for a {W}x{H} display", n, d.Width, d.Height);
+        }
+        catch (Exception e) { Log.Warning(e, "Could not write the FINAL FANTASY XI first-start settings"); }
+    }
+
+    [RelayCommand]
+    private void Cancel()
+    {
+        if (_cts is not { IsCancellationRequested: false } cts) return;
+        cts.Cancel();
+        Stage = "Stopping...";
+        if (CurrentStep == 2) Detail = "The installer will finish its current step, then undo the install.";
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern uint SetThreadExecutionState(uint flags);
+}

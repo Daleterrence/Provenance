@@ -1,0 +1,56 @@
+using System.Windows;
+
+namespace Provenance.Wpf.Services;
+
+public sealed class TrayIcon : IDisposable
+{
+    private readonly System.Windows.Forms.NotifyIcon _icon;
+    private readonly System.Windows.Forms.ToolStripItem _friends, _signOut, _exit;
+
+    public event Action? OpenRequested;
+    public event Action? FriendsRequested;
+    public event Action? SignOutRequested;
+    public event Action? ExitRequested;
+
+    public TrayIcon()
+    {
+        _icon = new System.Windows.Forms.NotifyIcon { Text = "Provenance (logged in to PlayOnline)", Visible = false };
+        try
+        {
+            var res = Application.GetResourceStream(new Uri("pack://application:,,,/Assets/provenance.ico"));
+            if (res != null) _icon.Icon = new System.Drawing.Icon(res.Stream);
+        }
+        catch { }   // the tray still works with the default icon
+        var menu = new System.Windows.Forms.ContextMenuStrip();
+        menu.Items.Add("Open Provenance", null, (_, _) => OpenRequested?.Invoke());
+        _friends = menu.Items.Add("Friends and messages", null, (_, _) => FriendsRequested?.Invoke());
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        _signOut = menu.Items.Add("Log out of PlayOnline", null, (_, _) => SignOutRequested?.Invoke());
+        _exit = menu.Items.Add("Exit and log out", null, (_, _) => ExitRequested?.Invoke());
+        _icon.ContextMenuStrip = menu;
+        _icon.DoubleClick += (_, _) => OpenRequested?.Invoke();
+        _icon.BalloonTipClicked += (_, _) => OpenRequested?.Invoke();
+    }
+
+    public void SetSignedIn(bool signedIn)
+    {
+        _friends.Visible = _signOut.Visible = signedIn;
+        _exit.Text = signedIn ? "Exit and log out" : "Exit";
+        _icon.Text = signedIn ? "Provenance (logged in to PlayOnline)" : "Provenance";
+    }
+
+    public bool Visible
+    {
+        get => _icon.Visible;
+        set => _icon.Visible = value;
+    }
+
+    public void ShowTip(string title, string text) =>
+        _icon.ShowBalloonTip(5000, title, text, System.Windows.Forms.ToolTipIcon.None);
+
+    public void Dispose()
+    {
+        _icon.Visible = false;
+        _icon.Dispose();
+    }
+}

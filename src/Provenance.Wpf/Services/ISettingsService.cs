@@ -1,0 +1,110 @@
+using System.Text.Json.Serialization;
+using Provenance.Common.PolFormat;
+
+namespace Provenance.Wpf.Services;
+
+// %APPDATA%\Provenance\settings.json
+public interface ISettingsService
+{
+    LauncherSettings Current { get; }
+
+    // from the registry, not a setting. A PC only ever has one working install
+    PolRegion? DetectedRegion { get; }
+
+    void Save(LauncherSettings settings);
+
+    // only the first failed save of a run raises it, so a full disk doesn't pop a dialog on every change
+    event Action<string>? SaveFailed;
+
+    string? LoadProblem { get; }
+
+    // settings.json as it is now, another copy may have saved since
+    LauncherSettings? ReadSaved() => null;
+}
+
+public sealed class LauncherSettings
+{
+    public List<Profile> Profiles { get; set; } = [new Profile { Id = "default", DisplayName = "Default" }];
+
+    public string ActiveProfileId { get; set; } = "default";
+
+    // shift at start-up or --noautologin skips it, and a rejected sign-in turns it off
+    public bool AutoLogin { get; set; }
+
+    public bool ExitAfterGameExits { get; set; } = true;
+
+    // "auto" follows the installed game, otherwise "na", "eu" or "jp"
+    public string FeedRegion { get; set; } = "auto";
+
+    public bool StartGameImmediately { get; set; }
+
+    public bool KeepSignedInInTray { get; set; } = true;
+
+    public List<MultiAccountEntry> MultiAccounts { get; set; } = [];
+
+    public bool SocialSplit { get; set; }
+
+    public bool MinimizeToTray { get; set; }
+
+    // 0 = never, otherwise 10-60 mins like POL's own sign-out timer
+    public int TraySignOutMinutes { get; set; }
+
+    public bool TrayTipShown { get; set; }
+
+    public bool NotifyFriendsOnline { get; set; } = true;
+
+    // 0 online, 1 away, 2 busy, 4 appear offline
+    public int PlayOnlineStatus { get; set; }
+
+    public string ThirdPartyHookPlatform { get; set; } = "none";
+    public string AshitaPath { get; set; } = "";
+    public string AshitaBootConfig { get; set; } = "";
+    public string WindowerPath { get; set; } = "";
+    // "" is Windower's default profile
+    public string WindowerProfile { get; set; } = "";
+
+    public bool AcceptedMemberAgreement { get; set; }
+
+    public bool MultiContinueOnError { get; set; } = true;
+
+    public bool MultiCloseWhenFinished { get; set; } = true;
+
+    // SE's patches can put a plain pol.exe back, so the bit goes on again before every start
+    public bool LargeAddressAware { get; set; } = true;
+
+    // turning it off couldn't clear pol.exe there and then, so the next start does it, once
+    public bool LargeAddressAwareClearAtStart { get; set; }
+}
+
+public sealed class MultiAccountEntry
+{
+    public string ProfileId { get; set; } = "";
+    public bool Enabled { get; set; }
+    // null uses the Windower/Ashita tab's setting
+    public string? ThirdPartyHookProfile { get; set; }
+    // why a run turned it off. Never retried by itself, three refusals lock the account
+    public string? Problem { get; set; }
+    public bool CredentialsRefused { get; set; }
+}
+
+// Id is the Credential Manager key so it can't change. DisplayName is the handle, the POL and SE IDs stay off screen
+public sealed class Profile
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
+    public string DisplayName { get; set; } = "New account";
+
+    public string? HandleName { get; set; }
+
+    // profile picture, 0 = none. The JSON name has to stay, saved accounts find their pics by it
+    [JsonPropertyName("FaceId")]
+    public int ProfilePictureId { get; set; }
+
+    // the code itself is asked for at every sign-in and never stored
+    public bool UseOtp { get; set; }
+
+    // "" (typed in each time), "bitwarden", "1password" or "keepassxc"
+    public string OtpSource { get; set; } = "";
+
+    // item name or id, or the entry URL for KeePassXC. Not a secret
+    public string OtpItem { get; set; } = "";
+}
