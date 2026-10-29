@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # has to be the same release as the Velopack package the app uses
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version 1.2.161
+
+      - name: Pack
+        id: pack
+        shell: pwsh
+        run: |
+          $xml = [xml](Get-Content -Raw src/Directory.Build.props)
+          $prefix = "$($xml.SelectSingleNode('/Project/PropertyGroup/VersionPrefix').InnerText)".Trim()
+          $suffix = "$($xml.SelectSingleNode('/Project/PropertyGroup/VersionSuffix').InnerText)".Trim()
+          $version = if ($suffix) { "$prefix-$suffix" } else { $prefix }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME doesn't match the version in src\Directory.Build.props ($version)."
+          }
+          $out = Join-Path $env:RUNNER_TEMP 'release'
+          ./tools/pack-release.ps1 -Version $version -Out $out
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$(if ($suffix) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+          "out=$out" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Provenance-${{ steps.pack.outputs.version }}
+          path: ${{ steps.pack.outputs.out }}
+          retention-days: 7
+
+      # a tag makes a draft, nothing goes out until it's published by hand
+      - name: Draft release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $a = @($env:GITHUB_REF_NAME) + @(Get-ChildItem '${{ steps.pack.outputs.out }}' -File | ForEach-Object FullName)
+          $a += '--draft', '--title', 'Provenance ${{ steps.pack.outputs.version }}', '--notes', 'Provenance ${{ steps.pack.outputs.version }}'
+          if ('${{ steps.pack.outputs.prerelease }}' -eq 'true') { $a += '--prerelease' }
+          gh release create @a
