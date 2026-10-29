@@ -1,4 +1,5 @@
 using Provenance.Common.Patcher;
+using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Mirror;
 
@@ -8,6 +9,15 @@ public sealed record MirrorOutcome(bool OnMirror, IReadOnlyList<MirrorEntry> Fai
 
 public static class MirrorUpdater
 {
+    // the mirror's copy is a US install. FFXI is the same files on EU (same installer cabs, same pc001W2U stream), the
+    // viewer isn't (polcoreEU.dll, appEU.dll, EU\env.dat), so EU's viewer gets null and updates from POL
+    public static string? RegionFor(PolRegion installed, string product) => installed switch
+    {
+        PolRegion.UnitedStates => "us",
+        PolRegion.Europe when product == "ffxi" => "us",
+        _ => null,
+    };
+
     // patch.ver goes last and only when nothing failed, POL is the caller's fallback
     public static async Task<MirrorOutcome> UpdateAsync(MirrorClient client, string region, string product, string folder,
         PolUpdater updater, VersionCheck check, Action beforeChange, IProgress<PatchProgress>? progress, CancellationToken ct,

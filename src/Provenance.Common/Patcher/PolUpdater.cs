@@ -18,12 +18,12 @@ public sealed record PatchProduct(string Name, int Id, string Host, string TagWi
     // null reads the Interface value from the registry like POL. It's the same on every PC, so the publisher pins it
     public string? PatchVerInterface { get; init; }
 
-    // host from env.dat's PATCH_SERVER_DOMAIN
-    public static PatchProduct Viewer(string viewerDir) =>
-        new("PlayOnline Viewer", 1000, "pt008.pol.com", "W2U", "W2U", viewerDir, viewerDir, @"SOFTWARE\PlayOnlineUS");
+    // host from env.dat's PATCH_SERVER_DOMAIN. EU patches from the same servers and tags, only its keys differ
+    public static PatchProduct Viewer(string viewerDir, PolRegion region = PolRegion.UnitedStates) =>
+        new("PlayOnline Viewer", 1000, "pt008.pol.com", "W2U", "W2U", viewerDir, viewerDir, PolPaths.Hive(region));
 
-    public static PatchProduct Ffxi(string ffxiDir, string viewerDir) =>
-        new("FINAL FANTASY XI", 1, "pc001W2U.pol.com", "W20", "W2U", ffxiDir, viewerDir, @"SOFTWARE\PlayOnlineUS");
+    public static PatchProduct Ffxi(string ffxiDir, string viewerDir, PolRegion region = PolRegion.UnitedStates) =>
+        new("FINAL FANTASY XI", 1, "pc001W2U.pol.com", "W20", "W2U", ffxiDir, viewerDir, PolPaths.Hive(region));
 }
 
 public sealed record VersionCheck(string Local, string Server, IPEndPoint Endpoint)

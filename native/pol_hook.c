@@ -567,14 +567,65 @@ static void *g_svc_2c4, *g_svc_2b4;
 #include "pol_profile_edit.c"
 static int get_handle(BYTE *b, int slot, void *rec) { return ((svc_ip)FS_GETHANDLE_FN)(slot, rec); }
 
+/* pol.exe loads the polcore for env.dat's region before the menu, so the loaded one is the region. polcoreEU.dll
+   1.18.15e is polcore.dll with its own COM ids, so every address in here is the same */
+static int pol_eu(void) { return !GetModuleHandleA("polcore.dll") && GetModuleHandleA("polcoreEU.dll") != NULL; }
+static HMODULE polcore_module(void) { return GetModuleHandleA(pol_eu() ? "polcoreEU.dll" : "polcore.dll"); }
+static const char *pol_hive(void) { return pol_eu() ? "PlayOnlineEU" : "PlayOnlineUS"; }
+
+/* app.dll 0x102afa80's EU answer when Settings has no Language: German 4, French 3, anything else 2. US just gets 1 */
+static DWORD eu_lang(LANGID id)
+{
+    switch (id) {
+    case 0x407: case 0x807: case 0xc07: case 0x1007: case 0x1407: return 4;
+    case 0x40c: case 0x80c: case 0xc0c: case 0x100c: case 0x140c: case 0x180c: return 3;
+    default: return 2;
+    }
+}
+
+static DWORD viewer_lang(void)
+{
+    HKEY hk;
+    char sub[80];
+    DWORD fallback = pol_eu() ? eu_lang(GetUserDefaultLangID()) : 1, lang = fallback, sz = sizeof lang;
+    wsprintfA(sub, "SOFTWARE\\%s\\SquareEnix\\PlayOnlineViewer\\Settings", pol_hive());
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, sub, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hk) == ERROR_SUCCESS) {
+        if (RegQueryValueExA(hk, "Language", NULL, NULL, (LPBYTE)&lang, &sz) != ERROR_SUCCESS)
+            lang = fallback;
+        RegCloseKey(hk);
+    }
+    return lang;
+}
+
+/* drops trailing backslashes (Locate existing install writes one) but never a drive's own */
+static void trim_slash(char *s)
+{
+    int n = lstrlenA(s);
+    while (n > 3 && s[n - 1] == '\\') s[--n] = 0;
+}
+
+/* the region's InstallFolder\1000 like the app reads it, into its own buffer so a failed read keeps the default */
+static void viewer_folder(char folder[MAX_PATH])
+{
+    HKEY hk;
+    char sub[48], got[MAX_PATH];
+    DWORD sz = sizeof got;
+    wsprintfA(sub, "SOFTWARE\\%s\\InstallFolder", pol_hive());
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, sub, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hk) != ERROR_SUCCESS) return;
+    if (RegGetValueA(hk, NULL, "1000", RRF_RT_REG_SZ, NULL, got, &sz) == ERROR_SUCCESS) {
+        trim_slash(got);
+        if (got[0]) lstrcpyA(folder, got);
+    }
+    RegCloseKey(hk);
+}
+
 /* The viewer's init before it launches content (REGISTRY_LANG, FFXI_LANG, REGISTRY_KEY, INSTALL_FOLDER, FILE_INIT),
    which the menu detour skips. Without it, game spits out FFXI-3322 at character creation (fun bonus of the error being
    in Japanese), took me a whole night to nail it... solid work on my part. */
 static void viewer_init(BYTE *b)
 {
-    HKEY hk;
-    DWORD lang = 1, sz = sizeof lang;
-    char key[] = "SOFTWARE\\PlayOnlineUS";
+    DWORD lang = viewer_lang();
+    char key[32];
     char folder[MAX_PATH] = "C:\\Program Files (x86)\\PlayOnline\\SquareEnix\\PlayOnlineViewer";
     char polid[16] = {0}, path[MAX_PATH + 32], *p;
     unsigned h = 0;
@@ -589,19 +640,8 @@ static void viewer_init(BYTE *b)
         "The name you entered is unavailable.\r\nPlease choose another name.",
         "%s has agreed to join\r\nthe group \"%s.\"", "%s has declined to join\r\nthe group \"%s.\"",
         "You have been removed from\r\nthe group \"%s.\"", "The group \"%s\"\r\nhas been disbanded." };
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\PlayOnlineUS\\SquareEnix\\PlayOnlineViewer\\Settings",
-                      0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hk) == ERROR_SUCCESS) {
-        if (RegQueryValueExA(hk, "Language", NULL, NULL, (LPBYTE)&lang, &sz) != ERROR_SUCCESS)
-            lang = 1;
-        RegCloseKey(hk);
-    }
-    sz = sizeof folder;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\PlayOnlineUS", 0,
-                      KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hk) == ERROR_SUCCESS) {
-        if (RegQueryValueExA(hk, "InstallFolder", NULL, NULL, (LPBYTE)folder, &sz) != ERROR_SUCCESS)
-            sz = sizeof folder;
-        RegCloseKey(hk);
-    }
+    wsprintfA(key, "SOFTWARE\\%s", pol_hive());
+    viewer_folder(folder);
     lg("viewer_init: lang=%u key='%s' folder='%s'\r\n", lang, key, folder);
     ((int (__cdecl *)(int))PSLOT(0x3C5))(1);
     ((int (__cdecl *)(int))PSLOT(0x1A4))((int)lang);
@@ -1208,7 +1248,7 @@ static void phase_c_seed(HMODULE pc)
 
 static void prime_session(void)
 {
-    HMODULE pc = GetModuleHandleA("polcore.dll");
+    HMODULE pc = polcore_module();
     static const unsigned char id64[8] = { 0xef,0xbe,0xad,0xde,0x78,0x56,0x34,0x12 };
     static const char name17[17] = "Kupo";
     if (!pc) { lg("pol_hook: polcore.dll not loaded at menu time?!\r\n"); return; }
@@ -1221,8 +1261,8 @@ static void prime_session(void)
     ((void (*)(unsigned))((BYTE *)pc + 0x181f0))(4);
     /* svc+0x730's state (polcore.dll 0x1009aa58) is -1 without a real menu session, 0 suits the pre-flight */
     *(unsigned *)((BYTE *)pc + 0x9aa58) = 0;
-    /* JP/US selector (polcore.dll 0x100aa318), 1 = US. JP wants SOFTWARE\PlayOnline\Interface, which isn't there,
-       so gate 7 bails. */
+    /* JP/US selector (polcore.dll 0x100aa318), 1 = anything but JP, EU too. JP wants SOFTWARE\PlayOnline\Interface,
+       which isn't there, so gate 7 bails. */
     *(unsigned *)((BYTE *)pc + 0xaa318) = 1;
     lg("pol_hook: fake session poked into polcore @ %08x\r\n", (unsigned)(ULONG_PTR)pc);
     viewer_init((BYTE *)pc);
@@ -1236,10 +1276,10 @@ static void prime_session(void)
 static void set_cwd_ffxi(void)
 {
     HKEY k;
-    char path[MAX_PATH], cur[MAX_PATH];
+    char path[MAX_PATH], cur[MAX_PATH], sub[64];
     DWORD n = sizeof path, t = 0;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\PlayOnlineUS\\InstallFolder", 0,
-                      KEY_READ, &k) != 0) {
+    wsprintfA(sub, "SOFTWARE\\WOW6432Node\\%s\\InstallFolder", pol_hive());
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, sub, 0, KEY_READ, &k) != 0) {
         lg("pol_hook: InstallFolder key open failed\r\n");
         return;
     }
@@ -3753,7 +3793,7 @@ static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned
         ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x6a10))();
         if (getenv_set("POL_HOLD")) {
             sweep_stale_social();
-            pol_hold((BYTE *)GetModuleHandleA("polcore.dll"));
+            pol_hold((BYTE *)polcore_module());
         }
         lg("pol_hook: menu call 1 -> content code 1 (FFXiEntry)\r\n");
         CloseHandle(CreateThread(NULL, 0, fx_hook_once, NULL, 0, NULL));

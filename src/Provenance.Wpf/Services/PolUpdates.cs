@@ -4,6 +4,7 @@ using Provenance.Common;
 using Provenance.Common.Locks;
 using Provenance.Common.Mirror;
 using Provenance.Common.Patcher;
+using Provenance.Common.PolFormat;
 using Serilog;
 
 namespace Provenance.Wpf.Services;
@@ -11,13 +12,13 @@ namespace Provenance.Wpf.Services;
 // same two moments as the viewer: its own update at each sign-in and FFXI's when Play's pressed
 public static class PolUpdates
 {
-    private const string MirrorRegion = "us";
     private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
     private static readonly MirrorClient Mirror = new(MirrorHttp, MirrorKeys.Trusted);
     private static int _noKeysLogged;
 
     // freeFiles ends our waiting pol.exe before any file changes
-    public static PatchResult UpdateViewer(string viewerDir, IProgress<PatchProgress>? progress, Action freeFiles, CancellationToken ct) =>
+    public static PatchResult UpdateViewer(string viewerDir, PolRegion region, IProgress<PatchProgress>? progress, Action freeFiles,
+                                           CancellationToken ct) =>
         Locked(ct, progress, () =>
         {
             void BeforeChange()
@@ -35,17 +36,18 @@ public static class PolUpdates
             }
             // a stale queue (.tmp2) mustn't overwrite what the mirror writes below
             ApplyQueued();
-            var r = Update(PatchProduct.Viewer(viewerDir), "viewer", progress, BeforeChange, ct);
+            var r = Update(PatchProduct.Viewer(viewerDir, region), MirrorUpdater.RegionFor(region, "viewer"), "viewer", progress, BeforeChange, ct);
             // up to date or not, an earlier run might've died between the update and these steps
             ApplyQueued();
             Log.Information("PlayOnline Viewer update check: {Result}", r);
             return r;
         });
 
-    public static PatchResult UpdateFfxi(string ffxiDir, string viewerDir, IProgress<PatchProgress>? progress, CancellationToken ct) =>
+    public static PatchResult UpdateFfxi(string ffxiDir, string viewerDir, PolRegion region, IProgress<PatchProgress>? progress,
+                                         CancellationToken ct) =>
         Locked(ct, progress, () =>
         {
-            var r = Update(PatchProduct.Ffxi(ffxiDir, viewerDir), "ffxi", progress, () =>
+            var r = Update(PatchProduct.Ffxi(ffxiDir, viewerDir, region), MirrorUpdater.RegionFor(region, "ffxi"), "ffxi", progress, () =>
             {
                 if (GameRunning())
                     throw Shown.Mark(new InvalidOperationException(
@@ -57,7 +59,8 @@ public static class PolUpdates
 
     // One POL version check, then the patch mirror. POL serves whatever the mirror can't, and beforeChange runs once
     // at most.
-    private static PatchResult Update(PatchProduct product, string slug, IProgress<PatchProgress>? progress, Action beforeChange, CancellationToken ct)
+    private static PatchResult Update(PatchProduct product, string? mirrorRegion, string slug, IProgress<PatchProgress>? progress,
+                                      Action beforeChange, CancellationToken ct)
     {
         var updater = new PolUpdater(product) { KeepLargeAddressAware = true };
         progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
@@ -70,13 +73,18 @@ public static class PolUpdates
         MirrorOutcome outcome;
         try
         {
-            if (MirrorKeys.Trusted.Count == 0)
+            if (mirrorRegion is null)
+            {
+                Log.Information("Update {Product}: the patch mirror has no copy of it for this region; using PlayOnline", product.Name);
+                outcome = new MirrorOutcome(false, [], 0);
+            }
+            else if (MirrorKeys.Trusted.Count == 0)
             {
                 if (Interlocked.Exchange(ref _noKeysLogged, 1) == 0) Log.Information("mirror keys not configured; using PlayOnline");
                 outcome = new MirrorOutcome(false, [], 0);
             }
             else
-                outcome = MirrorUpdater.UpdateAsync(Mirror, MirrorRegion, slug, product.Folder, updater, check, Once, progress, ct,
+                outcome = MirrorUpdater.UpdateAsync(Mirror, mirrorRegion, slug, product.Folder, updater, check, Once, progress, ct,
                     (msg, isError) =>
                     {
                         if (isError) Log.Error("Update {Product}: {Message}", product.Name, msg);

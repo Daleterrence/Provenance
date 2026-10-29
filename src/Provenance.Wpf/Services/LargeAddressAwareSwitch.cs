@@ -97,8 +97,8 @@ public static class LargeAddressAwareSwitch
     public static void Apply(ISettingsService settings, string when, Action? holdPrestarts = null, Action? releasePrestarts = null,
                              Func<string?>? blocked = null)
     {
-        if (settings.DetectedRegion == PolRegion.UnitedStates)
-            Apply(settings, For(PolRegion.UnitedStates, blocked), when, holdPrestarts, releasePrestarts);
+        if (PolPaths.Supported(settings.DetectedRegion))
+            Apply(settings, For(settings.DetectedRegion, blocked), when, holdPrestarts, releasePrestarts);
     }
 
     // anything in the way gets logged and the start carries on without it

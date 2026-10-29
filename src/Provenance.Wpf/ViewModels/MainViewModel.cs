@@ -758,12 +758,22 @@ public partial class MainViewModel : ObservableObject
     private static string? ViewerFolder(PolRegion? region) =>
         region is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null;
 
+    internal const string InstallText = "Provenance can download and install the game for you, or use an install you already have.";
+    internal const string InstallEuropeText = "Provenance can't install the European version of the game yet, but it can use an install you already have.";
+
+    // the installer only has the North American client so far
+    public bool CanDownloadInstall => _settings.DetectedRegion != PolRegion.Europe;
+    public string InstallCardText => CanDownloadInstall ? InstallText : InstallEuropeText;
+
     private void RefreshInstallState()
     {
         var region = _settings.DetectedRegion;
         GameInstalled = region is { } r &&
                         PolPaths.TryGetInstallFolder(r, PolPaths.FfxiProduct) is { } f &&
                         File.Exists(Path.Combine(f, "FFXiMain.dll"));
+        OnPropertyChanged(nameof(CanDownloadInstall));
+        OnPropertyChanged(nameof(InstallCardText));
+        DownloadInstallCommand.NotifyCanExecuteChanged();
         RefreshRepairAvailable(region);
         if (!StatusIconService.Available) LoadStatusIcons();
     }
@@ -784,7 +794,7 @@ public partial class MainViewModel : ObservableObject
             "Provenance still can't find FINAL FANTASY XI in that folder. Choose the folder FINAL FANTASY XI is in, or install the game.");
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanDownloadInstall))]
     private void DownloadInstall()
     {
         var vm = new InstallViewModel(_settings.DetectedRegion, _pol.HoldPrestarts, _pol.ReleasePrestarts);
@@ -1151,8 +1161,8 @@ public partial class MainViewModel : ObservableObject
     private bool EnsureMemberAgreement(Window? owner)
     {
         if (_settings.Current.AcceptedMemberAgreement) return true;
-        if (_settings.DetectedRegion != PolRegion.UnitedStates) return true;
-        var viewer = PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.ViewerProduct);
+        if (!PolPaths.Supported(_settings.DetectedRegion)) return true;
+        var viewer = ViewerFolder(_settings.DetectedRegion);
         var strings = viewer is null ? null : PolStringTable.Load(viewer);
         if (!AgreementDialog.Ask(owner, ProfileTitle, strings))
         {
@@ -1204,7 +1214,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         // SE's installer only writes 3 of the game settings
-        InstallViewModel.WriteFirstStartSettings(PolRegion.UnitedStates);
+        InstallViewModel.WriteFirstStartSettings(PlayRegion);
         ResetProgress("Starting FINAL FANTASY XI");
         OnProgress(new LaunchProgress("Starting game", "Starting FINAL FANTASY XI...", LaunchSteps.StartGame, 0.5));
         try { _pol.SignalPlay(); }
@@ -1247,10 +1257,13 @@ public partial class MainViewModel : ObservableObject
 
     internal static readonly TimeSpan PlayAnswerTimeout = TimeSpan.FromSeconds(15);
 
-    private static (string Ffxi, string Viewer)? GameFolders() =>
-        PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.FfxiProduct) is { } ffxi
-        && PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.ViewerProduct) is { } viewer
-            ? (ffxi, viewer) : null;
+    // Play only comes up after a login, which only a supported region gets
+    private PolRegion PlayRegion => _settings.DetectedRegion ?? PolRegion.UnitedStates;
+
+    private (string Ffxi, string Viewer, PolRegion Region)? GameFolders() =>
+        PolPaths.TryGetInstallFolder(PlayRegion, PolPaths.FfxiProduct) is { } ffxi
+        && PolPaths.TryGetInstallFolder(PlayRegion, PolPaths.ViewerProduct) is { } viewer
+            ? (ffxi, viewer, PlayRegion) : null;
 
     private async Task<bool> UpdateGameAsync()
     {
@@ -1259,7 +1272,7 @@ public partial class MainViewModel : ObservableObject
         var progress = new Progress<PatchProgress>(p => OnProgress(LaunchProgress.Updating("Updating", LaunchSteps.StartGame, p, 0.01, 0.99)));
         try
         {
-            await Task.Run(() => PolUpdates.UpdateFfxi(dirs.Ffxi, dirs.Viewer, progress, ct), ct);
+            await Task.Run(() => PolUpdates.UpdateFfxi(dirs.Ffxi, dirs.Viewer, dirs.Region, progress, ct), ct);
             return true;
         }
         catch (OperationCanceledException)

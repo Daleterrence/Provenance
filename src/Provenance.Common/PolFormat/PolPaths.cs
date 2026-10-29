@@ -11,12 +11,32 @@ public static class PolPaths
     public const string ViewerProduct = "1000";
     public const string FfxiProduct = "0001";
 
-    public static PolRegion? TryAutoDetectRegion()
+    private static readonly PolRegion[] Order = [PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan];
+
+    // the regions Provenance logs in and plays on
+    public static bool Supported(PolRegion? region) => region is PolRegion.UnitedStates or PolRegion.Europe;
+
+    public static string Hive(PolRegion region) => region switch
     {
-        foreach (var region in new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan })
-            if (TryGetInstallFolder(region, ViewerProduct) is { } viewer && Directory.Exists(viewer))
-                return region;
-        return null;
+        PolRegion.Japan => @"SOFTWARE\PlayOnline",
+        PolRegion.UnitedStates => @"SOFTWARE\PlayOnlineUS",
+        PolRegion.Europe => @"SOFTWARE\PlayOnlineEU",
+        _ => throw new ArgumentOutOfRangeException(nameof(region)),
+    };
+
+    public static PolRegion? TryAutoDetectRegion() => DetectRegion(r => TryGetInstallFolder(r, ViewerProduct));
+
+    // pol.exe goes by env.dat, not the registry, and a PC that's switched regions keeps the old one's keys. So a hive
+    // only counts when its viewer folder's env.dat agrees, and with none agreeing the first folder's env.dat wins
+    internal static PolRegion? DetectRegion(Func<PolRegion, string?> viewerFolder)
+    {
+        var found = new List<(PolRegion Hive, string Dir)>();
+        foreach (var region in Order)
+            if (viewerFolder(region) is { } dir && Directory.Exists(dir))
+                found.Add((region, dir));
+        foreach (var (hive, dir) in found)
+            if (PolEnv.Region(dir) == hive) return hive;
+        return found.Count == 0 ? null : PolEnv.Region(found[0].Dir) ?? found[0].Hive;
     }
 
     public static string? TryGetInstallFolder(PolRegion region, string productCode)
@@ -24,13 +44,7 @@ public static class PolPaths
         try
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
-            using var key = hklm.OpenSubKey(region switch
-            {
-                PolRegion.Japan => @"SOFTWARE\PlayOnline\InstallFolder",
-                PolRegion.UnitedStates => @"SOFTWARE\PlayOnlineUS\InstallFolder",
-                PolRegion.Europe => @"SOFTWARE\PlayOnlineEU\InstallFolder",
-                _ => throw new ArgumentOutOfRangeException(nameof(region)),
-            });
+            using var key = hklm.OpenSubKey(Hive(region) + @"\InstallFolder");
             var value = key?.GetValue(productCode) as string;
             return string.IsNullOrWhiteSpace(value) ? null : value.TrimEnd('\\');
         }

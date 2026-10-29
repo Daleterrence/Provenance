@@ -15,15 +15,18 @@ static void die(const char *m)
 
 static int get_pol_path(char *out, int cap)
 {
+    static const char *const keys[] = { "SOFTWARE\\WOW6432Node\\PlayOnlineUS\\InstallFolder",
+                                        "SOFTWARE\\WOW6432Node\\PlayOnlineEU\\InstallFolder" };
     HKEY k;
-    DWORD n = cap, t;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
-        "SOFTWARE\\WOW6432Node\\PlayOnlineUS\\InstallFolder", 0, KEY_READ, &k))
-        return 0;
-    if (RegQueryValueExA(k, "1000", NULL, &t, (BYTE *)out, &n) || t != REG_SZ) {
-        RegCloseKey(k); return 0;
+    DWORD n = 0, t;
+    int i, found = 0;
+    for (i = 0; i < 2 && !found; i++) {
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, keys[i], 0, KEY_READ, &k)) continue;
+        n = cap;
+        found = !RegQueryValueExA(k, "1000", NULL, &t, (BYTE *)out, &n) && t == REG_SZ;
+        RegCloseKey(k);
     }
-    RegCloseKey(k);
+    if (!found) return 0;
     if (n < 5 || n > (DWORD)cap) return 0;
     if (out[n - 2] != '\\') { out[n - 1] = '\\'; out[n] = 0; }
     lstrcatA(out, "pol.exe");

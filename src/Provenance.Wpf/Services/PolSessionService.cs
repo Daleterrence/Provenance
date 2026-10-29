@@ -147,6 +147,9 @@ public sealed class PolSessionService : IDisposable
         _wrapped = new WrappedStoreCache<WindowsCredentialStore>(openWrapped);
         _checkKey = checkKey;
         _dropKey = dropKey;
+        FindLaunchFiles = () => LaunchFiles(Region);
+        GameIsInstalled = () => GameInstalled(Region);
+        UpdateViewer = (dir, progress, freeFiles, ct) => PolUpdates.UpdateViewer(dir, Region, progress, freeFiles, ct);
         DeleteLeftovers();
         _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
     }
@@ -154,10 +157,10 @@ public sealed class PolSessionService : IDisposable
     public int? Pid { get; private set; }
 
     // everything a pol.exe start reaches outside this class, so the starts can be checked offline with stand-ins
-    internal Func<(string? ViewerDir, string? PolExe, string LauncherExe)> FindLaunchFiles { get; init; } = LaunchFiles;
-    internal Func<bool> GameIsInstalled { get; init; } = GameInstalled;
+    internal Func<(string? ViewerDir, string? PolExe, string LauncherExe)> FindLaunchFiles { get; init; }
+    internal Func<bool> GameIsInstalled { get; init; }
     internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
-    internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; } = PolUpdates.UpdateViewer;
+    internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; }
     internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
 
     public event Action<PolSocialSnapshot>? SnapshotUpdated;
@@ -172,6 +175,9 @@ public sealed class PolSessionService : IDisposable
     internal int SweepRuns => Volatile.Read(ref _sweepRuns);
 
     private WindowsCredentialStore Wrapped => _wrapped.Get();
+
+    // a login or pre-start only gets this far on a supported region
+    private PolRegion Region => _settings.DetectedRegion ?? PolRegion.UnitedStates;
 
     // a changed key stops the sign-in, the hook would read the entries with the new one and exit 11
     internal (int Code, string Text)? KeyForSignIn(int? detailsGeneration = null)
@@ -255,7 +261,7 @@ public sealed class PolSessionService : IDisposable
         _played = false;
         _sessionLean = options.Lean;
         var region = _settings.DetectedRegion;
-        if (region != PolRegion.UnitedStates)
+        if (!PolPaths.Supported(region))
             return Fail(region is null
                 ? "PlayOnline isn't installed." : $"Provenance doesn't support the {RegionName(region.Value)} version of PlayOnline yet.");
         var (viewerDir, polExe, launcherExe) = FindLaunchFiles();
@@ -516,9 +522,9 @@ public sealed class PolSessionService : IDisposable
         _ => "North American",
     };
 
-    private static (string? ViewerDir, string? PolExe, string LauncherExe) LaunchFiles()
+    private static (string? ViewerDir, string? PolExe, string LauncherExe) LaunchFiles(PolRegion region)
     {
-        var viewerDir = PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.ViewerProduct);
+        var viewerDir = PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct);
         var polExe = viewerDir is null ? null : Path.Combine(viewerDir, "pol.exe");
         var launcherExe = Path.Combine(ThirdPartyHookService.NativeDir, "pol_launch.exe");
         bool found = polExe != null && File.Exists(polExe) && File.Exists(launcherExe)
@@ -592,7 +598,7 @@ public sealed class PolSessionService : IDisposable
     private bool MayPrestart() =>
         _prestart == null && Pid == null && _prestartHolds == 0
         && Platform is not (ThirdPartyHookService.Ashita or ThirdPartyHookService.Windower)
-        && _settings.DetectedRegion == PolRegion.UnitedStates;
+        && PolPaths.Supported(_settings.DetectedRegion);
 
     internal bool PrestartAllowed
     {
@@ -652,8 +658,8 @@ public sealed class PolSessionService : IDisposable
         }
     }
 
-    private static bool GameInstalled() =>
-        PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.FfxiProduct) is { } ffxi && File.Exists(Path.Combine(ffxi, "FFXiMain.dll"));
+    private static bool GameInstalled(PolRegion region) =>
+        PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct) is { } ffxi && File.Exists(Path.Combine(ffxi, "FFXiMain.dll"));
 
     // POL_IPC_DIR and POL_CRED_KEYFILE have to go in here, the go file never carries them
     internal static void SetPrestartEnvironment(IDictionary<string, string?> env, int parentPid)

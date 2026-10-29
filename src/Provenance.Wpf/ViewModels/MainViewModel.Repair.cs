@@ -17,16 +17,20 @@ public partial class MainViewModel
     private const string RepairHint = "Checks every game file and replaces any that are damaged. It'll ask you before it replaces anything.";
     internal const string RepairLockedText = "Another copy of Provenance is updating or repairing the game files. Repair can start once it's finished.";
     internal const string RepairGameRunningText = "FINAL FANTASY XI is running. Close it to repair the game files.";
+    internal const string RepairEuropeText = "Repair isn't available for the European version of PlayOnline yet.";
 
     private DispatcherTimer? _repairProbe;
     private bool _repairing, _sessionEnding, _probing;
 
-    // the mirror only has the North American client. A broken install can have lost FFXiMain.dll, so it only needs
-    // both folders registered
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RepairBlockedReason), nameof(RepairTooltip))]
     [NotifyCanExecuteChangedFor(nameof(RepairGameFilesCommand))]
     private bool _repairAvailable;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RepairBlockedReason), nameof(RepairTooltip))]
+    [NotifyCanExecuteChangedFor(nameof(RepairGameFilesCommand))]
+    private bool _repairEurope;
 
     // what the probe last saw: another copy holding the update lock, or the game running
     [ObservableProperty]
@@ -36,16 +40,30 @@ public partial class MainViewModel
 
     public string? RepairBlockedReason =>
         !RepairAvailable ? null
+        : RepairEurope ? RepairEuropeText
         : _pol.Pid is not null || _sessionEnding ? "Repair can start once you're logged out of PlayOnline."
         : MultiRunning ? "Repair can start once Provenance has finished starting your accounts."
         : RepairBusyReason;
 
     public string RepairTooltip => RepairBlockedReason ?? RepairHint;
 
-    private void RefreshRepairAvailable(PolRegion? region) =>
-        RepairAvailable = MirrorKeys.Trusted.Count > 0 && (region is null or PolRegion.UnitedStates)
-                          && PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.ViewerProduct) is not null
-                          && PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.FfxiProduct) is not null;
+    // A broken install can have lost FFXiMain.dll, so it only needs both folders registered. The mirror only has the
+    // North American viewer, so EU is shown but off
+    internal static (bool Available, bool Europe) RepairState(PolRegion? region, bool haveKeys, Func<PolRegion, string, string?> folder)
+    {
+        bool europe = region == PolRegion.Europe;
+        var r = europe ? PolRegion.Europe : PolRegion.UnitedStates;
+        bool available = haveKeys && (region is null or PolRegion.UnitedStates or PolRegion.Europe)
+                         && folder(r, PolPaths.ViewerProduct) is not null && folder(r, PolPaths.FfxiProduct) is not null;
+        return (available, europe);
+    }
+
+    private void RefreshRepairAvailable(PolRegion? region)
+    {
+        var (available, europe) = RepairState(region, MirrorKeys.Trusted.Count > 0, PolPaths.TryGetInstallFolder);
+        RepairEurope = europe;
+        RepairAvailable = available;
+    }
 
     // Pid and the end of a sign-out have no change notice of their own
     private void RefreshRepair()
@@ -92,7 +110,7 @@ public partial class MainViewModel
     public async Task ProbeRepairAsync()
     {
         // a multi-account run holds the update lock in this copy, which isn't "another copy"
-        if (_probing || _repairing || !_windowShown || !RepairAvailable || SocialConnected || IsLaunching || MultiRunning) return;
+        if (_probing || _repairing || !_windowShown || !RepairAvailable || RepairEurope || SocialConnected || IsLaunching || MultiRunning) return;
         _probing = true;
         try { RepairBusyReason = await Task.Run(RepairBusy); }
         finally { _probing = false; }

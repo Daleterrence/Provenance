@@ -446,9 +446,10 @@ public sealed class GameInstaller
             var viewer = FindGameFolder(folder, "pol.exe");
             if (ffxi == null && viewer == null)
                 return "Couldn't find FINAL FANTASY XI in that folder.";
-            var suffix = region switch { PolRegion.Europe => "EU", PolRegion.Japan => "", _ => "US" };
+            // the viewer's own env.dat says which region's keys its pol.exe reads
+            if (viewer != null && PolEnv.Region(viewer) is { } own) region = own;
             using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
-            using var key = baseKey.CreateSubKey($@"SOFTWARE\PlayOnline{suffix}\InstallFolder", writable: true)
+            using var key = baseKey.CreateSubKey(PolPaths.Hive(region) + @"\InstallFolder", writable: true)
                             ?? throw Shown.Mark(new InvalidOperationException(NeedsAdmin));
             if (viewer != null) key.SetValue(PolPaths.ViewerProduct, viewer.TrimEnd('\\') + "\\", RegistryValueKind.String);
             if (ffxi != null) key.SetValue(PolPaths.FfxiProduct, ffxi.TrimEnd('\\') + "\\", RegistryValueKind.String);

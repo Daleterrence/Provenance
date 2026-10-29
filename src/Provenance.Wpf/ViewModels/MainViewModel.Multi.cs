@@ -329,7 +329,7 @@ public partial class MainViewModel : IMultiRunHost
                     SetRunStatus($"Updating FINAL FANTASY XI {step}{what}" + (eta.Length > 0 ? $". {eta}." : "."));
                 });
             });
-            try { await Task.Run(() => PolUpdates.UpdateFfxi(dirs.Ffxi, dirs.Viewer, patch, token), token); }
+            try { await Task.Run(() => PolUpdates.UpdateFfxi(dirs.Ffxi, dirs.Viewer, dirs.Region, patch, token), token); }
             catch (Exception) when (token.IsCancellationRequested) { return await Stopped(); }
             catch (Exception ex)
             {
@@ -341,7 +341,7 @@ public partial class MainViewModel : IMultiRunHost
         }
         if (token.IsCancellationRequested) return await Stopped();
 
-        try { InstallViewModel.WriteFirstStartSettings(PolRegion.UnitedStates); }
+        try { InstallViewModel.WriteFirstStartSettings(PlayRegion); }
         catch (Exception ex)
         {
             Log.Error(ex, "Multi-account mode: the first-start game settings were not written for {Account}", account.ProfileId);
