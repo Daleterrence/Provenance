@@ -36,6 +36,13 @@
                     <Run Text="{Binding TotalGib, Mode=OneWay}" /><Run Text=") and installs it with Square Enix's own installers." />
                 </TextBlock>
 
+                <StackPanel x:Name="RegionChoice" Visibility="{Binding ShowRegionChoice, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="Version" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
+                    <ComboBox Width="260" HorizontalAlignment="Left" Padding="12,8,8,8" FontSize="13"
+                              Style="{StaticResource MaterialDesignOutlinedComboBox}" AutomationProperties.Name="Version"
+                              ItemsSource="{Binding RegionChoices}" SelectedIndex="{Binding RegionIndex}" IsEnabled="{Binding CanChooseRegion}" />
+                </StackPanel>
+
                 <TextBlock Text="Install to" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBox Text="{Binding InstallFolder}" Style="{StaticResource MaterialDesignOutlinedTextBox}" />

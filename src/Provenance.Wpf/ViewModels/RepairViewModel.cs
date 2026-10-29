@@ -24,7 +24,6 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
     private const string GameRunningText = "FINAL FANTASY XI is running. Close every FINAL FANTASY XI window, then run the repair again.";
     private const string ViewerRunningText =
         "PlayOnline is running, either for a logged-in account or in another copy of Provenance. Log out and close it, then run the repair again.";
-    private const string MirrorRegion = "us";
     private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
 
     private CancellationTokenSource? _cts;
@@ -99,13 +98,14 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
         {
             // no keys means every mirror read would fail its signature, so not one request goes out
             if (MirrorKeys.Trusted.Count == 0) { End("Repair isn't available", MirrorRepair.NotSetUp, failed: false); return; }
-            if (region is { } r && r != PolRegion.UnitedStates)
+            var installed = region ?? PolRegion.UnitedStates;
+            if (MirrorLayout.RegionFolder(installed) is not { } mirrorRegion)
             {
-                End("Repair isn't available", "Repair only works with the North American version of PlayOnline.", failed: false);
+                End("Repair isn't available", "Repair only works with the North American and European versions of PlayOnline.", failed: false);
                 return;
             }
-            var viewerDir = PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.ViewerProduct);
-            var ffxiDir = PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.FfxiProduct);
+            var viewerDir = PolPaths.TryGetInstallFolder(installed, PolPaths.ViewerProduct);
+            var ffxiDir = PolPaths.TryGetInstallFolder(installed, PolPaths.FfxiProduct);
             if (viewerDir is null || ffxiDir is null)
             {
                 End("Nothing to repair", "Provenance couldn't find both the PlayOnline Viewer and FINAL FANTASY XI on this PC. Install the game first.", failed: true);
@@ -162,7 +162,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
                 var staging = Path.Combine(stagingRoot, Guid.NewGuid().ToString("N"));
                 try
                 {
-                    var repair = new MirrorRepair(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), MirrorRegion)
+                    var repair = new MirrorRepair(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion)
                     {
                         StagingDir = staging,
                         Status = status.Report,

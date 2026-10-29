@@ -38,8 +38,20 @@ public sealed class GameInstaller
 {
     public const long RequiredFreeBytes = 25L * 1024 * 1024 * 1024;
 
-    internal const string PolProductUs = "{81784E3A-1BDA-4743-B5F8-04E59DC7E031}";
-    internal const string FfxiProductUs = "{07EB4C8B-3869-49B4-8CF8-D6D9FB8C8026}";
+    // each region's two MSIs, by ProductCode
+    private static readonly (PolRegion Region, string Viewer, string Ffxi)[] ProductCodes =
+    [
+        (PolRegion.UnitedStates, "{81784E3A-1BDA-4743-B5F8-04E59DC7E031}", "{07EB4C8B-3869-49B4-8CF8-D6D9FB8C8026}"),
+        (PolRegion.Europe, "{F65CC5FB-3089-483C-8504-14EA5F58DD1D}", "{549BFF68-9B3D-46BE-88E3-BD4F7C6DEB36}"),
+    ];
+
+    public static bool Installs(PolRegion region) => ProductCodes.Any(p => p.Region == region);
+
+    internal static (string Viewer, string Ffxi) ProductCodesFor(PolRegion region) =>
+        ProductCodes.FirstOrDefault(p => p.Region == region) is { Viewer: not null } p
+            ? (p.Viewer, p.Ffxi)
+            : throw new ArgumentOutOfRangeException(nameof(region), region, "Provenance doesn't install this region.");
+
     internal const string PolShortcut = "MAKEPOLSHORTCUT", FfxiShortcut = "MAKEFFXISHORTCUT";
     private const string NeedsAdmin =
         "Provenance needs administrator rights to save where the game is installed. Run Provenance as an administrator.";
@@ -259,10 +271,11 @@ public sealed class GameInstaller
                ?? throw new InvalidDataException("The unpacked installer has no FFXISetup.exe.");
     }
 
-    public async Task<IReadOnlyList<string>> RunInstallAsync(string unpackedDir, string installRoot, string logDir,
+    public async Task<IReadOnlyList<string>> RunInstallAsync(string unpackedDir, string installRoot, string logDir, PolRegion region,
                                                              IProgress<InstallProgress>? progress, CancellationToken ct,
                                                              bool payloadInPlace = false)
     {
+        var (viewerCode, ffxiCode) = ProductCodesFor(region);
         var warnings = new List<string>();
         Directory.CreateDirectory(installRoot);
         Directory.CreateDirectory(logDir);
@@ -290,11 +303,11 @@ public sealed class GameInstaller
 
         var polMsi = FindFirst(unpackedDir, ViewerFolder, ViewerNames)
                      ?? throw Shown.Mark(new FileNotFoundException(NoViewerPackage));
-        await InstallPackageAsync(polMsi, PolProductUs, PolPaths.ViewerProduct, "pol.exe", installRoot, PolShortcut,
+        await InstallPackageAsync(polMsi, viewerCode, region, PolPaths.ViewerProduct, "pol.exe", installRoot, PolShortcut,
                                   "PlayOnline Viewer", Path.Combine(logDir, "playonline.log"), progress, warnings, ct, restartPending: false,
                                   payloadInPlace);
 
-        if (PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, PolPaths.ViewerProduct) is { } viewer &&
+        if (PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct) is { } viewer &&
             Directory.GetParent(viewer.TrimEnd('\\'))?.Parent is { } polRoot &&
             !string.Equals(Path.TrimEndingDirectorySeparator(polRoot.FullName), Path.TrimEndingDirectorySeparator(Path.GetFullPath(installRoot)),
                            StringComparison.OrdinalIgnoreCase))
@@ -304,7 +317,7 @@ public sealed class GameInstaller
         }
 
         var ffxiMsi = FindFirst(unpackedDir, FfxiFolder, FfxiNames) ?? throw Shown.Mark(new FileNotFoundException(NoFfxiPackage));
-        await InstallPackageAsync(ffxiMsi, FfxiProductUs, PolPaths.FfxiProduct, "FFXiMain.dll", installRoot, FfxiShortcut,
+        await InstallPackageAsync(ffxiMsi, ffxiCode, region, PolPaths.FfxiProduct, "FFXiMain.dll", installRoot, FfxiShortcut,
                                   "FINAL FANTASY XI", Path.Combine(logDir, "ffxi.log"), progress, warnings, ct, restartPending,
                                   payloadInPlace);
         if (restartPending) warnings.Add("Restart Windows before you play, because DirectPlay (which the game needs) only turns on after a restart.");
@@ -329,7 +342,7 @@ public sealed class GameInstaller
     private static void Say(IProgress<InstallProgress>? progress, string text, double fraction = -1) =>
         progress?.Report(new InstallProgress("Installing", text, fraction, 0, 0));
 
-    private static async Task InstallPackageAsync(string msi, string productCode, string registryValue, string keyFile,
+    private static async Task InstallPackageAsync(string msi, string productCode, PolRegion region, string registryValue, string keyFile,
                                                   string installRoot, string shortcutProperty, string name, string logPath,
                                                   IProgress<InstallProgress>? progress, List<string> warnings, CancellationToken ct,
                                                   bool restartPending, bool payloadInPlace)
@@ -337,7 +350,7 @@ public sealed class GameInstaller
         // The main file alone never counts, the mirror might have only just put it there. The InstallFolder value is
         // what marks a product installed, Apply writes it last.
         if (MsiInstaller.IsInstalled(productCode) ||
-            (PolPaths.TryGetInstallFolder(PolRegion.UnitedStates, registryValue) is { } dir && File.Exists(Path.Combine(dir, keyFile))))
+            (PolPaths.TryGetInstallFolder(region, registryValue) is { } dir && File.Exists(Path.Combine(dir, keyFile))))
         {
             Say(progress, $"{name} is already installed.", 1);
             warnings.Add($"{name} was already installed, so it's been left as it is.");

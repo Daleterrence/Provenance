@@ -23,6 +23,8 @@ public sealed class SettingsService : ISettingsService
     // looked up again until it's found, so an install made while the app runs gets picked up
     public PolRegion? DetectedRegion => _region ??= PolPaths.TryAutoDetectRegion();
 
+    public void RedetectRegion() => _region = null;
+
     public SettingsService()
         : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "settings.json")) { }
 

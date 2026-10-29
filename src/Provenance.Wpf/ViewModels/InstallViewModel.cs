@@ -25,7 +25,10 @@ public partial class InstallViewModel : ObservableObject
     private const uint EsContinuous = 0x80000000, EsSystemRequired = 0x00000001;
     private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
 
-    private readonly PolRegion _region;
+    // the versions the installer offers, North American first
+    private static readonly PolRegion[] RegionValues = [PolRegion.UnitedStates, PolRegion.Europe];
+
+    private PolRegion _region;
     private readonly Action? _holdPrestarts, _releasePrestarts;
     private readonly GameInstaller _installer = new();
     private readonly DownloadMeter _meter;
@@ -33,7 +36,9 @@ public partial class InstallViewModel : ObservableObject
 
     public InstallViewModel(PolRegion? region, Action? holdPrestarts = null, Action? releasePrestarts = null)
     {
-        _region = region ?? PolRegion.UnitedStates;
+        // a viewer that's already there decides, otherwise it's the player's pick
+        ShowRegionChoice = region is not { } r || !GameInstaller.Installs(r);
+        _region = ShowRegionChoice ? RegionValues[0] : region!.Value;
         _holdPrestarts = holdPrestarts;
         _releasePrestarts = releasePrestarts;
         _meter = new DownloadMeter(text => DownloadText = text, text => TimeLeftText = text);
@@ -46,6 +51,26 @@ public partial class InstallViewModel : ObservableObject
     }
 
     public event Action? Installed;
+
+    public bool ShowRegionChoice { get; }
+
+    public IReadOnlyList<string> RegionChoices { get; } = ["North American", "European"];
+
+    // fixed once a run's started, half an install of one region under the other's would be a mess
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanChooseRegion))]
+    private bool _regionLocked;
+
+    public bool CanChooseRegion => !RegionLocked;
+
+    [ObservableProperty] private int _regionIndex;
+
+    partial void OnRegionIndexChanged(int value)
+    {
+        if (RegionLocked || value < 0 || value >= RegionValues.Length) return;
+        _region = RegionValues[value];
+        TotalGib = $"{GameInstaller.TotalBytes(_region) / 1024.0 / 1024 / 1024:0.0} GiB";
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(GameFolderText))]
@@ -241,6 +266,7 @@ public partial class InstallViewModel : ObservableObject
             StageIndeterminate = true;
             Stage = "Preparing";
             Detail = "Checking this PC...";
+            Log.Information("Install: region {Region}", _region);
             // my own waiting pol.exe would fail the check below, and none may start while the files go in
             if (_holdPrestarts is not null)
             {
@@ -258,6 +284,10 @@ public partial class InstallViewModel : ObservableObject
             running.ForEach(p => p.Dispose());
             if (running.Count > 0)
                 throw Shown.Mark(new InvalidOperationException("PlayOnline or FINAL FANTASY XI is running. Close it, then press Try again."));
+            if (OtherVersionIn(InstallFolder, _region, PolPaths.TryGetInstallFolder) is { } clash)
+                throw Shown.Mark(new InvalidOperationException(clash));
+            // only from here, a refused start leaves the choice open
+            RegionLocked = true;
 
             var parts = GameInstaller.PartsFor(_region).ToList();
             var ownNames = parts.SelectMany(p => new[] { p.FileName, p.FileName + ".part" }).Concat(new[] { "unpacked", "logs", MirrorFolder });
@@ -312,7 +342,7 @@ public partial class InstallViewModel : ObservableObject
             IReadOnlyList<string> warnings;
             using (await UpdateLockAsync(ct))
             {
-                warnings = await _installer.RunInstallAsync(root, InstallFolder, Path.Combine(work, "logs"), InstallStepProgress(), ct);
+                warnings = await _installer.RunInstallAsync(root, InstallFolder, Path.Combine(work, "logs"), _region, InstallStepProgress(), ct);
                 WriteFirstStartSettings(_region);
             }
 
@@ -373,9 +403,9 @@ public partial class InstallViewModel : ObservableObject
     // it to SE's parts, but a problem on this PC is an error
     private async Task<bool> InstallFromMirrorAsync(string work, CancellationToken ct)
     {
-        if (_region != PolRegion.UnitedStates)
+        if (MirrorLayout.RegionFolder(_region) is not { } mirrorRegion)
         {
-            Log.Information("Install source: Square Enix's parts (the Provenance mirror has the US client only; region {Region})", _region);
+            Log.Information("Install source: Square Enix's parts (the Provenance mirror has no copy of region {Region})", _region);
             return false;
         }
         CurrentStep = 0;
@@ -383,7 +413,7 @@ public partial class InstallViewModel : ObservableObject
         Detail = MirrorInstall.PrepareText;
         Log.Information("Install source: trying the Provenance mirror");
         var staging = Path.Combine(work, MirrorFolder);
-        var mirror = new MirrorInstall(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), "us",
+        var mirror = new MirrorInstall(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion,
                                        m => Log.Warning("Mirror install: {Message}", m));
         var progress = new Progress<InstallProgress>(p =>
         {
@@ -434,7 +464,7 @@ public partial class InstallViewModel : ObservableObject
             _meter.Clear();
             try
             {
-                warnings = await _installer.RunInstallAsync(staged, InstallFolder, Path.Combine(work, "logs"), InstallStepProgress(), ct, payloadInPlace: true);
+                warnings = await _installer.RunInstallAsync(staged, InstallFolder, Path.Combine(work, "logs"), _region, InstallStepProgress(), ct, payloadInPlace: true);
                 WriteFirstStartSettings(_region);
                 mirror.WriteVersions();   // last, so a stopped install never claims a version
             }
@@ -456,6 +486,33 @@ public partial class InstallViewModel : ObservableObject
         Finished(next, warnings);
         return true;
     }
+
+    // another region's viewer or game in the same folders would get written over, with both regions' keys pointing
+    // there. This region's own install is fine, the installer carries on with it
+    internal static string? OtherVersionIn(string installFolder, PolRegion region, Func<PolRegion, string, string?> registered,
+                                           Func<string, bool>? fileExists = null)
+    {
+        fileExists ??= File.Exists;
+        var root = Path.Combine(installFolder, "SquareEnix");
+        var products = new[] { (PolPaths.ViewerProduct, "PlayOnlineViewer", "pol.exe", "PlayOnline"), (PolPaths.FfxiProduct, "FINAL FANTASY XI", "FFXiMain.dll", "FINAL FANTASY XI") };
+        foreach (var other in new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan }.Where(r => r != region))
+            foreach (var (code, folder, keyFile, name) in products)
+                // a switched PC keeps the old region's keys, so it only counts with the files really there
+                if (registered(other, code) is { } there && SameFolder(there, Path.Combine(root, folder)) && fileExists(Path.Combine(there, keyFile)))
+                    return $"The {VersionName(other)} version of {name} is already installed in {there}. Choose another folder for the {VersionName(region)} version.";
+        return null;
+    }
+
+    private static bool SameFolder(string a, string b) =>
+        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
+                      StringComparison.OrdinalIgnoreCase);
+
+    private static string VersionName(PolRegion region) => region switch
+    {
+        PolRegion.Europe => "European",
+        PolRegion.Japan => "Japanese",
+        _ => "North American",
+    };
 
     // the lock updates and repairs take, so another copy can't write into the same folders meanwhile
     private async Task<IDisposable> UpdateLockAsync(CancellationToken ct)

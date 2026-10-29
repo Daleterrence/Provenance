@@ -1,5 +1,6 @@
 using Provenance.Common.Install;
 using Provenance.Common.Patcher;
+using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Mirror;
 
@@ -252,7 +253,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
                    ?? throw new MirrorUnusableException(install.SkipReason ?? "the mirror has no install data", []);
 
         var packages = new List<Package>();
-        foreach (var (slug, _, productCode, keyFile, name) in MirrorInstall.Products)
+        foreach (var (slug, _, productCode, keyFile, name) in MirrorInstall.Products(Region))
         {
             var product = products.Single(p => p.Slug == slug).Product;
             var msi = slug == "viewer" ? data.ViewerMsi : data.FfxiMsi;
@@ -315,8 +316,11 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 
-    private static (string Slug, PatchProduct Product)[] ProductsOf(string viewerDir, string ffxiDir) =>
-        [("viewer", PatchProduct.Viewer(viewerDir)), ("ffxi", PatchProduct.Ffxi(ffxiDir, viewerDir))];
+    private PolRegion Region => MirrorLayout.RegionOf(region);
+
+    // the region's hive, POL keys patch.ver with its Interface value
+    private (string Slug, PatchProduct Product)[] ProductsOf(string viewerDir, string ffxiDir) =>
+        [("viewer", PatchProduct.Viewer(viewerDir, Region)), ("ffxi", PatchProduct.Ffxi(ffxiDir, viewerDir, Region))];
 
     private static IReadOnlyList<MirrorEntry> WorkOf(RepairPlan plan, string slug) => plan.Work.TryGetValue(slug, out var w) ? w : [];
 

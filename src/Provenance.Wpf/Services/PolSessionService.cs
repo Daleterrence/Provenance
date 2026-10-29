@@ -448,8 +448,12 @@ public sealed class PolSessionService : IDisposable
         var logPath = HookFiles.PathFor(pid, "log");
         var translator = new HookLogTranslator();
         var lastActivity = DateTime.UtcNow;
+        int? viewerLanguage = null;
         int? Ending(string line)
         {
+            // the language the hook gave polcore, the same one app.dll builds the jail page's address from
+            if (Regex.Match(line, @"viewer_init: lang=(\d+)") is { Success: true } lm && int.TryParse(lm.Groups[1].Value, out var lang))
+                viewerLanguage = lang;
             if (DetailsUnreadable(line)) return Fail(ErrorDetailsUnreadable, DetailsAgainText);
             if (line.Contains("phase_c: AUTH FAILED"))
             {
@@ -461,7 +465,7 @@ public sealed class PolSessionService : IDisposable
             }
             if (line.Contains("phase_c: ACCOUNT BLOCKED "))
                 return Fail(ErrorAccountBlocked,
-                            PolAccountNotices.Blocked(Regex.Match(line, @"ACCOUNT BLOCKED (\S+)").Groups[1].Value));
+                            PolAccountNotices.Blocked(Regex.Match(line, @"ACCOUNT BLOCKED (\S+)").Groups[1].Value, Region, viewerLanguage));
             if (line.Contains("phase_c: LOAD FAILED "))
                 return Fail(ErrorStalled, LoadFailedText(Regex.Match(line, @"LOAD FAILED (\w+)").Groups[1].Value));
             if (line.Contains("phase_c: NO POL HANDLE"))

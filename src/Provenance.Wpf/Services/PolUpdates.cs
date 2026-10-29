@@ -36,7 +36,7 @@ public static class PolUpdates
             }
             // a stale queue (.tmp2) mustn't overwrite what the mirror writes below
             ApplyQueued();
-            var r = Update(PatchProduct.Viewer(viewerDir, region), MirrorUpdater.RegionFor(region, "viewer"), "viewer", progress, BeforeChange, ct);
+            var r = Update(PatchProduct.Viewer(viewerDir, region), MirrorUpdater.RegionFor(region), "viewer", progress, BeforeChange, ct);
             // up to date or not, an earlier run might've died between the update and these steps
             ApplyQueued();
             Log.Information("PlayOnline Viewer update check: {Result}", r);
@@ -47,7 +47,7 @@ public static class PolUpdates
                                          CancellationToken ct) =>
         Locked(ct, progress, () =>
         {
-            var r = Update(PatchProduct.Ffxi(ffxiDir, viewerDir, region), MirrorUpdater.RegionFor(region, "ffxi"), "ffxi", progress, () =>
+            var r = Update(PatchProduct.Ffxi(ffxiDir, viewerDir, region), MirrorUpdater.RegionFor(region), "ffxi", progress, () =>
             {
                 if (GameRunning())
                     throw Shown.Mark(new InvalidOperationException(

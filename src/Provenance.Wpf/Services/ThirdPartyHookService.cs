@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using Provenance.Common.Game;
+using Provenance.Common.PolFormat;
 using Serilog;
 
 namespace Provenance.Wpf.Services;
@@ -115,6 +116,10 @@ public sealed class ThirdPartyHookService
         lines.Insert(end, $"{key} = {value}");
     }
 
+    // Ashita's [ashita.language] playonline: 2 English (North America), 3 European, for the region pol.exe's env.dat says
+    internal static int AshitaLanguage(string polExe) =>
+        Path.GetDirectoryName(polExe) is { Length: > 0 } dir && PolEnv.Region(dir) == PolRegion.Europe ? 3 : 2;
+
     // the user's boot config minus anything that'd fight the app: no command line (it can carry a credential blob), no
     // sign-in plugin or menu skip, and file = the real pol.exe
     public static string WriteAshitaBoot(string ashitaDir, string? sourceName, string polExe)
@@ -126,7 +131,7 @@ public sealed class ThirdPartyHookService
         {
             "[ashita.launcher]", "autoclose = 1", "name = provenance",
             "[ashita.boot]", "file = ", "command = ", "gamemodule = ffximain.dll", "script = default.txt", "args = ",
-            "[ashita.language]", "playonline = 2", "ashita = 2",
+            "[ashita.language]", $"playonline = {AshitaLanguage(polExe)}", "ashita = 2",
             "[ashita.polplugins]", "sandbox = 0", "autopol = 0", "quicky = 0",
         };
         // the sign-in plugin's switched off quietly

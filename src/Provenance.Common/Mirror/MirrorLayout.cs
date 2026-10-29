@@ -1,8 +1,19 @@
+using Provenance.Common.PolFormat;
+
 namespace Provenance.Common.Mirror;
 
 public static class MirrorLayout
 {
     public const string BaseUrl = "https://patch.provenancexi.app/";
+
+    // the regions the mirror has a copy of, by their folder in it. Japan has none (yet)
+    private static readonly (PolRegion Region, string Folder)[] Regions = [(PolRegion.UnitedStates, "us"), (PolRegion.Europe, "eu")];
+
+    public static string? RegionFolder(PolRegion region) => Regions.FirstOrDefault(r => r.Region == region).Folder;
+
+    public static PolRegion RegionOf(string folder) => Regions.FirstOrDefault(r => r.Folder == folder) is { Folder: not null } r
+        ? r.Region
+        : throw new ArgumentException($"Unknown mirror region \"{folder}\".", nameof(folder));
 
     public static string ObjectKey(string region, string sha256) => $"{region}/objects/{sha256}";
 

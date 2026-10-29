@@ -34,15 +34,21 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
     public const string DownloadText = "";
     private const string ScanText = "Checking the files already downloaded...";
 
-    internal static readonly (string Slug, string Code, string ProductCode, string KeyFile, string Name)[] Products =
-    [
-        ("viewer", PolPaths.ViewerProduct, GameInstaller.PolProductUs, "pol.exe", "PlayOnline Viewer"),
-        ("ffxi", PolPaths.FfxiProduct, GameInstaller.FfxiProductUs, "FFXiMain.dll", "FINAL FANTASY XI"),
-    ];
+    internal static (string Slug, string Code, string ProductCode, string KeyFile, string Name)[] Products(PolRegion region)
+    {
+        var (viewer, ffxi) = GameInstaller.ProductCodesFor(region);
+        return
+        [
+            ("viewer", PolPaths.ViewerProduct, viewer, "pol.exe", "PlayOnline Viewer"),
+            ("ffxi", PolPaths.FfxiProduct, ffxi, "FFXiMain.dll", "FINAL FANTASY XI"),
+        ];
+    }
+
+    private PolRegion Region => MirrorLayout.RegionOf(region);
 
     public Func<PatchProduct, CancellationToken, string> ServerVersion { get; init; } = (p, ct) => new PolUpdater(p).Check(ct).Server;
 
-    public Func<string, string?> RegisteredFolder { get; init; } = code => PolPaths.TryGetInstallFolder(RegionOf(region), code);
+    public Func<string, string?> RegisteredFolder { get; init; } = code => PolPaths.TryGetInstallFolder(MirrorLayout.RegionOf(region), code);
 
     public Func<string, bool> InstalledByWindowsInstaller { get; init; } = MsiInstaller.IsInstalled;
 
@@ -60,11 +66,12 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
         if (await FetchInstallDataAsync(stagingDir, null, progress, ct) is not { } data) return null;
         var (pointer, _, viewerMsi, ffxiMsi) = data;
 
-        var folders = new string[Products.Length];
-        var targets = new List<string>[Products.Length];
-        for (int i = 0; i < Products.Length; i++)
+        var products = Products(Region);
+        var folders = new string[products.Length];
+        var targets = new List<string>[products.Length];
+        for (int i = 0; i < products.Length; i++)
         {
-            var (slug, code, productCode, keyFile, name) = Products[i];
+            var (slug, code, productCode, keyFile, name) = products[i];
             var msi = slug == "viewer" ? viewerMsi : ffxiMsi;
             if (ReadPackage(msi, installRoot, keyFile, name, out var folder, out targets[i]) is { } unusable)
                 return Skip<string>(unusable);
@@ -82,10 +89,11 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
 
         var viewerDir = folders[0];
         var plans = new List<(StagedProduct Product, MirrorIndex Index, string Name)>();
-        for (int i = 0; i < Products.Length; i++)
+        for (int i = 0; i < products.Length; i++)
         {
-            var (slug, _, _, _, name) = Products[i];
-            var product = slug == "viewer" ? PatchProduct.Viewer(folders[i]) : PatchProduct.Ffxi(folders[i], viewerDir);
+            var (slug, _, _, _, name) = products[i];
+            // the region's hive, its Interface value keys patch.ver
+            var product = slug == "viewer" ? PatchProduct.Viewer(folders[i], Region) : PatchProduct.Ffxi(folders[i], viewerDir, Region);
             progress?.Report(new InstallProgress(PrepareStage, $"Checking the {name} version...", -1, 0, 0));
             string? server = null;
             try { server = await Task.Run(() => ServerVersion(product, ct), ct); }
@@ -174,14 +182,6 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
         SkipReason = reason;
         return null;
     }
-
-    private static PolRegion RegionOf(string region) => region switch
-    {
-        "us" => PolRegion.UnitedStates,
-        "eu" => PolRegion.Europe,
-        "jp" => PolRegion.Japan,
-        _ => throw new ArgumentException($"Unknown mirror region \"{region}\".", nameof(region)),
-    };
 
     private static string? Unsafe(string folder, MirrorIndex index) =>
         MirrorSync.FirstUnsafe(folder, index.Files) is { } why

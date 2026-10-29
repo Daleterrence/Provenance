@@ -11,6 +11,9 @@ public interface ISettingsService
     // from the registry, not a setting. A PC only ever has one working install
     PolRegion? DetectedRegion { get; }
 
+    // after an install or a located one, which can be another region than the one found before
+    void RedetectRegion() { }
+
     void Save(LauncherSettings settings);
 
     // only the first failed save of a run raises it, so a full disk doesn't pop a dialog on every change

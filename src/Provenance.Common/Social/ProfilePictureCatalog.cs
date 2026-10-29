@@ -1,4 +1,5 @@
 using System.Text;
+using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Social;
 
@@ -14,7 +15,14 @@ public static class ProfilePictureCatalog
     public sealed record Catalog(IReadOnlyList<Category> Categories, IReadOnlyList<ProfilePicture> ProfilePictures);
 
     // viewer region index (app.dll 0x105c7b44): 0 Japan, 1 North America, 2 Europe
-    public const int RegionUs = 1;
+    public const int RegionUs = 1, RegionEu = 2;
+
+    public static int RegionIndex(PolRegion region) => region switch
+    {
+        PolRegion.Japan => 0,
+        PolRegion.Europe => RegionEu,
+        _ => RegionUs,
+    };
 
     public static string Decode(byte[] data, string fileName)
     {
@@ -25,8 +33,10 @@ public static class ProfilePictureCatalog
         return Encoding.Unicode.GetString(plain, start, plain.Length - start);
     }
 
-    public static Catalog? Load(string viewerDir, int region = RegionUs)
+    // the install's own region by default, from its env.dat like pol.exe
+    public static Catalog? Load(string viewerDir, int? region = null)
     {
+        region ??= RegionIndex(ViewerBuild.RegionOf(viewerDir));
         // the US install has them under viewer\data\common, the EU one keeps per-language copies
         var dir = new[] { Path.Combine(viewerDir, "viewer", "data", "common"), Path.Combine(viewerDir, "data", "common") }
                   .FirstOrDefault(d => File.Exists(Path.Combine(d, "proface0.txt"))) ?? "";
@@ -34,7 +44,7 @@ public static class ProfilePictureCatalog
         var p1 = Path.Combine(dir, "proface1.txt");
         if (!File.Exists(p0) || !File.Exists(p1)) return null;
         return Parse(Decode(File.ReadAllBytes(p0), "proface0.txt"), Decode(File.ReadAllBytes(p1), "proface1.txt"),
-                     region, sheet => PolAvatar.SheetPath(viewerDir, sheet * 8) != null);
+                     region.Value, sheet => PolAvatar.SheetPath(viewerDir, sheet * 8) != null);
     }
 
     public static Catalog Parse(string categoriesText, string picsText, int region, Func<int, bool> sheetOnDisk)

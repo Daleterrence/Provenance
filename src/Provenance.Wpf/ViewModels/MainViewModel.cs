@@ -787,22 +787,12 @@ public partial class MainViewModel : ObservableObject
     private static string? ViewerFolder(PolRegion? region) =>
         region is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null;
 
-    internal const string InstallText = "Provenance can download and install the game for you, or use an install you already have.";
-    internal const string InstallEuropeText = "Provenance can't install the European version of the game yet, but it can use an install you already have.";
-
-    // the installer only has the North American client so far
-    public bool CanDownloadInstall => _settings.DetectedRegion != PolRegion.Europe;
-    public string InstallCardText => CanDownloadInstall ? InstallText : InstallEuropeText;
-
     private void RefreshInstallState()
     {
         var region = _settings.DetectedRegion;
         GameInstalled = region is { } r &&
                         PolPaths.TryGetInstallFolder(r, PolPaths.FfxiProduct) is { } f &&
                         File.Exists(Path.Combine(f, "FFXiMain.dll"));
-        OnPropertyChanged(nameof(CanDownloadInstall));
-        OnPropertyChanged(nameof(InstallCardText));
-        DownloadInstallCommand.NotifyCanExecuteChanged();
         RefreshRepairAvailable(region);
         if (!StatusIconService.Available) LoadStatusIcons();
     }
@@ -816,6 +806,7 @@ public partial class MainViewModel : ObservableObject
         var region = _settings.DetectedRegion ?? PolRegion.UnitedStates;
         var problem = GameInstaller.LocateExisting(folder, region, ex => Log.Warning(ex, "Could not record the install folder {Folder}", folder));
         if (problem != null) { MessageDialog.ShowError(Application.Current.MainWindow, "Couldn't use that folder", problem); return; }
+        _settings.RedetectRegion();
         RefreshInstallState();
         if (GameInstalled) MessageDialog.ShowInfo(Application.Current.MainWindow, "Install found",
             "FINAL FANTASY XI is now set up in Provenance.");
@@ -823,7 +814,7 @@ public partial class MainViewModel : ObservableObject
             "Provenance still can't find FINAL FANTASY XI in that folder. Choose the folder FINAL FANTASY XI is in, or install the game.");
     }
 
-    [RelayCommand(CanExecute = nameof(CanDownloadInstall))]
+    [RelayCommand]
     private void DownloadInstall()
     {
         var vm = new InstallViewModel(_settings.DetectedRegion, _pol.HoldPrestarts, _pol.ReleasePrestarts);
@@ -831,6 +822,7 @@ public partial class MainViewModel : ObservableObject
         if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
         vm.Installed += () => Application.Current.Dispatcher.Invoke(() =>
         {
+            _settings.RedetectRegion();
             RefreshInstallState();
             Task.Run(() => LargeAddressAwareSwitch.Apply(_settings, "after the install", _pol.HoldPrestarts, _pol.ReleasePrestarts,
                                                           LargeAddressAwareBlocked));

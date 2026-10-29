@@ -1,3 +1,5 @@
+using Provenance.Common.PolFormat;
+
 namespace Provenance.Common.Social;
 
 // the viewer's own account checks (app.dll LM table at 0x104a6d68, US block, Content ID check at 0x10199093), so the
@@ -84,15 +86,20 @@ public static class PolAccountNotices
         _ => $"Network Connection Error (code {reason}).",
     };
 
+    // env.dat's POL_JAIL_USER_LOGIN_URL with app.dll's language tag for %s ({ja-JP, en-US, en-GB, ...}[language] at
+    // 0x104b34a0). US always has language 1, EU reads its Settings\Language (the MSI writes 1), so only EU's 2 is en-GB
+    public static string JailUrl(PolRegion region, int? language) =>
+        $"http://info.playonline.com/snews/{(region == PolRegion.Europe && language == 2 ? "en-GB" : "en-US")}/jail.pml";
+
     // the server let it in but the account gates refused, so the session got signed out before anything started
-    public static string Blocked(string what)
+    public static string Blocked(string what, PolRegion region = PolRegion.UnitedStates, int? language = null)
     {
         if (what.StartsWith("LM-", StringComparison.Ordinal) && int.TryParse(what[3..], out var lm) &&
             For(220 + lm) is { } n)
             return $"{n.Text} ({n.Code})";
         if (what == "disconnect-bit") return "PlayOnline disconnected this account as soon as it logged in.";
         if (what == "jail")
-            return "This PlayOnline account is restricted. See http://info.playonline.com/snews/us/jail.pml for details.";
+            return $"This PlayOnline account is restricted. See {JailUrl(region, language)} for details.";
         if (what.StartsWith("load:", StringComparison.Ordinal) && int.TryParse(what[(what.IndexOf('=') + 1)..], out var code))
             return code switch
             {

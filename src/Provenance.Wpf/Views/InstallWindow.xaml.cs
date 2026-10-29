@@ -14,7 +14,18 @@ public partial class InstallWindow : Window
         Closing += OnClosing;
         KeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
         Loaded += (_, _) => { if (Owner != null) Owner.Closing += OnOwnerClosing; };
+        Loaded += (_, _) => GrowForRegionChoice();
         Closed += (_, _) => { if (Owner != null) Owner.Closing -= OnOwnerClosing; };
+    }
+
+    // the Version choice only shows with no viewer on the PC. The window grows by exactly its height then (still
+    // centred), so the rest looks the same either way
+    private void GrowForRegionChoice()
+    {
+        var grow = RegionChoice.ActualHeight;
+        if (grow <= 0) return;
+        Height += grow;
+        Top -= grow / 2;
     }
 
     private void OnOwnerClosing(object? sender, System.ComponentModel.CancelEventArgs e) => _ownerClosing = true;
