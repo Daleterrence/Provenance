@@ -69,6 +69,8 @@ public partial class SocialViewModel : ObservableObject
     private int _unreadCount;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(AttentionCount), nameof(NeedsAttention))]
     private int _pendingAnswers;
+    // unread, plus requests no friend list has had on screen yet. The taskbar stays lit while it's above 0
+    [ObservableProperty] private int _unseenCount;
     public int MyProfilePictureId { get; private set; }
 
     public bool HasUnread => UnreadCount > 0;
@@ -86,7 +88,8 @@ public partial class SocialViewModel : ObservableObject
     public event Action? ChangeProfilePictureRequested;
     public event Action<string, string>? MessageReceived;
     public event Action<string, string>? NoticeReceived;
-    public event Action<string>? FriendRequestReceived;
+    public event Action<string, int>? FriendRequestReceived;
+    public event Action<string, int>? GroupInviteReceived;
     public event Action<string>? FriendCameOnline;          // never for the presence that lands at sign-in
     public event Action<PolSocialSnapshot>? SnapshotApplied;
 
@@ -152,8 +155,42 @@ public partial class SocialViewModel : ObservableObject
     private readonly HashSet<int> _ackPending = new();
     private readonly HashSet<int> _answered = new();
     private readonly HashSet<int> _seenRequests = new();
+    private readonly HashSet<int> _shownRequests = new();
+    private bool _friendsListVisible, _mainWindowActive;
     private HashSet<string> _onlineFriends = new();
     private DateTime? _presenceQuietUntil;
+
+    public bool IsWaiting(int mid) => mid > 0 && Friends.Any(f => f.RequestMid == mid);
+
+    // the windows say when a friend list is on screen, like ConversationVisible
+    public bool FriendsListVisible
+    {
+        get => _friendsListVisible;
+        set
+        {
+            _friendsListVisible = value;
+            RefreshUnseen();
+        }
+    }
+
+    public bool MainWindowActive
+    {
+        get => _mainWindowActive;
+        set
+        {
+            _mainWindowActive = value;
+            RefreshUnseen();
+        }
+    }
+
+    private void RefreshUnseen()
+    {
+        var waiting = Friends.Where(f => f.RequestMid > 0).Select(f => f.RequestMid).ToList();
+        if (_friendsListVisible || _mainWindowActive) _shownRequests.UnionWith(waiting);
+        UnseenCount = UnreadCount + waiting.Count(m => !_shownRequests.Contains(m));
+    }
+
+    partial void OnUnreadCountChanged(int value) => RefreshUnseen();
 
     private void FlushAcks()
     {
@@ -213,6 +250,7 @@ public partial class SocialViewModel : ObservableObject
         Compose = "";
         _answered.Clear();
         _seenRequests.Clear();
+        _shownRequests.Clear();
         _onlineFriends.Clear();
         _presenceQuietUntil = null;
         _answerToken = _editToken = _picToken = _searchToken = _requestToken = _profileToken = _groupToken = null;
@@ -261,6 +299,7 @@ public partial class SocialViewModel : ObservableObject
         UnreadCount = _chat?.Unread ?? 0;
         if (SelectedFriend != null && _conversationDay != DateTime.Now.Date) RefreshConversation();   // past midnight
         PendingAnswers = Friends.Count(f => f.IsRequest || f.IsGroupInvite);
+        RefreshUnseen();
 
         if (_requestedStatus is { } want)
         {
@@ -343,9 +382,9 @@ public partial class SocialViewModel : ObservableObject
                 continue;
             }
             if (m.HasBody && m.Kind == PolMessage.KindGroupInvite && m.Mid > 0 && _seenRequests.Add(m.Mid))
-                NoticeReceived?.Invoke(m.From, $"{m.From} invited you to a friend group. Open Friends and messages to answer it.");
+                GroupInviteReceived?.Invoke(m.From, m.Mid);
             if (m.HasBody && m.Kind == PolMessage.KindFriendRequest && m.Mid > 0 && _seenRequests.Add(m.Mid))
-                FriendRequestReceived?.Invoke(m.From);
+                FriendRequestReceived?.Invoke(m.From, m.Mid);
             // chat from someone I ignore gets binned unread. The hook only catches listed mail, not a push
             if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey))
             {
@@ -361,15 +400,15 @@ public partial class SocialViewModel : ObservableObject
             if (m.HasBody && m.IsChat && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
         }
         // the recent results too, an answer or invitation can take the send slot before we see a line's result
-        foreach (var (token, state) in snap.SendResults.Append((snap.SendToken, snap.SendState)))
+        foreach (var (token, state, time, seq) in snap.SendResults.Append((snap.SendToken, snap.SendState, 0L, 0L)))
             if (token.Length > 0 && (state == "sent" || state.StartsWith("failed", StringComparison.Ordinal)))
             {
-                changed |= chat.SetSendState(token, state);
+                changed |= chat.SetSendState(token, state, time, seq);
                 if (token == _sendInFlight) _sendInFlight = null;
             }
         PumpSends();
         // a stored send finishes well inside 2 mins, so nothing says "Sending..." for ever
-        changed |= chat.ExpireSending(TimeSpan.FromMinutes(3), SendsStillPending());
+        changed |= chat.ExpireSending(ChatStore.SendExpiry(_sendQueue.Count), SendsStillPending());
         if (changed && ConversationVisible && SelectedFriend is { } open && chat.UnreadFrom(open.Name, open.Key) > 0)
             chat.MarkRead(open.Name, open.Key);
         // Dirty rather than changed, a log whose last save failed isn't on disk either
@@ -718,6 +757,8 @@ public partial class SocialViewModel : ObservableObject
             "failed:already ignored" => "That person is already on your ignore list.",
             "failed:-7188" => "Your friend list is full (200 friends).",
             "failed:no such friend" => "That person isn't on your friend list any more, so nothing was sent.",
+            "failed:stopped" => "PlayOnline didn't take your recent messages, so answers can't be sent until you log in again.",
+            "failed:hourly limit" => "You've sent 300 messages in the last hour, so your answer wasn't sent. Try again later.",
             var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
                 "PlayOnline didn't save the friend list, so your answer wasn't sent. Try again.",
             var s => $"PlayOnline didn't accept your answer ({FailReason(s)}).",
@@ -830,6 +871,8 @@ public partial class SocialViewModel : ObservableObject
                 "failed:-7181" => $"{_requestName} is on your ignore list. Stop ignoring them first.",
                 "failed:-7188" or "failed:-516" => "Your friend list is full (200 friends).",
                 "failed:no such result" => "Search again, then send the request.",
+                "failed:stopped" => "PlayOnline didn't take your recent messages, so friend requests can't be sent until you log in again.",
+                "failed:hourly limit" => "You've sent 300 messages in the last hour, so the request wasn't sent. Try again later.",
                 var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
                     "PlayOnline didn't save the friend list, so your request wasn't sent. Try again.",
                 var s => $"PlayOnline didn't accept the request ({FailReason(s)}).",

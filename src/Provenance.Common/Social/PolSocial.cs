@@ -102,8 +102,9 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     // viewer message 0x7007
     public bool BadPassword { get; init; }
     public string Play { get; init; } = "";   // "refused:..." when the hook's gate stopped a Play
-    // chat lines, answers and group invites share one send slot, so a result can get bumped between snapshots
-    public IReadOnlyList<(string Token, string State)> SendResults { get; init; } = [];
+    // chat lines, answers and group invites share one send slot, so a result can get bumped between snapshots. Time and
+    // Seq are the sent message's header ones, 0 when nothing went
+    public IReadOnlyList<(string Token, string State, long Time, long Seq)> SendResults { get; init; } = [];
 
     public string? SendStateFor(string? token)
     {
@@ -317,7 +318,7 @@ public static class SocialSnapshot
                 StatusBusy = Bool(root, "statusBusy"),
                 BadPassword = Bool(root, "badPassword"),
                 Play = Str(root, "play"),
-                SendResults = Arr(root, "sends", s => (Str(s, "token"), Str(s, "state"))),
+                SendResults = Arr(root, "sends", s => (Str(s, "token"), Str(s, "state"), Long(s, "time"), Long(s, "seq"))),
                 EditToken = editToken,
                 EditState = editState,
                 MyComment = Str(root, "myComment").Trim(),

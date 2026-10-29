@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -10,7 +9,7 @@ namespace Provenance.Wpf.Views;
 public partial class MainWindow : Window
 {
     private Services.TrayIcon? _tray;
-    private bool _exiting, _askingToExit, _cancellingSignIn;
+    private bool _exiting, _askingToExit, _cancellingSignIn, _flashing;
     private System.Windows.Threading.DispatcherTimer? _traySignOut;
     private DateTime _worldsClosedAt;
     private int _newsShown = -1;
@@ -22,7 +21,14 @@ public partial class MainWindow : Window
         DataContextChanged += OnDataContextChanged;
         IsVisibleChanged += (_, _) => ReportShown();
         StateChanged += (_, _) => ReportShown();
-        Activated += async (_, _) => { if (Vm is { } vm) await vm.ProbeRepairAsync(); };
+        Activated += async (_, _) =>
+        {
+            _flashing = false;   // coming to the front stops it
+            if (Vm is not { } vm) return;
+            vm.Social.MainWindowActive = true;
+            await vm.ProbeRepairAsync();
+        };
+        Deactivated += (_, _) => { if (Vm is { } vm) vm.Social.MainWindowActive = false; };
         FitWorkArea();
     }
 
@@ -84,6 +90,7 @@ public partial class MainWindow : Window
             old.RequestHide -= OnRequestHide;
             old.RequestShow -= OnRequestShow;
             old.RequestAttention -= OnRequestAttention;
+            old.AttentionCleared -= OnAttentionCleared;
             old.PropertyChanged -= OnVmPropertyChanged;
         }
         if (e.NewValue is MainViewModel @new)
@@ -91,6 +98,7 @@ public partial class MainWindow : Window
             @new.RequestHide += OnRequestHide;
             @new.RequestShow += OnRequestShow;
             @new.RequestAttention += OnRequestAttention;
+            @new.AttentionCleared += OnAttentionCleared;
             @new.PropertyChanged += OnVmPropertyChanged;
         }
     }
@@ -124,20 +132,19 @@ public partial class MainWindow : Window
             _tray.ShowTip("PlayOnline", text);
             return;
         }
-        if (IsActive || !IsVisible) return;
-        var fi = new FLASHWINFO
-        {
-            cbSize = (uint)Marshal.SizeOf<FLASHWINFO>(),
-            hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle,
-            dwFlags = 3 | 0x0C,   // FLASHW_ALL | FLASHW_TIMERNOFG: until the window comes to the front
-        };
-        FlashWindowEx(ref fi);
+        if (IsActive || !IsVisible || Vm is not { WantsAttention: true }) return;
+        TaskbarFlash.Start(this);
+        _flashing = true;
     });
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct FLASHWINFO { public uint cbSize; public IntPtr hwnd; public uint dwFlags; public uint uCount; public uint dwTimeout; }
-
-    [DllImport("user32.dll")] private static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
+    // read in the friends windows, so this window never came to the front to stop it. Queued like the flash, so it
+    // can't land before one
+    private void OnAttentionCleared() => Dispatcher.InvokeAsync(() =>
+    {
+        if (!_flashing) return;
+        _flashing = false;
+        TaskbarFlash.Stop(this);
+    });
 
     private void OnFriendActivated(FriendItem friend) => Vm?.OpenChatWith(friend);
 

@@ -30,6 +30,7 @@ public partial class MainViewModel : ObservableObject
     public event Action? RequestHide;
     public event Action? RequestShow;
     public event Action? RequestAttention;
+    public event Action? AttentionCleared;
 
     public MainViewModel(ICredentialService credentials, ISettingsService settings, FeedService feeds, PolSessionService pol,
                          AvatarService avatars)
@@ -103,10 +104,18 @@ public partial class MainViewModel : ObservableObject
         if (active != null) LoadCredentialsForProfile(active);
         _startGameImmediately = _settings.Current.StartGameImmediately;
         Social.MessageReceived += (from, text) => Alert(from, $"New message from {from}: {Preview(text, 60)}");
-        Social.FriendRequestReceived += who =>
+        Social.FriendRequestReceived += (who, mid) =>
             Alert(null, $"{who} sent you a friend request. Open Friends and messages to answer it.", "AccountPlusOutline",
-                  stays: true);
+                  stays: true, request: mid);
+        Social.GroupInviteReceived += (who, mid) =>
+            Alert(who, $"{who} invited you to a friend group. Open Friends and messages to answer it.", "BellOutline",
+                  request: mid);
         Social.NoticeReceived += (who, text) => Alert(who, text, "BellOutline");
+        Social.SnapshotApplied += _ => DropAnsweredNotice();
+        Social.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SocialViewModel.UnseenCount) && Social.UnseenCount == 0) AttentionCleared?.Invoke();
+        };
         // a quiet one, no taskbar flash, and it never covers a message notice
         Social.FriendCameOnline += who =>
         {
@@ -228,6 +237,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _noticeIcon = "EmailOutline";
     [ObservableProperty] private bool _noticeOpens = true;
     private bool _noticeStays;
+    private int _noticeRequest;   // the request or invitation the notice is about
     private DispatcherTimer? _noticeTimer;
     private string? _lastSender;
     private bool _gameRunning;
@@ -243,6 +253,8 @@ public partial class MainViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(CloseTooltip));
         RefreshLargeAddressAware();
+        // the hook numbers mail per session, so a request's notice can't outlive it
+        if (!value && _noticeRequest != 0) Notice = null;
     }
 
     partial void OnIsLaunchingChanged(bool value) => RefreshLargeAddressAware();
@@ -260,11 +272,27 @@ public partial class MainViewModel : ObservableObject
         _settings.Save(_settings.Current);
     }
 
-    private void Alert(string? sender, string text, string icon = "EmailOutline", bool stays = false)
+    private void Alert(string? sender, string text, string icon = "EmailOutline", bool stays = false, int request = 0)
     {
         _lastSender = sender;
         ShowNotice(text, icon, stays: stays);
+        _noticeRequest = request;
         RequestAttention?.Invoke();
+    }
+
+    // false once everything's been read or seen, like a message landing in a conversation that's already on screen
+    public bool WantsAttention => Social.UnseenCount > 0;
+
+    // answered here, the request leaves the list and the notice goes with it. Answering it anywhere else takes another
+    // login of this POL ID, which ends this session, and logging out takes the notice down
+    private void DropAnsweredNotice()
+    {
+        if (_noticeRequest != 0 && Notice != null && !Social.IsWaiting(_noticeRequest)) Notice = null;
+    }
+
+    partial void OnNoticeChanged(string? value)
+    {
+        if (value is null) _noticeRequest = 0;
     }
 
     private static string Preview(string text, int max)
@@ -300,6 +328,7 @@ public partial class MainViewModel : ObservableObject
 
     private void ShowNotice(string text, string icon = "EmailOutline", bool opens = true, bool stays = false)
     {
+        _noticeRequest = 0;
         Notice = text;
         NoticeIcon = icon;
         NoticeOpens = opens;

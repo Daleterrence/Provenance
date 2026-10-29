@@ -762,13 +762,11 @@ static int __cdecl w_svc_2b4(unsigned i, void *out)
         int used = 0;
         for (int k = 0; k < 8; k++) used += e[0x20 + k] & 1;
         valid++;
-        if (budget > 0)
+        if (budget > 0 && budget--)
             lg("polhandle[%u] valid, char slots used %d/8\r\n", i, used);
     }
-    if (i == 63 && budget > 0) {
-        budget--;
+    if (i == 63 && budget > 0 && budget--)
         lg("polhandle scan: %d valid handle(s)\r\n", valid);
-    }
     SetLastError(le);
     return r;
 }
@@ -1512,12 +1510,13 @@ static int parse_num(const char *x, int maxDigits, int *out)
     return d > 0 && !*x;
 }
 
-/* Messages, one job at a time and polled once a turn:
+/* Messages, list and read on one lane, delete on another, polled once a turn:
      list  svc 0x524(out, max), poll 0x528 (1 = done) into a zeroed 8-aligned array, stride 0x50, valid entries
            have W(+0x3e) & 0x8000
      read  svc 0x518, poll 0x51c on a copy of the entry (first 0x48 bytes = the server key), body at +0x4c
      push  svc 0xd9c registers evt(0, H) for a stored message, raw(H) for a real-time one (body at H+0x4c) */
 #define MAIL_MAX 64
+#define MAIL_SEEN 256
 typedef struct {
     __declspec(align(8)) BYTE hdr[0x50];   /* 8-aligned: 0x518 rejects anything else */
     int state;                             /* 0 listed, 1 read, 2 failed, 3 real-time, 4 saved, 5 deleted, 6 skip */
@@ -1528,9 +1527,14 @@ typedef struct {
     int has_att;
 } mailrec;
 static mailrec g_mail[MAIL_MAX];
-static int g_mail_n;
+static int g_mail_n, g_mail_mid;
+/* identities of messages whose slot got reused, so a re-listed one isn't fetched again */
+static BYTE g_mail_seen[MAIL_SEEN][0x1a];
+static int g_mail_seen_n, g_mail_seen_next;
 static __declspec(align(8)) BYTE g_inbox[0x50 * MAIL_MAX];
 static int g_mail_job = -1, g_mail_kind, g_mail_idx;
+static int g_del_job = -1, g_del_idx;
+static int g_mail_fresh;
 static char g_mail_state[16] = "pending";
 static char *g_mail_body;
 static ULONGLONG g_mail_retry_at;
@@ -1560,18 +1564,52 @@ static int mail_same(const BYTE *a, const BYTE *c)
 {
     return memcmp(a, c, 0x10) == 0 && memcmp(a + 0x30, c + 0x30, 8) == 0 && a[0x3c] == c[0x3c] && a[0x3d] == c[0x3d];
 }
+static void mail_ident(const BYTE *h, BYTE out[0x1a])
+{
+    memcpy(out, h, 0x10);
+    memcpy(out + 0x10, h + 0x30, 8);
+    out[0x18] = h[0x3c];
+    out[0x19] = h[0x3d];
+}
+/* the slot with the lowest mid above after and a state in mask (a bit per state), or -1. Mids only go up, so it's
+   arrival order */
+static int mail_next(int after, unsigned mask)
+{
+    int best = -1;
+    for (int i = 0; i < g_mail_n; i++)
+        if (g_mail[i].mid > after && ((mask >> g_mail[i].state) & 1) && (best < 0 || g_mail[i].mid < g_mail[best].mid))
+            best = i;
+    return best;
+}
+static mailrec *mail_by_mid(int mid)
+{
+    for (int i = 0; i < g_mail_n; i++) if (g_mail[i].mid == mid) return &g_mail[i];
+    return NULL;
+}
 static mailrec *mail_add(const BYTE *hdr)
 {
-    for (int i = 0; i < g_mail_n; i++)
+    BYTE id[0x1a];
+    int i;
+    for (i = 0; i < g_mail_n; i++)
         if (mail_same(g_mail[i].hdr, hdr)) return NULL;
-    if (g_mail_n >= MAIL_MAX) {
+    mail_ident(hdr, id);
+    for (i = 0; i < g_mail_seen_n; i++)
+        if (memcmp(g_mail_seen[i], id, sizeof id) == 0) return NULL;
+    if (g_mail_n < MAIL_MAX) {
+        i = g_mail_n++;
+    } else if ((i = mail_next(0, 1 << 2 | 1 << 5 | 1 << 6)) >= 0) {
+        /* the oldest failed, deleted or skipped one makes room, its identity goes in the ring */
+        mail_ident(g_mail[i].hdr, g_mail_seen[g_mail_seen_next]);
+        g_mail_seen_next = (g_mail_seen_next + 1) % MAIL_SEEN;
+        if (g_mail_seen_n < MAIL_SEEN) g_mail_seen_n++;
+    } else {
         lg("mail: cache full (%d) - message not kept this session (still on the server)\r\n", MAIL_MAX);
         return NULL;
     }
-    memset(&g_mail[g_mail_n], 0, sizeof g_mail[0]);
-    memcpy(g_mail[g_mail_n].hdr, hdr, 0x48);
-    g_mail[g_mail_n].mid = g_mail_n + 1;
-    return &g_mail[g_mail_n++];
+    memset(&g_mail[i], 0, sizeof g_mail[0]);
+    memcpy(g_mail[i].hdr, hdr, 0x48);
+    g_mail[i].mid = ++g_mail_mid;
+    return &g_mail[i];
 }
 static void mail_log_hdr(const char *what, const BYTE *h)
 {
@@ -1580,6 +1618,20 @@ static void mail_log_hdr(const char *what, const BYTE *h)
     lg("mail: %s from=%s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what, nm,
        h[0x3c], (unsigned)((*(WORD *)(h + 0x3e) >> 7) & 0x1f), *(DWORD *)(h + 0x38),
        *(DWORD *)(h + 0x30), *(DWORD *)(h + 0x34), *(WORD *)(h + 0x3e), *(WORD *)(h + 0x42));
+}
+/* whether a notice carries its body inline (H+0x4c), which the viewer never trusts. Its length and where the 0x07
+   sits only, never the text */
+static void mail_inline_log(const BYTE *h)
+{
+    const char *s = *(const char *const *)(h + 0x4c);
+    int n = 0, bel = -1;
+    if (s)
+        for (; n < 0x1000; n++) {
+            if ((n == 0 || !((ULONG_PTR)(s + n) & 0xfff)) && IsBadReadPtr(s + n, 1)) break;
+            if (!s[n]) break;
+            if (s[n] == 0x07 && bel < 0) bel = n;
+        }
+    lg("mail: notice inline text %d bytes, 0x07 at %d, body %u bytes\r\n", s ? n : -1, bel, *(const DWORD *)(h + 0x38));
 }
 /* push callbacks run inside polcore's IRC processing on the hold loop's thread, H on its stack, so copy and get out */
 static void __cdecl mail_evt(int code, void *arg)
@@ -1590,6 +1642,7 @@ static void __cdecl mail_evt(int code, void *arg)
     if (code == 0 && arg && !IsBadReadPtr(arg, 0x48)) {
         LONG n = g_push_n;
         if (n < 8) { memcpy(g_push_q[n], arg, 0x48); g_push_n = n + 1; }
+        if (!IsBadReadPtr(arg, 0x50)) mail_inline_log((const BYTE *)arg);
     }
 }
 static void __cdecl mail_raw(void *arg)
@@ -1604,6 +1657,7 @@ static void __cdecl mail_raw(void *arg)
         DWORD len = *(DWORD *)(h + 0x38);
         if (body && len <= 0x180 && !IsBadReadPtr(body, len)) mail_parse(m, body, (int)len);
         m->state = 3;
+        g_snap_dirty = g_mail_fresh = 1;
     }
 }
 static int sender_ignored(BYTE *b, const BYTE *h)
@@ -1651,6 +1705,7 @@ static void mail_read_done(int r)
     if (r == 1) {
         mail_parse(m, g_mail_body, (int)*(DWORD *)(m->hdr + 0x38));
         m->state = 1;
+        g_mail_fresh = 1;
         lg("mail: body read (%u bytes)\r\n", *(DWORD *)(m->hdr + 0x38));
     } else {
         m->state = 2;
@@ -1659,45 +1714,31 @@ static void mail_read_done(int r)
     *(char **)(m->hdr + 0x4c) = NULL;
     HeapFree(GetProcessHeap(), 0, g_mail_body);
     g_mail_body = NULL;
+    g_snap_dirty = 1;
 }
-static void mail_pump(BYTE *b)
+static int msg_jobs(void);
+static int msg_slot_ok(BYTE *b);
+static int send_built(void);
+static int writes_waiting(void);
+/* list or read, -0x100 (no free polcore slot, refused locally) tries again next turn. Only the list waits out the
+   30 s after a failed one, reads still go */
+static void mail_fetch_start(BYTE *b)
 {
     int i, t;
-    while (g_push_n > 0) {
-        LONG n = --g_push_n;
-        mail_log_hdr("notice", g_push_q[n]);
-        mail_add(g_push_q[n]);
-    }
-    if (g_mail_job >= 0) {
-        /* never cancelled here, polcore fails a stuck job at 100 s itself and svc 0x520 stalls every job poll 10 s */
-        int r = ((svc_i)SVC(g_mail_kind == 1 ? 0x528 : g_mail_kind == 2 ? 0x51c : 0x50c))(g_mail_job);
-        if (r == 0) return;
-        g_mail_job = -1;
-        if (g_mail_kind == 1) mail_list_done(r);
-        else if (g_mail_kind == 2) mail_read_done(r);
-        else {
-            g_mail[g_mail_idx].state = 5;
-            if (r == 1) lg("mail: deleted from the server after saving\r\n");
-            else lg("mail: delete FAILED %d - the message stays on the server\r\n", r);
-        }
-        return;
-    }
-    if (g_draining || GetTickCount64() < g_mail_retry_at) return;
-    if (g_mail_refresh) {
+    if (g_mail_refresh && GetTickCount64() >= g_mail_retry_at) {
         memset(g_inbox, 0, sizeof g_inbox);
         t = ((int (__cdecl *)(void *, int))SVC(0x524))(g_inbox, MAIL_MAX);
+        if (t == NO_SLOT) return;
         lg("mail: list start -> %d\r\n", t);
-        if (t == NO_SLOT) { g_mail_retry_at = GetTickCount64() + 5000; return; }
         g_mail_refresh = 0;
         if (t < 0) { mail_list_done(t); return; }
         g_mail_job = t; g_mail_kind = 1;
         return;
     }
-    for (i = 0; i < g_mail_n; i++) {
+    for (i = mail_next(0, 1); i >= 0; i = mail_next(g_mail[i].mid, 1)) {
         mailrec *m = &g_mail[i];
         DWORD len = *(DWORD *)(m->hdr + 0x38);
         unsigned kd = (*(WORD *)(m->hdr + 0x3e) >> 7) & 0x1f;
-        if (m->state != 0) continue;
         if (len == 0 || len > 0x101100) { m->state = 2; continue; }
         if (kd == 0 && sender_ignored(b, m->hdr)) {
             lg("mail: chat message from an ignored sender - deleted unread\r\n");
@@ -1715,30 +1756,61 @@ static void mail_pump(BYTE *b)
         if (!g_mail_body) return;
         *(char **)(m->hdr + 0x4c) = g_mail_body;
         t = ((svc_p)SVC(0x518))(m->hdr);
-        lg("mail: read start -> %d\r\n", t);
+        if (t != NO_SLOT) lg("mail: read start -> %d\r\n", t);
         if (t < 0) {
             *(char **)(m->hdr + 0x4c) = NULL;
             HeapFree(GetProcessHeap(), 0, g_mail_body);
             g_mail_body = NULL;
-            if (t == NO_SLOT) g_mail_retry_at = GetTickCount64() + 5000;
-            else m->state = 2;
+            if (t != NO_SLOT) m->state = 2;
             return;
         }
         g_mail_job = t; g_mail_kind = 2; g_mail_idx = i;
         return;
     }
-    /* saved by the launcher: delete the server copy (svc 0x508, keyed like the GET). One to a slot this account lost
-       is refused (-0x1540) and stays, as in the viewer. */
-    for (i = 0; i < g_mail_n; i++) {
+}
+/* saved by the launcher: delete the server copy (svc 0x508, keyed like the GET). One to a slot this account lost
+   is refused (-0x1540) and stays, as in the viewer. */
+static void mail_delete_start(BYTE *b)
+{
+    int i, t;
+    for (i = mail_next(0, 1 << 4); i >= 0; i = mail_next(g_mail[i].mid, 1 << 4)) {
         BYTE *h = g_mail[i].hdr;
-        if (g_mail[i].state != 4) continue;
         t = ((svc_p)SVC(0x508))(h);
+        if (t == NO_SLOT) return;
         lg("mail: delete start -> %d (from slot %u to slot %u)\r\n", t, h[0x3c], h[0x3d]);
-        if (t == NO_SLOT) { g_mail_retry_at = GetTickCount64() + 5000; return; }
         if (t < 0) { g_mail[i].state = 5; continue; }
-        g_mail_job = t; g_mail_kind = 3; g_mail_idx = i;
+        g_del_job = t; g_del_idx = i;
         return;
     }
+}
+/* reads first, then deletes on a lane of their own, and at most 2 message jobs (sends too) at once like the viewer
+   (app.dll 0x100512cf) */
+static void mail_pump(BYTE *b)
+{
+    int i, r, done = 0;
+    for (i = 0; i < g_push_n; i++) {   /* arrival order */
+        mail_log_hdr("notice", g_push_q[i]);
+        mail_add(g_push_q[i]);
+    }
+    g_push_n = 0;
+    /* never cancelled here, polcore fails a stuck job at 100 s itself and svc 0x520 stalls every job poll 10 s */
+    if (g_mail_job >= 0 && (r = ((svc_i)SVC(g_mail_kind == 1 ? 0x528 : 0x51c))(g_mail_job)) != 0) {
+        g_mail_job = -1;
+        if (g_mail_kind == 1) mail_list_done(r); else mail_read_done(r);
+        done = 1;
+    }
+    if (g_del_job >= 0 && (r = ((svc_i)SVC(0x50c))(g_del_job)) != 0) {
+        g_del_job = -1;
+        g_mail[g_del_idx].state = 5;
+        if (r == 1) lg("mail: deleted from the server after saving\r\n");
+        else lg("mail: delete FAILED %d - the message stays on the server\r\n", r);
+        done = 1;
+    }
+    /* a freed lane waits a turn, so a waiting send gets it first */
+    if (done) return;
+    if (!g_draining && g_mail_job < 0 && msg_slot_ok(b)) mail_fetch_start(b);
+    /* in a drain a delete only goes while no write is waiting for a slot, and nothing waits for it */
+    if (g_del_job < 0 && (!g_draining || (!msg_jobs() && !writes_waiting())) && msg_slot_ok(b)) mail_delete_start(b);
 }
 static void mail_ack_request(void)
 {
@@ -1751,13 +1823,11 @@ static void mail_ack_request(void)
         char c = buf[i];
         if (c >= '0' && c <= '9') v = (v < 0 ? 0 : v * 10) + (c - '0');
         else {
-            if (v > 0 && v <= g_mail_n) {
-                mailrec *m = &g_mail[v - 1];
-                if (m->state == 1 || m->state == 3) {
-                    m->state = m->state == 1 ? 4 : 5;
-                    m->text[0] = 0; m->subj[0] = 0;
-                    g_snap_dirty = 1;
-                }
+            mailrec *m = v > 0 ? mail_by_mid(v) : NULL;
+            if (m && (m->state == 1 || m->state == 3)) {
+                m->state = m->state == 1 ? 4 : 5;
+                m->text[0] = 0; m->subj[0] = 0;
+                g_snap_dirty = 1;
             }
             v = -1;
         }
@@ -1881,16 +1951,87 @@ static char g_send_token[48];
 static char g_send_state[48] = "";
 static BYTE *g_send_msg;
 static int g_send_job = -1;
-/* any process of the user can write a request and a send can't be undone, so sends are 5 s apart and the
-   recipient must match the row */
-static ULONGLONG g_send_last;
+static ULONGLONG g_send_started;
+static int msg_jobs(void) { return (g_send_job >= 0) + (g_mail_job >= 0) + (g_del_job >= 0); }
+/* the viewer's rule (app.dll 0x100512cf): under 2 message jobs, and 2 of polcore's 4 job slots free (svc 0xff4) */
+static int msg_slot_ok(BYTE *b)
+{
+    int used = 0, total = 4;
+    if (msg_jobs() >= 2) return 0;
+    if (SVC(0xff4)) ((void (__cdecl *)(int *, int *))SVC(0xff4))(&used, &total);
+    return total - used >= 2;
+}
+static int send_built(void) { return g_send_msg != NULL; }
+
+/* manual runs keep requests in %TEMP% where anything of the user's can write one, so sends are capped */
+#define PACE_GAP_MS 500
+#define PACE_PER_MIN 20
+#define PACE_PER_HOUR 300
+enum { PACE_OK, PACE_GAP, PACE_MIN, PACE_HOUR, PACE_HELD, PACE_STOPPED };
+typedef struct {
+    ULONGLONG take[PACE_PER_HOUR];   /* ring of PUT start times */
+    int next, count;
+    ULONGLONG done, hold;            /* when the last send finished, no PUT before hold */
+    int fails, stopped;              /* failed sends in a row, no more sends this session */
+} send_pace;
+static send_pace g_pace;
+static int pace_check(const send_pace *p, ULONGLONG now)
+{
+    if (p->stopped) return PACE_STOPPED;
+    if (now < p->hold) return PACE_HELD;
+    if (p->done && now - p->done < PACE_GAP_MS) return PACE_GAP;
+    if (p->count >= PACE_PER_MIN &&
+        now - p->take[(p->next + PACE_PER_HOUR - PACE_PER_MIN) % PACE_PER_HOUR] < 60000) return PACE_MIN;
+    if (p->count >= PACE_PER_HOUR && now - p->take[p->next] < 3600000) return PACE_HOUR;
+    return PACE_OK;
+}
+static void pace_take(send_pace *p, ULONGLONG now)
+{
+    p->take[p->next] = now;
+    p->next = (p->next + 1) % PACE_PER_HOUR;
+    if (p->count < PACE_PER_HOUR) p->count++;
+}
+/* r is a send's result (1 = stored), ms how long its PUT took. Only sends come here, a delete's -0x1540 (a slot
+   this account lost) never does */
+static void pace_done(send_pace *p, ULONGLONG now, int r, ULONGLONG ms)
+{
+    if (r == NO_SLOT) return;
+    p->done = now;
+    if (r == 1) p->fails = 0;
+    /* -0x153a suspended, -0x1540 not authorised: that's the account, not the line */
+    else if (r == -0x153a || r == -0x1540 || ++p->fails >= 3) p->stopped = 1;
+    else p->hold = now + (p->fails == 1 ? 10000 : 60000);
+    if (ms > 5000 && p->hold < now + 5000) p->hold = now + 5000;
+}
+static void send_paced(int r, ULONGLONG ms)
+{
+    int was = g_pace.stopped;
+    pace_done(&g_pace, GetTickCount64(), r, ms);
+    if (g_pace.stopped) {
+        if (!was) lg("mail: send failed %d - no more sends this session\r\n", r);
+    } else if (r != 1) {
+        lg("mail: send failed %d - sends wait %d s\r\n", r, g_pace.fails == 1 ? 10 : 60);
+    } else if (ms > 5000) {
+        lg("mail: slow send (%u ms) - the next one waits 5 s\r\n", (unsigned)ms);
+    }
+}
+/* a message that can't go this session or this hour is refused, not kept waiting */
+static const char *pace_refusal(void)
+{
+    int why = pace_check(&g_pace, GetTickCount64());
+    return why == PACE_STOPPED ? "failed:stopped" : why == PACE_HOUR ? "failed:hourly limit" : NULL;
+}
+
 #define SEND_HIST 8
-static struct { char token[48]; char state[48]; } g_send_hist[SEND_HIST];
+static struct { char token[48]; char state[48]; DWORD time, seq; } g_send_hist[SEND_HIST];
 static int g_send_hist_next;
-static void send_record(void)
+/* hdr is the message that went, its header time and seq let the app put my line where the friend sees it */
+static void send_record(const BYTE *hdr)
 {
     lstrcpynA(g_send_hist[g_send_hist_next].token, g_send_token, sizeof g_send_hist[0].token);
     lstrcpynA(g_send_hist[g_send_hist_next].state, g_send_state, sizeof g_send_hist[0].state);
+    g_send_hist[g_send_hist_next].time = hdr ? *(const DWORD *)(hdr + 0x34) : 0;
+    g_send_hist[g_send_hist_next].seq = hdr ? *(const DWORD *)(hdr + 0x30) : 0;
     g_send_hist_next = (g_send_hist_next + 1) % SEND_HIST;
     g_snap_dirty = 1;
 }
@@ -1898,20 +2039,35 @@ static void send_fail(const char *why)
 {
     lstrcpynA(g_send_state, why, sizeof g_send_state);
     lg("mail: send refused - %s\r\n", why);
-    send_record();
+    send_record(NULL);
 }
+/* chat lines, answers and group messages all get paced here (a chat take only checks first) */
 static void mail_send_start(BYTE *b)
 {
-    int t = ((svc_p)SVC(0x510))(g_send_msg);
+    ULONGLONG now = GetTickCount64();
+    int why = pace_check(&g_pace, now), t;
+    const char *no = pace_refusal();
+    if (no) {
+        send_fail(no);
+        HeapFree(GetProcessHeap(), 0, g_send_msg);
+        g_send_msg = NULL;
+        return;
+    }
+    /* in a drain (Play, log out) a built message goes once a message slot's free, the pace's waits don't hold it */
+    t = (g_draining ? msg_jobs() < 2 : why == PACE_OK && msg_slot_ok(b)) ? ((svc_p)SVC(0x510))(g_send_msg) : NO_SLOT;
     if (t == NO_SLOT) { lstrcpyA(g_send_state, "queued"); return; }
     lg("mail: send start -> %d\r\n", t);
     if (t < 0) {
         wsprintfA(g_send_state, "failed:%d", t);
-        send_record();
+        send_record(NULL);
+        /* polcore refusing it locally (-0x1551 for a bad header) sent nothing, only the account codes count */
+        if (t == -0x153a || t == -0x1540) send_paced(t, 0);
         HeapFree(GetProcessHeap(), 0, g_send_msg);
         g_send_msg = NULL;
     } else {
+        pace_take(&g_pace, now);
         g_send_job = t;
+        g_send_started = now;
         lstrcpyA(g_send_state, "sending");
     }
 }
@@ -1949,6 +2105,7 @@ static void mail_send_parse(BYTE *b, char *buf)
         int tl = (int)strcspn(++q, "\r\n");
         lstrcpynA(g_send_token, q, (tl < (int)sizeof g_send_token - 1 ? tl : (int)sizeof g_send_token - 1) + 1);
     }
+    if (pace_refusal()) { send_fail(pace_refusal()); return; }
     while (*p >= '0' && *p <= '9' && digits < 4) { row = row * 10 + (*p++ - '0'); digits++; }
     if (*p == '\r') p++;
     if (!digits || *p != '\n') { send_fail("failed:bad request"); return; }
@@ -1984,17 +2141,28 @@ static void mail_send_parse(BYTE *b, char *buf)
 }
 static void mail_send_pump(BYTE *b)
 {
+    static int said;
     char *buf;
+    int why;
+    ULONGLONG ms;
     if (g_send_job < 0) {
         /* a queued message is a write the user asked for, so it still starts during a drain (Play, sign-out),
            which waits for it. No new requests then though. */
         if (g_send_msg) { mail_send_start(b); return; }
-        if (g_draining || !request_waiting("send")) return;
-        if (GetTickCount64() - g_send_last < 5000) return;
+        /* an answer owns the send slot from its request to its message, a friend list upload in between */
+        if (g_draining || g_answer_kind || !request_waiting("send")) return;
+        /* stopped or at the hourly cap, a request is still taken so the app hears it wasn't sent */
+        why = pace_check(&g_pace, GetTickCount64());
+        if (why != PACE_OK && why != PACE_STOPPED && why != PACE_HOUR) {
+            if (why == PACE_MIN && said != why) lg("mail: 20 sends in a minute - the next chat line waits\r\n");
+            said = why;
+            return;
+        }
+        if (why == PACE_OK && !msg_slot_ok(b)) return;
         buf = (char *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x4000);
         if (!buf) return;
         if (take_request("send", buf, 0x4000) >= 0) {
-            g_send_last = GetTickCount64();
+            said = 0;
             mail_send_parse(b, buf);
         }
         HeapFree(GetProcessHeap(), 0, buf);
@@ -2003,9 +2171,13 @@ static void mail_send_pump(BYTE *b)
     int r = ((svc_i)SVC(0x514))(g_send_job);
     if (r == 0) return;
     g_send_job = -1;
+    /* nothing went, the viewer starts it again (its send state 4 -> 2) */
+    if (r == NO_SLOT) { lstrcpyA(g_send_state, "queued"); return; }
     if (r == 1) lstrcpyA(g_send_state, "sent"); else wsprintfA(g_send_state, "failed:%d", r);
-    send_record();
-    lg("mail: send done -> %d\r\n", r);
+    send_record(g_send_msg);
+    ms = GetTickCount64() - g_send_started;
+    lg("mail: send done -> %d (%u ms)\r\n", r, (unsigned)ms);
+    send_paced(r, ms);
     HeapFree(GetProcessHeap(), 0, g_send_msg);   /* only now, the upload read it during the polls */
     g_send_msg = NULL;
 }
@@ -3059,6 +3231,10 @@ static void group_request(BYTE *b)
     op = req_line(&p); tok = req_line(&p); gid = req_line(&p); a = req_line(&p); bb = req_line(&p); c = req_line(&p);
     d = req_line(&p);
     lstrcpynA(g_grp_token, tok, sizeof g_grp_token);
+    if (pace_refusal() && (!lstrcmpA(op, "accept") || !lstrcmpA(op, "decline") || !lstrcmpA(op, "invite"))) {
+        group_fail(pace_refusal());
+        return;
+    }
     if (notice_blocks(g_notice)) { group_fail("failed:account notice"); return; }
     if (!SVC(0x618) || !SVC(0x61c) || !SVC(0x608)) { group_fail("failed:no group services"); return; }
     if (lstrlenA(gid) == 16 && hex8(gid, &hi) && hex8(gid + 8, &lo)) {
@@ -3208,6 +3384,8 @@ static void answer_request(BYTE *b)
     op = req_line(&p); tok = req_line(&p); mids = req_line(&p); subj = req_line(&p); arg = req_line(&p);
     hkey = req_line(&p);
     lstrcpynA(g_answer_token, tok, sizeof g_answer_token);
+    /* every answer ends in a message, so refuse it before AddFriend or a list upload */
+    if (pace_refusal()) { answer_fail(pace_refusal()); return; }
     if (!parse_num(mids, 6, &mid)) { answer_fail("failed:bad request"); return; }
     if (notice_blocks(g_notice)) { answer_fail("failed:account notice"); return; }
     if (lstrcmpA(op, "request") == 0) {
@@ -3397,7 +3575,8 @@ static void snapshot_social(BYTE *b)
         if (!g_send_hist[k].token[0]) continue;
         json_str(tk, sizeof tk, g_send_hist[k].token);
         json_str(sj, sizeof sj, g_send_hist[k].state);
-        wsprintfA(line, "%s{\"token\":%s,\"state\":%s}", first ? "" : ",", tk, sj);
+        wsprintfA(line, "%s{\"token\":%s,\"state\":%s,\"time\":%lu,\"seq\":%lu}", first ? "" : ",", tk, sj,
+                  g_send_hist[k].time, g_send_hist[k].seq);
         wr(h, line);
         first = 0;
     }
@@ -3487,7 +3666,7 @@ static void snapshot_social(BYTE *b)
         int slot = ((svc_v)SVC(0x2f8))();
         BYTE rec[0x28] = {0};
         if (slot < 0) slot = g_my_slot;
-        if (slot >= 0 && ((svc_ip)SVC(0x2b4))(slot, rec) == 0) {
+        if (slot >= 0 && get_handle(b, slot, rec) == 0) {   /* unwrapped, the log budget's for FFXI's world login */
             sjis_json(hn, sizeof hn, rec + 0x08, 0x0f);
             pic = *(unsigned *)(rec + 0x1c);
         }
@@ -3527,12 +3706,12 @@ static void snapshot_social(BYTE *b)
         first = 0;
     }
     wr(h, "],\"messages\":[");
-    for (i = 0, first = 1; i < g_mail_n; i++) {
+    /* states 0-3, oldest first since slots get reused */
+    for (i = mail_next(0, 0xf), first = 1; i >= 0; i = mail_next(g_mail[i].mid, 0xf)) {
         const mailrec *ml = &g_mail[i];
         const BYTE *e = ml->hdr;
         WORD f = *(const WORD *)(e + 0x3e);
         int o;
-        if (ml->state >= 4) continue;
         sjis_json(nm, sizeof nm, e + 0x10, 0x0f);
         peer_key(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04), e[0x3c], sk);
         o = wsprintfA(mj, "%s{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"kind\":%u,\"time\":%u,\"seq\":%u,"
@@ -3551,6 +3730,10 @@ static void snapshot_social(BYTE *b)
     wr(h, "]}");
     CloseHandle(h);
     MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING);
+    if (g_mail_fresh) {
+        g_mail_fresh = 0;
+        lg("mail: snapshot has the new message\r\n");
+    }
 }
 /* Play is the one-shot POL_CRED_PLAY entry, user "play", wrapped so nothing else can forge it */
 static int play_signalled(void)
@@ -3598,6 +3781,11 @@ static int writes_pending(void)
 {
     return g_send_job >= 0 || g_send_msg || g_status_job >= 0 || g_edit_job >= 0 || g_edit_upload_want ||
            g_comment_wanted || g_pic_want >= 0 || g_grp_job >= 0 || g_answer_kind || g_me_step >= 3;
+}
+/* writes that are due but haven't got a job slot yet, or an answer's message still to come */
+static int writes_waiting(void)
+{
+    return send_built() || g_answer_kind || g_edit_upload_want || g_comment_wanted || g_me_step == 3;
 }
 static void drain_turn(BYTE *b, int mail)
 {
@@ -3708,19 +3896,17 @@ static void pol_hold(BYTE *b)
             } else {
                 until = GetTickCount64() + 15000;
                 lg("hold: Play signalled - finishing PlayOnline writes, then booting FFXI\r\n");
-                /* reads (inbox, bodies, profiles, searches) get cancelled and the next session redoes them, writes
-                   get 15 s. A cancel's 10 s job hold-off runs out during FFXI's start-up. */
+                /* only writes hold Play, 15 s at most. An inbox read or delete is cancelled after the wait: a cancel
+                   stalls job polls 10 s, which FFXI's start-up sits out */
                 g_draining = 1;
+                if (!g_lean) mail_ack_request();
                 if (g_prof_step != 0) profile_abandon(b, "cancelled");
                 if (g_srch_step != 0) search_abandon(b, "cancelled");
                 me_abandon(b, "cancelled");
-                if (g_mail_job >= 0 && (g_mail_kind == 1 || g_mail_kind == 2)) {
-                    CANCEL_JOB(g_mail_job);
-                    g_mail_job = -1;
-                }
-                while ((g_mail_job >= 0 || writes_pending()) && GetTickCount64() < until)
+                while (writes_pending() && GetTickCount64() < until)
                     drain_turn(b, !g_lean);
                 if (g_mail_job >= 0) CANCEL_JOB(g_mail_job);
+                if (g_del_job >= 0) CANCEL_JOB(g_del_job);
                 if (g_send_job >= 0) CANCEL_JOB(g_send_job);
                 if (g_status_job >= 0) CANCEL_JOB(g_status_job);
                 if (g_edit_job >= 0) CANCEL_JOB(g_edit_job);
@@ -3742,9 +3928,10 @@ static void pol_hold(BYTE *b)
             DeleteFileA(spath);
             until = GetTickCount64() + 5000;
             g_draining = 1;
+            if (!g_lean) mail_ack_request();
             me_abandon(b, "cancelled");
             while (writes_pending() && GetTickCount64() < until)
-                drain_turn(b, 0);
+                drain_turn(b, !g_lean);
             viewer_sign_out(b);
             lg("hold: signed out\r\n");
             end_pol(0);

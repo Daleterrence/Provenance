@@ -215,6 +215,8 @@ public partial class SocialViewModel
             "failed:no such group" or "failed:no such member" or "failed:no such invitation" => "The group changed. Try again.",
             "failed:-5316" => "That group name is already in use.",
             "failed:-5428" or "failed:-261" => "That group name can't be used.",
+            "failed:stopped" => "PlayOnline didn't take your recent messages, so invitations can't be sent or answered until you log in again.",
+            "failed:hourly limit" => "You've sent 300 messages in the last hour. Try again later.",
             var s => $"PlayOnline didn't accept the change ({FailReason(s)}).",
         };
     }

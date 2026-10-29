@@ -18,6 +18,7 @@ public partial class SocialWindow : Window
 {
     public SocialPart Part { get; }
     private bool HasMessages => Part != SocialPart.Friends;
+    private bool HasFriends => Part != SocialPart.Messages;
     private SocialViewModel? Vm => DataContext as SocialViewModel;
 
     public SocialWindow(SocialPart part)
@@ -37,14 +38,24 @@ public partial class SocialWindow : Window
             {
                 if (HasMessages) vm.Conversation.CollectionChanged += OnConversationChanged;
                 vm.PropertyChanged += OnVmChanged;
+                vm.MessageReceived += OnMessageLanded;
+                vm.NoticeReceived += OnMessageLanded;
+                vm.FriendRequestReceived += OnRequestLanded;
+                vm.GroupInviteReceived += OnRequestLanded;
             }
             ShowFriendInTitle();
             ReportVisible();
         };
         IsVisibleChanged += (_, _) => ReportVisible();
         StateChanged += (_, _) => ReportVisible();
+        Activated += (_, _) => _flashing = false;   // coming to the front stops it
+        if (Application.Current is { } app) app.Activated += OnAppActivated;
         // the view model outlives the window, so let go or a closed window keeps scrolling in the background
-        Closed += (_, _) => { if (Vm is { } vm) Detach(vm); };
+        Closed += (_, _) =>
+        {
+            if (Vm is { } vm) Detach(vm);
+            if (Application.Current is { } a) a.Activated -= OnAppActivated;
+        };
         // KeyDown, not Preview, so an open menu, the status list or the comment box gets its Esc first
         KeyDown += (_, e) =>
         {
@@ -61,13 +72,53 @@ public partial class SocialWindow : Window
             vm.Conversation.CollectionChanged -= OnConversationChanged;
             vm.ConversationVisible = false;
         }
+        if (HasFriends) vm.FriendsListVisible = false;
         vm.PropertyChanged -= OnVmChanged;
+        vm.MessageReceived -= OnMessageLanded;
+        vm.NoticeReceived -= OnMessageLanded;
+        vm.FriendRequestReceived -= OnRequestLanded;
+        vm.GroupInviteReceived -= OnRequestLanded;
     }
 
-    // a hidden or minimised window's messages stay unread until it's back
+    // Landing in this window counts as read or seen, so the main window stays quiet. With Provenance in the
+    // background this one flashes instead, till it's brought up
+    private void OnMessageLanded(string who, string _)
+    {
+        if (HasMessages && Vm?.SelectedFriend is { } f && string.Equals(f.Name, who, StringComparison.OrdinalIgnoreCase))
+            FlashIfBehind();
+    }
+
+    private void OnRequestLanded(string who, int mid)
+    {
+        if (HasFriends) FlashIfBehind();
+    }
+
+    private bool _flashing;
+
+    private void FlashIfBehind()
+    {
+        if (!IsVisible || WindowState == WindowState.Minimized) return;
+        if (Application.Current?.Windows.OfType<Window>().Any(w => w.IsActive) == true) return;
+        TaskbarFlash.Start(this);
+        _flashing = true;
+    }
+
+    // it only flashes while it's on screen, so with Provenance back in front it's done its job (the request might've
+    // been answered from the main window, say)
+    private void OnAppActivated(object? sender, EventArgs e)
+    {
+        if (!_flashing) return;
+        _flashing = false;
+        TaskbarFlash.Stop(this);
+    }
+
+    // a hidden or minimised window's messages stay unread until it's back, and its requests unseen
     private void ReportVisible()
     {
-        if (HasMessages && Vm is { } vm) vm.ConversationVisible = IsVisible && WindowState != WindowState.Minimized;
+        if (Vm is not { } vm) return;
+        bool shown = IsVisible && WindowState != WindowState.Minimized;
+        if (HasMessages) vm.ConversationVisible = shown;
+        if (HasFriends) vm.FriendsListVisible = shown;
     }
 
     private void ApplyPart()

@@ -12,6 +12,9 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
     // POL ID + handle, hashed by the hook. Entries without one match by name
     public string PeerKey { get; init; } = "";
 
+    // the message header's seq, which orders lines that share a second. Older logs don't have it
+    public long Seq { get; init; }
+
     public DateTimeOffset When => DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime();
 
     public string WhenText
@@ -54,6 +57,8 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
         "failed:self" => "Not sent: you can't send a message to your own handle.",
         "failed:too long" => "Not sent: messages can't be longer than 300 characters.",
         "failed:write" => "Not sent: Provenance couldn't send it to PlayOnline.",
+        "failed:stopped" => "Not sent: PlayOnline didn't take your recent messages, so sending is off until you log in again.",
+        "failed:hourly limit" => "Not sent: you've sent 300 messages in the last hour. Try again later.",
         var s when s.StartsWith("failed", StringComparison.Ordinal) => "Not sent: PlayOnline didn't accept it.",
         _ => "",
     };
@@ -106,7 +111,7 @@ public sealed class ChatStore
         if (_entries.Any(e => e.Key == m.Key)) return false;
         _entries.Add(new ChatEntry(m.Key, m.From, false, subject, text,
                                    m.Time > 0 ? m.Time : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), false, state)
-                     { PeerKey = m.FromKey });
+                     { PeerKey = m.FromKey, Seq = m.Seq });
         Dirty = true;
         return true;
     }
@@ -127,11 +132,15 @@ public sealed class ChatStore
         return e;
     }
 
-    public bool SetSendState(string token, string state)
+    // once sent, my line takes the header's time and seq like the friend's copy. That's polcore's clock, set by the server
+    public bool SetSendState(string token, string state, long time = 0, long seq = 0)
     {
         int i = _entries.FindIndex(e => e.Key == "out:" + token);
-        if (i < 0 || _entries[i].State == state) return false;
-        _entries[i] = _entries[i] with { State = state };
+        if (i < 0) return false;
+        var e = _entries[i];
+        bool stamp = state == "sent" && time > 0 && (e.Time != time || e.Seq != seq);
+        if (e.State == state && !stamp) return false;
+        _entries[i] = stamp ? e with { State = state, Time = time, Seq = seq } : e with { State = state };
         Changed();
         return true;
     }
@@ -144,6 +153,9 @@ public sealed class ChatStore
         Changed();
         return true;
     }
+
+    // the hook takes 20 lines a minute, so each one queued behind gets 3 secs on top of the 3 mins
+    public static TimeSpan SendExpiry(int queued) => TimeSpan.FromMinutes(3) + TimeSpan.FromSeconds(3 * Math.Max(0, queued));
 
     // still sending after maxAge means the hook never answered (the session ended, say)
     public bool ExpireSending(TimeSpan maxAge, IReadOnlySet<string>? keep = null)
@@ -171,8 +183,12 @@ public sealed class ChatStore
         return changed;
     }
 
+    // lines still waiting to go sit at the bottom in the order they were typed, the rest go by time then seq
     public IEnumerable<ChatEntry> With(string peer, string key = "") =>
-        _entries.Where(e => e.IsWith(peer, key)).OrderBy(e => e.Time);
+        _entries.Where(e => e.IsWith(peer, key)).OrderBy(Waiting)
+                .ThenBy(e => Waiting(e) ? 0 : e.Time).ThenBy(e => Waiting(e) ? 0 : e.Seq);
+
+    private static bool Waiting(ChatEntry e) => e.Outgoing && e.State is "sending" or "queued";
 
     public int UnreadFrom(string peer, string key = "") =>
         _entries.Count(e => !e.Outgoing && !e.Read && e.IsWith(peer, key));
