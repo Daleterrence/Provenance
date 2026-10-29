@@ -229,7 +229,7 @@ static LONG WINAPI veh_proc(EXCEPTION_POINTERS *ep)
     unsigned eip = (unsigned)(ULONG_PTR)ep->ExceptionRecord->ExceptionAddress;
     unsigned code = ep->ExceptionRecord->ExceptionCode;
     MEMORY_BASIC_INFORMATION mbi;
-    char mod[64] = "?";
+    char mod[MAX_PATH] = "?", *name = mod, *slash;
     unsigned base = 0;
     if (code != 0x406d1388 && code != 0x80000004) {   /* thread naming, single step */
         mbi.AllocationBase = 0;
@@ -237,7 +237,9 @@ static LONG WINAPI veh_proc(EXCEPTION_POINTERS *ep)
             base = (unsigned)(ULONG_PTR)mbi.AllocationBase;
             GetModuleFileNameA((HMODULE)mbi.AllocationBase, mod, sizeof mod);
         }
-        lg("CRASH %08x at %08x = %s+%05x\r\n", code, eip, mod, eip - base);
+        /* just the file name, the full viewer path ate the whole buffer and hid which dll it was */
+        if ((slash = strrchr(mod, '\\')) != NULL) name = slash + 1;
+        lg("CRASH %08x at %08x = %s+%05x\r\n", code, eip, name, eip - base);
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }

@@ -479,6 +479,7 @@ public sealed class PolSessionService : IDisposable
                     if (Ending(line) is { } result) return result;
                 int? exit = null;
                 try { if (_polProc is { HasExited: true } ended) exit = ended.ExitCode; } catch { }
+                LogEarlyExit(pid, exit, logPath);
                 var (endedCode, endedText) = EndedBeforeSignIn(exit);
                 return Fail(endedCode, endedText);
             }
@@ -487,6 +488,22 @@ public sealed class PolSessionService : IDisposable
             Thread.Sleep(250);
         }
         return Stopped("The login was cancelled, and PlayOnline has been closed.");
+    }
+
+    // the hook's own log is in the admin-only folder, so a player's log needs the exit code and the crash lines too
+    private static void LogEarlyExit(int pid, int? exit, string hookLog)
+    {
+        Log.Warning("pol.exe {Pid} ended before the login finished, exit code {Exit}", pid, exit is { } e ? $"0x{e:X8}" : "unknown");
+        try
+        {
+            using var fs = new FileStream(hookLog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(fs);
+            var crashes = new List<string>();
+            while (reader.ReadLine() is { } line)
+                if (line.Contains("CRASH ", StringComparison.Ordinal)) crashes.Add(line.Trim());
+            foreach (var line in crashes.TakeLast(3)) Log.Warning("pol_hook: {Line}", line);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     private static string LoadFailedText(string list) =>

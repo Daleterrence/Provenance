@@ -78,7 +78,8 @@ public static class LargeAddressAwareSwitch
             if (gate is null || t.Blocked() is not null) return Outcome.NextStart;
             if (LargeAddressAware.Read(polExe) == on) return Outcome.Done;
             var result = WithPrestartsHeld(t, holdPrestarts, releasePrestarts, path => Remember(LargeAddressAware.Set(path, on)));
-            Log.Information("Large Address Aware turned {State} in pol.exe: {Result}", on ? "on" : "off", result?.ToString() ?? "a pol.exe was running");
+            Log.Information("Large Address Aware {Done} {State} in pol.exe: {Result}", result == LargeAddressAware.Result.Done ? "turned" : "not turned",
+                            on ? "on" : "off", result?.ToString() ?? "a pol.exe was running");
             return result switch
             {
                 LargeAddressAware.Result.Done or LargeAddressAware.Result.NotPe or LargeAddressAware.Result.UnknownBuild => Outcome.Done,
@@ -127,7 +128,8 @@ public static class LargeAddressAwareSwitch
             if (result is LargeAddressAware.Result.UnknownBuild or LargeAddressAware.Result.NotPe)
                 Log.Information("Large Address Aware not applied {When}: pol.exe is a build Provenance doesn't know, so it was left alone", when);
             else
-                Log.Information("Large Address Aware turned {State} in pol.exe {When}: {Result}", on ? "on" : "off", when,
+                Log.Information("Large Address Aware {Done} {State} in pol.exe {When}: {Result}",
+                                result == LargeAddressAware.Result.Done ? "turned" : "not turned", on ? "on" : "off", when,
                                 result?.ToString() ?? "a pol.exe from the viewer is running");
             if (result == LargeAddressAware.Result.Done && !on) ClearDone(settings);
         }
