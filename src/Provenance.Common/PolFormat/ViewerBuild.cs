@@ -12,18 +12,30 @@ public static class ViewerBuild
     internal const string PolExeSha256 = "f496bfc7c26b33e42b7ccf263e29854725a8009deb784f0e6c508a6004f13f00";
     // the same file with Large Address Aware on, byte for byte what Windower's Tools page writes
     internal const string PolExeLaaSha256 = "f9ce70440b8639652355ff28d74871eb290119f3448938817bd0f684657cab2e";
+    // JP's own compile of the same code (its .rdata sits 8 bytes lower), and its Large Address Aware twin
+    internal const string JpPolExeSha256 = "0b5beb0198f0caafc252a0af64628fb3d1ae9b084ef772371b0e221b47ee5c3c";
+    internal const string JpPolExeLaaSha256 = "bd93da61469706764f7e6469be4d8d7e1888a8bc1d907a80b2f572fb4f24c492";
     internal const string InUseText = "The PlayOnline Viewer's files are in use or being changed. Close PlayOnline and try again.";
 
-    // one pol.exe for every region, but each region's polcore is its own file
+    // US and EU share a pol.exe, JP has its own, and each region's polcore is its own file
+    private static readonly (PolRegion Region, string Off, string On)[] PolExes =
+    [
+        (PolRegion.UnitedStates, PolExeSha256, PolExeLaaSha256),
+        (PolRegion.Europe, PolExeSha256, PolExeLaaSha256),
+        (PolRegion.Japan, JpPolExeSha256, JpPolExeLaaSha256),
+    ];
+
     private static readonly (PolRegion Region, string Sha256)[] Polcores =
     [
         (PolRegion.UnitedStates, "73b1864bf522d3aa6ec28e9f4bb226fcee956f7f4848a238c9c2d756dc703b06"),
         (PolRegion.Europe, "84c5329299bdf009192f12870d9ccd5809c3a3cefdad52efadf1c062bd7188bb"),
+        (PolRegion.Japan, "93d34b5a7e1f74473f92b74125aca4f58cab8e56e0df2183ea3a0bbce548801d"),
     ];
 
-    internal sealed record Builds((string Off, string On) PolExe, IReadOnlyList<(PolRegion Region, string Sha256)> Polcores);
+    internal sealed record Builds(IReadOnlyList<(PolRegion Region, string Off, string On)> PolExes,
+                                  IReadOnlyList<(PolRegion Region, string Sha256)> Polcores);
 
-    internal static readonly Builds Known = new((PolExeSha256, PolExeLaaSha256), Polcores);
+    internal static readonly Builds Known = new(PolExes, Polcores);
 
     public static string PolcorePath(PolRegion region) =>
         Path.Combine("viewer", "com", region == PolRegion.Europe ? "polcoreEU.dll" : "polcore.dll");
@@ -90,7 +102,7 @@ public static class ViewerBuild
     }
 
     private static bool Fits(Builds known, PolRegion region, string polSha, Func<string> coreSha) =>
-        (polSha == known.PolExe.Off || polSha == known.PolExe.On) && known.Polcores.Contains((region, coreSha()));
+        known.PolExes.Any(p => p.Region == region && (polSha == p.Off || polSha == p.On)) && known.Polcores.Contains((region, coreSha()));
 
     private sealed class Holder(List<FileStream> files) : IDisposable
     {

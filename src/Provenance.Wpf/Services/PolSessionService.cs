@@ -42,9 +42,11 @@ public sealed class PolSessionService : IDisposable
     public const string UnsafeStartText = "Provenance couldn't start PlayOnline safely. Restart Provenance and try again.";
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
 
-    // pol_hook.c exits 11 on unreadable saved entries, 12 on a bad POL_IPC_DIR and 13 when its mutexes can't get secret
-    // names (never the stock ones, anything can create those first)
+    // pol_hook.c exits 11 on unreadable saved entries, 12 on a bad POL_IPC_DIR, 13 when its mutexes can't get secret
+    // names (never the stock ones, anything can create those first) and 14 when pol.exe's region isn't POL_REGION
     internal const int UnsafeStartExitCode = 13;
+    internal const int RegionExitCode = 14;
+    public const string RegionChangedText = "PlayOnline started as a different version than the one Provenance checked. Restart Provenance and try again.";
 
     internal static bool DetailsUnreadable(string? line = null, int? exitCode = null) =>
         (line?.Contains("phase_c: SAVED DETAILS UNREADABLE", StringComparison.Ordinal) ?? false) || exitCode == 11;
@@ -64,6 +66,7 @@ public sealed class PolSessionService : IDisposable
         _ when DetailsUnreadable(exitCode: exitCode) => (ErrorDetailsUnreadable, DetailsAgainText),
         12 => (ErrorLauncherFailed, PrivateFolderText),
         UnsafeStartExitCode => (ErrorLauncherFailed, UnsafeStartText),
+        RegionExitCode => (ErrorLauncherFailed, RegionChangedText),
         3 => (ErrorAuthFailed, RefusedText),
         7 => (ErrorAccountBlocked, "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why."),
         10 => (ErrorStalled, LoadFailedText("")),
@@ -74,6 +77,7 @@ public sealed class PolSessionService : IDisposable
     {
         12 => PrivateFolderText,
         UnsafeStartExitCode => UnsafeStartText,
+        RegionExitCode => RegionChangedText,
         _ => "Your PlayOnline session has closed. Log in again to see your friends and messages.",
     };
 
@@ -275,7 +279,7 @@ public sealed class PolSessionService : IDisposable
         var region = _settings.DetectedRegion;
         if (!PolPaths.Supported(region))
             return Fail(region is null
-                ? "PlayOnline isn't installed." : $"Provenance doesn't support the {RegionName(region.Value)} version of PlayOnline yet.");
+                ? "PlayOnline isn't installed." : $"Provenance doesn't support the {PolPaths.VersionName(region.Value)} version of PlayOnline yet.");
         var (viewerDir, polExe, launcherExe) = FindLaunchFiles();
         if (polExe is null)
             return Fail("Some of the files needed to start PlayOnline are missing. Check FINAL FANTASY XI is installed, and if it is, reinstall Provenance.");
@@ -367,7 +371,7 @@ public sealed class PolSessionService : IDisposable
 
         var psi = LauncherStart(launcherExe, polExe);
         var env = psi.Environment;
-        SetBaseEnvironment(env);
+        SetBaseEnvironment(env, PolEnv.Region(Path.GetDirectoryName(polExe)!));
         // only the viewer's menu values, busy goes online
         var status = _settings.Current.PlayOnlineStatus;
         env["POL_STATUS"] = status is 0 or 1 or 4 ? status.ToString() : "0";
@@ -536,13 +540,6 @@ public sealed class PolSessionService : IDisposable
     private static string LoadFailedText(string list) =>
         $"PlayOnline didn't send {list switch { "status" => "your status", "friends" => "your friend list", "handles" => "your handles", "characters" => "your service list", "groups" => "your friend groups", _ => "everything it needs at login" }}, so you've been logged out (the PlayOnline Viewer does the same). Try again in a moment.";
 
-    private static string RegionName(PolRegion region) => region switch
-    {
-        PolRegion.Europe => "European",
-        PolRegion.Japan => "Japanese",
-        _ => "North American",
-    };
-
     private static (string? ViewerDir, string? PolExe, string LauncherExe) LaunchFiles(PolRegion region)
     {
         var viewerDir = PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct);
@@ -567,13 +564,23 @@ public sealed class PolSessionService : IDisposable
         return psi;
     }
 
-    private static void SetBaseEnvironment(IDictionary<string, string?> env)
+    // POL_REGION is the env.dat region the build check went by, as pol.exe's own index (0 JP, 1 US, 2 EU), which the
+    // hook holds pol.exe to. An env.dat that doesn't say leaves it to pol.exe
+    private static void SetBaseEnvironment(IDictionary<string, string?> env, PolRegion? region)
     {
         LaunchEnvironment.Reset(env);
         env["POL_IPC_DIR"] = HookFiles.Dir;
         env["POL_CRED_KEYFILE"] = CredentialKey.FilePath;
         env["POL_HOLD"] = "1";
+        if (region is { } r) env["POL_REGION"] = RegionIndex(r);
     }
+
+    internal static string RegionIndex(PolRegion region) => region switch
+    {
+        PolRegion.Japan => "0",
+        PolRegion.Europe => "2",
+        _ => "1",
+    };
 
     private void StartWatcher(int pid)
     {
@@ -661,7 +668,7 @@ public sealed class PolSessionService : IDisposable
             }
             LargeAddressAwareBeforeStart(viewerDir!, "before the pre-start");
             var psi = LauncherStart(launcherExe, polExe);
-            SetPrestartEnvironment(psi.Environment, Environment.ProcessId);
+            SetPrestartEnvironment(psi.Environment, Environment.ProcessId, PolEnv.Region(viewerDir!));
             using var launcher = StartProcess(psi);
             if (launcher is null || RunLauncher(launcher) is not { } run) return null;
             var m = PidLine.Match(run.Out);
@@ -683,9 +690,9 @@ public sealed class PolSessionService : IDisposable
         PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct) is { } ffxi && File.Exists(Path.Combine(ffxi, "FFXiMain.dll"));
 
     // POL_IPC_DIR and POL_CRED_KEYFILE have to go in here, the go file never carries them
-    internal static void SetPrestartEnvironment(IDictionary<string, string?> env, int parentPid)
+    internal static void SetPrestartEnvironment(IDictionary<string, string?> env, int parentPid, PolRegion? region)
     {
-        SetBaseEnvironment(env);
+        SetBaseEnvironment(env, region);
         env["POL_PRESTART"] = "1";
         env["POL_PRESTART_PARENT"] = parentPid.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }

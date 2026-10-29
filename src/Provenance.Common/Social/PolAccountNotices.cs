@@ -87,9 +87,14 @@ public static class PolAccountNotices
     };
 
     // env.dat's POL_JAIL_USER_LOGIN_URL with app.dll's language tag for %s ({ja-JP, en-US, en-GB, ...}[language] at
-    // 0x104b34a0). US always has language 1, EU reads its Settings\Language (the MSI writes 1), so only EU's 2 is en-GB
+    // 0x104b34a0). JP is always 0, US always 1, EU reads its Settings\Language (the MSI writes 1), so only EU's 2 is en-GB
     public static string JailUrl(PolRegion region, int? language) =>
-        $"http://info.playonline.com/snews/{(region == PolRegion.Europe && language == 2 ? "en-GB" : "en-US")}/jail.pml";
+        $"http://info.playonline.com/snews/{region switch
+        {
+            PolRegion.Japan => "ja-JP",
+            PolRegion.Europe when language == 2 => "en-GB",
+            _ => "en-US",
+        }}/jail.pml";
 
     // the server let it in but the account gates refused, so the session got signed out before anything started
     public static string Blocked(string what, PolRegion region = PolRegion.UnitedStates, int? language = null)

@@ -11,7 +11,9 @@ public partial class AgreementDialog : Window
     {
         InitializeComponent();
         WindowFrame.Attach(this);
-        string Get(int id) => strings != null && strings.TryGetValue(id, out var s) ? s : "";
+        // the JP table only has "untranslated" placeholders where the agreement goes, so there's nothing of it to show
+        bool none = strings != null && strings.TryGetValue(PolStringTable.AgreementText, out var text) && text == "\u672a\u7ffb\u8a33";
+        string Get(int id) => !none && strings != null && strings.TryGetValue(id, out var s) ? s : "";
         var body = Get(PolStringTable.AgreementText);
         var article8 = Get(PolStringTable.AgreementArticle8);
         TitleText.Text = body.Length > 0 ? body.Split('\n')[0].Trim() : "PlayOnline Member Agreement";

@@ -43,6 +43,7 @@ public sealed class GameInstaller
     [
         (PolRegion.UnitedStates, "{81784E3A-1BDA-4743-B5F8-04E59DC7E031}", "{07EB4C8B-3869-49B4-8CF8-D6D9FB8C8026}"),
         (PolRegion.Europe, "{F65CC5FB-3089-483C-8504-14EA5F58DD1D}", "{549BFF68-9B3D-46BE-88E3-BD4F7C6DEB36}"),
+        (PolRegion.Japan, "{E58BCEA5-A722-4FCA-89D5-C89E18B4E3FE}", "{55DAC7CD-71AF-40DA-9BE0-AB5358EA0069}"),
     ];
 
     public static bool Installs(PolRegion region) => ProductCodes.Any(p => p.Region == region);

@@ -36,7 +36,7 @@ public static class PolUpdates
             }
             // a stale queue (.tmp2) mustn't overwrite what the mirror writes below
             ApplyQueued();
-            var r = Update(PatchProduct.Viewer(viewerDir, region), MirrorUpdater.RegionFor(region), "viewer", progress, BeforeChange, ct);
+            var r = Update(PatchProduct.Viewer(viewerDir, region), region, "viewer", progress, BeforeChange, ct);
             // up to date or not, an earlier run might've died between the update and these steps
             ApplyQueued();
             Log.Information("PlayOnline Viewer update check: {Result}", r);
@@ -47,7 +47,7 @@ public static class PolUpdates
                                          CancellationToken ct) =>
         Locked(ct, progress, () =>
         {
-            var r = Update(PatchProduct.Ffxi(ffxiDir, viewerDir, region), MirrorUpdater.RegionFor(region), "ffxi", progress, () =>
+            var r = Update(PatchProduct.Ffxi(ffxiDir, viewerDir, region), region, "ffxi", progress, () =>
             {
                 if (GameRunning())
                     throw Shown.Mark(new InvalidOperationException(
@@ -59,9 +59,10 @@ public static class PolUpdates
 
     // One POL version check, then the patch mirror. POL serves whatever the mirror can't, and beforeChange runs once
     // at most.
-    private static PatchResult Update(PatchProduct product, string? mirrorRegion, string slug, IProgress<PatchProgress>? progress,
+    private static PatchResult Update(PatchProduct product, PolRegion installed, string slug, IProgress<PatchProgress>? progress,
                                       Action beforeChange, CancellationToken ct)
     {
+        var mirrorRegion = MirrorUpdater.RegionFor(installed, slug);
         var updater = new PolUpdater(product) { KeepLargeAddressAware = true };
         progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
         var check = updater.Check(ct);
@@ -89,7 +90,7 @@ public static class PolUpdates
                     {
                         if (isError) Log.Error("Update {Product}: {Message}", product.Name, msg);
                         else Log.Warning("Update {Product}: {Message}", product.Name, msg);
-                    }).GetAwaiter().GetResult();
+                    }, MirrorLayout.OwnFiles(installed, slug)).GetAwaiter().GetResult();
         }
         catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {

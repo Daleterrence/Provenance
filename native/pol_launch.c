@@ -16,11 +16,12 @@ static void die(const char *m)
 static int get_pol_path(char *out, int cap)
 {
     static const char *const keys[] = { "SOFTWARE\\WOW6432Node\\PlayOnlineUS\\InstallFolder",
-                                        "SOFTWARE\\WOW6432Node\\PlayOnlineEU\\InstallFolder" };
+                                        "SOFTWARE\\WOW6432Node\\PlayOnlineEU\\InstallFolder",
+                                        "SOFTWARE\\WOW6432Node\\PlayOnline\\InstallFolder" };
     HKEY k;
     DWORD n = 0, t;
     int i, found = 0;
-    for (i = 0; i < 2 && !found; i++) {
+    for (i = 0; i < 3 && !found; i++) {
         if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, keys[i], 0, KEY_READ, &k)) continue;
         n = cap;
         found = !RegQueryValueExA(k, "1000", NULL, &t, (BYTE *)out, &n) && t == REG_SZ;

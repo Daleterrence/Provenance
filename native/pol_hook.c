@@ -567,13 +567,54 @@ static void *g_svc_2c4, *g_svc_2b4;
 #include "pol_profile_edit.c"
 static int get_handle(BYTE *b, int slot, void *rec) { return ((svc_ip)FS_GETHANDLE_FN)(slot, rec); }
 
-/* pol.exe loads the polcore for env.dat's region before the menu, so the loaded one is the region. polcoreEU.dll
-   1.18.15e is polcore.dll with its own COM ids, so every address in here is the same */
-static int pol_eu(void) { return !GetModuleHandleA("polcore.dll") && GetModuleHandleA("polcoreEU.dll") != NULL; }
-static HMODULE polcore_module(void) { return GetModuleHandleA(pol_eu() ? "polcoreEU.dll" : "polcore.dll"); }
-static const char *pol_hive(void) { return pol_eu() ? "PlayOnlineEU" : "PlayOnlineUS"; }
+/* each region as its app.dll sets polcore up. svc 0x17dc(1) swaps in the JP half of polcore's conversion table, and
+   svc 0x690's language is what FFXI reads back through 0x694 as its area code */
+static const struct pol_region {
+    const char *name, *polcore, *hive, *maker, *strings;
+    int selector, jp_table, lang;   /* lang: JP 0 always, -1 Settings\Language or 1, -2 it or the UI language */
+} g_regions[3] = {
+    { "JP", "polcore.dll",   "PlayOnline",   "Square",     "viewer\\data\\common", 0, 1, 0 },
+    { "US", "polcore.dll",   "PlayOnlineUS", "SquareEnix", "viewer\\data\\common", 1, 0, -1 },
+    { "EU", "polcoreEU.dll", "PlayOnlineEU", "SquareEnix", "EU\\EN",               1, 0, -2 },
+};
 
-/* app.dll 0x102afa80's EU answer when Settings has no Language: German 4, French 3, anything else 2. US just gets 1 */
+#define REGION_EXIT 14
+#define REGION_MISMATCH ((const struct pol_region *)0)
+static const struct pol_region *g_region;
+
+/* pol.exe's index (0 JP, 1 US, 2 EU) and Provenance's POL_REGION (n characters). Only both there and different is a
+   mismatch, anything else falls back to the other one, then the loaded polcore */
+static const struct pol_region *region_of(int idx, const char *passed, DWORD n)
+{
+    int want = n == 1 && passed[0] >= '0' && passed[0] <= '2' ? passed[0] - '0' : -1;
+    if (idx >= 0 && idx <= 2) return want >= 0 && want != idx ? REGION_MISMATCH : &g_regions[idx];
+    if (want >= 0) return &g_regions[want];
+    return !GetModuleHandleA("polcore.dll") && GetModuleHandleA("polcoreEU.dll") ? &g_regions[2] : &g_regions[1];
+}
+
+/* pol.exe's region index (0x0045cd90), set from env.dat before it loads a polcore. A mismatch ends pol.exe before
+   polcore gets touched */
+static const struct pol_region *region(void)
+{
+    char want[4] = {0};
+    DWORD n;
+    int idx;
+    if (g_region) return g_region;
+    idx = *(int *)((BYTE *)GetModuleHandleW(NULL) + 0x5cd90);
+    n = GetEnvironmentVariableA("POL_REGION", want, sizeof want);
+    if (n > 1 || (n == 1 && (want[0] < '0' || want[0] > '2')))
+        lg("pol_hook: POL_REGION isn't 0, 1 or 2 - going by pol.exe's own region\r\n");
+    if ((g_region = region_of(idx, want, n)) == REGION_MISMATCH) {
+        lg("pol_hook: region mismatch (pol.exe %d, Provenance '%s') - ending pol.exe (exit %d)\r\n", idx, want, REGION_EXIT);
+        end_pol(REGION_EXIT);
+        ExitProcess(REGION_EXIT);
+    }
+    return g_region;
+}
+static HMODULE polcore_module(void) { return GetModuleHandleA(region()->polcore); }
+static const char *pol_hive(void) { return region()->hive; }
+
+/* app.dll 0x102afa80's EU answer when Settings has no Language: German 4, French 3, anything else 2 */
 static DWORD eu_lang(LANGID id)
 {
     switch (id) {
@@ -585,16 +626,152 @@ static DWORD eu_lang(LANGID id)
 
 static DWORD viewer_lang(void)
 {
+    const struct pol_region *r = region();
     HKEY hk;
-    char sub[80];
-    DWORD fallback = pol_eu() ? eu_lang(GetUserDefaultLangID()) : 1, lang = fallback, sz = sizeof lang;
-    wsprintfA(sub, "SOFTWARE\\%s\\SquareEnix\\PlayOnlineViewer\\Settings", pol_hive());
+    char sub[96];
+    DWORD fallback, lang, sz = sizeof lang;
+    if (r->lang >= 0) return (DWORD)r->lang;
+    fallback = r->lang == -2 ? eu_lang(GetUserDefaultLangID()) : 1;
+    lang = fallback;
+    wsprintfA(sub, "SOFTWARE\\%s\\%s\\PlayOnlineViewer\\Settings", r->hive, r->maker);
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, sub, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hk) == ERROR_SUCCESS) {
-        if (RegQueryValueExA(hk, "Language", NULL, NULL, (LPBYTE)&lang, &sz) != ERROR_SUCCESS)
+        if (RegQueryValueExA(hk, "Language", NULL, NULL, (LPBYTE)&lang, &sz) != ERROR_SUCCESS || lang > 8)
             lang = fallback;
         RegCloseKey(hk);
     }
     return lang;
+}
+
+/* svc 0xf14 and 0x690 in app.dll's order, with JP's 0x17dc in between and its 0x17e0 after */
+static void region_init(BYTE *b, DWORD lang)
+{
+    const struct pol_region *r = region();
+    ((int (__cdecl *)(int))PSLOT(0x3C5))(r->selector);
+    if (r->jp_table) ((int (__cdecl *)(int))PSLOT(0x5F7))(1);
+    ((int (__cdecl *)(int))PSLOT(0x1A4))((int)lang);
+    if (r->jp_table) ((int (__cdecl *)(int))PSLOT(0x5F8))((int)lang);
+    lg("viewer_init: region %s, selector %d, conversion table %d\r\n", r->name, r->selector, r->jp_table);
+}
+
+/* StringTable.bin's bits, LSB first from +0x10. -1 when it runs out */
+static int pex_bits(const BYTE *d, DWORD bits, DWORD *bit, int k)
+{
+    int v = 0, i;
+    for (i = 0; i < k; i++, (*bit)++) {
+        if (*bit >= bits) return -1;
+        v |= ((d[0x10 + (*bit >> 3)] >> (*bit & 7)) & 1) << i;
+    }
+    return v;
+}
+
+/* <folder>\<sub>\StringTable.bin unpacked: "PEX\0", the plain size at +4, then LZ77 bits over a zeroed 0x1000 window
+   (0 literal, 1 a 12-bit offset and a 4-bit length + 2) */
+static BYTE *string_table(const char *folder, const char *sub, DWORD *len)
+{
+    char path[MAX_PATH + 48];
+    HANDLE f;
+    DWORD size, got, n, bit = 0, bits, pos = 0x1000;
+    BYTE *d = NULL, *buf = NULL;
+    int t, off, cnt, ok = 0;
+    wsprintfA(path, "%s\\%s\\StringTable.bin", folder, sub);
+    f = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) return NULL;
+    size = GetFileSize(f, NULL);
+    if (size >= 0x10 && size < (8u << 20) && (d = HeapAlloc(GetProcessHeap(), 0, size)) != NULL &&
+        ReadFile(f, d, size, &got, NULL) && got == size && !memcmp(d, "PEX", 4) &&
+        (n = *(DWORD *)(d + 4)) > 0x10 && n < (16u << 20) &&
+        (buf = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x1000 + n)) != NULL) {
+        bits = (size - 0x10) * 8;
+        ok = 1;
+        while (ok && pos < 0x1000 + n) {
+            if ((t = pex_bits(d, bits, &bit, 1)) < 0) ok = 0;
+            else if (t == 0) {
+                if ((t = pex_bits(d, bits, &bit, 8)) < 0) ok = 0;
+                else buf[pos++] = (BYTE)t;
+            } else if ((off = pex_bits(d, bits, &bit, 12)) < 0 || (cnt = pex_bits(d, bits, &bit, 4)) < 0) ok = 0;
+            else
+                for (cnt += 2; cnt > 0 && pos < 0x1000 + n; cnt--, pos++) buf[pos] = buf[pos - 0x1000 + off];
+        }
+    }
+    CloseHandle(f);
+    if (d) HeapFree(GetProcessHeap(), 0, d);
+    if (!ok) {
+        if (buf) HeapFree(GetProcessHeap(), 0, buf);
+        return NULL;
+    }
+    *len = n;
+    MoveMemory(buf, buf + 0x1000, n);
+    return buf;
+}
+
+/* records from +0x10: u16 size, u16 id, NUL-ended UTF-16. Copied out, at most cap - 1 characters */
+static int table_text(const BYTE *raw, DWORD n, int id, WCHAR *out, int cap, int drop_cr)
+{
+    DWORD o = 0x10, i;
+    int k = 0;
+    while (o + 4 <= n) {
+        WORD size = *(const WORD *)(raw + o), sid = *(const WORD *)(raw + o + 2);
+        if (size < 4 || o + size > n) return 0;
+        if (sid == id) {
+            for (i = o + 4; i + 1 < o + size && k < cap - 1; i += 2) {
+                WCHAR c = (WCHAR)(raw[i] | raw[i + 1] << 8);
+                if (!c) break;
+                if (c != L'\r' || !drop_cr) out[k++] = c;
+            }
+            out[k] = 0;
+            return k > 0;
+        }
+        o += size;
+    }
+    return 0;
+}
+
+typedef int (__cdecl *to_sjis)(char *, const WCHAR *, int);
+
+/* message #i (0-9 titles, 10-19 texts) as app.dll (0x10057900) makes it: the table's string, CRs dropped from the
+   texts, through conv (svc 0xa40). english falls back to the US table's bytes. Its length, or -1 */
+static int message_bytes(const BYTE *raw, DWORD n, int i, int english, to_sjis conv, char out[0x100])
+{
+    static const WORD ids[20] = { 0x46c9, 0x46d0, 0x46d1, 0x46d2, 0x46d3, 0x46d4, 0x46d6, 0x46d8, 0x46dc, 0x46da,
+                                  0x46e6, 0x46ea, 0x46ec, 0x4ab8, 0x3bad, 0x46d7, 0x46d9, 0x46dd, 0x46db, 0x46d5 };
+    static const char *const en[20] = {
+        "Let's be friends!", "Friend registration accepted", "Friend registration declined", "Deleted",
+        "Please delete.", "Would you like to join a friend group?", "Group registration accepted",
+        "Group registration declined", "Removed from friend group", "Friend group disbanded",
+        "Would you like to be friends?", "%s accepted friend registration.\nWill be added to Friend List.",
+        "%s declined friend registration.", "You don't have access to %s's away message.",
+        "The name you entered is unavailable.\nPlease choose another name.",
+        "%s has agreed to join\nthe group \"%s.\"", "%s has declined to join\nthe group \"%s.\"",
+        "You have been removed from\nthe group \"%s.\"", "The group \"%s\"\nhas been disbanded.",
+        "Would you like to join the group \"%s\"?" };
+    WCHAR w[0x200];
+    int cap = i < 10 ? 0x80 : 0x100;
+    if (raw && table_text(raw, n, ids[i], w, 0x200, i >= 10) && conv(NULL, w, 0x81ac) < cap)
+        return conv(out, w, 0x81ac);
+    if (!english) return -1;
+    lstrcpyA(out, en[i]);
+    return lstrlenA(out);
+}
+
+/* SET_MESSAGE_TITLE/TEXT from the region's own StringTable like its viewer (EU's English one), so a friend gets the
+   same bytes. Text #4 is the name dialog FFXI-3322 needs */
+static void set_messages(BYTE *b, const char *folder)
+{
+    const struct pol_region *r = region();
+    DWORD n = 0;
+    BYTE *raw = string_table(folder, r->strings, &n);
+    char s[0x100];
+    int i, set = 0;
+    for (i = 0; i < 20; i++) {
+        /* JP keeps polcore's own Japanese for anything its table hasn't got */
+        if (message_bytes(raw, n, i, !r->jp_table, (to_sjis)PSLOT(0x290), s) < 0) continue;
+        if (i < 10) ((int (__cdecl *)(int, const char *))PSLOT(0x430))(i, s);
+        else ((int (__cdecl *)(int, const char *))PSLOT(0x516))(i - 10, s);
+        set++;
+    }
+    lg("viewer_init: %d message texts set, %s, FILE_INIT done\r\n", set,
+       raw ? "from StringTable.bin" : r->jp_table ? "StringTable.bin unreadable, polcore's own kept" : "StringTable.bin unreadable, English");
+    if (raw) HeapFree(GetProcessHeap(), 0, raw);
 }
 
 /* drops trailing backslashes (Locate existing install writes one) but never a drive's own */
@@ -630,21 +807,10 @@ static void viewer_init(BYTE *b)
     char polid[16] = {0}, path[MAX_PATH + 32], *p;
     unsigned h = 0;
     int slot, i;
-    static const char *const titles[10] = {
-        "Let's be friends!", "Friend registration accepted", "Friend registration declined", "Deleted",
-        "Please delete.", "Would you like to join a friend group?", "Group registration accepted",
-        "Group registration declined", "Removed from friend group", "Friend group disbanded" };
-    static const char *const texts[9] = {
-        "Would you like to be friends?", "%s accepted friend registration.\r\nWill be added to Friend List.",
-        "%s declined friend registration.", NULL,
-        "The name you entered is unavailable.\r\nPlease choose another name.",
-        "%s has agreed to join\r\nthe group \"%s.\"", "%s has declined to join\r\nthe group \"%s.\"",
-        "You have been removed from\r\nthe group \"%s.\"", "The group \"%s\"\r\nhas been disbanded." };
     wsprintfA(key, "SOFTWARE\\%s", pol_hive());
     viewer_folder(folder);
     lg("viewer_init: lang=%u key='%s' folder='%s'\r\n", lang, key, folder);
-    ((int (__cdecl *)(int))PSLOT(0x3C5))(1);
-    ((int (__cdecl *)(int))PSLOT(0x1A4))((int)lang);
+    region_init(b, lang);
     ((int (__cdecl *)(const char *))PSLOT(0x16F))(key);
     ((int (__cdecl *)(const char *))PSLOT(0x07D))(folder);
     ((int (__cdecl *)(void))PSLOT(0x3A4))();
@@ -663,13 +829,7 @@ static void viewer_init(BYTE *b)
         CreateDirectoryA(full, NULL);
     }
     lg("viewer_init: user slot %d (pub\\home%02d)\r\n", slot, slot);
-    /* SET_MESSAGE_TITLE/TEXT: English over polcore's built-in Japanese messages (the 3322 dialog is #4) */
-    for (i = 0; i < 10; i++)
-        ((int (__cdecl *)(int, const char *))PSLOT(0x430))(i, titles[i]);
-    for (i = 0; i < 9; i++)
-        if (texts[i])
-            ((int (__cdecl *)(int, const char *))PSLOT(0x516))(i, texts[i]);
-    lg("viewer_init: message texts set (EN), FILE_INIT done\r\n");
+    set_messages(b, folder);
 }
 
 static void *g_polcon_poll_orig;
@@ -799,7 +959,8 @@ static void refuse(char *state, int cap, const char *fmt, const char *why)
     g_snap_dirty = 1;
 }
 
-/* notices whose viewer screen only offers log out or a fix-it page (closed, suspended, banned...), US rows only */
+/* notices whose viewer screen only offers log out or a fix-it page (closed, suspended, banned...). The JP, US and EU
+   blocks of app.dll's table block the same codes */
 static int notice_blocks(unsigned st)
 {
     static const unsigned char block[] = { 221, 226, 227, 228, 229, 230, 231, 233, 235, 237, 239,
@@ -1253,6 +1414,7 @@ static void phase_c_seed(HMODULE pc)
 
 static void prime_session(void)
 {
+    const struct pol_region *r = region();
     HMODULE pc = polcore_module();
     static const unsigned char id64[8] = { 0xef,0xbe,0xad,0xde,0x78,0x56,0x34,0x12 };
     static const char name17[17] = "Kupo";
@@ -1264,14 +1426,10 @@ static void prime_session(void)
     *(unsigned *)((BYTE *)pc + 0x99254) = 1;   /* ready flag (svc+0xd10) */
     CopyMemory((BYTE *)pc + 0x99280, id64, 8);
     CopyMemory((BYTE *)pc + 0x99288, name17, 17);
-    /* windows type (svc+0x694), the first thing FFXiEntry's graphics pre-flight reads: 4 = modern NT, 1 blocks on
-       its dialog */
-    ((void (*)(unsigned))((BYTE *)pc + 0x181f0))(4);
     /* svc+0x730's state (polcore.dll 0x1009aa58) is -1 without a real menu session, 0 suits the pre-flight */
     *(unsigned *)((BYTE *)pc + 0x9aa58) = 0;
-    /* JP/US selector (polcore.dll 0x100aa318), 1 = anything but JP, EU too. JP wants SOFTWARE\PlayOnline\Interface,
-       which isn't there, so gate 7 bails. */
-    *(unsigned *)((BYTE *)pc + 0xaa318) = 1;
+    /* the JP/US selector (polcore.dll 0x100aa318), 0 JP, 1 anything else. svc 0xf14 sets it again in viewer_init */
+    *(unsigned *)((BYTE *)pc + 0xaa318) = (unsigned)r->selector;
     lg("pol_hook: fake session poked into polcore @ %08x\r\n", (unsigned)(ULONG_PTR)pc);
     viewer_init((BYTE *)pc);
     phase_c_seed(pc);

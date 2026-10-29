@@ -13,7 +13,8 @@ public static class LargeAddressAware
     private const int SharingViolation = unchecked((int)0x80070020);
     private const int LockViolation = unchecked((int)0x80070021);
 
-    internal static readonly (string Off, string On) Known = (ViewerBuild.PolExeSha256, ViewerBuild.PolExeLaaSha256);
+    internal static readonly (string Off, string On)[] Known =
+        [(ViewerBuild.PolExeSha256, ViewerBuild.PolExeLaaSha256), (ViewerBuild.JpPolExeSha256, ViewerBuild.JpPolExeLaaSha256)];
 
     // null when the file can't be read or isn't a PE file
     public static bool? Read(string path)
@@ -27,7 +28,7 @@ public static class LargeAddressAware
     }
 
     // SE's pol.exe, with or without the bit
-    public static bool IsKnownBuild(string path) => IsKnownBuild(path, Known);
+    public static bool IsKnownBuild(string path) => Known.Any(pair => IsKnownBuild(path, pair));
 
     internal static bool IsKnownBuild(string path, (string Off, string On) known)
     {
@@ -36,7 +37,19 @@ public static class LargeAddressAware
         return sha == known.Off || sha == known.On;
     }
 
-    public static Result Set(string path, bool on) => Set(path, on, Known);
+    // the pair this pol.exe belongs to, or the first so an unknown file gets UnknownBuild
+    public static Result Set(string path, bool on)
+    {
+        var pair = Known[0];
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var sha = Sha256(fs);
+            pair = Known.FirstOrDefault(k => sha == k.Off || sha == k.On, Known[0]);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        return Set(path, on, pair);
+    }
 
     // hashed before and after the one byte, so only SE's pol.exe or Windower's copy of it ever gets written
     internal static Result Set(string path, bool on, (string Off, string On) known)
@@ -82,13 +95,13 @@ public static class LargeAddressAware
 
     // the repair and install scans count Windower's pol.exe as intact, it's SE's file with the one bit set
     public static bool Matches(string relativePath, string listedSha256, string actualSha256) =>
-        Matches(relativePath, listedSha256, actualSha256, Known);
+        Known.Any(pair => Matches(relativePath, listedSha256, actualSha256, pair));
 
     internal static bool Matches(string relativePath, string listedSha256, string actualSha256, (string Off, string On) known) =>
         relativePath.Equals("pol.exe", StringComparison.OrdinalIgnoreCase) && listedSha256 == known.Off && actualSha256 == known.On;
 
     // SE's bytes back, when path is pol.exe with only the bit set. POL's patcher compares those against its file list
-    public static byte[]? Unpatched(string path) => Unpatched(path, Known);
+    public static byte[]? Unpatched(string path) => Known.Select(pair => Unpatched(path, pair)).FirstOrDefault(b => b is not null);
 
     internal static byte[]? Unpatched(string path, (string Off, string On) known)
     {

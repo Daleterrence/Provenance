@@ -18,12 +18,44 @@ public sealed record PatchProduct(string Name, int Id, string Host, string TagWi
     // null reads the Interface value from the registry like POL. It's the same on every PC, so the publisher pins it
     public string? PatchVerInterface { get; init; }
 
-    // host from env.dat's PATCH_SERVER_DOMAIN. EU patches from the same servers and tags, only its keys differ
+    public PolRegion Region { get; init; } = PolRegion.UnitedStates;
+
+    // pt004 and pt008 are one server: the viewer's wire tag (sqpolcts.bin) is what gets JP its own stream. FFXI's is
+    // W20 everywhere, so every region gets the same FFXI
     public static PatchProduct Viewer(string viewerDir, PolRegion region = PolRegion.UnitedStates) =>
-        new("PlayOnline Viewer", 1000, "pt008.pol.com", "W2U", "W2U", viewerDir, viewerDir, PolPaths.Hive(region));
+        new("PlayOnline Viewer", 1000, ViewerHost(viewerDir, region), Streams(region).Tag, Streams(region).Tag, viewerDir, viewerDir, PolPaths.Hive(region))
+        { Region = region };
 
     public static PatchProduct Ffxi(string ffxiDir, string viewerDir, PolRegion region = PolRegion.UnitedStates) =>
-        new("FINAL FANTASY XI", 1, "pc001W2U.pol.com", "W20", "W2U", ffxiDir, viewerDir, PolPaths.Hive(region));
+        new("FINAL FANTASY XI", 1, $"pc001{Streams(region).Tag}.pol.com", "W20", Streams(region).Tag, ffxiDir, viewerDir, PolPaths.Hive(region))
+        { Region = region };
+
+    // US and EU share their streams, JP has its own
+    private static (string ViewerHost, string Tag) Streams(PolRegion region) =>
+        region == PolRegion.Japan ? ("pt004.pol.com", "W20") : ("pt008.pol.com", "W2U");
+
+    // the other stream's host is never taken from env.dat
+    internal static string ViewerHost(string viewerDir, PolRegion region)
+    {
+        var own = Streams(region).ViewerHost;
+        var other = Streams(region == PolRegion.Japan ? PolRegion.UnitedStates : PolRegion.Japan).ViewerHost;
+        var named = PolEnv.ValueIn(viewerDir, "PATCH_SERVER_DOMAIN");
+        return named is null || !PolUpdater.IsPolHost(named) || named.Equals(other, StringComparison.OrdinalIgnoreCase) ? own : named;
+    }
+
+    internal static bool IsJapan(PolRegion? region) => region == PolRegion.Japan;
+
+    // JP and US/EU files never mix, the US env.dat turns a JP install into a broken US one. Checked before a server's
+    // asked anything
+    public void CheckStream()
+    {
+        if (PolEnv.Region(ViewerFolder) is { } installed && IsJapan(installed) != IsJapan(Region))
+            throw Shown.Mark(new InvalidOperationException(
+                $"This PlayOnline install is the {PolPaths.VersionName(installed)} version, so it can't take {PolPaths.VersionName(Region)} {Name} files. Nothing was changed."));
+        if (PolContents.WireTag(ViewerFolder, Id) is { } own && own != TagWire)
+            throw Shown.Mark(new InvalidOperationException(
+                $"The {PolPaths.VersionName(Region)} {Name} update doesn't match this PlayOnline install. Nothing was changed."));
+    }
 }
 
 public sealed record VersionCheck(string Local, string Server, IPEndPoint Endpoint)
@@ -67,6 +99,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
     public VersionCheck Check(string local, CancellationToken ct)
     {
+        product.CheckStream();
         var ep = Resolve(ct);
         var link = PatchServerLink.Connect(ep, ct);
         try
@@ -80,6 +113,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     // beforeChange only runs once an update's needed, and can throw to stop it
     public PatchResult Run(IProgress<PatchProgress>? progress, CancellationToken ct, Action? beforeChange = null, VersionCheck? check = null)
     {
+        product.CheckStream();
         if (check == null)
         {
             progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
@@ -421,6 +455,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
     private PatchResult Apply(List<PatchFile> manifest, string local, string server)
     {
+        CheckStagedEnv(manifest);
         bool queued = false;
         var rst = new StringBuilder();
         foreach (var f in manifest)
@@ -443,6 +478,27 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         WriteLocalVersion(server);
         WriteText("patch.rst", rst.ToString());
         return queued ? PatchResult.UpdatedQueued : PatchResult.Updated;
+    }
+
+    // the last check before anything's replaced: a new env.dat that moves the install between JP and US/EU means the
+    // wrong stream, so nothing goes in
+    internal void CheckStagedEnv(List<PatchFile> manifest)
+    {
+        if (product.Id != 1000) return;
+        foreach (var rel in new[] { Path.Combine("EU", "env.dat"), Path.Combine("data", "utf", "env.dat") })
+        {
+            var staged = Path.Combine(Dir, rel) + ".tmp2";
+            if (!File.Exists(staged)) continue;
+            var area = PolEnv.Value(staged, "POL_UCS_AREA_KBN");
+            if (area is "00" or "01" or "02" && (area == "00") == PatchProduct.IsJapan(product.Region)) continue;
+            foreach (var f in manifest)
+            {
+                var tmp2 = Local(f.Name) + ".tmp2";
+                if (File.Exists(tmp2)) DeleteFile(tmp2);
+            }
+            throw Shown.Mark(new InvalidDataException(
+                $"PlayOnline's update server sent {product.Name} files for another version of PlayOnline, so none of them were installed."));
+        }
     }
 
     private static void Replace(string staged, string target)

@@ -35,18 +35,17 @@ public static class PolEnv
         return new PolFileCipher(Key).Encrypt(data, (uint)text.Length);
     }
 
-    // pol.exe's own answer (WinMain 0x00414560 through 0x0040f5c0): POL_UCS_AREA_KBN from EU\env.dat when there is
-    // one, data\utf\env.dat otherwise. An EU install has both and the utf one says US, so a bad EU file is no answer
-    public static PolRegion? Region(string viewerDir)
-    {
-        foreach (var rel in new[] { Path.Combine("EU", "env.dat"), Path.Combine("data", "utf", "env.dat") })
-        {
-            var path = Path.Combine(viewerDir, rel);
-            if (!File.Exists(path)) continue;
-            return int.TryParse(Value(path, "POL_UCS_AREA_KBN"), NumberStyles.None, CultureInfo.InvariantCulture, out var area)
-                ? area switch { 0 => PolRegion.Japan, 1 => PolRegion.UnitedStates, 2 => PolRegion.Europe, _ => null }
-                : null;
-        }
-        return null;
-    }
+    // the one pol.exe reads (WinMain 0x00414560 through 0x0040f5c0): EU\env.dat when there is one, data\utf\env.dat
+    // otherwise. An EU install has both and the utf one says US
+    public static string? FileIn(string viewerDir) =>
+        new[] { Path.Combine("EU", "env.dat"), Path.Combine("data", "utf", "env.dat") }
+            .Select(rel => Path.Combine(viewerDir, rel)).FirstOrDefault(File.Exists);
+
+    public static string? ValueIn(string viewerDir, string name) => FileIn(viewerDir) is { } path ? Value(path, name) : null;
+
+    // pol.exe's own answer, POL_UCS_AREA_KBN. A bad EU file is no answer
+    public static PolRegion? Region(string viewerDir) =>
+        int.TryParse(ValueIn(viewerDir, "POL_UCS_AREA_KBN"), NumberStyles.None, CultureInfo.InvariantCulture, out var area)
+            ? area switch { 0 => PolRegion.Japan, 1 => PolRegion.UnitedStates, 2 => PolRegion.Europe, _ => null }
+            : null;
 }

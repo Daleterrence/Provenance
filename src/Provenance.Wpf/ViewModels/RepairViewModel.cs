@@ -101,7 +101,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
             var installed = region ?? PolRegion.UnitedStates;
             if (MirrorLayout.RegionFolder(installed) is not { } mirrorRegion)
             {
-                End("Repair isn't available", "Repair only works with the North American and European versions of PlayOnline.", failed: false);
+                End("Repair isn't available", MainViewModel.RepairNotYetText(installed), failed: false);
                 return;
             }
             var viewerDir = PolPaths.TryGetInstallFolder(installed, PolPaths.ViewerProduct);

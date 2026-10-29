@@ -9,17 +9,18 @@ public sealed record MirrorOutcome(bool OnMirror, IReadOnlyList<MirrorEntry> Fai
 
 public static class MirrorUpdater
 {
-    // each region the mirror has is its own folder there, viewer and FFXI alike. Null updates from POL
-    public static string? RegionFor(PolRegion installed) => MirrorLayout.RegionFolder(installed);
+    // null updates from POL
+    public static string? RegionFor(PolRegion installed, string product) => MirrorLayout.UpdateFolder(installed, product);
 
-    // patch.ver goes last and only when nothing failed, POL is the caller's fallback
+    // patch.ver goes last and only when nothing failed, POL is the caller's fallback. keep is never written
     public static async Task<MirrorOutcome> UpdateAsync(MirrorClient client, string region, string product, string folder,
         PolUpdater updater, VersionCheck check, Action beforeChange, IProgress<PatchProgress>? progress, CancellationToken ct,
-        Action<string, bool>? log = null)
+        Action<string, bool>? log = null, IReadOnlySet<string>? keep = null)
     {
         var none = new MirrorOutcome(false, [], 0);
         var next = await client.GetIndexAsync(region, product, check.Server, ct);
         if (next is null) return none;
+        if (keep is { Count: > 0 }) next = next with { Files = next.Files.Where(e => !keep.Contains(e.Path)).ToList() };
         var old = check.Local.Length > 0 ? await client.GetIndexAsync(region, product, check.Local, ct) : null;
 
         IReadOnlyList<MirrorEntry> work;

@@ -14,7 +14,7 @@ public static class PolPaths
     private static readonly PolRegion[] Order = [PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan];
 
     // the regions Provenance logs in and plays on
-    public static bool Supported(PolRegion? region) => region is PolRegion.UnitedStates or PolRegion.Europe;
+    public static bool Supported(PolRegion? region) => region is PolRegion.UnitedStates or PolRegion.Europe or PolRegion.Japan;
 
     public static string Hive(PolRegion region) => region switch
     {
@@ -22,6 +22,14 @@ public static class PolPaths
         PolRegion.UnitedStates => @"SOFTWARE\PlayOnlineUS",
         PolRegion.Europe => @"SOFTWARE\PlayOnlineEU",
         _ => throw new ArgumentOutOfRangeException(nameof(region)),
+    };
+
+    // how the text on screen names each version
+    public static string VersionName(PolRegion region) => region switch
+    {
+        PolRegion.Europe => "European",
+        PolRegion.Japan => "Japanese",
+        _ => "North American",
     };
 
     public static PolRegion? TryAutoDetectRegion() => DetectRegion(r => TryGetInstallFolder(r, ViewerProduct));

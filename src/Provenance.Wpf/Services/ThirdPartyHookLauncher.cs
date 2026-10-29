@@ -82,6 +82,11 @@ public static class ThirdPartyHookLauncher
             psi.FileName = Path.Combine(dir, "Windower.exe");
             psi.ArgumentList.Add("-p");
             psi.ArgumentList.Add(copy);
+            if (ThirdPartyHookService.WindowerRegion(polExe) is { } region)
+            {
+                psi.ArgumentList.Add("-r");
+                psi.ArgumentList.Add(region);
+            }
         }
         ApplyContract(psi.Environment, launchPsi.Environment, launchId);
 

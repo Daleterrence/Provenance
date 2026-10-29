@@ -25,8 +25,12 @@ public partial class InstallViewModel : ObservableObject
     private const uint EsContinuous = 0x80000000, EsSystemRequired = 0x00000001;
     private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
 
-    // the versions the installer offers, North American first
-    private static readonly PolRegion[] RegionValues = [PolRegion.UnitedStates, PolRegion.Europe];
+    // Japanese installs work, but stay out of the list until a JP login has been seen working
+    private const bool OfferJapanese = false;
+
+    // the versions the installer offers, North American first, only ones Provenance can log in with
+    private static readonly PolRegion[] RegionValues = new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan }
+        .Where(r => GameInstaller.Installs(r) && PolPaths.Supported(r) && (r != PolRegion.Japan || OfferJapanese)).ToArray();
 
     private PolRegion _region;
     private readonly Action? _holdPrestarts, _releasePrestarts;
@@ -37,7 +41,7 @@ public partial class InstallViewModel : ObservableObject
     public InstallViewModel(PolRegion? region, Action? holdPrestarts = null, Action? releasePrestarts = null)
     {
         // a viewer that's already there decides, otherwise it's the player's pick
-        ShowRegionChoice = region is not { } r || !GameInstaller.Installs(r);
+        ShowRegionChoice = region is not { } r || !RegionValues.Contains(r);
         _region = ShowRegionChoice ? RegionValues[0] : region!.Value;
         _holdPrestarts = holdPrestarts;
         _releasePrestarts = releasePrestarts;
@@ -54,7 +58,7 @@ public partial class InstallViewModel : ObservableObject
 
     public bool ShowRegionChoice { get; }
 
-    public IReadOnlyList<string> RegionChoices { get; } = ["North American", "European"];
+    public IReadOnlyList<string> RegionChoices { get; } = RegionValues.Select(PolPaths.VersionName).ToList();
 
     // fixed once a run's started, half an install of one region under the other's would be a mess
     [ObservableProperty]
@@ -499,20 +503,13 @@ public partial class InstallViewModel : ObservableObject
             foreach (var (code, folder, keyFile, name) in products)
                 // a switched PC keeps the old region's keys, so it only counts with the files really there
                 if (registered(other, code) is { } there && SameFolder(there, Path.Combine(root, folder)) && fileExists(Path.Combine(there, keyFile)))
-                    return $"The {VersionName(other)} version of {name} is already installed in {there}. Choose another folder for the {VersionName(region)} version.";
+                    return $"The {PolPaths.VersionName(other)} version of {name} is already installed in {there}. Choose another folder for the {PolPaths.VersionName(region)} version.";
         return null;
     }
 
     private static bool SameFolder(string a, string b) =>
         string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
                       StringComparison.OrdinalIgnoreCase);
-
-    private static string VersionName(PolRegion region) => region switch
-    {
-        PolRegion.Europe => "European",
-        PolRegion.Japan => "Japanese",
-        _ => "North American",
-    };
 
     // the lock updates and repairs take, so another copy can't write into the same folders meanwhile
     private async Task<IDisposable> UpdateLockAsync(CancellationToken ct)

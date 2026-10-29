@@ -116,9 +116,20 @@ public sealed class ThirdPartyHookService
         lines.Insert(end, $"{key} = {value}");
     }
 
-    // Ashita's [ashita.language] playonline: 2 English (North America), 3 European, for the region pol.exe's env.dat says
-    internal static int AshitaLanguage(string polExe) =>
-        Path.GetDirectoryName(polExe) is { Length: > 0 } dir && PolEnv.Region(dir) == PolRegion.Europe ? 3 : 2;
+    private static PolRegion? RegionOfPol(string polExe) =>
+        Path.GetDirectoryName(polExe) is { Length: > 0 } dir ? PolEnv.Region(dir) : null;
+
+    // Ashita's [ashita.language] playonline: 1 Japanese, 2 English (North America), 3 European, for the region pol.exe's
+    // env.dat says
+    internal static int AshitaLanguage(string polExe) => RegionOfPol(polExe) switch
+    {
+        PolRegion.Japan => 1,
+        PolRegion.Europe => 3,
+        _ => 2,
+    };
+
+    // Windower's -r JP for a JP pol.exe. US and EU stay on Windower's own Auto
+    internal static string? WindowerRegion(string polExe) => RegionOfPol(polExe) == PolRegion.Japan ? "JP" : null;
 
     // the user's boot config minus anything that'd fight the app: no command line (it can carry a credential blob), no
     // sign-in plugin or menu skip, and file = the real pol.exe
@@ -134,7 +145,6 @@ public sealed class ThirdPartyHookService
             "[ashita.language]", $"playonline = {AshitaLanguage(polExe)}", "ashita = 2",
             "[ashita.polplugins]", "sandbox = 0", "autopol = 0", "quicky = 0",
         };
-        // the sign-in plugin's switched off quietly
         var outLines = lines.Select(line => line.Split('=')[0].Trim().ToLowerInvariant() switch
         {
             "command" => "command = /game eAZcFcB",

@@ -11,6 +11,17 @@ public static class MirrorLayout
 
     public static string? RegionFolder(PolRegion region) => Regions.FirstOrDefault(r => r.Region == region).Folder;
 
+    private static readonly HashSet<string> JpFfxiOwn = new(["mov/mov999.pmv"], StringComparer.OrdinalIgnoreCase);
+
+    // JP has no copy of its own. Its FFXI file list is the US one byte for byte, so FFXI comes from us/ (bar
+    // mov999.pmv, which POL never patches), never its viewer
+    public static string? UpdateFolder(PolRegion installed, string product) =>
+        RegionFolder(installed) ?? (installed == PolRegion.Japan && product == "ffxi" ? "us" : null);
+
+    // files an install keeps as they are when its updates come from another region's folder
+    public static IReadOnlySet<string> OwnFiles(PolRegion installed, string product) =>
+        installed == PolRegion.Japan && product == "ffxi" ? JpFfxiOwn : new HashSet<string>();
+
     public static PolRegion RegionOf(string folder) => Regions.FirstOrDefault(r => r.Folder == folder) is { Folder: not null } r
         ? r.Region
         : throw new ArgumentException($"Unknown mirror region \"{folder}\".", nameof(folder));
