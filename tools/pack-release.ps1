@@ -11,8 +11,8 @@
     short commit (1.0.0-beta.1+1a2b3c4).
     It only packs committed code (a clean working tree) and needs an empty -Out outside the repo, by default
     %TEMP%\provenance-release\<version>. Nothing gets signed and nothing gets uploaded.
-    Put a beta up on GitHub as a pre-release and a stable version as a normal release. Only copies on a beta look at
-    GitHub pre-releases, and they still move up to a newer stable release.
+    A version with a suffix (1.0.0-beta.1) goes on the beta channel, one without (1.0.0) on stable. Copies on a beta
+    look at both and take the newest, copies on a stable version only ever look at stable.
 .EXAMPLE
     pwsh tools/pack-release.ps1 -Version 1.0.0-beta.1
 .EXAMPLE
@@ -89,7 +89,9 @@ if ($Matches[1] -ne $velopack) {
 }
 
 $natives = 'pol_hook.dll', 'pol_launch.exe', 'pol_uninstall.exe'
-Write-Host "vpk $velopack, release $Version from $commit -> $Out"
+# the app picks its channels by the same rule (SelfUpdate.ChannelSource), and so does the upload on GitHub
+$channel = if ($Version.Contains('-')) { 'beta' } else { 'stable' }
+Write-Host "vpk $velopack, release $Version ($channel channel) from $commit -> $Out"
 
 $work = Join-Path ([IO.Path]::GetTempPath()) "provenance-pack-$Version-$PID"
 $native = Join-Path $work 'native'
@@ -132,13 +134,14 @@ try {
     foreach ($v in $vpkVars) { Remove-Item -LiteralPath "Env:\$($v.Name)" }
     try {
         & $vpk --skip-updates pack -u Provenance -v $Version -p $publish -e ProvenanceLauncher.exe -i $icon -r win-x86 `
-            --packTitle Provenance --noPortable -o $Out
+            --packTitle Provenance --noPortable --channel $channel -o $Out
         if ($LASTEXITCODE -ne 0) { throw "vpk pack failed (exit code $LASTEXITCODE)" }
     } finally {
         foreach ($v in $vpkVars) { Set-Item -LiteralPath "Env:\$($v.Name)" -Value $v.Value }
     }
 
-    foreach ($file in 'Provenance-win-Setup.exe', "Provenance-$Version-full.nupkg", 'releases.win.json') {
+    $packed = "Provenance-$channel-Setup.exe", "Provenance-$Version-$channel-full.nupkg", "releases.$channel.json", "assets.$channel.json"
+    foreach ($file in $packed) {
         if (-not (Test-Path -LiteralPath (Join-Path $Out $file))) { throw "vpk finished but $file is missing from $Out" }
     }
 } finally {
@@ -148,6 +151,6 @@ try {
 Write-Host ''
 Write-Host "Release $Version from commit $commit is in $Out (not signed, not uploaded)."
 Write-Host "Natives: built from native\ at $($commit.Substring(0, 7))"
-if ($Version.Contains('-')) { Write-Host 'Put it up on GitHub as a pre-release. Only copies on a beta look at those.' }
-else { Write-Host 'Put it up on GitHub as a normal release, not a pre-release, or copies on a stable version will not see it.' }
+if ($channel -eq 'beta') { Write-Host 'Channel: beta. Only copies on a beta will see it.' }
+else { Write-Host 'Channel: stable. Every copy will see it, betas included.' }
 Get-ChildItem -LiteralPath $Out -File | Sort-Object Name | ForEach-Object { '  {0,-40} {1,12:N0} bytes' -f $_.Name, $_.Length }

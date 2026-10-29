@@ -14,11 +14,10 @@ using Velopack.Sources;
 
 namespace Provenance.Wpf.Services;
 
-// Provenance's own updates, from the GitHub releases, checked once at start-up before anything else runs
+// Provenance's own updates, from updates.provenancexi.app, checked once at start-up before anything else runs
 public static class SelfUpdate
 {
-    // a repo with no releases (or no repo, a 404) counts as no update
-    public const string ReleasesRepo = "https://github.com/Daleterrence/Provenance";
+    public const string UpdateServer = "https://updates.provenancexi.app/";
 
     // the restart after an update passes both. The first stops a failed apply looping, the second means only that
     // start (not a shortcut that has the first) judges how the update went
@@ -51,7 +50,7 @@ public static class SelfUpdate
         string root;
         try
         {
-            updates = new UpdateManager(new NewestReleaseSource(ReleasesRepo, VelopackLocator.Current.CurrentlyInstalledVersion));
+            updates = new UpdateManager(new ChannelSource(UpdateServer, VelopackLocator.Current.CurrentlyInstalledVersion));
             root = VelopackLocator.Current.RootAppDir ?? throw new InvalidOperationException("Velopack found no install folder.");
             if (!updates.IsInstalled)
             {
@@ -168,11 +167,6 @@ public static class SelfUpdate
             Log.Warning("Update download stalled for {Minutes} minutes, carrying on without it", StallTimeout.TotalMinutes);
             return false;
         }
-        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            Log.Information("GitHub answered 404 for {Repo}, so no update", ReleasesRepo);
-            return false;
-        }
         catch (Exception ex)
         {
             Log.Warning(ex, "Update check failed, carrying on without it");
@@ -257,19 +251,40 @@ public static class SelfUpdate
         catch { return false; }
     }
 
-    // Velopack fetches releases.win.json from each of the last 10 releases, a fresh connection each. Every feed only
-    // lists its own package, so the newest one's enough
-    internal sealed class NewestReleaseSource(string repo, SemanticVersion? installed, IFileDownloader? downloader = null)
-        // betas go up as GitHub pre-releases, and only a copy that's on a beta looks at those
-        : GithubSource(repo, null, installed?.IsPrerelease == true, downloader)
+    // betas go on the beta channel, the rest on stable. A beta copy reads both, so it moves up to a newer stable
+    // release (Velopack never offers an older one)
+    internal sealed class ChannelSource(string url, SemanticVersion? installed, IFileDownloader? downloader = null)
+        : SimpleWebSource(url, downloader)
     {
-        private const string Feed = "releases.win.json";
+        public const string Stable = "stable";
+        public const string Beta = "beta";
 
-        protected override async Task<GithubRelease[]> GetReleases(bool includePrereleases) =>
-            (await base.GetReleases(includePrereleases))
-                .Where(r => r.Assets?.Any(a => Feed.Equals(a.Name, StringComparison.OrdinalIgnoreCase)) == true)
-                .Take(1)
-                .ToArray();
+        // the channel Velopack passes in is the one this copy was packed with, the version already says the same
+        public override async Task<VelopackAssetFeed> GetReleaseFeed(IVelopackLogger logger, string? appId, string channel,
+                                                                     Guid? stagingId = null, VelopackAsset? latestLocalRelease = null)
+        {
+            if (installed?.IsPrerelease != true)
+            {
+                // a beta on the stable feed would be a publishing mistake, and stable copies don't follow it
+                var stable = await base.GetReleaseFeed(logger, appId, Stable, stagingId, latestLocalRelease);
+                return new VelopackAssetFeed { Assets = [.. stable.Assets.Where(a => !a.Version.IsPrerelease)] };
+            }
+            var feeds = await Task.WhenAll(StableOrNothing(logger, appId, stagingId, latestLocalRelease),
+                                           base.GetReleaseFeed(logger, appId, Beta, stagingId, latestLocalRelease));
+            return new VelopackAssetFeed { Assets = [.. feeds.SelectMany(f => f.Assets)] };
+        }
+
+        // nothing goes on stable until 1.0.0. Any other missing feed means the server's wrong, so that fails the check
+        private async Task<VelopackAssetFeed> StableOrNothing(IVelopackLogger logger, string? appId, Guid? stagingId,
+                                                              VelopackAsset? latestLocalRelease)
+        {
+            try { return await base.GetReleaseFeed(logger, appId, Stable, stagingId, latestLocalRelease); }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                Log.Information("No stable release on the update server yet");
+                return new VelopackAssetFeed();
+            }
+        }
     }
 }
 

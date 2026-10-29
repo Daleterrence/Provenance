@@ -5,12 +5,15 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: github.event_name != 'release'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,12 +42,16 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "prerelease=$(if ($suffix) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
           "out=$out" >> $env:GITHUB_OUTPUT
+          "setup=$((Get-ChildItem -LiteralPath $out -Filter '*-Setup.exe').FullName)" >> $env:GITHUB_OUTPUT
 
+      # just the installer on a plain push, the whole folder would eat the artifact storage. A tag's files go on the draft
       - uses: actions/upload-artifact@v4
+        if: github.ref_type != 'tag'
         with:
           name: Provenance-${{ steps.pack.outputs.version }}
-          path: ${{ steps.pack.outputs.out }}
-          retention-days: 7
+          path: ${{ steps.pack.outputs.setup }}
+          if-no-files-found: error
+          retention-days: 3
 
       # a tag makes a draft, nothing goes out until it's published by hand
       - name: Draft release
@@ -57,3 +64,49 @@ jobs:
           $a += '--draft', '--title', 'Provenance ${{ steps.pack.outputs.version }}', '--notes', 'Provenance ${{ steps.pack.outputs.version }}'
           if ('${{ steps.pack.outputs.prerelease }}' -eq 'true') { $a += '--prerelease' }
           gh release create @a
+
+  # publishing a release puts its files on the update server, updates.provenancexi.app
+  upload:
+    if: github.event_name == 'release'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    # vpk reads the channel's feed, adds the release and writes it back, so one upload per channel at a time. A run
+    # that gets cancelled while it waits just needs a re-run, those are safe
+    concurrency:
+      group: update-server-${{ contains(github.event.release.tag_name, '-') && 'beta' || 'stable' }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version 1.2.161
+
+      - name: Upload to R2
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          foreach ($name in 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY') {
+            if (-not [Environment]::GetEnvironmentVariable($name)) { throw "The repository secret $name isn't set." }
+          }
+          if ($env:TAG -cnotmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "$env:TAG isn't a version tag like v1.0.0 or v1.0.0-beta.1." }
+          # same rule as tools/pack-release.ps1, a suffix means beta
+          $channel = if ($env:TAG.Contains('-')) { 'beta' } else { 'stable' }
+          $dir = Join-Path $env:RUNNER_TEMP 'release'
+          gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --dir $dir
+          if ($LASTEXITCODE -ne 0) { throw "Couldn't download the files on release $env:TAG." }
+          $package = "Provenance-$($env:TAG.Substring(1))-$channel-full.nupkg"
+          if (-not (Test-Path -LiteralPath (Join-Path $dir $package))) { throw "Release $env:TAG has no $package, so it isn't the build for that tag." }
+          # keeps the last 5 versions on each channel, older packages get deleted
+          vpk --skip-updates upload s3 --outputDir $dir --channel $channel --bucket provenance-updates --region auto `
+            --endpoint "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com" --keyId $env:R2_ACCESS_KEY_ID `
+            --secret $env:R2_SECRET_ACCESS_KEY --keepMaxReleases 5
+          if ($LASTEXITCODE -ne 0) { throw "vpk upload failed (exit code $LASTEXITCODE)" }
+          "Provenance $($env:TAG.Substring(1)) is on the $channel channel." >> $env:GITHUB_STEP_SUMMARY
