@@ -1115,6 +1115,13 @@ static void phase_c_seed(HMODULE pc)
     if (!read_details("POL_CRED_POL", L"POL-POL", "POL", "staying on fake session",
                       "phase_c: bad cred shape (id/pw empty) - %s\r\n", id, sizeof id, pw, sizeof pw))
         return;
+    /* POL's own password box stops at 16, and polcore's copy of the encoded one has no room for more */
+    if (lstrlenA(pw) > 16) {
+        SecureZeroMemory(pw, sizeof pw);
+        lg("phase_c: POL password longer than 16 characters - exiting, FFXI NOT started\r\n");
+        if (launcher_mode()) end_pol(11);
+        return;
+    }
     lg("phase_c: REAL auth: POL ID='%s'\r\n", mask_id(id, m));
     ((svc_v)(b + 0x44390))();   /* session init (svc+0xc90) */
     /* inet init (polcore.dll 0x1000fe20 sets the flag at 0x100a66d4, the connect helper returns -2071 without it).
@@ -1252,6 +1259,9 @@ static void prime_session(void)
     static const unsigned char id64[8] = { 0xef,0xbe,0xad,0xde,0x78,0x56,0x34,0x12 };
     static const char name17[17] = "Kupo";
     if (!pc) { lg("pol_hook: polcore.dll not loaded at menu time?!\r\n"); return; }
+    /* before the login, so a crash during it gets a CRASH line too. Not a VEH, that'd catch IsBadReadPtr's
+       first-chance probes and recurse through lg (yes, IsBadReadPtr, I know) */
+    SetUnhandledExceptionFilter(veh_proc);
     *(unsigned *)((BYTE *)pc + 0x992e0) = 0;   /* login status >= 0 = in */
     *(unsigned *)((BYTE *)pc + 0x99254) = 1;   /* ready flag (svc+0xd10) */
     CopyMemory((BYTE *)pc + 0x99280, id64, 8);
@@ -1267,8 +1277,6 @@ static void prime_session(void)
     lg("pol_hook: fake session poked into polcore @ %08x\r\n", (unsigned)(ULONG_PTR)pc);
     viewer_init((BYTE *)pc);
     phase_c_seed(pc);
-    /* not a VEH, that'd catch IsBadReadPtr's first-chance probes and recurse through lg (yes, IsBadReadPtr, I know) */
-    SetUnhandledExceptionFilter(veh_proc);
 }
 
 /* Gate 7 (FFXiMain.dll 0x04245cb0) decodes patch.ver from the current directory. Real POL boots content from the

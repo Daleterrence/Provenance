@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -30,6 +31,11 @@ public sealed class PolSessionService : IDisposable
     public const int ErrorDetailsUnreadable = SignInCodes.DetailsUnreadable;
 
     public const string DetailsAgainText = "Provenance needs this account's login details again. Press Edit account to add them.";
+
+    // POL's password box stops at 16 and polcore has no room for more, a longer one gets refused before pol.exe sees it
+    public const int MaxPolPasswordLength = 16;
+    public const string PolPasswordTooLongText =
+        "Your saved PlayOnline password is longer than 16 characters, which PlayOnline doesn't allow. Press Edit account and enter it again.";
     public const string PlayUnreadableText = "Provenance couldn't start the game. Close Provenance and open it again.";
     public const string PlayRefusedText = "PlayOnline didn't let the game start. Log in again and try once more.";
     public const string PrivateFolderText = "Provenance couldn't use its own folder. Restart Provenance as an administrator.";
@@ -162,6 +168,11 @@ public sealed class PolSessionService : IDisposable
     internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
     internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; }
     internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
+    internal Func<Prestarted, bool> PrestartAlive { get; init; } = pre =>
+    {
+        try { using var p = Process.GetProcessById(pre.Pid); return !p.HasExited && IsSameProcess(p, pre.Started); }
+        catch (ArgumentException) { return false; }
+    };
 
     public event Action<PolSocialSnapshot>? SnapshotUpdated;
 
@@ -260,6 +271,7 @@ public sealed class PolSessionService : IDisposable
         _pending.Clear();
         _played = false;
         _sessionLean = options.Lean;
+        if (pol.Password.Length > MaxPolPasswordLength) return Fail(PolPasswordTooLongText, ErrorDetailsUnreadable);
         var region = _settings.DetectedRegion;
         if (!PolPaths.Supported(region))
             return Fail(region is null
@@ -368,24 +380,29 @@ public sealed class PolSessionService : IDisposable
         if (otpTarget != null) env["POL_CRED_OTP"] = otpTarget;
         if (options.Lean) env["POL_LEAN"] = "1";
 
+        if (ct.IsCancellationRequested) return Stopped("The login was cancelled.");
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.02));
         int pid;
         var platform = Platform;
         if (platform is ThirdPartyHookService.Ashita or ThirdPartyHookService.Windower)
         {
+            var polSeen = new StrongBox<bool>();
             var hookPid = ThirdPartyHookLauncher.StartViaThirdPartyHook(
                 _settings, platform, psi, polExe, _launchId!, options.ThirdPartyHookProfile, progress, ct,
-                hookStarted: (id, start) => TrackThirdPartyHook(platform, id, start));
+                hookStarted: (id, start) => TrackThirdPartyHook(platform, id, start, () => Volatile.Read(ref polSeen.Value)),
+                polStarted: () => Volatile.Write(ref polSeen.Value, true));
             if (hookPid is null) return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
             pid = hookPid.Value;
         }
         // never for a lean session, the go file can't carry POL_LEAN
-        else if (!options.Lean && TakePrestarted(psi) is { } pre)
+        else if (!options.Lean && TakePrestarted(psi, ct) is { } pre)
         {
             pid = pre;
         }
         else
         {
+            // a cancel while the pre-start was being taken leaves it waiting, so nothing starts in its place
+            if (ct.IsCancellationRequested) return Stopped("The login was cancelled.");
             // Smart App Control refuses a new unsigned build till Windows' cloud check knows it, so that gets retried
             for (int attempt = 1; ; attempt++)
             {
@@ -675,17 +692,20 @@ public sealed class PolSessionService : IDisposable
             if (env.TryGetValue(k, out var v) && v != null) yield return $"{k}={v}";
     }
 
-    private int? TakePrestarted(ProcessStartInfo psi)
+    // Nothing's sent till the go file's written, so a cancel before that leaves it waiting, hidden, for the next login.
+    // Only a live one goes back, a dead one would stop the Prestart after the cancel making a fresh one
+    private int? TakePrestarted(ProcessStartInfo psi, CancellationToken ct)
     {
-        if (TakePrestart() is not { } pre) return null;
+        if (TakePrestart(ct) is not { } pre) return null;
         int pid = pre.Pid;
         try
         {
-            using var p = Process.GetProcessById(pid);
-            if (p.HasExited || !IsSameProcess(p, pre.Started)) return null;
+            if (!PrestartAlive(pre)) return null;
+            if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
             var log = HookFiles.PathFor(pid, "log");
             var until = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (DateTime.UtcNow < until && !LogHas(log, "prestart: ready")) Thread.Sleep(100);
+            while (DateTime.UtcNow < until && !LogHas(log, "prestart: ready") && !ct.IsCancellationRequested) Thread.Sleep(100);
+            if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
             if (!LogHas(log, "prestart: ready")) { EndPrestarted(pre); return null; }
             var go = HookFiles.PathFor(pid, "go");
             File.WriteAllText(go + ".tmp", string.Join("\n", GoFileEntries(psi.Environment)));
@@ -696,15 +716,40 @@ public sealed class PolSessionService : IDisposable
         catch { EndPrestarted(pre); return null; }
     }
 
-    private Prestarted? TakePrestart()
+    private Prestarted? TakePrestart(CancellationToken ct = default)
     {
         Task<Prestarted?>? task;
         lock (_gate) { task = _prestart; _prestart = null; }
         if (task is null) return null;
-        if (task.Wait(TimeSpan.FromSeconds(8))) return task.Result;
-        task.ContinueWith(t => { if (t.Result is { } late) EndPrestarted(late); }, TaskContinuationOptions.OnlyOnRanToCompletion);
+        try
+        {
+            if (task.Wait(8000, ct)) return task.Result;
+        }
+        catch (OperationCanceledException)
+        {
+            GiveBack(task);
+            return null;
+        }
+        EndWhenDone(task);
         return null;
     }
+
+    // kept for the next login, unless another one, a session or a hold has turned up meanwhile
+    private void GiveBack(Task<Prestarted?> task)
+    {
+        lock (_gate)
+        {
+            if (!_disposed && MayPrestart())
+            {
+                _prestart = task;
+                return;
+            }
+        }
+        EndWhenDone(task);
+    }
+
+    private static void EndWhenDone(Task<Prestarted?> task) =>
+        task.ContinueWith(t => { if (t.Result is { } late) EndPrestarted(late); }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
     private static void EndPrestarted(Prestarted pre)
     {
@@ -1094,7 +1139,7 @@ public sealed class PolSessionService : IDisposable
     }
 
     // Windower waits with its window open until the game starts, so that's hidden while held (Ashita has none)
-    private void TrackThirdPartyHook(string platform, int pid, DateTime start)
+    private void TrackThirdPartyHook(string platform, int pid, DateTime start, Func<bool> polStarted)
     {
         lock (_hookGate)
         {
@@ -1104,23 +1149,23 @@ public sealed class PolSessionService : IDisposable
             _hookStart = start;
             if (platform != ThirdPartyHookService.Windower) return;
             _hookHide = new CancellationTokenSource();
-            ThirdPartyHookWindows.HideWindowerWhileHeld(pid, start, _hookHide.Token);
+            ThirdPartyHookWindows.HideWindowerWhileHeld(pid, start, polStarted, _hookHide.Token);
         }
     }
 
-    private (int Pid, DateTime Start)? TakeThirdPartyHook()
+    private (int Pid, DateTime Start, CancellationTokenSource? Hide)? TakeThirdPartyHook()
     {
         lock (_hookGate)
         {
-            _hookHide?.Cancel();
+            (int, DateTime, CancellationTokenSource?)? taken = _hookPid is { } pid ? (pid, _hookStart, _hookHide) : null;
             _hookHide = null;
-            (int, DateTime)? taken = _hookPid is { } pid ? (pid, _hookStart) : null;
             _hookPid = null;
             return taken;
         }
     }
 
-    private static void EndThirdPartyHook((int Pid, DateTime Start)? hook)
+    // Windower stays hidden till it's gone, or its window pops up for the couple of secs it gets to close
+    private static void EndThirdPartyHook((int Pid, DateTime Start, CancellationTokenSource? Hide)? hook)
     {
         if (hook is not { } a) return;
         try
@@ -1130,6 +1175,7 @@ public sealed class PolSessionService : IDisposable
             if (!p.WaitForExit(2000)) { p.Kill(); Log.Information("Ended {Name} (pid {Pid}): the game was not started", p.ProcessName, a.Pid); }
         }
         catch { /* already gone */ }
+        finally { a.Hide?.Cancel(); }
     }
 
     public void StopHold()
@@ -1191,7 +1237,7 @@ public sealed class PolSessionService : IDisposable
             _played = false;
         }
         ClearSession();
-        TakeThirdPartyHook();
+        if (TakeThirdPartyHook() is { Hide: { } hide }) hide.Cancel();
     }
 
     // multi-account mode: forget the played session, the game and its record stay as they are

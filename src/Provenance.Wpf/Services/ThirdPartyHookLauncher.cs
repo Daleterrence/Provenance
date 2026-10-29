@@ -34,8 +34,10 @@ public static class ThirdPartyHookLauncher
     internal static int? StartViaThirdPartyHook(ISettingsService settings, string platform, ProcessStartInfo launchPsi,
                                        string polExe, string launchId, string? profile,
                                        IProgress<LaunchProgress>? progress, CancellationToken ct,
-                                       Action<int, DateTime>? hookStarted = null)
+                                       Action<int, DateTime>? hookStarted = null, Action? polStarted = null,
+                                       LaunchLimits? limits = null)
     {
+        var limit = limits ?? LaunchLimits.Default;
         int? Fail(string text)
         {
             progress?.Report(new LaunchProgress("Failed", text));
@@ -105,73 +107,134 @@ public static class ThirdPartyHookLauncher
         // really is its child
         using var hookHandle = hookProc;
         int hookPid = hookProc.Id;
+        var hookStartUtc = ProcessTree.StartTime(hookPid) ?? hookStart.ToUniversalTime();
+        using var tree = new LaunchTree(hookPid, hookStartUtc);
 
-        var until = DateTime.UtcNow + TimeSpan.FromSeconds(90);
-        (int Pid, DateTime Start)? attached = null;
-        // not the viewer's, older than Windower/Ashita (another account's, say), or unreadable for 2 secs
+        // Till a pol.exe turns up there's only the long limit: Windower can sit in its own update for a while, and
+        // ending it part way could leave it broken. Then the hook gets limit.Report to say it's in
+        var startedAt = DateTime.UtcNow;
+        DateTime? reportBy = null, hookGoneAt = null;
+        bool saidSlow = false;
+        int? attached = null;
+        // not the viewer's (Ashita's own bootloader, say), or its path unreadable for 2 secs
         var skipped = new HashSet<int>();
         var tries = new Dictionary<int, int>();
-        while (DateTime.UtcNow < until && !ct.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
+            var now = DateTime.UtcNow;
+            if (reportBy is { } by ? now >= by : now - startedAt >= limit.Start) break;
             if (ReadPid(pidFile) is { } pid)
             {
                 try { File.Delete(pidFile); } catch { }
                 progress?.Report(new LaunchProgress("Starting", $"{name} has started PlayOnline.", LaunchSteps.StartPol));
                 return pid;
             }
-            if (attached is null && ProcessTree.FindDescendant(ProcessTree.Snapshot(), hookPid, PolExeName, skipped) is { } newPol)
+            bool hookGone = hookProc.HasExited;   // read first, any pol.exe it made is in the snapshot by then
+            tree.Update();
+            var pols = tree.Alive(PolExeName);
+            // one whose start can't be read counts as turned up too, so it can't keep the wait going
+            if (reportBy is null && (pols.Count > 0 || tree.Unreadable(PolExeName)))
             {
-                var image = ProcessTree.ImagePath(newPol);
-                var polStart = StartTime(newPol);
-                if ((image is not null && !SamePath(image, polExe)) || polStart < hookStart)
-                    skipped.Add(newPol);   // Ashita's own bootloader\pol.exe, say
-                else if (image is null || polStart is null)
+                reportBy = now + limit.Report;
+                polStarted?.Invoke();
+            }
+            if (attached is null && pols.FirstOrDefault(m => !skipped.Contains(m.Pid)) is { Pid: > 0 } newPol)
+            {
+                var image = ProcessTree.ImagePath(newPol.Pid);
+                if (image is not null && !SamePath(image, polExe))
+                    skipped.Add(newPol.Pid);
+                else if (image is null)
                 {
                     // gives up after 2 secs, so it can't hide a later pol.exe
-                    tries[newPol] = tries.GetValueOrDefault(newPol) + 1;
-                    if (tries[newPol] >= 20) skipped.Add(newPol);
+                    tries[newPol.Pid] = tries.GetValueOrDefault(newPol.Pid) + 1;
+                    if (tries[newPol.Pid] >= 20) skipped.Add(newPol.Pid);
                 }
                 else
                 {
-                    skipped.Add(newPol);
-                    attached = (newPol, polStart.Value);
-                    if (AttachHook(newPol) is { } attachError)
+                    skipped.Add(newPol.Pid);
+                    attached = newPol.Pid;
+                    if (AttachHook(newPol.Pid) is { } attachError)
                     {
-                        KillIfPol(newPol, polStart);
+                        EndLaunch(hookProc, tree);
                         return Fail(attachError);
                     }
-                    Log.Information("Loaded the Provenance hook into {Platform}'s pol.exe (pid {Pid})", name, newPol);
+                    Log.Information("Loaded the Provenance hook into {Platform}'s pol.exe (pid {Pid})", name, newPol.Pid);
                 }
+            }
+            else if (reportBy is null && hookGone)
+            {
+                // it can close before its pol.exe shows up (Ashita's autoclose, a launcher that hands over), so a few
+                // more secs, and as long as anything it started is still running
+                if (tree.AnyAlive) hookGoneAt = null;
+                else if ((hookGoneAt ??= now) + limit.HookGone <= now) break;
+            }
+            if (reportBy is null && !saidSlow && now - startedAt >= limit.SlowNote)
+            {
+                saidSlow = true;
+                progress?.Report(new LaunchProgress("Starting", $"{name} is still starting. Press Cancel to stop it.", LaunchSteps.StartPol));
             }
             Thread.Sleep(attached is null ? 100 : 250);
         }
         if (ct.IsCancellationRequested)
         {
-            // a pol.exe may already be signing in. It gets a few secs to report, then it's ended so it can't hold the
-            // account or the single-instance gate
-            var grace = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            int? late = null;
-            while (DateTime.UtcNow < grace && late is null)
-            {
-                if (ReadPid(pidFile) is { } lp) late = lp;
-                else Thread.Sleep(250);
-            }
+            bool closed = EndLaunch(hookProc, tree);
             try { File.Delete(pidFile); } catch { }
-            bool closed = late is { } kp ? KillIfPol(kp) : attached is { } a && KillIfPol(a.Pid, a.Start);
-            progress?.Report(new LaunchProgress("Stopped", closed
-                ? $"The login was cancelled, and PlayOnline has been closed. {name} might still be open."
-                : $"The login was cancelled before {name} started PlayOnline. {name} might still be open."));
+            progress?.Report(new LaunchProgress("Stopped", closed ? "The login was cancelled, and PlayOnline has been closed."
+                                                                  : "The login was cancelled."));
             return null;
         }
-        // never reported, and a pol.exe the hook got loaded into mustn't stay half signed in
-        if (attached is { } stuck) KillIfPol(stuck.Pid, stuck.Start);
+        // never reported, so nothing it started stays (a hooked one would be half signed in)
+        EndLaunch(hookProc, tree);
         return Fail($"{name} started, but Provenance couldn't log in through it. Check {name} starts PlayOnline from your PlayOnline Viewer folder.");
     }
 
-    private static DateTime? StartTime(int pid)
+    // how long a third-party launch gets: to start a pol.exe, to report once one's up, to start one after closing
+    // itself, and when the slow-start line shows
+    internal sealed record LaunchLimits(TimeSpan Start, TimeSpan Report, TimeSpan HookGone, TimeSpan SlowNote)
     {
-        try { using var p = Process.GetProcessById(pid); return p.StartTime; }
-        catch { return null; }
+        public static readonly LaunchLimits Default =
+            new(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(90), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30));
+    }
+
+    // Windower/Ashita first so it can't start another, then everything still running in its tree (pol.exe hooked or
+    // not, or whatever it handed over to). A pol.exe without the hook carries on into the viewer's own menu, the one
+    // thing nobody's meant to see
+    internal static bool EndLaunch(Process hook, LaunchTree tree)
+    {
+        try
+        {
+            if (!hook.HasExited)
+            {
+                hook.Kill();
+                hook.WaitForExit(3000);
+            }
+        }
+        catch (Exception ex) { Log.Warning(ex, "Could not end the third-party hook (pid {Pid})", hook.Id); }
+        bool viewer = false;
+        // again till a look finds nothing, a pol.exe can start one of its own (Ashita's bootloader, say) meanwhile
+        var until = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        for (bool again = true; again && DateTime.UtcNow < until;)
+        {
+            again = false;
+            tree.Update();
+            // the tree holds every member open, so each pid's still the process it checked
+            foreach (var (pid, _) in tree.Alive())
+            {
+                try
+                {
+                    using var p = Process.GetProcessById(pid);
+                    bool isViewer = PolProcess.IsViewerPol(p);
+                    var exe = p.ProcessName;
+                    p.Kill();
+                    p.WaitForExit(3000);
+                    viewer |= isViewer;
+                    again = true;
+                    Log.Information("Ended {Exe} (pid {Pid}): the login through the third-party hook was stopped", exe, pid);
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            }
+        }
+        return viewer;
     }
 
     private static bool SamePath(string? a, string b) =>
@@ -226,24 +289,5 @@ public static class ThirdPartyHookLauncher
             return int.TryParse(sr.ReadToEnd().Trim(), out var pid) ? pid : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
-    }
-
-    // only a real viewer pol.exe, and with started only that exact process, so a reused pid never gets killed
-    private static bool KillIfPol(int pid, DateTime? started = null)
-    {
-        try
-        {
-            using var p = Process.GetProcessById(pid);
-            if (!PolProcess.IsViewerPol(p)) return false;
-            if (started is { } st && p.StartTime != st) return false;
-            p.Kill();
-            p.WaitForExit(3000);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Could not stop pid {Pid}", pid);
-            return false;
-        }
     }
 }

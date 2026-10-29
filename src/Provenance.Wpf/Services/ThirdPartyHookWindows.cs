@@ -7,9 +7,9 @@ namespace Provenance.Wpf.Services;
 
 public static class ThirdPartyHookWindows
 {
-    // Windower sits with a splash and then its own window while a held session waits, which can be ages. Only those
-    // two get hidden, so an error or update dialog still shows
-    public static void HideWindowerWhileHeld(int windowerPid, DateTime started, CancellationToken stop) => Task.Run(async () =>
+    // Windower's splash and main window sit there while a held session waits, which can be ages. Only those two get
+    // hidden, the main one once its pol.exe is up, so an update or error dialog before that still shows
+    public static void HideWindowerWhileHeld(int windowerPid, DateTime started, Func<bool> mainToo, CancellationToken stop) => Task.Run(async () =>
     {
         var logged = new HashSet<IntPtr>();
         try
@@ -26,7 +26,8 @@ public static class ThirdPartyHookWindows
                     // If Windower renames them this quietly stops hiding anything
                     var cls = ClassOf(h);
                     bool splash = cls == "SplashScreen";
-                    bool main = cls.StartsWith("HwndWrapper[Windower.exe", StringComparison.OrdinalIgnoreCase) && TitleOf(h) == "Windower";
+                    bool main = cls.StartsWith("HwndWrapper[Windower.exe", StringComparison.OrdinalIgnoreCase) && TitleOf(h) == "Windower"
+                                && mainToo();
                     if (!splash && !main) continue;
                     ShowWindow(h, 0 /* SW_HIDE */);
                     if (logged.Add(h))
