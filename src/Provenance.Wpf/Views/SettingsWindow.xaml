@@ -202,6 +202,22 @@
                             </StackPanel>
                         </Border>
 
+                        <TextBlock Text="PlayOnline" Style="{StaticResource Section}" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <HeaderedContentControl Header="Chat language filter"
+                                                        Tag="When this is on, offensive words are hidden in FINAL FANTASY XI.">
+                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ChatLanguageFilter}"
+                                                  AutomationProperties.Name="Chat language filter" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="Auto-disconnect"
+                                                        Tag="PlayOnline disconnects you after you've been idle this long in FINAL FANTASY XI.">
+                                    <ComboBox ItemsSource="{Binding AutoDisconnectChoices}" SelectedIndex="{Binding AutoDisconnectIndex}"
+                                              AutomationProperties.Name="Auto-disconnect" />
+                                </HeaderedContentControl>
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Text="News and status" Style="{StaticResource Section}" />
                         <TextBlock Text="News region" Style="{StaticResource Label}" />
                         <ComboBox Width="260" HorizontalAlignment="Left"

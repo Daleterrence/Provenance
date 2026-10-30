@@ -843,6 +843,7 @@ public partial class MainViewModel : ObservableObject
         vm.Installed += () => Application.Current.Dispatcher.Invoke(() =>
         {
             _settings.RedetectRegion();
+            SaveSetting(PolOptions.NewInstall);
             RefreshInstallState();
             Task.Run(() => LargeAddressAwareSwitch.Apply(_settings, "after the install", _pol.HoldPrestarts, _pol.ReleasePrestarts,
                                                           LargeAddressAwareBlocked));
@@ -1260,6 +1261,7 @@ public partial class MainViewModel : ObservableObject
         }
         // SE's installer only writes 3 of the game settings
         InstallViewModel.WriteFirstStartSettings(PlayRegion);
+        WritePolOptions(_sessionProfileId);
         ResetProgress("Starting FINAL FANTASY XI");
         OnProgress(new LaunchProgress("Starting game", "Starting FINAL FANTASY XI...", LaunchSteps.StartGame, 0.5));
         try { _pol.SignalPlay(); }
@@ -1308,6 +1310,36 @@ public partial class MainViewModel : ObservableObject
 
     // Play only comes up after a login, which only a supported region gets
     private PolRegion PlayRegion => _settings.DetectedRegion ?? PolRegion.UnitedStates;
+
+    // the game reads these from the account's option.bin when it starts, so they go in before every start
+    private void WritePolOptions(string? profileId)
+    {
+        if (PolPaths.TryGetInstallFolder(PlayRegion, PolPaths.ViewerProduct) is { } viewer) WritePolOptions(profileId, viewer);
+    }
+
+    internal void WritePolOptions(string? profileId, string viewer)
+    {
+        try
+        {
+            if (Profiles.FirstOrDefault(p => p.Id == profileId) is not { } profile)
+            {
+                Log.Warning("The session's account is gone, its POL settings aren't written");
+                return;
+            }
+            var s = _settings.Current;
+            using (_settings.HoldLock())
+            {
+                // another copy may have changed them since this one read settings.json
+                if (_settings.ReadSaved() is { } saved)
+                {
+                    s.ChatLanguageFilter = saved.ChatLanguageFilter ?? s.ChatLanguageFilter;
+                    s.AutoDisconnectMinutes = saved.AutoDisconnectMinutes ?? s.AutoDisconnectMinutes;
+                }
+            }
+            PolOptions.Apply(s, viewer, PolOptions.SlotInUse(viewer, profile.HomeSlot), PlayRegion);
+        }
+        catch (Exception e) { Log.Warning(e, "Could not write the POL settings before the game start"); }
+    }
 
     private (string Ffxi, string Viewer, PolRegion Region)? GameFolders() =>
         PolPaths.TryGetInstallFolder(PlayRegion, PolPaths.FfxiProduct) is { } ffxi

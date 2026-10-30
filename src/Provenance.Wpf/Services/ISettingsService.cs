@@ -83,6 +83,13 @@ public sealed class LauncherSettings
 
     // the highest home slot handed out so far, so a removed account's number isn't given to the next one
     public int LastHomeSlot { get; set; }
+
+    // POL's own, which the game uses too. Null leaves the accounts' as they are, till they're picked in Settings
+    // (or set off by a new install)
+    public bool? ChatLanguageFilter { get; set; }
+
+    // -1 is off
+    public int? AutoDisconnectMinutes { get; set; }
 }
 
 public sealed class MultiAccountEntry

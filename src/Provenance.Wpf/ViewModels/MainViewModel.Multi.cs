@@ -348,6 +348,7 @@ public partial class MainViewModel : IMultiRunHost
             Log.Error(ex, "Multi-account mode: the first-start game settings were not written for {Account}", account.ProfileId);
             return await LetGo(AccountFailureKind.Account, ErrorText.Of(ex, "Provenance couldn't set up the game's settings for its first start."));
         }
+        WritePolOptions(account.ProfileId);
         try { _pol.SignalPlay(); }
         catch (Exception ex)
         {

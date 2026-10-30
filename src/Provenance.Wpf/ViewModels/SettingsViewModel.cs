@@ -49,6 +49,8 @@ public partial class SettingsViewModel : ObservableObject
         _notifyFriendsOnline = settings.Current.NotifyFriendsOnline;
         _largeAddressAwareOn = settings.Current.LargeAddressAware;
         _traySignOutIndex = Math.Max(0, Array.IndexOf(TraySignOutMinutes, settings.Current.TraySignOutMinutes));
+        _chatLanguageFilter = PolOptions.ChatFilter(settings.Current);
+        _autoDisconnectIndex = Math.Max(0, Array.IndexOf(PolOptions.AutoDisconnectChoices, PolOptions.AutoDisconnect(settings.Current)));
         LoadThirdPartyHook();
         LoadMulti();
         Game = new GameSettingsViewModel(region);
@@ -69,6 +71,9 @@ public partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<string> FeedRegionChoices { get; } =
         new[] { "Automatic (matches your install)", "North America", "Europe", "Japan" };
+
+    public IReadOnlyList<string> AutoDisconnectChoices { get; } =
+        PolOptions.AutoDisconnectChoices.Select(m => m < 0 ? "Off" : $"{m} minutes").ToList();
 
     private void Save(Action<LauncherSettings> change)
     {
@@ -92,6 +97,26 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (value >= 0 && value < TraySignOutMinutes.Length)
             Save(s => s.TraySignOutMinutes = TraySignOutMinutes[value]);
+    }
+
+    [ObservableProperty] private bool _chatLanguageFilter;
+    [ObservableProperty] private int _autoDisconnectIndex;
+
+    // either one set here pins the other at what's on screen, since both get written from then on
+    partial void OnChatLanguageFilterChanged(bool value) => Save(s =>
+    {
+        s.ChatLanguageFilter = value;
+        s.AutoDisconnectMinutes ??= PolOptions.AutoDisconnect(s);
+    });
+
+    partial void OnAutoDisconnectIndexChanged(int value)
+    {
+        if (value < 0 || value >= PolOptions.AutoDisconnectChoices.Length) return;
+        Save(s =>
+        {
+            s.AutoDisconnectMinutes = PolOptions.AutoDisconnectChoices[value];
+            s.ChatLanguageFilter ??= PolOptions.ChatFilter(s);
+        });
     }
 
     partial void OnFeedRegionIndexChanged(int value)

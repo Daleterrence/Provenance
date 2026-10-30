@@ -4570,6 +4570,29 @@ static void drain_turn(BYTE *b, int mail)
     Sleep(16);
 }
 
+/* the viewer sets polcore's idle timeout from option.bin's GOPN1_AO at login and FFXI only ever switches the timer on,
+   so with the hold's 0 it'd never fire in game. Off still till FFXI turns it on, same as the viewer leaves it */
+static int idle_timeout_for_game(BYTE *b)
+{
+    BYTE *rec = NULL;
+    int r = 0, mins = -1;
+    ULONGLONG until;
+    if (!SVC(0xe2c) || !SVC(0xe30) || !SVC(0xe3c) || !SVC(0xe40) || !SVC(0x11d4)) return -1;
+    ((int (__cdecl *)(void))SVC(0xe2c))();
+    until = GetTickCount64() + 5000;
+    while ((r = ((int (__cdecl *)(void))SVC(0xe30))()) == 0 && GetTickCount64() < until) Sleep(32);
+    if (r > 0) rec = ((BYTE *(__cdecl *)(const char *))SVC(0xe40))("GOPN1_AO");
+    if (rec) mins = *(int *)(rec + 0x18);
+    ((void (__cdecl *)(void))SVC(0xe3c))();
+    if (mins < 1 || mins > 60) {
+        lg("hold: auto-disconnect off in FFXI (%s)\r\n", r <= 0 ? "no option.bin" : rec ? "set off" : "not in option.bin");
+        return -1;
+    }
+    ((void (__cdecl *)(int))SVC(0x11d4))(mins * 60000);
+    lg("hold: auto-disconnect after %d min in FFXI\r\n", mins);
+    return mins;
+}
+
 /* held until Play, a stop or pol.exe ending. It's an IRC link so it never stops pumping, and never sends more than
    the viewer would. */
 static void pol_hold(BYTE *b)
@@ -4688,6 +4711,7 @@ static void pol_hold(BYTE *b)
                 /* the viewer always has notices on when a game starts, without them FFXI only sees new messages at its
                    next lobby login. A local flag, nothing goes on the wire */
                 if (g_lean && SVC(0x1020)) ((svc_i)SVC(0x1020))(1);
+                idle_timeout_for_game(b);
                 DeleteFileA(spath);   /* the snapshot has friends' messages in it */
                 store_drop();
                 lg("hold: booting FFXI\r\n");
