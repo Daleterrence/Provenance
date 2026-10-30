@@ -224,6 +224,7 @@ public partial class MainWindow : Window
             _exiting = false;
             return;
         }
+        Vm?.Social.SettleSends(SessionEnd.LogOut);
         _tray?.Dispose();
         _tray = null;
         base.OnClosing(e);

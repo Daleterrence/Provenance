@@ -14,6 +14,9 @@ using RequestAnswer = Provenance.Common.Social.SocialSnapshot.RequestAnswer;
 namespace Provenance.Wpf.ViewModels;
 
 // a friend, or someone who wrote but isn't on the list (Row -1)
+// how a session ends for its lines in flight: Play and log out (or exit) let the hook finish them, a drop doesn't
+public enum SessionEnd { Play, LogOut, Dropped }
+
 public sealed record FriendItem(string Name, string Character, string Comment, string StatusLabel,
                                 bool Online, int Row, ImageSource? Avatar, int Unread, string Section)
 {
@@ -278,7 +281,8 @@ public partial class SocialViewModel : ObservableObject
         _answerToken = _editToken = _picToken = _searchToken = _requestToken = _profileToken = _groupToken = null;
         _answerFor = null;
         _sendQueue.Clear();   // unsent lines stay in the log and expire as "not sent"
-        _sendInFlight = null;
+        _sendInFlight.Clear();
+        _sendsClosed = false;
         _storeTaken = false;
         GameRunning = false;
         _groupsSignature = "";
@@ -430,8 +434,11 @@ public partial class SocialViewModel : ObservableObject
             if (token.Length > 0 && (state == "sent" || state.StartsWith("failed", StringComparison.Ordinal)))
             {
                 changed |= chat.SetSendState(token, state, time, seq);
-                if (token == _sendInFlight) _sendInFlight = null;
+                _sendInFlight.RemoveAll(x => x.Token == token);
             }
+        foreach (var (token, state) in snap.SendQueue)
+            if (_sendInFlight.FindIndex(x => x.Token == token) is var i and >= 0)
+                _sendInFlight[i] = _sendInFlight[i] with { HookState = state, HookSaid = DateTime.UtcNow };
         PumpSends();
         // a stored send finishes well inside 2 mins, so nothing says "Sending..." for ever
         changed |= chat.ExpireSending(ChatStore.SendExpiry(_sendQueue.Count), SendsStillPending());
@@ -819,7 +826,7 @@ public partial class SocialViewModel : ObservableObject
             "failed:-7188" => "Your friend list is full (200 friends).",
             "failed:no such friend" => "That person isn't on your friend list any more, so nothing was sent.",
             "failed:stopped" => "PlayOnline didn't take your recent messages, so answers can't be sent until you log in again.",
-            "failed:hourly limit" => "You've sent 300 messages in the last hour, so your answer wasn't sent. Try again later.",
+            "failed:hourly limit" => "You've sent 600 messages in the last hour, so your answer wasn't sent. Try again later.",
             var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
                 "PlayOnline didn't save the friend list, so your answer wasn't sent. Try again.",
             var s => $"PlayOnline didn't accept your answer ({FailReason(s)}).",
@@ -938,7 +945,7 @@ public partial class SocialViewModel : ObservableObject
                 "failed:-7188" or "failed:-516" => "Your friend list is full (200 friends).",
                 "failed:no such result" => "Search again, then send the request.",
                 "failed:stopped" => "PlayOnline didn't take your recent messages, so friend requests can't be sent until you log in again.",
-                "failed:hourly limit" => "You've sent 300 messages in the last hour, so the request wasn't sent. Try again later.",
+                "failed:hourly limit" => "You've sent 600 messages in the last hour, so the request wasn't sent. Try again later.",
                 var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
                     "PlayOnline didn't save the friend list, so your request wasn't sent. Try again.",
                 var s => $"PlayOnline didn't accept the request ({FailReason(s)}).",
@@ -1022,17 +1029,23 @@ public partial class SocialViewModel : ObservableObject
         RefreshConversation();
     }
 
-    // the hook takes one send at a time and a new request file replaces an untaken one, so they queue here
+    // the hook runs 2 sends at once but reads one request file at a time, and a new file replaces an untaken one, so
+    // lines queue here
+    private const int SendsAtOnce = 2;
     private readonly Queue<(int Row, string Name, string Token, string Text)> _sendQueue = new();
-    private string? _sendInFlight;
-    private DateTime _sendInFlightAt;
+    // the pol.exe each went to, and what the hook last said about it and when ("sending" once its PUT's started)
+    private readonly record struct SendOut(string Token, DateTime At, int Pid, string HookState = "",
+                                           DateTime HookSaid = default);
+    private readonly List<SendOut> _sendInFlight = new();
+    private bool _sendsClosed;   // the session's ending, nothing more goes to its hook
 
     // lines that mustn't expire yet. With nothing in flight, queued lines age from when they were typed
     private HashSet<string> SendsStillPending()
     {
         var keep = new HashSet<string>();
-        if (_sendInFlight == null || DateTime.UtcNow - _sendInFlightAt >= TimeSpan.FromMinutes(3)) return keep;
-        keep.Add("out:" + _sendInFlight);
+        var live = _sendInFlight.Where(x => DateTime.UtcNow - x.At < TimeSpan.FromMinutes(3)).ToList();
+        if (live.Count == 0) return keep;
+        foreach (var x in live) keep.Add("out:" + x.Token);
         foreach (var q in _sendQueue) keep.Add("out:" + q.Token);
         return keep;
     }
@@ -1047,15 +1060,20 @@ public partial class SocialViewModel : ObservableObject
 
     private void PumpSends()
     {
-        if (_sendInFlight != null && DateTime.UtcNow - _sendInFlightAt > TimeSpan.FromMinutes(3))
+        int newest = _sendInFlight.Count - 1;
+        for (int i = newest; i >= 0; i--)
         {
-            // never answered. Untaken it's withdrawn, but once the hook has it, it might still go, so it's not re-sent
-            bool withdrawn = _pol.Pid is { } stalePid && SocialSnapshot.CancelRequest(stalePid, "send");
-            if (!withdrawn && _chat?.SetSendState(_sendInFlight, "unconfirmed") == true) RefreshConversation();
-            _sendInFlight = null;
+            var x = _sendInFlight[i];
+            if (DateTime.UtcNow - x.At <= TimeSpan.FromMinutes(3)) continue;
+            // never answered. Untaken it's withdrawn (only the newest can be), but once the hook has it, it might still
+            // go, so it's not re-sent
+            bool withdrawn = i == newest &&
+                             SocialSnapshot.WithdrawRequest(x.Pid, "send") == SocialSnapshot.Withdrawal.Withdrawn;
+            if (!withdrawn && _chat?.SetSendState(x.Token, "unconfirmed") == true) RefreshConversation();
+            _sendInFlight.RemoveAt(i);
         }
-        while (_sendInFlight == null && !GameRunning && _sendQueue.Count > 0 && _pol.Pid is { } pid &&
-               !SocialSnapshot.SendPending(pid))
+        while (!_sendsClosed && _sendInFlight.Count < SendsAtOnce && !GameRunning && _sendQueue.Count > 0 &&
+               _pol.Pid is { } pid && !SocialSnapshot.SendPending(pid))
         {
             var (row, name, token, text) = _sendQueue.Dequeue();
             // one that waited long enough to show "not sent" stays that way, they might've sent it again already
@@ -1063,12 +1081,36 @@ public partial class SocialViewModel : ObservableObject
             if (line is not { State: "sending" or "queued" }) continue;
             // no subject, like the viewer's own chat window
             if (SocialSnapshot.Send(pid, row, name, token, "", text))
-            {
-                _sendInFlight = token;
-                _sendInFlightAt = DateTime.UtcNow;
-            }
+                _sendInFlight.Add(new(token, DateTime.UtcNow, pid));
             else _chat?.SetSendState(token, "failed:write");
         }
+    }
+
+    // the session's ending and its results won't get here. One the hook started, or will in a drain, is unconfirmed,
+    // the rest are not sent
+    public void SettleSends(SessionEnd end)
+    {
+        bool drained = end != SessionEnd.Dropped;
+        string notSent = end == SessionEnd.Play ? "failed:game" : "failed:session";
+        var states = new List<(string, string)>();
+        int newest = _sendInFlight.Count - 1;
+        for (int i = newest; i >= 0; i--)
+        {
+            var x = _sendInFlight[i];
+            // only the newest can still be untaken, the next file's only written once the hook's taken the last
+            var w = i == newest ? SocialSnapshot.WithdrawRequest(x.Pid, "send") : SocialSnapshot.Withdrawal.Taken;
+            // held a second ago it could've started since, the snapshot that says so takes about 300 ms to get here
+            bool held = x.HookState == "queued" && DateTime.UtcNow - x.HookSaid >= TimeSpan.FromSeconds(1);
+            bool went = w == SocialSnapshot.Withdrawal.Taken ? drained || !held
+                      : w == SocialSnapshot.Withdrawal.Unknown && drained;   // the hook might take it before the drain
+            states.Add((x.Token, went ? "unconfirmed" : notSent));
+        }
+        foreach (var q in _sendQueue) states.Add((q.Token, notSent));
+        _chat?.SetSendStates(states);
+        _sendInFlight.Clear();
+        _sendQueue.Clear();
+        _sendsClosed = true;
+        RefreshConversation();
     }
 
     private DateTime _mailAskedAt = DateTime.MinValue;

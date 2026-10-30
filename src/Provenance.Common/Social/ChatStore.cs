@@ -48,7 +48,7 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
         "sent" => "Delivered to PlayOnline",
         "failed:timeout" => "Not sent: PlayOnline didn't answer.",
         // handed over with no answer, so it might still arrive and isn't offered again
-        "unconfirmed" => "Not confirmed: PlayOnline didn't answer. It might still arrive.",
+        "unconfirmed" => "Not confirmed: Provenance didn't hear back from PlayOnline. It might still have been sent.",
         // still in the game's outbox, so no send again or remove for it here
         "unsent" => "Not sent: FINAL FANTASY XI didn't finish sending it.",
         "failed:no such friend" or "failed:friend list changed" => "Not sent: the friend list changed.",
@@ -57,7 +57,9 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
         "failed:too long" => "Not sent: messages can't be longer than 300 characters, and some characters count as two.",
         "failed:write" => "Not sent: Provenance couldn't send it to PlayOnline.",
         "failed:stopped" => "Not sent: PlayOnline didn't take your recent messages, so sending is off until you log in again.",
-        "failed:hourly limit" => "Not sent: you've sent 300 messages in the last hour. Try again later.",
+        "failed:hourly limit" => "Not sent: you've sent 600 messages in the last hour. Try again later.",
+        "failed:session" => "Not sent: the PlayOnline session ended before it went.",
+        "failed:game" => "Not sent: the game started before it went.",
         var s when s.StartsWith("failed", StringComparison.Ordinal) => "Not sent: PlayOnline didn't accept it.",
         _ => "",
     };
@@ -155,6 +157,21 @@ public sealed class ChatStore
         return e;
     }
 
+    // a session's lines all at once when it ends, one save
+    public bool SetSendStates(IEnumerable<(string Token, string State)> states)
+    {
+        bool changed = false;
+        foreach (var (token, state) in states)
+        {
+            int i = _entries.FindIndex(e => e.Key == "out:" + token);
+            if (i < 0 || _entries[i].State == state) continue;
+            _entries[i] = _entries[i] with { State = state };
+            changed = true;
+        }
+        if (changed) Changed();
+        return changed;
+    }
+
     // once sent, my line takes the header's time and seq like the friend's copy. That's polcore's clock, set by the server
     public bool SetSendState(string token, string state, long time = 0, long seq = 0)
     {
@@ -181,8 +198,9 @@ public sealed class ChatStore
         return true;
     }
 
-    // the hook takes 20 lines a minute, so each one queued behind gets 3 secs on top of the 3 mins
-    public static TimeSpan SendExpiry(int queued) => TimeSpan.FromMinutes(3) + TimeSpan.FromSeconds(3 * Math.Max(0, queued));
+    // the hook takes 40 lines a minute, so each one queued behind gets 1.5 secs on top of the 3 mins
+    public static TimeSpan SendExpiry(int queued) =>
+        TimeSpan.FromMinutes(3) + TimeSpan.FromMilliseconds(1500 * Math.Max(0, queued));
 
     // still sending after maxAge means the hook never answered (the session ended, say)
     public bool ExpireSending(TimeSpan maxAge, IReadOnlySet<string>? keep = null)
@@ -211,10 +229,26 @@ public sealed class ChatStore
         return changed;
     }
 
-    // lines still waiting to go sit at the bottom in the order they were typed, the rest go by time then seq
-    public IEnumerable<ChatEntry> With(string peer, string key = "") =>
-        _entries.Where(e => e.IsWith(peer, key)).OrderBy(Waiting)
-                .ThenBy(e => Waiting(e) ? 0 : e.Time).ThenBy(e => Waiting(e) ? 0 : e.Seq);
+    // lines still going, and mine typed after one, sit at the bottom in typing order (a later one can finish first).
+    // The rest go by time then seq
+    public IEnumerable<ChatEntry> With(string peer, string key = "")
+    {
+        var lines = _entries.Where(e => e.IsWith(peer, key)).ToList();
+        int first = lines.FindIndex(Waiting);
+        var keyed = new List<(ChatEntry E, bool Tail, (long Time, long Seq) At)>(lines.Count);
+        (long Time, long Seq) last = (long.MinValue, long.MinValue);
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var e = lines[i];
+            bool mine = e.Key.StartsWith("out:", StringComparison.Ordinal);
+            var at = (e.Time, e.Seq);
+            // one that never got a header time (failed, unconfirmed) stays after the line typed before it
+            if (mine && e.State != "sent" && at.CompareTo(last) < 0) at = last;
+            if (mine) last = at;
+            keyed.Add((e, first >= 0 && i >= first && mine, at));
+        }
+        return keyed.OrderBy(x => x.Tail).ThenBy(x => x.Tail ? default : x.At).Select(x => x.E);
+    }
 
     private static bool Waiting(ChatEntry e) => e.Outgoing && e.State is "sending" or "queued";
 

@@ -147,9 +147,11 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     // viewer message 0x7007
     public bool BadPassword { get; init; }
     public string Play { get; init; } = "";   // "refused:..." when the hook's gate stopped a Play
-    // chat lines, answers and group invites share one send slot, so a result can get bumped between snapshots. Time and
+    // chat lines, answers and group invites share the send slots, so a result can get bumped between snapshots. Time and
     // Seq are the sent message's header ones, 0 when nothing went
     public IReadOnlyList<(string Token, string State, long Time, long Seq)> SendResults { get; init; } = [];
+    // the lines the hook has, "sending" once its PUT's started, "queued" before
+    public IReadOnlyList<(string Token, string State)> SendQueue { get; init; } = [];
 
     public string? SendStateFor(string? token)
     {
@@ -312,6 +314,27 @@ public static class SocialSnapshot
 
     public static void RefreshMail(int pid) => WriteRequest(pid, "mail", "1");
 
+    public enum Withdrawal { Withdrawn, Taken, Unknown }
+
+    // the hook takes a request by renaming it, so this rename and a take can't both happen. A file a scanner has open
+    // gets a few more tries
+    public static Withdrawal WithdrawRequest(int pid, string ext)
+    {
+        var path = HookFiles.PathFor(pid, ext);
+        for (int i = 0; ; i++)
+        {
+            try
+            {
+                File.Move(path, path + ".withdrawn", overwrite: true);
+                try { File.Delete(path + ".withdrawn"); } catch { }
+                return Withdrawal.Withdrawn;
+            }
+            catch (FileNotFoundException) { return Withdrawal.Taken; }
+            catch (IOException) when (i < 4 && File.Exists(path)) { Thread.Sleep(50); }
+            catch { return File.Exists(path) ? Withdrawal.Unknown : Withdrawal.Taken; }
+        }
+    }
+
     // a .taking file stops holding the queue after 15 secs, the hook reads newer requests in place after 10
     public static bool SendPending(int pid)
     {
@@ -366,6 +389,7 @@ public static class SocialSnapshot
                 BadPassword = Bool(root, "badPassword"),
                 Play = Str(root, "play"),
                 SendResults = Arr(root, "sends", s => (Str(s, "token"), Str(s, "state"), Long(s, "time"), Long(s, "seq"))),
+                SendQueue = Arr(root, "queue", q => (Str(q, "token"), Str(q, "state"))),
                 EditToken = editToken,
                 EditState = editState,
                 MyComment = Str(root, "myComment").Trim(),

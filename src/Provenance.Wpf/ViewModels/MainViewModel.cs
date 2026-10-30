@@ -64,7 +64,7 @@ public partial class MainViewModel : ObservableObject
             Log.Information("Session ended: {Why} (signed in here: {Connected})", why, SocialConnected);
             StartAllAccountsCommand.NotifyCanExecuteChanged();
             if (!SocialConnected) return;
-            EndSession();   // no question asked, the session's gone so the editor couldn't save anyway
+            EndSession(SessionEnd.Dropped);   // no question asked, the session's gone so the editor couldn't save anyway
             RequestShow?.Invoke();
             MessageDialog.ShowInfo(Application.Current.MainWindow, "PlayOnline session ended", why);
             Log.Information("Session ended: the notice was closed");
@@ -1012,7 +1012,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (MultiRunning) return;
         if (!EditProfileWindow.ConfirmDrop("Log out")) return;
-        EndSession();
+        EndSession(SessionEnd.LogOut);
     }
 
     private static void CloseSocialWindows()
@@ -1021,8 +1021,9 @@ public partial class MainViewModel : ObservableObject
         foreach (var w in SocialWindows()) w.Close();
     }
 
-    private void EndSession()
+    private void EndSession(SessionEnd end)
     {
+        Social.SettleSends(end);
         _socialPoll.Stop();
         CloseSocialWindows();
         _sessionEnding = true;   // before SocialConnected, so the Repair button never shows enabled in between
@@ -1273,6 +1274,7 @@ public partial class MainViewModel : ObservableObject
                 offerLogs: true);
             return;
         }
+        Social.SettleSends(SessionEnd.Play);
         _gameRunning = true;
         if (await _pol.WaitForPlayAnswerAsync(PlayAnswerTimeout) is { } failed)
         {
