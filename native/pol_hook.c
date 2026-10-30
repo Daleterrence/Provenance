@@ -796,6 +796,36 @@ static void viewer_folder(char folder[MAX_PATH])
     RegCloseKey(hk);
 }
 
+static char g_viewer[MAX_PATH];
+static int g_home = -1, g_home_made;
+
+static int plain_path(const char *path);
+/* SET_USER_SLOT, then pub\homeNN\msg\{s/a,s/b,r/a,r/b}, folders polcore can't make itself. Never a slot that goes
+   through a link, FFXI writes there as admin */
+static int home_set(BYTE *b, int slot)
+{
+    static const char *const sub[4] = { "s\\a", "s\\b", "r\\a", "r\\b" };
+    char full[MAX_PATH + 48], *p;
+    int i;
+    for (i = 0; i < 4; i++) {
+        wsprintfA(full, "%s\\pub\\home%02d\\msg\\%s", g_viewer, slot, sub[i]);
+        if (!plain_path(full)) {
+            lg("home: pub\\home%02d goes through a link - not used\r\n", slot);
+            return 0;
+        }
+    }
+    ((int (__cdecl *)(int))PSLOT(0x366))(slot);
+    g_home = slot;
+    g_home_made = 1;
+    for (i = 0; i < 4; i++) {
+        wsprintfA(full, "%s\\pub\\home%02d\\msg\\%s", g_viewer, slot, sub[i]);
+        for (p = full; *p; p++)
+            if (*p == '\\') { *p = 0; CreateDirectoryA(full, NULL); *p = '\\'; }
+        CreateDirectoryA(full, NULL);
+    }
+    return 1;
+}
+
 /* The viewer's init before it launches content (REGISTRY_LANG, FFXI_LANG, REGISTRY_KEY, INSTALL_FOLDER, FILE_INIT),
    which the menu detour skips. Without it, game spits out FFXI-3322 at character creation (fun bonus of the error being
    in Japanese), took me a whole night to nail it... solid work on my part. */
@@ -804,7 +834,7 @@ static void viewer_init(BYTE *b)
     DWORD lang = viewer_lang();
     char key[32];
     char folder[MAX_PATH] = "C:\\Program Files (x86)\\PlayOnline\\SquareEnix\\PlayOnlineViewer";
-    char polid[16] = {0}, path[MAX_PATH + 32], *p;
+    char polid[16] = {0};
     unsigned h = 0;
     int slot, i;
     wsprintfA(key, "SOFTWARE\\%s", pol_hive());
@@ -814,21 +844,15 @@ static void viewer_init(BYTE *b)
     ((int (__cdecl *)(const char *))PSLOT(0x16F))(key);
     ((int (__cdecl *)(const char *))PSLOT(0x07D))(folder);
     ((int (__cdecl *)(void))PSLOT(0x3A4))();
-    /* SET_USER_SLOT, then pub\homeNN\msg\{s/a,s/b,r/a,r/b}, folders polcore can't make itself */
+    lstrcpynA(g_viewer, folder, sizeof g_viewer);
+    /* the placeholder ID still, so always 84. home_pick moves the account to its own after the login, then the folders
+       get made */
     CopyMemory(polid, b + 0x99280, 8);
     for (i = 0; i < 8; i++) h = h * 31 + (unsigned char)polid[i];
     slot = 50 + (int)(h % 50);
     ((int (__cdecl *)(int))PSLOT(0x366))(slot);
-    wsprintfA(path, "%s\\pub\\home%02d\\msg", folder, slot);
-    for (i = 0; i < 4; i++) {
-        static const char *const sub[4] = { "s\\a", "s\\b", "r\\a", "r\\b" };
-        char full[MAX_PATH + 48];
-        wsprintfA(full, "%s\\%s", path, sub[i]);
-        for (p = full; *p; p++)
-            if (*p == '\\') { *p = 0; CreateDirectoryA(full, NULL); *p = '\\'; }
-        CreateDirectoryA(full, NULL);
-    }
-    lg("viewer_init: user slot %d (pub\\home%02d)\r\n", slot, slot);
+    g_home = slot;
+    lg("viewer_init: user slot %d for now\r\n", slot);
     set_messages(b, folder);
 }
 
@@ -1192,7 +1216,7 @@ static int handle_bootstrap(BYTE *b, int handles_loaded)
 static void prestart_wait(void)
 {
     static const char *allowed[] = { "POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP",
-                                     "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_STATUS" };
+                                     "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_STATUS", "POL_HOME" };
     char gp[MAX_PATH + 64], parent[16];
     HANDLE hparent = NULL;
     ULONGLONG lastParent = 0;
@@ -1252,6 +1276,7 @@ static void ffxi_gate_read(BYTE *b)
     g_ffxi_service = ffxi > 0;
     lg("phase_c: content ids: %d valid, %d FFXI\r\n", any, ffxi);
 }
+static void home_pick(BYTE *b);
 static void phase_c_seed(HMODULE pc)
 {
     BYTE *b = (BYTE *)pc;
@@ -1360,6 +1385,7 @@ static void phase_c_seed(HMODULE pc)
         account_blocked(b, what);
     }
     if (jail) account_blocked(b, "jail");
+    home_pick(b);
     /* MESSAGE_NOTICES(1), or polcore marks every message as lost. Lean mode reads no messages, so asks for none. */
     if (!g_lean)
         ((svc_i)SVC(0x1020))(1);
@@ -1433,6 +1459,8 @@ static void prime_session(void)
     lg("pol_hook: fake session poked into polcore @ %08x\r\n", (unsigned)(ULONG_PTR)pc);
     viewer_init((BYTE *)pc);
     phase_c_seed(pc);
+    if (!g_home_made && home_set((BYTE *)pc, g_home))
+        lg("viewer_init: user slot %d (pub\\home%02d)\r\n", g_home, g_home);
 }
 
 /* Gate 7 (FFXiMain.dll 0x04245cb0) decodes patch.ver from the current directory. Real POL boots content from the
@@ -1504,13 +1532,19 @@ static int pid_alive(DWORD pid)
 }
 /* Deletes social snapshots a killed session left behind (other people's data). Another live pol.exe's stays, and
    one with our pid is from an earlier process, so it goes. */
+static void sweep_stale(const char *pattern);
 static void sweep_stale_social(void)
+{
+    sweep_stale("pol_hook.*.social.json*");   /* the end * catches crash-left .tmp files */
+    sweep_stale("pol_hook.*.store.json*");
+}
+static void sweep_stale(const char *pattern)
 {
     char dir[MAX_PATH + 32], glob[MAX_PATH + 48], full[MAX_PATH + 64];
     WIN32_FIND_DATAA fd;
     ipc_dir(dir);
     if (!dir[0]) return;
-    lstrcpyA(glob, dir); lstrcatA(glob, "pol_hook.*.social.json*");   /* the end * catches crash-left .tmp files */
+    lstrcpyA(glob, dir); lstrcatA(glob, pattern);
     HANDLE h = FindFirstFileA(glob, &fd);
     if (h == INVALID_HANDLE_VALUE) return;
     do {
@@ -1602,17 +1636,29 @@ static BOOL request_waiting(const char *ext)
     return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES || GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES;
 }
 /* delete-on-close, so it's only acted on once the delete's certain. -1 = not now, it stays .taking, never runs twice */
-static int read_taken(const char *taken, char *buf, int cap)
+static int read_taken(const char *taken, char *buf, int cap, char **grown, DWORD most)
 {
     FILE_DISPOSITION_INFO del = { TRUE };
-    DWORD got = 0;
+    LARGE_INTEGER size;
+    DWORD got = 0, want = cap > 0 ? (DWORD)(cap - 1) : 0;
+    int cut = 0;
+    BOOL ok;
     HANDLE f = CreateFileA(taken, GENERIC_READ | DELETE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                            NULL, OPEN_EXISTING, 0, NULL);
     if (f == INVALID_HANDLE_VALUE) return -1;
-    BOOL ok = ReadFile(f, buf, (DWORD)(cap - 1), &got, NULL) &&
-              SetFileInformationByHandle(f, FileDispositionInfo, &del, sizeof del);
+    if (grown) {
+        if (!GetFileSizeEx(f, &size)) { CloseHandle(f); return -1; }
+        cut = size.QuadPart > (LONGLONG)most;
+        want = cut ? most : (DWORD)size.QuadPart;
+        if (!(buf = *grown = (char *)HeapAlloc(GetProcessHeap(), 0, want + 1))) { CloseHandle(f); return -1; }
+    }
+    ok = ReadFile(f, buf, want, &got, NULL) && SetFileInformationByHandle(f, FileDispositionInfo, &del, sizeof del);
     CloseHandle(f);
-    if (!ok) return -1;
+    if (!ok) {
+        if (grown) { HeapFree(GetProcessHeap(), 0, *grown); *grown = NULL; }
+        return -1;
+    }
+    if (cut) while (got > 0 && buf[got - 1] != '\n') got--;
     buf[got] = 0;
     return (int)got;
 }
@@ -1626,32 +1672,37 @@ static ULONGLONG file_age_ms(const char *p)
     t.HighPart = a.ftLastWriteTime.dwHighDateTime;
     return n.QuadPart > t.QuadPart ? (n.QuadPart - t.QuadPart) / 10000 : 0;
 }
-static int take_request(const char *ext, char *buf, int cap)
+static int take_request_ex(const char *ext, char *buf, int cap, char **grown, DWORD most)
 {
     char path[MAX_PATH + 64], taken[MAX_PATH + 80];
     int n;
+    if (grown) *grown = NULL;
     request_paths(ext, path, taken);
     /* a .taking left by a failed read goes first, so requests keep their order (Away, then back) */
     if (GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES) {
         static ULONGLONG lastSaid;
-        n = read_taken(taken, buf, cap);
-        if (n >= 0) return n > 0 ? n : -1;
-        if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES || file_age_ms(taken) < 10000) return -1;
-        if (GetTickCount64() - lastSaid > 60000) {
-            lastSaid = GetTickCount64();
-            lg("request: %s.taking could not be read for 10 s - newer requests are read in place\r\n", ext);
+        n = read_taken(taken, buf, cap, grown, most);
+        if (n < 0 && (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES || file_age_ms(taken) < 10000)) return -1;
+        if (n < 0) {
+            if (GetTickCount64() - lastSaid > 60000) {
+                lastSaid = GetTickCount64();
+                lg("request: %s.taking could not be read for 10 s - newer requests are read in place\r\n", ext);
+            }
+            n = read_taken(path, buf, cap, grown, most);
         }
-        n = read_taken(path, buf, cap);
-        return n > 0 ? n : -1;
+    } else {
+        if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) return -1;
+        /* Rename first, so anything written after this is a new file for next turn, never one deleted unread. A file a
+           scanner still holds can't be renamed, so it waits.
+           i am vry gud with computer and this was easy to find, honest! :X */
+        if (!MoveFileExA(path, taken, MOVEFILE_REPLACE_EXISTING)) return -1;
+        n = read_taken(taken, buf, cap, grown, most);
     }
-    if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) return -1;
-    /* Rename first, so anything written after this is a new file for next turn, never one deleted unread. A file a
-       scanner still holds can't be renamed, so it waits.
-       i am vry gud with computer and this was easy to find, honest! :X */
-    if (!MoveFileExA(path, taken, MOVEFILE_REPLACE_EXISTING)) return -1;
-    n = read_taken(taken, buf, cap);
-    return n > 0 ? n : -1;
+    if (n > 0) return n;
+    if (grown && *grown) { HeapFree(GetProcessHeap(), 0, *grown); *grown = NULL; }
+    return -1;
 }
+static int take_request(const char *ext, char *buf, int cap) { return take_request_ex(ext, buf, cap, NULL, 0); }
 static char *req_line(char **p)
 {
     char *s = *p, *e = s;
@@ -1970,16 +2021,16 @@ static void mail_pump(BYTE *b)
     /* in a drain a delete only goes while no write is waiting for a slot, and nothing waits for it */
     if (g_del_job < 0 && (!g_draining || (!msg_jobs() && !writes_waiting())) && msg_slot_ok(b)) mail_delete_start(b);
 }
+#define ACK_MAX (1024 * 1024)   /* about 140,000 mids, far more than a session ever has */
 static void mail_ack_request(void)
 {
-    char buf[1024];
+    char *buf;
     int got, v = -1;
     if (!request_waiting("ack")) return;
-    if (take_request("ack", buf, sizeof buf) < 0) return;
-    got = lstrlenA(buf);
+    if ((got = take_request_ex("ack", NULL, 0, &buf, ACK_MAX)) < 0) return;
     for (int i = 0; i <= got; i++) {
         char c = buf[i];
-        if (c >= '0' && c <= '9') v = (v < 0 ? 0 : v * 10) + (c - '0');
+        if (c >= '0' && c <= '9') v = v > 9999999 ? v : (v < 0 ? 0 : v * 10) + (c - '0');
         else {
             mailrec *m = v > 0 ? mail_by_mid(v) : NULL;
             if (m && (m->state == 1 || m->state == 3)) {
@@ -1990,6 +2041,7 @@ static void mail_ack_request(void)
             v = -1;
         }
     }
+    HeapFree(GetProcessHeap(), 0, buf);
 }
 
 /* Ids are masked per session and names change, so conversations are keyed on HMAC-SHA256("<my POL ID>/<peer POL
@@ -2103,6 +2155,425 @@ static int slot_name(BYTE *b, int slot, char *name16)
     memcpy(name16, rec + 0x08, 15);
     name16[15] = 0;
     return 1;
+}
+
+static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, int read,
+                    const char *subj, const char *text)
+{
+    char nm[64], sk[17];
+    WORD f = *(const WORD *)(e + 0x3e);
+    int o;
+    sjis_json(nm, sizeof nm, e + 0x10, 0x0f);
+    peer_key(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04), e[0x3c], sk);
+    o = wsprintfA(out, "{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"kind\":%u,\"time\":%u,"
+                       "\"seq\":%u,\"state\":\"%s\"%s,\"subject\":",
+                  mid, nm, sk, e[0x3c],
+                  is_me(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04)) ? "true" : "false",
+                  (unsigned)((f >> 7) & 0x1f), *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state,
+                  read < 0 ? "" : read ? ",\"read\":true" : ",\"read\":false");
+    o += json_text(out + o, cap - o - 16, subj);
+    lstrcpyA(out + o, ",\"text\":"); o += 8;
+    o += json_text(out + o, cap - o - 4, text);
+    out[o++] = '}';
+    out[o] = 0;
+    return o;
+}
+
+/* pub\homeNN\msg: r\b unread, r\a read (FFXI moves them there), s\b the game's outbox, s\a sent. A file's name is
+   its header in polcore's base64 */
+#define STORE_KEEP 200   /* per folder, the viewer's own cap */
+#define STORE_SCAN_MAX 20000
+#define STORE_BODY_MAX 0x1100
+#define STORE_JSON_MAX (3 * 1024 * 1024)
+#define LEGACY_HOME 84   /* the placeholder ID's slot, shared by every account without one of its own */
+static const char *const g_store_sub[4] = { "r\\a", "r\\b", "s\\a", "s\\b" };
+typedef struct { BYTE hdr[0x48]; char name[100]; int home, sub, alt_home, alt_sub; char alt[100]; } storefile;
+
+static int store_name_ok(const char *n)
+{
+    static const char abc[] = "TSG8IncW3HFKokOg79qzeCmZs2yBYEQVAUxR5rbwi4P@jMDLtpvad0f_J1hlN6uX";
+    int i;
+    for (i = 0; n[i]; i++) if (i >= 96 || !strchr(abc, n[i])) return 0;
+    return i == 96;
+}
+static int store_newer(const void *x, const void *y)
+{
+    const BYTE *a = ((const storefile *)x)->hdr, *c = ((const storefile *)y)->hdr;
+    DWORD ta = *(const DWORD *)(a + 0x34), tc = *(const DWORD *)(c + 0x34);
+    DWORD sa = *(const DWORD *)(a + 0x30), sc = *(const DWORD *)(c + 0x30);
+    if (ta != tc) return ta < tc ? 1 : -1;
+    return sa == sc ? 0 : sa < sc ? 1 : -1;
+}
+static void store_dir(char *out, int home, int sub)
+{
+    wsprintfA(out, "%s\\pub\\home%02d\\msg\\%s", g_viewer, home, g_store_sub[sub]);
+}
+/* pol.exe runs elevated, so it never goes through a junction or link someone else put in the viewer folder */
+static int plain_path(const char *path)
+{
+    char p[MAX_PATH + 160];
+    int base = lstrlenA(g_viewer);
+    DWORD a;
+    if (lstrlenA(path) >= (int)sizeof p || lstrlenA(path) <= base) return 0;
+    lstrcpyA(p, path);
+    for (char *c = p + base + 1;; c++) {
+        char was = *c;
+        if (was != '\\' && was) continue;
+        *c = 0;
+        a = GetFileAttributesA(p);
+        if (a != INVALID_FILE_ATTRIBUTES && (!(a & FILE_ATTRIBUTE_DIRECTORY) || (a & FILE_ATTRIBUTE_REPARSE_POINT)))
+            return 0;
+        if (!was) return 1;
+        *c = was;
+    }
+}
+static HANDLE open_plain(const char *path)
+{
+    BY_HANDLE_FILE_INFORMATION fi;
+    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                           OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    if (h == INVALID_HANDLE_VALUE) return h;
+    if (!GetFileInformationByHandle(h, &fi) || fi.nNumberOfLinks != 1 ||
+        (fi.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY))) {
+        CloseHandle(h);
+        return INVALID_HANDLE_VALUE;
+    }
+    return h;
+}
+static int store_owned(const BYTE *h, int sub, unsigned __int64 me)
+{
+    return memcmp(h + (sub >= 2 ? 0x00 : 0x08), &me, 8) == 0;
+}
+/* requests and invitations can't be answered from a copy, the server's is gone */
+static int store_wanted(const BYTE *h, int sub)
+{
+    WORD f = *(const WORD *)(h + 0x3e);
+    unsigned kd = (f >> 7) & 0x1f;
+    if (((f >> 12) & 3) == 1) return 0;
+    if (sub >= 2) return kd == 0;
+    return kd == 0 || kd == 9 || kd == 10 || kd == 0xf || kd == 0x10 || kd == 0x12 || kd == 0x13;
+}
+/* my newest STORE_KEEP in one folder, headers decoded by polcore (svc 0x540) so the ids are in this session's form */
+static int store_list(BYTE *b, int home, int sub, unsigned __int64 me, int wanted, storefile **out)
+{
+    char glob[MAX_PATH + 64];
+    WIN32_FIND_DATAA fd;
+    storefile *v = NULL;
+    int n = 0, looked = 0, cap = STORE_KEEP * 4;
+    HANDLE h;
+    *out = NULL;
+    if (!SVC(0x540) || !g_viewer[0]) return 0;
+    store_dir(glob, home, sub);
+    if (!plain_path(glob)) return 0;
+    lstrcatA(glob, "\\*");
+    if ((h = FindFirstFileA(glob, &fd)) == INVALID_HANDLE_VALUE) return 0;
+    if (!(v = (storefile *)HeapAlloc(GetProcessHeap(), 0, (cap + 1) * sizeof *v))) { FindClose(h); return 0; }
+    do {
+        if ((fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
+            !store_name_ok(fd.cFileName))
+            continue;
+        if (++looked > STORE_SCAN_MAX) {
+            lg("store: over %d files in home%02d\\msg\\%s, the rest aren't read\r\n", STORE_SCAN_MAX, home,
+               g_store_sub[sub]);
+            break;
+        }
+        memset(&v[n], 0, sizeof v[n]);
+        if (((int (__cdecl *)(void *, const char *))SVC(0x540))(v[n].hdr, fd.cFileName) != 0) continue;
+        if (!(*(WORD *)(v[n].hdr + 0x3e) & 0x8000)) continue;   /* the viewer's loader skips those too */
+        if (!store_owned(v[n].hdr, sub, me) || (wanted && !store_wanted(v[n].hdr, sub))) continue;
+        lstrcpyA(v[n].name, fd.cFileName);
+        v[n].home = home;
+        v[n].sub = sub;
+        v[n].alt_home = -1;
+        if (++n == cap) {
+            qsort(v, n, sizeof *v, store_newer);
+            n = STORE_KEEP;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    if (n > 1) qsort(v, n, sizeof *v, store_newer);
+    *out = v;
+    return n > STORE_KEEP ? STORE_KEEP : n;
+}
+static int store_read(const char *path, char *buf, int cap)
+{
+    DWORD got = 0;
+    BOOL ok;
+    HANDLE h = open_plain(path);
+    if (h == INVALID_HANDLE_VALUE) return -1;
+    ok = ReadFile(h, buf, (DWORD)cap, &got, NULL);
+    CloseHandle(h);
+    return ok ? (int)got : -1;
+}
+/* the other home's copy of the same message if this one won't read */
+static int store_body(const storefile *f, char *buf, int cap)
+{
+    char path[MAX_PATH + 160];
+    DWORD len = *(const DWORD *)(f->hdr + 0x38);
+    int got;
+    if (len == 0 || len > 0x101100) return -1;
+    if (cap > (int)len) cap = (int)len;
+    store_dir(path, f->home, f->sub);
+    lstrcatA(path, "\\");
+    lstrcatA(path, f->name);
+    if ((got = store_read(path, buf, cap)) > 0 || f->alt_home < 0) return got;
+    store_dir(path, f->alt_home, f->alt_sub);
+    lstrcatA(path, "\\");
+    lstrcatA(path, f->alt);
+    return store_read(path, buf, cap);
+}
+static int dir_exists(const char *p)
+{
+    DWORD a = GetFileAttributesA(p);
+    return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+static int legacy_home_there(void)
+{
+    char p[MAX_PATH + 32];
+    wsprintfA(p, "%s\\pub\\home%02d", g_viewer, LEGACY_HOME);
+    return g_viewer[0] && dir_exists(p) && plain_path(p);
+}
+
+static int sent_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, const char *subj,
+                     const char *text)
+{
+    char nm[64] = "\"\"", sk[17];
+    BYTE fr[0x140];
+    DWORD lo = *(const DWORD *)(e + 0x08), hi = *(const DWORD *)(e + 0x0c);
+    int row = find_friend_row(b, lo, hi, e[0x3d]), o;
+    peer_key(b, lo, hi, e[0x3d], sk);
+    if (row >= 0 && get_friend(b, row, fr)) sjis_json(nm, sizeof nm, fr + 0xa0, 0x0f);
+    o = wsprintfA(out, "{\"mid\":%d,\"to\":%s,\"toKey\":\"%s\",\"toSlot\":%u,\"time\":%u,\"seq\":%u,\"state\":\"%s\","
+                       "\"subject\":",
+                  mid, nm, sk, e[0x3d], *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state);
+    o += json_text(out + o, cap - o - 16, subj);
+    lstrcpyA(out + o, ",\"text\":"); o += 8;
+    o += json_text(out + o, cap - o - 4, text);
+    out[o++] = '}';
+    out[o] = 0;
+    return o;
+}
+typedef struct { char *p; int n, cap; } gbuf;
+static int gb_add(gbuf *g, const char *s, int len)
+{
+    if (g->n + len + 1 > g->cap) {
+        int cap = g->cap ? g->cap * 2 : 0x10000;
+        char *q;
+        while (cap < g->n + len + 1) cap *= 2;
+        if (cap > STORE_JSON_MAX + 0x10000) cap = STORE_JSON_MAX + 0x10000;
+        if (cap < g->n + len + 1) return 0;
+        q = (char *)(g->p ? HeapReAlloc(GetProcessHeap(), 0, g->p, cap) : HeapAlloc(GetProcessHeap(), 0, cap));
+        if (!q) return 0;
+        g->p = q;
+        g->cap = cap;
+    }
+    memcpy(g->p + g->n, s, len);
+    g->n += len;
+    g->p[g->n] = 0;
+    return 1;
+}
+static void wr(HANDLE h, const char *s);
+static void store_drop(void)
+{
+    char p[MAX_PATH + 64];
+    ipc_file(p, "store.json");
+    DeleteFileA(p);
+}
+/* FFXI deletes what it fetches from the server, so the store's the only copy of what was handled in game. Read
+   once, nothing on the wire */
+static void store_import(BYTE *b)
+{
+    static mailrec scratch;
+    static char body[STORE_BODY_MAX];
+    char path[MAX_PATH + 64], tmp[MAX_PATH + 80];
+    unsigned __int64 me = my_id(b);
+    storefile *all = NULL, *v, *g;
+    gbuf in = {0}, out = {0};
+    int homes[2], nh = 0, n = 0, cap = 0, k, i, j, h, s, got, nin = 0, nout = 0, left = 0;
+    DWORD wn;
+    HANDLE f;
+    store_drop();
+    if (!me || g_home < 0) return;
+    homes[nh++] = g_home;
+    if (g_home != LEGACY_HOME && legacy_home_there()) homes[nh++] = LEGACY_HOME;
+    for (h = 0; h < nh; h++)
+        for (s = 0; s < 4; s++) {   /* s\a before s\b, so a sent copy beats the outbox's */
+            k = store_list(b, homes[h], s, me, 1, &v);
+            for (i = 0; i < k; i++) {
+                for (j = 0; j < n; j++)
+                    if ((all[j].sub >= 2) == (s >= 2) && mail_same(all[j].hdr, v[i].hdr)) break;
+                if (j < n) {
+                    /* the same message twice: read if either copy is, sent if either went, the other's the spare */
+                    if (s < 2 && (s == 0 || (*(WORD *)(v[i].hdr + 0x42) & 0x100)))
+                        *(WORD *)(all[j].hdr + 0x42) |= 0x100;
+                    if (s == 2 && all[j].sub == 3) all[j] = v[i];
+                    else if (all[j].alt_home < 0) {
+                        all[j].alt_home = v[i].home;
+                        all[j].alt_sub = v[i].sub;
+                        lstrcpyA(all[j].alt, v[i].name);
+                    }
+                    continue;
+                }
+                if (n == cap) {
+                    cap = cap ? cap * 2 : 64;
+                    g = (storefile *)(all ? HeapReAlloc(GetProcessHeap(), 0, all, cap * sizeof *all)
+                                          : HeapAlloc(GetProcessHeap(), 0, cap * sizeof *all));
+                    if (!g) break;
+                    all = g;
+                }
+                all[n] = v[i];
+                if (s == 0) *(WORD *)(all[n].hdr + 0x42) |= 0x100;
+                n++;
+            }
+            if (v) HeapFree(GetProcessHeap(), 0, v);
+        }
+    if (n > 1) qsort(all, n, sizeof *all, store_newer);
+    for (i = 0; i < n; i++) {
+        int sent = all[i].sub >= 2, need, len;
+        char *json;
+        if ((got = store_body(&all[i], body, sizeof body)) <= 0) continue;
+        memset(&scratch, 0, sizeof scratch);
+        memcpy(scratch.hdr, all[i].hdr, 0x48);
+        mail_parse(&scratch, body, got);
+        need = 512 + 2 * (lstrlenA(scratch.subj) + lstrlenA(scratch.text));
+        if (!(json = (char *)HeapAlloc(GetProcessHeap(), 0, need))) continue;
+        if (sent) len = sent_json(b, json, need, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent", scratch.subj,
+                                  scratch.text);
+        else len = msg_json(b, json, need, all[i].hdr, 0, "local", (*(WORD *)(all[i].hdr + 0x42) >> 8) & 1,
+                            scratch.subj, scratch.text);
+        /* newest first, so a store too big for the file loses its oldest lines */
+        if (in.n + out.n + len + 2 > STORE_JSON_MAX ||
+            !gb_add(sent ? &out : &in, (sent ? nout : nin) ? "," : "", (sent ? nout : nin) ? 1 : 0) ||
+            !gb_add(sent ? &out : &in, json, len)) {
+            left = n - i;
+            HeapFree(GetProcessHeap(), 0, json);
+            break;
+        }
+        HeapFree(GetProcessHeap(), 0, json);
+        if (sent) nout++; else nin++;
+    }
+    if (all) HeapFree(GetProcessHeap(), 0, all);
+    SecureZeroMemory(body, sizeof body);
+    SecureZeroMemory(&scratch, sizeof scratch);
+    if (nin || nout) {
+        ipc_file(path, "store.json");
+        lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
+        f = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            wr(f, "{\"messages\":[");
+            if (in.n) WriteFile(f, in.p, (DWORD)in.n, &wn, NULL);
+            wr(f, "],\"gameSent\":[");
+            if (out.n) WriteFile(f, out.p, (DWORD)out.n, &wn, NULL);
+            wr(f, "]}");
+            CloseHandle(f);
+            MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING);
+        }
+    }
+    if (in.p) { SecureZeroMemory(in.p, in.cap); HeapFree(GetProcessHeap(), 0, in.p); }
+    if (out.p) { SecureZeroMemory(out.p, out.cap); HeapFree(GetProcessHeap(), 0, out.p); }
+    lg("store: %d received and %d sent line(s) from the message store (home%02d%s)%s\r\n", nin, nout, g_home,
+       nh > 1 ? " and home84" : "", left ? ", the oldest left out (too big)" : "");
+}
+
+/* Provenance's own numbering (POL_HOME), from 10 so the viewer's 01-08 are never touched, and never 84 */
+static int home_slot_ok(int s) { return s >= 10 && s <= 99 && s != LEGACY_HOME; }
+static int home_from_env(void)
+{
+    char v[8];
+    int s;
+    DWORD n = GetEnvironmentVariableA("POL_HOME", v, sizeof v);
+    if (n == 0 || n >= sizeof v || !parse_num(v, 2, &s) || !home_slot_ok(s)) return -1;
+    return s;
+}
+/* 1 copied, 0 nothing to do (no source, already there, too big), -1 failed. Never over a file, never through a link */
+static int copy_plain(const char *src, const char *dst)
+{
+    static char buf[0x10000];
+    LARGE_INTEGER size;
+    DWORD got, put;
+    int ok = 1;
+    HANDLE in, out;
+    if (GetFileAttributesA(src) == INVALID_FILE_ATTRIBUTES) return 0;
+    if ((in = open_plain(src)) == INVALID_HANDLE_VALUE) return -1;
+    if (!GetFileSizeEx(in, &size) || size.QuadPart > 0x200000) { CloseHandle(in); return 0; }
+    out = CreateFileA(dst, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (out == INVALID_HANDLE_VALUE) {
+        DWORD e = GetLastError();
+        CloseHandle(in);
+        return e == ERROR_FILE_EXISTS ? 0 : -1;
+    }
+    while (ok && ReadFile(in, buf, sizeof buf, &got, NULL) && got)
+        ok = WriteFile(out, buf, got, &put, NULL) && put == got;
+    CloseHandle(in);
+    CloseHandle(out);
+    if (!ok) DeleteFileA(dst);
+    return ok ? 1 : -1;
+}
+/* home84's option.bin (FFXI's POL settings) and this account's own messages, never over what's there. The messages go
+   once, FFXI moves and deletes them here after */
+static void home_copy(BYTE *b, int slot, unsigned __int64 me)
+{
+    char src[MAX_PATH + 160], dst[MAX_PATH + 160], mark[MAX_PATH + 64], done[8] = "";
+    storefile *v;
+    int s, i, k, r, copied = 0, failed = 0, opt = 0, had_o, had_m;
+    DWORD got = 0, wn;
+    HANDLE f;
+    wsprintfA(dst, "%s\\pub\\home%02d", g_viewer, slot);
+    if (!plain_path(dst)) return;
+    /* 'o' option.bin, 'm' the messages */
+    wsprintfA(mark, "%s\\provenance-copied", dst);
+    if ((f = open_plain(mark)) != INVALID_HANDLE_VALUE) {
+        if (!ReadFile(f, done, sizeof done - 1, &got, NULL)) got = 0;
+        CloseHandle(f);
+        done[got] = 0;
+    }
+    had_o = strchr(done, 'o') != NULL;
+    had_m = strchr(done, 'm') != NULL;
+    if (had_o && had_m) return;
+    if (!had_o) {
+        lstrcatA(dst, "\\option.bin");
+        wsprintfA(src, "%s\\pub\\home%02d\\option.bin", g_viewer, LEGACY_HOME);
+        opt = copy_plain(src, dst);
+    }
+    for (s = 0; s < 4 && me && !had_m; s++) {
+        store_dir(dst, slot, s);
+        if (!plain_path(dst)) { failed++; continue; }
+        k = store_list(b, LEGACY_HOME, s, me, 0, &v);
+        for (i = 0; i < k; i++) {
+            store_dir(src, LEGACY_HOME, s);
+            store_dir(dst, slot, s);
+            lstrcatA(src, "\\"); lstrcatA(src, v[i].name);
+            lstrcatA(dst, "\\"); lstrcatA(dst, v[i].name);
+            r = copy_plain(src, dst);
+            copied += r > 0;
+            failed += r < 0;
+        }
+        if (v) HeapFree(GetProcessHeap(), 0, v);
+    }
+    wsprintfA(done, "%s%s", had_o || opt >= 0 ? "o" : "", had_m || me ? "m" : "");
+    if (done[0]) {
+        DeleteFileA(mark);   /* a link someone left there goes, it's never written through */
+        f = CreateFileA(mark, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            WriteFile(f, done, (DWORD)lstrlenA(done), &wn, NULL);
+            CloseHandle(f);
+        }
+    }
+    lg("home: copy from home%02d to home%02d - option.bin %s, %d message(s), %d not copied%s\r\n", LEGACY_HOME, slot,
+       had_o ? "done before" : opt > 0 ? "copied" : opt < 0 ? "failed, tried again next time" : "not needed", copied,
+       failed, had_m ? " (messages done before)" : !me ? " (messages next time, no POL ID yet)" : "");
+}
+/* the account's own slot, or home84 when Provenance didn't send one (a manual run) */
+static void home_pick(BYTE *b)
+{
+    int slot = home_from_env();
+    if (!g_viewer[0] || slot < 0) {
+        lg("home: no user slot from Provenance - staying in home%02d\r\n", g_home);
+        return;
+    }
+    if (!home_set(b, slot)) return;
+    lg("home: user slot %d (pub\\home%02d)\r\n", slot, slot);
+    if (legacy_home_there()) home_copy(b, slot, SVC(0x558) ? my_id(b) : 0);
 }
 
 static char g_send_token[48];
@@ -2229,6 +2700,9 @@ static void mail_send_start(BYTE *b)
         lstrcpyA(g_send_state, "sending");
     }
 }
+/* FFXI only prints a message's text when it's 300 bytes or less, counted in the Shift-JIS that goes */
+#define TEXT_MAX_BYTES 300
+
 /* like the viewer (app.dll 0x100556e0), a 0xa8 header (svc 0x438) then the body (svc 0x440) */
 static int msg_build(BYTE *b, int kind, unsigned toLo, unsigned toHi, int fromSlot, int toSlot,
                      const char *myName, const char *sj_subj, const char *sj_text, const BYTE *att, int attType)
@@ -2283,14 +2757,15 @@ static void mail_send_parse(BYTE *b, char *buf)
     if (*(DWORD *)(fr + 0x08) & 0x10000000) { send_fail("failed:pending"); return; }
     if (is_me(b, *(DWORD *)(fr + 0x00), *(DWORD *)(fr + 0x04))) { send_fail("failed:self"); return; }
     wl = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
-    if (wl <= 0 || wl - 1 > 300) { send_fail("failed:too long"); return; }
+    if (wl <= 0 || wl - 1 > TEXT_MAX_BYTES) { send_fail("failed:too long"); return; }
     for (q = text; *q; q++) if ((BYTE)*q < 0x20 && *q != '\n') *q = ' ';
     for (q = subj; *q; q++) if ((BYTE)*q < 0x20) *q = ' ';
     mySlot = my_handle(b, myName);
     if (mySlot < 0) { send_fail("failed:no handle"); return; }
     utf8_to_sjis(subj, sj_subj, 0x80);
-    utf8_to_sjis(text, sj_text, 0x1000);
+    n = utf8_to_sjis(text, sj_text, 0x1000);
     if (!sj_text[0]) { send_fail("failed:empty"); return; }
+    if (n > TEXT_MAX_BYTES) { send_fail("failed:too long"); return; }
     n = msg_build(b, 0, *(DWORD *)(fr + 0x00), *(DWORD *)(fr + 0x04), mySlot, (int)FR_SLOT(fr), myName,
                   sj_subj, sj_text, NULL, 0);
     if (n < 0) { send_fail("failed:alloc"); return; }
@@ -3867,21 +4342,12 @@ static void snapshot_social(BYTE *b)
     /* states 0-3, oldest first since slots get reused */
     for (i = mail_next(0, 0xf), first = 1; i >= 0; i = mail_next(g_mail[i].mid, 0xf)) {
         const mailrec *ml = &g_mail[i];
-        const BYTE *e = ml->hdr;
-        WORD f = *(const WORD *)(e + 0x3e);
-        int o;
-        sjis_json(nm, sizeof nm, e + 0x10, 0x0f);
-        peer_key(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04), e[0x3c], sk);
-        o = wsprintfA(mj, "%s{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"kind\":%u,\"time\":%u,\"seq\":%u,"
-                          "\"state\":\"%s\",\"subject\":",
-                      first ? "" : ",", ml->mid, nm, sk, e[0x3c],
-                      is_me(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04)) ? "true" : "false",
-                      (unsigned)((f >> 7) & 0x1f), *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30),
-                      ml->state == 1 ? "read" : ml->state == 3 ? "realtime" : ml->state == 2 ? "failed" : "pending");
-        o += json_text(mj + o, (int)sizeof mj - o - 16, ml->subj);
-        lstrcpyA(mj + o, ",\"text\":"); o += 8;
-        o += json_text(mj + o, (int)sizeof mj - o - 4, ml->text);
-        mj[o++] = '}';
+        int o = 0;
+        if (!first) mj[o++] = ',';
+        o += msg_json(b, mj + o, (int)sizeof mj - o, ml->hdr, ml->mid,
+                      ml->state == 1 ? "read" : ml->state == 3 ? "realtime" : ml->state == 2 ? "failed" : "pending",
+                      -1,   /* no read bit, a server copy hasn't got one */
+                      ml->subj, ml->text);
         WriteFile(h, mj, (DWORD)o, &n, NULL);
         first = 0;
     }
@@ -3997,6 +4463,7 @@ static void pol_hold(BYTE *b)
             lstrcpyA(g_presence, "no-handle");
         }
     }
+    if (!g_lean) store_import(b);
     snapshot_social(b);
     for (;;) {
         ctl = GetTickCount64() - lastCtl >= 150;
@@ -4010,6 +4477,7 @@ static void pol_hold(BYTE *b)
             why = idle < 0 ? idle : reason < 0 ? reason : *(int *)(b + 0x9aa14);
             lg("hold: SESSION LOST reason=%d - signed out\r\n", why);
             DeleteFileA(spath);
+            store_drop();
             ipc_file(path, "ended");
             ef = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
             if (ef != INVALID_HANDLE_VALUE) {
@@ -4021,6 +4489,7 @@ static void pol_hold(BYTE *b)
         }
         if (ctl && SVC(0x13e4) && ((svc_v)SVC(0x13e4))()) {
             DeleteFileA(spath);
+            store_drop();
             account_blocked(b, "jail");
         }
         status_pump(b);
@@ -4072,7 +4541,11 @@ static void pol_hold(BYTE *b)
                 if (g_grp_job >= 0) CANCEL_JOB(g_grp_job);
                 /* FFXI installs its own message handlers, so polcore gets its defaults back */
                 if (SVC(0xda0)) ((void (__cdecl *)(void))SVC(0xda0))();
+                /* the viewer always has notices on when a game starts, without them FFXI only sees new messages at its
+                   next lobby login. A local flag, nothing goes on the wire */
+                if (g_lean && SVC(0x1020)) ((svc_i)SVC(0x1020))(1);
                 DeleteFileA(spath);   /* the snapshot has friends' messages in it */
+                store_drop();
                 lg("hold: booting FFXI\r\n");
                 return;
             }
@@ -4084,6 +4557,7 @@ static void pol_hold(BYTE *b)
             lg("hold: stop file seen - signing out and exiting\r\n");
             DeleteFileA(path);
             DeleteFileA(spath);
+            store_drop();
             until = GetTickCount64() + 5000;
             g_draining = 1;
             if (!g_lean) mail_ack_request();

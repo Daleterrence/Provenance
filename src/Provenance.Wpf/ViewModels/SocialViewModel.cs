@@ -96,7 +96,8 @@ public partial class SocialViewModel : ObservableObject
     [RelayCommand]
     private void ChangeProfilePicture()
     {
-        if (!ProfilePictureSaving) ChangeProfilePictureRequested?.Invoke();
+        if (GameRunning) EditNote = GameRunningNote;
+        else if (!ProfilePictureSaving) ChangeProfilePictureRequested?.Invoke();
     }
 
     private static string NewToken() => Guid.NewGuid().ToString("N")[..12];
@@ -118,18 +119,36 @@ public partial class SocialViewModel : ObservableObject
     [ObservableProperty] private int _myStatusIndex;
     [ObservableProperty] private string _statusNote = "";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(StatusEditable))] private bool _statusPending;
-    public bool StatusEditable => !StatusPending;
+    public bool StatusEditable => !StatusPending && !GameRunning;
     private PolStatus? _requestedStatus;
     private DateTime _requestedAt;
     private bool _applyingSnapshot;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSelection), nameof(NoSelection))]
+    [NotifyPropertyChangedFor(nameof(HasSelection), nameof(NoSelection), nameof(CanCompose))]
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     private FriendItem? _selectedFriend;
-    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(SendCommand))] private string _compose = "";
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(SendCommand))]
+    [NotifyPropertyChangedFor(nameof(ComposeBytes), nameof(ComposeCount), nameof(ComposeCountShown), nameof(ComposeNote))]
+    private string _compose = "";
     public bool HasSelection => SelectedFriend != null;
     public bool NoSelection => SelectedFriend == null;
+
+    // from the Play press till the game closes nothing new goes to the hook, answers already asked for still land
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCompose), nameof(ComposeNote), nameof(CanEdit), nameof(StatusEditable))]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(RefreshMailCommand))]
+    private bool _gameRunning;
+    public const string GameRunningNote = "That has to wait till FINAL FANTASY XI is closed.";
+
+    partial void OnGameRunningChanged(bool value) => StatusNote = value ? GameRunningNote : "";
+    public bool CanCompose => SelectedFriend is { CanMessage: true } && !GameRunning;
+
+    // the box counts in the bytes FFXI goes by, a Japanese character's two
+    public int ComposeBytes => PolMessage.TextBytes(Compose.Trim());
+    public string ComposeCount => $"{ComposeBytes}/{PolMessage.MaxTextBytes}";
+    public bool ComposeCountShown => ComposeBytes >= PolMessage.MaxTextBytes * 9 / 10;
+    private bool ComposeHasWide => ComposeBytes > Compose.Trim().Replace("\r", "").Length;
 
     // a draft per conversation, so it never goes to the next person picked (POL mail can't be called back)
     private readonly Dictionary<string, string> _drafts = new();
@@ -142,6 +161,9 @@ public partial class SocialViewModel : ObservableObject
     public string ComposeNote => SelectedFriend switch
     {
         null => "",
+        _ when GameRunning => "While FINAL FANTASY XI is running, replies go through the game.",
+        { CanMessage: true } when ComposeCountShown && ComposeHasWide =>
+            PolMessage.HasDoubleByte(Compose) ? "Japanese characters count as two." : "Some characters count as two.",
         { CanMessage: true, Online: true } => "This sends a PlayOnline message.",
         { CanMessage: true } f => $"{f.Name}'s offline, so they'll get this next time they log in.",
         { Pending: true } f => $"You can message {f.Name} once they accept your friend request.",
@@ -257,6 +279,8 @@ public partial class SocialViewModel : ObservableObject
         _answerFor = null;
         _sendQueue.Clear();   // unsent lines stay in the log and expire as "not sent"
         _sendInFlight = null;
+        _storeTaken = false;
+        GameRunning = false;
         _groupsSignature = "";
         Groups.Clear();
         HasGroups = false;
@@ -366,6 +390,8 @@ public partial class SocialViewModel : ObservableObject
             if (f.Key.Length > 0 &&
                 snap.Friends.Count(x => string.Equals(x.Name, f.Name, StringComparison.OrdinalIgnoreCase)) == 1)
                 changed |= chat.Adopt(f.Name, f.Key);   // lines saved while the hook had no key for them
+        bool takeStore = snap.Stored != null && !_storeTaken;
+        if (takeStore) changed |= MergeStored(chat, snap);
         foreach (var m in snap.Messages)
         {
             var who = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == m.FromKey)?.Name ?? m.From;
@@ -394,7 +420,7 @@ public partial class SocialViewModel : ObservableObject
             if (chat.MergeIncoming(m))
             {
                 changed = true;
-                MessageReceived?.Invoke(who, m.Text);
+                MessageReceived?.Invoke(who, m.Text.Length > 0 ? m.Text : m.Subject);
             }
             // chat only, a request stays on the server for the viewer and is never deleted unseen
             if (m.HasBody && m.IsChat && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
@@ -413,8 +439,38 @@ public partial class SocialViewModel : ObservableObject
             chat.MarkRead(open.Name, open.Key);
         // Dirty rather than changed, a log whose last save failed isn't on disk either
         bool kept = !chat.Dirty || chat.Save();
+        if (takeStore && kept && _pol.Pid is { } storePid)
+        {
+            SocialSnapshot.DeleteStore(storePid);
+            _storeTaken = true;
+        }
         if (!kept || (saved.Count > 0 && _pol.Pid is { } pid && !SocialSnapshot.Ack(pid, saved)))
             foreach (var mid in saved) _acked.Remove(mid);   // again next snapshot
+        return changed;
+    }
+
+    private bool _storeTaken;
+
+    // the game's message store, read by the hook at login: it's history, so no notices, and nothing to ack since none of
+    // it's on the server any more
+    private bool MergeStored(ChatStore chat, PolSocialSnapshot snap)
+    {
+        bool changed = false;
+        foreach (var m in snap.Stored!.Received)
+        {
+            if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey)) continue;
+            if (NoticeText(m.Kind) is { } line)
+            {
+                if (snap.MyKey.Length == 0 || m.FromKey != snap.MyKey) changed |= chat.MergeNotice(m, line);
+            }
+            else changed |= chat.MergeIncoming(m);
+        }
+        foreach (var s in snap.Stored.Sent)
+        {
+            var to = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == s.ToKey)?.Name ??
+                     (s.To.Length > 0 ? s.To : chat.NameFor(s.ToKey));
+            if (to.Length > 0 || s.ToKey.Length > 0) changed |= chat.AddGameSent(to, s);
+        }
         return changed;
     }
 
@@ -440,15 +496,20 @@ public partial class SocialViewModel : ObservableObject
                                          _avatars.NoProfilePicture, 0, "FRIEND REQUESTS")
                           { Key = m.FromKey, RequestMid = m.Mid, IsMe = m.IsMe });
         if (_chat != null)
-            foreach (var g in _chat.Entries.Where(e => !e.Outgoing && !items.Any(i => e.IsWith(i.Name, i.Key)))
-                                           .GroupBy(e => e.PeerKey.Length > 0 ? "k:" + e.PeerKey
-                                                                              : "n:" + e.Peer.ToUpperInvariant()))
+        {
+            var keys = items.Where(i => i.Key.Length > 0).Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
+            var names = items.Select(i => i.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var keyless = items.Where(i => i.Key.Length == 0).Select(i => i.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var (_, last, used) in _chat.Writers)
             {
-                var last = g.OrderBy(e => e.Time).Last();
+                bool listed = last.PeerKey.Length > 0 ? keys.Contains(last.PeerKey) || used.Any(keyless.Contains)
+                                                      : names.Contains(last.Peer);
+                if (listed) continue;
                 items.Add(new FriendItem(last.Peer, "", "Not on your friend list", "", false, -1,
                                          _avatars.NoProfilePicture, _chat.UnreadFrom(last.Peer, last.PeerKey),
                                          "OTHERS") { Key = last.PeerKey });
             }
+        }
         items = items.OrderBy(i => Array.IndexOf(Sections, i.Section))
                      .ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         var sig = string.Join("|", items.Select(i => $"{i.Name}/{i.Key}/{i.StatusLabel}/{i.Character}/{i.Comment}/" +
@@ -568,7 +629,7 @@ public partial class SocialViewModel : ObservableObject
     public string EditStatus => EditBusy ? "Saving the change to PlayOnline..."
                               : ProfilePictureSaving ? "Saving your profile picture to PlayOnline..." : EditNote;
     public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote);
-    public bool CanEdit => Connected && !EditBusy && !FriendsUnavailable && _pol.Pid != null;
+    public bool CanEdit => Connected && !EditBusy && !FriendsUnavailable && _pol.Pid != null && !GameRunning;
 
     private DispatcherTimer? _noteTimer;
     // success notes go by themselves, failures stay until dismissed. A note's a failure unless the setter says so
@@ -796,6 +857,11 @@ public partial class SocialViewModel : ObservableObject
     {
         var name = handleName.Trim();
         if (SearchBusy || !Connected || _pol.Pid is not { } pid) return;
+        if (GameRunning)
+        {
+            SearchFailed(GameRunningNote);
+            return;
+        }
         if (name.Length is 0 or > 15 || !name.All(c => char.IsAsciiLetterOrDigit(c) || c is ' ' or '-' or '_' or '.'))
         {
             SearchFailed(BadHandleName);
@@ -895,6 +961,11 @@ public partial class SocialViewModel : ObservableObject
     public void SaveProfilePicture(int picId)
     {
         if (ProfilePictureSaving || !Connected || _pol.Pid is not { } pid) return;
+        if (GameRunning)
+        {
+            EditNote = GameRunningNote;
+            return;
+        }
         _picToken = NewToken();
         _picAt = DateTime.UtcNow;
         ProfilePictureSaving = true;
@@ -924,13 +995,13 @@ public partial class SocialViewModel : ObservableObject
     }
 
     private bool CanSend() =>
-        SelectedFriend is { CanMessage: true } && !string.IsNullOrWhiteSpace(Compose) && _pol.Pid != null;
+        CanCompose && !string.IsNullOrWhiteSpace(Compose) && ComposeBytes <= PolMessage.MaxTextBytes && _pol.Pid != null;
 
     // POL mail (the viewer's stored send), so it reaches them offline too
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
     {
-        if (SelectedFriend is not { } f || _chat == null || _pol.Pid is null) return;
+        if (!CanSend() || SelectedFriend is not { } f || _chat == null) return;
         var text = Compose.Trim();
         if (text.Length == 0) return;
         Queue(f, text);
@@ -945,7 +1016,7 @@ public partial class SocialViewModel : ObservableObject
 
     public void Resend(ChatEntry e)
     {
-        if (!e.Failed || _chat == null || SelectedFriend is not { CanMessage: true } f || _pol.Pid is null) return;
+        if (!e.Failed || _chat == null || !CanCompose || SelectedFriend is not { } f || _pol.Pid is null) return;
         if (!_chat.RemoveFailed(e.Key)) return;
         Queue(f, e.Text);
         RefreshConversation();
@@ -983,12 +1054,14 @@ public partial class SocialViewModel : ObservableObject
             if (!withdrawn && _chat?.SetSendState(_sendInFlight, "unconfirmed") == true) RefreshConversation();
             _sendInFlight = null;
         }
-        while (_sendInFlight == null && _sendQueue.Count > 0 && _pol.Pid is { } pid && !SocialSnapshot.SendPending(pid))
+        while (_sendInFlight == null && !GameRunning && _sendQueue.Count > 0 && _pol.Pid is { } pid &&
+               !SocialSnapshot.SendPending(pid))
         {
             var (row, name, token, text) = _sendQueue.Dequeue();
             // one that waited long enough to show "not sent" stays that way, they might've sent it again already
             var line = _chat?.Entries.FirstOrDefault(e => e.Key == "out:" + token);
             if (line is not { State: "sending" or "queued" }) continue;
+            // no subject, like the viewer's own chat window
             if (SocialSnapshot.Send(pid, row, name, token, "", text))
             {
                 _sendInFlight = token;
@@ -1013,12 +1086,12 @@ public partial class SocialViewModel : ObservableObject
                                                              TaskScheduler.FromCurrentSynchronizationContext());
     }
 
-    private bool CanRefreshMail() => _pol.Pid != null && _last.Mail != "pending" &&
+    private bool CanRefreshMail() => _pol.Pid != null && !GameRunning && _last.Mail != "pending" &&
                                      DateTime.UtcNow - _mailAskedAt >= TimeSpan.FromSeconds(30);
 
     partial void OnMyStatusIndexChanged(int value)
     {
-        if (_applyingSnapshot || value < 0 || value >= StatusChoices.Length) return;
+        if (_applyingSnapshot || GameRunning || value < 0 || value >= StatusChoices.Length) return;
         if (StatusPending) return;
         var want = StatusChoices[value];
         _requestedStatus = want;

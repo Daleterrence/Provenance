@@ -49,15 +49,6 @@ public sealed class LocalTimeConverter : OneWayConverter
     }
 }
 
-public sealed class NearLimitConverter : IMultiValueConverter
-{
-    public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture) =>
-        values is [int length, int max, ..] && max > 0 && length >= max * 0.9 ? Visibility.Visible : Visibility.Collapsed;
-
-    public object[] ConvertBack(object value, Type[] targetTypes, object? parameter, CultureInfo culture)
-        => throw new NotSupportedException();
-}
-
 public sealed class NullToVisibilityConverter : OneWayConverter
 {
     public override object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)

@@ -445,25 +445,26 @@
                     <Border Grid.Row="2" Padding="12,10" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0"
                             Background="{DynamicResource Surface.1}">
                         <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
+                            <!-- MaxLength's only a backstop, the real limit's 300 bytes -->
                             <TextBox x:Name="ComposeBox" MinHeight="40" MaxHeight="120" FontSize="13"
                                      Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
                                      TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="300"
                                      Style="{StaticResource MaterialDesignOutlinedTextBox}" Padding="10,8"
                                      materialDesign:HintAssist.Hint="Write a message (Enter sends, Shift+Enter adds a line)"
                                      materialDesign:HintAssist.IsFloating="False"
-                                     IsEnabled="{Binding SelectedFriend.CanMessage}" PreviewKeyDown="OnComposeKey">
-                                <!-- the "n/300" count only shows near the limit -->
-                                <materialDesign:TextFieldAssist.CharacterCounterVisibility>
-                                    <MultiBinding Converter="{StaticResource NearLimit}">
-                                        <Binding Path="Text.Length" RelativeSource="{RelativeSource Self}" />
-                                        <Binding Path="MaxLength" RelativeSource="{RelativeSource Self}" />
-                                    </MultiBinding>
-                                </materialDesign:TextFieldAssist.CharacterCounterVisibility>
-                            </TextBox>
+                                     materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
+                                     IsEnabled="{Binding CanCompose}" PreviewKeyDown="OnComposeKey"
+                                     PreviewTextInput="OnComposeInput" DataObject.Pasting="OnComposePaste" />
                             <Button Grid.Column="1" Margin="10,0,0,0" Height="40" VerticalAlignment="Bottom"
                                     Style="{StaticResource AccentRaisedButton}" Command="{Binding SendCommand}" Content="SEND" />
-                            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="2,6,0,0" FontSize="11" TextWrapping="Wrap"
-                                       Foreground="{DynamicResource Text.3}" Text="{Binding ComposeNote}" />
+                            <DockPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="2,6,0,0">
+                                <!-- the "n/300" count only shows near the limit -->
+                                <TextBlock DockPanel.Dock="Right" Margin="10,0,0,0" FontSize="11" Foreground="{DynamicResource Text.3}"
+                                           Text="{Binding ComposeCount}"
+                                           Visibility="{Binding ComposeCountShown, Converter={StaticResource BoolToVis}}" />
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource Text.3}"
+                                           Text="{Binding ComposeNote}" />
+                            </DockPanel>
                         </Grid>
                     </Border>
                 </Grid>

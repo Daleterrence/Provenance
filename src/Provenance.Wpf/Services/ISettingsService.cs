@@ -23,6 +23,9 @@ public interface ISettingsService
 
     // settings.json as it is now, another copy may have saved since
     LauncherSettings? ReadSaved() => null;
+
+    // the lock Save and ReadSaved take, held across both (re-entrant on this thread)
+    IDisposable? HoldLock() => null;
 }
 
 public sealed class LauncherSettings
@@ -77,6 +80,9 @@ public sealed class LauncherSettings
 
     // turning it off couldn't clear pol.exe there and then, so the next start does it, once
     public bool LargeAddressAwareClearAtStart { get; set; }
+
+    // the highest home slot handed out so far, so a removed account's number isn't given to the next one
+    public int LastHomeSlot { get; set; }
 }
 
 public sealed class MultiAccountEntry
@@ -110,4 +116,7 @@ public sealed class Profile
 
     // item name or id, or the entry URL for KeePassXC. Not a secret
     public string OtpItem { get; set; } = "";
+
+    // the viewer folder's pub\homeNN this account's POL files go in, 0 till it's given one
+    public int HomeSlot { get; set; }
 }

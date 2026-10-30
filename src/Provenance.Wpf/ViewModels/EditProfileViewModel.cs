@@ -242,6 +242,11 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             Fail("Log in to edit your profile.");
             return;
         }
+        if (_social.GameRunning)
+        {
+            Fail(SocialViewModel.GameRunningNote);
+            return;
+        }
         Start(Job.Load);
         if (!SocialSnapshot.RequestMyProfile(pid, _token!)) Fail(WriteFailed);
     }
@@ -371,6 +376,11 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanSave))]
     private void Save()
     {
+        if (_social.GameRunning)
+        {
+            Fail(SocialViewModel.GameRunningNote);
+            return;
+        }
         if (_social.SessionPid is not { } pid)
         {
             Fail("Log in to edit your profile.");
@@ -425,6 +435,13 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                     if (name == "z_mail") _savedMail = Mail.Trim();
                     else if (long.TryParse(value, out var v)) _saved[name] = v;
                 _savedLevel = (int)Level;
+                if (_renameAfterSave && _social.GameRunning)
+                {
+                    // Play was pressed while it saved, so the handle stays changed for later
+                    _renameAfterSave = false;
+                    Done("Your profile is saved. The new handle has to wait till FINAL FANTASY XI is closed.");
+                    return;
+                }
                 if (_renameAfterSave)
                 {
                     StartRename(_pid);

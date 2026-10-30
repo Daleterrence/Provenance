@@ -41,6 +41,11 @@ public partial class SocialViewModel
             ProfileNote = "You can only view your friends' profiles.";
             return;
         }
+        if (GameRunning)
+        {
+            ProfileNote = GameRunningNote;
+            return;
+        }
         // the same profile again within 5 mins shows the copy we've got, no second request for a page just read
         if (f.Key.Length > 0 && _profileCache.TryGetValue(f.Key, out var hit) &&
             DateTime.UtcNow - hit.At < TimeSpan.FromMinutes(5))

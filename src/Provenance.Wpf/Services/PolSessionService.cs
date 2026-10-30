@@ -16,8 +16,9 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// Lean is POL_LEAN, a multi-account sign-in with no social side
-public sealed record SessionOptions(bool Lean, string? ThirdPartyHookProfile, int? KeyGeneration = null);
+// Lean is POL_LEAN, a multi-account sign-in with no social side. HomeSlot is POL_HOME, the account's pub\homeNN
+public sealed record SessionOptions(bool Lean, string? ThirdPartyHookProfile, int? KeyGeneration = null,
+                                    int HomeSlot = 0);
 
 public sealed class PolSessionService : IDisposable
 {
@@ -99,7 +100,8 @@ public sealed class PolSessionService : IDisposable
 
     // Has to match prestart_wait's allow-list in pol_hook.c, the hook drops any other key
     private static readonly string[] GoFileKeys =
-        ["POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP", "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_STATUS"];
+        ["POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP", "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_STATUS",
+         "POL_HOME"];
 
     private enum LaunchOutcome { Started, Failed, Refused, Cancelled }
 
@@ -383,6 +385,8 @@ public sealed class PolSessionService : IDisposable
         keys.AddRange([Key("HANDLE"), Key("PLAY")]);
         if (otpTarget != null) env["POL_CRED_OTP"] = otpTarget;
         if (options.Lean) env["POL_LEAN"] = "1";
+        if (HomeSlots.Valid(options.HomeSlot))
+            env["POL_HOME"] = options.HomeSlot.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         if (ct.IsCancellationRequested) return Stopped("The login was cancelled.");
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.02));
@@ -442,6 +446,7 @@ public sealed class PolSessionService : IDisposable
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.04));
         // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its sign-in from it
         DeleteQuietly(SocialSnapshot.PathForPid(pid));
+        DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
         DeleteQuietly(HookFiles.PathFor(pid, "stop"));
         foreach (var ext in RequestFiles)
         {
@@ -497,7 +502,8 @@ public sealed class PolSessionService : IDisposable
             if (ct.IsCancellationRequested) break;   // a cancel that lands with the first snapshot still wins
             if (SocialSnapshot.TryRead(pid) is { } snap)
             {
-                SnapshotUpdated?.Invoke(snap);
+                // the hook writes the store file before its first snapshot, so it's there now even if Play comes next
+                SnapshotUpdated?.Invoke(snap with { Stored = SocialSnapshot.TryReadStore(pid) });
                 StartWatcher(pid);
                 SaveSession(rememberedProfileId);
                 progress?.Report(new LaunchProgress("Connected", "You're logged in.", LaunchSteps.StartGame, 1.0));
@@ -1095,7 +1101,9 @@ public sealed class PolSessionService : IDisposable
     private void ReadSnapshot()
     {
         if (Pid is not { } pid) return;
-        if (SocialSnapshot.TryRead(pid) is { } snap) SnapshotUpdated?.Invoke(snap);
+        // the store file only turns up once, at login, and goes once the app has it
+        if (SocialSnapshot.TryRead(pid) is { } snap)
+            SnapshotUpdated?.Invoke(snap with { Stored = SocialSnapshot.TryReadStore(pid) });
     }
 
     public void Poll()
@@ -1114,6 +1122,7 @@ public sealed class PolSessionService : IDisposable
             try { if (_polProc is { HasExited: true } gone && gone.Id == pid) exit = gone.ExitCode; } catch { }
             Log.Warning("Held PlayOnline session (pid {Pid}) ended on its own (exit code {Exit})", pid, exit);
             DeleteQuietly(SocialSnapshot.PathForPid(pid));
+            DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
             Pid = null;
             _pidStarted = null;
         }
@@ -1203,6 +1212,7 @@ public sealed class PolSessionService : IDisposable
                 try { File.WriteAllText(HookFiles.PathFor(pid, "stop"), "stop"); } catch { }
                 KillIfOurs(pid, p => IsSameProcess(p, started), graceMs: 4000, afterMs: 2000);
                 DeleteQuietly(SocialSnapshot.PathForPid(pid));
+                DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
                 Log.Information("Stopped held PlayOnline session (pid {Pid})", pid);
                 Pid = null;
                 _pidStarted = null;

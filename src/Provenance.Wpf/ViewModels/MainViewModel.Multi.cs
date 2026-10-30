@@ -291,6 +291,7 @@ public partial class MainViewModel : IMultiRunHost
         {
             signIn = await _pol.ConnectAsync(pol, sea, otp, profile.Id, progress, AskHandleName, token,
                                              new SessionOptions(Lean: true, ThirdPartyHookProfile: hookProfile,
+                                                                HomeSlot: HomeSlotFor(profile),
                                                                 KeyGeneration: details.KeyGeneration));
         }
         catch (Exception) when (token.IsCancellationRequested) { return await Stopped(); }

@@ -187,6 +187,26 @@ public partial class SocialWindow : Window
         if (Vm is { } vm && vm.SendCommand.CanExecute(null)) vm.SendCommand.Execute(null);
     }
 
+    // the box stops at 300 bytes (Shift-JIS, what FFXI counts), a paste gets cut to what fits
+    private static string WithoutSelection(TextBox box) => box.Text.Remove(box.SelectionStart, box.SelectionLength);
+
+    private void OnComposeInput(object sender, TextCompositionEventArgs e)
+    {
+        if (sender is not TextBox box) return;
+        var next = WithoutSelection(box).Insert(box.SelectionStart, e.Text);
+        if (PolMessage.TextBytes(next) > PolMessage.MaxTextBytes) e.Handled = true;
+    }
+
+    private void OnComposePaste(object sender, DataObjectPastingEventArgs e)
+    {
+        if (sender is not TextBox box || e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string text) return;
+        int room = PolMessage.MaxTextBytes - PolMessage.TextBytes(WithoutSelection(box));
+        if (PolMessage.TextBytes(text) <= room) return;
+        e.CancelCommand();
+        box.SelectedText = PolMessage.FitBytes(text, Math.Max(0, room));
+        box.CaretIndex = box.SelectionStart + box.SelectionLength;
+    }
+
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
     private void OnMaximize(object sender, RoutedEventArgs e)

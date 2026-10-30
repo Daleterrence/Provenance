@@ -92,6 +92,8 @@ public partial class MainViewModel : ObservableObject
                 changed = true;
             }
         }
+        // an account without a home slot gets one, in list order (the order they were added)
+        changed |= HomeSlots.Assign(_settings.Current);
         if (changed) PersistProfileList();   // no settings write on an ordinary start
         avatars.Prewarm(Profiles.Select(p => p.ProfilePictureId));
 
@@ -401,7 +403,24 @@ public partial class MainViewModel : ObservableObject
         HasSavedCredentials = _credentials.HasUsableDetails(profile.Id);
     }
 
-    private void PersistProfileList() => SaveSetting(s => s.Profiles = Profiles.ToList());
+    // with slots, the settings lock is held from reading another copy's numbers to saving, so two can't give out one
+    private void PersistProfileList(bool slots = false)
+    {
+        using var gate = slots ? _settings.HoldLock() : null;
+        SaveSetting(s =>
+        {
+            s.Profiles = Profiles.ToList();
+            if (slots) HomeSlots.Assign(s, _settings.ReadSaved());
+        });
+    }
+
+    // a login always goes with the account's own home slot, so one without gets it now
+    internal int HomeSlotFor(Profile p)
+    {
+        if (!HomeSlots.Valid(p.HomeSlot) || Profiles.Any(o => o != p && o.HomeSlot == p.HomeSlot))
+            PersistProfileList(slots: true);
+        return p.HomeSlot;
+    }
 
     // only the POL entries' user names get read, no password's decoded
     private Profile? ProfileWithPolId(string polId, Profile? except = null) =>
@@ -446,7 +465,7 @@ public partial class MainViewModel : ObservableObject
             throw;
         }
         Profiles.Add(profile);
-        PersistProfileList();
+        PersistProfileList(slots: true);
         SelectedProfile = profile;
         Log.Information("Added account {Id}", profile.Id);
         return true;
@@ -1057,7 +1076,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             int code = await _pol.ConnectAsync(pol, sea, otp, profile.Id, progress, PromptHandleName, token,
-                                               new SessionOptions(false, null, keyGeneration));
+                                               new SessionOptions(false, null, keyGeneration, HomeSlotFor(profile)));
             await Application.Current!.Dispatcher.InvokeAsync(() => { });   // an empty hop so queued progress reports land first (yes, really)
             if (code == 0)
             {
@@ -1226,10 +1245,13 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         _socialPoll.Stop();
+        // nothing new goes to the hook from here, the game update still applies its answers
+        Social.GameRunning = true;
         IsLaunching = true;
         // like the viewer, the game update comes after the sign-in with the session held meanwhile
         if (!await UpdateGameAsync())
         {
+            Social.GameRunning = false;
             IsLaunching = false;
             _socialPoll.Start();
             return;
@@ -1242,6 +1264,7 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.Error(ex, "Could not signal Play");
+            Social.GameRunning = false;
             IsLaunching = false;
             _socialPoll.Start();
             MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI",
@@ -1253,6 +1276,7 @@ public partial class MainViewModel : ObservableObject
         if (await _pol.WaitForPlayAnswerAsync(PlayAnswerTimeout) is { } failed)
         {
             _gameRunning = false;
+            Social.GameRunning = false;
             _elapsedTimer.Stop();
             IsLaunching = false;
             CloseSocialWindows();
@@ -1268,6 +1292,7 @@ public partial class MainViewModel : ObservableObject
         _elapsedTimer.Stop();
         await _pol.WaitForExitAsync();
         _gameRunning = false;
+        Social.GameRunning = false;
         _pol.GameExited();
         if (_settings.Current.ExitAfterGameExits) { Application.Current.Shutdown(); return; }
         IsLaunching = false;

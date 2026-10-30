@@ -16,7 +16,6 @@
             <conv:LocalTimeConverter x:Key="LocalTimeConverter" />
             <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
             <conv:ArticleTimesConverter x:Key="ArticleTimesConverter" />
-            <conv:NearLimitConverter x:Key="NearLimit" />
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
             <conv:InvertBoolToVisibilityConverter x:Key="InvertBoolToVis" />
             <conv:InvertBoolConverter x:Key="InvertBool" />

@@ -67,7 +67,8 @@ public sealed record PolSearchHit(int Index, string Name, int ProfilePictureId, 
 
 public sealed record PolBlocked(int Index, string Name, string Key, bool AllHandles);
 
-// State is "read" (body downloaded), "pending", "failed" or "realtime"
+// State is "read" (body downloaded), "pending", "failed", "realtime" or "local" (from the game's message store, not
+// on the server any more)
 public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, long Seq, string State,
                                 string Subject, string Text, int Mid = 0, string FromKey = "")
 {
@@ -77,15 +78,59 @@ public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, 
     // the in-memory ids are session-masked, this one's stable
     public string Key => $"{From}|{FromSlot}|{Seq}|{Time}";
 
-    public bool HasBody => State is "read" or "realtime";
+    public bool HasBody => State is "read" or "realtime" or "local";
     public bool IsChat => Kind == 0;
+    public bool IsLocal => State == "local";
     public bool IsMe { get; init; }
+    public bool Read { get; init; }
 
     public const int KindFriendRequest = 1, KindFriendAccepted = 9, KindFriendDeclined = 10;
 
     // 0x12 is the server's "removed from friend group", 0x13 "friend group disbanded"
     public const int KindGroupInvite = 0xe, KindGroupAccepted = 0xf, KindGroupDeclined = 0x10,
                      KindGroupRemoved = 0x12, KindGroupDisbanded = 0x13;
+
+    // FFXI only prints a message's text when it's 300 bytes or less, in the Shift-JIS the hook sends
+    public const int MaxTextBytes = 300;
+
+    private static readonly Encoding Sjis = MakeSjis("??"), SjisOnly = MakeSjis("");
+
+    // the hook's conversion turns anything Shift-JIS hasn't got into a '?', so counting 2 a char never lets one through
+    private static Encoding MakeSjis(string missing)
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        return Encoding.GetEncoding(932, new EncoderReplacementFallback(missing), DecoderFallback.ReplacementFallback);
+    }
+
+    public static int TextBytes(string text) => Sjis.GetByteCount(text.Replace("\r", ""));
+
+    // a character Shift-JIS has as two bytes (Japanese, mostly), not one it hasn't got at all
+    public static bool HasDoubleByte(string text) =>
+        text.Any(c => !char.IsSurrogate(c) && SjisOnly.GetByteCount(new[] { c }) == 2);
+
+    // never half a surrogate pair
+    public static string FitBytes(string text, int bytes)
+    {
+        int used = 0, i = 0;
+        while (i < text.Length)
+        {
+            int len = char.IsSurrogatePair(text, i) ? 2 : 1;
+            int n = text[i] == '\r' ? 0 : Sjis.GetByteCount(text.ToCharArray(i, len));
+            if (used + n > bytes) break;
+            used += n;
+            i += len;
+        }
+        return text[..i];
+    }
+}
+
+public sealed record PolStoredLines(IReadOnlyList<PolMessage> Received, IReadOnlyList<PolSentLine> Sent);
+
+// a line I sent from the game, out of its message store. State is "sent" (s\a) or "unsent" (still in its outbox)
+public sealed record PolSentLine(string To, string ToKey, int ToSlot, long Time, long Seq, string State,
+                                 string Subject, string Text, int Mid = 0)
+{
+    public string Key => $"game:{(ToKey.Length > 0 ? ToKey : To)}|{ToSlot}|{Seq}|{Time}";
 }
 
 // pol_hook.<pid>.social.json, rewritten every couple of secs. FfxiService is the Content ID check ("active", "none",
@@ -134,6 +179,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public string GroupState { get; init; } = "";
     public string MeToken { get; init; } = "";
     public string MeState { get; init; } = "";
+    // the game's message store, read once at login (pol_hook.<pid>.store.json), null when there's none
+    public PolStoredLines? Stored { get; init; }
 
     public static readonly PolSocialSnapshot Empty = new(PolStatus.AppearOffline, 0, "", -1, [], []);
 }
@@ -142,6 +189,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
 public static class SocialSnapshot
 {
     public static string PathForPid(int pid) => HookFiles.PathFor(pid, "social.json");
+
+    public static string StorePathForPid(int pid) => HookFiles.PathFor(pid, "store.json");
 
     public static void SetStatus(int pid, PolStatus status) => WriteRequest(pid, "status", PolStatusText.Code(status).ToString());
 
@@ -296,9 +345,7 @@ public static class SocialSnapshot
                 Str(f, "comment"), PolStatusText.Parse(Str(f, "status")), Bool(f, "online"), Bool(f, "pending"),
                 UInt(f, "idLow"), UInt(f, "idHigh"), Int(f, "row", -1), Int(f, "pic", -1), (int)Long(f, "location"),
                 Str(f, "key")) { IsMe = Bool(f, "me") });
-            var messages = Arr(root, "messages", m => new PolMessage(Str(m, "from"), (int)Long(m, "fromSlot"),
-                (int)Long(m, "kind"), Long(m, "time"), Long(m, "seq"), Str(m, "state"), Str(m, "subject"),
-                Str(m, "text"), (int)Long(m, "mid"), Str(m, "fromKey")) { IsMe = Bool(m, "me") });
+            var messages = Arr(root, "messages", ReadMessage);
             var (sendToken, sendState) = Job(root, "send");
             var (editToken, editState) = Job(root, "edit");
             var (picToken, picState) = Job(root, "pic");
@@ -347,6 +394,10 @@ public static class SocialSnapshot
         }
     }
 
+    private static PolMessage ReadMessage(JsonElement m) =>
+        new(Str(m, "from"), (int)Long(m, "fromSlot"), (int)Long(m, "kind"), Long(m, "time"), Long(m, "seq"), Str(m, "state"),
+            Str(m, "subject"), Str(m, "text"), (int)Long(m, "mid"), Str(m, "fromKey")) { IsMe = Bool(m, "me"), Read = Bool(m, "read") };
+
     private static PolProfile ReadProfile(JsonElement p) =>
         new(Str(p, "name"), Str(p, "mail"), (int)Long(p, "mailState"), Str(p, "hid"), Long(p, "updated"),
             (int)Long(p, "level"),
@@ -363,6 +414,39 @@ public static class SocialSnapshot
 
     private static (string Token, string State) Job(JsonElement e, string n) =>
         Obj(e, n) is { ValueKind: JsonValueKind.Object } o ? (Str(o, "token"), Str(o, "state")) : ("", "");
+
+    public static PolStoredLines? ParseStore(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            return new PolStoredLines(Arr(root, "messages", ReadMessage),
+                Arr(root, "gameSent", s => new PolSentLine(Str(s, "to"), Str(s, "toKey"), (int)Long(s, "toSlot"),
+                    Long(s, "time"), Long(s, "seq"), Str(s, "state"), Str(s, "subject"), Str(s, "text"))));
+        }
+        catch { return null; }
+    }
+
+    // read once and taken (deleted) once it's in the chat log. The hook caps it at 3 MB
+    public static PolStoredLines? TryReadStore(int pid)
+    {
+        var path = StorePathForPid(pid);
+        if (!File.Exists(path)) return null;
+        try
+        {
+            if (new FileInfo(path).Length > 8 * 1024 * 1024) return null;
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var sr = new StreamReader(fs);
+            return ParseStore(sr.ReadToEnd());
+        }
+        catch { return null; }
+    }
+
+    public static void DeleteStore(int pid)
+    {
+        try { File.Delete(StorePathForPid(pid)); } catch { }
+    }
 
     public static PolSocialSnapshot? TryRead(int pid)
     {

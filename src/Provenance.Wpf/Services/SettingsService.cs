@@ -68,8 +68,10 @@ public sealed class SettingsService : ISettingsService
         IDisposable? gate = null;
         try
         {
-            try { gate = AdminLock.TryAcquire(AdminLock.PerUser("settings"), TimeSpan.FromSeconds(3)); }
-            catch (Exception ex) { Log.Warning(ex, "Could not take the settings lock; saving without it"); }
+            gate = HoldLock();
+            // another copy may have given out a slot since this one loaded, a number once given stays given
+            if (ReadSaved() is { } saved && saved.LastHomeSlot > settings.LastHomeSlot)
+                settings.LastHomeSlot = saved.LastHomeSlot;
             File.WriteAllText(tmp, JsonSerializer.Serialize(settings, JsonOptions));
             File.Move(tmp, _path, overwrite: true);
             Log.Debug("Settings saved to {Path}", _path);
@@ -87,12 +89,22 @@ public sealed class SettingsService : ISettingsService
         finally { gate?.Dispose(); }
     }
 
+    public IDisposable? HoldLock()
+    {
+        try { return AdminLock.TryAcquire(AdminLock.PerUser("settings"), TimeSpan.FromSeconds(3), reentrant: true); }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not take the settings lock; going on without it");
+            return null;
+        }
+    }
+
     // Save's move fails while anything has the file open, whatever it shares, so this waits its turn at the same lock
     public LauncherSettings? ReadSaved()
     {
         try
         {
-            using var gate = AdminLock.TryAcquire(AdminLock.PerUser("settings"), TimeSpan.FromMilliseconds(500));
+            using var gate = AdminLock.TryAcquire(AdminLock.PerUser("settings"), TimeSpan.FromMilliseconds(500), reentrant: true);
             if (gate is null || !File.Exists(_path)) return null;
             using var fs = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             return JsonSerializer.Deserialize<LauncherSettings>(fs);
