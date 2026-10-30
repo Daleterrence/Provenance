@@ -454,7 +454,7 @@ public partial class MainViewModel : ObservableObject
         }
         int n = Profiles.Count(p => p.DisplayName.StartsWith("New account", StringComparison.Ordinal));
         var profile = new Profile { DisplayName = n == 0 ? "New account" : $"New account {n + 1}", UseOtp = r.UseOtp,
-                                    OtpSource = r.OtpSource, OtpItem = r.OtpItem };
+                                    OtpSource = r.OtpSource, OtpItem = r.OtpItem, OtpAccount = r.OtpAccount };
         _credentials.SavePolAccount(profile.Id, new PolAccount(r.PolId, r.PolPassword));
         try { _credentials.SaveSeaAccount(profile.Id, new SeaAccount(r.SeaId, r.SeaPassword)); }
         catch
@@ -482,7 +482,7 @@ public partial class MainViewModel : ObservableObject
         _ = _credentials.CheckKeyAsync();
         var r = AccountDialog.Show(Application.Current.MainWindow, p.DisplayName, typed?.UseOtp ?? p.UseOtp, edit: true,
                                    typed?.OtpSource ?? p.OtpSource, typed?.OtpItem ?? p.OtpItem, requireAll: requireAll,
-                                   polId: typed?.PolId ?? "", seaId: typed?.SeaId ?? "");
+                                   polId: typed?.PolId ?? "", seaId: typed?.SeaId ?? "", otpAccount: typed?.OtpAccount ?? p.OtpAccount);
         if (r == null) return false;
         if (r.PolId.Length > 0 && ProfileWithPolId(r.PolId, except: p) is { } same)
         {
@@ -498,7 +498,7 @@ public partial class MainViewModel : ObservableObject
             return EditAccount(requireAll: true, typed: WithoutPasswords(r));
         // read before anything's saved, so the typed details get compared with the saved ones
         var blocked = _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id && e.CredentialsRefused);
-        bool cures = blocked is not null && ChangesSignIn(r, _credentials.ReadIds(p.Id), p.UseOtp, p.OtpSource, p.OtpItem);
+        bool cures = blocked is not null && ChangesSignIn(r, _credentials.ReadIds(p.Id), p.UseOtp, p.OtpSource, p.OtpItem, p.OtpAccount);
         if (polEdit != SideEdit.Keep)
             _credentials.SavePolAccount(p.Id, new PolAccount(r.PolId.Length > 0 ? r.PolId : pol!.PolId,
                                                              r.PolPassword.Length > 0 ? r.PolPassword : pol!.Password));
@@ -508,6 +508,7 @@ public partial class MainViewModel : ObservableObject
         p.UseOtp = r.UseOtp;
         p.OtpSource = r.OtpSource;
         p.OtpItem = r.OtpItem;
+        p.OtpAccount = r.OtpAccount;
         PersistProfileList();
         OtpSources.ForgetKeePassXcIfUnused(Profiles);
         // without a change that can cure the refusal the refused details are still what'd be sent, so the block stays
@@ -548,11 +549,11 @@ public partial class MainViewModel : ObservableObject
         "You didn't change anything that affects logging in, so this account stays turned off for multi-account login.";
 
     internal static bool ChangesSignIn(AccountDialogResult r, (string? PolId, string? SeaId) saved,
-                                       bool useOtp, string otpSource, string otpItem) =>
+                                       bool useOtp, string otpSource, string otpItem, string otpAccount = "") =>
         (r.PolId.Length > 0 && !string.Equals(r.PolId, saved.PolId, StringComparison.OrdinalIgnoreCase))
         || (r.SeaId.Length > 0 && !string.Equals(r.SeaId, saved.SeaId, StringComparison.OrdinalIgnoreCase))
         || r.PolPassword.Length > 0 || r.SeaPassword.Length > 0
-        || r.UseOtp != useOtp || r.OtpSource != otpSource || r.OtpItem != otpItem;
+        || r.UseOtp != useOtp || r.OtpSource != otpSource || r.OtpItem != otpItem || r.OtpAccount != otpAccount;
 
     internal static AccountDialogResult WithoutPasswords(AccountDialogResult typed) =>
         typed with { PolPassword = "", SeaPassword = "" };
@@ -1132,7 +1133,7 @@ public partial class MainViewModel : ObservableObject
     // accounts on one SE ID share an authenticator
     private static string? AskOtp(Window? owner, Profile profile, SeaAccount sea) =>
         OtpDialog.Ask(owner, profile.OtpSource, profile.OtpItem, "sea:" + sea.Username.Trim().ToLowerInvariant(),
-                      sea.Username);
+                      sea.Username, profile.OtpAccount);
 
     // both IDs there means the entries exist but won't unwrap (a key that's gone, say)
     internal static string MissingDetailsText((string? PolId, string? SeaId) ids) =>

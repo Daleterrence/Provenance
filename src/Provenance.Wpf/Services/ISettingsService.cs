@@ -119,4 +119,7 @@ public sealed class Profile
 
     // the viewer folder's pub\homeNN this account's POL files go in, 0 till it's given one
     public int HomeSlot { get; set; }
+
+    // the 1Password account that holds the item, "" lets op pick
+    public string OtpAccount { get; set; } = "";
 }

@@ -10,18 +10,21 @@ public partial class OtpDialog : Window
 {
     private string? _code;
     private readonly TextBox[] _boxes = new TextBox[6];
-    private readonly string _source, _item, _reuseKey, _seaId;
+    private readonly string _source, _item, _account, _reuseKey, _seaId;
     private CancellationTokenSource? _fetch;
+    private OtpFix _fix;
+    private string? _installTool;
     private bool _sending;
     private bool _closed;
 
-    internal static OtpDialog ForTest(string reuseKey) => new("", "", reuseKey, "");
+    internal static OtpDialog ForTest(string reuseKey) => new("", "", "", reuseKey, "");
 
-    private OtpDialog(string source, string item, string reuseKey, string seaId)
+    private OtpDialog(string source, string item, string account, string reuseKey, string seaId)
     {
         _seaId = seaId;
         _source = source;
         _item = item;
+        _account = account;
         _reuseKey = reuseKey;
         InitializeComponent();
         WindowFrame.Attach(this);
@@ -62,9 +65,10 @@ public partial class OtpDialog : Window
     }
 
     // reuseKey (the SE ID) names the authenticator, so one code never goes out twice
-    public static string? Ask(Window? owner, string source = "", string item = "", string reuseKey = "", string seaId = "")
+    public static string? Ask(Window? owner, string source = "", string item = "", string reuseKey = "", string seaId = "",
+                              string account = "")
     {
-        var dlg = new OtpDialog(source, item, reuseKey, seaId);
+        var dlg = new OtpDialog(source, item, account, reuseKey, seaId);
         if (owner is { IsVisible: true }) dlg.Owner = owner;
         else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         return dlg.ShowDialog() == true ? dlg._code : null;
@@ -204,10 +208,11 @@ public partial class OtpDialog : Window
         SourcePanel.Visibility = Visibility.Visible;
         SourceSpinner.Visibility = Visibility.Visible;
         MasterPanel.Visibility = RetryButton.Visibility = Visibility.Collapsed;
-        SourceText.Text = $"Getting the code from {name}...";
+        _installTool = null;
+        SourceText.Text = _source == OtpSources.OnePassword ? OtpSources.OnePasswordWaitText : $"Getting the code from {name}...";
         _fetch?.Cancel();
         var mine = _fetch = new CancellationTokenSource();
-        var r = await OtpSources.FetchAsync(_source, _item, _seaId, masterPassword, mine.Token);
+        var r = await OtpSources.FetchAsync(_source, _item, _account, _seaId, masterPassword, mine.Token);
         // same code as the account before (one authenticator), so wait for the next one
         for (int tries = 0; r.Code is { } used && _reuseKey.Length > 0 && await OtpReuse.WasUsedAsync(_reuseKey, used) && tries < 3; tries++)
         {
@@ -215,7 +220,7 @@ public partial class OtpDialog : Window
             SourceText.Text = $"The code from {name} was just used for another account. Waiting for the next code...";
             try { await Task.Delay(TimeSpan.FromSeconds(OtpReuse.SecondsToNextCode()), mine.Token); }
             catch (OperationCanceledException) { return; }
-            r = await OtpSources.FetchAsync(_source, _item, _seaId, null, mine.Token);
+            r = await OtpSources.FetchAsync(_source, _item, _account, _seaId, null, mine.Token);
         }
         if (!IsVisible || _code != null) return;
         if (mine != _fetch || mine.IsCancellationRequested) return;   // a newer attempt owns the screen
@@ -231,13 +236,76 @@ public partial class OtpDialog : Window
             finally { Busy = false; }
             return;
         }
-        if (r.Code != null) r = r with { Code = null, Problem = $"{name} kept giving a code that's already been used." };
-        SourceText.Text = r.Problem + " You can also type the code in yourself.";
-        if (r.NeedsMasterPassword) { MasterPanel.Visibility = Visibility.Visible; MasterBox.Focus(); }
-        else { RetryButton.Content = $"ASK {name.ToUpperInvariant()} AGAIN"; RetryButton.Visibility = Visibility.Visible; }
+        if (r.Code != null) r = r with { Code = null, Problem = $"{name} kept giving a code that's already been used.", Fix = OtpFix.TryAgain };
+        ShowProblem(r.Problem ?? "", r.Fix, r.Tool);
     }
 
-    private void OnRetry(object sender, RoutedEventArgs e) => _ = FetchAsync(null);
+    // one plain line and the button that fixes it. The boxes stay open for typing whatever it says
+    internal void ShowProblem(string text, OtpFix fix, string? tool = null, string? label = null)
+    {
+        SourcePanel.Visibility = Visibility.Visible;
+        SourceSpinner.Visibility = MasterPanel.Visibility = Visibility.Collapsed;
+        SourceText.Text = text;
+        _fix = fix;
+        _installTool = tool;
+        if (fix == OtpFix.MasterPassword)
+        {
+            RetryButton.Visibility = Visibility.Collapsed;
+            MasterPanel.Visibility = Visibility.Visible;
+            if (IsVisible) MasterBox.Focus();
+            return;
+        }
+        RetryButton.Content = label ?? fix switch
+        {
+            OtpFix.Install => "INSTALL IT",
+            OtpFix.OpenOnePasswordSettings => "OPEN 1PASSWORD SETTINGS",
+            OtpFix.TypeInstead => "TYPE THE CODE INSTEAD",
+            _ => "TRY AGAIN",
+        };
+        RetryButton.Visibility = Visibility.Visible;
+    }
+
+    private void OnRetry(object sender, RoutedEventArgs e)
+    {
+        switch (_fix)
+        {
+            case OtpFix.Install when _installTool is { } tool:
+                _ = InstallAsync(tool);
+                break;
+            case OtpFix.OpenOnePasswordSettings:
+                // the button asks again once 1Password's open
+                ShowProblem(OtpSources.OpenOnePasswordSettings() ? SourceText.Text : OtpSources.OpenSettingsFailedText, OtpFix.TryAgain);
+                break;
+            case OtpFix.TypeInstead:
+                SourcePanel.Visibility = Visibility.Collapsed;
+                _boxes[0].Focus();
+                break;
+            default:
+                _ = FetchAsync(null);
+                break;
+        }
+    }
+
+    // a fresh copy goes straight on to the code. Closing the dialog stops the download
+    private async Task InstallAsync(string tool)
+    {
+        _fetch?.Cancel();
+        var mine = _fetch = new CancellationTokenSource();
+        RetryButton.Visibility = Visibility.Collapsed;
+        SourceSpinner.Visibility = Visibility.Visible;
+        SourceText.Text = CliTools.DownloadingText(tool);
+        ToolInstall r;
+        try { r = await CliTools.InstallAsync(tool, null, mine.Token); }
+        catch (OperationCanceledException) { return; }
+        if (!IsVisible || _code != null || mine != _fetch || mine.IsCancellationRequested) return;
+        if (r == ToolInstall.Installed)
+        {
+            _ = FetchAsync(null);
+            return;
+        }
+        if (r == ToolInstall.NotSupported) ShowProblem(CliTools.ResultText(tool, r), OtpFix.TypeInstead);
+        else ShowProblem(CliTools.ResultText(tool, r), OtpFix.Install, tool, "TRY AGAIN");
+    }
 
     private void OnUnlock(object sender, RoutedEventArgs e)
     {
