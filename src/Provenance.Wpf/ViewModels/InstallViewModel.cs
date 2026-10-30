@@ -186,22 +186,30 @@ public partial class InstallViewModel : ObservableObject
         if (SettingsViewModel.PickFolder("Choose where to keep the downloaded installer") is { } d) DownloadFolder = d;
     }
 
-    // its files run as admin, so it's an admin-only ffxi-download folder (the chosen one if it's already that), and a
-    // stranger's folder with the same name gets skipped
-    private string LockWorkFolder(IEnumerable<string> ownNames)
+    // its files run as admin, so it's an admin-only ffxi-download folder in a folder only admins can change, both held
+    // until the install ends. A stranger's folder with the same name gets skipped
+    private SecureFiles.WorkFolder LockWorkFolder(IEnumerable<string> ownNames)
     {
         var chosen = Path.TrimEndingDirectorySeparator(Path.GetFullPath(DownloadFolder));
-        var candidates = new List<string>();
-        if (Path.GetFileName(chosen).Equals("ffxi-download", StringComparison.OrdinalIgnoreCase)) candidates.Add(chosen);
-        candidates.Add(Path.Combine(chosen, "ffxi-download"));
-        for (int i = 2; i <= 9; i++) candidates.Add(Path.Combine(chosen, $"ffxi-download-{i}"));
-        var names = ownNames.ToList();
-        foreach (var c in candidates)
+        if (!PathSafety.OnLocalFixedDrive(chosen))
         {
-            if (SecureFiles.LockFolder(c, names)) return c;
-            Log.Warning("{Folder} was not made by Provenance; it is left alone", c);
+            Log.Warning("Download folder {Folder} refused: it isn't on a fixed drive in this PC", chosen);
+            throw Shown.Mark(new InvalidOperationException(
+                "The download folder has to be on a drive in this PC, not a network or removable one. " +
+                "Choose another folder, such as C:\\ProgramData\\Provenance."));
         }
-        throw Shown.Mark(new InvalidOperationException($"Provenance couldn't make its own folder in {chosen}. Choose another download folder."));
+        try
+        {
+            return SecureFiles.HoldWorkFolder(chosen, ownNames.ToList(), PathSafety.AdminOnlyProblem)
+                   ?? throw Shown.Mark(new InvalidOperationException($"Provenance couldn't make its own folder in {chosen}. Choose another download folder."));
+        }
+        catch (SecureFiles.FolderRefusedException e)
+        {
+            Log.Warning("Download folder {Folder} refused: {Why}", chosen, e.Message);
+            throw Shown.Mark(new InvalidOperationException(
+                "The installer runs as admin, so its download folder has to be one only administrators can change. " +
+                "Choose another folder, such as C:\\ProgramData\\Provenance."));
+        }
     }
 
     private object? _barStep;
@@ -265,6 +273,7 @@ public partial class InstallViewModel : ObservableObject
         // the download takes hours on a slow line, and Windows mustn't sleep in the middle of it
         SetThreadExecutionState(EsContinuous | EsSystemRequired);
         bool held = false;
+        SecureFiles.WorkFolder? workFolder = null;
         try
         {
             StageIndeterminate = true;
@@ -296,7 +305,8 @@ public partial class InstallViewModel : ObservableObject
             var parts = GameInstaller.PartsFor(_region).ToList();
             var ownNames = parts.SelectMany(p => new[] { p.FileName, p.FileName + ".part" }).Concat(new[] { "unpacked", "logs", MirrorFolder });
             Detail = "Checking the download folder...";
-            var work = await Task.Run(() => LockWorkFolder(ownNames), ct);
+            workFolder = await Task.Run(() => LockWorkFolder(ownNames), ct);
+            var work = workFolder.Path;
             if (await InstallFromMirrorAsync(work, ct)) return;
             var unpacked = Path.Combine(work, "unpacked");
             string root;
@@ -396,6 +406,7 @@ public partial class InstallViewModel : ObservableObject
                 try { _releasePrestarts(); }
                 catch (Exception e) { Log.Warning(e, "Could not let pre-starts go again after the install"); }
             }
+            workFolder?.Dispose();
             SetThreadExecutionState(EsContinuous);
             _meter.Clear();
             StageIndeterminate = false;

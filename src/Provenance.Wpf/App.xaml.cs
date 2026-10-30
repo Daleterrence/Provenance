@@ -36,6 +36,8 @@ public partial class App : Application
             .CreateLogger();
 
         Log.Information("Provenance starting");
+        // before anything's written to ProgramData, so Provenance's own files never look planted to the folder check
+        if (!SecureFiles.OwnNewFilesAsAdministrators()) Log.Warning("New files won't be Administrators' if this PC's policy says otherwise");
         if (Program.VelopackStartError is { } velopackError)
             Log.Warning(velopackError, "Velopack start-up failed");
         LaunchArgs.Parse(e.Args);
