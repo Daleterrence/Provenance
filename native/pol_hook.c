@@ -4838,7 +4838,7 @@ static int g_game_started;
 static void __cdecl ffxi_returned(HRESULT hr)
 {
     if (!g_game_started) return;
-    if (hr) {
+    if (FAILED(hr)) {
         lg("pol_hook: GameStart failed hr=%08x - ending pol.exe (exit %d)\r\n", (unsigned)hr, GAME_START_EXIT);
         game_over(GAME_START_EXIT);
     } else {

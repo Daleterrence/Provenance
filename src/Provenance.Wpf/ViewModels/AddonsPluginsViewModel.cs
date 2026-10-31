@@ -36,7 +36,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     private readonly Func<AddonsTarget> _target;
     private readonly WindowerInstaller _install;
     private readonly AddonsHeading _addonsHeading = new("Addons"), _pluginsHeading = new("Plugins"),
-        _polHeading = new("PlayOnline plugins", "Ashita's polplugins, which load into PlayOnline before the game starts."), _end = new(null);
+        _polHeading = new("PlayOnline plugins", "Plugins Ashita loads into PlayOnline before the game starts."), _end = new(null);
     private AddonsTarget? _shown;
     private object? _scan;
     private Page? _page;
@@ -89,7 +89,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     partial void OnNoAddonsChanged(string? value) => _addonsHeading.Note = value;
     partial void OnNoPluginsChanged(string? value) => _pluginsHeading.Note = value;
-    partial void OnNoPolPluginsChanged(string? value) => _polHeading.Note = value;
 
     internal Task Refreshing { get; private set; } = Task.CompletedTask;
 
@@ -173,7 +172,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         CanChangeUseGlobal = !(page.UseGlobal && page.ListLocked);
         var who = page.Key.Length == 0 ? "the default profile" : page.Key;
         UseGlobalHelp = page.UseGlobal
-            ? $"This is the list in Windower's own settings, which Windower's launcher uses for every profile too. Turn this off to give {who} a list of its own."
+            ? $"This is the list in Windower's own settings, which Windower's own launcher uses for every profile too. Turn this off to give {who} a list of its own."
             : $"{(page.Key.Length == 0 ? "The default profile" : page.Key)} has a list of its own. Turn this on to use the list in Windower's own settings again.";
         Fill(Addons, page.Addons);
         Fill(Plugins, page.Plugins);
@@ -199,6 +198,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         NoAddons = Nothing(Addons, _page?.NoAddons);
         NoPlugins = Nothing(Plugins, _page?.NoPlugins);
         NoPolPlugins = Nothing(PolPlugins, _page?.NoPolPlugins);
+        _polHeading.Note = NoPolPlugins ?? (PolPlugins.Any(r => r.Visible && r.Incompatible) ? ThirdPartyHookService.IncompatibleNote : null);
         // hidden rows stay out of the list altogether, a collapsed one still costs the panel a container
         List<object> items = [this];
         if (HasLists)
@@ -657,21 +657,17 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
         var pol = boot.PolPlugins;
         AshitaLoad PolState(string n) => pol.Any(p => Same(p.Name, n) && p.On) ? AshitaLoad.On : AshitaLoad.Off;
-        var polRows = new List<RowData>();
-        foreach (var p in scan.Plugins.Where(p => p.Kind == AshitaPluginKind.PolPlugin))
-        {
-            if (AshitaBootFiles.IsTakeover(p.LoadName))
-                polRows.Add(new RowData(AddonKind.PolPlugin, p.LoadName, p.LoadName, null, null, null)
-                {
-                    HasSwitch = false, CanChange = false, Badges = [Badges.NotWithProvenance],
-                });
-            else polRows.Add(Row(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, p.Description, PolState(p.LoadName), true,
-                                 p.ForOtherAshita ? Badges.OtherAshita : null));
-        }
+        var polFound = scan.Plugins.Where(p => p.Kind == AshitaPluginKind.PolPlugin).ToList();
+        // a switched-off one shows off whatever the boot configuration says, as it is when Provenance starts the game
+        var polRows = polFound.Select(p => AshitaBootFiles.IsTakeover(p.LoadName)
+            ? new RowData(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, ThirdPartyHookService.IncompatibleReason(p.LoadName))
+                { CanChange = false, Incompatible = true, Badges = [Badges.Incompatible] }
+            : Row(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, p.Description, PolState(p.LoadName), true,
+                  p.ForOtherAshita ? Badges.OtherAshita : null)).ToList();
         var turnedOn = pol.Where(p => p.On && !AshitaBootFiles.IsTakeover(p.Name)).Select(p => p.Name);
-        polRows.AddRange(Missing(turnedOn, scan.Plugins.Where(p => p.Kind == AshitaPluginKind.PolPlugin).Select(p => p.LoadName))
+        polRows.AddRange(Missing(turnedOn, polFound.Select(p => p.LoadName))
             .Select(n => Row(AddonKind.PolPlugin, n, n, null, null, null, AshitaLoad.On, false)));
-        page.PolPlugins = polRows.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        page.PolPlugins = polRows.OrderBy(r => r.Incompatible).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
 
         page.NoAddons = $"No addons found in {Path.Combine(dir, "addons")}.";
         page.NoPlugins = $"No plugins found in {Path.Combine(dir, "plugins")}.";
@@ -718,10 +714,9 @@ public partial class AddonsPluginsViewModel : ObservableObject
             "This addon was written for Windower or an older Ashita, so it won't run in Ashita v4.", Warn: true);
         public static readonly AddonBadge OtherAshita = new("Built for a different Ashita",
             "This plugin was built for a different version of Ashita, so Ashita won't load it.", Warn: true);
+        public static readonly AddonBadge Incompatible = new(ThirdPartyHookService.IncompatibleText, ThirdPartyHookService.IncompatibleNote, Warn: true);
         public static readonly AddonBadge BadName = new("Name Ashita can't load",
             "Ashita can't load a name like this one from a script or boot configuration. Rename it to plain letters and numbers to use it.", Warn: true);
-        public static readonly AddonBadge NotWithProvenance = new("Not available with Provenance",
-            "Provenance logs you in itself, so this is always off when Provenance starts Ashita.", Warn: true);
     }
 }
 
@@ -738,6 +733,7 @@ internal sealed record RowData(AddonKind Kind, string Key, string Name, string? 
     public bool HasSwitch { get; init; } = true;
     public bool CanChange { get; init; } = true;
     public bool CanInstall { get; init; }
+    public bool Incompatible { get; init; }
     public IReadOnlyList<AddonBadge> Badges { get; init; } = [];
 }
 
@@ -764,6 +760,7 @@ public sealed partial class AddonRow : ObservableObject
     [ObservableProperty] private bool _hasSwitch;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _canChange;
     [ObservableProperty] private bool _canInstall;
+    [ObservableProperty] private bool _incompatible;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _installing;
     [ObservableProperty] private bool _visible = true;
     private string? _author;
@@ -792,6 +789,7 @@ public sealed partial class AddonRow : ObservableObject
         HasSwitch = d.HasSwitch;
         CanChange = d.CanChange;
         CanInstall = d.CanInstall;
+        Incompatible = d.Incompatible;
         if (_on != d.On)
         {
             _on = d.On;

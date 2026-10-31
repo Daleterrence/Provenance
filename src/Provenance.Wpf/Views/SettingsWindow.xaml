@@ -362,10 +362,10 @@
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock Text="POL plugins" Style="{StaticResource Section}" />
+                            <TextBlock Text="PlayOnline plugins" Style="{StaticResource Section}" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding AshitaCardEnabled}">
                                 <StackPanel Margin="0,4">
-                                    <TextBlock Text="This boot configuration doesn't list any POL plugins." Margin="0,6">
+                                    <TextBlock Text="This boot configuration doesn't list any PlayOnline plugins." Margin="0,6">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock" BasedOn="{StaticResource Help}">
                                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -387,6 +387,17 @@
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
+                                    <TextBlock Text="{Binding AshitaIncompatibleNote}" Margin="0,6,0,8">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Help}">
+                                                <Style.Triggers>
+                                                    <Trigger Property="Text" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                     <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,4,0,8" Foreground="{DynamicResource State.Warn}"
                                                Visibility="{Binding AshitaSandboxOn, Converter={StaticResource BoolToVis}}"
                                                Text="With sandbox on, the game only gets the game settings saved in this boot configuration. Set them on the Game page and save them there." />
@@ -596,13 +607,25 @@
                                         <TextBlock Text="{Binding ProfileShown}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Style="{StaticResource Help}" Margin="0,4,0,0"
                                                    Text="{Binding ProfileHelp}" />
+                                        <TextBlock Text="{Binding ReadOnlyNote}" TextWrapping="Wrap" FontSize="12" Margin="0,8,0,0"
+                                                   Foreground="{DynamicResource State.Warn}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <Trigger Property="Text" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </StackPanel>
                                 </Grid>
                             </Border>
 
                             <!-- only the cards need the game's saved settings, a broken install may have none -->
                             <TextBlock Text="Display" Style="{StaticResource Section}" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Available}">
+                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Resolution" views:SettingNote.Shared="{Binding AppliesToAll[Resolution]}">
                                         <ComboBox ItemsSource="{Binding Resolutions}" SelectedItem="{Binding Resolution}" />
@@ -634,7 +657,7 @@
                             </Border>
 
                             <TextBlock Text="Graphics" Style="{StaticResource Section}" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Available}">
+                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Quick preset" Tag="A preset changes the graphics settings below in one go. Press Save to keep the changes.">
                                         <UniformGrid Rows="1" Columns="3">
@@ -674,7 +697,7 @@
                             </Border>
 
                             <TextBlock Text="Sound" Style="{StaticResource Section}" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Available}">
+                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Sound" views:SettingNote.Shared="{Binding AppliesToAll[Sound]}">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding Sound}" />
@@ -696,7 +719,7 @@
                             </Border>
 
                             <TextBlock Text="Gamepad" Style="{StaticResource Section}" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Available}">
+                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Gamepad" views:SettingNote.Shared="{Binding AppliesToAll[Pad]}">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadEnabled}" />
@@ -726,7 +749,7 @@
                             </Border>
 
                             <TextBlock Text="Other" Style="{StaticResource Section}" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Available}">
+                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Opening movie" views:SettingNote.Shared="{Binding AppliesToAll[OpeningMovie]}" Tag="When this is on, the game plays its opening movie each time it starts.">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding OpeningMovie}" />
@@ -754,17 +777,19 @@
                                                     Command="{Binding BrowseScreenshotsCommand}" />
                                         </Grid>
                                     </StackPanel>
-                                    <HeaderedContentControl Header="Legacy settings" views:SettingNote.Shared="{Binding AppliesToAll[LegacySettings]}" Tag="Turn this on to change the three older settings below. Turning it off clears them.">
+                                    <HeaderedContentControl Header="Legacy settings" views:SettingNote.Shared="{Binding AppliesToAll[LegacySettings]}" Tag="{Binding LegacyHelp}">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding LegacySettings}" />
                                     </HeaderedContentControl>
-                                    <StackPanel Margin="20,0,0,0" IsEnabled="{Binding LegacySettings}">
-                                        <HeaderedContentControl Header="Hardware mouse cursor" views:SettingNote.Shared="{Binding AppliesToAll[HardwareMouse]}">
+                                    <!-- each row's enabled on its own, a Windower profile's hardware mouse doesn't need Legacy settings -->
+                                    <StackPanel Margin="20,0,0,0">
+                                        <HeaderedContentControl Header="Hardware mouse cursor" views:SettingNote.Shared="{Binding AppliesToAll[HardwareMouse]}"
+                                                                IsEnabled="{Binding HardwareMouseEnabled}" Tag="{Binding HardwareMouseHelp}">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding HardwareMouse}" />
                                         </HeaderedContentControl>
-                                        <HeaderedContentControl Header="Simple character select" views:SettingNote.Shared="{Binding AppliesToAll[SimpleCharSelect]}" Tag="When this is on, the character select screen shows still pictures instead of 3D models.">
+                                        <HeaderedContentControl Header="Simple character select" views:SettingNote.Shared="{Binding AppliesToAll[SimpleCharSelect]}" IsEnabled="{Binding LegacySettings}" Tag="When this is on, the character select screen shows still pictures instead of 3D models.">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding SimpleCharSelect}" />
                                         </HeaderedContentControl>
-                                        <HeaderedContentControl Header="Graphics card fix" views:SettingNote.Shared="{Binding AppliesToAll[GraphicsFix]}" Tag="This setting is also called Graphics Stabilization. It can help the game run properly on some graphics cards.">
+                                        <HeaderedContentControl Header="Graphics card fix" views:SettingNote.Shared="{Binding AppliesToAll[GraphicsFix]}" IsEnabled="{Binding LegacySettings}" Tag="This setting is also called Graphics Stabilization. It can help the game run properly on some graphics cards.">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GraphicsFix}" />
                                         </HeaderedContentControl>
                                     </StackPanel>
@@ -780,10 +805,10 @@
                                        Style="{StaticResource StatusText}" VerticalAlignment="Center"
                                        TextWrapping="Wrap" FontSize="12" Margin="0,0,12,0" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Button Content="DEFAULTS" Style="{StaticResource MaterialDesignFlatButton}" Command="{Binding DefaultsCommand}" Margin="0,0,6,0" IsEnabled="{Binding Available}" />
-                                <Button Content="REVERT" Style="{StaticResource MaterialDesignOutlinedButton}" Command="{Binding RevertCommand}" Margin="0,0,8,0" IsEnabled="{Binding Available}" />
+                                <Button Content="DEFAULTS" Style="{StaticResource MaterialDesignFlatButton}" Command="{Binding DefaultsCommand}" Margin="0,0,6,0" IsEnabled="{Binding Editable}" />
+                                <Button Content="REVERT" Style="{StaticResource MaterialDesignOutlinedButton}" Command="{Binding RevertCommand}" Margin="0,0,8,0" IsEnabled="{Binding Editable}" />
                                 <Button Content="SAVE" Width="100" Style="{StaticResource AccentRaisedButton}"
-                                        Command="{Binding SaveCommand}" IsEnabled="{Binding Available}" />
+                                        Command="{Binding SaveCommand}" IsEnabled="{Binding Editable}" />
                             </StackPanel>
                         </Grid>
                     </Border>

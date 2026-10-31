@@ -22,6 +22,8 @@ public interface IGameSettingsStore
     string? ProfileName { get; }
     string? ProfileDisplay { get; }
     bool SameShapeRenderSizes { get; }
+    // shown, but never saved to
+    bool ReadOnly { get; }
 
     // throws when there's nothing to load, Shown with the reason
     GameStoreLoad Load();
@@ -116,6 +118,7 @@ public sealed class RegistryGameStore(PolRegion? region, Func<bool, RegistryKey?
     public string? ProfileName => null;
     public string? ProfileDisplay => null;
     public bool SameShapeRenderSizes => false;
+    public bool ReadOnly => false;
 
     private RegistryKey? Open(bool write)
     {
@@ -159,6 +162,7 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
     public string? ProfileName => profileName;
     public string? ProfileDisplay => display ?? (profileName.Length == 0 ? "Default" : profileName);
     public bool SameShapeRenderSizes => true;
+    public bool ReadOnly => false;
 
     private WindowerProfile Profile(WindowerSettingsFile file) =>
         file.Find(profileName) ?? (profileName.Length == 0 ? file.Unnamed ?? new WindowerProfile() : null)
@@ -255,6 +259,7 @@ public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryG
     public string? ProfileName => bootName;
     public string? ProfileDisplay => bootName;
     public bool SameShapeRenderSizes => false;
+    public bool ReadOnly => AshitaBootFiles.IsShippedExample(bootName);
 
     private string PathOf()
     {

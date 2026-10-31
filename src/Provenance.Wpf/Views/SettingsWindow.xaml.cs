@@ -60,6 +60,7 @@ public partial class SettingsWindow : Window
         for (int i = 0; FindName($"Panel{i}") is UIElement panel; i++)
             panel.Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
         if (index == 0) ReadLargeAddressAware();
+        if (index == 1 && DataContext is ViewModels.SettingsViewModel hooks) hooks.ShowingHooks();
     }
 
     // Windower can change pol.exe while this window's open, so it's read again on every show and every switch back

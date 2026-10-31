@@ -19,7 +19,9 @@ namespace Provenance.Wpf.Services;
 
 // Lean is POL_LEAN, a multi-account sign-in with no social side. HomeSlot is POL_HOME, the account's pub\homeNN
 public sealed record SessionOptions(bool Lean, string? ThirdPartyHookProfile, int? KeyGeneration = null,
-                                    int HomeSlot = 0);
+                                    int HomeSlot = 0, IReadOnlyDictionary<string, WindowerAddonList>? WindowerLists = null);
+
+internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? problem);
 
 public sealed class PolSessionService : IDisposable
 {
@@ -169,7 +171,7 @@ public sealed class PolSessionService : IDisposable
         FindLaunchFiles = () => LaunchFiles(Region);
         GameIsInstalled = () => GameInstalled(Region);
         UpdateViewer = (dir, progress, freeFiles, ct) => PolUpdates.UpdateViewer(dir, Region, progress, freeFiles, ct);
-        WindowerSetup = (polExe, profile) => WindowerLaunch.SetupFor(_settings, polExe, profile);
+        WindowerSetup = (polExe, profile, lists) => WindowerLaunch.SetupFor(_settings, polExe, profile, lists);
         DeleteLeftovers();
         _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
     }
@@ -182,7 +184,10 @@ public sealed class PolSessionService : IDisposable
     internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
     internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; }
     internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
-    internal Func<string, string?, WindowerLaunchSetup> WindowerSetup { get; init; }
+    internal Func<bool> AnyPolRunningNow { get; init; } = AnyPolRunning;
+    internal Func<bool?> WindowsScreenSaver { get; init; } = ReadScreenSaver;
+    internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerLaunchSetup> WindowerSetup { get; init; }
+    internal HoldViewerFiles HoldViewer { get; init; } = ViewerBuild.Hold;
     internal RegistryKey? WindowerRegistryRoot { get; init; }
     internal Func<Prestarted, bool> PrestartAlive { get; init; } = pre =>
     {
@@ -264,15 +269,19 @@ public sealed class PolSessionService : IDisposable
         if (Volatile.Read(ref _played))
             throw Shown.Mark(new InvalidOperationException("Provenance is still finishing your last game. Close Provenance and open it again, then log in."));
         LastRefusalReason = null;
+        var launch = ForLaunch(options);
         int rc = ErrorLauncherFailed;
         try
         {
-            rc = await Task.Run(() => ConnectCore(pol, sea, otp, rememberedProfileId, progress, askHandleName,
-                                                  options ?? new SessionOptions(false, null), ct), ct);
+            rc = await Task.Run(() => ConnectCore(pol, sea, otp, rememberedProfileId, progress, askHandleName, launch, ct), ct);
             return rc;
         }
         finally { if (rc != 0) ReleaseClaim(); }
     }
+
+    // on the UI thread, where Settings changes the live addon lists while the login carries on in the background
+    internal SessionOptions ForLaunch(SessionOptions? options) =>
+        (options ?? new SessionOptions(false, null)) with { WindowerLists = WindowerLaunch.Snapshot(_settings.Current.WindowerAddonLists) };
 
     private int ConnectCore(PolAccount pol, SeaAccount sea, string otp, string? rememberedProfileId,
                             IProgress<LaunchProgress>? progress, Func<string?>? askHandleName, SessionOptions options,
@@ -320,8 +329,9 @@ public sealed class PolSessionService : IDisposable
         }
         // after the viewer's update and before the hold, which stops any write
         LargeAddressAwareBeforeStart(viewerDir!, "before the login");
+        NoteScreenSaverNow();
         // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the sign-in ends
-        using var viewerHold = ViewerBuild.Hold(viewerDir!, out var buildProblem);
+        using var viewerHold = HoldViewer(viewerDir!, out var buildProblem);
         if (buildProblem != null)
         {
             Log.Warning("Viewer build not supported: {Problem}", buildProblem);
@@ -413,7 +423,7 @@ public sealed class PolSessionService : IDisposable
         }
         else if (platform == ThirdPartyHookService.Windower)
         {
-            if (StartThroughWindower(psi, polExe, options.ThirdPartyHookProfile, _launchId!, progress, ct) is not { } started)
+            if (StartThroughWindower(psi, polExe, options.ThirdPartyHookProfile, _launchId!, progress, ct, options.WindowerLists) is not { } started)
                 return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
             pid = started;
         }
@@ -528,10 +538,11 @@ public sealed class PolSessionService : IDisposable
 
     // null once progress has said why
     internal int? StartThroughWindower(ProcessStartInfo psi, string polExe, string? profile, string launchId,
-                                       IProgress<LaunchProgress>? progress, CancellationToken ct)
+                                       IProgress<LaunchProgress>? progress, CancellationToken ct,
+                                       IReadOnlyDictionary<string, WindowerAddonList>? lists)
     {
         WindowerLaunch windower;
-        try { windower = WindowerLaunch.Prepare(WindowerSetup(polExe, profile), progress, ct); }
+        try { windower = WindowerLaunch.Prepare(WindowerSetup(polExe, profile, lists), progress, ct); }
         catch (OperationCanceledException)
         {
             progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
@@ -601,6 +612,9 @@ public sealed class PolSessionService : IDisposable
     private void LargeAddressAwareBeforeStart(string viewerDir, string when) =>
         LargeAddressAwareSwitch.Apply(_settings, new LargeAddressAwareSwitch.Target(viewerDir, ViewerPolRunning, () => null, () => null), when);
 
+    // Provenance can sit in the tray for days, so the screen saver's read again before every pol.exe start
+    private void NoteScreenSaverNow() => NoteScreenSaver(_settings, AnyPolRunningNow, WindowsScreenSaver);
+
     internal static ProcessStartInfo LauncherStart(string launcherExe, string polExe)
     {
         var psi = new ProcessStartInfo(launcherExe)
@@ -624,8 +638,8 @@ public sealed class PolSessionService : IDisposable
         if (ScreenSaverAtStart is { } saver) env["POL_SCREENSAVER"] = saver;
     }
 
-    // pol.exe switches the screen saver off while it runs, so it's read once before any start and the last pol.exe
-    // out puts it back
+    // pol.exe switches the screen saver off while it runs, so it's read before each start and the last pol.exe out puts
+    // it back
     internal static string? ScreenSaverAtStart { get; set; }
 
     internal static void NoteScreenSaver(ISettingsService settings) => NoteScreenSaver(settings, AnyPolRunning, ReadScreenSaver);
@@ -649,10 +663,10 @@ public sealed class PolSessionService : IDisposable
         else
         {
             on = readWindows();
-            if (on is { } fresh && settings.Current.ScreenSaverWasOn != fresh)
+            if (on is { } fresh)
             {
-                settings.Current.ScreenSaverWasOn = fresh;
-                if (settings.LoadProblem is null) settings.Save(settings.Current);
+                if (settings.LoadProblem is null) settings.SaveChange(s => s.ScreenSaverWasOn = fresh);
+                else settings.Current.ScreenSaverWasOn = fresh;
             }
         }
         ScreenSaverAtStart = on is { } v ? (v ? "1" : "0") : null;
@@ -777,6 +791,7 @@ public sealed class PolSessionService : IDisposable
                 return null;
             }
             LargeAddressAwareBeforeStart(viewerDir!, "before the pre-start");
+            NoteScreenSaverNow();
             var psi = LauncherStart(launcherExe, polExe);
             SetPrestartEnvironment(psi.Environment, Environment.ProcessId, PolEnv.Region(viewerDir!));
             using var launcher = StartProcess(psi);
@@ -1498,12 +1513,25 @@ public sealed class PolSessionService : IDisposable
         StopHold();
     }
 
-    public async Task WaitForExitAsync()
+    // the game's exit code, when there's still a way to read it
+    public async Task<int?> WaitForExitAsync()
     {
-        if (Pid is not { } pid) return;
-        try { using var p = Process.GetProcessById(pid); await p.WaitForExitAsync(); }
-        catch (ArgumentException) { }
+        if (Pid is not { } pid) return null;
+        try
+        {
+            using var p = Process.GetProcessById(pid);
+            await p.WaitForExitAsync();
+            return p.ExitCode;
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        // already gone, the handle kept from its start can still say how it ended. No gate, this can be the UI thread
+        var kept = _polProc;
+        try { return kept is { HasExited: true } && kept.Id == pid ? kept.ExitCode : null; }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { return null; }
     }
+
+    // what to tell the player once the game's pol.exe has ended, null for a normal end
+    internal static string? GameEndedText(int? exitCode) => exitCode == GameStartExitCode ? GameStartFailedText : null;
 
     private void CleanupOneShots(List<string> keys)
     {

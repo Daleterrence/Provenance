@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.PolFormat;
@@ -16,6 +17,15 @@ public interface ISettingsService
     void RedetectRegion() { }
 
     void Save(LauncherSettings settings);
+
+    // just this change goes into settings.json as it is now, and only when it changes something there. With no file,
+    // as here, Current stands in for it
+    void SaveChange(Action<LauncherSettings> change)
+    {
+        var before = JsonSerializer.Serialize(Current);
+        change(Current);
+        if (JsonSerializer.Serialize(Current) != before) Save(Current);
+    }
 
     // only the first failed save of a run raises it, so a full disk doesn't pop a dialog on every change
     event Action<string>? SaveFailed;

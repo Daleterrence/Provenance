@@ -359,7 +359,7 @@ public sealed class WindowerUpdater
     private async Task CoreAsync(Job job, WindowerManifest manifest, bool skip, WindowerUpdateResult result)
     {
         if (!skip && result.LauncherBefore != manifest.LauncherVersion &&
-            await ReplaceAsync(job, $"{Branch}/Windower.exe", LauncherPath, "Windower.exe"))
+            await ReplaceAsync(job, $"{Branch}/Windower.exe", LauncherPath, "Windower's own launcher"))
         {
             result.LauncherAfter = LauncherVersionOf(LauncherPath);
             job.Http.UserAgent = WindowerHttp.UserAgentFor(result.LauncherAfter.Major > 0 ? result.LauncherAfter : WindowerHttp.DefaultLauncher);
@@ -384,7 +384,7 @@ public sealed class WindowerUpdater
             }
             if (!WindowerFiles.LooksLikePe(temp))
             {
-                job.Errors.Add($"The {what} that downloaded isn't a program file, so the old one was kept.");
+                job.Errors.Add($"The download for {what} isn't a program file, so the old one was kept.");
                 return false;
             }
             job.Swap(temp, target);

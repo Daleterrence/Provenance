@@ -59,11 +59,30 @@ public sealed class SettingsService : ISettingsService
         }
     }
 
-    // temp file then a move, a truncated settings.json would load as defaults and lose every account
     public void Save(LauncherSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         Current = settings;
+        Write(settings);
+    }
+
+    public void SaveChange(Action<LauncherSettings> change)
+    {
+        change(Current);
+        using var gate = HoldLock();
+        if (!File.Exists(_path)) Write(Current);
+        else if (ReadSaved() is { } saved)
+        {
+            var before = JsonSerializer.Serialize(saved, JsonOptions);
+            change(saved);
+            if (JsonSerializer.Serialize(saved, JsonOptions) != before) Write(saved);
+        }
+        else Log.Warning("settings.json couldn't be read again, so a change is only kept until Provenance closes");
+    }
+
+    // temp file then a move, a truncated settings.json would load as defaults and lose every account
+    private void Write(LauncherSettings settings)
+    {
         var tmp = $"{_path}.{Environment.ProcessId}.tmp";
         IDisposable? gate = null;
         try

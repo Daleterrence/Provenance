@@ -30,6 +30,20 @@ public partial class GameSettingsViewModel : ObservableObject
     }
 
     public bool Available => _forTest || _loaded;
+    public bool Editable => Available && !_store.ReadOnly;
+
+    public string ReadOnlyNote => _store.ReadOnly
+        ? $"{ProfileShown} is one of Ashita's example files, so Provenance won't change it. Duplicate it under Windower/Ashita and change the copy instead."
+        : "";
+
+    // Windower writes its profile's hardware mouse at every start, Legacy settings or not
+    private bool HardwareMouseOwn => _store.Platform == ThirdPartyHookService.Windower;
+    public bool HardwareMouseEnabled => LegacySettings || HardwareMouseOwn;
+    public string? HardwareMouseHelp => HardwareMouseOwn
+        ? "Windower sets this from the profile every time the game starts, so it doesn't need Legacy settings." : null;
+    public string LegacyHelp => HardwareMouseOwn
+        ? "Turn this on to change Simple character select and Graphics card fix. Turning it off clears them."
+        : "Turn this on to change the three older settings below. Turning it off clears them.";
 
     public IGameSettingsStore Store => _store;
     public bool HasProfile => _store.Platform is not null;
@@ -92,6 +106,11 @@ public partial class GameSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(KeepAspectHelp));
         OnPropertyChanged(nameof(SharedNoteText));
         OnPropertyChanged(nameof(ProfileHelp));
+        OnPropertyChanged(nameof(Editable));
+        OnPropertyChanged(nameof(ReadOnlyNote));
+        OnPropertyChanged(nameof(HardwareMouseEnabled));
+        OnPropertyChanged(nameof(HardwareMouseHelp));
+        OnPropertyChanged(nameof(LegacyHelp));
     }
 
     public string[] WindowModes { get; } = { "Full screen", "Windowed", "Borderless window" };
@@ -169,8 +188,9 @@ public partial class GameSettingsViewModel : ObservableObject
     // the official tool puts these back to 0 whenever Legacy settings is off
     partial void OnLegacySettingsChanged(bool value)
     {
+        OnPropertyChanged(nameof(HardwareMouseEnabled));
         if (value || _applying) return;
-        HardwareMouse = false;
+        if (!HardwareMouseOwn) HardwareMouse = false;
         SimpleCharSelect = false;
         GraphicsFix = false;
     }
@@ -203,6 +223,7 @@ public partial class GameSettingsViewModel : ObservableObject
         AppliesToAll = Shared(loaded?.ProfileFields, HasProfile);
         Apply(_original);
         OnPropertyChanged(nameof(Available));
+        OnPropertyChanged(nameof(Editable));
         Status = problem ?? (HasProfile ? $"These are the current game settings for this {ProfileKind}." : "These are your current game settings.");
     }
 
@@ -213,10 +234,11 @@ public partial class GameSettingsViewModel : ObservableObject
         _original = s.Clone();
         Apply(_original);
         OnPropertyChanged(nameof(Available));
+        OnPropertyChanged(nameof(Editable));
         Status = "These are your current game settings.";
     }
 
-    public bool HasUnsavedChanges => Available && _edited;
+    public bool HasUnsavedChanges => Editable && _edited;
 
     // any property change that isn't loading values (or a read-out) counts as an edit
     protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
@@ -225,7 +247,8 @@ public partial class GameSettingsViewModel : ObservableObject
         if (!_applying && e.PropertyName is not (nameof(Status) or nameof(StatusIsError) or nameof(BrightnessText) or nameof(Available)
                 or nameof(HasUnsavedChanges) or nameof(UiScaleText) or nameof(UiSizeText) or nameof(UiScaleMax) or nameof(Store)
                 or nameof(HasProfile) or nameof(ProfileKind) or nameof(ProfileShown) or nameof(ProfileHeading) or nameof(IntroText) or nameof(KeepAspectHelp)
-                or nameof(SharedNoteText) or nameof(ProfileHelp) or nameof(AppliesToAll)))
+                or nameof(SharedNoteText) or nameof(ProfileHelp) or nameof(AppliesToAll) or nameof(Editable) or nameof(ReadOnlyNote)
+                or nameof(HardwareMouseEnabled) or nameof(HardwareMouseHelp) or nameof(LegacyHelp)))
             _edited = true;
     }
 
@@ -297,6 +320,7 @@ public partial class GameSettingsViewModel : ObservableObject
         if (_forTest) return;
         if (!HasProfile && _region is null) { Status = "Provenance couldn't find a PlayOnline install, so there's nowhere to save these settings."; return; }
         if (!_loaded) { Status = "FINAL FANTASY XI isn't installed on this PC, so there are no settings to save."; return; }
+        if (_store.ReadOnly) { Status = ReadOnlyNote; StatusIsError = true; return; }
         try
         {
             var saved = _store.Save(Collect(), _original);

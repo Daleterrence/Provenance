@@ -104,7 +104,8 @@ public sealed class WindowerLaunch : IDisposable
         _ => WindowerRegion.US,
     };
 
-    public static WindowerLaunchSetup SetupFor(ISettingsService settings, string polExe, string? accountProfile)
+    public static WindowerLaunchSetup SetupFor(ISettingsService settings, string polExe, string? accountProfile,
+                                              IReadOnlyDictionary<string, WindowerAddonList>? lists)
     {
         var s = settings.Current;
         var dir = ThirdPartyHookService.DetectWindower(s.WindowerPath)
@@ -118,7 +119,7 @@ public sealed class WindowerLaunch : IDisposable
             PolExe = polExe,
             Region = region,
             FfxiDir = PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct),
-            Lists = s.WindowerAddonLists,
+            Lists = lists,
         };
     }
 
@@ -137,6 +138,9 @@ public sealed class WindowerLaunch : IDisposable
             throw;
         }
     }
+
+    internal static Dictionary<string, WindowerAddonList>? Snapshot(IReadOnlyDictionary<string, WindowerAddonList>? lists) =>
+        lists?.Where(kv => kv.Value is not null).ToDictionary(kv => kv.Key, kv => kv.Value.Copy(), StringComparer.Ordinal);
 
     private void Steps(IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
@@ -465,7 +469,7 @@ public static class WindowerUpdates
         if (r.Skipped && r.SkipReason is { } why) return why;
         var parts = new List<string>();
         if (r.HookChanged) parts.Add($"Hook.dll (now {r.HookAfter})");
-        if (r.LauncherChanged) parts.Add("Windower.exe");
+        if (r.LauncherChanged) parts.Add("Windower's own launcher");
         if (r.PluginsUpdated.Count > 0) parts.Add(r.PluginsUpdated.Count == 1 ? "1 plugin" : $"{r.PluginsUpdated.Count} plugins");
         if (r.AddonsUpdated.Count > 0) parts.Add(r.AddonsUpdated.Count == 1 ? "1 addon" : $"{r.AddonsUpdated.Count} addons");
         if (r.ResUpdated.Count > 0 || r.ResRemoved.Count > 0) parts.Add("the resource files");

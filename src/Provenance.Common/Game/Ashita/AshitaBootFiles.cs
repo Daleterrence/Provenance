@@ -11,8 +11,8 @@ public static class AshitaBootFiles
     // tracked in Ashita's git, so changing them makes the user's next git pull fight them
     private static readonly string[] Examples = ["example-retail.ini", "example.ini", "example-privateserver.ini"];
 
-    // the sign-in plugin and the menu skip, both would take the login over from Provenance
-    private static readonly string[] Takeovers = ["autopol", "quicky"];
+    // polplugins that would fight Provenance over the login or the accounts, so they're always off in the launch copy
+    private static readonly string[] Takeovers = ["autopol", "quicky", "extraslots"];
 
     public static string Folder(string ashitaDir) => Path.Combine(ashitaDir, "config", "boot");
 
@@ -27,6 +27,9 @@ public static class AshitaBootFiles
     public static bool IsShippedExample(string fileName) => Examples.Contains(fileName, StringComparer.OrdinalIgnoreCase);
 
     public static bool IsTakeover(string polPlugin) => Takeovers.Contains(polPlugin, StringComparer.OrdinalIgnoreCase);
+
+    public static IEnumerable<string> InstalledTakeovers(string ashitaDir) =>
+        Takeovers.Where(t => File.Exists(Path.Combine(ashitaDir, "polplugins", t + ".dll")));
 
     public static string? ExampleFor(string ashitaDir) =>
         Examples.Take(2).FirstOrDefault(e => File.Exists(Path.Combine(Folder(ashitaDir), e)));

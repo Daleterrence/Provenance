@@ -50,6 +50,7 @@ public partial class MainViewModel : IMultiRunHost
     private string _runPlatform = "";
 
     private PolSocialSnapshot? _runSnapshot;
+    private readonly List<string> _lateGameFailures = [];
 
     private SettingsViewModel? _openSettings;
 
@@ -95,6 +96,7 @@ public partial class MainViewModel : IMultiRunHost
         _runHookProfiles = entries.ToDictionary(e => e.ProfileId, e => e.ThirdPartyHookProfile);
         _runPlatform = _pol.Platform;
         _exitAfterStop = false;
+        _lateGameFailures.Clear();
         // a friends window left open mustn't write requests to the run's lean sessions
         _socialPoll.Stop();
         CloseSocialWindows();
@@ -127,10 +129,13 @@ public partial class MainViewModel : IMultiRunHost
         var failures = result?.Failures ?? [];
         Log.Information("Multi-account mode: finished, {Failures} failure(s), stopped {Stopped}", failures.Count, result?.Stopped);
         if (_exitAfterStop) { Application.Current.Shutdown(); return; }
-        if (failures.Count > 0 || unexpected != null)
+        if (failures.Count > 0 || unexpected != null || _lateGameFailures.Count > 0)
         {
-            var lines = failures.Select(f => $"{f.Account.Name}: {f.Failure.Text}").ToList();
+            var lines = failures.Select(f => $"{f.Account.Name}: {f.Failure.Text}").Concat(_lateGameFailures).ToList();
+            _lateGameFailures.Clear();
             if (unexpected != null) lines.Add(unexpected);
+            // a long run can end with the window in the tray
+            RequestShow?.Invoke();
             MessageDialog.ShowError(owner, "Multi-account mode", string.Join("\n", lines), offerLogs: true);
             return;
         }
@@ -363,9 +368,32 @@ public partial class MainViewModel : IMultiRunHost
             return await LetGo(PlayFailureKind(playFailed), playFailed);
         }
 
+        var exited = _pol.WaitForExitAsync();
         _pol.ReleasePlayedSession();
+        _ = NoteGameEndAsync(account, exited);
         Log.Information("Multi-account mode: {Account} is in the game", account.ProfileId);
         return null;
+    }
+
+    // the run's moved on by the time a game that didn't start ends its pol.exe, so that's told when it happens (or
+    // with the run's own report, if it's still going)
+    private async Task NoteGameEndAsync(MultiRunAccount account, Task<int?> exited)
+    {
+        try
+        {
+            var code = await exited;
+            if (PolSessionService.GameEndedText(code) is not { } text) return;
+            Log.Error("Multi-account mode: FINAL FANTASY XI didn't start for {Account} (pol.exe exit code {Code})", account.ProfileId, code);
+            var line = $"{account.Name}: {text}";
+            if (MultiRunning) _lateGameFailures.Add(line);
+            else
+            {
+                // the window may well be in the tray by now
+                RequestShow?.Invoke();
+                MessageDialog.ShowError(Application.Current?.MainWindow, "Multi-account mode", line, offerLogs: true);
+            }
+        }
+        catch (Exception ex) { Log.Warning(ex, "Multi-account mode: couldn't tell how {Account}'s game ended", account.ProfileId); }
     }
 
     // both entries there but unusable is a Credential failure, so it stays off until edited (like hook exit 11)

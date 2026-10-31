@@ -52,6 +52,17 @@ public sealed class ThirdPartyHookService
 
     public static IReadOnlyList<string> AshitaBootConfigs(string? ashitaDir) => AshitaBootFiles.List(ashitaDir);
 
+    public const string IncompatibleText = "Incompatible with Provenance";
+    public const string IncompatibleNote = "The ones marked incompatible stay off whenever Provenance starts the game. Your Ashita settings aren't changed.";
+
+    public static string IncompatibleReason(string polPlugin) => polPlugin.ToLowerInvariant() switch
+    {
+        "autopol" => "Provenance logs you in itself.",
+        "quicky" => "Provenance takes you into the game itself.",
+        "extraslots" => "Provenance manages your accounts itself.",
+        _ => "Provenance does this itself.",
+    };
+
     // Ashita writes the boot config into each log ("Ashita Config Script: \boot\config.ini"), so the newest log that
     // isn't from my own launch wins. Bit cheeky, but it works
     public static string? LastUsedAshitaBootConfig(string? ashitaDir)

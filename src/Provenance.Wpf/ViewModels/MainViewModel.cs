@@ -1301,15 +1301,18 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex) { Log.Warning(ex, "Could not bring the game window to the front"); }
         RequestHide?.Invoke();
         _elapsedTimer.Stop();
-        await _pol.WaitForExitAsync();
+        var exit = await _pol.WaitForExitAsync();
         _gameRunning = false;
         Social.GameRunning = false;
         _pol.GameExited();
-        if (_settings.Current.ExitAfterGameExits) { Application.Current.Shutdown(); return; }
+        var ended = PolSessionService.GameEndedText(exit);
+        if (ended is not null) Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);
+        else if (_settings.Current.ExitAfterGameExits) { Application.Current.Shutdown(); return; }
         IsLaunching = false;
         SocialConnected = false;
         RequestShow?.Invoke();
         _pol.Prestart();
+        if (ended is not null) MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI", ended, offerLogs: true);
     }
 
     internal static readonly TimeSpan PlayAnswerTimeout = TimeSpan.FromSeconds(15);

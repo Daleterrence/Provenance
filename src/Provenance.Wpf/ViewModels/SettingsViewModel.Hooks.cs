@@ -402,6 +402,9 @@ public partial class SettingsViewModel
         LoadAshitaCard();
     }
 
+    // the Addons tab can repoint the boot configuration's script or switch sandbox on meanwhile
+    public void ShowingHooks() => LoadCards();
+
     private void LoadWindowerCard()
     {
         _loadingCard = true;
@@ -421,9 +424,13 @@ public partial class SettingsViewModel
             var p = file is { LoadError: null } && WindowerProfile is { } item ? Find(file, item.Name) : null;
             WindowerConsoleKey = Choice(p?.ConsoleKey ?? WindowerKeys.Insert);
             WindowerAllowWinKey = p?.AllowWinKey ?? false;
-            WindowerBranchIndex = file?.Dev == true ? 1 : 0;
-            RefreshWindowerVersion();
-            ShowLastUpdate();
+            // mid-update the branch and the checking line are the update's, it reloads the card once it's done
+            if (!WindowerUpdating)
+            {
+                WindowerBranchIndex = file?.Dev == true ? 1 : 0;
+                RefreshWindowerVersion();
+                ShowLastUpdate();
+            }
         }
         finally { _loadingCard = false; }
         OnProfilesChanged();
@@ -459,7 +466,7 @@ public partial class SettingsViewModel
         {
             WindowerBranchState.Matches => $"Hook.dll {info.HookFile} is installed, the latest {name} version.",
             WindowerBranchState.UpdatePending when info.HookManifest == info.HookFile =>
-                $"Hook.dll {info.HookFile} is installed, the latest {name} version. Windower.exe has an update waiting, which the next check gets.",
+                $"Hook.dll {info.HookFile} is installed, the latest {name} version. Windower's own launcher has an update waiting, which the next check gets.",
             WindowerBranchState.UpdatePending => $"Hook.dll {info.HookFile} is installed. The {name} version is {info.HookManifest}, which the next check gets.",
             _ => $"Hook.dll {info.HookFile} is installed. Check for updates to compare it with the {name} version.",
         };
@@ -544,8 +551,7 @@ public partial class SettingsViewModel
         finally
         {
             WindowerUpdating = false;
-            RefreshWindowerVersion();
-            ShowLastUpdate();
+            LoadWindowerCard();
         }
     }
 
@@ -572,8 +578,7 @@ public partial class SettingsViewModel
         finally
         {
             WindowerUpdating = false;
-            RefreshWindowerVersion();
-            ShowLastUpdate();
+            LoadWindowerCard();
         }
     }
 
@@ -611,6 +616,7 @@ public partial class SettingsViewModel
     [ObservableProperty] private string _ashitaScriptArgs = "";
     [ObservableProperty] private int _ashitaLanguageIndex = 1;
     [ObservableProperty] private bool _ashitaSandboxOn;
+    [ObservableProperty] private string _ashitaIncompatibleNote = "";
     [ObservableProperty] private bool _ashitaCardEnabled;
     [ObservableProperty] private string _ashitaCardNote = "";
     private const string NoScript = "None";
@@ -623,6 +629,7 @@ public partial class SettingsViewModel
         try
         {
             AshitaPolPlugins.Clear();
+            AshitaIncompatibleNote = "";
             AshitaScripts.Clear();
             AshitaCardNote = "";
             AshitaCardEnabled = false;
@@ -648,13 +655,20 @@ public partial class SettingsViewModel
             AshitaScript = script;
             AshitaScriptArgs = cfg.ScriptArgs ?? "";
             AshitaLanguageIndex = cfg.PlayOnlineLanguage switch { 1 => 0, 3 => 2, _ => 1 };
-            foreach (var pp in cfg.PolPlugins)
+            foreach (var pp in cfg.PolPlugins.Where(p => !AshitaBootFiles.IsTakeover(p.Name)))
             {
-                bool takeover = AshitaBootFiles.IsTakeover(pp.Name);
-                var row = new PolPluginRow { Name = pp.Name, Available = !takeover, Note = takeover ? "Not available with Provenance" : null, On = pp.On && !takeover };
+                var row = new PolPluginRow { Name = pp.Name, On = pp.On };
                 row.Changed = SavePolPlugin;
                 AshitaPolPlugins.Add(row);
             }
+            // off whatever the file says, as they are when Provenance starts the game
+            foreach (var name in AshitaBootFiles.InstalledTakeovers(AshitaDir!).Order(StringComparer.OrdinalIgnoreCase))
+                AshitaPolPlugins.Add(new PolPluginRow
+                {
+                    Name = name, Available = false,
+                    Note = $"{ThirdPartyHookService.IncompatibleText}. {ThirdPartyHookService.IncompatibleReason(name)}",
+                });
+            AshitaIncompatibleNote = AshitaPolPlugins.Any(r => !r.Available) ? ThirdPartyHookService.IncompatibleNote : "";
             AshitaSandboxOn = SandboxOn();
             bool example = AshitaBootFiles.IsShippedExample(AshitaBootConfig!.Name);
             AshitaCardEnabled = !example;

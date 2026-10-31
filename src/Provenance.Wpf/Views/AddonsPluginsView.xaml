@@ -95,7 +95,16 @@
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type vm:AddonRow}">
-            <Border Margin="28,0,28,6" Padding="14,10" Style="{StaticResource Card}">
+            <Border Margin="28,0,28,6" Padding="14,10">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Incompatible}" Value="True">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid ColumnDefinitions="*,Auto,Auto">
                     <StackPanel VerticalAlignment="Center">
                         <WrapPanel>
