@@ -33,6 +33,46 @@
             <Setter Property="materialDesign:TextFieldAssist.LeadingIcon" Value="Magnify" />
             <Setter Property="materialDesign:TextFieldAssist.HasClearButton" Value="True" />
         </Style>
+        <!-- Addons, Plugins and Ashita's PlayOnline Plugins along the top, one list each -->
+        <Style x:Key="SubTabs" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Cursor" Value="Hand" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Bd" Margin="0,0,6,0" Padding="16,8" CornerRadius="8" Background="Transparent"
+                                            BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
+                                        <TextBlock x:Name="Label" Text="{Binding}" FontSize="13" Foreground="{DynamicResource Text.2}" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.3}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Primary.Muted}" />
+                                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Text.1}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- "No addons found in ..." or no matches, gone when there's nothing to say -->
         <Style x:Key="ListNote" TargetType="TextBlock" BasedOn="{StaticResource Help}">
             <Setter Property="FontSize" Value="12" />
@@ -63,6 +103,15 @@
                 <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
                            Visibility="{Binding Message, Converter={StaticResource NullToVisibilityConverter}}" />
                 <StackPanel Visibility="{Binding HasLists, Converter={StaticResource BoolToVis}}">
+                    <Border Style="{StaticResource PlatformCard}" Tag="{Binding CardPlatform}" Margin="0,0,0,12">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <materialDesign:PackIcon Kind="PuzzleOutline" Width="22" Height="22" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                <TextBlock Text="{Binding CardHeading}" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding CardName}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
                     <TextBlock Text="{Binding Intro}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,14" />
                     <TextBlock Text="{Binding Problem}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource State.Warn}" Margin="0,0,0,14"
                                Visibility="{Binding Problem, Converter={StaticResource NullToVisibilityConverter}}" />
@@ -77,6 +126,8 @@
                                           AutomationProperties.Name="Use the same list for every profile" />
                         </Grid>
                     </Border>
+                    <ListBox ItemsSource="{Binding Tabs}" SelectedIndex="{Binding Tab}" Style="{StaticResource SubTabs}" Margin="0,0,0,12"
+                             AutomationProperties.Name="Lists" />
                     <TextBox Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Search}"
                              materialDesign:HintAssist.Hint="Search by name, author or description"
                              AutomationProperties.Name="Search addons and plugins" />
@@ -86,10 +137,10 @@
 
         <DataTemplate DataType="{x:Type vm:AddonsHeading}">
             <StackPanel Margin="28,16,28,0">
-                <TextBlock Text="{Binding Title}" Style="{StaticResource Section}"
-                           Visibility="{Binding Title, Converter={StaticResource NullToVisibilityConverter}}" />
-                <TextBlock Text="{Binding Help}" Style="{StaticResource Help}" Margin="0,-6,0,10"
+                <TextBlock Text="{Binding Help}" Style="{StaticResource Help}" FontSize="12" Margin="0,0,0,10"
                            Visibility="{Binding Help, Converter={StaticResource NullToVisibilityConverter}}" />
+                <TextBlock Text="{Binding Warning}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12" Foreground="{DynamicResource State.Warn}"
+                           Visibility="{Binding Warning, Converter={StaticResource NullToVisibilityConverter}}" />
                 <TextBlock Text="{Binding Note}" Style="{StaticResource ListNote}" />
             </StackPanel>
         </DataTemplate>

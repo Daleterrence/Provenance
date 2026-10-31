@@ -22,17 +22,6 @@ public sealed record ConsoleKeyChoice(WindowerKey Key, string Display)
     public override string ToString() => Display;
 }
 
-public sealed partial class PolPluginRow : ObservableObject
-{
-    public required string Name { get; init; }
-    public bool Available { get; init; } = true;
-    public string? Note { get; init; }
-    [ObservableProperty] private bool _on;
-    internal Action<PolPluginRow>? Changed;
-
-    partial void OnOnChanged(bool value) => Changed?.Invoke(this);
-}
-
 // The Windower/Ashita page: the platform, its folder, the profiles and each profile's own settings. Like General,
 // every change saves straight away
 public partial class SettingsViewModel
@@ -57,7 +46,6 @@ public partial class SettingsViewModel
     internal Func<string, string, string, Func<string, string?>, string?>? AskName { get; set; }
     internal Func<string, string, string, bool, bool>? Confirm { get; set; }
     internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = WindowerUpdates.NewUpdater;
-    internal Func<bool> WindowerBusy { get; set; } = WindowerUpdater.AnyRunning;
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
 
     // only the folder in the box, never one found somewhere else, since profiles get changed in it
@@ -256,7 +244,7 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(CanCopyProfile));
         OnPropertyChanged(nameof(CanChangeProfile));
         OnPropertyChanged(nameof(WindowerCardEnabled));
-        OnPropertyChanged(nameof(WindowerUpdatesEnabled));
+        OnPropertyChanged(nameof(WindowerBranchEnabled));
         OnPropertyChanged(nameof(CanStartNewWindowerSettings));
     }
 
@@ -382,19 +370,19 @@ public partial class SettingsViewModel
     private bool StillThere(string name) => IsWindower ? Item(WindowerProfiles, name) is not null : Item(AshitaBootConfigs, name) is not null;
 
     public IReadOnlyList<ConsoleKeyChoice> ConsoleKeys { get; } = WindowerKeyNames.Pickable();
-    public string[] WindowerBranches { get; } = { "Stable", "Development" };
-    [ObservableProperty] private ConsoleKeyChoice? _windowerConsoleKey;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ConsoleKeyText))] private ConsoleKeyChoice? _windowerConsoleKey;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ConsoleKeyText))] private bool _waitingForConsoleKey;
     [ObservableProperty] private bool _windowerAllowWinKey;
-    [ObservableProperty] private int _windowerBranchIndex;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(WindowerBranchName))] private bool _windowerDev;
     [ObservableProperty] private string _windowerVersionText = "";
-    [ObservableProperty] private string _windowerUpdateText = "";
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(WindowerUpdatesEnabled))] private bool _windowerUpdating;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanManageProfiles), nameof(CanCopyProfile), nameof(CanChangeProfile), nameof(WindowerCardEnabled), nameof(WindowerUpdatesEnabled))]
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(WindowerBranchEnabled))] private bool _switchingBranch;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanManageProfiles), nameof(CanCopyProfile), nameof(CanChangeProfile), nameof(WindowerCardEnabled), nameof(WindowerBranchEnabled))]
     private string? _windowerSettingsProblem;
     private bool _loadingCard;
 
     public bool WindowerCardEnabled => WindowerDir is not null && !WindowerLinked && WindowerSettingsProblem is null && WindowerProfile is not null;
-    public bool WindowerUpdatesEnabled => WindowerDir is not null && !WindowerLinked && WindowerSettingsProblem is null && !WindowerUpdating;
+    public bool WindowerBranchEnabled => WindowerDir is not null && !WindowerLinked && WindowerSettingsProblem is null && !SwitchingBranch;
+    public string WindowerBranchName => BranchName(Branch);
 
     private void LoadCards()
     {
@@ -402,7 +390,7 @@ public partial class SettingsViewModel
         LoadAshitaCard();
     }
 
-    // the Addons tab can repoint the boot configuration's script or switch sandbox on meanwhile
+    // the Addons tab can repoint the boot configuration's script meanwhile
     public void ShowingHooks() => LoadCards();
 
     private void LoadWindowerCard()
@@ -411,6 +399,7 @@ public partial class SettingsViewModel
         try
         {
             WindowerSettingsProblem = null;
+            WaitingForConsoleKey = false;
             if (!IsWindower || WindowerDir is not { } dir) return;
             WindowerSettingsFile? file = null;
             try { file = WindowerSettingsFile.Load(dir); }
@@ -424,12 +413,11 @@ public partial class SettingsViewModel
             var p = file is { LoadError: null } && WindowerProfile is { } item ? Find(file, item.Name) : null;
             WindowerConsoleKey = Choice(p?.ConsoleKey ?? WindowerKeys.Insert);
             WindowerAllowWinKey = p?.AllowWinKey ?? false;
-            // mid-update the branch and the checking line are the update's, it reloads the card once it's done
-            if (!WindowerUpdating)
+            // mid-switch the branch is the switch's, it reloads the card once it's done
+            if (!SwitchingBranch)
             {
-                WindowerBranchIndex = file?.Dev == true ? 1 : 0;
+                WindowerDev = file?.Dev == true;
                 RefreshWindowerVersion();
-                ShowLastUpdate();
             }
         }
         finally { _loadingCard = false; }
@@ -442,7 +430,7 @@ public partial class SettingsViewModel
     private ConsoleKeyChoice Choice(WindowerKey key) =>
         ConsoleKeys.FirstOrDefault(c => c.Key.ScanCode == key.ScanCode) ?? new ConsoleKeyChoice(key, WindowerKeyNames.Display(key));
 
-    private string Branch => WindowerBranchIndex == 1 ? "dev" : "stable";
+    private string Branch => WindowerDev ? "dev" : "stable";
     private static string BranchName(string branch) => branch == "dev" ? "Development" : "Stable";
 
     private void RefreshWindowerVersion()
@@ -451,7 +439,7 @@ public partial class SettingsViewModel
         var name = BranchName(Branch);
         if (!File.Exists(Path.Combine(dir, "Hook.dll")))
         {
-            WindowerVersionText = "Hook.dll isn't installed yet. Check for updates to get it.";
+            WindowerVersionText = "Hook.dll isn't installed yet. Provenance gets it the next time you log in.";
             return;
         }
         WindowerBranchInfo info;
@@ -462,23 +450,48 @@ public partial class SettingsViewModel
             WindowerVersionText = "";
             return;
         }
+        // a switch that hasn't been fetched yet still has the old branch's manifest, so its version means nothing here
         WindowerVersionText = info.State switch
         {
             WindowerBranchState.Matches => $"Hook.dll {info.HookFile} is installed, the latest {name} version.",
+            WindowerBranchState.UpdatePending when info.SwitchPending =>
+                $"Hook.dll {info.HookFile} is installed. Provenance gets the {name} version the next time you log in.",
             WindowerBranchState.UpdatePending when info.HookManifest == info.HookFile =>
-                $"Hook.dll {info.HookFile} is installed, the latest {name} version. Windower's own launcher has an update waiting, which the next check gets.",
-            WindowerBranchState.UpdatePending => $"Hook.dll {info.HookFile} is installed. The {name} version is {info.HookManifest}, which the next check gets.",
-            _ => $"Hook.dll {info.HookFile} is installed. Check for updates to compare it with the {name} version.",
+                $"Hook.dll {info.HookFile} is installed, the latest {name} version. Windower's own launcher has an update waiting, which Provenance gets the next time you log in.",
+            WindowerBranchState.UpdatePending =>
+                $"Hook.dll {info.HookFile} is installed. The {name} version is {info.HookManifest}, which Provenance gets the next time you log in.",
+            _ => $"Hook.dll {info.HookFile} is installed.",
         };
     }
-
-    private void ShowLastUpdate() =>
-        WindowerUpdateText = WindowerUpdates.For(WindowerDir) is { } last ? $"Last checked at {last.At:HH:mm}. {last.Text}" : "";
 
     partial void OnWindowerConsoleKeyChanged(ConsoleKeyChoice? value)
     {
         if (!_loadingCard && value is not null) SaveWindowerProfile(p => p.ConsoleKey = value.Key);
     }
+
+    public string ConsoleKeyText => WaitingForConsoleKey ? "Press Key Now, Esc to Cancel" : $"{(WindowerConsoleKey ?? Choice(WindowerKeys.Insert)).Display} (Click to Edit)";
+
+    [RelayCommand]
+    private void EditConsoleKey() => WaitingForConsoleKey = !WaitingForConsoleKey && WindowerCardEnabled;
+
+    public void CancelConsoleKey() => WaitingForConsoleKey = false;
+
+    // a key in DirectInput's numbering. Esc gives up, one Windower can't use as its console key is ignored and the
+    // wait goes on, and any other becomes the key and saves straight away
+    public void PressConsoleKey(int code)
+    {
+        if (!WaitingForConsoleKey) return;
+        if (code == EscapeCode)
+        {
+            WaitingForConsoleKey = false;
+            return;
+        }
+        if (ConsoleKeys.FirstOrDefault(c => c.Key.ScanCode == code) is not { } pick) return;
+        WaitingForConsoleKey = false;
+        WindowerConsoleKey = pick;
+    }
+
+    private const int EscapeCode = 1;
 
     partial void OnWindowerAllowWinKeyChanged(bool value)
     {
@@ -503,35 +516,34 @@ public partial class SettingsViewModel
         }
     }
 
-    partial void OnWindowerBranchIndexChanged(int value)
+    [RelayCommand]
+    private void FlipWindowerBranch()
     {
-        if (!_loadingCard) WindowerWork = SwitchBranchAsync(value == 1 ? "dev" : "stable");
+        if (WindowerBranchEnabled) WindowerDev = !WindowerDev;
+    }
+
+    partial void OnWindowerDevChanged(bool value)
+    {
+        if (!_loadingCard) WindowerWork = SwitchBranchAsync(value ? "dev" : "stable");
     }
 
     private void PutBranchBack()
     {
         _loadingCard = true;
-        try { WindowerBranchIndex = WindowerDir is { } dir && ReadWindower(dir) is { Dev: true } ? 1 : 0; }
+        try { WindowerDev = WindowerDir is { } dir && ReadWindower(dir) is { Dev: true }; }
         finally { _loadingCard = false; }
     }
 
-    // Windower's own files get swapped out, so nothing that uses them can be running
+    // only saved here, the next login's update fetches it. The flag makes that update ask for the new branch's
+    // manifest in full rather than trust the old one's date
     private async Task SwitchBranchAsync(string branch)
     {
         if (WindowerDir is not { } dir) return;
-        if (WindowerBusy())
-        {
-            Say("Close FINAL FANTASY XI, PlayOnline and Windower before you switch Windower's branch.", error: true);
-            PutBranchBack();
-            return;
-        }
         Say("");
-        WindowerUpdating = true;
-        WindowerUpdateText = $"Switching Windower to the {BranchName(branch)} version...";
+        SwitchingBranch = true;
         try
         {
-            var updater = NewWindowerUpdater(dir, branch);
-            if (!await updater.PrepareBranchSwitchAsync())
+            if (!await NewWindowerUpdater(dir, branch).PrepareBranchSwitchAsync())
             {
                 Say("Provenance couldn't switch Windower's branch. Try again in a moment.", error: true);
                 PutBranchBack();
@@ -539,8 +551,6 @@ public partial class SettingsViewModel
             }
             WindowerSettingsFile.Update(dir, _settings.Current.WindowerAddonLists, (f, _) => f.Dev = branch == "dev");
             _settings.Save(_settings.Current);
-            var result = await Task.Run(() => updater.UpdateAsync());
-            WindowerUpdates.Record(dir, WindowerUpdates.Describe(result));
         }
         catch (Exception ex)
         {
@@ -550,34 +560,7 @@ public partial class SettingsViewModel
         }
         finally
         {
-            WindowerUpdating = false;
-            LoadWindowerCard();
-        }
-    }
-
-    [RelayCommand]
-    private Task CheckWindowerUpdates() => WindowerWork = CheckWindowerUpdatesAsync();
-
-    private async Task CheckWindowerUpdatesAsync()
-    {
-        if (WindowerDir is not { } dir || WindowerUpdating) return;
-        var branch = ReadWindower(dir)?.Branch ?? Branch;
-        WindowerUpdating = true;
-        WindowerUpdateText = "Checking for Windower updates...";
-        try
-        {
-            var result = await Task.Run(() => NewWindowerUpdater(dir, branch).UpdateAsync());
-            foreach (var e in result.Errors) Log.Warning("Windower update: {Error}", e);
-            WindowerUpdates.Record(dir, WindowerUpdates.Describe(result));
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Windower update failed");
-            WindowerUpdates.Record(dir, "Windower's update stopped part way.");
-        }
-        finally
-        {
-            WindowerUpdating = false;
+            SwitchingBranch = false;
             LoadWindowerCard();
         }
     }
@@ -609,14 +592,9 @@ public partial class SettingsViewModel
     }
 
     public ObservableCollection<string> AshitaScripts { get; } = new();
-    public ObservableCollection<PolPluginRow> AshitaPolPlugins { get; } = new();
-    public string[] AshitaLanguages { get; } = { "Japanese", "English (North America)", "English (Europe)" };
     [ObservableProperty] private string _ashitaName = "";
     [ObservableProperty] private string? _ashitaScript;
     [ObservableProperty] private string _ashitaScriptArgs = "";
-    [ObservableProperty] private int _ashitaLanguageIndex = 1;
-    [ObservableProperty] private bool _ashitaSandboxOn;
-    [ObservableProperty] private string _ashitaIncompatibleNote = "";
     [ObservableProperty] private bool _ashitaCardEnabled;
     [ObservableProperty] private string _ashitaCardNote = "";
     private const string NoScript = "None";
@@ -628,16 +606,12 @@ public partial class SettingsViewModel
         _loadingCard = true;
         try
         {
-            AshitaPolPlugins.Clear();
-            AshitaIncompatibleNote = "";
             AshitaScripts.Clear();
             AshitaCardNote = "";
             AshitaCardEnabled = false;
             AshitaName = "";
             AshitaScript = null;
             AshitaScriptArgs = "";
-            AshitaLanguageIndex = 1;
-            AshitaSandboxOn = false;
             if (!IsAshita || AshitaFile is not { } path) return;
             AshitaScripts.Add(NoScript);
             foreach (var s in Scripts(AshitaDir!)) AshitaScripts.Add(s);
@@ -654,22 +628,6 @@ public partial class SettingsViewModel
             if (!AshitaScripts.Contains(script)) AshitaScripts.Add(script);
             AshitaScript = script;
             AshitaScriptArgs = cfg.ScriptArgs ?? "";
-            AshitaLanguageIndex = cfg.PlayOnlineLanguage switch { 1 => 0, 3 => 2, _ => 1 };
-            foreach (var pp in cfg.PolPlugins.Where(p => !AshitaBootFiles.IsTakeover(p.Name)))
-            {
-                var row = new PolPluginRow { Name = pp.Name, On = pp.On };
-                row.Changed = SavePolPlugin;
-                AshitaPolPlugins.Add(row);
-            }
-            // off whatever the file says, as they are when Provenance starts the game
-            foreach (var name in AshitaBootFiles.InstalledTakeovers(AshitaDir!).Order(StringComparer.OrdinalIgnoreCase))
-                AshitaPolPlugins.Add(new PolPluginRow
-                {
-                    Name = name, Available = false,
-                    Note = $"{ThirdPartyHookService.IncompatibleText}. {ThirdPartyHookService.IncompatibleReason(name)}",
-                });
-            AshitaIncompatibleNote = AshitaPolPlugins.Any(r => !r.Available) ? ThirdPartyHookService.IncompatibleNote : "";
-            AshitaSandboxOn = SandboxOn();
             bool example = AshitaBootFiles.IsShippedExample(AshitaBootConfig!.Name);
             AshitaCardEnabled = !example;
             if (example) AshitaCardNote = "This is one of Ashita's example files, which Provenance doesn't change. Duplicate it to make one of your own.";
@@ -677,8 +635,6 @@ public partial class SettingsViewModel
         finally { _loadingCard = false; }
         OnProfilesChanged();
     }
-
-    private bool SandboxOn() => AshitaPolPlugins.Any(p => p.Name.Equals("sandbox", StringComparison.OrdinalIgnoreCase) && p.On);
 
     private static IEnumerable<string> Scripts(string dir)
     {
@@ -695,19 +651,6 @@ public partial class SettingsViewModel
     partial void OnAshitaNameChanged(string value) { if (!_loadingCard) SaveAshita(c => c.Name = value.Trim()); }
     partial void OnAshitaScriptChanged(string? value) { if (!_loadingCard && value is not null) SaveAshita(c => c.Script = value == NoScript ? "" : value); }
     partial void OnAshitaScriptArgsChanged(string value) { if (!_loadingCard) SaveAshita(c => c.ScriptArgs = value.Trim()); }
-
-    // 0 and 2 are both English to Ashita, so English is only written back when it's picked
-    partial void OnAshitaLanguageIndexChanged(int value)
-    {
-        if (!_loadingCard) SaveAshita(c => c.PlayOnlineLanguage = value switch { 0 => 1, 2 => 3, _ => 2 });
-    }
-
-    private void SavePolPlugin(PolPluginRow row)
-    {
-        if (_loadingCard || !row.Available) return;
-        SaveAshita(c => c.SetPolPlugin(row.Name, row.On));
-        AshitaSandboxOn = SandboxOn();
-    }
 
     private void SaveAshita(Action<BootConfig> change)
     {
@@ -758,4 +701,14 @@ public static class WindowerKeyNames
     public static IReadOnlyList<ConsoleKeyChoice> Pickable() =>
         WindowerKeys.All.Where(WindowerKeys.Pickable).Select(WindowerKeys.Canonical).DistinctBy(k => k.ScanCode)
                     .Select(k => new ConsoleKeyChoice(k, Display(k))).ToList();
+
+    // DirectInput's number for a key, which is what Windower's are: the scan code, plus 0x80 for an extended one.
+    // Windows hands Pause and Num Lock over the wrong way round, and Print Screen only ever comes as a key up
+    public static int DirectInputCode(int virtualKey, int scanCode, bool extended) => virtualKey switch
+    {
+        0x13 => 197,
+        0x90 => 69,
+        0x2C => 183,
+        _ => (scanCode & 0x7F) | (extended ? 0x80 : 0),
+    };
 }

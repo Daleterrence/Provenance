@@ -27,6 +27,10 @@
     <SolidColorBrush x:Key="Badge.Event"       Color="#1F4652" />
     <SolidColorBrush x:Key="Badge.Update"      Color="#24452E" />
 
+    <!-- Settings' profile cards, white text on these -->
+    <SolidColorBrush x:Key="Platform.Windower" Color="#339933" />
+    <SolidColorBrush x:Key="Platform.Ashita"   Color="#D45447" />
+
     <SolidColorBrush x:Key="Border.Hair"    Color="White" Opacity="0.08" />
     <!-- every window's edge. DWM draws it from 24H2 on, so it has to be solid -->
     <SolidColorBrush x:Key="Border.Window"  Color="#263041" />

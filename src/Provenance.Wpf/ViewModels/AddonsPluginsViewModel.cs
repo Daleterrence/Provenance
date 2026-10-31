@@ -25,6 +25,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
 {
     private const string LoadedBy = "already loaded by ", OwnListOnly = "only a profile's own list can load it";
     private const string SettingsNotSaved = "Provenance couldn't save your settings, so your changes will only last until Provenance closes.";
+    private const string SandboxText =
+        "With sandbox on, the game only gets the game settings saved in this boot configuration. Set them on the Game page and save them there.";
 
     private static readonly string[] Watched =
     [
@@ -35,12 +37,12 @@ public partial class AddonsPluginsViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private readonly Func<AddonsTarget> _target;
     private readonly WindowerInstaller _install;
-    private readonly AddonsHeading _addonsHeading = new("Addons"), _pluginsHeading = new("Plugins"),
-        _polHeading = new("PlayOnline plugins", "Plugins Ashita loads into PlayOnline before the game starts."), _end = new(null);
+    private readonly AddonsHeading _addonsHeading = new(), _pluginsHeading = new(),
+        _polHeading = new("Plugins Ashita loads into PlayOnline before the game starts."), _end = new();
     private AddonsTarget? _shown;
     private object? _scan;
     private Page? _page;
-    private int _refreshes;
+    private int _refreshes, _tab;
     private bool _visible, _useGlobal;
 
     public AddonsPluginsViewModel(ISettingsService settings, Func<AddonsTarget> target, WindowerInstaller? install = null)
@@ -67,9 +69,21 @@ public partial class AddonsPluginsViewModel : ObservableObject
     public ObservableCollection<AddonRow> Plugins { get; } = [];
     public ObservableCollection<AddonRow> PolPlugins { get; } = [];
 
-    // top to bottom: this for the top of the page, then each list under its heading. Only rows come and go, so the
-    // search box isn't rebuilt mid-typing
+    // top to bottom: this for the top of the page, then the sub-tab's list under its heading. Only rows come and go,
+    // so the search box isn't rebuilt mid-typing
     public ObservableCollection<object> Items { get; } = [];
+
+    public ObservableCollection<string> Tabs { get; } = ["Addons", "Plugins"];
+
+    // the same order as AddonKind
+    public int Tab
+    {
+        get => _tab;
+        set
+        {
+            if (SetProperty(ref _tab, Math.Clamp(value, 0, Tabs.Count - 1))) Filter();
+        }
+    }
 
     [ObservableProperty] private string _search = "";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasLists))] private string? _message = "";
@@ -79,6 +93,9 @@ public partial class AddonsPluginsViewModel : ObservableObject
     [ObservableProperty] private bool _statusIsError;
     [ObservableProperty] private bool _isWindower;
     [ObservableProperty] private bool _isAshita;
+    [ObservableProperty] private string? _cardPlatform;
+    [ObservableProperty] private string _cardHeading = "";
+    [ObservableProperty] private string _cardName = "";
     [ObservableProperty] private bool _canChangeUseGlobal = true;
     [ObservableProperty] private string _useGlobalHelp = "";
     [ObservableProperty] private string? _noAddons;
@@ -89,6 +106,22 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     partial void OnNoAddonsChanged(string? value) => _addonsHeading.Note = value;
     partial void OnNoPluginsChanged(string? value) => _pluginsHeading.Note = value;
+
+    // Ashita's PlayOnline Plugins tab goes with it, but not while a page is loading, so another boot config keeps it
+    // picked. Addons gets picked before it goes, or the strip would be left with nothing
+    private void SyncTabs(Page page)
+    {
+        if (page.Message is not null) return;
+        if (IsAshita)
+        {
+            if (Tabs.Count == 2) Tabs.Add("PlayOnline Plugins");
+        }
+        else if (Tabs.Count == 3)
+        {
+            Tab = 0;
+            Tabs.RemoveAt(2);
+        }
+    }
 
     internal Task Refreshing { get; private set; } = Task.CompletedTask;
 
@@ -167,6 +200,10 @@ public partial class AddonsPluginsViewModel : ObservableObject
         Problem = page.Problem == Status ? null : page.Problem;
         IsWindower = page.Message is null && page.Platform == ThirdPartyHookService.Windower;
         IsAshita = page.Message is null && page.Platform == ThirdPartyHookService.Ashita;
+        SyncTabs(page);
+        CardPlatform = page.Message is null ? page.Platform : null;
+        CardHeading = IsAshita ? "Addons and plugins for the Ashita boot configuration" : "Addons and plugins for the Windower profile";
+        CardName = page.Display;
         _useGlobal = page.UseGlobal;
         OnPropertyChanged(nameof(UseGlobal));
         CanChangeUseGlobal = !(page.UseGlobal && page.ListLocked);
@@ -199,19 +236,14 @@ public partial class AddonsPluginsViewModel : ObservableObject
         NoPlugins = Nothing(Plugins, _page?.NoPlugins);
         NoPolPlugins = Nothing(PolPlugins, _page?.NoPolPlugins);
         _polHeading.Note = NoPolPlugins ?? (PolPlugins.Any(r => r.Visible && r.Incompatible) ? ThirdPartyHookService.IncompatibleNote : null);
+        _polHeading.Warning = PolPlugins.Any(r => Same(r.Key, "sandbox") && r.On) ? SandboxText : null;
         // hidden rows stay out of the list altogether, a collapsed one still costs the panel a container
         List<object> items = [this];
         if (HasLists)
         {
-            items.Add(_addonsHeading);
-            items.AddRange(Addons.Where(r => r.Visible));
-            items.Add(_pluginsHeading);
-            items.AddRange(Plugins.Where(r => r.Visible));
-            if (IsAshita)
-            {
-                items.Add(_polHeading);
-                items.AddRange(PolPlugins.Where(r => r.Visible));
-            }
+            var (heading, rows) = Tab switch { 1 => (_pluginsHeading, Plugins), 2 => (_polHeading, PolPlugins), _ => (_addonsHeading, Addons) };
+            items.Add(heading);
+            items.AddRange(rows.Where(r => r.Visible));
             items.Add(_end);
         }
         Sync(Items, items);
@@ -496,10 +528,9 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
         var profile = file.Find(profileName);
         page.Key = profile?.Name ?? profileName;
+        page.Display = SettingsViewModel.WindowerDisplay(page.Key, file.Profiles.Select(p => p.Name).ToList());
         page.Branch = file.Branch;
-        page.Intro = page.Key.Length == 0
-            ? "Turn addons and plugins on or off for Windower's default profile. Changes save straight away."
-            : $"Turn addons and plugins on or off for the Windower profile {page.Key}. Changes save straight away.";
+        page.Intro = "Turn addons and plugins on or off for this profile. Changes save straight away.";
         var effective = WindowerAddonList.Effective(file, lists, page.Key);
         page.UseGlobal = effective.UseGlobal;
         page.ListLocked = locked;
@@ -595,8 +626,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
         scan ??= new AshitaScan(AshitaAddons.Scan(dir), AshitaPlugins.Scan(dir));
         var page = new Page
         {
-            Platform = ThirdPartyHookService.Ashita, Key = bootName,
-            Intro = $"Turn addons and plugins on or off for the Ashita boot configuration {bootName}. Changes save straight away.",
+            Platform = ThirdPartyHookService.Ashita, Key = bootName, Display = bootName,
+            Intro = "Turn addons and plugins on or off for this boot configuration. Changes save straight away.",
         };
         AshitaBootConfig boot;
         try { boot = AshitaBootConfig.Load(path); }
@@ -686,7 +717,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         public string? Problem;
         public string Platform = ThirdPartyHookService.None;
         public bool UseGlobal = true, ListLocked;
-        public string Key = "";
+        public string Key = "", Display = "";
         public string Branch = "stable";
         public List<RowData> Addons = [], Plugins = [], PolPlugins = [];
         public string? NoAddons, NoPlugins, NoPolPlugins;
@@ -720,11 +751,11 @@ public partial class AddonsPluginsViewModel : ObservableObject
     }
 }
 
-public sealed partial class AddonsHeading(string? title, string? help = null) : ObservableObject
+public sealed partial class AddonsHeading(string? help = null) : ObservableObject
 {
-    public string? Title { get; } = title;
     public string? Help { get; } = help;
     [ObservableProperty] private string? _note;
+    [ObservableProperty] private string? _warning;
 }
 
 internal sealed record RowData(AddonKind Kind, string Key, string Name, string? Version, string? Author, string? Description)

@@ -213,17 +213,17 @@ public sealed class WindowerLaunch : IDisposable
         var updater = (_setup.NewUpdater ?? WindowerUpdates.NewUpdater)(_setup.WindowerDir, branch);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(_setup.UpdateLimit);
-        string? failed = null;
+        bool failed = false;
         try { Update = updater.UpdateAsync(limit.Token).GetAwaiter().GetResult(); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             Log.Warning("Windower's update took longer than {Limit}, the launch carries on without it", _setup.UpdateLimit);
-            failed = "Windower's update took too long, so it was stopped.";
+            failed = true;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
             Log.Warning(e, "Windower's update failed");
-            failed = "Windower's update stopped part way.";
+            failed = true;
         }
         ct.ThrowIfCancellationRequested();
         if (Update is { } r)
@@ -233,8 +233,7 @@ public sealed class WindowerLaunch : IDisposable
             Log.Information("Windower update ({Branch}): Hook.dll {Before} -> {After}, {Plugins} plugin(s), {Addons} addon(s)",
                             r.Branch, r.HookBefore, r.HookAfter, r.PluginsUpdated.Count, r.AddonsUpdated.Count);
         }
-        WindowerUpdates.Record(_setup.WindowerDir, WindowerUpdates.Describe(Update, failed));
-        if (failed is null && Update is { Errors.Count: 0, LockTimedOut: false }) return;
+        if (!failed && Update is { Errors.Count: 0, LockTimedOut: false }) return;
         UpdateNotice = UpdateNoticeText;
         progress?.Report(new LaunchProgress("Notice", UpdateNotice));
     }
@@ -445,36 +444,6 @@ public sealed class WindowerLaunch : IDisposable
 
 public static class WindowerUpdates
 {
-    private static readonly Dictionary<string, (DateTime At, string Text)> Last = new(StringComparer.OrdinalIgnoreCase);
-
     public static WindowerUpdater NewUpdater(string dir, string branch) =>
         new(dir, branch) { Log = line => Serilog.Log.Debug("Windower update: {Line}", line) };
-
-    public static void Record(string dir, string text)
-    {
-        lock (Last) Last[Path.GetFullPath(dir)] = (DateTime.Now, text);
-    }
-
-    public static (DateTime At, string Text)? For(string? dir)
-    {
-        if (string.IsNullOrWhiteSpace(dir)) return null;
-        lock (Last) return Last.TryGetValue(Path.GetFullPath(dir), out var v) ? v : null;
-    }
-
-    public static string Describe(WindowerUpdateResult? r, string? failed = null)
-    {
-        if (failed is not null || r is null) return failed ?? "Windower's update didn't finish.";
-        if (r.LockTimedOut) return "Something else was updating Windower, so Provenance left it this time.";
-        if (r.Errors.Count > 0) return $"Windower couldn't be fully updated. {r.Errors[0]}";
-        if (r.Skipped && r.SkipReason is { } why) return why;
-        var parts = new List<string>();
-        if (r.HookChanged) parts.Add($"Hook.dll (now {r.HookAfter})");
-        if (r.LauncherChanged) parts.Add("Windower's own launcher");
-        if (r.PluginsUpdated.Count > 0) parts.Add(r.PluginsUpdated.Count == 1 ? "1 plugin" : $"{r.PluginsUpdated.Count} plugins");
-        if (r.AddonsUpdated.Count > 0) parts.Add(r.AddonsUpdated.Count == 1 ? "1 addon" : $"{r.AddonsUpdated.Count} addons");
-        if (r.ResUpdated.Count > 0 || r.ResRemoved.Count > 0) parts.Add("the resource files");
-        if (parts.Count == 0) return "Windower is up to date.";
-        var list = parts.Count == 1 ? parts[0] : string.Join(", ", parts.Take(parts.Count - 1)) + " and " + parts[^1];
-        return $"Windower is up to date. Provenance updated {list}.";
-    }
 }

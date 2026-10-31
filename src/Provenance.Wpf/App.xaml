@@ -33,6 +33,22 @@
                 <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
             </Style>
 
+            <!-- the profile a Settings page is changing, in its app's colour. Tag is the platform -->
+            <Style x:Key="PlatformCard" TargetType="Border">
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="16,12" />
+                <Setter Property="Background" Value="{DynamicResource Surface.1}" />
+                <Setter Property="TextElement.Foreground" Value="White" />
+                <Style.Triggers>
+                    <Trigger Property="Tag" Value="windower">
+                        <Setter Property="Background" Value="{DynamicResource Platform.Windower}" />
+                    </Trigger>
+                    <Trigger Property="Tag" Value="ashita">
+                        <Setter Property="Background" Value="{DynamicResource Platform.Ashita}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
             <!-- the default wide grey scrollbar with arrows looks awful on the dark theme -->
             <Style TargetType="ScrollBar" BasedOn="{StaticResource MaterialDesignScrollBarMinimal}">
                 <Setter Property="materialDesign:ScrollBarAssist.ThumbCornerRadius" Value="3" />

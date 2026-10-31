@@ -1,4 +1,7 @@
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Interop;
 
 namespace Provenance.Wpf.Views;
 
@@ -15,6 +18,8 @@ public partial class SettingsWindow : Window
         Tabs.SelectionChanged += (_, _) => ShowPanel(Tabs.SelectedIndex);
         Loaded += (_, _) => ShowPanel(Tabs.SelectedIndex);
         Activated += (_, _) => { if (IsLoaded && Tabs.SelectedIndex == 0) ReadLargeAddressAware(); };
+        Deactivated += (_, _) => CancelConsoleKey();
+        PreviewMouseDown += (_, _) => { if (!ConsoleKeyButton.IsMouseOver) CancelConsoleKey(); };
         Closing += OnClosing;
         // KeyDown not PreviewKeyDown, so an open dropdown gets its Esc first and only closes itself
         KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Escape) { e.Handled = true; Close(); } };
@@ -70,4 +75,44 @@ public partial class SettingsWindow : Window
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
+
+    private void CancelConsoleKey() => (DataContext as ViewModels.SettingsViewModel)?.CancelConsoleKey();
+
+    private void OnConsoleKeyFocusLost(object sender, KeyboardFocusChangedEventArgs e) => CancelConsoleKey();
+
+    // while it waits every key is the button's, so Esc doesn't close Settings and Tab doesn't move on. A held key's
+    // repeats don't count
+    private void OnConsoleKeyDown(object sender, KeyEventArgs e)
+    {
+        if (DataContext is not ViewModels.SettingsViewModel { WaitingForConsoleKey: true } vm) return;
+        e.Handled = true;
+        if (!e.IsRepeat) vm.PressConsoleKey(DirectInputCode(e.Key == Key.System ? e.SystemKey : e.Key));
+    }
+
+    private void OnConsoleKeyUp(object sender, KeyEventArgs e)
+    {
+        if (DataContext is not ViewModels.SettingsViewModel { WaitingForConsoleKey: true } vm) return;
+        e.Handled = true;
+        if ((e.Key == Key.System ? e.SystemKey : e.Key) == Key.Snapshot) vm.PressConsoleKey(DirectInputCode(Key.Snapshot));
+    }
+
+    // the scan code's in the key message itself, which tells Enter from the keypad's. A key that didn't come from one
+    // (raised by hand) gets the scan code Windows would give it
+    private static int DirectInputCode(Key key)
+    {
+        int vk = KeyInterop.VirtualKeyFromKey(key);
+        var msg = ComponentDispatcher.CurrentKeyboardMessage;
+        if (msg.message is WmKeyDown or WmSysKeyDown && (int)msg.wParam == vk)
+        {
+            long lp = msg.lParam.ToInt64();
+            return ViewModels.WindowerKeyNames.DirectInputCode(vk, (int)(lp >> 16) & 0xFF, (lp & 0x1000000) != 0);
+        }
+        uint sc = MapVirtualKeyW((uint)vk, MapVkToVscEx);
+        return ViewModels.WindowerKeyNames.DirectInputCode(vk, (int)(sc & 0xFF), (sc & 0xFF00) is 0xE000 or 0xE100);
+    }
+
+    private const int WmKeyDown = 0x100, WmSysKeyDown = 0x104;
+    private const uint MapVkToVscEx = 4;
+
+    [DllImport("user32.dll")] private static extern uint MapVirtualKeyW(uint code, uint mapType);
 }

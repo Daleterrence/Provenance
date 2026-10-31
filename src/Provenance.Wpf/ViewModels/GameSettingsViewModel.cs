@@ -55,31 +55,16 @@ public partial class GameSettingsViewModel : ObservableObject
     };
     public string ProfileHeading => HasProfile ? $"Game settings for the {ProfileKind}" : "";
     public string ProfileShown => _store.ProfileDisplay ?? "";
-
-    public string SharedNoteText => _store.Platform == ThirdPartyHookService.Ashita ? "Applies to every boot configuration" : "Applies to every profile";
-
-    public string ProfileHelp => _store.Platform switch
-    {
-        ThirdPartyHookService.Windower =>
-            "Settings marked \"Applies to every profile\" are shared by all your Windower profiles. You can pick another profile under Windower/Ashita.",
-        ThirdPartyHookService.Ashita =>
-            "Settings marked \"Applies to every boot configuration\" are shared by all of them. You can pick another boot configuration under Windower/Ashita.",
-        _ => "",
-    };
+    public string? Platform => _store.Platform;
 
     public string KeepAspectHelp => _store.SameShapeRenderSizes
         ? "Windower always keeps the 3D resolution the same shape as the game resolution. This setting is for when you play without it."
         : "When this is on, the 3D resolution list only shows sizes that are the same shape as the game resolution.";
 
+    // the Config Tool line only holds with no Windower or Ashita, they keep some of these in their own files
     public string IntroText => HasProfile
-        ? "These are the same settings as in the FINAL FANTASY XI Config tool. Only the settings you change are saved."
-        : "These are the same settings as in the FINAL FANTASY XI Config tool. Only the settings you change are saved, and Windower or Ashita can override some of them while you play.";
-
-    // true for a field every profile shares, which gets a note saying so. Never with no platform
-    [ObservableProperty] private IReadOnlyDictionary<string, bool> _appliesToAll = Shared(null, false);
-
-    private static Dictionary<string, bool> Shared(IReadOnlySet<string>? profileFields, bool hasProfile) =>
-        GameFields.All.ToDictionary(f => f, f => hasProfile && profileFields is not null && !profileFields.Contains(f));
+        ? "Only the settings you change are saved."
+        : "These are the same settings as in the FINAL FANTASY XI Config Tool. Only the settings you change are saved, and Windower or Ashita can override some of them while you play.";
 
     public void UseStore(IGameSettingsStore store)
     {
@@ -101,11 +86,10 @@ public partial class GameSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasProfile));
         OnPropertyChanged(nameof(ProfileKind));
         OnPropertyChanged(nameof(ProfileShown));
+        OnPropertyChanged(nameof(Platform));
         OnPropertyChanged(nameof(ProfileHeading));
         OnPropertyChanged(nameof(IntroText));
         OnPropertyChanged(nameof(KeepAspectHelp));
-        OnPropertyChanged(nameof(SharedNoteText));
-        OnPropertyChanged(nameof(ProfileHelp));
         OnPropertyChanged(nameof(Editable));
         OnPropertyChanged(nameof(ReadOnlyNote));
         OnPropertyChanged(nameof(HardwareMouseEnabled));
@@ -220,7 +204,6 @@ public partial class GameSettingsViewModel : ObservableObject
         }
         _loaded = loaded is not null;
         _original = loaded?.Settings ?? FfxiSettings.Defaults();
-        AppliesToAll = Shared(loaded?.ProfileFields, HasProfile);
         Apply(_original);
         OnPropertyChanged(nameof(Available));
         OnPropertyChanged(nameof(Editable));
@@ -246,8 +229,8 @@ public partial class GameSettingsViewModel : ObservableObject
         base.OnPropertyChanged(e);
         if (!_applying && e.PropertyName is not (nameof(Status) or nameof(StatusIsError) or nameof(BrightnessText) or nameof(Available)
                 or nameof(HasUnsavedChanges) or nameof(UiScaleText) or nameof(UiSizeText) or nameof(UiScaleMax) or nameof(Store)
-                or nameof(HasProfile) or nameof(ProfileKind) or nameof(ProfileShown) or nameof(ProfileHeading) or nameof(IntroText) or nameof(KeepAspectHelp)
-                or nameof(SharedNoteText) or nameof(ProfileHelp) or nameof(AppliesToAll) or nameof(Editable) or nameof(ReadOnlyNote)
+                or nameof(HasProfile) or nameof(ProfileKind) or nameof(ProfileShown) or nameof(Platform) or nameof(ProfileHeading) or nameof(IntroText)
+                or nameof(KeepAspectHelp) or nameof(Editable) or nameof(ReadOnlyNote)
                 or nameof(HardwareMouseEnabled) or nameof(HardwareMouseHelp) or nameof(LegacyHelp)))
             _edited = true;
     }

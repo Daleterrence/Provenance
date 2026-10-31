@@ -28,9 +28,6 @@ public static class AshitaBootFiles
 
     public static bool IsTakeover(string polPlugin) => Takeovers.Contains(polPlugin, StringComparer.OrdinalIgnoreCase);
 
-    public static IEnumerable<string> InstalledTakeovers(string ashitaDir) =>
-        Takeovers.Where(t => File.Exists(Path.Combine(ashitaDir, "polplugins", t + ".dll")));
-
     public static string? ExampleFor(string ashitaDir) =>
         Examples.Take(2).FirstOrDefault(e => File.Exists(Path.Combine(Folder(ashitaDir), e)));
 

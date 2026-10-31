@@ -4,6 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:views="clr-namespace:Provenance.Wpf.Views"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
         Title="Provenance settings" Icon="/Assets/provenance.ico"
         Width="760" Height="600" MinWidth="640" MinHeight="480"
         WindowStyle="None" ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
@@ -70,11 +71,6 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
-        <Style x:Key="SharedNote" TargetType="StackPanel">
-            <Setter Property="Orientation" Value="Horizontal" />
-            <Setter Property="Margin" Value="0,3,0,0" />
-        </Style>
-
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource Surface.1}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Border.Hair}" />
@@ -100,22 +96,20 @@
                             <StackPanel x:Name="Text" VerticalAlignment="Center">
                                 <TextBlock FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource Text.1}"
                                            Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" />
-                                <TextBlock x:Name="HelpText" Style="{StaticResource Help}" Margin="0,2,0,0"
-                                           Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" />
-                                <StackPanel x:Name="SharedNote" Style="{StaticResource SharedNote}" Visibility="Collapsed">
-                                    <materialDesign:PackIcon Kind="AccountMultipleOutline" Width="13" Height="13" VerticalAlignment="Center"
-                                                             Foreground="{DynamicResource Primary}" />
-                                    <TextBlock Text="{Binding SharedNoteText, FallbackValue=''}" FontSize="11" Margin="4,0,0,0" Foreground="{DynamicResource Text.3}" />
-                                </StackPanel>
+                                <!-- usually plain text, the odd one with a bold bit is a TextBlock of its own -->
+                                <ContentPresenter x:Name="HelpText" Margin="0,2,0,0" Content="{TemplateBinding Tag}">
+                                    <ContentPresenter.Resources>
+                                        <DataTemplate DataType="{x:Type sys:String}">
+                                            <TextBlock Style="{StaticResource Help}" Text="{Binding}" />
+                                        </DataTemplate>
+                                    </ContentPresenter.Resources>
+                                </ContentPresenter>
                             </StackPanel>
                             <ContentPresenter Grid.Column="2" VerticalAlignment="Center" />
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="Tag" Value="{x:Null}">
                                 <Setter TargetName="HelpText" Property="Visibility" Value="Collapsed" />
-                            </Trigger>
-                            <Trigger Property="views:SettingNote.Shared" Value="True">
-                                <Setter TargetName="SharedNote" Property="Visibility" Value="Visible" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Text" Property="Opacity" Value="0.45" />
@@ -236,11 +230,11 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Text="PlayOnline" Style="{StaticResource Section}" />
+                        <TextBlock Text="Global Settings" Style="{StaticResource Section}" />
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <HeaderedContentControl Header="Chat language filter"
-                                                        Tag="When this is on, offensive words are hidden in FINAL FANTASY XI.">
+                                                        Tag="When this is on, offensive words are hidden in PlayOnline and FINAL FANTASY XI.">
                                     <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ChatLanguageFilter}"
                                                   AutomationProperties.Name="Chat language filter" />
                                 </HeaderedContentControl>
@@ -355,52 +349,6 @@
                                         <TextBox Text="{Binding AshitaScriptArgs, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                                  AutomationProperties.Name="Script arguments" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="PlayOnline language">
-                                        <ComboBox ItemsSource="{Binding AshitaLanguages}" SelectedIndex="{Binding AshitaLanguageIndex}"
-                                                  AutomationProperties.Name="PlayOnline language" />
-                                    </HeaderedContentControl>
-                                </StackPanel>
-                            </Border>
-
-                            <TextBlock Text="PlayOnline plugins" Style="{StaticResource Section}" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding AshitaCardEnabled}">
-                                <StackPanel Margin="0,4">
-                                    <TextBlock Text="This boot configuration doesn't list any PlayOnline plugins." Margin="0,6">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Help}">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding AshitaPolPlugins.Count}" Value="0">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                    <ItemsControl ItemsSource="{Binding AshitaPolPlugins}" Focusable="False">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <HeaderedContentControl Header="{Binding Name}" Tag="{Binding Note}" IsEnabled="{Binding Available}">
-                                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding On}"
-                                                                  AutomationProperties.Name="{Binding Name}" />
-                                                </HeaderedContentControl>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    <TextBlock Text="{Binding AshitaIncompatibleNote}" Margin="0,6,0,8">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Help}">
-                                                <Style.Triggers>
-                                                    <Trigger Property="Text" Value="">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                    <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,4,0,8" Foreground="{DynamicResource State.Warn}"
-                                               Visibility="{Binding AshitaSandboxOn, Converter={StaticResource BoolToVis}}"
-                                               Text="With sandbox on, the game only gets the game settings saved in this boot configuration. Set them on the Game page and save them there." />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -450,11 +398,23 @@
                             <TextBlock Text="Profile settings" Style="{StaticResource Section}" Margin="0,22,0,10" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding WindowerCardEnabled}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Console key" Tag="The key that opens Windower's console in the game.">
-                                        <ComboBox ItemsSource="{Binding ConsoleKeys}" SelectedItem="{Binding WindowerConsoleKey}" DisplayMemberPath="Display"
-                                                  MaxDropDownHeight="320" AutomationProperties.Name="Console key" />
+                                    <HeaderedContentControl Header="Console key" Tag="Sets the keybind to open the Windower console in-game.">
+                                        <Button x:Name="ConsoleKeyButton" Content="{Binding ConsoleKeyText}" FontSize="12" Command="{Binding EditConsoleKeyCommand}"
+                                                PreviewKeyDown="OnConsoleKeyDown" PreviewKeyUp="OnConsoleKeyUp" LostKeyboardFocus="OnConsoleKeyFocusLost"
+                                                AutomationProperties.Name="Console key">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding WaitingForConsoleKey}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource Primary.Muted}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Allow the Windows key" Tag="When this is off, the Windows key does nothing while you're playing.">
+                                    <HeaderedContentControl Header="Allow the Windows key" Tag="If enabled, the Windows key opens the Start Menu as usual.">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding WindowerAllowWinKey}"
                                                       AutomationProperties.Name="Allow the Windows key" />
                                     </HeaderedContentControl>
@@ -462,30 +422,17 @@
                             </Border>
 
                             <TextBlock Text="Updates" Style="{StaticResource Section}" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding WindowerUpdatesEnabled}">
+                            <Border Style="{StaticResource Card}" IsEnabled="{Binding WindowerBranchEnabled}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Branch" Tag="Development gets new versions of Windower first. Most people use Stable.">
-                                        <ComboBox ItemsSource="{Binding WindowerBranches}" SelectedIndex="{Binding WindowerBranchIndex}"
-                                                  AutomationProperties.Name="Branch" />
+                                    <HeaderedContentControl Header="Branch">
+                                        <HeaderedContentControl.Tag>
+                                            <TextBlock Style="{StaticResource Help}"><Run Text="Switches your Windower hook between Stable and Development. " /><Bold>Leave this on stable unless you know what you are doing.</Bold></TextBlock>
+                                        </HeaderedContentControl.Tag>
+                                        <Button Content="{Binding WindowerBranchName}" Style="{StaticResource MaterialDesignOutlinedButton}" FontSize="12"
+                                                Command="{Binding FlipWindowerBranchCommand}" AutomationProperties.Name="Branch" />
                                     </HeaderedContentControl>
                                     <TextBlock Text="{Binding WindowerVersionText}" TextWrapping="Wrap" FontSize="12" Margin="0,2,0,10"
-                                               Foreground="{DynamicResource Text.2}" />
-                                    <HeaderedContentControl Header="Check for updates" Tag="Provenance also checks every time it starts the game through Windower.">
-                                        <Button Content="CHECK NOW" Style="{StaticResource MaterialDesignOutlinedButton}" FontSize="12"
-                                                Command="{Binding CheckWindowerUpdatesCommand}" />
-                                    </HeaderedContentControl>
-                                    <TextBlock Text="{Binding WindowerUpdateText}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,10"
-                                               Foreground="{DynamicResource Text.2}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Style.Triggers>
-                                                    <Trigger Property="Text" Value="">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+                                               Foreground="{DynamicResource Text.2}" Visibility="{Binding WindowerVersionText, Converter={StaticResource NullToVisibilityConverter}}" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -596,44 +543,33 @@
                 <Grid x:Name="Panel2" Visibility="Collapsed" DataContext="{Binding Game}" RowDefinitions="*,Auto">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="28,22,28,6">
-                            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,16"
-                                       Text="{Binding IntroText}" />
-                            <Border Style="{StaticResource Card}" Padding="16,12" Visibility="{Binding HasProfile, Converter={StaticResource BoolToVis}}">
+                            <Border Style="{StaticResource PlatformCard}" Tag="{Binding Platform}" Margin="0,0,0,12"
+                                    Visibility="{Binding HasProfile, Converter={StaticResource BoolToVis}}">
                                 <Grid ColumnDefinitions="Auto,*">
-                                    <materialDesign:PackIcon Kind="PuzzleOutline" Width="22" Height="22" VerticalAlignment="Top" Margin="0,2,0,0"
-                                                             Foreground="{DynamicResource Text.2}" />
+                                    <materialDesign:PackIcon Kind="PuzzleOutline" Width="22" Height="22" VerticalAlignment="Center" />
                                     <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                                        <TextBlock Text="{Binding ProfileHeading}" Style="{StaticResource Label}" />
+                                        <TextBlock Text="{Binding ProfileHeading}" FontSize="12" FontWeight="SemiBold" />
                                         <TextBlock Text="{Binding ProfileShown}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Style="{StaticResource Help}" Margin="0,4,0,0"
-                                                   Text="{Binding ProfileHelp}" />
-                                        <TextBlock Text="{Binding ReadOnlyNote}" TextWrapping="Wrap" FontSize="12" Margin="0,8,0,0"
-                                                   Foreground="{DynamicResource State.Warn}">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Style.Triggers>
-                                                        <Trigger Property="Text" Value="">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </Trigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
                                     </StackPanel>
                                 </Grid>
                             </Border>
+                            <TextBlock Text="{Binding ReadOnlyNote}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12"
+                                       Foreground="{DynamicResource State.Warn}"
+                                       Visibility="{Binding ReadOnlyNote, Converter={StaticResource NullToVisibilityConverter}}" />
+                            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,16"
+                                       Text="{Binding IntroText}" />
 
                             <!-- only the cards need the game's saved settings, a broken install may have none -->
                             <TextBlock Text="Display" Style="{StaticResource Section}" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Resolution" views:SettingNote.Shared="{Binding AppliesToAll[Resolution]}">
+                                    <HeaderedContentControl Header="Resolution">
                                         <ComboBox ItemsSource="{Binding Resolutions}" SelectedItem="{Binding Resolution}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Window mode" views:SettingNote.Shared="{Binding AppliesToAll[WindowMode]}">
+                                    <HeaderedContentControl Header="Window mode">
                                         <ComboBox ItemsSource="{Binding WindowModes}" SelectedIndex="{Binding WindowModeIndex}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="UI size" views:SettingNote.Shared="{Binding AppliesToAll[UiSize]}" Tag="Higher values make the menus and text bigger.">
+                                    <HeaderedContentControl Header="UI size" Tag="Higher values make the menus and text bigger.">
                                         <StackPanel>
                                             <Grid ColumnDefinitions="*,46">
                                                 <Slider Minimum="1" Maximum="{Binding UiScaleMax}" Value="{Binding UiScale}"
@@ -645,7 +581,7 @@
                                             <TextBlock Text="{Binding UiSizeText}" Style="{StaticResource Help}" Margin="0,2,0,0" />
                                         </StackPanel>
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Brightness" views:SettingNote.Shared="{Binding AppliesToAll[Brightness]}">
+                                    <HeaderedContentControl Header="Brightness">
                                         <Grid ColumnDefinitions="*,46">
                                             <Slider Minimum="-1" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
                                                     Value="{Binding Brightness}" VerticalAlignment="Center" />
@@ -669,28 +605,28 @@
                                                     Margin="4,0,0,0" Command="{Binding PresetCommand}" CommandParameter="Standard" />
                                         </UniformGrid>
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="3D resolution" views:SettingNote.Shared="{Binding AppliesToAll[RenderSize]}" Tag="This is the resolution the game draws the world at. A higher one looks sharper, but the game can run slower.">
+                                    <HeaderedContentControl Header="3D resolution" Tag="This is the resolution the game draws the world at. A higher one looks sharper, but the game can run slower.">
                                         <ComboBox ItemsSource="{Binding RenderSizes}" SelectedItem="{Binding RenderSize}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Keep aspect ratio" views:SettingNote.Shared="{Binding AppliesToAll[KeepAspect]}" Tag="{Binding KeepAspectHelp}">
+                                    <HeaderedContentControl Header="Keep aspect ratio" Tag="{Binding KeepAspectHelp}">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding KeepAspect}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Textures" views:SettingNote.Shared="{Binding AppliesToAll[Textures]}">
+                                    <HeaderedContentControl Header="Textures">
                                         <ComboBox ItemsSource="{Binding Quality3}" SelectedIndex="{Binding Textures}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Fonts" views:SettingNote.Shared="{Binding AppliesToAll[Fonts]}">
+                                    <HeaderedContentControl Header="Fonts">
                                         <ComboBox ItemsSource="{Binding Quality3}" SelectedIndex="{Binding Fonts}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Map quality" views:SettingNote.Shared="{Binding AppliesToAll[Maps]}">
+                                    <HeaderedContentControl Header="Map quality">
                                         <ComboBox ItemsSource="{Binding Quality2}" SelectedIndex="{Binding Maps2D}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Vegetation movement" views:SettingNote.Shared="{Binding AppliesToAll[Vegetation]}">
+                                    <HeaderedContentControl Header="Vegetation movement">
                                         <ComboBox ItemsSource="{Binding VegetationLevels}" SelectedIndex="{Binding Vegetation}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Distant textures" views:SettingNote.Shared="{Binding AppliesToAll[DistantTextures]}" Tag="When this is on, textures stay sharp in the distance. It looks better, but the game can run slower.">
+                                    <HeaderedContentControl Header="Distant textures" Tag="When this is on, textures stay sharp in the distance. It looks better, but the game can run slower.">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding DrawDistance}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Enhanced shading" views:SettingNote.Shared="{Binding AppliesToAll[EnhancedShading]}">
+                                    <HeaderedContentControl Header="Enhanced shading">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding EnhancedShading}" />
                                     </HeaderedContentControl>
                                 </StackPanel>
@@ -699,10 +635,10 @@
                             <TextBlock Text="Sound" Style="{StaticResource Section}" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Sound" views:SettingNote.Shared="{Binding AppliesToAll[Sound]}">
+                                    <HeaderedContentControl Header="Sound">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding Sound}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Simultaneous sound effects" views:SettingNote.Shared="{Binding AppliesToAll[SoundEffects]}" Tag="This is how many sound effects the game can play at the same time."
+                                    <HeaderedContentControl Header="Simultaneous sound effects" Tag="This is how many sound effects the game can play at the same time."
                                                             IsEnabled="{Binding Sound}">
                                         <Grid ColumnDefinitions="*,46">
                                             <Slider Minimum="12" Maximum="20" TickFrequency="1" IsSnapToTickEnabled="True"
@@ -711,7 +647,7 @@
                                                        VerticalAlignment="Center" Foreground="{DynamicResource Text.2}" />
                                         </Grid>
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Sound in the background" views:SettingNote.Shared="{Binding AppliesToAll[BackgroundSound]}" Tag="When this is on, the sound keeps playing when you switch to another window."
+                                    <HeaderedContentControl Header="Sound in the background" Tag="When this is on, the sound keeps playing when you switch to another window."
                                                             IsEnabled="{Binding Sound}">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding BackgroundSound}" />
                                     </HeaderedContentControl>
@@ -721,23 +657,23 @@
                             <TextBlock Text="Gamepad" Style="{StaticResource Section}" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Gamepad" views:SettingNote.Shared="{Binding AppliesToAll[Pad]}">
+                                    <HeaderedContentControl Header="Gamepad">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadEnabled}" />
                                     </HeaderedContentControl>
                                     <StackPanel Margin="20,0,0,0" IsEnabled="{Binding PadEnabled}">
-                                        <HeaderedContentControl Header="Force feedback" views:SettingNote.Shared="{Binding AppliesToAll[PadForceFeedback]}">
+                                        <HeaderedContentControl Header="Force feedback">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadForceFeedback}" />
                                         </HeaderedContentControl>
-                                        <HeaderedContentControl Header="Analogue sliders" views:SettingNote.Shared="{Binding AppliesToAll[PadSlider]}">
+                                        <HeaderedContentControl Header="Analogue sliders">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadSlider}" />
                                         </HeaderedContentControl>
-                                        <HeaderedContentControl Header="Hat switches" views:SettingNote.Shared="{Binding AppliesToAll[PadHat]}">
+                                        <HeaderedContentControl Header="Hat switches">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadHat}" />
                                         </HeaderedContentControl>
-                                        <HeaderedContentControl Header="Gamepad in the background" views:SettingNote.Shared="{Binding AppliesToAll[PadBackground]}" Tag="When this is on, the gamepad keeps working when you switch to another window.">
+                                        <HeaderedContentControl Header="Gamepad in the background" Tag="When this is on, the gamepad keeps working when you switch to another window.">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadBackground}" />
                                         </HeaderedContentControl>
-                                        <HeaderedContentControl Header="XInput controller" views:SettingNote.Shared="{Binding AppliesToAll[PadXInput]}" Tag="Turn this on if you use an Xbox controller, or one that works like it.">
+                                        <HeaderedContentControl Header="XInput controller" Tag="Turn this on if you use an Xbox controller, or one that works like it.">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadXInput}" />
                                         </HeaderedContentControl>
                                     </StackPanel>
@@ -751,10 +687,10 @@
                             <TextBlock Text="Other" Style="{StaticResource Section}" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Opening movie" views:SettingNote.Shared="{Binding AppliesToAll[OpeningMovie]}" Tag="When this is on, the game plays its opening movie each time it starts.">
+                                    <HeaderedContentControl Header="Opening movie" Tag="When this is on, the game plays its opening movie each time it starts.">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding OpeningMovie}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Full-size screenshots" views:SettingNote.Shared="{Binding AppliesToAll[FullResScreenshots]}" Tag="When this is on, your screenshots are saved at your screen's resolution.">
+                                    <HeaderedContentControl Header="Full-size screenshots" Tag="When this is on, your screenshots are saved at your screen's resolution.">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding FullResScreenshots}" />
                                     </HeaderedContentControl>
                                     <StackPanel Margin="0,8,0,10">
@@ -762,12 +698,6 @@
                                             <TextBlock Text="Screenshots and settings folder" FontSize="13" Foreground="{DynamicResource Text.1}" />
                                             <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
                                                        Text="The game saves your screenshots and some of its settings in this folder." />
-                                            <StackPanel Style="{StaticResource SharedNote}"
-                                                        Visibility="{Binding AppliesToAll[ScreenshotFolder], Converter={StaticResource BoolToVis}}">
-                                                <materialDesign:PackIcon Kind="AccountMultipleOutline" Width="13" Height="13" VerticalAlignment="Center"
-                                                                         Foreground="{DynamicResource Primary}" />
-                                                <TextBlock Text="{Binding SharedNoteText, FallbackValue=''}" FontSize="11" Margin="4,0,0,0" Foreground="{DynamicResource Text.3}" />
-                                            </StackPanel>
                                             <Border Height="8" />
                                         </StackPanel>
                                         <Grid ColumnDefinitions="*,Auto">
@@ -777,19 +707,19 @@
                                                     Command="{Binding BrowseScreenshotsCommand}" />
                                         </Grid>
                                     </StackPanel>
-                                    <HeaderedContentControl Header="Legacy settings" views:SettingNote.Shared="{Binding AppliesToAll[LegacySettings]}" Tag="{Binding LegacyHelp}">
+                                    <HeaderedContentControl Header="Legacy settings" Tag="{Binding LegacyHelp}">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding LegacySettings}" />
                                     </HeaderedContentControl>
                                     <!-- each row's enabled on its own, a Windower profile's hardware mouse doesn't need Legacy settings -->
                                     <StackPanel Margin="20,0,0,0">
-                                        <HeaderedContentControl Header="Hardware mouse cursor" views:SettingNote.Shared="{Binding AppliesToAll[HardwareMouse]}"
+                                        <HeaderedContentControl Header="Hardware mouse cursor"
                                                                 IsEnabled="{Binding HardwareMouseEnabled}" Tag="{Binding HardwareMouseHelp}">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding HardwareMouse}" />
                                         </HeaderedContentControl>
-                                        <HeaderedContentControl Header="Simple character select" views:SettingNote.Shared="{Binding AppliesToAll[SimpleCharSelect]}" IsEnabled="{Binding LegacySettings}" Tag="When this is on, the character select screen shows still pictures instead of 3D models.">
+                                        <HeaderedContentControl Header="Simple character select" IsEnabled="{Binding LegacySettings}" Tag="When this is on, the character select screen shows still pictures instead of 3D models.">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding SimpleCharSelect}" />
                                         </HeaderedContentControl>
-                                        <HeaderedContentControl Header="Graphics card fix" views:SettingNote.Shared="{Binding AppliesToAll[GraphicsFix]}" IsEnabled="{Binding LegacySettings}" Tag="This setting is also called Graphics Stabilization. It can help the game run properly on some graphics cards.">
+                                        <HeaderedContentControl Header="Graphics card fix" IsEnabled="{Binding LegacySettings}" Tag="This setting is also called Graphics Stabilization. It can help the game run properly on some graphics cards.">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GraphicsFix}" />
                                         </HeaderedContentControl>
                                     </StackPanel>
