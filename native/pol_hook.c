@@ -997,7 +997,7 @@ static int __cdecl w_svc_2b4(unsigned i, void *out)
 static int g_ffxi_service = -1;
 static int g_friends_loaded, g_groups_loaded;
 static int g_lean;
-static unsigned g_notice;
+static unsigned g_notice, g_notice_days;
 static int g_bad_password;
 static volatile int g_snap_dirty;
 static int g_my_slot = -1;
@@ -1031,6 +1031,18 @@ static int notice_blocks(unsigned st)
     if (st >= 253 && st <= 255) return 1;   /* no table row: the viewer shows LM-01 (log out only) */
     for (int i = 0; i < (int)sizeof block; i++) if (block[i] == st) return 1;
     return 0;
+}
+/* LM-02's text has a day count in it. The viewer only asks svc 0xd24 for it on that row (polcore 0x10046100: days
+   from now to the date in the login result, today included) */
+static void notice_read(BYTE *b)
+{
+    if (!SVC(0xd20)) return;
+    g_notice = ((unsigned char (__cdecl *)(void))SVC(0xd20))();
+    lg("phase_c: account notice status %u (LM-%02u)\r\n", g_notice, g_notice > 220 && g_notice <= 252 ? g_notice - 220 : 0);
+    if (g_notice == 222 && SVC(0xd24)) {
+        g_notice_days = ((unsigned char (__cdecl *)(void))SVC(0xd24))();
+        lg("phase_c: LM-02 days left %u\r\n", g_notice_days);
+    }
 }
 /* the viewer's sign-out (app.dll 0x101983fb). 0xcc4 runs once, it returns 0, not 7, for the hook's connection type */
 static void viewer_sign_out(BYTE *b)
@@ -1431,11 +1443,7 @@ static void phase_c_seed(HMODULE pc)
     }
     lg("phase_c: AUTH OK (state 30) - session bound\r\n");
     g_real_auth = 1;
-    if (SVC(0xd20)) {
-        g_notice = ((unsigned char (__cdecl *)(void))SVC(0xd20))();
-        lg("phase_c: account notice status %u (LM-%02u)\r\n", g_notice,
-           g_notice > 220 && g_notice <= 252 ? g_notice - 220 : 0);
-    }
+    notice_read(b);
     /* stricter than the viewer on purpose, a blocked account stops here */
     flags = *(WORD *)(b + 0x993f4);
     jail = SVC(0x13e4) ? ((svc_v)SVC(0x13e4))() : 0;
@@ -4390,9 +4398,9 @@ static void snapshot_social(BYTE *b)
     wr(h, "{\"groups\":");
     wsprintfA(line, "%d", groups);
     wr(h, line);
-    wsprintfA(line, ",\"ffxiService\":\"%s\",\"notice\":%u,\"presence\":\"%s\",\"play\":\"%s\","
+    wsprintfA(line, ",\"ffxiService\":\"%s\",\"notice\":%u,\"noticeDays\":%u,\"presence\":\"%s\",\"play\":\"%s\","
                     "\"friendsLoaded\":%s,\"groupsLoaded\":%s,\"mail\":\"%s\",\"statusBusy\":%s,\"badPassword\":%s",
-              g_ffxi_service == 1 ? "active" : g_ffxi_service == 0 ? "none" : "unknown", g_notice,
+              g_ffxi_service == 1 ? "active" : g_ffxi_service == 0 ? "none" : "unknown", g_notice, g_notice_days,
               g_presence, g_play_state, g_friends_loaded ? "true" : "false", g_groups_loaded ? "true" : "false",
               g_mail_state, (g_status_job >= 0 || g_status_want >= 0) ? "true" : "false",
               g_bad_password ? "true" : "false");

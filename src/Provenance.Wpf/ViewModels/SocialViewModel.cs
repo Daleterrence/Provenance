@@ -365,7 +365,7 @@ public partial class SocialViewModel : ObservableObject
         Avatar = _avatars.ProfilePicture(snap.MyProfilePictureId);
         MyProfilePictureId = snap.MyProfilePictureId;
         var region = _settings.DetectedRegion ?? PolRegion.UnitedStates;
-        var notice = PolAccountNotices.For(snap.Notice, region);
+        var notice = PolAccountNotices.For(snap.Notice, region, snap.NoticeDays);
         PlayBlockedReason = PolAccountNotices.PlayBlockedReason(snap, region);
         AccountNotice = snap.BadPassword ? PolAccountNotices.BadPassword
                       : notice is { Blocks: false } ? $"{notice.Text} ({notice.Code})" : null;

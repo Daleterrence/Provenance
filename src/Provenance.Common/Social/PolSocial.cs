@@ -144,6 +144,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public bool GroupsLoaded { get; init; } = true;
     public string Mail { get; init; } = "";   // "pending", "ok" or "failed"
     public bool StatusBusy { get; init; }
+    // LM-02's day count (svc 0xd24), 0 when the hook didn't read one
+    public int NoticeDays { get; init; }
     // viewer message 0x7007
     public bool BadPassword { get; init; }
     public string Play { get; init; } = "";   // "refused:..." when the hook's gate stopped a Play
@@ -386,6 +388,7 @@ public static class SocialSnapshot
                 GroupsLoaded = Bool(root, "groupsLoaded"),
                 Mail = Str(root, "mail"),
                 StatusBusy = Bool(root, "statusBusy"),
+                NoticeDays = Int(root, "noticeDays", 0),
                 BadPassword = Bool(root, "badPassword"),
                 Play = Str(root, "play"),
                 SendResults = Arr(root, "sends", s => (Str(s, "token"), Str(s, "state"), Long(s, "time"), Long(s, "seq"))),

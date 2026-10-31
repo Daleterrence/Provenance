@@ -1,3 +1,4 @@
+using System.Globalization;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Social;
@@ -19,10 +20,11 @@ public static class PolAccountNotices
     // Blocks when the viewer's frame only offers Log Out or a fix-it page
     public sealed record Notice(int Status, string Code, bool Blocks, string Text);
 
+    // the viewer's own text, word for word, minus the bits that tell you to press one of its buttons
     private static readonly Dictionary<int, Notice> Table = new[]
     {
         N(221, true, "Unable to log in due to unexpected error."),
-        N(222, false, "Because the free trial period has ended, all relevant Content IDs have been cancelled automatically. If you complete procedures to transfer your account to regular billing-based gameplay within the allowed number of days (including today), you will be able to continue playing with your current character data."),
+        N(222, false, "Because the free trial period has ended, all relevant Content IDs have been cancelled automatically. If you complete procedures to transfer your account to regular billing-based gameplay within %s days (including today), you will be able to continue playing with your current character data."),
         N(223, false, "Due to internet congestion, it will take longer than usual to complete registration for PlayOnline. Please wait for an e-mail confirming its completion."),
         N(224, false, "Your account will be closed at the end of this month due to missing payment information. Please log in from a Japanese copy of the PlayOnline Viewer for further details."),
         N(225, false, "Your current payment method cannot be used at this time. Please log in from a Japanese Viewer which you originally registered with for further details."),
@@ -43,7 +45,7 @@ public static class PolAccountNotices
         N(240, true, "Your account is closed due to an expired card and unpaid fees. You can reactivate your account by paying these fees with a valid card."),
         N(241, true, "Your account has been closed due to unpaid fees resulting from declined authorization on your credit card. You can reactivate your account by paying these fees with a valid card."),
         N(242, true, "Your account is closed due to receiving a chargeback on past fees. You need to pay these fees before you are allowed to reactivate your account."),
-        N(243, true, "Your account is closed due to receiving a chargeback on a payment for a previous charge. Please pay the outstanding amount."),
+        N(243, true, "Your account is closed due to receiving a chargeback on a payment for a previous charge. Please proceed and pay the outstanding amount."),
         N(244, true, "A Square Enix account is required to use PlayOnline services. Please obtain a Square Enix account before continuing."),
         N(245, true, "To use PlayOnline services, you will need to log in to the Square Enix Account Management System and reactivate them."),
         N(246, true, "A Square Enix account is required to reactivate PlayOnline services. Please obtain a Square Enix account before continuing."),
@@ -55,11 +57,15 @@ public static class PolAccountNotices
         N(252, false, "The credit card registered for your payment method will expire at the end of the month. Please update the credit card information before it expires. You can do so from \"Register/Update Payment Method\" within the Square Enix Account Management System."),
     }.ToDictionary(n => n.Status);
 
-    // the EU block points LM-01 and LM-14 at messages of their own (0x6ee6, 0x5730), every other row is the US one
+    // the EU block points LM-01 and LM-14 at messages of their own (0x6ee6, 0x5730), and the EU table words LM-17, LM-19
+    // and LM-31 its own way. Every other row is the US one
     private static readonly Dictionary<int, Notice> Europe = new[]
     {
-        N(221, true, "Your account is closed due to unpaid fees. If you would like to reactivate your account, please refer to \"Regarding Unpaid Fees.\""),
+        N(221, true, "Your account is closed due to unpaid fees."),
         N(234, false, "There are Content IDs with contract periods ending in the near future. If you do not perform a Content ID contract extension by the last day of the month (or, in the case of free trial periods, the day that the period ends), you will be unable to use the Content ID from the day after the period has ended."),
+        N(237, true, "This account has been banned due to a violation of the PlayOnline or FINAL FANTASY XI agreements. Please contact the Square Enix Support Centre for any questions regarding this notice. You may also refer to the \"Account Penalties\" page under \"Online Manners\" in the \"Rules and Policies\" section of the official website for details on account penalties."),
+        N(239, true, "Unable to reactivate your PlayOnline account per your request. Please contact the Square Enix Support Centre for further details if you have any questions."),
+        N(251, true, "Due to either an unresolved issue with service fees or a violation of the PlayOnline or FINAL FANTASY XI agreements, PlayOnline services have been suspended. Please contact the Square Enix Support Centre for details."),
     }.ToDictionary(n => n.Status);
 
     private static Notice N(int status, bool blocks, string text) =>
@@ -75,11 +81,15 @@ public static class PolAccountNotices
     // an unknown service isn't a refusal, Play stays on and asks POL again
     public static bool CanPlay(string? reason) => reason is null || reason == ServiceUnknown;
 
-    // status byte from svc 0xd20. 253..255 have no row, the viewer shows LM-01 for them
-    public static Notice? For(int status, PolRegion region = PolRegion.UnitedStates)
+    // status byte from svc 0xd20. 253..255 have no row, the viewer shows LM-01 for them. A refused login has no day count
+    // for LM-02, so that one says it in words
+    public static Notice? For(int status, PolRegion region = PolRegion.UnitedStates, int days = 0)
     {
         if (status is >= 253 and <= 255) status = 221;
-        return region == PolRegion.Europe && Europe.TryGetValue(status, out var eu) ? eu : Table.GetValueOrDefault(status);
+        var n = region == PolRegion.Europe && Europe.TryGetValue(status, out var eu) ? eu : Table.GetValueOrDefault(status);
+        return n is not null && n.Text.Contains("%s", StringComparison.Ordinal)
+            ? n with { Text = n.Text.Replace("%s", days > 0 ? days.ToString(CultureInfo.InvariantCulture) : "the allowed number of", StringComparison.Ordinal) }
+            : n;
     }
 
     public static string SignInRefused(int reason, PolRegion region = PolRegion.UnitedStates) => reason switch
@@ -88,9 +98,10 @@ public static class PolAccountNotices
         -205 => "Your account login has been temporarily disabled due to three consecutive password errors. Please try again later.",
         -201 => "This PlayOnline ID is already logged in elsewhere.",
         -204 => "This version of PlayOnline is too old to log in with.",
-        -5310 => "Login to your account has been temporarily restricted. Instructions for lifting this restriction have been sent to the email address registered to your Square Enix Account.",
+        -5310 when region == PolRegion.Europe => "Due to a change in your connection settings or the detection of suspicious access to your account, login to your account has been temporarily restricted. For more information about the login restriction, please refer to the following page. http://support.eu.square-enix.com/j/lbgb",
+        -5310 => "Due to either a change in your connection settings or the detection of suspicious access to your account, login to your account has been temporarily restricted. Instructions for lifting this restriction have been sent to the email address registered to your Square Enix Account. For more information about the login restriction, please refer to the following page: http://support.na.square-enix.com/j/lbna",
         -5311 or -5312 => "The Square Enix ID, Square Enix password, or one-time password entered is incorrect.",
-        -5426 => "Square Enix Account Certification Error.",
+        -5426 => "Square Enix Account Certification Error. An unexpected problem occurred. Persistent problems can be reported from Service & Support.",
         -0x40c => "Connection cancelled.",
         <= -221 and >= -252 => For(-reason, region) is { } n ? $"{n.Text} ({n.Code})" : "Unable to log in due to unexpected error.",
         _ => $"Network Connection Error (code {reason}).",
@@ -119,10 +130,10 @@ public static class PolAccountNotices
             return code switch
             {
                 -5434 => "Service for the specified PlayOnline ID has been suspended.",
-                -5333 => "Logins from this PlayOnline ID are restricted to a specific IP address.",
-                -5332 => "Your PlayOnline password has been changed. Log in again with the new password.",
+                -5333 => "Unable to log in to PlayOnline. Logins from this PlayOnline ID are restricted to a specific IP address.",
+                -5332 => "Your PlayOnline password has been changed. Please log in again with the new password.",
                 -5441 or -5442 => "Unauthorized connection to server detected.",
-                >= -5433 and <= -5430 => "Connection terminated or not available.",
+                >= -5433 and <= -5430 => ConnectionLost,
                 -5370 or -5371 or (>= -5438 and <= -5435) => "The server may be experiencing problems.",
                 _ => $"PlayOnline turned this account away (code {code}).",
             };
@@ -134,12 +145,18 @@ public static class PolAccountNotices
         -0x40f => "Disconnected. The current PlayOnline ID was used to log in from another terminal.",
         -0x400 or -0x401 or -0x40e => "Disconnected. Now offline.",
         -251 => "Disconnected from PlayOnline.",
-        -207 => "Connection terminated or not available.",
+        -207 => ConnectionLost,
         <= -221 and >= -252 => For(-reason, region) is { } n ? $"{n.Text} ({n.Code})" : "Disconnected from PlayOnline.",
         _ => $"Disconnected from PlayOnline (code {reason}).",
     };
 
+    // polerr 207, what the viewer says once a revoked login drops
+    private const string ConnectionLost =
+        "Connection terminated or not available. Please try connecting again later or check cables, networking devices, and network settings.";
+
     // viewer message 0x7007
     public const string BadPassword =
-        "Your PlayOnline password is no longer valid. Change your PlayOnline password on the PlayOnline website.";
+        "PlayOnline passwords corresponding to the following are now invalid.\n\n" +
+        "- PlayOnline passwords under 8 characters\n" +
+        "- PlayOnline passwords using the same characters as ones PlayOnline ID";
 }

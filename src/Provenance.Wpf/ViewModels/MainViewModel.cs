@@ -1194,14 +1194,14 @@ public partial class MainViewModel : ObservableObject
                    null, generation);
     }
 
-    // the US viewer shows it before an account's first sign-in, here it's once per app
+    // the US viewer asks once per PlayOnline ID, here it's once per install
     private bool EnsureMemberAgreement(Window? owner)
     {
         if (_settings.Current.AcceptedMemberAgreement) return true;
         if (!PolPaths.Supported(_settings.DetectedRegion)) return true;
         var viewer = ViewerFolder(_settings.DetectedRegion);
         var strings = viewer is null ? null : PolStringTable.Load(viewer);
-        if (!AgreementDialog.Ask(owner, ProfileTitle, strings))
+        if (!AgreementDialog.Ask(owner, strings))
         {
             Log.Information("Member Agreement declined: not signing in");
             ShowNotice("You're not logged in, because you didn't accept the PlayOnline Member Agreement.", "InformationOutline", opens: false);

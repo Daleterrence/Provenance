@@ -7,7 +7,7 @@ namespace Provenance.Wpf.Views;
 // the text comes from the user's own POL install (StringTable.bin 0x7011 to 0x7013), nothing's shipped
 public partial class AgreementDialog : Window
 {
-    public AgreementDialog(string accountName, IReadOnlyDictionary<int, string>? strings)
+    public AgreementDialog(IReadOnlyDictionary<int, string>? strings)
     {
         InitializeComponent();
         WindowFrame.Attach(this);
@@ -18,18 +18,17 @@ public partial class AgreementDialog : Window
         var article8 = Get(PolStringTable.AgreementArticle8);
         TitleText.Text = body.Length > 0 ? body.Split('\n')[0].Trim() : "PlayOnline Member Agreement";
         var notice = Get(PolStringTable.AgreementNotice);
-        IntroText.Text = $"{(notice.Length > 0 ? notice + ": " : "")}PlayOnline asks every account to accept this agreement " +
-                         $"before it logs in for the first time. Read it, then choose below{(accountName.StartsWith("New account", StringComparison.Ordinal) ? "" : " for " + accountName)}.";
+        IntroText.Text = $"{(notice.Length > 0 ? notice + ": " : "")}You need to accept this agreement before Provenance can log in " +
+                         "to PlayOnline. Read it, then choose below.";
         BodyText.Text = body.Length > 0
             ? body + (article8.Length > 0 ? "\n\n" + article8 : "")
-            : "Provenance couldn't read the PlayOnline Member Agreement from your PlayOnline Viewer install. " +
-              "It's the same agreement the PlayOnline Viewer shows before an account logs in for the first time. " +
+            : "Provenance couldn't find the PlayOnline Member Agreement in your PlayOnline Viewer install. " +
               "If you don't accept it, Provenance won't log in.";
     }
 
-    public static bool Ask(Window? owner, string accountName, IReadOnlyDictionary<int, string>? strings)
+    public static bool Ask(Window? owner, IReadOnlyDictionary<int, string>? strings)
     {
-        var dlg = new AgreementDialog(accountName, strings);
+        var dlg = new AgreementDialog(strings);
         if (owner is { IsVisible: true }) dlg.Owner = owner;
         else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         return dlg.ShowDialog() == true;
