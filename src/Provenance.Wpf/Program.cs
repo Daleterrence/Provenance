@@ -1,3 +1,4 @@
+using Provenance.Common;
 using Provenance.Wpf.Services;
 using Velopack;
 
@@ -10,6 +11,7 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        ThreadStaticsFix.Apply();
         // before any window: it gives the windows the shortcuts' taskbar id, and UpdateManager can't find the install
         // without it. Updates only get applied from the update window, never here
         if (SelfUpdate.InstalledCopy)
