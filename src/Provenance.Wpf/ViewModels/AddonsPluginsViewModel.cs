@@ -415,7 +415,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         // tried on the script as it is first, so nothing gets copied for a change that can't be made anyway
         if (!Change(current ?? AshitaScript.FromBytes([])))
             throw Shown.Mark(new InvalidOperationException(string.IsNullOrWhiteSpace(name)
-                ? $"Provenance couldn't change {row.Name}, this boot configuration has no script set. Set one under Windower/Ashita."
+                ? $"Provenance couldn't change {row.Name} for this boot configuration."
                 : $"Provenance couldn't change {row.Name} in the script {AshitaScript.FileName(name)}."));
         if (current is not null && !AshitaScript.NeedsCopy(dir, name, bootName, Scripts(dir, name)))
         {
@@ -576,7 +576,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         page.Key = profile?.Name ?? profileName;
         page.Display = SettingsViewModel.WindowerDisplay(page.Key, file.Profiles.Select(p => p.Name).ToList());
         page.Branch = file.Branch;
-        page.Intro = "Turn addons and plugins on or off for this profile. Changes save straight away.";
+        page.Intro = "Turn addons and plugins on or off. Changes save straight away.";
         var effective = WindowerAddonList.Effective(file, lists, page.Key, extras);
         page.UseGlobal = effective.UseGlobal;
         page.ListLocked = locked;
@@ -776,9 +776,9 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     private static class Badges
     {
-        public static readonly AddonBadge Install = new("Not installed", "Press Install to download it from Windower.");
-        public static readonly AddonBadge NotInWindower = new("Not installed", "It's on the list, but it isn't in your Windower folder.");
-        public static readonly AddonBadge NotInAshita = new("Not installed", "It's turned on, but it isn't in your Ashita folder.");
+        public static readonly AddonBadge Install = new("Not installed", "Press Install to add it to your Windower folder.");
+        public static readonly AddonBadge NotInWindower = new("Not installed", "It's turned on, but it isn't in your Windower folder.");
+        public static readonly AddonBadge NotInAshita = new("Not installed", "It's named in this boot configuration, but it isn't in your Ashita folder.");
         public static readonly AddonBadge NotAPlugin = new("Not a Windower plugin",
             "This file in Windower's plugins folder isn't a Windower 4 plugin, so it can't be turned on.", Warn: true);
         public static readonly AddonBadge InitTxt = new("Loaded by your init.txt",
@@ -786,12 +786,13 @@ public partial class AddonsPluginsViewModel : ObservableObject
         public static readonly AddonBadge InitCommand = new("Loaded by this profile's init command",
             "This profile's init command loads it itself, so it loads no matter what the list says.");
         public static readonly AddonBadge ByScript = new("Loaded by your script",
-            "Your Ashita script loads this in a way Provenance can't safely change, so it's left as it is.");
+            "Your Ashita script loads or unloads this in a way Provenance can't safely change, so it's left as it is.");
         public static readonly AddonBadge NotForV4 = new("Not for Ashita v4",
             "This addon was written for Windower or an older Ashita, so it won't run in Ashita v4.", Warn: true);
         public static readonly AddonBadge OtherAshita = new("Built for a different Ashita",
             "This plugin was built for a different version of Ashita, so Ashita won't load it.", Warn: true);
-        public static readonly AddonBadge Incompatible = new(ThirdPartyHookService.IncompatibleText, ThirdPartyHookService.IncompatibleNote, Warn: true);
+        public static readonly AddonBadge Incompatible = new(ThirdPartyHookService.IncompatibleText,
+            "Provenance keeps this off whenever it starts the game. Your Ashita settings aren't changed.", Warn: true);
         public static readonly AddonBadge BadName = new("Name Ashita can't load",
             "Ashita can't load a name like this one from a script or boot configuration. Rename it to plain letters and numbers to use it.", Warn: true);
     }

@@ -325,7 +325,7 @@ public partial class InstallViewModel : ObservableObject
             {
                 CurrentStep = 0;
                 Stage = "Downloading FINAL FANTASY XI";
-                Detail = "Checking the files on Square Enix's server...";
+                Detail = "Checking Square Enix's installer files...";
                 foreach (var part in parts) await _installer.CheckServerAsync(part, ct);
                 StageIndeterminate = false;
                 long grandTotal = parts.Sum(p => p.Size);
@@ -563,7 +563,7 @@ public partial class InstallViewModel : ObservableObject
         if (_cts is not { IsCancellationRequested: false } cts) return;
         cts.Cancel();
         Stage = "Stopping...";
-        if (CurrentStep == 2) Detail = "The installer will finish its current step, then undo the install.";
+        if (CurrentStep == 2) Detail = "The install will stop after its current step.";
     }
 
     [DllImport("kernel32.dll")]

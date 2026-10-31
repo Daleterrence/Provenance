@@ -520,7 +520,7 @@ public static class OtpSources
         var mine = string.IsNullOrWhiteSpace(seaId) ? null
                  : entries.FirstOrDefault(e => string.Equals(e.Login, seaId, StringComparison.OrdinalIgnoreCase));
         return mine is null
-            ? (null, $"More than one KeePassXC entry for {url} has a one-time password.")
+            ? (null, $"More than one KeePassXC entry for {url} has a one-time password. Set the username of the right one to your Square Enix ID.")
             : (mine, null);
     }
 

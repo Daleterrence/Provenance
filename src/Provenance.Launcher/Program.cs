@@ -76,7 +76,7 @@ internal static class Program
         }
         if (!unreachable && (asked.Count == 0 || AllClosed(asked, TimeSpan.FromSeconds(20)))) return;
         Message("Provenance is still running, so the uninstall can't remove all of its files. Close Provenance " +
-                "(if it's in the system tray, right-click its icon and choose Exit), then press OK.", MbIconWarning);
+                "(if it's in the system tray, right-click its icon to exit), then press OK.", MbIconWarning);
         AllClosed(asked, TimeSpan.FromSeconds(5));
     }
 

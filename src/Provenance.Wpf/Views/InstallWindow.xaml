@@ -33,7 +33,7 @@
             <!-- before a run, and after a stop or a failure so the folders can change -->
             <StackPanel Grid.Row="1" Margin="0,18,0,0" Visibility="{Binding CanStart, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="This downloads the official game (about " Foreground="{DynamicResource Text.2}" FontSize="13">
-                    <Run Text="{Binding TotalGib, Mode=OneWay}" /><Run Text=") and installs it with Square Enix's own installers." />
+                    <Run Text="{Binding TotalGib, Mode=OneWay}" /><Run Text=") and installs it the way Square Enix's own installer does." />
                 </TextBlock>
 
                 <StackPanel x:Name="RegionChoice" Visibility="{Binding ShowRegionChoice, Converter={StaticResource BoolToVis}}">

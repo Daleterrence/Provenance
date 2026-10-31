@@ -74,7 +74,7 @@ public static class ViewerBuild
         State.Missing => "Couldn't find the PlayOnline Viewer. Install FINAL FANTASY XI first.",
         State.Outdated => $"Your PlayOnline Viewer is version {Version(viewerDir)}, and it needs updating to {CurrentVersion} first.",
         _ => $"Provenance doesn't support this version of the PlayOnline Viewer ({Version(viewerDir) ?? "unknown"}) yet. " +
-             "Check for a Provenance update.",
+             "Restart Provenance to check for an update.",
     };
 
     // held open while pol.exe starts: the files that got checked are the ones that run

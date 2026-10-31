@@ -302,7 +302,7 @@
                 <StackPanel Orientation="Horizontal">
                     <ProgressBar Width="20" Height="20" IsIndeterminate="True" Value="0" Foreground="{DynamicResource Primary}"
                                  Style="{StaticResource MaterialDesignCircularProgressBar}" />
-                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="14" Text="Loading Profile..." />
+                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="14" Text="Loading your profile..." />
                 </StackPanel>
             </Border>
         </Grid>

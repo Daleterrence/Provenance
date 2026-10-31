@@ -439,7 +439,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                 {
                     // Play was pressed while it saved, so the handle stays changed for later
                     _renameAfterSave = false;
-                    Done("Your profile is saved. The new handle has to wait till FINAL FANTASY XI is closed.");
+                    Done("Your profile is saved. Your handle wasn't renamed because FINAL FANTASY XI started.");
                     return;
                 }
                 if (_renameAfterSave)
@@ -466,8 +466,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private static string FailText(Job job, string state) => state switch
     {
-        "cancelled" => "Logging out stopped the request.",
-        "failed:account notice" => "PlayOnline has a notice for this account. Read it in PlayOnline first.",
+        "cancelled" => "Logging out or starting FINAL FANTASY XI stopped the request.",
+        "failed:account notice" => "This PlayOnline account can't change its profile right now.",
         "failed:no handle" => "This account doesn't have a PlayOnline handle yet.",
         "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install.",
         "failed:no profile" => "PlayOnline doesn't have a profile for this handle.",

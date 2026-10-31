@@ -274,7 +274,7 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <HeaderedContentControl Header="Large Address Aware" IsEnabled="{Binding LargeAddressAwareEnabled}"
-                                                        Tag="When this is on, the game can use up to 4&#160;GB of memory instead of 2&#160;GB, which helps with HD texture mods. Provenance applies it every time the game starts. It's the same setting as Windower's Large Address Aware.">
+                                                        Tag="When this is on, the game can use up to 4&#160;GB of memory instead of 2&#160;GB, which helps with HD texture mods. Provenance applies it every time the game starts, and it's the same setting as Windower's Large Address Aware.">
                                     <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding LargeAddressAwareOn}"
                                                   AutomationProperties.Name="Large Address Aware" />
                                 </HeaderedContentControl>
@@ -378,14 +378,14 @@
                             <TextBlock Text="Boot configuration settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding AshitaCardEnabled}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Name" Tag="The name Ashita shows for this boot configuration.">
+                                    <HeaderedContentControl Header="Name" Tag="The name a launcher shows for this boot configuration in place of its file name.">
                                         <TextBox Text="{Binding AshitaName, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                                  AutomationProperties.Name="Name" />
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="Script" Tag="The script Ashita runs when the game starts, from its scripts folder.">
                                         <ComboBox ItemsSource="{Binding AshitaScripts}" SelectedItem="{Binding AshitaScript}" AutomationProperties.Name="Script" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Script arguments" Tag="Anything the script needs after its name, if it takes any.">
+                                    <HeaderedContentControl Header="Script arguments" Tag="Passed to the script when Ashita runs it, if it takes any.">
                                         <TextBox Text="{Binding AshitaScriptArgs, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                                  AutomationProperties.Name="Script arguments" />
                                     </HeaderedContentControl>
@@ -586,7 +586,7 @@
                                     <HeaderedContentControl Header="Window mode">
                                         <ComboBox ItemsSource="{Binding WindowModes}" SelectedIndex="{Binding WindowModeIndex}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="UI size" Tag="Higher values make the menus and text bigger.">
+                                    <HeaderedContentControl Header="UI size" Tag="Higher values make the menus bigger.">
                                         <StackPanel>
                                             <Grid ColumnDefinitions="*,46">
                                                 <Slider Minimum="1" Maximum="{Binding UiScaleMax}" Value="{Binding UiScale}"
@@ -622,7 +622,7 @@
                                                     Margin="4,0,0,0" Command="{Binding PresetCommand}" CommandParameter="Standard" />
                                         </UniformGrid>
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="3D resolution" Tag="This is the resolution the game draws the world at. A higher one looks sharper, but the game can run slower.">
+                                    <HeaderedContentControl Header="3D resolution" Tag="This is the resolution the game draws its 3D graphics at, before scaling them to the game resolution.">
                                         <ComboBox ItemsSource="{Binding RenderSizes}" SelectedItem="{Binding RenderSize}" />
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="Keep aspect ratio" Tag="{Binding KeepAspectHelp}">
@@ -640,7 +640,7 @@
                                     <HeaderedContentControl Header="Vegetation movement">
                                         <ComboBox ItemsSource="{Binding VegetationLevels}" SelectedIndex="{Binding Vegetation}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Distant textures" Tag="When this is on, textures stay sharp in the distance. It looks better, but the game can run slower.">
+                                    <HeaderedContentControl Header="Distant textures" Tag="When this is on, distant objects get full-size textures instead of lower-resolution ones.">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding DrawDistance}" />
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="Enhanced shading">
@@ -655,8 +655,7 @@
                                     <HeaderedContentControl Header="Sound">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding Sound}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Simultaneous sound effects" Tag="This is how many sound effects the game can play at the same time."
-                                                            IsEnabled="{Binding Sound}">
+                                    <HeaderedContentControl Header="Simultaneous sound effects" IsEnabled="{Binding Sound}">
                                         <Grid ColumnDefinitions="*,46">
                                             <Slider Minimum="12" Maximum="20" TickFrequency="1" IsSnapToTickEnabled="True"
                                                     Value="{Binding SoundEffects}" VerticalAlignment="Center" />
@@ -727,13 +726,13 @@
                                     <HeaderedContentControl Header="Legacy settings" Tag="{Binding LegacyHelp}">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding LegacySettings}" />
                                     </HeaderedContentControl>
-                                    <!-- each row's enabled on its own, a Windower profile's hardware mouse doesn't need Legacy settings -->
+                                    <!-- each row's enabled on its own, Windower writes a profile's hardware mouse at every start -->
                                     <StackPanel Margin="20,0,0,0">
                                         <HeaderedContentControl Header="Hardware mouse cursor"
-                                                                IsEnabled="{Binding HardwareMouseEnabled}" Tag="{Binding HardwareMouseHelp}">
+                                                                IsEnabled="{Binding HardwareMouseEnabled}">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding HardwareMouse}" />
                                         </HeaderedContentControl>
-                                        <HeaderedContentControl Header="Simple character select" IsEnabled="{Binding LegacySettings}" Tag="When this is on, the character select screen shows still pictures instead of 3D models.">
+                                        <HeaderedContentControl Header="Simple character creation" IsEnabled="{Binding LegacySettings}" Tag="When this is on, character creation shows still pictures instead of 3D models.">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding SimpleCharSelect}" />
                                         </HeaderedContentControl>
                                         <HeaderedContentControl Header="Graphics card fix" IsEnabled="{Binding LegacySettings}" Tag="This setting is also called Graphics Stabilization. It can help the game run properly on some graphics cards.">

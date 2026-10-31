@@ -91,7 +91,7 @@ public partial class FriendsList : UserControl
             menu.Items.Add(new Separator());
             // the viewer's request window only ignores this one handle
             menu.Items.Add(Item("Ignore...", vm.CanEdit && !f.IsMe, Confirmed(Owner, "Ignore " + f.Name,
-                $"Add {f.Name} to your ignore list? PlayOnline will decline the request, and this handle's messages won't reach you any more. You can undo this from your ignore list.",
+                $"Add {f.Name} to your ignore list? PlayOnline will decline the request, and this handle's messages won't reach you any more. You can stop ignoring them later from your ignore list.",
                 "IGNORE", () => vm.AnswerRequest(f, RequestAnswer.Ignore))));
             return;
         }
@@ -159,7 +159,7 @@ public partial class FriendsList : UserControl
     {
         var pick = MessageDialog.Confirm(Owner, "Ignore " + f.Name,
             $"PlayOnline will take {f.Name} off your friend list, and their messages won't reach you any more. " +
-            "You can undo this from your ignore list.", "IGNORE",
+            "You can stop ignoring them later, but that won't put them back on your friend list.", "IGNORE",
             "Ignore this handle only", "Ignore every handle of this PlayOnline ID", destructive: true);
         if (pick is not null) vm.IgnoreFriend(f, pick == 1);
     }

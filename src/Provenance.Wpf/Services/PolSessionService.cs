@@ -42,7 +42,7 @@ public sealed class PolSessionService : IDisposable
         "Your saved PlayOnline password is longer than 16 characters, which PlayOnline doesn't allow. Press Edit account and enter it again.";
     public const string PlayUnreadableText = "Provenance couldn't start the game. Close Provenance and open it again.";
     public const string PlayRefusedText = "PlayOnline didn't let the game start. Log in again and try once more.";
-    public const string PrivateFolderText = "Provenance couldn't use its own folder. Restart Provenance as an administrator.";
+    public const string PrivateFolderText = "Provenance couldn't use its own folder. Restart Provenance and try again.";
     public const string UnsafeStartText = "Provenance couldn't start PlayOnline safely. Restart Provenance and try again.";
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
 
@@ -491,7 +491,7 @@ public sealed class PolSessionService : IDisposable
                 return Fail(ErrorNoPolHandle, "This PlayOnline account doesn't have a handle, and none was created.");
             if (line.Contains("handle name rejected") || line.Contains("handle claim failed")
                 || line.Contains("handle save failed"))
-                return Fail(ErrorHandleRejected, "PlayOnline didn't accept that handle name.");
+                return Fail(ErrorHandleRejected, "PlayOnline didn't accept that handle name. Log in again to try a different one.");
             if (line.Contains("phase_c: FFXI SERVICE UNKNOWN") || line.Contains("hold: no signed-in session"))
                 return Fail(ErrorAuthFailed, "The PlayOnline login didn't finish. Try again.");
             return null;
@@ -595,7 +595,7 @@ public sealed class PolSessionService : IDisposable
     }
 
     private static string LoadFailedText(string list) =>
-        $"PlayOnline didn't send {list switch { "status" => "your status", "friends" => "your friend list", "handles" => "your handles", "characters" => "your service list", "groups" => "your friend groups", _ => "everything it needs at login" }}, so you've been logged out (the PlayOnline Viewer does the same). Try again in a moment.";
+        $"PlayOnline didn't send {list switch { "status" => "your status", "friends" => "your friend list", "handles" => "your handles", "characters" => "your Content ID list", "groups" => "your friend groups", _ => "everything it needs at login" }}, so you've been logged out. Try again in a moment.";
 
     private static (string? ViewerDir, string? PolExe, string LauncherExe) LaunchFiles(PolRegion region)
     {

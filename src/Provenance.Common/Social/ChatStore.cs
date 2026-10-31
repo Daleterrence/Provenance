@@ -52,14 +52,14 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
         // still in the game's outbox, so no send again or remove for it here
         "unsent" => "Not sent: FINAL FANTASY XI didn't finish sending it.",
         "failed:no such friend" or "failed:friend list changed" => "Not sent: the friend list changed.",
-        "failed:pending" => "Not sent: this person hasn't answered your friend request yet.",
+        "failed:pending" => "Not sent: this person hasn't accepted your friend request yet.",
         "failed:self" => "Not sent: you can't send a message to your own handle.",
         "failed:too long" => "Not sent: messages can't be longer than 300 characters, and some characters count as two.",
         "failed:write" => "Not sent: Provenance couldn't send it to PlayOnline.",
         "failed:stopped" => "Not sent: PlayOnline didn't take your recent messages, so sending is off until you log in again.",
         "failed:hourly limit" => "Not sent: you've sent 600 messages in the last hour. Try again later.",
         "failed:session" => "Not sent: the PlayOnline session ended before it went.",
-        "failed:game" => "Not sent: the game started before it went.",
+        "failed:game" => "Not sent: FINAL FANTASY XI started before it went.",
         var s when s.StartsWith("failed", StringComparison.Ordinal) => "Not sent: PlayOnline didn't accept it.",
         _ => "",
     };

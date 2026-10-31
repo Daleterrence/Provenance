@@ -158,7 +158,7 @@ public sealed class WindowerUpdater
         if (job is null) return new(name, false, written, errors);
         var zipPath = WindowerAddonTree.ZipPath(Folder);
         var tree = File.Exists(zipPath) ? WindowerAddonTree.Load(WindowerAddonTree.CachePath(Folder)) : null;
-        if (tree is null) return new(name, false, written, ["Windower's addon list hasn't been downloaded yet."]);
+        if (tree is null) return new(name, false, written, ["Windower's addons haven't been downloaded yet."]);
         var addon = tree.Find(name);
         if (addon is null) return new(name, false, written, [$"{name} isn't in Windower's addon list."]);
         await job.Step(() =>
@@ -215,7 +215,7 @@ public sealed class WindowerUpdater
             var wait = WindowerRunning() && MutexWait > TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : MutexWait;
             var hold = await WindowerUpdateMutex.AcquireAsync(MutexName, wait, ct);
             if (hold is null)
-                errors.Add($"Windower's update lock was held elsewhere for {wait.TotalSeconds:0.#} s, so nothing was updated this time.");
+                errors.Add($"Windower's update lock was held elsewhere for {wait.TotalSeconds:0.#} s, so nothing was changed this time.");
             return (hold, hold is null);
         }
         catch (Exception e) when (e is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
@@ -516,7 +516,7 @@ public sealed class WindowerUpdater
             else if (!WindowerFiles.LooksLikePe(tempDll))
             {
                 ok = false;
-                job.Errors.Add($"The {p.Name}.dll that downloaded isn't a program file, so the old one was kept.");
+                job.Errors.Add($"The {p.Name}.dll that downloaded isn't a program file, so it wasn't used.");
             }
             if (p.Resources && (d.Ok || !install))
             {
@@ -530,19 +530,19 @@ public sealed class WindowerUpdater
                 else if (!WindowerFiles.IsZip(tempZip))
                 {
                     ok = false;
-                    job.Errors.Add($"The {p.Name}.zip that downloaded isn't a zip, so {p.Name} wasn't updated.");
+                    job.Errors.Add($"The {p.Name}.zip that downloaded isn't a zip, so it wasn't used.");
                 }
             }
             if (!ok) return d.Outcome == WindowerFetchOutcome.Downloaded ? WindowerFetchOutcome.Broken : d.Outcome;
             if (tempZip is not null && !ExtractPluginZip(job, tempZip, p.Name, skipThumbs: !install, written))
             {
-                job.Errors.Add($"{p.Name} wasn't updated, not all of its files could be written.");
+                job.Errors.Add($"Not all of the files for {p.Name} could be written.");
                 return WindowerFetchOutcome.Broken;
             }
             try { job.Swap(tempDll, dll); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                job.Errors.Add($"{p.Name}.dll couldn't be replaced, the old one was kept: {e.Message}");
+                job.Errors.Add($"{p.Name}.dll couldn't be written: {e.Message}");
                 return WindowerFetchOutcome.Broken;
             }
             written.Add(Path.Combine("plugins", p.Name + ".dll"));
@@ -759,13 +759,13 @@ public sealed class WindowerUpdater
         switch (f.Outcome)
         {
             case WindowerFetchOutcome.HttpError:
-                errors.Add($"{what} wasn't updated, {f.Host} answered {f.Status}.");
+                errors.Add($"{what} couldn't be downloaded, {f.Host} answered {f.Status}.");
                 break;
             case WindowerFetchOutcome.Unreachable:
                 errors.Add($"{f.Host} couldn't be reached, so nothing else was downloaded from it.");
                 break;
             case WindowerFetchOutcome.Broken:
-                errors.Add($"{what} didn't download completely, so the old copy was kept.");
+                errors.Add($"{what} didn't download completely, so it wasn't used.");
                 break;
         }
     }

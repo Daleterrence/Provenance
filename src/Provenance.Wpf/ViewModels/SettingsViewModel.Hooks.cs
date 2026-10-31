@@ -152,7 +152,8 @@ public partial class SettingsViewModel
     public bool RestartWanted { get; private set; }
 
     public static string RestartText(int from, int to) =>
-        $"You're already logged in, so {PlatformName(from)} is still loaded. Provenance needs to restart to switch to {PlatformName(to)}.";
+        (from is 1 or 2 ? $"You're already logged in, so {PlatformName(from)} is still loaded." : "You're already logged in without Windower or Ashita.")
+        + (to is 1 or 2 ? $" Provenance needs to restart to switch to {PlatformName(to)}." : $" Provenance needs to restart to stop using {PlatformName(from)}.");
 
     private static string PlatformName(int index) => index switch { 1 => "Ashita", 2 => "Windower", _ => "no Windower or Ashita" };
 

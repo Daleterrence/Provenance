@@ -23,7 +23,7 @@
 
             <TextBlock FontSize="13" LineHeight="19" Foreground="{DynamicResource Text.2}"
                        TextWrapping="Wrap" Margin="0,0,0,14"
-                       Text="Type the 6-digit code from your Square Enix authenticator. It's only used once and never saved." />
+                       Text="Type the 6-digit code from your Square Enix authenticator. It's only used for this login and isn't kept." />
 
             <StackPanel x:Name="SourcePanel" Visibility="Collapsed" Margin="0,0,0,14">
                 <StackPanel Orientation="Horizontal">

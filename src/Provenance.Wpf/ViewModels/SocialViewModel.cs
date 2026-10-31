@@ -170,8 +170,8 @@ public partial class SocialViewModel : ObservableObject
         { CanMessage: true, Online: true } => "This sends a PlayOnline message.",
         { CanMessage: true } f => $"{f.Name}'s offline, so they'll get this next time they log in.",
         { Pending: true } f => $"You can message {f.Name} once they accept your friend request.",
-        { IsRequest: true } f => $"Answer {f.Name}'s friend request to send them messages.",
-        { IsGroupInvite: true } => "Answer the group invitation first.",
+        { IsRequest: true } f => $"Accept {f.Name}'s friend request to send them messages.",
+        { IsGroupInvite: true } => "You can't reply to a group invitation, only accept or decline it.",
         var f => $"PlayOnline messages only go to friends. Add {f.Name} as a friend to reply.",
     };
 
@@ -643,7 +643,7 @@ public partial class SocialViewModel : ObservableObject
     private bool _noteIsSuccess;
     private string? _editToken;
     private DateTime _editAt;
-    private const string RequestWriteFailed = "Provenance couldn't send the change to PlayOnline. Try again.";
+    private const string RequestWriteFailed = "Provenance couldn't send the request to PlayOnline. Try again.";
 
     partial void OnEditNoteChanged(string value)
     {
@@ -730,17 +730,17 @@ public partial class SocialViewModel : ObservableObject
     private static string EditFailureText(string state) => state switch
     {
         "timeout" => "PlayOnline didn't answer the change.",
-        "failed:pending" => "That friend hasn't answered your friend request yet, so you can only remove the request.",
+        "failed:pending" => "That person hasn't accepted your friend request yet, so you can only withdraw it.",
         "failed:self" => "You can't ignore yourself.",
-        "failed:friend list changed" or "failed:list changed" or "failed:no such friend" or "failed:no such entry"
-            => "Your friend list changed. Try again.",
+        "failed:friend list changed" or "failed:no such friend" => "Your friend list changed. Try again.",
+        "failed:list changed" or "failed:no such entry" => "Your ignore list changed. Try again.",
         "failed:bad name" => "Use 1 to 15 English letters, numbers or symbols.",
         "failed:friends not loaded" => "Your friend list didn't load, so this can't be changed right now. Log out and back in again.",
         "failed:account notice" => "This PlayOnline account can't change its friends right now.",
         "failed:reloaded" => "PlayOnline had a newer friend list, so Provenance loaded it instead. Try again.",
         "failed:no handle" => "This account doesn't have a PlayOnline handle.",
-        "failed:-7187" => "That person is already on the list.",
-        "failed:-7188" or "failed:-516" => "The list is full.",
+        "failed:-7187" => "That person is already on your ignore list.",
+        "failed:-7188" or "failed:-516" => "Your ignore list is full (100 people).",
         _ => $"PlayOnline didn't accept the change ({FailReason(state)}).",
     };
 
@@ -952,7 +952,7 @@ public partial class SocialViewModel : ObservableObject
             });
             return;
         }
-        SearchNote = $"Friend request sent to {_requestName}. They'll show on your list as \"Friend request sent\" until they answer.";
+        SearchNote = $"Friend request sent to {_requestName}. They'll show on your list as \"Friend request sent\" until they accept.";
         for (int i = 0; i < SearchHits.Count; i++)
             if (SearchHits[i].Name == _requestName && SearchHits[i].Key == _requestKey)
                 SearchHits[i] = SearchHits[i] with { RequestSent = true };

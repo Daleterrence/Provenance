@@ -79,7 +79,7 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
     private static void CheckPolPlugin(string name)
     {
         if (name.Length == 0 || name[0] == '.' || name.Contains("..") || !name.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.'))
-            throw Shown.Mark(new ArgumentException($"\"{name}\" isn't a polplugin name Ashita can load."));
+            throw Shown.Mark(new ArgumentException($"Ashita can't load a PlayOnline plugin called \"{name}\"."));
     }
 
     private static int InRange(string name, int v) => name switch

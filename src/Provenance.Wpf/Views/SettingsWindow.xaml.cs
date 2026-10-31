@@ -51,7 +51,7 @@ public partial class SettingsWindow : Window
     {
         if (_ownerClosing || DataContext is not ViewModels.SettingsViewModel { Game.HasUnsavedChanges: true } vm) return;
         var pick = MessageDialog.Confirm(this, "Unsaved game settings",
-            "You've changed some FINAL FANTASY XI settings but haven't saved them yet.", "CLOSE",
+            "You've changed some game settings but haven't saved them yet.", "CLOSE",
             "Save the changes, then close", "Close without saving");
         if (pick is null) { e.Cancel = true; return; }
         if (pick == 0)

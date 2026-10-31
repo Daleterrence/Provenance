@@ -48,7 +48,7 @@ public sealed class HookLogTranslator
                                       Math.Min(0.68 + 0.04 * _loadsDone, 0.88));
         }
         if (ContentIds.Match(line) is { Success: true } ci && ci.Groups[2].Value == "0")
-            return Once("cids", "Signed in", "This account doesn't have a FINAL FANTASY XI service.", LaunchSteps.Profile, 0.9);
+            return Once("cids", "Signed in", "This account has no Content ID for FINAL FANTASY XI.", LaunchSteps.Profile, 0.9);
         if (line.Contains("hold: POL-only session held"))
         {
             _ready = true;

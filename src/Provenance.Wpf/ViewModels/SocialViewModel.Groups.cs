@@ -202,7 +202,8 @@ public partial class SocialViewModel
         EditNote = st switch
         {
             "timeout" => "PlayOnline didn't answer.",
-            "failed:not master" or "failed:not allowed" => "Only the group master (or a sub-master) can do that.",
+            "failed:not master" => "Only the group master can disband the group.",
+            "failed:not allowed" => "Only the group master (or a sub-master) can do that.",
             "failed:self" => "You can't invite yourself to a group.",
             "failed:not a member" => "You've only been invited to that group. Accept the invitation first.",
             "failed:already in group" => "That person is already in this group, or already invited.",

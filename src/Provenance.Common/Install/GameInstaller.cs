@@ -57,7 +57,7 @@ public sealed class GameInstaller
     internal const string PolUninstaller = "Provenance - PlayOnline Uninstall.exe",
                           FfxiUninstaller = "Provenance - FINAL FANTASY XI Uninstall.exe";
     private const string NeedsAdmin =
-        "Provenance needs administrator rights to save where the game is installed. Run Provenance as an administrator.";
+        "Windows didn't let Provenance save where the game is installed.";
 
     private const string ViewerFolder = "PlayOnline", FfxiFolder = "FINAL_FANTASY_XI";
     private static readonly string[] ViewerNames = ["PlayOnlineViewer.msi", "PlayOnlineViewer_us.msi"];

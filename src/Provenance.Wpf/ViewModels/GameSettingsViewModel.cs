@@ -39,10 +39,8 @@ public partial class GameSettingsViewModel : ObservableObject
     // Windower writes its profile's hardware mouse at every start, Legacy settings or not
     private bool HardwareMouseOwn => _store.Platform == ThirdPartyHookService.Windower;
     public bool HardwareMouseEnabled => LegacySettings || HardwareMouseOwn;
-    public string? HardwareMouseHelp => HardwareMouseOwn
-        ? "Windower sets this from the profile every time the game starts, so it doesn't need Legacy settings." : null;
     public string LegacyHelp => HardwareMouseOwn
-        ? "Turn this on to change Simple character select and Graphics card fix. Turning it off clears them."
+        ? "Turn this on to change Simple character creation and Graphics card fix. Turning it off clears them."
         : "Turn this on to change the three older settings below. Turning it off clears them.";
 
     public IGameSettingsStore Store => _store;
@@ -57,8 +55,8 @@ public partial class GameSettingsViewModel : ObservableObject
     public string ProfileShown => _store.ProfileDisplay ?? "";
     public string? Platform => _store.Platform;
 
-    public string KeepAspectHelp => _store.SameShapeRenderSizes
-        ? "Windower always keeps the 3D resolution the same shape as the game resolution. This setting is for when you play without it."
+    public string? KeepAspectHelp => _store.SameShapeRenderSizes
+        ? null
         : "When this is on, the 3D resolution list only shows sizes that are the same shape as the game resolution.";
 
     // the Config Tool line only holds with no Windower or Ashita, they keep some of these in their own files
@@ -93,7 +91,6 @@ public partial class GameSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(Editable));
         OnPropertyChanged(nameof(ReadOnlyNote));
         OnPropertyChanged(nameof(HardwareMouseEnabled));
-        OnPropertyChanged(nameof(HardwareMouseHelp));
         OnPropertyChanged(nameof(LegacyHelp));
     }
 
@@ -231,7 +228,7 @@ public partial class GameSettingsViewModel : ObservableObject
                 or nameof(HasUnsavedChanges) or nameof(UiScaleText) or nameof(UiSizeText) or nameof(UiScaleMax) or nameof(Store)
                 or nameof(HasProfile) or nameof(ProfileKind) or nameof(ProfileShown) or nameof(Platform) or nameof(ProfileHeading) or nameof(IntroText)
                 or nameof(KeepAspectHelp) or nameof(Editable) or nameof(ReadOnlyNote)
-                or nameof(HardwareMouseEnabled) or nameof(HardwareMouseHelp) or nameof(LegacyHelp)))
+                or nameof(HardwareMouseEnabled) or nameof(LegacyHelp)))
             _edited = true;
     }
 

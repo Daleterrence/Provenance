@@ -47,7 +47,7 @@ public sealed class WindowerLaunch : IDisposable
     public static readonly TimeSpan UpdateLimit = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan TurnWait = TimeSpan.FromMinutes(3);
 
-    public const string UpdateNoticeText = "Windower couldn't be updated this time, so the game starts with the files it already has.";
+    public const string UpdateNoticeText = "Windower couldn't be fully updated this time, so the game starts with the files it already has.";
 
     // what Windower.exe writes when there's no init.txt, byte for byte
     internal static readonly string DefaultInit = string.Concat(new[]

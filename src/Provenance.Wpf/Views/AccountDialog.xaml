@@ -37,7 +37,7 @@
                        Foreground="{DynamicResource Text.3}"
                        Text="Leave a field empty to keep what's already saved." />
 
-            <CheckBox x:Name="OtpBox" Content="This account uses a one-time password (authenticator)"
+            <CheckBox x:Name="OtpBox" Content="This account uses a one-time password"
                       Foreground="{DynamicResource Text.2}" Margin="0,4,0,0" />
             <StackPanel x:Name="OtpSourcePanel" Margin="26,10,0,0"
                         IsEnabled="{Binding IsChecked, ElementName=OtpBox}">

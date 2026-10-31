@@ -74,7 +74,7 @@ public partial class AddFriendDialog : Window
             null => "Choose a handle from the list first.",
             { IsMe: true } => "That's one of your own handles. You can't add yourself as a friend.",
             { IsFriend: true } => $"{hit.Name} is already on your friend list.",
-            { RequestSent: true } => $"A friend request to {hit.Name} is already on its way.",
+            { RequestSent: true } => $"You've already sent {hit.Name} a friend request.",
             _ when !Vm.CanEdit => "Wait for your last change to finish first.",
             _ => null,
         };
@@ -84,8 +84,8 @@ public partial class AddFriendDialog : Window
             return;
         }
         if (MessageDialog.Confirm(this, "Send friend request",
-                $"Send \"Let's be friends!\" to {hit!.Name}? They'll show on your list as a pending friend " +
-                "until they accept or decline.", "SEND") is not null)
+                $"Send \"Let's be friends!\" to {hit!.Name}? They'll show on your list as \"Friend request sent\" " +
+                "until they accept.", "SEND") is not null)
             Vm.SendFriendRequest(hit);
     }
 

@@ -15,7 +15,7 @@ public static class CredentialKey
     public const string SavedAccounts =
         "the saved accounts and the KeePassXC connection: each account asks for its sign-in details again, " +
         "and KeePassXC asks to allow Provenance again";
-    public const string UnavailableText = "Provenance can't open the key that protects your saved login details. Restart Provenance as an administrator.";
+    public const string UnavailableText = "Provenance can't open the key that protects your saved login details. Restart Provenance and try again.";
     private const string FileName = "cred.key";
     private static readonly TimeSpan GateWait = TimeSpan.FromSeconds(10);
     private static string? _filePath;
