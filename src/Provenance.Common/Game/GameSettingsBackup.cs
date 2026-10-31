@@ -1,0 +1,673 @@
+using System.IO.Compression;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using Microsoft.Win32.SafeHandles;
+using Provenance.Common.IO;
+using Provenance.Common.Locks;
+
+namespace Provenance.Common.Game;
+
+// <FFXI>\USER, the VirtualStore copy of it, and <0042>\ffxiuser. Any of them can be missing
+public sealed record BackupSources(string? User, string? VirtualStoreUser, string? FfxiUser);
+
+public enum BackupOutcome { Made, Unchanged, NothingThere }
+
+// LeftOut is for the log: each file that didn't go in, and why
+public sealed record BackupResult(BackupOutcome Outcome, string? Zip, IReadOnlyList<string> LeftOut);
+
+public sealed record BackupInfo(string Path, DateTime CreatedUtc, int Characters, int Files)
+{
+    internal IReadOnlyList<GameSettingsBackup.ManifestFile> Manifest { get; init; } = [];
+    internal int Suffix { get; init; }
+}
+
+public sealed record RestoreResult(int Restored, BackupResult Before, IReadOnlyList<string> LeftOut);
+
+public sealed class BackupFolderLinkedException(string folder)
+    : IOException($"{folder} is a link to somewhere else, so Provenance won't save backups in it.");
+
+public sealed class NotABackupException() : IOException("That file isn't one of Provenance's game settings backups.");
+
+public sealed class BackupBeforeRestoreException(Exception inner) : IOException("The current settings couldn't be backed up first.", inner);
+
+// Whole character folders rather than SE's list of patterns, it's only a few KB more and covers anything they add.
+// The game rewrites these in place with no locking, so every copy gets checked for a write landing mid-read
+public static partial class GameSettingsBackup
+{
+    public const int Kept = 5;
+    public const string NameStart = "FINAL FANTASY XI settings ";
+    internal const string ManifestName = "provenance-backup.json";
+    private const string UserDir = "USER", VirtualStoreDir = "VirtualStore", FfxiUserDir = "ffxiuser", Shared = "tig.dat";
+    private static readonly string[] FilterLists = ["allowed.txt", "prohibited.txt"];
+
+    private const int Tries = 4, SettleRounds = 3, ManifestFormat = 1;
+    private const long MaxFile = 16 << 20, MaxTotal = 1L << 30;
+    private const int MaxEntries = 100_000;
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(50);
+    internal static TimeSpan Settle = TimeSpan.FromMilliseconds(150);
+
+    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+
+    internal static Action<string>? AfterReadForTest;
+    internal static Action? BeforeSettleForTest;
+
+    public static string DefaultFolder =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "Backups");
+
+    // a part path would be taken from wherever this elevated process happens to be sat
+    public static string FolderOrDefault(string? chosen) =>
+        chosen?.Trim() is { Length: > 0 } c && Path.IsPathFullyQualified(c) ? c : DefaultFolder;
+
+    // one at a time across every copy on the PC, whoever's running them
+    public static IDisposable? TryLock(TimeSpan wait) => AdminLock.TryAcquire("game-settings-backup", wait);
+
+    // an empty settings folder (0042) is Documents\My Games\FINAL FANTASY XI, same as the config tool fills in
+    public static BackupSources Sources(string ffxiFolder, string? settingsFolder, string? localAppData = null, string? documents = null)
+    {
+        var install = Path.TrimEndingDirectorySeparator(Path.GetFullPath(ffxiFolder));
+        var root = Path.GetPathRoot(install);
+        localAppData ??= Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        string? virtualStore = root is { Length: 3 } && root[1] == ':' && Path.IsPathFullyQualified(localAppData)
+            ? Path.Combine(localAppData, VirtualStoreDir, install[root.Length..], UserDir) : null;
+        var settings = string.IsNullOrWhiteSpace(settingsFolder)
+            ? Path.Combine(documents ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games", "FINAL FANTASY XI")
+            : settingsFolder.Trim();
+        return new(Path.Combine(install, UserDir), virtualStore, Path.IsPathFullyQualified(settings) ? Path.Combine(settings, FfxiUserDir) : null);
+    }
+
+    internal sealed class Manifest
+    {
+        public int Format { get; set; }
+        public DateTime Created { get; set; }
+        public List<ManifestFile> Files { get; set; } = [];
+    }
+
+    internal sealed class ManifestFile
+    {
+        public string Name { get; set; } = "";
+        public long Size { get; set; }
+        public DateTime Written { get; set; }
+    }
+
+    private readonly record struct Stat(long Size, long Written);
+
+    private sealed record Found(string Entry, string Path, string Folder, bool ZeroIsTorn, Stat Stat);
+
+    private sealed class Taken(Found file, byte[] data, Stat stat, long readAt)
+    {
+        public Found File = file;
+        public byte[] Data = data;
+        public Stat Stat = stat;
+        public long ReadAt = readAt;
+    }
+
+    public static BackupResult BackUp(BackupSources sources, string folder, DateTime? now = null)
+    {
+        var leftOut = new List<string>();
+        var found = Scan(sources, leftOut);
+        if (found.Count == 0) return new(BackupOutcome.NothingThere, null, leftOut);
+
+        folder = Path.GetFullPath(folder);
+        Directory.CreateDirectory(folder);
+        using var pins = FolderPins.Hold(folder, folder) ?? throw new BackupFolderLinkedException(folder);
+        var newest = List(folder).FirstOrDefault();
+        if (newest is not null && Same(newest.Manifest, found)) return new(BackupOutcome.Unchanged, newest.Path, leftOut);
+
+        var taken = new List<Taken>();
+        var torn = new List<Found>();
+        foreach (var f in found)
+        {
+            try
+            {
+                if (ReadSteady(f) is { } t) taken.Add(t);
+                else torn.Add(f);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { leftOut.Add($"{f.Entry}: {e.Message}"); }
+        }
+        SettleDown(taken, torn, leftOut);
+
+        var at = now ?? DateTime.Now;
+        var manifest = new Manifest { Format = ManifestFormat, Created = at.ToUniversalTime() };
+        var fallback = new List<(string Entry, byte[] Data, ManifestFile File)>();
+        if (torn.Count > 0)
+        {
+            using var last = newest is null ? null : TryOpenZip(newest.Path);
+            foreach (var f in torn)
+            {
+                var old = newest?.Manifest.FirstOrDefault(m => m.Name.Equals(f.Entry, StringComparison.OrdinalIgnoreCase));
+                if (last is not null && old is not null && ReadEntry(last, old.Name) is { } data)
+                {
+                    fallback.Add((f.Entry, data, old));
+                    leftOut.Add($"{f.Entry}: kept changing, so the copy from {Path.GetFileName(newest!.Path)} went in");
+                }
+                else leftOut.Add($"{f.Entry}: kept changing, so it's left out");
+            }
+        }
+
+        var tmp = Path.Combine(folder, $"{NameStart}{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var fs = CreateForUser(tmp))
+            using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
+            {
+                foreach (var t in taken)
+                {
+                    Add(zip, t.File.Entry, t.Data, t.Stat.Written);
+                    manifest.Files.Add(new ManifestFile { Name = t.File.Entry, Size = t.Stat.Size, Written = DateTime.FromFileTimeUtc(t.Stat.Written) });
+                }
+                foreach (var (entry, data, file) in fallback)
+                {
+                    Add(zip, entry, data, file.Written.ToFileTimeUtc());
+                    manifest.Files.Add(file);
+                }
+                using var m = zip.CreateEntry(ManifestName, CompressionLevel.Optimal).Open();
+                JsonSerializer.Serialize(m, manifest, Indented);
+            }
+            var made = MoveToFreeName(tmp, folder, at);
+            Prune(folder, pins, leftOut);
+            return new(BackupOutcome.Made, made, leftOut);
+        }
+        finally { try { File.Delete(tmp); } catch { } }
+    }
+
+    // ours are the ones named like ours with a manifest that reads, newest first
+    public static IReadOnlyList<BackupInfo> List(string folder)
+    {
+        if (!Directory.Exists(folder)) return [];
+        var ours = new List<BackupInfo>();
+        foreach (var path in Directory.EnumerateFiles(folder, NameStart + "*.zip"))
+        {
+            var m = BackupName().Match(Path.GetFileName(path));
+            if (!m.Success) continue;
+            try
+            {
+                using var zip = OpenZip(path);
+                if (Describe(path, zip) is { } info) ours.Add(info with { Suffix = m.Groups[1].Success ? int.Parse(m.Groups[1].Value) : 1 });
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException) { }
+        }
+        return ours.OrderByDescending(b => b.CreatedUtc).ThenByDescending(b => b.Suffix).ToList();
+    }
+
+    public static BackupInfo Check(string zipPath)
+    {
+        try
+        {
+            using var zip = OpenZip(zipPath);
+            return Describe(zipPath, zip) ?? throw new NotABackupException();
+        }
+        catch (InvalidDataException) { throw new NotABackupException(); }
+    }
+
+    // the current settings go in a backup first, so it can be undone. Nothing's ever deleted, like SE's own restore.
+    // blocked gets asked again right before the first write
+    public static RestoreResult Restore(string zipPath, BackupSources sources, string folder, Func<string?>? blocked = null)
+    {
+        // no delete sharing, so the backup made first can't prune this one away mid-restore
+        using var fs = new FileStream(zipPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        ZipArchive zip;
+        try { zip = new ZipArchive(fs, ZipArchiveMode.Read); }
+        catch (InvalidDataException) { throw new NotABackupException(); }
+        using (zip)
+        {
+            if (ReadManifest(zip) is not { } manifest) throw new NotABackupException();
+            var written = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in manifest.Files) written.TryAdd(f.Name, f.Written);
+            // every file read through once first, so a damaged zip stops before anything's changed
+            try
+            {
+                if (zip.Entries.Any(e => e.FullName != ManifestName && ReadEntry(e) is null)) throw new NotABackupException();
+            }
+            catch (InvalidDataException) { throw new NotABackupException(); }
+            BackupResult before;
+            try { before = BackUp(sources, folder); }
+            catch (Exception e) { throw new BackupBeforeRestoreException(e); }
+            if (blocked?.Invoke() is { } why) throw Shown.Mark(new InvalidOperationException(why));
+            var leftOut = new List<string>(before.LeftOut.Select(l => "before: " + l));
+            int restored = 0;
+            foreach (var group in zip.Entries.Where(e => e.FullName != ManifestName).GroupBy(e => Target(sources, e.FullName)))
+            {
+                if (group.Key is not { } dir)
+                {
+                    leftOut.AddRange(group.Select(e => $"{e.FullName}: there's nowhere to put it on this PC"));
+                    continue;
+                }
+                using var pins = Pin(dir.Root, dir.Sub);
+                foreach (var e in group)
+                {
+                    var data = ReadEntry(e) ?? throw new NotABackupException();
+                    Put(pins.Dir, e.Name, data, written.TryGetValue(e.FullName, out var at) ? at : null);
+                    restored++;
+                }
+            }
+            return new(restored, before, leftOut);
+        }
+    }
+
+    private static SecurityIdentifier? CurrentUser()
+    {
+        using var me = WindowsIdentity.GetCurrent();
+        return me.User;
+    }
+
+    // Provenance runs elevated, so whether the player could open or delete its files would be down to the folder. The
+    // file says so itself, set on the handle so nothing can swap it for a link first
+    private static FileStream CreateForUser(string path)
+    {
+        var fs = new FileInfo(path).Create(FileMode.CreateNew, FileSystemRights.Read | FileSystemRights.Write | FileSystemRights.ReadPermissions
+                                           | FileSystemRights.ChangePermissions, FileShare.None, 4096, FileOptions.None, null);
+        try
+        {
+            if (CurrentUser() is { } me)
+            {
+                var sec = fs.GetAccessControl();
+                sec.AddAccessRule(new FileSystemAccessRule(me, FileSystemRights.FullControl, AccessControlType.Allow));
+                fs.SetAccessControl(sec);
+            }
+            return fs;
+        }
+        catch
+        {
+            fs.Dispose();
+            throw;
+        }
+    }
+
+    private static string MoveToFreeName(string tmp, string folder, DateTime at)
+    {
+        var stem = NameStart + at.ToString("yyyy-MM-dd HH-mm-ss", System.Globalization.CultureInfo.InvariantCulture);
+        for (int n = 1; n < 1000; n++)
+        {
+            var path = Path.Combine(folder, n == 1 ? stem + ".zip" : $"{stem} ({n}).zip");
+            if (File.Exists(path) || Directory.Exists(path)) continue;
+            try
+            {
+                File.Move(tmp, path, overwrite: false);
+                return path;
+            }
+            catch (IOException) when (File.Exists(path)) { }
+        }
+        throw new IOException($"There are already 999 backups called {stem}.");
+    }
+
+    private static void Prune(string folder, FolderPins pins, List<string> leftOut)
+    {
+        foreach (var old in List(folder).Skip(Kept))
+            if (!pins.DeleteEntry(old.Path)) leftOut.Add($"{Path.GetFileName(old.Path)}: couldn't be deleted to keep the newest {Kept}");
+    }
+
+    [GeneratedRegex(@"^FINAL FANTASY XI settings \d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}(?: \((\d{1,4})\))?\.zip$", RegexOptions.IgnoreCase)]
+    private static partial Regex BackupName();
+
+    // the game writes ids with %x, but nothing stops a hand-made folder in upper case
+    [GeneratedRegex(@"^[0-9a-fA-F]{1,8}$")]
+    private static partial Regex CharacterFolder();
+
+    [GeneratedRegex(@"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$")]
+    private static partial Regex PlainName();
+
+    [GeneratedRegex(@"^(con|prn|aux|nul|com\d|lpt\d)(\.|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex DeviceName();
+
+    private static bool IsFileName(string name) => PlainName().IsMatch(name) && !name.EndsWith('.') && !DeviceName().IsMatch(name);
+
+    internal static bool IsEntry(string name)
+    {
+        var parts = name.Split('/');
+        if (parts is [VirtualStoreDir, UserDir, ..]) parts = parts[1..];
+        return parts switch
+        {
+            [UserDir, var f] => f.Equals(Shared, StringComparison.OrdinalIgnoreCase),
+            [UserDir, var id, var f] => CharacterFolder().IsMatch(id) && IsFileName(f),
+            [FfxiUserDir, var f] => FilterLists.Contains(f, StringComparer.OrdinalIgnoreCase),
+            _ => false,
+        };
+    }
+
+    private readonly record struct TargetDir(string Root, string Sub);
+
+    private static TargetDir? Target(BackupSources s, string entry) => entry.Split('/') switch
+    {
+        [UserDir, _] => s.User is { } u ? new(u, "") : null,
+        [UserDir, var id, _] => s.User is { } u ? new(u, id) : null,
+        [VirtualStoreDir, UserDir, _] => s.VirtualStoreUser is { } v ? new(v, "") : null,
+        [VirtualStoreDir, UserDir, var id, _] => s.VirtualStoreUser is { } v ? new(v, id) : null,
+        [FfxiUserDir, _] => s.FfxiUser is { } f ? new(f, "") : null,
+        _ => null,
+    };
+
+    private static List<Found> Scan(BackupSources s, List<string> leftOut)
+    {
+        var found = new List<Found>();
+        ScanUser(s.User, UserDir + "/", found, leftOut);
+        ScanUser(s.VirtualStoreUser, $"{VirtualStoreDir}/{UserDir}/", found, leftOut);
+        if (Place(s.FfxiUser, FfxiUserDir, leftOut) is { } settings)
+            foreach (var name in FilterLists)
+                AddFound(Path.Combine(settings, name), settings, $"{FfxiUserDir}/{name}", false, found, leftOut);
+        return found;
+    }
+
+    private static void ScanUser(string? root, string prefix, List<Found> found, List<string> leftOut)
+    {
+        if (Place(root, prefix.TrimEnd('/'), leftOut) is not { } real) return;
+        AddFound(Path.Combine(real, Shared), real, prefix + Shared, true, found, leftOut);
+        foreach (var dir in Listed(real, prefix, leftOut, Directory.EnumerateDirectories))
+        {
+            var id = Path.GetFileName(dir);
+            if (!CharacterFolder().IsMatch(id))
+            {
+                leftOut.Add($"{prefix}{id}: not a character folder");
+                continue;
+            }
+            if (new DirectoryInfo(dir).Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                leftOut.Add($"{prefix}{id}: a link, so it's left out");
+                continue;
+            }
+            foreach (var file in Listed(dir, $"{prefix}{id}", leftOut, Directory.EnumerateFiles))
+            {
+                var name = Path.GetFileName(file);
+                if (IsFileName(name)) AddFound(file, dir, $"{prefix}{id}/{name}", true, found, leftOut);
+                else leftOut.Add($"{prefix}{id}/{name}: not a name a backup takes");
+            }
+        }
+    }
+
+    private static List<string> Listed(string dir, string what, List<string> leftOut, Func<string, IEnumerable<string>> list)
+    {
+        try { return list(dir).ToList(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            leftOut.Add($"{what}: couldn't be listed ({e.Message})");
+            return [];
+        }
+    }
+
+    // where the folder really is, when nothing at or below its own name is a link. Above it's fine (an install moved
+    // to another drive with a junction, say)
+    private static string? Place(string? root, string what, List<string> leftOut)
+    {
+        if (root is null || !Directory.Exists(root)) return null;
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        if (Path.GetDirectoryName(full) is not { } parent || !FolderPins.Plain(parent, full, lastIsFolder: true))
+        {
+            leftOut.Add($"{what}: {full} is a link, so it's left out");
+            return null;
+        }
+        return FolderPins.RealPath(full);
+    }
+
+    private static void AddFound(string path, string folder, string entry, bool zeroIsTorn, List<Found> found, List<string> leftOut)
+    {
+        if (!File.Exists(path)) return;
+        try
+        {
+            using var h = OpenChecked(path, folder, data: false, out var stat);
+            found.Add(new(entry, path, folder, zeroIsTorn, stat));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { leftOut.Add($"{entry}: {e.Message}"); }
+    }
+
+    private static bool Same(IReadOnlyList<ManifestFile> last, List<Found> now)
+    {
+        if (last.Count != now.Count) return false;
+        var byName = new Dictionary<string, ManifestFile>(StringComparer.OrdinalIgnoreCase);
+        foreach (var f in last) byName.TryAdd(f.Name, f);
+        return now.All(f => byName.TryGetValue(f.Entry, out var m) && m.Size == f.Stat.Size
+                            && m.Written.ToUniversalTime().ToFileTimeUtc() == f.Stat.Written);
+    }
+
+    // size and last write before and after each read, a few goes at it. An empty character file is one caught
+    // mid-write, the game always writes something
+    private static Taken? ReadSteady(Found f)
+    {
+        for (int i = 0; i < Tries; i++)
+        {
+            if (i > 0) Thread.Sleep(RetryDelay);
+            using var h = OpenChecked(f.Path, f.Folder, data: true, out var before);
+            if (before.Size > MaxFile) throw new IOException($"it's {before.Size} bytes, far bigger than any game settings file");
+            var data = ReadAll(h, before.Size);
+            AfterReadForTest?.Invoke(f.Path);
+            var after = StatOf(Info(h));
+            if (data is not null && after == before && !(f.ZeroIsTorn && before.Size == 0)) return new(f, data, before, Environment.TickCount64);
+        }
+        return null;
+    }
+
+    // the C runtime writes a big file in two goes, and between them it sits there at the first part's size. A look
+    // after the game's had time to finish catches that
+    private static void SettleDown(List<Taken> taken, List<Found> torn, List<string> leftOut)
+    {
+        BeforeSettleForTest?.Invoke();
+        for (int round = 0; taken.Count > 0; round++)
+        {
+            var wait = Settle - TimeSpan.FromMilliseconds(Environment.TickCount64 - taken.Max(t => t.ReadAt));
+            if (wait > TimeSpan.Zero) Thread.Sleep(wait);
+            var moved = taken.Where(t => !StillAt(t)).ToList();
+            if (moved.Count == 0) return;
+            foreach (var t in moved)
+            {
+                taken.Remove(t);
+                if (round == SettleRounds)
+                {
+                    torn.Add(t.File);
+                    continue;
+                }
+                try
+                {
+                    if (ReadSteady(t.File) is { } again) taken.Add(again);
+                    else torn.Add(t.File);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { leftOut.Add($"{t.File.Entry}: {e.Message}"); }
+            }
+            if (round == SettleRounds) return;
+        }
+    }
+
+    private static bool StillAt(Taken t)
+    {
+        try
+        {
+            using var h = OpenChecked(t.File.Path, t.File.Folder, data: false, out var now);
+            return now == t.Stat;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    private static byte[]? ReadAll(SafeFileHandle h, long size)
+    {
+        var data = new byte[size + 1];
+        int got = 0;
+        while (got < data.Length)
+        {
+            int n = RandomAccess.Read(h, data.AsSpan(got), got);
+            if (n == 0) break;
+            got += n;
+        }
+        return got == size ? data[..got] : null;
+    }
+
+    private static void Add(ZipArchive zip, string entry, byte[] data, long written)
+    {
+        var e = zip.CreateEntry(entry, CompressionLevel.Optimal);
+        var at = DateTime.FromFileTimeUtc(written).ToLocalTime();
+        if (at.Year is >= 1980 and <= 2107) e.LastWriteTime = at;
+        using var s = e.Open();
+        s.Write(data);
+    }
+
+    private static ZipArchive OpenZip(string path)
+    {
+        var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        try { return new ZipArchive(fs, ZipArchiveMode.Read); }
+        catch
+        {
+            fs.Dispose();
+            throw;
+        }
+    }
+
+    private static ZipArchive? TryOpenZip(string path)
+    {
+        try { return OpenZip(path); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException) { return null; }
+    }
+
+    private static BackupInfo? Describe(string path, ZipArchive zip)
+    {
+        if (ReadManifest(zip) is not { } m) return null;
+        var ids = m.Files.Select(f => f.Name.Split('/') switch { [UserDir, var id, _] => id, [VirtualStoreDir, UserDir, var id, _] => id, _ => null })
+                   .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        return new BackupInfo(path, m.Created.ToUniversalTime(), ids, m.Files.Count) { Manifest = m.Files };
+    }
+
+    // every entry has to be one a backup makes, at a size a game file could be
+    private static Manifest? ReadManifest(ZipArchive zip)
+    {
+        if (zip.Entries.Count > MaxEntries) return null;
+        Manifest? m;
+        try
+        {
+            if (zip.GetEntry(ManifestName) is not { Length: < 64 << 20 } entry) return null;
+            using var s = entry.Open();
+            m = JsonSerializer.Deserialize<Manifest>(s);
+        }
+        catch (JsonException) { return null; }
+        if (m is not { Format: ManifestFormat } || m.Files is null || m.Files.Any(f => f is null || !IsEntry(f.Name))) return null;
+        long total = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in zip.Entries)
+        {
+            if (e.FullName == ManifestName) continue;
+            if (!IsEntry(e.FullName) || e.Length > MaxFile || !seen.Add(e.FullName) || (total += e.Length) > MaxTotal) return null;
+        }
+        return m;
+    }
+
+    private static byte[]? ReadEntry(ZipArchive zip, string name) =>
+        zip.Entries.FirstOrDefault(e => e.FullName.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } e ? ReadEntry(e) : null;
+
+    // the length in the zip is only a claim, so no more than it is read
+    private static byte[]? ReadEntry(ZipArchiveEntry e)
+    {
+        if (e.Length > MaxFile) return null;
+        var data = new byte[e.Length + 1];
+        using var s = e.Open();
+        int got = 0;
+        while (got < data.Length)
+        {
+            int n = s.Read(data, got, data.Length - got);
+            if (n == 0) break;
+            got += n;
+        }
+        return got == e.Length ? data[..got] : null;
+    }
+
+    private sealed class PinnedDir(FolderPins pins, string dir) : IDisposable
+    {
+        public string Dir { get; } = dir;
+        public void Dispose() => pins.Dispose();
+    }
+
+    // made where it's missing, from the nearest folder that's there. Nothing at or below the place's own name can be a
+    // link, the same rule as a backup's reads
+    private static PinnedDir Pin(string root, string sub)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        var anchor = Path.GetDirectoryName(full);
+        while (anchor is not null && !Directory.Exists(anchor)) anchor = Path.GetDirectoryName(anchor);
+        if (anchor is null || FolderPins.RealPath(anchor) is not { } real) throw new DirectoryNotFoundException($"Nothing above {full} is there.");
+        var dir = Path.Join(real, full[anchor.Length..].TrimStart('\\'), sub);
+        var pins = FolderPins.Hold(real, dir) ?? throw new IOException($"{dir} goes through a link, so nothing's put back there.");
+        return new PinnedDir(pins, dir);
+    }
+
+    // a new name every time and never opened over an existing one, so a link left in its place can't catch it. The
+    // last write time goes back too, or every restore would look like a change to the next backup
+    private static void Put(string dir, string name, byte[] data, DateTime? written)
+    {
+        var tmp = Path.Combine(dir, $"{name}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                fs.Write(data);
+                fs.Flush();
+                if (written is { } at) File.SetLastWriteTimeUtc(fs.SafeFileHandle, at.ToUniversalTime());
+            }
+            File.Move(tmp, Path.Combine(dir, name), overwrite: true);
+        }
+        finally { try { File.Delete(tmp); } catch { } }
+    }
+
+    // a link, a hard link to something else or a file that's moved out from under the folder it was found in would
+    // have an elevated copy read something it shouldn't, so all three are refused on the open handle itself
+    private static SafeFileHandle OpenChecked(string path, string folder, bool data, out Stat stat)
+    {
+        var h = CreateFileW(LinkCheck.LongPath(Path.GetFullPath(path)), data ? GenericRead : ReadAttributes,
+                            ShareRead | ShareWrite | ShareDelete, IntPtr.Zero, OpenExisting, OpenReparsePoint, IntPtr.Zero);
+        if (h.IsInvalid)
+        {
+            int err = Marshal.GetLastPInvokeError();
+            h.Dispose();
+            throw err == 5 ? new UnauthorizedAccessException("Windows didn't let Provenance read it") : new IOException($"it couldn't be opened (error {err})");
+        }
+        try
+        {
+            var info = Info(h);
+            if ((info.Attributes & ReparsePointAttribute) != 0) throw new IOException("it's a link");
+            if ((info.Attributes & DirectoryAttribute) != 0) throw new IOException("it's a folder");
+            if (info.Links != 1) throw new IOException("it has other names (a hard link)");
+            if (FinalPath(h) is not { } where || !string.Equals(Path.GetDirectoryName(where), Path.TrimEndingDirectorySeparator(folder), StringComparison.OrdinalIgnoreCase))
+                throw new IOException("it isn't in the folder it was found in");
+            stat = StatOf(info);
+            return h;
+        }
+        catch
+        {
+            h.Dispose();
+            throw;
+        }
+    }
+
+    private static Stat StatOf(HandleInfo info) => new(((long)info.SizeHigh << 32) | info.SizeLow, info.Written);
+
+    private static HandleInfo Info(SafeFileHandle h) =>
+        GetFileInformationByHandle(h, out var info) ? info : throw new IOException($"its details couldn't be read (error {Marshal.GetLastPInvokeError()})");
+
+    private static string? FinalPath(SafeFileHandle h)
+    {
+        var buf = new StringBuilder(1024);
+        uint n = GetFinalPathNameByHandleW(h, buf, (uint)buf.Capacity, 0);
+        if (n == 0 || n >= buf.Capacity) return null;
+        var s = buf.ToString(0, (int)n);
+        if (s.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return @"\\" + s[8..];
+        return s.StartsWith(@"\\?\", StringComparison.Ordinal) ? s[4..] : s;
+    }
+
+    private const uint GenericRead = 0x80000000, ReadAttributes = 0x80;
+    private const uint ShareRead = 1, ShareWrite = 2, ShareDelete = 4, OpenExisting = 3, OpenReparsePoint = 0x00200000;
+    private const uint ReparsePointAttribute = 0x400, DirectoryAttribute = 0x10;
+
+    // FILETIMEs are two DWORDs, so 4-byte aligned
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    private struct HandleInfo
+    {
+        public uint Attributes;
+        public long Created, Accessed, Written;
+        public uint Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFileInformationByHandle(SafeFileHandle file, out HandleInfo info);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, StringBuilder path, uint size, uint flags);
+}

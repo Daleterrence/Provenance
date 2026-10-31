@@ -309,6 +309,37 @@
                             </StackPanel>
                         </Border>
 
+                        <TextBlock Text="Backups" Style="{StaticResource Section}" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <HeaderedContentControl Header="Automatic backups"
+                                                        Tag="When this is on, Provenance backs up your characters' in-game settings and macros before the game starts, if they've changed. It keeps the newest 5.">
+                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding BackupGameSettings}"
+                                                  AutomationProperties.Name="Automatic backups" />
+                                </HeaderedContentControl>
+                                <StackPanel Margin="0,8,0,10">
+                                    <TextBlock Text="Backups folder" FontSize="13" Foreground="{DynamicResource Text.1}" />
+                                    <Border Height="8" />
+                                    <Grid ColumnDefinitions="*,Auto,Auto">
+                                        <TextBox Text="{Binding BackupFolder, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
+                                                 materialDesign:HintAssist.Hint="{Binding DefaultBackupFolder}" AutomationProperties.Name="Backups folder" />
+                                        <Button Grid.Column="1" Margin="8,0,0,0" Content="BROWSE" Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Command="{Binding BrowseBackupFolderCommand}" />
+                                        <Button Grid.Column="2" Margin="6,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                                                Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                                                Command="{Binding OpenBackupFolderCommand}" ToolTip="Open folder" AutomationProperties.Name="Open folder">
+                                            <materialDesign:PackIcon Kind="FolderOpenOutline" Width="18" Height="18" />
+                                        </Button>
+                                    </Grid>
+                                    <TextBlock Text="{Binding BackupStatus}" Tag="{Binding BackupStatusIsError}" Style="{StaticResource ProfileStatusText}" Margin="0,8,0,0" />
+                                </StackPanel>
+                                <HeaderedContentControl Header="Restore a backup" Tag="Puts your game settings back from one of your backups.">
+                                    <Button Content="RESTORE" Style="{StaticResource MaterialDesignOutlinedButton}" FontSize="12"
+                                            Command="{Binding RestoreBackupCommand}" />
+                                </HeaderedContentControl>
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Text="News and status" Style="{StaticResource Section}" />
                         <TextBlock Text="News region" Style="{StaticResource Label}" />
                         <ComboBox Width="260" HorizontalAlignment="Left"

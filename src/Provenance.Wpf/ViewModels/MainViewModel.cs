@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Serilog;
 using Provenance.Common.Feeds;
+using Provenance.Common.Game;
 using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
@@ -1257,6 +1258,7 @@ public partial class MainViewModel : ObservableObject
         InstallViewModel.WriteFirstStartSettings(PlayRegion);
         WritePolOptions(_sessionProfileId);
         ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
+        await BackUpGameSettingsAsync(null, text => ProgressText = text);
         OnProgress(new LaunchProgress("Starting game", "Starting FINAL FANTASY XI...", LaunchSteps.StartGame, 0.5));
         try { _pol.SignalPlay(); }
         catch (Exception ex)
@@ -1336,6 +1338,21 @@ public partial class MainViewModel : ObservableObject
             PolOptions.Apply(s, viewer, PolOptions.SlotInUse(viewer, profile.HomeSlot), PlayRegion);
         }
         catch (Exception e) { Log.Warning(e, "Could not write the POL settings before the game start"); }
+    }
+
+    // a test points it at made-up folders
+    internal Func<LauncherSettings, string?, BackupSources?>? GameBackupSourcesForTest { get; set; }
+
+    // right before the game starts. However it goes the game still starts, a failed one only gets a notice
+    internal async Task BackUpGameSettingsAsync(string? accountBoot, Action<string>? saying = null)
+    {
+        var s = _settings.ReadSaved() ?? _settings.Current;
+        if (!s.BackupGameSettings) return;
+        saying?.Invoke(GameBackups.WorkingText);
+        var region = PlayRegion;
+        var sources = GameBackupSourcesForTest ?? ((settings, boot) => GameBackups.SourcesFor(settings, region, boot));
+        if (await Task.Run(() => GameBackups.BeforePlay(s, () => sources(s, accountBoot))) is { } problem)
+            ShowNotice(problem, "AlertCircleOutline", opens: false, stays: true);
     }
 
     private (string Ffxi, string Viewer, PolRegion Region)? GameFolders() =>

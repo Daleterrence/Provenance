@@ -51,6 +51,7 @@ public partial class MainViewModel : IMultiRunHost
 
     private PolSocialSnapshot? _runSnapshot;
     private readonly List<string> _lateGameFailures = [];
+    private bool _runBackedUp;
 
     private SettingsViewModel? _openSettings;
 
@@ -96,6 +97,7 @@ public partial class MainViewModel : IMultiRunHost
         _runHookProfiles = entries.ToDictionary(e => e.ProfileId, e => e.ThirdPartyHookProfile);
         _runPlatform = _pol.Platform;
         _exitAfterStop = false;
+        _runBackedUp = false;
         _lateGameFailures.Clear();
         // a friends window left open mustn't write requests to the run's lean sessions
         _socialPoll.Stop();
@@ -350,6 +352,11 @@ public partial class MainViewModel : IMultiRunHost
             return await LetGo(AccountFailureKind.Account, ErrorText.Of(ex, "Provenance couldn't set up the game's settings for its first start."));
         }
         WritePolOptions(account.ProfileId);
+        if (await BackUpForRunAsync(hookProfile))
+        {
+            if (token.IsCancellationRequested) return await Stopped();
+            SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
+        }
         try { _pol.SignalPlay(); }
         catch (Exception ex)
         {
@@ -369,6 +376,15 @@ public partial class MainViewModel : IMultiRunHost
         _ = NoteGameEndAsync(account, exited);
         Log.Information("Multi-account mode: {Account} is in the game", account.ProfileId);
         return null;
+    }
+
+    // once a run, before its first game starts. True when it was this account's turn
+    internal async Task<bool> BackUpForRunAsync(string? accountBoot)
+    {
+        if (_runBackedUp) return false;
+        _runBackedUp = true;
+        await BackUpGameSettingsAsync(accountBoot, SetRunStatus);
+        return true;
     }
 
     // the run's moved on by the time a game that didn't start ends its pol.exe, so that's told when it happens (or

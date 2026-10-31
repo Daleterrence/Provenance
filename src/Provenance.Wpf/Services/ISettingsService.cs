@@ -108,6 +108,11 @@ public sealed class LauncherSettings
 
     // the last read with no pol.exe running, since a running one has it switched off
     public bool? ScreenSaverWasOn { get; set; }
+
+    public bool BackupGameSettings { get; set; }
+
+    // "" is %APPDATA%\Provenance\Backups
+    public string BackupFolder { get; set; } = "";
 }
 
 public sealed class MultiAccountEntry

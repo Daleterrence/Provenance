@@ -40,6 +40,11 @@ public partial class SettingsWindow : Window
         vm.Later = a => Dispatcher.BeginInvoke(a);
         vm.AskRestart = text => MessageDialog.Confirm(this, "Restart Provenance?", text, "RESTART") == 0;
         vm.Restart = () => Dispatcher.BeginInvoke(Close);
+        vm.ShowRestored = (title, text, error) =>
+        {
+            if (error) MessageDialog.ShowError(this, title, text);
+            else MessageDialog.ShowInfo(this, title, text);
+        };
     }
 
     // settings.xml takes 255, and Ashita's file names stop well short of that

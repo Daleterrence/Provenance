@@ -57,6 +57,8 @@ public partial class SettingsViewModel : ObservableObject
         _traySignOutIndex = Math.Max(0, Array.IndexOf(TraySignOutMinutes, settings.Current.TraySignOutMinutes));
         _chatLanguageFilter = PolOptions.ChatFilter(settings.Current);
         _autoDisconnectIndex = Math.Max(0, Array.IndexOf(PolOptions.AutoDisconnectChoices, PolOptions.AutoDisconnect(settings.Current)));
+        _backupGameSettings = settings.Current.BackupGameSettings;
+        _backupFolder = settings.Current.BackupFolder;
         LoadThirdPartyHook();
         LoadMulti();
         Game = new GameSettingsViewModel(region, GameStoreForSelection());
