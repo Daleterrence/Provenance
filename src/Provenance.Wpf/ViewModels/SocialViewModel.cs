@@ -886,6 +886,13 @@ public partial class SocialViewModel : ObservableObject
         SearchFailed(RequestWriteFailed);
     }
 
+    internal string? FriendRequestBlocked =>
+        CanEdit ? null
+        : GameRunning ? GameRunningNote
+        : EditBusy ? "Wait for your last change to finish first."
+        : FriendsUnavailable ? "Your friend list didn't load, so friend requests can't be sent right now. Log out and back in again."
+        : "Log in to send friend requests.";
+
     public void SendFriendRequest(SearchHitItem hit)
     {
         if (hit.IsMe)
@@ -926,8 +933,9 @@ public partial class SocialViewModel : ObservableObject
             }
             else SearchFailed(st switch
             {
-                "timeout" => "PlayOnline didn't answer the search.",
+                "timeout" or "failed:timeout" => "PlayOnline didn't answer the search.",
                 "failed:bad name" => BadHandleName,
+                "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't search for handles.",
                 _ => $"PlayOnline couldn't run the search ({FailReason(st)}).",
             });
         }
@@ -945,6 +953,8 @@ public partial class SocialViewModel : ObservableObject
                 "failed:-7181" => $"{_requestName} is on your ignore list. Stop ignoring them first.",
                 "failed:-7188" or "failed:-516" => "Your friend list is full (200 friends).",
                 "failed:no such result" => "Search again, then send the request.",
+                "failed:no handle" => "This account doesn't have a PlayOnline handle.",
+                "failed:no such friend" => $"Your friend list changed before the request to {_requestName} went, so it wasn't sent. Try again.",
                 "failed:stopped" => "PlayOnline didn't take your recent messages, so friend requests can't be sent until you log in again.",
                 "failed:hourly limit" => "You've sent 600 messages in the last hour, so the request wasn't sent. Try again later.",
                 var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>

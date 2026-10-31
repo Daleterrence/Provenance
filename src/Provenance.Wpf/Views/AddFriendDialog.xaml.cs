@@ -75,8 +75,7 @@ public partial class AddFriendDialog : Window
             { IsMe: true } => "That's one of your own handles. You can't add yourself as a friend.",
             { IsFriend: true } => $"{hit.Name} is already on your friend list.",
             { RequestSent: true } => $"You've already sent {hit.Name} a friend request.",
-            _ when !Vm.CanEdit => "Wait for your last change to finish first.",
-            _ => null,
+            _ => Vm.FriendRequestBlocked,
         };
         if (problem != null)
         {

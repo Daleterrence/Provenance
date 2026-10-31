@@ -107,8 +107,11 @@ public partial class SocialViewModel
         }
         ProfileNote = st switch
         {
-            "timeout" => "PlayOnline didn't answer.",
+            "timeout" or "failed:timeout" => "PlayOnline didn't answer.",
             "failed:no profile" => "This person doesn't have a PlayOnline profile to show.",
+            "failed:no such friend" or "failed:friend list changed" => "Your friend list changed. Try again.",
+            "failed:pending" => "You can only view your friends' profiles.",
+            "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.",
             _ => $"PlayOnline didn't send the profile ({FailReason(st)}).",
         };
         ProfileNoteIsError = st != "failed:no profile";

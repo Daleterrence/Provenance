@@ -214,6 +214,8 @@ public partial class SocialViewModel
             "failed:name too long" => "That group name is too long (20 English letters, or 10 Japanese characters).",
             "failed:already a member" => "You're already in this group with another handle.",
             "failed:no such group" or "failed:no such member" or "failed:no such invitation" => "The group changed. Try again.",
+            "failed:no such friend" => "Your friend list changed, so the invitation wasn't sent. Try again.",
+            "failed:no handle" => "This account doesn't have a PlayOnline handle.",
             "failed:-5316" => "That group name is already in use.",
             "failed:-5428" or "failed:-261" => "That group name can't be used.",
             "failed:stopped" => "PlayOnline didn't take your recent messages, so invitations can't be sent or answered until you log in again.",

@@ -477,7 +477,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         "failed:mail too long" => "The mail address is too long.",
         "failed:bad name" => "PlayOnline doesn't accept that handle name. Use English letters, numbers and symbols.",
         "failed:word" => "That handle name has a word in it that PlayOnline doesn't allow. Choose a different name.",
-        "failed:-261" => "The entered name could not be registered. Please register with a different name.",
+        "failed:-261" or "failed:-5429" => "The entered name could not be registered. Please register with a different name.",
         "failed:reloaded" => "PlayOnline didn't keep the new handle name. Try again later.",
         "failed:busy" => "PlayOnline was busy with other requests. Try again.",
         "failed:mismatch" => "PlayOnline sent a profile that isn't this handle's, so nothing was changed.",
