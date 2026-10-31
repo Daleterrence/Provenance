@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Provenance.Common.Game.Windower;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Wpf.Services;
@@ -68,6 +69,8 @@ public sealed class LauncherSettings
     public string WindowerPath { get; set; } = "";
     // "" is Windower's default profile
     public string WindowerProfile { get; set; } = "";
+    // by Windower profile name, and no entry means settings.xml's own list
+    public Dictionary<string, WindowerAddonList> WindowerAddonLists { get; set; } = [];
 
     public bool AcceptedMemberAgreement { get; set; }
 

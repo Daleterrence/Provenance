@@ -45,7 +45,9 @@ function Source([string]$name) { '"' + (Join-Path $PSScriptRoot $name) + '"' }
 # up at run time, so the hook adds no DLL to pol.exe's start-up.
 $hookLibs = 'user32.lib advapi32.lib crypt32.lib ole32.lib uuid.lib'
 $clHook = "cl /nologo /O2 /W3 $(Source 'pol_hook.c') /LD /Fepol_hook.dll /link $hookLibs"
-$clLaunch = "cl /nologo /O2 /W3 $(Source 'pol_launch.c') /Fepol_launch.exe /link user32.lib advapi32.lib"
+# shell32 is only for --windower's wide arguments, delay-loaded so the other launches never load it
+$clLaunch = "cl /nologo /O2 /W3 $(Source 'pol_launch.c') /Fepol_launch.exe /link user32.lib advapi32.lib shell32.lib" +
+    ' delayimp.lib /DELAYLOAD:shell32.dll'
 # the uninstaller deletes from Program Files and HKLM, so it always asks for admin
 $clUninstall = "cl /nologo /O2 /W3 /MT $(Source 'pol_uninstall.c') /Fepol_uninstall.exe /link user32.lib advapi32.lib" +
     ' ole32.lib oleaut32.lib shell32.lib /SUBSYSTEM:WINDOWS /MANIFEST:EMBED' +
