@@ -34,6 +34,12 @@ public partial class SettingsWindow : Window
         vm.AskName = (title, prompt, start, check) =>
             InputDialog.Prompt(this, title, prompt, start, maxLength: WindowerNameLength, validate: check);
         vm.Confirm = (title, body, ok, destructive) => MessageDialog.Confirm(this, title, body, ok, destructive: destructive) == 0;
+        vm.AskSaveGame = which => MessageDialog.Confirm(this, "Unsaved game settings",
+            $"You've changed some game settings{(which is null ? "" : " for " + which)} but haven't saved them yet.", "CONTINUE",
+            "Save them first", "Don't save them") switch { 0 => true, 1 => false, _ => null };
+        vm.Later = a => Dispatcher.BeginInvoke(a);
+        vm.AskRestart = text => MessageDialog.Confirm(this, "Restart Provenance?", text, "RESTART") == 0;
+        vm.Restart = () => Dispatcher.BeginInvoke(Close);
     }
 
     // settings.xml takes 255, and Ashita's file names stop well short of that
@@ -57,11 +63,12 @@ public partial class SettingsWindow : Window
 
     private void ShowPanel(int index)
     {
-        // a profile picked under Windower/Ashita since the Game page was last shown
-        if (index == 2 && DataContext is ViewModels.SettingsViewModel vm)
-            vm.ShowingGame(which => MessageDialog.Confirm(this, "Unsaved game settings",
-                $"You've changed some game settings{(which is null ? "" : " for " + which)} but haven't saved them yet.", "CONTINUE",
-                "Save them first", "Don't save them") switch { 0 => true, 1 => false, _ => null });
+        if (DataContext is ViewModels.SettingsViewModel vm)
+        {
+            vm.ShownTab = index;
+            // a profile picked on another tab since the Game page was last shown
+            if (index == 2 && !vm.ShowingGame(vm.AskSaveGame)) vm.PickGameProfile();
+        }
         for (int i = 0; FindName($"Panel{i}") is UIElement panel; i++)
             panel.Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
         if (index == 0) ReadLargeAddressAware();

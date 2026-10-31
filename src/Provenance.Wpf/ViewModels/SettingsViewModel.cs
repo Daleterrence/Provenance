@@ -17,7 +17,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private readonly ISettingsService _settings;
     private readonly FeedService? _feeds;
-    private readonly Func<bool>? _multiRunning;
+    private readonly Func<bool>? _multiRunning, _loggedIn;
     private readonly Func<string?>? _largeAddressAwareBlocked;
     private readonly Action? _holdPrestarts, _releasePrestarts, _stopPrestart;
     private readonly Func<bool, RegistryKey?>? _gameKey;
@@ -25,8 +25,9 @@ public partial class SettingsViewModel : ObservableObject
 
     public SettingsViewModel(ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
                              Action? holdPrestarts = null, Action? releasePrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
-                             Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null)
+                             Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null, Func<bool>? loggedIn = null)
     {
+        _loggedIn = loggedIn;
         _gameKey = gameKey;
         _stopPrestart = stopPrestart;
         _settings = settings;

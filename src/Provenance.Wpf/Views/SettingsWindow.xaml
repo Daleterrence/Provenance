@@ -44,8 +44,9 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
         </Style>
+        <!-- the other controls fill the row's column, so this puts a switch against the card's edge like them -->
         <Style x:Key="Switch" TargetType="ToggleButton" BasedOn="{StaticResource MaterialDesignSwitchToggleButton}">
-            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
         </Style>
         <Style x:Key="DimWhenOff" TargetType="FrameworkElement">
             <Style.Triggers>
@@ -64,7 +65,7 @@
         <Style x:Key="ProfileStatusText" TargetType="TextBlock" BasedOn="{StaticResource StatusText}">
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="Margin" Value="0,8,0,0" />
+            <Setter Property="Margin" Value="0,0,0,14" />
             <Style.Triggers>
                 <Trigger Property="Text" Value="">
                     <Setter Property="Visibility" Value="Collapsed" />
@@ -196,8 +197,58 @@
                 </StackPanel>
             </ListBox>
 
-            <Grid Grid.Column="1" Background="{DynamicResource Bg.Base}">
-                <ScrollViewer x:Name="Panel0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+            <Grid Grid.Column="1" Background="{DynamicResource Bg.Base}" RowDefinitions="Auto,*">
+                <Border Padding="28,12" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,0,0,1"
+                        Visibility="{Binding ShowProfileSwitcher, Converter={StaticResource BoolToVis}}">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <TextBlock Text="{Binding ProfileSwitcherLabel}" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding WindowerProfiles}" SelectedItem="{Binding WindowerProfile}" DisplayMemberPath="Display"
+                                  Visibility="{Binding IsWindower, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Windower profile" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding AshitaBootConfigs}" SelectedItem="{Binding AshitaBootConfig}" DisplayMemberPath="Display"
+                                  Visibility="{Binding IsAshita, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Ashita profile" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0"
+                                    Visibility="{Binding ShowProfileTools, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsWindower, Converter={StaticResource BoolToVis}}">
+                                <Button Style="{StaticResource ProfileTool}" Command="{Binding AddProfileCommand}" IsEnabled="{Binding CanManageProfiles}"
+                                        ToolTip="Add a profile" AutomationProperties.Name="Add a profile">
+                                    <materialDesign:PackIcon Kind="Plus" Width="20" Height="20" />
+                                </Button>
+                                <Button Style="{StaticResource ProfileTool}" Command="{Binding DuplicateProfileCommand}" IsEnabled="{Binding CanCopyProfile}"
+                                        ToolTip="Duplicate this profile" AutomationProperties.Name="Duplicate this profile">
+                                    <materialDesign:PackIcon Kind="ContentCopy" Width="18" Height="18" />
+                                </Button>
+                                <Button Style="{StaticResource ProfileTool}" Command="{Binding RenameProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
+                                        ToolTip="Rename this profile" AutomationProperties.Name="Rename this profile">
+                                    <materialDesign:PackIcon Kind="PencilOutline" Width="18" Height="18" />
+                                </Button>
+                                <Button Style="{StaticResource ProfileTool}" Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
+                                        ToolTip="Delete this profile" AutomationProperties.Name="Delete this profile">
+                                    <materialDesign:PackIcon Kind="DeleteOutline" Width="20" Height="20" />
+                                </Button>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsAshita, Converter={StaticResource BoolToVis}}">
+                                <Button Style="{StaticResource ProfileTool}" Command="{Binding AddProfileCommand}" IsEnabled="{Binding CanManageProfiles}"
+                                        ToolTip="Add a boot configuration" AutomationProperties.Name="Add a boot configuration">
+                                    <materialDesign:PackIcon Kind="Plus" Width="20" Height="20" />
+                                </Button>
+                                <Button Style="{StaticResource ProfileTool}" Command="{Binding DuplicateProfileCommand}" IsEnabled="{Binding CanCopyProfile}"
+                                        ToolTip="Duplicate this boot configuration" AutomationProperties.Name="Duplicate this boot configuration">
+                                    <materialDesign:PackIcon Kind="ContentCopy" Width="18" Height="18" />
+                                </Button>
+                                <Button Style="{StaticResource ProfileTool}" Command="{Binding RenameProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
+                                        ToolTip="Rename this boot configuration" AutomationProperties.Name="Rename this boot configuration">
+                                    <materialDesign:PackIcon Kind="PencilOutline" Width="18" Height="18" />
+                                </Button>
+                                <Button Style="{StaticResource ProfileTool}" Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
+                                        ToolTip="Delete this boot configuration" AutomationProperties.Name="Delete this boot configuration">
+                                    <materialDesign:PackIcon Kind="DeleteOutline" Width="20" Height="20" />
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <ScrollViewer x:Name="Panel0" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Installation" Style="{StaticResource Section}" />
                         <TextBlock Text="Region" Style="{StaticResource Label}" />
@@ -279,7 +330,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <ScrollViewer x:Name="Panel1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="Panel1" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Windower/Ashita" Style="{StaticResource Section}" />
                         <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,14"
@@ -299,31 +350,8 @@
                                 <Button Grid.Column="1" Margin="8,0,0,0" Content="BROWSE" Style="{StaticResource MaterialDesignOutlinedButton}"
                                         Command="{Binding BrowseAshitaCommand}" />
                             </Grid>
-                            <TextBlock Text="Boot configuration" Style="{StaticResource Label}" />
-                            <Grid ColumnDefinitions="*,Auto">
-                                <ComboBox ItemsSource="{Binding AshitaBootConfigs}" SelectedItem="{Binding AshitaBootConfig}" DisplayMemberPath="Display"
-                                          AutomationProperties.Name="Boot configuration" />
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
-                                    <Button Style="{StaticResource ProfileTool}" Command="{Binding AddProfileCommand}" IsEnabled="{Binding CanManageProfiles}"
-                                            ToolTip="Add a boot configuration" AutomationProperties.Name="Add a boot configuration">
-                                        <materialDesign:PackIcon Kind="Plus" Width="20" Height="20" />
-                                    </Button>
-                                    <Button Style="{StaticResource ProfileTool}" Command="{Binding DuplicateProfileCommand}" IsEnabled="{Binding CanCopyProfile}"
-                                            ToolTip="Duplicate this boot configuration" AutomationProperties.Name="Duplicate this boot configuration">
-                                        <materialDesign:PackIcon Kind="ContentCopy" Width="18" Height="18" />
-                                    </Button>
-                                    <Button Style="{StaticResource ProfileTool}" Command="{Binding RenameProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
-                                            ToolTip="Rename this boot configuration" AutomationProperties.Name="Rename this boot configuration">
-                                        <materialDesign:PackIcon Kind="PencilOutline" Width="18" Height="18" />
-                                    </Button>
-                                    <Button Style="{StaticResource ProfileTool}" Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
-                                            ToolTip="Delete this boot configuration" AutomationProperties.Name="Delete this boot configuration">
-                                        <materialDesign:PackIcon Kind="DeleteOutline" Width="20" Height="20" />
-                                    </Button>
-                                </StackPanel>
-                            </Grid>
                             <TextBlock Text="{Binding ProfileStatus}" Tag="{Binding ProfileStatusIsError}" Style="{StaticResource ProfileStatusText}" />
-                            <TextBlock Text="{Binding AshitaCardNote}" TextWrapping="Wrap" FontSize="12" Margin="0,8,0,0" Foreground="{DynamicResource State.Warn}">
+                            <TextBlock Text="{Binding AshitaCardNote}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,14" Foreground="{DynamicResource State.Warn}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Style.Triggers>
@@ -335,7 +363,7 @@
                                 </TextBlock.Style>
                             </TextBlock>
 
-                            <TextBlock Text="Boot configuration settings" Style="{StaticResource Section}" Margin="0,22,0,10" />
+                            <TextBlock Text="Boot configuration settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding AshitaCardEnabled}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Name" Tag="The name Ashita shows for this boot configuration.">
@@ -361,31 +389,8 @@
                                 <Button Grid.Column="1" Margin="8,0,0,0" Content="BROWSE" Style="{StaticResource MaterialDesignOutlinedButton}"
                                         Command="{Binding BrowseWindowerCommand}" />
                             </Grid>
-                            <TextBlock Text="Windower profile" Style="{StaticResource Label}" />
-                            <Grid ColumnDefinitions="*,Auto">
-                                <ComboBox ItemsSource="{Binding WindowerProfiles}" SelectedItem="{Binding WindowerProfile}" DisplayMemberPath="Display"
-                                          AutomationProperties.Name="Windower profile" />
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
-                                    <Button Style="{StaticResource ProfileTool}" Command="{Binding AddProfileCommand}" IsEnabled="{Binding CanManageProfiles}"
-                                            ToolTip="Add a profile" AutomationProperties.Name="Add a profile">
-                                        <materialDesign:PackIcon Kind="Plus" Width="20" Height="20" />
-                                    </Button>
-                                    <Button Style="{StaticResource ProfileTool}" Command="{Binding DuplicateProfileCommand}" IsEnabled="{Binding CanCopyProfile}"
-                                            ToolTip="Duplicate this profile" AutomationProperties.Name="Duplicate this profile">
-                                        <materialDesign:PackIcon Kind="ContentCopy" Width="18" Height="18" />
-                                    </Button>
-                                    <Button Style="{StaticResource ProfileTool}" Command="{Binding RenameProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
-                                            ToolTip="Rename this profile" AutomationProperties.Name="Rename this profile">
-                                        <materialDesign:PackIcon Kind="PencilOutline" Width="18" Height="18" />
-                                    </Button>
-                                    <Button Style="{StaticResource ProfileTool}" Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
-                                            ToolTip="Delete this profile" AutomationProperties.Name="Delete this profile">
-                                        <materialDesign:PackIcon Kind="DeleteOutline" Width="20" Height="20" />
-                                    </Button>
-                                </StackPanel>
-                            </Grid>
                             <TextBlock Text="{Binding ProfileStatus}" Tag="{Binding ProfileStatusIsError}" Style="{StaticResource ProfileStatusText}" />
-                            <Border Margin="0,10,0,0" Padding="14,10" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource State.Warn}"
+                            <Border Margin="0,0,0,14" Padding="14,10" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource State.Warn}"
                                     Visibility="{Binding WindowerSettingsProblem, Converter={StaticResource NullToVisibilityConverter}}">
                                 <StackPanel>
                                     <TextBlock Text="{Binding WindowerSettingsProblem}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource State.Warn}" />
@@ -395,7 +400,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock Text="Profile settings" Style="{StaticResource Section}" Margin="0,22,0,10" />
+                            <TextBlock Text="Profile settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding WindowerCardEnabled}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Console key" Tag="Sets the keybind to open the Windower console in-game.">
@@ -439,9 +444,9 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <views:AddonsPluginsView x:Name="Panel3" Visibility="Collapsed" DataContext="{Binding Addons}" />
+                <views:AddonsPluginsView x:Name="Panel3" Grid.Row="1" Visibility="Collapsed" DataContext="{Binding Addons}" />
 
-                <ScrollViewer x:Name="Panel4" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer x:Name="Panel4" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Multi-account mode" Style="{StaticResource Section}" />
                         <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,8"
@@ -491,12 +496,8 @@
                                     <DataTemplate>
                                         <Border Margin="0,0,0,8" Padding="12,8" CornerRadius="10" Background="{DynamicResource Surface.1}"
                                                 BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
-                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                                                <CheckBox IsChecked="{Binding Enabled}" VerticalAlignment="Center"
-                                                          IsEnabled="{Binding CredentialsRefused, Converter={StaticResource InvertBool}}"
-                                                          ToolTip="Start this account when you press Start all accounts"
-                                                          AutomationProperties.Name="{Binding Name, StringFormat=Start {0} in multi-account mode}" />
-                                                <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+                                            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                                <StackPanel Margin="0,0,10,0" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding Name}" FontSize="14" TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Text="{Binding Problem, StringFormat=Turned off: {0}}" FontSize="11" TextWrapping="Wrap"
                                                                Foreground="{DynamicResource State.Warn}">
@@ -514,12 +515,12 @@
                                                                Foreground="{DynamicResource State.Warn}"
                                                                Visibility="{Binding CredentialsRefused, Converter={StaticResource BoolToVis}}" />
                                                 </StackPanel>
-                                                <ComboBox Grid.Column="2" Width="200" Margin="0" Padding="10,6"
+                                                <ComboBox Grid.Column="1" Width="200" Margin="0" Padding="10,6"
                                                           ItemsSource="{Binding DataContext.MultiProfileChoices, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                           SelectedItem="{Binding ThirdPartyHookProfile}" IsEnabled="{Binding Enabled}"
                                                           ToolTip="{Binding DataContext.MultiProfileLabel, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                           Visibility="{Binding DataContext.MultiHasThirdPartyHook, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVis}}" />
-                                                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
                                                     <Button Width="32" Height="32" Padding="0" Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
                                                             Command="{Binding DataContext.MoveMultiUpCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}" ToolTip="Start earlier" AutomationProperties.Name="Start earlier">
@@ -531,6 +532,10 @@
                                                         <materialDesign:PackIcon Kind="ChevronDown" Width="20" Height="20" />
                                                     </Button>
                                                 </StackPanel>
+                                                <CheckBox Grid.Column="3" Margin="8,0,0,0" IsChecked="{Binding Enabled}" VerticalAlignment="Center"
+                                                          IsEnabled="{Binding CredentialsRefused, Converter={StaticResource InvertBool}}"
+                                                          ToolTip="Start this account when you press Start all accounts"
+                                                          AutomationProperties.Name="{Binding Name, StringFormat=Start {0} in multi-account mode}" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -540,7 +545,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <Grid x:Name="Panel2" Visibility="Collapsed" DataContext="{Binding Game}" RowDefinitions="*,Auto">
+                <Grid x:Name="Panel2" Grid.Row="1" Visibility="Collapsed" DataContext="{Binding Game}" RowDefinitions="*,Auto">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="28,22,28,6">
                             <Border Style="{StaticResource PlatformCard}" Tag="{Binding Platform}" Margin="0,0,0,12"

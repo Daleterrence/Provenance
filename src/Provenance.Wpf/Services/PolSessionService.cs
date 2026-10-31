@@ -1020,7 +1020,7 @@ public sealed class PolSessionService : IDisposable
     }
 
     private const string PolDidNotStart = "PlayOnline didn't start. Try again in a moment.";
-    private const string WindowerDidNotStart = "PlayOnline didn't start with Windower. Try again in a moment, and if it keeps happening, check for Windower updates in Settings, under Windower/Ashita.";
+    private const string WindowerDidNotStart = "PlayOnline didn't start with Windower. Try again in a moment.";
 
     private static void EndNewPol(int pid, DateTime launcherStarted)
     {

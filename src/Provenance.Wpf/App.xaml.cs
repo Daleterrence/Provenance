@@ -19,6 +19,8 @@ public partial class App : Application
 
     public IServiceProvider Services => _host?.Services ?? throw new InvalidOperationException("Host not started");
 
+    internal static bool RestartOnExit { get; set; }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -195,12 +197,30 @@ public partial class App : Application
             Log.Information("Provenance exiting (code {Code})", e.ApplicationExitCode);
             try { Task.Run(OtpSources.LockBitwardenAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }
             if (_host is { } host) EndHost(host);
+            if (RestartOnExit) StartAgain();
         }
         finally
         {
             Log.CloseAndFlush();
             base.OnExit(e);
         }
+    }
+
+    // after the host's gone, so a held session's already logged out by the time the new copy starts
+    private static void StartAgain()
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, WorkingDirectory = AppContext.BaseDirectory };
+            if (LaunchArgs.ProfileId is { } account)
+            {
+                psi.ArgumentList.Add("--account");
+                psi.ArgumentList.Add(account);
+            }
+            using var started = System.Diagnostics.Process.Start(psi);
+            Log.Information("Started Provenance again (pid {Pid})", started?.Id);
+        }
+        catch (Exception ex) { Log.Error(ex, "Could not start Provenance again"); }
     }
 
     internal static void EndHost(IHost host)

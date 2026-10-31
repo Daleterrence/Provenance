@@ -29,6 +29,7 @@ public partial class MainViewModel : ObservableObject
 
     public event Action? RequestHide;
     public event Action? RequestShow;
+    public event Action? RequestRestart;
     public event Action? RequestAttention;
     public event Action? AttentionCleared;
 
@@ -1411,17 +1412,33 @@ public partial class MainViewModel : ObservableObject
         var vm = new SettingsViewModel(_settings, multiRunning: () => MultiRunning,
                                        holdPrestarts: _pol.HoldPrestarts, releasePrestarts: _pol.ReleasePrestarts,
                                        largeAddressAwareBlocked: LargeAddressAwareBlocked,
-                                       stopPrestart: () => Task.Run(_pol.StopPrestart));
+                                       stopPrestart: () => Task.Run(_pol.StopPrestart),
+                                       loggedIn: () => IsLaunching || SocialConnected || _pol.Pid is not null);
+        vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.ThirdPartyHookIndex)) PlatformChanged(); };
         var w = new SettingsWindow { DataContext = vm };
         if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
         _openSettings = vm;
         try { w.ShowDialog(); }
         finally { _openSettings = null; }
+        if (vm.RestartWanted)
+        {
+            RequestRestart?.Invoke();
+            return;
+        }
         OnPropertyChanged(nameof(CloseTooltip));
         RefreshMultiAccounts();
         if (_settings.Current.ThirdPartyHookPlatform != hookBefore && !SocialConnected && !IsLaunching)
             Task.Run(() => { _pol.StopPrestart(); _pol.Prestart(); });
     }
+
+    public string? PlaySubtitle => _pol.Platform switch
+    {
+        ThirdPartyHookService.Windower => "Windower loaded",
+        ThirdPartyHookService.Ashita => "Ashita loaded",
+        _ => null,
+    };
+
+    internal void PlatformChanged() => OnPropertyChanged(nameof(PlaySubtitle));
 
     // the Repair button's own checks, in its order. The lock comes from the switch's copy of its probe
     private string? LargeAddressAwareBlocked() =>

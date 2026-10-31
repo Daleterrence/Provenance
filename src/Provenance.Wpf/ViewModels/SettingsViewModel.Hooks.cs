@@ -45,6 +45,19 @@ public partial class SettingsViewModel
     // the window fills these in, a test answers them itself
     internal Func<string, string, string, Func<string, string?>, string?>? AskName { get; set; }
     internal Func<string, string, string, bool, bool>? Confirm { get; set; }
+    internal Func<string?, bool?>? AskSaveGame { get; set; }
+    internal Func<string, bool>? AskRestart { get; set; }
+    internal Action? Restart { get; set; }
+    // a pick that's turned down goes back once the dropdown's finished with it
+    internal Action<Action> Later { get; set; } = a => a();
+
+    // the Settings tab that's showing, which the window keeps up to date
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private int _shownTab;
+
+    // Windower/Ashita, Game and Addons and plugins are the tabs that change a profile
+    public bool ShowProfileSwitcher => ShownTab is 1 or 2 or 3 && (IsWindower || IsAshita);
+    public bool ShowProfileTools => ShownTab == 1;
+    public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita Profile:" : "Editing Windower Profile:";
     internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = WindowerUpdates.NewUpdater;
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
 
@@ -106,14 +119,16 @@ public partial class SettingsViewModel
         (ThirdPartyHookStatus, ThirdPartyHookStatusIsError) = ThirdPartyHookIndex switch
         {
             1 when AshitaDir is null => ("Couldn't find Ashita v4 in that folder.", true),
-            1 => ("The game starts through Ashita with the boot configuration below.", false),
+            1 => ("The game starts through Ashita with the boot configuration picked at the top.", false),
             2 when WindowerDir is null => ("Couldn't find Windower 4 in that folder.", true),
             2 when ThirdPartyHookService.IsLinkedFolder(WindowerDir) => (ThirdPartyHookService.LinkedWindowerText, true),
-            2 => ("The game starts through Windower with the profile below.", false),
+            2 => ("The game starts through Windower with the profile picked at the top.", false),
             _ => ("The game starts directly, without Windower or Ashita.", false),
         };
         OnPropertyChanged(nameof(IsAshita));
         OnPropertyChanged(nameof(IsWindower));
+        OnPropertyChanged(nameof(ShowProfileSwitcher));
+        OnPropertyChanged(nameof(ProfileSwitcherLabel));
         OnProfilesChanged();
     }
 
@@ -132,29 +147,76 @@ public partial class SettingsViewModel
         SyncGame();
     }
 
-    // after the first load, a switch between Windower and Ashita clears each account's stored profile
-    partial void OnThirdPartyHookIndexChanged(int value)
+    // set once the player's agreed to a restart for a platform change, the window closes and the app restarts after
+    public bool RestartWanted { get; private set; }
+
+    public static string RestartText(int from, int to) =>
+        $"You're already logged in, so {PlatformName(from)} is still loaded. Provenance needs to restart to switch to {PlatformName(to)}.";
+
+    private static string PlatformName(int index) => index switch { 1 => "Ashita", 2 => "Windower", _ => "no Windower or Ashita" };
+
+    // after the first load, a switch between Windower and Ashita clears each account's stored profile. Logged in, the
+    // old one's already loaded, so it only switches with a restart and a no puts it back unsaved
+    partial void OnThirdPartyHookIndexChanged(int oldValue, int newValue)
     {
+        bool restart = !_loadingThirdPartyHook && _loggedIn?.Invoke() == true;
+        if (restart && AskRestart?.Invoke(RestartText(oldValue, newValue)) != true)
+        {
+            Later(() => PutPlatformBack(oldValue));
+            return;
+        }
         SaveThirdPartyHook();
         RefreshMultiChoices(platformChanged: !_loadingThirdPartyHook);
         if (_loadingThirdPartyHook) return;
         // a pol.exe pre-started for a plain login would hold off Windower's updates, and it's no use to either of them
-        if (value is 1 or 2) _stopPrestart?.Invoke();
+        if (newValue is 1 or 2) _stopPrestart?.Invoke();
         LoadCards();
+        if (!restart) return;
+        RestartWanted = true;
+        Restart?.Invoke();
     }
 
-    partial void OnAshitaBootConfigChanged(HookProfileItem? value)
+    private void PutPlatformBack(int index)
+    {
+        _loadingThirdPartyHook = true;
+        try { ThirdPartyHookIndex = index; }
+        finally { _loadingThirdPartyHook = false; }
+    }
+
+    partial void OnAshitaBootConfigChanged(HookProfileItem? oldValue, HookProfileItem? newValue)
     {
         if (_loadingThirdPartyHook) return;
+        if (!GameFollows())
+        {
+            Later(() => AshitaBootConfig = oldValue);
+            return;
+        }
         SaveThirdPartyHook();
         LoadAshitaCard();
     }
 
-    partial void OnWindowerProfileChanged(HookProfileItem? value)
+    partial void OnWindowerProfileChanged(HookProfileItem? oldValue, HookProfileItem? newValue)
     {
         if (_loadingThirdPartyHook) return;
+        if (!GameFollows())
+        {
+            Later(() => WindowerProfile = oldValue);
+            return;
+        }
         SaveThirdPartyHook();
         LoadWindowerCard();
+    }
+
+    // on the Game tab the page moves with the pick, so changes it hasn't saved get asked about first. False when the
+    // player backs out, and the pick goes back
+    private bool GameFollows() => ShownTab != 2 || ShowingGame(AskSaveGame);
+
+    // backing out of that on the way into the Game tab leaves the page on its own profile, so the pick follows it there
+    public void PickGameProfile()
+    {
+        if (Game.Store.ProfileName is not { } name) return;
+        if (IsWindower && Game.Store.Platform == ThirdPartyHookService.Windower) WindowerProfile = Item(WindowerProfiles, name) ?? WindowerProfile;
+        else if (IsAshita && Game.Store.Platform == ThirdPartyHookService.Ashita) AshitaBootConfig = Item(AshitaBootConfigs, name) ?? AshitaBootConfig;
     }
 
     partial void OnAshitaPathChanged(string value)
@@ -214,21 +276,22 @@ public partial class SettingsViewModel
         Game.UseStore(want);
     }
 
-    public void ShowingGame(Func<string?, bool?>? saveFirst)
+    public bool ShowingGame(Func<string?, bool?>? saveFirst)
     {
         var want = GameStoreForSelection();
-        if (want.Key == Game.Store.Key && Game.Available) return;
+        if (want.Key == Game.Store.Key && Game.Available) return true;
         if (Game.HasUnsavedChanges)
         {
             var answer = saveFirst?.Invoke(Game.HasProfile ? $"the {Game.ProfileKind} {Game.ProfileShown}" : null);
-            if (answer is null) return;
+            if (answer is null) return false;
             if (answer == true)
             {
                 Game.SaveCommand.Execute(null);
-                if (Game.HasUnsavedChanges) return;   // the save failed, its error's on the page
+                if (Game.HasUnsavedChanges) return false;   // the save failed, its error's on the page
             }
         }
         Game.UseStore(want);
+        return true;
     }
 
     public bool CanManageProfiles => !MultiRunGoing && (IsWindower ? WindowerDir is not null && !WindowerLinked && WindowerSettingsProblem is null : IsAshita && AshitaDir is not null);
@@ -436,32 +499,17 @@ public partial class SettingsViewModel
     private void RefreshWindowerVersion()
     {
         if (WindowerDir is not { } dir) { WindowerVersionText = ""; return; }
-        var name = BranchName(Branch);
         if (!File.Exists(Path.Combine(dir, "Hook.dll")))
         {
             WindowerVersionText = "Hook.dll isn't installed yet. Provenance gets it the next time you log in.";
             return;
         }
-        WindowerBranchInfo info;
-        try { info = NewWindowerUpdater(dir, Branch).BranchInfo(); }
+        try { WindowerVersionText = $"Hook.dll {NewWindowerUpdater(dir, Branch).BranchInfo().HookFile} is installed."; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.Warning(ex, "Could not read Windower's versions");
             WindowerVersionText = "";
-            return;
         }
-        // a switch that hasn't been fetched yet still has the old branch's manifest, so its version means nothing here
-        WindowerVersionText = info.State switch
-        {
-            WindowerBranchState.Matches => $"Hook.dll {info.HookFile} is installed, the latest {name} version.",
-            WindowerBranchState.UpdatePending when info.SwitchPending =>
-                $"Hook.dll {info.HookFile} is installed. Provenance gets the {name} version the next time you log in.",
-            WindowerBranchState.UpdatePending when info.HookManifest == info.HookFile =>
-                $"Hook.dll {info.HookFile} is installed, the latest {name} version. Windower's own launcher has an update waiting, which Provenance gets the next time you log in.",
-            WindowerBranchState.UpdatePending =>
-                $"Hook.dll {info.HookFile} is installed. The {name} version is {info.HookManifest}, which Provenance gets the next time you log in.",
-            _ => $"Hook.dll {info.HookFile} is installed.",
-        };
     }
 
     partial void OnWindowerConsoleKeyChanged(ConsoleKeyChoice? value)

@@ -89,6 +89,7 @@ public partial class MainWindow : Window
         {
             old.RequestHide -= OnRequestHide;
             old.RequestShow -= OnRequestShow;
+            old.RequestRestart -= OnRequestRestart;
             old.RequestAttention -= OnRequestAttention;
             old.AttentionCleared -= OnAttentionCleared;
             old.PropertyChanged -= OnVmPropertyChanged;
@@ -97,6 +98,7 @@ public partial class MainWindow : Window
         {
             @new.RequestHide += OnRequestHide;
             @new.RequestShow += OnRequestShow;
+            @new.RequestRestart += OnRequestRestart;
             @new.RequestAttention += OnRequestAttention;
             @new.AttentionCleared += OnAttentionCleared;
             @new.PropertyChanged += OnVmPropertyChanged;
@@ -157,6 +159,13 @@ public partial class MainWindow : Window
 
     private void OnRequestShow() => Dispatcher.Invoke(ShowFromTray);
 
+    // the same exit as the tray's, which logs a held session out, then the app starts again once it's gone
+    private void OnRequestRestart() => Dispatcher.InvokeAsync(() =>
+    {
+        App.RestartOnExit = true;
+        ExitApp();
+    });
+
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
     private void OnMinimize(object sender, RoutedEventArgs e)
@@ -210,6 +219,7 @@ public partial class MainWindow : Window
                 if (run.MultiRunning) run.StopAllAccountsAndExit();
                 else Dispatcher.InvokeAsync(Close);   // the run ended while the question was up, and not from inside Closing
             }
+            else App.RestartOnExit = false;
             return;
         }
         // a second close while the unsaved-changes question's up (Alt+F4, tray Exit) waits for its answer
@@ -222,6 +232,7 @@ public partial class MainWindow : Window
         {
             e.Cancel = true;
             _exiting = false;
+            App.RestartOnExit = false;
             return;
         }
         Vm?.Social.SettleSends(SessionEnd.LogOut);
