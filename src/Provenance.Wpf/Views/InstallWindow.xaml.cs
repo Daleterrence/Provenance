@@ -39,7 +39,7 @@ public partial class InstallWindow : Window
         var what = vm.CurrentStep switch
         {
             0 => "Closing this window stops the download. It'll carry on from where it left off next time.",
-            1 => "Closing this window stops unpacking. The download is kept, so you can unpack it next time.",
+            1 => "Closing this window stops unpacking. The download is kept, so you can carry on with the install next time.",
             _ => "Closing this window stops the install before it finishes. You can finish it next time.",
         };
         if (MessageDialog.Confirm(this, "Stop the install?", what, "STOP", destructive: true) is null)

@@ -122,12 +122,25 @@ public partial class InstallViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(StepText))]
     private int _currentStep;    // 0 download, 1 unpack, 2 install, 3 done
 
+    // the mirror's files come ready to install, so that way has no unpack step
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StepText))]
+    private bool _fromMirror;
+
     public string StepText => !Running ? "" : CurrentStep switch
     {
-        0 => "Step 1 of 3: Download",
+        0 => $"Step 1 of {(FromMirror ? 2 : 3)}: Download",
         1 => "Step 2 of 3: Unpack",
-        2 => "Step 3 of 3: Install",
+        2 => FromMirror ? "Step 2 of 2: Install" : "Step 3 of 3: Install",
         _ => "Finishing",
+    };
+
+    // Continue tries the mirror again first, so a stop while unpacking can't promise the unpack
+    internal static string StoppedText(int step) => step switch
+    {
+        0 => "The download was stopped. It'll carry on from where it left off.",
+        1 => "Unpacking was stopped. The download is kept, so press Continue to carry on with the install.",
+        _ => "The install was stopped before it finished. Press Continue to finish it.",
     };
 
     private bool CanStartInstall() => !Running && !Done && EnoughSpace;
@@ -396,12 +409,7 @@ public partial class InstallViewModel : ObservableObject
         {
             Stage = "Cancelled";
             StartLabel = "CONTINUE";
-            Detail = CurrentStep switch
-            {
-                0 => "The download was stopped. It'll carry on from where it left off.",
-                1 => "Unpacking was stopped. The download is kept, so press Continue to unpack it.",
-                _ => "The install was stopped before it finished. Press Continue to finish it.",
-            };
+            Detail = StoppedText(CurrentStep);
         }
         catch (Exception ex)
         {
@@ -434,6 +442,7 @@ public partial class InstallViewModel : ObservableObject
             Log.Information("Install source: Square Enix's parts (the Provenance mirror has no copy of region {Region})", _region);
             return false;
         }
+        FromMirror = true;
         CurrentStep = 0;
         Stage = "Preparing";
         Detail = MirrorInstall.PrepareText;
@@ -453,6 +462,7 @@ public partial class InstallViewModel : ObservableObject
         async Task<bool> SquareEnixAsync(string reason)
         {
             Log.Information("Install source: Square Enix's parts ({Reason})", reason);
+            FromMirror = false;
             StageIndeterminate = true;
             DownloadFraction = 0;
             _meter.Clear();

@@ -289,7 +289,7 @@ public sealed class GameInstaller
         else if (File.Exists(dxsetup))
         {
             Say(progress, "Installing the DirectX runtime...");
-            await RunDirectXAsync(dxsetup, warnings, ct);
+            await RunDirectXAsync(dxsetup, warnings, ct, () => Say(progress, "The install will stop once the DirectX runtime has finished installing."));
         }
 
         // the FFXI package's own DISM step, Sysnative so a 32-bit host gets the 64-bit DISM
@@ -299,7 +299,8 @@ public sealed class GameInstaller
         if (File.Exists(dism))
         {
             Say(progress, "Turning on DirectPlay...");
-            int dp = await RunAsync(dism, "/online /Enable-Feature /all /FeatureName:DirectPlay /NoRestart", ct);
+            int dp = await RunAsync(dism, "/online /Enable-Feature /all /FeatureName:DirectPlay /NoRestart", ct,
+                                    () => Say(progress, "The install will stop once Windows has finished turning on DirectPlay."));
             if (dp == 3010) restartPending = true;
             else if (dp != 0) throw Shown.Mark(new InvalidOperationException($"Windows couldn't turn on DirectPlay, which FINAL FANTASY XI needs (DISM code {dp})."));
         }
@@ -336,9 +337,9 @@ public sealed class GameInstaller
             .All(f => File.Exists(Path.Combine(sys, f)));
     }
 
-    internal static async Task RunDirectXAsync(string dxsetup, List<string> warnings, CancellationToken ct)
+    internal static async Task RunDirectXAsync(string dxsetup, List<string> warnings, CancellationToken ct, Action? stopping = null)
     {
-        int code = await RunAsync(dxsetup, "/silent", ct);
+        int code = await RunAsync(dxsetup, "/silent", ct, stopping);
         if (code != 0) warnings.Add($"The DirectX runtime installer stopped with code {code}. Game controllers in XInput mode might need it.");
     }
 
@@ -444,12 +445,15 @@ public sealed class GameInstaller
                ?? (Directory.Exists(dir) ? Directory.GetFiles(dir, "*.msi").FirstOrDefault() : null);
     }
 
-    internal static async Task<int> RunAsync(string exe, string args, CancellationToken ct)
+    // a stop waits for it to finish, DXSETUP or DISM killed part way can leave the DirectX runtime half installed
+    internal static async Task<int> RunAsync(string exe, string args, CancellationToken ct, Action? stopping = null)
     {
+        ct.ThrowIfCancellationRequested();
         using var p = Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = false, CreateNoWindow = true })
                       ?? throw Shown.Mark(new InvalidOperationException($"Windows couldn't start {Path.GetFileName(exe)}."));
-        using var reg = ct.Register(() => { try { if (!p.HasExited) p.Kill(true); } catch { } });
-        await p.WaitForExitAsync(ct);
+        using (ct.Register(() => stopping?.Invoke()))
+            await p.WaitForExitAsync(CancellationToken.None);
+        ct.ThrowIfCancellationRequested();
         return p.ExitCode;
     }
 

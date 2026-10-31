@@ -181,7 +181,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
                 throw Shown.Mark(new InvalidOperationException(DirectXFailed));
             }
             Status?.Invoke("Installing the DirectX runtime...");
-            // a stop part way through DXSETUP can leave some of the runtime in place
+            // DXSETUP runs to the end even after a stop, so it's fixing something from the start
             Fixing?.Invoke();
             Fixed?.Invoke();
             var warnings = new List<string>();
