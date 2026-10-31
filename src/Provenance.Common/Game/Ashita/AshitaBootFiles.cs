@@ -105,20 +105,23 @@ public static class AshitaBootFiles
         return path;
     }
 
-    // a copy of the install's own example with the game settings left to Windows, or a short one of mine
+    // a copy of the install's own example with the game settings left to Windows, or a short one of mine. Either way
+    // the hardware mouse starts on
     public static string Create(string ashitaDir, string name, bool fromExample, int playOnline = 2)
     {
         var path = NewFile(ashitaDir, name);
         var stem = Path.GetFileNameWithoutExtension(name).Trim();
+        AshitaIniFile ini;
         if (fromExample && ExampleFor(ashitaDir) is { } example)
         {
-            var ini = AshitaIniFile.Load(Path.Combine(Folder(ashitaDir), example));
+            ini = AshitaIniFile.Load(Path.Combine(Folder(ashitaDir), example));
             ini.Set("ashita.launcher", "name", stem);
             foreach (var key in ini.Entries("ffxi.registry").Select(e => e.Key).Distinct(StringComparer.OrdinalIgnoreCase).ToList())
                 ini.Set("ffxi.registry", key, "-1");
-            ini.Save(path, backup: false);
         }
-        else AshitaIniFile.FromText(Template(stem, playOnline)).Save(path, backup: false);
+        else ini = AshitaIniFile.FromText(Template(stem, playOnline));
+        ini.Set("ffxi.registry", "0021", "1");
+        ini.Save(path, backup: false);
         return path;
     }
 

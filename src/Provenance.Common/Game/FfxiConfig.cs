@@ -39,11 +39,11 @@ public sealed class FfxiSettings
         return c;
     }
 
-    // the official tool's Default button
+    // the official tool's Default button, apart from the hardware mouse, which is on because it's more responsive
     public static FfxiSettings Defaults() => new()
     {
         DrawDistanceMip = 0, Width = 800, Height = 600, BgWidth = 800, BgHeight = 600, Sound = 1,
-        Vegetation = 2, EnhancedShading = 1, Textures = 2, Maps2D = 1, HardwareMouse = 0, OpeningMovie = 1,
+        Vegetation = 2, EnhancedShading = 1, Textures = 2, Maps2D = 1, HardwareMouse = 1, OpeningMovie = 1,
         SimpleCharSelect = 0, Brightness = 0f, SoundEffects = 12, WindowMode = 1, BackgroundSound = 0,
         Fonts = 2, UiWidth = 0, UiHeight = 0, GraphicsFix = 0, ScreenshotFolder = "", FullResScreenshots = 1,
         KeepAspect = 1, LegacySettings = 0, PadMode = [0, 1, 1, 1, 0, 0],

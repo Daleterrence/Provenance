@@ -36,13 +36,6 @@ public partial class GameSettingsViewModel : ObservableObject
         ? $"{ProfileShown} is one of Ashita's example files, so Provenance won't change it. Duplicate it under Windower/Ashita and change the copy instead."
         : "";
 
-    // Windower writes its profile's hardware mouse at every start, Legacy settings or not
-    private bool HardwareMouseOwn => _store.Platform == ThirdPartyHookService.Windower;
-    public bool HardwareMouseEnabled => LegacySettings || HardwareMouseOwn;
-    public string LegacyHelp => HardwareMouseOwn
-        ? "Turn this on to change Simple character creation and Graphics card fix. Turning it off clears them."
-        : "Turn this on to change the three older settings below. Turning it off clears them.";
-
     public IGameSettingsStore Store => _store;
     public bool HasProfile => _store.Platform is not null;
     public string ProfileKind => _store.Platform switch
@@ -55,9 +48,8 @@ public partial class GameSettingsViewModel : ObservableObject
     public string ProfileShown => _store.ProfileDisplay ?? "";
     public string? Platform => _store.Platform;
 
-    public string? KeepAspectHelp => _store.SameShapeRenderSizes
-        ? null
-        : "When this is on, the 3D resolution list only shows sizes that are the same shape as the game resolution.";
+    // the game never reads 0044, it only picks which sizes the official tool lists, so a profile has no use for it
+    public bool KeepAspectShown => !HasProfile;
 
     // the Config Tool line only holds with no Windower or Ashita, they keep some of these in their own files
     public string IntroText => HasProfile
@@ -87,11 +79,9 @@ public partial class GameSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(Platform));
         OnPropertyChanged(nameof(ProfileHeading));
         OnPropertyChanged(nameof(IntroText));
-        OnPropertyChanged(nameof(KeepAspectHelp));
+        OnPropertyChanged(nameof(KeepAspectShown));
         OnPropertyChanged(nameof(Editable));
         OnPropertyChanged(nameof(ReadOnlyNote));
-        OnPropertyChanged(nameof(HardwareMouseEnabled));
-        OnPropertyChanged(nameof(LegacyHelp));
     }
 
     public string[] WindowModes { get; } = { "Full screen", "Windowed", "Borderless window" };
@@ -166,12 +156,11 @@ public partial class GameSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(UiSizeText));
     }
 
-    // the official tool puts these back to 0 whenever Legacy settings is off
+    // the official tool puts these back to 0 whenever Legacy settings is off (the hardware mouse too, but the game
+    // reads that one whatever Legacy settings says)
     partial void OnLegacySettingsChanged(bool value)
     {
-        OnPropertyChanged(nameof(HardwareMouseEnabled));
         if (value || _applying) return;
-        if (!HardwareMouseOwn) HardwareMouse = false;
         SimpleCharSelect = false;
         GraphicsFix = false;
     }
@@ -227,8 +216,7 @@ public partial class GameSettingsViewModel : ObservableObject
         if (!_applying && e.PropertyName is not (nameof(Status) or nameof(StatusIsError) or nameof(BrightnessText) or nameof(Available)
                 or nameof(HasUnsavedChanges) or nameof(UiScaleText) or nameof(UiSizeText) or nameof(UiScaleMax) or nameof(Store)
                 or nameof(HasProfile) or nameof(ProfileKind) or nameof(ProfileShown) or nameof(Platform) or nameof(ProfileHeading) or nameof(IntroText)
-                or nameof(KeepAspectHelp) or nameof(Editable) or nameof(ReadOnlyNote)
-                or nameof(HardwareMouseEnabled) or nameof(LegacyHelp)))
+                or nameof(KeepAspectShown) or nameof(Editable) or nameof(ReadOnlyNote)))
             _edited = true;
     }
 
@@ -284,7 +272,7 @@ public partial class GameSettingsViewModel : ObservableObject
         s.OpeningMovie = B(OpeningMovie); s.Textures = Textures; s.Maps2D = Maps2D; s.Fonts = Fonts;
         // off keeps a mip level Windower or Ashita had above 1
         s.Vegetation = Vegetation; s.DrawDistanceMip = DrawDistance ? 0 : Math.Max(1, _original.DrawDistanceMip); s.EnhancedShading = B(EnhancedShading);
-        s.KeepAspect = B(KeepAspect); s.Sound = B(Sound); s.SoundEffects = (int)Math.Round(SoundEffects);
+        s.KeepAspect = KeepAspectShown ? B(KeepAspect) : _original.KeepAspect; s.Sound = B(Sound); s.SoundEffects = (int)Math.Round(SoundEffects);
         s.BackgroundSound = B(BackgroundSound); s.ScreenshotFolder = ScreenshotFolder.Trim();
         s.FullResScreenshots = B(FullResScreenshots); s.LegacySettings = B(LegacySettings);
         s.HardwareMouse = B(HardwareMouse); s.SimpleCharSelect = B(SimpleCharSelect); s.GraphicsFix = B(GraphicsFix);
@@ -377,7 +365,7 @@ public partial class GameSettingsViewModel : ObservableObject
     }
 
     // Windower keeps the 3D resolution as one scale of the game's, so only that shape can be saved there
-    private bool SameShapeOnly => KeepAspect || _store.SameShapeRenderSizes;
+    private bool SameShapeOnly => (KeepAspectShown && KeepAspect) || _store.SameShapeRenderSizes;
 
     private void RebuildRenderSizes(string keep)
     {

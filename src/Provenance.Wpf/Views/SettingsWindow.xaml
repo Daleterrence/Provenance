@@ -446,7 +446,7 @@
                             <TextBlock Text="Profile settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding WindowerCardEnabled}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Console key" Tag="Sets the keybind to open the Windower console in-game.">
+                                    <HeaderedContentControl Header="Console key" Tag="The key that opens and closes the Windower console in game.">
                                         <Button x:Name="ConsoleKeyButton" Content="{Binding ConsoleKeyText}" FontSize="12" Command="{Binding EditConsoleKeyCommand}"
                                                 PreviewKeyDown="OnConsoleKeyDown" PreviewKeyUp="OnConsoleKeyUp" LostKeyboardFocus="OnConsoleKeyFocusLost"
                                                 AutomationProperties.Name="Console key">
@@ -462,7 +462,7 @@
                                             </Button.Style>
                                         </Button>
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Allow the Windows key" Tag="If enabled, the Windows key opens the Start Menu as usual.">
+                                    <HeaderedContentControl Header="Allow the Windows key" Tag="Makes Windows handle keybinds before Windower. Required for normal Windows 11 Alt-Tab behaviour.">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding WindowerAllowWinKey}"
                                                       AutomationProperties.Name="Allow the Windows key" />
                                     </HeaderedContentControl>
@@ -474,7 +474,7 @@
                                 <StackPanel>
                                     <HeaderedContentControl Header="Branch">
                                         <HeaderedContentControl.Tag>
-                                            <TextBlock Style="{StaticResource Help}"><Run Text="Switches your Windower hook between Stable and Development. " /><Bold>Leave this on stable unless you know what you are doing.</Bold></TextBlock>
+                                            <TextBlock Style="{StaticResource Help}"><Run Text="Switches Windower, its plugins and its addons between Stable and Development. The switch happens the next time you log in. " /><Bold>Leave this on Stable unless you know what you're doing.</Bold></TextBlock>
                                         </HeaderedContentControl.Tag>
                                         <Button Content="{Binding WindowerBranchName}" Style="{StaticResource MaterialDesignOutlinedButton}" FontSize="12"
                                                 Command="{Binding FlipWindowerBranchCommand}" AutomationProperties.Name="Branch" />
@@ -656,10 +656,11 @@
                                     <HeaderedContentControl Header="3D resolution" Tag="This is the resolution the game draws its 3D graphics at, before scaling them to the game resolution.">
                                         <ComboBox ItemsSource="{Binding RenderSizes}" SelectedItem="{Binding RenderSize}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Keep aspect ratio" Tag="{Binding KeepAspectHelp}">
+                                    <HeaderedContentControl Header="Keep aspect ratio" Tag="When this is on, the 3D resolution list only shows sizes that are the same shape as the game resolution."
+                                                            Visibility="{Binding KeepAspectShown, Converter={StaticResource BoolToVis}}">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding KeepAspect}" />
                                     </HeaderedContentControl>
-                                    <HeaderedContentControl Header="Textures">
+                                    <HeaderedContentControl Header="Textures" Tag="This only changes the quality of light flares and clouds.">
                                         <ComboBox ItemsSource="{Binding Quality3}" SelectedIndex="{Binding Textures}" />
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="Fonts">
@@ -754,15 +755,13 @@
                                                     Command="{Binding BrowseScreenshotsCommand}" />
                                         </Grid>
                                     </StackPanel>
-                                    <HeaderedContentControl Header="Legacy settings" Tag="{Binding LegacyHelp}">
+                                    <HeaderedContentControl Header="Hardware mouse cursor">
+                                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding HardwareMouse}" />
+                                    </HeaderedContentControl>
+                                    <HeaderedContentControl Header="Legacy settings" Tag="Turn this on to change Simple character creation and Graphics card fix. Turning it off clears them.">
                                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding LegacySettings}" />
                                     </HeaderedContentControl>
-                                    <!-- each row's enabled on its own, Windower writes a profile's hardware mouse at every start -->
                                     <StackPanel Margin="20,0,0,0">
-                                        <HeaderedContentControl Header="Hardware mouse cursor"
-                                                                IsEnabled="{Binding HardwareMouseEnabled}">
-                                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding HardwareMouse}" />
-                                        </HeaderedContentControl>
                                         <HeaderedContentControl Header="Simple character creation" IsEnabled="{Binding LegacySettings}" Tag="When this is on, character creation shows still pictures instead of 3D models.">
                                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding SimpleCharSelect}" />
                                         </HeaderedContentControl>
