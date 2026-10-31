@@ -32,31 +32,9 @@ public sealed record WindowerLaunchSetup
 
 // what Windower writes into the registry for a profile. FFXI only reads it once Play's pressed, and another launch can
 // have written its own profile's by then
-public sealed record WindowerGameValues(string WindowerDir, WindowerProfile Profile, WindowerRegion Region, RegistryKey? Root)
+public sealed record WindowerGameValues(WindowerProfile Profile, WindowerRegion Region, RegistryKey? Root)
 {
     public IReadOnlyList<string> Apply() => WindowerGameRegistry.Apply(Profile, Region, Profile.Width, Profile.Height, Root);
-
-    // the profile as settings.xml has it now, for a session picked up again. Null when it's gone, never a guess
-    public static WindowerGameValues? Find(string windowerDir, string profileName, WindowerRegion region, RegistryKey? root)
-    {
-        string why = "the profile's gone";
-        WindowerProfile? profile = null;
-        if (!ThirdPartyHookService.IsWindowerFolder(windowerDir)) why = "the Windower folder's gone";
-        else if (ThirdPartyHookService.IsLinkedFolder(windowerDir)) why = "the Windower folder's a link now";
-        else
-        {
-            try
-            {
-                var file = WindowerSettingsFile.Load(windowerDir);
-                if (file.LoadError is not null) why = "settings.xml can't be read";
-                else profile = file.Find(profileName) ?? (profileName.Length == 0 ? file.Unnamed : null);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { why = "settings.xml can't be read"; }
-        }
-        if (profile is not null) return new(windowerDir, profile, region, root);
-        Log.Warning("Windower's game settings for the profile {Profile} won't be written again at Play: {Why}", profileName, why);
-        return null;
-    }
 }
 
 // Everything Windower.exe does before it starts pol.exe, then pol_launch --windower puts Hook.dll in and pol_hook after
@@ -95,7 +73,7 @@ public sealed class WindowerLaunch : IDisposable
     public string? UpdateNotice { get; private set; }
     public IReadOnlyList<string> RegistryWritten { get; private set; } = [];
     public bool HandoverOpen => _mapping is not null && _ready is not null;
-    public WindowerGameValues GameValues => new(_setup.WindowerDir, Profile.Clone(), Region, _setup.RegistryRoot);
+    public WindowerGameValues GameValues => new(Profile.Clone(), Region, _setup.RegistryRoot);
 
     private WindowerRegion Region => _setup.Region switch
     {

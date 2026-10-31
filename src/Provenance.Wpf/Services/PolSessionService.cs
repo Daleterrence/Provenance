@@ -3,7 +3,6 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.Win32;
 using Provenance.Common;
 using Provenance.Common.Credentials;
 using Provenance.Common.Game;
@@ -115,12 +114,11 @@ public sealed class PolSessionService : IDisposable
 
     internal sealed record Prestarted(int Pid, DateTime? Started);
 
-    // Pid 0 is a claim, start times are UTC ticks. The Windower ones are what its Play needs if another copy picks it up
-    internal sealed record SessionFile(int Pid, long StartTicks, string LaunchId, string? ProfileId,
-                                       int OwnerPid = 0, long OwnerStartTicks = 0, bool Played = false, bool Lean = false,
-                                       string? WindowerDir = null, string? WindowerProfile = null, int WindowerRegion = -1);
+    // Pid 0 is a claim, start times are UTC ticks
+    private sealed record SessionFile(int Pid, long StartTicks, string? ProfileId, int OwnerPid = 0, long OwnerStartTicks = 0,
+                                      bool Played = false);
 
-    // admin-only, so nothing running as the user can plant a record that makes the app attach to or end a process
+    // admin-only, so nothing running as the user can plant a record that makes the app end a process
     private static readonly Lazy<string> SessionDirLazy = new(() => SecureFiles.SubDir("sessions"));
     private static string SessionDir => SessionDirLazy.Value;
 
@@ -149,7 +147,6 @@ public sealed class PolSessionService : IDisposable
     private int _prestartHolds;   // under _gate
     private string? _sessionFile;
     private string? _sessionProfile;
-    private bool _sessionLean;
     private string? _claimFile;
     private int? _hookPid;
     private DateTime _hookStart;
@@ -178,7 +175,8 @@ public sealed class PolSessionService : IDisposable
 
     public int? Pid { get; private set; }
 
-    // everything a pol.exe start reaches outside this class, so the starts can be checked offline with stand-ins
+    // everything a pol.exe start (or ending an earlier copy's) reaches outside this class, so they can be checked
+    // offline with stand-ins
     internal Func<(string? ViewerDir, string? PolExe, string LauncherExe)> FindLaunchFiles { get; init; }
     internal Func<bool> GameIsInstalled { get; init; }
     internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
@@ -188,12 +186,12 @@ public sealed class PolSessionService : IDisposable
     internal Func<bool?> WindowsScreenSaver { get; init; } = ReadScreenSaver;
     internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerLaunchSetup> WindowerSetup { get; init; }
     internal HoldViewerFiles HoldViewer { get; init; } = ViewerBuild.Hold;
-    internal RegistryKey? WindowerRegistryRoot { get; init; }
     internal Func<Prestarted, bool> PrestartAlive { get; init; } = pre =>
     {
         try { using var p = Process.GetProcessById(pre.Pid); return !p.HasExited && IsSameProcess(p, pre.Started); }
         catch (ArgumentException) { return false; }
     };
+    internal Func<Process, bool> IsViewerPol { get; init; } = PolProcess.IsViewerPol;
 
     public event Action<PolSocialSnapshot>? SnapshotUpdated;
 
@@ -295,7 +293,6 @@ public sealed class PolSessionService : IDisposable
         _logOffset = 0;
         _pending.Clear();
         _played = false;
-        _sessionLean = options.Lean;
         if (pol.Password.Length > MaxPolPasswordLength) return Fail(PolPasswordTooLongText, ErrorDetailsUnreadable);
         var region = _settings.DetectedRegion;
         if (!PolPaths.Supported(region))
@@ -565,10 +562,6 @@ public sealed class PolSessionService : IDisposable
         }
     }
 
-    internal void ReattachWindower(string? windowerDir, string? profile, int region) =>
-        Volatile.Write(ref _windowerPlay, windowerDir is null || profile is null || region is < 0 or > 2 ? null
-            : WindowerGameValues.Find(windowerDir, profile, (WindowerRegion)region, WindowerRegistryRoot));
-
     // another launch through Windower may have written its own profile's values since this one's
     internal void PutWindowerValuesBack()
     {
@@ -627,13 +620,15 @@ public sealed class PolSessionService : IDisposable
     }
 
     // POL_REGION is the env.dat region the build check went by, as pol.exe's own index (0 JP, 1 US, 2 EU), which the
-    // hook holds pol.exe to. An env.dat that doesn't say leaves it to pol.exe
+    // hook holds pol.exe to. An env.dat that doesn't say leaves it to pol.exe. With POL_OWNER the hook logs out once this
+    // copy's gone, unless the game's started
     internal static void SetBaseEnvironment(IDictionary<string, string?> env, PolRegion? region)
     {
         LaunchEnvironment.Reset(env);
         env["POL_IPC_DIR"] = HookFiles.Dir;
         env["POL_CRED_KEYFILE"] = CredentialKey.FilePath;
         env["POL_HOLD"] = "1";
+        env["POL_OWNER"] = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (region is { } r) env["POL_REGION"] = RegionIndex(r);
         if (ScreenSaverAtStart is { } saver) env["POL_SCREENSAVER"] = saver;
     }
@@ -793,7 +788,7 @@ public sealed class PolSessionService : IDisposable
             LargeAddressAwareBeforeStart(viewerDir!, "before the pre-start");
             NoteScreenSaverNow();
             var psi = LauncherStart(launcherExe, polExe);
-            SetPrestartEnvironment(psi.Environment, Environment.ProcessId, PolEnv.Region(viewerDir!));
+            SetPrestartEnvironment(psi.Environment, PolEnv.Region(viewerDir!));
             using var launcher = StartProcess(psi);
             if (launcher is null || RunLauncher(launcher, PolLaunchLimit) is not { } run) return null;
             var m = PidLine.Match(run.Out);
@@ -814,12 +809,11 @@ public sealed class PolSessionService : IDisposable
     private static bool GameInstalled(PolRegion region) =>
         PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct) is { } ffxi && File.Exists(Path.Combine(ffxi, "FFXiMain.dll"));
 
-    // POL_IPC_DIR and POL_CRED_KEYFILE have to go in here, the go file never carries them
-    internal static void SetPrestartEnvironment(IDictionary<string, string?> env, int parentPid, PolRegion? region)
+    // POL_IPC_DIR, POL_CRED_KEYFILE and POL_OWNER have to go in here, the go file never carries them
+    internal static void SetPrestartEnvironment(IDictionary<string, string?> env, PolRegion? region)
     {
         SetBaseEnvironment(env, region);
         env["POL_PRESTART"] = "1";
-        env["POL_PRESTART_PARENT"] = parentPid.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     internal static IEnumerable<string> GoFileEntries(IDictionary<string, string?> env)
@@ -1069,16 +1063,14 @@ public sealed class PolSessionService : IDisposable
         catch { return false; }
     }
 
-    internal static SessionFile? ReadRecord(string path) => JsonSerializer.Deserialize<SessionFile>(File.ReadAllText(path));
+    private static SessionFile? ReadRecord(string path) => JsonSerializer.Deserialize<SessionFile>(File.ReadAllText(path));
 
     // write then move, another copy may read it at any moment
-    internal static void WriteRecord(string path, string tmp, int pid, long startTicks, string launchId,
-                                     string? profileId, bool played = false, bool lean = false, WindowerGameValues? windower = null)
+    private static void WriteRecord(string path, string tmp, int pid, long startTicks, string? profileId, bool played = false)
     {
         using var me = Process.GetCurrentProcess();
         File.WriteAllText(tmp, JsonSerializer.Serialize(
-            new SessionFile(pid, startTicks, launchId, profileId, me.Id, PolProcess.StartUtcTicks(me), played, lean,
-                            windower?.WindowerDir, windower?.Profile.Name, windower is { } w ? (int)w.Region : -1)));
+            new SessionFile(pid, startTicks, profileId, me.Id, PolProcess.StartUtcTicks(me), played)));
         File.Move(tmp, path, overwrite: true);
     }
 
@@ -1093,12 +1085,11 @@ public sealed class PolSessionService : IDisposable
     {
         try
         {
-            if (Pid is not { } pid || _pidStarted is not { } st || _launchId is null) return;
+            if (Pid is not { } pid || _pidStarted is not { } st) return;
             _sessionProfile = profileId;
             Directory.CreateDirectory(SessionDir);
             var path = Path.Combine(SessionDir, $"{pid}.json");
-            WriteRecord(path, $"{path}.{Environment.ProcessId}.tmp", pid, st.ToUniversalTime().Ticks, _launchId,
-                        profileId, played, _sessionLean, Volatile.Read(ref _windowerPlay));
+            WriteRecord(path, $"{path}.{Environment.ProcessId}.tmp", pid, st.ToUniversalTime().Ticks, profileId, played);
             _sessionFile = path;
             ReleaseClaim();
         }
@@ -1122,7 +1113,7 @@ public sealed class PolSessionService : IDisposable
             }
             ReleaseClaim();
             var path = Path.Combine(SessionDir, $"claim-{Environment.ProcessId}.json");
-            WriteRecord(path, path + ".tmp", 0, 0, "", profileId);
+            WriteRecord(path, path + ".tmp", 0, 0, profileId);
             _claimFile = path;
             return true;
         }
@@ -1165,62 +1156,26 @@ public sealed class PolSessionService : IDisposable
         catch { return false; }
     }
 
-    public bool TryReattach(out string? profileId, string? wantProfile = null)
+    // a copy that ended before Play can leave its pol.exe logged in (an older hook stays held, a newer one may still be
+    // logging itself out), so it's ended here and the next login starts fresh
+    public void EndOrphans()
     {
-        profileId = null;
-        try
+        foreach (var path in SessionFilePaths())
         {
-            using var claim = AdminLock.TryAcquire(SessionClaimLock, TimeSpan.FromSeconds(3));
-            // never without the lock, two copies starting together would take one session
-            if (claim is null) return false;
-            var files = Directory.Exists(SessionDir)
-                ? new DirectoryInfo(SessionDir).GetFiles("*.json").OrderByDescending(f => f.LastWriteTimeUtc).Select(f => f.FullName).ToList()
-                : [];
-            foreach (var path in files)
+            SessionFile? s;
+            try { s = ReadRecord(path); }
+            catch { continue; }   // maybe another copy's mid-replace, never delete it
+            if (s is null) continue;
+            bool ownerAlive = IsAlive(s.OwnerPid, s.OwnerStartTicks);
+            if (ownerAlive && s.OwnerPid != Environment.ProcessId) continue;
+            if (!IsAlive(s.Pid, s.StartTicks) || !IsPol(s.Pid))
             {
-                SessionFile? s;
-                try { s = ReadRecord(path); }
-                catch { continue; }   // maybe another copy's mid-replace, never delete it
-                if (s is null) continue;
-                if (s.OwnerPid != Environment.ProcessId && IsAlive(s.OwnerPid, s.OwnerStartTicks)) continue;
-                if (!IsAlive(s.Pid, s.StartTicks) || !IsPol(s.Pid))
-                {
-                    DeleteQuietly(path);
-                    continue;
-                }
-                if (s.Played) continue;
-                if (s.Lean || !File.Exists(SocialSnapshot.PathForPid(s.Pid)))
-                {
-                    // its copy died before the game started, so it holds the account for nobody
-                    EndOrphan(s.Pid, s.StartTicks);
-                    DeleteQuietly(path);
-                    continue;
-                }
-                if (wantProfile != null && s.ProfileId != wantProfile) continue;
-                DateTime started;
-                using (var p = Process.GetProcessById(s.Pid)) started = p.StartTime;
-                lock (_gate)
-                {
-                    Pid = s.Pid;
-                    _pidStarted = started;
-                    _launchId = s.LaunchId;
-                    _played = false;
-                    _sessionLean = false;
-                }
-                profileId = s.ProfileId;
-                ReattachWindower(s.WindowerDir, s.WindowerProfile, s.WindowerRegion);
-                SaveSession(s.ProfileId);
-                StartWatcher(s.Pid);
-                ThreadPool.QueueUserWorkItem(_ => ReadSnapshot());
-                Log.Information("Re-attached to the held PlayOnline session (pid {Pid})", s.Pid);
-                return true;
+                DeleteQuietly(path);
+                continue;
             }
-            return false;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Re-attach failed");
-            return false;
+            if (s.Played || ownerAlive) continue;
+            EndOrphan(s.Pid, s.StartTicks);
+            DeleteQuietly(path);
         }
     }
 
@@ -1249,15 +1204,15 @@ public sealed class PolSessionService : IDisposable
         catch { return false; }
     });
 
-    private static bool IsPol(int pid)
+    private bool IsPol(int pid)
     {
-        try { using var p = Process.GetProcessById(pid); return PolProcess.IsViewerPol(p); }
+        try { using var p = Process.GetProcessById(pid); return IsViewerPol(p); }
         catch { return false; }
     }
 
-    private static void EndOrphan(int pid, long startUtcTicks)
+    private void EndOrphan(int pid, long startUtcTicks)
     {
-        if (KillIfOurs(pid, p => PolProcess.StartUtcTicks(p) == startUtcTicks && PolProcess.IsViewerPol(p), 0, 3000))
+        if (KillIfOurs(pid, p => PolProcess.StartUtcTicks(p) == startUtcTicks && IsViewerPol(p), 0, 3000))
             Log.Warning("Ended pol.exe {Pid}: its copy of Provenance ended before the game started", pid);
     }
 
@@ -1433,15 +1388,13 @@ public sealed class PolSessionService : IDisposable
             _played = false;
             _sessionFile = null;
             _sessionProfile = null;
-            _sessionLean = false;
             _polProc?.Dispose();
             _polProc = null;
             lock (_hookGate) _hookPid = null;
         }
     }
 
-    internal string AdoptPlayedForTest(int pid, DateTime started, string profileId,
-                                       (int Pid, DateTime Start)? hook = null, bool lean = false)
+    internal string AdoptPlayedForTest(int pid, DateTime started, string profileId, (int Pid, DateTime Start)? hook = null)
     {
         var launchId = "test" + Guid.NewGuid().ToString("N")[..8];
         lock (_gate)
@@ -1450,7 +1403,6 @@ public sealed class PolSessionService : IDisposable
             _pidStarted = started;
             _launchId = launchId;
             _played = true;
-            _sessionLean = lean;
         }
         if (hook is { } h)
             lock (_hookGate)

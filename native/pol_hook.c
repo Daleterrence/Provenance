@@ -1052,6 +1052,30 @@ static int stop_requested(void)
     return GetFileAttributesA(p) != INVALID_FILE_ATTRIBUTES;
 }
 
+/* POL_OWNER is the Provenance that started this pol.exe. Held by handle, so a reused pid can't stand in for it */
+static HANDLE g_owner;
+static int g_owner_gone;
+static ULONGLONG g_owner_checked;
+static void owner_open(void)
+{
+    char v[16];
+    DWORD n = GetEnvironmentVariableA("POL_OWNER", v, sizeof v), pid, err;
+    if (n == 0 || n >= sizeof v || (pid = (DWORD)atoi(v)) == 0) return;
+    g_owner = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    if (g_owner) { lg("pol_hook: owned by Provenance pid %u\r\n", pid); return; }
+    err = GetLastError();
+    g_owner_gone = err == ERROR_INVALID_PARAMETER;   /* no such process, it went before the hook even loaded */
+    lg("pol_hook: Provenance pid %u can't be watched (error %u)\r\n", pid, err);
+}
+static int owner_gone(void)
+{
+    if (g_owner && !g_owner_gone && GetTickCount64() - g_owner_checked >= 1000) {
+        g_owner_checked = GetTickCount64();
+        g_owner_gone = WaitForSingleObject(g_owner, 0) == WAIT_OBJECT_0;
+    }
+    return g_owner_gone;
+}
+
 /* presence only gets pushed once we're there with a handle, the viewer's last sign-in step is ChangeMyStatus(slot,
    location 1000). Handle -1 = signed off. */
 static void status_start(BYTE *b, int handle, int status, int location)
@@ -1177,6 +1201,11 @@ static int wait_handle_name(BYTE *b, char *name, int cap)
             lg("phase_c: stop requested while waiting for a handle name - exiting, FFXI NOT started\r\n");
             end_pol(8);
         }
+        if (owner_gone()) {
+            lg("phase_c: Provenance ended while waiting for a handle name - signing out and exiting\r\n");
+            viewer_sign_out(b);
+            end_pol(8);
+        }
         POLCON_STEP(b);
         POLCON_IDLE(b);
         Sleep(200);
@@ -1256,23 +1285,13 @@ static void prestart_wait(void)
 {
     static const char *allowed[] = { "POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP",
                                      "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_STATUS", "POL_HOME" };
-    char gp[MAX_PATH + 64], parent[16];
-    HANDLE hparent = NULL;
-    ULONGLONG lastParent = 0;
+    char gp[MAX_PATH + 64];
     if (!getenv_set("POL_PRESTART")) return;
-    if (GetEnvironmentVariableA("POL_PRESTART_PARENT", parent, sizeof parent) > 0)
-        hparent = OpenProcess(SYNCHRONIZE, FALSE, (DWORD)atoi(parent));
     ipc_file(gp, "go");
     lg("prestart: ready - waiting for LOG IN (nothing sent yet)\r\n");
     for (;;) {
         if (stop_requested()) { lg("prestart: stop requested - exiting, nothing was sent\r\n"); end_pol(0); }
-        if (hparent && GetTickCount64() - lastParent >= 1000) {
-            lastParent = GetTickCount64();
-            if (WaitForSingleObject(hparent, 0) == WAIT_OBJECT_0) {
-                lg("prestart: launcher ended - exiting, nothing was sent\r\n");
-                end_pol(0);
-            }
-        }
+        if (owner_gone()) { lg("prestart: Provenance ended - exiting, nothing was sent\r\n"); end_pol(0); }
         if (GetFileAttributesA(gp) != INVALID_FILE_ATTRIBUTES) {
             char buf[2048], *p, *line, *eq;
             DWORD got = 0;
@@ -1297,7 +1316,6 @@ static void prestart_wait(void)
         }
         Sleep(16);
     }
-    if (hparent) CloseHandle(hparent);
     lg("prestart: go\r\n");
 }
 
@@ -1394,6 +1412,10 @@ static void phase_c_seed(HMODULE pc)
         if (sm == 30 || sm == 32 || sm == 36 || sm == 39) break;
         if (stop_requested()) {
             lg("phase_c: stop requested during sign-in - exiting, FFXI NOT started\r\n");
+            end_pol(8);
+        }
+        if (owner_gone()) {
+            lg("phase_c: Provenance ended during sign-in - exiting, FFXI NOT started\r\n");
             end_pol(8);
         }
         POLCON_STEP(b);
@@ -4632,8 +4654,24 @@ static int idle_timeout_for_game(BYTE *b)
     return mins;
 }
 
-/* held until Play, a stop or pol.exe ending. It's an IRC link so it never stops pumping, and never sends more than
-   the viewer would. */
+/* writes under way get 5 s to finish, then the viewer's sign-out */
+static void hold_sign_out(BYTE *b, const char *spath)
+{
+    ULONGLONG until = GetTickCount64() + 5000;
+    DeleteFileA(spath);
+    store_drop();
+    g_draining = 1;
+    if (!g_lean) mail_ack_request();
+    me_abandon(b, "cancelled");
+    while (writes_pending() && GetTickCount64() < until)
+        drain_turn(b, !g_lean);
+    viewer_sign_out(b);
+    lg("hold: signed out\r\n");
+    end_pol(0);
+}
+
+/* held until Play, a stop, Provenance ending or pol.exe ending. It's an IRC link so it never stops pumping, and never
+   sends more than the viewer would. */
 static void pol_hold(BYTE *b)
 {
     static ULONGLONG lastCtl, lastStatusReq, lastMailReq;
@@ -4648,6 +4686,11 @@ static void pol_hold(BYTE *b)
         end_pol(3);
     }
     ipc_file(spath, "social.json");
+    /* a login that finished after its Provenance went never gets held */
+    if (owner_gone()) {
+        lg("hold: Provenance ended during the login - signing out and exiting\r\n");
+        hold_sign_out(b, spath);
+    }
     lg("hold: POL-only session held; waiting for Play (POL_CRED_PLAY)\r\n");
     if (g_lean) lg("hold: lean session (no social)\r\n");
     /* the viewer's auto log-off option (GOPN1_AO), which polcore starts off: keep it that way */
@@ -4753,6 +4796,9 @@ static void pol_hold(BYTE *b)
                 idle_timeout_for_game(b);
                 DeleteFileA(spath);   /* the snapshot has friends' messages in it */
                 store_drop();
+                /* the game keeps going whatever happens to Provenance */
+                if (g_owner) CloseHandle(g_owner);
+                g_owner = NULL;
                 lg("hold: booting FFXI\r\n");
                 return;
             }
@@ -4763,17 +4809,11 @@ static void pol_hold(BYTE *b)
         if (ctl && GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) {
             lg("hold: stop file seen - signing out and exiting\r\n");
             DeleteFileA(path);
-            DeleteFileA(spath);
-            store_drop();
-            until = GetTickCount64() + 5000;
-            g_draining = 1;
-            if (!g_lean) mail_ack_request();
-            me_abandon(b, "cancelled");
-            while (writes_pending() && GetTickCount64() < until)
-                drain_turn(b, !g_lean);
-            viewer_sign_out(b);
-            lg("hold: signed out\r\n");
-            end_pol(0);
+            hold_sign_out(b, spath);
+        }
+        if (ctl && owner_gone()) {
+            lg("hold: Provenance ended - signing out and exiting\r\n");
+            hold_sign_out(b, spath);
         }
         if (ctl && g_status_job < 0 && GetTickCount64() - lastStatusReq >= 2000 &&
             take_request("status", sv, sizeof sv) >= 0) {
@@ -5057,6 +5097,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, void *r)
     /* shows whether Large Address Aware took: 0xfffeffff with the bit on pol.exe, 0x7ffeffff without */
     GetSystemInfo(&si);
     lg("pol_hook: highest user address %08x\r\n", (unsigned)(ULONG_PTR)si.lpMaximumApplicationAddress);
+    owner_open();
     install();
     idn = GetEnvironmentVariableA("PROVENANCE_LAUNCH_ID", id, sizeof id);
     if (idn > 0 && !launch_id_ok(id, idn)) {

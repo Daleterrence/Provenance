@@ -860,18 +860,7 @@ public partial class MainViewModel : ObservableObject
 
     public void Startup(bool autoLoginSuppressed)
     {
-        if (_pol.TryReattach(out var heldProfile, LaunchArgs.ProfileId))
-        {
-            StartAllAccountsCommand.NotifyCanExecuteChanged();
-            RefreshRepair();
-            if (heldProfile != null && Profiles.FirstOrDefault(p => p.Id == heldProfile) is { } held)
-                SelectedProfile = held;
-            if (SelectedProfile is { } prof) { Social.Start(prof.Id); _sessionProfileId = prof.Id; }
-            _socialPoll.Start();
-            ShowNotice("You're still logged in to PlayOnline from last time.", "InformationOutline", opens: false);
-            if (LaunchArgs.Play) _ = PlayAfterReattachAsync();
-            return;
-        }
+        _pol.EndOrphans();
         _pol.Prestart();
         if (LaunchArgs.Play && SelectedProfile != null && SelectedProfile.Id == (LaunchArgs.ProfileId ?? SelectedProfile.Id))
         {
@@ -1198,13 +1187,6 @@ public partial class MainViewModel : ObservableObject
             return new(null, null, problem + " Press Edit account to fix it.", generation);
         return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SeaAccount(sea.Username.Trim(), sea.Password),
                    null, generation);
-    }
-
-    private async Task PlayAfterReattachAsync()
-    {
-        for (int i = 0; i < 40 && !SocialConnected; i++) await Task.Delay(500);
-        if (SocialConnected && PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null);
-        else Log.Warning("--play: the session left by an earlier copy of Provenance did not answer");
     }
 
     // the US viewer shows it before an account's first sign-in, here it's once per app
