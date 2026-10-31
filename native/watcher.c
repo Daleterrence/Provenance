@@ -1,6 +1,6 @@
-/* pol_launch.exe [pol.exe] [hook dll]: pol.exe starts suspended, gets the hook, then resumes. --attach <pid> [hook dll]
-   is for a pol.exe Windower or Ashita started, which it never ends. --windower <Hook.dll> <pol.exe> [hook dll] puts
-   Windower's Hook.dll in before the hook, the way Windower.exe does */
+/* "Provenance Watcher.exe" [pol.exe] [hook dll]: pol.exe starts suspended, gets the hook, then resumes.
+   --attach <pid> [hook dll] is for a pol.exe Windower or Ashita started, which it never ends.
+   --windower <Hook.dll> <pol.exe> [hook dll] puts Windower's Hook.dll in before the hook, the way Windower.exe does */
 #include <windows.h>
 #include <shellapi.h>
 #include <stdio.h>
@@ -11,7 +11,7 @@
 static HANDLE g_child;   /* the suspended pol.exe, killed on any later failure */
 static void die(const char *m)
 {
-    fprintf(stderr, "pol_launch: %s (err=%lu)\n", m, GetLastError());
+    fprintf(stderr, "watcher: %s (err=%lu)\n", m, GetLastError());
     if (g_child) TerminateProcess(g_child, 1);
     exit(1);
 }
@@ -72,9 +72,9 @@ static int attach(DWORD pid, const char *dll)
     remote_call(p, set_error_mode, (void *)(UINT_PTR)old, "restoring the error mode timed out");
     VirtualFreeEx(p, remote, 0, MEM_RELEASE);
     CloseHandle(p);
-    printf("pol_launch: attach, LoadLibraryA -> %08lx\n", code);
+    printf("watcher: attach, LoadLibraryA -> %08lx\n", code);
     if (!code) die("hook dll was refused or failed to load in target");
-    printf("pol_launch: attached to pol.exe (pid %lu)\n", pid);
+    printf("watcher: attached to pol.exe (pid %lu)\n", pid);
     return 0;
 }
 
@@ -108,19 +108,20 @@ static int hook_and_resume(PROCESS_INFORMATION *pi, const char *dll, UINT errmod
     if (WaitForSingleObject(th, 10000) != WAIT_OBJECT_0)
         die("hook dll load timed out in target");
     GetExitCodeThread(th, &code);
-    printf("pol_launch: injected, LoadLibraryA -> %08x\n", code);
+    printf("watcher: injected, LoadLibraryA -> %08x\n", code);
     if (!code || code == STILL_ACTIVE) die("hook dll was refused or failed to load in target");
     CloseHandle(th);
     remote_call(pi->hProcess, set_error_mode, (void *)(UINT_PTR)errmode, "restoring the error mode timed out");
-    /* POL_LAUNCH_NORESUME=1 loads the hook, then ends pol.exe unresumed (checks the injection without starting POL) */
-    if (GetEnvironmentVariableA("POL_LAUNCH_NORESUME", noresume, sizeof noresume) && noresume[0] == '1') {
-        printf("pol_launch: hook loaded; POL_LAUNCH_NORESUME set, pol.exe ended unresumed\n");
+    /* PROVENANCE_WATCHER_NORESUME=1 loads the hook, then ends pol.exe unresumed (checks the injection without
+       starting POL) */
+    if (GetEnvironmentVariableA("PROVENANCE_WATCHER_NORESUME", noresume, sizeof noresume) && noresume[0] == '1') {
+        printf("watcher: hook loaded; PROVENANCE_WATCHER_NORESUME set, pol.exe ended unresumed\n");
         TerminateProcess(pi->hProcess, 0);
         return 0;
     }
     ResumeThread(pi->hThread);
     g_child = NULL;
-    printf("pol_launch: pol.exe running (pid %lu)\n", pi->dwProcessId);
+    printf("watcher: pol.exe running (pid %lu)\n", pi->dwProcessId);
     CloseHandle(pi->hThread);
     CloseHandle(pi->hProcess);
     return 0;
@@ -180,12 +181,12 @@ static int windower(void)
     if (!settings) die("Windower's settings mapping isn't there");
     ready = OpenEventW(SYNCHRONIZE, FALSE, L"windower.signal-injection");
     if (!ready) die("Windower's injection event isn't there");
-    n = GetEnvironmentVariableA("POL_LAUNCH_WINDOWER_WAIT_MS", wait_s, sizeof wait_s);
+    n = GetEnvironmentVariableA("PROVENANCE_WATCHER_WINDOWER_WAIT_MS", wait_s, sizeof wait_s);
     if (n && n < sizeof wait_s && strtoul(wait_s, NULL, 10)) wait_ms = strtoul(wait_s, NULL, 10);
 
-    printf("pol_launch: host=%s\n", utf8(pol));
+    printf("watcher: host=%s\n", utf8(pol));
     printf("hook =%s\n", dll);
-    printf("pol_launch: windower=%s\n", utf8(hook));
+    printf("watcher: windower=%s\n", utf8(hook));
     n = lstrlenW(pol);
     cmd = malloc((n + 16) * sizeof(WCHAR));
     cwd = malloc((n + 1) * sizeof(WCHAR));
@@ -193,7 +194,7 @@ static int windower(void)
     lstrcpyW(cwd, pol);
     slash = wcsrchr(cwd, L'\\');
     if (slash) *slash = 0;
-    printf("pol_launch: cwd=%s\n", utf8(cwd));
+    printf("watcher: cwd=%s\n", utf8(cwd));
     cmd[0] = L'"';
     lstrcpyW(cmd + 1, pol);
     lstrcatW(cmd, L"\" kiyaku=true");
@@ -220,7 +221,7 @@ static int windower(void)
     GetExitCodeThread(th, &code);
     CloseHandle(th);
     VirtualFreeEx(pi.hProcess, remote, 0, MEM_RELEASE);
-    printf("pol_launch: windower, LoadLibraryW -> %08lx\n", code);
+    printf("watcher: windower, LoadLibraryW -> %08lx\n", code);
     if (!code) die("Windower's Hook.dll was refused or failed to load in target");
     /* the event comes once every one of its hooks is in, pol.exe stays suspended till then */
     waits[0] = ready;
@@ -229,7 +230,7 @@ static int windower(void)
     n = WaitForMultipleObjects(2, waits, FALSE, wait_ms);
     if (n == WAIT_OBJECT_0 + 1) die("pol.exe ended before Windower's hook reported in");
     if (n != WAIT_OBJECT_0) die("Windower's hook didn't report in");
-    printf("pol_launch: windower hook reported in\n");
+    printf("watcher: windower hook reported in\n");
     /* Windower's Hook.dll detours kernel32's LoadLibraryA to refuse anything named like it, and pol_hook.dll only
        gets past on a quirk in its check (not one I'd bet on lasting). KernelBase's export goes round the detour */
     kernelbase = GetModuleHandleA("kernelbase.dll");
@@ -262,13 +263,13 @@ int main(int argc, char **argv)
     if (GetFileAttributesA(pol) == INVALID_FILE_ATTRIBUTES) die("pol.exe not found");
     if (GetFileAttributesA(dll) == INVALID_FILE_ATTRIBUTES) die("pol_hook.dll not found");
 
-    printf("pol_launch: host=%s\nhook =%s\n", pol, dll);
+    printf("watcher: host=%s\nhook =%s\n", pol, dll);
     /* kiyaku=true skips the EULA, no /game means the hook hands back content code 1. FFXiEntry resolves the install
        paths from the cwd, so that's POL's folder */
     lstrcpynA(cwd, pol, MAX_PATH);
     for (char *e = cwd + lstrlenA(cwd); e > cwd && *e != '\\'; e--) *e = 0;
     if (cwd[lstrlenA(cwd) - 1] == '\\') cwd[lstrlenA(cwd) - 1] = 0;
-    printf("pol_launch: cwd=%s\n", cwd);
+    printf("watcher: cwd=%s\n", cwd);
     wsprintfA(cmd, "\"%s\" kiyaku=true", pol);
     /* pol.exe inherits the error mode, so the same no-boxes rule as attach */
     errmode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);

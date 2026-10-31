@@ -18,7 +18,7 @@ public static class ThirdPartyHookLauncher
         boot == Path.GetFileName(boot) && boot.EndsWith(".ini", StringComparison.OrdinalIgnoreCase);
 
     // nothing POL_ or PROVENANCE_ from the user's environment, every POL_ value of this sign-in, plus the launch marker
-    // and id. Never PROVENANCE_HOOK, pol_launch --attach loads the hook
+    // and id. Never PROVENANCE_HOOK, the watcher's --attach loads the hook
     internal static void ApplyContract(IDictionary<string, string?> target, IDictionary<string, string?> launchEnv, string launchId)
     {
         LaunchEnvironment.Reset(target);
@@ -29,7 +29,7 @@ public static class ThirdPartyHookLauncher
         target["PROVENANCE_LAUNCH_ID"] = launchId;
     }
 
-    // Ashita-cli starts pol.exe itself, then pol_launch --attach loads the hook into it. Credentials only travel as
+    // Ashita-cli starts pol.exe itself, then the watcher's --attach loads the hook into it. Credentials only travel as
     // Credential Manager target names in the environment, never on a command line
     internal static int? StartViaAshita(ISettingsService settings, ProcessStartInfo launchPsi,
                                         string polExe, string launchId, string? profile,
@@ -224,7 +224,7 @@ public static class ThirdPartyHookLauncher
     private static string? AttachHook(int pid)
     {
         var started = DateTime.UtcNow;
-        var psi = new ProcessStartInfo(Path.Combine(ThirdPartyHookService.NativeDir, "pol_launch.exe"))
+        var psi = new ProcessStartInfo(Path.Combine(ThirdPartyHookService.NativeDir, ThirdPartyHookService.WatcherExe))
         {
             WorkingDirectory = ThirdPartyHookService.NativeDir, UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,
@@ -234,25 +234,25 @@ public static class ThirdPartyHookLauncher
         psi.ArgumentList.Add(Path.Combine(ThirdPartyHookService.NativeDir, "pol_hook.dll"));
         try
         {
-            using var p = Process.Start(psi) ?? throw new InvalidOperationException("pol_launch did not start");
+            using var p = Process.Start(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
             var outTask = p.StandardOutput.ReadToEndAsync();
             var errTask = p.StandardError.ReadToEndAsync();
             if (!p.WaitForExit(30_000)) { try { p.Kill(); } catch { } return "Provenance couldn't start logging in to PlayOnline in time. Try again."; }
             var stdout = outTask.GetAwaiter().GetResult();
             var stderr = errTask.GetAwaiter().GetResult().Trim();
             if (p.ExitCode == 0 && stdout.Contains("attached to pol.exe", StringComparison.Ordinal)) return null;
-            Log.Error("pol_launch --attach {Pid} failed: {Error}", pid, stderr);
-            return CodeIntegrity.Refused(started, "pol_launch.exe", "pol_hook.dll") ? CodeIntegrity.RefusedText
+            Log.Error("Provenance Watcher --attach {Pid} failed: {Error}", pid, stderr);
+            return CodeIntegrity.Refused(started, ThirdPartyHookService.WatcherExe, "pol_hook.dll") ? CodeIntegrity.RefusedText
                  : NotPickedUp;
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == CodeIntegrity.PolicyViolation)
         {
-            Log.Warning(ex, "Windows refused to start pol_launch.exe");
+            Log.Warning(ex, "Windows refused to start Provenance Watcher.exe");
             return CodeIntegrity.RefusedText;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "pol_launch --attach {Pid} did not run", pid);
+            Log.Error(ex, "Provenance Watcher --attach {Pid} did not run", pid);
             return NotPickedUp;
         }
     }

@@ -3,8 +3,8 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// Smart App Control blocks a new unsigned pol_launch.exe or pol_hook.dll until Windows' cloud check knows it, so a
-// fresh build can fail and then work
+// Smart App Control blocks a new unsigned Provenance Watcher.exe or pol_hook.dll until Windows' cloud check knows it,
+// so a fresh build can fail and then work
 public static class CodeIntegrity
 {
     private const string LogName = "Microsoft-Windows-CodeIntegrity/Operational";

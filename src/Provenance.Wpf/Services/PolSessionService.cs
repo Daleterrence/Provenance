@@ -438,7 +438,7 @@ public sealed class PolSessionService : IDisposable
         {
             // a cancel while the pre-start was being taken leaves it waiting, so nothing starts in its place
             if (ct.IsCancellationRequested) return Stopped("The login was cancelled.");
-            if (StartWithPolLaunch(psi, progress, ct, PolLaunchLimit, PolDidNotStart) is not { } started)
+            if (StartWithWatcher(psi, progress, ct, WatcherLimit, PolDidNotStart) is not { } started)
                 return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
             pid = started;
         }
@@ -556,12 +556,12 @@ public sealed class PolSessionService : IDisposable
             progress?.Report(new LaunchProgress("Failed", ErrorText.Of(ex, "Provenance couldn't get Windower ready to start the game. Try again in a moment.")));
             return null;
         }
-        // held till pol_launch is done, Hook.dll copies the mapping out before it signals
+        // held till the watcher is done, Hook.dll copies the mapping out before it signals
         using (windower)
         {
             windower.ApplyTo(psi, launchId);
             progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline with Windower...", LaunchSteps.StartPol, 0.02));
-            var pid = StartWithPolLaunch(psi, progress, ct, WindowerLaunch.PolLaunchLimit, WindowerDidNotStart);
+            var pid = StartWithWatcher(psi, progress, ct, WindowerLaunch.WatcherLimit, WindowerDidNotStart);
             if (pid is not null) Volatile.Write(ref _windowerPlay, windower.GameValues);
             return pid;
         }
@@ -601,7 +601,7 @@ public sealed class PolSessionService : IDisposable
     {
         var viewerDir = PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct);
         var polExe = viewerDir is null ? null : Path.Combine(viewerDir, "pol.exe");
-        var launcherExe = Path.Combine(ThirdPartyHookService.NativeDir, "pol_launch.exe");
+        var launcherExe = Path.Combine(ThirdPartyHookService.NativeDir, ThirdPartyHookService.WatcherExe);
         bool found = polExe != null && File.Exists(polExe) && File.Exists(launcherExe)
                      && File.Exists(Path.Combine(ThirdPartyHookService.NativeDir, "pol_hook.dll"));
         return (viewerDir, found ? polExe : null, launcherExe);
@@ -795,7 +795,7 @@ public sealed class PolSessionService : IDisposable
             var psi = LauncherStart(launcherExe, polExe);
             SetPrestartEnvironment(psi.Environment, PolEnv.Region(viewerDir!));
             using var launcher = StartProcess(psi);
-            if (launcher is null || RunLauncher(launcher, PolLaunchLimit) is not { } run) return null;
+            if (launcher is null || RunLauncher(launcher, WatcherLimit) is not { } run) return null;
             var m = PidLine.Match(run.Out);
             if (run.ExitCode != 0 || !m.Success) return null;
             var pid = int.Parse(m.Groups[1].Value);
@@ -936,11 +936,11 @@ public sealed class PolSessionService : IDisposable
         catch { return false; }
     }
 
-    internal static readonly TimeSpan PolLaunchLimit = TimeSpan.FromSeconds(60);
+    internal static readonly TimeSpan WatcherLimit = TimeSpan.FromSeconds(60);
 
     private static (int ExitCode, string Out, string Err)? RunLauncher(Process launcher, TimeSpan limit)
     {
-        // both pipes, a full stderr pipe would block pol_launch forever
+        // both pipes, a full stderr pipe would block the watcher forever
         var outTask = launcher.StandardOutput.ReadToEndAsync();
         var errTask = launcher.StandardError.ReadToEndAsync();
         if (!launcher.WaitForExit(limit)) { EndStuckLauncher(launcher, limit); return null; }
@@ -949,23 +949,23 @@ public sealed class PolSessionService : IDisposable
 
     // Smart App Control refuses a new unsigned build till Windows' cloud check knows it, so that gets retried. Null once
     // progress has said why
-    private int? StartWithPolLaunch(ProcessStartInfo psi, IProgress<LaunchProgress>? progress, CancellationToken ct, TimeSpan limit, string failText)
+    private int? StartWithWatcher(ProcessStartInfo psi, IProgress<LaunchProgress>? progress, CancellationToken ct, TimeSpan limit, string failText)
     {
         for (int attempt = 1; ; attempt++)
         {
             var attemptStart = DateTime.UtcNow;
-            var (outcome, launchedPid, failure) = RunPolLaunch(psi, ct, limit, failText);
+            var (outcome, launchedPid, failure) = RunWatcher(psi, ct, limit, failText);
             if (outcome == LaunchOutcome.Started) return launchedPid;
             if (outcome == LaunchOutcome.Cancelled)
             {
                 progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
                 return null;
             }
-            bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, "pol_launch.exe", "pol_hook.dll");
+            bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, ThirdPartyHookService.WatcherExe, "pol_hook.dll");
             if (refused && attempt <= RefusedRetryWaits.Length)
             {
                 var wait = RefusedRetryWaits[attempt - 1];
-                Log.Warning("Windows Code Integrity refused pol_launch.exe or pol_hook.dll (attempt {Attempt}); trying again in {Wait}", attempt, wait);
+                Log.Warning("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll (attempt {Attempt}); trying again in {Wait}", attempt, wait);
                 progress?.Report(new LaunchProgress("Starting", $"Windows is checking Provenance's files. Trying again in {wait.TotalSeconds:0} seconds...", LaunchSteps.StartPol, 0.02));
                 if (ct.WaitHandle.WaitOne(wait))
                 {
@@ -974,19 +974,19 @@ public sealed class PolSessionService : IDisposable
                 }
                 continue;
             }
-            if (refused) Log.Error("Windows Code Integrity refused pol_launch.exe or pol_hook.dll {Attempts} times", attempt);
+            if (refused) Log.Error("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll {Attempts} times", attempt);
             progress?.Report(new LaunchProgress("Failed", refused ? CodeIntegrity.RefusedText : failure));
             return null;
         }
     }
 
-    // A cancel waits for pol_launch (its steps time out on their own) then ends its pol.exe. Killing it half way would
+    // A cancel waits for the watcher (its steps time out on their own) then ends its pol.exe. Killing it half way would
     // leave a suspended pol.exe behind.
-    private (LaunchOutcome Outcome, int Pid, string Failure) RunPolLaunch(ProcessStartInfo psi, CancellationToken ct, TimeSpan limit, string failText)
+    private (LaunchOutcome Outcome, int Pid, string Failure) RunWatcher(ProcessStartInfo psi, CancellationToken ct, TimeSpan limit, string failText)
     {
         try
         {
-            using var launcher = StartProcess(psi) ?? throw new InvalidOperationException("pol_launch did not start");
+            using var launcher = StartProcess(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
             var launcherStarted = launcher.StartTime;   // read now, it can throw once the process exits
             if (RunLauncher(launcher, limit) is not { } run)
                 return ct.IsCancellationRequested
@@ -1001,14 +1001,14 @@ public sealed class PolSessionService : IDisposable
             var stderr = run.Err.Trim();
             if (run.ExitCode != 0 || !m.Success)
             {
-                Log.Error("pol_launch exited {Code}: {Error}", run.ExitCode, stderr.Length > 0 ? stderr : "no message");
+                Log.Error("Provenance Watcher exited {Code}: {Error}", run.ExitCode, stderr.Length > 0 ? stderr : "no message");
                 return (LaunchOutcome.Failed, 0, failText);
             }
             return (LaunchOutcome.Started, int.Parse(m.Groups[1].Value), "");
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == CodeIntegrity.PolicyViolation)
         {
-            Log.Warning(ex, "Windows refused to start pol_launch.exe");
+            Log.Warning(ex, "Windows refused to start Provenance Watcher.exe");
             return (LaunchOutcome.Refused, 0, "");
         }
         catch (Exception ex)
@@ -1037,7 +1037,7 @@ public sealed class PolSessionService : IDisposable
         try { launcher.Kill(); } catch { }
         foreach (var child in ProcessTree.ChildrenOf(id))
             if (started != DateTime.MinValue) EndNewPol(child, started);
-        Log.Warning("pol_launch (pid {Pid}) did not exit in {Limit} and was ended", id, limit);
+        Log.Warning("Provenance Watcher (pid {Pid}) did not exit in {Limit} and was ended", id, limit);
     }
 
     private static bool KillIfOurs(int pid, Func<Process, bool> ours, int graceMs = 0, int afterMs = 0)

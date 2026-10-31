@@ -38,12 +38,12 @@ public sealed record WindowerGameValues(WindowerProfile Profile, WindowerRegion 
     public IReadOnlyList<string> Apply() => WindowerGameRegistry.Apply(Profile, Region, Profile.Width, Profile.Height, Root);
 }
 
-// Everything Windower.exe does before it starts pol.exe, then pol_launch --windower puts Hook.dll in and pol_hook after
-// it. The mapping and the event have fixed names, so launches take turns and hold both till pol_launch is done
+// Everything Windower.exe does before it starts pol.exe, then the watcher's --windower puts Hook.dll in and pol_hook
+// after it. The mapping and the event have fixed names, so launches take turns and hold both till the watcher is done
 public sealed class WindowerLaunch : IDisposable
 {
     internal const string LockName = @"Local\ProvenanceWindowerLaunch";
-    public static readonly TimeSpan PolLaunchLimit = TimeSpan.FromSeconds(90);
+    public static readonly TimeSpan WatcherLimit = TimeSpan.FromSeconds(90);
     public static readonly TimeSpan UpdateLimit = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan TurnWait = TimeSpan.FromMinutes(3);
 
@@ -103,7 +103,7 @@ public sealed class WindowerLaunch : IDisposable
         };
     }
 
-    // every step up to running pol_launch. A throw has a message for the player when it's Shown
+    // every step up to running the watcher. A throw has a message for the player when it's Shown
     public static WindowerLaunch Prepare(WindowerLaunchSetup setup, IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         var launch = new WindowerLaunch(setup);

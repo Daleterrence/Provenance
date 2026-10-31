@@ -1,0 +1,33 @@
+#include <winver.h>
+/* build-native.ps1 writes this one from src\Directory.Build.props */
+#include "watcher_version.h"
+
+1 ICON "provenance.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION WATCHER_FILEVERSION
+PRODUCTVERSION WATCHER_FILEVERSION
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "000004b0"
+        BEGIN
+            VALUE "CompanyName", "Provenance"
+            VALUE "FileDescription", "Provenance Watcher"
+            VALUE "FileVersion", WATCHER_FILEVERSION_STR
+            VALUE "InternalName", "Provenance Watcher"
+            VALUE "OriginalFilename", "Provenance Watcher.exe"
+            VALUE "ProductName", "Provenance"
+            VALUE "ProductVersion", WATCHER_PRODUCTVERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0000, 0x04b0
+    END
+END

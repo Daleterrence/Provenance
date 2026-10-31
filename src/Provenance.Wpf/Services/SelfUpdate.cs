@@ -30,7 +30,7 @@ public static class SelfUpdate
 
     // Update.exe kills everything running from the install folder before it swaps the files, and a pol.exe holding
     // pol_hook.dll stops the swap anyway
-    private static readonly string[] InUseNames = ["Provenance", "pol_launch", "pol"];
+    private static readonly string[] InUseNames = ["Provenance", "Provenance Watcher", "pol"];
 
     // sq.version next to the exe and Update.exe one folder up. A hand-copied or local build never touches Velopack
     public static bool InstalledCopy { get; } =
@@ -188,7 +188,7 @@ public static class SelfUpdate
         }
     }
 
-    // the exe path for Provenance, pol_launch and Update.exe, the loaded modules for pol.exe (it lives in the
+    // the exe path for Provenance, the watcher and Update.exe, the loaded modules for pol.exe (it lives in the
     // viewer folder, the hook doesn't)
     private static string? FindRunning(string root, params string[] names)
     {
