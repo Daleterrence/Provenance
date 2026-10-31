@@ -19,6 +19,13 @@ public sealed class AshitaIniFile
         ("ashita.boot", "file", 259), ("ashita.boot", "command", 1023), ("import", "import", 255),
     ];
 
+    // as Settings labels them
+    private static readonly (string Section, string Key, string Label)[] Labels =
+    [
+        ("ashita.launcher", "name", "The name"), ("ashita.boot", "script", "The script"),
+        ("ashita.boot", "args", "The script arguments"), ("ffxi.registry", "0042", "The screenshots and settings folder"),
+    ];
+
     // the only four Ashita-cli reads, and it takes the first copy. Ashita.dll reads everything else and takes the last
     private static readonly (string Section, string Key)[] CliKeys =
     [
@@ -243,20 +250,26 @@ public sealed class AshitaIniFile
         return found;
     }
 
+    private static string Label(string section, string key) =>
+        Labels.FirstOrDefault(l => Same(l.Section, section) && Same(l.Key, key)).Label ?? "That setting";
+
+    private static string TooLong(string section, string key) => $"{Label(section, key)} can't be this long, Ashita can't read that much.";
+
     public string? ValueProblem(string section, string key, string value)
     {
-        if (value.Any(c => char.IsControl(c) && c != '\t')) return $"{key} can't have line breaks or control characters in it.";
-        if (value.Length > 0 && (IsSpace(value[0]) || IsSpace(value[^1]))) return $"{key} can't start or end with a space.";
+        var label = Label(section, key);
+        if (value.Any(c => char.IsControl(c) && c != '\t')) return $"{label} can't have line breaks or control characters.";
+        if (value.Length > 0 && (IsSpace(value[0]) || IsSpace(value[^1]))) return $"{label} can't start or end with a space.";
         if (value.Length >= 2 && value[0] is '"' or '\'' && value[^1] == value[0])
-            return $"{key} can't be wrapped in quotes, Ashita would keep them as part of it.";
+            return $"{label} can't be wrapped in quotes, Ashita would keep the quotes.";
         if (value.Contains(" ;") || value.Contains("\t;"))
-            return $"{key} can't have a ; after a space. It looks like a comment, but Ashita keeps it as part of the value.";
+            return $"{label} can't have a ; after a space. It looks like a comment, but Ashita keeps it as part of the value.";
         if (!Fits(ansi, value))
-            return $"{key} has characters Ashita can't read with this PC's language for non-Unicode programs.";
+            return $"{label} can only use characters Ashita can read with this PC's language for non-Unicode programs.";
         int bytes = ansi.GetByteCount(value);
         foreach (var (s, k, max) in Limits)
-            if (Same(s, section) && Same(k, key) && bytes > max) return $"{key} is too long for Ashita, it takes {max} characters at most.";
-        if (ansi.GetByteCount(key) + 3 + bytes > MaxLine) return $"{key} is too long for Ashita to read.";
+            if (Same(s, section) && Same(k, key) && bytes > max) return $"{label} can't be longer than {max} characters for Ashita.";
+        if (ansi.GetByteCount(key) + 3 + bytes > MaxLine) return TooLong(section, key);
         return null;
     }
 
@@ -276,7 +289,7 @@ public sealed class AshitaIniFile
         CheckName(key, false);
         if (ValueProblem(section, key, value) is { } problem) throw Shown.Mark(new ArgumentException(problem));
         if (!Fits(ansi, section + key))
-            throw Shown.Mark(new ArgumentException($"{key} has characters Ashita can't read with this PC's language for non-Unicode programs."));
+            throw Shown.Mark(new ArgumentException("That setting's name has characters Ashita can't read with this PC's language for non-Unicode programs."));
         var p = Scan();
         if (First(p, section) is not (var header, var end))
         {
@@ -299,7 +312,7 @@ public sealed class AshitaIniFile
         if (p[copies[0]].ValueStart == p[copies[0]].ValueEnd && value.Length > 0 && before.Length >= 2 && before[^1] == '=' && IsSpace(before[^2]))
             before += " ";
         var updated = before + value + text[p[copies[0]].ValueEnd..];
-        if (ansi.GetByteCount(updated) > MaxLine) throw Shown.Mark(new ArgumentException($"{key} is too long for Ashita to read."));
+        if (ansi.GetByteCount(updated) > MaxLine) throw Shown.Mark(new ArgumentException(TooLong(section, key)));
         if (updated != text) Replace(copies[0], updated);
         foreach (var i in Enumerable.Reverse(copies.Skip(1)))
             if (Secret(section, key)) RemoveAt(i);

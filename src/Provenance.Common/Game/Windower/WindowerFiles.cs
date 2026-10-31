@@ -58,7 +58,8 @@ internal static class WindowerFiles
     // ERROR_REPARSE_POINT_ENCOUNTERED, so a refusal isn't retried like a sharing violation
     public const int LinkFound = unchecked((int)0x80070000 | 4395);
 
-    public static IOException ThroughLink(string what) => new($"{what} goes through a link, so nothing more was written there.") { HResult = LinkFound };
+    public static IOException ThroughLink(string what) =>
+        Shown.Mark(new IOException($"{what} goes through a link, so nothing more was written there.") { HResult = LinkFound });
 
     public static Version FileVersion(string file)
     {

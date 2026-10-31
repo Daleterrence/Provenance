@@ -220,10 +220,21 @@ public sealed class WindowerUpdater
         }
         catch (Exception e) when (e is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
         {
-            errors.Add($"Windower's update lock couldn't be taken: {e.Message}");
+            errors.Add(Reason(e, "Windower's update lock couldn't be taken, so nothing was changed this time. Try again in a moment."));
             return (null, false);
         }
     }
+
+    // install shows these, so Windows' and .NET's own wording only goes in the log
+    private string Reason(Exception e, string ours)
+    {
+        if (Shown.Is(e)) return e.Message;
+        Log?.Invoke($"{ours} ({e.GetType().Name}: {e.Message})");
+        return ours;
+    }
+
+    private string WriteFailed(Exception e, string what) =>
+        Reason(e, $"{what} couldn't be written. Try again, and if it keeps happening, check nothing else is using it and the drive isn't full.");
 
     // Users can write in a Windower folder and this runs elevated, so the root, updates and updates\temp are held for
     // the whole run and refused if any is a link
@@ -276,7 +287,7 @@ public sealed class WindowerUpdater
             try { await step(); }
             catch (Exception e) when (e is not OperationCanceledException || !Ct.IsCancellationRequested)
             {
-                Errors.Add(e.Message);
+                Errors.Add(_owner.Reason(e, "Provenance ran into a problem it didn't expect. Try again in a moment."));
             }
         }
 
@@ -542,7 +553,7 @@ public sealed class WindowerUpdater
             try { job.Swap(tempDll, dll); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                job.Errors.Add($"{p.Name}.dll couldn't be written: {e.Message}");
+                job.Errors.Add(WriteFailed(e, p.Name + ".dll"));
                 return WindowerFetchOutcome.Broken;
             }
             written.Add(Path.Combine("plugins", p.Name + ".dll"));
@@ -589,7 +600,7 @@ public sealed class WindowerUpdater
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
             {
                 all = false;
-                job.Errors.Add($"{e.FullName} from {plugin}.zip couldn't be written: {ex.Message}");
+                job.Errors.Add(WriteFailed(ex, $"{e.FullName} from {plugin}.zip"));
             }
         }
         return all;
@@ -713,7 +724,7 @@ public sealed class WindowerUpdater
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            job.Errors.Add($"{f.Path} couldn't be written: {e.Message}");
+            job.Errors.Add(WriteFailed(e, f.Path));
             return false;
         }
     }

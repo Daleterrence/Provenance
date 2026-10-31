@@ -210,11 +210,12 @@ public partial class AddonsPluginsViewModel : ObservableObject
         IsAshita = page.Message is null && page.Platform == ThirdPartyHookService.Ashita;
         SyncTabs(page);
         CardPlatform = page.Message is null ? page.Platform : null;
-        CardHeading = IsAshita ? "Addons and plugins for the Ashita boot configuration" : "Addons and plugins for the Windower profile";
-        CardName = page.Display;
+        SameListForEveryProfile = IsWindower && page.UseGlobal;
+        CardHeading = IsAshita ? "Addons and plugins for the Ashita boot configuration"
+                    : SameListForEveryProfile ? "Addons and plugins for Windower" : "Addons and plugins for the Windower profile";
+        CardName = SameListForEveryProfile ? "Every profile" : page.Display;
         _useGlobal = page.UseGlobal;
         OnPropertyChanged(nameof(UseGlobal));
-        SameListForEveryProfile = IsWindower && page.UseGlobal;
         CanChangeUseGlobal = !(page.UseGlobal && page.ListLocked);
         Fill(Addons, page.Addons);
         Fill(Plugins, page.Plugins);
@@ -488,12 +489,16 @@ public partial class AddonsPluginsViewModel : ObservableObject
         {
             var result = await _install(dir, page.Branch, row.Kind, row.Key);
             if (result.Installed) ShowNote($"{row.Name} is installed.");
-            else ShowError($"{row.Name} couldn't be installed. {result.Errors.FirstOrDefault() ?? "Windower's servers didn't send it."}");
+            else
+            {
+                Log.Warning("Could not install {Name}: {Errors}", row.Key, string.Join(" | ", result.Errors));
+                ShowError($"{row.Name} couldn't be installed. {result.Errors.FirstOrDefault() ?? "Windower's servers didn't send it."}");
+            }
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not install {Name}", row.Key);
-            ShowError(ErrorText.Of(ex, $"{row.Name} couldn't be installed."));
+            ShowError(ErrorText.Of(ex, $"{row.Name} couldn't be installed. Try again in a moment."));
         }
         finally { row.Installing = false; }
         Refreshing = RefreshAsync();
@@ -525,7 +530,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     private static Task<WindowerInstallResult> InstallFromWindower(string dir, string branch, AddonKind kind, string name)
     {
-        var updater = new WindowerUpdater(dir, branch);
+        var updater = WindowerUpdates.NewUpdater(dir, branch);
         return kind == AddonKind.Plugin ? updater.InstallPluginAsync(name) : updater.InstallAddonAsync(name);
     }
 
@@ -785,7 +790,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
             "Windower's scripts\\init.txt loads this itself, so it loads no matter what the list says.");
         public static readonly AddonBadge InitCommand = new("Loaded by this profile's init command",
             "This profile's init command loads it itself, so it loads no matter what the list says.");
-        public static readonly AddonBadge ByScript = new("Loaded by your script",
+        public static readonly AddonBadge ByScript = new("Set by your script",
             "Your Ashita script loads or unloads this in a way Provenance can't safely change, so it's left as it is.");
         public static readonly AddonBadge NotForV4 = new("Not for Ashita v4",
             "This addon was written for Windower or an older Ashita, so it won't run in Ashita v4.", Warn: true);
