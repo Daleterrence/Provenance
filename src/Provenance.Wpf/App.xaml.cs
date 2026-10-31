@@ -137,6 +137,8 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         var mainWindow = Services.GetRequiredService<MainWindow>();
         var mainVm = Services.GetRequiredService<MainViewModel>();
+        // after the view model's listening for a failed save, before its start-up can pre-start a pol.exe
+        PolSessionService.NoteScreenSaver(Services.GetRequiredService<ISettingsService>());
         // Windows signing out cancels a sign-in now, the normal exit signs a held session out
         SessionEnding += (_, _) => { Log.Information("Windows session ending"); _ = mainVm.CancelSignInAsync(); };
         mainWindow.DataContext = mainVm;

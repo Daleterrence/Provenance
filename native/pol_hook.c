@@ -5,6 +5,7 @@
 #include <string.h>
 #include <shlobj.h>
 #include <bcrypt.h>
+#include <tlhelp32.h>
 #include "pol_cred.h"
 #pragma comment(lib, "bcrypt.lib")
 
@@ -14,10 +15,48 @@ static int g_lgcs_ready;
 
 static int getenv_set(const char *name) { return GetEnvironmentVariableA(name, NULL, 0) > 0; }
 
+/* pol.exe switches the screen saver off at start and only puts it back in its own cleanup, which end_pol skips. The
+   app's POL_SCREENSAVER is read before any pol.exe runs, by the time DllMain does one may have switched it off */
+static int g_saver = -1;
+static void saver_save(void)
+{
+    char v[4];
+    BOOL on;
+    if (GetEnvironmentVariableA("POL_SCREENSAVER", v, sizeof v) == 1 && (v[0] == '0' || v[0] == '1'))
+        g_saver = v[0] - '0';
+    else if (SystemParametersInfoW(SPI_GETSCREENSAVEACTIVE, 0, &on, 0))
+        g_saver = on != 0;
+}
+/* other copies of this exe, so another pol.exe still in game keeps it off and the last one out puts it back */
+static int others_running(void)
+{
+    WCHAR self[MAX_PATH], *name = self, *s;
+    PROCESSENTRY32W pe;
+    HANDLE snap;
+    BOOL ok;
+    int n = 0;
+    DWORD len = GetModuleFileNameW(NULL, self, MAX_PATH);
+    if (!len || len >= MAX_PATH) return 0;
+    for (s = self; *s; s++)
+        if (*s == L'\\' || *s == L'/') name = s + 1;
+    snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return 0;
+    pe.dwSize = sizeof pe;
+    for (ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe))
+        if (pe.th32ProcessID != GetCurrentProcessId() && !lstrcmpiW(pe.szExeFile, name)) n++;
+    CloseHandle(snap);
+    return n;
+}
+static void saver_restore(void)
+{
+    if (g_saver >= 0 && !others_running()) SystemParametersInfoW(SPI_SETSCREENSAVEACTIVE, (UINT)g_saver, NULL, 0);
+}
+
 /* not ExitProcess: Windower 4's Hook.dll fails fast (0xc0000409) in its detach code when the game never started, so
    it's TerminateProcess, the big hammer */
 static void end_pol(UINT code)
 {
+    saver_restore();
     TerminateProcess(GetCurrentProcess(), code);
 }
 
@@ -4774,14 +4813,172 @@ static DWORD WINAPI fx_hook_once(void *unused)
     return 0;
 }
 
+#define GAME_START_EXIT 15
+
+/* add-ons and game plugins already unloaded inside FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins
+   and finish its log, so it gets a clean exit, anything else is just more places to crash on the way out */
+static void game_over(UINT code)
+{
+    if (GetModuleHandleW(L"Ashita.dll")) {
+        saver_restore();
+        ExitProcess(code);
+    }
+    end_pol(code);
+}
+
+/* 1.18.15e: the menu session's prologue (push -1; push 0x43fe5a; mov eax, fs:[0]), and the content launcher's
+   GameStart call and the empty trace call after it (call eax; push L"Return from FFXI"; mov esi, eax;
+   call 0x00412430) */
+static const BYTE MENU_PROLOGUE[] = { 0x6a, 0xff, 0x68, 0x5a, 0xfe, 0x43, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00, 0x00 };
+static const BYTE FFXI_RETURN[] = { 0xff, 0xd0, 0x68, 0xa4, 0x2b, 0x44, 0x00, 0x8b, 0xf0, 0xe8, 0x18, 0xf2, 0xff, 0xff };
+
+static int g_game_started;
+/* first thing after GameStart returns, ok or not. On a failed one pol.exe would go on to pass the FFXiEntry it's just
+   released (NULL) to 0x00408620, which falls over on it :( */
+static void __cdecl ffxi_returned(HRESULT hr)
+{
+    if (!g_game_started) return;
+    if (hr) {
+        lg("pol_hook: GameStart failed hr=%08x - ending pol.exe (exit %d)\r\n", (unsigned)hr, GAME_START_EXIT);
+        game_over(GAME_START_EXIT);
+    } else {
+        lg("pol_hook: content exited (back from FFXI) - ending pol.exe\r\n");
+        game_over(0);
+    }
+}
+/* GameStart's HRESULT is in esi by the trace call, and the caller pops the string itself */
+static __declspec(naked) void ffxi_returned_thunk(void)
+{
+    __asm {
+        push esi
+        call ffxi_returned
+        add esp, 4
+        ret
+    }
+}
+
+static int hook_game_end(BYTE *exe)
+{
+    BYTE *p = exe + 0x1320a;
+    DWORD old;
+    if (memcmp(p, FFXI_RETURN, sizeof FFXI_RETURN) != 0) {
+        lg("pol_hook: content launcher not as expected (%02x %02x %02x) - game end not hooked\r\n", p[0], p[2], p[9]);
+        return 0;
+    }
+    if (!VirtualProtect(p + 9, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        lg("pol_hook: content launcher protect failed - game end not hooked\r\n");
+        return 0;
+    }
+    *(DWORD *)(p + 10) = (DWORD)((BYTE *)ffxi_returned_thunk - (p + 14));
+    VirtualProtect(p + 9, 5, old, &old);
+    lg("pol_hook: content launcher's return hooked\r\n");
+    return 1;
+}
+
+#define WATCH_POLL_MS 500
+#define WATCH_GRACE_MS 15000
+enum { WATCH_WAIT, WATCH_GONE, WATCH_BACK, WATCH_END };
+struct game_watch { int seen, gone; ULONGLONG gone_at; };
+/* a window that's back before the grace runs out means it wasn't over */
+static int watch_step(struct game_watch *w, int window, ULONGLONG now)
+{
+    if (window) {
+        int back = w->gone;
+        w->seen = 1;
+        w->gone = 0;
+        return back ? WATCH_BACK : WATCH_WAIT;
+    }
+    if (!w->seen) return WATCH_WAIT;
+    if (!w->gone) {
+        w->gone = 1;
+        w->gone_at = now;
+        return WATCH_GONE;
+    }
+    return now - w->gone_at >= WATCH_GRACE_MS ? WATCH_END : WATCH_WAIT;
+}
+
+/* every pol.exe's game window has this class, so only ours counts */
+static int is_game_window(HWND h)
+{
+    char cls[16];
+    DWORD pid;
+    return GetClassNameA(h, cls, sizeof cls) && !lstrcmpiA(cls, "FFXiClass") && GetWindowThreadProcessId(h, &pid) &&
+           pid == GetCurrentProcessId();
+}
+/* kept once found, FindWindowEx only sees top-level windows and a reparented one would look gone */
+static int game_window_up(HWND *h)
+{
+    HWND w = NULL;
+    if (*h && IsWindow(*h) && is_game_window(*h)) return 1;
+    *h = NULL;
+    while ((w = FindWindowExA(NULL, w, "FFXiClass", NULL)) != NULL)
+        if (is_game_window(w)) {
+            *h = w;
+            return 1;
+        }
+    return 0;
+}
+
+#ifndef WER_FAULT_REPORTING_NO_UI
+#define WER_FAULT_REPORTING_NO_UI 0x20
+#endif
+typedef HRESULT (WINAPI *wer_get_t)(HANDLE, PDWORD);
+typedef HRESULT (WINAPI *wer_set_t)(DWORD);
+static UINT g_err_mode;
+static DWORD g_wer_flags;
+/* nobody needs a "pol.exe has stopped working" box after they've quit the game */
+static void quiet_crashes(void)
+{
+    HMODULE k = GetModuleHandleW(L"kernel32.dll");
+    wer_get_t get = (wer_get_t)GetProcAddress(k, "WerGetFlags");
+    wer_set_t set = (wer_set_t)GetProcAddress(k, "WerSetFlags");
+    g_wer_flags = 0;
+    if (get && get(GetCurrentProcess(), &g_wer_flags) != S_OK) g_wer_flags = 0;
+    if (set) set(g_wer_flags | WER_FAULT_REPORTING_NO_UI);
+    g_err_mode = GetErrorMode();
+    SetErrorMode(g_err_mode | SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS);
+}
+static void loud_crashes(void)
+{
+    wer_set_t set = (wer_set_t)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "WerSetFlags");
+    if (set) set(g_wer_flags);
+    SetErrorMode(g_err_mode);
+}
+
+/* for anything still going once the window's gone, or a missing content launcher hook. Not a hung add-on unload
+   though, that's in FFXI's D3D cleanup, before the window goes */
+static DWORD WINAPI game_watch(void *unused)
+{
+    struct game_watch w = { 0 };
+    HWND h = NULL;
+    (void)unused;
+    for (;;) {
+        switch (watch_step(&w, game_window_up(&h), GetTickCount64())) {
+        case WATCH_GONE:
+            quiet_crashes();
+            lg("pol_hook: game window gone - crash boxes off, ending pol.exe in %d s if it's still here\r\n",
+               WATCH_GRACE_MS / 1000);
+            break;
+        case WATCH_BACK:
+            loud_crashes();
+            lg("pol_hook: game window back - not over yet, crash boxes back on\r\n");
+            break;
+        case WATCH_END:
+            lg("pol_hook: still here %d s after the game window went - ending pol.exe\r\n", WATCH_GRACE_MS / 1000);
+            end_pol(0);   /* even under Ashita, something's stuck and a clean exit could get stuck behind it */
+            break;
+        }
+        Sleep(WATCH_POLL_MS);
+    }
+}
+
 /* The menu session detour, thiscall (this in ecx) + 4 args, callee pops 16 bytes. Returning 1 takes pol.exe's
    dispatch (0x0041406e) down its FFXI case: 0x00413140 CoCreates FFXiEntry {989D790D}, which boots FFXiMain. */
+static int g_menu_calls;
 static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned d)
 {
-    static int calls;
     (void)a; (void)b; (void)c; (void)d;
-    calls++;
-    if (calls == 1) {
+    if (++g_menu_calls == 1) {
         prime_session();
         set_cwd_ffxi();
         /* pol.exe 0x00406a10 destroys the hidden splash on the thread that made it */
@@ -4791,23 +4988,19 @@ static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned
             pol_hold((BYTE *)polcore_module());
         }
         lg("pol_hook: menu call 1 -> content code 1 (FFXiEntry)\r\n");
+        g_game_started = 1;
         CloseHandle(CreateThread(NULL, 0, fx_hook_once, NULL, 0, NULL));
+        CloseHandle(CreateThread(NULL, 0, game_watch, NULL, 0, NULL));
         return 1;
     }
-    /* the game came back to the menu (closed, or it failed): exit, never relaunch. ExitProcess, not end_pol, so
-       Windower add-ons unload normally. */
-    if (calls <= 4)
-        lg("pol_hook: menu call %d -> content exited, staying exited\r\n", calls);
-    else
-        lg("pol_hook: menu call %d -> quit pol.exe\r\n", calls);
-    ExitProcess(0);
+    /* the game came back to the menu (closed, or it failed): end it here, never relaunch */
+    lg("pol_hook: menu call %d -> content exited, staying exited\r\n", g_menu_calls);
+    game_over(0);
     return 1000;
 }
 
 static void install(void)
 {
-    /* its prologue: push -1; push 0x43fe5a; mov eax, fs:[0] */
-    static const BYTE want[] = { 0x6a, 0xff, 0x68, 0x5a, 0xfe, 0x43, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00, 0x00 };
     HMODULE exe = GetModuleHandleW(NULL);
     DWORD old, rel;
     /* WinMain reaches CreateMutexW and OpenMutexW through pol.exe's MSLU slots, not the IAT. In a Windower or
@@ -4825,7 +5018,7 @@ static void install(void)
     /* An E9 jmp over the menu session (pol.exe 0x00413710), only in the 1.18.15e pol.exe I wrote this against.
        Other builds (1.18.00n for one) have other code here. */
     BYTE *p = (BYTE *)exe + 0x13710;
-    if (memcmp(p, want, sizeof want) != 0) {
+    if (memcmp(p, MENU_PROLOGUE, sizeof MENU_PROLOGUE) != 0) {
         lg("pol_hook: pol.exe is not the 1.18.15e build (menu session %02x %02x %02x) - not hooked\r\n",
            p[0], p[1], p[2]);
         return;
@@ -4836,6 +5029,7 @@ static void install(void)
     *(DWORD *)(p + 1) = rel;
     VirtualProtect(p, 5, old, &old);
     lg("pol_hook: menu session detoured -> %08x\r\n", (unsigned)(ULONG_PTR)menu_stub);
+    hook_game_end((BYTE *)exe);
 }
 
 /* PROVENANCE_LAUNCH_ID ends up in a file name in ipc_dir, so only what Provenance makes gets through: 1 to 32
@@ -4857,6 +5051,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, void *r)
     (void)r;
     if (why != DLL_PROCESS_ATTACH) return TRUE;
     DisableThreadLibraryCalls(h);
+    saver_save();
     InitializeCriticalSection(&g_lgcs);
     g_lgcs_ready = 1;
     /* shows whether Large Address Aware took: 0xfffeffff with the bit on pol.exe, 0x7ffeffff without */

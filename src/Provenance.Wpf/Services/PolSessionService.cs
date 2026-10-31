@@ -44,10 +44,13 @@ public sealed class PolSessionService : IDisposable
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
 
     // pol_hook.c exits 11 on unreadable saved entries, 12 on a bad POL_IPC_DIR, 13 when its mutexes can't get secret
-    // names (never the stock ones, anything can create those first) and 14 when pol.exe's region isn't POL_REGION
+    // names (never the stock ones, anything can create those first), 14 when pol.exe's region isn't POL_REGION and 15
+    // when FFXI's GameStart fails
     internal const int UnsafeStartExitCode = 13;
     internal const int RegionExitCode = 14;
+    internal const int GameStartExitCode = 15;
     public const string RegionChangedText = "PlayOnline started as a different version than the one Provenance checked. Restart Provenance and try again.";
+    public const string GameStartFailedText = "FINAL FANTASY XI couldn't start. Try again, and if it keeps happening, check the game's files with Repair.";
 
     internal static bool DetailsUnreadable(string? line = null, int? exitCode = null) =>
         (line?.Contains("phase_c: SAVED DETAILS UNREADABLE", StringComparison.Ordinal) ?? false) || exitCode == 11;
@@ -68,6 +71,7 @@ public sealed class PolSessionService : IDisposable
         12 => (ErrorLauncherFailed, PrivateFolderText),
         UnsafeStartExitCode => (ErrorLauncherFailed, UnsafeStartText),
         RegionExitCode => (ErrorLauncherFailed, RegionChangedText),
+        GameStartExitCode => (ErrorLauncherFailed, GameStartFailedText),
         3 => (ErrorAuthFailed, RefusedText),
         7 => (ErrorAccountBlocked, "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why."),
         10 => (ErrorStalled, LoadFailedText("")),
@@ -79,6 +83,7 @@ public sealed class PolSessionService : IDisposable
         12 => PrivateFolderText,
         UnsafeStartExitCode => UnsafeStartText,
         RegionExitCode => RegionChangedText,
+        GameStartExitCode => GameStartFailedText,
         _ => "Your PlayOnline session has closed. Log in again to see your friends and messages.",
     };
 
@@ -516,6 +521,7 @@ public sealed class PolSessionService : IDisposable
                     if (Ending(line) is { } result) return result;
                 int? exit = null;
                 try { if (_polProc is { HasExited: true } ended) exit = ended.ExitCode; } catch { }
+                PutScreenSaverBack();
                 LogEarlyExit(pid, exit, logPath);
                 var (endedCode, endedText) = EndedBeforeSignIn(exit);
                 return Fail(endedCode, endedText);
@@ -579,7 +585,69 @@ public sealed class PolSessionService : IDisposable
         env["POL_CRED_KEYFILE"] = CredentialKey.FilePath;
         env["POL_HOLD"] = "1";
         if (region is { } r) env["POL_REGION"] = RegionIndex(r);
+        if (ScreenSaverAtStart is { } saver) env["POL_SCREENSAVER"] = saver;
     }
+
+    // pol.exe switches the screen saver off while it runs, so it's read once before any start and the last pol.exe
+    // out puts it back
+    internal static string? ScreenSaverAtStart { get; set; }
+
+    internal static void NoteScreenSaver(ISettingsService settings) => NoteScreenSaver(settings, AnyPolRunning, ReadScreenSaver);
+
+    private static bool AnyPolRunning()
+    {
+        var pols = Process.GetProcessesByName("pol");
+        foreach (var p in pols) p.Dispose();
+        return pols.Length > 0;
+    }
+
+    // Windows only has the real answer with no pol.exe about, so that one's kept for a start while one's still running.
+    // A settings.json that didn't load is left for the user's own next save to replace
+    internal static void NoteScreenSaver(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows)
+    {
+        bool? on;
+        if (polRunning())
+        {
+            on = settings.Current.ScreenSaverWasOn ?? readWindows();
+        }
+        else
+        {
+            on = readWindows();
+            if (on is { } fresh && settings.Current.ScreenSaverWasOn != fresh)
+            {
+                settings.Current.ScreenSaverWasOn = fresh;
+                if (settings.LoadProblem is null) settings.Save(settings.Current);
+            }
+        }
+        ScreenSaverAtStart = on is { } v ? (v ? "1" : "0") : null;
+        SavedScreenSaver = settings.Current.ScreenSaverWasOn;
+        if (on is null) Log.Warning("Could not read the screen saver setting, the hook reads it itself");
+    }
+
+    internal static bool? SavedScreenSaver { get; set; }
+
+    // a pol.exe that crashed or got killed never put it back itself, and the next start's read has to be the real one
+    internal static void PutScreenSaverBack() =>
+        PutScreenSaverBack(SavedScreenSaver, AnyPolRunning, on => SetSystemParameter(SpiSetScreenSaveActive, on ? 1u : 0u, IntPtr.Zero, 0));
+
+    internal static bool PutScreenSaverBack(bool? wasOn, Func<bool> polRunning, Action<bool> set)
+    {
+        if (wasOn is not { } on || polRunning()) return false;
+        set(on);
+        return true;
+    }
+
+    private static bool? ReadScreenSaver() =>
+        SystemParametersInfoW(SpiGetScreenSaveActive, 0, out int on, 0) ? on != 0 : null;
+
+    private const uint SpiGetScreenSaveActive = 0x10;
+    private const uint SpiSetScreenSaveActive = 0x11;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SystemParametersInfoW(uint action, uint param, out int value, uint winIni);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    private static extern bool SetSystemParameter(uint action, uint param, IntPtr value, uint winIni);
 
     internal static string RegionIndex(PolRegion region) => region switch
     {
@@ -891,9 +959,15 @@ public sealed class PolSessionService : IDisposable
         try
         {
             using var p = Process.GetProcessById(pid);
-            if (!ours(p) || (graceMs > 0 && p.WaitForExit(graceMs))) return false;
+            if (!ours(p)) return false;
+            if (graceMs > 0 && p.WaitForExit(graceMs))
+            {
+                PutScreenSaverBack();
+                return false;
+            }
             p.Kill();
-            if (afterMs > 0) p.WaitForExit(afterMs);
+            p.WaitForExit(Math.Max(afterMs, 1000));
+            PutScreenSaverBack();
             return true;
         }
         catch { return false; }
@@ -1121,6 +1195,7 @@ public sealed class PolSessionService : IDisposable
             if (Pid != pid) return;
             try { if (_polProc is { HasExited: true } gone && gone.Id == pid) exit = gone.ExitCode; } catch { }
             Log.Warning("Held PlayOnline session (pid {Pid}) ended on its own (exit code {Exit})", pid, exit);
+            PutScreenSaverBack();
             DeleteQuietly(SocialSnapshot.PathForPid(pid));
             DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
             Pid = null;
@@ -1250,6 +1325,7 @@ public sealed class PolSessionService : IDisposable
 
     public void GameExited()
     {
+        PutScreenSaverBack();
         lock (_gate)
         {
             if (!_played) return;
