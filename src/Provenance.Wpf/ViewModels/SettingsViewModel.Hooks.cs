@@ -145,12 +145,12 @@ public partial class SettingsViewModel
     }
 
     // after the first load, a switch between Windower and Ashita clears each account's stored profile
-    // a pol.exe pre-started for a plain login would hold off Windower's updates, and it's no use to either of them
     partial void OnThirdPartyHookIndexChanged(int value)
     {
         SaveThirdPartyHook();
         RefreshMultiChoices(platformChanged: !_loadingThirdPartyHook);
         if (_loadingThirdPartyHook) return;
+        // a pol.exe pre-started for a plain login would hold off Windower's updates, and it's no use to either of them
         if (value is 1 or 2) _stopPrestart?.Invoke();
         LoadCards();
     }
@@ -221,14 +221,15 @@ public partial class SettingsViewModel
     {
         if (!_gameReady) return;
         var want = GameStoreForSelection();
-        if (want.Key == Game.Store.Key || Game.HasUnsavedChanges) return;
+        // one that couldn't load gets another go, settings.xml may have been sorted since
+        if (want.Key == Game.Store.Key && Game.Available || Game.HasUnsavedChanges) return;
         Game.UseStore(want);
     }
 
     public void ShowingGame(Func<string?, bool?>? saveFirst)
     {
         var want = GameStoreForSelection();
-        if (want.Key == Game.Store.Key) return;
+        if (want.Key == Game.Store.Key && Game.Available) return;
         if (Game.HasUnsavedChanges)
         {
             var answer = saveFirst?.Invoke(Game.HasProfile ? $"the {Game.ProfileKind} {Game.ProfileShown}" : null);
@@ -256,6 +257,7 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(CanChangeProfile));
         OnPropertyChanged(nameof(WindowerCardEnabled));
         OnPropertyChanged(nameof(WindowerUpdatesEnabled));
+        OnPropertyChanged(nameof(CanStartNewWindowerSettings));
     }
 
     private int PlayOnlineLanguage => _settings.DetectedRegion switch { PolRegion.Japan => 1, PolRegion.Europe => 3, _ => 2 };
@@ -575,10 +577,12 @@ public partial class SettingsViewModel
         }
     }
 
+    public bool CanStartNewWindowerSettings => WindowerDir is not null && !WindowerLinked;
+
     [RelayCommand]
     private void StartNewWindowerSettings()
     {
-        if (WindowerDir is not { } dir) return;
+        if (WindowerDir is not { } dir || WindowerLinked) return;
         if (Confirm?.Invoke("Start a new settings file",
                 "Windower's settings.xml can't be read. Provenance will keep it next to the new one, and the new one starts with just the Default profile.",
                 "START A NEW ONE", false) != true) return;

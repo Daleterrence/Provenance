@@ -431,7 +431,8 @@
                                 <StackPanel>
                                     <TextBlock Text="{Binding WindowerSettingsProblem}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource State.Warn}" />
                                     <Button Content="START A NEW SETTINGS FILE" HorizontalAlignment="Left" Margin="0,10,0,0" FontSize="12"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}" Command="{Binding StartNewWindowerSettingsCommand}" />
+                                            Style="{StaticResource MaterialDesignOutlinedButton}" Command="{Binding StartNewWindowerSettingsCommand}"
+                                            Visibility="{Binding CanStartNewWindowerSettings, Converter={StaticResource BoolToVis}}" />
                                 </StackPanel>
                             </Border>
 

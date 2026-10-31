@@ -194,6 +194,8 @@ public sealed class WindowerSettingsFile
     public string? MoveBadFileAside(string windowerDir)
     {
         var path = PathIn(windowerDir);
+        // the rename runs as admin too, so it never goes through a link
+        LinkCheck.Refuse(Path.GetFullPath(windowerDir), path);
         using (Lock())
         {
             if (File.Exists(path))

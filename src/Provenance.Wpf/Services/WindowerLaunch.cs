@@ -32,9 +32,31 @@ public sealed record WindowerLaunchSetup
 
 // what Windower writes into the registry for a profile. FFXI only reads it once Play's pressed, and another launch can
 // have written its own profile's by then
-public sealed record WindowerGameValues(WindowerProfile Profile, WindowerRegion Region, RegistryKey? Root)
+public sealed record WindowerGameValues(string WindowerDir, WindowerProfile Profile, WindowerRegion Region, RegistryKey? Root)
 {
     public IReadOnlyList<string> Apply() => WindowerGameRegistry.Apply(Profile, Region, Profile.Width, Profile.Height, Root);
+
+    // the profile as settings.xml has it now, for a session picked up again. Null when it's gone, never a guess
+    public static WindowerGameValues? Find(string windowerDir, string profileName, WindowerRegion region, RegistryKey? root)
+    {
+        string why = "the profile's gone";
+        WindowerProfile? profile = null;
+        if (!ThirdPartyHookService.IsWindowerFolder(windowerDir)) why = "the Windower folder's gone";
+        else if (ThirdPartyHookService.IsLinkedFolder(windowerDir)) why = "the Windower folder's a link now";
+        else
+        {
+            try
+            {
+                var file = WindowerSettingsFile.Load(windowerDir);
+                if (file.LoadError is not null) why = "settings.xml can't be read";
+                else profile = file.Find(profileName) ?? (profileName.Length == 0 ? file.Unnamed : null);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { why = "settings.xml can't be read"; }
+        }
+        if (profile is not null) return new(windowerDir, profile, region, root);
+        Log.Warning("Windower's game settings for the profile {Profile} won't be written again at Play: {Why}", profileName, why);
+        return null;
+    }
 }
 
 // Everything Windower.exe does before it starts pol.exe, then pol_launch --windower puts Hook.dll in and pol_hook after
@@ -73,7 +95,7 @@ public sealed class WindowerLaunch : IDisposable
     public string? UpdateNotice { get; private set; }
     public IReadOnlyList<string> RegistryWritten { get; private set; } = [];
     public bool HandoverOpen => _mapping is not null && _ready is not null;
-    public WindowerGameValues GameValues => new(Profile.Clone(), Region, _setup.RegistryRoot);
+    public WindowerGameValues GameValues => new(_setup.WindowerDir, Profile.Clone(), Region, _setup.RegistryRoot);
 
     private WindowerRegion Region => _setup.Region switch
     {
@@ -283,8 +305,8 @@ public sealed class WindowerLaunch : IDisposable
 
     private const string BusyText = "Windower is starting another game at the moment. Try again once it's up.";
 
-    // Made new, never opened: the elevated pol.exe trusts every path in the mapping, so one something else made first
-    // isn't used. Hook.dll makes the event too and may well keep it, so one of its own (owned by an admin) is fine
+    // pol.exe trusts every path in the mapping, so one made first by anything else is never used. Hook.dll may keep
+    // its own event though, and an admin's is fine
     private void OpenHandover()
     {
         using var sa = HandoverSecurity.Create();
@@ -354,7 +376,8 @@ public sealed class WindowerLaunch : IDisposable
         _turn = null;
     }
 
-    // Administrators, SYSTEM and the user, and when elevated a high label so nothing at medium can write to either
+    // Elevated, only Administrators and SYSTEM, and nothing below high can open either. Not elevated (a dev run) the
+    // user too, or the launch couldn't open its own
     private sealed class HandoverSecurity : IDisposable
     {
         private IntPtr _descriptor;
@@ -364,7 +387,7 @@ public sealed class WindowerLaunch : IDisposable
         {
             using var me = WindowsIdentity.GetCurrent();
             bool elevated = new WindowsPrincipal(me).IsInRole(WindowsBuiltInRole.Administrator);
-            var sddl = $"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{me.User})" + (elevated ? "S:(ML;;NW;;;HI)" : "");
+            var sddl = elevated ? "O:BAD:P(A;;GA;;;SY)(A;;GA;;;BA)S:(ML;;NWNRNX;;;HI)" : $"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{me.User})";
             if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out var sd, IntPtr.Zero))
                 throw new InvalidOperationException($"Windower's handover security couldn't be made (error {Marshal.GetLastPInvokeError()}).");
             return new HandoverSecurity

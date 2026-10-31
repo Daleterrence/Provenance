@@ -4,6 +4,7 @@ using Provenance.Common;
 using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.Windower;
+using Provenance.Common.IO;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Wpf.Services;
@@ -163,8 +164,12 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
         file.Find(profileName) ?? (profileName.Length == 0 ? file.Unnamed ?? new WindowerProfile() : null)
         ?? throw Shown.Mark(new InvalidOperationException($"The Windower profile {profileName} isn't in Windower's settings any more. Choose another one under Windower/Ashita."));
 
+    // a link is refused here rather than only when Save gets to it
     public GameStoreLoad Load()
     {
+        if (ThirdPartyHookService.IsLinkedFolder(windowerDir)) throw Shown.Mark(new IOException(ThirdPartyHookService.LinkedWindowerText));
+        if (LinkCheck.IsRedirect(WindowerSettingsFile.PathIn(windowerDir)))
+            throw Shown.Mark(new IOException("Windower's settings.xml is a link to somewhere else, so Provenance won't change it."));
         var windows = registry.Load().Settings;
         var file = WindowerSettingsFile.Load(windowerDir);
         if (file.LoadError is not null)

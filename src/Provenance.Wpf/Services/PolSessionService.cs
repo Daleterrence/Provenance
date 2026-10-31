@@ -3,9 +3,11 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 using Provenance.Common;
 using Provenance.Common.Credentials;
 using Provenance.Common.Game;
+using Provenance.Common.Game.Windower;
 using Provenance.Common.Locks;
 using Provenance.Common.Multi;
 using Provenance.Common.Patcher;
@@ -111,9 +113,10 @@ public sealed class PolSessionService : IDisposable
 
     internal sealed record Prestarted(int Pid, DateTime? Started);
 
-    // Pid 0 is a claim, start times are UTC ticks
-    private sealed record SessionFile(int Pid, long StartTicks, string LaunchId, string? ProfileId,
-                                      int OwnerPid = 0, long OwnerStartTicks = 0, bool Played = false, bool Lean = false);
+    // Pid 0 is a claim, start times are UTC ticks. The Windower ones are what its Play needs if another copy picks it up
+    internal sealed record SessionFile(int Pid, long StartTicks, string LaunchId, string? ProfileId,
+                                       int OwnerPid = 0, long OwnerStartTicks = 0, bool Played = false, bool Lean = false,
+                                       string? WindowerDir = null, string? WindowerProfile = null, int WindowerRegion = -1);
 
     // admin-only, so nothing running as the user can plant a record that makes the app attach to or end a process
     private static readonly Lazy<string> SessionDirLazy = new(() => SecureFiles.SubDir("sessions"));
@@ -180,6 +183,7 @@ public sealed class PolSessionService : IDisposable
     internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; }
     internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
     internal Func<string, string?, WindowerLaunchSetup> WindowerSetup { get; init; }
+    internal RegistryKey? WindowerRegistryRoot { get; init; }
     internal Func<Prestarted, bool> PrestartAlive { get; init; } = pre =>
     {
         try { using var p = Process.GetProcessById(pre.Pid); return !p.HasExited && IsSameProcess(p, pre.Started); }
@@ -549,6 +553,10 @@ public sealed class PolSessionService : IDisposable
             return pid;
         }
     }
+
+    internal void ReattachWindower(string? windowerDir, string? profile, int region) =>
+        Volatile.Write(ref _windowerPlay, windowerDir is null || profile is null || region is < 0 or > 2 ? null
+            : WindowerGameValues.Find(windowerDir, profile, (WindowerRegion)region, WindowerRegistryRoot));
 
     // another launch through Windower may have written its own profile's values since this one's
     internal void PutWindowerValuesBack()
@@ -1046,15 +1054,16 @@ public sealed class PolSessionService : IDisposable
         catch { return false; }
     }
 
-    private static SessionFile? ReadRecord(string path) => JsonSerializer.Deserialize<SessionFile>(File.ReadAllText(path));
+    internal static SessionFile? ReadRecord(string path) => JsonSerializer.Deserialize<SessionFile>(File.ReadAllText(path));
 
     // write then move, another copy may read it at any moment
-    private static void WriteRecord(string path, string tmp, int pid, long startTicks, string launchId,
-                                    string? profileId, bool played = false, bool lean = false)
+    internal static void WriteRecord(string path, string tmp, int pid, long startTicks, string launchId,
+                                     string? profileId, bool played = false, bool lean = false, WindowerGameValues? windower = null)
     {
         using var me = Process.GetCurrentProcess();
         File.WriteAllText(tmp, JsonSerializer.Serialize(
-            new SessionFile(pid, startTicks, launchId, profileId, me.Id, PolProcess.StartUtcTicks(me), played, lean)));
+            new SessionFile(pid, startTicks, launchId, profileId, me.Id, PolProcess.StartUtcTicks(me), played, lean,
+                            windower?.WindowerDir, windower?.Profile.Name, windower is { } w ? (int)w.Region : -1)));
         File.Move(tmp, path, overwrite: true);
     }
 
@@ -1074,7 +1083,7 @@ public sealed class PolSessionService : IDisposable
             Directory.CreateDirectory(SessionDir);
             var path = Path.Combine(SessionDir, $"{pid}.json");
             WriteRecord(path, $"{path}.{Environment.ProcessId}.tmp", pid, st.ToUniversalTime().Ticks, _launchId,
-                        profileId, played, _sessionLean);
+                        profileId, played, _sessionLean, Volatile.Read(ref _windowerPlay));
             _sessionFile = path;
             ReleaseClaim();
         }
@@ -1184,6 +1193,7 @@ public sealed class PolSessionService : IDisposable
                     _sessionLean = false;
                 }
                 profileId = s.ProfileId;
+                ReattachWindower(s.WindowerDir, s.WindowerProfile, s.WindowerRegion);
                 SaveSession(s.ProfileId);
                 StartWatcher(s.Pid);
                 ThreadPool.QueueUserWorkItem(_ => ReadSnapshot());

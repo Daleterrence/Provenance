@@ -107,9 +107,10 @@ internal static class WindowerFiles
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
     }
 
+    // a OneDrive file has the reparse point attribute too, only a junction or symlink counts
     public static bool IsLinkOrFolder(string path)
     {
-        try { return (File.GetAttributes(path) & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0; }
+        try { return File.GetAttributes(path).HasFlag(FileAttributes.Directory) || LinkCheck.IsRedirect(path); }
         catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { return false; }
     }
 
@@ -175,7 +176,8 @@ internal static class WindowerFiles
                     FileAttributes a;
                     try { a = File.GetAttributes(entry); }
                     catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
-                    if (a.HasFlag(FileAttributes.Directory) && !a.HasFlag(FileAttributes.ReparsePoint)) DeleteTree(pins, entry);
+                    if (a.HasFlag(FileAttributes.Directory) && !(a.HasFlag(FileAttributes.ReparsePoint) && LinkCheck.IsRedirect(entry)))
+                        DeleteTree(pins, entry);
                     else pins.DeleteEntry(entry);
                 }
             }

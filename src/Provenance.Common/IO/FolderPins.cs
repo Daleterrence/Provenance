@@ -104,6 +104,26 @@ public sealed class FolderPins : IDisposable
         return SetFileInformationByHandle(h, FileDispositionInfo, ref yes, 1);
     }
 
+    // Pin's root test without holding anything: a folder that's a link, or is reached through one (a junctioned parent,
+    // a SUBST drive), isn't where its path says. Something that won't open isn't counted
+    public static bool ThroughLink(string root)
+    {
+        var given = LongName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)));
+        using var h = CreateFileW(given, ReadAttributes, ShareRead | ShareWrite | ShareDelete, IntPtr.Zero, OpenExisting,
+                                  BackupSemantics | OpenReparsePoint, IntPtr.Zero);
+        if (h.IsInvalid) return false;
+        if (GetFileInformationByHandleEx(h, AttributeTagInfo, out var tag, 8) && LinkCheck.IsRedirect(tag.Attributes, tag.ReparseTag)) return true;
+        return !string.Equals(FinalPath(h), given, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // where a folder really is, every link on the way (its own too) followed. Null if it won't open
+    public static string? RealPath(string dir)
+    {
+        using var h = CreateFileW(Path.GetFullPath(dir), ReadAttributes, ShareRead | ShareWrite | ShareDelete, IntPtr.Zero, OpenExisting,
+                                  BackupSemantics, IntPtr.Zero);
+        return h.IsInvalid ? null : FinalPath(h);
+    }
+
     // nothing between root and path is a reparse point of any kind, and the last part is a folder or a file as asked
     // (missing parts are fine). Stricter than LinkCheck on purpose, it's the hook's plain_path rule
     public static bool Plain(string root, string path, bool lastIsFolder)

@@ -58,6 +58,14 @@ public static class PolOptions
     public static void Apply(LauncherSettings s, string viewerDir, int slot, PolRegion region)
     {
         if (s.ChatLanguageFilter is null && s.AutoDisconnectMinutes is null) return;
+        // an install moved to another drive (a junction above it, SUBST, a mount point) is pinned where it really is.
+        // Below the viewer folder nothing can be a link
+        if (FolderPins.RealPath(viewerDir) is not { } real)
+        {
+            Log.Warning("The viewer folder {Viewer} couldn't be opened, POL settings not written for home{Slot:00}", viewerDir, slot);
+            return;
+        }
+        viewerDir = real;
         var dir = Path.Combine(viewerDir, "pub", $"home{slot:00}");
         var path = Path.Combine(dir, "option.bin");
         if (!Plain(viewerDir, path, lastIsFolder: false))
