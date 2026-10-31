@@ -73,7 +73,11 @@ public static class ViewerBuild
         State.Supported => null,
         State.Missing => "Couldn't find the PlayOnline Viewer. Install FINAL FANTASY XI first.",
         State.Outdated => $"Your PlayOnline Viewer is version {Version(viewerDir)}, and it needs updating to {CurrentVersion} first.",
-        _ => $"Provenance doesn't support this version of the PlayOnline Viewer ({Version(viewerDir) ?? "unknown"}) yet. " +
+        // version.dat's right, it's pol.exe or polcore that isn't the file that version came with
+        _ when Version(viewerDir) == CurrentVersion =>
+            $"Your PlayOnline Viewer says it's version {CurrentVersion}, but its files don't match that version. " +
+            (region == PolRegion.Japan ? "Reinstall the PlayOnline Viewer to fix them." : "Press Repair game files to fix them."),
+        _ =>$"Provenance doesn't support this version of the PlayOnline Viewer ({Version(viewerDir) ?? "unknown"}) yet. " +
              "Restart Provenance to check for an update.",
     };
 

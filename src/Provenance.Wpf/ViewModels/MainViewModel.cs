@@ -162,21 +162,21 @@ public partial class MainViewModel : ObservableObject
         ? $"{t.TotalSeconds:0}s"
         : $"{(int)t.TotalMinutes}m {t.Seconds:00}s";
 
-    private void ResetProgress(string title)
+    private void ResetProgress(string title, string text)
     {
         _launchStarted = DateTime.UtcNow;
         ElapsedText = "0s";
         ProgressTitle = title;
-        ProgressText = "Starting PlayOnline...";
+        ProgressText = text;
         ProgressFraction = 0.01;
         _updatedFirst = false;
         TrackTimeLeft(null);
         _elapsedTimer.Start();
     }
 
-    private CancellationToken BeginCancellable(string title)
+    private CancellationToken BeginCancellable(string title, string text)
     {
-        ResetProgress(title);
+        ResetProgress(title, text);
         _launchCts = new CancellationTokenSource();
         CanCancel = true;
         return _launchCts.Token;
@@ -635,6 +635,7 @@ public partial class MainViewModel : ObservableObject
     private static string TitleFor(int code) => code switch
     {
         PolSessionService.ErrorAuthFailed => "Login not accepted",
+        PolSessionService.ErrorUnfinished => "Login didn't finish",
         PolSessionService.ErrorNoPolHandle => "PlayOnline handle needed",
         PolSessionService.ErrorHandleRejected => "Handle not accepted",
         PolSessionService.ErrorStalled => "PlayOnline stopped responding",
@@ -1064,7 +1065,7 @@ public partial class MainViewModel : ObservableObject
         _sessionProfileId = profile.Id;
         IsLaunching = true;
         var token = BeginCancellable(ProfileTitle.StartsWith("New account", StringComparison.Ordinal)
-            ? "Logging in to PlayOnline" : "Logging in to " + ProfileTitle);
+            ? "Logging in to PlayOnline" : "Logging in to " + ProfileTitle, "Starting PlayOnline...");
         bool startAfter = false;
         string? lastFailure = null;
         var progress = new Progress<LaunchProgress>(p =>
@@ -1093,22 +1094,10 @@ public partial class MainViewModel : ObservableObject
                     _pol.StopHold();
                     _pol.Prestart();
                 });
-                // never a retry by itself after a refusal, it'd stretch a three-strikes lockout
-                bool autoOff = code is PolSessionService.ErrorAuthFailed or PolSessionService.ErrorAccountBlocked
-                                   or PolSessionService.ErrorDetailsUnreadable && AutoLogin;
-                if (autoOff) AutoLogin = false;
+                var failure = LoginFailure(code, lastFailure, AutoLogin);
+                if (failure.AutoOff) AutoLogin = false;
                 if (code != PolSessionService.ErrorCancelled)
-                {
-                    var why = lastFailure ?? $"Provenance couldn't log in to PlayOnline (code {code}).";
-                    if (code == PolSessionService.ErrorAuthFailed)
-                        why += "\n\nIf your password has changed, press Edit account to update it, then log in again.";
-                    if (autoOff)
-                        why += "\n\nProvenance has turned off Log in automatically, so it won't try this account again by itself.";
-                    // a refused password or a handle problem is the user's to fix, anything else might need the log
-                    MessageDialog.ShowError(Application.Current?.MainWindow, TitleFor(code), why,
-                        offerLogs: code is PolSessionService.ErrorStalled or PolSessionService.ErrorLauncherFailed
-                                   || TitleFor(code) == "Couldn't log in");
-                }
+                    MessageDialog.ShowError(Application.Current?.MainWindow, failure.Title, failure.Text, offerLogs: failure.OfferLogs);
             }
         }
         catch (OperationCanceledException) { await Task.Run(() => _pol.StopHold()); }
@@ -1126,6 +1115,22 @@ public partial class MainViewModel : ObservableObject
             IsLaunching = false;
         }
         if (startAfter && PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null);
+    }
+
+    // never a retry by itself after a refusal, it'd stretch a three-strikes lockout. A refused password or a handle
+    // problem is the user's to fix, anything else might need the log
+    internal static (string Title, string Text, bool AutoOff, bool OfferLogs) LoginFailure(int code, string? detail, bool autoLogin)
+    {
+        bool autoOff = code is PolSessionService.ErrorAuthFailed or PolSessionService.ErrorAccountBlocked
+                           or PolSessionService.ErrorDetailsUnreadable && autoLogin;
+        var why = detail ?? $"Provenance couldn't log in to PlayOnline (code {code}).";
+        if (code == PolSessionService.ErrorAuthFailed)
+            why += "\n\nIf your password has changed, press Edit account to update it, then log in again.";
+        if (autoOff)
+            why += "\n\nProvenance has turned off Log in automatically, so it won't try this account again by itself.";
+        return (TitleFor(code), why, autoOff,
+                code is PolSessionService.ErrorStalled or PolSessionService.ErrorLauncherFailed or PolSessionService.ErrorUnfinished
+                || TitleFor(code) == "Couldn't log in");
     }
 
     // accounts on one SE ID share an authenticator
@@ -1251,7 +1256,7 @@ public partial class MainViewModel : ObservableObject
         // SE's installer only writes 3 of the game settings
         InstallViewModel.WriteFirstStartSettings(PlayRegion);
         WritePolOptions(_sessionProfileId);
-        ResetProgress("Starting FINAL FANTASY XI");
+        ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         OnProgress(new LaunchProgress("Starting game", "Starting FINAL FANTASY XI...", LaunchSteps.StartGame, 0.5));
         try { _pol.SignalPlay(); }
         catch (Exception ex)
@@ -1341,7 +1346,7 @@ public partial class MainViewModel : ObservableObject
     private async Task<bool> UpdateGameAsync()
     {
         if (GameFolders() is not { } dirs) return true;
-        var ct = BeginCancellable("Updating FINAL FANTASY XI");
+        var ct = BeginCancellable("Updating FINAL FANTASY XI", "Checking for FINAL FANTASY XI updates...");
         var progress = new Progress<PatchProgress>(p => OnProgress(LaunchProgress.Updating("Updating", LaunchSteps.StartGame, p, 0.01, 0.99)));
         try
         {

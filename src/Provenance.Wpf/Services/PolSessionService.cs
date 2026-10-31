@@ -33,6 +33,7 @@ public sealed class PolSessionService : IDisposable
     public const int ErrorCancelled = SignInCodes.Cancelled;
     public const int ErrorAccountBlocked = SignInCodes.AccountBlocked;
     public const int ErrorDetailsUnreadable = SignInCodes.DetailsUnreadable;
+    public const int ErrorUnfinished = SignInCodes.Unfinished;
 
     public const string DetailsAgainText = "Provenance needs this account's login details again. Press Edit account to add them.";
 
@@ -58,6 +59,12 @@ public sealed class PolSessionService : IDisposable
     internal static bool DetailsUnreadable(string? line = null, int? exitCode = null) =>
         (line?.Contains("phase_c: SAVED DETAILS UNREADABLE", StringComparison.Ordinal) ?? false) || exitCode == 11;
 
+    public const string UnfinishedText = "The PlayOnline login didn't finish. Try again.";
+
+    // the hook gave up with no session to hold or no Content ID list, nothing got refused
+    internal static bool LoginUnfinished(string line) =>
+        line.Contains("phase_c: FFXI SERVICE UNKNOWN", StringComparison.Ordinal) || line.Contains("hold: no signed-in session", StringComparison.Ordinal);
+
     internal enum PlayAnswer { None, Started, Unreadable, Refused }
 
     internal static PlayAnswer PlayAnswerOf(string? line) =>
@@ -77,8 +84,8 @@ public sealed class PolSessionService : IDisposable
         GameStartExitCode => (ErrorLauncherFailed, GameStartFailedText),
         3 => (ErrorAuthFailed, RefusedText),
         7 => (ErrorAccountBlocked, "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why."),
-        10 => (ErrorStalled, LoadFailedText("")),
-        _ => (ErrorStalled, "PlayOnline closed before the login finished."),
+        10 => (ErrorUnfinished, LoadFailedText("")),
+        _ => (ErrorUnfinished, "PlayOnline closed before the login finished."),
     };
 
     internal static string SessionClosedText(int? exitCode) => exitCode switch
@@ -479,21 +486,20 @@ public sealed class PolSessionService : IDisposable
                 var rm = Regex.Match(line, @"reason=(-?\d+)");
                 LastRefusalReason = rm.Success && int.TryParse(rm.Groups[1].Value, out var reason) ? reason : null;
                 return Fail(ErrorAuthFailed, LastRefusalReason is { } r
-                    ? PolAccountNotices.SignInRefused(r)
+                    ? PolAccountNotices.SignInRefused(r, Region)
                     : RefusedText);
             }
             if (line.Contains("phase_c: ACCOUNT BLOCKED "))
                 return Fail(ErrorAccountBlocked,
                             PolAccountNotices.Blocked(Regex.Match(line, @"ACCOUNT BLOCKED (\S+)").Groups[1].Value, Region, viewerLanguage));
             if (line.Contains("phase_c: LOAD FAILED "))
-                return Fail(ErrorStalled, LoadFailedText(Regex.Match(line, @"LOAD FAILED (\w+)").Groups[1].Value));
+                return Fail(ErrorUnfinished, LoadFailedText(Regex.Match(line, @"LOAD FAILED (\w+)").Groups[1].Value));
             if (line.Contains("phase_c: NO POL HANDLE"))
                 return Fail(ErrorNoPolHandle, "This PlayOnline account doesn't have a handle, and none was created.");
             if (line.Contains("handle name rejected") || line.Contains("handle claim failed")
                 || line.Contains("handle save failed"))
                 return Fail(ErrorHandleRejected, "PlayOnline didn't accept that handle name. Log in again to try a different one.");
-            if (line.Contains("phase_c: FFXI SERVICE UNKNOWN") || line.Contains("hold: no signed-in session"))
-                return Fail(ErrorAuthFailed, "The PlayOnline login didn't finish. Try again.");
+            if (LoginUnfinished(line)) return Fail(ErrorUnfinished, UnfinishedText);
             return null;
         }
         while (!ct.IsCancellationRequested)
@@ -1261,7 +1267,7 @@ public sealed class PolSessionService : IDisposable
         try
         {
             if (File.Exists(ended) && int.TryParse(File.ReadAllText(ended).Trim(), out var reason))
-                why = PolAccountNotices.SessionLost(reason);
+                why = PolAccountNotices.SessionLost(reason, Region);
             File.Delete(ended);
         }
         catch { }

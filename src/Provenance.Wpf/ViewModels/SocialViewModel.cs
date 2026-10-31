@@ -364,8 +364,9 @@ public partial class SocialViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(snap.MyHandle)) AccountName = snap.MyHandle;
         Avatar = _avatars.ProfilePicture(snap.MyProfilePictureId);
         MyProfilePictureId = snap.MyProfilePictureId;
-        var notice = PolAccountNotices.For(snap.Notice);
-        PlayBlockedReason = PolAccountNotices.PlayBlockedReason(snap);
+        var region = _settings.DetectedRegion ?? PolRegion.UnitedStates;
+        var notice = PolAccountNotices.For(snap.Notice, region);
+        PlayBlockedReason = PolAccountNotices.PlayBlockedReason(snap, region);
         AccountNotice = snap.BadPassword ? PolAccountNotices.BadPassword
                       : notice is { Blocks: false } ? $"{notice.Text} ({notice.Code})" : null;
         Connected = true;

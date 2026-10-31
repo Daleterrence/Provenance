@@ -310,11 +310,7 @@ public partial class MainViewModel : IMultiRunHost
         SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
 
         var snap = _runSnapshot ?? (_pol.Pid is { } pid ? SocialSnapshot.TryRead(pid) : null);
-        if (snap is null)
-            return await LetGo(AccountFailureKind.Account,
-                               "PlayOnline didn't send this account's services, so the game wasn't started.");
-        var blocked = PolAccountNotices.PlayBlockedReason(snap);
-        if (!PolAccountNotices.CanPlay(blocked)) return await LetGo(AccountFailureKind.Account, blocked!);
+        if (PlayGateFailure(snap, PlayRegion) is { } gate) return await LetGo(gate.Kind, gate.Text);
         if (token.IsCancellationRequested) return await Stopped();
 
         if (GameFolders() is { } dirs)
@@ -401,6 +397,16 @@ public partial class MainViewModel : IMultiRunHost
         !string.IsNullOrEmpty(ids.PolId) && !string.IsNullOrEmpty(ids.SeaId)
             ? new(AccountFailureKind.Credential, PolSessionService.DetailsAgainText)
             : new(AccountFailureKind.Account, MissingDetailsText(ids));
+
+    // the login only finishes once the hook's written a snapshot, so a missing one is the file being gone or unreadable
+    // since (the session ending, say), not anything PlayOnline did
+    internal static AccountFailure? PlayGateFailure(PolSocialSnapshot? snap, PolRegion region)
+    {
+        if (snap is null)
+            return new(AccountFailureKind.Account, "Provenance couldn't read this account's details after it logged in, so the game wasn't started.");
+        var blocked = PolAccountNotices.PlayBlockedReason(snap, region);
+        return PolAccountNotices.CanPlay(blocked) ? null : new(AccountFailureKind.Account, blocked!);
+    }
 
     // a refusal by the hook's gate is this account's problem, anything else wants a restart so the run stops
     internal static AccountFailureKind PlayFailureKind(string text) =>

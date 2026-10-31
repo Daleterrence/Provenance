@@ -2,8 +2,8 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Social;
 
-// the viewer's own account checks (app.dll LM table at 0x104a6d68, US block, Content ID check at 0x10199093), so the
-// game gets refused in the same cases with the same text
+// the viewer's own account checks (app.dll LM table at 0x104a6d68, Content ID check at 0x10199093), so the game gets
+// refused in the same cases with the same text
 public static class PolAccountNotices
 {
     // app string 0x65d9. A cancelled Content ID is just missing, so this covers never subscribed and cancelled
@@ -55,24 +55,34 @@ public static class PolAccountNotices
         N(252, false, "The credit card registered for your payment method will expire at the end of the month. Please update the credit card information before it expires. You can do so from \"Register/Update Payment Method\" within the Square Enix Account Management System."),
     }.ToDictionary(n => n.Status);
 
+    // the EU block points LM-01 and LM-14 at messages of their own (0x6ee6, 0x5730), every other row is the US one
+    private static readonly Dictionary<int, Notice> Europe = new[]
+    {
+        N(221, true, "Your account is closed due to unpaid fees. If you would like to reactivate your account, please refer to \"Regarding Unpaid Fees.\""),
+        N(234, false, "There are Content IDs with contract periods ending in the near future. If you do not perform a Content ID contract extension by the last day of the month (or, in the case of free trial periods, the day that the period ends), you will be unable to use the Content ID from the day after the period has ended."),
+    }.ToDictionary(n => n.Status);
+
     private static Notice N(int status, bool blocks, string text) =>
         new(status, $"LM-{status - 220:00}", blocks, text);
 
-    public static string? PlayBlockedReason(PolSocialSnapshot snap) => snap.FfxiService switch
+    public static string? PlayBlockedReason(PolSocialSnapshot snap, PolRegion region = PolRegion.UnitedStates) => snap.FfxiService switch
     {
         "none" => NoFfxiContentId,
         "unknown" => ServiceUnknown,
-        _ => For(snap.Notice) is { Blocks: true } notice ? $"{notice.Text} ({notice.Code})" : null,
+        _ => For(snap.Notice, region) is { Blocks: true } notice ? $"{notice.Text} ({notice.Code})" : null,
     };
 
     // an unknown service isn't a refusal, Play stays on and asks POL again
     public static bool CanPlay(string? reason) => reason is null || reason == ServiceUnknown;
 
     // status byte from svc 0xd20. 253..255 have no row, the viewer shows LM-01 for them
-    public static Notice? For(int status) =>
-        Table.TryGetValue(status, out var n) ? n : status is >= 253 and <= 255 ? Table[221] : null;
+    public static Notice? For(int status, PolRegion region = PolRegion.UnitedStates)
+    {
+        if (status is >= 253 and <= 255) status = 221;
+        return region == PolRegion.Europe && Europe.TryGetValue(status, out var eu) ? eu : Table.GetValueOrDefault(status);
+    }
 
-    public static string SignInRefused(int reason) => reason switch
+    public static string SignInRefused(int reason, PolRegion region = PolRegion.UnitedStates) => reason switch
     {
         -202 or -203 => "Incorrect PlayOnline ID and/or password.",
         -205 => "Your account login has been temporarily disabled due to three consecutive password errors. Please try again later.",
@@ -82,7 +92,7 @@ public static class PolAccountNotices
         -5311 or -5312 => "The Square Enix ID, Square Enix password, or one-time password entered is incorrect.",
         -5426 => "Square Enix Account Certification Error.",
         -0x40c => "Connection cancelled.",
-        <= -221 and >= -252 => For(-reason) is { } n ? $"{n.Text} ({n.Code})" : "Unable to log in due to unexpected error.",
+        <= -221 and >= -252 => For(-reason, region) is { } n ? $"{n.Text} ({n.Code})" : "Unable to log in due to unexpected error.",
         _ => $"Network Connection Error (code {reason}).",
     };
 
@@ -100,7 +110,7 @@ public static class PolAccountNotices
     public static string Blocked(string what, PolRegion region = PolRegion.UnitedStates, int? language = null)
     {
         if (what.StartsWith("LM-", StringComparison.Ordinal) && int.TryParse(what[3..], out var lm) &&
-            For(220 + lm) is { } n)
+            For(220 + lm, region) is { } n)
             return $"{n.Text} ({n.Code})";
         if (what == "disconnect-bit") return "PlayOnline disconnected this account as soon as it logged in.";
         if (what == "jail")
@@ -119,13 +129,13 @@ public static class PolAccountNotices
         return "PlayOnline turned this account away.";
     }
 
-    public static string SessionLost(int reason) => reason switch
+    public static string SessionLost(int reason, PolRegion region = PolRegion.UnitedStates) => reason switch
     {
         -0x40f => "Disconnected. The current PlayOnline ID was used to log in from another terminal.",
         -0x400 or -0x401 or -0x40e => "Disconnected. Now offline.",
         -251 => "Disconnected from PlayOnline.",
         -207 => "Connection terminated or not available.",
-        <= -221 and >= -252 => For(-reason) is { } n ? $"{n.Text} ({n.Code})" : "Disconnected from PlayOnline.",
+        <= -221 and >= -252 => For(-reason, region) is { } n ? $"{n.Text} ({n.Code})" : "Disconnected from PlayOnline.",
         _ => $"Disconnected from PlayOnline (code {reason}).",
     };
 
