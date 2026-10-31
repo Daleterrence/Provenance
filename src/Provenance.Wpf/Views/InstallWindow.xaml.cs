@@ -18,7 +18,7 @@ public partial class InstallWindow : Window
         Closed += (_, _) => { if (Owner != null) Owner.Closing -= OnOwnerClosing; };
     }
 
-    // the Version choice only shows with no viewer on the PC. The window grows by exactly its height then (still
+    // the Region choice only shows with no viewer on the PC. The window grows by exactly its height then (still
     // centred), so the rest looks the same either way
     private void GrowForRegionChoice()
     {

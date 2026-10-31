@@ -1,0 +1,54 @@
+using System.Globalization;
+using System.Runtime.InteropServices;
+
+namespace Provenance.Common.PolFormat;
+
+// the version that suits where Windows says the PC is: Europe and Oceania get the European one, Japan the Japanese
+// one, and the Americas and everywhere else North America
+public static class PolLocale
+{
+    private static readonly HashSet<string> EuropeanVersion = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AD", "AL", "AT", "AX", "BA", "BE", "BG", "BY", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FO", "FR",
+        "GB", "GG", "GI", "GR", "HR", "HU", "IE", "IM", "IS", "IT", "JE", "LI", "LT", "LU", "LV", "MC", "MD", "ME",
+        "MK", "MT", "NL", "NO", "PL", "PT", "RO", "RS", "RU", "SE", "SI", "SJ", "SK", "SM", "TR", "UA", "VA", "XK",
+        // Oceania, the US territories out there stay North American
+        "AU", "CC", "CK", "CX", "FJ", "FM", "HM", "KI", "MH", "NC", "NF", "NR", "NU", "NZ", "PF", "PG", "PN", "PW",
+        "SB", "TK", "TO", "TV", "VU", "WF", "WS",
+    };
+
+    public static PolRegion ForCountry(string? country) => country?.Trim().ToUpperInvariant() switch
+    {
+        "JP" => PolRegion.Japan,
+        { } c when EuropeanVersion.Contains(c) => PolRegion.Europe,
+        _ => PolRegion.UnitedStates,
+    };
+
+    // the home location (Settings, Country or region) first, it's where the PC is rather than how it formats dates
+    public static PolRegion FromWindows() => ForCountry(HomeCountry() ?? FormatCountry());
+
+    private static string? HomeCountry()
+    {
+        try
+        {
+            var name = new char[16];
+            int n = GetUserDefaultGeoName(name, name.Length);
+            // an unset one comes back as a UN area code like "001", not a country
+            return n == 3 && char.IsAsciiLetter(name[0]) && char.IsAsciiLetter(name[1]) ? new string(name, 0, 2) : null;
+        }
+        catch (EntryPointNotFoundException) { return null; }
+    }
+
+    private static string? FormatCountry()
+    {
+        try
+        {
+            var code = RegionInfo.CurrentRegion.TwoLetterISORegionName;
+            return code.Length == 2 && code != "IV" ? code : null;
+        }
+        catch (ArgumentException) { return null; }
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetUserDefaultGeoName([Out] char[] geoName, int geoNameCount);
+}

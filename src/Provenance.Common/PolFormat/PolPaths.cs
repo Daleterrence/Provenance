@@ -32,6 +32,14 @@ public static class PolPaths
         _ => "North American",
     };
 
+    // the installer's region list names places, everywhere else names versions
+    public static string RegionName(PolRegion region) => region switch
+    {
+        PolRegion.Europe => "Europe",
+        PolRegion.Japan => "Japan",
+        _ => "North America",
+    };
+
     public static PolRegion? TryAutoDetectRegion() => DetectRegion(r => TryGetInstallFolder(r, ViewerProduct));
 
     // pol.exe goes by env.dat, not the registry, and a PC that's switched regions keeps the old one's keys. So a hive

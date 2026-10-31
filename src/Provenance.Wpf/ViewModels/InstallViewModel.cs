@@ -32,7 +32,10 @@ public partial class InstallViewModel : ObservableObject
     private static readonly PolRegion[] RegionValues = new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan }
         .Where(r => GameInstaller.Installs(r) && PolPaths.Supported(r) && (r != PolRegion.Japan || OfferJapanese)).ToArray();
 
+    internal static Func<PolRegion> LocaleRegion { get; set; } = PolLocale.FromWindows;
+
     private PolRegion _region;
+    private readonly PolRegion _autoRegion;
     private readonly Action? _holdPrestarts, _releasePrestarts;
     private readonly GameInstaller _installer = new();
     private readonly DownloadMeter _meter;
@@ -42,7 +45,11 @@ public partial class InstallViewModel : ObservableObject
     {
         // a viewer that's already there decides, otherwise it's the player's pick
         ShowRegionChoice = region is not { } r || !RegionValues.Contains(r);
-        _region = ShowRegionChoice ? RegionValues[0] : region!.Value;
+        // a version that isn't offered yet (Japanese, for now) leaves Auto on the first one that is
+        var local = LocaleRegion();
+        _autoRegion = RegionValues.Contains(local) ? local : RegionValues[0];
+        RegionChoices = [$"Auto ({PolPaths.RegionName(_autoRegion)})", .. RegionValues.Select(PolPaths.RegionName)];
+        _region = ShowRegionChoice ? _autoRegion : region!.Value;
         _holdPrestarts = holdPrestarts;
         _releasePrestarts = releasePrestarts;
         _meter = new DownloadMeter(text => DownloadText = text, text => TimeLeftText = text);
@@ -58,7 +65,7 @@ public partial class InstallViewModel : ObservableObject
 
     public bool ShowRegionChoice { get; }
 
-    public IReadOnlyList<string> RegionChoices { get; } = RegionValues.Select(PolPaths.VersionName).ToList();
+    public IReadOnlyList<string> RegionChoices { get; }
 
     // fixed once a run's started, half an install of one region under the other's would be a mess
     [ObservableProperty]
@@ -71,8 +78,8 @@ public partial class InstallViewModel : ObservableObject
 
     partial void OnRegionIndexChanged(int value)
     {
-        if (RegionLocked || value < 0 || value >= RegionValues.Length) return;
-        _region = RegionValues[value];
+        if (RegionLocked || value < 0 || value > RegionValues.Length) return;
+        _region = value == 0 ? _autoRegion : RegionValues[value - 1];
         TotalGib = $"{GameInstaller.TotalBytes(_region) / 1024.0 / 1024 / 1024:0.0} GiB";
     }
 
@@ -252,12 +259,16 @@ public partial class InstallViewModel : ObservableObject
         try { Directory.Delete(dir, recursive: true); } catch (Exception e) { Log.Warning(e, "Could not remove {Dir}", dir); }
     }
 
-    private void Finished(string next, IReadOnlyList<string> warnings)
+    // next is null when everything's already up to date
+    private void Finished(string? next, IReadOnlyList<string> warnings)
     {
         CurrentStep = 3;
         StageIndeterminate = false;
         Stage = "Installed";
-        Detail = "FINAL FANTASY XI is installed. " + next + (warnings.Count == 0 ? "" : " " + string.Join(" ", warnings));
+        Detail = (next is null
+                     ? "PlayOnline Viewer and FINAL FANTASY XI have been successfully installed and updated."
+                     : "PlayOnline Viewer and FINAL FANTASY XI have been successfully installed. " + next)
+                 + (warnings.Count == 0 ? "" : " " + string.Join(" ", warnings));
         Done = true;
         Installed?.Invoke();
     }
@@ -496,7 +507,7 @@ public partial class InstallViewModel : ObservableObject
 
         Log.Information("Install finished in {Folder} from the Provenance mirror; warnings: {Warnings}", InstallFolder, warnings);
         var next = mirror.Staged.All(s => s.Current)
-            ? "It's up to date."
+            ? null
             : "PlayOnline and the game finish updating the first time you log in and press Play.";
         Finished(next, warnings);
         return true;
