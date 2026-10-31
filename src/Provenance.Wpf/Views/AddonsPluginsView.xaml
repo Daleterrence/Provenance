@@ -33,7 +33,7 @@
             <Setter Property="materialDesign:TextFieldAssist.LeadingIcon" Value="Magnify" />
             <Setter Property="materialDesign:TextFieldAssist.HasClearButton" Value="True" />
         </Style>
-        <!-- Addons, Plugins and Ashita's PlayOnline Plugins along the top, one list each -->
+        <!-- Addons, Plugins and Ashita's PlayOnline Plugins across the top, one list each, sharing the width evenly -->
         <Style x:Key="SubTabs" TargetType="ListBox">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -41,7 +41,7 @@
             <Setter Property="ItemsPanel">
                 <Setter.Value>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
+                        <UniformGrid Rows="1" />
                     </ItemsPanelTemplate>
                 </Setter.Value>
             </Setter>
@@ -52,9 +52,10 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="Bd" Margin="0,0,6,0" Padding="16,8" CornerRadius="8" Background="Transparent"
+                                    <Border x:Name="Bd" Margin="3,0" Padding="16,8" CornerRadius="8" Background="Transparent"
                                             BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
-                                        <TextBlock x:Name="Label" Text="{Binding}" FontSize="13" Foreground="{DynamicResource Text.2}" />
+                                        <TextBlock x:Name="Label" Text="{Binding}" FontSize="13" Foreground="{DynamicResource Text.2}"
+                                                   HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
@@ -72,6 +73,19 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- the sub-tabs sit above the list but outside what scrolls, and beside the scroll bar rather than over it, so
+             they line up with the cards either way -->
+        <ControlTemplate x:Key="UnderSubTabs" TargetType="ScrollViewer">
+            <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,Auto">
+                <ListBox ItemsSource="{Binding Tabs}" SelectedIndex="{Binding Tab}" Style="{StaticResource SubTabs}" Margin="25,18,25,6"
+                         Visibility="{Binding HasLists, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Lists" />
+                <ScrollContentPresenter Grid.Row="1" CanContentScroll="{TemplateBinding CanContentScroll}" />
+                <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="{TemplateBinding ScrollableHeight}"
+                           ViewportSize="{TemplateBinding ViewportHeight}" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"
+                           Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}" />
+            </Grid>
+        </ControlTemplate>
 
         <!-- "No addons found in ..." or no matches, gone when there's nothing to say -->
         <Style x:Key="ListNote" TargetType="TextBlock" BasedOn="{StaticResource Help}">
@@ -96,10 +110,21 @@
             </Border>
         </DataTemplate>
 
-        <!-- the top of the page is the first item in the list, so it scrolls away like the other tabs' pages do -->
+        <!-- the top of the page is the first item in the list, so it scrolls away like the other tabs' pages do. The
+             sub-tabs stay put above it -->
         <DataTemplate DataType="{x:Type vm:AddonsPluginsViewModel}">
-            <StackPanel Margin="28,22,28,0">
-                <TextBlock Text="Addons and plugins" Style="{StaticResource Section}" />
+            <StackPanel>
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Margin" Value="28,22,28,0" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasLists}" Value="True">
+                                <Setter Property="Margin" Value="28,12,28,0" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <TextBlock Text="{Binding PageTitle}" Style="{StaticResource Section}" />
                 <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
                            Visibility="{Binding Message, Converter={StaticResource NullToVisibilityConverter}}" />
                 <StackPanel Visibility="{Binding HasLists, Converter={StaticResource BoolToVis}}">
@@ -119,15 +144,14 @@
                             Visibility="{Binding IsWindower, Converter={StaticResource BoolToVis}}">
                         <Grid ColumnDefinitions="*,Auto">
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Use the same list for every profile" FontSize="13" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding UseGlobalHelp}" Style="{StaticResource Help}" Margin="0,2,0,0" />
+                                <TextBlock Text="Use the same addons/plugins for every profile" FontSize="13" TextWrapping="Wrap" />
+                                <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
+                                           Text="By default, Windower loads the same addons and plugins for every profile. Disable this to instead load different ones for each of your profiles." />
                             </StackPanel>
                             <ToggleButton Grid.Column="1" Margin="16,0,0,0" Style="{StaticResource Switch}" IsChecked="{Binding UseGlobal}" IsEnabled="{Binding CanChangeUseGlobal}"
-                                          AutomationProperties.Name="Use the same list for every profile" />
+                                          AutomationProperties.Name="Use the same addons/plugins for every profile" />
                         </Grid>
                     </Border>
-                    <ListBox ItemsSource="{Binding Tabs}" SelectedIndex="{Binding Tab}" Style="{StaticResource SubTabs}" Margin="0,0,0,12"
-                             AutomationProperties.Name="Lists" />
                     <TextBox Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Search}"
                              materialDesign:HintAssist.Hint="Search by name, author or description"
                              AutomationProperties.Name="Search addons and plugins" />
@@ -156,10 +180,13 @@
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
-                <Grid ColumnDefinitions="*,Auto,Auto">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                     <StackPanel VerticalAlignment="Center">
                         <WrapPanel>
                             <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <materialDesign:PackIcon Kind="CheckDecagram" Width="15" Height="15" Margin="-4,0,8,0" VerticalAlignment="Center" Background="Transparent"
+                                                     Foreground="{DynamicResource Primary}" ToolTip="{Binding VerifiedTip}" AutomationProperties.Name="{Binding VerifiedTip}"
+                                                     Visibility="{Binding VerifiedTip, Converter={StaticResource NullToVisibilityConverter}}" />
                             <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,0,8,0" VerticalAlignment="Center"
                                        Visibility="{Binding Details, Converter={StaticResource NullToVisibilityConverter}}" />
                             <ItemsControl ItemsSource="{Binding Badges}" ItemTemplate="{StaticResource Badge}" Focusable="False" VerticalAlignment="Center">
@@ -173,7 +200,14 @@
                         <TextBlock Text="{Binding Description}" Style="{StaticResource Help}" Margin="0,3,0,0"
                                    Visibility="{Binding Description, Converter={StaticResource NullToVisibilityConverter}}" />
                     </StackPanel>
-                    <Button Grid.Column="1" Margin="16,0,0,0" Height="30" Padding="12,0" FontSize="12" VerticalAlignment="Center"
+                    <Button Grid.Column="1" Margin="12,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                            Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                            Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}" ToolTip="Open folder" AutomationProperties.Name="Open folder"
+                            Visibility="{Binding Location, Converter={StaticResource NullToVisibilityConverter}}">
+                        <materialDesign:PackIcon Kind="FolderOpenOutline" Width="18" Height="18" />
+                    </Button>
+                    <Button Grid.Column="2" Margin="16,0,0,0" Height="30" Padding="12,0" FontSize="12" VerticalAlignment="Center"
                             Command="{Binding DataContext.InstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name, StringFormat=Install {0}}"
                             Visibility="{Binding CanInstall, Converter={StaticResource BoolToVis}}">
@@ -188,10 +222,19 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <ToggleButton Grid.Column="2" Margin="16,0,0,0" Style="{StaticResource Switch}"
-                                  IsChecked="{Binding On}" IsEnabled="{Binding SwitchEnabled}"
-                                  Visibility="{Binding HasSwitch, Converter={StaticResource BoolToVis}}"
-                                  AutomationProperties.Name="{Binding Name}" />
+                    <!-- hidden rather than gone, so the folder buttons line up down the list -->
+                    <ToggleButton Grid.Column="3" Margin="16,0,0,0" IsChecked="{Binding On}" IsEnabled="{Binding SwitchEnabled}"
+                                  AutomationProperties.Name="{Binding Name}">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton" BasedOn="{StaticResource Switch}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSwitch}" Value="False">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -203,7 +246,8 @@
                       VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True">
             <ItemsControl.Template>
                 <ControlTemplate TargetType="ItemsControl">
-                    <ScrollViewer Focusable="False" CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer Focusable="False" CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                                  Template="{StaticResource UnderSubTabs}">
                         <ItemsPresenter />
                     </ScrollViewer>
                 </ControlTemplate>

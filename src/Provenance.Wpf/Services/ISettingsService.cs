@@ -79,8 +79,10 @@ public sealed class LauncherSettings
     public string WindowerPath { get; set; } = "";
     // "" is Windower's default profile
     public string WindowerProfile { get; set; } = "";
-    // by Windower profile name, and no entry means settings.xml's own list
+    // by Windower profile name, and no entry means the shared list
     public Dictionary<string, WindowerAddonList> WindowerAddonLists { get; set; } = [];
+    // the shared list's addons and plugins that Windower.exe doesn't offer, so they stay out of settings.xml
+    public WindowerAddonList? WindowerSharedExtras { get; set; }
 
     public bool AcceptedMemberAgreement { get; set; }
 

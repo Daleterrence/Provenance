@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -23,7 +22,6 @@ public static partial class WindowerAddons
 {
     // the _addon lines sit at the top, nobody needs the rest of a 200 KB addon for them
     private const int MaxRead = 64 * 1024;
-    private const int MaxTree = 32 << 20;
     private const int RegexMs = 500;
 
     // addons\<name>\<name>.lua, the name matching its folder in any case. libs is Windower's shared code, never an
@@ -180,40 +178,4 @@ public static partial class WindowerAddons
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Spaces();
-
-    // the addons Windower.exe offers: folders in its cached tree of the Lua repo (updates\addons.json) with a
-    // <name>.lua straight inside, grouped case for case
-    internal static IReadOnlyList<(string Name, bool Installed)> RepoAddons(string windowerDir)
-    {
-        var path = Path.Combine(windowerDir, "updates", "addons.json");
-        var folders = new Dictionary<string, string?>(StringComparer.Ordinal);
-        try
-        {
-            if (!File.Exists(path) || new FileInfo(path).Length > MaxTree) return [];
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var doc = JsonDocument.Parse(fs);
-            if (!doc.RootElement.TryGetProperty("tree", out var tree) || tree.ValueKind != JsonValueKind.Array) return [];
-            foreach (var node in tree.EnumerateArray())
-            {
-                if (node.ValueKind != JsonValueKind.Object || !node.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String
-                    || type.GetString() != "blob" || !node.TryGetProperty("path", out var p) || p.ValueKind != JsonValueKind.String)
-                    continue;
-                var parts = p.GetString()!.Split(['/', '\\'], 3);
-                if (parts.Length < 3 || parts[0] != "addons") continue;
-                folders.TryAdd(parts[1], null);
-                if (folders[parts[1]] is null && parts[2].Equals(parts[1] + ".lua", StringComparison.OrdinalIgnoreCase)) folders[parts[1]] = p.GetString();
-            }
-        }
-        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException) { return []; }
-        var list = new List<(string, bool)>();
-        foreach (var (name, main) in folders)
-        {
-            if (main is null) continue;
-            bool installed;
-            try { installed = File.Exists(Path.Combine(windowerDir, main)); }
-            catch (ArgumentException) { installed = false; }
-            list.Add((name, installed));
-        }
-        return list;
-    }
 }

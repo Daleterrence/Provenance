@@ -18,7 +18,8 @@ namespace Provenance.Wpf.Services;
 
 // Lean is POL_LEAN, a multi-account sign-in with no social side. HomeSlot is POL_HOME, the account's pub\homeNN
 public sealed record SessionOptions(bool Lean, string? ThirdPartyHookProfile, int? KeyGeneration = null,
-                                    int HomeSlot = 0, IReadOnlyDictionary<string, WindowerAddonList>? WindowerLists = null);
+                                    int HomeSlot = 0, IReadOnlyDictionary<string, WindowerAddonList>? WindowerLists = null,
+                                    WindowerAddonList? WindowerShared = null);
 
 internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? problem);
 
@@ -168,7 +169,7 @@ public sealed class PolSessionService : IDisposable
         FindLaunchFiles = () => LaunchFiles(Region);
         GameIsInstalled = () => GameInstalled(Region);
         UpdateViewer = (dir, progress, freeFiles, ct) => PolUpdates.UpdateViewer(dir, Region, progress, freeFiles, ct);
-        WindowerSetup = (polExe, profile, lists) => WindowerLaunch.SetupFor(_settings, polExe, profile, lists);
+        WindowerSetup = (polExe, profile, lists, shared) => WindowerLaunch.SetupFor(_settings, polExe, profile, lists, shared);
         DeleteLeftovers();
         _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
     }
@@ -184,7 +185,7 @@ public sealed class PolSessionService : IDisposable
     internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
     internal Func<bool> AnyPolRunningNow { get; init; } = AnyPolRunning;
     internal Func<bool?> WindowsScreenSaver { get; init; } = ReadScreenSaver;
-    internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerLaunchSetup> WindowerSetup { get; init; }
+    internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerAddonList?, WindowerLaunchSetup> WindowerSetup { get; init; }
     internal HoldViewerFiles HoldViewer { get; init; } = ViewerBuild.Hold;
     internal Func<Prestarted, bool> PrestartAlive { get; init; } = pre =>
     {
@@ -279,7 +280,11 @@ public sealed class PolSessionService : IDisposable
 
     // on the UI thread, where Settings changes the live addon lists while the login carries on in the background
     internal SessionOptions ForLaunch(SessionOptions? options) =>
-        (options ?? new SessionOptions(false, null)) with { WindowerLists = WindowerLaunch.Snapshot(_settings.Current.WindowerAddonLists) };
+        (options ?? new SessionOptions(false, null)) with
+        {
+            WindowerLists = WindowerLaunch.Snapshot(_settings.Current.WindowerAddonLists),
+            WindowerShared = _settings.Current.WindowerSharedExtras?.Copy(),
+        };
 
     private int ConnectCore(PolAccount pol, SeaAccount sea, string otp, string? rememberedProfileId,
                             IProgress<LaunchProgress>? progress, Func<string?>? askHandleName, SessionOptions options,
@@ -420,7 +425,7 @@ public sealed class PolSessionService : IDisposable
         }
         else if (platform == ThirdPartyHookService.Windower)
         {
-            if (StartThroughWindower(psi, polExe, options.ThirdPartyHookProfile, _launchId!, progress, ct, options.WindowerLists) is not { } started)
+            if (StartThroughWindower(psi, polExe, options.ThirdPartyHookProfile, _launchId!, progress, ct, options.WindowerLists, options.WindowerShared) is not { } started)
                 return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
             pid = started;
         }
@@ -536,10 +541,10 @@ public sealed class PolSessionService : IDisposable
     // null once progress has said why
     internal int? StartThroughWindower(ProcessStartInfo psi, string polExe, string? profile, string launchId,
                                        IProgress<LaunchProgress>? progress, CancellationToken ct,
-                                       IReadOnlyDictionary<string, WindowerAddonList>? lists)
+                                       IReadOnlyDictionary<string, WindowerAddonList>? lists, WindowerAddonList? shared = null)
     {
         WindowerLaunch windower;
-        try { windower = WindowerLaunch.Prepare(WindowerSetup(polExe, profile, lists), progress, ct); }
+        try { windower = WindowerLaunch.Prepare(WindowerSetup(polExe, profile, lists, shared), progress, ct); }
         catch (OperationCanceledException)
         {
             progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));

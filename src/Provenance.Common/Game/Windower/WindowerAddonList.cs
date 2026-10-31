@@ -4,7 +4,7 @@ public sealed record WindowerLaunchLists(IReadOnlyList<string> RequiredPlugins, 
                                          IReadOnlyList<string> Addons, IReadOnlyList<string> Skipped);
 
 // a profile's addons and plugins, kept in Provenance's own settings by Windower profile name. UseGlobal (and no entry
-// at all) means settings.xml's <autoload>, which Windower.exe uses for every profile
+// at all) means the shared list, settings.xml's <autoload> plus Provenance's own extras
 public sealed class WindowerAddonList
 {
     public bool UseGlobal { get; set; } = true;
@@ -15,13 +15,17 @@ public sealed class WindowerAddonList
 
     private static List<string> Clean(List<string>? names) => names?.Where(n => !string.IsNullOrWhiteSpace(n)).ToList() ?? [];
 
-    public static WindowerAddonList Global(WindowerSettingsFile settings) =>
-        new() { UseGlobal = true, Addons = [.. settings.Addons], Plugins = [.. settings.Plugins] };
+    public static WindowerAddonList Global(WindowerSettingsFile settings, WindowerAddonList? extras = null) =>
+        new() { UseGlobal = true, Addons = Merge(settings.Addons, extras?.Addons), Plugins = Merge(settings.Plugins, extras?.Plugins) };
+
+    private static List<string> Merge(List<string> names, List<string>? extras) =>
+        [.. names, .. Clean(extras).Where(n => !names.Contains(n, StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase)];
 
     // a profile renamed outside Provenance has no entry any more, so it's back on the global list. settings.json can
     // hold a null for any of it, so nothing here trusts it not to
-    public static WindowerAddonList Effective(WindowerSettingsFile settings, IReadOnlyDictionary<string, WindowerAddonList>? lists, string profileName) =>
-        lists is not null && lists.TryGetValue(profileName, out var own) && own is { UseGlobal: false } ? own.Copy() : Global(settings);
+    public static WindowerAddonList Effective(WindowerSettingsFile settings, IReadOnlyDictionary<string, WindowerAddonList>? lists, string profileName,
+                                              WindowerAddonList? extras = null) =>
+        lists is not null && lists.TryGetValue(profileName, out var own) && own is { UseGlobal: false } ? own.Copy() : Global(settings, extras);
 
     // the new name never inherits whatever an old profile of that name left behind
     public static void Renamed(IDictionary<string, WindowerAddonList> lists, string oldName, string newName)
@@ -46,51 +50,32 @@ public sealed class WindowerAddonList
             lists.Remove(key);
     }
 
-    // the global list goes out exactly as Windower.exe sends it, only a profile's own list can add more. Anything
-    // init.txt or the init command loads itself is left out
+    // the shared list and a profile's own go out the same way: whatever's installed and loadable, less anything
+    // init.txt or the init command loads itself
     public static WindowerLaunchLists ForLaunch(string windowerDir, WindowerProfile profile, WindowerAddonList effective,
                                                 IReadOnlyList<WindowerPluginInfo>? plugins = null, IReadOnlyList<WindowerAddonInfo>? addons = null)
     {
         plugins ??= WindowerPlugins.Scan(windowerDir);
         var skipped = new List<string>();
         var required = plugins.Where(p => p.InManifest && p.Required).Select(p => p.Name).ToList();
-        var wantedPlugins = Clean(effective.Plugins).Distinct(StringComparer.Ordinal).ToList();
-        var wantedAddons = Clean(effective.Addons).Distinct(StringComparer.Ordinal).ToList();
-        List<string> sendPlugins, sendAddons;
+        var wantedPlugins = Clean(effective.Plugins).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var wantedAddons = Clean(effective.Addons).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-        if (effective.UseGlobal)
+        var sendPlugins = new List<string>();
+        foreach (var n in wantedPlugins)
         {
-            var manifest = plugins.Where(p => p.InManifest).ToList();
-            sendPlugins = manifest.Where(p => !p.Required && p.Installed && wantedPlugins.Contains(p.Name, StringComparer.Ordinal)).Select(p => p.Name).ToList();
-            foreach (var n in wantedPlugins)
-                if (manifest.FirstOrDefault(p => p.Name == n) is { } m) { if (!m.Installed && !m.Required) skipped.Add($"{n} (not installed)"); }
-                else skipped.Add($"{n} (not one of Windower's own plugins, only a profile's own list can load it)");
-
-            var tree = WindowerAddons.RepoAddons(windowerDir);
-            sendAddons = tree.Where(a => a.Installed && wantedAddons.Contains(a.Name, StringComparer.Ordinal)).Select(a => a.Name).ToList();
-            var inTree = tree.ToDictionary(a => a.Name, a => a.Installed, StringComparer.Ordinal);
-            foreach (var n in wantedAddons)
-                if (inTree.TryGetValue(n, out var installed)) { if (!installed) skipped.Add($"{n} (addon not installed)"); }
-                else skipped.Add($"{n} (not in Windower's addon list, only a profile's own list can load it)");
+            var p = plugins.FirstOrDefault(x => x.Name.Equals(n, StringComparison.OrdinalIgnoreCase));
+            if (p is { Required: true }) continue;
+            if (p is { Installed: true, IsWindowerPlugin: true }) sendPlugins.Add(p.Name);
+            else skipped.Add(p is { Installed: true } ? $"{n} (not a Windower plugin)" : $"{n} (not installed)");
         }
-        else
-        {
-            sendPlugins = [];
-            foreach (var n in wantedPlugins.Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                var p = plugins.FirstOrDefault(x => x.Name.Equals(n, StringComparison.OrdinalIgnoreCase));
-                if (p is { Required: true }) continue;
-                if (p is { Installed: true, IsWindowerPlugin: true }) sendPlugins.Add(p.Name);
-                else skipped.Add(p is { Installed: true } ? $"{n} (not a Windower plugin)" : $"{n} (not installed)");
-            }
-            sendPlugins = plugins.Select(p => p.Name).Where(sendPlugins.Contains).ToList();
+        sendPlugins = plugins.Select(p => p.Name).Where(sendPlugins.Contains).ToList();
 
-            addons ??= WindowerAddons.Scan(windowerDir);
-            sendAddons = [];
-            foreach (var n in wantedAddons.Distinct(StringComparer.OrdinalIgnoreCase))
-                if (addons.FirstOrDefault(a => a.Name.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Name);
-                else skipped.Add($"{n} (addon not installed)");
-        }
+        addons ??= WindowerAddons.Scan(windowerDir);
+        var sendAddons = new List<string>();
+        foreach (var n in wantedAddons)
+            if (addons.FirstOrDefault(a => a.Name.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Name);
+            else skipped.Add($"{n} (addon not installed)");
 
         // required plugins stay in whatever the scripts say, the addons need LuaCore before init.txt runs
         var loads = ScriptLoads.Read(windowerDir, profile.InitCommand);

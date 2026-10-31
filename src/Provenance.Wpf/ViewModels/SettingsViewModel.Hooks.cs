@@ -54,8 +54,9 @@ public partial class SettingsViewModel
     // the Settings tab that's showing, which the window keeps up to date
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private int _shownTab;
 
-    // Windower/Ashita, Game and Addons and plugins are the tabs that change a profile
-    public bool ShowProfileSwitcher => ShownTab is 1 or 2 or 3 && (IsWindower || IsAshita);
+    // Windower/Ashita, Game and Addons and plugins are the tabs that change a profile, though there's nothing to pick
+    // on Addons and plugins while every profile gets the same list
+    public bool ShowProfileSwitcher => ShownTab is 1 or 2 or 3 && (IsWindower || IsAshita) && !(ShownTab == 3 && Addons is { SameListForEveryProfile: true });
     public bool ShowProfileTools => ShownTab == 1;
     public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita Profile:" : "Editing Windower Profile:";
     internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = WindowerUpdates.NewUpdater;

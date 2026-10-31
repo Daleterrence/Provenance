@@ -62,6 +62,10 @@ public partial class SettingsViewModel : ObservableObject
         Game = new GameSettingsViewModel(region, GameStoreForSelection());
         _gameReady = true;
         Addons = new AddonsPluginsViewModel(settings, this);
+        Addons.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AddonsPluginsViewModel.SameListForEveryProfile)) OnPropertyChanged(nameof(ShowProfileSwitcher));
+        };
     }
 
     public GameSettingsViewModel Game { get; }

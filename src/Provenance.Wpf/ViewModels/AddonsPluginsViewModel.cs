@@ -23,7 +23,7 @@ public sealed record AddonBadge(string Text, string Tip, bool Warn = false);
 // files and Provenance's settings as they are now
 public partial class AddonsPluginsViewModel : ObservableObject
 {
-    private const string LoadedBy = "already loaded by ", OwnListOnly = "only a profile's own list can load it";
+    private const string LoadedBy = "already loaded by ";
     private const string SettingsNotSaved = "Provenance couldn't save your settings, so your changes will only last until Provenance closes.";
     private const string SandboxText =
         "With sandbox on, the game only gets the game settings saved in this boot configuration. Set them on the Game page and save them there.";
@@ -81,12 +81,16 @@ public partial class AddonsPluginsViewModel : ObservableObject
         get => _tab;
         set
         {
-            if (SetProperty(ref _tab, Math.Clamp(value, 0, Tabs.Count - 1))) Filter();
+            if (!SetProperty(ref _tab, Math.Clamp(value, 0, Tabs.Count - 1))) return;
+            OnPropertyChanged(nameof(PageTitle));
+            Filter();
         }
     }
 
+    public string PageTitle => HasLists ? Tabs[Tab] : "Addons and plugins";
+
     [ObservableProperty] private string _search = "";
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasLists))] private string? _message = "";
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasLists), nameof(PageTitle))] private string? _message = "";
     [ObservableProperty] private string _intro = "";
     [ObservableProperty] private string? _problem;
     [ObservableProperty] private string _status = "";
@@ -97,10 +101,12 @@ public partial class AddonsPluginsViewModel : ObservableObject
     [ObservableProperty] private string _cardHeading = "";
     [ObservableProperty] private string _cardName = "";
     [ObservableProperty] private bool _canChangeUseGlobal = true;
-    [ObservableProperty] private string _useGlobalHelp = "";
     [ObservableProperty] private string? _noAddons;
     [ObservableProperty] private string? _noPlugins;
     [ObservableProperty] private string? _noPolPlugins;
+    // Windower's shared list, so Settings hides the profile switcher. While a page loads it's a guess from the
+    // settings, or the switcher would pop up and vanish again
+    [ObservableProperty] private bool _sameListForEveryProfile;
 
     public bool HasLists => Message is null;
 
@@ -159,6 +165,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
             Plugins.Clear();
             PolPlugins.Clear();
             Message = "Looking for addons and plugins...";
+            SameListForEveryProfile = target.Platform == ThirdPartyHookService.Windower
+                                      && _settings.Current.WindowerAddonLists?.GetValueOrDefault(target.Profile) is not { UseGlobal: false };
             Filter();
         }
         object? scan;
@@ -180,7 +188,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     {
         if (_shown is not { } target) return;
         Page page;
-        try { page = Build(target, Lists(), _scan); }
+        try { page = Build(target, Lists(), _settings.Current.WindowerSharedExtras?.Copy(), _scan); }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not read the addons and plugins in {Folder}", target.Folder);
@@ -206,11 +214,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
         CardName = page.Display;
         _useGlobal = page.UseGlobal;
         OnPropertyChanged(nameof(UseGlobal));
+        SameListForEveryProfile = IsWindower && page.UseGlobal;
         CanChangeUseGlobal = !(page.UseGlobal && page.ListLocked);
-        var who = page.Key.Length == 0 ? "the default profile" : page.Key;
-        UseGlobalHelp = page.UseGlobal
-            ? $"This is the list in Windower's own settings, which Windower's own launcher uses for every profile too. Turn this off to give {who} a list of its own."
-            : $"{(page.Key.Length == 0 ? "The default profile" : page.Key)} has a list of its own. Turn this on to use the list in Windower's own settings again.";
         Fill(Addons, page.Addons);
         Fill(Plugins, page.Plugins);
         Fill(PolPlugins, page.PolPlugins);
@@ -313,7 +318,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         {
             // a settings.xml that didn't read is an empty list, and that'd stick as the profile's own
             var file = Readable(dir);
-            if (own is null) lists[key] = own = WindowerAddonList.Global(file);
+            if (own is null) lists[key] = own = WindowerAddonList.Global(file, _settings.Current.WindowerSharedExtras);
             own.UseGlobal = false;
         }
         SaveSettings();
@@ -366,9 +371,26 @@ public partial class AddonsPluginsViewModel : ObservableObject
             SaveSettings();
             return;
         }
-        Readable(dir);
-        WindowerSettingsFile.Update(dir, f => Toggle(row.Kind == AddonKind.Addon ? f.Addons : f.Plugins, row.Key, on));
+        var file = Readable(dir);
+        var extras = _settings.Current.WindowerSharedExtras ??= new WindowerAddonList();
+        var extraNames = row.Kind == AddonKind.Addon ? extras.Addons ??= [] : extras.Plugins ??= [];
+        var offered = OfferedByWindower(row);
+        if (on ? offered is not null : Has(row.Kind == AddonKind.Addon ? file.Addons : file.Plugins, row.Key))
+            WindowerSettingsFile.Update(dir, f => Toggle(row.Kind == AddonKind.Addon ? f.Addons : f.Plugins, offered ?? row.Key, on));
+        if (on ? offered is null : Has(extraNames, row.Key))
+        {
+            Toggle(extraNames, row.Key, on);
+            SaveSettings();
+        }
     }
+
+    // settings.xml only ever gets names Windower.exe offers itself, spelt its way. Everything else on the shared list
+    // stays in Provenance's own settings
+    private string? OfferedByWindower(AddonRow row) => _scan is not WindowerScan scan ? null
+        : row.Kind == AddonKind.Addon ? scan.Tree?.Addons.FirstOrDefault(a => Same(a.Name, row.Key))?.Name
+        : scan.Plugins.FirstOrDefault(p => p.InManifest && Same(p.Name, row.Key))?.Name;
+
+    private static bool Has(List<string> names, string name) => names.Any(n => Same(n, name));
 
     private static void Toggle(List<string> names, string name, bool on)
     {
@@ -478,6 +500,29 @@ public partial class AddonsPluginsViewModel : ObservableObject
         await Refreshing;
     }
 
+    // a test swaps it for one that just notes the path
+    internal Action<string, bool> ShowInExplorer { get; set; } = (path, isFile) => { if (isFile) Explorer.ShowFile(path); else Explorer.ShowFolder(path); };
+
+    // an addon opens its own folder, a plugin its folder with the DLL picked
+    [RelayCommand]
+    private void OpenFolder(AddonRow? row)
+    {
+        if (row?.Location is not { } path) return;
+        bool isFile = row.Kind != AddonKind.Addon;
+        if (isFile ? !File.Exists(path) : !Directory.Exists(path))
+        {
+            ShowError($"{row.Name} isn't installed any more.");
+            Refreshing = RefreshAsync();
+            return;
+        }
+        try { ShowInExplorer(path, isFile); }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not open {Path} in Explorer", path);
+            ShowError("Windows couldn't open that folder.");
+        }
+    }
+
     private static Task<WindowerInstallResult> InstallFromWindower(string dir, string branch, AddonKind kind, string name)
     {
         var updater = new WindowerUpdater(dir, branch);
@@ -493,12 +538,12 @@ public partial class AddonsPluginsViewModel : ObservableObject
         _ => null,
     };
 
-    private static Page Build(AddonsTarget target, IReadOnlyDictionary<string, WindowerAddonList> lists, object? scan) => target switch
+    private static Page Build(AddonsTarget target, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras, object? scan) => target switch
     {
         { Platform: ThirdPartyHookService.Windower, Folder: null } =>
             Page.Empty("Provenance couldn't find Windower. Choose its folder under Windower/Ashita first."),
         { Platform: ThirdPartyHookService.Windower, Folder: { } dir } when ThirdPartyHookService.IsLinkedFolder(dir) => Page.Empty(ThirdPartyHookService.LinkedWindowerText),
-        { Platform: ThirdPartyHookService.Windower, Folder: { } dir } => BuildWindower(dir, target.Profile, lists, scan as WindowerScan),
+        { Platform: ThirdPartyHookService.Windower, Folder: { } dir } => BuildWindower(dir, target.Profile, lists, extras, scan as WindowerScan),
         { Platform: ThirdPartyHookService.Ashita, Folder: null } =>
             Page.Empty("Provenance couldn't find Ashita. Choose its folder under Windower/Ashita first."),
         { Platform: ThirdPartyHookService.Ashita, Folder: { } dir } => BuildAshita(dir, target.Profile, scan as AshitaScan),
@@ -507,7 +552,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     private sealed record WindowerScan(IReadOnlyList<WindowerPluginInfo> Plugins, IReadOnlyList<WindowerAddonInfo> Addons, WindowerAddonTree? Tree);
 
-    private static Page BuildWindower(string dir, string profileName, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerScan? scan)
+    private static Page BuildWindower(string dir, string profileName, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras,
+                                      WindowerScan? scan)
     {
         scan ??= (WindowerScan)Scan(new AddonsTarget(ThirdPartyHookService.Windower, dir, profileName))!;
         var page = new Page { Platform = ThirdPartyHookService.Windower };
@@ -531,7 +577,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         page.Display = SettingsViewModel.WindowerDisplay(page.Key, file.Profiles.Select(p => p.Name).ToList());
         page.Branch = file.Branch;
         page.Intro = "Turn addons and plugins on or off for this profile. Changes save straight away.";
-        var effective = WindowerAddonList.Effective(file, lists, page.Key);
+        var effective = WindowerAddonList.Effective(file, lists, page.Key, extras);
         page.UseGlobal = effective.UseGlobal;
         page.ListLocked = locked;
         profile ??= new WindowerProfile();
@@ -546,13 +592,11 @@ public partial class AddonsPluginsViewModel : ObservableObject
         var missingAddons = Missing(effective.Addons, scan.Addons.Select(a => a.Name).Concat(notInstalled.Select(t => t.Name)));
         var addonNames = scan.Addons.Select(a => a.Name).Concat(notInstalled.Select(t => t.Name)).Concat(missingAddons).ToList();
 
-        var loadedPlugins = Reasons(dir, profile, scan, false, pluginNames, []);
-        var loadedAddons = Reasons(dir, profile, scan, false, [], addonNames);
-        var globalPlugins = Reasons(dir, profile, scan, true, pluginNames, []);
-        var globalAddons = Reasons(dir, profile, scan, true, [], addonNames);
+        var loadedPlugins = Reasons(dir, profile, scan, pluginNames, []);
+        var loadedAddons = Reasons(dir, profile, scan, [], addonNames);
 
         RowData Row(AddonKind kind, string key, string name, string? version, string? author, string? description, bool isInstalled, bool installable,
-                    bool windowerPlugin = true)
+                    bool windowerPlugin = true, bool official = false, string? location = null)
         {
             var on = Listed(kind == AddonKind.Addon ? effective.Addons : effective.Plugins, key);
             var badges = new List<AddonBadge>();
@@ -569,24 +613,21 @@ public partial class AddonsPluginsViewModel : ObservableObject
                 badges.Add(why.EndsWith("init.txt", StringComparison.Ordinal) ? Badges.InitTxt : Badges.InitCommand);
                 hasSwitch = false;
             }
-            var global = kind == AddonKind.Addon ? globalAddons : globalPlugins;
-            if (effective.UseGlobal && isInstalled && windowerPlugin && global.TryGetValue(key, out var skip) && skip.EndsWith(OwnListOnly, StringComparison.Ordinal))
-            {
-                badges.Add(Badges.OwnListOnly);
-                canTurnOn = false;
-            }
             return new RowData(kind, key, name, version, author, description)
             {
                 On = on, HasSwitch = hasSwitch, CanChange = !frozen && (canTurnOn || on), CanInstall = !isInstalled && installable, Badges = badges,
+                Team = official ? "Windower" : null, Location = isInstalled ? location : null,
             };
         }
 
+        var repo = (scan.Tree?.Addons ?? []).Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         page.Plugins = plugins.Select(p => Row(AddonKind.Plugin, p.Name, p.Name, (p.FileVersion ?? p.ManifestVersion)?.ToString(), null,
-                                               Blank(p.Description), p.Installed, p.InManifest, p.IsWindowerPlugin))
+                                               Blank(p.Description), p.Installed, p.InManifest, p.IsWindowerPlugin, official: p.InManifest, location: p.Path))
             .Concat(missingPlugins.Select(n => Row(AddonKind.Plugin, n, n, null, null, null, false, false)))
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        page.Addons = scan.Addons.Select(a => Row(AddonKind.Addon, a.Name, a.DisplayName, a.Version, a.Author, a.Description, true, false))
-            .Concat(notInstalled.Select(t => Row(AddonKind.Addon, t.Name, t.Name, null, null, null, false, true)))
+        page.Addons = scan.Addons.Select(a => Row(AddonKind.Addon, a.Name, a.DisplayName, a.Version, a.Author, a.Description, true, false,
+                                                  official: repo.Contains(a.Name), location: Path.GetDirectoryName(a.MainFile)))
+            .Concat(notInstalled.Select(t => Row(AddonKind.Addon, t.Name, t.Name, null, null, null, false, true, official: true)))
             .Concat(missingAddons.Select(n => Row(AddonKind.Addon, n, n, null, null, null, false, false)))
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
         page.NoAddons = $"No addons found in {Path.Combine(dir, "addons")}.";
@@ -602,10 +643,9 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     // the launch's own skip reasons read back, so a badge never disagrees with what really loads. Bit cheeky, but
     // nothing else knows
-    private static Dictionary<string, string> Reasons(string dir, WindowerProfile profile, WindowerScan scan, bool useGlobal,
-                                                      List<string> plugins, List<string> addons)
+    private static Dictionary<string, string> Reasons(string dir, WindowerProfile profile, WindowerScan scan, List<string> plugins, List<string> addons)
     {
-        var list = new WindowerAddonList { UseGlobal = useGlobal, Plugins = plugins, Addons = addons };
+        var list = new WindowerAddonList { Plugins = plugins, Addons = addons };
         var reasons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var s in WindowerAddonList.ForLaunch(dir, profile, list, scan.Plugins, scan.Addons).Skipped)
         {
@@ -655,7 +695,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
 
         RowData Row(AddonKind kind, string key, string name, string? version, string? author, string? description, AshitaLoad state,
-                    bool installed, AddonBadge? problem = null)
+                    bool installed, AddonBadge? problem = null, string? location = null)
         {
             var badges = new List<AddonBadge>();
             if (!installed) badges.Add(Badges.NotInAshita);
@@ -666,24 +706,26 @@ public partial class AddonsPluginsViewModel : ObservableObject
             return new RowData(kind, key, name, version, author, description)
             {
                 On = on, HasSwitch = state != AshitaLoad.ByScript, CanChange = !readOnly && (canTurnOn || on), Badges = badges,
+                Team = AshitaTeam(kind, key), Location = installed ? location : null,
             };
         }
 
-        List<RowData> Rows(AddonKind kind, IEnumerable<(string Key, string Name, string? Version, string? Author, string? Description, AddonBadge? Problem)> found,
+        List<RowData> Rows(AddonKind kind,
+                           IEnumerable<(string Key, string Name, string? Version, string? Author, string? Description, AddonBadge? Problem, string Location)> found,
                            IEnumerable<string> loaded, Func<string, AshitaLoad> state)
         {
             var list = found.ToList();
-            return list.Select(f => Row(kind, f.Key, f.Name, f.Version, f.Author, f.Description, state(f.Key), true, f.Problem))
+            return list.Select(f => Row(kind, f.Key, f.Name, f.Version, f.Author, f.Description, state(f.Key), true, f.Problem, f.Location))
                 .Concat(Missing(loaded, list.Select(f => f.Key)).Select(n => Row(kind, n, n, null, null, null, state(n), false)))
                 .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
         page.Addons = Rows(AddonKind.Addon,
-            scan.Addons.Select(a => (a.LoadName, a.Name, a.Version, a.Author, a.Description, a.NotForAshitaV4 ? Badges.NotForV4 : null)),
+            scan.Addons.Select(a => (a.LoadName, a.Name, a.Version, a.Author, a.Description, a.NotForAshitaV4 ? Badges.NotForV4 : null, a.Folder)),
             script.Addons.Select(a => a.Name), script.Addon);
         page.Plugins = Rows(AddonKind.Plugin,
             scan.Plugins.Where(p => p.Kind == AshitaPluginKind.Plugin)
-                .Select(p => (p.LoadName, p.Name, p.VersionText, p.Author, p.Description, p.ForOtherAshita ? Badges.OtherAshita : null)),
+                .Select(p => (p.LoadName, p.Name, p.VersionText, p.Author, p.Description, p.ForOtherAshita ? Badges.OtherAshita : null, p.Dll)),
             script.Plugins.Select(p => p.Name), script.Plugin);
 
         var pol = boot.PolPlugins;
@@ -692,9 +734,9 @@ public partial class AddonsPluginsViewModel : ObservableObject
         // a switched-off one shows off whatever the boot configuration says, as it is when Provenance starts the game
         var polRows = polFound.Select(p => AshitaBootFiles.IsTakeover(p.LoadName)
             ? new RowData(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, ThirdPartyHookService.IncompatibleReason(p.LoadName))
-                { CanChange = false, Incompatible = true, Badges = [Badges.Incompatible] }
+                { CanChange = false, Incompatible = true, Badges = [Badges.Incompatible], Team = AshitaTeam(AddonKind.PolPlugin, p.LoadName), Location = p.Dll }
             : Row(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, p.Description, PolState(p.LoadName), true,
-                  p.ForOtherAshita ? Badges.OtherAshita : null)).ToList();
+                  p.ForOtherAshita ? Badges.OtherAshita : null, p.Dll)).ToList();
         var turnedOn = pol.Where(p => p.On && !AshitaBootFiles.IsTakeover(p.Name)).Select(p => p.Name);
         polRows.AddRange(Missing(turnedOn, polFound.Select(p => p.LoadName))
             .Select(n => Row(AddonKind.PolPlugin, n, n, null, null, null, AshitaLoad.On, false)));
@@ -705,6 +747,13 @@ public partial class AddonsPluginsViewModel : ObservableObject
         page.NoPolPlugins = $"No PlayOnline plugins found in {Path.Combine(dir, "polplugins")}.";
         return page;
     }
+
+    private static string? AshitaTeam(AddonKind kind, string name) => kind switch
+    {
+        AddonKind.Addon => AshitaShipped.IsAddon(name),
+        AddonKind.Plugin => AshitaShipped.IsPlugin(name),
+        _ => AshitaShipped.IsPolPlugin(name),
+    } ? "Ashita" : null;
 
     private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
@@ -736,9 +785,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
             "Windower's scripts\\init.txt loads this itself, so it loads no matter what the list says.");
         public static readonly AddonBadge InitCommand = new("Loaded by this profile's init command",
             "This profile's init command loads it itself, so it loads no matter what the list says.");
-        public static readonly AddonBadge OwnListOnly = new("Only with this profile's own list",
-            "Windower's shared list only takes addons and plugins that Windower offers itself. Turn off Use the same list for every profile to load this one.",
-            Warn: true);
         public static readonly AddonBadge ByScript = new("Loaded by your script",
             "Your Ashita script loads this in a way Provenance can't safely change, so it's left as it is.");
         public static readonly AddonBadge NotForV4 = new("Not for Ashita v4",
@@ -766,6 +812,10 @@ internal sealed record RowData(AddonKind Kind, string Key, string Name, string? 
     public bool CanInstall { get; init; }
     public bool Incompatible { get; init; }
     public IReadOnlyList<AddonBadge> Badges { get; init; } = [];
+    // the team that makes it, when it comes with Windower or Ashita
+    public string? Team { get; init; }
+    // an addon's folder or a plugin's DLL, only once it's installed
+    public string? Location { get; init; }
 }
 
 public sealed partial class AddonRow : ObservableObject
@@ -794,6 +844,8 @@ public sealed partial class AddonRow : ObservableObject
     [ObservableProperty] private bool _incompatible;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _installing;
     [ObservableProperty] private bool _visible = true;
+    [ObservableProperty] private string? _verifiedTip;
+    [ObservableProperty] private string? _location;
     private string? _author;
 
     public bool SwitchEnabled => CanChange && !Installing;
@@ -821,6 +873,8 @@ public sealed partial class AddonRow : ObservableObject
         CanChange = d.CanChange;
         CanInstall = d.CanInstall;
         Incompatible = d.Incompatible;
+        VerifiedTip = d.Team is { } team ? $"This {(Kind == AddonKind.Addon ? "addon" : "plugin")} is provided and maintained by the {team} development team." : null;
+        Location = d.Location;
         if (_on != d.On)
         {
             _on = d.On;

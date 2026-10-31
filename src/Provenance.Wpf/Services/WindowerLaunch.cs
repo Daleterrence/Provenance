@@ -24,6 +24,7 @@ public sealed record WindowerLaunchSetup
     public required PolRegion Region { get; init; }
     public string? FfxiDir { get; init; }
     public IReadOnlyDictionary<string, WindowerAddonList>? Lists { get; init; }
+    public WindowerAddonList? SharedExtras { get; init; }
     // a test's own key in place of HKLM, and its own update server
     public RegistryKey? RegistryRoot { get; init; }
     public Func<string, string, WindowerUpdater>? NewUpdater { get; init; }
@@ -83,7 +84,7 @@ public sealed class WindowerLaunch : IDisposable
     };
 
     public static WindowerLaunchSetup SetupFor(ISettingsService settings, string polExe, string? accountProfile,
-                                              IReadOnlyDictionary<string, WindowerAddonList>? lists)
+                                              IReadOnlyDictionary<string, WindowerAddonList>? lists, WindowerAddonList? shared = null)
     {
         var s = settings.Current;
         var dir = ThirdPartyHookService.DetectWindower(s.WindowerPath)
@@ -98,6 +99,7 @@ public sealed class WindowerLaunch : IDisposable
             Region = region,
             FfxiDir = PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct),
             Lists = lists,
+            SharedExtras = shared,
         };
     }
 
@@ -257,7 +259,7 @@ public sealed class WindowerLaunch : IDisposable
         var dir = _setup.WindowerDir;
         var ffxi = _setup.FfxiDir
                    ?? throw Shown.Mark(new DirectoryNotFoundException("Provenance couldn't find the FINAL FANTASY XI folder, so it can't start the game through Windower."));
-        Lists = WindowerAddonList.ForLaunch(dir, Profile, WindowerAddonList.Effective(file, _setup.Lists, Profile.Name));
+        Lists = WindowerAddonList.ForLaunch(dir, Profile, WindowerAddonList.Effective(file, _setup.Lists, Profile.Name, _setup.SharedExtras));
         var sent = Profile.Clone();
         // fast login swaps in Windower's own POL proxy and the other two patch pol.exe, all of which fight the hook.
         // settings.xml keeps the user's own values for Windower.exe
