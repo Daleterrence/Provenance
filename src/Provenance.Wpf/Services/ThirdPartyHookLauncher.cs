@@ -64,7 +64,7 @@ public static class ThirdPartyHookLauncher
             catch (Exception ex)
             {
                 Log.Error(ex, "Could not write the Ashita boot config");
-                return Fail("Provenance couldn't make its copy of your Ashita boot configuration.");
+                return Fail(ErrorText.Of(ex, "Provenance couldn't make its copy of your Ashita boot configuration."));
             }
             psi.FileName = Path.Combine(dir, "Ashita-cli.exe");
             psi.ArgumentList.Add(bootFile);

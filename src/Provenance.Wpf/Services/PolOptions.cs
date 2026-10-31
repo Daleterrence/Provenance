@@ -1,7 +1,6 @@
 using System.IO;
-using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
 using Serilog;
+using Provenance.Common.IO;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Wpf.Services;
@@ -87,7 +86,7 @@ public static class PolOptions
             Log.Warning("option.bin for home{Slot:00} has no usable chat filter or auto-disconnect entry", slot);
             return;
         }
-        using var pins = Pins.Hold(viewerDir, dir);
+        using var pins = FolderPins.Hold(viewerDir, dir);
         if (pins is null)
         {
             Log.Warning("pub\\home{Slot:00} couldn't be held for the write, its POL settings are left alone", slot);
@@ -106,91 +105,8 @@ public static class PolOptions
         finally { try { File.Delete(tmp); } catch { } }
     }
 
-    // the viewer folder may be one users can write to, so nothing below it can be a link that sends a write elsewhere.
-    // The same rule as the hook's plain_path, with the last part a file or a folder
-    internal static bool Plain(string viewerDir, string path, bool lastIsFolder)
-    {
-        var root = Path.GetFullPath(viewerDir).TrimEnd('\\');
-        var full = Path.GetFullPath(path);
-        if (!full.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase)) return false;
-        var parts = full[(root.Length + 1)..].Split('\\');
-        var at = root;
-        for (int i = 0; i < parts.Length; i++)
-        {
-            at = Path.Combine(at, parts[i]);
-            FileAttributes a;
-            try { a = File.GetAttributes(at); }
-            catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException) { return true; }
-            if (a.HasFlag(FileAttributes.ReparsePoint)) return false;
-            if (a.HasFlag(FileAttributes.Directory) != (lastIsFolder || i < parts.Length - 1)) return false;
-        }
-        return true;
-    }
+    // the viewer folder may be one users can write to, so nothing below it can be a link that sends a write elsewhere
+    internal static bool Plain(string viewerDir, string path, bool lastIsFolder) => FolderPins.Plain(viewerDir, path, lastIsFolder);
 
-    internal static IDisposable? HoldFolders(string viewerDir, string dir) => Pins.Hold(viewerDir, dir);
-
-    // each folder from the viewer one down, opened without delete sharing so none can be renamed and swapped for a link
-    // while the file's written. A read-attributes-only handle wouldn't do, those don't count for sharing
-    private sealed class Pins : IDisposable
-    {
-        private readonly List<SafeFileHandle> _held = [];
-
-        public static Pins? Hold(string viewerDir, string dir)
-        {
-            var pins = new Pins();
-            var at = Path.GetFullPath(viewerDir).TrimEnd('\\');
-            var rest = Path.GetFullPath(dir)[(at.Length + 1)..].Split('\\');
-            if (!pins.Add(at)) return pins.Fail();
-            foreach (var part in rest)
-            {
-                at = Path.Combine(at, part);
-                if (!Directory.Exists(at)) Directory.CreateDirectory(at);
-                if (!pins.Add(at)) return pins.Fail();
-            }
-            return pins;
-        }
-
-        private bool Add(string dir)
-        {
-            var h = CreateFileW(dir, ListDirectory | ReadAttributes, ShareRead | ShareWrite, IntPtr.Zero, OpenExisting,
-                                BackupSemantics | OpenReparsePoint, IntPtr.Zero);
-            if (h.IsInvalid || !GetFileInformationByHandleEx(h, AttributeTagInfo, out var tag, 8) ||
-                (tag.Attributes & (uint)FileAttributes.Directory) == 0 || (tag.Attributes & (uint)FileAttributes.ReparsePoint) != 0)
-            {
-                h.Dispose();
-                return false;
-            }
-            _held.Add(h);
-            return true;
-        }
-
-        private Pins? Fail()
-        {
-            Dispose();
-            return null;
-        }
-
-        public void Dispose()
-        {
-            foreach (var h in _held) h.Dispose();
-            _held.Clear();
-        }
-
-        private const uint ListDirectory = 0x1, ReadAttributes = 0x80, ShareRead = 1, ShareWrite = 2, OpenExisting = 3;
-        private const uint BackupSemantics = 0x02000000, OpenReparsePoint = 0x00200000;
-        private const int AttributeTagInfo = 9;
-
-        private struct AttributeTag
-        {
-            public uint Attributes;
-            public uint ReparseTag;
-        }
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint disposition,
-                                                         uint flags, IntPtr template);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool GetFileInformationByHandleEx(SafeFileHandle file, int infoClass, out AttributeTag info, uint size);
-    }
+    internal static IDisposable? HoldFolders(string viewerDir, string dir) => FolderPins.Hold(viewerDir, dir);
 }

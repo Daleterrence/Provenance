@@ -64,10 +64,19 @@ public static class WindowerSettings
         {
             try { gate = AdminLock.TryAcquire("windower-settings", TimeSpan.FromSeconds(5)); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-            var tmp = $"{file}.provenance.{Environment.ProcessId}.tmp";
+            var tmp = $"{file}.provenance.{Guid.NewGuid():N}.tmp";
             var ws = new XmlWriterSettings { Encoding = new UTF8Encoding(false), Indent = true, IndentChars = "  " };
-            using (var w = XmlWriter.Create(tmp, ws)) doc.Save(w);
-            File.Move(tmp, file, overwrite: true);
+            try
+            {
+                using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (var w = XmlWriter.Create(fs, ws))
+                    doc.Save(w);
+                File.Move(tmp, file, overwrite: true);
+            }
+            finally
+            {
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
         }
         finally { gate?.Dispose(); }
         return new CopyResult(name, source, src is not null, true);

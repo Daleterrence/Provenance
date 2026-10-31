@@ -1,7 +1,7 @@
 using System.IO;
-using System.Text;
 using System.Text.RegularExpressions;
 using Provenance.Common.Game;
+using Provenance.Common.Game.Ashita;
 using Provenance.Common.PolFormat;
 using Serilog;
 
@@ -12,16 +12,6 @@ namespace Provenance.Wpf.Services;
 public sealed class ThirdPartyHookService
 {
     public const string None = "none", Ashita = "ashita", Windower = "windower";
-    private const string AshitaBootPrefix = "provenance";
-
-    // one copy per source config, so two accounts on different configs never overwrite one Ashita's still reading
-    public static string AshitaBootNameFor(string? source) =>
-        string.IsNullOrWhiteSpace(source) ? AshitaBootPrefix + ".ini"
-                                          : $"{AshitaBootPrefix}.{Path.GetFileNameWithoutExtension(source)}.ini";
-
-    public static bool IsOwnAshitaBoot(string fileName) =>
-        fileName.Equals(AshitaBootPrefix + ".ini", StringComparison.OrdinalIgnoreCase)
-        || fileName.StartsWith(AshitaBootPrefix + ".", StringComparison.OrdinalIgnoreCase);
 
     public static string NativeDir => Path.Combine(AppContext.BaseDirectory, "native");
 
@@ -43,16 +33,7 @@ public sealed class ThirdPartyHookService
                 if (!string.IsNullOrEmpty(pf)) yield return Path.Combine(pf, n);
     }
 
-    public static IReadOnlyList<string> AshitaBootConfigs(string? ashitaDir)
-    {
-        if (ashitaDir is null) return Array.Empty<string>();
-        var dir = Path.Combine(ashitaDir, "config", "boot");
-        if (!Directory.Exists(dir)) return Array.Empty<string>();
-        return Directory.GetFiles(dir, "*.ini")
-            .Select(Path.GetFileName).OfType<string>()
-            .Where(n => !IsOwnAshitaBoot(n))
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-    }
+    public static IReadOnlyList<string> AshitaBootConfigs(string? ashitaDir) => AshitaBootFiles.List(ashitaDir);
 
     // Ashita writes the boot config into each log ("Ashita Config Script: \boot\config.ini"), so the newest log that
     // isn't from my own launch wins. Bit cheeky, but it works
@@ -72,7 +53,9 @@ public sealed class ThirdPartyHookService
                 var buf = new char[16384];   // the header's at the top
                 var head = new string(buf, 0, sr.Read(buf, 0, buf.Length));
                 var m = re.Match(head);
-                if (m.Success && !IsOwnAshitaBoot(m.Groups["n"].Value))
+                // one that's been renamed or deleted since would only fail the launch
+                if (m.Success && !AshitaBootFiles.IsLaunchCopy(m.Groups["n"].Value)
+                    && File.Exists(Path.Combine(AshitaBootFiles.Folder(ashitaDir), m.Groups["n"].Value)))
                     return m.Groups["n"].Value;
             }
         }
@@ -105,17 +88,6 @@ public sealed class ThirdPartyHookService
         return r.Name;
     }
 
-    private static void EnsureKey(List<string> lines, string section, string key, string value)
-    {
-        int sec = lines.FindIndex(l => l.Trim().Equals($"[{section}]", StringComparison.OrdinalIgnoreCase));
-        if (sec < 0) { lines.Add($"[{section}]"); lines.Add($"{key} = {value}"); return; }
-        int end = lines.FindIndex(sec + 1, l => l.TrimStart().StartsWith("["));
-        if (end < 0) end = lines.Count;
-        for (int i = sec + 1; i < end; i++)
-            if (lines[i].Split('=')[0].Trim().Equals(key, StringComparison.OrdinalIgnoreCase)) { lines[i] = $"{key} = {value}"; return; }
-        lines.Insert(end, $"{key} = {value}");
-    }
-
     private static PolRegion? RegionOfPol(string polExe) =>
         Path.GetDirectoryName(polExe) is { Length: > 0 } dir ? PolEnv.Region(dir) : null;
 
@@ -131,36 +103,6 @@ public sealed class ThirdPartyHookService
     // Windower's -r JP for a JP pol.exe. US and EU stay on Windower's own Auto
     internal static string? WindowerRegion(string polExe) => RegionOfPol(polExe) == PolRegion.Japan ? "JP" : null;
 
-    // the user's boot config minus anything that'd fight the app: no command line (it can carry a credential blob), no
-    // sign-in plugin or menu skip, and file = the real pol.exe
-    public static string WriteAshitaBoot(string ashitaDir, string? sourceName, string polExe)
-    {
-        var bootDir = Path.Combine(ashitaDir, "config", "boot");
-        Directory.CreateDirectory(bootDir);
-        var src = string.IsNullOrWhiteSpace(sourceName) ? null : Path.Combine(bootDir, sourceName!);
-        var lines = src != null && File.Exists(src) ? File.ReadAllLines(src) : new[]
-        {
-            "[ashita.launcher]", "autoclose = 1", "name = provenance",
-            "[ashita.boot]", "file = ", "command = ", "gamemodule = ffximain.dll", "script = default.txt", "args = ",
-            "[ashita.language]", $"playonline = {AshitaLanguage(polExe)}", "ashita = 2",
-            "[ashita.polplugins]", "sandbox = 0", "autopol = 0", "quicky = 0",
-        };
-        var outLines = lines.Select(line => line.Split('=')[0].Trim().ToLowerInvariant() switch
-        {
-            "command" => "command = /game eAZcFcB",
-            "autopol" => "autopol = 0",
-            "quicky" => "quicky = 0",
-            "name" when line.TrimStart().StartsWith("name", StringComparison.OrdinalIgnoreCase) => "name = provenance",
-            "file" => $"file = {polExe}",
-            _ => line,
-        }).ToList();
-        EnsureKey(outLines, "ashita.boot", "command", "/game eAZcFcB");
-        EnsureKey(outLines, "ashita.boot", "file", polExe);
-        EnsureKey(outLines, "ashita.boot", "args", "");
-        EnsureKey(outLines, "ashita.polplugins", "autopol", "0");
-        EnsureKey(outLines, "ashita.polplugins", "quicky", "0");
-        var target = Path.Combine(bootDir, AshitaBootNameFor(sourceName));
-        File.WriteAllLines(target, outLines, new UTF8Encoding(false));
-        return target;
-    }
+    public static string WriteAshitaBoot(string ashitaDir, string? sourceName, string polExe) =>
+        AshitaBootFiles.WriteLaunchCopy(ashitaDir, sourceName, polExe, AshitaLanguage(polExe));
 }

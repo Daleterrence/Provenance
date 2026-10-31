@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="provenance-cli" />
+    <InternalsVisibleTo Include="provenance-app-tests" />
     <PackageReference Include="NaCl.Net" Version="0.1.13" />
     <PackageReference Include="SharpCompress" Version="0.50.7" />
   </ItemGroup>

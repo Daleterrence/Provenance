@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using Provenance.Common.IO;
 using Provenance.Common.Locks;
 
 namespace Provenance.Common.Game.Windower;
@@ -218,7 +219,7 @@ public sealed class WindowerSettingsFile
     {
         if (LoadError is not null)
             throw Shown.Mark(new InvalidOperationException(
-                "Windower's settings.xml couldn't be read, so Provenance won't save over it. Set it aside first to start a new one."));
+                "Windower's settings.xml couldn't be read, so Provenance won't save over it. Choose Start a new settings file under Windower/Ashita to set it aside and start again."));
     }
 
     // if the lock doesn't come it writes anyway, the move swaps settings.xml whole
@@ -228,17 +229,20 @@ public sealed class WindowerSettingsFile
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
+    // a new temp name every time and never opened over anything already there, so nothing planted can catch the write
     private static void Write(string path, byte[] bytes)
     {
-        var tmp = $"{path}.provenance.{Environment.ProcessId}.tmp";
+        var full = Path.GetFullPath(path);
+        var tmp = $"{full}.provenance.{Guid.NewGuid():N}.tmp";
+        LinkCheck.Refuse(Path.GetDirectoryName(full) ?? full, full, tmp);
         try
         {
-            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 fs.Write(bytes);
                 fs.Flush(flushToDisk: true);
             }
-            File.Move(tmp, path, overwrite: true);
+            File.Move(tmp, full, overwrite: true);
         }
         finally
         {
