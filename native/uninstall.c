@@ -1,5 +1,6 @@
-/* pol_uninstall.c - the Add/Remove Programs uninstaller for the POL and FFXI installs Provenance applies itself (no
-   Windows Installer, so no MsiExec /X). Run as uninstall.exe "<install>\Uninstall\{ProductCode}.txt" [/quiet]
+/* uninstall.c - the Add/Remove Programs uninstaller for the POL and FFXI installs Provenance applies itself (no
+   Windows Installer, so no MsiExec /X). Built twice, once per product with FFXI_UNINSTALL for the game's, so the
+   UAC prompt names the right one. Run as <this exe> "<install>\Uninstall\{ProductCode}.txt" [/quiet]
    The .txt is UTF-16LE, one item per line:
      N <display name>
      A <Uninstall key>                  HKLM, 32-bit view
@@ -19,6 +20,16 @@
 #include <tlhelp32.h>
 #include <wchar.h>
 #include <stdlib.h>
+
+#ifdef FFXI_UNINSTALL
+#define TITLE L"Provenance - FINAL FANTASY XI Uninstall"
+#else
+#define TITLE L"Provenance - PlayOnline Uninstall"
+#endif
+
+/* both products share the Uninstall folder, so the last one out takes both programs with it */
+static const wchar_t *const g_programs[] = { L"Provenance - PlayOnline Uninstall.exe",
+                                             L"Provenance - FINAL FANTASY XI Uninstall.exe" };
 
 static HWND g_label;
 static wchar_t g_name[256] = L"FINAL FANTASY XI";
@@ -175,22 +186,22 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
 {
     int argc;
     wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    wchar_t *text, ask[512], self[MAX_PATH], dir[MAX_PATH], *slash, pattern[MAX_PATH + 8];
+    wchar_t *text, ask[512], dir[MAX_PATH], *slash, pattern[MAX_PATH + 8];
     DWORD chars;
     WIN32_FIND_DATAW fd;
     HANDLE h;
-    int quiet;
+    int quiet, i;
     (void)prev; (void)cmd; (void)show;
     quiet = argc >= 3 && !_wcsicmp(argv[2], L"/quiet");
     if (argc < 2 || !(text = load(argv[1], &chars))) {
-        MessageBoxW(NULL, L"The uninstall information was not found.", L"Uninstall", MB_ICONERROR);
+        MessageBoxW(NULL, L"The uninstall information was not found.", TITLE, MB_ICONERROR);
         return 1;
     }
     run(text, chars, L'N');
     wsprintfW(ask, L"Remove %s from this computer?\n\nYour FINAL FANTASY XI settings and the files that game updates added are kept, as with Square Enix's own uninstall.", g_name);
-    if (!quiet && MessageBoxW(NULL, ask, L"Uninstall", MB_YESNO | MB_ICONQUESTION) != IDYES) return 2;
+    if (!quiet && MessageBoxW(NULL, ask, TITLE, MB_YESNO | MB_ICONQUESTION) != IDYES) return 2;
     while (running(L"pol.exe") || running(L"polboot.exe")) {
-        if (quiet || MessageBoxW(NULL, L"PlayOnline or FINAL FANTASY XI is running. Close it, then press Retry.", L"Uninstall",
+        if (quiet || MessageBoxW(NULL, L"PlayOnline or FINAL FANTASY XI is running. Close it, then press Retry.", TITLE,
                                  MB_RETRYCANCEL | MB_ICONWARNING) != IDRETRY) return 3;
     }
     CoInitialize(NULL);
@@ -209,23 +220,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
     DestroyWindow(g_label);
     g_label = NULL;
     DeleteFileW(argv[1]);
-    /* the last product gone: this program and its folder go at the next restart */
-    GetModuleFileNameW(NULL, self, MAX_PATH);
-    lstrcpynW(dir, self, MAX_PATH);
+    /* the last product gone: both programs and their folder go */
+    GetModuleFileNameW(NULL, dir, MAX_PATH);
     if ((slash = wcsrchr(dir, L'\\')) != NULL) *slash = 0;
     wsprintfW(pattern, L"%s\\*.txt", dir);
     h = FindFirstFileW(pattern, &fd);
     if (h != INVALID_HANDLE_VALUE) FindClose(h);
     else {
-        /* renamed out of the way first, or a reinstall before that restart gets its fresh uninstall.exe deleted too
-           (whoops, that one bit) */
-        wchar_t old[MAX_PATH + 32];
-        wsprintfW(old, L"%s\\uninstall-%lu.old", dir, GetCurrentProcessId());
-        MoveFileExW(MoveFileExW(self, old, MOVEFILE_REPLACE_EXISTING) ? old : self, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
+        for (i = 0; i < 2; i++) {
+            wchar_t path[MAX_PATH + 64], old[MAX_PATH + 32];
+            wsprintfW(path, L"%s\\%s", dir, g_programs[i]);
+            if (DeleteFileW(path) || GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES) continue;
+            /* this one's running, so it goes at the next restart. Renamed out of the way first, or a reinstall
+               before that restart gets its fresh copy deleted too (whoops, that one bit) */
+            wsprintfW(old, L"%s\\uninstall-%lu-%d.old", dir, GetCurrentProcessId(), i);
+            MoveFileExW(MoveFileExW(path, old, MOVEFILE_REPLACE_EXISTING) ? old : path, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
+        }
         MoveFileExW(dir, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
     }
     wsprintfW(ask, L"%s was removed.", g_name);
-    if (!quiet) MessageBoxW(NULL, ask, L"Uninstall", MB_ICONINFORMATION);
+    if (!quiet) MessageBoxW(NULL, ask, TITLE, MB_ICONINFORMATION);
     CoUninitialize();
     return 0;
 }

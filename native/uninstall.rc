@@ -1,0 +1,41 @@
+#include <winver.h>
+/* build-native.ps1 writes this one from src\Directory.Build.props */
+#include "native_version.h"
+
+#ifdef FFXI_UNINSTALL
+#define NAME "Provenance - FINAL FANTASY XI Uninstall"
+#define FILE "Provenance - FINAL FANTASY XI Uninstall.exe"
+#else
+#define NAME "Provenance - PlayOnline Uninstall"
+#define FILE "Provenance - PlayOnline Uninstall.exe"
+#endif
+
+1 ICON "provenance.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION NATIVE_FILEVERSION
+PRODUCTVERSION NATIVE_FILEVERSION
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "000004b0"
+        BEGIN
+            VALUE "CompanyName", "Provenance"
+            VALUE "FileDescription", NAME
+            VALUE "FileVersion", NATIVE_FILEVERSION_STR
+            VALUE "InternalName", NAME
+            VALUE "OriginalFilename", FILE
+            VALUE "ProductName", "Provenance"
+            VALUE "ProductVersion", NATIVE_PRODUCTVERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0000, 0x04b0
+    END
+END

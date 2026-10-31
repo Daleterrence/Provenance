@@ -88,7 +88,8 @@ if ($Matches[1] -ne $velopack) {
     throw "vpk is $($Matches[1]) but Provenance uses Velopack $velopack. Run: dotnet tool update -g vpk --version $velopack"
 }
 
-$natives = 'pol_hook.dll', 'Provenance Watcher.exe', 'pol_uninstall.exe'
+$natives = 'pol_hook.dll', 'Provenance Watcher.exe', 'Provenance - PlayOnline Uninstall.exe',
+    'Provenance - FINAL FANTASY XI Uninstall.exe'
 # the app picks its channels by the same rule (SelfUpdate.ChannelSource), and so does the upload on GitHub
 $channel = if ($Version.Contains('-')) { 'beta' } else { 'stable' }
 Write-Host "vpk $velopack, release $Version ($channel channel) from $commit -> $Out"
@@ -113,7 +114,7 @@ try {
 
     # Windows wants four numbers in the file version, the pre-release label only goes in the product version
     $numeric = "$($Version.Split('-')[0]).0"
-    foreach ($file in 'Provenance.exe', 'ProvenanceLauncher.exe', 'native\Provenance Watcher.exe') {
+    foreach ($file in @('Provenance.exe', 'ProvenanceLauncher.exe') + @($natives -like '*.exe' | ForEach-Object { "native\$_" })) {
         if (-not (Test-Path -LiteralPath (Join-Path $publish $file))) { throw "The publish folder has no $file" }
         $info = (Get-Item -LiteralPath (Join-Path $publish $file)).VersionInfo
         if ($info.FileVersion -ne $numeric) { throw "$file is version $($info.FileVersion), expected $numeric" }

@@ -370,7 +370,7 @@ public sealed class MsiPackage : IDisposable
         string code = p["ProductCode"];
         string arpKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + code;
         Directory.CreateDirectory(setup.Folder);
-        string exe = Path.Combine(setup.Folder, "uninstall.exe");
+        string exe = Path.Combine(setup.Folder, Path.GetFileName(setup.UninstallerExe));
         string list = Path.Combine(setup.Folder, code + ".txt");
         File.Copy(setup.UninstallerExe, exe, overwrite: true);
 

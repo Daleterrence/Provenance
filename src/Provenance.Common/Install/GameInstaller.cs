@@ -54,6 +54,8 @@ public sealed class GameInstaller
             : throw new ArgumentOutOfRangeException(nameof(region), region, "Provenance doesn't install this region.");
 
     internal const string PolShortcut = "MAKEPOLSHORTCUT", FfxiShortcut = "MAKEFFXISHORTCUT";
+    internal const string PolUninstaller = "Provenance - PlayOnline Uninstall.exe",
+                          FfxiUninstaller = "Provenance - FINAL FANTASY XI Uninstall.exe";
     private const string NeedsAdmin =
         "Provenance needs administrator rights to save where the game is installed. Run Provenance as an administrator.";
 
@@ -388,7 +390,7 @@ public sealed class GameInstaller
         string msi, string installRoot, string shortcutProperty)
     {
         var props = new Dictionary<string, string> { ["ALLUSERS"] = "1", [shortcutProperty] = "1" };
-        var uninstaller = Path.Combine(AppContext.BaseDirectory, "native", "pol_uninstall.exe");
+        var uninstaller = Path.Combine(AppContext.BaseDirectory, "native", shortcutProperty == PolShortcut ? PolUninstaller : FfxiUninstaller);
         if (!File.Exists(uninstaller)) throw Shown.Mark(new FileNotFoundException("Some of Provenance's own files are missing. Reinstall Provenance, then try again."));
         return (props, new MsiPackage.UninstallSetup(uninstaller, Path.Combine(installRoot, "Uninstall"), Path.GetDirectoryName(msi)! + "\\"));
     }

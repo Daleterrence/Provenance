@@ -66,13 +66,16 @@
   <!-- Provenance Watcher.exe injects pol_hook.dll, which it expects next to itself -->
   <ItemGroup>
     <None Include="$(NativeToolsDir)\Provenance Watcher.exe" Link="native\Provenance Watcher.exe" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="$(NativeToolsDir)\pol_uninstall.exe" Link="native\pol_uninstall.exe" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NativeToolsDir)\Provenance - PlayOnline Uninstall.exe" Link="native\Provenance - PlayOnline Uninstall.exe" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NativeToolsDir)\Provenance - FINAL FANTASY XI Uninstall.exe" Link="native\Provenance - FINAL FANTASY XI Uninstall.exe" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NativeToolsDir)\pol_hook.dll" Link="native\pol_hook.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="RequireNatives" BeforeTargets="BeforeBuild">
-    <Error Condition="!Exists('$(NativeToolsDir)\pol_hook.dll') or !Exists('$(NativeToolsDir)\Provenance Watcher.exe') or !Exists('$(NativeToolsDir)\pol_uninstall.exe')"
-           Text="pol_hook.dll, Provenance Watcher.exe or pol_uninstall.exe is missing from $([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(NativeToolsDir)')). Run native\build-native.ps1 first to build them." />
+    <Error Condition="!Exists('$(NativeToolsDir)\pol_hook.dll') or !Exists('$(NativeToolsDir)\Provenance Watcher.exe')
+                      or !Exists('$(NativeToolsDir)\Provenance - PlayOnline Uninstall.exe')
+                      or !Exists('$(NativeToolsDir)\Provenance - FINAL FANTASY XI Uninstall.exe')"
+           Text="pol_hook.dll, Provenance Watcher.exe or one of the uninstallers is missing from $([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(NativeToolsDir)')). Run native\build-native.ps1 first to build them." />
   </Target>
 
 </Project>
