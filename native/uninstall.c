@@ -23,8 +23,10 @@
 
 #ifdef FFXI_UNINSTALL
 #define TITLE L"Provenance - FINAL FANTASY XI Uninstall"
+#define ASK L"Remove %s from this PC?\n\nYour FINAL FANTASY XI settings and the files that game updates added are kept, as with Square Enix's own uninstall."
 #else
 #define TITLE L"Provenance - PlayOnline Uninstall"
+#define ASK L"Remove %s from this PC?"
 #endif
 
 /* both products share the Uninstall folder, so the last one out takes both programs with it */
@@ -198,7 +200,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
         return 1;
     }
     run(text, chars, L'N');
-    wsprintfW(ask, L"Remove %s from this PC?\n\nYour FINAL FANTASY XI settings and the files that game updates added are kept, as with Square Enix's own uninstall.", g_name);
+    wsprintfW(ask, ASK, g_name);
     if (!quiet && MessageBoxW(NULL, ask, TITLE, MB_YESNO | MB_ICONQUESTION) != IDYES) return 2;
     while (running(L"pol.exe") || running(L"polboot.exe")) {
         if (quiet || MessageBoxW(NULL, L"PlayOnline or FINAL FANTASY XI is running. Close it, then press Retry.", TITLE,

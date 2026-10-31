@@ -17,7 +17,8 @@ public static class LargeAddressAwareSwitch
     internal const string UnsupportedText = "Provenance can't apply this to your version of the PlayOnline Viewer.";
     internal const string LoggedInText = "You can change this once you're logged out of PlayOnline.";
     internal const string MultiRunText = "You can change this once Provenance has finished starting your accounts.";
-    internal const string LockedText = "Another copy of Provenance is updating or repairing the game files. You can change this once it's finished.";
+    internal static string LockedText(PolUpdates.Job? holder) =>
+        $"Another copy of Provenance is {PolUpdates.Doing(holder)}. You can change this once it's finished.";
     internal const string OnNextStartText = "Provenance will turn this on the next time the game starts.";
     internal const string OffNextStartText = "Provenance will turn this off the next time the game starts.";
     internal const string DeniedText = "Windows won't let Provenance change the PlayOnline Viewer's files, so this setting can't be applied.";
@@ -32,7 +33,7 @@ public static class LargeAddressAwareSwitch
 
     private static string? Busy()
     {
-        try { return PolUpdates.LockFree() ? null : LockedText; }
+        try { return PolUpdates.LockFree() ? null : LockedText(PolUpdates.Holder()); }
         catch (Exception e)
         {
             Log.Debug(e, "Could not check whether Large Address Aware could be changed");
@@ -73,7 +74,7 @@ public static class LargeAddressAwareSwitch
             if (!LargeAddressAware.IsKnownBuild(polExe))
                 return ViewerBuild.Check(dir) == ViewerBuild.State.Outdated ? Outcome.NextStart : Outcome.Done;
             if (t.Blocked() is not null) return Outcome.NextStart;
-            using var gate = PolUpdates.TryLock(TimeSpan.FromSeconds(2));
+            using var gate = PolUpdates.TryLock(PolUpdates.Job.LargeAddressAware, TimeSpan.FromSeconds(2));
             // again under the lock, a login starting now would want my waiting pol.exe
             if (gate is null || t.Blocked() is not null) return Outcome.NextStart;
             if (LargeAddressAware.Read(polExe) == on) return Outcome.Done;
@@ -116,7 +117,7 @@ public static class LargeAddressAwareSwitch
                 if (!on) ClearDone(settings);
                 return;
             }
-            using var gate = PolUpdates.TryLock(LockWait);
+            using var gate = PolUpdates.TryLock(PolUpdates.Job.LargeAddressAware, LockWait);
             if (gate is null) { Log.Information("Large Address Aware not applied {When}: an update or repair is running", when); return; }
             if (LargeAddressAware.Read(polExe) == on)
             {

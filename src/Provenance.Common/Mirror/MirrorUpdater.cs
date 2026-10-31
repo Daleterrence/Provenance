@@ -20,19 +20,11 @@ public static class MirrorUpdater
         var none = new MirrorOutcome(false, [], 0);
         var next = await client.GetIndexAsync(region, product, check.Server, ct);
         if (next is null) return none;
-        if (keep is { Count: > 0 }) next = next with { Files = next.Files.Where(e => !keep.Contains(e.Path)).ToList() };
-        var old = check.Local.Length > 0 ? await client.GetIndexAsync(region, product, check.Local, ct) : null;
 
         IReadOnlyList<MirrorEntry> work;
         try
         {
-            if (old is not null) work = MirrorSync.Diff(old, next);
-            else
-            {
-                progress?.Report(new PatchProgress(PatchPhase.Scan, "Checking your files...", 0));
-                work = await MirrorSync.ScanAsync(folder, next, Bytes(PatchPhase.Scan, "Checking your files...", progress), ct, keepLargeAddressAware: true);
-            }
-            foreach (var e in work) MirrorSync.SafePath(folder, e.Path);   // every path checked before beforeChange
+            work = await WorkAsync(client, region, product, folder, next, check.Local, keep, Bytes(PatchPhase.Scan, "Checking your files...", progress), ct);
         }
         catch (InvalidDataException ex)
         {
@@ -51,6 +43,41 @@ public static class MirrorUpdater
         }
         if (failed.Count == 0) updater.WriteLocalVersion(check.Server);
         return new MirrorOutcome(true, failed, work.Count - failed.Count);
+    }
+
+    // the change from the installed version's index when the mirror has it, otherwise whatever doesn't match on disk.
+    // Every path's checked before anything changes
+    private static async Task<IReadOnlyList<MirrorEntry>> WorkAsync(MirrorClient client, string region, string product, string folder,
+        MirrorIndex next, string local, IReadOnlySet<string>? keep, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
+    {
+        if (keep is { Count: > 0 }) next = next with { Files = next.Files.Where(e => !keep.Contains(e.Path)).ToList() };
+        var old = local.Length > 0 ? await client.GetIndexAsync(region, product, local, ct) : null;
+        IReadOnlyList<MirrorEntry> work;
+        if (old is not null) work = MirrorSync.Diff(old, next);
+        else
+        {
+            scanned?.Report((0, next.Files.Sum(f => f.Size)));
+            work = await MirrorSync.ScanAsync(folder, next, scanned, ct, keepLargeAddressAware: true);
+        }
+        foreach (var e in work) MirrorSync.SafePath(folder, e.Path);
+        return work;
+    }
+
+    // the bytes UpdateAsync would download into folder, against known or else the mirror's newest version. Null when
+    // the mirror has no usable copy, so the update would come from POL
+    public static async Task<long?> DownloadSizeAsync(MirrorClient client, string region, string product, string folder, string local,
+        IReadOnlySet<string>? keep, MirrorIndex? known, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
+    {
+        var next = known;
+        if (next is null)
+        {
+            var pointer = await client.GetPointerAsync(region, ct);
+            if (pointer is null || pointer.Region != region || !pointer.Versions.TryGetValue(product, out var newest)) return null;
+            next = await client.GetIndexAsync(region, product, newest, ct);
+            if (next is null) return null;
+        }
+        try { return MirrorSync.DownloadSize(await WorkAsync(client, region, product, folder, next, local, keep, scanned, ct)); }
+        catch (InvalidDataException) { return null; }
     }
 
     private static IProgress<(long Done, long Total)>? Bytes(PatchPhase phase, string text, IProgress<PatchProgress>? progress) =>

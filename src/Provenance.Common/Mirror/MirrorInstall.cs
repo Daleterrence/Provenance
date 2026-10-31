@@ -56,12 +56,19 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
 
     public IReadOnlyList<StagedProduct> Staged { get; private set; } = [];
 
+    // the game's file list as StageAsync found it, and whether POL was already on a version the mirror hasn't got, so
+    // the first update's size after SE's parts needs nothing fetched again
+    public MirrorIndex? GameIndex { get; private set; }
+    public bool GameBehind { get; private set; }
+
     // null with SkipReason when the mirror can't serve it or an install's in the way, nothing under installRoot gets
     // touched then
     public async Task<string?> StageAsync(string stagingDir, string installRoot, IProgress<InstallProgress>? progress, CancellationToken ct)
     {
         Staged = [];
         SkipReason = null;
+        GameIndex = null;
+        GameBehind = false;
         if (!client.HasKeys) return Skip<string>("the mirror keys are not configured");
         if (await FetchInstallDataAsync(stagingDir, null, progress, ct) is not { } data) return null;
         var (pointer, _, viewerMsi, ffxiMsi) = data;
@@ -110,6 +117,7 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
                 if (index is null) return Skip<string>($"the {slug} index {newest} is missing or failed verification");
                 if (server is not null) log?.Invoke($"the mirror does not have {name} {server} yet; installing {newest}, and the first update brings it current");
             }
+            if (slug == "ffxi") (GameIndex, GameBehind) = (index, server is not null && index.Version != server);
             if (Unsafe(folders[i], index) is { } unsafePath) return Skip<string>(unsafePath);
             // Apply needs every file its package installs, a missing one would only stop it after the whole download
             if (Unlisted(folders[i], targets[i], index) is { } unlisted)

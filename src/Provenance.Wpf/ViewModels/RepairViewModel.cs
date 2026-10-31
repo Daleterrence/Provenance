@@ -76,7 +76,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
         _ => $"Repair found {files} files that are damaged or out of date ({Size(bytes)}) and can download fresh copies to replace them. " + ModsWarning,
     };
 
-    private static string Size(long bytes) =>
+    internal static string Size(long bytes) =>
         bytes >= 1_000_000_000 ? Invariant($"{bytes / 1e9:0.0} GB") : bytes >= 1_000_000 ? Invariant($"{bytes / 1e6:0.0} MB")
         : Invariant($"{Math.Max(1, bytes / 1000)} KB");
 
@@ -141,7 +141,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
             // Normal, so the progress reports already queued land first and can't paint over what comes next
             var dispatcher = System.Windows.Application.Current.Dispatcher;
             void OnUi(Action a) => dispatcher.Invoke(a, System.Windows.Threading.DispatcherPriority.Normal);
-            var outcome = await Task.Run(() => PolUpdates.Locked(ct, waiting, () =>
+            var outcome = await Task.Run(() => PolUpdates.Locked(PolUpdates.Job.Repair, ct, waiting, () =>
             {
                 OnUi(() => Status = CheckingText);
                 // again under the lock, another copy may have started the game while this one waited

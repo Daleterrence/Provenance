@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Http;
 using System.Diagnostics;
 using Provenance.Common;
@@ -19,7 +20,7 @@ public static class PolUpdates
     // freeFiles ends our waiting pol.exe before any file changes
     public static PatchResult UpdateViewer(string viewerDir, PolRegion region, IProgress<PatchProgress>? progress, Action freeFiles,
                                            CancellationToken ct) =>
-        Locked(ct, progress, () =>
+        Locked(Job.ViewerUpdate, ct, progress, () =>
         {
             void BeforeChange()
             {
@@ -45,7 +46,7 @@ public static class PolUpdates
 
     public static PatchResult UpdateFfxi(string ffxiDir, string viewerDir, PolRegion region, IProgress<PatchProgress>? progress,
                                          CancellationToken ct) =>
-        Locked(ct, progress, () =>
+        Locked(Job.GameUpdate, ct, progress, () =>
         {
             var r = Update(PatchProduct.Ffxi(ffxiDir, viewerDir, region), region, "ffxi", progress, () =>
             {
@@ -130,24 +131,37 @@ public static class PolUpdates
         }
     });
 
+    public enum Job { Install, ViewerUpdate, GameUpdate, Repair, LargeAddressAware }
+
     // a thread-held AdminLock, so call it from a worker and keep the work synchronous
-    internal static T Locked<T>(CancellationToken ct, IProgress<PatchProgress>? progress, Func<T> work)
+    internal static T Locked<T>(Job job, CancellationToken ct, IProgress<PatchProgress>? progress, Func<T> work)
     {
-        using var gate = Lock(ct, progress);
+        using var gate = Lock(job, ct, progress);
         return work();
     }
 
-    internal const string WaitingText = "Waiting for another copy of Provenance to finish updating or repairing the game...";
+    // what goes after "Another copy of Provenance is". Null is a holder that hasn't said or has gone
+    internal static string Doing(Job? holder) => holder switch
+    {
+        Job.Install => "installing FINAL FANTASY XI",
+        Job.ViewerUpdate => "updating PlayOnline",
+        Job.GameUpdate => "updating FINAL FANTASY XI",
+        Job.Repair => "repairing the game files",
+        Job.LargeAddressAware => "changing the Large Address Aware setting",
+        _ => "using the game files",
+    };
+
+    internal static string WaitingText(Job? holder) => $"Waiting for another copy of Provenance to finish {Doing(holder)}...";
 
     // one lock for every product (installs too), and a copy that dies mid-update lets go with its process
-    internal static IDisposable Lock(CancellationToken ct, IProgress<PatchProgress>? progress)
+    internal static IDisposable Lock(Job job, CancellationToken ct, IProgress<PatchProgress>? progress)
     {
         for (int waits = 0; ; waits++)
         {
             ct.ThrowIfCancellationRequested();
-            if (TryLock(TimeSpan.FromMilliseconds(500), ct) is { } gate) return gate;
+            if (TryLock(job, TimeSpan.FromMilliseconds(500), ct) is { } gate) return gate;
             // every 5 s, which a multi-account run's no-progress guard counts as progress
-            if (waits % 10 == 0) progress?.Report(new PatchProgress(PatchPhase.Check, WaitingText, -1));
+            if (waits % 10 == 0) progress?.Report(new PatchProgress(PatchPhase.Check, WaitingText(Holder()), -1));
         }
     }
 
@@ -159,7 +173,56 @@ public static class PolUpdates
     }
 
     // null when another update or repair still held it after the timeout
-    internal static IDisposable? TryLock(TimeSpan timeout, CancellationToken ct = default) => AdminLock.TryAcquire("update", timeout, ct);
+    internal static IDisposable? TryLock(Job job, TimeSpan timeout, CancellationToken ct = default) =>
+        AdminLock.TryAcquire("update", timeout, ct) is { } gate ? new Holding(gate, job) : null;
+
+    // the holder's pid and start time go in with the job, so a copy that died holding the lock can't speak for the next
+    private static string RecordPath() => Path.ChangeExtension(AdminLock.PathFor("update"), ".job");
+
+    internal static Job? Holder()
+    {
+        try
+        {
+            string text;
+            using (var fs = new FileStream(RecordPath(), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(fs)) text = reader.ReadToEnd();
+            var parts = text.Split(' ');
+            if (parts.Length != 3 || !int.TryParse(parts[0], out var pid) || !long.TryParse(parts[1], out var started)
+                || !Enum.TryParse<Job>(parts[2], out var job) || !Enum.IsDefined(job)) return null;
+            using var p = Process.GetProcessById(pid);
+            return p.StartTime.ToUniversalTime().Ticks == started ? job : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException
+                                       or System.ComponentModel.Win32Exception) { return null; }
+    }
+
+    private sealed class Holding : IDisposable
+    {
+        private readonly IDisposable _gate;
+        private readonly string? _record;
+        private int _disposed;
+
+        public Holding(IDisposable gate, Job job)
+        {
+            _gate = gate;
+            try
+            {
+                _record = RecordPath();
+                using var me = Process.GetCurrentProcess();
+                File.WriteAllText(_record, $"{Environment.ProcessId} {me.StartTime.ToUniversalTime().Ticks} {job}");
+            }
+            catch (Exception e) { Log.Debug(e, "Could not note what the update lock is held for"); }
+        }
+
+        // the record goes while the lock's still held, or it could take the next holder's with it
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            try { if (_record is not null) File.Delete(_record); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Debug(e, "Could not remove the update lock's note"); }
+            _gate.Dispose();
+        }
+    }
 }
 
 public sealed class SyncProgress<T>(Action<T> report) : IProgress<T>

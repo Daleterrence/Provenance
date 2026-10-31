@@ -40,6 +40,7 @@ public partial class InstallViewModel : ObservableObject
     private readonly GameInstaller _installer = new();
     private readonly DownloadMeter _meter;
     private CancellationTokenSource? _cts;
+    private MirrorInstall? _mirror;
 
     public InstallViewModel(PolRegion? region, Action? holdPrestarts = null, Action? releasePrestarts = null)
     {
@@ -81,6 +82,7 @@ public partial class InstallViewModel : ObservableObject
         if (RegionLocked || value < 0 || value > RegionValues.Length) return;
         _region = value == 0 ? _autoRegion : RegionValues[value - 1];
         TotalGib = $"{GameInstaller.TotalBytes(_region) / 1024.0 / 1024 / 1024:0.0} GiB";
+        OnPropertyChanged(nameof(ShowKeepInstaller));
     }
 
     [ObservableProperty]
@@ -100,15 +102,25 @@ public partial class InstallViewModel : ObservableObject
     private bool _enoughSpace = true;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanStart), nameof(StepText))]
+    [NotifyPropertyChangedFor(nameof(CanStart), nameof(StepText), nameof(ShowKeepInstaller))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private bool _running;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanStart))]
+    [NotifyPropertyChangedFor(nameof(CanStart), nameof(ShowKeepInstaller))]
     private bool _done;
 
     public bool CanStart => !Running && !Done;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowKeepInstaller))]
+    private bool _fromParts;
+
+    // only SE's parts are ever kept, so it shows when they're the way in: up front when there's no mirror to try first,
+    // or once a run's fallen back to them (the tick's only read at the end)
+    public bool ShowKeepInstaller => Running ? FromParts : CanStart && StraightToParts(_region, MirrorKeys.Trusted.Count > 0);
+
+    internal static bool StraightToParts(PolRegion region, bool haveKeys) => MirrorLayout.RegionFolder(region) is null || !haveKeys;
 
     [ObservableProperty] private string _startLabel = "DOWNLOAD AND INSTALL";
     [ObservableProperty] private string _stage = "Ready to install";
@@ -292,6 +304,7 @@ public partial class InstallViewModel : ObservableObject
         if (Running) return;
         Running = true;
         Done = false;
+        FromParts = false;
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         // the download takes hours on a slow line, and Windows mustn't sleep in the middle of it
@@ -332,6 +345,7 @@ public partial class InstallViewModel : ObservableObject
             workFolder = await Task.Run(() => LockWorkFolder(ownNames), ct);
             var work = workFolder.Path;
             if (await InstallFromMirrorAsync(work, ct)) return;
+            FromParts = true;
             var unpacked = Path.Combine(work, "unpacked");
             string root;
             for (int attempt = 1; ; attempt++)
@@ -395,8 +409,9 @@ public partial class InstallViewModel : ObservableObject
             }, CancellationToken.None);
 
             // SE's files are from 2019, so the first sign-in updates POL and the first Play the game
+            var updateBytes = await FirstUpdateSizeAsync(ct);
             Log.Information("Install finished in {Folder}; warnings: {Warnings}", InstallFolder, warnings);
-            Finished("PlayOnline updates itself the first time you log in, and the game updates the first time you press Play (about 1.7 GB).", warnings);
+            Finished(PartsNextText(updateBytes), warnings);
         }
         catch (RestartRequiredException e)
         {
@@ -437,6 +452,7 @@ public partial class InstallViewModel : ObservableObject
     // it to SE's parts, but a problem on this PC is an error
     private async Task<bool> InstallFromMirrorAsync(string work, CancellationToken ct)
     {
+        _mirror = null;
         if (MirrorLayout.RegionFolder(_region) is not { } mirrorRegion)
         {
             Log.Information("Install source: Square Enix's parts (the Provenance mirror has no copy of region {Region})", _region);
@@ -448,8 +464,8 @@ public partial class InstallViewModel : ObservableObject
         Detail = MirrorInstall.PrepareText;
         Log.Information("Install source: trying the Provenance mirror");
         var staging = Path.Combine(work, MirrorFolder);
-        var mirror = new MirrorInstall(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion,
-                                       m => Log.Warning("Mirror install: {Message}", m));
+        var mirror = _mirror = new MirrorInstall(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion,
+                                                 m => Log.Warning("Mirror install: {Message}", m));
         var progress = new Progress<InstallProgress>(p =>
         {
             Stage = p.Stage;
@@ -523,6 +539,42 @@ public partial class InstallViewModel : ObservableObject
         return true;
     }
 
+    internal static string PartsNextText(long? gameUpdateBytes) =>
+        "PlayOnline updates itself the first time you log in, and the game updates the first time you press Play" +
+        (gameUpdateBytes is long b && b > 0 ? $" ({RepairViewModel.Size(b)} to download)." : ".");
+
+    // the way the first Play picks its files, reusing the game index from the mirror's try. Null when it'd come from
+    // POL or the mirror can't be reached
+    private async Task<long?> FirstUpdateSizeAsync(CancellationToken ct)
+    {
+        if (MirrorUpdater.RegionFor(_region, "ffxi") is not { } mirrorRegion || MirrorKeys.Trusted.Count == 0 || _mirror?.GameBehind == true
+            || PolPaths.TryGetInstallFolder(_region, PolPaths.FfxiProduct) is not { } ffxiDir
+            || PolPaths.TryGetInstallFolder(_region, PolPaths.ViewerProduct) is not { } viewerDir)
+            return null;
+        Detail = "Checking how big the game's first update is...";
+        var step = new object();
+        var scanned = new Progress<(long Done, long Total)>(p =>
+        {
+            StageIndeterminate = false;
+            ShowFraction(step, p.Total > 0 ? (double)p.Done / p.Total : 1);
+            _meter.Update(p.Done, p.Total, download: false);
+        });
+        try
+        {
+            var local = new PolUpdater(PatchProduct.Ffxi(ffxiDir, viewerDir, _region)).LocalVersion();
+            var bytes = await Task.Run(() => MirrorUpdater.DownloadSizeAsync(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion, "ffxi",
+                ffxiDir, local, MirrorLayout.OwnFiles(_region, "ffxi"), _mirror?.GameIndex, scanned, ct), ct);
+            Log.Information("First game update size: {Size}", bytes is { } n ? $"{n:N0} bytes from the Provenance mirror" : "the mirror has no usable copy");
+            return bytes;
+        }
+        catch (Exception e)
+        {
+            Log.Information("First game update size not worked out: {Reason}", e.Message);
+            return null;
+        }
+        finally { _meter.Clear(); }
+    }
+
     // another region's viewer or game in the same folders would get written over, with both regions' keys pointing
     // there. This region's own install is fine, the installer carries on with it
     internal static string? OtherVersionIn(string installFolder, PolRegion region, Func<PolRegion, string, string?> registered,
@@ -551,7 +603,7 @@ public partial class InstallViewModel : ObservableObject
             StageIndeterminate = true;
             Detail = p.Text;
         });
-        return await Task.Run(() => PolUpdates.Lock(ct, waiting), ct);
+        return await Task.Run(() => PolUpdates.Lock(PolUpdates.Job.Install, ct, waiting), ct);
     }
 
     // SE's installer only writes 3 of the game's settings, and the game just closes without the rest
