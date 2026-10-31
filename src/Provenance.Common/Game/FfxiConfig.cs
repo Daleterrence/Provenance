@@ -279,7 +279,8 @@ public static class FfxiConfig
         D("0022", s.OpeningMovie, original.OpeningMovie);
         D("0023", s.SimpleCharSelect, original.SimpleCharSelect);
         var bright = MathF.Round(Math.Clamp(s.Brightness, -1f, 1f), 1);
-        if (bright != original.Brightness) Set("0028", BitConverter.SingleToInt32Bits(bright));
+        // a value from elsewhere between two tenths stays as it is till it's moved
+        if (bright != MathF.Round(Math.Clamp(original.Brightness, -1f, 1f), 1)) Set("0028", BitConverter.SingleToInt32Bits(bright));
         D("0029", Math.Clamp(s.SoundEffects, 12, 20), original.SoundEffects);
         D("0034", s.WindowMode is 0 or 1 or 3 ? s.WindowMode : 1, original.WindowMode);
         D("0035", s.BackgroundSound, original.BackgroundSound);

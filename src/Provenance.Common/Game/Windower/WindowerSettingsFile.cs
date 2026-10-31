@@ -14,6 +14,7 @@ public sealed class WindowerSettingsFile
     public const string FileName = "settings.xml";
     public const int MaxNameLength = 255;
     private const string LockName = "windower-settings";
+    private const string OldCopySuffix = " (Provenance)", OldDefaultCopy = "(Provenance)";
     private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(5);
 
     private readonly List<WindowerProfile> _profiles = [];
@@ -179,6 +180,7 @@ public sealed class WindowerSettingsFile
             var f = LoadFile(path);
             f.ThrowIfUnreadable();
             var working = lists.ToDictionary(kv => kv.Key, kv => kv.Value?.Copy()!, StringComparer.Ordinal);
+            f.DropOldCopies(working);
             change(f, working);
             Write(path, f.ToBytes());
             WindowerAddonList.Prune(working, f);
@@ -250,6 +252,30 @@ public sealed class WindowerSettingsFile
         }
     }
 
+    // Provenance used to launch through a "<name> (Provenance)" copy of each profile. They go on the first save, and a
+    // name that still points at one means its source
+    public static bool IsOldCopy(string? name)
+    {
+        var n = (name ?? "").Trim();
+        return n == OldDefaultCopy || n.EndsWith(OldCopySuffix, StringComparison.Ordinal);
+    }
+
+    public static string OldCopySource(string? name)
+    {
+        var n = (name ?? "").Trim();
+        return n == OldDefaultCopy ? "" : n.EndsWith(OldCopySuffix, StringComparison.Ordinal) ? n[..^OldCopySuffix.Length] : name ?? "";
+    }
+
+    private void DropOldCopies(IDictionary<string, WindowerAddonList> lists)
+    {
+        foreach (var p in _profiles.Where(p => IsOldCopy(p.Name)).ToList())
+        {
+            _profiles.Remove(p);
+            lists.Remove(p.Name);
+        }
+        if (_profiles.Count == 0) _profiles.Add(new WindowerProfile());
+    }
+
     // trimmed, then the first match in any case in file order, like Windower's -p
     public WindowerProfile? Find(string? name)
     {
@@ -274,6 +300,7 @@ public sealed class WindowerSettingsFile
         if (n.Length > MaxNameLength) return $"A profile name can be {MaxNameLength} characters at most.";
         try { XmlConvert.VerifyXmlChars(n); }
         catch (XmlException) { return "That name has a character settings.xml can't hold."; }
+        if (IsOldCopy(n)) return "Choose a name that doesn't end in (Provenance).";
         if (_profiles.Any(p => !ReferenceEquals(p, renaming) && p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)))
             return $"There's already a profile called {n}.";
         return null;

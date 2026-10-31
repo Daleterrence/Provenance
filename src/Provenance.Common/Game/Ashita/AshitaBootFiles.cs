@@ -26,6 +26,8 @@ public static class AshitaBootFiles
 
     public static bool IsShippedExample(string fileName) => Examples.Contains(fileName, StringComparer.OrdinalIgnoreCase);
 
+    public static bool IsTakeover(string polPlugin) => Takeovers.Contains(polPlugin, StringComparer.OrdinalIgnoreCase);
+
     public static string? ExampleFor(string ashitaDir) =>
         Examples.Take(2).FirstOrDefault(e => File.Exists(Path.Combine(Folder(ashitaDir), e)));
 

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -149,7 +148,7 @@ public sealed class PolSessionService : IDisposable
     private string? _claimFile;
     private int? _hookPid;
     private DateTime _hookStart;
-    private CancellationTokenSource? _hookHide;
+    private WindowerGameValues? _windowerPlay;
 
     public PolSessionService(ISettingsService settings)
         : this(settings, new WindowsCredentialStore(), () => new WindowsCredentialStore(wrapKey: CredentialKey.Open()),
@@ -167,6 +166,7 @@ public sealed class PolSessionService : IDisposable
         FindLaunchFiles = () => LaunchFiles(Region);
         GameIsInstalled = () => GameInstalled(Region);
         UpdateViewer = (dir, progress, freeFiles, ct) => PolUpdates.UpdateViewer(dir, Region, progress, freeFiles, ct);
+        WindowerSetup = (polExe, profile) => WindowerLaunch.SetupFor(_settings, polExe, profile);
         DeleteLeftovers();
         _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
     }
@@ -179,6 +179,7 @@ public sealed class PolSessionService : IDisposable
     internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
     internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; }
     internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
+    internal Func<string, string?, WindowerLaunchSetup> WindowerSetup { get; init; }
     internal Func<Prestarted, bool> PrestartAlive { get; init; } = pre =>
     {
         try { using var p = Process.GetProcessById(pre.Pid); return !p.HasExited && IsSameProcess(p, pre.Started); }
@@ -397,15 +398,20 @@ public sealed class PolSessionService : IDisposable
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.02));
         int pid;
         var platform = Platform;
-        if (platform is ThirdPartyHookService.Ashita or ThirdPartyHookService.Windower)
+        Volatile.Write(ref _windowerPlay, null);
+        if (platform == ThirdPartyHookService.Ashita)
         {
-            var polSeen = new StrongBox<bool>();
-            var hookPid = ThirdPartyHookLauncher.StartViaThirdPartyHook(
-                _settings, platform, psi, polExe, _launchId!, options.ThirdPartyHookProfile, progress, ct,
-                hookStarted: (id, start) => TrackThirdPartyHook(platform, id, start, () => Volatile.Read(ref polSeen.Value)),
-                polStarted: () => Volatile.Write(ref polSeen.Value, true));
+            var hookPid = ThirdPartyHookLauncher.StartViaAshita(
+                _settings, psi, polExe, _launchId!, options.ThirdPartyHookProfile, progress, ct,
+                hookStarted: TrackThirdPartyHook);
             if (hookPid is null) return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
             pid = hookPid.Value;
+        }
+        else if (platform == ThirdPartyHookService.Windower)
+        {
+            if (StartThroughWindower(psi, polExe, options.ThirdPartyHookProfile, _launchId!, progress, ct) is not { } started)
+                return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
+            pid = started;
         }
         // never for a lean session, the go file can't carry POL_LEAN
         else if (!options.Lean && TakePrestarted(psi, ct) is { } pre)
@@ -416,26 +422,9 @@ public sealed class PolSessionService : IDisposable
         {
             // a cancel while the pre-start was being taken leaves it waiting, so nothing starts in its place
             if (ct.IsCancellationRequested) return Stopped("The login was cancelled.");
-            // Smart App Control refuses a new unsigned build till Windows' cloud check knows it, so that gets retried
-            for (int attempt = 1; ; attempt++)
-            {
-                var attemptStart = DateTime.UtcNow;
-                var (outcome, launchedPid, failure) = RunPolLaunch(psi, ct);
-                if (outcome == LaunchOutcome.Started) { pid = launchedPid; break; }
-                if (outcome == LaunchOutcome.Cancelled) return Stopped("The login was cancelled.");
-                bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, "pol_launch.exe", "pol_hook.dll");
-                if (refused && attempt <= RefusedRetryWaits.Length)
-                {
-                    var wait = RefusedRetryWaits[attempt - 1];
-                    Log.Warning("Windows Code Integrity refused pol_launch.exe or pol_hook.dll (attempt {Attempt}); trying again in {Wait}", attempt, wait);
-                    progress?.Report(new LaunchProgress("Starting", $"Windows is checking Provenance's files. Trying again in {wait.TotalSeconds:0} seconds...", LaunchSteps.StartPol, 0.02));
-                    if (ct.WaitHandle.WaitOne(wait)) return Stopped("The login was cancelled.");
-                    continue;
-                }
-                if (refused) Log.Error("Windows Code Integrity refused pol_launch.exe or pol_hook.dll {Attempts} times", attempt);
-                progress?.Report(new LaunchProgress("Failed", refused ? CodeIntegrity.RefusedText : failure));
-                return ErrorLauncherFailed;
-            }
+            if (StartWithPolLaunch(psi, progress, ct, PolLaunchLimit, PolDidNotStart) is not { } started)
+                return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
+            pid = started;
         }
         lock (_gate)
         {
@@ -533,6 +522,45 @@ public sealed class PolSessionService : IDisposable
         return Stopped("The login was cancelled, and PlayOnline has been closed.");
     }
 
+    // null once progress has said why
+    internal int? StartThroughWindower(ProcessStartInfo psi, string polExe, string? profile, string launchId,
+                                       IProgress<LaunchProgress>? progress, CancellationToken ct)
+    {
+        WindowerLaunch windower;
+        try { windower = WindowerLaunch.Prepare(WindowerSetup(polExe, profile), progress, ct); }
+        catch (OperationCanceledException)
+        {
+            progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Windower wasn't ready to start the game");
+            progress?.Report(new LaunchProgress("Failed", ErrorText.Of(ex, "Provenance couldn't get Windower ready to start the game. Try again in a moment.")));
+            return null;
+        }
+        // held till pol_launch is done, Hook.dll copies the mapping out before it signals
+        using (windower)
+        {
+            windower.ApplyTo(psi, launchId);
+            progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline with Windower...", LaunchSteps.StartPol, 0.02));
+            var pid = StartWithPolLaunch(psi, progress, ct, WindowerLaunch.PolLaunchLimit, WindowerDidNotStart);
+            if (pid is not null) Volatile.Write(ref _windowerPlay, windower.GameValues);
+            return pid;
+        }
+    }
+
+    // another launch through Windower may have written its own profile's values since this one's
+    internal void PutWindowerValuesBack()
+    {
+        if (Volatile.Read(ref _windowerPlay) is not { } values) return;
+        try { Log.Information("Windower's game settings for {Profile} written again before Play ({Keys})", values.Profile.Name, values.Apply().Count); }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            Log.Warning(ex, "Could not write Windower's game settings again before Play");
+        }
+    }
+
     // the hook's own log is in the admin-only folder, so a player's log needs the exit code and the crash lines too
     private static void LogEarlyExit(int pid, int? exit, string hookLog)
     {
@@ -565,7 +593,7 @@ public sealed class PolSessionService : IDisposable
     private void LargeAddressAwareBeforeStart(string viewerDir, string when) =>
         LargeAddressAwareSwitch.Apply(_settings, new LargeAddressAwareSwitch.Target(viewerDir, ViewerPolRunning, () => null, () => null), when);
 
-    private static ProcessStartInfo LauncherStart(string launcherExe, string polExe)
+    internal static ProcessStartInfo LauncherStart(string launcherExe, string polExe)
     {
         var psi = new ProcessStartInfo(launcherExe)
         {
@@ -578,7 +606,7 @@ public sealed class PolSessionService : IDisposable
 
     // POL_REGION is the env.dat region the build check went by, as pol.exe's own index (0 JP, 1 US, 2 EU), which the
     // hook holds pol.exe to. An env.dat that doesn't say leaves it to pol.exe
-    private static void SetBaseEnvironment(IDictionary<string, string?> env, PolRegion? region)
+    internal static void SetBaseEnvironment(IDictionary<string, string?> env, PolRegion? region)
     {
         LaunchEnvironment.Reset(env);
         env["POL_IPC_DIR"] = HookFiles.Dir;
@@ -744,7 +772,7 @@ public sealed class PolSessionService : IDisposable
             var psi = LauncherStart(launcherExe, polExe);
             SetPrestartEnvironment(psi.Environment, Environment.ProcessId, PolEnv.Region(viewerDir!));
             using var launcher = StartProcess(psi);
-            if (launcher is null || RunLauncher(launcher) is not { } run) return null;
+            if (launcher is null || RunLauncher(launcher, PolLaunchLimit) is not { } run) return null;
             var m = PidLine.Match(run.Out);
             if (run.ExitCode != 0 || !m.Success) return null;
             var pid = int.Parse(m.Groups[1].Value);
@@ -886,27 +914,62 @@ public sealed class PolSessionService : IDisposable
         catch { return false; }
     }
 
-    private static (int ExitCode, string Out, string Err)? RunLauncher(Process launcher)
+    internal static readonly TimeSpan PolLaunchLimit = TimeSpan.FromSeconds(60);
+
+    private static (int ExitCode, string Out, string Err)? RunLauncher(Process launcher, TimeSpan limit)
     {
         // both pipes, a full stderr pipe would block pol_launch forever
         var outTask = launcher.StandardOutput.ReadToEndAsync();
         var errTask = launcher.StandardError.ReadToEndAsync();
-        if (!launcher.WaitForExit(60_000)) { EndStuckLauncher(launcher); return null; }
+        if (!launcher.WaitForExit(limit)) { EndStuckLauncher(launcher, limit); return null; }
         return (launcher.ExitCode, outTask.GetAwaiter().GetResult(), errTask.GetAwaiter().GetResult());
     }
 
-    // A cancel waits for pol_launch (its steps time out after 10 s) then ends its pol.exe. Killing it half way would
+    // Smart App Control refuses a new unsigned build till Windows' cloud check knows it, so that gets retried. Null once
+    // progress has said why
+    private int? StartWithPolLaunch(ProcessStartInfo psi, IProgress<LaunchProgress>? progress, CancellationToken ct, TimeSpan limit, string failText)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            var attemptStart = DateTime.UtcNow;
+            var (outcome, launchedPid, failure) = RunPolLaunch(psi, ct, limit, failText);
+            if (outcome == LaunchOutcome.Started) return launchedPid;
+            if (outcome == LaunchOutcome.Cancelled)
+            {
+                progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
+                return null;
+            }
+            bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, "pol_launch.exe", "pol_hook.dll");
+            if (refused && attempt <= RefusedRetryWaits.Length)
+            {
+                var wait = RefusedRetryWaits[attempt - 1];
+                Log.Warning("Windows Code Integrity refused pol_launch.exe or pol_hook.dll (attempt {Attempt}); trying again in {Wait}", attempt, wait);
+                progress?.Report(new LaunchProgress("Starting", $"Windows is checking Provenance's files. Trying again in {wait.TotalSeconds:0} seconds...", LaunchSteps.StartPol, 0.02));
+                if (ct.WaitHandle.WaitOne(wait))
+                {
+                    progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
+                    return null;
+                }
+                continue;
+            }
+            if (refused) Log.Error("Windows Code Integrity refused pol_launch.exe or pol_hook.dll {Attempts} times", attempt);
+            progress?.Report(new LaunchProgress("Failed", refused ? CodeIntegrity.RefusedText : failure));
+            return null;
+        }
+    }
+
+    // A cancel waits for pol_launch (its steps time out on their own) then ends its pol.exe. Killing it half way would
     // leave a suspended pol.exe behind.
-    private (LaunchOutcome Outcome, int Pid, string Failure) RunPolLaunch(ProcessStartInfo psi, CancellationToken ct)
+    private (LaunchOutcome Outcome, int Pid, string Failure) RunPolLaunch(ProcessStartInfo psi, CancellationToken ct, TimeSpan limit, string failText)
     {
         try
         {
             using var launcher = StartProcess(psi) ?? throw new InvalidOperationException("pol_launch did not start");
             var launcherStarted = launcher.StartTime;   // read now, it can throw once the process exits
-            if (RunLauncher(launcher) is not { } run)
+            if (RunLauncher(launcher, limit) is not { } run)
                 return ct.IsCancellationRequested
                     ? (LaunchOutcome.Cancelled, 0, "")
-                    : (LaunchOutcome.Failed, 0, PolDidNotStart);
+                    : (LaunchOutcome.Failed, 0, failText);
             var m = PidLine.Match(run.Out);
             if (ct.IsCancellationRequested)
             {
@@ -917,7 +980,7 @@ public sealed class PolSessionService : IDisposable
             if (run.ExitCode != 0 || !m.Success)
             {
                 Log.Error("pol_launch exited {Code}: {Error}", run.ExitCode, stderr.Length > 0 ? stderr : "no message");
-                return (LaunchOutcome.Failed, 0, PolDidNotStart);
+                return (LaunchOutcome.Failed, 0, failText);
             }
             return (LaunchOutcome.Started, int.Parse(m.Groups[1].Value), "");
         }
@@ -929,11 +992,12 @@ public sealed class PolSessionService : IDisposable
         catch (Exception ex)
         {
             Log.Error(ex, "Hold launch failed");
-            return (LaunchOutcome.Failed, 0, PolDidNotStart);
+            return (LaunchOutcome.Failed, 0, failText);
         }
     }
 
     private const string PolDidNotStart = "PlayOnline didn't start. Try again in a moment.";
+    private const string WindowerDidNotStart = "PlayOnline didn't start with Windower. Try again in a moment, and if it keeps happening, check for Windower updates in Settings, under Windower/Ashita.";
 
     private static void EndNewPol(int pid, DateTime launcherStarted)
     {
@@ -943,7 +1007,7 @@ public sealed class PolSessionService : IDisposable
             Log.Information("Ended pol.exe (pid {Pid}): the sign-in was cancelled", pid);
     }
 
-    private static void EndStuckLauncher(Process launcher)
+    private static void EndStuckLauncher(Process launcher, TimeSpan limit)
     {
         int id = launcher.Id;
         DateTime started;
@@ -951,7 +1015,7 @@ public sealed class PolSessionService : IDisposable
         try { launcher.Kill(); } catch { }
         foreach (var child in ProcessTree.ChildrenOf(id))
             if (started != DateTime.MinValue) EndNewPol(child, started);
-        Log.Warning("pol_launch (pid {Pid}) did not exit in 60 s and was ended", id);
+        Log.Warning("pol_launch (pid {Pid}) did not exit in {Limit} and was ended", id, limit);
     }
 
     private static bool KillIfOurs(int pid, Func<Process, bool> ours, int graceMs = 0, int afterMs = 0)
@@ -1225,6 +1289,7 @@ public sealed class PolSessionService : IDisposable
         // skip the log so far, only the answer to this Play counts and not an unreadable entry planted earlier
         if (Pid is { } pid)
             try { ReadNewLines(HookFiles.PathFor(pid, "log")); } catch (Exception ex) { Log.Warning(ex, "Could not read the hook log before Play"); }
+        PutWindowerValuesBack();
         // saved first, so a throw leaves the session held
         Wrapped.Save($"{LaunchKeyPrefix}{_launchId}:PLAY", "play", "go", sessionOnly: true);
         _played = true;
@@ -1233,34 +1298,27 @@ public sealed class PolSessionService : IDisposable
         SaveSession(_sessionProfile, played: true);
     }
 
-    // Windower waits with its window open until the game starts, so that's hidden while held (Ashita has none)
-    private void TrackThirdPartyHook(string platform, int pid, DateTime start, Func<bool> polStarted)
+    private void TrackThirdPartyHook(int pid, DateTime start)
     {
         lock (_hookGate)
         {
-            _hookHide?.Cancel();
-            _hookHide = null;
             _hookPid = pid;
             _hookStart = start;
-            if (platform != ThirdPartyHookService.Windower) return;
-            _hookHide = new CancellationTokenSource();
-            ThirdPartyHookWindows.HideWindowerWhileHeld(pid, start, polStarted, _hookHide.Token);
         }
     }
 
-    private (int Pid, DateTime Start, CancellationTokenSource? Hide)? TakeThirdPartyHook()
+    private (int Pid, DateTime Start)? TakeThirdPartyHook()
     {
         lock (_hookGate)
         {
-            (int, DateTime, CancellationTokenSource?)? taken = _hookPid is { } pid ? (pid, _hookStart, _hookHide) : null;
-            _hookHide = null;
+            (int, DateTime)? taken = _hookPid is { } pid ? (pid, _hookStart) : null;
             _hookPid = null;
             return taken;
         }
     }
 
-    // Windower stays hidden till it's gone, or its window pops up for the couple of secs it gets to close
-    private static void EndThirdPartyHook((int Pid, DateTime Start, CancellationTokenSource? Hide)? hook)
+    // Ashita-cli closes by itself once the game's up, so it only gets a couple of secs before it's ended
+    private static void EndThirdPartyHook((int Pid, DateTime Start)? hook)
     {
         if (hook is not { } a) return;
         try
@@ -1270,7 +1328,6 @@ public sealed class PolSessionService : IDisposable
             if (!p.WaitForExit(2000)) { p.Kill(); Log.Information("Ended {Name} (pid {Pid}): the game was not started", p.ProcessName, a.Pid); }
         }
         catch { /* already gone */ }
-        finally { a.Hide?.Cancel(); }
     }
 
     public void StopHold()
@@ -1334,7 +1391,7 @@ public sealed class PolSessionService : IDisposable
             _played = false;
         }
         ClearSession();
-        if (TakeThirdPartyHook() is { Hide: { } hide }) hide.Cancel();
+        TakeThirdPartyHook();
     }
 
     // multi-account mode: forget the played session, the game and its record stay as they are
@@ -1354,12 +1411,7 @@ public sealed class PolSessionService : IDisposable
             _sessionLean = false;
             _polProc?.Dispose();
             _polProc = null;
-            lock (_hookGate)
-            {
-                // no Cancel, the hiding stops by itself when Windower ends
-                _hookPid = null;
-                _hookHide = null;
-            }
+            lock (_hookGate) _hookPid = null;
         }
     }
 

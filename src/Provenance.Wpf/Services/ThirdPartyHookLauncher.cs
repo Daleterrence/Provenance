@@ -29,14 +29,15 @@ public static class ThirdPartyHookLauncher
         target["PROVENANCE_LAUNCH_ID"] = launchId;
     }
 
-    // Windower/Ashita start pol.exe themselves, then pol_launch --attach loads the hook into it. Credentials only
-    // travel as Credential Manager target names in the environment, never on a command line
-    internal static int? StartViaThirdPartyHook(ISettingsService settings, string platform, ProcessStartInfo launchPsi,
-                                       string polExe, string launchId, string? profile,
-                                       IProgress<LaunchProgress>? progress, CancellationToken ct,
-                                       Action<int, DateTime>? hookStarted = null, Action? polStarted = null,
-                                       LaunchLimits? limits = null)
+    // Ashita-cli starts pol.exe itself, then pol_launch --attach loads the hook into it. Credentials only travel as
+    // Credential Manager target names in the environment, never on a command line
+    internal static int? StartViaAshita(ISettingsService settings, ProcessStartInfo launchPsi,
+                                        string polExe, string launchId, string? profile,
+                                        IProgress<LaunchProgress>? progress, CancellationToken ct,
+                                        Action<int, DateTime>? hookStarted = null, Action? polStarted = null,
+                                        LaunchLimits? limits = null)
     {
+        const string name = "Ashita";
         var limit = limits ?? LaunchLimits.Default;
         int? Fail(string text)
         {
@@ -44,50 +45,25 @@ public static class ThirdPartyHookLauncher
             return null;
         }
         var s = settings.Current;
-        bool ashita = platform == ThirdPartyHookService.Ashita;
-        string? dir = ashita ? ThirdPartyHookService.DetectAshita(s.AshitaPath) : ThirdPartyHookService.DetectWindower(s.WindowerPath);
-        var name = ashita ? "Ashita" : "Windower";
-        if (dir is null) return Fail($"Couldn't find {name}. Set its folder in Settings, under Windower/Ashita.");
+        string? dir = ThirdPartyHookService.DetectAshita(s.AshitaPath);
+        if (dir is null) return Fail("Couldn't find Ashita. Set its folder in Settings, under Windower/Ashita.");
 
+        bool fromAccount = profile is { Length: > 0 };
+        var boot = fromAccount ? profile
+                 : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? ThirdPartyHookService.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
+        if (boot is { Length: > 0 } && !IsBootFileName(boot))
+            return Fail(fromAccount ? AccountBootFileProblem
+                : "The Ashita boot configuration has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Windower/Ashita.");
+        string bootFile;
+        try { bootFile = Path.GetFileName(ThirdPartyHookService.WriteAshitaBoot(dir, boot, polExe)); }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Could not write the Ashita boot config");
+            return Fail(ErrorText.Of(ex, "Provenance couldn't make its copy of your Ashita boot configuration."));
+        }
         // no shell, so it inherits the environment below
-        var psi = new ProcessStartInfo { WorkingDirectory = dir, UseShellExecute = false, CreateNoWindow = ashita };
-        if (ashita)
-        {
-            bool fromAccount = profile is { Length: > 0 };
-            var boot = fromAccount ? profile
-                     : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? ThirdPartyHookService.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
-            if (boot is { Length: > 0 } && !IsBootFileName(boot))
-                return Fail(fromAccount ? AccountBootFileProblem
-                    : "The Ashita boot configuration has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Windower/Ashita.");
-            string bootFile;
-            try { bootFile = Path.GetFileName(ThirdPartyHookService.WriteAshitaBoot(dir, boot, polExe)); }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Could not write the Ashita boot config");
-                return Fail(ErrorText.Of(ex, "Provenance couldn't make its copy of your Ashita boot configuration."));
-            }
-            psi.FileName = Path.Combine(dir, "Ashita-cli.exe");
-            psi.ArgumentList.Add(bootFile);
-        }
-        else
-        {
-            string copy;
-            try { copy = ThirdPartyHookService.PrepareWindowerProfile(dir, profile ?? s.WindowerProfile); }
-            catch (Exception ex)
-            {
-                // Windower's fast login would take the sign-in over, so no copy, no launch
-                Log.Error(ex, "Could not write Provenance's Windower profile");
-                return Fail("Provenance couldn't make its copy of your Windower profile.");
-            }
-            psi.FileName = Path.Combine(dir, "Windower.exe");
-            psi.ArgumentList.Add("-p");
-            psi.ArgumentList.Add(copy);
-            if (ThirdPartyHookService.WindowerRegion(polExe) is { } region)
-            {
-                psi.ArgumentList.Add("-r");
-                psi.ArgumentList.Add(region);
-            }
-        }
+        var psi = new ProcessStartInfo(Path.Combine(dir, "Ashita-cli.exe")) { WorkingDirectory = dir, UseShellExecute = false, CreateNoWindow = true };
+        psi.ArgumentList.Add(bootFile);
         ApplyContract(psi.Environment, launchPsi.Environment, launchId);
 
         var pidFile = HookFiles.PidFile(launchId);
@@ -115,8 +91,8 @@ public static class ThirdPartyHookLauncher
         var hookStartUtc = ProcessTree.StartTime(hookPid) ?? hookStart.ToUniversalTime();
         using var tree = new LaunchTree(hookPid, hookStartUtc);
 
-        // Till a pol.exe turns up there's only the long limit: Windower can sit in its own update for a while, and
-        // ending it part way could leave it broken. Then the hook gets limit.Report to say it's in
+        // Till a pol.exe turns up there's only the long limit, a cold start can keep Ashita-cli busy for a while. Then
+        // the hook gets limit.Report to say it's in
         var startedAt = DateTime.UtcNow;
         DateTime? reportBy = null, hookGoneAt = null;
         bool saidSlow = false;
@@ -201,7 +177,7 @@ public static class ThirdPartyHookLauncher
             new(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(90), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30));
     }
 
-    // Windower/Ashita first so it can't start another, then everything still running in its tree (pol.exe hooked or
+    // Ashita first so it can't start another, then everything still running in its tree (pol.exe hooked or
     // not, or whatever it handed over to). A pol.exe without the hook carries on into the viewer's own menu, the one
     // thing nobody's meant to see
     internal static bool EndLaunch(Process hook, LaunchTree tree)

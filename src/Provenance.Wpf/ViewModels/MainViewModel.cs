@@ -192,6 +192,12 @@ public partial class MainViewModel : ObservableObject
 
     private void OnProgress(LaunchProgress p)
     {
+        if (p.Stage == "Notice")
+        {
+            Log.Information("progress: notice: {Detail}", p.Detail);
+            ShowNotice(p.Detail, "InformationOutline", opens: false);
+            return;
+        }
         if (!string.IsNullOrWhiteSpace(p.Detail)) ProgressText = p.Detail;
         if (p.Fraction >= 0)
         {
@@ -1401,7 +1407,8 @@ public partial class MainViewModel : ObservableObject
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
         var vm = new SettingsViewModel(_settings, multiRunning: () => MultiRunning,
                                        holdPrestarts: _pol.HoldPrestarts, releasePrestarts: _pol.ReleasePrestarts,
-                                       largeAddressAwareBlocked: LargeAddressAwareBlocked);
+                                       largeAddressAwareBlocked: LargeAddressAwareBlocked,
+                                       stopPrestart: () => Task.Run(_pol.StopPrestart));
         var w = new SettingsWindow { DataContext = vm };
         if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
         _openSettings = vm;

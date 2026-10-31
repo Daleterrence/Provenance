@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
 using Serilog;
 using Provenance.Common.PolFormat;
 using Provenance.Wpf.Services;
@@ -18,12 +19,16 @@ public partial class SettingsViewModel : ObservableObject
     private readonly FeedService? _feeds;
     private readonly Func<bool>? _multiRunning;
     private readonly Func<string?>? _largeAddressAwareBlocked;
-    private readonly Action? _holdPrestarts, _releasePrestarts;
-    private bool _loadingThirdPartyHook;
+    private readonly Action? _holdPrestarts, _releasePrestarts, _stopPrestart;
+    private readonly Func<bool, RegistryKey?>? _gameKey;
+    private bool _loadingThirdPartyHook, _gameReady;
 
     public SettingsViewModel(ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
-                             Action? holdPrestarts = null, Action? releasePrestarts = null, Func<string?>? largeAddressAwareBlocked = null)
+                             Action? holdPrestarts = null, Action? releasePrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
+                             Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null)
     {
+        _gameKey = gameKey;
+        _stopPrestart = stopPrestart;
         _settings = settings;
         _multiRunning = multiRunning;
         _largeAddressAwareBlocked = largeAddressAwareBlocked;
@@ -53,10 +58,13 @@ public partial class SettingsViewModel : ObservableObject
         _autoDisconnectIndex = Math.Max(0, Array.IndexOf(PolOptions.AutoDisconnectChoices, PolOptions.AutoDisconnect(settings.Current)));
         LoadThirdPartyHook();
         LoadMulti();
-        Game = new GameSettingsViewModel(region);
+        Game = new GameSettingsViewModel(region, GameStoreForSelection());
+        _gameReady = true;
+        Addons = new AddonsPluginsViewModel(settings, this);
     }
 
     public GameSettingsViewModel Game { get; }
+    public AddonsPluginsViewModel Addons { get; }
     public string RegionText { get; }
     public string ViewerFolder { get; }
     public string FfxiFolder { get; }
@@ -213,98 +221,6 @@ public partial class SettingsViewModel : ObservableObject
         catch (InvalidOperationException) { return null; }   // host not started (design time)
     }
 
-    public string[] ThirdPartyHookChoices { get; } = { "None", "Ashita v4", "Windower 4" };
-
-    [ObservableProperty] private int _thirdPartyHookIndex;
-    [ObservableProperty] private string _ashitaPath = string.Empty;
-    [ObservableProperty] private string _windowerPath = string.Empty;
-    [ObservableProperty] private string _ashitaBootConfig = string.Empty;
-    [ObservableProperty] private string _windowerProfile = string.Empty;
-    [ObservableProperty] private string _thirdPartyHookStatus = string.Empty;
-    [ObservableProperty] private bool _thirdPartyHookStatusIsError;
-    public ObservableCollection<string> AshitaBootConfigs { get; } = new();
-    public ObservableCollection<string> WindowerProfiles { get; } = new();
-    public bool IsAshita => ThirdPartyHookIndex == 1;
-    public bool IsWindower => ThirdPartyHookIndex == 2;
-
-    private void LoadThirdPartyHook()
-    {
-        _loadingThirdPartyHook = true;
-        var s = _settings.Current;
-        ThirdPartyHookIndex = s.ThirdPartyHookPlatform switch { ThirdPartyHookService.Ashita => 1, ThirdPartyHookService.Windower => 2, _ => 0 };
-        AshitaPath = ThirdPartyHookService.DetectAshita(s.AshitaPath) ?? s.AshitaPath;
-        WindowerPath = ThirdPartyHookService.DetectWindower(s.WindowerPath) ?? s.WindowerPath;
-        RefreshThirdPartyHookLists();
-        // the boot config Ashita really ran with last (from its logs), so the game keeps its window and plugins
-        var lastUsed = ThirdPartyHookService.LastUsedAshitaBootConfig(ThirdPartyHookService.DetectAshita(AshitaPath));
-        AshitaBootConfig = AshitaBootConfigs.Contains(s.AshitaBootConfig) ? s.AshitaBootConfig
-                         : lastUsed != null && AshitaBootConfigs.Contains(lastUsed) ? lastUsed
-                         : AshitaBootConfigs.FirstOrDefault(c => c.Equals("default.ini", StringComparison.OrdinalIgnoreCase))
-                           ?? AshitaBootConfigs.FirstOrDefault() ?? string.Empty;
-        WindowerProfile = WindowerProfiles.Contains(DisplayProfile(s.WindowerProfile)) ? DisplayProfile(s.WindowerProfile)
-                        : WindowerProfiles.FirstOrDefault() ?? string.Empty;
-        _loadingThirdPartyHook = false;
-        UpdateThirdPartyHookStatus();
-    }
-
-    private static string DisplayProfile(string p) => p.Length == 0 ? "(default)" : p;
-    private static string StoredProfile(string p) => p == "(default)" ? string.Empty : p;
-
-    private void RefreshThirdPartyHookLists()
-    {
-        AshitaBootConfigs.Clear();
-        foreach (var c in ThirdPartyHookService.AshitaBootConfigs(ThirdPartyHookService.DetectAshita(AshitaPath))) AshitaBootConfigs.Add(c);
-        WindowerProfiles.Clear();
-        foreach (var p in ThirdPartyHookService.WindowerProfiles(ThirdPartyHookService.DetectWindower(WindowerPath))) WindowerProfiles.Add(DisplayProfile(p));
-        RefreshMultiChoices();
-    }
-
-    private void UpdateThirdPartyHookStatus()
-    {
-        (ThirdPartyHookStatus, ThirdPartyHookStatusIsError) = ThirdPartyHookIndex switch
-        {
-            1 when ThirdPartyHookService.DetectAshita(AshitaPath) is null => ("Couldn't find Ashita v4 in that folder.", true),
-            1 => ("The game starts through Ashita with the boot configuration below.", false),
-            2 when ThirdPartyHookService.DetectWindower(WindowerPath) is null => ("Couldn't find Windower 4 in that folder.", true),
-            2 => ("The game starts through Windower with the profile below.", false),
-            _ => ("The game starts directly, without Windower or Ashita.", false),
-        };
-        OnPropertyChanged(nameof(IsAshita));
-        OnPropertyChanged(nameof(IsWindower));
-    }
-
-    private void SaveThirdPartyHook()
-    {
-        if (_loadingThirdPartyHook) return;
-        var s = _settings.Current;
-        s.ThirdPartyHookPlatform = ThirdPartyHookIndex switch { 1 => ThirdPartyHookService.Ashita, 2 => ThirdPartyHookService.Windower, _ => ThirdPartyHookService.None };
-        s.AshitaPath = AshitaPath;
-        s.WindowerPath = WindowerPath;
-        s.AshitaBootConfig = AshitaBootConfig;
-        s.WindowerProfile = StoredProfile(WindowerProfile);
-        _settings.Save(s);
-        UpdateThirdPartyHookStatus();
-    }
-
-    // after the first load, a switch between Windower and Ashita clears each account's stored profile
-    partial void OnThirdPartyHookIndexChanged(int value) { SaveThirdPartyHook(); RefreshMultiChoices(platformChanged: !_loadingThirdPartyHook); }
-    partial void OnAshitaBootConfigChanged(string value) => SaveThirdPartyHook();
-    partial void OnWindowerProfileChanged(string value) => SaveThirdPartyHook();
-    partial void OnAshitaPathChanged(string value) { if (!_loadingThirdPartyHook) { RefreshThirdPartyHookLists(); SaveThirdPartyHook(); } }
-    partial void OnWindowerPathChanged(string value) { if (!_loadingThirdPartyHook) { RefreshThirdPartyHookLists(); SaveThirdPartyHook(); } }
-
-    [RelayCommand]
-    private void BrowseAshita() { if (PickFolder("Choose your Ashita v4 folder") is { } d) AshitaPath = d; }
-
-    [RelayCommand]
-    private void BrowseWindower() { if (PickFolder("Choose your Windower 4 folder") is { } d) WindowerPath = d; }
-
-    internal static string? PickFolder(string title)
-    {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = title };
-        return dlg.ShowDialog() == true ? dlg.FolderName : null;
-    }
-
     // Multi-account page. The first profile choice means whatever the Windower/Ashita tab says
     public string ProfileDefaultChoice => ThirdPartyHookIndex == 1 ? "Select Ashita profile..." : "Select Windower profile...";
     public ObservableCollection<MultiAccountRow> MultiAccountRows { get; } = new();
@@ -330,6 +246,7 @@ public partial class SettingsViewModel : ObservableObject
         LoadMulti();
         OnPropertyChanged(nameof(MultiRunGoing));
         OnPropertyChanged(nameof(MultiEditable));
+        OnProfilesChanged();
     }
 
     private bool _loadingMulti;
@@ -372,10 +289,14 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     private string ToChoice(string? stored) =>
-        stored is null ? ProfileDefaultChoice : ThirdPartyHookIndex == 2 ? DisplayProfile(stored) : stored;
+        stored is null ? ProfileDefaultChoice
+        : ThirdPartyHookIndex == 2 ? Item(WindowerProfiles, stored)?.Display ?? stored
+        : stored;
 
     private string? FromChoice(string choice) =>
-        choice == ProfileDefaultChoice ? null : ThirdPartyHookIndex == 2 ? StoredProfile(choice) : choice;
+        choice == ProfileDefaultChoice ? null
+        : ThirdPartyHookIndex == 2 ? WindowerProfiles.FirstOrDefault(i => i.Display == choice)?.Name ?? choice
+        : choice;
 
     // a Windower profile means nothing to Ashita and vice versa, so a platform switch clears every stored one
     private void RefreshMultiChoices(bool platformChanged = false)
@@ -384,8 +305,8 @@ public partial class SettingsViewModel : ObservableObject
         var keep = MultiAccountRows.Select(r => r.ThirdPartyHookProfile).ToList();
         MultiProfileChoices.Clear();
         MultiProfileChoices.Add(ProfileDefaultChoice);
-        foreach (var c in ThirdPartyHookIndex == 1 ? AshitaBootConfigs : ThirdPartyHookIndex == 2 ? WindowerProfiles : Enumerable.Empty<string>())
-            MultiProfileChoices.Add(c);
+        foreach (var c in ThirdPartyHookIndex == 1 ? AshitaBootConfigs : ThirdPartyHookIndex == 2 ? WindowerProfiles : Enumerable.Empty<HookProfileItem>())
+            MultiProfileChoices.Add(c.Display);
         for (int i = 0; i < MultiAccountRows.Count; i++)
             MultiAccountRows[i].ThirdPartyHookProfile = !platformChanged && MultiProfileChoices.Contains(keep[i]) ? keep[i] : ProfileDefaultChoice;
         _loadingMulti = false;

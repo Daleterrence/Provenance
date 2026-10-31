@@ -20,7 +20,19 @@ public partial class SettingsWindow : Window
         KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Escape) { e.Handled = true; Close(); } };
         Loaded += (_, _) => { if (Owner != null) Owner.Closing += OnOwnerClosing; };
         Closed += (_, _) => { if (Owner != null) Owner.Closing -= OnOwnerClosing; };
+        DataContextChanged += (_, _) => Wire();
     }
+
+    private void Wire()
+    {
+        if (DataContext is not ViewModels.SettingsViewModel vm) return;
+        vm.AskName = (title, prompt, start, check) =>
+            InputDialog.Prompt(this, title, prompt, start, maxLength: WindowerNameLength, validate: check);
+        vm.Confirm = (title, body, ok, destructive) => MessageDialog.Confirm(this, title, body, ok, destructive: destructive) == 0;
+    }
+
+    // settings.xml takes 255, and Ashita's file names stop well short of that
+    private const int WindowerNameLength = 255;
 
     private void OnOwnerClosing(object? sender, System.ComponentModel.CancelEventArgs e) => _ownerClosing = true;
 
@@ -40,6 +52,11 @@ public partial class SettingsWindow : Window
 
     private void ShowPanel(int index)
     {
+        // a profile picked under Windower/Ashita since the Game page was last shown
+        if (index == 2 && DataContext is ViewModels.SettingsViewModel vm)
+            vm.ShowingGame(which => MessageDialog.Confirm(this, "Unsaved game settings",
+                $"You've changed some game settings{(which is null ? "" : " for " + which)} but haven't saved them yet.", "CONTINUE",
+                "Save them first", "Don't save them") switch { 0 => true, 1 => false, _ => null });
         for (int i = 0; FindName($"Panel{i}") is UIElement panel; i++)
             panel.Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
         if (index == 0) ReadLargeAddressAware();

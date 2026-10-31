@@ -6,27 +6,93 @@ using CommunityToolkit.Mvvm.Input;
 using Serilog;
 using Provenance.Common.Game;
 using Provenance.Common.PolFormat;
+using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.ViewModels;
 
-// The official FFXI Config tool's options, on the same registry values. Changes wait for Save, and only the changed
-// values get written
+// The official FFXI Config tool's options, saved to the registry, or to the Windower profile or Ashita boot
+// configuration the store's for. Changes wait for Save, and only the changed values get written
 public partial class GameSettingsViewModel : ObservableObject
 {
     private readonly PolRegion? _region;
+    private IGameSettingsStore _store;
     private FfxiSettings _original = FfxiSettings.Defaults();
-    private bool _applying, _edited, _forTest;
+    private bool _applying, _edited, _forTest, _loaded;
     // 0037/0038 as they'll be saved. A loaded value stays exact until the slider or the resolution moves
     private int _uiWidth, _uiHeight;
 
-    public GameSettingsViewModel(PolRegion? region)
+    public GameSettingsViewModel(PolRegion? region, IGameSettingsStore? store = null)
     {
         _region = region;
+        _store = store ?? new RegistryGameStore(region);
         foreach (var m in DisplayModes()) Resolutions.Add(m);
         Load();
     }
 
-    public bool Available => _forTest || (_region is { } r && FfxiConfig.Exists(r));
+    public bool Available => _forTest || _loaded;
+
+    public IGameSettingsStore Store => _store;
+    public bool HasProfile => _store.Platform is not null;
+    public string ProfileKind => _store.Platform switch
+    {
+        ThirdPartyHookService.Windower => "Windower profile",
+        ThirdPartyHookService.Ashita => "Ashita boot configuration",
+        _ => "",
+    };
+    public string ProfileHeading => HasProfile ? $"Game settings for the {ProfileKind}" : "";
+    public string ProfileShown => _store.ProfileDisplay ?? "";
+
+    public string SharedNoteText => _store.Platform == ThirdPartyHookService.Ashita ? "Applies to every boot configuration" : "Applies to every profile";
+
+    public string ProfileHelp => _store.Platform switch
+    {
+        ThirdPartyHookService.Windower =>
+            "Settings marked \"Applies to every profile\" are shared by all your Windower profiles. You can pick another profile under Windower/Ashita.",
+        ThirdPartyHookService.Ashita =>
+            "Settings marked \"Applies to every boot configuration\" are shared by all of them. You can pick another boot configuration under Windower/Ashita.",
+        _ => "",
+    };
+
+    public string KeepAspectHelp => _store.SameShapeRenderSizes
+        ? "Windower always keeps the 3D resolution the same shape as the game resolution. This setting is for when you play without it."
+        : "When this is on, the 3D resolution list only shows sizes that are the same shape as the game resolution.";
+
+    public string IntroText => HasProfile
+        ? "These are the same settings as in the FINAL FANTASY XI Config tool. Only the settings you change are saved."
+        : "These are the same settings as in the FINAL FANTASY XI Config tool. Only the settings you change are saved, and Windower or Ashita can override some of them while you play.";
+
+    // true for a field every profile shares, which gets a note saying so. Never with no platform
+    [ObservableProperty] private IReadOnlyDictionary<string, bool> _appliesToAll = Shared(null, false);
+
+    private static Dictionary<string, bool> Shared(IReadOnlySet<string>? profileFields, bool hasProfile) =>
+        GameFields.All.ToDictionary(f => f, f => hasProfile && profileFields is not null && !profileFields.Contains(f));
+
+    public void UseStore(IGameSettingsStore store)
+    {
+        _store = store;
+        StoreChanged();
+        Load();
+    }
+
+    // the same profile under its new name, so nothing on screen changes
+    public void Retarget(IGameSettingsStore store)
+    {
+        _store = store;
+        StoreChanged();
+    }
+
+    private void StoreChanged()
+    {
+        OnPropertyChanged(nameof(Store));
+        OnPropertyChanged(nameof(HasProfile));
+        OnPropertyChanged(nameof(ProfileKind));
+        OnPropertyChanged(nameof(ProfileShown));
+        OnPropertyChanged(nameof(ProfileHeading));
+        OnPropertyChanged(nameof(IntroText));
+        OnPropertyChanged(nameof(KeepAspectHelp));
+        OnPropertyChanged(nameof(SharedNoteText));
+        OnPropertyChanged(nameof(ProfileHelp));
+    }
 
     public string[] WindowModes { get; } = { "Full screen", "Windowed", "Borderless window" };
     public string[] Quality3 { get; } = { "Standard", "Medium", "High quality" };
@@ -124,13 +190,20 @@ public partial class GameSettingsViewModel : ObservableObject
 
     private void Load()
     {
-        _original = _region is { } r && FfxiConfig.Exists(r) ? FfxiConfig.Load(r) : FfxiSettings.Defaults();
+        GameStoreLoad? loaded = null;
+        string? problem = null;
+        try { loaded = _store.Load(); }
+        catch (Exception ex)
+        {
+            if (!ErrorText.Ours(ex)) Log.Warning(ex, "Could not load the game settings");
+            problem = ErrorText.Of(ex, "Provenance couldn't read the game settings.");
+        }
+        _loaded = loaded is not null;
+        _original = loaded?.Settings ?? FfxiSettings.Defaults();
+        AppliesToAll = Shared(loaded?.ProfileFields, HasProfile);
         Apply(_original);
-        // the game makes its settings on its first start
-        Status = Available ? "These are your current game settings."
-               : _region is { } reg && PolPaths.TryGetInstallFolder(reg, PolPaths.FfxiProduct) != null
-                   ? "FINAL FANTASY XI is installed, but it has no saved settings yet. Open the FINAL FANTASY XI Config tool once as an administrator so it saves them, then open these settings again."
-                   : "FINAL FANTASY XI isn't installed on this PC, so there are no game settings to change.";
+        OnPropertyChanged(nameof(Available));
+        Status = problem ?? (HasProfile ? $"These are the current game settings for this {ProfileKind}." : "These are your current game settings.");
     }
 
     // made-up settings in place of this PC's, and Save never writes them
@@ -150,7 +223,9 @@ public partial class GameSettingsViewModel : ObservableObject
     {
         base.OnPropertyChanged(e);
         if (!_applying && e.PropertyName is not (nameof(Status) or nameof(StatusIsError) or nameof(BrightnessText) or nameof(Available)
-                or nameof(HasUnsavedChanges) or nameof(UiScaleText) or nameof(UiSizeText) or nameof(UiScaleMax)))
+                or nameof(HasUnsavedChanges) or nameof(UiScaleText) or nameof(UiSizeText) or nameof(UiScaleMax) or nameof(Store)
+                or nameof(HasProfile) or nameof(ProfileKind) or nameof(ProfileShown) or nameof(ProfileHeading) or nameof(IntroText) or nameof(KeepAspectHelp)
+                or nameof(SharedNoteText) or nameof(ProfileHelp) or nameof(AppliesToAll)))
             _edited = true;
     }
 
@@ -204,7 +279,8 @@ public partial class GameSettingsViewModel : ObservableObject
         (s.UiWidth, s.UiHeight) = (_uiWidth, _uiHeight);
         s.Brightness = (float)Math.Round(Brightness, 1);
         s.OpeningMovie = B(OpeningMovie); s.Textures = Textures; s.Maps2D = Maps2D; s.Fonts = Fonts;
-        s.Vegetation = Vegetation; s.DrawDistanceMip = DrawDistance ? 0 : 1; s.EnhancedShading = B(EnhancedShading);
+        // off keeps a mip level Windower or Ashita had above 1
+        s.Vegetation = Vegetation; s.DrawDistanceMip = DrawDistance ? 0 : Math.Max(1, _original.DrawDistanceMip); s.EnhancedShading = B(EnhancedShading);
         s.KeepAspect = B(KeepAspect); s.Sound = B(Sound); s.SoundEffects = (int)Math.Round(SoundEffects);
         s.BackgroundSound = B(BackgroundSound); s.ScreenshotFolder = ScreenshotFolder.Trim();
         s.FullResScreenshots = B(FullResScreenshots); s.LegacySettings = B(LegacySettings);
@@ -219,17 +295,17 @@ public partial class GameSettingsViewModel : ObservableObject
     private void Save()
     {
         if (_forTest) return;
-        if (_region is not { } r) { Status = "Provenance couldn't find a PlayOnline install, so there's nowhere to save these settings."; return; }
-        if (!FfxiConfig.Exists(r)) { Status = "FINAL FANTASY XI isn't installed on this PC, so there are no settings to save."; return; }
+        if (!HasProfile && _region is null) { Status = "Provenance couldn't find a PlayOnline install, so there's nowhere to save these settings."; return; }
+        if (!_loaded) { Status = "FINAL FANTASY XI isn't installed on this PC, so there are no settings to save."; return; }
         try
         {
-            int n = FfxiConfig.Save(r, Collect(), _original);
-            _original = FfxiConfig.Load(r);
+            var saved = _store.Save(Collect(), _original);
+            _original = _store.Load().Settings;
             Apply(_original);
             bool running = Process.GetProcessesByName("pol").Length > 0;
-            Status = n == 0 ? "You haven't changed anything, so there's nothing to save." :
+            Status = !saved.Wrote ? "You haven't changed anything, so there's nothing to save." :
                      "Your changes are saved." + (running ? " If the game is running, it'll use them the next time it starts." : "");
-            Log.Information("Saved {Count} FFXI settings values", n);
+            Log.Information("Saved {Count} FFXI settings values ({Store})", saved.Changed, _store.Key);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
         {
@@ -240,7 +316,7 @@ public partial class GameSettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.Error(ex, "FFXI settings save failed");
-            Status = "Provenance couldn't write the FINAL FANTASY XI settings, so your changes weren't saved.";
+            Status = ErrorText.Of(ex, "Provenance couldn't write the FINAL FANTASY XI settings, so your changes weren't saved.");
             StatusIsError = true;
         }
     }
@@ -273,7 +349,7 @@ public partial class GameSettingsViewModel : ObservableObject
                 RenderSize = PickOrAdd(Fmt(w, h)); Textures = 1; Fonts = 1; Vegetation = 1;
                 EnhancedShading = true; DrawDistance = true; Maps2D = 1; break;
             default:
-                RenderSize = PickOrAdd(KeepAspect ? RenderSizes.FirstOrDefault() ?? Fmt(w, h) : Fmt(512, 512));
+                RenderSize = PickOrAdd(SameShapeOnly ? RenderSizes.FirstOrDefault() ?? Fmt(w, h) : Fmt(512, 512));
                 Textures = 0; Maps2D = 0; Fonts = 0; Vegetation = 1; DrawDistance = false; EnhancedShading = false; break;
         }
         Status = $"The {which} preset is shown. Press Save to keep it.";
@@ -296,15 +372,24 @@ public partial class GameSettingsViewModel : ObservableObject
         Status = "The gamepad tool is open. When you've finished with it, close these settings and open them again to see its changes.";
     }
 
+    // Windower keeps the 3D resolution as one scale of the game's, so only that shape can be saved there
+    private bool SameShapeOnly => KeepAspect || _store.SameShapeRenderSizes;
+
     private void RebuildRenderSizes(string keep)
     {
         var (w, h) = Parse(Resolution, 800, 600);
         RenderSizes.Clear();
         var list = new List<string> { Fmt(w, h), Fmt(w * 2, h * 2) };
-        if (!KeepAspect) foreach (var p in new[] { 512, 1024, 2048, 4096 }) list.Add(Fmt(p, p));
-        foreach (var m in Resolutions) { var (mw, mh) = Parse(m, 0, 0); if (!KeepAspect || mw * h == mh * w) list.Add(m); }
+        if (!SameShapeOnly) foreach (var p in new[] { 512, 1024, 2048, 4096 }) list.Add(Fmt(p, p));
+        foreach (var m in Resolutions) { var (mw, mh) = Parse(m, 0, 0); if (!SameShapeOnly || mw * h == mh * w) list.Add(m); }
         foreach (var x in list.Distinct()) RenderSizes.Add(x);
-        RenderSize = PickOrAdd(string.IsNullOrEmpty(keep) ? Fmt(w, h) : keep);
+        var pick = string.IsNullOrEmpty(keep) ? Fmt(w, h) : keep;
+        // a scale's rounding can leave it a pixel off the shape, which is fine. Another resolution's shape takes the
+        // nearest one that fits
+        var (kw, kh) = Parse(pick, w, h);
+        if (_store.SameShapeRenderSizes && Math.Abs((long)kw * h - (long)kh * w) > Math.Max(w, h))
+            pick = RenderSizes.OrderBy(r => Math.Abs(Parse(r, 0, 0).Item1 - kw)).First();
+        RenderSize = PickOrAdd(pick);
     }
 
     private string PickOrAdd(string v)
