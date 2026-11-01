@@ -57,8 +57,13 @@ public partial class SettingsViewModel
         var folder = GameSettingsBackup.FolderOrDefault(_settings.Current.BackupFolder);
         try
         {
-            Directory.CreateDirectory(folder);
+            if (!Directory.Exists(folder))
+                using (GameSettingsBackup.HoldFolder(folder) ?? throw new BackupFolderLinkedException(folder)) { }
             ShowBackupFolder(folder);
+        }
+        catch (BackupFolderLinkedException)
+        {
+            SayBackup("Your backups folder goes through a link to somewhere else, so Provenance won't make it. Choose another folder.", error: true);
         }
         catch (Exception ex)
         {

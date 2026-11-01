@@ -5,6 +5,7 @@
 #include <string.h>
 #include <shlobj.h>
 #include <bcrypt.h>
+#include <sddl.h>
 #include <tlhelp32.h>
 #include "pol_cred.h"
 #pragma comment(lib, "bcrypt.lib")
@@ -2249,19 +2250,37 @@ static HANDLE peer_secret_old(void)
     }
     return f;
 }
+/* POL_IPC_DIR is one folder for the whole PC, so each Windows user gets their own file there, named by their SID */
+static int peer_secret_name(WCHAR *out, int cap)
+{
+    BYTE buf[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    WCHAR *sid = NULL;
+    HANDLE t;
+    DWORD n = 0;
+    int ok;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &t)) return 0;
+    ok = GetTokenInformation(t, TokenUser, buf, sizeof buf, &n) &&
+         ConvertSidToStringSidW(((TOKEN_USER *)buf)->User.Sid, &sid);
+    CloseHandle(t);
+    if (!ok) return 0;
+    ok = lstrlenW(sid) + 13 <= cap;
+    if (ok) wsprintfW(out, L"peerkey-%s.bin", sid);
+    LocalFree(sid);
+    return ok;
+}
 /* in the admin-only POL_IPC_DIR, so manual runs without one get no conversation keys */
 static int peer_secret(void)
 {
-    WCHAR path[MAX_PATH + 32];
+    WCHAR path[MAX_PATH + 256], name[256];
     FILE_DISPOSITION_INFO gone = { TRUE };
     HANDLE f, old;
     DWORD n = 0;
     int r;
     if (g_peer_secret_ok) return 1;
     n = GetEnvironmentVariableW(L"POL_IPC_DIR", path, MAX_PATH);
-    if (!n || n >= MAX_PATH) return 0;
+    if (!n || n >= MAX_PATH || !peer_secret_name(name, 256)) return 0;
     if (path[n - 1] != L'\\' && path[n - 1] != L'/') lstrcatW(path, L"\\");
-    lstrcatW(path, L"peerkey.bin");
+    lstrcatW(path, name);
     if ((r = peer_secret_read(path)) >= 0) return r;
     old = peer_secret_old();
     if (old == INVALID_HANDLE_VALUE &&
@@ -3298,9 +3317,10 @@ static void search_request(BYTE *b)
     g_srch_n = 0;
     if (notice_blocks(g_notice)) { search_done("failed:account notice"); return; }
     if (!ascii_name_ok(name)) { search_done("failed:bad name"); return; }
+    /* a name with a ' never goes out in a handle search (ascii_name_ok keeps 0x04 out) */
+    if (strchr(name, '\'')) { search_done("failed:quote"); return; }
     if (!fs_load_pib(b)) { search_done("failed:no schema"); return; }
     memset(g_srch_cond, 0, sizeof g_srch_cond);
-    /* the viewer's search by handle: the name goes between 0x04 quotes, and a handle can't hold a 0x04 */
     wsprintfA(g_srch_clause, "z_up_name=UPPER(\x04%s\x04)", name);
     ((void (__cdecl *)(void *, int, const char *))SVC(0x4a4))(g_srch_cond, 7, g_srch_clause);
     lg("friends: search \"%s\"\r\n", name);

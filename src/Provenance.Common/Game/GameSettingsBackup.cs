@@ -112,8 +112,7 @@ public static partial class GameSettingsBackup
         if (found.Count == 0) return new(BackupOutcome.NothingThere, null, leftOut);
 
         folder = Path.GetFullPath(folder);
-        Directory.CreateDirectory(folder);
-        using var pins = FolderPins.Hold(folder, folder) ?? throw new BackupFolderLinkedException(folder);
+        using var pins = HoldFolder(folder) ?? throw new BackupFolderLinkedException(folder);
         var newest = List(folder).FirstOrDefault();
         if (newest is not null && Same(newest.Manifest, found)) return new(BackupOutcome.Unchanged, newest.Path, leftOut);
 
@@ -174,6 +173,29 @@ public static partial class GameSettingsBackup
         finally { try { File.Delete(tmp); } catch { } }
     }
 
+    // the folder comes from settings.json, so whatever's missing of it is made from the nearest folder that's there,
+    // each one held and checked first. Null if any of it is a link, before anything's made through one
+    public static FolderPins? HoldFolder(string folder)
+    {
+        folder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        var anchor = folder;
+        while (!Directory.Exists(anchor))
+            anchor = Path.GetDirectoryName(anchor) ?? throw new DirectoryNotFoundException($"Nothing above {folder} is there.");
+        return HoldFrom(anchor, folder);
+    }
+
+    // a drive root can't be a pin's root, so the first folder under one is made on its own
+    private static FolderPins? HoldFrom(string anchor, string dir)
+    {
+        if (Path.GetDirectoryName(anchor) is null && dir.Length > anchor.Length)
+        {
+            if (FolderPins.ThroughLink(anchor)) return null;
+            anchor = Path.Join(anchor, dir[anchor.Length..].TrimStart('\\').Split('\\')[0]);
+            Directory.CreateDirectory(anchor);
+        }
+        return FolderPins.Hold(anchor, dir);
+    }
+
     // ours are the ones named like ours with a manifest that reads, newest first
     public static IReadOnlyList<BackupInfo> List(string folder)
     {
@@ -229,20 +251,26 @@ public static partial class GameSettingsBackup
             if (blocked?.Invoke() is { } why) throw Shown.Mark(new InvalidOperationException(why));
             var leftOut = new List<string>(before.LeftOut.Select(l => "before: " + l));
             int restored = 0;
-            foreach (var group in zip.Entries.Where(e => e.FullName != ManifestName).GroupBy(e => Target(sources, e.FullName)))
+            var pinned = new List<(PinnedDir Pins, IGrouping<TargetDir?, ZipArchiveEntry> Entries)>();
+            try
             {
-                if (group.Key is not { } dir)
+                // every place is held and checked before anything's written, so a link stops the lot
+                foreach (var group in zip.Entries.Where(e => e.FullName != ManifestName).GroupBy(e => Target(sources, e.FullName)))
                 {
-                    leftOut.AddRange(group.Select(e => $"{e.FullName}: there's nowhere to put it on this PC"));
-                    continue;
+                    if (group.Key is { } dir) pinned.Add((Pin(dir.Root, dir.Sub), group));
+                    else leftOut.AddRange(group.Select(e => $"{e.FullName}: there's nowhere to put it on this PC"));
                 }
-                using var pins = Pin(dir.Root, dir.Sub);
-                foreach (var e in group)
-                {
-                    var data = ReadEntry(e) ?? throw new NotABackupException();
-                    Put(pins.Dir, e.Name, data, written.TryGetValue(e.FullName, out var at) ? at : null);
-                    restored++;
-                }
+                foreach (var (pins, group) in pinned)
+                    foreach (var e in group)
+                    {
+                        var data = ReadEntry(e) ?? throw new NotABackupException();
+                        Put(pins.Dir, e.Name, data, written.TryGetValue(e.FullName, out var at) ? at : null);
+                        restored++;
+                    }
+            }
+            finally
+            {
+                foreach (var (pins, _) in pinned) pins.Dispose();
             }
             return new(restored, before, leftOut);
         }
@@ -574,17 +602,23 @@ public static partial class GameSettingsBackup
     }
 
     // made where it's missing, from the nearest folder that's there. Nothing at or below the place's own name can be a
-    // link, the same rule as a backup's reads
+    // link (the same rule as a backup's reads). When the folder above it is missing too (0042 can be anything), the
+    // folder it's made from can't be reached through one either
     private static PinnedDir Pin(string root, string sub)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-        var anchor = Path.GetDirectoryName(full);
+        var parent = Path.GetDirectoryName(full);
+        var anchor = parent;
         while (anchor is not null && !Directory.Exists(anchor)) anchor = Path.GetDirectoryName(anchor);
         if (anchor is null || FolderPins.RealPath(anchor) is not { } real) throw new DirectoryNotFoundException($"Nothing above {full} is there.");
         var dir = Path.Join(real, full[anchor.Length..].TrimStart('\\'), sub);
-        var pins = FolderPins.Hold(real, dir) ?? throw new IOException($"{dir} goes through a link, so nothing's put back there.");
+        if (anchor != parent && FolderPins.ThroughLink(anchor)) throw Linked(Path.Join(full, sub));
+        var pins = HoldFrom(real, dir) ?? throw Linked(dir);
         return new PinnedDir(pins, dir);
     }
+
+    private static IOException Linked(string dir) =>
+        Shown.Mark(new IOException($"Nothing was restored, because {dir} goes through a link to somewhere else."));
 
     // a new name every time and never opened over an existing one, so a link left in its place can't catch it. The
     // last write time goes back too, or every restore would look like a change to the next backup

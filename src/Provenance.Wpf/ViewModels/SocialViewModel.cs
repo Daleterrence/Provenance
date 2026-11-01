@@ -890,6 +890,7 @@ public partial class SocialViewModel : ObservableObject
     private string _requestKey = "";
     private DateTime _requestAt;
     private const string BadHandleName = "Type a handle name of up to 15 English letters, numbers or symbols.";
+    private const string QuoteInName = "Provenance can't search for handle names with an apostrophe (') in them.";
 
     private void SearchFailed(string note)
     {
@@ -909,6 +910,11 @@ public partial class SocialViewModel : ObservableObject
         if (name.Length is 0 or > 15 || !name.All(c => c is >= ' ' and <= '~'))
         {
             SearchFailed(BadHandleName);
+            return;
+        }
+        if (name.Contains('\''))
+        {
+            SearchFailed(QuoteInName);
             return;
         }
         _searchToken = NewToken();
@@ -971,6 +977,7 @@ public partial class SocialViewModel : ObservableObject
             {
                 "timeout" or "failed:timeout" => "PlayOnline didn't answer the search.",
                 "failed:bad name" => BadHandleName,
+                "failed:quote" => QuoteInName,
                 "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't search for handles.",
                 _ => $"PlayOnline couldn't run the search ({FailReason(st)}).",
             });
