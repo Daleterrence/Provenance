@@ -420,6 +420,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private void OnSnapshot(PolSocialSnapshot snap)
     {
+        // waiting its turn behind another profile server job in the hook, so its clock hasn't started
+        if (_job != Job.None && _token is not null && snap.MeToken != _token && snap.ProfileServerBusy) _at = DateTime.UtcNow;
         if (_job == Job.None || _token is null || snap.MeToken != _token) return;
         var state = snap.MeState;
         if (state.StartsWith("failed", StringComparison.Ordinal) || state == "cancelled")

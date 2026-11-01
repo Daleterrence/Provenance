@@ -18,9 +18,12 @@ public partial class AddFriendDialog : Window
         WindowFrame.Attach(this);
         DataContext = vm;
         Loaded += (_, _) => NameBox.Focus();
+        // a search still out when it closes is nobody's, so its hits never turn up under whatever's asked next
+        Closed += (_, _) => vm.CancelSearch();
         // opened from a row: search their name straight away, then pick their own hit (two people can share a name)
         if (handleName != null)
         {
+            vm.CancelSearch();
             vm.SearchKind = FriendSearchKind.Handle;
             NameBox.Text = handleName;
             Loaded += (_, _) => Vm.Search(NameBox.Text);

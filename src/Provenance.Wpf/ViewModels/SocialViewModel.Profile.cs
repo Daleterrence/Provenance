@@ -13,7 +13,9 @@ public sealed partial class ProfileTab(int slot, string characterKey, string lab
     public string CharacterKey { get; } = characterKey;
     [ObservableProperty] private string _label = label;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Clickable))] private bool _isSelected;
-    public bool Clickable => !IsSelected;
+    // a tab whose read failed can be clicked again to retry
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Clickable))] private bool _failed;
+    public bool Clickable => !IsSelected || Failed;
 }
 
 public partial class SocialViewModel
@@ -64,7 +66,8 @@ public partial class SocialViewModel
         HasProfileTabs = false;
         _handleProfile = null;
         _characterShown = null;
-        _ffxiToken = null;
+        _profileToken = _ffxiToken = null;
+        ProfileLoading = false;
         _profileFor = f.Name;
         _profileRow = f.Row;
         _profileKey = f.Key;
@@ -83,8 +86,6 @@ public partial class SocialViewModel
         if (f.Key.Length > 0 && _profileCache.TryGetValue(f.Key, out var hit) &&
             DateTime.UtcNow - hit.At < TimeSpan.FromMinutes(5))
         {
-            _profileToken = null;
-            ProfileLoading = false;
             ProfileNote = "";
             HandleProfileArrived(hit.Profile);
             return;
@@ -125,9 +126,11 @@ public partial class SocialViewModel
     private void ApplyProfileState(PolSocialSnapshot snap)
     {
         if (_profileToken is null) return;
+        WaitingTurn(ref _profileAt, _profileToken, snap.ProfileToken, snap);
         // a "done" with no profile isn't an answer yet
         bool mine = snap.ProfileToken == _profileToken && (snap.ProfileState != "done" || snap.Profile != null);
         if (Settled(mine ? snap.ProfileState : null, "done", _profileAt, 130) is not { } st) return;
+        if (st == "timeout") Withdraw("profile");
         _profileToken = null;
         ProfileLoading = false;
         if (st == "done")
@@ -153,8 +156,14 @@ public partial class SocialViewModel
         "failed:no such friend" or "failed:friend list changed" => "Your friend list changed. Try again.",
         "failed:pending" => "You can only view your friends' profiles.",
         "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.",
-        _ => $"PlayOnline didn't send the profile ({FailReason(st)}).",
+        "failed:account notice" => "This PlayOnline account can't view profiles right now.",
+        NoCharacter => "Provenance couldn't find that character. Open the profile again from your friends list.",
+        // only a number is PlayOnline's own error, the rest never got as far as asking
+        _ when int.TryParse(FailReason(st), out _) => $"PlayOnline didn't send the profile ({FailReason(st)}).",
+        _ => $"Provenance couldn't ask PlayOnline for the profile ({FailReason(st)}).",
     };
+
+    private const string NoCharacter = "failed:no character";
 
     private string PrivacyText(int level) => level switch
     {
@@ -186,7 +195,7 @@ public partial class SocialViewModel
     [RelayCommand]
     private void SelectProfileTab(ProfileTab? tab)
     {
-        if (tab is null || tab.IsSelected || _ffxiToken is not null || ProfileLoading || !ProfileTabs.Contains(tab)) return;
+        if (tab is null || !tab.Clickable || _ffxiToken is not null || ProfileLoading || !ProfileTabs.Contains(tab)) return;
         if (tab.Slot < 0)
         {
             if (_handleProfile is null) return;
@@ -201,7 +210,17 @@ public partial class SocialViewModel
             return;
         }
         if (_pol.Pid is not { } pid) return;
-        var from = ProfileTabs.FirstOrDefault(t => t.IsSelected);
+        // the row from the latest friend list, a friend added or removed above this one moves it
+        if (_profileKey.Length > 0 && _last.FriendsLoaded)
+        {
+            if (_last.Friends.FirstOrDefault(x => x.Key == _profileKey && x.Row >= 0) is not { Pending: false } now)
+            {
+                ProfileNote = "You can only view your friends' profiles.";
+                return;
+            }
+            _profileRow = now.Row;
+        }
+        var from = ProfileTabs.FirstOrDefault(t => t.IsSelected && !t.Failed) ?? _ffxiFrom;
         SelectTab(tab);
         ShowCharacterPage(null);
         _ffxiToken = NewToken();
@@ -220,7 +239,11 @@ public partial class SocialViewModel
 
     private void SelectTab(ProfileTab tab)
     {
-        foreach (var t in ProfileTabs) t.IsSelected = t == tab;
+        foreach (var t in ProfileTabs)
+        {
+            t.IsSelected = t == tab;
+            t.Failed = false;
+        }
     }
 
     // a tab that was up before, from what it had, no new read
@@ -235,17 +258,21 @@ public partial class SocialViewModel
     private void ApplyFfxiProfileState(PolSocialSnapshot snap)
     {
         if (_ffxiToken is null) return;
+        WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileToken, snap);
         bool mine = snap.FfxiProfileToken == _ffxiToken && (snap.FfxiProfileState != "done" || snap.FfxiProfile != null);
         if (Settled(mine ? snap.FfxiProfileState : null, "done", _ffxiAt, 130) is not { } st) return;
+        if (st == "timeout") Withdraw("ffxiprofile");
         _ffxiToken = null;
         ProfileLoading = false;
         var tab = _ffxiFor!;
+        // the hook read whatever's in that slot now, which has to be the character the tab's for
+        if (st == "done" && snap.FfxiProfile!.CharacterKey != tab.CharacterKey) st = NoCharacter;
         if (st == "done")
         {
             var r = snap.FfxiProfile!;
             ProfileNote = "";
-            if (r.NameState == PolProfile.Shown && r.Name.Length > 0 && CharacterNames.Get(tab.CharacterKey)?.Name != r.Name)
-                CharacterNames.Remember(tab.CharacterKey, new KnownCharacter(r.Name));
+            var known = CharacterNames.FromProfile(r);
+            if (known is not null && CharacterNames.Get(tab.CharacterKey) != known) CharacterNames.Remember(tab.CharacterKey, known);
             tab.Label = TabLabel(tab.CharacterKey);
             _characterShown = r with { Slot = tab.Slot };
             ShowCharacterPage(_characterShown);
@@ -257,8 +284,11 @@ public partial class SocialViewModel
             ProfileNote = ViewerText(0x4ab6, "Selected profile is hidden.");
             return;
         }
+        // a profile shown again from the copy has slots the hook's lost, so opening it again reads it afresh
+        if (st == NoCharacter) _profileCache.Remove(_profileKey);
         ProfileNote = st == "failed:no profile" ? ViewerText(0x4a83, "No profile data found.") : ProfileFailText(st);
         ProfileNoteIsError = st != "failed:no profile";
+        tab.Failed = ProfileNoteIsError;
     }
 
     // the handle's H-ID and mail stay, there's no picture and the record level goes after the game's name

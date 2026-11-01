@@ -115,6 +115,18 @@ public partial class SocialViewModel : ObservableObject
         state == ok || state?.StartsWith("failed", StringComparison.Ordinal) == true ? state
         : DateTime.UtcNow - since > TimeSpan.FromSeconds(secs) ? "timeout" : null;
 
+    // a request the hook hasn't taken yet never runs for nobody
+    private void Withdraw(string ext)
+    {
+        if (_pol.Pid is { } pid) SocialSnapshot.CancelRequest(pid, ext);
+    }
+
+    // profile server reads go one at a time in the hook, so a clock only starts once the hook's taken that read
+    private static void WaitingTurn(ref DateTime since, string? token, string hookToken, PolSocialSnapshot snap)
+    {
+        if (token is not null && hookToken != token && snap.ProfileServerBusy) since = DateTime.UtcNow;
+    }
+
     private string? ViewerFolder() =>
         _settings.DetectedRegion is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null;
 
@@ -288,7 +300,10 @@ public partial class SocialViewModel : ObservableObject
         _onlineFriends.Clear();
         _presenceQuietUntil = null;
         _lookups?.Reset();
+        if (_profileToken is not null || _ffxiToken is not null) ProfileNote = "";   // nothing's coming for those
         _answerToken = _editToken = _picToken = _searchToken = _requestToken = _profileToken = _groupToken = _ffxiToken = null;
+        ProfileLoading = false;
+        _profileCache.Clear();   // a new hook has none of the slots the cached profiles' tabs read
         _answerFor = null;
         _sendQueue.Clear();   // unsent lines stay in the log and expire as "not sent"
         _sendInFlight.Clear();
@@ -887,7 +902,8 @@ public partial class SocialViewModel : ObservableObject
         public string World { get; init; } = "";
         public string Label => IsCharacter && World.Length > 0 ? PlayingText.For(Name, World).Long : Name;
         public string Note =>
-            IsMe ? "This is you" : IsFriend ? "Already on your friend list" : RequestSent ? "Friend request sent" : "";
+            IsMe ? "This is you" : IsFriend ? "Already on your friend list" : RequestSent ? "Friend request sent"
+            : IsCharacter && World.Length == 0 ? "World not shown" : "";
     }
 
     public ObservableCollection<SearchHitItem> SearchHits { get; } = new();
@@ -919,7 +935,7 @@ public partial class SocialViewModel : ObservableObject
     public string SearchIntro => SearchKind switch
     {
         FriendSearchKind.Hid => "Search PlayOnline for a handle by its H-ID. Every handle has its own, shown in its profile.",
-        FriendSearchKind.Character => "Search for a FINAL FANTASY XI character by name. The same name can be on more than one world, so check the world.",
+        FriendSearchKind.Character => "Search for a FINAL FANTASY XI character by name. The same name can be on more than one world, so check the world (a private profile doesn't show it).",
         _ => "Search PlayOnline for a handle name. Many people can share one name, so check the picture.",
     };
     public int SearchMaxLength => SearchKind == FriendSearchKind.Hid ? 20 : 15;
@@ -937,6 +953,7 @@ public partial class SocialViewModel : ObservableObject
     private const string QuoteInName = "Provenance can't search for handle names with an apostrophe (') in them.";
     private const string BadHid = "Type an H-ID in numbers, like 00-1234567.";
     private const string BadCharacterName = "Type a character name of up to 15 English letters, with no spaces, numbers or symbols.";
+    private const int SearchPage = 100;   // the hook fetches the first 100, like the viewer
     private const string TooManyResults = "Too many results. Please narrow your search.";
 
     private void SearchFailed(string note)
@@ -983,6 +1000,17 @@ public partial class SocialViewModel : ObservableObject
         SearchFailed(RequestWriteFailed);
     }
 
+    // a search nobody's waiting on any more: withdrawn if the hook hasn't taken it yet, and its answer's ignored
+    public void CancelSearch()
+    {
+        if (_searchToken is null) return;
+        Withdraw("search");
+        _searchToken = null;
+        SearchBusy = false;
+        SearchNote = "";
+        SearchHits.Clear();
+    }
+
     internal string? FriendRequestBlocked =>
         CanEdit ? null
         : GameRunning ? GameRunningNote
@@ -1014,10 +1042,12 @@ public partial class SocialViewModel : ObservableObject
 
     private void ApplySearchState(PolSocialSnapshot snap)
     {
-        // two profile-server jobs, each up to 100 secs
+        // two profile-server jobs, each up to 120 secs in the hook
+        WaitingTurn(ref _searchAt, _searchToken, snap.SearchToken, snap);
         if (_searchToken != null &&
-            Settled(snap.SearchToken == _searchToken ? snap.SearchState : null, "done", _searchAt, 220) is { } st)
+            Settled(snap.SearchToken == _searchToken ? snap.SearchState : null, "done", _searchAt, 250) is { } st)
         {
+            if (st == "timeout") Withdraw("search");
             _searchToken = null;
             SearchBusy = false;
             var characters = _searchedKind == FriendSearchKind.Character;
@@ -1034,12 +1064,13 @@ public partial class SocialViewModel : ObservableObject
                                    { IsCharacter = characters, World = characters ? h.World : "" });
                 }
                 var what = characters ? "character" : "handle";
-                var total = Math.Max(snap.SearchTotal, SearchHits.Count);
+                // only past the first page were there more than came back, the hook drops a hit with nothing in it
+                var total = snap.SearchTotal > SearchPage ? snap.SearchTotal : SearchHits.Count;
                 SearchNote = SearchHits.Count == 0 ? _searchedKind switch
                              {
-                                 FriendSearchKind.Hid => "There's no PlayOnline handle with that H-ID.",
-                                 FriendSearchKind.Character => "There's no FINAL FANTASY XI character with that name.",
-                                 _ => "There's no PlayOnline handle with that name.",
+                                 FriendSearchKind.Hid => "PlayOnline didn't find a handle with that H-ID.",
+                                 FriendSearchKind.Character => "PlayOnline didn't find a FINAL FANTASY XI character with that name.",
+                                 _ => "PlayOnline didn't find a handle with that name.",
                              }
                            : total > SearchHits.Count ? $"Found {total} {what}s. Showing {SearchHits.Count} of them."
                            : SearchHits.Count == 1 ? $"Found 1 {what}." : $"Found {SearchHits.Count} {what}s.";
@@ -1115,9 +1146,11 @@ public partial class SocialViewModel : ObservableObject
     private void ApplyProfilePictureState(PolSocialSnapshot snap)
     {
         if (_picToken is null) return;
+        WaitingTurn(ref _picAt, _picToken, snap.ProfilePictureToken, snap);
         // two jobs, each up to 100 secs in polcore
         if (Settled(snap.ProfilePictureToken == _picToken ? snap.ProfilePictureState : null, "saved", _picAt, 250)
             is not { } st) return;
+        if (st == "timeout") Withdraw("pic");
         _picToken = null;
         ProfilePictureSaving = false;
         if (st == "saved") return;

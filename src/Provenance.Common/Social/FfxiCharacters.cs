@@ -92,6 +92,12 @@ public sealed class CharacterNames
         _ => null,
     };
 
+    // a profile tab's read: whatever name it shows, so an old one never outlives a record that's gone private
+    // like FromAnswer, a shown record with no name in it isn't kept, nobody knows what that means yet
+    public static KnownCharacter? FromProfile(PolFfxiProfile r) =>
+        r is { NameState: PolProfile.Shown, Name.Length: > 0 } ? new(r.Name)
+        : r.NameState == PolProfile.Private ? new("", "private") : null;
+
     private static Dictionary<string, KnownCharacter> Read(string path)
     {
         try
@@ -223,6 +229,12 @@ public sealed class CharacterLookups(CharacterNames names)
 
     // the request file couldn't be written
     public void Failed() => Asking = null;
+
+    // the give-up clock only starts once the hook's taken it, it waits while the hook's busy with another read
+    public void Waiting(string hookToken, bool hookBusy, DateTime now)
+    {
+        if (Asking is not null && hookToken != Token && hookBusy) _askedAt = now;
+    }
 
     // a new session. Who's on what carries over, so a failed one still waits for a real change
     public void Reset()

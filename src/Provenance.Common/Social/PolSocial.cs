@@ -82,6 +82,10 @@ public sealed record PolFfxiProfile(int Slot, int Level, string Name, int NameSt
     public (int Value, int State) Job { get; init; }
     public (int Value, int State) JobLevel { get; init; }
     public (int Value, int State) Race { get; init; }
+    // the character the hook read, from the friend's slot
+    public uint Ctsid { get; init; }
+    public ulong Ctid { get; init; }
+    public string CharacterKey => $"{Ctsid}:{Ctid}";
 }
 
 // Class: 2 invited, 3 member, 4 sub-master, 5 master
@@ -233,6 +237,10 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public string FfxiProfileToken { get; init; } = "";
     public string FfxiProfileState { get; init; } = "";
     public PolFfxiProfile? FfxiProfile { get; init; }
+    // the hook runs one profile server job at a time, so while one's going any other just waits its turn
+    public bool ProfileServerBusy => SearchState == "searching" || ProfileState == "loading" || CharacterState == "loading" ||
+                                     FfxiProfileState == "loading" || MeState is "loading" or "saving" ||
+                                     ProfilePictureState == "saving";
     // the game's message store, read once at login (pol_hook.<pid>.store.json), null when there's none
     public PolStoredLines? Stored { get; init; }
 
@@ -524,6 +532,8 @@ public static class SocialSnapshot
             Job = Num("jobId"),
             JobLevel = Num("jobLevel"),
             Race = Num("raceId"),
+            Ctsid = UInt(p, "ctsid"),
+            Ctid = (ulong)UInt(p, "ctidHigh") << 32 | UInt(p, "ctidLow"),
         };
     }
 

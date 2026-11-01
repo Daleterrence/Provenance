@@ -3265,14 +3265,16 @@ static pdb_item *pdb_get(BYTE *b, pdb_schema *s, const char *name, pdb_rec *rec)
     return ((svc49c_t)SVC(0x49c))(s, name, rec);
 }
 
-/* a search, a friend's profile, a character lookup and an FFXI profile are all prof DB reads, so they share the 3 s gap
-   and go one at a time, never more than the viewer has going */
+/* a search, a friend's profile, a character lookup, an FFXI profile, my own profile and a picture save all go to the
+   profile server, so they share the 3 s gap and go one at a time, never more than the viewer has going */
 static ULONGLONG g_db_last;
 static int g_srch_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
 static int g_prof_step, g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
+static int g_pic_want;
 static int db_free(void)
 {
-    return GetTickCount64() - g_db_last >= 3000 && !g_srch_step && !g_prof_step && !g_ch_step && !g_fp_step;
+    return GetTickCount64() - g_db_last >= 3000 && !g_srch_step && !g_prof_step && !g_ch_step && !g_fp_step &&
+           (g_me_step < 1 || g_me_step > 5) && g_pic_want < 0;
 }
 
 /* prof_001, the FFXI table (title 1). z_phead's what a search hit gets added from */
@@ -3317,7 +3319,13 @@ static void sjis_copy(char *out, const char *src, int cap)
 enum { SK_HANDLE, SK_HID, SK_CHARACTER };
 static const char *const g_srch_kinds[] = { "handle", "hid", "character" };
 /* name is z_phead's handle name, what AddFriend gets whatever the kind */
-typedef struct { DWORD lo, hi; int slot; char name[16], chname[16], world[16]; unsigned pic; } srchrec;
+typedef struct {
+    DWORD lo, hi;
+    int slot;
+    char name[16], chname[16], world[16], key[17];
+    unsigned pic;
+    BYTE isfriend, me;
+} srchrec;
 static srchrec g_srch[SEARCH_MAX];
 static int g_srch_n, g_srch_kind, g_srch_total, g_srch_many;
 static int g_srch_job = -1;
@@ -3328,6 +3336,8 @@ static BYTE *g_srch_buf;
 static pdb_schema *g_srch_pib;
 static DWORD g_srch_set, g_srch_want;
 static ULONGLONG g_srch_last, g_srch_t0;
+static int g_srch_marked;
+static DWORD g_srch_marked_for;
 
 static void search_done(const char *state)
 {
@@ -3335,6 +3345,7 @@ static void search_done(const char *state)
     if (g_srch_buf) { HeapFree(GetProcessHeap(), 0, g_srch_buf); g_srch_buf = NULL; }
     g_srch_step = 0;
     g_srch_job = -1;
+    g_srch_marked = 0;
     lg("friends: search %s (%d hits)\r\n", state, g_srch_n);
     g_snap_dirty = 1;
 }
@@ -3395,7 +3406,6 @@ static void search_request(BYTE *b)
     unsigned __int64 hid = 0;
     int k = 0;
     if (GetTickCount64() - g_srch_last < 5000 || !db_free()) return;
-    if (g_me_step == 5) return;
     if (take_request("search", buf, sizeof buf) < 0) return;
     g_srch_last = g_db_last = GetTickCount64();
     p = buf;
@@ -3462,10 +3472,12 @@ static void search_pump(BYTE *b, int ctl)
         g_srch_job = -1;
         if (r == -0x14cc) { search_done("done"); return; }   /* "No matching results were found." */
         if (r < 0) { search_done(failed(r)); return; }
-        if ((int)out[1] <= 0 || (int)out[0] < 0) { search_done("done"); return; }
-        lg("friends: search %u hits%s\r\n", out[1], out[2] ? " (too many)" : "");
-        g_srch_total = (int)out[1];
-        if (out[1] >= SEARCH_TOO_MANY || out[2]) { g_srch_many = 1; search_done("done"); return; }
+        if ((int)out[0] < 0) { search_done("done"); return; }
+        lg("friends: search %d hits%s\r\n", (int)out[1], out[2] ? " (too many)" : "");
+        g_srch_total = (int)out[1] > 0 ? (int)out[1] : 0;
+        /* the viewer goes by the too-many flag before it looks at the count */
+        if (out[2] || (int)out[1] >= SEARCH_TOO_MANY) { g_srch_many = 1; search_done("done"); return; }
+        if ((int)out[1] <= 0) { search_done("done"); return; }
         g_srch_set = out[0];
         g_srch_want = out[1] > SEARCH_MAX ? SEARCH_MAX : out[1];
         g_srch_buf = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
@@ -3665,9 +3677,30 @@ static char g_prof_token[48], g_prof_state[32] = "";
 static char *g_prof_json;
 static pdb_rec *g_prof_rec;
 static ULONGLONG g_prof_t0;
-/* the handle's 8 game slots from its last profile (z_phead, or the friend row), what its FFXI tabs read */
-static BYTE g_prof_slots[8 * 0x10];
-static unsigned __int64 g_prof_slots_hid;
+/* game slots (z_phead, or the friend row) from the last 16 profiles read, by H-ID. The app shows a profile again from
+   its own copy and the tabs still need them */
+#define PROF_SLOTS_KEPT 16
+static struct { unsigned __int64 hid; BYTE slots[8 * 0x10]; } g_prof_slots[PROF_SLOTS_KEPT];
+static int g_prof_slots_next;
+static const BYTE *prof_slots_for(unsigned __int64 hid)
+{
+    for (int i = 0; hid && i < PROF_SLOTS_KEPT; i++) if (g_prof_slots[i].hid == hid) return g_prof_slots[i].slots;
+    return NULL;
+}
+/* NULL forgets the handle's */
+static void prof_slots_keep(unsigned __int64 hid, const BYTE *src)
+{
+    int i = 0;
+    if (!hid) return;
+    while (i < PROF_SLOTS_KEPT && g_prof_slots[i].hid != hid) i++;
+    if (i == PROF_SLOTS_KEPT) {
+        if (!src) return;
+        i = g_prof_slots_next;
+        g_prof_slots_next = (g_prof_slots_next + 1) % PROF_SLOTS_KEPT;
+    }
+    g_prof_slots[i].hid = src ? hid : 0;
+    if (src) memcpy(g_prof_slots[i].slots, src, sizeof g_prof_slots[i].slots);
+}
 
 /* H-ID = friend record +0x98 bits 1..44 */
 static unsigned __int64 fr_hid(const BYTE *fr)
@@ -3769,12 +3802,10 @@ static void profile_build(BYTE *b)
             src = fr + 0x18;
             from = "the friend row";
         }
-        memset(g_prof_slots, 0, sizeof g_prof_slots);
-        g_prof_slots_hid = 0;
-        if (src) { memcpy(g_prof_slots, src, sizeof g_prof_slots); g_prof_slots_hid = g_prof_hid; }
+        prof_slots_keep(g_prof_hid, src);
         PJ(",\"characters\":[");
-        for (i = 0, k = 0; i < 8; i++) {
-            const BYTE *sl = g_prof_slots + i * 0x10;
+        for (i = 0, k = 0; src && i < 8; i++) {
+            const BYTE *sl = src + i * 0x10;
             DWORD cs = *(const DWORD *)(sl + 4);
             if (!(*(const WORD *)sl & 1) || *(const WORD *)(sl + 2) != 1) continue;
             PJ("%s{\"slot\":%d,\"ctsid\":%u,\"ctidLow\":%u,\"ctidHigh\":%u,\"world\":%u}", k++ ? "," : "", i, cs,
@@ -4005,8 +4036,8 @@ static void character_pump(BYTE *b, int ctl)
     character_done("done");
 }
 
-/* one of a friend's FFXI characters for their profile's tabs, the same prof_001 read as the viewer's tab. The app only
-   says which slot, the ids always come from the friend's own slots. Values go out raw, the app has the names */
+/* a friend's FFXI character for their profile's tabs, the viewer's prof_001 read. The app only says which slot, the
+   ids come from the friend's own slots */
 static __declspec(align(8)) pdb_cond g_fp_cond[2];
 static pdb_cond *g_fp_where;
 static int g_fp_job = -1, g_fp_slot = -1;
@@ -4043,8 +4074,8 @@ static void ffxiprofile_abandon(BYTE *b, const char *state)
     g_fp_rec = NULL;   /* a cancelled read can still write, so never freed */
     ffxiprofile_done(state);
 }
-/* states as the handle profile's (0 shown, 1 private, 2 not set). prof_001 has no per-field levels, so the record level
-   decides for every value. Type 3 is a signed short, the viewer sign-extends it */
+/* states as the handle profile's, and prof_001 has no per-field levels so the record level decides them all. Type 3
+   is a signed short */
 static void ffxiprofile_build(BYTE *b)
 {
     char nm[0x100], wn[0x100];
@@ -4090,6 +4121,7 @@ static void ffxiprofile_request(BYTE *b)
     lstrcpynA(g_fp_token, tok, sizeof g_fp_token);
     g_fp_json[0] = 0;
     g_fp_slot = -1;
+    g_fp_ctsid = g_fp_lo = g_fp_hi = 0;
     if (!parse_num(rows, 4, &row) || row >= 200 || !parse_num(sl, 1, &n) || n > 7) {
         ffxiprofile_done("failed:bad request");
         return;
@@ -4101,7 +4133,8 @@ static void ffxiprofile_request(BYTE *b)
     if (lstrcmpA(k, key) != 0) { ffxiprofile_done("failed:friend list changed"); return; }
     if (*(DWORD *)(fr + 0x08) & 0x10000000) { ffxiprofile_done("failed:pending"); return; }
     /* the slots the tabs came from when it's the same handle, like the viewer looks in z_phead first */
-    slot = (g_prof_slots_hid && g_prof_slots_hid == fr_hid(fr) ? g_prof_slots : fr + 0x18) + n * 0x10;
+    slot = prof_slots_for(fr_hid(fr));
+    slot = (slot ? slot : fr + 0x18) + n * 0x10;
     if (!(*(const WORD *)slot & 1) || *(const WORD *)(slot + 2) != 1) { ffxiprofile_done("failed:no character"); return; }
     g_fp_ctsid = *(const DWORD *)(slot + 4);
     g_fp_lo = *(const DWORD *)(slot + 8);
@@ -4340,12 +4373,12 @@ static void me_request(BYTE *b)
     char buf[2048], *p, *tok, *lvl, *line, *name, nomail[0x80], jp[MAX_PATH + 64];
     int kind, level = 0, idx;
     pol_handle h;
-    if (GetTickCount64() - g_me_last < 3000) return;
+    if (GetTickCount64() - g_me_last < 3000 || !db_free()) return;
     kind = take_request("myprofile", buf, sizeof buf) >= 0 ? 1
          : take_request("saveprofile", buf, sizeof buf) >= 0 ? 2
          : take_request("rename", buf, sizeof buf) >= 0 ? 3 : 0;
     if (!kind) return;
-    g_me_last = GetTickCount64();
+    g_me_last = g_db_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);
     lstrcpynA(g_me_token, tok, sizeof g_me_token);
@@ -4844,9 +4877,9 @@ static void pic_pump(BYTE *b, int ctl)
     if (g_pic_want < 0) {
         char buf[96], *p;
         int i, v = 0, d = 0;
-        if (!ctl || g_draining || GetTickCount64() - g_pic_last < 5000) return;
+        if (!ctl || g_draining || GetTickCount64() - g_pic_last < 5000 || !db_free()) return;
         if (take_request("pic", buf, sizeof buf) < 0) return;
-        g_pic_last = GetTickCount64();
+        g_pic_last = g_db_last = GetTickCount64();
         for (i = 0; buf[i] >= '0' && buf[i] <= '9' && d < 5; i++, d++) v = v * 10 + (buf[i] - '0');
         p = buf + i;
         if (*p == '\r') p++;
@@ -4873,6 +4906,35 @@ static void pic_pump(BYTE *b, int ctl)
     else wsprintfA(g_pic_state, "failed:%d", r);
     g_pic_want = -1;
     g_snap_dirty = 1;
+}
+
+/* a cheap look at who's on the friend list, so the hits' marks only get worked out again when it changes */
+static DWORD friends_sig(BYTE *b)
+{
+    DWORD h = 2166136261u;
+    for (int i = 0; i < 200; i++) {
+        const DWORD *a = (const DWORD *)(b + 0xb40d8 + i * 0xb0);
+        if (IsBadReadPtr(a, 0xb0)) break;
+        h = (h ^ a[0]) * 16777619u;
+        h = (h ^ a[1]) * 16777619u;
+        h = (h ^ a[0x98 / 4]) * 16777619u;
+        h = (h ^ a[0x9c / 4]) * 16777619u;
+    }
+    return h;
+}
+static void search_mark(BYTE *b)
+{
+    DWORD sig = friends_sig(b);
+    int i;
+    for (i = 0; i < g_srch_n; i++)
+        if (!g_srch[i].key[0]) peer_key(b, g_srch[i].lo, g_srch[i].hi, (unsigned)g_srch[i].slot, g_srch[i].key);
+    if (g_srch_marked && sig == g_srch_marked_for) return;
+    for (i = 0; i < g_srch_n; i++) {
+        g_srch[i].isfriend = find_friend_row(b, g_srch[i].lo, g_srch[i].hi, g_srch[i].slot) >= 0;
+        g_srch[i].me = (BYTE)is_me(b, g_srch[i].lo, g_srch[i].hi);
+    }
+    g_srch_marked = 1;
+    g_srch_marked_for = sig;
 }
 
 static void wr(HANDLE h, const char *s)
@@ -4940,6 +5002,7 @@ static void snapshot_social(BYTE *b)
     json_str(tk, sizeof tk, g_pic_token);
     wsprintfA(line, ",\"pic\":{\"token\":%s,\"want\":%d,\"state\":\"%s\"}", tk, g_pic_want, g_pic_state);
     wr(h, line);
+    search_mark(b);
     json_str(tk, sizeof tk, g_srch_token);
     wsprintfA(line, ",\"search\":{\"token\":%s,\"state\":\"%s\",\"kind\":\"%s\",\"total\":%d,\"tooMany\":%s,\"results\":[",
               tk, g_srch_state, g_srch_kinds[g_srch_kind], g_srch_total, g_srch_many ? "true" : "false");
@@ -4947,15 +5010,13 @@ static void snapshot_social(BYTE *b)
     for (i = 0; i < g_srch_n; i++) {
         char hd[64], wd[64];
         const char *shown = g_srch_kind == SK_CHARACTER ? g_srch[i].chname : g_srch[i].name;
-        peer_key(b, g_srch[i].lo, g_srch[i].hi, (unsigned)g_srch[i].slot, sk);
         sjis_json(nm, sizeof nm, (const BYTE *)shown, 0x0f);
         sjis_json(hd, sizeof hd, (const BYTE *)g_srch[i].name, 0x0f);
         sjis_json(wd, sizeof wd, (const BYTE *)g_srch[i].world, 0x0f);
         wsprintfA(line, "%s{\"index\":%d,\"name\":%s,\"handle\":%s,\"world\":%s,\"pic\":%u,\"key\":\"%s\",\"friend\":%s,"
                   "\"me\":%s}",
-                  i ? "," : "", i, nm, hd, wd, g_srch[i].pic, sk,
-                  find_friend_row(b, g_srch[i].lo, g_srch[i].hi, g_srch[i].slot) >= 0 ? "true" : "false",
-                  is_me(b, g_srch[i].lo, g_srch[i].hi) ? "true" : "false");
+                  i ? "," : "", i, nm, hd, wd, g_srch[i].pic, g_srch[i].key, g_srch[i].isfriend ? "true" : "false",
+                  g_srch[i].me ? "true" : "false");
         wr(h, line);
     }
     wr(h, "]}");
@@ -4970,7 +5031,8 @@ static void snapshot_social(BYTE *b)
     if (g_ch_json[0] && lstrcmpA(g_ch_state, "done") == 0) { wr(h, ","); wr(h, g_ch_json); }
     wr(h, "}");
     wr_job(h, ",\"ffxiprofile\":{\"token\":%s,\"state\":\"%s\"", g_fp_token, g_fp_state);
-    wsprintfA(line, ",\"slot\":%d", g_fp_slot);
+    wsprintfA(line, ",\"slot\":%d,\"ctsid\":%u,\"ctidLow\":%u,\"ctidHigh\":%u", g_fp_slot, g_fp_ctsid, g_fp_lo,
+              g_fp_hi);
     wr(h, line);
     if (g_fp_json[0] && lstrcmpA(g_fp_state, "done") == 0) { wr(h, ","); wr(h, g_fp_json); }
     wr(h, "}");
@@ -5145,6 +5207,14 @@ static void go_online(BYTE *b)
     status_start(b, g_my_slot, want, 1000);
 }
 
+static void db_reads_abandon(BYTE *b)
+{
+    if (g_prof_step != 0) profile_abandon(b, "cancelled");
+    if (g_ch_step != 0) character_abandon(b, "cancelled");
+    if (g_fp_step != 0) ffxiprofile_abandon(b, "cancelled");
+    if (g_srch_step != 0) search_abandon(b, "cancelled");
+}
+
 static int writes_pending(void)
 {
     return g_sq_n || g_status_job >= 0 || g_edit_job >= 0 || g_edit_upload_want ||
@@ -5317,10 +5387,7 @@ static void pol_hold(BYTE *b)
                    stalls job polls 10 s, which FFXI's start-up sits out */
                 g_draining = 1;
                 if (!g_lean) mail_ack_request();
-                if (g_prof_step != 0) profile_abandon(b, "cancelled");
-                if (g_ch_step != 0) character_abandon(b, "cancelled");
-                if (g_fp_step != 0) ffxiprofile_abandon(b, "cancelled");
-                if (g_srch_step != 0) search_abandon(b, "cancelled");
+                db_reads_abandon(b);
                 me_abandon(b, "cancelled");
                 while (writes_pending() && GetTickCount64() < until)
                     drain_turn(b, !g_lean);

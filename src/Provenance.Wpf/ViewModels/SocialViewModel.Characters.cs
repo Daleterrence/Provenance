@@ -24,6 +24,7 @@ public partial class SocialViewModel
     {
         var lookups = Lookups;
         lookups.Answer(snap.CharacterToken, snap.CharacterState, snap.Character);
+        lookups.Waiting(snap.CharacterToken, snap.ProfileServerBusy, DateTime.UtcNow);
         if (snap.FriendsLoaded) lookups.Seen(snap.Friends);
         if (GameRunning || _pol.Pid is not { } pid || lookups.Next(DateTime.UtcNow) is not { } game) return;
         if (!SocialSnapshot.RequestCharacter(pid, lookups.Token, game.Ctsid, game.Ctid)) lookups.Failed();
