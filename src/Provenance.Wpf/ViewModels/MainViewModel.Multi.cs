@@ -431,9 +431,9 @@ public partial class MainViewModel : IMultiRunHost
         return PolAccountNotices.CanPlay(blocked) ? null : new(AccountFailureKind.Account, blocked!);
     }
 
-    // a refusal by the hook's gate is this account's problem, anything else wants a restart so the run stops
+    // an unread or unanswered Play wants a restart so the run stops, a refusal or a lost session is this account's problem
     internal static AccountFailureKind PlayFailureKind(string text) =>
-        text == PolSessionService.PlayRefusedText ? AccountFailureKind.Account : AccountFailureKind.Install;
+        text == PolSessionService.PlayUnreadableText ? AccountFailureKind.Install : AccountFailureKind.Account;
 
     // never throws. StopHold leaves a session that got to the game alone, so that one's just forgotten.
     private async Task LetGoOfAccountAsync()

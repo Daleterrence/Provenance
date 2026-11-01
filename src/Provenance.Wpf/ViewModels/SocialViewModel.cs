@@ -541,8 +541,8 @@ public partial class SocialViewModel : ObservableObject
                                                      $"{i.Pending}/{i.RequestMid}"));
         if (sig == _friendsSignature) return;
         _friendsSignature = sig;
-        // patched in place rather than cleared, so the list keeps its scroll position and selection. Second go at this,
-        // the first still redrew the lot whenever someone came online
+        // patched in place rather than cleared, so the list keeps its scroll position and selection and only the rows
+        // that changed get redrawn
         var keep = SelectedFriend;
         for (int i = 0; i < items.Count; i++)
         {

@@ -284,6 +284,7 @@ public partial class MainWindow : Window
     // like the viewer's idle sign-out it asks nothing, so an open profile editor just closes as it is
     private void OnTraySignOutTick(object? sender, EventArgs e)
     {
+        if (Vm is { IsLaunching: true }) return;   // not idle while the game updates or starts, so it waits another round
         _traySignOut?.Stop();
         EditProfileWindow.Current?.CloseQuietly();
         ExitApp();

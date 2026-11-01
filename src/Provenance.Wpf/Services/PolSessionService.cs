@@ -43,6 +43,7 @@ public sealed class PolSessionService : IDisposable
         "Your saved PlayOnline password is longer than 16 characters, which PlayOnline doesn't allow. Press Edit account and enter it again.";
     public const string PlayUnreadableText = "Provenance couldn't start the game. Close Provenance and open it again.";
     public const string PlayRefusedText = "PlayOnline didn't let the game start. Log in again and try once more.";
+    public const string PlaySessionClosedText = "Your PlayOnline session closed before the game could start. Log in again and try once more.";
     public const string PrivateFolderText = "Provenance couldn't use its own folder. Restart Provenance and try again.";
     public const string UnsafeStartText = "Provenance couldn't start PlayOnline safely. Restart Provenance and try again.";
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
@@ -1367,7 +1368,13 @@ public sealed class PolSessionService : IDisposable
         // taken now so one that a new sign-in starts meanwhile is left alone
         var hook = TakeThirdPartyHook();
         Task.Run(() => EndThirdPartyHook(hook));
-        string why = SessionClosedText(exit);
+        SessionEnded?.Invoke(LostSessionText(pid) ?? SessionClosedText(exit));
+    }
+
+    // the hook's reason when it lost the session itself, read once
+    private string? LostSessionText(int pid)
+    {
+        string? why = null;
         var ended = HookFiles.PathFor(pid, "ended");
         try
         {
@@ -1376,7 +1383,7 @@ public sealed class PolSessionService : IDisposable
             File.Delete(ended);
         }
         catch { }
-        SessionEnded?.Invoke(why);
+        return why;
     }
 
     public void SignalPlay()
@@ -1534,7 +1541,11 @@ public sealed class PolSessionService : IDisposable
 
     public Task<string?> WaitForPlayAnswerAsync(TimeSpan timeout) => Task.Run(() =>
     {
-        if (Pid is not { } pid) return null;
+        if (Pid is not { } pid)
+        {
+            EndUnstartedPlay();
+            return PlaySessionClosedText;
+        }
         var logPath = HookFiles.PathFor(pid, "log");
         var until = DateTime.UtcNow + timeout;
         while (true)
@@ -1558,7 +1569,17 @@ public sealed class PolSessionService : IDisposable
                         return PlayRefusedText;
                 }
             }
-            if (!alive) return null;
+            // nothing polls while Play runs, so a session the hook lost meanwhile only shows here
+            if (!alive)
+            {
+                Log.Warning("pol.exe {Pid} ended before the game started, the PlayOnline session was lost", pid);
+                var why = LostSessionText(pid) ?? PlaySessionClosedText;
+                PutScreenSaverBack();
+                EndUnstartedPlay();
+                // no pol.exe left to stop, and a later one with this pid would read it
+                DeleteQuietly(HookFiles.PathFor(pid, "stop"));
+                return why;
+            }
             // a held pol.exe never exits by itself, so without this the wait would never end
             if (DateTime.UtcNow >= until)
             {

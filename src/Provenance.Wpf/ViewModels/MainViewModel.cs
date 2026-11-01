@@ -1010,7 +1010,8 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void SignOut()
     {
-        if (MultiRunning) return;
+        // Play's game update needs the session it's holding
+        if (MultiRunning || IsLaunching) return;
         if (!EditProfileWindow.ConfirmDrop("Log out")) return;
         EndSession(SessionEnd.LogOut);
     }
@@ -1266,6 +1267,7 @@ public partial class MainViewModel : ObservableObject
         {
             Log.Error(ex, "Could not signal Play");
             Social.GameRunning = false;
+            _elapsedTimer.Stop();
             IsLaunching = false;
             _socialPoll.Start();
             MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI",
@@ -1300,6 +1302,7 @@ public partial class MainViewModel : ObservableObject
         if (ended is not null) Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);
         else if (_settings.Current.ExitAfterGameExits) { RequestExit?.Invoke(); return; }
         IsLaunching = false;
+        CloseSocialWindows();
         SocialConnected = false;
         RequestShow?.Invoke();
         _pol.Prestart();
