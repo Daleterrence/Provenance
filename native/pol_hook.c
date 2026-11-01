@@ -3265,16 +3265,67 @@ static pdb_item *pdb_get(BYTE *b, pdb_schema *s, const char *name, pdb_rec *rec)
     return ((svc49c_t)SVC(0x49c))(s, name, rec);
 }
 
-#define SEARCH_MAX 20
-typedef struct { DWORD lo, hi; int slot; char name[16]; unsigned pic; } srchrec;
-static srchrec g_srch[SEARCH_MAX];
-static int g_srch_n;
+/* a search, a friend's profile, a character lookup and an FFXI profile are all prof DB reads, so they share the 3 s gap
+   and go one at a time, never more than the viewer has going */
+static ULONGLONG g_db_last;
 static int g_srch_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
+static int g_prof_step, g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
+static int db_free(void)
+{
+    return GetTickCount64() - g_db_last >= 3000 && !g_srch_step && !g_prof_step && !g_ch_step && !g_fp_step;
+}
+
+/* prof_001, the FFXI table (title 1). z_phead's what a search hit gets added from */
+static pdb_schema *g_ch_pib;
+static int ch_check_schema(BYTE *b, pdb_schema *s)
+{
+    static const struct { const char *n; BYTE type; WORD size; } want[] = {
+        { "z_ctsid", 6, 4 }, { "z_ctid", 8, 8 }, { "z_name", 1, 0 }, { "z_worldname", 1, 0 }, { "z_phead", 9, 0 },
+    };
+    int i, idx;
+    if (s->table_id != 1) return 0;
+    for (i = 0; i < (int)(sizeof want / sizeof want[0]); i++) {
+        const pdb_field *f = fs_field(s, want[i].n, &idx);
+        if (!f || f->type != want[i].type || (want[i].size && f->size != want[i].size)) return 0;
+        if (((svc4bc_t)SVC(0x4bc))(s, want[i].n) != idx) return 0;
+    }
+    if (0x17 + (DWORD)s->nfields * 0x10 + s->rec_raw > s->rec_size + 8) return 0;
+    return 1;
+}
+static pdb_schema *ch_load_pib(BYTE *b)
+{
+    if (!g_ch_pib) g_ch_pib = pib_load(b, L"prof_001.pib", "prof_001", ch_check_schema);
+    return g_ch_pib;
+}
+/* cut at whole SJIS characters, never between a lead byte and its trail */
+static void sjis_copy(char *out, const char *src, int cap)
+{
+    int i = 0, n;
+    while (src[i]) {
+        BYTE c = (BYTE)src[i];
+        n = ((c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xfc)) && src[i + 1] ? 2 : 1;
+        if (i + n > cap - 1) break;
+        i += n;
+    }
+    memcpy(out, src, (size_t)i);
+    out[i] = 0;
+}
+
+/* the viewer's page is 100, and at 1000 or more it doesn't fetch at all */
+#define SEARCH_MAX 100
+#define SEARCH_TOO_MANY 1000
+enum { SK_HANDLE, SK_HID, SK_CHARACTER };
+static const char *const g_srch_kinds[] = { "handle", "hid", "character" };
+/* name is z_phead's handle name, what AddFriend gets whatever the kind */
+typedef struct { DWORD lo, hi; int slot; char name[16], chname[16], world[16]; unsigned pic; } srchrec;
+static srchrec g_srch[SEARCH_MAX];
+static int g_srch_n, g_srch_kind, g_srch_total, g_srch_many;
 static int g_srch_job = -1;
 static char g_srch_token[48], g_srch_state[32] = "";
 static __declspec(align(8)) BYTE g_srch_cond[0x18];
 static char g_srch_clause[64];
 static BYTE *g_srch_buf;
+static pdb_schema *g_srch_pib;
 static DWORD g_srch_set, g_srch_want;
 static ULONGLONG g_srch_last, g_srch_t0;
 
@@ -3298,7 +3349,7 @@ static void search_abandon(BYTE *b, const char *state)
 }
 static void search_start(BYTE *b)
 {
-    int t = ((int (__cdecl *)(void *, void *, void *))SVC(0x4c0))(g_fs_pib, g_srch_cond, NULL);
+    int t = ((int (__cdecl *)(void *, void *, void *))SVC(0x4c0))(g_srch_pib, g_srch_cond, NULL);
     if (t == NO_SLOT) { g_srch_step = 1; return; }
     lg("friends: search start -> %d\r\n", t);
     if (t < 0) { search_done(failed(t)); return; }
@@ -3308,7 +3359,7 @@ static void search_start(BYTE *b)
 }
 static void search_fetch(BYTE *b)
 {
-    int r = ((int (__cdecl *)(int, void *, int, int, void *))SVC(0x4c8))((int)g_srch_set, g_fs_pib, 0,
+    int r = ((int (__cdecl *)(int, void *, int, int, void *))SVC(0x4c8))((int)g_srch_set, g_srch_pib, 0,
                                                                         (int)g_srch_want, g_srch_buf);
     if (r == NO_SLOT) { g_srch_step = 3; return; }
     lg("friends: search fetching %u -> %d\r\n", g_srch_want, r);
@@ -3317,27 +3368,77 @@ static void search_fetch(BYTE *b)
     g_srch_step = 4;
     g_srch_t0 = GetTickCount64();
 }
+/* an H-ID as the viewer shows it (00-1234567) or just the number: '-' and spaces go, then 1-13 digits */
+static int hid_parse(const char *s, unsigned __int64 *out)
+{
+    unsigned __int64 v = 0;
+    int d = 0;
+    if (lstrlenA(s) > 20) return 0;
+    for (; *s; s++) {
+        if (*s == '-' || *s == ' ') continue;
+        if (*s < '0' || *s > '9' || ++d > 13) return 0;
+        v = v * 10 + (unsigned)(*s - '0');
+    }
+    *out = v;
+    return d > 0 && v >= 1 && v <= 0xfffffffffffULL;
+}
+static int ffxi_name_ok(const char *s)
+{
+    int n = 0;
+    for (; *s; s++, n++)
+        if (!((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z'))) return 0;
+    return n >= 1 && n <= 15;
+}
 static void search_request(BYTE *b)
 {
-    char buf[256], *p, *tok, *name;
-    if (GetTickCount64() - g_srch_last < 5000) return;
+    char buf[256], *p, *tok, *kind, *val, dec[24];
+    unsigned __int64 hid = 0;
+    int k = 0;
+    if (GetTickCount64() - g_srch_last < 5000 || !db_free()) return;
     if (g_me_step == 5) return;
     if (take_request("search", buf, sizeof buf) < 0) return;
-    g_srch_last = GetTickCount64();
+    g_srch_last = g_db_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);
-    name = req_line(&p);
+    kind = req_line(&p);
+    val = req_line(&p);
     lstrcpynA(g_srch_token, tok, sizeof g_srch_token);
     g_srch_n = 0;
+    g_srch_total = 0;
+    g_srch_many = 0;
+    while (k < 3 && lstrcmpA(kind, g_srch_kinds[k]) != 0) k++;
+    g_srch_kind = k < 3 ? k : SK_HANDLE;
+    if (k == 3) { search_done("failed:bad request"); return; }
     if (notice_blocks(g_notice)) { search_done("failed:account notice"); return; }
-    if (!ascii_name_ok(name)) { search_done("failed:bad name"); return; }
-    /* a name with a ' never goes out in a handle search (ascii_name_ok keeps 0x04 out) */
-    if (strchr(name, '\'')) { search_done("failed:quote"); return; }
-    if (!fs_load_pib(b)) { search_done("failed:no schema"); return; }
+    if (k == SK_HANDLE) {
+        if (!ascii_name_ok(val)) { search_done("failed:bad name"); return; }
+        /* a name with a ' never goes out in a handle search (ascii_name_ok keeps 0x04 out) */
+        if (strchr(val, '\'')) { search_done("failed:quote"); return; }
+    } else if (k == SK_HID) {
+        if (!hid_parse(val, &hid)) { search_done("failed:bad hid"); return; }
+    } else if (!ffxi_name_ok(val)) {
+        search_done("failed:bad character");
+        return;
+    }
+    g_srch_pib = k == SK_CHARACTER ? ch_load_pib(b) : fs_load_pib(b);
+    if (!g_srch_pib) { search_done("failed:no schema"); return; }
     memset(g_srch_cond, 0, sizeof g_srch_cond);
-    wsprintfA(g_srch_clause, "z_up_name=UPPER(\x04%s\x04)", name);
+    /* the clauses are the viewer's, from the .pfb files. The H-ID goes back out as a plain number like svc 0x784
+       leaves it, and INITCAP is how FFXI names are kept */
+    if (k == SK_HANDLE) {
+        wsprintfA(g_srch_clause, "z_up_name=UPPER(\x04%s\x04)", val);
+    } else if (k == SK_HID) {
+        int n = 0, i;
+        char t[24];
+        do { t[n++] = (char)('0' + (int)(hid % 10)); hid /= 10; } while (hid);
+        for (i = 0; i < n; i++) dec[i] = t[n - 1 - i];
+        dec[n] = 0;
+        wsprintfA(g_srch_clause, "z_hid=%s", dec);
+    } else {
+        wsprintfA(g_srch_clause, "z_name=INITCAP(\x04%s\x04)", val);
+    }
     ((void (__cdecl *)(void *, int, const char *))SVC(0x4a4))(g_srch_cond, 7, g_srch_clause);
-    lg("friends: search \"%s\"\r\n", name);
+    lg("friends: search %s \"%s\"\r\n", g_srch_kinds[k], val);
     lstrcpyA(g_srch_state, "searching");
     g_snap_dirty = 1;
     search_start(b);
@@ -3361,12 +3462,14 @@ static void search_pump(BYTE *b, int ctl)
         g_srch_job = -1;
         if (r == -0x14cc) { search_done("done"); return; }   /* "No matching results were found." */
         if (r < 0) { search_done(failed(r)); return; }
-        if ((int)out[1] <= 0) { search_done("done"); return; }
+        if ((int)out[1] <= 0 || (int)out[0] < 0) { search_done("done"); return; }
+        lg("friends: search %u hits%s\r\n", out[1], out[2] ? " (too many)" : "");
+        g_srch_total = (int)out[1];
+        if (out[1] >= SEARCH_TOO_MANY || out[2]) { g_srch_many = 1; search_done("done"); return; }
         g_srch_set = out[0];
-        g_srch_want = (int)out[1] > SEARCH_MAX ? SEARCH_MAX : out[1];
-        lg("friends: search %u hits\r\n", out[1]);
+        g_srch_want = out[1] > SEARCH_MAX ? SEARCH_MAX : out[1];
         g_srch_buf = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-                                       (SIZE_T)g_fs_pib->rec_size * g_srch_want + 64);
+                                       (SIZE_T)g_srch_pib->rec_size * g_srch_want + 64);
         if (!g_srch_buf) { search_done("failed:alloc"); return; }
         search_fetch(b);
         return;
@@ -3379,19 +3482,30 @@ static void search_pump(BYTE *b, int ctl)
     g_srch_job = -1;
     if (r < 0) { search_done(failed(r)); return; }
     for (BYTE *rec = g_srch_buf; rec && g_srch_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
-        pdb_item *ph, *fi;
+        pdb_item *ph, *it;
         BYTE *fr;
+        srchrec *h = &g_srch[g_srch_n];
         if (!*(DWORD *)(rec + 0xc)) continue;
-        ph = pdb_get(b, g_fs_pib, "z_phead", (pdb_rec *)rec);
+        ph = pdb_get(b, g_srch_pib, "z_phead", (pdb_rec *)rec);
         if (!ph || !(ph->flags & 1) || !(fr = (BYTE *)ph->v.bytes.p) || IsBadReadPtr(fr, 0xb0)) continue;
         if (!(*(DWORD *)(fr + 0x98) & 1)) continue;
-        g_srch[g_srch_n].lo = *(DWORD *)(fr + 0x00);
-        g_srch[g_srch_n].hi = *(DWORD *)(fr + 0x04);
-        g_srch[g_srch_n].slot = (int)FR_SLOT(fr);
-        memcpy(g_srch[g_srch_n].name, fr + 0xa0, 15);
-        g_srch[g_srch_n].name[15] = 0;
-        fi = pdb_get(b, g_fs_pib, "z_ficon", (pdb_rec *)rec);
-        g_srch[g_srch_n].pic = fi && (fi->flags & 1) ? fi->v.u32 : 0;
+        memset(h, 0, sizeof *h);
+        h->lo = *(DWORD *)(fr + 0x00);
+        h->hi = *(DWORD *)(fr + 0x04);
+        h->slot = (int)FR_SLOT(fr);
+        memcpy(h->name, fr + 0xa0, 15);
+        if (g_srch_kind == SK_CHARACTER) {
+            /* prof_001 has no profile picture. The world stays out of a Private record */
+            it = pdb_get(b, g_srch_pib, "z_name", (pdb_rec *)rec);
+            if (it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, 0x40))
+                sjis_copy(h->chname, it->v.str, sizeof h->chname);
+            it = pdb_get(b, g_srch_pib, "z_worldname", (pdb_rec *)rec);
+            if (((pdb_rec *)rec)->level >= 1 && it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, 0x40))
+                sjis_copy(h->world, it->v.str, sizeof h->world);
+        } else {
+            it = pdb_get(b, g_srch_pib, "z_ficon", (pdb_rec *)rec);
+            h->pic = it && (it->flags & 1) ? it->v.u32 : 0;
+        }
         g_srch_n++;
     }
     search_done("done");
@@ -3544,7 +3658,6 @@ static void pol_json(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
     json_text(js, jscap, u8);
 }
 
-static int g_prof_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
 static pdb_cond g_prof_cond;
 static int g_prof_job = -1, g_prof_row;
 static unsigned __int64 g_prof_hid;
@@ -3552,10 +3665,6 @@ static char g_prof_token[48], g_prof_state[32] = "";
 static char *g_prof_json;
 static pdb_rec *g_prof_rec;
 static ULONGLONG g_prof_t0;
-/* a friend's profile, a character lookup and an FFXI profile are all prof DB reads, so they share the 3 s gap and go one
-   at a time */
-static ULONGLONG g_db_last;
-static int g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
 /* the handle's 8 game slots from its last profile (z_phead, or the friend row), what its FFXI tabs read */
 static BYTE g_prof_slots[8 * 0x10];
 static unsigned __int64 g_prof_slots_hid;
@@ -3716,7 +3825,7 @@ static void profile_request(BYTE *b)
     BYTE fr[0x140];
     int row;
     pdb_schema *s;
-    if (GetTickCount64() - g_db_last < 3000 || g_ch_step != 0 || g_fp_step != 0) return;
+    if (!db_free()) return;
     if (take_request("profile", buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
@@ -3768,7 +3877,6 @@ static void profile_pump(BYTE *b, int ctl)
 
 /* a friend's FFXI character, the way the viewer's FFXI profile tab finds it: prof_001 (title 1) by z_ctsid and z_ctid
    together. Only for a character a friend's on right now */
-static pdb_schema *g_ch_pib;
 static __declspec(align(8)) pdb_cond g_ch_cond[2];
 static pdb_cond *g_ch_where;
 static int g_ch_job = -1;
@@ -3777,21 +3885,6 @@ static char g_ch_token[48], g_ch_state[32] = "", g_ch_json[0x400];
 static pdb_rec *g_ch_rec;
 static ULONGLONG g_ch_t0;
 
-static int ch_check_schema(BYTE *b, pdb_schema *s)
-{
-    static const struct { const char *n; BYTE type; WORD size; } want[] = {
-        { "z_ctsid", 6, 4 }, { "z_ctid", 8, 8 }, { "z_name", 1, 0 }, { "z_worldname", 1, 0 },
-    };
-    int i, idx;
-    if (s->table_id != 1) return 0;
-    for (i = 0; i < (int)(sizeof want / sizeof want[0]); i++) {
-        const pdb_field *f = fs_field(s, want[i].n, &idx);
-        if (!f || f->type != want[i].type || (want[i].size && f->size != want[i].size)) return 0;
-        if (((svc4bc_t)SVC(0x4bc))(s, want[i].n) != idx) return 0;
-    }
-    if (0x17 + (DWORD)s->nfields * 0x10 + s->rec_raw > s->rec_size + 8) return 0;
-    return 1;
-}
 static int parse_u32(const char *x, DWORD *out)
 {
     unsigned __int64 v = 0;
@@ -3799,19 +3892,6 @@ static int parse_u32(const char *x, DWORD *out)
     while (*x >= '0' && *x <= '9' && d < 10) { v = v * 10 + (unsigned)(*x++ - '0'); d++; }
     *out = (DWORD)v;
     return d > 0 && !*x && v <= 0xffffffffu;
-}
-/* cut at whole SJIS characters, never between a lead byte and its trail */
-static void sjis_copy(char *out, const char *src, int cap)
-{
-    int i = 0, n;
-    while (src[i]) {
-        BYTE c = (BYTE)src[i];
-        n = ((c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xfc)) && src[i + 1] ? 2 : 1;
-        if (i + n > cap - 1) break;
-        i += n;
-    }
-    memcpy(out, src, (size_t)i);
-    out[i] = 0;
 }
 /* the record's string field, empty when it isn't there */
 static void ch_text(BYTE *b, pdb_rec *rec, const char *name, char *js, int cap, BYTE *level)
@@ -3877,7 +3957,7 @@ static void character_request(BYTE *b)
 {
     char buf[128], *p, *tok;
     unsigned __int64 ctid;
-    if (GetTickCount64() - g_db_last < 3000 || g_prof_step != 0 || g_fp_step != 0) return;
+    if (!db_free()) return;
     if (take_request("character", buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
@@ -3890,8 +3970,7 @@ static void character_request(BYTE *b)
     }
     if (notice_blocks(g_notice)) { character_done("failed:account notice"); return; }
     if (!ffxi_friend_on(b, g_ch_ctsid, g_ch_lo, g_ch_hi)) { character_done("failed:not playing"); return; }
-    if (!g_ch_pib) g_ch_pib = pib_load(b, L"prof_001.pib", "prof_001", ch_check_schema);
-    if (!g_ch_pib) { character_done("failed:no schema"); return; }
+    if (!ch_load_pib(b)) { character_done("failed:no schema"); return; }
     g_ch_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
     if (!g_ch_rec) { character_done("failed:alloc"); return; }
     ctid = (unsigned __int64)g_ch_hi << 32 | g_ch_lo;
@@ -4000,7 +4079,7 @@ static void ffxiprofile_request(BYTE *b)
     const BYTE *slot;
     int row, n;
     unsigned __int64 ctid;
-    if (GetTickCount64() - g_db_last < 3000 || g_prof_step != 0 || g_ch_step != 0) return;
+    if (!db_free()) return;
     if (take_request("ffxiprofile", buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
@@ -4027,8 +4106,7 @@ static void ffxiprofile_request(BYTE *b)
     g_fp_ctsid = *(const DWORD *)(slot + 4);
     g_fp_lo = *(const DWORD *)(slot + 8);
     g_fp_hi = *(const DWORD *)(slot + 0xc);
-    if (!g_ch_pib) g_ch_pib = pib_load(b, L"prof_001.pib", "prof_001", ch_check_schema);
-    if (!g_ch_pib || !fp_check_schema(b, g_ch_pib)) { ffxiprofile_done("failed:no schema"); return; }
+    if (!ch_load_pib(b) || !fp_check_schema(b, g_ch_pib)) { ffxiprofile_done("failed:no schema"); return; }
     g_fp_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
     if (!g_fp_rec) { ffxiprofile_done("failed:alloc"); return; }
     ctid = (unsigned __int64)g_fp_hi << 32 | g_fp_lo;
@@ -4863,13 +4941,19 @@ static void snapshot_social(BYTE *b)
     wsprintfA(line, ",\"pic\":{\"token\":%s,\"want\":%d,\"state\":\"%s\"}", tk, g_pic_want, g_pic_state);
     wr(h, line);
     json_str(tk, sizeof tk, g_srch_token);
-    wsprintfA(line, ",\"search\":{\"token\":%s,\"state\":\"%s\",\"results\":[", tk, g_srch_state);
+    wsprintfA(line, ",\"search\":{\"token\":%s,\"state\":\"%s\",\"kind\":\"%s\",\"total\":%d,\"tooMany\":%s,\"results\":[",
+              tk, g_srch_state, g_srch_kinds[g_srch_kind], g_srch_total, g_srch_many ? "true" : "false");
     wr(h, line);
     for (i = 0; i < g_srch_n; i++) {
+        char hd[64], wd[64];
+        const char *shown = g_srch_kind == SK_CHARACTER ? g_srch[i].chname : g_srch[i].name;
         peer_key(b, g_srch[i].lo, g_srch[i].hi, (unsigned)g_srch[i].slot, sk);
-        sjis_json(nm, sizeof nm, (const BYTE *)g_srch[i].name, 0x0f);
-        wsprintfA(line, "%s{\"index\":%d,\"name\":%s,\"pic\":%u,\"key\":\"%s\",\"friend\":%s,\"me\":%s}",
-                  i ? "," : "", i, nm, g_srch[i].pic, sk,
+        sjis_json(nm, sizeof nm, (const BYTE *)shown, 0x0f);
+        sjis_json(hd, sizeof hd, (const BYTE *)g_srch[i].name, 0x0f);
+        sjis_json(wd, sizeof wd, (const BYTE *)g_srch[i].world, 0x0f);
+        wsprintfA(line, "%s{\"index\":%d,\"name\":%s,\"handle\":%s,\"world\":%s,\"pic\":%u,\"key\":\"%s\",\"friend\":%s,"
+                  "\"me\":%s}",
+                  i ? "," : "", i, nm, hd, wd, g_srch[i].pic, sk,
                   find_friend_row(b, g_srch[i].lo, g_srch[i].hi, g_srch[i].slot) >= 0 ? "true" : "false",
                   is_me(b, g_srch[i].lo, g_srch[i].hi) ? "true" : "false");
         wr(h, line);

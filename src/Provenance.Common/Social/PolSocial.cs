@@ -95,9 +95,12 @@ public sealed record PolGroupMember(int Index, string Name, string Key, int Prof
 public sealed record PolGroup(string Id, string Name, int MyClass, int MySlot, int MyStatus, int MyIndex,
                               IReadOnlyList<PolGroupMember> Members);
 
+// Name is the character's for a character search, Handle is always the handle's
 public sealed record PolSearchHit(int Index, string Name, int ProfilePictureId, string Key, bool IsFriend)
 {
     public bool IsMe { get; init; }
+    public string Handle { get; init; } = "";
+    public string World { get; init; } = "";
 }
 
 public sealed record PolBlocked(int Index, string Name, string Key, bool AllHandles);
@@ -212,6 +215,10 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public string SearchToken { get; init; } = "";
     public string SearchState { get; init; } = "";
     public IReadOnlyList<PolSearchHit> SearchResults { get; init; } = [];
+    public FriendSearchKind SearchKind { get; init; }
+    // how many PlayOnline found, which can be more than came back
+    public int SearchTotal { get; init; }
+    public bool SearchTooMany { get; init; }
     public string ProfileToken { get; init; } = "";
     public string ProfileState { get; init; } = "";
     public PolProfile? Profile { get; init; }
@@ -293,9 +300,9 @@ public static class SocialSnapshot
         return WriteRequest(pid, "answer", $"{verb}\n{OneLine(token)}\n{mid}\n{OneLine(subject)}\n{(allHandles ? "1" : "0")}");
     }
 
-    // printable ASCII only, like a handle name. The hook refuses anything else
-    public static bool Search(int pid, string token, string handleName) =>
-        WriteRequest(pid, "search", $"{token.Replace("\n", "")}\n{handleName.Replace("\r", "").Replace("\n", "")}");
+    // the hook checks the value again and builds the query itself
+    public static bool Search(int pid, string token, FriendSearchKind kind, string value) =>
+        WriteRequest(pid, "search", $"{token.Replace("\n", "")}\n{FriendSearch.Wire(kind)}\n{value.Replace("\r", "").Replace("\n", "")}");
 
     public static bool SendFriendRequest(int pid, string token, int index, string hitKey, string subject, string text) =>
         WriteRequest(pid, "answer", $"request\n{OneLine(token)}\n{index}\n{OneLine(subject)}\n{OneLine(text)}\n{OneLine(hitKey)}");
@@ -426,6 +433,8 @@ public static class SocialSnapshot
             var (editToken, editState) = Job(root, "edit");
             var (picToken, picState) = Job(root, "pic");
             var (searchToken, searchState) = Job(root, "search");
+            var search = Obj(root, "search");
+            var searched = search.ValueKind == JsonValueKind.Object;
             var (profileToken, profileState) = Job(root, "profile");
             var (groupToken, groupState) = Job(root, "group");
             var (meToken, meState) = Job(root, "me");
@@ -456,8 +465,12 @@ public static class SocialSnapshot
                 ProfilePictureState = picState,
                 SearchToken = searchToken,
                 SearchState = searchState,
-                SearchResults = Arr(Obj(root, "search"), "results", h => new PolSearchHit((int)Long(h, "index"),
-                    Str(h, "name"), (int)Long(h, "pic"), Str(h, "key"), Bool(h, "friend")) { IsMe = Bool(h, "me") }),
+                SearchResults = Arr(search, "results", h => new PolSearchHit((int)Long(h, "index"),
+                    Str(h, "name"), (int)Long(h, "pic"), Str(h, "key"), Bool(h, "friend"))
+                    { IsMe = Bool(h, "me"), Handle = Str(h, "handle"), World = Str(h, "world") }),
+                SearchKind = searched ? FriendSearch.FromWire(Str(search, "kind")) : FriendSearchKind.Handle,
+                SearchTotal = searched ? Int(search, "total", 0) : 0,
+                SearchTooMany = searched && Bool(search, "tooMany"),
                 ProfileToken = profileToken,
                 ProfileState = profileState,
                 Profile = profileState == "done" ? ReadProfile(Obj(root, "profile")) : null,

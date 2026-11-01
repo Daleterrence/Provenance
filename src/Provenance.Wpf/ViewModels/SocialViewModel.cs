@@ -879,9 +879,13 @@ public partial class SocialViewModel : ObservableObject
         };
     }
 
+    // Name is the character's for a character hit, which shows like a friend in game does
     public sealed record SearchHitItem(int Index, string Name, ImageSource? Avatar, bool IsFriend, string Key,
                                        bool RequestSent = false, bool IsMe = false)
     {
+        public bool IsCharacter { get; init; }
+        public string World { get; init; } = "";
+        public string Label => IsCharacter && World.Length > 0 ? PlayingText.For(Name, World).Long : Name;
         public string Note =>
             IsMe ? "This is you" : IsFriend ? "Already on your friend list" : RequestSent ? "Friend request sent" : "";
     }
@@ -892,14 +896,48 @@ public partial class SocialViewModel : ObservableObject
     [ObservableProperty] private bool _searchNoteIsError;
     partial void OnSearchNoteChanged(string value) => SearchNoteIsError = false;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SearchByHandle), nameof(SearchByHid), nameof(SearchByCharacter), nameof(SearchHint),
+                              nameof(SearchIntro), nameof(SearchMaxLength))]
+    private FriendSearchKind _searchKind;
+    // the picker's off while a search runs, so the hits always match the kind showing
+    partial void OnSearchKindChanged(FriendSearchKind value)
+    {
+        if (SearchBusy) return;
+        SearchHits.Clear();
+        SearchNote = "";
+    }
+    public bool SearchByHandle { get => SearchKind == FriendSearchKind.Handle; set { if (value) SearchKind = FriendSearchKind.Handle; } }
+    public bool SearchByHid { get => SearchKind == FriendSearchKind.Hid; set { if (value) SearchKind = FriendSearchKind.Hid; } }
+    public bool SearchByCharacter { get => SearchKind == FriendSearchKind.Character; set { if (value) SearchKind = FriendSearchKind.Character; } }
+    public string SearchHint => SearchKind switch
+    {
+        FriendSearchKind.Hid => "H-ID, like 00-1234567",
+        FriendSearchKind.Character => "Character name",
+        _ => "Handle name",
+    };
+    public string SearchIntro => SearchKind switch
+    {
+        FriendSearchKind.Hid => "Search PlayOnline for a handle by its H-ID. Every handle has its own, shown in its profile.",
+        FriendSearchKind.Character => "Search for a FINAL FANTASY XI character by name. The same name can be on more than one world, so check the world.",
+        _ => "Search PlayOnline for a handle name. Many people can share one name, so check the picture.",
+    };
+    public int SearchMaxLength => SearchKind == FriendSearchKind.Hid ? 20 : 15;
+
     private string? _searchToken;
     private DateTime _searchAt;
+    private FriendSearchKind _searchedKind;
+    private string _searchedValue = "";
     private string? _requestToken;
     private string _requestName = "";
     private string _requestKey = "";
+    private bool _requestCharacter;
     private DateTime _requestAt;
     private const string BadHandleName = "Type a handle name of up to 15 English letters, numbers or symbols.";
     private const string QuoteInName = "Provenance can't search for handle names with an apostrophe (') in them.";
+    private const string BadHid = "Type an H-ID in numbers, like 00-1234567.";
+    private const string BadCharacterName = "Type a character name of up to 15 English letters, with no spaces, numbers or symbols.";
+    private const string TooManyResults = "Too many results. Please narrow your search.";
 
     private void SearchFailed(string note)
     {
@@ -907,31 +945,39 @@ public partial class SocialViewModel : ObservableObject
         SearchNoteIsError = true;
     }
 
-    public void Search(string handleName)
+    public void Search(string text)
     {
-        var name = handleName.Trim();
+        var value = text.Trim();
+        var kind = SearchKind;
         if (SearchBusy || !Connected || _pol.Pid is not { } pid) return;
         if (GameRunning)
         {
             SearchFailed(GameRunningNote);
             return;
         }
-        if (name.Length is 0 or > 15 || !name.All(c => c is >= ' ' and <= '~'))
+        if (!FriendSearch.Ok(kind, value))
         {
-            SearchFailed(BadHandleName);
+            SearchFailed(kind switch
+            {
+                FriendSearchKind.Hid => BadHid,
+                FriendSearchKind.Character => BadCharacterName,
+                _ => BadHandleName,
+            });
             return;
         }
-        if (name.Contains('\''))
+        if (kind == FriendSearchKind.Handle && value.Contains('\''))
         {
             SearchFailed(QuoteInName);
             return;
         }
         _searchToken = NewToken();
         _searchAt = DateTime.UtcNow;
+        _searchedKind = kind;
+        _searchedValue = value;
         SearchHits.Clear();
         SearchBusy = true;
         SearchNote = "Searching PlayOnline...";
-        if (SocialSnapshot.Search(pid, _searchToken, name)) return;
+        if (SocialSnapshot.Search(pid, _searchToken, kind, value)) return;
         _searchToken = null;
         SearchBusy = false;
         SearchFailed(RequestWriteFailed);
@@ -956,6 +1002,7 @@ public partial class SocialViewModel : ObservableObject
         _requestToken = token;
         _requestName = hit.Name;
         _requestKey = hit.Key;
+        _requestCharacter = hit.IsCharacter;
         _requestAt = DateTime.UtcNow;
         SearchNote = $"Sending a friend request to {hit.Name}...";
         if (SocialSnapshot.SendFriendRequest(pid, token, hit.Index, hit.Key, ViewerText(0x46c9, "Let's be friends!"),
@@ -973,20 +1020,39 @@ public partial class SocialViewModel : ObservableObject
         {
             _searchToken = null;
             SearchBusy = false;
-            if (st == "done")
+            var characters = _searchedKind == FriendSearchKind.Character;
+            if (st == "done" && snap.SearchTooMany) SearchFailed(TooManyResults);
+            else if (st == "done")
             {
                 SearchHits.Clear();
                 foreach (var h in snap.SearchResults)
-                    SearchHits.Add(new SearchHitItem(h.Index, h.Name, _avatars.ProfilePicture(h.ProfilePictureId),
-                                                     h.IsFriend, h.Key, IsMe: h.IsMe));
-                SearchNote = SearchHits.Count == 0 ? "There's no PlayOnline handle with that name."
-                           : SearchHits.Count == 1 ? "Found 1 handle." : $"Found {SearchHits.Count} handles.";
+                {
+                    // the search matched INITCAP of what was typed, so a hit with no name in it is still called that
+                    var name = characters && h.Name.Length == 0 ? FriendSearch.InitCap(_searchedValue) : h.Name;
+                    SearchHits.Add(new SearchHitItem(h.Index, name, _avatars.ProfilePicture(characters ? 0 : h.ProfilePictureId),
+                                                     h.IsFriend, h.Key, IsMe: h.IsMe)
+                                   { IsCharacter = characters, World = characters ? h.World : "" });
+                }
+                var what = characters ? "character" : "handle";
+                var total = Math.Max(snap.SearchTotal, SearchHits.Count);
+                SearchNote = SearchHits.Count == 0 ? _searchedKind switch
+                             {
+                                 FriendSearchKind.Hid => "There's no PlayOnline handle with that H-ID.",
+                                 FriendSearchKind.Character => "There's no FINAL FANTASY XI character with that name.",
+                                 _ => "There's no PlayOnline handle with that name.",
+                             }
+                           : total > SearchHits.Count ? $"Found {total} {what}s. Showing {SearchHits.Count} of them."
+                           : SearchHits.Count == 1 ? $"Found 1 {what}." : $"Found {SearchHits.Count} {what}s.";
             }
             else SearchFailed(st switch
             {
                 "timeout" or "failed:timeout" => "PlayOnline didn't answer the search.",
                 "failed:bad name" => BadHandleName,
                 "failed:quote" => QuoteInName,
+                "failed:bad hid" => BadHid,
+                "failed:bad character" => BadCharacterName,
+                "failed:no schema" when characters =>
+                    "Provenance couldn't read the FINAL FANTASY XI profile layout from your PlayOnline install, so it can't search for characters.",
                 "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't search for handles.",
                 _ => $"PlayOnline couldn't run the search ({FailReason(st)}).",
             });
@@ -1015,7 +1081,7 @@ public partial class SocialViewModel : ObservableObject
             });
             return;
         }
-        SearchNote = $"Friend request sent to {_requestName}. They'll show on your list as \"Friend request sent\" until they accept.";
+        SearchNote = $"Friend request sent to {_requestName}. They'll show on your list{(_requestCharacter ? " under their PlayOnline handle," : "")} as \"Friend request sent\" until they accept.";
         for (int i = 0; i < SearchHits.Count; i++)
             if (SearchHits[i].Name == _requestName && SearchHits[i].Key == _requestKey)
                 SearchHits[i] = SearchHits[i] with { RequestSent = true };

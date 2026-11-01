@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Provenance.Common.Social;
 using Provenance.Wpf.ViewModels;
 
 namespace Provenance.Wpf.Views;
@@ -20,6 +21,7 @@ public partial class AddFriendDialog : Window
         // opened from a row: search their name straight away, then pick their own hit (two people can share a name)
         if (handleName != null)
         {
+            vm.SearchKind = FriendSearchKind.Handle;
             NameBox.Text = handleName;
             Loaded += (_, _) => Vm.Search(NameBox.Text);
             if (!string.IsNullOrEmpty(handleKey))
@@ -59,6 +61,13 @@ public partial class AddFriendDialog : Window
 
     private void OnSearch(object sender, RoutedEventArgs e) => Vm.Search(NameBox.Text);
 
+    private void OnKindPicked(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        NameBox.Focus();
+        NameBox.SelectAll();
+    }
+
     private void OnNameKey(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
@@ -71,7 +80,7 @@ public partial class AddFriendDialog : Window
         var hit = Hits.SelectedItem as SocialViewModel.SearchHitItem;
         var problem = hit switch
         {
-            null => "Choose a handle from the list first.",
+            null => Vm.SearchKind == FriendSearchKind.Character ? "Choose a character from the list first." : "Choose a handle from the list first.",
             { IsMe: true } => "That's one of your own handles. You can't add yourself as a friend.",
             { IsFriend: true } => $"{hit.Name} is already on your friend list.",
             { RequestSent: true } => $"You've already sent {hit.Name} a friend request.",
@@ -83,8 +92,9 @@ public partial class AddFriendDialog : Window
             return;
         }
         if (MessageDialog.Confirm(this, "Send friend request",
-                $"Send \"Let's be friends!\" to {hit!.Name}? They'll show on your list as \"Friend request sent\" " +
-                "until they accept.", "SEND") is not null)
+                $"Send \"Let's be friends!\" to {hit!.Name}? They'll show on your list" +
+                (hit.IsCharacter ? " under their PlayOnline handle," : "") + " as \"Friend request sent\" until they accept.",
+                "SEND") is not null)
             Vm.SendFriendRequest(hit);
     }
 

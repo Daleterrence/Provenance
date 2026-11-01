@@ -18,6 +18,40 @@
         <shell:WindowChrome CaptionHeight="40" ResizeBorderThickness="0" GlassFrameThickness="0" CornerRadius="0" />
     </shell:WindowChrome.WindowChrome>
 
+    <Window.Resources>
+        <!-- what the search goes by, underlined like the profile window's tabs -->
+        <Style x:Key="SearchKindTab" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Line" Background="Transparent" BorderThickness="0,0,0,2" BorderBrush="Transparent"
+                                Padding="10,0" Height="30">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Primary}" />
+                                <Setter TargetName="Line" Property="BorderBrush" Value="{DynamicResource Primary}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Line" Property="Background" Value="{DynamicResource Surface.1}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Line" Property="Background" Value="{DynamicResource Surface.1}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,*,Auto">
         <Grid Background="{DynamicResource Surface.1}">
             <TextBlock Margin="14,0" VerticalAlignment="Center" FontSize="14" Text="Add a friend" />
@@ -28,14 +62,21 @@
             </Button>
         </Grid>
 
-        <StackPanel Grid.Row="1" Margin="16,14,16,6">
-            <TextBlock FontSize="12" Foreground="{DynamicResource Text.2}" TextWrapping="Wrap"
-                       Text="Search PlayOnline for a handle name. Many people can share one name, so check the picture." />
+        <StackPanel Grid.Row="1" Margin="16,8,16,6">
+            <StackPanel Orientation="Horizontal" Margin="-10,0,0,8" IsEnabled="{Binding SearchBusy, Converter={StaticResource InvertBool}}">
+                <RadioButton Style="{StaticResource SearchKindTab}" GroupName="SearchKind" Content="Handle"
+                             IsChecked="{Binding SearchByHandle}" Checked="OnKindPicked" />
+                <RadioButton Style="{StaticResource SearchKindTab}" GroupName="SearchKind" Content="H-ID"
+                             IsChecked="{Binding SearchByHid}" Checked="OnKindPicked" />
+                <RadioButton Style="{StaticResource SearchKindTab}" GroupName="SearchKind" Content="Character"
+                             IsChecked="{Binding SearchByCharacter}" Checked="OnKindPicked" />
+            </StackPanel>
+            <TextBlock FontSize="12" Foreground="{DynamicResource Text.2}" TextWrapping="Wrap" Text="{Binding SearchIntro}" />
             <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
-                <TextBox x:Name="NameBox" FontSize="13" Height="40" Padding="10,6" MaxLength="15"
+                <TextBox x:Name="NameBox" FontSize="13" Height="40" Padding="10,6" MaxLength="{Binding SearchMaxLength}"
                          Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                         materialDesign:HintAssist.Hint="Handle name" materialDesign:HintAssist.IsFloating="False"
-                         KeyDown="OnNameKey" />
+                         materialDesign:HintAssist.Hint="{Binding SearchHint}" materialDesign:HintAssist.IsFloating="False"
+                         AutomationProperties.Name="{Binding SearchHint}" KeyDown="OnNameKey" />
                 <Button Grid.Column="1" Margin="10,0,0,0" Height="40" Content="SEARCH" Click="OnSearch"
                         Style="{StaticResource AccentRaisedButton}" />
             </Grid>
@@ -56,7 +97,7 @@
                     <Grid Margin="4,3" ColumnDefinitions="Auto,*">
                         <local:ProfilePictureCircle Diameter="40" Margin="0,0,12,0" Source="{Binding Avatar}" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Medium" />
+                            <TextBlock Text="{Binding Label}" FontSize="14" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding Note}" FontSize="11.5" Foreground="{DynamicResource Text.3}" />
                         </StackPanel>
                     </Grid>
