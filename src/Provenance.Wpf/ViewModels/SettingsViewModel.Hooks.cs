@@ -477,7 +477,10 @@ public partial class SettingsViewModel
                 WindowerSettingsProblem = "Provenance couldn't read Windower's settings.xml. Close anything that has it open, then open Settings again.";
             }
             if (file?.LoadError is { } why)
-                WindowerSettingsProblem = $"Windower's settings.xml couldn't be read ({why}). Fix the file, or start a new one here. The old one's kept next to it.";
+            {
+                Log.Warning("Windower's settings.xml couldn't be read: {Why}", why);
+                WindowerSettingsProblem = file.Unreadable("start a new one here. The old one's kept next to it.");
+            }
             var p = file is { LoadError: null } && WindowerProfile is { } item ? Find(file, item.Name) : null;
             WindowerConsoleKey = Choice(p?.ConsoleKey ?? WindowerKeys.Insert);
             WindowerAllowWinKey = p?.AllowWinKey ?? false;

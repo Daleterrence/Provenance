@@ -39,6 +39,7 @@ public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string 
         AccountLimitAt = 0x62C0, FastLoginAt = 0x62C1, BackgroundAt = 0x62C2;
 
     private const string Unsupported = "echo Command not supported in initialization: ";
+    private const string LoadLuaCore = "load LuaCore";
 
     public static WindowerHookBlock Build(WindowerHookInput input)
     {
@@ -105,10 +106,11 @@ public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string 
     }
 
     // what the hook actually gets. Windower cuts it mid-command, which would run half of one, so this stops at the last
-    // whole one
+    // whole one. The hook runs it before any plugin loads, so a lua load in it gets LuaCore loaded first
     internal static string InitCommandAsSent(string? initCommand, List<string>? warnings = null)
     {
         var command = FilterInitCommand(initCommand);
+        if (ScriptLoads.LoadsAddon(command)) command = LoadLuaCore + ";" + command;
         int max = InitCommandField.Chars - 1;
         if (command.Length <= max) return command;
         int cut = command.LastIndexOf(';', max);

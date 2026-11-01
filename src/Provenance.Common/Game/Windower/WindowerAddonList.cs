@@ -77,10 +77,13 @@ public sealed class WindowerAddonList
             if (addons.FirstOrDefault(a => a.Name.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Name);
             else skipped.Add($"{n} (addon not installed)");
 
-        // required plugins stay in whatever the scripts say, the addons need LuaCore before init.txt runs
+        // required plugins stay in whatever init.txt says, the addons need LuaCore before it runs. The init command runs
+        // before them though, and a second load of one only gets "Plugin already loaded."
         var loads = ScriptLoads.Read(windowerDir, profile.InitCommand);
         string? Already(string name, Dictionary<string, string> loaded) =>
             loaded.TryGetValue(name, out var where) ? $"{name} (already loaded by {where})" : null;
+        foreach (var n in required.ToList())
+            if (loads.Plugins.GetValueOrDefault(n) == ScriptLoads.InitCommand && Already(n, loads.Plugins) is { } why) { required.Remove(n); skipped.Add(why); }
         foreach (var n in sendPlugins.ToList())
             if (Already(n, loads.Plugins) is { } why) { sendPlugins.Remove(n); skipped.Add(why); }
         foreach (var n in sendAddons.ToList())
@@ -92,13 +95,14 @@ public sealed class WindowerAddonList
 internal static class ScriptLoads
 {
     private const int MaxRead = 1 << 20;
+    public const string InitCommand = "the profile's init command";
 
     public static (Dictionary<string, string> Plugins, Dictionary<string, string> Addons) Read(string windowerDir, string? initCommand)
     {
         var plugins = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var addons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         // just what the hook gets: load and exec are echoes by then, and a cut-off tail never runs
-        Scan(WindowerHookBlock.InitCommandAsSent(initCommand), "the profile's init command", plugins, addons);
+        Scan(WindowerHookBlock.InitCommandAsSent(initCommand), InitCommand, plugins, addons);
         Scan(ReadInit(Path.Combine(windowerDir, "scripts", "init.txt")), "your init.txt", plugins, addons);
         return (plugins, addons);
     }
@@ -115,6 +119,13 @@ internal static class ScriptLoads
             return System.Text.Encoding.UTF8.GetString(buf, bom, buf.Length - bom);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return ""; }
+    }
+
+    public static bool LoadsAddon(string script)
+    {
+        var addons = new Dictionary<string, string>();
+        Scan(script, "", new Dictionary<string, string>(), addons);
+        return addons.Count > 0;
     }
 
     internal static void Scan(string script, string where, Dictionary<string, string> plugins, Dictionary<string, string> addons)

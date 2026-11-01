@@ -35,7 +35,13 @@ public sealed class WindowerSettingsFile
     // the file was there but wasn't XML. It reads as empty like it does for Windower, but it won't be saved over until
     // MoveBadFileAside has kept a copy
     public string? LoadError { get; private set; }
+    public int? LoadErrorLine { get; private set; }
     public bool CanSave => LoadError is null;
+
+    // LoadError is .NET's wording, for the log. This is the player's, then whatever else they can do about it
+    public string Unreadable(string orElse) => LoadErrorLine is { } line
+        ? $"Windower's settings.xml has a mistake on line {line}, so Provenance can't read it. Fix that line, or {orElse}"
+        : $"Windower's settings.xml has a mistake in it, so Provenance can't read it. Fix the file, or {orElse}";
 
     private WindowerSettingsFile() { }
 
@@ -72,6 +78,7 @@ public sealed class WindowerSettingsFile
         {
             var empty = Empty();
             empty.LoadError = e.Message;
+            empty.LoadErrorLine = e.LineNumber > 0 ? e.LineNumber : null;
             empty._warnings.Add($"Windower's settings.xml couldn't be read ({e.Message}).");
             return empty;
         }
@@ -216,6 +223,7 @@ public sealed class WindowerSettingsFile
     private void Recovered()
     {
         LoadError = null;
+        LoadErrorLine = null;
         _warnings.Clear();
     }
 

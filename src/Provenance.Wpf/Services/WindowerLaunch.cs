@@ -171,8 +171,10 @@ public sealed class WindowerLaunch : IDisposable
             throw Shown.Mark(new IOException("Provenance couldn't read Windower's settings.xml. Try again in a moment."));
         }
         if (file.LoadError is { } why)
-            throw Shown.Mark(new InvalidDataException(
-                $"Windower's settings.xml couldn't be read ({why}). Fix the file, or start a new one in Settings, under Windower/Ashita."));
+        {
+            Log.Warning("Windower's settings.xml couldn't be read: {Why}", why);
+            throw Shown.Mark(new InvalidDataException(file.Unreadable("start a new one in Settings, under Windower/Ashita.")));
+        }
         foreach (var w in file.Warnings) Log.Warning("Windower settings: {Warning}", w);
         return file;
     }

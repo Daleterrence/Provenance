@@ -340,11 +340,14 @@ public partial class AddonsPluginsViewModel : ObservableObject
     private static WindowerSettingsFile Readable(string dir)
     {
         var file = WindowerSettingsFile.Load(dir);
-        return file.LoadError is { } why ? throw Shown.Mark(new InvalidOperationException(Unreadable(why))) : file;
+        return file.LoadError is not null ? throw Shown.Mark(new InvalidOperationException(Unreadable(file))) : file;
     }
 
-    private static string Unreadable(string why) =>
-        $"Windower's settings.xml couldn't be read ({why}), so its list can't be changed here. Fix the file, or choose Start a new settings file under Windower/Ashita to set it aside and start again.";
+    private static string Unreadable(WindowerSettingsFile file)
+    {
+        Log.Warning("Windower's settings.xml couldn't be read: {Why}", file.LoadError);
+        return file.Unreadable("choose Start a new settings file under Windower/Ashita to set it aside and start again. Until then its list can't be changed here.");
+    }
 
     internal void Switch(AddonRow row, bool on)
     {
@@ -572,10 +575,10 @@ public partial class AddonsPluginsViewModel : ObservableObject
             locked = true;
             page.Problem = "Provenance couldn't read Windower's settings.xml, so its list can't be changed right now. Close anything that has it open, then come back to this page.";
         }
-        if (file.LoadError is { } why)
+        if (file.LoadError is not null)
         {
             locked = true;
-            page.Problem = Unreadable(why);
+            page.Problem = Unreadable(file);
         }
         var profile = file.Find(profileName);
         page.Key = profile?.Name ?? profileName;
