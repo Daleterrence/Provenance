@@ -211,7 +211,11 @@ public sealed class WindowerSettingsFile
                 var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
                 var moved = $"{path}.bad-{stamp}";
                 for (int n = 2; File.Exists(moved); n++) moved = $"{path}.bad-{stamp}-{n}";
-                File.Move(path, moved);
+                using (var pins = LinkCheck.Hold(windowerDir, windowerDir))
+                {
+                    LinkCheck.Recheck(pins, windowerDir, pins.Real(path), pins.Real(moved));
+                    File.Move(pins.Real(path), pins.Real(moved));
+                }
                 Recovered();
                 return moved;
             }
@@ -245,8 +249,12 @@ public sealed class WindowerSettingsFile
     private static void Write(string path, byte[] bytes)
     {
         var full = Path.GetFullPath(path);
+        var dir = Path.GetDirectoryName(full) ?? full;
         var tmp = $"{full}.provenance.{Guid.NewGuid():N}.tmp";
-        LinkCheck.Refuse(Path.GetDirectoryName(full) ?? full, full, tmp);
+        LinkCheck.Refuse(dir, full, tmp);
+        using var pins = LinkCheck.Hold(dir, dir);
+        full = pins.Real(full);
+        tmp = pins.Real(tmp);
         try
         {
             using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -254,6 +262,7 @@ public sealed class WindowerSettingsFile
                 fs.Write(bytes);
                 fs.Flush(flushToDisk: true);
             }
+            LinkCheck.Recheck(pins, dir, full);
             File.Move(tmp, full, overwrite: true);
         }
         finally

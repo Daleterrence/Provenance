@@ -72,7 +72,7 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
 // like the viewer's own pub\homeNN\msg. The server keeps no read flag or sent copy, so those live here
 public sealed class ChatStore
 {
-    private readonly string _path;
+    private readonly string? _path;
     private readonly List<ChatEntry> _entries = new();
     private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
     // the 2 sec poll asks for counts every time, so they're worked out once per change, not per ask
@@ -85,7 +85,13 @@ public sealed class ChatStore
     // DPAPI-encrypted, it's friends' messages in there
     public ChatStore(string profileId, string? root = null)
     {
-        root ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "messages");
+        if (root is null)
+        {
+            // no AppData at all would make this a relative path, so the log just isn't kept
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (string.IsNullOrEmpty(appData)) return;
+            root = Path.Combine(appData, "Provenance", "messages");
+        }
         _path = Path.Combine(root, profileId + ".dat");
         if (!File.Exists(_path)) return;
         try
@@ -354,19 +360,33 @@ public sealed class ChatStore
         Save();
     }
 
+    public Action<string>? Log { get; init; }
+
     public bool Save()
     {
+        if (_path is null) return false;
+        string? tmp = null;
         try
         {
             var cipher = Dpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(_entries), Entropy);
-            if (cipher is null) return false;
+            if (cipher is null)
+            {
+                Log?.Invoke($"{Path.GetFileName(_path)} couldn't be encrypted, so it wasn't saved");
+                return false;
+            }
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var tmp = _path + ".tmp";
+            // a new name every time, so two saves at once can't trip over each other's temp file
+            tmp = $"{_path}.{Guid.NewGuid():N}.tmp";
             File.WriteAllBytes(tmp, cipher);
             File.Move(tmp, _path, overwrite: true);
             Dirty = false;
             return true;
         }
-        catch { return false; }   // history's a convenience, never worth breaking the session over
+        catch (Exception e)   // history's a convenience, never worth breaking the session over
+        {
+            Log?.Invoke($"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
+            if (tmp is not null) try { File.Delete(tmp); } catch { }
+            return false;
+        }
     }
 }

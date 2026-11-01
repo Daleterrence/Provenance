@@ -12,10 +12,12 @@ public sealed class FolderPins : IDisposable
     private readonly string _root;
     private readonly Dictionary<string, SafeFileHandle> _held = new(StringComparer.OrdinalIgnoreCase);
 
-    public FolderPins(string root)
+    public FolderPins(string root) : this(root, root) { }
+
+    private FolderPins(string given, string real)
     {
-        _given = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-        _root = LongName(_given);
+        _given = Path.TrimEndingDirectorySeparator(Path.GetFullPath(given));
+        _root = LongName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(real)));
     }
 
     public string Root => _root;
@@ -28,6 +30,25 @@ public sealed class FolderPins : IDisposable
         pins.Dispose();
         return null;
     }
+
+    // Hold, but a link above top is followed (an install moved to another drive, say) and everything's held where it
+    // really is. Real gives the path to write to
+    public static FolderPins? HoldBelow(string top, string dir)
+    {
+        var given = Path.TrimEndingDirectorySeparator(Path.GetFullPath(top));
+        var real = given;
+        if (Path.GetDirectoryName(given) is { } parent)
+        {
+            if (RealPath(parent) is not { } p) return null;
+            real = Path.Join(p, Path.GetFileName(given));
+        }
+        var pins = new FolderPins(given, real);
+        if (pins.Pin(dir)) return pins;
+        pins.Dispose();
+        return null;
+    }
+
+    public string Real(string path) => Rebase(path);
 
     // The root and every folder down to dir, made where missing. Held ones are checked again, an emptied folder can
     // still be made a link while it's held
@@ -119,7 +140,7 @@ public sealed class FolderPins : IDisposable
     // where a folder really is, every link on the way (its own too) followed. Null if it won't open
     public static string? RealPath(string dir)
     {
-        using var h = CreateFileW(Path.GetFullPath(dir), ReadAttributes, ShareRead | ShareWrite | ShareDelete, IntPtr.Zero, OpenExisting,
+        using var h = CreateFileW(LinkCheck.LongPath(Path.GetFullPath(dir)), ReadAttributes, ShareRead | ShareWrite | ShareDelete, IntPtr.Zero, OpenExisting,
                                   BackupSemantics, IntPtr.Zero);
         return h.IsInvalid ? null : FinalPath(h);
     }
@@ -157,7 +178,7 @@ public sealed class FolderPins : IDisposable
     private bool Add(string dir)
     {
         if (_held.ContainsKey(dir)) return Fine(dir);
-        var h = CreateFileW(dir, ListDirectory | ReadAttributes, ShareRead | ShareWrite, IntPtr.Zero, OpenExisting,
+        var h = CreateFileW(LinkCheck.LongPath(dir), ListDirectory | ReadAttributes, ShareRead | ShareWrite, IntPtr.Zero, OpenExisting,
                             BackupSemantics | OpenReparsePoint, IntPtr.Zero);
         if (h.IsInvalid)
         {

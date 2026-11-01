@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Game.Ashita;
 
@@ -123,6 +124,13 @@ public static class AshitaBootFiles
         return path;
     }
 
+    // config and boot stay held while files are copied, moved or deleted there, and it's all done where they really are
+    private static FolderPins Hold(string ashitaDir)
+    {
+        var config = Path.GetFullPath(Path.Combine(ashitaDir, "config"));
+        return LinkCheck.Hold(config, Path.Combine(config, "boot"));
+    }
+
     // a copy of the install's own example with the game settings left to Windows, or a short one of mine. Either way
     // the hardware mouse starts on
     public static string Create(string ashitaDir, string name, bool fromExample, int playOnline = 2)
@@ -147,7 +155,7 @@ public static class AshitaBootFiles
     {
         var from = Existing(ashitaDir, source, change: false);
         var path = NewFile(ashitaDir, name);
-        File.Copy(from, path);
+        using (var pins = Hold(ashitaDir)) File.Copy(pins.Real(from), pins.Real(path));
         FollowName(path, source);
         return path;
     }
@@ -162,9 +170,13 @@ public static class AshitaBootFiles
             path = Path.Combine(Path.GetDirectoryName(from)!, newName);
         }
         else path = NewFile(ashitaDir, newName);
-        File.Move(from, path);
-        if (File.Exists(from + ".bak")) File.Move(from + ".bak", path + ".bak", overwrite: true);
-        DropLaunchCopy(ashitaDir, name);
+        using (var pins = Hold(ashitaDir))
+        {
+            var (src, dst) = (pins.Real(from), pins.Real(path));
+            File.Move(src, dst);
+            if (File.Exists(src + ".bak")) File.Move(src + ".bak", dst + ".bak", overwrite: true);
+            DropLaunchCopy(pins, ashitaDir, name);
+        }
         FollowName(path, name);
         return path;
     }
@@ -187,14 +199,15 @@ public static class AshitaBootFiles
     public static void Delete(string ashitaDir, string name)
     {
         var path = Existing(ashitaDir, name, change: true);
-        File.Delete(path);
-        File.Delete(path + ".bak");
-        DropLaunchCopy(ashitaDir, name);
+        using var pins = Hold(ashitaDir);
+        File.Delete(pins.Real(path));
+        File.Delete(pins.Real(path + ".bak"));
+        DropLaunchCopy(pins, ashitaDir, name);
     }
 
-    private static void DropLaunchCopy(string ashitaDir, string name)
+    private static void DropLaunchCopy(FolderPins pins, string ashitaDir, string name)
     {
-        try { File.Delete(Path.Combine(Folder(ashitaDir), LaunchCopyName(name))); }
+        try { File.Delete(pins.Real(Path.Combine(Folder(ashitaDir), LaunchCopyName(name)))); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
@@ -261,11 +274,12 @@ public static class AshitaBootFiles
             ini.Set("ashita.polplugins", plugin, "0");
             ini.Scrub("ashita.polplugins.args", plugin);
         }
+        using var pins = Hold(ashitaDir);
         ini.Save(target, backup: false);
 
         if (!ReadsRight(target, polExe))
         {
-            try { File.Delete(target); } catch (IOException) { }
+            try { File.Delete(pins.Real(target)); } catch (IOException) { }
             throw Shown.Mark(new InvalidOperationException(
                 $"Provenance couldn't make a copy of {source ?? "its boot configuration"} that Ashita reads the way it should, so it won't start Ashita with it. Check the file for odd line breaks or characters."));
         }

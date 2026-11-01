@@ -5,10 +5,7 @@ namespace Provenance.Common.Social;
 
 public sealed record MyProfileField(string Label, int Level, long Value, string Text);
 
-public sealed record MyProfileChoice(long Code, IReadOnlyList<string> Parts)
-{
-    public string Text => string.Join(" \u203a ", Parts.Where(p => p.Length > 0));
-}
+public sealed record MyProfileChoice(long Code, IReadOnlyList<string> Parts);
 
 // Level is 1 Private, 2 Friends only, 3 POL. Tables are the viewer's value tables (prof_pol.pfb)
 public sealed record MyProfile(string Handle, int Level, IReadOnlyDictionary<string, MyProfileField> Fields,

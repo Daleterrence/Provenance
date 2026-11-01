@@ -24,8 +24,24 @@ public static class LinkCheck
     public static void Refuse(params IEnumerable<string> paths)
     {
         foreach (var p in paths)
-            if (IsRedirect(p)) throw Shown.Mark(new IOException($"Provenance won't write to {p}, it's a link to somewhere else."));
+            if (IsRedirect(p)) throw Linked(p);
     }
+
+    // top and every folder down to dir stay held until it's disposed, so none can be swapped for a link mid-write
+    public static FolderPins Hold(string top, string dir)
+    {
+        if (!Directory.Exists(dir)) throw new DirectoryNotFoundException($"{dir} isn't there.");
+        return FolderPins.HoldBelow(top, dir) ?? throw Linked(dir);
+    }
+
+    // right before the move or replace, an emptied folder can still be made a link while it's held
+    public static void Recheck(FolderPins pins, string dir, params IEnumerable<string> files)
+    {
+        if (!pins.Intact(dir)) throw Linked(dir);
+        Refuse(files);
+    }
+
+    private static IOException Linked(string p) => Shown.Mark(new IOException($"Provenance won't write to {p}, it's a link to somewhere else."));
 
     // FindFirstFileW stops at 260 characters without \\?\, and a link it can't see must not read as no link
     internal static string LongPath(string full)

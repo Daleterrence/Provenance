@@ -147,6 +147,9 @@ public sealed class AshitaIniFile
         var dir = Path.GetDirectoryName(full)!;
         var bak = full + ".bak";
         RefuseLinks(full, bak, dir, Path.GetDirectoryName(dir) ?? dir);
+        using var pins = LinkCheck.Hold(Path.GetDirectoryName(dir) ?? dir, dir);
+        full = pins.Real(full);
+        bak = pins.Real(bak);
         // a backup from before a token was taken out would keep it on disk
         bool dropBackup = File.Exists(full) && Parse(File.ReadAllBytes(full), ansi.CodePage).Secrets().Except(Secrets()).Any();
         var tmp = $"{full}.{Guid.NewGuid():N}.tmp";
@@ -154,6 +157,7 @@ public sealed class AshitaIniFile
         try
         {
             File.WriteAllBytes(tmp, ToBytes());
+            LinkCheck.Recheck(pins, dir, full, bak);
             replacing = File.Exists(full);
             if (replacing) File.Replace(tmp, full, backup && !dropBackup ? bak : null);
             else File.Move(tmp, full);

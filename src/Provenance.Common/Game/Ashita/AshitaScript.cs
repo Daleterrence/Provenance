@@ -73,27 +73,45 @@ public sealed partial class AshitaScript
     public void Save(string path)
     {
         var full = Path.GetFullPath(path);
+        var dir = Path.GetDirectoryName(full)!;
         var bak = full + ".bak";
         var tmp = $"{full}.{Guid.NewGuid():N}.tmp";
         LinkCheck.Refuse([.. FoldersTo(full), full, bak, tmp]);
-        bool replacing = false;
-        try
+        FolderPins pins;
+        try { pins = LinkCheck.Hold(Top(dir), dir); }
+        catch (DirectoryNotFoundException e) { throw SaveFailed(full, e); }
+        using (pins)
         {
-            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) fs.Write(ToBytes());
-            replacing = File.Exists(full);
-            // the first .bak is the script from before Provenance touched it, so it's never written over
-            if (replacing) File.Replace(tmp, full, File.Exists(bak) ? null : bak);
-            else File.Move(tmp, full);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // a Replace that failed halfway can leave the temp file as the only copy
-            if (!replacing || File.Exists(full))
-                try { File.Delete(tmp); } catch (Exception d) when (d is IOException or UnauthorizedAccessException) { }
-            throw Shown.Mark(new IOException($"Provenance couldn't save the Ashita script {Path.GetFileName(full)}.", e));
+            full = pins.Real(full);
+            bak = pins.Real(bak);
+            tmp = pins.Real(tmp);
+            bool replacing = false;
+            try
+            {
+                using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) fs.Write(ToBytes());
+                LinkCheck.Recheck(pins, dir, full, bak);
+                replacing = File.Exists(full);
+                // the first .bak is the script from before Provenance touched it, so it's never written over
+                if (replacing) File.Replace(tmp, full, File.Exists(bak) ? null : bak);
+                else File.Move(tmp, full);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // a Replace that failed halfway can leave the temp file as the only copy
+                if (!replacing || File.Exists(full))
+                    try { File.Delete(tmp); } catch (Exception d) when (d is IOException or UnauthorizedAccessException) { }
+                if (Shown.Is(e)) throw;
+                throw SaveFailed(full, e);
+            }
         }
         Changed = false;
     }
+
+    private static IOException SaveFailed(string full, Exception e) =>
+        Shown.Mark(new IOException($"Provenance couldn't save the Ashita script {Path.GetFileName(full)}.", e));
+
+    // the highest folder FoldersTo checks
+    private string Top(string dir) => scriptsDir is not null && Under(scriptsDir, dir) ? scriptsDir : Path.GetDirectoryName(dir) ?? dir;
 
     private List<string> FoldersTo(string full)
     {
@@ -168,16 +186,18 @@ public sealed partial class AshitaScript
         {
             Directory.CreateDirectory(dir);
             LinkCheck.Refuse([dir]);
+            using var pins = LinkCheck.Hold(dir, dir);
             for (int n = 1; n < 1000; n++)
             {
                 var name = n == 1 ? stem + ".txt" : $"{stem}-{n}.txt";
-                var target = Path.Combine(dir, name);
+                var target = pins.Real(Path.Combine(dir, name));
                 var tmp = $"{target}.{Guid.NewGuid():N}.tmp";
                 LinkCheck.Refuse([target, tmp]);
                 if (Path.Exists(target)) continue;
                 try
                 {
                     using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) fs.Write(bytes);
+                    LinkCheck.Recheck(pins, dir, target);
                     try
                     {
                         File.Move(tmp, target, overwrite: false);
