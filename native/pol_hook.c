@@ -5161,7 +5161,8 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, void *r)
     saver_save();
     InitializeCriticalSection(&g_lgcs);
     g_lgcs_ready = 1;
-    /* shows whether Large Address Aware took: 0xfffeffff with the bit on pol.exe, 0x7ffeffff without */
+    /* shows whether Large Address Aware took: 0xfffeffff with the bit on pol.exe, 0x7ffeffff without. Keep it the
+       first line, the app reads a reused pid's log from the last one on */
     GetSystemInfo(&si);
     lg("pol_hook: highest user address %08x\r\n", (unsigned)(ULONG_PTR)si.lpMaximumApplicationAddress);
     owner_open();

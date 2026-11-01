@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Serilog;
 using Provenance.Common.Locks;
 using Provenance.Common.PolFormat;
@@ -13,6 +14,8 @@ public sealed class SettingsService : ISettingsService
     private readonly string _path;
     private bool _saveFailedRaised;
     private PolRegion? _region;
+    // this copy's settings as it last read or saved them, which is what tells its own changes from another copy's
+    private JsonObject _known;
 
     public LauncherSettings Current { get; private set; }
 
@@ -33,6 +36,7 @@ public sealed class SettingsService : ISettingsService
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         _path = path;
         Current = Load();
+        _known = Node(Current);
     }
 
     private LauncherSettings Load()
@@ -75,25 +79,41 @@ public sealed class SettingsService : ISettingsService
         {
             var before = JsonSerializer.Serialize(saved, JsonOptions);
             change(saved);
-            if (JsonSerializer.Serialize(saved, JsonOptions) != before) Write(saved);
+            if (JsonSerializer.Serialize(saved, JsonOptions) != before && !WriteFile(Node(saved))) return;
+            var known = _known.Deserialize<LauncherSettings>(JsonOptions)!;
+            change(known);
+            _known = Node(known);
         }
         else Log.Warning("settings.json couldn't be read again, so a change is only kept until Provenance closes");
     }
 
-    // temp file then a move, a truncated settings.json would load as defaults and lose every account
+    // what this copy changed since it last read or saved goes on top of the file as it is now, so another copy's
+    // changes meanwhile stay. An unreadable file is replaced whole
     private void Write(LauncherSettings settings)
+    {
+        using var gate = HoldLock();
+        var saved = ReadSaved();
+        // another copy may have given out a slot since this one loaded, a number once given stays given
+        if (saved is not null && saved.LastHomeSlot > settings.LastHomeSlot)
+            settings.LastHomeSlot = saved.LastHomeSlot;
+        var mine = Node(settings);
+        var file = saved is null ? null : Node(saved);
+        var merged = file is null ? mine : Merge(mine, _known, file);
+        if ((file is not null && JsonNode.DeepEquals(merged, file)) || WriteFile(merged)) _known = mine;
+    }
+
+    // temp file then a move, a truncated settings.json would load as defaults and lose every account
+    private bool WriteFile(JsonObject settings)
     {
         var tmp = $"{_path}.{Environment.ProcessId}.tmp";
         IDisposable? gate = null;
         try
         {
             gate = HoldLock();
-            // another copy may have given out a slot since this one loaded, a number once given stays given
-            if (ReadSaved() is { } saved && saved.LastHomeSlot > settings.LastHomeSlot)
-                settings.LastHomeSlot = saved.LastHomeSlot;
-            File.WriteAllText(tmp, JsonSerializer.Serialize(settings, JsonOptions));
+            File.WriteAllText(tmp, settings.ToJsonString(JsonOptions));
             File.Move(tmp, _path, overwrite: true);
             Log.Debug("Settings saved to {Path}", _path);
+            return true;
         }
         catch (Exception ex)
         {
@@ -104,8 +124,75 @@ public sealed class SettingsService : ISettingsService
                 _saveFailedRaised = true;
                 SaveFailed?.Invoke(ex.Message);
             }
+            return false;
         }
         finally { gate?.Dispose(); }
+    }
+
+    private static JsonObject Node(LauncherSettings settings) => JsonSerializer.SerializeToNode(settings, JsonOptions)!.AsObject();
+
+    // accounts and their multi-account rows match up by id and the Windower lists by profile name, so one added,
+    // edited or removed in either copy keeps that
+    private static JsonObject Merge(JsonObject mine, JsonObject? was, JsonObject file, bool lists = true)
+    {
+        var merged = new JsonObject();
+        foreach (var (name, value) in mine)
+        {
+            var before = was?[name];
+            string? key = !lists ? null : name switch
+            {
+                nameof(LauncherSettings.Profiles) => nameof(Profile.Id),
+                nameof(LauncherSettings.MultiAccounts) => nameof(MultiAccountEntry.ProfileId),
+                nameof(LauncherSettings.WindowerAddonLists) => "",
+                _ => null,
+            };
+            var pick = !file.TryGetPropertyValue(name, out var now) ? value
+                     : key is not null ? MergeKeyed(value, before, now, key)
+                     : JsonNode.DeepEquals(value, before) ? now : value;
+            merged[name] = pick?.DeepClone();
+        }
+        return merged;
+    }
+
+    // one gone from the file was removed by another copy, one this copy never had was added by one
+    private static JsonNode? MergeKeyed(JsonNode? mine, JsonNode? was, JsonNode? file, string key)
+    {
+        if (Entries(mine, key) is not { } m || Entries(file, key) is not { } f)
+            return JsonNode.DeepEquals(mine, was) ? file : mine;
+        var before = Entries(was, key) ?? new();
+        var merged = new Dictionary<string, JsonNode?>();
+        foreach (var (id, item) in m)
+        {
+            if (!before.TryGetValue(id, out var old)) merged[id] = item;
+            else if (f.TryGetValue(id, out var now))
+                merged[id] = item is JsonObject a && now is JsonObject b ? Merge(a, old as JsonObject, b, lists: false)
+                           : JsonNode.DeepEquals(item, old) ? now : item;
+        }
+        foreach (var (id, item) in f)
+            if (!before.ContainsKey(id) && !m.ContainsKey(id)) merged[id] = item;
+        // the multi-account order can be changed, so this copy's goes when it moved one and the file's otherwise
+        bool moved = !m.Keys.Where(before.ContainsKey).SequenceEqual(before.Keys.Where(m.ContainsKey));
+        var order = (moved ? m.Keys.Concat(f.Keys) : f.Keys.Concat(m.Keys)).Distinct().Where(merged.ContainsKey);
+        if (key.Length > 0) return new JsonArray(order.Select(id => merged[id]?.DeepClone()).ToArray());
+        var map = new JsonObject();
+        foreach (var id in order) map[id] = merged[id]?.DeepClone();
+        return map;
+    }
+
+    // null when it isn't the shape expected or an id turns up twice, and then the whole list goes by the plain rule
+    private static OrderedDictionary<string, JsonNode?>? Entries(JsonNode? node, string key)
+    {
+        var entries = new OrderedDictionary<string, JsonNode?>();
+        if (key.Length == 0 && node is JsonObject map)
+        {
+            foreach (var (name, item) in map) entries.Add(name, item);
+            return entries;
+        }
+        if (key.Length == 0 || node is not JsonArray list) return null;
+        foreach (var item in list)
+            if (item is not JsonObject o || o[key] is not JsonValue v || !v.TryGetValue(out string? id) || !entries.TryAdd(id, item))
+                return null;
+        return entries;
     }
 
     public IDisposable? HoldLock()

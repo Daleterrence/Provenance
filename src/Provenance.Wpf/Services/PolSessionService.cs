@@ -103,6 +103,7 @@ public sealed class PolSessionService : IDisposable
 
     private const string LaunchKeyPrefix = "LAUNCH:";
     private const string SessionClaimLock = "session-claim";
+    private const string PrestartLock = "prestart";
     private static readonly Regex PidLine = new(@"pol\.exe running \(pid (\d+)\)", RegexOptions.Compiled);
     private static readonly TimeSpan[] RefusedRetryWaits = [TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(60)];
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(10);
@@ -126,9 +127,14 @@ public sealed class PolSessionService : IDisposable
     private sealed record SessionFile(int Pid, long StartTicks, string? ProfileId, int OwnerPid = 0, long OwnerStartTicks = 0,
                                       bool Played = false);
 
-    // admin-only, so nothing running as the user can plant a record that makes the app end a process
-    private static readonly Lazy<string> SessionDirLazy = new(() => SecureFiles.SubDir("sessions"));
-    private static string SessionDir => SessionDirLazy.Value;
+    // admin-only, so nothing running as the user can plant a record that makes the app end a process. Only a good
+    // answer's kept, a failed check gets tried again next time
+    private static readonly object SessionDirGate = new();
+    private static string? _sessionDir;
+    private static string SessionDir
+    {
+        get { lock (SessionDirGate) return _sessionDir ??= SecureFiles.SubDir("sessions"); }
+    }
 
     private static long _dnsWarmedAt;
 
@@ -200,6 +206,7 @@ public sealed class PolSessionService : IDisposable
         catch (ArgumentException) { return false; }
     };
     internal Func<Process, bool> IsViewerPol { get; init; } = PolProcess.IsViewerPol;
+    internal Action ScreenSaverBack { get; init; } = PutScreenSaverBack;
 
     public event Action<PolSocialSnapshot>? SnapshotUpdated;
 
@@ -324,7 +331,7 @@ public sealed class PolSessionService : IDisposable
         {
             UpdateViewer(viewerDir!, new SyncProgress<PatchProgress>(
                 p => progress?.Report(LaunchProgress.Updating("Starting", LaunchSteps.StartPol, p, 0.02, LaunchProgress.SignInUpdateEnd))),
-                StopPrestart, ct);
+                FreeViewerFiles, ct);
         }
         catch (OperationCanceledException)
         {
@@ -465,6 +472,7 @@ public sealed class PolSessionService : IDisposable
         DeleteQuietly(SocialSnapshot.PathForPid(pid));
         DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
         DeleteQuietly(HookFiles.PathFor(pid, "stop"));
+        DeleteQuietly(HookFiles.PathFor(pid, "ended"));
         foreach (var ext in RequestFiles)
         {
             DeleteQuietly(HookFiles.PathFor(pid, ext));
@@ -472,6 +480,8 @@ public sealed class PolSessionService : IDisposable
         }
 
         var logPath = HookFiles.PathFor(pid, "log");
+        try { if (File.Exists(logPath)) _logOffset = ThisRun(logPath).Start; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         var translator = new HookLogTranslator();
         var lastActivity = DateTime.UtcNow;
         int? viewerLanguage = null;
@@ -590,12 +600,8 @@ public sealed class PolSessionService : IDisposable
         Log.Warning("pol.exe {Pid} ended before the login finished, exit code {Exit}", pid, exit is { } e ? $"0x{e:X8}" : "unknown");
         try
         {
-            using var fs = new FileStream(hookLog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(fs);
-            var crashes = new List<string>();
-            while (reader.ReadLine() is { } line)
-                if (line.Contains("CRASH ", StringComparison.Ordinal)) crashes.Add(line.Trim());
-            foreach (var line in crashes.TakeLast(3)) Log.Warning("pol_hook: {Line}", line);
+            var crashes = ThisRun(hookLog).Text.Split('\n').Where(l => l.Contains("CRASH ", StringComparison.Ordinal));
+            foreach (var line in crashes.TakeLast(3)) Log.Warning("pol_hook: {Line}", line.Trim());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
@@ -649,7 +655,8 @@ public sealed class PolSessionService : IDisposable
     // it back
     internal static string? ScreenSaverAtStart { get; set; }
 
-    internal static void NoteScreenSaver(ISettingsService settings) => NoteScreenSaver(settings, AnyPolRunning, ReadScreenSaver);
+    internal static void NoteScreenSaver(ISettingsService settings) =>
+        NoteScreenSaver(settings, AnyPolRunning, ReadScreenSaver, PolEndedUnseen, SetScreenSaver);
 
     private static bool AnyPolRunning()
     {
@@ -660,7 +667,8 @@ public sealed class PolSessionService : IDisposable
 
     // Windows only has the real answer with no pol.exe about, so that one's kept for a start while one's still running.
     // A settings.json that didn't load is left for the user's own next save to replace
-    internal static void NoteScreenSaver(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows)
+    internal static void NoteScreenSaver(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows,
+                                         Func<bool>? endedUnseen = null, Action<bool>? set = null)
     {
         bool? on;
         if (polRunning())
@@ -670,6 +678,13 @@ public sealed class PolSessionService : IDisposable
         else
         {
             on = readWindows();
+            // pol.exe only ever switches it off, and one that crashed with nothing watching never put it back
+            if (on == false && settings.Current.ScreenSaverWasOn == true && set is not null && endedUnseen?.Invoke() == true)
+            {
+                Log.Information("A pol.exe ended while no copy of Provenance was watching, so the screen saver's been put back on");
+                set(true);
+                on = true;
+            }
             if (on is { } fresh)
             {
                 if (settings.LoadProblem is null) settings.SaveChange(s => s.ScreenSaverWasOn = fresh);
@@ -684,8 +699,7 @@ public sealed class PolSessionService : IDisposable
     internal static bool? SavedScreenSaver { get; set; }
 
     // a pol.exe that crashed or got killed never put it back itself, and the next start's read has to be the real one
-    internal static void PutScreenSaverBack() =>
-        PutScreenSaverBack(SavedScreenSaver, AnyPolRunning, on => SetSystemParameter(SpiSetScreenSaveActive, on ? 1u : 0u, IntPtr.Zero, 0));
+    internal static void PutScreenSaverBack() => PutScreenSaverBack(SavedScreenSaver, AnyPolRunning, SetScreenSaver);
 
     internal static bool PutScreenSaverBack(bool? wasOn, Func<bool> polRunning, Action<bool> set)
     {
@@ -696,6 +710,15 @@ public sealed class PolSessionService : IDisposable
 
     private static bool? ReadScreenSaver() =>
         SystemParametersInfoW(SpiGetScreenSaveActive, 0, out int on, 0) ? on != 0 : null;
+
+    private static void SetScreenSaver(bool on) => SetSystemParameter(SpiSetScreenSaveActive, on ? 1u : 0u, IntPtr.Zero, 0);
+
+    // a record whose pol.exe and copy have both gone, so nothing saw that pol.exe end
+    internal static bool PolEndedUnseen() => SessionFilePaths().Any(path =>
+    {
+        try { return ReadRecord(path) is { Pid: > 0 } f && !IsAlive(f.Pid, f.StartTicks) && !IsAlive(f.OwnerPid, f.OwnerStartTicks); }
+        catch { return false; }
+    });
 
     private const uint SpiGetScreenSaveActive = 0x10;
     private const uint SpiSetScreenSaveActive = 0x11;
@@ -806,8 +829,14 @@ public sealed class PolSessionService : IDisposable
             var m = PidLine.Match(run.Out);
             if (run.ExitCode != 0 || !m.Success) return null;
             var pid = int.Parse(m.Groups[1].Value);
+            // an older pol.exe with this pid left these, and its stop file would end this one before LOG IN
+            foreach (var ext in new[] { "stop", "ended", "go" }) DeleteQuietly(HookFiles.PathFor(pid, ext));
             DateTime? started = null;
             try { using var p = Process.GetProcessById(pid); started = p.StartTime; } catch { }
+            // so another copy that's about to change the viewer's files can end it while it's only waiting
+            if (started is { } at)
+                try { File.WriteAllText(HookFiles.PathFor(pid, "prestart"), at.ToUniversalTime().Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the pre-started pol.exe for other copies"); }
             Log.Information("Pre-started pol.exe (pid {Pid}), waiting for LOG IN", pid);
             return new Prestarted(pid, started);
         }
@@ -849,9 +878,15 @@ public sealed class PolSessionService : IDisposable
             while (DateTime.UtcNow < until && !LogHas(log, "prestart: ready") && !ct.IsCancellationRequested) Thread.Sleep(100);
             if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
             if (!LogHas(log, "prestart: ready")) { EndPrestarted(pre); return null; }
-            var go = HookFiles.PathFor(pid, "go");
-            File.WriteAllText(go + ".tmp", string.Join("\n", GoFileEntries(psi.Environment)));
-            File.Move(go + ".tmp", go, overwrite: true);
+            // under the lock another copy ends waiting pre-starts with, so it's either been stopped or it's mine to use
+            using (var handOver = AdminLock.TryAcquire(PrestartLock, TimeSpan.FromSeconds(5)))
+            {
+                if (handOver is null || File.Exists(HookFiles.PathFor(pid, "stop"))) { EndPrestarted(pre); return null; }
+                File.Delete(HookFiles.PathFor(pid, "prestart"));
+                var go = HookFiles.PathFor(pid, "go");
+                File.WriteAllText(go + ".tmp", string.Join("\n", GoFileEntries(psi.Environment)));
+                File.Move(go + ".tmp", go, overwrite: true);
+            }
             Log.Information("Using the pre-started pol.exe (pid {Pid})", pid);
             return pid;
         }
@@ -896,6 +931,7 @@ public sealed class PolSessionService : IDisposable
     private static void EndPrestarted(Prestarted pre)
     {
         try { File.WriteAllText(HookFiles.PathFor(pre.Pid, "stop"), "stop"); } catch { }
+        DeleteQuietly(HookFiles.PathFor(pre.Pid, "prestart"));
         KillIfOurs(pre.Pid, p => IsSameProcess(p, pre.Started), graceMs: 3000);
     }
 
@@ -910,7 +946,65 @@ public sealed class PolSessionService : IDisposable
     public void HoldPrestarts()
     {
         lock (_gate) _prestartHolds++;
+        FreeViewerFiles();
+    }
+
+    private void FreeViewerFiles()
+    {
         StopPrestart();
+        EndWaitingPrestarts();
+    }
+
+    // Other copies' waiting pre-starts hold the viewer's files too (that copy's next login just starts its own pol.exe).
+    // One that copy's already handing to a login has lost its record by the time this gets the lock
+    internal void EndWaitingPrestarts()
+    {
+        var ending = new List<(int Pid, long Ticks)>();
+        bool Waiting(Process p, long ticks)
+        {
+            try { return !p.HasExited && PolProcess.StartUtcTicks(p) == ticks && IsViewerPol(p); }
+            catch { return false; }
+        }
+        try
+        {
+            using var handOver = AdminLock.TryAcquire(PrestartLock, TimeSpan.FromSeconds(5));
+            if (handOver is null)
+            {
+                Log.Warning("Other copies' pre-started pol.exe were left running: the hand-over lock stayed busy");
+                return;
+            }
+            foreach (var record in Directory.GetFiles(HookFiles.Dir, "pol_hook.*.prestart"))
+            {
+                try
+                {
+                    var parts = Path.GetFileName(record).Split('.');
+                    if (parts.Length != 3 || !int.TryParse(parts[1], out var pid)
+                        || !long.TryParse(File.ReadAllText(record).Trim(), out var ticks)) continue;
+                    bool waiting;
+                    try { using var p = Process.GetProcessById(pid); waiting = Waiting(p, ticks); }
+                    catch (ArgumentException) { waiting = false; }
+                    if (waiting)
+                    {
+                        File.WriteAllText(HookFiles.PathFor(pid, "stop"), "stop");
+                        ending.Add((pid, ticks));
+                    }
+                    File.Delete(record);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    Log.Warning(e, "Could not end the pre-started pol.exe of {Record}", Path.GetFileName(record));
+                }
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Log.Warning(e, "Could not end other copies' pre-started pol.exe");
+        }
+        foreach (var (pid, ticks) in ending)
+        {
+            Log.Information("Ending another copy's pre-started pol.exe (pid {Pid}): the viewer's files are about to change", pid);
+            KillIfOurs(pid, p => Waiting(p, ticks), graceMs: 3000);
+        }
     }
 
     public void ReleasePrestarts()
@@ -934,13 +1028,23 @@ public sealed class PolSessionService : IDisposable
 
     private static bool LogHas(string path, string text)
     {
-        try
-        {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var sr = new StreamReader(fs);
-            return sr.ReadToEnd().Contains(text, StringComparison.Ordinal);
-        }
+        try { return ThisRun(path).Text.Contains(text, StringComparison.Ordinal); }
         catch { return false; }
+    }
+
+    // The hook only appends, so a reused pid's log starts with an older pol.exe's lines. DllMain's first line opens
+    // each run, and the pid's only known once it's written, so the last one is this pol.exe's
+    private const string HookFirstLine = "pol_hook: highest user address";
+
+    // Latin1 keeps one char per byte, so Start is a byte offset too
+    private static (string Text, long Start) ThisRun(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var sr = new StreamReader(fs, Encoding.Latin1, detectEncodingFromByteOrderMarks: false);
+        var text = sr.ReadToEnd();
+        int at = text.LastIndexOf(HookFirstLine, StringComparison.Ordinal);
+        int start = at <= 0 ? 0 : text.LastIndexOf('\n', at - 1) + 1;
+        return (text[start..], start);
     }
 
     internal static readonly TimeSpan WatcherLimit = TimeSpan.FromSeconds(60);
@@ -1400,7 +1504,9 @@ public sealed class PolSessionService : IDisposable
             _played = false;
             _sessionFile = null;
             _sessionProfile = null;
-            _polProc?.Dispose();
+            // nothing watches the game from here, and one that crashes leaves the screen saver off
+            if (_polProc is { } game)
+                game.WaitForExitAsync().ContinueWith(_ => { game.Dispose(); ScreenSaverBack(); }, TaskScheduler.Default);
             _polProc = null;
             lock (_hookGate) _hookPid = null;
         }
