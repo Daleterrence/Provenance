@@ -1682,9 +1682,10 @@ static int utf8_to_sjis(const char *src, char *out, int cap)
 }
 
 /* Friend rows live in two polcore arrays (the ignore list is 100 rows of A's shape just before it, b+0xafc18):
-     A  b+0xb40d8, stride 0xb0    +0x08 flags (bits 13-15 status, 0x800 online, 0x10000000 pending request)
-                                  +0x98 valid, +0xa0 handle name (SJIS)
-     B  b+0x3fc920, stride 0x84   +0x00 profile pic, +0x04 character/location text (SJIS), +0x1c comment (UTF-16)
+     A  b+0xb40d8, stride 0xb0    +0x08 flags (bits 13-15 status, 0x800 online, 0x10000 a game slot's in use,
+                                        bits 17-19 which slot, 0x10000000 pending request)
+                                  +0x18 eight 16-byte game slots, +0x98 valid, +0xa0 handle name (SJIS)
+     B  b+0x3fc920, stride 0x84   +0x00 profile pic, +0x1c comment (UTF-16)
    (flags >> 13) & 7 is status + 1 (1 online, 2 away, 3 busy), 0 offline. Online also needs 0x800. */
 static int friend_online(unsigned fa)
 {
@@ -1699,6 +1700,19 @@ static const char *friend_status(unsigned fa)
         case 3: return "busy";
         default: return "online";
     }
+}
+/* a game slot: u16 flags (bit 0 valid), u16 title (1 = FFXI), u32 ctsid, u64 ctid. FFXI's world id is the ctsid's
+   byte 2, FFXiMain checks it against your own world the same way */
+static int friend_ffxi(const BYTE *a, DWORD *ctsid, DWORD *ctLo, DWORD *ctHi)
+{
+    unsigned fa = *(const unsigned *)(a + 0x08);
+    const BYTE *s = a + 0x18 + ((fa >> 17) & 7) * 0x10;
+    if (!(fa & 0x800) || !(fa & 0x10000) || (fa & 0x10000000) || !friend_online(fa)) return 0;
+    if (!(*(const WORD *)s & 1) || *(const WORD *)(s + 2) != 1) return 0;
+    *ctsid = *(const DWORD *)(s + 4);
+    *ctLo = *(const DWORD *)(s + 8);
+    *ctHi = *(const DWORD *)(s + 0xc);
+    return 1;
 }
 
 static void request_paths(const char *ext, char *path, char *taken)
@@ -3537,7 +3551,10 @@ static unsigned __int64 g_prof_hid;
 static char g_prof_token[48], g_prof_state[32] = "";
 static char *g_prof_json;
 static pdb_rec *g_prof_rec;
-static ULONGLONG g_prof_last, g_prof_t0;
+static ULONGLONG g_prof_t0;
+/* a friend's profile and a character lookup are both prof DB reads, so they share the 3 s gap and go one at a time */
+static ULONGLONG g_db_last;
+static int g_ch_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
 
 static void profile_done(const char *state)
 {
@@ -3660,9 +3677,9 @@ static void profile_request(BYTE *b)
     BYTE fr[0x140];
     int row;
     pdb_schema *s;
-    if (GetTickCount64() - g_prof_last < 3000) return;
+    if (GetTickCount64() - g_db_last < 3000 || g_ch_step != 0) return;
     if (take_request("profile", buf, sizeof buf) < 0) return;
-    g_prof_last = GetTickCount64();
+    g_db_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);
     rows = req_line(&p);
@@ -3710,6 +3727,166 @@ static void profile_pump(BYTE *b, int ctl)
     if (!g_prof_rec->items) { profile_done("failed:no profile"); return; }
     profile_build(b);
     profile_done("done");
+}
+
+/* a friend's FFXI character, the way the viewer's FFXI profile tab finds it: prof_001 (title 1) by z_ctsid and z_ctid
+   together. Only for a character a friend's on right now */
+static pdb_schema *g_ch_pib;
+static __declspec(align(8)) pdb_cond g_ch_cond[2];
+static pdb_cond *g_ch_where;
+static int g_ch_job = -1;
+static DWORD g_ch_ctsid, g_ch_lo, g_ch_hi;
+static char g_ch_token[48], g_ch_state[32] = "", g_ch_json[0x400];
+static pdb_rec *g_ch_rec;
+static ULONGLONG g_ch_t0;
+
+static int ch_check_schema(BYTE *b, pdb_schema *s)
+{
+    static const struct { const char *n; BYTE type; WORD size; } want[] = {
+        { "z_ctsid", 6, 4 }, { "z_ctid", 8, 8 }, { "z_name", 1, 0 }, { "z_worldname", 1, 0 },
+    };
+    int i, idx;
+    if (s->table_id != 1) return 0;
+    for (i = 0; i < (int)(sizeof want / sizeof want[0]); i++) {
+        const pdb_field *f = fs_field(s, want[i].n, &idx);
+        if (!f || f->type != want[i].type || (want[i].size && f->size != want[i].size)) return 0;
+        if (((svc4bc_t)SVC(0x4bc))(s, want[i].n) != idx) return 0;
+    }
+    if (0x17 + (DWORD)s->nfields * 0x10 + s->rec_raw > s->rec_size + 8) return 0;
+    return 1;
+}
+static int parse_u32(const char *x, DWORD *out)
+{
+    unsigned __int64 v = 0;
+    int d = 0;
+    while (*x >= '0' && *x <= '9' && d < 10) { v = v * 10 + (unsigned)(*x++ - '0'); d++; }
+    *out = (DWORD)v;
+    return d > 0 && !*x && v <= 0xffffffffu;
+}
+/* cut at whole SJIS characters, never between a lead byte and its trail */
+static void sjis_copy(char *out, const char *src, int cap)
+{
+    int i = 0, n;
+    while (src[i]) {
+        BYTE c = (BYTE)src[i];
+        n = ((c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xfc)) && src[i + 1] ? 2 : 1;
+        if (i + n > cap - 1) break;
+        i += n;
+    }
+    memcpy(out, src, (size_t)i);
+    out[i] = 0;
+}
+/* the record's string field, empty when it isn't there */
+static void ch_text(BYTE *b, const char *name, char *js, int cap, BYTE *level)
+{
+    pdb_item *it = pdb_get(b, g_ch_pib, name, g_ch_rec);
+    char raw[0x40] = "";
+    if (level) *level = it ? it->level : 0;
+    if (it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, sizeof raw + 1))
+        sjis_copy(raw, it->v.str, sizeof raw);
+    pol_json(b, raw, 0x80, js, cap);
+}
+static void character_done(const char *state)
+{
+    lstrcpynA(g_ch_state, state, sizeof g_ch_state);
+    if (g_ch_rec) { HeapFree(GetProcessHeap(), 0, g_ch_rec); g_ch_rec = NULL; }
+    g_ch_step = 0;
+    g_ch_job = -1;
+    lg("character: %s\r\n", state);
+    g_snap_dirty = 1;
+}
+static void character_abandon(BYTE *b, const char *state)
+{
+    if (g_ch_step == 1 && g_ch_job >= 0) ((svc4dc_t)SVC(0x4dc))(g_ch_job);
+    g_ch_rec = NULL;   /* a cancelled read can still write, so never freed */
+    character_done(state);
+}
+/* nameState 0 shown, 1 withheld, 2 empty. Like the viewer with a header field (and prof_pol's z_name), only the record
+   level says whether the name's visible, z_name's own level just goes in the log */
+static void character_build(BYTE *b)
+{
+    char nm[0x100], wn[0x100];
+    BYTE lv = 0;
+    int st;
+    ch_text(b, "z_name", nm, sizeof nm, &lv);
+    st = g_ch_rec->level < 1 ? 1 : strcmp(nm, "\"\"") == 0 ? 2 : 0;
+    ch_text(b, "z_worldname", wn, sizeof wn, NULL);
+    wsprintfA(g_ch_json, "\"name\":%s,\"nameState\":%d,\"level\":%u,\"worldName\":%s", st == 1 ? "\"\"" : nm, st,
+              g_ch_rec->level, wn);
+    lg("character: record level %u, name level %u, state %d\r\n", g_ch_rec->level, lv, st);
+}
+static void character_start(BYTE *b)
+{
+    int t = ((svc4b4_t)SVC(0x4b4))(g_ch_pib, g_ch_where, g_ch_rec);
+    if (t == NO_SLOT) { g_ch_step = 2; return; }
+    lg("character: load -> %d\r\n", t);
+    if (t < 0) { character_done(failed(t)); return; }
+    g_ch_job = t;
+    g_ch_step = 1;
+    g_ch_t0 = GetTickCount64();
+}
+static int ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
+{
+    DWORD cs, cl, chi;
+    for (int i = 0; i < 200; i++) {
+        BYTE *a = b + 0xb40d8 + i * 0xb0;
+        if (IsBadReadPtr(a, 0xb0)) break;
+        if ((*(unsigned *)(a + 0x98) & 1) && friend_ffxi(a, &cs, &cl, &chi) && cs == ctsid && cl == lo && chi == hi)
+            return 1;
+    }
+    return 0;
+}
+static void character_request(BYTE *b)
+{
+    char buf[128], *p, *tok;
+    unsigned __int64 ctid;
+    if (GetTickCount64() - g_db_last < 3000 || g_prof_step != 0) return;
+    if (take_request("character", buf, sizeof buf) < 0) return;
+    g_db_last = GetTickCount64();
+    p = buf;
+    tok = req_line(&p);
+    lstrcpynA(g_ch_token, tok, sizeof g_ch_token);
+    g_ch_json[0] = 0;
+    if (!parse_u32(req_line(&p), &g_ch_ctsid) || !parse_u32(req_line(&p), &g_ch_lo) || !parse_u32(req_line(&p), &g_ch_hi)) {
+        character_done("failed:bad request");
+        return;
+    }
+    if (notice_blocks(g_notice)) { character_done("failed:account notice"); return; }
+    if (!ffxi_friend_on(b, g_ch_ctsid, g_ch_lo, g_ch_hi)) { character_done("failed:not playing"); return; }
+    if (!g_ch_pib) g_ch_pib = pib_load(b, L"prof_001.pib", "prof_001", ch_check_schema);
+    if (!g_ch_pib) { character_done("failed:no schema"); return; }
+    g_ch_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
+    if (!g_ch_rec) { character_done("failed:alloc"); return; }
+    ctid = (unsigned __int64)g_ch_hi << 32 | g_ch_lo;
+    memset(g_ch_cond, 0, sizeof g_ch_cond);
+    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &g_ch_cond[0].item, "z_ctsid", &g_ch_ctsid, 1);
+    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &g_ch_cond[1].item, "z_ctid", &ctid, 1);
+    if (!(g_ch_cond[0].item.flags & 1) || !(g_ch_cond[1].item.flags & 1)) { character_done("failed:schema"); return; }
+    ((svc4a8_t)SVC(0x4a8))(&g_ch_cond[0], 1);
+    ((svc4a8_t)SVC(0x4a8))(&g_ch_cond[1], 1);
+    g_ch_where = ((svc4ac_t)SVC(0x4ac))(2, &g_ch_cond[0], &g_ch_cond[1]);
+    if (!g_ch_where) { character_done("failed:schema"); return; }
+    lstrcpyA(g_ch_state, "loading");
+    g_snap_dirty = 1;
+    character_start(b);
+}
+static void character_pump(BYTE *b, int ctl)
+{
+    if (g_ch_step == 0) {
+        if (ctl && !g_draining) character_request(b);
+        return;
+    }
+    if (g_ch_step == 2) { if (!g_draining) character_start(b); else character_done("cancelled"); return; }
+    int r = ((svc4b8_t)SVC(0x4b8))(g_ch_job);
+    if (r == 0) {
+        if (GetTickCount64() - g_ch_t0 >= 120000) character_abandon(b, "failed:timeout");
+        return;
+    }
+    g_ch_job = -1;
+    if (r < 0) { character_done(failed(r)); return; }
+    if (!g_ch_rec->items) { character_done("failed:no profile"); return; }
+    character_build(b);
+    character_done("done");
 }
 
 #pragma pack(push, 1)
@@ -4458,7 +4635,7 @@ static void wr_job(HANDLE h, const char *fmt, const char *token, const char *sta
 static void snapshot_social(BYTE *b)
 {
     static char one[900], mj[28000];
-    char path[MAX_PATH + 64], tmp[MAX_PATH + 80], line[900], nm[64], cm[192], ch[96], tk[100], sj[110], sk[17];
+    char path[MAX_PATH + 64], tmp[MAX_PATH + 80], line[900], nm[64], cm[192], gm[112], tk[100], sj[110], sk[17];
     char gn[96], mt[96], mc[0x33 * 3 + 8], cu[0x33 * 3 + 1], u8[0x33 * 3 + 1], js[0x33 * 6 + 8], hn[64] = "\"\"";
     WCHAR wc[0x34];
     DWORD n, ids[8];
@@ -4525,6 +4702,11 @@ static void snapshot_social(BYTE *b)
     wr_job(h, ",\"group\":{\"token\":%s,\"state\":\"%s\"}", g_grp_token, g_grp_state);
     wr_job(h, ",\"profile\":{\"token\":%s,\"state\":\"%s\"", g_prof_token, g_prof_state);
     if (g_prof_json && g_prof_json[0] && lstrcmpA(g_prof_state, "done") == 0) { wr(h, ","); wr(h, g_prof_json); }
+    wr(h, "}");
+    wr_job(h, ",\"character\":{\"token\":%s,\"state\":\"%s\"", g_ch_token, g_ch_state);
+    wsprintfA(line, ",\"ctsid\":%u,\"ctidLow\":%u,\"ctidHigh\":%u", g_ch_ctsid, g_ch_lo, g_ch_hi);
+    wr(h, line);
+    if (g_ch_json[0] && lstrcmpA(g_ch_state, "done") == 0) { wr(h, ","); wr(h, g_ch_json); }
     wr(h, "}");
     if (SVC(0x648) && SVC(0x618) && SVC(0x61c)) {
         ng = ((int (__cdecl *)(DWORD *))SVC(0x648))(ids);
@@ -4607,24 +4789,28 @@ static void snapshot_social(BYTE *b)
         WCHAR fw[0x33] = {0};
         char combuf[0x33 * 3 + 1] = {0};
         unsigned idLo, idHi, fa;
+        DWORD cs, cl, chi;
         if (IsBadReadPtr(a, 0xb0) || IsBadReadPtr(bn, 0x84)) break;
         if (!(*(unsigned *)(a + 0x98) & 1)) continue;   /* valid bit (polcore.dll 0x10024d30) */
         idLo = *(unsigned *)(a + 0x00); idHi = *(unsigned *)(a + 0x04);
         fa = *(unsigned *)(a + 0x08);
         sjis_json(nm, sizeof nm, a + 0xa0, 0x0f);
-        sjis_json(ch, sizeof ch, bn + 0x04, 0x17);
         /* the comment's UTF-16 while the names are SJIS (learnt that from a list of one-letter comments :D) */
         memcpy(fw, bn + 0x1c, 0x32 * sizeof(WCHAR));
         WideCharToMultiByte(CP_UTF8, 0, fw, -1, combuf, (int)sizeof combuf - 1, NULL, NULL);
         json_str(cm, sizeof cm, combuf);
         friend_key(b, a, sk);
+        gm[0] = 0;
+        if (friend_ffxi(a, &cs, &cl, &chi))
+            wsprintfA(gm, ",\"game\":{\"world\":%u,\"ctsid\":%u,\"ctidLow\":%u,\"ctidHigh\":%u}", (cs >> 16) & 0xff,
+                      cs, cl, chi);
         /* location = A+0x0c bits 1-10 (1000/1001 = in the viewer or chat, where real-time messages reach) */
-        wsprintfA(line, "%s{\"row\":%d,\"key\":\"%s\",\"name\":%s,\"character\":%s,\"comment\":%s,\"status\":\"%s\",\"online\":%s,"
-                        "\"pending\":%s,\"idLow\":%u,\"idHigh\":%u,\"pic\":%u,\"location\":%u,\"a08\":%u,\"me\":%s}",
-                  first ? "" : ",", i, sk, nm, ch, cm, friend_status(fa),
+        wsprintfA(line, "%s{\"row\":%d,\"key\":\"%s\",\"name\":%s,\"comment\":%s,\"status\":\"%s\",\"online\":%s,"
+                        "\"pending\":%s,\"idLow\":%u,\"idHigh\":%u,\"pic\":%u,\"location\":%u,\"a08\":%u,\"me\":%s%s}",
+                  first ? "" : ",", i, sk, nm, cm, friend_status(fa),
                   friend_online(fa) ? "true" : "false", (fa & 0x10000000) ? "true" : "false", idLo, idHi,
                   *(unsigned *)(bn + 0x00), (*(unsigned *)(a + 0x0c) >> 1) & 0x3ff, fa,
-                  is_me(b, idLo, idHi) ? "true" : "false");
+                  is_me(b, idLo, idHi) ? "true" : "false", gm);
         wr(h, line);
         first = 0;
     }
@@ -4843,6 +5029,7 @@ static void pol_hold(BYTE *b)
         friend_edit_pump(b, ctl);
         search_pump(b, ctl);
         profile_pump(b, ctl);
+        character_pump(b, ctl);
         group_pump(b, ctl);
         me_pump(b, ctl);
         answer_pump(b, ctl);
@@ -4864,6 +5051,7 @@ static void pol_hold(BYTE *b)
                 g_draining = 1;
                 if (!g_lean) mail_ack_request();
                 if (g_prof_step != 0) profile_abandon(b, "cancelled");
+                if (g_ch_step != 0) character_abandon(b, "cancelled");
                 if (g_srch_step != 0) search_abandon(b, "cancelled");
                 me_abandon(b, "cancelled");
                 while (writes_pending() && GetTickCount64() < until)

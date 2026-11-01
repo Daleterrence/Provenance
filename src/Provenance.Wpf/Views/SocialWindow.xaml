@@ -410,19 +410,20 @@
                                     ToolTip="Actions for this person" AutomationProperties.Name="Actions for this person" Click="OnConversationMenu">
                                 <materialDesign:PackIcon Kind="DotsVertical" Width="20" Height="20" />
                             </Button>
-                            <StackPanel Margin="0,0,40,0" Orientation="Horizontal">
+                            <Grid Margin="0,0,40,0" ColumnDefinitions="Auto,*">
                                 <local:ProfilePictureCircle Diameter="40" Margin="0,0,12,0" VerticalAlignment="Center"
                                                             Source="{Binding SelectedFriend.Avatar}" />
-                                <StackPanel VerticalAlignment="Center">
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding SelectedFriend.Name}" FontSize="15" FontWeight="SemiBold" />
-                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,Auto,*">
                                         <local:StatusMark Status="{Binding SelectedFriend.StatusLabel}" Margin="0,0,6,0" />
-                                        <TextBlock FontSize="12" Foreground="{DynamicResource Text.3}">
-                                            <Run Text="{Binding SelectedFriend.StatusLabel, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding SelectedFriend.Character, Mode=OneWay}" />
-                                        </TextBlock>
-                                    </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding SelectedFriend.StatusLabel}" FontSize="12"
+                                                   Foreground="{DynamicResource Text.3}" VerticalAlignment="Center" />
+                                        <local:FitText Grid.Column="2" Long="{Binding SelectedFriend.Playing}" Short="{Binding SelectedFriend.PlayingShort}"
+                                                       FontSize="12" Foreground="{DynamicResource Text.3}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                    </Grid>
                                 </StackPanel>
-                            </StackPanel>
+                            </Grid>
                         </Grid>
                     </Border>
                     <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">

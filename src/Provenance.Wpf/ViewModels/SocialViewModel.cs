@@ -17,9 +17,11 @@ namespace Provenance.Wpf.ViewModels;
 // how a session ends for its lines in flight: Play and log out (or exit) let the hook finish them, a drop doesn't
 public enum SessionEnd { Play, LogOut, Dropped }
 
-public sealed record FriendItem(string Name, string Character, string Comment, string StatusLabel,
+// Playing is the FFXI line next to their name, PlayingShort the same without the world for when that doesn't fit
+public sealed record FriendItem(string Name, string Playing, string Comment, string StatusLabel,
                                 bool Online, int Row, ImageSource? Avatar, int Unread, string Section)
 {
+    public string PlayingShort { get; init; } = "";
     public string Key { get; init; } = "";   // the hook's hashed POL ID + handle, empty if it couldn't make one
     public bool Pending { get; init; }
     public int RequestMid { get; init; }
@@ -285,6 +287,7 @@ public partial class SocialViewModel : ObservableObject
         _shownRequests.Clear();
         _onlineFriends.Clear();
         _presenceQuietUntil = null;
+        _lookups?.Reset();
         _answerToken = _editToken = _picToken = _searchToken = _requestToken = _profileToken = _groupToken = null;
         _answerFor = null;
         _sendQueue.Clear();   // unsent lines stay in the log and expire as "not sent"
@@ -330,6 +333,7 @@ public partial class SocialViewModel : ObservableObject
         ApplyProfilePictureState(snap);
         ApplyProfileState(snap);
         ApplyGroupState(snap);
+        ApplyCharacters(snap);
         RebuildGroups(snap);
         FriendsUnavailable = !snap.FriendsLoaded;
         MessagesUnavailable = snap.Mail == "failed";
@@ -503,12 +507,16 @@ public partial class SocialViewModel : ObservableObject
 
     private void RebuildFriends(PolSocialSnapshot snap)
     {
-        var items = snap.Friends.Select(f => new FriendItem(
-                f.Name, f.Online ? f.Character : "", f.Pending ? "" : Filtered(f.Comment),
+        var items = snap.Friends.Select(f =>
+        {
+            var (playing, playingShort) = Playing(f);
+            return new FriendItem(
+                f.Name, playing, f.Pending ? "" : Filtered(f.Comment),
                 f.Pending ? "Friend request sent" : f.Online ? f.StatusLabel : "Offline", f.Online && !f.Pending, f.Row,
                 _avatars.ProfilePicture(f.ProfilePictureId), _chat?.UnreadFrom(f.Name, f.Key) ?? 0,
                 f.Pending ? "REQUESTS SENT" : f.Online ? "ONLINE" : "OFFLINE")
-            { Key = f.Key, Pending = f.Pending, IsMe = f.IsMe }).ToList();
+            { Key = f.Key, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort };
+        }).ToList();
         // invitations (kind 0xe) and requests (kind 1) stay on the server until they're answered
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_answered.Contains(m.Mid)))
             if (m.Kind == PolMessage.KindGroupInvite)
@@ -536,7 +544,7 @@ public partial class SocialViewModel : ObservableObject
         }
         items = items.OrderBy(i => Array.IndexOf(Sections, i.Section))
                      .ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-        var sig = string.Join("|", items.Select(i => $"{i.Name}/{i.Key}/{i.StatusLabel}/{i.Character}/{i.Comment}/" +
+        var sig = string.Join("|", items.Select(i => $"{i.Name}/{i.Key}/{i.StatusLabel}/{i.Playing}/{i.PlayingShort}/{i.Comment}/" +
                                                      $"{i.Unread}/{i.Avatar != null}/{i.Section}/{i.Row}/" +
                                                      $"{i.Pending}/{i.RequestMid}"));
         if (sig == _friendsSignature) return;

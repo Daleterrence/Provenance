@@ -29,7 +29,7 @@ public static class PolStatusText
         s switch { PolStatus.Online => 0, PolStatus.Away => 1, PolStatus.Busy => 2, _ => 4 };
 }
 
-public sealed record PolFriend(string Name, string Character, string Comment, PolStatus Status,
+public sealed record PolFriend(string Name, string Comment, PolStatus Status,
                                bool Online, bool Pending, uint IdLow, uint IdHigh, int Row = -1,
                                int ProfilePictureId = -1, int Location = 0, string Key = "")
 {
@@ -37,6 +37,21 @@ public sealed record PolFriend(string Name, string Character, string Comment, Po
     public string StatusLabel => PolStatusText.Label(Status);
     // another of my own handles (same POL ID), can't be ignored or invited
     public bool IsMe { get; init; }
+    // null unless they're online and in FFXI right now
+    public PolFriendGame? Game { get; init; }
+}
+
+// the FFXI character a friend's on, from their presence: World is the game's world id, Ctsid and Ctid pick out the
+// character (the FFXI profile's z_ctsid and z_ctid)
+public sealed record PolFriendGame(int World, uint Ctsid, ulong Ctid)
+{
+    public string CharacterKey => $"{Ctsid}:{Ctid}";
+}
+
+// the hook's answer for one character's FFXI profile. NameState is PolProfile's Shown, Private or NotSet
+public sealed record PolCharacterLookup(uint Ctsid, ulong Ctid, string Name, int NameState, int Level, string WorldName)
+{
+    public string CharacterKey => $"{Ctsid}:{Ctid}";
 }
 
 // Location has 3 lines, Interest 2, the rest 1, and only Portrait has a pic
@@ -187,6 +202,9 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public string GroupState { get; init; } = "";
     public string MeToken { get; init; } = "";
     public string MeState { get; init; } = "";
+    public string CharacterToken { get; init; } = "";
+    public string CharacterState { get; init; } = "";
+    public PolCharacterLookup? Character { get; init; }
     // the game's message store, read once at login (pol_hook.<pid>.store.json), null when there's none
     public PolStoredLines? Stored { get; init; }
 
@@ -292,6 +310,10 @@ public static class SocialSnapshot
     public static bool SetComment(int pid, string token, string text) =>
         WriteRequest(pid, "comment", $"{token.Replace("\n", "")}\n{text.Replace("\r", "").Replace("\n", " ")}");
 
+    // the hook only looks it up while a friend's on that character
+    public static bool RequestCharacter(int pid, string token, uint ctsid, ulong ctid) =>
+        WriteRequest(pid, "character", $"{OneLine(token)}\n{ctsid}\n{(uint)ctid}\n{(uint)(ctid >> 32)}");
+
     public static bool RequestMyProfile(int pid, string token) => WriteRequest(pid, "myprofile", OneLine(token));
 
     // load first, the save keeps each field's own level. level is 1 Private, 2 Friends only, 3 POL
@@ -370,10 +392,10 @@ public static class SocialSnapshot
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            var friends = Arr(root, "friends", f => new PolFriend(Str(f, "name"), Str(f, "character"),
+            var friends = Arr(root, "friends", f => new PolFriend(Str(f, "name"),
                 Str(f, "comment"), PolStatusText.Parse(Str(f, "status")), Bool(f, "online"), Bool(f, "pending"),
                 UInt(f, "idLow"), UInt(f, "idHigh"), Int(f, "row", -1), Int(f, "pic", -1), (int)Long(f, "location"),
-                Str(f, "key")) { IsMe = Bool(f, "me") });
+                Str(f, "key")) { IsMe = Bool(f, "me"), Game = ReadGame(Obj(f, "game")) });
             var messages = Arr(root, "messages", ReadMessage);
             var (sendToken, sendState) = Job(root, "send");
             var (editToken, editState) = Job(root, "edit");
@@ -382,6 +404,7 @@ public static class SocialSnapshot
             var (profileToken, profileState) = Job(root, "profile");
             var (groupToken, groupState) = Job(root, "group");
             var (meToken, meState) = Job(root, "me");
+            var (charToken, charState) = Job(root, "character");
             var ffxi = Str(root, "ffxiService");
             return new PolSocialSnapshot(PolStatusText.Parse(Str(root, "myStatus")), Int(root, "groups", 0),
                                          Str(root, "myHandle"), Int(root, "myPic", -1), friends, messages,
@@ -417,6 +440,9 @@ public static class SocialSnapshot
                 GroupState = groupState,
                 MeToken = meToken,
                 MeState = meState,
+                CharacterToken = charToken,
+                CharacterState = charState,
+                Character = ReadCharacter(Obj(root, "character")),
             };
         }
         catch
@@ -442,6 +468,17 @@ public static class SocialSnapshot
             Arr(g, "members", m => new PolGroupMember((int)Long(m, "index"), Str(m, "name"), Str(m, "key"),
                 (int)Long(m, "pic"), (int)Long(m, "class"), (int)Long(m, "status"), Bool(m, "me"),
                 Bool(m, "ignored"), Str(m, "text"), Str(m, "comment"))));
+
+    private static PolFriendGame? ReadGame(JsonElement g) =>
+        g.ValueKind == JsonValueKind.Object
+            ? new PolFriendGame((int)Long(g, "world"), UInt(g, "ctsid"), (ulong)UInt(g, "ctidHigh") << 32 | UInt(g, "ctidLow"))
+            : null;
+
+    private static PolCharacterLookup? ReadCharacter(JsonElement c) =>
+        c.ValueKind == JsonValueKind.Object
+            ? new PolCharacterLookup(UInt(c, "ctsid"), (ulong)UInt(c, "ctidHigh") << 32 | UInt(c, "ctidLow"), Str(c, "name").Trim(),
+                                     Int(c, "nameState", PolProfile.Private), (int)Long(c, "level"), Str(c, "worldName"))
+            : null;
 
     private static (string Token, string State) Job(JsonElement e, string n) =>
         Obj(e, n) is { ValueKind: JsonValueKind.Object } o ? (Str(o, "token"), Str(o, "state")) : ("", "");

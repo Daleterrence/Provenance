@@ -153,20 +153,20 @@ static int fs_check_schema(BYTE *b, pdb_schema *s)
     return 1;
 }
 
-static pdb_schema *fs_load_pib(BYTE *b)
+/* data\db\<file>, relocated by polcore. check gets the relocated schema, NULL when either says no */
+static pdb_schema *pib_load(BYTE *b, const WCHAR *file, const char *tag, int (*check)(BYTE *, pdb_schema *))
 {
     WCHAR path[0x200 + 32];
     HANDLE f;
     DWORD sz, got = 0;
     BYTE *buf;
     pdb_schema *s;
-    if (g_fs_pib) return g_fs_pib;
     memset(path, 0, sizeof path);
     if (((svc16c4_t)SVC(0x16c4))(0x14, path, 0x200, 0) <= 0) return NULL;  /* "<root>\data\db\" */
     path[0x200 - 1] = 0;
-    lstrcatW(path, L"prof_pol.pib");
+    lstrcatW(path, file);
     f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) { FS_LOG("pic: cannot open %ls (%u)\r\n", path, GetLastError()); return NULL; }
+    if (f == INVALID_HANDLE_VALUE) { FS_LOG("db: cannot open %ls (%u)\r\n", path, GetLastError()); return NULL; }
     sz = GetFileSize(f, NULL);
     if (sz < 0x3c || sz > 0x10000) { CloseHandle(f); return NULL; }
     buf = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sz);
@@ -175,7 +175,7 @@ static pdb_schema *fs_load_pib(BYTE *b)
     CloseHandle(f);
     /* check the raw file before polcore relocates it, in 64 bits so a huge offset can't wrap past the check */
     s = (pdb_schema *)buf;
-    if (memcmp(s->name, "prof_pol", 9) != 0 || s->relocated != 0 || s->nfields == 0 ||
+    if (memcmp(s->name, tag, lstrlenA(tag) + 1) != 0 || s->relocated != 0 || s->nfields == 0 ||
         (DWORD)(ULONG_PTR)s->fields >= sz ||
         (unsigned __int64)(DWORD)(ULONG_PTR)s->fields + (unsigned __int64)s->nfields * 0x18 > sz ||
         (DWORD)(ULONG_PTR)s->p14 >= sz || (DWORD)(ULONG_PTR)s->p2c >= sz) {
@@ -183,14 +183,19 @@ static pdb_schema *fs_load_pib(BYTE *b)
         return NULL;
     }
     s = ((svc494_t)SVC(0x494))(buf);
-    if (s != (pdb_schema *)buf || !fs_check_schema(b, s)) {
-        FS_LOG("pic: prof_pol.pib is not the expected schema\r\n");
+    if (s != (pdb_schema *)buf || !check(b, s)) {
+        FS_LOG("db: %ls is not the expected schema\r\n", path);
         HeapFree(GetProcessHeap(), 0, buf);    /* no job's seen it yet */
         return NULL;
     }
-    FS_LOG("pic: %ls loaded, %u fields, record buffer %u bytes\r\n", path, s->nfields, s->rec_size);
-    g_fs_pib = s;
+    FS_LOG("db: %ls loaded, %u fields, record buffer %u bytes\r\n", path, s->nfields, s->rec_size);
     return s;
+}
+
+static pdb_schema *fs_load_pib(BYTE *b)
+{
+    if (!g_fs_pib) g_fs_pib = pib_load(b, L"prof_pol.pib", "prof_pol", fs_check_schema);
+    return g_fs_pib;
 }
 
 static int fs_handle(BYTE *b, int slot, pol_handle *h)

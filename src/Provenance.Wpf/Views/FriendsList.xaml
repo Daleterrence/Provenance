@@ -14,12 +14,16 @@
                 <local:ProfilePictureCircle Diameter="40" Margin="0,0,12,0" VerticalAlignment="Center"
                                             Source="{Binding Avatar}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <TextBlock FontSize="14" TextTrimming="CharacterEllipsis">
-                        <TextBlock.ToolTip>
-                            <TextBlock><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding Character, Mode=OneWay}" /></TextBlock>
-                        </TextBlock.ToolTip>
-                        <Run Text="{Binding Name, Mode=OneWay}" Foreground="{DynamicResource Text.1}" FontWeight="Medium" /><Run Text="   " /><Run Text="{Binding Character, Mode=OneWay}" Foreground="{DynamicResource Text.3}" FontSize="12" />
-                    </TextBlock>
+                    <!-- docked, the name's measured against the whole width so it still trims, and the Playing line gets what's left -->
+                    <DockPanel Background="Transparent">
+                        <DockPanel.ToolTip>
+                            <TextBlock><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding Playing, Mode=OneWay}" /></TextBlock>
+                        </DockPanel.ToolTip>
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" FontSize="14" FontWeight="Medium"
+                                   Foreground="{DynamicResource Text.1}" TextTrimming="CharacterEllipsis" VerticalAlignment="Bottom" />
+                        <local:FitText Long="{Binding Playing}" Short="{Binding PlayingShort}" FontSize="12"
+                                       Foreground="{DynamicResource Text.3}" Margin="12,0,0,1" VerticalAlignment="Bottom" />
+                    </DockPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                         <local:StatusMark Status="{Binding StatusLabel}" Margin="0,0,6,0" />
                         <TextBlock FontSize="12" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Text.3}">
