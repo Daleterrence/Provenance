@@ -1148,7 +1148,10 @@ static void run_loads(BYTE *b, struct pload *items, int n)
         /* a running write (the handle save) ignores the stop file, the server may already have it */
         for (writing = 0, i = 0; i < n; i++) if (items[i].write && started[i] && items[i].res == 0) writing = 1;
         if (!writing && stop_requested()) {
-            lg("phase_c: stop requested during profile load - exiting, FFXI NOT started\r\n");
+            lg("phase_c: stop requested during profile load - signing out and exiting, FFXI NOT started\r\n");
+            for (i = 0; i < n; i++)
+                if (items[i].res == 0 && started[i]) CANCEL_JOB(items[i].ticket);
+            viewer_sign_out(b);
             end_pol(8);
         }
         if (GetTickCount64() - t0 > 240000) {
@@ -1210,7 +1213,8 @@ static int wait_handle_name(BYTE *b, char *name, int cap)
             lg("phase_c: handle answer unreadable (%s) - ignored, still waiting\r\n", cred_why(rc));
         }
         if (stop_requested()) {
-            lg("phase_c: stop requested while waiting for a handle name - exiting, FFXI NOT started\r\n");
+            lg("phase_c: stop requested while waiting for a handle name - signing out and exiting, FFXI NOT started\r\n");
+            viewer_sign_out(b);
             end_pol(8);
         }
         if (owner_gone()) {
@@ -1487,20 +1491,24 @@ static void phase_c_seed(HMODULE pc)
     if (!getenv_set("POL_HOLD")) {
         if (g_ffxi_service == 0) {
             lg("phase_c: NO FFXI CONTENT ID - FFXI NOT started (Viewer string 0x65d9)\r\n");
+            viewer_sign_out(b);
             end_pol(6);
         }
         if (g_ffxi_service < 0) {
             lg("phase_c: FFXI SERVICE UNKNOWN - the Content ID list did not load, FFXI NOT started\r\n");
+            viewer_sign_out(b);
             end_pol(9);
         }
         if (notice_blocks(g_notice)) {
             lg("phase_c: ACCOUNT NOTICE LM-%02u blocks play - FFXI NOT started\r\n", g_notice - 220);
+            viewer_sign_out(b);
             end_pol(7);
         }
     }
     rc = handle_bootstrap(b, all[2].res == 1);
     if (rc) {
-        lg("phase_c: stopping before FFXI boots (exit %d)\r\n", rc);
+        lg("phase_c: stopping before FFXI boots (exit %d) - signing out\r\n", rc);
+        viewer_sign_out(b);
         end_pol((UINT)rc);
     }
     *(unsigned *)(b + 0x99254) = 1;
