@@ -36,7 +36,11 @@ $repo = Split-Path -Parent $PSScriptRoot
 $src = Join-Path $repo 'src'
 $wpf = Join-Path $src 'Provenance.Wpf\Provenance.Wpf.csproj'
 $launcher = Join-Path $src 'Provenance.Launcher\Provenance.Launcher.csproj'
-$icon = Join-Path $src 'Provenance.Wpf\Assets\provenance.ico'
+$assetsRoot = @($env:PROVENANCE_ASSETS, (Join-Path $repo '..\assets'), (Join-Path $repo '..\..\assets')) |
+    Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'app\provenance.ico')) } | Select-Object -First 1
+if (-not $assetsRoot) { throw "Provenance's images aren't in this repo. Put the assets folder next to the repo, or set PROVENANCE_ASSETS to where it is." }
+$icon = Join-Path $assetsRoot 'app\provenance.ico'
+$env:PROVENANCE_ASSETS = [IO.Path]::GetFullPath($assetsRoot)
 $buildNative = Join-Path $repo 'native\build-native.ps1'
 if (-not $Out) { $Out = Join-Path ([IO.Path]::GetTempPath()) "provenance-release\$Version" }
 $Out = [IO.Path]::GetFullPath($Out)

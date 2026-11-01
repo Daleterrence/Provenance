@@ -13,7 +13,7 @@
     <RootNamespace>Provenance.Launcher</RootNamespace>
     <AssemblyName>ProvenanceLauncher</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\Provenance.Wpf\Assets\provenance.ico</ApplicationIcon>
+    <ApplicationIcon>$(ProvenanceAssetsDir)\app\provenance.ico</ApplicationIcon>
     <Product>Provenance</Product>
   </PropertyGroup>
 

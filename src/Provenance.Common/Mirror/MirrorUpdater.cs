@@ -63,19 +63,11 @@ public static class MirrorUpdater
         return work;
     }
 
-    // the bytes UpdateAsync would download into folder, against known or else the mirror's newest version. Null when
-    // the mirror has no usable copy, so the update would come from POL
+    // the bytes UpdateAsync would download into folder to reach next, which has to be the version POL says is current
+    // (the mirror's newest can be behind it, and then the update comes from POL). Null when next is unusable
     public static async Task<long?> DownloadSizeAsync(MirrorClient client, string region, string product, string folder, string local,
-        IReadOnlySet<string>? keep, MirrorIndex? known, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
+        IReadOnlySet<string>? keep, MirrorIndex next, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
     {
-        var next = known;
-        if (next is null)
-        {
-            var pointer = await client.GetPointerAsync(region, ct);
-            if (pointer is null || pointer.Region != region || !pointer.Versions.TryGetValue(product, out var newest)) return null;
-            next = await client.GetIndexAsync(region, product, newest, ct);
-            if (next is null) return null;
-        }
         try { return MirrorSync.DownloadSize(await WorkAsync(client, region, product, folder, next, local, keep, scanned, ct)); }
         catch (InvalidDataException) { return null; }
     }

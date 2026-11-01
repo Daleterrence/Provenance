@@ -551,11 +551,11 @@ public partial class InstallViewModel : ObservableObject
         "PlayOnline updates itself the first time you log in, and the game updates the first time you press Play" +
         (gameUpdateBytes is long b && b > 0 ? $" ({RepairViewModel.Size(b)} to download)." : ".");
 
-    // the way the first Play picks its files, reusing the game index from the mirror's try. Null when it'd come from
-    // POL or the mirror can't be reached
+    // the way the first Play picks its files, reusing the game index from the mirror's try. Null when it could come
+    // from POL (the mirror's try never got POL's version, or the mirror hasn't got it) or the mirror can't be reached
     private async Task<long?> FirstUpdateSizeAsync(CancellationToken ct)
     {
-        if (MirrorUpdater.RegionFor(_region, "ffxi") is not { } mirrorRegion || MirrorKeys.Trusted.Count == 0 || _mirror?.GameBehind == true
+        if (MirrorUpdater.RegionFor(_region, "ffxi") is not { } mirrorRegion || MirrorKeys.Trusted.Count == 0 || _mirror?.GameIndex is not { } index
             || PolPaths.TryGetInstallFolder(_region, PolPaths.FfxiProduct) is not { } ffxiDir
             || PolPaths.TryGetInstallFolder(_region, PolPaths.ViewerProduct) is not { } viewerDir)
             return null;
@@ -571,7 +571,7 @@ public partial class InstallViewModel : ObservableObject
         {
             var local = new PolUpdater(PatchProduct.Ffxi(ffxiDir, viewerDir, _region)).LocalVersion();
             var bytes = await Task.Run(() => MirrorUpdater.DownloadSizeAsync(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion, "ffxi",
-                ffxiDir, local, MirrorLayout.OwnFiles(_region, "ffxi"), _mirror?.GameIndex, scanned, ct), ct);
+                ffxiDir, local, MirrorLayout.OwnFiles(_region, "ffxi"), index, scanned, ct), ct);
             Log.Information("First game update size: {Size}", bytes is { } n ? $"{n:N0} bytes from the Provenance mirror" : "the mirror has no usable copy");
             return bytes;
         }

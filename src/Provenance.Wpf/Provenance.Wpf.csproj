@@ -16,7 +16,7 @@
     <RootNamespace>Provenance.Wpf</RootNamespace>
     <AssemblyName>Provenance</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\provenance.ico</ApplicationIcon>
+    <ApplicationIcon>$(ProvenanceAssetsDir)\app\provenance.ico</ApplicationIcon>
     <Product>Provenance</Product>
     <!-- Program.Main, so Velopack runs before WPF starts -->
     <StartupObject>Provenance.Wpf.Program</StartupObject>
@@ -36,10 +36,12 @@
     <Using Remove="System.Drawing" />
   </ItemGroup>
 
+  <!-- the images keep their /Assets/ pack paths, the installer's zone pictures go next to the exe -->
   <ItemGroup>
-    <Resource Include="Assets\provenance.ico" />
-    <Resource Include="Assets\provenance-256.png" />
-    <Resource Include="Assets\bg-logo.png" />
+    <Resource Include="$(ProvenanceAssetsDir)\app\provenance.ico" Link="Assets\provenance.ico" />
+    <Resource Include="$(ProvenanceAssetsDir)\app\provenance-256.png" Link="Assets\provenance-256.png" />
+    <Resource Include="$(ProvenanceAssetsDir)\app\bg-logo.png" Link="Assets\bg-logo.png" />
+    <None Include="$(ProvenanceAssetsDir)\installer\zones\*.jpg" Link="zones\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -70,6 +72,11 @@
     <None Include="$(NativeToolsDir)\Provenance - FINAL FANTASY XI Uninstall.exe" Link="native\Provenance - FINAL FANTASY XI Uninstall.exe" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NativeToolsDir)\pol_hook.dll" Link="native\pol_hook.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <Target Name="RequireAssets" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(ProvenanceAssetsDir)' == '' or !Exists('$(ProvenanceAssetsDir)\app\provenance.ico')"
+           Text="Provenance's images aren't in this repo. Put the assets folder next to the repo, or set PROVENANCE_ASSETS to where it is." />
+  </Target>
 
   <Target Name="RequireNatives" BeforeTargets="BeforeBuild">
     <Error Condition="!Exists('$(NativeToolsDir)\pol_hook.dll') or !Exists('$(NativeToolsDir)\Provenance Watcher.exe')

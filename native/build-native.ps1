@@ -32,6 +32,13 @@ if (-not $vcvars -or -not (Test-Path -LiteralPath $vcvars)) {
 $OutDir = [IO.Path]::GetFullPath($OutDir)
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
+# the icon's in the assets folder, found the same way the .NET build finds it
+$assetsRoot = @($env:PROVENANCE_ASSETS, (Join-Path $PSScriptRoot '..\..\assets'), (Join-Path $PSScriptRoot '..\..\..\assets')) |
+    Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'app\provenance.ico')) } | Select-Object -First 1
+if (-not $assetsRoot) {
+    throw "Provenance's images aren't in this repo. Put the assets folder next to the repo, or set PROVENANCE_ASSETS to where it is."
+}
+
 # the exes carry the same version as Provenance.exe, Windows wants four numbers in the file version
 $props = [xml](Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\src\Directory.Build.props'))
 $prefix = "$($props.SelectSingleNode('/Project/PropertyGroup/VersionPrefix').InnerText)".Trim()
@@ -61,7 +68,7 @@ function Source([string]$name) { '"' + (Join-Path $PSScriptRoot $name) + '"' }
 $hookLibs = 'user32.lib advapi32.lib crypt32.lib ole32.lib uuid.lib'
 $clHook = "cl /nologo /O2 /W3 $(Source 'pol_hook.c') /LD /Fepol_hook.dll /link $hookLibs"
 # the exes all get Provenance's own icon
-$assets = Join-Path $PSScriptRoot '..\src\Provenance.Wpf\Assets'
+$assets = Join-Path $assetsRoot 'app'
 $clWatcher = "rc /nologo /i ""$OutDir"" /i ""$assets"" /fo watcher.res $(Source 'watcher.rc') && " +
     "cl /nologo /O2 /W3 $(Source 'watcher.c') watcher.res /Fe""Provenance Watcher.exe"" /link user32.lib advapi32.lib"
 # the uninstallers delete from Program Files and HKLM, so they always ask for admin. One build per product, so the

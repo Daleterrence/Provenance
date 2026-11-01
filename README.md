@@ -14,7 +14,10 @@ Download the Setup.exe file from the latest release on the [releases](https://gi
 
 ## Build
 
-You'll need the .NET 10 SDK and Visual Studio Build Tools with the x86 C++ compiler, then:
+You'll need the .NET 10 SDK and Visual Studio Build Tools with the x86 C++ compiler. Provenance's images aren't in
+this repo, so you'll also need an `assets` folder next to it (or `PROVENANCE_ASSETS` set to one) with
+`app\provenance.ico`, `app\provenance-256.png` and `app\bg-logo.png` in it, plus any installer pictures as `.jpg`
+files in `installer\zones`. Then:
 
 ```
 pwsh native/build-native.ps1

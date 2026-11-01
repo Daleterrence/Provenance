@@ -18,6 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # the icon, logo and background live in their own private repo
+      - uses: actions/checkout@v4
+        with:
+          repository: Daleterrence/Provenance-assets
+          ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
+          path: assets
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -29,6 +36,8 @@ jobs:
       - name: Pack
         id: pack
         shell: pwsh
+        env:
+          PROVENANCE_ASSETS: ${{ github.workspace }}\assets
         run: |
           $xml = [xml](Get-Content -Raw src/Directory.Build.props)
           $prefix = "$($xml.SelectSingleNode('/Project/PropertyGroup/VersionPrefix').InnerText)".Trim()

@@ -7,3 +7,5 @@ native/bin/
 .vs/
 .vscode/
 *.log
+# CI checks the assets repo out here
+/assets/

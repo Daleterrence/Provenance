@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels"
+        xmlns:local="clr-namespace:Provenance.Wpf.Views"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:InstallViewModel}"
         Title="Install FINAL FANTASY XI" Icon="/Assets/provenance.ico"
         Width="640" Height="560" ResizeMode="NoResize"
@@ -61,6 +62,9 @@
                             Command="{Binding BrowseDownloadCommand}" />
                 </Grid>
             </StackPanel>
+
+            <local:ZoneSlideshow Grid.Row="1" Margin="0,18,0,0" Height="224" AutomationProperties.Name="Zone pictures"
+                                 Visibility="{Binding CanStart, Converter={StaticResource InvertBoolToVis}}" />
 
             <StackPanel Grid.Row="2" VerticalAlignment="Center">
                 <TextBlock Text="{Binding StepText}" FontSize="12" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
