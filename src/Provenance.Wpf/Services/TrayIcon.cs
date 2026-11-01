@@ -12,6 +12,26 @@ public sealed class TrayIcon : IDisposable
     public event Action? SignOutRequested;
     public event Action? ExitRequested;
 
+    private static int _warmed;
+
+    // a cold menu takes about a second to build, which sat on the UI thread before the window could hide. One built
+    // and thrown away on a worker first and the real one's instant. MTA on purpose, a dead STA thread would end up
+    // owning WinForms' system events window
+    public static void Warm()
+    {
+        if (Interlocked.Exchange(ref _warmed, 1) != 0) return;
+        new Thread(() =>
+        {
+            try
+            {
+                using var menu = new System.Windows.Forms.ContextMenuStrip();
+                menu.Items.Add("Open", null, (_, _) => { });
+                menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+            }
+            catch { }   // just means the first close is slow again
+        }) { IsBackground = true, Name = "Tray warm-up" }.Start();
+    }
+
     public TrayIcon()
     {
         _icon = new System.Windows.Forms.NotifyIcon { Text = "Provenance (logged in to PlayOnline)", Visible = false };

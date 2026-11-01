@@ -263,6 +263,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnSocialConnectedChanged(bool value)
     {
         OnPropertyChanged(nameof(CloseTooltip));
+        if (value && (_settings.Current.KeepSignedInInTray || _settings.Current.MinimizeToTray)) TrayIcon.Warm();
         RefreshLargeAddressAware();
         // the hook numbers mail per session, so a request's notice can't outlive it
         if (!value && _noticeRequest != 0) Notice = null;

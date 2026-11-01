@@ -153,6 +153,7 @@ public partial class App : Application
         mainWindow.DataContext = mainVm;
         MainWindow = mainWindow;
         mainWindow.Show();
+        if (Services.GetRequiredService<ISettingsService>().Current.MinimizeToTray) TrayIcon.Warm();
         if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));
 
         bool suppressed = shiftAtStart || ShiftDown()
