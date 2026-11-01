@@ -93,6 +93,13 @@ public partial class MainViewModel : IMultiRunHost
         var accounts = entries.Select(e => Profiles.First(p => p.Id == e.ProfileId))
                               .Select(p => new MultiRunAccount(p.Id, string.IsNullOrWhiteSpace(p.HandleName) ? p.DisplayName : p.HandleName!))
                               .ToList();
+        if (MultiAccountRules.WithoutProfile(entries) is { Count: > 0 } unpicked)
+        {
+            Log.Warning("Multi-account mode: not started, {Count} account(s) have no profile picked", unpicked.Count);
+            var names = unpicked.Select(e => accounts.First(a => a.ProfileId == e.ProfileId).Name).ToList();
+            MessageDialog.ShowError(owner, "Multi-account mode", MultiAccountRules.NoProfileText(_pol.Platform, names));
+            return;
+        }
         _runAccounts = accounts;
         _runHookProfiles = entries.ToDictionary(e => e.ProfileId, e => e.ThirdPartyHookProfile);
         _runPlatform = _pol.Platform;

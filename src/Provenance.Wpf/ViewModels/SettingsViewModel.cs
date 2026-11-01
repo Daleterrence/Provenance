@@ -228,7 +228,7 @@ public partial class SettingsViewModel : ObservableObject
         catch (InvalidOperationException) { return null; }   // host not started (design time)
     }
 
-    // Multi-account page. The first profile choice means whatever the Windower/Ashita tab says
+    // Multi-account page. The first profile choice is none, which an account that's turned on can't start with
     public string ProfileDefaultChoice => ThirdPartyHookIndex == 1 ? "Select Ashita boot configuration..." : "Select Windower profile...";
     public ObservableCollection<MultiAccountRow> MultiAccountRows { get; } = new();
     public ObservableCollection<string> MultiProfileChoices { get; } = new();
@@ -288,7 +288,7 @@ public partial class SettingsViewModel : ObservableObject
                 CredentialsRefused = entry?.CredentialsRefused ?? false,
                 ThirdPartyHookProfile = ToChoice(entry?.ThirdPartyHookProfile),
             };
-            row.Changed = SaveMulti;
+            row.Changed = () => { SaveMulti(); NoteUnpicked(); };
             MultiAccountRows.Add(row);
         }
         _loadingMulti = false;
@@ -323,6 +323,14 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(MultiHasThirdPartyHook));
         OnPropertyChanged(nameof(MultiEditable));
         OnPropertyChanged(nameof(MultiProfileLabel));
+        NoteUnpicked();
+    }
+
+    private void NoteUnpicked()
+    {
+        foreach (var r in MultiAccountRows)
+            r.ProfileNeeded = MultiHasThirdPartyHook && r.Enabled && r.ThirdPartyHookProfile == ProfileDefaultChoice
+                ? $"Choose the {MultiProfileLabel} {r.Name} starts with." : null;
     }
 
     // safe mid-run too: the run read its profiles at the start, and only the profile changes
@@ -388,6 +396,7 @@ public sealed partial class MultiAccountRow : ObservableObject
     [ObservableProperty] private string? _problem;
     [ObservableProperty] private string _thirdPartyHookProfile = "";
     [ObservableProperty] private bool _credentialsRefused;
+    [ObservableProperty] private string? _profileNeeded;
     internal Action? Changed;
 
     partial void OnEnabledChanged(bool value)

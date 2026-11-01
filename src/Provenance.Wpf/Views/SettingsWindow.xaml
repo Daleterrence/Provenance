@@ -554,6 +554,17 @@
                                                             </Style>
                                                         </TextBlock.Style>
                                                     </TextBlock>
+                                                    <TextBlock Text="{Binding ProfileNeeded}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ProfileNeeded}" Value="{x:Null}">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
                                                     <TextBlock Text="Edit this account's login details to turn it on again." FontSize="11" TextWrapping="Wrap"
                                                                Foreground="{DynamicResource State.Warn}"
                                                                Visibility="{Binding CredentialsRefused, Converter={StaticResource BoolToVis}}" />
