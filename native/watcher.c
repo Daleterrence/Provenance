@@ -2,7 +2,6 @@
    --attach <pid> [hook dll] is for a pol.exe Windower or Ashita started, which it never ends.
    --windower <Hook.dll> <pol.exe> [hook dll] puts Windower's Hook.dll in before the hook, the way Windower.exe does */
 #include <windows.h>
-#include <shellapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
@@ -16,24 +15,26 @@ static void die(const char *m)
     exit(1);
 }
 
-static int get_pol_path(char *out, int cap)
+static int get_pol_path(WCHAR *out, int cap)
 {
-    static const char *const keys[] = { "SOFTWARE\\WOW6432Node\\PlayOnlineUS\\InstallFolder",
-                                        "SOFTWARE\\WOW6432Node\\PlayOnlineEU\\InstallFolder",
-                                        "SOFTWARE\\WOW6432Node\\PlayOnline\\InstallFolder" };
+    static const WCHAR *const keys[] = { L"SOFTWARE\\WOW6432Node\\PlayOnlineUS\\InstallFolder",
+                                         L"SOFTWARE\\WOW6432Node\\PlayOnlineEU\\InstallFolder",
+                                         L"SOFTWARE\\WOW6432Node\\PlayOnline\\InstallFolder" };
     HKEY k;
     DWORD n = 0, t;
     int i, found = 0;
     for (i = 0; i < 3 && !found; i++) {
-        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, keys[i], 0, KEY_READ, &k)) continue;
-        n = cap;
-        found = !RegQueryValueExA(k, "1000", NULL, &t, (BYTE *)out, &n) && t == REG_SZ;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, keys[i], 0, KEY_READ, &k)) continue;
+        n = cap * sizeof(WCHAR);
+        found = !RegQueryValueExW(k, L"1000", NULL, &t, (BYTE *)out, &n) && t == REG_SZ;
         RegCloseKey(k);
     }
     if (!found) return 0;
-    if (n < 5 || n > (DWORD)cap) return 0;
-    if (out[n - 2] != '\\') { out[n - 1] = '\\'; out[n] = 0; }
-    lstrcatA(out, "pol.exe");
+    n /= sizeof(WCHAR);
+    if (n && !out[n - 1]) n--;
+    if (n < 3 || n >= (DWORD)cap) return 0;
+    if (out[n - 1] != L'\\') out[n++] = L'\\';
+    lstrcpyW(out + n, L"pol.exe");
     return 1;
 }
 
@@ -48,16 +49,16 @@ static DWORD remote_call(HANDLE p, FARPROC fn, void *arg, const char *what)
     return code;
 }
 
-static int attach(DWORD pid, const char *dll)
+static int attach(DWORD pid, const WCHAR *dll)
 {
     HMODULE k32 = GetModuleHandleA("kernel32.dll");
     FARPROC set_error_mode = GetProcAddress(k32, "SetErrorMode");
-    FARPROC load_library = GetProcAddress(k32, "LoadLibraryA");
+    FARPROC load_library = GetProcAddress(k32, "LoadLibraryW");
     HANDLE p;
     void *remote;
-    DWORD old, code;
+    DWORD old, code, size = (lstrlenW(dll) + 1) * sizeof(WCHAR);
 
-    if (GetFileAttributesA(dll) == INVALID_FILE_ATTRIBUTES) die("pol_hook.dll not found");
+    if (GetFileAttributesW(dll) == INVALID_FILE_ATTRIBUTES) die("pol_hook.dll not found");
     p = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION |
                     PROCESS_VM_WRITE | PROCESS_VM_READ | SYNCHRONIZE, FALSE, pid);
     if (!p) die("cannot open pol.exe to attach");
@@ -65,32 +66,31 @@ static int attach(DWORD pid, const char *dll)
        load until someone clicks OK. Great feature :D */
     old = remote_call(p, set_error_mode, (void *)(UINT_PTR)(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX),
                       "setting the error mode timed out");
-    remote = VirtualAllocEx(p, NULL, MAX_PATH, MEM_COMMIT, PAGE_READWRITE);
+    remote = VirtualAllocEx(p, NULL, size, MEM_COMMIT, PAGE_READWRITE);
     if (!remote) die("VirtualAllocEx");
-    if (!WriteProcessMemory(p, remote, dll, lstrlenA(dll) + 1, NULL)) die("WriteProcessMemory");
+    if (!WriteProcessMemory(p, remote, dll, size, NULL)) die("WriteProcessMemory");
     code = remote_call(p, load_library, remote, "hook dll load timed out in target");
     remote_call(p, set_error_mode, (void *)(UINT_PTR)old, "restoring the error mode timed out");
     VirtualFreeEx(p, remote, 0, MEM_RELEASE);
     CloseHandle(p);
-    printf("watcher: attach, LoadLibraryA -> %08lx\n", code);
+    printf("watcher: attach, LoadLibraryW -> %08lx\n", code);
     if (!code) die("hook dll was refused or failed to load in target");
     printf("watcher: attached to pol.exe (pid %lu)\n", pid);
     return 0;
 }
 
-static void default_hook(char *dll)
+/* never just the name, an elevated pol.exe would go looking for that along PATH */
+static void default_hook(WCHAR *dll)
 {
-    char *slash;
-    GetModuleFileNameA(NULL, dll, MAX_PATH);
-    slash = dll + lstrlenA(dll);
-    while (slash > dll && *slash != '\\' && *slash != '/') slash--;
-    if (*slash == '\\' || *slash == '/') slash++;
-    lstrcpyA(slash, "pol_hook.dll");
-    if (GetFileAttributesA(dll) == INVALID_FILE_ATTRIBUTES)
-        lstrcpyA(dll, "pol_hook.dll");
+    WCHAR *slash;
+    DWORD n = GetModuleFileNameW(NULL, dll, MAX_PATH);
+    if (!n || n >= MAX_PATH || !(slash = wcsrchr(dll, L'\\')) || slash - dll + 14 > MAX_PATH)
+        die("can't find pol_hook.dll next to the watcher");
+    lstrcpyW(slash + 1, L"pol_hook.dll");
 }
 
-static int hook_and_resume(PROCESS_INFORMATION *pi, const char *dll, UINT errmode, FARPROC load_library)
+static int hook_and_resume(PROCESS_INFORMATION *pi, const void *dll, DWORD size, UINT errmode, FARPROC load_library,
+                           const char *how)
 {
     FARPROC set_error_mode = GetProcAddress(GetModuleHandleA("kernel32.dll"), "SetErrorMode");
     char noresume[4] = {0};
@@ -98,17 +98,16 @@ static int hook_and_resume(PROCESS_INFORMATION *pi, const char *dll, UINT errmod
     HANDLE th;
     DWORD code;
 
-    remote = VirtualAllocEx(pi->hProcess, NULL, MAX_PATH, MEM_COMMIT, PAGE_READWRITE);
+    remote = VirtualAllocEx(pi->hProcess, NULL, size, MEM_COMMIT, PAGE_READWRITE);
     if (!remote) die("VirtualAllocEx");
-    if (!WriteProcessMemory(pi->hProcess, remote, dll, lstrlenA(dll) + 1, NULL))
+    if (!WriteProcessMemory(pi->hProcess, remote, dll, size, NULL))
         die("WriteProcessMemory");
-    /* it's an ANSI path, so LoadLibraryA */
     th = CreateRemoteThread(pi->hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)load_library, remote, 0, NULL);
     if (!th) die("CreateRemoteThread");
     if (WaitForSingleObject(th, 10000) != WAIT_OBJECT_0)
         die("hook dll load timed out in target");
     GetExitCodeThread(th, &code);
-    printf("watcher: injected, LoadLibraryA -> %08x\n", code);
+    printf("watcher: injected, %s -> %08x\n", how, code);
     if (!code || code == STILL_ACTIVE) die("hook dll was refused or failed to load in target");
     CloseHandle(th);
     remote_call(pi->hProcess, set_error_mode, (void *)(UINT_PTR)errmode, "restoring the error mode timed out");
@@ -144,9 +143,9 @@ static WCHAR *full_path(const WCHAR *path, const char *what)
 
 /* the app makes Windower's mapping and event before it runs this. Hook.dll throws on its install thread when the
    mapping's missing, so that's refused before pol.exe even starts */
-static int windower(void)
+static int windower(int argc, WCHAR **arg)
 {
-    WCHAR **arg, *hook, *pol, *polhook, *cmd, *cwd, *slash, def[MAX_PATH];
+    WCHAR *hook, *pol, *polhook, *cmd, *cwd, *slash, def[MAX_PATH];
     char dll[MAX_PATH] = {0}, wait_s[16] = {0};
     STARTUPINFOW si = { sizeof si };
     PROCESS_INFORMATION pi;
@@ -157,16 +156,12 @@ static int windower(void)
     DWORD code, n, size, wait_ms = 30000;
     UINT errmode;
     BOOL lossy = FALSE;
-    int argc;
 
-    /* wide, Windower's folder can have characters the ANSI code page can't spell */
-    arg = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!arg || argc < 4) die("--windower needs Hook.dll and pol.exe");
+    if (argc < 4) die("--windower needs Hook.dll and pol.exe");
     pol = arg[3];
     if (argc > 4) polhook = arg[4];
     else {
-        default_hook(dll);
-        MultiByteToWideChar(CP_ACP, 0, dll, -1, def, MAX_PATH);
+        default_hook(def);
         polhook = def;
     }
     /* full paths, so what gets checked here is what pol.exe loads from its own working folder */
@@ -236,47 +231,65 @@ static int windower(void)
     kernelbase = GetModuleHandleA("kernelbase.dll");
     if (kernelbase) load_library = GetProcAddress(kernelbase, "LoadLibraryA");
     if (!load_library) load_library = GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA");
-    return hook_and_resume(&pi, dll, errmode, load_library);
+    return hook_and_resume(&pi, dll, lstrlenA(dll) + 1, errmode, load_library, "LoadLibraryA");
 }
 
-int main(int argc, char **argv)
+/* wide all the way, Provenance's folder has the Windows user name in it and that can be anything */
+int wmain(int argc, WCHAR **argv)
 {
-    char pol[MAX_PATH] = {0}, dll[MAX_PATH] = {0}, cmd[MAX_PATH + 64], cwd[MAX_PATH];
-    STARTUPINFOA si = { sizeof si };
+    WCHAR reg[MAX_PATH] = {0}, def[MAX_PATH], *pol = NULL, *dll, *cmd, *cwd, *slash;
+    STARTUPINFOW si = { sizeof si };
     PROCESS_INFORMATION pi;
     UINT errmode;
+    DWORD n;
 
-    int attaching = argc > 2 && lstrcmpA(argv[1], "--attach") == 0;
+    int attaching = argc > 2 && lstrcmpW(argv[1], L"--attach") == 0;
     int dllarg = attaching ? 3 : 2;
 
-    if (argc > 1 && lstrcmpA(argv[1], "--windower") == 0) return windower();
-    if (attaching) lstrcpynA(pol, "(attach)", MAX_PATH);
-    else if (argc > 1) lstrcpynA(pol, argv[1], MAX_PATH);
-    else if (!get_pol_path(pol, MAX_PATH - 16)) die("cannot resolve pol.exe (pass path as arg1)");
-    if (argc > dllarg) lstrcpynA(dll, argv[dllarg], MAX_PATH);
-    else default_hook(dll);
+    if (argc > 1 && lstrcmpW(argv[1], L"--windower") == 0) return windower(argc, argv);
+    if (!attaching) {
+        if (argc > 1) pol = argv[1];
+        else if (get_pol_path(reg, MAX_PATH - 16)) pol = reg;
+        else die("cannot resolve pol.exe (pass path as arg1)");
+    }
+    if (argc > dllarg) dll = argv[dllarg];
+    else {
+        default_hook(def);
+        dll = def;
+    }
+    /* pol.exe would look for a relative one from its own working folder */
+    dll = full_path(dll, "pol_hook.dll path is no good");
     if (attaching) {
-        DWORD pid = (DWORD)strtoul(argv[2], NULL, 10);
+        DWORD pid = (DWORD)wcstoul(argv[2], NULL, 10);
         if (!pid) die("--attach needs a pid");
         return attach(pid, dll);
     }
-    if (GetFileAttributesA(pol) == INVALID_FILE_ATTRIBUTES) die("pol.exe not found");
-    if (GetFileAttributesA(dll) == INVALID_FILE_ATTRIBUTES) die("pol_hook.dll not found");
+    pol = full_path(pol, "pol.exe path is no good");
+    if (GetFileAttributesW(pol) == INVALID_FILE_ATTRIBUTES) die("pol.exe not found");
+    if (GetFileAttributesW(dll) == INVALID_FILE_ATTRIBUTES) die("pol_hook.dll not found");
 
-    printf("watcher: host=%s\nhook =%s\n", pol, dll);
+    printf("watcher: host=%s\n", utf8(pol));
+    printf("hook =%s\n", utf8(dll));
     /* kiyaku=true skips the EULA, no /game means the hook hands back content code 1. FFXiEntry resolves the install
        paths from the cwd, so that's POL's folder */
-    lstrcpynA(cwd, pol, MAX_PATH);
-    for (char *e = cwd + lstrlenA(cwd); e > cwd && *e != '\\'; e--) *e = 0;
-    if (cwd[lstrlenA(cwd) - 1] == '\\') cwd[lstrlenA(cwd) - 1] = 0;
-    printf("watcher: cwd=%s\n", cwd);
-    wsprintfA(cmd, "\"%s\" kiyaku=true", pol);
+    n = lstrlenW(pol);
+    cmd = malloc((n + 16) * sizeof(WCHAR));
+    cwd = malloc((n + 1) * sizeof(WCHAR));
+    if (!cmd || !cwd) die("out of memory");
+    lstrcpyW(cwd, pol);
+    slash = wcsrchr(cwd, L'\\');
+    if (slash) *slash = 0;
+    printf("watcher: cwd=%s\n", utf8(cwd));
+    cmd[0] = L'"';
+    lstrcpyW(cmd + 1, pol);
+    lstrcatW(cmd, L"\" kiyaku=true");
     /* pol.exe inherits the error mode, so the same no-boxes rule as attach */
     errmode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     SetErrorMode(errmode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-    if (!CreateProcessA(pol, cmd, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, cwd, &si, &pi))
+    if (!CreateProcessW(pol, cmd, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, slash ? cwd : NULL, &si, &pi))
         die("CreateProcess pol.exe");
     SetErrorMode(errmode);
     g_child = pi.hProcess;
-    return hook_and_resume(&pi, dll, errmode, GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA"));
+    return hook_and_resume(&pi, dll, (lstrlenW(dll) + 1) * sizeof(WCHAR), errmode,
+                           GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryW"), "LoadLibraryW");
 }

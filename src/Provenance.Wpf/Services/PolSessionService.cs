@@ -627,6 +627,7 @@ public sealed class PolSessionService : IDisposable
             RedirectStandardOutput = true, RedirectStandardError = true,
         };
         psi.ArgumentList.Add(polExe);
+        psi.ArgumentList.Add(Path.Combine(ThirdPartyHookService.NativeDir, "pol_hook.dll"));
         return psi;
     }
 

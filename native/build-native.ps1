@@ -60,12 +60,10 @@ function Source([string]$name) { '"' + (Join-Path $PSScriptRoot $name) + '"' }
 # up at run time, so the hook adds no DLL to pol.exe's start-up.
 $hookLibs = 'user32.lib advapi32.lib crypt32.lib ole32.lib uuid.lib'
 $clHook = "cl /nologo /O2 /W3 $(Source 'pol_hook.c') /LD /Fepol_hook.dll /link $hookLibs"
-# shell32 is only for --windower's wide arguments, delay-loaded so the other launches never load it. The exes all
-# get Provenance's own icon
+# the exes all get Provenance's own icon
 $assets = Join-Path $PSScriptRoot '..\src\Provenance.Wpf\Assets'
 $clWatcher = "rc /nologo /i ""$OutDir"" /i ""$assets"" /fo watcher.res $(Source 'watcher.rc') && " +
-    "cl /nologo /O2 /W3 $(Source 'watcher.c') watcher.res /Fe""Provenance Watcher.exe"" /link user32.lib advapi32.lib" +
-    ' shell32.lib delayimp.lib /DELAYLOAD:shell32.dll'
+    "cl /nologo /O2 /W3 $(Source 'watcher.c') watcher.res /Fe""Provenance Watcher.exe"" /link user32.lib advapi32.lib"
 # the uninstallers delete from Program Files and HKLM, so they always ask for admin. One build per product, so the
 # UAC prompt names the one it's removing
 function UninstallCl([string]$exe, [string]$tag, [string]$rcDefine, [string]$clDefine) {

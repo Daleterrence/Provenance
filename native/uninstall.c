@@ -116,8 +116,8 @@ static int run(wchar_t *text, DWORD chars, wchar_t kind)
             case L'S': case L'F':
                 delete_file(arg);
                 if (kind == L'F' && (++n % 500) == 0) {
-                    wchar_t msg[160];
-                    wsprintfW(msg, L"Removing %s: %d files", g_name, n);
+                    wchar_t msg[300];
+                    _snwprintf_s(msg, _countof(msg), _TRUNCATE, L"Removing %s: %d files", g_name, n);
                     status(msg);
                 }
                 break;
@@ -157,13 +157,14 @@ static int run(wchar_t *text, DWORD chars, wchar_t kind)
                     WIN32_FIND_DATAW fd;
                     HANDLE h;
                     *tab = 0;
-                    wsprintfW(pattern, L"%s\\%s", arg, tab + 1);
-                    h = FindFirstFileW(pattern, &fd);
+                    /* a line too long for these is skipped, a cut-off path could be some other file */
+                    h = _snwprintf_s(pattern, _countof(pattern), _TRUNCATE, L"%s\\%s", arg, tab + 1) < 0
+                        ? INVALID_HANDLE_VALUE : FindFirstFileW(pattern, &fd);
                     if (h != INVALID_HANDLE_VALUE) {
                         do {
                             if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-                            wsprintfW(file, L"%s\\%s", arg, fd.cFileName);
-                            delete_file(file);
+                            if (_snwprintf_s(file, _countof(file), _TRUNCATE, L"%s\\%s", arg, fd.cFileName) >= 0)
+                                delete_file(file);
                         } while (FindNextFileW(h, &fd));
                         FindClose(h);
                     }
