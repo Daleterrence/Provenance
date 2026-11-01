@@ -1,7 +1,10 @@
 namespace Provenance.Common.Game.Windower;
 
 public sealed record WindowerLaunchLists(IReadOnlyList<string> RequiredPlugins, IReadOnlyList<string> Plugins,
-                                         IReadOnlyList<string> Addons, IReadOnlyList<string> Skipped);
+                                         IReadOnlyList<string> Addons, IReadOnlyList<string> Skipped)
+{
+    public IReadOnlyList<string> InitCommandAddons { get; init; } = [];
+}
 
 // a profile's addons and plugins, kept in Provenance's own settings by Windower profile name. UseGlobal (and no entry
 // at all) means the shared list, settings.xml's <autoload> plus Provenance's own extras
@@ -51,7 +54,7 @@ public sealed class WindowerAddonList
     }
 
     // the shared list and a profile's own go out the same way: whatever's installed and loadable, less anything
-    // init.txt or the init command loads itself
+    // init.txt loads itself
     public static WindowerLaunchLists ForLaunch(string windowerDir, WindowerProfile profile, WindowerAddonList effective,
                                                 IReadOnlyList<WindowerPluginInfo>? plugins = null, IReadOnlyList<WindowerAddonInfo>? addons = null)
     {
@@ -77,18 +80,18 @@ public sealed class WindowerAddonList
             if (addons.FirstOrDefault(a => a.Name.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Name);
             else skipped.Add($"{n} (addon not installed)");
 
-        // required plugins stay in whatever init.txt says, the addons need LuaCore before it runs. The init command runs
-        // before them though, and a second load of one only gets "Plugin already loaded."
+        // required plugins always go, the addons need LuaCore before init.txt runs. Nothing shows the init command's
+        // load LuaCore really runs, so its addons go in the list too (a second lua load just prints "already loaded")
         var loads = ScriptLoads.Read(windowerDir, profile.InitCommand);
         string? Already(string name, Dictionary<string, string> loaded) =>
-            loaded.TryGetValue(name, out var where) ? $"{name} (already loaded by {where})" : null;
-        foreach (var n in required.ToList())
-            if (loads.Plugins.GetValueOrDefault(n) == ScriptLoads.InitCommand && Already(n, loads.Plugins) is { } why) { required.Remove(n); skipped.Add(why); }
+            loaded.TryGetValue(name, out var where) && where != ScriptLoads.InitCommand ? $"{name} (already loaded by {where})" : null;
         foreach (var n in sendPlugins.ToList())
             if (Already(n, loads.Plugins) is { } why) { sendPlugins.Remove(n); skipped.Add(why); }
         foreach (var n in sendAddons.ToList())
             if (Already(n, loads.Addons) is { } why) { sendAddons.Remove(n); skipped.Add(why); }
-        return new WindowerLaunchLists(required, sendPlugins, sendAddons, skipped);
+        var fromInit = addons.Where(a => loads.Addons.GetValueOrDefault(a.Name) == ScriptLoads.InitCommand).Select(a => a.Name).ToList();
+        sendAddons.AddRange(fromInit.Where(n => !sendAddons.Contains(n, StringComparer.OrdinalIgnoreCase)));
+        return new WindowerLaunchLists(required, sendPlugins, sendAddons, skipped) { InitCommandAddons = fromInit };
     }
 }
 

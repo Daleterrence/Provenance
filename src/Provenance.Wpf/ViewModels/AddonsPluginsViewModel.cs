@@ -655,11 +655,13 @@ public partial class AddonsPluginsViewModel : ObservableObject
     {
         var list = new WindowerAddonList { Plugins = plugins, Addons = addons };
         var reasons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var s in WindowerAddonList.ForLaunch(dir, profile, list, scan.Plugins, scan.Addons).Skipped)
+        var launch = WindowerAddonList.ForLaunch(dir, profile, list, scan.Plugins, scan.Addons);
+        foreach (var s in launch.Skipped)
         {
             int at = s.LastIndexOf(" (", StringComparison.Ordinal);
             if (at > 0 && s.EndsWith(')')) reasons.TryAdd(s[..at], s[(at + 2)..^1]);
         }
+        foreach (var n in launch.InitCommandAddons) reasons.TryAdd(n, LoadedBy + "the profile's init command");
         return reasons;
     }
 
