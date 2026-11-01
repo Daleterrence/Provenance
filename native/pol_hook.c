@@ -2303,19 +2303,25 @@ static int slot_name(BYTE *b, int slot, char *name16)
 }
 
 static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, int read,
-                    const char *subj, const char *text)
+                    const char *subj, const char *text, const BYTE *att)
 {
-    char nm[64], sk[17];
+    char nm[64], sk[17], grp[80] = "";
     WORD f = *(const WORD *)(e + 0x3e);
+    unsigned kind = (f >> 7) & 0x1f;
     int o;
     sjis_json(nm, sizeof nm, e + 0x10, 0x0f);
     peer_key(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04), e[0x3c], sk);
+    /* removed from a group (0x12) or it was disbanded (0x13): the name's in the type-10 attachment, the text's empty */
+    if (att && (kind == 0x12 || kind == 0x13)) {
+        lstrcpyA(grp, ",\"group\":");
+        sjis_json(grp + 9, sizeof grp - 9, att + 8, 0x14);
+    }
     o = wsprintfA(out, "{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"kind\":%u,\"time\":%u,"
-                       "\"seq\":%u,\"state\":\"%s\"%s,\"subject\":",
+                       "\"seq\":%u,\"state\":\"%s\"%s%s,\"subject\":",
                   mid, nm, sk, e[0x3c],
                   is_me(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04)) ? "true" : "false",
-                  (unsigned)((f >> 7) & 0x1f), *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state,
-                  read < 0 ? "" : read ? ",\"read\":true" : ",\"read\":false");
+                  kind, *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state,
+                  read < 0 ? "" : read ? ",\"read\":true" : ",\"read\":false", grp);
     o += json_text(out + o, cap - o - 16, subj);
     lstrcpyA(out + o, ",\"text\":"); o += 8;
     o += json_text(out + o, cap - o - 4, text);
@@ -2585,7 +2591,7 @@ static void store_import(BYTE *b)
         if (sent) len = sent_json(b, json, need, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent", scratch.subj,
                                   scratch.text);
         else len = msg_json(b, json, need, all[i].hdr, 0, "local", (*(WORD *)(all[i].hdr + 0x42) >> 8) & 1,
-                            scratch.subj, scratch.text);
+                            scratch.subj, scratch.text, scratch.has_att ? scratch.att : NULL);
         /* newest first, so a store too big for the file loses its oldest lines */
         if (in.n + out.n + len + 2 > STORE_JSON_MAX ||
             !gb_add(sent ? &out : &in, (sent ? nout : nin) ? "," : "", (sent ? nout : nin) ? 1 : 0) ||
@@ -3230,7 +3236,6 @@ static void search_fetch(BYTE *b)
 static void search_request(BYTE *b)
 {
     char buf[256], *p, *tok, *name;
-    const char *c;
     if (GetTickCount64() - g_srch_last < 5000) return;
     if (g_me_step == 5) return;
     if (take_request("search", buf, sizeof buf) < 0) return;
@@ -3241,14 +3246,10 @@ static void search_request(BYTE *b)
     lstrcpynA(g_srch_token, tok, sizeof g_srch_token);
     g_srch_n = 0;
     if (notice_blocks(g_notice)) { search_done("failed:account notice"); return; }
-    /* only letters, digits, space, '-', '_' and '.' go out in a handle search */
-    for (c = name; *c; c++)
-        if (!((*c >= 'A' && *c <= 'Z') || (*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') ||
-              *c == ' ' || *c == '-' || *c == '_' || *c == '.')) break;
-    if (*c || !name[0] || lstrlenA(name) > 15) { search_done("failed:bad name"); return; }
+    if (!ascii_name_ok(name)) { search_done("failed:bad name"); return; }
     if (!fs_load_pib(b)) { search_done("failed:no schema"); return; }
     memset(g_srch_cond, 0, sizeof g_srch_cond);
-    /* the viewer's search by handle, 0x04 being svc 0x4a4's quote */
+    /* the viewer's search by handle: the name goes between 0x04 quotes, and a handle can't hold a 0x04 */
     wsprintfA(g_srch_clause, "z_up_name=UPPER(\x04%s\x04)", name);
     ((void (__cdecl *)(void *, int, const char *))SVC(0x4a4))(g_srch_cond, 7, g_srch_clause);
     lg("friends: search \"%s\"\r\n", name);
@@ -3461,6 +3462,7 @@ static void pol_json(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
 static int g_prof_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
 static pdb_cond g_prof_cond;
 static int g_prof_job = -1, g_prof_row;
+static unsigned __int64 g_prof_hid;
 static char g_prof_token[48], g_prof_state[32] = "";
 static char *g_prof_json;
 static pdb_rec *g_prof_rec;
@@ -3505,7 +3507,12 @@ static void profile_build(BYTE *b)
     PJ(",\"mail\":%s,\"mailState\":%d", js, st);
     it = pdb_get(b, s, "z_hid", g_prof_rec);
     memset(hid, 0, sizeof hid);
-    if (it && SVC(0x76c)) ((int (__cdecl *)(char *, DWORD, DWORD))SVC(0x76c))(hid, (DWORD)it->v.u64, 0);
+    /* the viewer prints the record's low 32 bits, or the H-ID it asked for when that's 0 (a hidden one) */
+    if (SVC(0x76c)) {
+        DWORD lo = it ? (DWORD)it->v.u64 : 0, hi = 0;
+        if (!lo) { lo = (DWORD)g_prof_hid; hi = (DWORD)(g_prof_hid >> 32); }
+        ((int (__cdecl *)(char *, DWORD, DWORD))SVC(0x76c))(hid, lo, hi);
+    }
     hid[0x20] = 0;
     json_str(js, sizeof js, hid);
     PJ(",\"hid\":%s", js);
@@ -3610,6 +3617,7 @@ static void profile_request(BYTE *b)
     ((svc4a8_t)SVC(0x4a8))(&g_prof_cond, 1);
     ((svc4ac_t)SVC(0x4ac))(1, &g_prof_cond);
     g_prof_row = row;
+    g_prof_hid = hid;
     lstrcpyA(g_prof_state, "loading");
     g_snap_dirty = 1;
     profile_start(b);
@@ -4560,7 +4568,7 @@ static void snapshot_social(BYTE *b)
                       ml->state == 3 ? "realtime" : ml->state == 2 ? "failed" : ml->state == 1 && !hold ? "read"
                                                                                                    : "pending",
                       -1,   /* no read bit, a server copy hasn't got one */
-                      hold ? "" : ml->subj, hold ? "" : ml->text);
+                      hold ? "" : ml->subj, hold ? "" : ml->text, ml->has_att && !hold ? ml->att : NULL);
         WriteFile(h, mj, (DWORD)o, &n, NULL);
         first = 0;
     }

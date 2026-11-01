@@ -297,7 +297,7 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <HeaderedContentControl Header="Chat language filter"
-                                                        Tag="When this is on, offensive words are hidden in PlayOnline and FINAL FANTASY XI.">
+                                                        Tag="When this is on, offensive words are hidden in messages, comments and profiles from other PlayOnline members, and in FINAL FANTASY XI.">
                                     <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ChatLanguageFilter}"
                                                   AutomationProperties.Name="Chat language filter" />
                                 </HeaderedContentControl>

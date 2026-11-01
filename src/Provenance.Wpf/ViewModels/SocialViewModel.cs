@@ -235,16 +235,23 @@ public partial class SocialViewModel : ObservableObject
         FlushAcks();
     }
 
-    private static string? NoticeText(int kind) => kind switch
+    private string? NoticeText(PolMessage m) => m.Kind switch
     {
         PolMessage.KindFriendAccepted => "Accepted your friend request.",
         PolMessage.KindFriendDeclined => "Declined your friend request.",
         PolMessage.KindGroupAccepted => "Accepted your group invitation.",
         PolMessage.KindGroupDeclined => "Declined your group invitation.",
-        PolMessage.KindGroupRemoved => "Removed you from a friend group.",
-        PolMessage.KindGroupDisbanded => "Disbanded a friend group you were in.",
+        PolMessage.KindGroupRemoved => m.Group.Length == 0 ? "You have been removed from a friend group."
+            : OneLine(ViewerText(0x46dd, "You have been removed from the group \"%s.\"")).Replace("%s", m.Group),
+        PolMessage.KindGroupDisbanded => m.Group.Length == 0 ? "A friend group you were in has been disbanded."
+            : OneLine(ViewerText(0x46db, "The group \"%s\" has been disbanded.")).Replace("%s", m.Group),
         _ => null,
     };
+
+    // SE's group lines already say what happened, so they don't get the sender's name in front
+    private static bool SaysWho(int kind) => kind is not (PolMessage.KindGroupRemoved or PolMessage.KindGroupDisbanded);
+
+    private static string OneLine(string s) => s.Replace("\r\n", " ").Replace('\n', ' ');
 
     private void NoticeComingOnline(PolSocialSnapshot snap)
     {
@@ -309,6 +316,12 @@ public partial class SocialViewModel : ObservableObject
     {
         _last = snap;
         bool chatChanged = _chat != null && MergeChat(_chat, snap);
+        if (FilterOn != _filterWasOn)
+        {
+            _filterWasOn = FilterOn;
+            _friendsSignature = _groupsSignature = "";
+            chatChanged = true;
+        }
         FlushAcks();
         // my own jobs first, so a failure never leaves a lock behind and an answered request's gone before the redraw
         ApplyEditState(snap);
@@ -400,14 +413,13 @@ public partial class SocialViewModel : ObservableObject
         foreach (var m in snap.Messages)
         {
             var who = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == m.FromKey)?.Name ?? m.From;
-            if (m.HasBody && NoticeText(m.Kind) is { } line)
+            if (m.HasBody && NoticeText(m) is { } line)
             {
                 // one about my own action (say I disbanded the group) isn't news, but it still goes from the server
-                bool mine = snap.MyKey.Length > 0 && m.FromKey == snap.MyKey;
-                if (!mine && chat.MergeNotice(m, line))
+                if (!Mine(snap, m) && chat.MergeNotice(m, line))
                 {
                     changed = true;
-                    NoticeReceived?.Invoke(who, $"{who} {char.ToLowerInvariant(line[0])}{line[1..]}");
+                    NoticeReceived?.Invoke(who, SaysWho(m.Kind) ? $"{who} {char.ToLowerInvariant(line[0])}{line[1..]}" : line);
                 }
                 if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
                 continue;
@@ -425,7 +437,7 @@ public partial class SocialViewModel : ObservableObject
             if (chat.MergeIncoming(m))
             {
                 changed = true;
-                MessageReceived?.Invoke(who, m.Text.Length > 0 ? m.Text : m.Subject);
+                MessageReceived?.Invoke(who, Filtered(m.Text.Length > 0 ? m.Text : m.Subject));
             }
             // chat only, a request stays on the server for the viewer and is never deleted unseen
             if (m.HasBody && m.IsChat && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
@@ -459,6 +471,10 @@ public partial class SocialViewModel : ObservableObject
 
     private bool _storeTaken;
 
+    // sent by this handle, or another handle on my own POL ID
+    private static bool Mine(PolSocialSnapshot snap, PolMessage m) =>
+        m.IsMe || (snap.MyKey.Length > 0 && m.FromKey == snap.MyKey);
+
     // the game's message store, read by the hook at login: it's history, so no notices, and nothing to ack since none of
     // it's on the server any more
     private bool MergeStored(ChatStore chat, PolSocialSnapshot snap)
@@ -467,9 +483,9 @@ public partial class SocialViewModel : ObservableObject
         foreach (var m in snap.Stored!.Received)
         {
             if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey)) continue;
-            if (NoticeText(m.Kind) is { } line)
+            if (NoticeText(m) is { } line)
             {
-                if (snap.MyKey.Length == 0 || m.FromKey != snap.MyKey) changed |= chat.MergeNotice(m, line);
+                if (!Mine(snap, m)) changed |= chat.MergeNotice(m, line);
             }
             else changed |= chat.MergeIncoming(m);
         }
@@ -488,7 +504,7 @@ public partial class SocialViewModel : ObservableObject
     private void RebuildFriends(PolSocialSnapshot snap)
     {
         var items = snap.Friends.Select(f => new FriendItem(
-                f.Name, f.Online ? f.Character : "", f.Pending ? "" : f.Comment,
+                f.Name, f.Online ? f.Character : "", f.Pending ? "" : Filtered(f.Comment),
                 f.Pending ? "Friend request sent" : f.Online ? f.StatusLabel : "Offline", f.Online && !f.Pending, f.Row,
                 _avatars.ProfilePicture(f.ProfilePictureId), _chat?.UnreadFrom(f.Name, f.Key) ?? 0,
                 f.Pending ? "REQUESTS SENT" : f.Online ? "ONLINE" : "OFFLINE")
@@ -496,7 +512,7 @@ public partial class SocialViewModel : ObservableObject
         // invitations (kind 0xe) and requests (kind 1) stay on the server until they're answered
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_answered.Contains(m.Mid)))
             if (m.Kind == PolMessage.KindGroupInvite)
-                items.Add(new FriendItem(m.From, "", m.Text.Length > 0 ? m.Text : "Group invitation", "", false, -1,
+                items.Add(new FriendItem(m.From, "", m.Text.Length > 0 ? Filtered(m.Text) : "Group invitation", "", false, -1,
                                          _avatars.NoProfilePicture, 0, "GROUP INVITATIONS")
                           { Key = m.FromKey, RequestMid = m.Mid, IsGroupInvite = true });
             else if (m.Kind == PolMessage.KindFriendRequest)
@@ -609,8 +625,10 @@ public partial class SocialViewModel : ObservableObject
         Conversation.Clear();
         if (SelectedFriend is not { } f || _chat == null) return;
         DateTime? day = null;
-        foreach (var e in _chat.With(f.Name, f.Key))
+        foreach (var line in _chat.With(f.Name, f.Key))
         {
+            var e = line.Outgoing || line.State == "notice" ? line
+                  : line with { Subject = Filtered(line.Subject), Text = Filtered(line.Text) };
             var d = e.When.Date;
             Conversation.Add(d == day ? e : e with { DayBreak = DayLabel(d) });
             day = d;
@@ -731,7 +749,7 @@ public partial class SocialViewModel : ObservableObject
     private static string EditFailureText(string state) => state switch
     {
         "timeout" => "PlayOnline didn't answer the change.",
-        "failed:pending" => "That person hasn't accepted your friend request yet, so you can only withdraw it.",
+        "failed:pending" => "That person hasn't accepted your friend request yet, so you can only delete it.",
         "failed:self" => "You can't ignore yourself.",
         "failed:friend list changed" or "failed:no such friend" => "Your friend list changed. Try again.",
         "failed:list changed" or "failed:no such entry" => "Your ignore list changed. Try again.",
@@ -751,6 +769,24 @@ public partial class SocialViewModel : ObservableObject
     private DateTime _answerAt;
     private IReadOnlyDictionary<int, string>? _viewerStrings;
     private bool _viewerStringsTried;
+
+    private PolLanguageFilter? _wordFilter;
+    private bool _wordFilterTried, _filterWasOn;
+
+    private bool FilterOn => PolOptions.ChatFilter(_settings.Current);
+
+    // the chat language filter where the viewer runs it: what other people wrote, never my own lines
+    internal string Filtered(string text)
+    {
+        if (text.Length == 0 || !FilterOn) return text;
+        if (!_wordFilterTried && _settings.DetectedRegion != null)
+        {
+            _wordFilterTried = true;
+            var viewer = ViewerFolder();
+            _wordFilter = viewer is null ? null : PolLanguageFilter.Load(viewer);
+        }
+        return _wordFilter?.Apply(text) ?? text;
+    }
 
     internal string ViewerText(int id, string fallback)
     {
@@ -853,7 +889,7 @@ public partial class SocialViewModel : ObservableObject
     private string _requestName = "";
     private string _requestKey = "";
     private DateTime _requestAt;
-    private const string BadHandleName = "Type a handle name of up to 15 English letters, numbers, spaces, '-', '_' or '.'.";
+    private const string BadHandleName = "Type a handle name of up to 15 English letters, numbers or symbols.";
 
     private void SearchFailed(string note)
     {
@@ -870,7 +906,7 @@ public partial class SocialViewModel : ObservableObject
             SearchFailed(GameRunningNote);
             return;
         }
-        if (name.Length is 0 or > 15 || !name.All(c => char.IsAsciiLetterOrDigit(c) || c is ' ' or '-' or '_' or '.'))
+        if (name.Length is 0 or > 15 || !name.All(c => c is >= ' ' and <= '~'))
         {
             SearchFailed(BadHandleName);
             return;

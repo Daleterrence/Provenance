@@ -47,6 +47,8 @@ public sealed record PolProfile(string Name, string Mail, int MailState, string 
                                 IReadOnlyList<PolProfileRow> Rows, string Away, string AwayFrom)
 {
     public const int Shown = 0, Private = 1, NotSet = 2, UnderTen = 3;
+
+    public int NameState { get; init; }
 }
 
 // Class: 2 invited, 3 member, 4 sub-master, 5 master
@@ -83,6 +85,8 @@ public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, 
     public bool IsLocal => State == "local";
     public bool IsMe { get; init; }
     public bool Read { get; init; }
+    // the group a removal or disband was about, from its attachment
+    public string Group { get; init; } = "";
 
     public const int KindFriendRequest = 1, KindFriendAccepted = 9, KindFriendDeclined = 10;
 
@@ -250,7 +254,7 @@ public static class SocialSnapshot
         return WriteRequest(pid, "answer", $"{verb}\n{OneLine(token)}\n{mid}\n{OneLine(subject)}\n{(allHandles ? "1" : "0")}");
     }
 
-    // letters, digits, space, '-', '_' and '.' only, the hook refuses anything else
+    // printable ASCII only, like a handle name. The hook refuses anything else
     public static bool Search(int pid, string token, string handleName) =>
         WriteRequest(pid, "search", $"{token.Replace("\n", "")}\n{handleName.Replace("\r", "").Replace("\n", "")}");
 
@@ -423,14 +427,14 @@ public static class SocialSnapshot
 
     private static PolMessage ReadMessage(JsonElement m) =>
         new(Str(m, "from"), (int)Long(m, "fromSlot"), (int)Long(m, "kind"), Long(m, "time"), Long(m, "seq"), Str(m, "state"),
-            Str(m, "subject"), Str(m, "text"), (int)Long(m, "mid"), Str(m, "fromKey")) { IsMe = Bool(m, "me"), Read = Bool(m, "read") };
+            Str(m, "subject"), Str(m, "text"), (int)Long(m, "mid"), Str(m, "fromKey")) { IsMe = Bool(m, "me"), Read = Bool(m, "read"), Group = Str(m, "group") };
 
     private static PolProfile ReadProfile(JsonElement p) =>
         new(Str(p, "name"), Str(p, "mail"), (int)Long(p, "mailState"), Str(p, "hid"), Long(p, "updated"),
             (int)Long(p, "level"),
             Arr(p, "rows", r => new PolProfileRow(Str(r, "label"), Str(r, "field"), (int)Long(r, "state"),
                                                   Arr(r, "lines", l => l.GetString() ?? ""), (int)Long(r, "pic"))),
-            Str(p, "away").TrimEnd(), Str(p, "awayFrom"));
+            Str(p, "away").TrimEnd(), Str(p, "awayFrom")) { NameState = (int)Long(p, "nameState") };
 
     private static PolGroup ReadGroup(JsonElement g) =>
         new(Str(g, "id"), Str(g, "name"), (int)Long(g, "myClass"), (int)Long(g, "mySlot"), (int)Long(g, "myStatus"),

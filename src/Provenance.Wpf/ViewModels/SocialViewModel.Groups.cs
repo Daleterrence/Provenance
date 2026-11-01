@@ -73,7 +73,7 @@ public partial class SocialViewModel
                 .ThenBy(m => m.Name, StringComparer.CurrentCultureIgnoreCase)
                 .Select(m => new GroupMemberItem(m.Index, m.Name, m.Key, _avatars.ProfilePicture(m.ProfilePictureId),
                                                  m.Class, RoleText(m.Class), MemberStatus(m), m.Online, m.Me,
-                                                 m.Comment))
+                                                 m.Me ? m.Comment : Filtered(m.Comment)))   // mine fills its edit box
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
             Groups.Add(new GroupItem(g.Id, g.Name, g.MyClass, RoleText(g.MyClass), online, members));

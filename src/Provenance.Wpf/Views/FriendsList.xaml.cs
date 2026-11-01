@@ -119,11 +119,11 @@ public partial class FriendsList : UserControl
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Rename...", edit && !f.Pending, () => Rename(vm, f)));
         var removeBody = f.Pending
-            ? $"Withdraw your friend request to {f.Name}?"
+            ? $"Delete your friend request to {f.Name}? This takes it off your own friend list."
             : $"Remove {f.Name} from your PlayOnline friend list? Your saved messages with {f.Name} stay in Provenance.";
-        menu.Items.Add(Item(f.Pending ? "Withdraw friend request..." : "Remove from friends...", edit,
-            Confirmed(Owner, f.Pending ? "Withdraw friend request" : "Remove friend", removeBody,
-                      f.Pending ? "WITHDRAW" : "REMOVE", () => vm.RemoveFriend(f))));
+        menu.Items.Add(Item(f.Pending ? "Delete friend request..." : "Remove from friends...", edit,
+            Confirmed(Owner, f.Pending ? "Delete friend request" : "Remove friend", removeBody,
+                      f.Pending ? "DELETE" : "REMOVE", () => vm.RemoveFriend(f))));
         menu.Items.Add(Item("Ignore...", edit && !f.Pending && !f.IsMe, () => Ignore(vm, f)));
     }
 

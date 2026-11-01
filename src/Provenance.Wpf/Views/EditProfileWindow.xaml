@@ -167,7 +167,7 @@
                     </ListBox.ItemContainerStyle>
                 </ListBox>
                 <TextBlock Style="{StaticResource Help}" Margin="2,0,0,0"
-                           Text="Your handle name and picture are always visible. This controls everything else on the profile." />
+                           Text="{Binding VisibilityHelp}" />
 
                 <TextBlock Text="About you" Style="{StaticResource Section}" />
                 <Grid ColumnDefinitions="*,14,*">

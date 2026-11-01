@@ -158,7 +158,17 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void RetryLoad() => Load();
 
-    [ObservableProperty] private long _level;   // 1 private, 2 friends, 3 everyone, 0 if it loaded as none of them
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(VisibilityHelp))]
+    private long _level;   // 1 private, 2 friends, 3 everyone, 0 if it loaded as none of them
+
+    // the viewer's own help for each choice
+    public string VisibilityHelp => Level switch
+    {
+        3 => _social.ViewerText(0x2c5f, "Show profile to all PlayOnline members."),
+        2 => _social.ViewerText(0x2c60, "Show profile to friends and group friends only."),
+        1 => _social.ViewerText(0x2c61, "Hide profile from all PlayOnline members."),
+        _ => "",
+    };
     [ObservableProperty] private string _handleName = "";
     [ObservableProperty] private string _mail = "";
     [ObservableProperty] private string _ageText = "";
