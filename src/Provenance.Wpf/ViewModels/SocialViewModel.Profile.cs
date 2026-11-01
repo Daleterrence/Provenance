@@ -1,16 +1,32 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Social;
 
 namespace Provenance.Wpf.ViewModels;
+
+// Handle Profile (Slot -1) or one of the handle's FFXI characters
+public sealed partial class ProfileTab(int slot, string characterKey, string label) : ObservableObject
+{
+    public int Slot { get; } = slot;
+    public string CharacterKey { get; } = characterKey;
+    [ObservableProperty] private string _label = label;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Clickable))] private bool _isSelected;
+    public bool Clickable => !IsSelected;
+}
 
 public partial class SocialViewModel
 {
     public sealed record ProfileRowItem(string Label, string Value, ImageSource? Picture);
 
     public ObservableCollection<ProfileRowItem> ProfileRows { get; } = new();
-    [ObservableProperty] private bool _profileLoading;
+    public ObservableCollection<ProfileTab> ProfileTabs { get; } = new();
+    [ObservableProperty] private bool _hasProfileTabs;
+    [ObservableProperty] private bool _profileShowsPicture = true;
+    [ObservableProperty] private string _profileGameLine = "";
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ProfileTabsClickable))] private bool _profileLoading;
+    public bool ProfileTabsClickable => !ProfileLoading;
     [ObservableProperty] private string _profileNote = "";
     [ObservableProperty] private bool _profileNoteIsError;
     partial void OnProfileNoteChanged(string value) => ProfileNoteIsError = false;
@@ -24,7 +40,14 @@ public partial class SocialViewModel
     [ObservableProperty] private ImageSource? _profilePicture;
     private string? _profileToken;
     private string _profileKey = "", _profileFor = "";
+    private int _profileRow = -1;
     private DateTime _profileAt;
+    // what's on screen: the handle's answer and the last character one that loaded, so going back never reads again
+    private PolProfile? _handleProfile;
+    private PolFfxiProfile? _characterShown;
+    private string? _ffxiToken;
+    private DateTime _ffxiAt;
+    private ProfileTab? _ffxiFor, _ffxiFrom;
     private readonly Dictionary<string, (PolProfile Profile, DateTime At)> _profileCache = new();
     private ProfilePictureCatalog.Catalog? _picCatalog;
     private bool _picCatalogTried;
@@ -34,8 +57,17 @@ public partial class SocialViewModel
     {
         ProfileRows.Clear();
         ProfileName = ProfileHid = ProfileMail = ProfileUpdated = ProfilePrivacy = ProfileAway = ProfileAwayFrom = "";
+        ProfileGameLine = "";
         ProfilePicture = _avatars.NoProfilePicture;
+        ProfileShowsPicture = true;
+        ProfileTabs.Clear();
+        HasProfileTabs = false;
+        _handleProfile = null;
+        _characterShown = null;
+        _ffxiToken = null;
         _profileFor = f.Name;
+        _profileRow = f.Row;
+        _profileKey = f.Key;
         // a request with no answer yet has no profile to show (the viewer greys it out)
         if (!f.IsFriend || f.Pending || _pol.Pid is not { } pid)
         {
@@ -54,11 +86,10 @@ public partial class SocialViewModel
             _profileToken = null;
             ProfileLoading = false;
             ProfileNote = "";
-            ShowProfile(hit.Profile);
+            HandleProfileArrived(hit.Profile);
             return;
         }
         _profileToken = NewToken();
-        _profileKey = f.Key;
         _profileAt = DateTime.UtcNow;
         ProfileLoading = true;
         ProfileNote = "Loading the profile from PlayOnline...";
@@ -103,25 +134,156 @@ public partial class SocialViewModel
         {
             ProfileNote = "";
             if (_profileKey.Length > 0) _profileCache[_profileKey] = (snap.Profile!, DateTime.UtcNow);
-            ShowProfile(snap.Profile!);
+            HandleProfileArrived(snap.Profile!);
             return;
         }
         ProfileNote = st switch
         {
-            "timeout" or "failed:timeout" => "PlayOnline didn't answer.",
             "failed:no profile" => "This person doesn't have a PlayOnline profile to show.",
-            "failed:no such friend" or "failed:friend list changed" => "Your friend list changed. Try again.",
-            "failed:pending" => "You can only view your friends' profiles.",
-            "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.",
             // -0x14cc, which the viewer calls a hidden profile
             "failed:-5324" => ViewerText(0x4ab4, "Profile of %s's handle is hidden.").Replace("%s", Filtered(_profileFor)),
-            _ => $"PlayOnline didn't send the profile ({FailReason(st)}).",
+            _ => ProfileFailText(st),
         };
         ProfileNoteIsError = st is not ("failed:no profile" or "failed:-5324");
     }
 
+    private static string ProfileFailText(string st) => st switch
+    {
+        "timeout" or "failed:timeout" => "PlayOnline didn't answer.",
+        "failed:no such friend" or "failed:friend list changed" => "Your friend list changed. Try again.",
+        "failed:pending" => "You can only view your friends' profiles.",
+        "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.",
+        _ => $"PlayOnline didn't send the profile ({FailReason(st)}).",
+    };
+
+    private string PrivacyText(int level) => level switch
+    {
+        1 => ViewerText(0x4a7d, "Private"),
+        2 => ViewerText(0x4a7e, "Show to friends"),
+        3 => ViewerText(0x4a7c, "Show to all"),
+        _ => "",
+    };
+
+    // the tabs only show when there's a character to put in them
+    private void HandleProfileArrived(PolProfile p)
+    {
+        _handleProfile = p;
+        _characterShown = null;
+        ProfileTabs.Clear();
+        if (p.Characters.Count > 0)
+        {
+            ProfileTabs.Add(new ProfileTab(-1, "", ViewerText(0x4abe, "Handle Profile")) { IsSelected = true });
+            foreach (var c in p.Characters) ProfileTabs.Add(new ProfileTab(c.Slot, c.CharacterKey, TabLabel(c.CharacterKey)));
+        }
+        HasProfileTabs = ProfileTabs.Count > 0;
+        ShowProfile(p);
+    }
+
+    private string TabLabel(string characterKey) =>
+        CharacterNames.Get(characterKey) is { Name.Length: > 0 } known ? Filtered(known.Name) : FfxiProfileText.Title;
+
+    // one read per click, never for the tab that's already up or while one's out. Handle Profile shows the answer it had
+    [RelayCommand]
+    private void SelectProfileTab(ProfileTab? tab)
+    {
+        if (tab is null || tab.IsSelected || _ffxiToken is not null || ProfileLoading || !ProfileTabs.Contains(tab)) return;
+        if (tab.Slot < 0)
+        {
+            if (_handleProfile is null) return;
+            SelectTab(tab);
+            ProfileNote = "";
+            ShowProfile(_handleProfile);
+            return;
+        }
+        if (GameRunning)
+        {
+            ProfileNote = GameRunningNote;
+            return;
+        }
+        if (_pol.Pid is not { } pid) return;
+        var from = ProfileTabs.FirstOrDefault(t => t.IsSelected);
+        SelectTab(tab);
+        ShowCharacterPage(null);
+        _ffxiToken = NewToken();
+        _ffxiAt = DateTime.UtcNow;
+        _ffxiFor = tab;
+        _ffxiFrom = from;
+        ProfileLoading = true;
+        ProfileNote = ViewerText(0x4a82, "Retrieving profile data...");
+        if (SocialSnapshot.RequestFfxiProfile(pid, _ffxiToken, _profileRow, _profileKey, tab.Slot)) return;
+        _ffxiToken = null;
+        ProfileLoading = false;
+        ShowTabAgain(from);
+        ProfileNote = RequestWriteFailed;
+        ProfileNoteIsError = true;
+    }
+
+    private void SelectTab(ProfileTab tab)
+    {
+        foreach (var t in ProfileTabs) t.IsSelected = t == tab;
+    }
+
+    // a tab that was up before, from what it had, no new read
+    private void ShowTabAgain(ProfileTab? tab)
+    {
+        if (tab is null) return;
+        SelectTab(tab);
+        if (tab.Slot < 0 && _handleProfile is not null) ShowProfile(_handleProfile);
+        else ShowCharacterPage(_characterShown?.Slot == tab.Slot ? _characterShown : null);
+    }
+
+    private void ApplyFfxiProfileState(PolSocialSnapshot snap)
+    {
+        if (_ffxiToken is null) return;
+        bool mine = snap.FfxiProfileToken == _ffxiToken && (snap.FfxiProfileState != "done" || snap.FfxiProfile != null);
+        if (Settled(mine ? snap.FfxiProfileState : null, "done", _ffxiAt, 130) is not { } st) return;
+        _ffxiToken = null;
+        ProfileLoading = false;
+        var tab = _ffxiFor!;
+        if (st == "done")
+        {
+            var r = snap.FfxiProfile!;
+            ProfileNote = "";
+            if (r.NameState == PolProfile.Shown && r.Name.Length > 0 && CharacterNames.Get(tab.CharacterKey)?.Name != r.Name)
+                CharacterNames.Remember(tab.CharacterKey, new KnownCharacter(r.Name));
+            tab.Label = TabLabel(tab.CharacterKey);
+            _characterShown = r with { Slot = tab.Slot };
+            ShowCharacterPage(_characterShown);
+            return;
+        }
+        if (st == "failed:hidden")
+        {
+            ShowTabAgain(_ffxiFrom);
+            ProfileNote = ViewerText(0x4ab6, "Selected profile is hidden.");
+            return;
+        }
+        ProfileNote = st == "failed:no profile" ? ViewerText(0x4a83, "No profile data found.") : ProfileFailText(st);
+        ProfileNoteIsError = st != "failed:no profile";
+    }
+
+    // the handle's H-ID and mail stay, there's no picture and the record level goes after the game's name
+    private void ShowCharacterPage(PolFfxiProfile? r)
+    {
+        ProfileShowsPicture = false;
+        ProfilePicture = _avatars.NoProfilePicture;
+        ProfileUpdated = ProfilePrivacy = ProfileAway = ProfileAwayFrom = "";
+        ProfileRows.Clear();
+        if (r is null)
+        {
+            ProfileName = "";
+            ProfileGameLine = FfxiProfileText.Title;
+            return;
+        }
+        ProfileName = r.NameState == PolProfile.Private ? StateText(PolProfile.Private) : Filtered(r.Name);
+        ProfileGameLine = FfxiProfileText.Line(PrivacyText(r.Level));
+        foreach (var (label, value) in FfxiProfileText.Rows(r, StateText(PolProfile.Private), StateText(PolProfile.NotSet), Filtered))
+            ProfileRows.Add(new ProfileRowItem(label, value, null));
+    }
+
     private void ShowProfile(PolProfile p)
     {
+        ProfileShowsPicture = true;
+        ProfileGameLine = "";
         ProfileName = p.NameState == PolProfile.Private ? StateText(PolProfile.Private) : Filtered(p.Name);
         ProfilePicture = _avatars.NoProfilePicture;
         ProfileHid = p.Hid.Length > 0 ? "H-ID " + p.Hid : "";
@@ -129,13 +291,7 @@ public partial class SocialViewModel
                       p.Mail == ViewerText(0x4a7f, "No Mail address") ? "" : Filtered(p.Mail);
         ProfileUpdated = p.Updated is > 0 and < 253402300800   // FromUnixTimeSeconds throws past the year 9999
             ? "Updated " + DateTimeOffset.FromUnixTimeSeconds(p.Updated).ToLocalTime().ToString("d MMM yyyy") : "";
-        ProfilePrivacy = p.Level switch
-        {
-            1 => ViewerText(0x4a7d, "Private"),
-            2 => ViewerText(0x4a7e, "Show to friends"),
-            3 => ViewerText(0x4a7c, "Show to all"),
-            _ => "",
-        };
+        ProfilePrivacy = PrivacyText(p.Level);
         ProfileRows.Clear();
         foreach (var r in p.Rows)
         {

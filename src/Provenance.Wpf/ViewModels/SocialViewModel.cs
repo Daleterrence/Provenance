@@ -288,7 +288,7 @@ public partial class SocialViewModel : ObservableObject
         _onlineFriends.Clear();
         _presenceQuietUntil = null;
         _lookups?.Reset();
-        _answerToken = _editToken = _picToken = _searchToken = _requestToken = _profileToken = _groupToken = null;
+        _answerToken = _editToken = _picToken = _searchToken = _requestToken = _profileToken = _groupToken = _ffxiToken = null;
         _answerFor = null;
         _sendQueue.Clear();   // unsent lines stay in the log and expire as "not sent"
         _sendInFlight.Clear();
@@ -332,6 +332,7 @@ public partial class SocialViewModel : ObservableObject
         ApplySearchState(snap);
         ApplyProfilePictureState(snap);
         ApplyProfileState(snap);
+        ApplyFfxiProfileState(snap);
         ApplyGroupState(snap);
         ApplyCharacters(snap);
         RebuildGroups(snap);

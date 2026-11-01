@@ -18,9 +18,27 @@
         <shell:WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" />
     </shell:WindowChrome.WindowChrome>
 
+    <Window.Resources>
+        <!-- the open tab gets an underline as well as the colour, and can't be clicked again -->
+        <Style x:Key="ProfileTabButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
+            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Height" Value="30" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Primary}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
     <!-- POL's View Profile: pic, name, H-ID, mail, last update and privacy, then its rows in POL's order and the
-         away message -->
-    <Grid x:Name="Root" Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,*,Auto">
+         away message. A handle with FFXI characters gets a tab for each, which swaps the page for that character's -->
+    <Grid x:Name="Root" Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,Auto,*,Auto">
         <Grid Background="{DynamicResource Surface.1}">
             <TextBlock Margin="14,0" VerticalAlignment="Center" FontSize="14" Text="PlayOnline profile" />
             <Button HorizontalAlignment="Right" Width="44" Height="40" Padding="0"
@@ -30,9 +48,29 @@
             </Button>
         </Grid>
 
-        <Grid Grid.Row="1" Margin="18,16,18,8" ColumnDefinitions="Auto,*">
-            <local:ProfilePictureCircle Diameter="72" Source="{Binding ProfilePicture}" VerticalAlignment="Top" />
-            <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+        <ItemsControl Grid.Row="1" Margin="12,8,12,0" ItemsSource="{Binding ProfileTabs}"
+                      IsHitTestVisible="{Binding ProfileTabsClickable}"
+                      Visibility="{Binding HasProfileTabs, Converter={StaticResource BoolToVis}}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Button Style="{StaticResource ProfileTabButton}" IsHitTestVisible="{Binding Clickable}"
+                            Command="{Binding DataContext.SelectProfileTabCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding}" AutomationProperties.Name="{Binding Label}">
+                        <TextBlock Text="{Binding Label}" MaxWidth="180" TextTrimming="CharacterEllipsis" />
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Grid Grid.Row="2" Margin="18,16,18,8" ColumnDefinitions="Auto,*">
+            <local:ProfilePictureCircle Diameter="72" Source="{Binding ProfilePicture}" VerticalAlignment="Top" Margin="0,0,14,0"
+                                        Visibility="{Binding ProfileShowsPicture, Converter={StaticResource BoolToVis}}" />
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
                 <TextBlock Text="{Binding ProfileName}" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                 <TextBox Style="{x:Null}" Text="{Binding ProfileHid, Mode=OneWay}" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"
                          IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0"
@@ -44,6 +82,8 @@
                          SelectionBrush="{DynamicResource Primary}"
                          Visibility="{Binding ProfileMail, Converter={StaticResource NullToVisibilityConverter}}" />
                 <WrapPanel Margin="0,2,0,0" TextElement.FontSize="11.5" TextElement.Foreground="{DynamicResource Text.3}">
+                    <TextBlock Text="{Binding ProfileGameLine, Mode=OneWay}"
+                               Visibility="{Binding ProfileGameLine, Converter={StaticResource NullToVisibilityConverter}}" />
                     <TextBlock Text="{Binding ProfileUpdated, Mode=OneWay}" Margin="0,0,12,0" />
                     <TextBlock Visibility="{Binding ProfilePrivacy, Converter={StaticResource NullToVisibilityConverter}}">
                         <Run Text="Privacy: " /><Run Text="{Binding ProfilePrivacy, Mode=OneWay}" />
@@ -52,7 +92,7 @@
             </StackPanel>
         </Grid>
 
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="18,4,18,16">
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Padding="18,4,18,16">
             <StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,8"
                             Visibility="{Binding ProfileNote, Converter={StaticResource NullToVisibilityConverter}}">
@@ -88,7 +128,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <Border Grid.Row="3" Padding="14,8" Background="{DynamicResource Surface.1}"
+        <Border Grid.Row="4" Padding="14,8" Background="{DynamicResource Surface.1}"
                 BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="SendButton" Content="SEND MESSAGE" Style="{StaticResource AccentFlatButton}" Click="OnSendMessage" />

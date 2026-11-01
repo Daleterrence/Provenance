@@ -113,7 +113,7 @@ public sealed class PolSessionService : IDisposable
     // a new request file goes here too (I'll forget)
     private static readonly string[] RequestFiles =
         ["send", "status", "mail", "ack", "comment", "pic", "friend", "answer", "search", "profile", "group",
-         "myprofile", "saveprofile", "rename", "character"];
+         "myprofile", "saveprofile", "rename", "character", "ffxiprofile"];
 
     // Has to match prestart_wait's allow-list in pol_hook.c, the hook drops any other key
     private static readonly string[] GoFileKeys =

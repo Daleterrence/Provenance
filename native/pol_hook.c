@@ -3552,9 +3552,20 @@ static char g_prof_token[48], g_prof_state[32] = "";
 static char *g_prof_json;
 static pdb_rec *g_prof_rec;
 static ULONGLONG g_prof_t0;
-/* a friend's profile and a character lookup are both prof DB reads, so they share the 3 s gap and go one at a time */
+/* a friend's profile, a character lookup and an FFXI profile are all prof DB reads, so they share the 3 s gap and go one
+   at a time */
 static ULONGLONG g_db_last;
-static int g_ch_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
+static int g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
+/* the handle's 8 game slots from its last profile (z_phead, or the friend row), what its FFXI tabs read */
+static BYTE g_prof_slots[8 * 0x10];
+static unsigned __int64 g_prof_slots_hid;
+
+/* H-ID = friend record +0x98 bits 1..44 */
+static unsigned __int64 fr_hid(const BYTE *fr)
+{
+    return ((unsigned __int64)((*(const DWORD *)(fr + 0x9c) >> 1) & 0xfff) << 32) |
+           ((*(const DWORD *)(fr + 0x98) >> 1) | (*(const DWORD *)(fr + 0x9c) << 31));
+}
 
 static void profile_done(const char *state)
 {
@@ -3635,6 +3646,34 @@ static void profile_build(BYTE *b)
         first = 0;
     }
     PJ("]");
+    /* the FFXI tabs: z_phead's slots like the viewer (readable whatever the level), else the friend row's. Only title
+       1, other games' profiles never get a tab here */
+    {
+        BYTE fr[0x140];
+        pdb_item *ph = pdb_get(b, s, "z_phead", g_prof_rec);
+        const BYTE *h = ph && (ph->flags & 1) ? (const BYTE *)ph->v.bytes.p : NULL, *src = NULL;
+        const char *from = "nowhere";
+        if (h && !IsBadReadPtr(h, 0xb0) && (*(const DWORD *)(h + 0x98) & 1) && fr_hid(h) == g_prof_hid) {
+            src = h + 0x18;
+            from = "z_phead";
+        } else if (get_friend(b, g_prof_row, fr) && fr_hid(fr) == g_prof_hid) {
+            src = fr + 0x18;
+            from = "the friend row";
+        }
+        memset(g_prof_slots, 0, sizeof g_prof_slots);
+        g_prof_slots_hid = 0;
+        if (src) { memcpy(g_prof_slots, src, sizeof g_prof_slots); g_prof_slots_hid = g_prof_hid; }
+        PJ(",\"characters\":[");
+        for (i = 0, k = 0; i < 8; i++) {
+            const BYTE *sl = g_prof_slots + i * 0x10;
+            DWORD cs = *(const DWORD *)(sl + 4);
+            if (!(*(const WORD *)sl & 1) || *(const WORD *)(sl + 2) != 1) continue;
+            PJ("%s{\"slot\":%d,\"ctsid\":%u,\"ctidLow\":%u,\"ctidHigh\":%u,\"world\":%u}", k++ ? "," : "", i, cs,
+               *(const DWORD *)(sl + 8), *(const DWORD *)(sl + 0xc), (cs >> 16) & 0xff);
+        }
+        PJ("]");
+        lg("profile: %d FFXI characters (from %s)\r\n", k, from);
+    }
     /* svc 0x1200 is the viewer's away text (-0x14cc = none or no access). All z_aa_* at 0 means none, though 0x1200
        would happily invent "I am away from the keyboard". */
     for (k = 0; k < 8 && !set; k++) {
@@ -3677,7 +3716,7 @@ static void profile_request(BYTE *b)
     BYTE fr[0x140];
     int row;
     pdb_schema *s;
-    if (GetTickCount64() - g_db_last < 3000 || g_ch_step != 0) return;
+    if (GetTickCount64() - g_db_last < 3000 || g_ch_step != 0 || g_fp_step != 0) return;
     if (take_request("profile", buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
@@ -3694,9 +3733,7 @@ static void profile_request(BYTE *b)
     /* a row still waiting for an answer has no handle id yet, so no query that could find someone else */
     if (*(DWORD *)(fr + 0x08) & 0x10000000) { profile_done("failed:pending"); return; }
     if (!(s = fs_load_pib(b)) || !pf_load(b)) { profile_done("failed:no schema"); return; }
-    /* H-ID = friend record +0x98 bits 1..44 */
-    unsigned __int64 hid = ((unsigned __int64)((*(DWORD *)(fr + 0x9c) >> 1) & 0xfff) << 32) |
-                           ((*(DWORD *)(fr + 0x98) >> 1) | (*(DWORD *)(fr + 0x9c) << 31));
+    unsigned __int64 hid = fr_hid(fr);
     g_prof_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, s->rec_size + 8);
     if (!g_prof_rec) { profile_done("failed:alloc"); return; }
     memset(&g_prof_cond, 0, sizeof g_prof_cond);
@@ -3777,9 +3814,9 @@ static void sjis_copy(char *out, const char *src, int cap)
     out[i] = 0;
 }
 /* the record's string field, empty when it isn't there */
-static void ch_text(BYTE *b, const char *name, char *js, int cap, BYTE *level)
+static void ch_text(BYTE *b, pdb_rec *rec, const char *name, char *js, int cap, BYTE *level)
 {
-    pdb_item *it = pdb_get(b, g_ch_pib, name, g_ch_rec);
+    pdb_item *it = pdb_get(b, g_ch_pib, name, rec);
     char raw[0x40] = "";
     if (level) *level = it ? it->level : 0;
     if (it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, sizeof raw + 1))
@@ -3808,9 +3845,9 @@ static void character_build(BYTE *b)
     char nm[0x100], wn[0x100];
     BYTE lv = 0;
     int st;
-    ch_text(b, "z_name", nm, sizeof nm, &lv);
+    ch_text(b, g_ch_rec, "z_name", nm, sizeof nm, &lv);
     st = g_ch_rec->level < 1 ? 1 : strcmp(nm, "\"\"") == 0 ? 2 : 0;
-    ch_text(b, "z_worldname", wn, sizeof wn, NULL);
+    ch_text(b, g_ch_rec, "z_worldname", wn, sizeof wn, NULL);
     wsprintfA(g_ch_json, "\"name\":%s,\"nameState\":%d,\"level\":%u,\"worldName\":%s", st == 1 ? "\"\"" : nm, st,
               g_ch_rec->level, wn);
     lg("character: record level %u, name level %u, state %d\r\n", g_ch_rec->level, lv, st);
@@ -3840,7 +3877,7 @@ static void character_request(BYTE *b)
 {
     char buf[128], *p, *tok;
     unsigned __int64 ctid;
-    if (GetTickCount64() - g_db_last < 3000 || g_prof_step != 0) return;
+    if (GetTickCount64() - g_db_last < 3000 || g_prof_step != 0 || g_fp_step != 0) return;
     if (take_request("character", buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
@@ -3887,6 +3924,146 @@ static void character_pump(BYTE *b, int ctl)
     if (!g_ch_rec->items) { character_done("failed:no profile"); return; }
     character_build(b);
     character_done("done");
+}
+
+/* one of a friend's FFXI characters for their profile's tabs, the same prof_001 read as the viewer's tab. The app only
+   says which slot, the ids always come from the friend's own slots. Values go out raw, the app has the names */
+static __declspec(align(8)) pdb_cond g_fp_cond[2];
+static pdb_cond *g_fp_where;
+static int g_fp_job = -1, g_fp_slot = -1;
+static DWORD g_fp_ctsid, g_fp_lo, g_fp_hi;
+static char g_fp_token[48], g_fp_state[32] = "", g_fp_json[0x400];
+static pdb_rec *g_fp_rec;
+static ULONGLONG g_fp_t0;
+static const char *const g_fp_nums[][2] = {
+    { "z_countryid", "countryId" }, { "z_zoneid", "zoneId" }, { "z_jobid", "jobId" }, { "z_joblevel", "jobLevel" },
+    { "z_raceid", "raceId" },
+};
+
+static int fp_check_schema(BYTE *b, pdb_schema *s)
+{
+    int i, idx;
+    for (i = 0; i < (int)(sizeof g_fp_nums / sizeof g_fp_nums[0]); i++) {
+        const pdb_field *f = fs_field(s, g_fp_nums[i][0], &idx);
+        if (!f || f->type != 3 || ((svc4bc_t)SVC(0x4bc))(s, g_fp_nums[i][0]) != idx) return 0;
+    }
+    return 1;
+}
+static void ffxiprofile_done(const char *state)
+{
+    lstrcpynA(g_fp_state, state, sizeof g_fp_state);
+    if (g_fp_rec) { HeapFree(GetProcessHeap(), 0, g_fp_rec); g_fp_rec = NULL; }
+    g_fp_step = 0;
+    g_fp_job = -1;
+    lg("ffxiprofile: %s\r\n", state);
+    g_snap_dirty = 1;
+}
+static void ffxiprofile_abandon(BYTE *b, const char *state)
+{
+    if (g_fp_step == 1 && g_fp_job >= 0) ((svc4dc_t)SVC(0x4dc))(g_fp_job);
+    g_fp_rec = NULL;   /* a cancelled read can still write, so never freed */
+    ffxiprofile_done(state);
+}
+/* states as the handle profile's (0 shown, 1 private, 2 not set). prof_001 has no per-field levels, so the record level
+   decides for every value. Type 3 is a signed short, the viewer sign-extends it */
+static void ffxiprofile_build(BYTE *b)
+{
+    char nm[0x100], wn[0x100];
+    int priv = g_fp_rec->level < 1, i, o, st;
+    ch_text(b, g_fp_rec, "z_name", nm, sizeof nm, NULL);
+    ch_text(b, g_fp_rec, "z_worldname", wn, sizeof wn, NULL);
+    o = wsprintfA(g_fp_json, "\"level\":%u,\"name\":%s,\"nameState\":%d,\"worldName\":%s,\"worldNameState\":%d",
+                  g_fp_rec->level, priv ? "\"\"" : nm, priv ? PV_PRIVATE : strcmp(nm, "\"\"") ? PV_OK : PV_NOTSET,
+                  priv ? "\"\"" : wn, priv ? PV_PRIVATE : strcmp(wn, "\"\"") ? PV_OK : PV_NOTSET);
+    for (i = 0; i < (int)(sizeof g_fp_nums / sizeof g_fp_nums[0]); i++) {
+        pdb_item *it = pdb_get(b, g_ch_pib, g_fp_nums[i][0], g_fp_rec);
+        st = priv ? PV_PRIVATE : it && (it->flags & 1) ? PV_OK : PV_NOTSET;
+        o += wsprintfA(g_fp_json + o, ",\"%s\":%d,\"%sState\":%d", g_fp_nums[i][1],
+                       st == PV_OK ? (int)(short)it->v.u16 : 0, g_fp_nums[i][1], st);
+    }
+    lg("ffxiprofile: slot %d, record level %u\r\n", g_fp_slot, g_fp_rec->level);
+}
+static void ffxiprofile_start(BYTE *b)
+{
+    int t = ((svc4b4_t)SVC(0x4b4))(g_ch_pib, g_fp_where, g_fp_rec);
+    if (t == NO_SLOT) { g_fp_step = 2; return; }
+    lg("ffxiprofile: load -> %d\r\n", t);
+    if (t < 0) { ffxiprofile_done(failed(t)); return; }
+    g_fp_job = t;
+    g_fp_step = 1;
+    g_fp_t0 = GetTickCount64();
+}
+static void ffxiprofile_request(BYTE *b)
+{
+    char buf[128], *p, *tok, *rows, *key, *sl, k[17];
+    BYTE fr[0x140];
+    const BYTE *slot;
+    int row, n;
+    unsigned __int64 ctid;
+    if (GetTickCount64() - g_db_last < 3000 || g_prof_step != 0 || g_ch_step != 0) return;
+    if (take_request("ffxiprofile", buf, sizeof buf) < 0) return;
+    g_db_last = GetTickCount64();
+    p = buf;
+    tok = req_line(&p);
+    rows = req_line(&p);
+    key = req_line(&p);
+    sl = req_line(&p);
+    lstrcpynA(g_fp_token, tok, sizeof g_fp_token);
+    g_fp_json[0] = 0;
+    g_fp_slot = -1;
+    if (!parse_num(rows, 4, &row) || row >= 200 || !parse_num(sl, 1, &n) || n > 7) {
+        ffxiprofile_done("failed:bad request");
+        return;
+    }
+    g_fp_slot = n;
+    if (notice_blocks(g_notice)) { ffxiprofile_done("failed:account notice"); return; }
+    if (!get_friend(b, row, fr)) { ffxiprofile_done("failed:no such friend"); return; }
+    friend_key(b, fr, k);
+    if (lstrcmpA(k, key) != 0) { ffxiprofile_done("failed:friend list changed"); return; }
+    if (*(DWORD *)(fr + 0x08) & 0x10000000) { ffxiprofile_done("failed:pending"); return; }
+    /* the slots the tabs came from when it's the same handle, like the viewer looks in z_phead first */
+    slot = (g_prof_slots_hid && g_prof_slots_hid == fr_hid(fr) ? g_prof_slots : fr + 0x18) + n * 0x10;
+    if (!(*(const WORD *)slot & 1) || *(const WORD *)(slot + 2) != 1) { ffxiprofile_done("failed:no character"); return; }
+    g_fp_ctsid = *(const DWORD *)(slot + 4);
+    g_fp_lo = *(const DWORD *)(slot + 8);
+    g_fp_hi = *(const DWORD *)(slot + 0xc);
+    if (!g_ch_pib) g_ch_pib = pib_load(b, L"prof_001.pib", "prof_001", ch_check_schema);
+    if (!g_ch_pib || !fp_check_schema(b, g_ch_pib)) { ffxiprofile_done("failed:no schema"); return; }
+    g_fp_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
+    if (!g_fp_rec) { ffxiprofile_done("failed:alloc"); return; }
+    ctid = (unsigned __int64)g_fp_hi << 32 | g_fp_lo;
+    memset(g_fp_cond, 0, sizeof g_fp_cond);
+    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &g_fp_cond[0].item, "z_ctsid", &g_fp_ctsid, 1);
+    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &g_fp_cond[1].item, "z_ctid", &ctid, 1);
+    if (!(g_fp_cond[0].item.flags & 1) || !(g_fp_cond[1].item.flags & 1)) { ffxiprofile_done("failed:schema"); return; }
+    ((svc4a8_t)SVC(0x4a8))(&g_fp_cond[0], 1);
+    ((svc4a8_t)SVC(0x4a8))(&g_fp_cond[1], 1);
+    g_fp_where = ((svc4ac_t)SVC(0x4ac))(2, &g_fp_cond[0], &g_fp_cond[1]);
+    if (!g_fp_where) { ffxiprofile_done("failed:schema"); return; }
+    lg("ffxiprofile: row %d slot %d\r\n", row, n);
+    lstrcpyA(g_fp_state, "loading");
+    g_snap_dirty = 1;
+    ffxiprofile_start(b);
+}
+static void ffxiprofile_pump(BYTE *b, int ctl)
+{
+    if (g_fp_step == 0) {
+        if (ctl && !g_draining) ffxiprofile_request(b);
+        return;
+    }
+    if (g_fp_step == 2) { if (!g_draining) ffxiprofile_start(b); else ffxiprofile_done("cancelled"); return; }
+    int r = ((svc4b8_t)SVC(0x4b8))(g_fp_job);
+    if (r == 0) {
+        if (GetTickCount64() - g_fp_t0 >= 120000) ffxiprofile_abandon(b, "failed:timeout");
+        return;
+    }
+    g_fp_job = -1;
+    /* "Selected profile is hidden." */
+    if (r == -0x14cc) { ffxiprofile_done("failed:hidden"); return; }
+    if (r < 0) { ffxiprofile_done(failed(r)); return; }
+    if (!g_fp_rec->items) { ffxiprofile_done("failed:no profile"); return; }
+    ffxiprofile_build(b);
+    ffxiprofile_done("done");
 }
 
 #pragma pack(push, 1)
@@ -4708,6 +4885,11 @@ static void snapshot_social(BYTE *b)
     wr(h, line);
     if (g_ch_json[0] && lstrcmpA(g_ch_state, "done") == 0) { wr(h, ","); wr(h, g_ch_json); }
     wr(h, "}");
+    wr_job(h, ",\"ffxiprofile\":{\"token\":%s,\"state\":\"%s\"", g_fp_token, g_fp_state);
+    wsprintfA(line, ",\"slot\":%d", g_fp_slot);
+    wr(h, line);
+    if (g_fp_json[0] && lstrcmpA(g_fp_state, "done") == 0) { wr(h, ","); wr(h, g_fp_json); }
+    wr(h, "}");
     if (SVC(0x648) && SVC(0x618) && SVC(0x61c)) {
         ng = ((int (__cdecl *)(DWORD *))SVC(0x648))(ids);
         wr(h, ",\"groupList\":[");
@@ -5030,6 +5212,7 @@ static void pol_hold(BYTE *b)
         search_pump(b, ctl);
         profile_pump(b, ctl);
         character_pump(b, ctl);
+        ffxiprofile_pump(b, ctl);
         group_pump(b, ctl);
         me_pump(b, ctl);
         answer_pump(b, ctl);
@@ -5052,6 +5235,7 @@ static void pol_hold(BYTE *b)
                 if (!g_lean) mail_ack_request();
                 if (g_prof_step != 0) profile_abandon(b, "cancelled");
                 if (g_ch_step != 0) character_abandon(b, "cancelled");
+                if (g_fp_step != 0) ffxiprofile_abandon(b, "cancelled");
                 if (g_srch_step != 0) search_abandon(b, "cancelled");
                 me_abandon(b, "cancelled");
                 while (writes_pending() && GetTickCount64() < until)

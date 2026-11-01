@@ -64,6 +64,24 @@ public sealed record PolProfile(string Name, string Mail, int MailState, string 
     public const int Shown = 0, Private = 1, NotSet = 2, UnderTen = 3;
 
     public int NameState { get; init; }
+    // the handle's FFXI characters, one tab each
+    public IReadOnlyList<PolFfxiCharacter> Characters { get; init; } = [];
+}
+
+// one of the handle's game slots with an FFXI character in it. World is the game's world id
+public sealed record PolFfxiCharacter(int Slot, uint Ctsid, ulong Ctid, int World)
+{
+    public string CharacterKey => $"{Ctsid}:{Ctid}";
+}
+
+// a character's FFXI profile as the hook reads it, raw numbers with PolProfile's Shown, Private or NotSet each
+public sealed record PolFfxiProfile(int Slot, int Level, string Name, int NameState, string WorldName, int WorldNameState)
+{
+    public (int Value, int State) Nation { get; init; }
+    public (int Value, int State) Area { get; init; }
+    public (int Value, int State) Job { get; init; }
+    public (int Value, int State) JobLevel { get; init; }
+    public (int Value, int State) Race { get; init; }
 }
 
 // Class: 2 invited, 3 member, 4 sub-master, 5 master
@@ -205,6 +223,9 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public string CharacterToken { get; init; } = "";
     public string CharacterState { get; init; } = "";
     public PolCharacterLookup? Character { get; init; }
+    public string FfxiProfileToken { get; init; } = "";
+    public string FfxiProfileState { get; init; } = "";
+    public PolFfxiProfile? FfxiProfile { get; init; }
     // the game's message store, read once at login (pol_hook.<pid>.store.json), null when there's none
     public PolStoredLines? Stored { get; init; }
 
@@ -314,6 +335,10 @@ public static class SocialSnapshot
     public static bool RequestCharacter(int pid, string token, uint ctsid, ulong ctid) =>
         WriteRequest(pid, "character", $"{OneLine(token)}\n{ctsid}\n{(uint)ctid}\n{(uint)(ctid >> 32)}");
 
+    // which of the friend's game slots, the hook takes the character's ids from the slot itself
+    public static bool RequestFfxiProfile(int pid, string token, int friendRow, string friendKey, int slot) =>
+        WriteRequest(pid, "ffxiprofile", $"{OneLine(token)}\n{friendRow}\n{OneLine(friendKey)}\n{slot}");
+
     public static bool RequestMyProfile(int pid, string token) => WriteRequest(pid, "myprofile", OneLine(token));
 
     // load first, the save keeps each field's own level. level is 1 Private, 2 Friends only, 3 POL
@@ -405,6 +430,7 @@ public static class SocialSnapshot
             var (groupToken, groupState) = Job(root, "group");
             var (meToken, meState) = Job(root, "me");
             var (charToken, charState) = Job(root, "character");
+            var (ffxiToken, ffxiState) = Job(root, "ffxiprofile");
             var ffxi = Str(root, "ffxiService");
             return new PolSocialSnapshot(PolStatusText.Parse(Str(root, "myStatus")), Int(root, "groups", 0),
                                          Str(root, "myHandle"), Int(root, "myPic", -1), friends, messages,
@@ -443,6 +469,9 @@ public static class SocialSnapshot
                 CharacterToken = charToken,
                 CharacterState = charState,
                 Character = ReadCharacter(Obj(root, "character")),
+                FfxiProfileToken = ffxiToken,
+                FfxiProfileState = ffxiState,
+                FfxiProfile = ffxiState == "done" ? ReadFfxiProfile(Obj(root, "ffxiprofile")) : null,
             };
         }
         catch
@@ -460,7 +489,30 @@ public static class SocialSnapshot
             (int)Long(p, "level"),
             Arr(p, "rows", r => new PolProfileRow(Str(r, "label"), Str(r, "field"), (int)Long(r, "state"),
                                                   Arr(r, "lines", l => l.GetString() ?? ""), (int)Long(r, "pic"))),
-            Str(p, "away").TrimEnd(), Str(p, "awayFrom")) { NameState = (int)Long(p, "nameState") };
+            Str(p, "away").TrimEnd(), Str(p, "awayFrom"))
+        {
+            NameState = (int)Long(p, "nameState"),
+            Characters = Arr(p, "characters", c => new PolFfxiCharacter((int)Long(c, "slot"), UInt(c, "ctsid"),
+                                                                        (ulong)UInt(c, "ctidHigh") << 32 | UInt(c, "ctidLow"),
+                                                                        (int)Long(c, "world"))),
+        };
+
+    // anything missing reads as private, never as a value
+    private static PolFfxiProfile? ReadFfxiProfile(JsonElement p)
+    {
+        if (p.ValueKind != JsonValueKind.Object) return null;
+        (int, int) Num(string n) => ((int)Long(p, n), Int(p, n + "State", PolProfile.Private));
+        return new PolFfxiProfile(Int(p, "slot", -1), (int)Long(p, "level"), Str(p, "name").Trim(),
+                                  Int(p, "nameState", PolProfile.Private), Str(p, "worldName").Trim(),
+                                  Int(p, "worldNameState", PolProfile.Private))
+        {
+            Nation = Num("countryId"),
+            Area = Num("zoneId"),
+            Job = Num("jobId"),
+            JobLevel = Num("jobLevel"),
+            Race = Num("raceId"),
+        };
+    }
 
     private static PolGroup ReadGroup(JsonElement g) =>
         new(Str(g, "id"), Str(g, "name"), (int)Long(g, "myClass"), (int)Long(g, "mySlot"), (int)Long(g, "myStatus"),
