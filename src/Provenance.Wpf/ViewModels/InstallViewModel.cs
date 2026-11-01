@@ -284,6 +284,15 @@ public partial class InstallViewModel : ObservableObject
         try { Directory.Delete(dir, recursive: true); } catch (Exception e) { Log.Warning(e, "Could not remove {Dir}", dir); }
     }
 
+    internal static void RemoveParts(string work, PolRegion region, bool keepParts)
+    {
+        var unpacked = Path.Combine(work, "unpacked");
+        if (Directory.Exists(unpacked)) RemoveDir(unpacked);
+        if (keepParts) return;
+        foreach (var name in GameInstaller.PartsFor(region).SelectMany(p => new[] { p.FileName, p.FileName + ".part" }))
+            try { File.Delete(Path.Combine(work, name)); } catch (Exception e) { Log.Warning(e, "Could not remove {Part}", name); }
+    }
+
     // next is null when everything's already up to date
     private void Finished(string? next, IReadOnlyList<string> warnings)
     {
@@ -400,13 +409,7 @@ public partial class InstallViewModel : ObservableObject
 
             StageIndeterminate = true;
             Detail = "Removing the installer files...";
-            await Task.Run(() =>
-            {
-                RemoveDir(unpacked);
-                if (!KeepInstaller)
-                    foreach (var part in parts)
-                        try { File.Delete(Path.Combine(work, part.FileName)); } catch (Exception e) { Log.Warning(e, "Could not remove {Part}", part.FileName); }
-            }, CancellationToken.None);
+            await Task.Run(() => RemoveParts(work, _region, KeepInstaller), CancellationToken.None);
 
             // SE's files are from 2019, so the first sign-in updates POL and the first Play the game
             var updateBytes = await FirstUpdateSizeAsync(ct);
@@ -529,7 +532,12 @@ public partial class InstallViewModel : ObservableObject
 
         StageIndeterminate = true;
         Detail = "Removing the installer files...";
-        await Task.Run(() => RemoveDir(staged), CancellationToken.None);
+        await Task.Run(() =>
+        {
+            RemoveDir(staged);
+            // a parts run stopped before this one leaves gigabytes of SE's parts behind otherwise
+            RemoveParts(work, _region, KeepInstaller);
+        }, CancellationToken.None);
 
         Log.Information("Install finished in {Folder} from the Provenance mirror; warnings: {Warnings}", InstallFolder, warnings);
         var next = mirror.Staged.All(s => s.Current)

@@ -467,8 +467,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             if (f.Attribute == BlockAttribute.Reset2)
             {
                 // files a running viewer has open get queued in its patch.ini for startpol.exe
-                var key = product.Folder.TrimEnd('\\') + "\\" + f.Name;
-                if (!WritePrivateProfileStringA("Rename", key, key + ".tmp2", Path.Combine(product.ViewerFolder, "patch.ini")))
+                if (!Queue(product.ViewerFolder, product.Folder.TrimEnd('\\') + "\\" + f.Name))
                     throw Shown.Mark(new IOException($"Provenance couldn't set {f.Name} to update when PlayOnline restarts. Try again."));
                 rst.Append(f.Name).Append(' ');
                 queued = true;
@@ -528,6 +527,10 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         Replace(path + ".provenance", path);
     }
 
+    // SE's writer, in the ANSI code page like startpol.exe's reader
+    internal static bool Queue(string viewerDir, string target) =>
+        WritePrivateProfileStringA("Rename", target, target + ".tmp2", Path.Combine(viewerDir, "patch.ini"));
+
     // The viewer's next start, done here: startpol.exe /REPLACEPOLEXE moves queued .tmp2 files in (patch.ini ->
     // patch.bak), then pol.exe's boot step at 0x00410710 refreshes the DLLs. Throws if any are in use.
     public static void ApplyQueued(string viewerDir)
@@ -535,21 +538,27 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         var ini = Path.Combine(viewerDir, "patch.ini");
         if (File.Exists(ini))
         {
-            var rename = File.ReadAllLines(ini, Encoding.Latin1)
-                .SkipWhile(l => !l.Trim().Equals("[Rename]", StringComparison.OrdinalIgnoreCase)).Skip(1)
-                .TakeWhile(l => !l.TrimStart().StartsWith('['));
-            foreach (var line in rename)
+            var queued = new List<(string Target, string Staged)>();
+            bool lost = false;
+            foreach (var line in RenameSection(ini))
             {
                 int eq = line.IndexOf('=');
                 if (eq <= 0) continue;
                 string target = line[..eq].Trim(), staged = line[(eq + 1)..].Trim();
                 if (!IsInside(viewerDir, target) || !IsInside(viewerDir, staged))
                     throw new InvalidDataException($"patch.ini names a file outside the PlayOnline Viewer folder: {target}");
-                if (!File.Exists(staged)) continue;
+                if (File.Exists(staged)) queued.Add((target, staged));
+                else lost = true;
+            }
+            // every copy before any delete, so a file in use leaves the whole queue to run again
+            foreach (var (target, staged) in queued)
+            {
                 Writable(target);
                 File.Copy(staged, target, overwrite: true);
-                DeleteFile(staged);
             }
+            foreach (var (_, staged) in queued) DeleteFile(staged);
+            // a queued file that's gone means the version can't be trusted, so the next check looks at every file
+            if (lost && File.Exists(Path.Combine(viewerDir, "patch.ver"))) DeleteFile(Path.Combine(viewerDir, "patch.ver"));
             Writable(Path.Combine(viewerDir, "patch.bak"));
             File.Copy(ini, Path.Combine(viewerDir, "patch.bak"), overwrite: true);
             DeleteFile(ini);
@@ -580,7 +589,18 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         return Path.GetFullPath(path).StartsWith(root, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Windows decodes it with the same code page that wrote it
+    private static IEnumerable<string> RenameSection(string ini)
+    {
+        var buf = new char[32767];
+        int n = GetPrivateProfileSectionW("Rename", buf, buf.Length, ini);
+        return new string(buf, 0, n).Split('\0', StringSplitOptions.RemoveEmptyEntries);
+    }
+
     [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool WritePrivateProfileStringA(string section, string key, string value, string file);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetPrivateProfileSectionW(string section, char[] buffer, int size, string file);
 }

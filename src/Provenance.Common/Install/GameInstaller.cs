@@ -92,6 +92,9 @@ public sealed class GameInstaller
         (1_339_572_151, "62932811d80080e7cd72a830c0ce7c99"),
     ];
 
+    // HttpClient's timeout is off for 1.6 GB parts, and a half-open connection would otherwise wait forever
+    public static TimeSpan IdleTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
     private readonly HttpClient _http;
 
     public GameInstaller(HttpClient? http = null)
@@ -121,7 +124,9 @@ public sealed class GameInstaller
     public async Task<(long size, string? md5)> HeadAsync(GamePart part, CancellationToken ct = default)
     {
         using var req = new HttpRequestMessage(HttpMethod.Head, part.Url);
-        using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(IdleTimeout);
+        using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, limit.Token);
         res.EnsureSuccessStatusCode();
         long size = res.Content.Headers.ContentLength ?? 0;
         string? md5 = res.Headers.ETag?.Tag.Trim('"').Split(':')[0];
@@ -156,10 +161,15 @@ public sealed class GameInstaller
         if (have > part.Size) { File.Delete(partial); have = 0; }
 
         using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
-        using (var msg = new HttpRequestMessage(HttpMethod.Get, part.Url))
+        // only armed while waiting on SE, re-hashing a resumed .part can take a while
+        using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        try
         {
+            using var msg = new HttpRequestMessage(HttpMethod.Get, part.Url);
             if (have > 0) msg.Headers.Range = new RangeHeaderValue(have, null);
-            using var res = await _http.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, ct);
+            idle.CancelAfter(IdleTimeout);
+            using var res = await _http.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, idle.Token);
+            idle.CancelAfter(Timeout.InfiniteTimeSpan);
             if (res.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable) { File.Delete(partial); await DownloadPartAsync(part, destDir, bytes, ct); return; }
             res.EnsureSuccessStatusCode();
             bool resumed = have > 0 && res.StatusCode == HttpStatusCode.PartialContent;
@@ -173,13 +183,21 @@ public sealed class GameInstaller
             int n;
             if (resumed)
                 while ((n = await dst.ReadAsync(buf, ct)) > 0) md5.AppendData(buf, 0, n);
-            while ((n = await src.ReadAsync(buf, ct)) > 0)
+            while (true)
             {
+                idle.CancelAfter(IdleTimeout);
+                n = await src.ReadAsync(buf, idle.Token);
+                idle.CancelAfter(Timeout.InfiniteTimeSpan);
+                if (n == 0) break;
                 await dst.WriteAsync(buf.AsMemory(0, n), ct);
                 md5.AppendData(buf, 0, n);
                 total += n;
                 bytes?.Report(total);
             }
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"{part.FileName} stopped downloading, nothing came for {IdleTimeout.TotalSeconds:0} seconds", ex);
         }
         if (!Convert.ToHexString(md5.GetHashAndReset()).Equals(part.Md5, StringComparison.OrdinalIgnoreCase))
         {

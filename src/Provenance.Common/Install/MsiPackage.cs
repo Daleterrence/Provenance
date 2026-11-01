@@ -129,7 +129,7 @@ public sealed class MsiPackage : IDisposable
             ["INSTALLDIR"] = installDir.TrimEnd('\\') + "\\",
         };
         var dirs = ResolveDirectories(props, sandbox);
-        // attributes in this one query, one per component (61,353 for FFXI) left the install sat at 100% for so long SE might slap a 2 hour limit on it...
+        // attributes come from this one query, since a query per component (61,353 for FFXI) left the install sat at 100% for ages
         var comps = Query("SELECT `Component`,`Directory_`,`Condition`,`KeyPath`,`Attributes` FROM `Component`")
             .ToDictionary(r => r[0], r => (Dir: r[1], Condition: r[2], KeyPath: r[3], Attrs: int.TryParse(r[4], out var a) ? a : 0));
         bool On(string comp) => comps.TryGetValue(comp, out var c) && Condition(c.Condition, props);

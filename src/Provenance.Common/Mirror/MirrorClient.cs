@@ -211,8 +211,9 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         resp.EnsureSuccessStatusCode();
         if (resp.Content.Headers.ContentLength > MaxSignedBytes) return null;
         using var ms = new MemoryStream();
-        await using (var body = await resp.Content.ReadAsStreamAsync(ct))
+        try
         {
+            await using var body = await resp.Content.ReadAsStreamAsync(ct);
             var buf = new byte[81920];
             int n;
             while ((n = await body.ReadAsync(buf, ct)) > 0)
@@ -220,6 +221,11 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
                 if (ms.Length + n > MaxSignedBytes) return null;
                 ms.Write(buf, 0, n);
             }
+        }
+        // a connection dropped part way through, so callers fall back as they would for no connection at all
+        catch (IOException ex)
+        {
+            throw new HttpRequestException(HttpRequestError.ResponseEnded, $"the connection dropped while reading {key}: {ex.Message}", ex);
         }
         return SignedBlob.TryOpen(ms.ToArray(), trusted, out var payload) ? payload : null;
     }
