@@ -229,7 +229,7 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     // Multi-account page. The first profile choice means whatever the Windower/Ashita tab says
-    public string ProfileDefaultChoice => ThirdPartyHookIndex == 1 ? "Select Ashita profile..." : "Select Windower profile...";
+    public string ProfileDefaultChoice => ThirdPartyHookIndex == 1 ? "Select Ashita boot configuration..." : "Select Windower profile...";
     public ObservableCollection<MultiAccountRow> MultiAccountRows { get; } = new();
     public ObservableCollection<string> MultiProfileChoices { get; } = new();
     public bool MultiHasThirdPartyHook => ThirdPartyHookIndex != 0;
@@ -295,15 +295,16 @@ public partial class SettingsViewModel : ObservableObject
         RefreshMultiChoices();
     }
 
+    private ObservableCollection<HookProfileItem>? ChoiceItems => ThirdPartyHookIndex switch { 1 => AshitaBootConfigs, 2 => WindowerProfiles, _ => null };
+
     private string ToChoice(string? stored) =>
         stored is null ? ProfileDefaultChoice
-        : ThirdPartyHookIndex == 2 ? Item(WindowerProfiles, stored)?.Display ?? stored
+        : ChoiceItems is { } items ? Item(items, stored)?.Display ?? stored
         : stored;
 
     private string? FromChoice(string choice) =>
         choice == ProfileDefaultChoice ? null
-        : ThirdPartyHookIndex == 2 ? WindowerProfiles.FirstOrDefault(i => i.Display == choice)?.Name ?? choice
-        : choice;
+        : ChoiceItems?.FirstOrDefault(i => i.Display == choice)?.Name ?? choice;
 
     // a Windower profile means nothing to Ashita and vice versa, so a platform switch clears every stored one
     private void RefreshMultiChoices(bool platformChanged = false)

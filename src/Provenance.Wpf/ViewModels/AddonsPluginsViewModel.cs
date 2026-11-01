@@ -671,7 +671,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         scan ??= new AshitaScan(AshitaAddons.Scan(dir), AshitaPlugins.Scan(dir));
         var page = new Page
         {
-            Platform = ThirdPartyHookService.Ashita, Key = bootName, Display = bootName,
+            Platform = ThirdPartyHookService.Ashita, Key = bootName, Display = AshitaBootFiles.ShownName(dir, bootName),
             Intro = "Turn addons and plugins on or off for this boot configuration. Changes save straight away.",
         };
         AshitaBootConfig boot;
@@ -683,7 +683,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
         bool readOnly = AshitaBootFiles.IsShippedExample(bootName);
         if (readOnly)
-            page.Problem = $"{bootName} is one of Ashita's example files, so Provenance won't change it. Duplicate it under Windower/Ashita and change the copy instead.";
+            page.Problem = $"{page.Display} is one of Ashita's example files, so Provenance won't change it. Duplicate it under Windower/Ashita and change the copy instead.";
         AshitaScript script;
         try
         {

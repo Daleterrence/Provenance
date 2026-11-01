@@ -58,7 +58,7 @@ public partial class SettingsViewModel
     // on Addons and plugins while every profile gets the same list
     public bool ShowProfileSwitcher => ShownTab is 1 or 2 or 3 && (IsWindower || IsAshita) && !(ShownTab == 3 && Addons is { SameListForEveryProfile: true });
     public bool ShowProfileTools => ShownTab == 1;
-    public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita Profile:" : "Editing Windower Profile:";
+    public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita Boot Configuration:" : "Editing Windower Profile:";
     internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = WindowerUpdates.NewUpdater;
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
 
@@ -101,7 +101,7 @@ public partial class SettingsViewModel
         try
         {
             AshitaBootConfigs.Clear();
-            foreach (var c in AshitaBootFiles.List(AshitaDir)) AshitaBootConfigs.Add(new HookProfileItem(c, c));
+            foreach (var (file, shown) in AshitaBootFiles.Names(AshitaDir)) AshitaBootConfigs.Add(new HookProfileItem(file, shown));
             WindowerProfiles.Clear();
             var names = ThirdPartyHookService.WindowerProfiles(WindowerDir);
             foreach (var n in names) WindowerProfiles.Add(new HookProfileItem(n, WindowerDisplay(n, names)));
@@ -264,7 +264,7 @@ public partial class SettingsViewModel
             return WindowerProfile is { } p ? new WindowerGameStore(w, p.Name, registry, p.Display)
                  : new WindowerGameStore(w, WindowerSettingsFile.OldCopySource(s.WindowerProfile), registry);
         if (IsAshita && AshitaDir is { } a && (AshitaBootConfig?.Name ?? s.AshitaBootConfig) is { Length: > 0 } boot)
-            return new AshitaGameStore(a, boot, registry);
+            return new AshitaGameStore(a, boot, registry, AshitaBootConfig?.Display);
         return registry;
     }
 
@@ -362,7 +362,7 @@ public partial class SettingsViewModel
         {
             var stem = Path.GetFileNameWithoutExtension(b.Name);
             var start = HookProfiles.AshitaNameProblem(a, $"{stem}-copy.ini") is null ? $"{stem}-copy.ini" : NewAshitaName(a);
-            var name = AskName?.Invoke("Duplicate a boot configuration", $"What should the copy of {b.Name} be called?", start, n => HookProfiles.AshitaNameProblem(a, n));
+            var name = AskName?.Invoke("Duplicate a boot configuration", $"What should the copy of {b.Display} be called?", start, n => HookProfiles.AshitaNameProblem(a, n));
             if (name is not null) ChangeProfiles(() => HookProfiles.DuplicateAshita(a, b.Name, name), "Provenance couldn't copy the boot configuration.");
         }
     }
@@ -380,7 +380,9 @@ public partial class SettingsViewModel
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
         {
-            var name = AskName?.Invoke("Rename a boot configuration", $"What should {b.Name} be called?", b.Name, n => HookProfiles.AshitaNameProblem(a, n, renaming: b.Name));
+            // it's the file that's renamed, a name of its own stays put
+            var ask = b.Display == b.Name ? $"What should {b.Name} be called?" : $"What should the file for {b.Display} be called?";
+            var name = AskName?.Invoke("Rename a boot configuration", ask, b.Name, n => HookProfiles.AshitaNameProblem(a, n, renaming: b.Name));
             if (name is null || HookProfiles.AshitaFileName(name) == b.Name) return;
             ChangeProfiles(() => HookProfiles.RenameAshita(_settings, a, b.Name, name), "Provenance couldn't rename the boot configuration.", renamedFrom: b.Name);
         }
@@ -397,7 +399,8 @@ public partial class SettingsViewModel
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
         {
-            if (Confirm?.Invoke("Delete boot configuration", $"Delete the boot configuration {b.Name}? The file is removed from Ashita's config\\boot folder, and this can't be undone.", "DELETE", true) != true) return;
+            var file = b.Display == b.Name ? "The file is" : $"Its file, {b.Name}, is";
+            if (Confirm?.Invoke("Delete boot configuration", $"Delete the boot configuration {b.Display}? {file} removed from Ashita's config\\boot folder, and this can't be undone.", "DELETE", true) != true) return;
             ChangeProfiles(() => { HookProfiles.DeleteAshita(_settings, a, b.Name); return null; }, "Provenance couldn't delete the boot configuration.");
         }
     }
@@ -698,25 +701,35 @@ public partial class SettingsViewModel
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
     }
 
-    partial void OnAshitaNameChanged(string value) { if (!_loadingCard) SaveAshita(c => c.Name = value.Trim()); }
+    // the lists, the Game page and the accounts' picks all show the new name
+    partial void OnAshitaNameChanged(string value)
+    {
+        if (_loadingCard || !SaveAshita(c => c.Name = value.Trim())) return;
+        RefreshThirdPartyHookLists();
+        LoadMulti();
+        if (Game.Store.Platform == ThirdPartyHookService.Ashita && Game.Store.ProfileName == AshitaBootConfig?.Name) Game.Retarget(GameStoreForSelection());
+    }
+
     partial void OnAshitaScriptChanged(string? value) { if (!_loadingCard && value is not null) SaveAshita(c => c.Script = value == NoScript ? "" : value); }
     partial void OnAshitaScriptArgsChanged(string value) { if (!_loadingCard) SaveAshita(c => c.ScriptArgs = value.Trim()); }
 
-    private void SaveAshita(Action<BootConfig> change)
+    private bool SaveAshita(Action<BootConfig> change)
     {
-        if (!AshitaCardEnabled || AshitaFile is not { } path) return;
+        if (!AshitaCardEnabled || AshitaFile is not { } path) return false;
         try
         {
             var cfg = BootConfig.Load(path);
             change(cfg);
             if (cfg.Ini.Changed) cfg.Save(path);
             Say("");
+            return true;
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not save the boot configuration");
             Say(ErrorText.Of(ex, "Provenance couldn't save that to the boot configuration."), error: true);
             LoadAshitaCard();
+            return false;
         }
     }
 }

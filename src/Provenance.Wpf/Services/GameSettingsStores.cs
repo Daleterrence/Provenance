@@ -252,12 +252,12 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
 }
 
 // an Ashita boot configuration's [ffxi.registry], which Ashita hands the game in place of the registry's values
-public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryGameStore registry) : IGameSettingsStore
+public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryGameStore registry, string? display = null) : IGameSettingsStore
 {
     public string Key => $"ashita|{Path.GetFullPath(ashitaDir)}|{bootName}|{registry.Key}";
     public string? Platform => ThirdPartyHookService.Ashita;
     public string? ProfileName => bootName;
-    public string? ProfileDisplay => bootName;
+    public string? ProfileDisplay => display ?? bootName;
     public bool SameShapeRenderSizes => false;
     public bool ReadOnly => AshitaBootFiles.IsShippedExample(bootName);
 

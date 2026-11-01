@@ -166,7 +166,7 @@ public static class ThirdPartyHookLauncher
         }
         // never reported, so nothing it started stays (a hooked one would be half signed in)
         EndLaunch(hookProc, tree);
-        return Fail($"{name} started, but Provenance couldn't log in through it. Check {name} starts PlayOnline from your PlayOnline Viewer folder.");
+        return Fail($"{name} started, but Provenance couldn't log in through it. Check {name} starts the game without Provenance, then try again.");
     }
 
     // how long a third-party launch gets: to start a pol.exe, to report once one's up, to start one after closing

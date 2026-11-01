@@ -150,7 +150,7 @@
                 <ComboBox Style="{StaticResource TitleCombo}" ItemsSource="{Binding WindowerProfiles}" SelectedItem="{Binding WindowerProfile}" DisplayMemberPath="Display"
                           Visibility="{Binding IsWindower, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Windower profile" />
                 <ComboBox Style="{StaticResource TitleCombo}" ItemsSource="{Binding AshitaBootConfigs}" SelectedItem="{Binding AshitaBootConfig}" DisplayMemberPath="Display"
-                          Visibility="{Binding IsAshita, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Ashita profile" />
+                          Visibility="{Binding IsAshita, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Ashita boot configuration" />
             </Grid>
             <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="6,0,2,0" VerticalAlignment="Center"
                         Visibility="{Binding ShowProfileTools, Converter={StaticResource BoolToVis}}">
@@ -409,7 +409,7 @@
                             <TextBlock Text="Boot configuration settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding AshitaCardEnabled}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Name" Tag="The name a launcher shows for this boot configuration in place of its file name.">
+                                    <HeaderedContentControl Header="Name" Tag="The name Ashita's launcher shows for this boot configuration instead of its file name.">
                                         <TextBox Text="{Binding AshitaName, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                                  AutomationProperties.Name="Name" />
                                     </HeaderedContentControl>
@@ -513,10 +513,10 @@
                                 </Style>
                             </StackPanel.Style>
                             <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding MultiContinueOnError}" Margin="0,0,0,4">
-                                <TextBlock Text="Continue process on error" TextWrapping="Wrap" />
+                                <TextBlock Text="Continue multi-login process on error" TextWrapping="Wrap" />
                             </CheckBox>
                             <TextBlock Style="{StaticResource Help}" Margin="26,0,0,10"
-                                       Text="If one of the accounts fails to login due to an incorrect password, no subscription, or other problem, continue logging on the other accounts. Disabling this option will make Provenance stop upon an error logging in an account." />
+                                       Text="If one of the accounts fails to log in due to an incorrect password, no subscription, or other problem, continue logging on the other accounts. Disabling this option will make Provenance stop upon an error logging in an account. Some problems, like a failed game update, always stop the run." />
                             <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding MultiCloseWhenFinished}" Margin="0,0,0,4">
                                 <TextBlock Text="Close Provenance when finished" TextWrapping="Wrap" />
                             </CheckBox>

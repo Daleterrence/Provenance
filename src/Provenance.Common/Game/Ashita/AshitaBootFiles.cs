@@ -42,6 +42,24 @@ public static class AshitaBootFiles
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    // each one as Ashita's launcher lists it, its [ashita.launcher] name or else the file name. Two that would read the
+    // same get their file names after them
+    public static IReadOnlyList<(string File, string Shown)> Names(string? ashitaDir)
+    {
+        var named = List(ashitaDir).Select(f => (File: f, Name: LauncherName(ashitaDir!, f) ?? f)).ToList();
+        return named.Select(n => (n.File, n.Name != n.File && named.Count(o => o.Name.Equals(n.Name, StringComparison.OrdinalIgnoreCase)) > 1
+            ? $"{n.Name} ({n.File})" : n.Name)).ToList();
+    }
+
+    public static string ShownName(string? ashitaDir, string fileName) =>
+        Names(ashitaDir).FirstOrDefault(n => n.File.Equals(fileName, StringComparison.OrdinalIgnoreCase)).Shown ?? fileName;
+
+    private static string? LauncherName(string ashitaDir, string fileName)
+    {
+        try { return AshitaIniFile.Load(Path.Combine(Folder(ashitaDir), fileName)).Get("ashita.launcher", "name")?.Trim() is { Length: > 0 } n ? n : null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { return null; }
+    }
+
     private static bool IniFileName(string name) =>
         name == Path.GetFileName(name) && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
         && Path.GetExtension(name).Equals(".ini", StringComparison.OrdinalIgnoreCase)
@@ -130,6 +148,7 @@ public static class AshitaBootFiles
         var from = Existing(ashitaDir, source, change: false);
         var path = NewFile(ashitaDir, name);
         File.Copy(from, path);
+        FollowName(path, source);
         return path;
     }
 
@@ -146,7 +165,23 @@ public static class AshitaBootFiles
         File.Move(from, path);
         if (File.Exists(from + ".bak")) File.Move(from + ".bak", path + ".bak", overwrite: true);
         DropLaunchCopy(ashitaDir, name);
+        FollowName(path, name);
         return path;
+    }
+
+    // a launcher name that's just the old file's name (Create sets it that way) follows it to the new one. The file's
+    // already there either way, so one that can't be read or written keeps the name it had
+    private static void FollowName(string path, string oldFileName)
+    {
+        try
+        {
+            var ini = AshitaIniFile.Load(path);
+            var old = Path.GetFileNameWithoutExtension(oldFileName).Trim();
+            if (!string.Equals(ini.Get("ashita.launcher", "name")?.Trim(), old, StringComparison.OrdinalIgnoreCase)) return;
+            ini.Set("ashita.launcher", "name", Path.GetFileNameWithoutExtension(path).Trim());
+            ini.Save(path, backup: false);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
     }
 
     public static void Delete(string ashitaDir, string name)
