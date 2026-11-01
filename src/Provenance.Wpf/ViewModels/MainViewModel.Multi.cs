@@ -137,7 +137,7 @@ public partial class MainViewModel : IMultiRunHost
         }
         var failures = result?.Failures ?? [];
         Log.Information("Multi-account mode: finished, {Failures} failure(s), stopped {Stopped}", failures.Count, result?.Stopped);
-        if (_exitAfterStop) { Application.Current.Shutdown(); return; }
+        if (_exitAfterStop) { RequestExit?.Invoke(); return; }
         if (failures.Count > 0 || unexpected != null || _lateGameFailures.Count > 0)
         {
             var lines = failures.Select(f => $"{f.Account.Name}: {f.Failure.Text}").Concat(_lateGameFailures).ToList();
@@ -148,7 +148,7 @@ public partial class MainViewModel : IMultiRunHost
             MessageDialog.ShowError(owner, "Multi-account mode", string.Join("\n", lines), offerLogs: true);
             return;
         }
-        if (result is { CloseApp: true }) Application.Current.Shutdown();
+        if (result is { CloseApp: true }) RequestExit?.Invoke();
     }
 
     // saved straight away so a crash can't lose it, and found by ID as Settings may have swapped the list mid-run

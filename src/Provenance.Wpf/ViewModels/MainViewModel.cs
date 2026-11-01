@@ -31,6 +31,7 @@ public partial class MainViewModel : ObservableObject
     public event Action? RequestHide;
     public event Action? RequestShow;
     public event Action? RequestRestart;
+    public event Action? RequestExit;
     public event Action? RequestAttention;
     public event Action? AttentionCleared;
 
@@ -1297,7 +1298,7 @@ public partial class MainViewModel : ObservableObject
         _pol.GameExited();
         var ended = PolSessionService.GameEndedText(exit);
         if (ended is not null) Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);
-        else if (_settings.Current.ExitAfterGameExits) { Application.Current.Shutdown(); return; }
+        else if (_settings.Current.ExitAfterGameExits) { RequestExit?.Invoke(); return; }
         IsLaunching = false;
         SocialConnected = false;
         RequestShow?.Invoke();

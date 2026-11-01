@@ -90,6 +90,7 @@ public partial class MainWindow : Window
             old.RequestHide -= OnRequestHide;
             old.RequestShow -= OnRequestShow;
             old.RequestRestart -= OnRequestRestart;
+            old.RequestExit -= OnRequestExit;
             old.RequestAttention -= OnRequestAttention;
             old.AttentionCleared -= OnAttentionCleared;
             old.PropertyChanged -= OnVmPropertyChanged;
@@ -99,6 +100,7 @@ public partial class MainWindow : Window
             @new.RequestHide += OnRequestHide;
             @new.RequestShow += OnRequestShow;
             @new.RequestRestart += OnRequestRestart;
+            @new.RequestExit += OnRequestExit;
             @new.RequestAttention += OnRequestAttention;
             @new.AttentionCleared += OnAttentionCleared;
             @new.PropertyChanged += OnVmPropertyChanged;
@@ -166,6 +168,8 @@ public partial class MainWindow : Window
         ExitApp();
     });
 
+    private void OnRequestExit() => Dispatcher.InvokeAsync(ExitWithoutAsking);
+
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
     private void OnMinimize(object sender, RoutedEventArgs e)
@@ -173,7 +177,7 @@ public partial class MainWindow : Window
         if (Vm is { MinimizeGoesToTray: true } vm)
         {
             ToTray(vm, vm.SocialConnected);
-            if (vm.SocialConnected) StartTraySignOut(vm);
+            if (vm.KeepInTrayOnClose) StartTraySignOut(vm);   // the timer's part of keep me logged in, Settings greys it out otherwise
             return;
         }
         WindowState = WindowState.Minimized;
@@ -241,6 +245,15 @@ public partial class MainWindow : Window
         base.OnClosing(e);
     }
 
+    // a shutdown closes the window whatever OnClosing says, so the icon can't be left behind
+    protected override void OnClosed(EventArgs e)
+    {
+        _traySignOut?.Stop();
+        _tray?.Dispose();
+        _tray = null;
+        base.OnClosed(e);
+    }
+
     private void ToTray(MainViewModel vm, bool signedIn)
     {
         if (_tray == null)
@@ -285,8 +298,9 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    // the uninstaller asks and there's nobody to answer questions, so like the idle sign-out it asks nothing
-    internal void ExitForUninstall()
+    // the uninstaller, Windows logging off and closing when the game exits have nobody there to answer questions, so
+    // like the idle sign-out it asks nothing
+    internal void ExitWithoutAsking()
     {
         EditProfileWindow.Current?.CloseQuietly();
         if (Vm is { MultiRunning: true } run)

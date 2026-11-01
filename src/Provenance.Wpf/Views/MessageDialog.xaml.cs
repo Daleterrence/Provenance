@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
@@ -84,8 +83,7 @@ public partial class MessageDialog : Window
     private void OnOpenLogs(object sender, RoutedEventArgs e)
     {
         var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "logs");
-        if (Directory.Exists(dir))
-            Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
+        if (Directory.Exists(dir)) Services.Explorer.ShowFolder(dir);
     }
 
     private void OnDrag(object sender, MouseButtonEventArgs e)

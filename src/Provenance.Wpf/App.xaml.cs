@@ -141,12 +141,18 @@ public partial class App : Application
         var mainVm = Services.GetRequiredService<MainViewModel>();
         // after the view model's listening for a failed save, before its start-up can pre-start a pol.exe
         PolSessionService.NoteScreenSaver(Services.GetRequiredService<ISettingsService>());
-        // Windows signing out cancels a sign-in now, the normal exit signs a held session out
-        SessionEnding += (_, _) => { Log.Information("Windows session ending"); _ = mainVm.CancelSignInAsync(); };
+        // Windows logging off cancels a sign-in, and WPF would close the window ignoring its Cancel, so it closes the normal
+        // way first: a held session's logged out and nothing goes to the tray
+        SessionEnding += (_, _) =>
+        {
+            Log.Information("Windows session ending");
+            _ = mainVm.CancelSignInAsync();
+            mainWindow.ExitWithoutAsking();
+        };
         mainWindow.DataContext = mainVm;
         MainWindow = mainWindow;
         mainWindow.Show();
-        if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitForUninstall));
+        if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));
 
         bool suppressed = shiftAtStart || ShiftDown()
                           || e.Args.Any(a => a.Equals("--noautologin", StringComparison.OrdinalIgnoreCase));

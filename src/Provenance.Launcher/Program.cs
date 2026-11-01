@@ -54,6 +54,9 @@ internal static class Program
     // to close the normal way instead, like its tray's Exit
     private static void CloseRunningCopies()
     {
+        // Velopack kills this hook at 30 s, so it all fits in 25 and an unanswered message can't hold it past that
+        long until = Environment.TickCount64 + 25_000;
+        TimeSpan Left() => TimeSpan.FromMilliseconds(Math.Max(0, until - Environment.TickCount64));
         var asked = new List<string>();
         bool unreachable = false;
         foreach (var p in Process.GetProcessesByName("Provenance"))
@@ -74,10 +77,21 @@ internal static class Program
                 asked.Add(name);
             }
         }
-        if (!unreachable && (asked.Count == 0 || AllClosed(asked, TimeSpan.FromSeconds(20)))) return;
-        Message("Provenance is still running, so the uninstall can't remove all of its files. Close Provenance " +
-                "(if it's in the system tray, right-click its icon to exit), then press OK.", MbIconWarning);
-        AllClosed(asked, TimeSpan.FromSeconds(5));
+        if (!unreachable && (asked.Count == 0 || AllClosed(asked, TimeSpan.FromSeconds(12)))) return;
+        var answered = new ManualResetEventSlim();
+        new Thread(() =>
+        {
+            Message("Provenance is still running, so the uninstall can't remove all of its files. Close Provenance " +
+                    "(if it's in the system tray, right-click its icon to exit), then press OK.", MbIconWarning);
+            answered.Set();
+        }) { IsBackground = true }.Start();
+        // a copy that couldn't be asked can't be watched either, so that one waits for the OK
+        while (Left() > TimeSpan.Zero)
+        {
+            if (!unreachable && AllClosed(asked, TimeSpan.Zero)) return;
+            if (answered.Wait(250)) break;
+        }
+        AllClosed(asked, Left() < TimeSpan.FromSeconds(5) ? Left() : TimeSpan.FromSeconds(5));
     }
 
     // a copy's event goes when the copy does
