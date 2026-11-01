@@ -106,7 +106,10 @@ public sealed class MsiPackage : IDisposable
 
     public sealed record Sandbox(string RegistryKey, string Folder);
 
-    public sealed record UninstallSetup(string UninstallerExe, string Folder, string InstallSource);
+    // with the region's key, the product's InstallFolder value and its settings key, the uninstall takes the product's whole
+    // folder and settings, not just what the package wrote
+    public sealed record UninstallSetup(string UninstallerExe, string Folder, string InstallSource, string? RegionKey = null,
+                                        string? FolderValue = null, string? SettingsKey = null);
 
     public sealed record Result(int Files, long Bytes, int RegistryValues, int Classes, int TypeLibs, int Shortcuts, int ProgIds = 0,
                                 bool Uninstall = false)
@@ -201,7 +204,7 @@ public sealed class MsiPackage : IDisposable
 
         // before anything that marks the product installed, so it's never installed without an uninstall entry
         bool wroteUninstall = false;
-        if (uninstall != null && !(keepExisting && UninstallIntact(sandbox)))
+        if (uninstall != null && !(keepExisting && UninstallIntact(uninstall, sandbox)))
         {
             status?.Invoke("Saving the uninstall information...");
             WriteUninstall(uninstall, props, dirs, comps, files, On, Format, sandbox);
@@ -305,8 +308,10 @@ public sealed class MsiPackage : IDisposable
         return new Result(files.Count, total, values, classes, typeLibs, shortcuts, progIdsWritten, wroteUninstall);
     }
 
-    // the entry and both files it runs, an uninstall entry whose uninstaller's gone can't uninstall anything
-    private bool UninstallIntact(Sandbox? sandbox)
+    // the entry and both files it runs (an uninstall entry whose uninstaller's gone can't uninstall anything), and they're
+    // this build's uninstaller and record, in a folder only admins can change, so a repair swaps an older pair for the
+    // current one
+    private bool UninstallIntact(UninstallSetup setup, Sandbox? sandbox)
     {
         var code = Query("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'").FirstOrDefault()?[0];
         if (string.IsNullOrEmpty(code)) return false;
@@ -314,7 +319,16 @@ public sealed class MsiPackage : IDisposable
         using var k = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + code);
         if (k?.GetValue("UninstallString", null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not string command) return false;
         var parts = Regex.Matches(command, "\"([^\"]*)\"").Select(m => m.Groups[1].Value).ToList();
-        return parts.Count == 2 && parts.All(File.Exists);
+        if (parts.Count != 2 || !parts.All(File.Exists)) return false;
+        if (!UninstallFolder.Protected(Path.GetDirectoryName(parts[1])!, parts[1])) return false;
+        if (!Path.GetFileName(parts[0]).Equals(Path.GetFileName(setup.UninstallerExe), StringComparison.OrdinalIgnoreCase)) return false;
+        try
+        {
+            var record = File.ReadAllLines(parts[1], Encoding.Unicode);
+            return record.Any(l => l.StartsWith("I ", StringComparison.Ordinal))
+                   && (setup.RegionKey is null || record.Any(l => l.StartsWith("L ", StringComparison.Ordinal)));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 
     private static bool ClassIntact(RegistryKey hklm, string clsid, string context, string server)
@@ -369,16 +383,31 @@ public sealed class MsiPackage : IDisposable
         var p = Query("SELECT `Property`,`Value` FROM `Property`").ToDictionary(r => r[0], r => r[1]);
         string code = p["ProductCode"];
         string arpKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + code;
-        Directory.CreateDirectory(setup.Folder);
+        using var held = UninstallFolder.Hold(setup.Folder);
         string exe = Path.Combine(setup.Folder, Path.GetFileName(setup.UninstallerExe));
         string list = Path.Combine(setup.Folder, code + ".txt");
-        File.Copy(setup.UninstallerExe, exe, overwrite: true);
+        // made fresh, so they take the folder's permissions rather than keeping whatever they had
+        File.Delete(exe);
+        File.Delete(list);
+        File.Copy(setup.UninstallerExe, exe);
+        UninstallFolder.Own(exe);
 
-        var lines = new List<string> { "N " + p.GetValueOrDefault("ProductName", ""), "A " + arpKey };
+        var root = Path.TrimEndingDirectorySeparator(props["INSTALLDIR"]);
+        var lines = new List<string> { "N " + p.GetValueOrDefault("ProductName", ""), "A " + arpKey, "I " + root };
+        // the product's folder, as its InstallFolder value names it. It goes whole, so nothing in it gets a line of its own
+        string? tree = null;
+        string folderKey = setup.RegionKey + @"\InstallFolder";
+        if (setup.RegionKey != null && setup.FolderValue != null)
+            foreach (var r in Query("SELECT `Root`,`Key`,`Name`,`Value`,`Component_` FROM `Registry`"))
+                if (on(r[4]) && r[0] == "2" && format(r[1]).Equals(folderKey, StringComparison.OrdinalIgnoreCase) && format(r[2]) == setup.FolderValue
+                    && Path.TrimEndingDirectorySeparator(format(r[3])) is var t && Path.IsPathFullyQualified(t)
+                    && t.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase))
+                    tree = t;
+        bool InTree(string path) => tree != null && (path.Equals(tree, StringComparison.OrdinalIgnoreCase)
+                                                     || path.StartsWith(tree + "\\", StringComparison.OrdinalIgnoreCase));
         var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void Folder(string dir)
         {
-            var root = Path.TrimEndingDirectorySeparator(props["INSTALLDIR"]);
             for (var d = Path.TrimEndingDirectorySeparator(dir); d.Length > 3; d = Path.GetDirectoryName(d)!)
             {
                 folders.Add(d);
@@ -422,7 +451,7 @@ public sealed class MsiPackage : IDisposable
         }
         foreach (var f in files.Values)
         {
-            lines.Add("F " + f.Path);
+            if (!InTree(f.Path)) lines.Add("F " + f.Path);
             Folder(Path.GetDirectoryName(f.Path)!);
         }
         foreach (var r in Query("SELECT `Component_`,`FileName`,`DirProperty`,`InstallMode` FROM `RemoveFile`"))
@@ -432,7 +461,15 @@ public sealed class MsiPackage : IDisposable
             var dir = dirs.TryGetValue(r[2], out var dd) ? dd : props.GetValueOrDefault(r[2], "");
             if (dir.Length == 0) continue;
             if (r[1].Length == 0) folders.Add(Path.TrimEndingDirectorySeparator(dir));
-            else lines.Add($"P {Path.TrimEndingDirectorySeparator(dir)}\t{LongName(r[1])}");
+            else if (!InTree(Path.TrimEndingDirectorySeparator(dir))) lines.Add($"P {Path.TrimEndingDirectorySeparator(dir)}\t{LongName(r[1])}");
+        }
+        if (tree != null) lines.Add("R " + tree);
+        if (setup.SettingsKey != null) lines.Add("K " + setup.SettingsKey);
+        if (setup.RegionKey != null)
+        {
+            if (setup.FolderValue != null && !lines.Contains($"V M {folderKey}\t{setup.FolderValue}", StringComparer.OrdinalIgnoreCase))
+                lines.Add($"V M {folderKey}\t{setup.FolderValue}");
+            lines.Add("L " + setup.RegionKey);
         }
 
         string? icon = null;
@@ -451,9 +488,10 @@ public sealed class MsiPackage : IDisposable
                               Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.CommonProgramFilesX86,
                               Environment.SpecialFolder.Windows, Environment.SpecialFolder.SystemX86 }
             .Select(f => Path.TrimEndingDirectorySeparator(Environment.GetFolderPath(f))).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        lines.AddRange(folders.Where(f => !special.Contains(f) && Path.GetPathRoot(f) != f + "\\")
+        lines.AddRange(folders.Where(f => !special.Contains(f) && Path.GetPathRoot(f) != f + "\\" && !InTree(f))
                               .OrderByDescending(f => f.Length).Select(f => "D " + f));
         File.WriteAllText(list, string.Join("\r\n", lines) + "\r\n", Encoding.Unicode);
+        UninstallFolder.Own(list);
 
         var version = p.GetValueOrDefault("ProductVersion", "0.0.0").Split('.').Select(x => int.TryParse(x, out var v) ? v : 0).Concat([0, 0, 0]).ToArray();
         long kb = files.Values.Sum(f => (f.Size + 4095) / 4096 * 4);

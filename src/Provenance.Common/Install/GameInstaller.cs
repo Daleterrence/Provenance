@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Microsoft.Win32;
+using Provenance.Common.Game;
 using Provenance.Common.PolFormat;
 using SharpCompress.Archives.Rar;
 using SharpCompress.Readers;
@@ -393,7 +394,7 @@ public sealed class GameInstaller
         var report = new Progress<(long done, long total)>(p => progress?.Report(new InstallProgress("Installing",
             $"Installing {name}: {p.done / 1073741824.0:0.00} of {p.total / 1073741824.0:0.00} GiB",
             p.total > 0 ? (double)p.done / p.total : -1, p.done, p.total)));
-        var (props, uninstall) = DirectApplySetup(msi, installRoot, shortcutProperty);
+        var (props, uninstall) = DirectApplySetup(msi, installRoot, shortcutProperty, region);
         var result = await Task.Run(() =>
         {
             using var pkg = new MsiPackage(msi);
@@ -406,12 +407,17 @@ public sealed class GameInstaller
     }
 
     internal static (Dictionary<string, string> Properties, MsiPackage.UninstallSetup Uninstall) DirectApplySetup(
-        string msi, string installRoot, string shortcutProperty)
+        string msi, string installRoot, string shortcutProperty, PolRegion region)
     {
         var props = new Dictionary<string, string> { ["ALLUSERS"] = "1", [shortcutProperty] = "1" };
-        var uninstaller = Path.Combine(AppContext.BaseDirectory, "native", shortcutProperty == PolShortcut ? PolUninstaller : FfxiUninstaller);
+        bool pol = shortcutProperty == PolShortcut;
+        var uninstaller = Path.Combine(AppContext.BaseDirectory, "native", pol ? PolUninstaller : FfxiUninstaller);
         if (!File.Exists(uninstaller)) throw Shown.Mark(new FileNotFoundException("Some of Provenance's own files are missing. Reinstall Provenance, then try again."));
-        return (props, new MsiPackage.UninstallSetup(uninstaller, Path.Combine(installRoot, "Uninstall"), Path.GetDirectoryName(msi)! + "\\"));
+        // the Japanese installs keep their settings under SQUARE, not SquareEnix
+        var hive = PolPaths.Hive(region);
+        var settings = pol ? $@"{hive}\{(region == PolRegion.Japan ? "SQUARE" : "SquareEnix")}\PlayOnlineViewer" : FfxiConfig.KeyPath(region);
+        return (props, new MsiPackage.UninstallSetup(uninstaller, Path.Combine(installRoot, "Uninstall"), Path.GetDirectoryName(msi)! + "\\",
+                                                     hive, pol ? PolPaths.ViewerProduct : PolPaths.FfxiProduct, settings));
     }
 
     private static async Task RunMsiAsync(string msi, string installRoot, string shortcutProperty, string name,

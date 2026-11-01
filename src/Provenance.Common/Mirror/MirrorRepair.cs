@@ -276,7 +276,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
                 throw new MirrorUnusableException(
                     $"the {name} installer needs {rel}, which is missing, and the mirror's {slug} index {plan.Versions[slug]} does not list it", [rel]);
             }
-            var (props, uninstall) = GameInstaller.DirectApplySetup(msi, installRoot, slug == "viewer" ? GameInstaller.PolShortcut : GameInstaller.FfxiShortcut);
+            var (props, uninstall) = GameInstaller.DirectApplySetup(msi, installRoot, slug == "viewer" ? GameInstaller.PolShortcut : GameInstaller.FfxiShortcut, Region);
             packages.Add(new Package(name, msi, props, uninstall));
         }
         return (packages, installDirectX);
