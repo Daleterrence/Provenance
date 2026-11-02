@@ -612,6 +612,8 @@ public partial class SocialViewModel : ObservableObject
             }
             else changed |= chat.MergeIncoming(m);
         }
+        var times = snap.Stored.Sent.Select(s => s.Time).Concat(snap.Stored.Received.Select(m => m.Time)).Where(t => t > 0).ToList();
+        if (times.Count > 0) chat.PruneDeleted(times.Min());
         return changed;
     }
 
@@ -1290,9 +1292,10 @@ public partial class SocialViewModel : ObservableObject
         AfterDelete();
     }
 
-    public void ClearConversation()
+    // only the lines that were on screen when Clear was picked, not ones that landed while it asked
+    public void ClearConversation(IReadOnlyCollection<string> keys)
     {
-        if (_chat == null || SelectedFriend is not { } f || _chat.Clear(f.Name, f.Key) == 0) return;
+        if (_chat == null || _chat.DeleteKeys(keys) == 0) return;
         AfterDelete();
     }
 

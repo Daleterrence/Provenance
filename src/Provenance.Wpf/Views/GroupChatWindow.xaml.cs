@@ -26,7 +26,7 @@ public partial class GroupChatWindow : Window
         _vm.Lines.CollectionChanged += OnLinesChanged;
         _vm.Ended += OnEnded;
         _vm.LineArrived += OnLineArrived;
-        _tick.Tick += (_, _) => _vm.SendTick();
+        _tick.Tick += (_, _) => _vm.Tick(DateTime.UtcNow);
         _tick.Start();
         Activated += (_, _) =>
         {
@@ -86,7 +86,7 @@ public partial class GroupChatWindow : Window
     }
 
     // hidden or behind: the taskbar button flashes if that's wanted, the notice is the main window's
-    private void OnLineArrived(string group, string who, string text)
+    private void OnLineArrived(string group, string who, string text, int count)
     {
         if (!_settings.Current.GroupChatFlash || !IsVisible || IsActive) return;
         TaskbarFlash.Start(this);
@@ -117,8 +117,9 @@ public partial class GroupChatWindow : Window
 
     internal void ClearChat()
     {
+        var shown = _vm.Lines.Select(l => l.Id).ToList();
         if (MessageDialog.Confirm(this, "Clear chat", ClearQuestion(_vm.GroupName), "CLEAR", destructive: true) != 0) return;
-        _vm.ClearLines();
+        _vm.ClearLines(shown);
     }
 
     public static string ClearQuestion(string group) =>
@@ -161,7 +162,8 @@ public partial class GroupChatWindow : Window
         var kept = _vm.FilterInput(e.Text);
         if (kept == e.Text || sender is not TextBox box) return;
         e.Handled = true;
-        box.SelectedText = kept;
+        int room = GroupChatFiles.MaxText - (box.Text.Length - box.SelectionLength);
+        box.SelectedText = kept.Length > room ? kept[..Math.Max(0, room)] : kept;
         box.CaretIndex = box.SelectionStart + box.SelectionLength;
     }
 

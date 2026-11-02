@@ -130,6 +130,11 @@ public sealed class GroupChatLog
     public IReadOnlyList<GroupChatEntry> Lines(string group) =>
         _groups.TryGetValue(group, out var l) ? l : [];
 
+    public bool Dirty { get; private set; }
+    private DateTime _savedAt;
+    // a busy chat brings lines every second, and every save re-encrypts every group's whole log
+    public static readonly TimeSpan SaveEvery = TimeSpan.FromSeconds(5);
+
     public void Add(string group, IEnumerable<GroupChatEntry> lines)
     {
         if (!_groups.TryGetValue(group, out var l)) _groups[group] = l = new List<GroupChatEntry>();
@@ -137,15 +142,32 @@ public sealed class GroupChatLog
         l.AddRange(lines);
         if (l.Count == before) return;
         if (l.Count > KeepPerGroup) l.RemoveRange(0, l.Count - KeepPerGroup);
+        Dirty = true;
+        SaveIfDue(DateTime.UtcNow);
+    }
+
+    // from the last try, not the last save that worked, so one that keeps failing isn't tried every half second
+    public void SaveIfDue(DateTime now)
+    {
+        if (!Dirty || now - _savedAt < SaveEvery) return;
+        _savedAt = now;
         Save();
     }
 
-    public bool Delete(string group, string id)
+    public void Flush()
     {
-        if (!_groups.TryGetValue(group, out var l) || l.RemoveAll(e => e.Id == id) == 0) return false;
+        if (Dirty) Save();
+    }
+
+    public bool Delete(string group, string id) => Delete(group, [id]);
+
+    public bool Delete(string group, IReadOnlyCollection<string> ids)
+    {
+        if (!_groups.TryGetValue(group, out var l) || l.RemoveAll(e => ids.Contains(e.Id)) == 0) return false;
         Save();
         return true;
     }
+
 
     public bool Clear(string group)
     {
@@ -172,6 +194,8 @@ public sealed class GroupChatLog
             tmp = $"{_path}.{Guid.NewGuid():N}.tmp";
             File.WriteAllBytes(tmp, cipher);
             File.Move(tmp, _path, overwrite: true);
+            Dirty = false;
+            _savedAt = DateTime.UtcNow;
             return true;
         }
         catch (Exception e)

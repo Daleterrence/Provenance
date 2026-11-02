@@ -1046,6 +1046,7 @@ static void notice_read(BYTE *b)
     }
 }
 static void gc_signed_out(void);
+static void gc_group_going(BYTE *b, DWORD lo, DWORD hi);
 /* the viewer's sign-out (app.dll 0x101983fb). 0xcc4 runs once, it returns 0, not 7, for the hook's connection type */
 static void viewer_sign_out(BYTE *b)
 {
@@ -4820,10 +4821,12 @@ static void group_request(BYTE *b)
     if (!haveGroup) { group_fail("failed:no such group"); return; }
     if (lstrcmpA(op, "disband") == 0) {
         if (myClass != 5) { group_fail("failed:not master"); return; }
+        gc_group_going(b, lo, hi);
         group_start(((int (__cdecl *)(DWORD, DWORD))SVC(0x610))(lo, hi), 0x614, "disband");
     } else if (lstrcmpA(op, "leave") == 0) {
         if (myClass == 5) { group_fail("failed:master cannot leave"); return; }
         if (myClass < 3) { group_fail("failed:not a member"); return; }
+        gc_group_going(b, lo, hi);
         group_start(((int (__cdecl *)(DWORD, DWORD, unsigned, int))SVC(0x620))(lo, hi, gh.myIndex, 1), 0x624, "leave");
     } else if (lstrcmpA(op, "class") == 0) {
         if (!parse_num(a, 2, &idx) || idx > 63 || !parse_num(bb, 1, &cls)) { group_fail("failed:bad request"); return; }
@@ -5107,6 +5110,7 @@ static int gc_open(void);
 static void gc_end(BYTE *b, const char *state, int reset);
 static void gc_join_refused(const char *tok, const char *state);
 static void gc_send_refused(const char *tok, const char *state);
+static int gc_joined(BYTE *b);
 
 static int get_chr(BYTE *b, int i, BYTE *rec)
 {
@@ -5365,7 +5369,7 @@ static void handle_request(BYTE *b)
         g_snap_dirty = 1;
         /* the viewer quits private chat before a switch, so a room's left first, through the one PART there is */
         if (chat_room_open()) chat_end(b);
-        if (gc_open()) gc_end(b, "left:handle", 0);
+        if (gc_open() || gc_joined(b)) gc_end(b, "left:handle", 0);
         handle_switch_start(b);
         if (handle_switching()) writes_refuse(b);
         return;
@@ -5947,11 +5951,9 @@ static void hold_sign_out(BYTE *b, const char *spath)
     end_pol(0);
 }
 
-/* held until Play, a stop, Provenance ending or pol.exe ending. It's an IRC link so it never stops pumping, and never
-   sends more than the viewer would. */
 /* read only: polcore stamps conn+0x39d4 whenever it sends anything on the link, and on a quiet hold that's only the
    PONG to the server's PING (every ~125 s). It drops the session as -250 400 s after the last one, so these say when
-   the server went quiet. One line every 10 minutes at most */
+   the server went quiet. The login's own stamp is only noted, then one line every 10 minutes at most */
 #define LINK_LOG_MS 600000
 static DWORD g_link_sent;
 static ULONGLONG g_link_sent_at, g_link_logged_at;
@@ -5966,13 +5968,20 @@ static void link_watch(BYTE *b)
     if (IsBadReadPtr(at, 4) || !(sent = *(DWORD *)at) || sent == g_link_sent) return;
     g_link_sent = sent;
     g_link_sent_at = GetTickCount64();
+    if (!g_link_logged_at) {
+        g_link_logged_at = g_link_sent_at;
+        return;
+    }
     g_link_sends++;
-    if (g_link_logged_at && g_link_sent_at - g_link_logged_at < LINK_LOG_MS) return;
-    lg("link: answered the server (its PING), %d time(s) since the last of these lines\r\n", g_link_sends);
+    if (g_link_sent_at - g_link_logged_at < LINK_LOG_MS) return;
+    lg("link: polcore sent something %d time(s) since the last of these lines (on a quiet hold that's the PONG)\r\n",
+       g_link_sends);
     g_link_logged_at = g_link_sent_at;
     g_link_sends = 0;
 }
 
+/* held until Play, a stop, Provenance ending or pol.exe ending. It's an IRC link so it never stops pumping, and never
+   sends more than the viewer would. */
 static void pol_hold(BYTE *b)
 {
     static ULONGLONG lastCtl, lastMailReq;

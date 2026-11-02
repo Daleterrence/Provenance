@@ -247,7 +247,9 @@ public sealed class ChatSendGate
     {
         if (Token == null) return null;
         string? done = null;
-        if (hookToken == Token && hookState is { } s && (s == "sent" || s.StartsWith("failed", StringComparison.Ordinal))) done = s;
+        if (hookToken == Token && hookState is { } s &&
+            (s == "sent" || s.StartsWith("sent:", StringComparison.Ordinal) || s.StartsWith("failed", StringComparison.Ordinal)))
+            done = s;
         else if (_sentAt is { } at && now - at > GiveUp) done = "failed:timeout";
         if (done != null) Token = null;
         return done;

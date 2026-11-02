@@ -1059,22 +1059,22 @@ static void cr_room_pump(BYTE *b, int ctl)
             g_cr_reread = 0;
             if (!cr_members(b)) { cr_left(g_cr_kicked_me ? "kicked" : "gone"); return; }
         }
+        /* a PRIVMSG reads the same answer as the group chat's JOIN, WHO and PART, so nothing goes while one's out */
+        if (gc_busy()) return;
         if (g_cr_msg_kind >= 0) {
             if (GetTickCount64() - g_cr_msg_at >= CR_SEND_GAP_MS) cr_msg_start(b, g_cr_msg_kind);
             return;
         }
         if (!cr_msg_ready()) return;
         if (g_cr_hello) { g_cr_hello = 0; cr_frame_out(b, CRM_HELLO); return; }
-        if (g_cr_mop) {
-            if (!gc_busy()) cr_master_step(b);
-            return;
-        }
+        if (g_cr_mop) { cr_master_step(b); return; }
         if (ctl && request_new("chatmaster")) { cr_master_request(b); return; }
         if (ctl && request_new("chatsend")) { cr_send_request(b); return; }
         if (g_cr_replies > 0) { g_cr_replies--; cr_frame_out(b, CRM_REPLY); }
         return;
     }
     if (g_cr_st == CR_SETTOPIC && (g_cr_hello || g_cr_msg_kind >= 0)) {
+        if (gc_busy()) return;
         if (g_cr_msg_kind >= 0) {
             if (GetTickCount64() - g_cr_msg_at >= CR_SEND_GAP_MS) cr_msg_start(b, g_cr_msg_kind);
             return;
@@ -1421,7 +1421,8 @@ static void chat_pump(BYTE *b, int ctl)
 }
 
 static int chat_room_open(void) { return g_cr_st != CR_OUT; }
-static int cr_cmd_busy(void) { return g_cr_wait == CRW_CMD; }
+/* a command or a PRIVMSG waiting on its answer. One that hasn't gone yet holds nothing, it waits for the group chat */
+static int cr_cmd_busy(void) { return g_cr_wait != CRW_NONE; }
 
 /* an enter or a line asked for while the handle's changing, answered as not done */
 static void chat_join_refused(const char *tok, const char *haskey)
@@ -1460,14 +1461,20 @@ static void chat_send_refused(const char *tok)
 /* Play: FFXI takes the link over, so a room gets a PART first (the user's leaving chat for the game) */
 static void chat_end(BYTE *b)
 {
-    int s = cr_session(b);
+    int s = cr_session(b), r;
     ULONGLONG until = GetTickCount64() + 3000;
     if (g_cr_db) cr_db_abandon(b, "cancelled");
     if (g_cr_st == CR_OUT) return;
     if (s >= 0 && g_cr_wait != CRW_NONE) ((svc_i)SVC(0x248))(s);
     g_cr_wait = CRW_NONE;
-    /* a JOIN with no answer yet still gets there, so it's PARTed like a room */
-    if (cr_part(b) > 0) {
+    /* a JOIN with no answer yet still gets there, so it's PARTed like a room. The group chat can have the link's one
+       command out, so the PART's tried again till it goes */
+    while ((r = cr_part(b)) == 0 && GetTickCount64() < until) {
+        POLCON_STEP(b);
+        POLCON_IDLE(b);
+        Sleep(16);
+    }
+    if (r > 0) {
         while (GetTickCount64() < until && ((svc_i)SVC(0x244))(s) == 0) {
             POLCON_STEP(b);
             POLCON_IDLE(b);

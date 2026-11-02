@@ -32,7 +32,8 @@ public partial class MainViewModel : ObservableObject
     public event Action? RequestShow;
     public event Action? RequestRestart;
     public event Action? RequestExit;
-    public event Action? RequestAttention;
+    // true when there's a notice to show as a tray tip, false for the taskbar alone
+    public event Action<bool>? RequestAttention;
     public event Action? AttentionCleared;
 
     public MainViewModel(ICredentialService credentials, ISettingsService settings, FeedService feeds, PolSessionService pol,
@@ -292,7 +293,7 @@ public partial class MainViewModel : ObservableObject
         _lastSender = sender;
         ShowNotice(text, icon, stays: stays);
         _noticeRequest = request;
-        RequestAttention?.Invoke();
+        RequestAttention?.Invoke(true);
     }
 
     // false once everything's been read or seen, like a message landing in a conversation that's already on screen
@@ -343,15 +344,16 @@ public partial class MainViewModel : ObservableObject
 
     private bool _noticeGroupChat;
 
-    // a line in the group chat with its window hidden or behind, as the settings say
-    private void OnGroupChatLine(string group, string who, string text)
+    // lines in the group chat with its window hidden or behind, one notice a batch, as the settings say
+    private void OnGroupChatLine(string group, string who, string text, int count)
     {
-        if (_settings.Current.GroupChatNotice)
+        bool notice = _settings.Current.GroupChatNotice;
+        if (notice)
         {
-            ShowNotice($"{who} in {group}: {Preview(text, 60)}", "Forum");
+            ShowNotice(count == 1 ? $"{who} in {group}: {Preview(text, 60)}" : $"{count} new lines in {group}", "Forum");
             _noticeGroupChat = true;
         }
-        if (_settings.Current.GroupChatNotice || _settings.Current.GroupChatFlash) RequestAttention?.Invoke();
+        if (notice || _settings.Current.GroupChatFlash) RequestAttention?.Invoke(notice);
     }
 
     // the window side, which tests with no windows swap out

@@ -129,11 +129,14 @@ public partial class MainWindow : Window
         NewsContent.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
     }
 
-    private void OnRequestAttention() => Dispatcher.InvokeAsync(() =>
+    // a tray tip only for a notice that's just been shown, never an old one again for a flash on its own
+    internal static bool TipFor(bool tip, bool inTray, string? notice) => tip && inTray && notice is not null;
+
+    private void OnRequestAttention(bool tip) => Dispatcher.InvokeAsync(() =>
     {
-        if (_tray is { Visible: true } && Vm?.Notice is { } text)
+        if (_tray is { Visible: true } tray && TipFor(tip, true, Vm?.Notice) && Vm?.Notice is { } text)
         {
-            _tray.ShowTip("PlayOnline", text);
+            tray.ShowTip("PlayOnline", text);
             return;
         }
         if (IsActive || !IsVisible || Vm is not { WantsAttention: true }) return;

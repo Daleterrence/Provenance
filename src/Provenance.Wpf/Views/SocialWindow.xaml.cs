@@ -344,8 +344,9 @@ public partial class SocialWindow : Window
 
     internal void ClearConversation(SocialViewModel vm, FriendItem f)
     {
+        var shown = vm.Conversation.Select(e => e.Key).ToList();
         if (MessageDialog.Confirm(this, "Clear conversation", ClearQuestion(f.Name), "CLEAR", destructive: true) != 0) return;
-        vm.ClearConversation();
+        vm.ClearConversation(shown);
     }
 
     // a line's own menu: copy, or delete this PC's copy of it

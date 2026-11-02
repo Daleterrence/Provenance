@@ -3,16 +3,16 @@
 #define GC_LINES 256
 #define GC_TEXT_MAX 174       /* NOTICE #XXL<16 hex> :<base64> has to fit polcore's 0x200 byte line, past that it drops it */
 #define GC_GIVE_UP_MS 30000   /* the viewer's own, then svc 0x6c4 */
-#define GC_ECHO_MS 5000
+#define GC_SEND_MS 30000      /* a line polcore's still holding after this is given up on, it might still go */
 
 typedef struct { DWORD seq, time; int from, me; WCHAR name[0x20]; WCHAR text[0xc0]; } gc_line;
 enum { GC_OUT, GC_STARTING, GC_JOINING, GC_IN, GC_LEAVING };
 enum { GS_NONE, GS_WAITING, GS_QUEUED };
 
-static int g_gc_st = GC_OUT, g_gc_used, g_gc_my = -1, g_gc_send, g_gc_leave_want, g_gc_lines_dirty;
+static int g_gc_st = GC_OUT, g_gc_used, g_gc_my = -1, g_gc_send, g_gc_leave_want, g_gc_lines_dirty, g_gc_have_row = 1;
 static DWORD g_gc_lo, g_gc_hi, g_gc_seq, g_gc_written_seq;
 static char g_gc_tok[48], g_gc_state[24] = "", g_gc_stok[48], g_gc_sstate[24] = "", g_gc_cancel_tok[48];
-static ULONGLONG g_gc_t0, g_gc_sent_at, g_gc_written_at;
+static ULONGLONG g_gc_t0, g_gc_sent_at, g_gc_written_at, g_gc_part_at;
 static gc_line g_gc_line[GC_LINES];
 static int g_gc_line_n, g_gc_line_next;
 static volatile LONG g_gc_echo;
@@ -32,8 +32,11 @@ static void gc_send_state(const char *s)
     lstrcpynA(g_gc_sstate, s, sizeof g_gc_sstate);
     g_snap_dirty = 1;
 }
+static void gc_write_lines(void);
 static void gc_out(const char *state)
 {
+    /* the last second's lines go in before the app hears it's over */
+    if (g_gc_lines_dirty) gc_write_lines();
     if (g_gc_send) gc_send_state("failed:left");
     g_gc_send = GS_NONE;
     g_gc_leave_want = 0;
@@ -73,6 +76,8 @@ static int gc_joined(BYTE *b)
     return SVC(0x6cc) && ((int (__cdecl *)(char *))SVC(0x6cc))(ch) == 0;
 }
 static void gc_force_leave(BYTE *b) { if (SVC(0x6c4)) ((svc_v)SVC(0x6c4))(); }
+/* polcore's one waiting line (its base64 at DAT_100bdc30), cleared once FUN_1002b8a0's sent it or given up on it */
+static int gc_line_held(BYTE *b) { return !IsBadReadPtr(b + 0xbdc30, 1) && b[0xbdc30] != 0; }
 
 /* my row in the group, -1 when polcore hasn't got one for me */
 static int gc_my_row(BYTE *b, DWORD lo, DWORD hi, grp_mem *m)
@@ -86,10 +91,15 @@ static int gc_still_in(BYTE *b)
 {
     grp_hdr gh;
     grp_mem m;
-    int cls;
+    int cls, row;
     if (!get_group(b, g_gc_lo, g_gc_hi, &gh)) return 0;
+    /* the viewer reads myIndex for every line, polcore can move my row while I'm in */
+    g_gc_my = gh.myIndex;
     cls = (gh.flags >> 1) & 7;
-    if (gc_my_row(b, g_gc_lo, g_gc_hi, &m) >= 0 && ((m.flags >> 18) & 7) == 1) return -1;
+    row = gc_my_row(b, g_gc_lo, g_gc_hi, &m);
+    /* polcore's echo needs my id and the group's handle slot (FUN_10027df0) */
+    g_gc_have_row = row >= 0 && ((m.hHi >> 13) & 0x3f) == ((gh.flags >> 4) & 0x3f);
+    if (row >= 0 && ((m.flags >> 18) & 7) == 1) return -1;
     return cls >= 3 && cls <= 5;
 }
 
@@ -99,8 +109,7 @@ static void gc_try_start(BYTE *b)
     (void)b;
     if (r == 0) return;   /* polcore's still leaving or joining something, the viewer tries again next frame */
     if (r < 0) { lg("groupchat: start refused %d\r\n", r); gc_out("failed:join"); return; }
-    g_gc_st = GC_JOINING;
-    gc_state("joining");
+    g_gc_st = GC_JOINING;   /* the app's had "joining" since the request */
 }
 
 static void gc_join_refused(const char *tok, const char *state)
@@ -129,7 +138,6 @@ static void gc_join_request(BYTE *b)
         return;
     }
     g_gc_cancel_tok[0] = 0;
-    if (gc_busy()) { gc_join_refused(tok, "failed:busy"); return; }
     if (notice_blocks(g_notice)) { gc_join_refused(tok, "failed:account notice"); return; }
     if (lstrlenA(gid) != 16 || !hex8(gid, &hi) || !hex8(gid + 8, &lo) || !(lo | hi) || !parse_num(sl, 2, &slot) ||
         slot > 63) {
@@ -146,6 +154,7 @@ static void gc_join_request(BYTE *b)
         if ((int)((m.hHi >> 13) & 0x3f) != slot || lstrcmpA(k, hk)) { gc_join_refused(tok, "failed:list changed"); return; }
         if (!SVC(0x2f8) || ((svc_v)SVC(0x2f8))() != slot) { gc_join_refused(tok, "failed:handle"); return; }
     }
+    g_gc_leave_want = 0;
     if (g_gc_st == GC_IN && lo == g_gc_lo && hi == g_gc_hi) {
         lstrcpynA(g_gc_tok, tok, sizeof g_gc_tok);
         gc_state("in");
@@ -154,12 +163,14 @@ static void gc_join_request(BYTE *b)
     if (g_gc_send) gc_send_state("failed:left");
     g_gc_send = GS_NONE;
     lstrcpynA(g_gc_tok, tok, sizeof g_gc_tok);
+    /* the last group's tail goes out under its own id, and the file stays that group's till this one has a line */
+    if (g_gc_lines_dirty) gc_write_lines();
     g_gc_lo = lo;
     g_gc_hi = hi;
     g_gc_my = gh.myIndex;
     g_gc_line_n = g_gc_line_next = 0;
-    g_gc_lines_dirty = 1;
     g_gc_t0 = GetTickCount64();
+    g_gc_part_at = 0;
     /* in another group's chat already: polcore PARTs it and JOINs this one, the viewer's Switch Group */
     g_gc_st = GC_STARTING;
     gc_state("joining");
@@ -171,7 +182,12 @@ static void gc_leave(BYTE *b)
     int r;
     (void)b;
     g_gc_leave_want = 0;
-    if (g_gc_st == GC_STARTING) { gc_out("left"); return; }
+    /* still in the last group's chat while this one waits to start (a switch), so that one's left */
+    if (g_gc_st == GC_STARTING) {
+        if (gc_joined(b)) gc_force_leave(b);
+        gc_out("left");
+        return;
+    }
     if (g_gc_st == GC_JOINING) { gc_force_leave(b); gc_out("left"); return; }
     if (g_gc_st != GC_IN) return;
     if (cr_cmd_busy()) { g_gc_leave_want = 1; return; }
@@ -223,6 +239,7 @@ static void gc_send_request(BYTE *b)
     if (cr_sjis_exact(b, w, sj, sizeof sj) < 0) { gc_send_state("failed:characters"); return; }
     lstrcpynW(g_gc_out, w, GC_TEXT_MAX + 1);
     g_gc_send = GS_WAITING;
+    g_gc_sent_at = GetTickCount64();
     gc_send_state("sending");
 }
 
@@ -231,7 +248,10 @@ static void gc_send_pump(BYTE *b)
     int r;
     if (g_gc_send == GS_WAITING) {
         r = ((int (__cdecl *)(const WCHAR *))SVC(0x6bc))(g_gc_out);
-        if (r == 0) return;   /* the last line hasn't gone yet */
+        if (r == 0) {   /* the last line hasn't gone yet */
+            if (GetTickCount64() - g_gc_sent_at >= GC_SEND_MS) { g_gc_send = GS_NONE; gc_send_state("failed:busy"); }
+            return;
+        }
         if (r < 0) {
             g_gc_send = GS_NONE;
             lg("groupchat: line refused %d\r\n", r);
@@ -244,17 +264,35 @@ static void gc_send_pump(BYTE *b)
         return;
     }
     if (g_gc_send != GS_QUEUED) return;
-    /* NOTICE never gets an answer, so my own copy coming back is the only sign it went */
+    /* NOTICE never gets an answer, so my own copy coming back is the only sign it went. polcore echoes it as it
+       lets go of the line, so let go with no echo is not sent */
     if (g_gc_echo) { g_gc_send = GS_NONE; gc_send_state("sent"); }
-    else if (GetTickCount64() - g_gc_sent_at >= GC_ECHO_MS) { g_gc_send = GS_NONE; gc_send_state("failed:not sent"); }
+    /* with no row for me in the group polcore can't echo (FUN_1002afb0 looks me up), so gone is all there is to go on,
+       and the app shows the line itself */
+    else if (!gc_line_held(b)) { g_gc_send = GS_NONE; gc_send_state(g_gc_have_row ? "failed:not sent" : "sent:unechoed"); }
+    else if (GetTickCount64() - g_gc_sent_at >= GC_SEND_MS) { g_gc_send = GS_NONE; gc_send_state("failed:timeout"); }
+}
+
+/* polcore's own PART after it's dropped me from the group, only noted */
+static void gc_part_watch(BYTE *b)
+{
+    if (!gc_joined(b)) lg("groupchat: polcore's PART went\r\n");
+    else if (GetTickCount64() - g_gc_part_at >= GC_GIVE_UP_MS) lg("groupchat: polcore's still in the channel\r\n");
+    else return;
+    g_gc_part_at = 0;
 }
 
 /* every hold loop turn. Requests on control turns only */
 static void gc_pump(BYTE *b, int ctl)
 {
     if (g_draining) return;
+    if (g_gc_part_at && g_gc_st == GC_OUT) gc_part_watch(b);
     if (g_gc_st == GC_STARTING) {
-        if (GetTickCount64() - g_gc_t0 >= GC_GIVE_UP_MS) { gc_out("failed:busy"); return; }
+        if (GetTickCount64() - g_gc_t0 >= GC_GIVE_UP_MS) {
+            if (gc_joined(b)) gc_force_leave(b);
+            gc_out("failed:busy");
+            return;
+        }
         if (!cr_cmd_busy()) gc_try_start(b);
     } else if (g_gc_st == GC_JOINING) {
         int r = ((svc_v)SVC(0x6b0))();
@@ -271,6 +309,7 @@ static void gc_pump(BYTE *b, int ctl)
         if ((still = gc_still_in(b)) <= 0) {
             gc_force_leave(b);
             gc_out(still < 0 ? "removed" : "gone");
+            if (gc_joined(b)) g_gc_part_at = GetTickCount64();
             return;
         }
         if (!gc_joined(b)) { gc_out("lost"); return; }
@@ -281,24 +320,29 @@ static void gc_pump(BYTE *b, int ctl)
     }
     if (!ctl) return;
     if (request_waiting("groupchatleave")) { gc_leave_request(b); return; }
-    if (request_waiting("groupchatjoin")) { gc_join_request(b); return; }
+    /* a join waits for the last one, or a leave, to settle rather than being turned away */
+    if (!gc_busy() && request_waiting("groupchatjoin")) { gc_join_request(b); return; }
     if (request_waiting("groupchatsend")) gc_send_request(b);
 }
 
-/* a handle switch or Play: out now, through the one PART, before anything else touches the link */
-static void gc_end(BYTE *b, const char *state, int reset)
+/* a handle switch, Play, or leaving the group: out now, through the one PART, before anything else touches the link.
+   No room command can be waiting on its answer by now */
+static void gc_end_by(BYTE *b, const char *state, int reset, ULONGLONG until)
 {
-    ULONGLONG until = GetTickCount64() + 3000;
-    if (g_gc_st == GC_OUT) {
+    int r = 0;
+    if (g_gc_st == GC_OUT && !gc_joined(b)) {
         if (reset && SVC(0x6c8)) ((svc_v)SVC(0x6c8))();
         return;
     }
-    if (g_gc_st == GC_IN && SVC(0x6b4) && ((svc_v)SVC(0x6b4))() > 0)
-        while (GetTickCount64() < until && ((svc_v)SVC(0x6b8))() == 0) {
+    if (g_gc_st == GC_IN && SVC(0x6b4) && ((svc_v)SVC(0x6b4))() > 0) {
+        lg("groupchat: leaving\r\n");
+        while (GetTickCount64() < until && (r = ((svc_v)SVC(0x6b8))()) == 0) {
             POLCON_STEP(b);
             POLCON_IDLE(b);
             Sleep(16);
         }
+        lg("groupchat: PART answered %d\r\n", r);
+    }
     if (gc_joined(b) || g_gc_st == GC_JOINING) {
         gc_force_leave(b);
         while (GetTickCount64() < until && gc_joined(b)) {
@@ -310,6 +354,32 @@ static void gc_end(BYTE *b, const char *state, int reset)
     /* polcore keeps a pointer to gc_cb till the PART goes or this, and FFXI's about to own the link */
     if (reset && SVC(0x6c8)) ((svc_v)SVC(0x6c8))();
     gc_out(state);
+}
+static void gc_end(BYTE *b, const char *state, int reset) { gc_end_by(b, state, reset, GetTickCount64() + 3000); }
+
+/* polcore only PARTs once I'm out of the group, too late for the others to see, so the PART goes first here */
+static void gc_group_going(BYTE *b, DWORD lo, DWORD hi)
+{
+    ULONGLONG until = GetTickCount64() + 3000;
+    if (!gc_open() || g_gc_lo != lo || g_gc_hi != hi) return;
+    /* a room command's answer comes first, or the room would read the PART's. The room's pump returns once it's read
+       one, so it can't start another in here */
+    while (cr_cmd_busy() && GetTickCount64() < until) {
+        POLCON_STEP(b);
+        POLCON_IDLE(b);
+        cr_room_pump(b, 0);
+        Sleep(16);
+    }
+    if (cr_cmd_busy()) {
+        /* marked to go, it goes after the room's answer from the hold loop, so after the group change */
+        lg("groupchat: the room's still waiting on its answer, so the PART can't go first\r\n");
+        gc_force_leave(b);
+        gc_out("gone");
+    } else gc_end_by(b, "gone", 0, until);
+    if (gc_joined(b)) {
+        lg("groupchat: PART not out in 3 s\r\n");
+        g_gc_part_at = GetTickCount64();
+    }
 }
 /* the sign-out's svc 0x6c8 has already dropped it */
 static void gc_signed_out(void)

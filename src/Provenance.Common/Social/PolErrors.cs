@@ -85,7 +85,7 @@ public static class PolErrors
         "User has been idle. Switched to offline.",
         "A problem occurred while connecting to AOL's access point (telephone number). Please try again later.",
         "AOL access point (telephone number) connection failed.",
-        "You have signed out of Xbox Live and are currently offline. Logging out of PlayOnline\ufffdE",
+        "You have signed out of Xbox Live and are currently offline. Logging out of PlayOnline...",
         "Problems with the HDD data were detected. Version update failed.",
         "Networking problems have occurred. Please try again later.",
         "Some problems occurred in HDD data. Please check installation status.",

@@ -147,7 +147,9 @@ public static class PolAccountNotices
     {
         -0x40f => "Disconnected. The current PlayOnline ID was used to log in from another terminal.",
         -0x400 or -0x401 or -0x40e => "Disconnected. Now offline.",
-        _ => NetworkError(Math.Abs(reason), region),
+        // the viewer says nothing for one that isn't negative (FUN_101984da), and the session's still gone
+        >= 0 => "Disconnected from PlayOnline.",
+        _ => NetworkError((int)Math.Min(-(long)reason, int.MaxValue), region),
     };
 
     // the three polerr texts with a %d (days left on a payment) are the viewer's to fill in, so they're left off

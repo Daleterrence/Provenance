@@ -41,6 +41,7 @@ public partial class SocialViewModel
     private string? _groupToken;
     private string _groupDone = "";
     private string? _groupLeaving;
+    internal string? LeavingGroupId => _groupLeaving;
     private DateTime _groupAt;
     private bool _groupBySend;
 
@@ -97,7 +98,7 @@ public partial class SocialViewModel
         _groupDone = doneText;
         _groupAt = DateTime.UtcNow;
         _groupBySend = op is GroupOp.Invite or GroupOp.AcceptInvite or GroupOp.DeclineInvite;   // these report as sends
-        _groupLeaving = op == GroupOp.Leave ? groupId : null;
+        _groupLeaving = op is GroupOp.Leave or GroupOp.Disband ? groupId : null;
         _answerFor = invite;   // only now, a refused click must never mark it answered
         if (SocialSnapshot.ChangeGroup(pid, op, token, groupId, a, b, c, key)) return;
         _groupToken = null;
@@ -184,6 +185,8 @@ public partial class SocialViewModel
                    invite: invite);
     }
 
+    internal const string ChatClosedNote = "The group chat was closed, but you're still in the group.";
+
     private void ApplyGroupState(PolSocialSnapshot snap)
     {
         if (_groupToken is null) return;
@@ -236,5 +239,7 @@ public partial class SocialViewModel
             "failed:hourly limit" => "You've sent 600 messages in the last hour. Try again later.",
             var s => $"PlayOnline didn't accept the change ({FailReason(s)}).",
         };
+        // the hook leaves the group's chat before the group, so a refused leave can still have closed it
+        if (left != null && GroupChat.LeaveFailed(left, snap)) EditNote += " " + ChatClosedNote;
     }
 }
