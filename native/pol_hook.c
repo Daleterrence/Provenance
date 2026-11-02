@@ -1876,6 +1876,7 @@ static int g_mail_fresh;
 static char g_mail_state[16] = "pending";
 static ULONGLONG g_mail_retry_at;
 static volatile int g_mail_refresh = 1;
+static volatile int g_mail_raw_new;
 static int g_mail_fails;
 static BYTE g_push_q[8][0x48];
 static volatile LONG g_push_n;
@@ -2020,8 +2021,15 @@ static void __cdecl mail_raw(void *arg)
         DWORD len = *(DWORD *)(h + 0x38);
         if (body && len <= 0x180 && !IsBadReadPtr(body, len)) mail_parse(m, body, (int)len);
         m->state = 3;
-        g_snap_dirty = g_mail_fresh = 1;
+        g_snap_dirty = g_mail_fresh = g_mail_raw_new = 1;
     }
+}
+static int is_me(BYTE *b, unsigned lo, unsigned hi);
+/* a chat line from my own POL ID is never one I received. Sent from a handle the friend's handle isn't friends with,
+   it can come back to me instead of reaching them */
+static int mail_mine(BYTE *b, const BYTE *h)
+{
+    return ((*(const WORD *)(h + 0x3e) >> 7) & 0x1f) == 0 && is_me(b, *(const DWORD *)h, *(const DWORD *)(h + 4));
 }
 static int sender_ignored(BYTE *b, const BYTE *h)
 {
@@ -2117,6 +2125,11 @@ static void mail_fetch_start(BYTE *b, int lane)
             m->state = 4;
             continue;
         }
+        if (mail_mine(b, m->hdr)) {
+            lg("mail: chat message from my own POL ID - not fetched or shown\r\n");
+            m->state = 6;
+            continue;
+        }
         /* chat 0, friend request 1, answers 9/10, group invitation 0xe and its notices, the rest stay unread */
         if (!(kd == 0 || kd == 1 || kd == 9 || kd == 10 || kd == 0xe || kd == 0xf || kd == 0x10 ||
               kd == 0x12 || kd == 0x13)) {
@@ -2163,6 +2176,14 @@ static void mail_pump(BYTE *b)
         mail_add(g_push_q[i]);
     }
     g_push_n = 0;
+    if (g_mail_raw_new) {
+        g_mail_raw_new = 0;
+        for (i = 0; i < g_mail_n; i++)
+            if (g_mail[i].state == 3 && mail_mine(b, g_mail[i].hdr)) {
+                lg("mail: real-time chat line from my own POL ID - not shown\r\n");
+                g_mail[i].state = 6;
+            }
+    }
     /* never cancelled here, polcore fails a stuck job at 100 s itself and svc 0x520 stalls every job poll 10 s */
     for (i = 0; i < MAIL_LANES; i++)
         if (g_rd[i].job >= 0 && (r = ((svc_i)SVC(g_rd[i].kind == 1 ? 0x528 : 0x51c))(g_rd[i].job)) != 0) {
@@ -2636,6 +2657,7 @@ static void store_import(BYTE *b)
         for (s = 0; s < 4; s++) {   /* s\a before s\b, so a sent copy beats the outbox's */
             k = store_list(b, homes[h], s, me, 1, &v);
             for (i = 0; i < k; i++) {
+                if (s < 2 && ((*(WORD *)(v[i].hdr + 0x3e) >> 7) & 0x1f) == 0 && !memcmp(v[i].hdr, &me, 8)) continue;
                 for (j = 0; j < n; j++)
                     if ((all[j].sub >= 2) == (s >= 2) && mail_same(all[j].hdr, v[i].hdr)) break;
                 if (j < n) {

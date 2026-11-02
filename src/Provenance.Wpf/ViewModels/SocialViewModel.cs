@@ -458,6 +458,8 @@ public partial class SocialViewModel : ObservableObject
                 if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
                 continue;
             }
+            // a line of mine coming back isn't something I received, and it's left where it is on the server
+            if (m.IsChat && Mine(snap, m)) continue;
             if (chat.MergeIncoming(m))
             {
                 changed = true;
@@ -506,7 +508,7 @@ public partial class SocialViewModel : ObservableObject
         bool changed = false;
         foreach (var m in snap.Stored!.Received)
         {
-            if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey)) continue;
+            if (m.IsChat && (Mine(snap, m) || (m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey)))) continue;
             if (NoticeText(m) is { } line)
             {
                 if (!Mine(snap, m)) changed |= chat.MergeNotice(m, line);
