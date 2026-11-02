@@ -300,7 +300,8 @@ public partial class SocialViewModel
         if (st == "failed:hidden")
         {
             ShowTabAgain(_ffxiFrom);
-            ProfileNote = ViewerText(0x4ab6, "Selected profile is hidden.");
+            ProfileNote = "";
+            ProfilePopup?.Invoke(ViewerText(0x4ab6, "Selected profile is hidden."));
             return;
         }
         // a profile shown again from the copy has slots the hook's lost, so opening it again reads it afresh

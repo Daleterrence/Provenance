@@ -97,6 +97,8 @@ public partial class SocialViewModel : ObservableObject
     public event Action<string, int>? GroupInviteReceived;
     public event Action<string>? FriendCameOnline;          // never for the presence that lands at sign-in
     public event Action<PolSocialSnapshot>? SnapshotApplied;
+    // the viewer's own popups over the profile window
+    public event Action<string>? ProfilePopup;
 
     [RelayCommand]
     private void ChangeProfilePicture()

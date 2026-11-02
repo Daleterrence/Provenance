@@ -15,6 +15,9 @@ public partial class ProfileWindow : Window
         _friend = friend;
         SetFriend(friend);
         vm.RequestProfile(friend);
+        void Popup(string text) => MessageDialog.ShowInfo(this, "PlayOnline profile", text);
+        vm.ProfilePopup += Popup;
+        Closed += (_, _) => vm.ProfilePopup -= Popup;
         KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Escape) { e.Handled = true; Close(); } };
     }
 
