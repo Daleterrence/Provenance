@@ -433,6 +433,15 @@ public partial class SocialViewModel : ObservableObject
                 changed |= chat.Adopt(f.Name, f.Key);   // lines saved while the hook had no key for them
         bool takeStore = snap.Stored != null && !_storeTaken;
         if (takeStore) changed |= MergeStored(chat, snap);
+        // the recent results too, an answer or invitation can take the send slot before we see a line's result. First,
+        // so a line of mine coming back in the same snapshot finds the time and seq it went with
+        foreach (var (token, state, time, seq) in snap.SendResults.Append((snap.SendToken, snap.SendState, 0L, 0L)))
+            if (token.Length > 0 && (state == "sent" || state.StartsWith("failed", StringComparison.Ordinal)))
+            {
+                changed |= chat.SetSendState(token, state, time, seq);
+                _sendInFlight.RemoveAll(x => x.Token == token);
+            }
+        foreach (var (token, fromSlot, toOther) in snap.SentFrom) changed |= chat.SetSentFrom(token, fromSlot, toOther);
         foreach (var m in snap.Messages)
         {
             var who = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == m.FromKey)?.Name ?? m.From;
@@ -457,8 +466,14 @@ public partial class SocialViewModel : ObservableObject
                 if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
                 continue;
             }
-            // a line of mine coming back isn't something I received. The hook deletes it, so it's never acked here
-            if (m.IsChat && Mine(snap, m)) continue;
+            // a line I sent coming back (the same header time and seq as one in the log) isn't something I received. It
+            // goes from the server like any read line, and one of mine it can't match is shown like any other
+            if (Echo(snap, m, chat))
+            {
+                changed |= chat.MarkReturned(m.Time, m.Seq, m.FromSlot);
+                if (m.HasBody && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
+                continue;
+            }
             if (chat.MergeIncoming(m))
             {
                 changed = true;
@@ -467,14 +482,7 @@ public partial class SocialViewModel : ObservableObject
             // chat only, a request stays on the server for the viewer and is never deleted unseen
             if (m.HasBody && m.IsChat && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
         }
-        // the recent results too, an answer or invitation can take the send slot before we see a line's result
-        foreach (var (token, state, time, seq) in snap.SendResults.Append((snap.SendToken, snap.SendState, 0L, 0L)))
-            if (token.Length > 0 && (state == "sent" || state.StartsWith("failed", StringComparison.Ordinal)))
-            {
-                changed |= chat.SetSendState(token, state, time, seq);
-                _sendInFlight.RemoveAll(x => x.Token == token);
-            }
-        foreach (var (time, seq) in snap.Returned) changed |= chat.MarkReturned(time, seq);
+        foreach (var (time, seq, fromSlot) in snap.Returned) changed |= chat.MarkReturned(time, seq, fromSlot);
         foreach (var (token, state) in snap.SendQueue)
             if (_sendInFlight.FindIndex(x => x.Token == token) is var i and >= 0)
                 _sendInFlight[i] = _sendInFlight[i] with { HookState = state, HookSaid = DateTime.UtcNow };
@@ -501,25 +509,46 @@ public partial class SocialViewModel : ObservableObject
     private static bool Mine(PolSocialSnapshot snap, PolMessage m) =>
         m.IsMe || (snap.MyKey.Length > 0 && m.FromKey == snap.MyKey);
 
+    // only a certain echo of mine: the log has a line I sent to another POL ID with the same time, seq and sending slot, or
+    // it's from a handle to itself. Anything else from my POL ID is shown, never deleted unread
+    private static bool Echo(PolSocialSnapshot snap, PolMessage m, ChatStore chat) =>
+        m.IsChat && Mine(snap, m) &&
+        ((m.ToMe && m.ToKey.Length > 0 && m.ToKey == m.FromKey) || chat.SentAt(m.Time, m.Seq, m.FromSlot));
+
+    // what's still on its way under the active handle. A switch waits for it, it'd go from the new one otherwise
+    internal string? PendingWrite() =>
+        _sendQueue.Count > 0 || _sendInFlight.Count > 0 ? "Wait for your messages to finish sending first."
+        : _editToken != null ? "Wait for your friend list change to finish first."
+        : _answerToken != null || _requestToken != null ? "Wait for your friend request to finish first."
+        : _groupToken != null ? "Wait for your friend group change to finish first."
+        : _picToken != null ? "Wait for your profile picture to finish saving first."
+        : StatusPending ? "Wait for your status change to finish first."
+        : null;
+
     // the game's message store, read by the hook at login: it's history, so no notices, and nothing to ack since none of
     // it's on the server any more
     private bool MergeStored(ChatStore chat, PolSocialSnapshot snap)
     {
         bool changed = false;
-        foreach (var m in snap.Stored!.Received)
+        foreach (var s in snap.Stored!.Sent)
         {
-            if (m.IsChat && (Mine(snap, m) || (m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey)))) continue;
+            var to = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == s.ToKey)?.Name ??
+                     (s.To.Length > 0 ? s.To : chat.NameFor(s.ToKey));
+            if (to.Length > 0 || s.ToKey.Length > 0) changed |= chat.AddGameSent(to, s);
+        }
+        foreach (var m in snap.Stored.Received)
+        {
+            if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey)) continue;
+            if (Echo(snap, m, chat))
+            {
+                changed |= chat.MarkReturned(m.Time, m.Seq, m.FromSlot);
+                continue;
+            }
             if (NoticeText(m) is { } line)
             {
                 if (!Mine(snap, m)) changed |= chat.MergeNotice(m, line);
             }
             else changed |= chat.MergeIncoming(m);
-        }
-        foreach (var s in snap.Stored.Sent)
-        {
-            var to = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == s.ToKey)?.Name ??
-                     (s.To.Length > 0 ? s.To : chat.NameFor(s.ToKey));
-            if (to.Length > 0 || s.ToKey.Length > 0) changed |= chat.AddGameSent(to, s);
         }
         return changed;
     }

@@ -84,6 +84,13 @@ public partial class HandlesViewModel : ObservableObject
             Note = _op == HandleChange.Switch ? "You were logged out before PlayOnline confirmed the switch."
                                               : "You were logged out before PlayOnline confirmed the change.";
         }
+        // Play takes the hook's last word with it (the snapshot's deleted), so a change still going is settled here
+        if (readOnly == HandleList.ReadOnlyText && _token != null)
+        {
+            _token = null;
+            NoteIsError = true;
+            Note = HandleList.Failed(_op, "failed:cancelled");
+        }
         Settle();
         Busy = _token != null;
         Rebuild();

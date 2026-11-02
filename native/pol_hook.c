@@ -2027,25 +2027,77 @@ static void __cdecl mail_raw(void *arg)
     }
 }
 static int is_me(BYTE *b, unsigned lo, unsigned hi);
-/* a chat line from my own POL ID is never one I received. One of mine has been seen coming back like this when it
-   went from a handle the friend's handle isn't friends with */
 static int mail_mine(BYTE *b, const BYTE *h)
 {
     return ((*(const WORD *)(h + 0x3e) >> 7) & 0x1f) == 0 && is_me(b, *(const DWORD *)h, *(const DWORD *)(h + 4));
 }
-/* the time and seq of the ones that came back, so the app can mark the line it sent */
+static void fmt_polid(BYTE *b, unsigned lo, unsigned hi, char out[12]);
+static void peer_key(BYTE *b, unsigned lo, unsigned hi, unsigned slot, char out[17]);
+/* every line this session sent to another POL ID: header time and seq and the slot it went from */
+#define SENT_IDS 256
+static struct { DWORD time, seq; BYTE from_slot; } g_sent_ids[SENT_IDS];
+static int g_sent_ids_n, g_sent_ids_next;
+static int sent_by_me(const BYTE *h)
+{
+    for (int i = 0; i < g_sent_ids_n; i++)
+        if (g_sent_ids[i].time == *(const DWORD *)(h + 0x34) && g_sent_ids[i].seq == *(const DWORD *)(h + 0x30) &&
+            g_sent_ids[i].from_slot == h[0x3c])
+            return 1;
+    return 0;
+}
+/* a zeroed or odd recipient field never counts as someone else's POL ID */
+static int polid_ok(BYTE *b, DWORD lo, DWORD hi)
+{
+    char id[12];
+    if (!lo && !hi) return 0;
+    fmt_polid(b, lo, hi, id);
+    return lstrlenA(id) == 8;
+}
+/* one of mine coming back: a line this session sent to another POL ID (same time, seq and sending slot), or one from a
+   handle to itself. Anything else from my POL ID, another of my handles writing to this one say, is a real message */
+static int mail_echo(BYTE *b, const BYTE *h)
+{
+    static int said;
+    DWORD lo = *(const DWORD *)(h + 8), hi = *(const DWORD *)(h + 0xc);
+    int ok, me;
+    if (!mail_mine(b, h)) return 0;
+    ok = polid_ok(b, lo, hi);
+    me = ok && is_me(b, lo, hi);
+    if (!said) {
+        said = 1;
+        lg("mail: a chat line from my own POL ID, to %s, slot %u to slot %u\r\n",
+           !ok ? "no POL ID" : me ? "my POL ID" : "another POL ID", h[0x3c], h[0x3d]);
+    }
+    return sent_by_me(h) || (me && h[0x3c] == h[0x3d]);
+}
+/* the ones that came back, so the app can mark the line it sent */
 #define RETURNED_MAX 16
-static struct { DWORD time, seq; } g_returned[RETURNED_MAX];
+static struct { DWORD time, seq; BYTE from_slot; } g_returned[RETURNED_MAX];
 static int g_returned_n, g_returned_next;
 static void mail_returned(const BYTE *h)
 {
     DWORD t = *(const DWORD *)(h + 0x34), q = *(const DWORD *)(h + 0x30);
-    for (int i = 0; i < g_returned_n; i++) if (g_returned[i].time == t && g_returned[i].seq == q) return;
+    for (int i = 0; i < g_returned_n; i++)
+        if (g_returned[i].time == t && g_returned[i].seq == q && g_returned[i].from_slot == h[0x3c]) return;
     g_returned[g_returned_next].time = t;
     g_returned[g_returned_next].seq = q;
+    g_returned[g_returned_next].from_slot = h[0x3c];
     g_returned_next = (g_returned_next + 1) % RETURNED_MAX;
     if (g_returned_n < RETURNED_MAX) g_returned_n++;
     g_snap_dirty = 1;
+}
+/* a pushed line's looked at again whenever one lands and whenever a send's answer comes in, so one that came back
+   before its own send was answered still gets caught, and never makes it into a snapshot first */
+static void mail_recheck(BYTE *b)
+{
+    if (!g_mail_raw_new) return;
+    g_mail_raw_new = 0;
+    for (int i = 0; i < g_mail_n; i++)
+        if (g_mail[i].state == 3 && mail_echo(b, g_mail[i].hdr)) {
+            lg("mail: a chat line I sent came back real-time - not shown\r\n");
+            mail_returned(g_mail[i].hdr);
+            g_mail[i].state = 6;
+        }
 }
 static int sender_ignored(BYTE *b, const BYTE *h)
 {
@@ -2141,10 +2193,10 @@ static void mail_fetch_start(BYTE *b, int lane)
             m->state = 4;
             continue;
         }
-        /* the viewer reads one like any other and deletes it once it's saved. It's never shown here, so it's
-           deleted unread like an ignored sender's */
-        if (mail_mine(b, m->hdr)) {
-            lg("mail: chat message from my own POL ID - deleted unread\r\n");
+        /* the viewer reads one like any other and deletes it once it's saved. A line I sent is never shown as
+           received, so it's deleted unread like an ignored sender's */
+        if (mail_echo(b, m->hdr)) {
+            lg("mail: a chat line I sent came back - deleted unread\r\n");
             mail_returned(m->hdr);
             m->state = 4;
             continue;
@@ -2195,15 +2247,7 @@ static void mail_pump(BYTE *b)
         mail_add(g_push_q[i]);
     }
     g_push_n = 0;
-    if (g_mail_raw_new) {
-        g_mail_raw_new = 0;
-        for (i = 0; i < g_mail_n; i++)
-            if (g_mail[i].state == 3 && mail_mine(b, g_mail[i].hdr)) {
-                lg("mail: real-time chat line from my own POL ID - not shown\r\n");
-                mail_returned(g_mail[i].hdr);
-                g_mail[i].state = 6;
-            }
-    }
+    mail_recheck(b);
     /* never cancelled here, polcore fails a stuck job at 100 s itself and svc 0x520 stalls every job poll 10 s */
     for (i = 0; i < MAIL_LANES; i++)
         if (g_rd[i].job >= 0 && (r = ((svc_i)SVC(g_rd[i].kind == 1 ? 0x528 : 0x51c))(g_rd[i].job)) != 0) {
@@ -2431,21 +2475,24 @@ static int slot_name(BYTE *b, int slot, char *name16)
 static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, int read,
                     const char *subj, const char *text, const BYTE *att)
 {
-    char nm[64], sk[17], grp[80] = "";
+    char nm[64], sk[17], tk[17], grp[80] = "";
     WORD f = *(const WORD *)(e + 0x3e);
     unsigned kind = (f >> 7) & 0x1f;
-    int o;
+    DWORD tlo = *(const DWORD *)(e + 0x08), thi = *(const DWORD *)(e + 0x0c);
+    int o, tome = polid_ok(b, tlo, thi) && is_me(b, tlo, thi);
     sjis_json(nm, sizeof nm, e + 0x10, 0x0f);
     peer_key(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04), e[0x3c], sk);
+    peer_key(b, tlo, thi, e[0x3d], tk);
     /* removed from a group (0x12) or it was disbanded (0x13): the name's in the type-10 attachment, the text's empty */
     if (att && (kind == 0x12 || kind == 0x13)) {
         lstrcpyA(grp, ",\"group\":");
         sjis_json(grp + 9, sizeof grp - 9, att + 8, 0x14);
     }
-    o = wsprintfA(out, "{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"kind\":%u,\"time\":%u,"
-                       "\"seq\":%u,\"state\":\"%s\"%s%s,\"subject\":",
+    o = wsprintfA(out, "{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"toKey\":\"%s\","
+                       "\"toMe\":%s,\"kind\":%u,\"time\":%u,\"seq\":%u,\"state\":\"%s\"%s%s,\"subject\":",
                   mid, nm, sk, e[0x3c],
-                  is_me(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04)) ? "true" : "false",
+                  is_me(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04)) ? "true" : "false", tk,
+                  tome ? "true" : "false",
                   kind, *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state,
                   read < 0 ? "" : read ? ",\"read\":true" : ",\"read\":false", grp);
     o += json_text(out + o, cap - o - 16, subj);
@@ -2620,9 +2667,10 @@ static int sent_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const 
     int row = find_friend_row(b, lo, hi, e[0x3d]), o;
     peer_key(b, lo, hi, e[0x3d], sk);
     if (row >= 0 && get_friend(b, row, fr)) sjis_json(nm, sizeof nm, fr + 0xa0, 0x0f);
-    o = wsprintfA(out, "{\"mid\":%d,\"to\":%s,\"toKey\":\"%s\",\"toSlot\":%u,\"time\":%u,\"seq\":%u,\"state\":\"%s\","
-                       "\"subject\":",
-                  mid, nm, sk, e[0x3d], *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state);
+    o = wsprintfA(out, "{\"mid\":%d,\"to\":%s,\"toKey\":\"%s\",\"toSlot\":%u,\"fromSlot\":%u,\"toOther\":%s,\"time\":%u,"
+                       "\"seq\":%u,\"state\":\"%s\",\"subject\":",
+                  mid, nm, sk, e[0x3d], e[0x3c], polid_ok(b, lo, hi) && !is_me(b, lo, hi) ? "true" : "false",
+                  *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state);
     o += json_text(out + o, cap - o - 16, subj);
     lstrcpyA(out + o, ",\"text\":"); o += 8;
     o += json_text(out + o, cap - o - 4, text);
@@ -2685,7 +2733,6 @@ static void store_import(BYTE *b)
         for (s = 0; s < 4; s++) {   /* s\a before s\b, so a sent copy beats the outbox's */
             k = store_list(b, homes[h], s, me, 1, &v);
             for (i = 0; i < k; i++) {
-                if (s < 2 && ((*(WORD *)(v[i].hdr + 0x3e) >> 7) & 0x1f) == 0 && !memcmp(v[i].hdr, &me, 8)) continue;
                 for (j = 0; j < n; j++)
                     if ((all[j].sub >= 2) == (s >= 2) && mail_same(all[j].hdr, v[i].hdr)) break;
                 if (j < n) {
@@ -2970,11 +3017,23 @@ static const char *pace_refusal(void)
 }
 
 #define SEND_HIST 8
-static struct { char token[48]; char state[48]; DWORD time, seq; } g_send_hist[SEND_HIST];
+static struct { char token[48]; char state[48]; DWORD time, seq, to_lo, to_hi; int from_slot; } g_send_hist[SEND_HIST];
 static int g_send_hist_next;
 static void send_note(const char *token, const char *state)
 {
     if (!lstrcmpA(token, g_send_token)) lstrcpynA(g_send_state, state, sizeof g_send_state);
+}
+/* a line that went to another POL ID, remembered so the same line coming back can be told from a real one */
+static void sent_record(BYTE *b, const BYTE *hdr)
+{
+    DWORD lo = *(const DWORD *)(hdr + 8), hi = *(const DWORD *)(hdr + 0xc);
+    if (!polid_ok(b, lo, hi) || is_me(b, lo, hi)) return;
+    g_sent_ids[g_sent_ids_next].time = *(const DWORD *)(hdr + 0x34);
+    g_sent_ids[g_sent_ids_next].seq = *(const DWORD *)(hdr + 0x30);
+    g_sent_ids[g_sent_ids_next].from_slot = hdr[0x3c];
+    g_sent_ids_next = (g_sent_ids_next + 1) % SENT_IDS;
+    if (g_sent_ids_n < SENT_IDS) g_sent_ids_n++;
+    g_mail_raw_new = 1;
 }
 /* hdr is the message that went, its header time and seq let the app put my line where the friend sees it */
 static void send_result(const char *token, const char *state, const BYTE *hdr)
@@ -2984,6 +3043,9 @@ static void send_result(const char *token, const char *state, const BYTE *hdr)
     lstrcpynA(g_send_hist[g_send_hist_next].state, state, sizeof g_send_hist[0].state);
     g_send_hist[g_send_hist_next].time = hdr ? *(const DWORD *)(hdr + 0x34) : 0;
     g_send_hist[g_send_hist_next].seq = hdr ? *(const DWORD *)(hdr + 0x30) : 0;
+    g_send_hist[g_send_hist_next].to_lo = hdr ? *(const DWORD *)(hdr + 0x08) : 0;
+    g_send_hist[g_send_hist_next].to_hi = hdr ? *(const DWORD *)(hdr + 0x0c) : 0;
+    g_send_hist[g_send_hist_next].from_slot = hdr ? hdr[0x3c] : -1;
     g_send_hist_next = (g_send_hist_next + 1) % SEND_HIST;
     g_snap_dirty = 1;
 }
@@ -3128,6 +3190,7 @@ static void mail_send_pump(BYTE *b)
         if (r == NO_SLOT) { send_note(s->token, "queued"); again = 1; continue; }
         if (r == 1) lstrcpyA(st, "sent"); else wsprintfA(st, "failed:%d", r);
         send_result(s->token, st, s->msg);
+        if (r == 1) sent_record(b, s->msg);
         ms = GetTickCount64() - s->started;
         lg("mail: send done -> %d (%u ms)\r\n", r, (unsigned)ms);
         send_paced(r, ms);
@@ -3322,7 +3385,8 @@ static ULONGLONG g_db_last;
 static int g_srch_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
 static int g_prof_step, g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
 static int g_pic_want;
-static int g_cr_db;   /* the chat rooms' zone and room lists, pol_chat.c */
+static int g_cr_db;   /* chat's zone and room lists, 0 idle, the steps are pol_chat.c's cr_db_pump */
+static ULONGLONG g_cr_last;   /* chat's last enter, leave or list, pol_chat.c */
 static int db_free(void)
 {
     return GetTickCount64() - g_db_last >= 3000 && !g_srch_step && !g_prof_step && !g_ch_step && !g_fp_step &&
@@ -3747,8 +3811,11 @@ static void prof_slots_keep(unsigned __int64 hid, const BYTE *src)
     while (i < PROF_SLOTS_KEPT && g_prof_slots[i].hid != hid) i++;
     if (i == PROF_SLOTS_KEPT) {
         if (!src) return;
-        i = g_prof_slots_next;
-        g_prof_slots_next = (g_prof_slots_next + 1) % PROF_SLOTS_KEPT;
+        for (i = 0; i < PROF_SLOTS_KEPT && g_prof_slots[i].hid; i++) ;   /* a forgotten one's free first */
+        if (i == PROF_SLOTS_KEPT) {
+            i = g_prof_slots_next;
+            g_prof_slots_next = (g_prof_slots_next + 1) % PROF_SLOTS_KEPT;
+        }
     }
     g_prof_slots[i].hid = src ? hid : 0;
     if (src) memcpy(g_prof_slots[i].slots, src, sizeof g_prof_slots[i].slots);
@@ -4036,11 +4103,19 @@ static int ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
     }
     return 0;
 }
+/* the app asks for the next lookup as soon as one's answered, so the user's own reads and saves go first */
+static int user_db_waiting(void)
+{
+    static const char *const ext[] = { "search", "profile", "ffxiprofile", "myprofile", "saveprofile", "rename", "pic",
+                                       "chatzones", "chatrooms" };
+    for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (request_waiting(ext[i])) return 1;
+    return 0;
+}
 static void character_request(BYTE *b)
 {
     char buf[128], *p, *tok;
     unsigned __int64 ctid;
-    if (!db_free()) return;
+    if (!db_free() || user_db_waiting()) return;
     if (take_request("character", buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
@@ -5043,10 +5118,10 @@ static void handle_place(BYTE *b, int idx, int slot, int pos)
     DWORD *f = (DWORD *)(b + 0x403090 + idx * 0x68);
     int now = (int)((*f >> 22) & 7);
     if (pos < 0 || pos > 7 || now == pos || !(*f & CHR_LINKED) || (int)CHR_HANDLE(*f) != slot || (hs[pos] & 1) ||
-        ((hs[now] >> 1) & 0x3f) != idx)
+        !(hs[now] & 1) || ((hs[now] >> 1) & 0x3f) != idx)
         return;
     hs[pos] = hs[now];
-    hs[now] &= 0xfe;
+    hs[now] &= 0xfe;   /* what polcore's own unlink leaves (polcore.dll 0x10022d00) */
     *f = (*f & ~(7u << 22)) | (DWORD)pos << 22;
 }
 /* a put that didn't go puts polcore back how the server has it, which costs nothing (no reload, the viewer doesn't) */
@@ -5112,6 +5187,7 @@ static ULONGLONG last_request(void)
     if (g_me_last > t) t = g_me_last;
     if (g_db_last > t) t = g_db_last;
     if (g_pic_last > t) t = g_pic_last;
+    if (g_cr_last > t) t = g_cr_last;
     return t;
 }
 
@@ -5230,6 +5306,7 @@ static void handle_pump(BYTE *b, int ctl)
 static void handle_abandon(BYTE *b)
 {
     if (g_hop == HOP_NONE) return;
+    if (g_hjob >= 0) CANCEL_JOB(g_hjob);
     if (g_hop != HOP_SWITCH) handle_undo(b);
     handle_done("failed:cancelled");
 }
@@ -5239,7 +5316,9 @@ static void handles_json(BYTE *b, HANDLE out)
     BYTE rec[0x68];
     int cur = SVC(0x2f8) ? ((svc_v)SVC(0x2f8))() : -1, first = 1, i, j, o;
     DWORD f;
-    wr_job(out, ",\"handleJob\":{\"token\":%s,\"state\":\"%s\"}", g_htoken, g_hstate);
+    wr_job(out, ",\"handleJob\":{\"token\":%s,\"state\":\"%s\"", g_htoken, g_hstate);
+    wr(out, g_hop == HOP_SWITCH ? ",\"op\":\"switch\"}" : g_hop == HOP_LINK ? ",\"op\":\"link\"}"
+                                : g_hop == HOP_UNLINK ? ",\"op\":\"unlink\"}" : "}");
     wr(out, ",\"handles\":[");
     for (i = 0; i < 64; i++) {
         if (!handle_ok(b, i, rec)) continue;
@@ -5326,6 +5405,7 @@ static void snapshot_social(BYTE *b)
     grp_hdr gh;
     grp_mem m;
     if (!b) return;
+    mail_recheck(b);
     ipc_file(path, "social.json");
     lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
     HANDLE h = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -5348,14 +5428,20 @@ static void snapshot_social(BYTE *b)
         if (!g_send_hist[k].token[0]) continue;
         json_str(tk, sizeof tk, g_send_hist[k].token);
         json_str(sj, sizeof sj, g_send_hist[k].state);
-        wsprintfA(line, "%s{\"token\":%s,\"state\":%s,\"time\":%lu,\"seq\":%lu}", first ? "" : ",", tk, sj,
-                  g_send_hist[k].time, g_send_hist[k].seq);
+        n = (DWORD)wsprintfA(line, "%s{\"token\":%s,\"state\":%s,\"time\":%lu,\"seq\":%lu", first ? "" : ",", tk, sj,
+                             g_send_hist[k].time, g_send_hist[k].seq);
+        if (g_send_hist[k].from_slot >= 0)
+            n += (DWORD)wsprintfA(line + n, ",\"fromSlot\":%d,\"toOther\":%s", g_send_hist[k].from_slot,
+                                  polid_ok(b, g_send_hist[k].to_lo, g_send_hist[k].to_hi) &&
+                                  !is_me(b, g_send_hist[k].to_lo, g_send_hist[k].to_hi) ? "true" : "false");
+        lstrcpyA(line + n, "}");
         wr(h, line);
         first = 0;
     }
     wr(h, "],\"returned\":[");
     for (i = 0; i < g_returned_n; i++) {
-        wsprintfA(line, "%s{\"time\":%lu,\"seq\":%lu}", i ? "," : "", g_returned[i].time, g_returned[i].seq);
+        wsprintfA(line, "%s{\"time\":%lu,\"seq\":%lu,\"fromSlot\":%u}", i ? "," : "", g_returned[i].time,
+                  g_returned[i].seq, g_returned[i].from_slot);
         wr(h, line);
     }
     /* the messages the hook has, and whether each one's PUT has started */
@@ -5668,6 +5754,37 @@ static void hold_turn(BYTE *b, int ctl)
     }
 }
 
+/* Play: only writes hold it, ms at most. An inbox read or delete is cancelled after the wait: a cancel stalls job polls
+   10 s, which FFXI's start-up sits out */
+static void play_drain(BYTE *b, const char *spath, DWORD ms)
+{
+    ULONGLONG until = GetTickCount64() + ms;
+    g_draining = 1;
+    if (!g_lean) mail_ack_request();
+    db_reads_abandon(b);
+    me_abandon(b, "cancelled");
+    chat_end(b);
+    while (writes_pending() && GetTickCount64() < until)
+        drain_turn(b, !g_lean);
+    for (int i = 0; i < MAIL_LANES; i++) if (g_rd[i].job >= 0) CANCEL_JOB(g_rd[i].job);
+    if (g_del_job >= 0) CANCEL_JOB(g_del_job);
+    for (int i = 0; i < g_sq_n; i++) if (g_sq[i].job >= 0) CANCEL_JOB(g_sq[i].job);
+    if (g_status_job >= 0) CANCEL_JOB(g_status_job);
+    handle_abandon(b);
+    g_in_hold = 0;
+    if (g_edit_job >= 0) CANCEL_JOB(g_edit_job);
+    if (g_pic_want >= 0) profile_pic_cancel(b);
+    if (g_grp_job >= 0) CANCEL_JOB(g_grp_job);
+    /* FFXI installs its own message handlers, so polcore gets its defaults back */
+    if (SVC(0xda0)) ((void (__cdecl *)(void))SVC(0xda0))();
+    /* the viewer always has notices on when a game starts, without them FFXI only sees new messages at its next lobby
+       login. A local flag, nothing goes on the wire */
+    if (g_lean && SVC(0x1020)) ((svc_i)SVC(0x1020))(1);
+    idle_timeout_for_game(b);
+    DeleteFileA(spath);   /* the snapshot has friends' messages in it */
+    store_drop();
+}
+
 /* writes under way get 5 s to finish, then the viewer's sign-out */
 static void hold_sign_out(BYTE *b, const char *spath)
 {
@@ -5689,7 +5806,7 @@ static void hold_sign_out(BYTE *b, const char *spath)
 static void pol_hold(BYTE *b)
 {
     static ULONGLONG lastCtl, lastMailReq;
-    ULONGLONG lastSnap = 0, until;
+    ULONGLONG lastSnap = 0;
     char spath[MAX_PATH + 64], path[MAX_PATH + 64], num[16], rq[16];
     int ctl, idle, reason, why;
     HANDLE ef;
@@ -5779,35 +5896,8 @@ static void pol_hold(BYTE *b)
                     g_snap_dirty = 1;
                 }
             } else {
-                until = GetTickCount64() + 15000;
                 lg("hold: Play signalled - finishing PlayOnline writes, then booting FFXI\r\n");
-                /* only writes hold Play, 15 s at most. An inbox read or delete is cancelled after the wait: a cancel
-                   stalls job polls 10 s, which FFXI's start-up sits out */
-                g_draining = 1;
-                if (!g_lean) mail_ack_request();
-                db_reads_abandon(b);
-                me_abandon(b, "cancelled");
-                chat_end(b);
-                while (writes_pending() && GetTickCount64() < until)
-                    drain_turn(b, !g_lean);
-                for (int i = 0; i < MAIL_LANES; i++) if (g_rd[i].job >= 0) CANCEL_JOB(g_rd[i].job);
-                if (g_del_job >= 0) CANCEL_JOB(g_del_job);
-                for (int i = 0; i < g_sq_n; i++) if (g_sq[i].job >= 0) CANCEL_JOB(g_sq[i].job);
-                if (g_status_job >= 0) CANCEL_JOB(g_status_job);
-                if (g_hjob >= 0) CANCEL_JOB(g_hjob);
-                handle_abandon(b);
-                g_in_hold = 0;
-                if (g_edit_job >= 0) CANCEL_JOB(g_edit_job);
-                if (g_pic_want >= 0) profile_pic_cancel(b);
-                if (g_grp_job >= 0) CANCEL_JOB(g_grp_job);
-                /* FFXI installs its own message handlers, so polcore gets its defaults back */
-                if (SVC(0xda0)) ((void (__cdecl *)(void))SVC(0xda0))();
-                /* the viewer always has notices on when a game starts, without them FFXI only sees new messages at its
-                   next lobby login. A local flag, nothing goes on the wire */
-                if (g_lean && SVC(0x1020)) ((svc_i)SVC(0x1020))(1);
-                idle_timeout_for_game(b);
-                DeleteFileA(spath);   /* the snapshot has friends' messages in it */
-                store_drop();
+                play_drain(b, spath, 15000);
                 /* the game keeps going whatever happens to Provenance */
                 if (g_owner) CloseHandle(g_owner);
                 g_owner = NULL;

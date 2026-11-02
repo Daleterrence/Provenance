@@ -24,7 +24,7 @@ public sealed record ChatLine(long Seq, long Time, string Kind, int From, bool M
 }
 
 // the snapshot's "chat", there once chat's been used this session. States run "searching" -> "done" or "failed:...",
-// and the room's "entering" -> "in" -> "left", or "failed:...", "kicked" or "lost"
+// and the room's "entering" -> "in" -> "left", or "failed:...", "kicked", "gone" (the room went without a kick) or "lost"
 public sealed record ChatRoomsSnapshot(long LineSeq,
                                        string ZonesToken, string ZonesState, IReadOnlyList<ChatZone> Zones,
                                        IReadOnlyList<ChatCategory> Categories,

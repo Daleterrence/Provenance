@@ -31,7 +31,6 @@ enum { CRM_SAY, CRM_HELLO = 2, CRM_REPLY = 3 };
 
 static int g_cr_used;
 static void *g_cr_644;
-static ULONGLONG g_cr_last;
 
 static cr_raw g_cr_raw[CR_RAW];
 static volatile LONG g_cr_raw_n;
@@ -39,7 +38,6 @@ static int g_cr_raw_lost;
 
 static pdb_schema *g_cr_cpib, *g_cr_rpib;
 static pfb_hdr *g_cr_cpfb, *g_cr_rpfb;
-static int g_cr_db;   /* 0 idle, 1 start waits, 2 search, 3 fetch waits, 4 fetch. +10 for the room list */
 static int g_cr_job = -1;
 static int g_cr_set, g_cr_count;
 static BYTE *g_cr_buf;
@@ -260,7 +258,7 @@ static void cr_parse(BYTE *b, const WCHAR *w, DWORD lo, DWORD hi, int whisper)
     case L'a':
     case L'b':
         cr_copy(name, 0x21, n > 8 ? w + 8 : L"", 0x20);
-        if (w[0] == L'b' && !lstrcmpW(name, g_cr_nick)) g_cr_kicked_me = 1;
+        if (w[0] == L'b' && p && p->master && !lstrcmpW(name, g_cr_nick)) g_cr_kicked_me = 1;
         cr_add_line(w[0] == L'a' ? CRK_MASTER : CRK_KICKED, 0, NULL, name, NULL);
         return;
     }
@@ -576,9 +574,20 @@ static int cr_password(const char *tok, char *key, int cap)
     if (rc != PC_NOT_FOUND) lg("chat: room password entry unusable (%s)\r\n", rc == PC_OK ? "another enter's" : cred_why(rc));
     return 0;
 }
+/* a JOIN that timed out could still have got there, so it gets its one PART here */
+static void cr_part_stale(BYTE *b)
+{
+    if (g_cr_st == CR_OUT && g_cr_joined && cr_part(b) > 0) lg("chat: PART for %s, its JOIN never answered\r\n", g_cr_room);
+}
+static void cr_join_refused(const char *state)
+{
+    SecureZeroMemory(g_cr_key, sizeof g_cr_key);
+    if (state) cr_room_state(state);
+}
 static void cr_join_request(BYTE *b)
 {
     char buf[512], *p, *tok, *irc, *haskey, *nick;
+    int pw = 0;
     if (take_request("chatjoin", buf, sizeof buf) < 0) return;
     g_cr_used = 1;
     g_cr_last = GetTickCount64();
@@ -587,31 +596,39 @@ static void cr_join_request(BYTE *b)
     irc = req_line(&p);
     haskey = req_line(&p);
     nick = req_line(&p);
+    /* the password entry's read, and so deleted, before anything can turn the enter down */
+    if (haskey[0]) pw = cr_password(tok, g_cr_key, sizeof g_cr_key);
     if (g_cr_st != CR_OUT) {
         lg("chat: enter ignored, already in or entering a room\r\n");
+        cr_join_refused(NULL);
         return;
     }
     if (g_cr_cancel_tok[0] && !lstrcmpA(g_cr_cancel_tok, tok)) {
         g_cr_cancel_tok[0] = 0;
-        if (haskey[0]) cr_password(tok, g_cr_key, sizeof g_cr_key);   /* only to delete it */
-        SecureZeroMemory(g_cr_key, sizeof g_cr_key);
         lg("chat: enter called off before it was taken\r\n");
+        cr_join_refused(NULL);
         return;
     }
     g_cr_cancel_tok[0] = 0;
     lstrcpynA(g_cr_tok, tok, sizeof g_cr_tok);
-    if (notice_blocks(g_notice)) { cr_room_state("failed:account notice"); return; }
+    if (notice_blocks(g_notice)) { cr_join_refused("failed:account notice"); return; }
     if (!cr_irc_ok(irc) || (haskey[0] && lstrcmpA(haskey, "1")) || !cr_nick_ok(b, nick)) {
-        cr_room_state("failed:bad request");
+        cr_join_refused("failed:bad request");
         return;
     }
-    if (cr_session(b) < 0) { cr_room_state("failed:no chat"); return; }
-    if (haskey[0] && (!cr_password(tok, g_cr_key, sizeof g_cr_key) || !cr_key_ok(g_cr_key))) {
-        SecureZeroMemory(g_cr_key, sizeof g_cr_key);
-        cr_room_state("failed:no password");
-        return;
-    }
+    if (cr_session(b) < 0) { cr_join_refused("failed:no chat"); return; }
+    if (haskey[0] && (!pw || !cr_key_ok(g_cr_key))) { cr_join_refused("failed:no password"); return; }
     if (!haskey[0]) g_cr_key[0] = 0;
+    cr_part_stale(b);
+    /* a line the hook renamed but never read belongs to the last room, it never goes into this one */
+    {
+        char path[MAX_PATH + 64];
+        for (int i = 0; i < 3; i++) {
+            ipc_file(path, "chatsend");
+            lstrcatA(path, i == 0 ? "" : i == 1 ? ".taking" : ".taking2");
+            DeleteFileA(path);
+        }
+    }
     lstrcpynA(g_cr_room, irc, sizeof g_cr_room);
     cr_room_clear();
     g_cr_line_n = g_cr_line_next = 0;
@@ -631,8 +648,9 @@ static void cr_leave_request(BYTE *b)
     g_cr_last = GetTickCount64();
     req_line(&p);
     join = req_line(&p);
-    /* the app couldn't withdraw its enter, so it's called off here instead */
-    if (g_cr_st == CR_OUT && join[0]) lstrcpynA(g_cr_cancel_tok, join, sizeof g_cr_cancel_tok);
+    /* the app couldn't withdraw its enter, so it's called off here instead, even with a PART still going */
+    if (join[0] && lstrcmpA(join, g_cr_tok)) lstrcpynA(g_cr_cancel_tok, join, sizeof g_cr_cancel_tok);
+    cr_part_stale(b);
     if (g_cr_st == CR_OUT || g_cr_leave) return;
     lg("chat: leaving %s\r\n", g_cr_room);
     g_cr_leave = 1;
@@ -662,7 +680,12 @@ static void cr_room_pump(BYTE *b, int ctl)
             if (g_cr_wait == CRW_MSG) { cr_msg_done(0, "failed:timeout"); return; }
             /* a JOIN that timed out but got there anyway counts */
             if (g_cr_st == CR_JOIN && cr_members(b)) { cr_step_done(b, 1); return; }
-            if (g_cr_st == CR_JOIN || g_cr_st == CR_AWAY) { cr_left("failed:timeout"); return; }
+            if (g_cr_st == CR_JOIN || g_cr_st == CR_AWAY) {
+                int sent = g_cr_st == CR_JOIN;
+                cr_left("failed:timeout");
+                g_cr_joined = sent;   /* it could still get there, so the next leave, Play or enter PARTs it */
+                return;
+            }
             r = 1;
         }
         if (g_cr_wait == CRW_MSG) cr_msg_done(r, NULL);
@@ -990,7 +1013,7 @@ static void chat_pump(BYTE *b, int ctl)
 {
     if (g_draining) return;
     cr_room_pump(b, ctl);
-    if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_new("chatsend")) cr_send_request(b);
+    if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting("chatsend")) cr_send_request(b);
     if (g_cr_db) cr_db_pump(b);
     if (!ctl || GetTickCount64() - g_cr_last < CR_GAP_MS) return;
     if (request_new("chatleave")) { cr_leave_request(b); return; }
@@ -1008,7 +1031,7 @@ static void chat_end(BYTE *b)
     int s = cr_session(b);
     ULONGLONG until = GetTickCount64() + 3000;
     if (g_cr_db) cr_db_abandon(b, "cancelled");
-    if (g_cr_st == CR_OUT) return;
+    if (g_cr_st == CR_OUT && !g_cr_joined) return;
     if (s >= 0 && g_cr_wait != CRW_NONE) ((svc_i)SVC(0x248))(s);
     g_cr_wait = CRW_NONE;
     /* a JOIN with no answer yet still gets there, so it's PARTed like a room */

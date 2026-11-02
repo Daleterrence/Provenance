@@ -103,6 +103,10 @@ public sealed class PolSessionService : IDisposable
         !string.IsNullOrEmpty(dir) && dir.Length < 260 - 64 && Directory.Exists(dir);
 
     private const string LaunchKeyPrefix = "LAUNCH:";
+
+    // the room password's one-shot entry, and the full target the hook gets as POL_CRED_CHAT
+    internal static string ChatKey(string launchId) => $"{LaunchKeyPrefix}{launchId}:CHAT";
+    internal static string ChatTarget(string launchId) => $"{WindowsCredentialStore.DefaultPrefix}:{ChatKey(launchId)}";
     private const string SessionClaimLock = "session-claim";
     private const string PrestartLock = "prestart";
     private static readonly Regex PidLine = new(@"pol\.exe running \(pid (\d+)\)", RegexOptions.Compiled);
@@ -114,7 +118,7 @@ public sealed class PolSessionService : IDisposable
     private static readonly string[] RequestFiles =
         ["send", "status", "mail", "ack", "comment", "pic", "friend", "answer", "search", "profile", "group",
          "myprofile", "saveprofile", "rename", "character", "ffxiprofile", "chatzones", "chatrooms", "chatjoin",
-         "chatsend", "chatleave"];
+         "chatsend", "chatleave", "handle"];
 
     // Has to match prestart_wait's allow-list in pol_hook.c, the hook drops any other key
     private static readonly string[] GoFileKeys =
@@ -420,7 +424,7 @@ public sealed class PolSessionService : IDisposable
         env["POL_CRED_ONESHOT"] = string.Join(",", oneShot);
         env["POL_CRED_HANDLE"] = Target(Key("HANDLE"));
         env["POL_CRED_PLAY"] = Target(Key("PLAY"));
-        env["POL_CRED_CHAT"] = Target(Key("CHAT"));
+        env["POL_CRED_CHAT"] = ChatTarget(_launchId!);
         keys.AddRange([Key("HANDLE"), Key("PLAY")]);
         if (otpTarget != null) env["POL_CRED_OTP"] = otpTarget;
         if (options.Lean) env["POL_LEAN"] = "1";
@@ -1398,7 +1402,7 @@ public sealed class PolSessionService : IDisposable
         if (_launchId is not { } id) return false;
         try
         {
-            Wrapped.Save($"{LaunchKeyPrefix}{id}:CHAT", token, password, sessionOnly: true);
+            Wrapped.Save(ChatKey(id), token, password, sessionOnly: true);
             return true;
         }
         catch (Exception ex)
@@ -1411,7 +1415,7 @@ public sealed class PolSessionService : IDisposable
     public void DropChatPassword()
     {
         if (_launchId is { } id)
-            try { _store.Delete($"{LaunchKeyPrefix}{id}:CHAT"); } catch { }
+            try { _store.Delete(ChatKey(id)); } catch { }
     }
 
     // the room's lines, an enter never taken and its password, whatever way the session ended

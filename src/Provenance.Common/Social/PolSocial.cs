@@ -131,6 +131,9 @@ public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, 
     public bool IsChat => Kind == 0;
     public bool IsLocal => State == "local";
     public bool IsMe { get; init; }
+    // who it was addressed to (the hook's hashed POL ID + handle) and whether that's my own POL ID
+    public string ToKey { get; init; } = "";
+    public bool ToMe { get; init; }
     public bool Read { get; init; }
     // the group a removal or disband was about, from its attachment
     public string Group { get; init; } = "";
@@ -182,6 +185,9 @@ public sealed record PolSentLine(string To, string ToKey, int ToSlot, long Time,
                                  string Subject, string Text, int Mid = 0)
 {
     public string Key => $"game:{(ToKey.Length > 0 ? ToKey : To)}|{ToSlot}|{Seq}|{Time}";
+    // the handle slot it went from, and whether it went to another POL ID (not one of my own handles)
+    public int FromSlot { get; init; } = -1;
+    public bool ToOther { get; init; }
 }
 
 // pol_hook.<pid>.social.json, rewritten every couple of secs. FfxiService is the Content ID check ("active", "none",
@@ -203,10 +209,12 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     // chat lines, answers and group invites share the send slots, so a result can get bumped between snapshots. Time and
     // Seq are the sent message's header ones, 0 when nothing went
     public IReadOnlyList<(string Token, string State, long Time, long Seq)> SendResults { get; init; } = [];
+    // for the lines that went: the handle slot they went from and whether they went to another POL ID
+    public IReadOnlyList<(string Token, int FromSlot, bool ToOther)> SentFrom { get; init; } = [];
     // the lines the hook has, "sending" once its PUT's started, "queued" before
     public IReadOnlyList<(string Token, string State)> SendQueue { get; init; } = [];
     // the header time and seq of chat lines from my own POL ID the hook got back, which never reached anyone
-    public IReadOnlyList<(long Time, long Seq)> Returned { get; init; } = [];
+    public IReadOnlyList<(long Time, long Seq, int FromSlot)> Returned { get; init; } = [];
 
     public string? SendStateFor(string? token)
     {
@@ -249,13 +257,16 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     // the hook runs one profile server job at a time, so while one's going any other just waits its turn
     public bool ProfileServerBusy => SearchState == "searching" || ProfileState == "loading" || CharacterState == "loading" ||
                                      FfxiProfileState == "loading" || MeState is "loading" or "saving" ||
-                                     ProfilePictureState == "saving";
+                                     ProfilePictureState == "saving" ||
+                                     Chat is { ZonesState: "searching" } or { RoomsState: "searching" } ||
+                                     (HandleState == "working" && HandleOp == "switch");
     // the game's message store, read once at login (pol_hook.<pid>.store.json), null when there's none
     public PolStoredLines? Stored { get; init; }
     public IReadOnlyList<PolHandle> Handles { get; init; } = [];
     public IReadOnlyList<PolContentId> ContentIds { get; init; } = [];
     public string HandleToken { get; init; } = "";
     public string HandleState { get; init; } = "";
+    public string HandleOp { get; init; } = "";
     // null till chat rooms get used this session
     public ChatRoomsSnapshot? Chat { get; init; }
 
@@ -497,8 +508,10 @@ public static class SocialSnapshot
                 BadPassword = Bool(root, "badPassword"),
                 Play = Str(root, "play"),
                 SendResults = Arr(root, "sends", s => (Str(s, "token"), Str(s, "state"), Long(s, "time"), Long(s, "seq"))),
+                SentFrom = Arr(root, "sends", s => (Str(s, "token"), Int(s, "fromSlot", -1), Bool(s, "toOther")))
+                           .Where(x => x.Item2 >= 0).ToList(),
                 SendQueue = Arr(root, "queue", q => (Str(q, "token"), Str(q, "state"))),
-                Returned = Arr(root, "returned", r => (Long(r, "time"), Long(r, "seq"))),
+                Returned = Arr(root, "returned", r => (Long(r, "time"), Long(r, "seq"), Int(r, "fromSlot", -1))),
                 EditToken = editToken,
                 EditState = editState,
                 MyComment = Str(root, "myComment").Trim(),
@@ -536,6 +549,7 @@ public static class SocialSnapshot
                     Str(c, "name"), Str(c, "text"), (int)Long(c, "order"), Int(c, "handle", -1), Str(c, "key"))),
                 HandleToken = handleToken,
                 HandleState = handleState,
+                HandleOp = Obj(root, "handleJob") is { ValueKind: JsonValueKind.Object } hj ? Str(hj, "op") : "",
                 Chat = ChatRoomsSnapshot.Read(Obj(root, "chat")),
             };
         }
@@ -547,7 +561,10 @@ public static class SocialSnapshot
 
     private static PolMessage ReadMessage(JsonElement m) =>
         new(Str(m, "from"), (int)Long(m, "fromSlot"), (int)Long(m, "kind"), Long(m, "time"), Long(m, "seq"), Str(m, "state"),
-            Str(m, "subject"), Str(m, "text"), (int)Long(m, "mid"), Str(m, "fromKey")) { IsMe = Bool(m, "me"), Read = Bool(m, "read"), Group = Str(m, "group") };
+            Str(m, "subject"), Str(m, "text"), (int)Long(m, "mid"), Str(m, "fromKey"))
+        {
+            IsMe = Bool(m, "me"), ToKey = Str(m, "toKey"), ToMe = Bool(m, "toMe"), Read = Bool(m, "read"), Group = Str(m, "group"),
+        };
 
     private static PolProfile ReadProfile(JsonElement p) =>
         new(Str(p, "name"), Str(p, "mail"), (int)Long(p, "mailState"), Str(p, "hid"), Long(p, "updated"),
@@ -610,7 +627,8 @@ public static class SocialSnapshot
             var root = doc.RootElement;
             return new PolStoredLines(Arr(root, "messages", ReadMessage),
                 Arr(root, "gameSent", s => new PolSentLine(Str(s, "to"), Str(s, "toKey"), (int)Long(s, "toSlot"),
-                    Long(s, "time"), Long(s, "seq"), Str(s, "state"), Str(s, "subject"), Str(s, "text"))));
+                    Long(s, "time"), Long(s, "seq"), Str(s, "state"), Str(s, "subject"), Str(s, "text"))
+                    { FromSlot = Int(s, "fromSlot", -1), ToOther = Bool(s, "toOther") }));
         }
         catch { return null; }
     }

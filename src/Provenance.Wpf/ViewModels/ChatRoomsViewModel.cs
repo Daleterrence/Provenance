@@ -54,7 +54,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private string _roomIrc = "", _roomTitle = "";
     private long _seenSeq, _lastSeq, _joinSeq;
     private string? _lastNick;
-    private bool _restoringZone, _quiet, _disposed;
+    private bool _restoringZone, _quiet, _disposed, _joinLocked;
     private readonly Dictionary<int, string> _categories = new();
 
     // savePassword hands a room password to the hook for one enter (token, password), dropPassword takes back one it
@@ -68,12 +68,17 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _social.PropertyChanged += OnSocialChanged;
         ZonesView = CollectionViewSource.GetDefaultView(Zones);
         ZonesView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ChatZoneItem.Group)));
-        _tick.Tick += (_, _) =>
-        {
-            SendCommand.NotifyCanExecuteChanged();
-            if (_gate.Token is null) _tick.Stop();
-        };
+        _tick.Tick += (_, _) => SendTick();
     }
+
+    // Send's button only greys and ungreys when asked, so this keeps asking till a line can go again
+    internal void SendTick()
+    {
+        SendCommand.NotifyCanExecuteChanged();
+        if (_gate.Token is null && _gate.CanSend(DateTime.UtcNow)) _tick.Stop();
+    }
+
+    internal bool SendTicking => _tick.IsEnabled;
 
     public ObservableCollection<ChatZoneItem> Zones { get; } = new();
     public ICollectionView ZonesView { get; }
@@ -182,6 +187,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         }
         _lastNick = nick;
         _joinToken = token;
+        _joinLocked = room.Locked;
         _joinSeq = _lastSeq;
         _roomIrc = room.Room.Irc;
         _roomTitle = room.Name;
@@ -404,6 +410,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 return;
         }
         if (!chat.RoomState.StartsWith("failed", StringComparison.Ordinal)) return;
+        // the hook deletes the password entry once it knows there's one, this is in case it never got that far
+        if (_joinLocked) _dropPassword();
         var why = chat.RoomState switch
         {
             "failed:refused" => "Room entry refused.",

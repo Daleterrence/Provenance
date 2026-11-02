@@ -15,6 +15,10 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
     // the message header's seq, which orders lines that share a second. Older logs don't have it
     public long Seq { get; init; }
 
+    // for a line I sent: the handle slot it went from (-1 unknown) and whether it went to another POL ID (null unknown)
+    public int FromSlot { get; init; } = -1;
+    public bool? ToOther { get; init; }
+
     public DateTimeOffset When => DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime();
 
     public string WhenText
@@ -141,7 +145,7 @@ public sealed class ChatStore
         Add(new ChatEntry(s.Key, peer, true, s.Subject, s.Text,
                           s.Time > 0 ? s.Time : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), true,
                           s.State == "sent" ? "sent" : "unsent")
-            { PeerKey = s.ToKey, Seq = s.Seq });
+            { PeerKey = s.ToKey, Seq = s.Seq, FromSlot = s.FromSlot, ToOther = s.FromSlot >= 0 ? s.ToOther : null });
         Dirty = true;
         return true;
     }
@@ -194,10 +198,30 @@ public sealed class ChatStore
         return true;
     }
 
-    // a line of mine that came back with this header time and seq went to PlayOnline but never reached anyone
-    public bool MarkReturned(long time, long seq)
+    // a line I sent to another POL ID went out from fromSlot with this header time and seq. Kept across restarts. One to
+    // one of my own handles never counts, its copy coming in is that handle getting it for real
+    public bool SentAt(long time, long seq, int fromSlot) =>
+        time > 0 && fromSlot >= 0 &&
+        _entries.Any(e => e.Outgoing && e.Time == time && e.Seq == seq && e.FromSlot == fromSlot && e.ToOther == true &&
+                          e.State is "sent" or "failed:returned");
+
+    public bool SetSentFrom(string token, int fromSlot, bool toOther)
     {
-        int i = _entries.FindLastIndex(e => e.Outgoing && e.State == "sent" && e.Time == time && e.Seq == seq);
+        var key = "out:" + token;
+        int i = _keys.Contains(key) ? _entries.FindLastIndex(e => e.Key == key) : -1;
+        if (i < 0 || (_entries[i].FromSlot == fromSlot && _entries[i].ToOther == toOther)) return false;
+        _entries[i] = _entries[i] with { FromSlot = fromSlot, ToOther = toOther };
+        _version++;
+        Dirty = true;
+        return true;
+    }
+
+    // that line came back, so it went to PlayOnline but never reached anyone
+    public bool MarkReturned(long time, long seq, int fromSlot)
+    {
+        if (fromSlot < 0) return false;
+        int i = _entries.FindLastIndex(e => e.Outgoing && e.State == "sent" && e.Time == time && e.Seq == seq &&
+                                            e.FromSlot == fromSlot && e.ToOther == true);
         if (i < 0) return false;
         _entries[i] = _entries[i] with { State = "failed:returned" };
         _version++;
