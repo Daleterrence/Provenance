@@ -22,6 +22,7 @@
     <Window.Resources>
         <!-- decoded once near the size shown, the source PNGs are 1026x907 and 256x256 -->
         <BitmapImage x:Key="BgLogo" UriSource="/Assets/bg-logo.png" DecodePixelHeight="680" />
+        <BitmapImage x:Key="NoImage" UriSource="/Assets/no-image.jpg" />
         <BitmapImage x:Key="TitleIcon" UriSource="/Assets/provenance-256.png" DecodePixelWidth="64" />
         <Style x:Key="LinkButton" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
@@ -199,7 +200,7 @@
             <Button Grid.Column="4" Width="38" Height="34" Padding="0"
                     Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                    Click="OnClose" ToolTip="{Binding CloseTooltip}">
+                    Click="OnClose" ToolTip="{Binding CloseTooltip}" AutomationProperties.Name="{Binding CloseTooltip}">
                 <materialDesign:PackIcon Kind="WindowClose" Width="17" Height="17" />
             </Button>
         </Grid>
@@ -230,19 +231,14 @@
                                     <ImageBrush ImageSource="{Binding CurrentNews.ImageUrl}" Stretch="Fill" />
                                 </Border.Background>
                             </Border>
-                            <Border CornerRadius="8" Height="110"
-                                    Visibility="{Binding CurrentNews.ImageUrl, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=invert}">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                        <GradientStop Color="#16303F" Offset="0" />
-                                        <GradientStop Color="#0E5A64" Offset="0.55" />
-                                        <GradientStop Color="#102A3A" Offset="1" />
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                                <materialDesign:PackIcon Kind="SwordCross" Width="56" Height="56"
-                                                         HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                         Opacity="0.3" Foreground="{DynamicResource Primary.Glow}" />
-                            </Border>
+                            <Grid Visibility="{Binding CurrentNews.ImageUrl, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=invert}">
+                                <Image Source="{StaticResource NoImage}" Stretch="Uniform" Opacity="0" />
+                                <Border CornerRadius="8">
+                                    <Border.Background>
+                                        <ImageBrush ImageSource="{StaticResource NoImage}" Stretch="Fill" />
+                                    </Border.Background>
+                                </Border>
+                            </Grid>
                         </Grid>
 
                         <TextBlock Grid.Row="1" Margin="2,14,2,0" Cursor="Hand" ToolTip="{Binding CurrentNews.Title}"
@@ -485,7 +481,7 @@
                                           Foreground="{DynamicResource Text.2}" IsChecked="{Binding StartGameImmediately}" />
 
                                 <Button Margin="0,18,0,0" Height="48" FontSize="16" Command="{Binding SignInCommand}"
-                                        Style="{StaticResource AccentRaisedButton}" Content="LOG IN" IsDefault="True" />
+                                        Style="{StaticResource ActionButton}" Content="LOG IN" IsDefault="True" />
                                 <Button Margin="0,8,0,0" Height="36" Style="{StaticResource AccentFlatButton}"
                                         Command="{Binding StartAllAccountsCommand}" Content="{Binding StartAllText}"
                                         Visibility="{Binding HasMultiAccounts, Converter={StaticResource BoolToVis}}"
@@ -538,15 +534,65 @@
                                 <TextBlock Margin="0,0,0,8" TextWrapping="Wrap" TextAlignment="Center" FontSize="12"
                                            Foreground="{DynamicResource Text.2}" Text="{Binding Social.AccountNotice}"
                                            Visibility="{Binding Social.AccountNotice, Converter={StaticResource NullToVisibilityConverter}}" />
-                                <Button Height="48" FontSize="16" Command="{Binding PlayCommand}"
-                                        IsEnabled="{Binding Social.CanPlay}"
-                                        Style="{StaticResource AccentRaisedButton}" IsDefault="True" AutomationProperties.Name="Play">
-                                    <StackPanel>
-                                        <TextBlock Text="PLAY" HorizontalAlignment="Center" />
-                                        <TextBlock Text="{Binding PlaySubtitle}" FontSize="11" FontWeight="Normal" Opacity="0.7" HorizontalAlignment="Center"
-                                                   Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
-                                    </StackPanel>
-                                </Button>
+                                <Border Height="52">
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource ActionShell}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Social.CanPlay}" Value="False">
+                                                    <Setter Property="Background" Value="{DynamicResource Surface.3}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Surface.3}" />
+                                                    <Setter Property="Effect" Value="{x:Null}" />
+                                                    <Setter Property="TextElement.Foreground" Value="{DynamicResource Text.3}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid ColumnDefinitions="*,Auto,Auto">
+                                        <Button Command="{Binding PlayCommand}" IsEnabled="{Binding Social.CanPlay}" IsDefault="True"
+                                                AutomationProperties.Name="Play">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource ActionSegment}">
+                                                    <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="1,0,0,1" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasPlayChoices}" Value="False">
+                                                            <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="1" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Social.CanPlay}" Value="False">
+                                                            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <!-- an invisible copy of the line above PLAY keeps PLAY in the middle, nudged up a touch -->
+                                            <StackPanel Margin="0,0,0,6">
+                                                <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0" Margin="0,0,0,-4"
+                                                           HorizontalAlignment="Center" AutomationProperties.Name=""
+                                                           Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
+                                                <TextBlock Text="PLAY" FontSize="18" HorizontalAlignment="Center" />
+                                                <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0.8" Margin="0,-4,0,0"
+                                                           HorizontalAlignment="Center"
+                                                           Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Rectangle Grid.Column="1" Width="1" Margin="0,9,0,9" Fill="{DynamicResource Action.Divider}"
+                                                   Visibility="{Binding HasPlayChoices, Converter={StaticResource BoolToVis}}" />
+                                        <Button Grid.Column="2" Width="52" Click="OnPlayChoices" IsEnabled="{Binding Social.CanPlay}"
+                                                ToolTip="{Binding PlayChoicesTitle}" AutomationProperties.Name="{Binding PlayChoicesTitle}"
+                                                Visibility="{Binding HasPlayChoices, Converter={StaticResource BoolToVis}}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource ActionSegment}">
+                                                    <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="0,1,1,0" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Social.CanPlay}" Value="False">
+                                                            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <materialDesign:PackIcon Kind="Cog" Width="22" Height="22" />
+                                        </Button>
+                                    </Grid>
+                                </Border>
                             </StackPanel>
                         </Grid>
 
@@ -568,7 +614,7 @@
                                                Foreground="{DynamicResource Text.3}" Text="{Binding ElapsedText}" />
                                 </Grid>
                                 <Button Margin="0,22,0,0" Height="40" FontSize="14" Command="{Binding CancelLaunchCommand}"
-                                        Style="{StaticResource MaterialDesignOutlinedButton}" Content="CANCEL" />
+                                        Style="{StaticResource ActionButton}" Content="CANCEL" />
                             </StackPanel>
                         </Grid>
                     </Grid>

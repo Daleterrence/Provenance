@@ -856,6 +856,7 @@ public sealed partial class AddonRow : ObservableObject
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _installing;
     [ObservableProperty] private bool _visible = true;
     [ObservableProperty] private string? _verifiedTip;
+    [ObservableProperty] private string? _team;
     [ObservableProperty] private string? _location;
     private string? _author;
 
@@ -884,6 +885,7 @@ public sealed partial class AddonRow : ObservableObject
         CanChange = d.CanChange;
         CanInstall = d.CanInstall;
         Incompatible = d.Incompatible;
+        Team = d.Team;
         VerifiedTip = d.Team is { } team ? $"This {(Kind == AddonKind.Addon ? "addon" : "plugin")} is provided and maintained by the {team} development team." : null;
         Location = d.Location;
         if (_on != d.On)

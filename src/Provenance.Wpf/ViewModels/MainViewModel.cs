@@ -9,6 +9,8 @@ using CommunityToolkit.Mvvm.Input;
 using Serilog;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;
+using Provenance.Common.Game.Windower;
+using Provenance.Common.Game.Ashita;
 using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
@@ -1599,12 +1601,55 @@ public partial class MainViewModel : ObservableObject
 
     public string? PlaySubtitle => _pol.Platform switch
     {
-        ThirdPartyHookService.Windower => "Windower loaded",
-        ThirdPartyHookService.Ashita => "Ashita loaded",
+        ThirdPartyHookService.Windower => "WINDOWER LOADED",
+        ThirdPartyHookService.Ashita => "ASHITA LOADED",
         _ => null,
     };
 
-    internal void PlatformChanged() => OnPropertyChanged(nameof(PlaySubtitle));
+    internal void PlatformChanged()
+    {
+        OnPropertyChanged(nameof(PlaySubtitle));
+        OnPropertyChanged(nameof(HasPlayChoices));
+        OnPropertyChanged(nameof(PlayChoicesTitle));
+    }
+
+    public sealed record PlayChoice(string Name, string Display, bool Current);
+
+    public bool HasPlayChoices => _pol.Platform is ThirdPartyHookService.Windower or ThirdPartyHookService.Ashita;
+
+    public string PlayChoicesTitle => _pol.Platform == ThirdPartyHookService.Ashita ? "Boot configuration" : "Windower profile";
+
+    public string NoPlayChoicesText => _pol.Platform == ThirdPartyHookService.Ashita
+        ? "No boot configurations found" : "No Windower profiles found";
+
+    // the same pick Play uses: Ashita falls back to the last config Ashita ran with, Windower's "" is the unnamed one
+    public IReadOnlyList<PlayChoice> PlayChoices()
+    {
+        var s = _settings.Current;
+        if (_pol.Platform == ThirdPartyHookService.Ashita)
+        {
+            var dir = ThirdPartyHookService.DetectAshita(s.AshitaPath);
+            var current = string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? ThirdPartyHookService.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
+            return AshitaBootFiles.Names(dir)
+                .Select(n => new PlayChoice(n.File, n.Shown, n.File.Equals(current, StringComparison.OrdinalIgnoreCase))).ToList();
+        }
+        if (_pol.Platform == ThirdPartyHookService.Windower)
+        {
+            var names = ThirdPartyHookService.WindowerProfiles(ThirdPartyHookService.DetectWindower(s.WindowerPath));
+            var current = WindowerSettingsFile.OldCopySource(s.WindowerProfile);
+            return names.Select(n => new PlayChoice(n, SettingsViewModel.WindowerDisplay(n, names), n == current)).ToList();
+        }
+        return [];
+    }
+
+    public void PickPlayChoice(string name)
+    {
+        var s = _settings.Current;
+        if (_pol.Platform == ThirdPartyHookService.Ashita) s.AshitaBootConfig = name;
+        else if (_pol.Platform == ThirdPartyHookService.Windower) s.WindowerProfile = name;
+        else return;
+        _settings.Save(s);
+    }
 
     // the Repair button's own checks, in its order. The lock comes from the switch's copy of its probe
     private string? LargeAddressAwareBlocked() =>

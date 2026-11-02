@@ -41,6 +41,7 @@
     <Resource Include="$(ProvenanceAssetsDir)\app\provenance.ico" Link="Assets\provenance.ico" />
     <Resource Include="$(ProvenanceAssetsDir)\app\provenance-256.png" Link="Assets\provenance-256.png" />
     <Resource Include="$(ProvenanceAssetsDir)\app\bg-logo.png" Link="Assets\bg-logo.png" />
+    <Resource Include="$(ProvenanceAssetsDir)\app\no-image.jpg" Link="Assets\no-image.jpg" />
     <None Include="$(ProvenanceAssetsDir)\installer\zones\*.jpg" Link="zones\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

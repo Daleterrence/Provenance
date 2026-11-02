@@ -184,9 +184,23 @@
                     <StackPanel VerticalAlignment="Center">
                         <WrapPanel>
                             <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
-                            <materialDesign:PackIcon Kind="CheckDecagram" Width="15" Height="15" Margin="-4,0,8,0" VerticalAlignment="Center" Background="Transparent"
-                                                     Foreground="{DynamicResource Primary}" ToolTip="{Binding VerifiedTip}" AutomationProperties.Name="{Binding VerifiedTip}"
-                                                     Visibility="{Binding VerifiedTip, Converter={StaticResource NullToVisibilityConverter}}" />
+                            <materialDesign:PackIcon Kind="ShieldCheck" Width="15" Height="15" Margin="-4,0,8,0" VerticalAlignment="Center" Background="Transparent"
+                                                     ToolTip="{Binding VerifiedTip}" AutomationProperties.Name="{Binding VerifiedTip}"
+                                                     Visibility="{Binding VerifiedTip, Converter={StaticResource NullToVisibilityConverter}}">
+                                <materialDesign:PackIcon.Style>
+                                    <Style TargetType="materialDesign:PackIcon">
+                                        <Setter Property="Foreground" Value="{DynamicResource Primary}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Team}" Value="Windower">
+                                                <Setter Property="Foreground" Value="{DynamicResource Platform.Windower}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Team}" Value="Ashita">
+                                                <Setter Property="Foreground" Value="{DynamicResource Platform.Ashita}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </materialDesign:PackIcon.Style>
+                            </materialDesign:PackIcon>
                             <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,0,8,0" VerticalAlignment="Center"
                                        Visibility="{Binding Details, Converter={StaticResource NullToVisibilityConverter}}" />
                             <ItemsControl ItemsSource="{Binding Badges}" ItemTemplate="{StaticResource Badge}" Focusable="False" VerticalAlignment="Center">

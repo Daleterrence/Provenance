@@ -97,6 +97,91 @@
                 </Style.Triggers>
             </Style>
 
+            <!-- the big Play and LOG IN buttons: square like the rest, but shaded and outlined so they read as something to press -->
+            <Style x:Key="ActionShell" TargetType="Border">
+                <Setter Property="CornerRadius" Value="2" />
+                <Setter Property="Background" Value="{DynamicResource Action.Fill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Action.Edge}" />
+                <Setter Property="BorderThickness" Value="1,1,1,2" />
+                <Setter Property="Effect">
+                    <Setter.Value>
+                        <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.5" Color="#000000" />
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="ActionSegment" TargetType="Button">
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="1" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid Background="Transparent">
+                                <Border x:Name="Tint" Background="White" Opacity="0"
+                                        CornerRadius="{TemplateBinding materialDesign:ButtonAssist.CornerRadius}" />
+                                <Border x:Name="Ring" BorderBrush="White" BorderThickness="2" Opacity="0" Margin="3"
+                                        CornerRadius="1" />
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Tint" Property="Opacity" Value="0.1" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Tint" Property="Background" Value="Black" />
+                                    <Setter TargetName="Tint" Property="Opacity" Value="0.18" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Ring" Property="Opacity" Value="0.85" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Cursor" Value="Arrow" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- LOG IN: one segment in its own shell -->
+            <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource ActionSegment}">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Shell" Style="{StaticResource ActionShell}">
+                                <Grid>
+                                    <Border x:Name="Tint" Background="White" Opacity="0" CornerRadius="1" />
+                                    <Border x:Name="Ring" BorderBrush="White" BorderThickness="2" Opacity="0" Margin="3" CornerRadius="1" />
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Tint" Property="Opacity" Value="0.1" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Tint" Property="Background" Value="Black" />
+                                    <Setter TargetName="Tint" Property="Opacity" Value="0.18" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Ring" Property="Opacity" Value="0.85" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Shell" Property="Background" Value="{DynamicResource Surface.3}" />
+                                    <Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource Surface.3}" />
+                                    <Setter TargetName="Shell" Property="Effect" Value="{x:Null}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+                                    <Setter Property="Cursor" Value="Arrow" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- MaterialDesign pads a floating hint with its own grey background, which leaves a chip round the label.
                  These pad it with Surface.2, the dialogs they sit on -->
             <Style x:Key="DialogTextBox" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">

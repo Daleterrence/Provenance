@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -154,6 +156,25 @@ public partial class MainWindow : Window
     });
 
     private void OnFriendActivated(FriendItem friend) => Vm?.OpenChatWith(friend);
+
+    // read fresh each time, so it follows Settings and any profile added since
+    private void OnPlayChoices(object sender, RoutedEventArgs e)
+    {
+        if (Vm is not { } vm || sender is not FrameworkElement cog) return;
+        var menu = new ContextMenu { PlacementTarget = cog, Placement = PlacementMode.Bottom };
+        menu.Items.Add(new MenuItem { Header = vm.PlayChoicesTitle, IsEnabled = false });
+        menu.Items.Add(new Separator());
+        var choices = vm.PlayChoices();
+        if (choices.Count == 0) menu.Items.Add(new MenuItem { Header = vm.NoPlayChoicesText, IsEnabled = false });
+        foreach (var c in choices)
+        {
+            var item = new MenuItem { Header = c.Display, IsCheckable = true, IsChecked = c.Current };
+            var name = c.Name;
+            item.Click += (_, _) => vm.PickPlayChoice(name);
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
+    }
 
     private void OnOpenNotice(object sender, RoutedEventArgs e) => Vm?.OpenNotice();
 

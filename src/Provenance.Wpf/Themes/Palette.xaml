@@ -30,6 +30,18 @@
     <!-- Settings' profile cards, white text on these -->
     <SolidColorBrush x:Key="Platform.Windower" Color="#339933" />
     <SolidColorBrush x:Key="Platform.Ashita"   Color="#D45447" />
+    <SolidColorBrush x:Key="Action"         Color="#385AA2" />
+    <LinearGradientBrush x:Key="Action.Fill" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#4C6FB8" Offset="0" />
+        <GradientStop Color="#385AA2" Offset="0.55" />
+        <GradientStop Color="#30508F" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Action.Edge" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#6F8FD0" Offset="0" />
+        <GradientStop Color="#2A4580" Offset="0.5" />
+        <GradientStop Color="#1C3160" Offset="1" />
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="Action.Divider" Color="#5C7DC2" />
 
     <SolidColorBrush x:Key="Border.Hair"    Color="White" Opacity="0.08" />
     <!-- every window's edge. DWM draws it from 24H2 on, so it has to be solid -->
