@@ -1775,14 +1775,27 @@ static ULONGLONG file_age_ms(const char *p)
     t.HighPart = a.ftLastWriteTime.dwHighDateTime;
     return n.QuadPart > t.QuadPart ? (n.QuadPart - t.QuadPart) / 10000 : 0;
 }
+/* a rename keeps the app's write time, so the waits below count from the take instead */
+static void taken_now(const char *taken)
+{
+    FILETIME now;
+    HANDLE f = CreateFileA(taken, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                           OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return;
+    GetSystemTimeAsFileTime(&now);
+    SetFileTime(f, NULL, NULL, &now);
+    CloseHandle(f);
+}
 /* past a .taking that can't be read, the next request's renamed to .taking2 first like any take, so the app
    withdrawing it and this read can't both happen. One left there is tried again, then dropped after 10 s */
 static int take_second(const char *ext, const char *path, const char *second, char *buf, int cap, char **grown,
                        DWORD most)
 {
     int n;
-    if (GetFileAttributesA(second) == INVALID_FILE_ATTRIBUTES && !MoveFileExA(path, second, MOVEFILE_REPLACE_EXISTING))
-        return -1;
+    if (GetFileAttributesA(second) == INVALID_FILE_ATTRIBUTES) {
+        if (!MoveFileExA(path, second, MOVEFILE_REPLACE_EXISTING)) return -1;
+        taken_now(second);
+    }
     n = read_taken(second, buf, cap, grown, most);
     if (n < 0 && file_age_ms(second) >= 10000 && DeleteFileA(second))
         lg("request: %s.taking2 could not be read for 10 s - dropped\r\n", ext);
@@ -1822,6 +1835,7 @@ static int take_request_ex(const char *ext, char *buf, int cap, char **grown, DW
            scanner still holds can't be renamed, so it waits.
            i am vry gud with computer and this was easy to find, honest! :X */
         if (!MoveFileExA(path, taken, MOVEFILE_REPLACE_EXISTING)) return -1;
+        taken_now(taken);
         n = read_taken(taken, buf, cap, grown, most);
     }
     if (n > 0) return n;
@@ -2100,7 +2114,7 @@ static int mail_undecided(BYTE *b, const mailrec *m)
 {
     return sends_going() && (m->state == 0 || m->state == 3) && mail_mine(b, m->hdr);
 }
-/* looked at again whenever a line lands and whenever a send's answer comes in or a send's dropped */
+/* looked at again whenever a line lands and whenever a send's answer comes in */
 static void mail_recheck(BYTE *b)
 {
     if (!g_mail_raw_new) return;
@@ -3074,7 +3088,6 @@ static void send_drop(int i)
     HeapFree(GetProcessHeap(), 0, g_sq[i].msg);
     for (; i < g_sq_n - 1; i++) g_sq[i] = g_sq[i + 1];
     g_sq_n--;
-    g_mail_raw_new = 1;
 }
 /* chat lines, answers and group messages all get paced here (a chat take only checks first), oldest built first */
 static void mail_send_start(BYTE *b)
@@ -5216,7 +5229,6 @@ static void writes_refuse(BYTE *b)
         case 2: lstrcpynA(g_edit_token, l1, sizeof g_edit_token); edit_fail(SWITCHING); break;
         case 4: lstrcpynA(g_grp_token, l2, sizeof g_grp_token); group_fail(SWITCHING); break;
         case 5: lstrcpynA(g_pic_token, l2, sizeof g_pic_token); pic_fail(SWITCHING); break;
-        case 6: break;
         case 7: case 8: case 9: lstrcpynA(g_me_token, l1, sizeof g_me_token); me_done(SWITCHING); break;
         case 10: chat_join_refused(l1, l3); break;
         case 11: chat_send_refused(l1); break;
@@ -5286,8 +5298,8 @@ static void handle_request(BYTE *b)
         g_snap_dirty = 1;
         /* the viewer quits private chat before a switch, so a room's left first, through the one PART there is */
         if (chat_room_open()) chat_end(b);
-        writes_refuse(b);
         handle_switch_start(b);
+        if (handle_switching()) writes_refuse(b);
         return;
     }
     if (!get_chr(b, idx, c) || *(WORD *)(c + 2) != 1) { handle_fail("failed:list changed"); return; }

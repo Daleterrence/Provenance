@@ -1299,9 +1299,10 @@ public partial class MainViewModel : ObservableObject
             MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI", failed);
             return;
         }
-        Handles.GameStarted();
-        try { await BringGameForwardAsync(); }
+        bool up = false;
+        try { up = await BringGameForwardAsync(); }
         catch (Exception ex) { Log.Warning(ex, "Could not bring the game window to the front"); }
+        if (up) Handles.GameStarted();
         RequestHide?.Invoke();
         _elapsedTimer.Stop();
         var exit = await _pol.WaitForExitAsync();
@@ -1403,24 +1404,26 @@ public partial class MainViewModel : ObservableObject
     }
 
     // Windows only hands focus to the last program used, which is the app at the Play click
-    private async Task BringGameForwardAsync()
+    // true once the game's window is up
+    private async Task<bool> BringGameForwardAsync()
     {
-        if (_pol.Pid is not { } pid) return;
+        if (_pol.Pid is not { } pid) return false;
         ThirdPartyHookWindows.AllowForeground(pid);
         var until = DateTime.UtcNow.AddSeconds(90);
         while (DateTime.UtcNow < until)
         {
-            try { using var p = Process.GetProcessById(pid); if (p.HasExited) return; }
-            catch (ArgumentException) { return; }
+            try { using var p = Process.GetProcessById(pid); if (p.HasExited) return false; }
+            catch (ArgumentException) { return false; }
             if (ThirdPartyHookWindows.GameWindow(pid) is var h && h != IntPtr.Zero)
             {
                 bool front = ThirdPartyHookWindows.BringToFront(h);
                 Log.Information("Game window is up (pol.exe {Pid}); brought to the front: {Front}", pid, front);
-                return;
+                return true;
             }
             await Task.Delay(250);
         }
         Log.Warning("No game window from pol.exe {Pid} after 90 s", pid);
+        return false;
     }
 
     private HandlesViewModel? _handles;
@@ -1456,6 +1459,7 @@ public partial class MainViewModel : ObservableObject
         bool on = SocialConnected && _pol.Pid is not null;
         Handles.Update(on ? Social.Last : null, on,
                        Social.GameRunning ? HandleList.ReadOnlyText : MultiRunning ? HandleList.MultiRunText : null);
+        Social.HandleSwitching = Handles.Switching;
     }
 
     [RelayCommand]

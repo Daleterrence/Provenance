@@ -576,11 +576,6 @@ static int cr_password(const char *tok, char *key, int cap)
     if (rc != PC_NOT_FOUND) lg("chat: room password entry unusable (%s)\r\n", rc == PC_OK ? "another enter's" : cred_why(rc));
     return 0;
 }
-/* a JOIN that timed out could still have got there, so it gets its one PART here */
-static void cr_part_stale(BYTE *b)
-{
-    if (g_cr_st == CR_OUT && g_cr_joined && cr_part(b) > 0) lg("chat: PART for %s, its JOIN never answered\r\n", g_cr_room);
-}
 static void cr_join_refused(const char *state)
 {
     SecureZeroMemory(g_cr_key, sizeof g_cr_key);
@@ -621,7 +616,6 @@ static void cr_join_request(BYTE *b)
     if (cr_session(b) < 0) { cr_join_refused("failed:no chat"); return; }
     if (haskey[0] && (!pw || !cr_key_ok(g_cr_key))) { cr_join_refused("failed:no password"); return; }
     if (!haskey[0]) g_cr_key[0] = 0;
-    cr_part_stale(b);
     /* a line the hook renamed but never read belongs to the last room, it never goes into this one */
     {
         char path[MAX_PATH + 64];
@@ -652,7 +646,6 @@ static void cr_leave_request(BYTE *b)
     join = req_line(&p);
     /* the app couldn't withdraw its enter, so it's called off here instead, even with a PART still going */
     if (join[0] && lstrcmpA(join, g_cr_tok)) lstrcpynA(g_cr_cancel_tok, join, sizeof g_cr_cancel_tok);
-    cr_part_stale(b);
     if (g_cr_st == CR_OUT || g_cr_leave) return;
     lg("chat: leaving %s\r\n", g_cr_room);
     g_cr_leave = 1;
@@ -1054,7 +1047,7 @@ static void chat_end(BYTE *b)
     int s = cr_session(b);
     ULONGLONG until = GetTickCount64() + 3000;
     if (g_cr_db) cr_db_abandon(b, "cancelled");
-    if (g_cr_st == CR_OUT && !g_cr_joined) return;
+    if (g_cr_st == CR_OUT) return;
     if (s >= 0 && g_cr_wait != CRW_NONE) ((svc_i)SVC(0x248))(s);
     g_cr_wait = CRW_NONE;
     /* a JOIN with no answer yet still gets there, so it's PARTed like a room */

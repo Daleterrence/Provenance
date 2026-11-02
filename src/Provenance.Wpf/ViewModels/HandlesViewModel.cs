@@ -36,6 +36,7 @@ public partial class HandlesViewModel : ObservableObject
     private HandleChange _op;
     private string _doneText = "";
     private string _signature = "";
+    private bool _wasReadOnly;
 
     public HandlesViewModel(Func<int?> pid, Func<int, ImageSource?>? picture = null)
     {
@@ -63,7 +64,9 @@ public partial class HandlesViewModel : ObservableObject
     public string NoCharactersText => HandleList.NoCharactersText;
     public string NoHandlesText => HandleList.NoHandlesText;
     public bool InChatRoom => _snap.Chat is { RoomState: "in" or "entering" };
-    public bool Switching => Busy && _op == HandleChange.Switch;
+    // mine, or one the hook's still running (it can take mine after the page has given up on it)
+    public bool Switching => (Busy && _op == HandleChange.Switch) ||
+                             (LoggedIn && _snap is { HandleOp: "switch", HandleState: "working" });
 
     // title, question, OK label -> yes
     public Func<string, string, string, bool>? Confirm { get; set; }
@@ -82,11 +85,12 @@ public partial class HandlesViewModel : ObservableObject
             // the session that had it is gone, and so is anything that could say how it went
             _token = null;
             NoteIsError = true;
-            Note = _op == HandleChange.Switch ? "You were logged out before PlayOnline confirmed the switch."
-                                              : "You were logged out before PlayOnline confirmed the change.";
+            Note = _op == HandleChange.Switch ? "The PlayOnline session ended before Provenance could confirm the switch."
+                                              : "The PlayOnline session ended before Provenance could confirm the change.";
         }
-        // no snapshots come while the game's starting (its update can take a while), so the wait starts again after
-        if (readOnly != null) _at = DateTime.UtcNow;
+        // the wait doesn't count while the game's starting, nothing can be changed then
+        if (readOnly != null || _wasReadOnly) _at = DateTime.UtcNow;
+        _wasReadOnly = readOnly != null;
         Settle();
         Busy = _token != null;
         Rebuild();
@@ -99,7 +103,8 @@ public partial class HandlesViewModel : ObservableObject
         var state = _snap.HandleToken == _token ? _snap.HandleState : "";
         if (state != "saved" && !state.StartsWith("failed", StringComparison.Ordinal))
         {
-            if (DateTime.UtcNow - _at < TimeSpan.FromSeconds(110)) return;
+            // once the hook's taken it, it's the hook's answer that ends it
+            if (state == "working" || DateTime.UtcNow - _at < TimeSpan.FromSeconds(110)) return;
             if (_pid() is { } pid) SocialSnapshot.CancelRequest(pid, "handle");
             state = "timeout";
         }
@@ -132,7 +137,7 @@ public partial class HandlesViewModel : ObservableObject
     public IReadOnlyList<HandleRow> LinkTargets(HandleCharacterRow c) =>
         c.Character.Orphan ? [] : Rows.Where(r => r.Handle.Slot != c.Handle?.Slot).ToList();
 
-    // the game really started: the hook waited for the change before it booted FFXI, but its answer went with the
+    // the game's window is up: the hook waited for the change before it booted FFXI, but its answer went with the
     // snapshot, so all that's known is that it wasn't confirmed here
     public void GameStarted()
     {

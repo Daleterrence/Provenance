@@ -420,7 +420,7 @@ public static class SocialSnapshot
     {
         var path = HookFiles.PathFor(pid, ext);
         bool removed = false;
-        foreach (var p in new[] { path, path + ".taking" })
+        foreach (var p in new[] { path, path + ".taking", path + ".taking2" })
             try { if (File.Exists(p)) { File.Delete(p); removed = true; } } catch { }
         return removed;
     }

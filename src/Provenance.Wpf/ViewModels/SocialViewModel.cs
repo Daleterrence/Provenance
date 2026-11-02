@@ -170,9 +170,9 @@ public partial class SocialViewModel : ObservableObject
 
     partial void OnHandleSwitchingChanged(bool value)
     {
+        if (!value && EditNote == SwitchingNote) EditNote = "";
         if (GameRunning) return;
         StatusNote = value ? SwitchingNote : StatusNote == SwitchingNote ? "" : StatusNote;
-        if (!value && EditNote == SwitchingNote) EditNote = "";
     }
 
     // the box counts in the bytes FFXI goes by, a Japanese character's two
@@ -1185,9 +1185,9 @@ public partial class SocialViewModel : ObservableObject
     public void SaveProfilePicture(int picId)
     {
         if (ProfilePictureSaving || !Connected || _pol.Pid is not { } pid) return;
-        if (GameRunning)
+        if (GameRunning || HandleSwitching)
         {
-            EditNote = GameRunningNote;
+            EditNote = GameRunning ? GameRunningNote : SwitchingNote;
             return;
         }
         _picToken = NewToken();

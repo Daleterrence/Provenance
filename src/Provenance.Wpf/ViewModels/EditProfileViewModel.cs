@@ -253,9 +253,9 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             Fail("Log in to edit your profile.");
             return;
         }
-        if (_social.GameRunning)
+        if (_social.GameRunning || _social.HandleSwitching)
         {
-            Fail(SocialViewModel.GameRunningNote);
+            Fail(_social.GameRunning ? SocialViewModel.GameRunningNote : SocialViewModel.SwitchingNote);
             return;
         }
         Start(Job.Load);
@@ -388,9 +388,9 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanSave))]
     private void Save()
     {
-        if (_social.GameRunning)
+        if (_social.GameRunning || _social.HandleSwitching)
         {
-            Fail(SocialViewModel.GameRunningNote);
+            Fail(_social.GameRunning ? SocialViewModel.GameRunningNote : SocialViewModel.SwitchingNote);
             return;
         }
         if (_social.SessionPid is not { } pid)
