@@ -5179,6 +5179,13 @@ static void handle_switched(BYTE *b)
     lg("handles: active handle now slot %d\r\n", g_my_slot);
 }
 
+/* written by the app for the handle that's active now, but not taken yet */
+static int writes_asked(void)
+{
+    static const char *const ext[] = { "send", "friend", "comment", "answer", "group", "pic", "status" };
+    for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (request_waiting(ext[i])) return 1;
+    return 0;
+}
 static ULONGLONG last_request(void)
 {
     ULONGLONG t = g_hlast;
@@ -5222,7 +5229,7 @@ static void handle_request(BYTE *b)
         if (slot == cur) { handle_fail("failed:already active"); return; }
         /* they went under the old handle, some with its slot in them, and a read's answer is what the old handle
            was allowed to see */
-        if (writes_pending() || g_me_step || g_status_want >= 0 || g_srch_step || g_prof_step || g_ch_step ||
+        if (writes_pending() || writes_asked() || g_me_step || g_status_want >= 0 || g_srch_step || g_prof_step ||
             g_fp_step || g_cr_db) {
             handle_fail("failed:busy");
             return;

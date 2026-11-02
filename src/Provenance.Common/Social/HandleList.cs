@@ -24,6 +24,7 @@ public static class HandleList
     public const string MultiRunText = "Handles can't be changed while Provenance is starting your accounts.";
     public const string NoHandlesText = "This PlayOnline account doesn't have a handle yet.";
     public const string NoTargetText = "There's no other handle to link it to.";
+    public const string GameStartedText = "Provenance couldn't confirm the change before the game started.";
     public const string AutoSwitchText =
         "When you log in to FINAL FANTASY XI with a character that's linked to another handle, that handle becomes your active handle.";
     public const string NoCharactersText = "No characters linked to this handle.";

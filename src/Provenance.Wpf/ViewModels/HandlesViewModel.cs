@@ -84,13 +84,8 @@ public partial class HandlesViewModel : ObservableObject
             Note = _op == HandleChange.Switch ? "You were logged out before PlayOnline confirmed the switch."
                                               : "You were logged out before PlayOnline confirmed the change.";
         }
-        // Play takes the hook's last word with it (the snapshot's deleted), so a change still going is settled here
-        if (readOnly == HandleList.ReadOnlyText && _token != null)
-        {
-            _token = null;
-            NoteIsError = true;
-            Note = HandleList.Failed(_op, "failed:cancelled");
-        }
+        // no snapshots come while the game's starting (its update can take a while), so the wait starts again after
+        if (readOnly != null) _at = DateTime.UtcNow;
         Settle();
         Busy = _token != null;
         Rebuild();
@@ -135,6 +130,18 @@ public partial class HandlesViewModel : ObservableObject
     // the handles a character could go to, with the full ones greyed
     public IReadOnlyList<HandleRow> LinkTargets(HandleCharacterRow c) =>
         c.Character.Orphan ? [] : Rows.Where(r => r.Handle.Slot != c.Handle?.Slot).ToList();
+
+    // the game really started: the hook waited for the change before it booted FFXI, but its answer went with the
+    // snapshot, so all that's known is that it wasn't confirmed here
+    public void GameStarted()
+    {
+        if (_token is null) return;
+        _token = null;
+        Busy = false;
+        NoteIsError = true;
+        Note = HandleList.GameStartedText;
+        Rebuild();
+    }
 
     // Link to... with nowhere to go says so rather than opening nothing
     public void NoTarget()

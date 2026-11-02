@@ -1299,6 +1299,7 @@ public partial class MainViewModel : ObservableObject
             MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI", failed);
             return;
         }
+        Handles.GameStarted();
         try { await BringGameForwardAsync(); }
         catch (Exception ex) { Log.Warning(ex, "Could not bring the game window to the front"); }
         RequestHide?.Invoke();
@@ -1433,7 +1434,7 @@ public partial class MainViewModel : ObservableObject
             _handles = new HandlesViewModel(() => _pol.Pid, _avatars.ProfilePicture)
             {
                 SwitchBlocked = () => EditProfileWindow.Current is not null
-                    ? "Close the profile editor first. It's editing the active handle's profile." : null,
+                    ? "Close the profile editor first. It's editing the active handle's profile." : Social.PendingWrite(),
             };
             Social.SnapshotApplied += _ => ShowHandles();
             PropertyChanged += (_, e) =>
