@@ -5081,8 +5081,9 @@ static void pic_pump(BYTE *b, int ctl)
    0x10040c9e), a link or unlink a local 0x2dc/0x2e0 and then one PutChrList (0x1038) */
 #define CHR_LINKED 0x8000
 #define CHR_HANDLE(f) (((f) >> 16) & 0x3f)
-enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_UNLINK };
+enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_UNLINK, HOP_LINKALL };
 static int g_hop, g_hjob = -1, g_hwant, g_hslot = -1, g_hidx = -1, g_hfrom = -1, g_hpos = -1, g_hreload;
+static int g_hall[8], g_hall_n;
 static char g_htoken[48], g_hstate[48] = "";
 static ULONGLONG g_hlast;
 static int g_in_hold;
@@ -5158,7 +5159,9 @@ static void handle_place(BYTE *b, int idx, int slot, int pos)
 /* a put that didn't go puts polcore back how the server has it, which costs nothing (no reload, the viewer doesn't) */
 static void handle_undo(BYTE *b)
 {
-    if (g_hop == HOP_LINK) {
+    if (g_hop == HOP_LINKALL) {
+        for (int i = 0; i < g_hall_n; i++) ((int (__cdecl *)(int, int))SVC(0x2e0))(g_hall[i], g_hslot);
+    } else if (g_hop == HOP_LINK) {
         ((int (__cdecl *)(int, int))SVC(0x2e0))(g_hidx, g_hslot);
         if (g_hfrom >= 0 && ((int (__cdecl *)(int, int))SVC(0x2dc))(g_hidx, g_hfrom) >= 0) handle_place(b, g_hidx, g_hfrom, g_hpos);
     } else if (((int (__cdecl *)(int, int))SVC(0x2dc))(g_hidx, g_hslot) >= 0) {
@@ -5195,8 +5198,12 @@ static void handle_put_done(BYTE *b, int r)
     /* a put that became a load already has the server's copy in polcore */
     f = get_chr(b, g_hidx, c) ? *(DWORD *)(c + 0x10) : 0;
     linked = (f & CHR_LINKED) && (int)CHR_HANDLE(f) == g_hslot;
+    for (int i = 0; g_hop == HOP_LINKALL && i < g_hall_n; i++) {
+        f = get_chr(b, g_hall[i], c) ? *(DWORD *)(c + 0x10) : 0;
+        if (!(f & CHR_LINKED) || (int)CHR_HANDLE(f) != g_hslot) linked = 0;
+    }
     if (g_hreload) handle_done("failed:reloaded");
-    else if (linked != (g_hop == HOP_LINK)) handle_done("failed:not saved");
+    else if (linked != (g_hop != HOP_UNLINK)) handle_done("failed:not saved");
     else handle_done("saved");
 }
 /* my profile's the handle's, so a loaded one's the old handle's now */
@@ -5254,8 +5261,48 @@ static ULONGLONG last_request(void)
     return t;
 }
 
-/* <op> switch|link|unlink, <token>, <handle slot>, <handle key>, then for link/unlink <content index>, <content key>.
-   The keys are the snapshot's, so a request never lands on a record that changed */
+/* the viewer's link before it starts a game (app.dll 0x100235d5): unlinked ones go on the active handle, all in one
+   PutChrList. The app only sends what fits, so it's all or nothing here */
+static void handle_linkall(BYTE *b, int slot, BYTE *h, char *ix, char *ck, char *p)
+{
+    char k[17];
+    BYTE c[0x68];
+    int idx[8], n = 0, r;
+    if (slot != ((svc_v)SVC(0x2f8))()) { handle_fail("failed:not active"); return; }
+    while (ix[0]) {
+        if (n == 8 || !parse_num(ix, 2, &idx[n]) || idx[n] > 63) { handle_fail("failed:bad request"); return; }
+        for (int i = 0; i < n; i++) if (idx[i] == idx[n]) { handle_fail("failed:bad request"); return; }
+        if (!get_chr(b, idx[n], c) || *(WORD *)(c + 2) != 1) { handle_fail("failed:list changed"); return; }
+        chr_key(c, k);
+        if (lstrcmpA(k, ck) != 0) { handle_fail("failed:list changed"); return; }
+        if (*(DWORD *)(c + 0x10) & CHR_LINKED) { handle_fail("failed:already linked"); return; }
+        n++;
+        ix = req_line(&p); ck = req_line(&p);
+    }
+    if (!n) { handle_fail("failed:bad request"); return; }
+    if (handle_used(h) + n > 8) { handle_fail("failed:handle full"); return; }
+    for (int i = 0; i < n; i++) {
+        r = ((int (__cdecl *)(int, int))SVC(0x2dc))(idx[i], slot);
+        if (r < 0) {
+            while (i-- > 0) ((int (__cdecl *)(int, int))SVC(0x2e0))(idx[i], slot);
+            handle_fail(failed(r));
+            return;
+        }
+    }
+    g_hop = HOP_LINKALL;
+    g_hslot = slot;
+    g_hidx = idx[0];
+    g_hfrom = g_hpos = -1;
+    memcpy(g_hall, idx, sizeof idx);
+    g_hall_n = n;
+    lstrcpyA(g_hstate, "working");
+    lg("handles: %d unlinked content index(es) linked to the active slot %d\r\n", n, slot);
+    g_snap_dirty = 1;
+    handle_put_start(b);
+}
+
+/* <op> switch|link|unlink|linkall, token, slot, handle key, then index/key pairs. The keys are the snapshot's, so a
+   request never lands on a record that changed */
 static void handle_request(BYTE *b)
 {
     char buf[512], *p, *op, *tok, *sl, *hk, *ix, *ck, k[17];
@@ -5269,9 +5316,10 @@ static void handle_request(BYTE *b)
     p = buf;
     op = req_line(&p); tok = req_line(&p); sl = req_line(&p); hk = req_line(&p); ix = req_line(&p); ck = req_line(&p);
     lstrcpynA(g_htoken, tok, sizeof g_htoken);
-    kind = !lstrcmpA(op, "switch") ? HOP_SWITCH : !lstrcmpA(op, "link") ? HOP_LINK : !lstrcmpA(op, "unlink") ? HOP_UNLINK : 0;
+    kind = !lstrcmpA(op, "switch") ? HOP_SWITCH : !lstrcmpA(op, "link") ? HOP_LINK : !lstrcmpA(op, "unlink") ? HOP_UNLINK
+         : !lstrcmpA(op, "linkall") ? HOP_LINKALL : 0;
     if (!kind || !tok[0] || !parse_num(sl, 2, &slot) || slot > 63 ||
-        (kind != HOP_SWITCH && (!parse_num(ix, 2, &idx) || idx > 63))) {
+        (kind != HOP_SWITCH && kind != HOP_LINKALL && (!parse_num(ix, 2, &idx) || idx > 63))) {
         handle_fail("failed:bad request");
         return;
     }
@@ -5302,6 +5350,7 @@ static void handle_request(BYTE *b)
         if (handle_switching()) writes_refuse(b);
         return;
     }
+    if (kind == HOP_LINKALL) { handle_linkall(b, slot, h, ix, ck, p); return; }
     if (!get_chr(b, idx, c) || *(WORD *)(c + 2) != 1) { handle_fail("failed:list changed"); return; }
     chr_key(c, k);
     if (lstrcmpA(k, ck) != 0) { handle_fail("failed:list changed"); return; }
@@ -5383,7 +5432,8 @@ static void handles_json(BYTE *b, HANDLE out)
     DWORD f;
     wr_job(out, ",\"handleJob\":{\"token\":%s,\"state\":\"%s\"", g_htoken, g_hstate);
     wr(out, g_hop == HOP_SWITCH ? ",\"op\":\"switch\"}" : g_hop == HOP_LINK ? ",\"op\":\"link\"}"
-                                : g_hop == HOP_UNLINK ? ",\"op\":\"unlink\"}" : "}");
+                                : g_hop == HOP_UNLINK ? ",\"op\":\"unlink\"}" : g_hop == HOP_LINKALL ? ",\"op\":\"linkall\"}"
+                                : "}");
     wr(out, ",\"handles\":[");
     for (i = 0; i < 64; i++) {
         if (!handle_ok(b, i, rec)) continue;
@@ -5460,7 +5510,7 @@ static void snapshot_social(BYTE *b)
 {
     static char one[900], mj[28000];
     char path[MAX_PATH + 64], tmp[MAX_PATH + 80], line[900], nm[64], cm[192], gm[112], tk[100], sj[110], sk[17];
-    char gn[96], mt[96], mc[0x33 * 3 + 8], cu[0x33 * 3 + 1], u8[0x33 * 3 + 1], js[0x33 * 6 + 8], hn[64] = "\"\"";
+    char gn[96], mt[96], mc[0x33 * 3 + 8], cu[0x33 * 3 + 1], u8[0x33 * 3 + 1], js[0x33 * 6 + 8], hn[64] = "\"\"", hk[17];
     WCHAR wc[0x34];
     DWORD n, ids[8];
     int i, k, ng, st, first = 1, groups = 0, held = 0;
@@ -5577,9 +5627,12 @@ static void snapshot_social(BYTE *b)
                 WideCharToMultiByte(CP_UTF8, 0, m.comment, -1, cu, (int)sizeof cu - 1, NULL, NULL);
                 json_str(mc, sizeof mc, cu);
                 peer_key(b, m.idLo, m.idHi, (m.hHi >> 13) & 0x3f, sk);
-                wsprintfA(one, "%s{\"index\":%d,\"name\":%s,\"key\":\"%s\",\"pic\":%u,\"class\":%u,\"status\":%u,"
-                               "\"me\":%s,\"ignored\":%s,\"text\":%s,\"comment\":%s}",
-                          mfirst ? "" : ",", mi, nm, sk, m.pic, (m.flags >> 18) & 7, (m.flags >> 4) & 7,
+                /* +0x20 is a handle word like a handle record's +0x00: H-ID in bits 1-44, slot in 45-50 */
+                handle_key((const BYTE *)&m.hLo, hk);
+                wsprintfA(one, "%s{\"index\":%d,\"name\":%s,\"key\":\"%s\",\"slot\":%u,\"hid\":\"%s\",\"mine\":%s,"
+                               "\"pic\":%u,\"class\":%u,\"status\":%u,\"me\":%s,\"ignored\":%s,\"text\":%s,\"comment\":%s}",
+                          mfirst ? "" : ",", mi, nm, sk, (m.hHi >> 13) & 0x3f, hk, is_me(b, m.idLo, m.idHi) ? "true" : "false",
+                          m.pic, (m.flags >> 18) & 7, (m.flags >> 4) & 7,
                           ((m.flags >> 21) & 1) ? "true" : "false", ((m.flags >> 1) & 1) ? "true" : "false", mt, mc);
                 wr(h, one);
                 mfirst = 0;

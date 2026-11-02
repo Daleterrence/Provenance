@@ -94,6 +94,11 @@ public sealed record PolGroupMember(int Index, string Name, string Key, int Prof
 {
     // 1 online, 2 away, 3 busy, 0 and 4 offline
     public bool Online => Status is 1 or 2 or 3;
+    // the member's handle: its slot on its own account (-1 when the hook didn't say) and its Handle ID, in the
+    // handles' key format. Mine is my POL ID's row, the one the viewer goes by
+    public int Slot { get; init; } = -1;
+    public string Hid { get; init; } = "";
+    public bool Mine { get; init; }
 }
 
 public sealed record PolGroup(string Id, string Name, int MyClass, int MySlot, int MyStatus, int MyIndex,
@@ -402,6 +407,15 @@ public static class SocialSnapshot
 
     public enum HandleChange { Switch, Link, Unlink }
 
+    // the unlinked ones go on the active handle in one save, the hook refuses the lot if they don't all fit
+    public static bool LinkAll(int pid, string token, PolHandle active, IReadOnlyList<PolContentId> contents)
+    {
+        if (contents.Count is 0 or > HandleList.MaxContentIds) return false;
+        var body = new StringBuilder($"linkall\n{OneLine(token)}\n{active.Slot}\n{OneLine(active.Key)}");
+        foreach (var c in contents) body.Append($"\n{c.Index}\n{OneLine(c.Key)}");
+        return WriteRequest(pid, "handle", body.ToString());
+    }
+
     // the keys are the snapshot's, so the hook refuses one aimed at a record that's changed since
     public static bool ChangeHandle(int pid, HandleChange op, string token, PolHandle handle, PolContentId? content = null)
     {
@@ -603,7 +617,7 @@ public static class SocialSnapshot
             (int)Long(g, "myIndex"),
             Arr(g, "members", m => new PolGroupMember((int)Long(m, "index"), Str(m, "name"), Str(m, "key"),
                 (int)Long(m, "pic"), (int)Long(m, "class"), (int)Long(m, "status"), Bool(m, "me"),
-                Bool(m, "ignored"), Str(m, "text"), Str(m, "comment"))));
+                Bool(m, "ignored"), Str(m, "text"), Str(m, "comment")) { Slot = Int(m, "slot", -1), Hid = Str(m, "hid"), Mine = Bool(m, "mine") }));
 
     private static PolFriendGame? ReadGame(JsonElement g) =>
         g.ValueKind == JsonValueKind.Object

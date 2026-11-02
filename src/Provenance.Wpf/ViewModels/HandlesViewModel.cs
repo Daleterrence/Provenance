@@ -37,6 +37,7 @@ public partial class HandlesViewModel : ObservableObject
     private string _doneText = "";
     private string _signature = "";
     private bool _wasReadOnly;
+    private Action<string?>? _after;
 
     public HandlesViewModel(Func<int?> pid, Func<int, ImageSource?>? picture = null)
     {
@@ -51,6 +52,7 @@ public partial class HandlesViewModel : ObservableObject
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ReadOnly), nameof(Editable))] private string? _readOnlyText;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable))] private bool _busy;
     [ObservableProperty] private string _note = "";
+    private bool _open, _noteSeen;
     [ObservableProperty] private bool _noteIsError;
     [ObservableProperty] private bool _hasUnlinked;
     [ObservableProperty] private bool _noHandles;
@@ -87,6 +89,7 @@ public partial class HandlesViewModel : ObservableObject
             NoteIsError = true;
             Note = _op == HandleChange.Switch ? "The PlayOnline session ended before Provenance could confirm the switch."
                                               : "The PlayOnline session ended before Provenance could confirm the change.";
+            After(Note);
         }
         // the wait doesn't count while the game's starting, nothing can be changed then
         if (readOnly != null || _wasReadOnly) _at = DateTime.UtcNow;
@@ -111,6 +114,14 @@ public partial class HandlesViewModel : ObservableObject
         _token = null;
         NoteIsError = state != "saved";
         Note = state == "saved" ? _doneText : HandleList.Failed(_op, state);
+        After(state == "saved" ? null : Note);
+    }
+
+    private void After(string? failed)
+    {
+        var after = _after;
+        _after = null;
+        after?.Invoke(failed);
     }
 
     private void Rebuild()
@@ -146,6 +157,7 @@ public partial class HandlesViewModel : ObservableObject
         Busy = false;
         NoteIsError = true;
         Note = HandleList.GameStartedText;
+        After(Note);
         Rebuild();
     }
 
@@ -167,6 +179,48 @@ public partial class HandlesViewModel : ObservableObject
         }
         if (Confirm?.Invoke("Switch Handle", HandleList.SwitchQuestion(row.Handle, InChatRoom), "SWITCH") != true) return;
         Send(HandleChange.Switch, row.Handle, null, HandleList.Done(HandleChange.Switch, row.Name, ""));
+    }
+
+    partial void OnNoteChanged(string value) => _noteSeen = _open;
+
+    // Settings is opening: an answer that came in while it was shut shows this once, one already seen there goes
+    public void Opened()
+    {
+        if (!Busy && _noteSeen)
+        {
+            Note = "";
+            NoteIsError = false;
+        }
+        _open = true;
+        _noteSeen = true;
+    }
+
+    public void Closed() => _open = false;
+
+    // a group's chat only opens under the handle I joined it with
+    public void OpenGroup(PolGroup group, Func<string, bool> ask, Action open, Action<string> tell)
+    {
+        if (!LoggedIn)
+        {
+            tell(HandleList.NotLoggedInText);
+            return;
+        }
+        if (GroupHandleCheck.For(_snap, group) is not { } check)
+        {
+            open();
+            return;
+        }
+        var why = ReadOnlyText ?? check.Problem ?? (Busy ? HandleList.PageBusyText : null)
+                  ?? SwitchBlocked?.Invoke();
+        if (why != null)
+        {
+            tell(why);
+            return;
+        }
+        if (!ask(check.Question)) return;
+        Send(HandleChange.Switch, check.To!, null, HandleList.Done(HandleChange.Switch, check.To!.Name, ""));
+        if (_token is null) tell(Note);
+        else _after = failed => { if (failed is null) open(); else tell(failed); };
     }
 
     public void Link(HandleCharacterRow c, HandleRow to)
@@ -192,9 +246,9 @@ public partial class HandlesViewModel : ObservableObject
 
     private void Send(HandleChange op, PolHandle handle, PolContentId? content, string done)
     {
-        if (_pid() is not { } pid) return;
+        _after = null;
         var token = Guid.NewGuid().ToString("N")[..12];
-        if (!SocialSnapshot.ChangeHandle(pid, op, token, handle, content))
+        if (_pid() is not { } pid || !SocialSnapshot.ChangeHandle(pid, op, token, handle, content))
         {
             NoteIsError = true;
             Note = "Provenance couldn't pass the change to PlayOnline.";

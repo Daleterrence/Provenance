@@ -22,19 +22,22 @@ public partial class MessageDialog : Window
     // Null when cancelled, else 0 (or 1 for the second of two choices). Destructive and safeKeys ones put Enter and Esc
     // on cancel so a stray key can't do it, and only destructive goes red.
     public static int? Confirm(Window? owner, string title, string body, string okLabel,
-                               string? choiceA = null, string? choiceB = null, bool destructive = false, bool safeKeys = false)
+                               string? choiceA = null, string? choiceB = null, bool destructive = false, bool safeKeys = false,
+                               string? cancelLabel = null)
     {
-        var dlg = ForConfirm(title, body, okLabel, choiceA, choiceB, destructive, safeKeys);
+        var dlg = ForConfirm(title, body, okLabel, choiceA, choiceB, destructive, safeKeys, cancelLabel);
         if (dlg.ShowOver(owner) != true) return null;
         return dlg.ChoiceB.IsChecked == true && dlg.Choices.Visibility == Visibility.Visible ? 1 : 0;
     }
 
     // set up but not shown yet
     internal static MessageDialog ForConfirm(string title, string body, string okLabel,
-                                             string? choiceA = null, string? choiceB = null, bool destructive = false, bool safeKeys = false)
+                                             string? choiceA = null, string? choiceB = null, bool destructive = false, bool safeKeys = false,
+                                             string? cancelLabel = null)
     {
         var dlg = Create(title, body, PackIconKind.HelpCircleOutline);
         dlg.CancelButton.Visibility = Visibility.Visible;
+        if (cancelLabel != null) dlg.CancelButton.Content = cancelLabel;
         dlg.OkButton.Content = okLabel;
         dlg.OkButton.IsCancel = false;
         dlg.CancelButton.IsCancel = true;

@@ -1265,6 +1265,15 @@ public partial class MainViewModel : ObservableObject
             _socialPoll.Start();
             return;
         }
+        if (await LinkBeforePlayAsync() is var linked and not PreLaunchResult.Play)
+        {
+            Social.GameRunning = false;
+            _elapsedTimer.Stop();
+            IsLaunching = false;
+            _socialPoll.Start();
+            if (linked == PreLaunchResult.ShowHandles) OpenSettingsAt(SettingsWindow.HandlesTab);
+            return;
+        }
         // SE's installer only writes 3 of the game settings
         InstallViewModel.WriteFirstStartSettings(PlayRegion);
         WritePolOptions(_sessionProfileId);
@@ -1321,6 +1330,40 @@ public partial class MainViewModel : ObservableObject
     }
 
     internal static readonly TimeSpan PlayAnswerTimeout = TimeSpan.FromSeconds(15);
+
+    // a test answers the questions itself, and says whether its made-up session is still there
+    internal Func<string, bool>? PreLaunchAnswerForTest { get; set; }
+    internal Func<int, bool>? SessionAliveForTest { get; set; }
+
+    // where the viewer does it, after the update and right before the game starts
+    internal Task<PreLaunchResult> LinkBeforePlayAsync()
+    {
+        var owner = Application.Current?.MainWindow;
+        ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
+        return new PreLaunchLink
+        {
+            Pid = () => _pol.Pid,
+            Ask = text => Asking(() => MessageDialog.Confirm(owner, PreLaunchLink.Title, text, "YES", cancelLabel: "NO") == 0, text),
+            Failed = text => Asking(() =>
+            {
+                MessageDialog.ShowError(owner, PreLaunchLink.Title, text);
+                return true;
+            }, text),
+            Saying = text => ProgressText = text,
+            PageWaiting = () => Handles.Busy ? Handles.Note : null,
+            Alive = SessionAliveForTest ?? PreLaunchLink.ProcessAlive,
+            Read = _ => Social.Last,
+        }.RunAsync();
+    }
+
+    // the footer's "has to wait till the game's closed" isn't true while the answer can still stop it starting
+    private bool Asking(Func<bool> dialog, string text)
+    {
+        var note = Social.StatusNote;
+        Social.StatusNote = "";
+        try { return PreLaunchAnswerForTest is { } answer ? answer(text) : dialog(); }
+        finally { if (Social.StatusNote == "") Social.StatusNote = note; }
+    }
 
     // Play only comes up after a login, which only a supported region gets
     private PolRegion PlayRegion => _settings.DetectedRegion ?? PolRegion.UnitedStates;
@@ -1463,7 +1506,9 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenSettings()
+    private void OpenSettings() => OpenSettingsAt(0);
+
+    private void OpenSettingsAt(int tab)
     {
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
         var handles = Handles;
@@ -1476,10 +1521,16 @@ public partial class MainViewModel : ObservableObject
                                        handles: handles);
         vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.ThirdPartyHookIndex)) PlatformChanged(); };
         var w = new SettingsWindow { DataContext = vm };
+        w.Tabs.SelectedIndex = tab;
         if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
         _openSettings = vm;
+        handles.Opened();
         try { w.ShowDialog(); }
-        finally { _openSettings = null; }
+        finally
+        {
+            _openSettings = null;
+            handles.Closed();
+        }
         if (vm.RestartWanted)
         {
             RequestRestart?.Invoke();

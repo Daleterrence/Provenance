@@ -28,6 +28,8 @@ public static class HandleList
     public const string AutoSwitchText =
         "When you log in to FINAL FANTASY XI with a character that's linked to another handle, that handle becomes your active handle.";
     public const string NoCharactersText = "No characters linked to this handle.";
+    public const string NotLoggedInText = "You're not logged in to PlayOnline.";
+    public const string PageBusyText = "Another handle change is still going. Try again in a moment.";
 
     // the viewer's own fallback for a record with no name
     public static string Label(PolContentId c) => string.IsNullOrWhiteSpace(c.Name) ? "Content ID" : c.Name.Trim();
@@ -67,8 +69,8 @@ public static class HandleList
         "failed:busy" => "PlayOnline is busy with something else. Try again in a moment.",
         "failed:already active" => "That handle is already active.",
         "failed:handle full" or "failed:-7169" => LimitText,
-        "failed:list changed" or "failed:not linked" or "failed:already linked" or "failed:-7172" or "failed:-7173"
-            or "failed:-7174" => "Your handles or characters changed, so nothing was saved. Try again.",
+        "failed:list changed" or "failed:not linked" or "failed:already linked" or "failed:not active" or "failed:-7172"
+            or "failed:-7173" or "failed:-7174" => "Your handles or characters changed, so nothing was saved. Try again.",
         "failed:-7168" => "Not saved: that character is already linked to a handle.",
         "failed:reloaded" => "Not saved: PlayOnline had a newer Content ID list, so Provenance loaded that instead. Try again.",
         "failed:not saved" => "Not saved: PlayOnline didn't keep the change. Try again.",

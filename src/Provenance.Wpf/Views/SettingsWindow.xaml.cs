@@ -13,6 +13,7 @@ namespace Provenance.Wpf.Views;
 public partial class SettingsWindow : Window
 {
     private bool _ownerClosing;   // tray Exit: no question that could leave a window up with the tray gone
+    public const int HandlesTab = 5;
 
     public SettingsWindow()
     {

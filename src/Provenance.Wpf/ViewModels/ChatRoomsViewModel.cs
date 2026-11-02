@@ -92,7 +92,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public Func<string, bool>? ConfirmLeave { get; set; }
     public Action<string>? ShowError { get; set; }
 
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(InLobby), nameof(InRoom))] private Page _current = Page.Lobby;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(InLobby), nameof(InRoom)), NotifyCanExecuteChangedFor(nameof(EnterCommand), nameof(ExitCommand))]
+    private Page _current = Page.Lobby;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Available), nameof(CanRetry))] private string? _unavailable;
     [ObservableProperty] private string _zonesNote = "";
     [ObservableProperty] private string _roomsNote = "";
