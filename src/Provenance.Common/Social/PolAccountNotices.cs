@@ -140,15 +140,22 @@ public static class PolAccountNotices
         return "PlayOnline turned this account away.";
     }
 
+    // a session that drops, the viewer's way (app.dll FUN_10198472): its own two disconnect texts, and anything else is
+    // msg 0x5654 with the code as POL-nnnn (msg 0x5a16) and polerr's text for it. The LM table is only ever for a
+    // login, a -250 (no server PING for 400 s) just shares its number with LM-30
     public static string SessionLost(int reason, PolRegion region = PolRegion.UnitedStates) => reason switch
     {
         -0x40f => "Disconnected. The current PlayOnline ID was used to log in from another terminal.",
         -0x400 or -0x401 or -0x40e => "Disconnected. Now offline.",
-        -251 => "Disconnected from PlayOnline.",
-        -207 => ConnectionLost,
-        <= -221 and >= -252 => For(-reason, region) is { } n ? $"{n.Text} ({n.Code})" : "Disconnected from PlayOnline.",
-        _ => $"Disconnected from PlayOnline (code {reason}).",
+        _ => NetworkError(Math.Abs(reason), region),
     };
+
+    // the three polerr texts with a %d (days left on a payment) are the viewer's to fill in, so they're left off
+    public static string NetworkError(int code, PolRegion region = PolRegion.UnitedStates)
+    {
+        var head = $"Network Connection Error\nPOL-{code:0000}";
+        return PolErrors.Text(code, region) is { } text && !text.Contains("%d") ? $"{head}\n{text}" : head;
+    }
 
     // polerr 207, what the viewer says once a revoked login drops
     private const string ConnectionLost =
