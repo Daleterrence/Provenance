@@ -345,7 +345,16 @@ public partial class SocialViewModel : ObservableObject
         _applyingSnapshot = true;
         try { ApplyCore(snap); }
         finally { _applyingSnapshot = false; }
+        // a popup's modal loop lets the next snapshot in, so it waits till this one's all applied
+        if (_popupAfterApply is { } text)
+        {
+            _popupAfterApply = null;
+            ProfilePopup?.Invoke(text);
+        }
     }
+
+    private string? _popupAfterApply;
+    internal bool ApplyingSnapshot => _applyingSnapshot;
 
     public PolSocialSnapshot Last => _last;
 

@@ -1617,6 +1617,8 @@ static void sweep_stale_social(void)
     sweep_stale("pol_hook.*.store.json*");
     sweep_stale("pol_hook.*.chatroom.json*");
     sweep_stale("pol_hook.*.chatjoin*");
+    sweep_stale("pol_hook.*.chatcreate*");
+    sweep_stale("pol_hook.*.chatmaster*");
 }
 static void sweep_stale(const char *pattern)
 {
@@ -2733,10 +2735,10 @@ static void store_drop(void)
     DeleteFileA(p);
     ipc_file(p, "chatroom.json");   /* the chat room's lines, other people's words like the messages */
     DeleteFileA(p);
-    /* and an enter that never got taken */
-    for (int i = 0; i < 3; i++) {
-        ipc_file(p, "chatjoin");
-        lstrcatA(p, i == 0 ? "" : i == 1 ? ".taking" : ".taking2");
+    /* and an enter, a create or a master's change that never got taken */
+    for (int i = 0; i < 9; i++) {
+        ipc_file(p, i < 3 ? "chatjoin" : i < 6 ? "chatcreate" : "chatmaster");
+        lstrcatA(p, i % 3 == 0 ? "" : i % 3 == 1 ? ".taking" : ".taking2");
         DeleteFileA(p);
     }
 }
@@ -5093,6 +5095,8 @@ static int chat_room_open(void);
 static void chat_end(BYTE *b);
 static void chat_join_refused(const char *tok, const char *haskey);
 static void chat_send_refused(const char *tok);
+static void chat_create_refused(const char *tok, const char *haskey);
+static void chat_master_refused(const char *tok, const char *haskey);
 
 static int get_chr(BYTE *b, int i, BYTE *rec)
 {
@@ -5223,7 +5227,7 @@ static void handle_switched(BYTE *b)
 static void writes_refuse(BYTE *b)
 {
     static const char *const ext[] = { "send", "friend", "comment", "answer", "group", "pic", "status", "myprofile",
-                                       "saveprofile", "rename", "chatjoin", "chatsend" };
+                                       "saveprofile", "rename", "chatjoin", "chatsend", "chatcreate", "chatmaster" };
     char buf[512], *p, *l1, *l2, *l3;
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) {
         if (take_request(ext[i], buf, sizeof buf) < 0) continue;
@@ -5239,6 +5243,8 @@ static void writes_refuse(BYTE *b)
         case 7: case 8: case 9: lstrcpynA(g_me_token, l1, sizeof g_me_token); me_done(SWITCHING); break;
         case 10: chat_join_refused(l1, l3); break;
         case 11: chat_send_refused(l1); break;
+        case 12: chat_create_refused(l1, l2); break;
+        case 13: chat_master_refused(l1, l2); break;
         }
     }
 }

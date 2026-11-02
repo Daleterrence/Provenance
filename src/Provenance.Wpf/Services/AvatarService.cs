@@ -34,6 +34,38 @@ public sealed class AvatarService(ISettingsService settings)
 
     public ImageSource? ProfilePicture(int picId) => (picId > 0 ? Load(picId) : null) ?? NoProfilePicture;
 
+    private readonly Dictionary<int, ImageSource?> _emotes = new();
+    private BitmapSource? _faceSheet;
+    private bool _faceSheetTried;
+
+    // the chat emoticons, read from the user's own viewer like the profile pictures and never shipped. The viewer asks
+    // for chat_face.tm2, which is skins\chat_face.png: 8 across, 32x32, cell 0 its "NO"
+    public ImageSource? ChatEmote(int index)
+    {
+        if (index < 1 || index > ChatLook.Emotes) return null;
+        lock (_lock)
+        {
+            if (_emotes.TryGetValue(index, out var have)) return have;
+            if (!_faceSheetTried && ViewerDir is { } dir)
+            {
+                _faceSheetTried = true;
+                var path = Path.Combine(dir, "viewer", "data", "system", "skins", "chat_face.png");
+                try { if (File.Exists(path)) _faceSheet = DecodeSheet(path); }
+                catch (Exception e) { Log.Warning(e, "Chat emoticons: {Path} didn't decode", path); }
+            }
+            ImageSource? img = null;
+            int x = (index & 7) * 32, y = (index >> 3) * 32;
+            if (_faceSheet is { } sheet && x + 32 <= sheet.PixelWidth && y + 32 <= sheet.PixelHeight)
+            {
+                var crop = new CroppedBitmap(sheet, new Int32Rect(x, y, 32, 32));
+                crop.Freeze();
+                img = crop;
+            }
+            _emotes[index] = img;
+            return img;
+        }
+    }
+
     public void Prewarm(IEnumerable<int> picIds)
     {
         try

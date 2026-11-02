@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Data;
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Social;
@@ -19,18 +20,38 @@ public sealed record ChatRoomItem(ChatRoomEntry Room, string Name, string Catego
     public string People => $"{Room.People}/{Room.Capacity}";
     public bool Locked => Room.Locked;
     public bool HasCategories => Categories.Length > 0;
+    public string Language => ChatLook.Language(Room.Categories);
+    public bool HasLanguage => Language.Length > 0;
 }
 
-// Style is say, notice (arrivals, leaving, master changes), status (away and back), whisper or mine
+// Style is say, notice (arrivals, leaving, master changes), status (away and back), whisper or mine. Colour is a say
+// line's own (null for the default), Emote its face
 public sealed record ChatLineItem(long Seq, string Text, string Style, DateTimeOffset When)
 {
     public string TimeText => When.ToString("HH:mm");
+    public Brush? Colour { get; init; }
+    public ImageSource? Emote { get; init; }
+    public bool HasColour => Colour is not null;
+    public bool HasEmote => Emote is not null;
 }
 
-public sealed record ChatMemberItem(string Name, bool Me, bool Master, bool Away)
+// Name is empty till the member's own hello says it, the viewer lists them nameless till then
+public sealed record ChatMemberItem(string Name, bool Me, bool Master, bool Away, int Key = 0)
 {
     public string Note => Away ? "Away" : Me ? "You" : "";
 }
+
+public sealed record ChatColourItem(int Pick, Brush Swatch)
+{
+    public string Name => ChatLook.ColourName(Pick);
+}
+public sealed record ChatEmoteItem(int Index, ImageSource Image)
+{
+    public string Name => $"Emoticon {Index}";
+}
+
+// the viewer's Create Room form, Members/Purpose/Language 0 when not set
+public sealed record ChatRoomForm(int Zone, string Name, int Occupancy, string? Password, int Members, int Purpose, int Language);
 
 // one chat rooms window: the zone picker and room list, then the room. Everything goes through the hook's files, bar
 // the room password, which goes as a one-shot Credential Manager entry
@@ -44,6 +65,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public const string LeaveQuestion = "Leave chat room?";
     public const string LeaveAsMaster =
         "Another member will be automatically designated room master if you leave the chat room now. Leave the room?";
+    public const string MasterOnly = "This command is for the room master only.";
+    public const string UnlockedText = "The old password was removed, but the new one couldn't be set. The room has no password now.";
 
     private readonly SocialViewModel _social;
     private readonly Func<string, string, bool> _savePassword;
@@ -56,14 +79,23 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private string? _lastNick;
     private bool _restoringZone, _quiet, _disposed, _joinLocked;
     private readonly Dictionary<int, string> _categories = new();
+    private readonly Func<int, ImageSource?>? _emote;
+    private string? _masterToken, _masterName;
+    private MasterJob _masterKind;
+    private enum MasterJob { Kick, Master, Password }
 
     // savePassword hands a room password to the hook for one enter (token, password), dropPassword takes back one it
     // never read
-    public ChatRoomsViewModel(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword)
+    public ChatRoomsViewModel(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword,
+                              Func<int, ImageSource?>? emote = null)
     {
         _social = social;
         _savePassword = savePassword;
         _dropPassword = dropPassword;
+        _emote = emote;
+        for (int i = 0; i < ChatLook.Colours; i++) ColourChoices.Add(new ChatColourItem(i, LineBrush(ChatLook.PickerArgb(i))));
+        for (int i = 1; i <= ChatLook.Emotes; i++)
+            if (emote?.Invoke(i) is { } img) EmoteChoices.Add(new ChatEmoteItem(i, img));
         _social.SnapshotApplied += OnSnapshot;
         _social.PropertyChanged += OnSocialChanged;
         ZonesView = CollectionViewSource.GetDefaultView(Zones);
@@ -75,7 +107,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     internal void SendTick()
     {
         SendCommand.NotifyCanExecuteChanged();
-        if (_gate.Token is null && _gate.CanSend(DateTime.UtcNow)) _tick.Stop();
+        MasterTick(DateTime.UtcNow);
+        if (_gate.Token is null && _gate.CanSend(DateTime.UtcNow) && _masterToken is null) _tick.Stop();
     }
 
     internal bool SendTicking => _tick.IsEnabled;
@@ -85,14 +118,31 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public ObservableCollection<ChatRoomItem> Rooms { get; } = new();
     public ObservableCollection<ChatLineItem> Lines { get; } = new();
     public ObservableCollection<ChatMemberItem> Members { get; } = new();
+    public ObservableCollection<ChatColourItem> ColourChoices { get; } = new();
+    public ObservableCollection<ChatEmoteItem> EmoteChoices { get; } = new();
+    public bool HasEmotes => EmoteChoices.Count > 0;
+
+    // the next line's colour (-1 none) and emoticon (0 none), back to none once it's sent like the viewer's
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(PickedColour))] private int _colour = -1;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(PickedEmote))] private int _emoticon;
+    public Brush? PickedColour => Colour < 0 ? null : ColourChoices[Colour].Swatch;
+    public ImageSource? PickedEmote => Emoticon > 0 ? _emote?.Invoke(Emoticon) : null;
+
+    [RelayCommand] private void PickColour(object? pick) => Colour = pick is int i ? i : -1;
+    [RelayCommand] private void PickEmote(object? pick) => Emoticon = pick is int i ? i : 0;
 
     // the view's hooks for the questions only it can ask
     public Func<string, string?>? AskChatName { get; set; }
     public Func<string?>? AskPassword { get; set; }
     public Func<string, bool>? ConfirmLeave { get; set; }
     public Action<string>? ShowError { get; set; }
+    public Action<string>? ShowInfo { get; set; }
+    // null when the form's cancelled
+    public Func<IReadOnlyList<ChatZone>, int, IReadOnlyList<ChatCategory>, ChatRoomForm?>? AskCreate { get; set; }
+    public Func<string, bool>? Confirm { get; set; }
+    public Func<string?>? AskNewPassword { get; set; }
 
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(InLobby), nameof(InRoom)), NotifyCanExecuteChangedFor(nameof(EnterCommand), nameof(ExitCommand))]
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(InLobby), nameof(InRoom), nameof(MasterIdle)), NotifyCanExecuteChangedFor(nameof(EnterCommand), nameof(ExitCommand), nameof(CreateRoomCommand))]
     private Page _current = Page.Lobby;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Available), nameof(CanRetry))] private string? _unavailable;
     [ObservableProperty] private string _zonesNote = "";
@@ -103,15 +153,20 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _roomCount = "";
     [ObservableProperty] private string _sendNote = "";
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(SendCommand))] private string _compose = "";
-    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(UpdateListCommand), nameof(NextPageCommand), nameof(PreviousPageCommand), nameof(EnterCommand))]
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(UpdateListCommand), nameof(NextPageCommand), nameof(PreviousPageCommand), nameof(EnterCommand), nameof(CreateRoomCommand))]
     private bool _searching;
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(UpdateListCommand), nameof(NextPageCommand), nameof(PreviousPageCommand), nameof(EnterCommand))]
     private ChatZoneItem? _selectedZone;
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(EnterCommand))] private ChatRoomItem? _selectedRoom;
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(NextPageCommand), nameof(PreviousPageCommand))] private int _offset;
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(NextPageCommand))] private int _total;
-    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(UpdateListCommand), nameof(EnterCommand), nameof(ExitCommand), nameof(CancelEnterCommand))]
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(UpdateListCommand), nameof(EnterCommand), nameof(ExitCommand), nameof(CancelEnterCommand), nameof(CreateRoomCommand))]
     private bool _entering;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(MasterIdle))] private bool _isMaster;
+    [ObservableProperty] private bool _roomLocked;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(MasterIdle))] private bool _masterBusy;
+    // ROOM PASSWORD's button, which greys with everything else the master can't do right now
+    public bool MasterIdle => CanMaster;
 
     public bool Available => Unavailable is null;
     public bool CanRetry => Unavailable is not null && Unavailable != GameRunningText;
@@ -202,6 +257,135 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         }
     }
 
+    private bool CanCreate => Zones.Count > 0 && !Entering && !Searching && Current == Page.Lobby && !_social.HandleSwitching;
+
+    // the viewer's Create Room: its form, the chat name, then the hook makes the room and I'm its master
+    [RelayCommand(CanExecute = nameof(CanCreate))]
+    private void CreateRoom()
+    {
+        if (Pid is not { } pid) return;
+        var cats = _categories.Select(c => new ChatCategory(c.Key, "", c.Value)).ToList();
+        if (AskCreate?.Invoke(Zones.Select(z => z.Zone).ToList(), SelectedZone?.Zone.Code ?? 0, cats) is not { } form) return;
+        var nick = AskChatName?.Invoke(_lastNick ?? DefaultNick());
+        if (nick is null) return;
+        var token = NewToken();
+        bool locked = form.Password is { Length: > 0 };
+        if (locked && !_savePassword(token, form.Password!))
+        {
+            ShowError?.Invoke("Chat communication error.");
+            return;
+        }
+        _lastNick = nick;
+        _joinToken = token;
+        _joinLocked = locked;
+        _joinSeq = _lastSeq;
+        _roomIrc = "";
+        _roomTitle = form.Name.Trim();
+        Entering = true;
+        BusyText = "Creating chat room...";
+        if (!ChatRoomFiles.Create(pid, token, locked, form.Zone, form.Occupancy, form.Members, form.Purpose, form.Language, nick,
+                                  form.Name.Trim()))
+        {
+            if (locked) _dropPassword();
+            BackToLobby();
+            ShowError?.Invoke("Chat communication error.");
+        }
+    }
+
+    // the create form's question, in the viewer's words (0x4eef/0x4ef0)
+    public static string CreateQuestion(string zone, int occupancy, bool password, string members, string purpose, string language) =>
+        $"Create chat room with these settings?\n\nZone: {zone}\nOccupancy: {occupancy}\nPassword: {(password ? "ON" : "Off")}\n" +
+        $"Category 1: {members}\nCategory 2: {purpose}\nCategory 3: {language}";
+
+    private bool CanMaster => Current == Page.Room && IsMaster && !MasterBusy && !_social.HandleSwitching && !_social.GameRunning;
+
+    public bool CanKick(ChatMemberItem? m) => m is { Me: false } && CanMaster;
+
+    // the viewer's Kick and Designate, each with its own question first
+    public void Kick(ChatMemberItem m)
+    {
+        if (!CanKick(m)) { ShowError?.Invoke(MasterOnly); return; }
+        if (Confirm?.Invoke($"Kick {m.Name}\nfrom this chat room?") != true) return;
+        SendMaster(ChatRoomFiles.MasterOp.Kick, MasterJob.Kick, m.Key, m.Name, null);
+    }
+
+    public void Designate(ChatMemberItem m)
+    {
+        if (!CanKick(m)) { ShowError?.Invoke(MasterOnly); return; }
+        if (Confirm?.Invoke($"Designate {m.Name} the new room master?") != true) return;
+        SendMaster(ChatRoomFiles.MasterOp.Master, MasterJob.Master, m.Key, m.Name, null);
+    }
+
+    // a new password, or none to take it off
+    public void ChangePassword(bool remove)
+    {
+        if (!CanMaster) { ShowError?.Invoke(_social.HandleSwitching ? SocialViewModel.SwitchingNote : MasterOnly); return; }
+        string? pw = null;
+        if (!remove && (pw = AskNewPassword?.Invoke()) is null) return;
+        if (Confirm?.Invoke("Update chat room settings?") != true) return;
+        SendMaster(ChatRoomFiles.MasterOp.Password, MasterJob.Password, 0, "", pw);
+    }
+
+    private void SendMaster(ChatRoomFiles.MasterOp op, MasterJob kind, int key, string name, string? password)
+    {
+        if (Pid is not { } pid) return;
+        var token = NewToken();
+        if (password is { Length: > 0 } && !_savePassword(token, password))
+        {
+            ShowError?.Invoke("Chat communication error.");
+            return;
+        }
+        if (!ChatRoomFiles.Master(pid, token, op, key, password is { Length: > 0 }))
+        {
+            if (password is { Length: > 0 }) _dropPassword();
+            ShowError?.Invoke("Chat communication error.");
+            return;
+        }
+        _masterToken = token;
+        _masterKind = kind;
+        _masterName = name;
+        _masterSentAt = DateTime.UtcNow;
+        MasterBusy = true;
+        _tick.Start();
+    }
+
+    private DateTime _masterSentAt;
+    // a little past the hook's own 120 s, for a job it never took or never answered
+    internal static readonly TimeSpan MasterGiveUp = TimeSpan.FromSeconds(130);
+
+    internal void MasterTick(DateTime now)
+    {
+        if (_masterToken is null || now - _masterSentAt < MasterGiveUp || Pid is not { } pid) return;
+        SocialSnapshot.WithdrawRequest(pid, "chatmaster");
+        if (_masterKind == MasterJob.Password) _dropPassword();
+        _masterToken = null;
+        MasterBusy = false;
+        ShowError?.Invoke("Chat communication error.");
+    }
+
+    private void ApplyMaster(ChatRoomsSnapshot chat)
+    {
+        if (_masterToken is null || chat.MasterToken != _masterToken || chat.MasterState is "" or "working") return;
+        _masterToken = null;
+        MasterBusy = false;
+        var name = _masterName ?? "";
+        if (chat.MasterState == "done")
+        {
+            if (_masterKind == MasterJob.Kick) ShowInfo?.Invoke("Kicked.");
+            else if (_masterKind == MasterJob.Master) ShowInfo?.Invoke("New room master designated.");
+            return;
+        }
+        if (_masterKind == MasterJob.Password) _dropPassword();
+        ShowError?.Invoke(chat.MasterState switch
+        {
+            "failed:left" => $"{name} has already left.",
+            "failed:not master" => MasterOnly,
+            "failed:unlocked" => UnlockedText,
+            "failed:handle changing" => "Your handle was changing, so nothing was changed.",
+            _ => "Chat communication error.",
+        });
+    }
+
     // the handle's name, cut to what a chat name can hold
     private string DefaultNick()
     {
@@ -235,7 +419,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             SocialSnapshot.WithdrawRequest(pid, "chatsend");
             if (Current == Page.Room || Entering)
             {
-                bool withdrawn = Entering && SocialSnapshot.WithdrawRequest(pid, "chatjoin") == SocialSnapshot.Withdrawal.Withdrawn;
+                bool withdrawn = Entering && ((SocialSnapshot.WithdrawRequest(pid, "chatjoin") == SocialSnapshot.Withdrawal.Withdrawn) |
+                                              (SocialSnapshot.WithdrawRequest(pid, "chatcreate") == SocialSnapshot.Withdrawal.Withdrawn));
                 if (Entering) _dropPassword();
                 if (!withdrawn && !_quiet) ChatRoomFiles.Leave(pid, NewToken(), Entering ? _joinToken ?? "" : "");
             }
@@ -259,6 +444,12 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _gate.Reset();
         _tick.Stop();
         SendNote = "";
+        _masterToken = null;
+        MasterBusy = false;
+        IsMaster = false;
+        OnPropertyChanged(nameof(MasterIdle));
+        Colour = -1;
+        Emoticon = 0;
         Members.Clear();
         Lines.Clear();
         _roomIrc = "";
@@ -280,9 +471,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             return;
         }
         var token = NewToken();
-        if (!ChatRoomFiles.Send(pid, token, text)) { SendNote = "Chat communication error."; return; }
+        if (!ChatRoomFiles.Send(pid, token, text, Colour, Emoticon)) { SendNote = "Chat communication error."; return; }
         _gate.Sent(token, DateTime.UtcNow);
         Compose = "";
+        Colour = -1;
+        Emoticon = 0;
         SendNote = "";
         _tick.Start();
         SendCommand.NotifyCanExecuteChanged();
@@ -291,9 +484,12 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     // the game starting leaves the room straight away, the hook might never see the Play. TRY AGAIN once it's closed
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(SocialViewModel.HandleSwitching) or nameof(SocialViewModel.GameRunning))
+            OnPropertyChanged(nameof(MasterIdle));
         if (e.PropertyName == nameof(SocialViewModel.HandleSwitching))
         {
             EnterCommand.NotifyCanExecuteChanged();
+            CreateRoomCommand.NotifyCanExecuteChanged();
             SendCommand.NotifyCanExecuteChanged();
             SendNote = _social.HandleSwitching ? SocialViewModel.SwitchingNote : SendNote == SocialViewModel.SwitchingNote ? "" : SendNote;
             return;
@@ -310,12 +506,21 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private void OnSnapshot(PolSocialSnapshot snap)
     {
         if (snap.Chat is not { } chat) return;
+        ApplyCategories(chat);
         ApplyZones(chat);
         ApplyRooms(chat);
         ApplyRoom(chat);
         ApplyLines(chat);
         ApplySend(chat);
+        ApplyMaster(chat);
         _lastSeq = Math.Max(_lastSeq, chat.LineSeq);
+    }
+
+    // taken whenever they come, c_chan.pfb can fail to read with the zones and work with a room list
+    private void ApplyCategories(ChatRoomsSnapshot chat)
+    {
+        if (chat.Categories.Count == 0) return;
+        foreach (var c in chat.Categories) _categories[c.Code] = c.Name;
     }
 
     private void ApplyZones(ChatRoomsSnapshot chat)
@@ -329,8 +534,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             Unavailable = NotNow;
             return;
         }
-        _categories.Clear();
-        foreach (var c in chat.Categories) _categories[c.Code] = c.Name;
         var keep = SelectedZone?.Zone.Code;
         _restoringZone = true;
         try
@@ -339,6 +542,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             foreach (var z in chat.Zones) Zones.Add(new ChatZoneItem(z with { Name = _social.Filtered(z.Name) }));
             if (Zones.Count == 0) { Unavailable = NotNow; return; }
             ZonesNote = "Select zone.";
+            CreateRoomCommand.NotifyCanExecuteChanged();
             SelectedZone = keep is { } k ? Zones.FirstOrDefault(x => x.Zone.Code == k) : null;
         }
         finally { _restoringZone = false; }
@@ -378,6 +582,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             case "in":
                 if (Current != Page.Room)
                 {
+                    if (_roomIrc.Length == 0) _roomIrc = chat.RoomIrc;
                     Current = Page.Room;
                     Entering = false;
                     BusyText = "";
@@ -390,14 +595,15 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 }
                 RoomName = title;
                 var now = chat.Members.OrderByDescending(x => x.Master).ThenByDescending(x => x.Me)
-                    .Select(m => new ChatMemberItem(m.Name.Length > 0 ? (m.Me ? m.Name : _social.Filtered(m.Name)) : CouldNotGetName,
-                                                    m.Me, m.Master, m.Away)).ToList();
+                    .Select(m => new ChatMemberItem(m.Me ? m.Name : _social.Filtered(m.Name), m.Me, m.Master, m.Away, m.Key)).ToList();
                 if (!Members.SequenceEqual(now))
                 {
                     Members.Clear();
                     foreach (var m in now) Members.Add(m);
                 }
                 RoomCount = chat.Limit > 0 ? $"{Members.Count}/{chat.Limit}" : $"{Members.Count}";
+                IsMaster = Members.Any(m => m.Me && m.Master);
+                RoomLocked = chat.Locked;
                 return;
             // out of the room before the dialog, which runs its own loop where the next snapshot lands
             case "kicked":
@@ -428,6 +634,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             "failed:closed" => "This room is already closed and cannot be entered.",
             "failed:no chat" => NotNow,
             "failed:handle changing" => "Your handle was changing, so the room wasn't entered.",
+            "failed:bad name" => "The entered room name cannot be used. Please enter a different name.",
             _ => "Chat communication error.",
         };
         BackToLobby();
@@ -442,7 +649,14 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         foreach (var l in file.Lines.Where(x => x.Seq > _seenSeq).OrderBy(x => x.Seq))
         {
             var (text, style) = LineText(l);
-            AddLine(l.Seq, text, style, l.When);
+            var line = new ChatLineItem(l.Seq, text, style, l.When);
+            if (l.Kind == "say")
+                line = line with
+                {
+                    Colour = ChatLook.Argb(l.Colour) is { } c ? LineBrush(c) : null,
+                    Emote = ChatLook.Emote(l.Emote) is > 0 and var e ? _emote?.Invoke(e) : null,
+                };
+            Lines.Add(line);
             _seenSeq = l.Seq;
         }
         while (Lines.Count > 500) Lines.RemoveAt(0);
@@ -465,6 +679,34 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             "whisper" => ($"Whisper from {name}.\n\"{text}\"", "whisper"),
             _ => ($"{name}> {text}", "say"),
         };
+    }
+
+    // the viewer's colours are for its light window, so they're lifted to the same hue at a lightness that reads here
+    internal static SolidColorBrush LineBrush(uint argb)
+    {
+        double r = ((argb >> 16) & 0xff) / 255.0, g = ((argb >> 8) & 0xff) / 255.0, b = (argb & 0xff) / 255.0;
+        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), l = (max + min) / 2, h = 0, s = 0;
+        if (max > min)
+        {
+            double d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            h = max == r ? (g - b) / d + (g < b ? 6 : 0) : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
+            h /= 6;
+        }
+        l = Math.Max(l, 0.68);
+        s = Math.Min(1, s * 1.1);
+        double q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+        static double Hue(double p, double q, double t)
+        {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            return t < 1 / 6.0 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3.0 ? p + (q - p) * (2 / 3.0 - t) * 6 : p;
+        }
+        byte C(double v) => (byte)Math.Round(Math.Clamp(v, 0, 1) * 255);
+        var brush = s == 0 ? new SolidColorBrush(Color.FromRgb(C(l), C(l), C(l)))
+                           : new SolidColorBrush(Color.FromRgb(C(Hue(p, q, h + 1 / 3.0)), C(Hue(p, q, h)), C(Hue(p, q, h - 1 / 3.0))));
+        brush.Freeze();
+        return brush;
     }
 
     private void AddLine(long seq, string text, string style, DateTimeOffset? when = null) =>

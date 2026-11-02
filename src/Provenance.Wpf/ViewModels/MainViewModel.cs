@@ -941,7 +941,7 @@ public partial class MainViewModel : ObservableObject
     private void OpenChatRooms()
     {
         if (MultiRunning) return;
-        ChatRoomsWindow.ShowFor(Social, _pol.SaveChatPassword, _pol.DropChatPassword);
+        ChatRoomsWindow.ShowFor(Social, _pol.SaveChatPassword, _pol.DropChatPassword, _avatars.ChatEmote);
     }
 
     private static List<SocialWindow> SocialWindows() => Application.Current.Windows.OfType<SocialWindow>().ToList();

@@ -36,8 +36,11 @@
 
         <!-- read-only so a line can be copied, arrivals and the like in the accent colour -->
         <DataTemplate x:Key="RoomLine" DataType="{x:Type vm:ChatLineItem}">
-            <Grid Margin="0,1" ColumnDefinitions="Auto,*">
+            <!-- the face sits after the text so every line's text starts in the same place, like the viewer's log -->
+            <Grid Margin="0,1" ColumnDefinitions="Auto,*,Auto">
                 <TextBlock Margin="0,1,10,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding TimeText}" />
+                <Image Grid.Column="2" Source="{Binding Emote}" Width="24" Height="24" Margin="6,-3,0,0" VerticalAlignment="Top"
+                       RenderOptions.BitmapScalingMode="HighQuality" Visibility="{Binding HasEmote, Converter={StaticResource BoolToVis}}" />
                 <TextBox x:Name="Body" Grid.Column="1" Style="{x:Null}" Text="{Binding Text, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
                          IsReadOnly="True" IsTabStop="False" BorderThickness="0" Background="Transparent" Padding="0"
                          Foreground="{DynamicResource Text.1}" CaretBrush="Transparent" Cursor="IBeam"
@@ -55,6 +58,10 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Style}" Value="mine">
                     <Setter TargetName="Body" Property="Foreground" Value="{DynamicResource Text.2}" />
+                </DataTrigger>
+                <!-- after the styles, so a line's own colour wins -->
+                <DataTrigger Binding="{Binding HasColour}" Value="True">
+                    <Setter TargetName="Body" Property="Foreground" Value="{Binding Colour}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -149,20 +156,26 @@
                                        Text="{Binding SelectedZone.Name, FallbackValue=Rooms, TargetNullValue=Rooms}" />
                             <TextBlock FontSize="12" Foreground="{DynamicResource Text.3}" Text="{Binding RoomsNote}" />
                         </StackPanel>
-                        <Button Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource AccentFlatButton}" FontSize="12"
-                                Content="UPDATE LIST" Command="{Binding UpdateListCommand}" ToolTip="Update room list for selected zone." />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource AccentFlatButton}" FontSize="12" Content="CREATE ROOM"
+                                    Command="{Binding CreateRoomCommand}" ToolTip="Create a new chat room." />
+                            <Button Style="{StaticResource AccentFlatButton}" FontSize="12" Content="UPDATE LIST"
+                                    Command="{Binding UpdateListCommand}" ToolTip="Update room list for selected zone." />
+                        </StackPanel>
                     </Grid>
                 </Border>
-                <Grid Grid.Row="1" Margin="16,8,16,4" ColumnDefinitions="22,*,Auto">
+                <Grid Grid.Row="1" Margin="16,8,16,4" ColumnDefinitions="22,*,Auto,Auto">
                     <TextBlock Grid.Column="1" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Text.3}" Text="Room Name" />
-                    <TextBlock Grid.Column="2" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Text.3}" Text="Occupancy" />
+                    <TextBlock Grid.Column="2" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Text.3}" Text="Language"
+                               Margin="0,0,12,0" />
+                    <TextBlock Grid.Column="3" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Text.3}" Text="Occupancy" />
                 </Grid>
                 <ListBox x:Name="RoomList" Grid.Row="2" ItemsSource="{Binding Rooms}" SelectedItem="{Binding SelectedRoom}"
                          ItemContainerStyle="{StaticResource ListRow}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          MouseDoubleClick="OnRoomDoubleClick">
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:ChatRoomItem}">
-                            <Grid ColumnDefinitions="22,*,Auto">
+                            <Grid ColumnDefinitions="22,*,Auto,Auto">
                                 <materialDesign:PackIcon Kind="Lock" Width="14" Height="14" VerticalAlignment="Center" Foreground="{DynamicResource Text.3}"
                                                          ToolTip="Password" Visibility="{Binding Locked, Converter={StaticResource BoolToVis}}" />
                                 <StackPanel Grid.Column="1" Margin="0,0,12,0">
@@ -170,7 +183,15 @@
                                     <TextBlock Text="{Binding Categories}" FontSize="11" Foreground="{DynamicResource Text.3}" TextTrimming="CharacterEllipsis"
                                                Visibility="{Binding HasCategories, Converter={StaticResource BoolToVis}}" />
                                 </StackPanel>
-                                <TextBlock Grid.Column="2" Text="{Binding People}" FontSize="13" VerticalAlignment="Center" MinWidth="56" TextAlignment="Right" />
+                                <!-- the viewer's JP/EN/FR/GE badge, from the room's language category -->
+                                <Border Grid.Column="2" MinWidth="52" Margin="0,0,12,0" VerticalAlignment="Center">
+                                    <Border HorizontalAlignment="Center" Padding="6,1" CornerRadius="4" BorderThickness="1"
+                                            BorderBrush="{DynamicResource Border.Hair}" Background="{DynamicResource Surface.2}"
+                                            Visibility="{Binding HasLanguage, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="{Binding Language}" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Text.2}" />
+                                    </Border>
+                                </Border>
+                                <TextBlock Grid.Column="3" Text="{Binding People}" FontSize="13" VerticalAlignment="Center" MinWidth="56" TextAlignment="Right" />
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -211,8 +232,13 @@
                     <TextBlock VerticalAlignment="Center" FontSize="15" TextTrimming="CharacterEllipsis">
                         <Run Text="{Binding RoomName, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="   " /><Run Text="{Binding RoomCount, Mode=OneWay}" FontSize="13" Foreground="{DynamicResource Text.3}" />
                     </TextBlock>
-                    <Button Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource AccentFlatButton}" FontSize="12" Content="EXIT"
-                            Command="{Binding ExitCommand}" ToolTip="Exit chat room and return to the room list." />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource AccentFlatButton}" FontSize="12" Content="ROOM PASSWORD" Click="OnPasswordMenu"
+                                IsEnabled="{Binding MasterIdle}"
+                                Visibility="{Binding IsMaster, Converter={StaticResource BoolToVis}}" ToolTip="Set or remove the room's password." />
+                        <Button Style="{StaticResource AccentFlatButton}" FontSize="12" Content="EXIT"
+                                Command="{Binding ExitCommand}" ToolTip="Exit chat room and return to the room list." />
+                    </StackPanel>
                 </Grid>
             </Border>
             <Grid Grid.Row="1">
@@ -231,7 +257,11 @@
                         <ItemsControl ItemsSource="{Binding Members}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:ChatMemberItem}">
-                                    <Grid Margin="14,3" ColumnDefinitions="18,*,Auto">
+                                    <!-- the master's Kick and Designate, filled as the menu opens -->
+                                    <Grid Margin="14,3" ColumnDefinitions="18,*,Auto" Background="Transparent" ContextMenuOpening="OnMemberMenu">
+                                        <Grid.ContextMenu>
+                                            <ContextMenu />
+                                        </Grid.ContextMenu>
                                         <materialDesign:PackIcon Kind="Star" Width="14" Height="14" VerticalAlignment="Center"
                                                                  Foreground="{DynamicResource Accent.Gold}" ToolTip="Room master"
                                                                  Visibility="{Binding Master, Converter={StaticResource BoolToVis}}" />
@@ -246,15 +276,33 @@
                 </Grid>
             </Grid>
             <Border Grid.Row="2" Padding="12,10" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0" Background="{DynamicResource Surface.1}">
-                <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
-                    <TextBox x:Name="ComposeBox" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
+                <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,*,Auto">
+                    <!-- the viewer's Text Color and Emoticon, both back to none after each line -->
+                    <Button Height="40" Width="40" Padding="0" VerticalAlignment="Bottom" Style="{StaticResource MaterialDesignFlatButton}"
+                            x:Name="ColourButton" Click="OnColourMenu" ToolTip="Text Color" AutomationProperties.Name="Text Color">
+                        <Grid>
+                            <materialDesign:PackIcon Kind="FormatColorText" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
+                            <Rectangle Width="20" Height="4" RadiusX="2" RadiusY="2" VerticalAlignment="Bottom" Margin="0,0,0,-4"
+                                       Fill="{Binding PickedColour}" />
+                        </Grid>
+                    </Button>
+                    <Button Grid.Column="1" Height="40" Width="40" Padding="0" Margin="0,0,6,0" VerticalAlignment="Bottom"
+                            x:Name="EmoteButton" Style="{StaticResource MaterialDesignFlatButton}" Click="OnEmoteMenu" ToolTip="Emoticon" AutomationProperties.Name="Emoticon"
+                            Visibility="{Binding HasEmotes, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <materialDesign:PackIcon Kind="EmoticonOutline" Width="20" Height="20" Foreground="{DynamicResource Text.2}"
+                                                     Visibility="{Binding PickedEmote, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=invert}" />
+                            <Image Source="{Binding PickedEmote}" Width="26" Height="26" />
+                        </Grid>
+                    </Button>
+                    <TextBox x:Name="ComposeBox" Grid.Column="2" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
                              TextWrapping="Wrap" MaxLength="300" Style="{StaticResource MaterialDesignOutlinedTextBox}" Padding="10,8"
                              materialDesign:HintAssist.Hint="Say something to the room (Enter sends)" materialDesign:HintAssist.IsFloating="False"
                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                              PreviewKeyDown="OnComposeKey" PreviewTextInput="OnComposeInput" DataObject.Pasting="OnComposePaste" />
-                    <Button Grid.Column="1" Margin="10,0,0,0" Height="40" VerticalAlignment="Bottom" Style="{StaticResource AccentRaisedButton}"
+                    <Button Grid.Column="3" Margin="10,0,0,0" Height="40" VerticalAlignment="Bottom" Style="{StaticResource AccentRaisedButton}"
                             Command="{Binding SendCommand}" Content="SEND" />
-                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="2,6,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}"
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Margin="2,6,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}"
                                Text="{Binding SendNote}" Visibility="{Binding SendNote, Converter={StaticResource NullToVisibilityConverter}}" />
                 </Grid>
             </Border>

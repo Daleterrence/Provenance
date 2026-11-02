@@ -17,10 +17,51 @@ public sealed record ChatRoomEntry(string Irc, string Name, bool Official, bool 
 // Key only means something inside the one room, the hook never hands out ids
 public sealed record ChatMember(int Key, string Name, bool Me, bool Master, bool Away);
 
-// Kind is say, entered, left, away, back, master, kicked or whisper. From is the member key, 0 for my own lines
+// Kind is say, entered, left, away, back, master, kicked or whisper. From is the member key, 0 for my own lines.
+// Colour is the line's colour character as a number (-1 when it was 'z'), Emote its emoticon (0 for none)
 public sealed record ChatLine(long Seq, long Time, string Kind, int From, bool Me, string Name, string Text)
 {
     public DateTimeOffset When => DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime();
+    public int Colour { get; init; } = -1;
+    public int Emote { get; init; }
+}
+
+// the viewer's text colours and emoticons. Its colour table (app.dll 0x10495828) is ARGB on a light window
+public static class ChatLook
+{
+    public const int Emotes = 23, Colours = 12;
+
+    private static readonly uint[] Table =
+    [
+        0xff101010, 0xff101010, 0xff101010, 0xffa02048, 0xff101010, 0xff101010, 0xff000079, 0xff103060, 0xff027aa3,
+        0xff2b6e1f, 0xff003800, 0xff4d0808, 0xff800080, 0xffb6427c, 0xff9d2a04, 0xff808000, 0xff474747,
+    ];
+
+    // the colour a line's char stands for. Past the table (17-23) or 'z' the viewer reads whatever's there, so it's
+    // the default here, which is null
+    public static uint? Argb(int colourChar) =>
+        colourChar is >= 0 and < 17 && Table[colourChar] != Table[0] ? Table[colourChar] : null;
+
+    // the picker's 12, each the char 5 on from its place (app.dll 0x100984df)
+    public static uint PickerArgb(int pick) => Table[pick + 5];
+
+    private static readonly string[] Names =
+        ["Black", "Navy", "Dark blue", "Blue", "Green", "Dark green", "Maroon", "Purple", "Pink", "Rust", "Olive", "Grey"];
+
+    public static string ColourName(int pick) => pick >= 0 && pick < Names.Length ? Names[pick] : "No colour";
+
+    // the one a received line shows: the viewer only draws a face for 1 or more off its first sheet
+    public static int Emote(int e) => e is >= 1 and <= Emotes ? e : 0;
+
+    // the room list's badge, from the room's language category (app.dll FUN_1008fc68, strings 0x4e90-0x4e93)
+    public static string Language(IReadOnlyList<int> categories) => categories.Count > 2 ? categories[2] switch
+    {
+        300 => "JP",
+        301 => "EN",
+        302 => "FR",
+        303 => "GE",
+        _ => "",
+    } : "";
 }
 
 // the snapshot's "chat", there once chat's been used this session. States run "searching" -> "done" or "failed:...",
@@ -34,6 +75,9 @@ public sealed record ChatRoomsSnapshot(long LineSeq,
                                        IReadOnlyList<ChatMember> Members,
                                        string SendToken, string SendState)
 {
+    public string MasterToken { get; init; } = "";
+    public string MasterState { get; init; } = "";
+
     public static ChatRoomsSnapshot? Read(JsonElement c)
     {
         if (c.ValueKind != JsonValueKind.Object) return null;
@@ -51,7 +95,11 @@ public sealed record ChatRoomsSnapshot(long LineSeq,
                 Long(x, "created"))),
             Str(room, "token"), Str(room, "state"), Str(room, "irc"), Int(room, "limit", 0), Bool(room, "locked"),
             Arr(room, "members", m => new ChatMember(Int(m, "key", 0), Str(m, "name"), Bool(m, "me"), Bool(m, "master"), Bool(m, "away"))),
-            Str(send, "token"), Str(send, "state"));
+            Str(send, "token"), Str(send, "state"))
+        {
+            MasterToken = Obj(c, "master") is { ValueKind: JsonValueKind.Object } m ? Str(m, "token") : "",
+            MasterState = Obj(c, "master") is { ValueKind: JsonValueKind.Object } m2 ? Str(m2, "state") : "",
+        };
     }
 }
 
@@ -61,14 +109,24 @@ public sealed record ChatRoomLines(string Room, IReadOnlyList<ChatLine> Lines);
 // the hook's chat room requests and its lines file. Requests are written whole like the others
 public static class ChatRoomFiles
 {
-    // the hook's own limits: 15 Shift-JIS bytes for a chat name, 23 characters of password, 300 bytes of text
+    // the hook's own limits: 15 Shift-JIS bytes for a chat name, 23 characters of password, 300 bytes of text. A new
+    // room's from the viewer's form: 30 characters of name, 16 letters and numbers of password, 2-20 people
     public const int MaxNameBytes = 15, MaxPasswordLength = 23, MaxTextBytes = 300, PageSize = 100;
+    public const int MaxRoomName = 30, MaxNewPassword = 16, MinOccupancy = 2, MaxOccupancy = 20, DefaultOccupancy = 10;
 
     public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, "chatroom.json");
 
     public static void Delete(int pid)
     {
         try { File.Delete(LinesPathForPid(pid)); } catch { }
+    }
+
+    // the requests that carry a room, a chat name or a password entry's token, never left about once the session's gone
+    public static void DeleteRequests(int pid)
+    {
+        foreach (var ext in new[] { "chatjoin", "chatcreate", "chatmaster" })
+            foreach (var tail in new[] { "", ".taking", ".taking2", ".tmp" })
+                try { File.Delete(HookFiles.PathFor(pid, ext) + tail); } catch { }
     }
 
     public static bool Zones(int pid, string token) => Write(pid, "chatzones", OneLine(token));
@@ -80,8 +138,21 @@ public static class ChatRoomFiles
     public static bool Join(int pid, string token, string irc, bool hasPassword, string chatName) =>
         Write(pid, "chatjoin", $"{OneLine(token)}\n{OneLine(irc)}\n{(hasPassword ? "1" : "")}\n{OneLine(chatName)}");
 
-    public static bool Send(int pid, string token, string text) =>
-        Write(pid, "chatsend", $"{OneLine(token)}\n{OneLine(text)}");
+    public static bool Send(int pid, string token, string text, int colour = -1, int emote = 0) =>
+        Write(pid, "chatsend", $"{OneLine(token)}\n{OneLine(text)}\n{colour}\n{emote}");
+
+    // a new room. The password goes the same way an enter's does, never in here
+    public static bool Create(int pid, string token, bool hasPassword, int zone, int occupancy, int members, int purpose,
+                              int language, string chatName, string roomName) =>
+        Write(pid, "chatcreate", $"{OneLine(token)}\n{(hasPassword ? "1" : "")}\n{zone}\n{occupancy}\n{members}\n{purpose}\n" +
+                                 $"{language}\n{OneLine(chatName)}\n{OneLine(roomName)}");
+
+    public enum MasterOp { Kick, Master, Password }
+
+    // the room master's: kick or designate a member (by the room's key), or a new password (none turns it off)
+    public static bool Master(int pid, string token, MasterOp op, int memberKey = 0, bool hasPassword = false) =>
+        Write(pid, "chatmaster", $"{OneLine(token)}\n{(hasPassword ? "1" : "")}\n" +
+                                 $"{op switch { MasterOp.Kick => "kick", MasterOp.Master => "master", _ => "password" }}\n{memberKey}");
 
     // joinToken calls off an enter the app couldn't withdraw, should the hook take it after this
     public static bool Leave(int pid, string token, string joinToken = "") =>
@@ -92,6 +163,18 @@ public static class ChatRoomFiles
         string.IsNullOrWhiteSpace(name) ? "Enter chat name."
         : name.Any(c => c < ' ' || c == '\t') ? "That chat name can't be used."
         : PolMessage.TextBytes(name) > MaxNameBytes ? "Chat names can be up to 15 characters (Japanese characters count as two)."
+        : null;
+
+    public static string? RoomNameProblem(string name) =>
+        string.IsNullOrWhiteSpace(name) ? "Room name is not set. Cannot create room."
+        : name.Length > MaxRoomName ? "Room names can be up to 30 characters."
+        : name.Any(c => c < ' ') || !ShiftJis.Fits(name) ? "The entered room name cannot be used. Please enter a different name."
+        : null;
+
+    // the viewer's new password box takes letters and numbers, 16 at most
+    public static string? NewPasswordProblem(string password) =>
+        password.Length == 0 ? "Room password is not set. Cannot create room."
+        : password.Length > MaxNewPassword || !password.All(char.IsAsciiLetterOrDigit) ? "Room passwords are up to 16 letters and numbers."
         : null;
 
     public static string? PasswordProblem(string password) =>
@@ -107,7 +190,8 @@ public static class ChatRoomFiles
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             return new ChatRoomLines(Str(root, "room"), Arr(root, "lines", l => new ChatLine(Long(l, "seq"), Long(l, "time"),
-                Str(l, "kind"), Int(l, "from", 0), Bool(l, "me"), Str(l, "name"), Str(l, "text"))));
+                Str(l, "kind"), Int(l, "from", 0), Bool(l, "me"), Str(l, "name"), Str(l, "text"))
+                { Colour = Int(l, "colour", -1), Emote = Int(l, "emote", 0) }));
         }
         catch { return null; }
     }
