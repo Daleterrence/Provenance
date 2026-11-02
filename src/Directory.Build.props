@@ -3,7 +3,7 @@
        exe's file version keeps just the numbers (1.0.0.0) -->
   <PropertyGroup>
     <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix>beta.4.1</VersionSuffix>
+    <VersionSuffix>beta.5</VersionSuffix>
   </PropertyGroup>
 
   <!-- the images aren't in this repo. They come from PROVENANCE_ASSETS, or an assets folder next to the repo -->
