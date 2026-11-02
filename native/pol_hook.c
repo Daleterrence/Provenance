@@ -1727,7 +1727,10 @@ static BOOL request_waiting(const char *ext)
 {
     char path[MAX_PATH + 64], taken[MAX_PATH + 80];
     request_paths(ext, path, taken);
-    return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES || GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES;
+    if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES || GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES)
+        return TRUE;
+    lstrcatA(taken, "2");
+    return GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES;
 }
 static BOOL request_new(const char *ext)
 {
@@ -1797,9 +1800,13 @@ static int take_request_ex(const char *ext, char *buf, int cap, char **grown, DW
     if (GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES) {
         static ULONGLONG lastSaid;
         n = read_taken(taken, buf, cap, grown, most);
-        if (n < 0 && ((GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES &&
-                       GetFileAttributesA(second) == INVALID_FILE_ATTRIBUTES) || file_age_ms(taken) < 10000))
+        if (n < 0 && GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES &&
+            GetFileAttributesA(second) == INVALID_FILE_ATTRIBUTES) {
+            if (file_age_ms(taken) >= 60000 && DeleteFileA(taken))
+                lg("request: %s.taking could not be read for 60 s - dropped\r\n", ext);
             return -1;
+        }
+        if (n < 0 && file_age_ms(taken) < 10000) return -1;
         if (n < 0) {
             if (GetTickCount64() - lastSaid > 60000) {
                 lastSaid = GetTickCount64();

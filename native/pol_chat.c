@@ -393,6 +393,7 @@ static void cr_go(int step)
     g_cr_st = step;
     g_cr_tries = 0;
 }
+static char g_cr_part_state[32];   /* what a PART that's already been reported ends in, "left" when empty */
 static void cr_left(const char *state)
 {
     if (lstrcmpA(g_cr_sstate, "sending") == 0) cr_send_state("failed:left");
@@ -404,13 +405,14 @@ static void cr_left(const char *state)
     g_cr_leave = 0;
     cr_go(CR_OUT);
     cr_room_state(state);
+    g_cr_part_state[0] = 0;
 }
 /* a step's answer: >0 done, <0 the server's error (or the link's), from svc 0x244 */
 static void cr_step_done(BYTE *b, int r)
 {
     int st = g_cr_st;
     g_cr_wait = CRW_NONE;
-    if (st == CR_PART) { cr_left("left"); return; }
+    if (st == CR_PART) { cr_left(g_cr_part_state[0] ? g_cr_part_state : "left"); return; }
     if (st == CR_AWAY) {
         if (r < 0) lg("chat: AWAY answered %d, entering anyway\r\n", r);
         if (g_cr_leave) { cr_left("left"); return; }
@@ -680,10 +682,15 @@ static void cr_room_pump(BYTE *b, int ctl)
             if (g_cr_wait == CRW_MSG) { cr_msg_done(0, "failed:timeout"); return; }
             /* a JOIN that timed out but got there anyway counts */
             if (g_cr_st == CR_JOIN && cr_members(b)) { cr_step_done(b, 1); return; }
-            if (g_cr_st == CR_JOIN || g_cr_st == CR_AWAY) {
-                int sent = g_cr_st == CR_JOIN;
-                cr_left("failed:timeout");
-                g_cr_joined = sent;   /* it could still get there, so the next leave, Play or enter PARTs it */
+            if (g_cr_st == CR_AWAY) { cr_left("failed:timeout"); return; }
+            if (g_cr_st == CR_JOIN) {
+                /* it could still get there, so its PART goes now and waits like any step. The window's back in the
+                   lobby already */
+                g_cr_wait = CRW_NONE;
+                lstrcpyA(g_cr_part_state, "failed:timeout");
+                cr_room_state(g_cr_part_state);
+                g_cr_leave = 1;
+                cr_go(CR_PART);
                 return;
             }
             r = 1;
@@ -719,7 +726,7 @@ static void cr_room_pump(BYTE *b, int ctl)
     }
     if (r < 0) {
         if (r != CR_NOTHING_TO_LEAVE) lg("chat: step %d couldn't be sent (%d)\r\n", g_cr_st, r);
-        if (g_cr_st == CR_PART) { cr_left("left"); return; }
+        if (g_cr_st == CR_PART) { cr_left(g_cr_part_state[0] ? g_cr_part_state : "left"); return; }
         if (g_cr_st == CR_AWAY) { cr_go(CR_JOIN); return; }
         if (g_cr_st == CR_JOIN) { cr_left(failed(r)); return; }
         cr_step_done(b, r);
@@ -1016,14 +1023,15 @@ static void chat_pump(BYTE *b, int ctl)
     if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting("chatsend")) cr_send_request(b);
     if (g_cr_db) cr_db_pump(b);
     if (!ctl || GetTickCount64() - g_cr_last < CR_GAP_MS) return;
-    if (request_new("chatleave")) { cr_leave_request(b); return; }
-    if (g_cr_st == CR_OUT && request_new("chatjoin")) { cr_join_request(b); return; }   /* a PART goes first */
+    /* waiting, not new: a .taking left by a read that failed is tried again first */
+    if (request_waiting("chatleave")) { cr_leave_request(b); return; }
+    if (g_cr_st == CR_OUT && request_waiting("chatjoin")) { cr_join_request(b); return; }   /* a PART goes first */
     if (g_cr_db || !db_free()) return;
-    if (request_new("chatzones")) { cr_zones_request(b); return; }
-    if (request_new("chatrooms")) cr_rooms_request(b);
+    if (request_waiting("chatzones")) { cr_zones_request(b); return; }
+    if (request_waiting("chatrooms")) cr_rooms_request(b);
 }
 
-static int chat_room_open(void) { return g_cr_st != CR_OUT; }
+static int chat_room_open(void) { return g_cr_st != CR_OUT || g_cr_joined; }
 
 /* Play: FFXI takes the link over, so a room gets a PART first (the user's leaving chat for the game) */
 static void chat_end(BYTE *b)
