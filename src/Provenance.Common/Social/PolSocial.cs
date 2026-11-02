@@ -109,6 +109,13 @@ public sealed record PolSearchHit(int Index, string Name, int ProfilePictureId, 
 
 public sealed record PolBlocked(int Index, string Name, string Key, bool AllHandles);
 
+// one of the account's handles. ContentIds are the indexes of the Content IDs linked to it, 8 at most
+public sealed record PolHandle(int Slot, string Name, string Key, int ProfilePictureId, int Order, bool Active,
+                               IReadOnlyList<int> ContentIds);
+
+// a Content ID record. Type 1 is FFXI, Handle the slot it's linked to or -1. What Text holds isn't known yet
+public sealed record PolContentId(int Index, int Type, string Name, string Text, int Order, int Handle, string Key);
+
 // State is "read" (body downloaded), "pending", "failed", "realtime" or "local" (from the game's message store, not
 // on the server any more)
 public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, long Seq, string State,
@@ -243,6 +250,10 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
                                      ProfilePictureState == "saving";
     // the game's message store, read once at login (pol_hook.<pid>.store.json), null when there's none
     public PolStoredLines? Stored { get; init; }
+    public IReadOnlyList<PolHandle> Handles { get; init; } = [];
+    public IReadOnlyList<PolContentId> ContentIds { get; init; } = [];
+    public string HandleToken { get; init; } = "";
+    public string HandleState { get; init; } = "";
 
     public static readonly PolSocialSnapshot Empty = new(PolStatus.AppearOffline, 0, "", -1, [], []);
 }
@@ -370,6 +381,21 @@ public static class SocialSnapshot
     public static bool RenameHandle(int pid, string token, string name) =>
         WriteRequest(pid, "rename", $"{OneLine(token)}\n{OneLine(name)}");
 
+    public enum HandleChange { Switch, Link, Unlink }
+
+    // the keys are the snapshot's, so the hook refuses one aimed at a record that's changed since
+    public static bool ChangeHandle(int pid, HandleChange op, string token, PolHandle handle, PolContentId? content = null)
+    {
+        var verb = op switch { HandleChange.Switch => "switch", HandleChange.Link => "link", _ => "unlink" };
+        var body = $"{verb}\n{OneLine(token)}\n{handle.Slot}\n{OneLine(handle.Key)}";
+        if (op != HandleChange.Switch)
+        {
+            if (content is null) return false;
+            body += $"\n{content.Index}\n{OneLine(content.Key)}";
+        }
+        return WriteRequest(pid, "handle", body);
+    }
+
     // an abandoned edit mustn't run later, so the .taking copy the hook would retry goes too
     public static bool CancelRequest(int pid, string ext)
     {
@@ -448,6 +474,7 @@ public static class SocialSnapshot
             var (meToken, meState) = Job(root, "me");
             var (charToken, charState) = Job(root, "character");
             var (ffxiToken, ffxiState) = Job(root, "ffxiprofile");
+            var (handleToken, handleState) = Job(root, "handleJob");
             var ffxi = Str(root, "ffxiService");
             return new PolSocialSnapshot(PolStatusText.Parse(Str(root, "myStatus")), Int(root, "groups", 0),
                                          Str(root, "myHandle"), Int(root, "myPic", -1), friends, messages,
@@ -493,6 +520,13 @@ public static class SocialSnapshot
                 FfxiProfileToken = ffxiToken,
                 FfxiProfileState = ffxiState,
                 FfxiProfile = ffxiState == "done" ? ReadFfxiProfile(Obj(root, "ffxiprofile")) : null,
+                Handles = Arr(root, "handles", h => new PolHandle(Int(h, "slot", -1), Str(h, "name"), Str(h, "key"),
+                    Int(h, "pic", -1), (int)Long(h, "order"), Bool(h, "active"),
+                    Arr(h, "contentIds", i => i.TryGetInt32(out var n) ? n : -1))),
+                ContentIds = Arr(root, "contentIds", c => new PolContentId(Int(c, "index", -1), (int)Long(c, "type"),
+                    Str(c, "name"), Str(c, "text"), (int)Long(c, "order"), Int(c, "handle", -1), Str(c, "key"))),
+                HandleToken = handleToken,
+                HandleState = handleState,
             };
         }
         catch

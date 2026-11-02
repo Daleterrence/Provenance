@@ -1,7 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
+using Provenance.Common.Social;
 
 namespace Provenance.Wpf.Views;
 
@@ -45,6 +48,38 @@ public partial class SettingsWindow : Window
             if (error) MessageDialog.ShowError(this, title, text);
             else MessageDialog.ShowInfo(this, title, text);
         };
+        vm.Handles.Confirm = (title, body, ok) => MessageDialog.Confirm(this, title, body, ok) == 0;
+    }
+
+    private void OnSwitchHandle(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ViewModels.HandleRow row } && DataContext is ViewModels.SettingsViewModel vm)
+            vm.Handles.Switch(row);
+    }
+
+    private void OnUnlinkCharacter(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ViewModels.HandleCharacterRow c } && DataContext is ViewModels.SettingsViewModel vm)
+            vm.Handles.Unlink(c);
+    }
+
+    // the other handles to pick from, a full one greyed out with the limit under its name
+    private void OnLinkCharacter(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: ViewModels.HandleCharacterRow c } button ||
+            DataContext is not ViewModels.SettingsViewModel vm) return;
+        var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom };
+        foreach (var to in vm.Handles.LinkTargets(c))
+        {
+            var header = new StackPanel();
+            header.Children.Add(new TextBlock { Text = to.Name, FontSize = 13 });
+            if (to.Full)
+                header.Children.Add(new TextBlock { Text = HandleList.LimitText, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 280 });
+            var item = new MenuItem { Header = header, IsEnabled = !to.Full };
+            item.Click += (_, _) => vm.Handles.Link(c, to);
+            menu.Items.Add(item);
+        }
+        if (menu.Items.Count > 0) menu.IsOpen = true;
     }
 
     // settings.xml takes 255, and Ashita's file names stop well short of that

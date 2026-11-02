@@ -25,9 +25,11 @@ public partial class SettingsViewModel : ObservableObject
 
     public SettingsViewModel(ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
                              Action? holdPrestarts = null, Action? releasePrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
-                             Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null, Func<bool>? loggedIn = null)
+                             Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null, Func<bool>? loggedIn = null,
+                             HandlesViewModel? handles = null)
     {
         _loggedIn = loggedIn;
+        Handles = handles ?? new HandlesViewModel(() => null);
         _gameKey = gameKey;
         _stopPrestart = stopPrestart;
         _settings = settings;
@@ -72,6 +74,7 @@ public partial class SettingsViewModel : ObservableObject
 
     public GameSettingsViewModel Game { get; }
     public AddonsPluginsViewModel Addons { get; }
+    public HandlesViewModel Handles { get; }
     public string RegionText { get; }
     public string ViewerFolder { get; }
     public string FfxiFolder { get; }

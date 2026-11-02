@@ -330,8 +330,12 @@ public partial class SocialViewModel : ObservableObject
         finally { _applyingSnapshot = false; }
     }
 
+    public PolSocialSnapshot Last => _last;
+
     private void ApplyCore(PolSocialSnapshot snap)
     {
+        // a friend's profile shows what they let this handle see, so ones read under another handle go
+        if (_last.MyKey.Length > 0 && snap.MyKey.Length > 0 && _last.MyKey != snap.MyKey) _profileCache.Clear();
         _last = snap;
         bool chatChanged = _chat != null && MergeChat(_chat, snap);
         if (FilterOn != _filterWasOn)

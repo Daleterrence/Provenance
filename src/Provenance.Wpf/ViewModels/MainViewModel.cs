@@ -1418,17 +1418,39 @@ public partial class MainViewModel : ObservableObject
     private void OpenSettings()
     {
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
+        var handles = new HandlesViewModel(() => _pol.Pid, _avatars.ProfilePicture);
+        // a multi-account run's lean sessions take no requests
+        void ShowHandles() => handles.Update(SocialConnected && _pol.Pid is not null ? Social.Last : null,
+                                             SocialConnected && _pol.Pid is not null,
+                                             Social.GameRunning || MultiRunning || IsLaunching);
+        void OnSnap(PolSocialSnapshot _) => ShowHandles();
+        void OnChange(object? s, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(SocialConnected) or nameof(IsLaunching) or nameof(MultiRunning)
+                or nameof(SocialViewModel.GameRunning)) ShowHandles();
+        }
+        ShowHandles();
+        Social.SnapshotApplied += OnSnap;
+        PropertyChanged += OnChange;
+        Social.PropertyChanged += OnChange;
         var vm = new SettingsViewModel(_settings, multiRunning: () => MultiRunning,
                                        holdPrestarts: _pol.HoldPrestarts, releasePrestarts: _pol.ReleasePrestarts,
                                        largeAddressAwareBlocked: LargeAddressAwareBlocked,
                                        stopPrestart: () => Task.Run(_pol.StopPrestart),
-                                       loggedIn: () => IsLaunching || SocialConnected || _pol.Pid is not null);
+                                       loggedIn: () => IsLaunching || SocialConnected || _pol.Pid is not null,
+                                       handles: handles);
         vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.ThirdPartyHookIndex)) PlatformChanged(); };
         var w = new SettingsWindow { DataContext = vm };
         if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
         _openSettings = vm;
         try { w.ShowDialog(); }
-        finally { _openSettings = null; }
+        finally
+        {
+            _openSettings = null;
+            Social.SnapshotApplied -= OnSnap;
+            PropertyChanged -= OnChange;
+            Social.PropertyChanged -= OnChange;
+        }
         if (vm.RestartWanted)
         {
             RequestRestart?.Invoke();
