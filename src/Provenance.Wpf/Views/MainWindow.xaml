@@ -507,7 +507,13 @@
                                 <TextBlock FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center">
                                     <Run Text="Friends" /><Run Text="   " /><Run Text="{Binding Social.Summary, Mode=OneWay}" FontSize="12" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
                                 </TextBlock>
-                                <Button HorizontalAlignment="Right" Style="{StaticResource AccentFlatButton}" Padding="8,0" Height="30"
+                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                                <Button Style="{StaticResource AccentFlatButton}" Padding="8,0" Height="30" Width="36"
+                                        Command="{Binding OpenChatRoomsCommand}"
+                                        ToolTip="Open chat rooms" AutomationProperties.Name="Open chat rooms">
+                                    <materialDesign:PackIcon Kind="Forum" Width="16" Height="16" />
+                                </Button>
+                                <Button Style="{StaticResource AccentFlatButton}" Padding="8,0" Height="30"
                                         FontSize="12" Command="{Binding OpenSocialCommand}"
                                         ToolTip="Open friends and messages" AutomationProperties.Name="Open friends and messages">
                                     <StackPanel Orientation="Horizontal">
@@ -522,6 +528,7 @@
                                         </Border>
                                     </StackPanel>
                                 </Button>
+                                </StackPanel>
                             </Grid>
                             <local:FriendsList Grid.Row="1" DataContext="{Binding Social}" FriendActivated="OnFriendActivated" />
                             <StackPanel Grid.Row="2" Margin="8,10,8,0">

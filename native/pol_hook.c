@@ -1301,7 +1301,7 @@ static int handle_bootstrap(BYTE *b, int handles_loaded)
 static void prestart_wait(void)
 {
     static const char *allowed[] = { "POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP",
-                                     "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_STATUS", "POL_HOME" };
+                                     "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_CRED_CHAT", "POL_STATUS", "POL_HOME" };
     char gp[MAX_PATH + 64];
     if (!getenv_set("POL_PRESTART")) return;
     ipc_file(gp, "go");
@@ -1615,6 +1615,8 @@ static void sweep_stale_social(void)
 {
     sweep_stale("pol_hook.*.social.json*");   /* the end * catches crash-left .tmp files */
     sweep_stale("pol_hook.*.store.json*");
+    sweep_stale("pol_hook.*.chatroom.json*");
+    sweep_stale("pol_hook.*.chatjoin*");
 }
 static void sweep_stale(const char *pattern)
 {
@@ -2635,6 +2637,14 @@ static void store_drop(void)
     char p[MAX_PATH + 64];
     ipc_file(p, "store.json");
     DeleteFileA(p);
+    ipc_file(p, "chatroom.json");   /* the chat room's lines, other people's words like the messages */
+    DeleteFileA(p);
+    /* and an enter that never got taken */
+    for (int i = 0; i < 3; i++) {
+        ipc_file(p, "chatjoin");
+        lstrcatA(p, i == 0 ? "" : i == 1 ? ".taking" : ".taking2");
+        DeleteFileA(p);
+    }
 }
 /* FFXI deletes what it fetches from the server, so the store's the only copy of what was handled in game. Read
    once, nothing on the wire */
@@ -3294,10 +3304,11 @@ static ULONGLONG g_db_last;
 static int g_srch_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
 static int g_prof_step, g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
 static int g_pic_want;
+static int g_cr_db;   /* the chat rooms' zone and room lists, pol_chat.c */
 static int db_free(void)
 {
     return GetTickCount64() - g_db_last >= 3000 && !g_srch_step && !g_prof_step && !g_ch_step && !g_fp_step &&
-           (g_me_step < 1 || g_me_step > 5) && g_pic_want < 0;
+           !g_cr_db && (g_me_step < 1 || g_me_step > 5) && g_pic_want < 0;
 }
 
 /* prof_001, the FFXI table (title 1). z_phead's what a search hit gets added from */
@@ -5215,6 +5226,7 @@ static void search_mark(BYTE *b)
     g_srch_marked = 1;
     g_srch_marked_for = sig;
 }
+#include "pol_chat.c"
 
 static void wr(HANDLE h, const char *s)
 {
@@ -5315,6 +5327,7 @@ static void snapshot_social(BYTE *b)
     wr(h, line);
     if (g_fp_json[0] && lstrcmpA(g_fp_state, "done") == 0) { wr(h, ","); wr(h, g_fp_json); }
     wr(h, "}");
+    chat_snapshot(b, h);
     if (SVC(0x648) && SVC(0x618) && SVC(0x61c)) {
         ng = ((int (__cdecl *)(DWORD *))SVC(0x648))(ids);
         wr(h, ",\"groupList\":[");
@@ -5586,7 +5599,8 @@ static void pol_hold(BYTE *b)
     /* the viewer's auto log-off option (GOPN1_AO), which polcore starts off: keep it that way */
     if (SVC(0x11d4)) ((void (__cdecl *)(int))SVC(0x11d4))(0);
     if (!g_lean && SVC(0xd9c)) {
-        void *cb[6] = { 0, SVC(0x538), 0, SVC(0x644), (void *)mail_raw, (void *)mail_evt };
+        void *cb[6];
+        push_callbacks(b, cb);
         ((void (__cdecl *)(void **))SVC(0xd9c))(cb);
         lg("mail: push callbacks registered (svc 0xd9c)\r\n");
     }
@@ -5656,6 +5670,7 @@ static void pol_hold(BYTE *b)
         me_pump(b, wctl);
         answer_pump(b, wctl);
         pic_pump(b, wctl);
+        if (!g_lean) chat_pump(b, wctl);
         if (ctl && play_signalled()) {
             if (g_ffxi_service != 1 || notice_blocks(g_notice)) {
                 const char *no = g_ffxi_service == 0 ? "refused:no-content-id"
@@ -5674,6 +5689,7 @@ static void pol_hold(BYTE *b)
                 if (!g_lean) mail_ack_request();
                 db_reads_abandon(b);
                 me_abandon(b, "cancelled");
+                chat_end(b);
                 while (writes_pending() && GetTickCount64() < until)
                     drain_turn(b, !g_lean);
                 for (int i = 0; i < MAIL_LANES; i++) if (g_rd[i].job >= 0) CANCEL_JOB(g_rd[i].job);

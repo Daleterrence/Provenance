@@ -937,6 +937,13 @@ public partial class MainViewModel : ObservableObject
         ShowSocialWindow(_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both, activate: true);
     }
 
+    [RelayCommand]
+    private void OpenChatRooms()
+    {
+        if (MultiRunning) return;
+        ChatRoomsWindow.ShowFor(Social, _pol.SaveChatPassword, _pol.DropChatPassword);
+    }
+
     private static List<SocialWindow> SocialWindows() => Application.Current.Windows.OfType<SocialWindow>().ToList();
 
     // unowned, so they stay up while the main window's minimised or in the tray
@@ -1020,6 +1027,7 @@ public partial class MainViewModel : ObservableObject
     private static void CloseSocialWindows()
     {
         EditProfileWindow.Current?.CloseQuietly();
+        ChatRoomsWindow.Current?.CloseQuietly();
         foreach (var w in SocialWindows()) w.Close();
     }
 

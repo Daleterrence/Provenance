@@ -7,6 +7,9 @@ namespace Provenance.Wpf.Views;
 public partial class InputDialog : Window
 {
     private Func<string, string?> _check = _ => null;
+    private bool _secret;
+
+    private string Value => _secret ? SecretBox.Password : InputBox.Text.Trim();
 
     private InputDialog()
     {
@@ -32,9 +35,34 @@ public partial class InputDialog : Window
         return dlg.ShowDialog() == true ? dlg.InputBox.Text.Trim() : null;
     }
 
+    // the password as typed (never trimmed), or null when cancelled
+    public static string? PromptSecret(Window owner, string title, string prompt, int maxLength = 64,
+                                       Func<string, string?>? validate = null)
+    {
+        var dlg = ForSecret(title, prompt, maxLength, validate);
+        dlg.Owner = owner;
+        try { return dlg.ShowDialog() == true ? dlg.SecretBox.Password : null; }
+        finally { dlg.SecretBox.Clear(); }
+    }
+
+    // set up but not shown yet
+    internal static InputDialog ForSecret(string title, string prompt, int maxLength, Func<string, string?>? validate)
+    {
+        var dlg = new InputDialog { Title = title, _secret = true };
+        dlg.PromptText.Text = prompt;
+        dlg.InputBox.Visibility = Visibility.Collapsed;
+        dlg.SecretBox.Visibility = Visibility.Visible;
+        dlg.SecretBox.MaxLength = maxLength;
+        MaterialDesignThemes.Wpf.PasswordBoxAssist.SetIsPasswordRevealed(dlg.SecretBox, false);
+        dlg._check = t => validate?.Invoke(t);
+        dlg.SecretBox.PasswordChanged += (_, _) => dlg.ErrorText.Visibility = Visibility.Collapsed;
+        dlg.Loaded += (_, _) => dlg.SecretBox.Focus();
+        return dlg;
+    }
+
     private void OnOk(object sender, RoutedEventArgs e)
     {
-        if (_check(InputBox.Text.Trim()) is { } problem)
+        if (_check(Value) is { } problem)
         {
             ErrorText.Text = problem;
             ErrorText.Visibility = Visibility.Visible;

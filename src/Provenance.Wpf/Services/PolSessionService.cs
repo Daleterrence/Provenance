@@ -113,11 +113,12 @@ public sealed class PolSessionService : IDisposable
     // a new request file goes here too (I'll forget)
     private static readonly string[] RequestFiles =
         ["send", "status", "mail", "ack", "comment", "pic", "friend", "answer", "search", "profile", "group",
-         "myprofile", "saveprofile", "rename", "character", "ffxiprofile"];
+         "myprofile", "saveprofile", "rename", "character", "ffxiprofile", "chatzones", "chatrooms", "chatjoin",
+         "chatsend", "chatleave"];
 
     // Has to match prestart_wait's allow-list in pol_hook.c, the hook drops any other key
     private static readonly string[] GoFileKeys =
-        ["POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP", "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_STATUS",
+        ["POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP", "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_CRED_CHAT", "POL_STATUS",
          "POL_HOME"];
 
     private enum LaunchOutcome { Started, Failed, Refused, Cancelled }
@@ -419,6 +420,7 @@ public sealed class PolSessionService : IDisposable
         env["POL_CRED_ONESHOT"] = string.Join(",", oneShot);
         env["POL_CRED_HANDLE"] = Target(Key("HANDLE"));
         env["POL_CRED_PLAY"] = Target(Key("PLAY"));
+        env["POL_CRED_CHAT"] = Target(Key("CHAT"));
         keys.AddRange([Key("HANDLE"), Key("PLAY")]);
         if (otpTarget != null) env["POL_CRED_OTP"] = otpTarget;
         if (options.Lean) env["POL_LEAN"] = "1";
@@ -472,12 +474,14 @@ public sealed class PolSessionService : IDisposable
         // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its sign-in from it
         DeleteQuietly(SocialSnapshot.PathForPid(pid));
         DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
+        DropChatLeftovers(pid);
         DeleteQuietly(HookFiles.PathFor(pid, "stop"));
         DeleteQuietly(HookFiles.PathFor(pid, "ended"));
         foreach (var ext in RequestFiles)
         {
             DeleteQuietly(HookFiles.PathFor(pid, ext));
             DeleteQuietly(HookFiles.PathFor(pid, ext) + ".taking");
+            DeleteQuietly(HookFiles.PathFor(pid, ext) + ".taking2");
         }
 
         var logPath = HookFiles.PathFor(pid, "log");
@@ -1359,6 +1363,7 @@ public sealed class PolSessionService : IDisposable
             PutScreenSaverBack();
             DeleteQuietly(SocialSnapshot.PathForPid(pid));
             DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
+            DropChatLeftovers(pid);
             Pid = null;
             _pidStarted = null;
         }
@@ -1384,6 +1389,37 @@ public sealed class PolSessionService : IDisposable
         }
         catch { }
         return why;
+    }
+
+    // the room password goes to the hook as a one-shot entry like the account details, the hook deletes it once read.
+    // User is the enter's token, so it only ever works for that one
+    public bool SaveChatPassword(string token, string password)
+    {
+        if (_launchId is not { } id) return false;
+        try
+        {
+            Wrapped.Save($"{LaunchKeyPrefix}{id}:CHAT", token, password, sessionOnly: true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not hand the room password to the hook");
+            return false;
+        }
+    }
+
+    public void DropChatPassword()
+    {
+        if (_launchId is { } id)
+            try { _store.Delete($"{LaunchKeyPrefix}{id}:CHAT"); } catch { }
+    }
+
+    // the room's lines, an enter never taken and its password, whatever way the session ended
+    private void DropChatLeftovers(int pid)
+    {
+        ChatRoomFiles.Delete(pid);
+        foreach (var tail in new[] { "", ".taking", ".taking2", ".tmp" }) DeleteQuietly(HookFiles.PathFor(pid, "chatjoin") + tail);
+        DropChatPassword();
     }
 
     public void SignalPlay()
@@ -1448,6 +1484,7 @@ public sealed class PolSessionService : IDisposable
                 KillIfOurs(pid, p => IsSameProcess(p, started), graceMs: 4000, afterMs: 2000);
                 DeleteQuietly(SocialSnapshot.PathForPid(pid));
                 DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
+                DropChatLeftovers(pid);
                 Log.Information("Stopped held PlayOnline session (pid {Pid})", pid);
                 Pid = null;
                 _pidStarted = null;

@@ -27,6 +27,10 @@
 
             <TextBox x:Name="InputBox" Style="{StaticResource MaterialDesignOutlinedTextBox}" materialDesign:HintAssist.IsFloating="False"
                      FontSize="13" Padding="12,8" MinHeight="42" VerticalContentAlignment="Center" KeyDown="OnInputKeyDown" />
+            <!-- a password: dots, with the same show button as the account's -->
+            <PasswordBox x:Name="SecretBox" Style="{StaticResource DialogRevealPasswordBox}" Visibility="Collapsed"
+                         materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
+                         FontSize="13" Padding="12,8" MinHeight="42" VerticalContentAlignment="Center" KeyDown="OnInputKeyDown" />
 
             <TextBlock x:Name="ErrorText" Margin="2,6,0,0" FontSize="12" Foreground="{DynamicResource State.Down}"
                        TextWrapping="Wrap" Visibility="Collapsed" />

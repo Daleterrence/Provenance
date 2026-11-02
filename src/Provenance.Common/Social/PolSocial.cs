@@ -254,6 +254,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public IReadOnlyList<PolContentId> ContentIds { get; init; } = [];
     public string HandleToken { get; init; } = "";
     public string HandleState { get; init; } = "";
+    // null till chat rooms get used this session
+    public ChatRoomsSnapshot? Chat { get; init; }
 
     public static readonly PolSocialSnapshot Empty = new(PolStatus.AppearOffline, 0, "", -1, [], []);
 }
@@ -527,6 +529,7 @@ public static class SocialSnapshot
                     Str(c, "name"), Str(c, "text"), (int)Long(c, "order"), Int(c, "handle", -1), Str(c, "key"))),
                 HandleToken = handleToken,
                 HandleState = handleState,
+                Chat = ChatRoomsSnapshot.Read(Obj(root, "chat")),
             };
         }
         catch
