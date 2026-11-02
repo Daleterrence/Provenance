@@ -12,6 +12,8 @@ public sealed record MyProfile(string Handle, int Level, IReadOnlyDictionary<str
                                IReadOnlyDictionary<string, IReadOnlyList<MyProfileChoice>> Tables)
 {
     public string Token { get; init; } = "";
+    // the H-ID of the handle it was loaded for, a rename's refused for any other
+    public string Key { get; init; } = "";
 
     public static string PathForPid(int pid) => HookFiles.PathFor(pid, "myprofile.json");
 
@@ -46,6 +48,7 @@ public sealed record MyProfile(string Handle, int Level, IReadOnlyDictionary<str
             return new MyProfile(Text(root, "handle"), level, fields, tables)
             {
                 Token = Text(root, "token"),
+                Key = Text(root, "key"),
             };
         }
         catch { return null; }

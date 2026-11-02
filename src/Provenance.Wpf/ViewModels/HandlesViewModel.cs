@@ -9,6 +9,7 @@ namespace Provenance.Wpf.ViewModels;
 public sealed record HandleCharacterRow(HandleCharacter Character, PolHandle? Handle, bool Editable)
 {
     public string Label => Character.Label;
+    public bool CanLink => Editable && !Character.Orphan;
     public bool CanUnlink => Editable && Handle != null;
 }
 
@@ -23,7 +24,8 @@ public sealed record HandleRow(HandleGroup Group, ImageSource? Picture, IReadOnl
     public bool NoCharacters => Characters.Count == 0;
 }
 
-// Settings > Handles. Everything shown comes from the hook's snapshot, and a change is one request the hook checks again
+// Settings > Handles. Everything shown comes from the hook's snapshot, and a change is one request the hook checks
+// again. One lives as long as the app, so a change still going when Settings closes says how it went next time
 public partial class HandlesViewModel : ObservableObject
 {
     private readonly Func<int?> _pid;
@@ -44,30 +46,44 @@ public partial class HandlesViewModel : ObservableObject
     public ObservableCollection<HandleRow> Rows { get; } = new();
     public ObservableCollection<HandleCharacterRow> Unlinked { get; } = new();
 
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowList))] private bool _loggedIn;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable))] private bool _readOnly;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowList), nameof(Editable))] private bool _loggedIn;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ReadOnly), nameof(Editable))] private string? _readOnlyText;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable))] private bool _busy;
     [ObservableProperty] private string _note = "";
     [ObservableProperty] private bool _noteIsError;
     [ObservableProperty] private bool _hasUnlinked;
+    [ObservableProperty] private bool _noHandles;
 
     public bool ShowList => LoggedIn;
+    public bool ReadOnly => ReadOnlyText != null;
     public bool Editable => LoggedIn && !ReadOnly && !Busy;
     public string LoggedOutText => HandleList.LoggedOutText;
-    public string ReadOnlyText => HandleList.ReadOnlyText;
     public string AutoSwitchText => HandleList.AutoSwitchText;
     public string LimitText => HandleList.LimitText;
     public string NoCharactersText => HandleList.NoCharactersText;
+    public string NoHandlesText => HandleList.NoHandlesText;
+    public bool InChatRoom => _snap.Chat is { RoomState: "in" or "entering" };
 
     // title, question, OK label -> yes
     public Func<string, string, string, bool>? Confirm { get; set; }
 
-    public void Update(PolSocialSnapshot? snap, bool loggedIn, bool readOnly)
+    // why a switch can't go right now (something open that's bound to the active handle), or null
+    public Func<string?>? SwitchBlocked { get; set; }
+
+    // readOnly is the line saying why, null when changes can be made
+    public void Update(PolSocialSnapshot? snap, bool loggedIn, string? readOnly)
     {
         LoggedIn = loggedIn && snap != null;
-        ReadOnly = readOnly;
+        ReadOnlyText = readOnly;
         if (snap != null) _snap = snap;
-        if (!LoggedIn) _token = null;
+        if (!LoggedIn && _token != null)
+        {
+            // the session that had it is gone, and so is anything that could say how it went
+            _token = null;
+            NoteIsError = true;
+            Note = _op == HandleChange.Switch ? "You were logged out before PlayOnline confirmed the switch."
+                                              : "You were logged out before PlayOnline confirmed the change.";
+        }
         Settle();
         Busy = _token != null;
         Rebuild();
@@ -96,7 +112,8 @@ public partial class HandlesViewModel : ObservableObject
         var sig = $"{edit}|" + string.Join("|", groups.Select(g =>
                       $"{g.Handle.Slot}/{g.Handle.Name}/{g.Handle.Key}/{g.Handle.ProfilePictureId}/{g.Handle.Active}/{g.Full}/" +
                       string.Join(",", g.Characters.Select(c => c.Record.Key + ":" + c.Label)))) +
-                  "|u:" + string.Join(",", unlinked.Select(c => c.Record.Key + ":" + c.Label));
+                  "|u:" + string.Join(",", unlinked.Select(c => c.Record.Key + ":" + c.Label + ":" + c.Orphan));
+        NoHandles = LoggedIn && groups.Count == 0;
         if (sig == _signature) return;
         _signature = sig;
         Rows.Clear();
@@ -110,18 +127,31 @@ public partial class HandlesViewModel : ObservableObject
 
     // the handles a character could go to, with the full ones greyed
     public IReadOnlyList<HandleRow> LinkTargets(HandleCharacterRow c) =>
-        Rows.Where(r => r.Handle.Slot != c.Handle?.Slot).ToList();
+        c.Character.Orphan ? [] : Rows.Where(r => r.Handle.Slot != c.Handle?.Slot).ToList();
+
+    // Link to... with nowhere to go says so rather than opening nothing
+    public void NoTarget()
+    {
+        NoteIsError = false;
+        Note = HandleList.NoTargetText;
+    }
 
     public void Switch(HandleRow row)
     {
         if (!Editable || row.Active) return;
-        if (Confirm?.Invoke("Switch Handle", HandleList.SwitchQuestion(row.Handle), "SWITCH") != true) return;
+        if (SwitchBlocked?.Invoke() is { } why)
+        {
+            NoteIsError = true;
+            Note = why;
+            return;
+        }
+        if (Confirm?.Invoke("Switch Handle", HandleList.SwitchQuestion(row.Handle, InChatRoom), "SWITCH") != true) return;
         Send(HandleChange.Switch, row.Handle, null, HandleList.Done(HandleChange.Switch, row.Name, ""));
     }
 
     public void Link(HandleCharacterRow c, HandleRow to)
     {
-        if (!Editable || c.Handle?.Slot == to.Handle.Slot) return;
+        if (!c.CanLink || !Editable || c.Handle?.Slot == to.Handle.Slot) return;
         if (to.Full)
         {
             NoteIsError = true;

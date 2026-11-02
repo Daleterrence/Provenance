@@ -2027,11 +2027,25 @@ static void __cdecl mail_raw(void *arg)
     }
 }
 static int is_me(BYTE *b, unsigned lo, unsigned hi);
-/* a chat line from my own POL ID is never one I received. Sent from a handle the friend's handle isn't friends with,
-   it can come back to me instead of reaching them */
+/* a chat line from my own POL ID is never one I received. One of mine has been seen coming back like this when it
+   went from a handle the friend's handle isn't friends with */
 static int mail_mine(BYTE *b, const BYTE *h)
 {
     return ((*(const WORD *)(h + 0x3e) >> 7) & 0x1f) == 0 && is_me(b, *(const DWORD *)h, *(const DWORD *)(h + 4));
+}
+/* the time and seq of the ones that came back, so the app can mark the line it sent */
+#define RETURNED_MAX 16
+static struct { DWORD time, seq; } g_returned[RETURNED_MAX];
+static int g_returned_n, g_returned_next;
+static void mail_returned(const BYTE *h)
+{
+    DWORD t = *(const DWORD *)(h + 0x34), q = *(const DWORD *)(h + 0x30);
+    for (int i = 0; i < g_returned_n; i++) if (g_returned[i].time == t && g_returned[i].seq == q) return;
+    g_returned[g_returned_next].time = t;
+    g_returned[g_returned_next].seq = q;
+    g_returned_next = (g_returned_next + 1) % RETURNED_MAX;
+    if (g_returned_n < RETURNED_MAX) g_returned_n++;
+    g_snap_dirty = 1;
 }
 static int sender_ignored(BYTE *b, const BYTE *h)
 {
@@ -2127,9 +2141,12 @@ static void mail_fetch_start(BYTE *b, int lane)
             m->state = 4;
             continue;
         }
+        /* the viewer reads one like any other and deletes it once it's saved. It's never shown here, so it's
+           deleted unread like an ignored sender's */
         if (mail_mine(b, m->hdr)) {
-            lg("mail: chat message from my own POL ID - not fetched or shown\r\n");
-            m->state = 6;
+            lg("mail: chat message from my own POL ID - deleted unread\r\n");
+            mail_returned(m->hdr);
+            m->state = 4;
             continue;
         }
         /* chat 0, friend request 1, answers 9/10, group invitation 0xe and its notices, the rest stay unread */
@@ -2183,6 +2200,7 @@ static void mail_pump(BYTE *b)
         for (i = 0; i < g_mail_n; i++)
             if (g_mail[i].state == 3 && mail_mine(b, g_mail[i].hdr)) {
                 lg("mail: real-time chat line from my own POL ID - not shown\r\n");
+                mail_returned(g_mail[i].hdr);
                 g_mail[i].state = 6;
             }
     }
@@ -4315,8 +4333,8 @@ static int me_write_json(BYTE *b)
     h.name[15] = 0;
     pol_json(b, h.name, 0x400, js, sizeof js);
     json_str(tk, sizeof tk, g_me_token);
-    o += wsprintfA(out + o, "{\"token\":%s,\"handle\":%s,\"slot\":%d,\"level\":%u,\"fields\":{",
-                   tk, js, g_my_slot, g_me_rec->level);
+    o += wsprintfA(out + o, "{\"token\":%s,\"handle\":%s,\"slot\":%d,\"key\":\"%03x%08x\",\"level\":%u,\"fields\":{",
+                   tk, js, g_my_slot, (unsigned)(g_me_hid >> 32), (unsigned)g_me_hid, g_me_rec->level);
     for (i = 0; i < (int)(sizeof g_me_fields / sizeof g_me_fields[0]); i++) {
         pdb_item *it = pdb_get(b, s, g_me_fields[i], g_me_rec);
         int idx = ((svc4bc_t)SVC(0x4bc))(s, g_me_fields[i]);
@@ -4440,7 +4458,14 @@ static void me_request(BYTE *b)
         return;
     }
     if (kind == 3) {
+        char *key, now[17];
         name = req_line(&p);
+        key = req_line(&p);
+        memset(&h, 0, sizeof h);
+        /* the handle the editor loaded, so one left open across a switch can't rename the new one */
+        if (get_handle(b, g_my_slot, &h) < 0 || !(h.lo & 1)) { me_done("failed:no handle"); return; }
+        wsprintfA(now, "%03x%08x", (h.hi >> 1) & 0xfff, h.lo >> 1 | h.hi << 31);
+        if (lstrcmpA(key, now) != 0) { me_done("failed:not loaded"); return; }
         memset(g_me_name, 0, sizeof g_me_name);
         if (!name[0] || MultiByteToWideChar(CP_UTF8, 0, name, -1, g_me_name, 31) <= 0) {
             me_done("failed:bad name");
@@ -4953,12 +4978,14 @@ static void pic_pump(BYTE *b, int ctl)
 #define CHR_LINKED 0x8000
 #define CHR_HANDLE(f) (((f) >> 16) & 0x3f)
 enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_UNLINK };
-static int g_hop, g_hjob = -1, g_hwant, g_hslot = -1, g_hidx = -1, g_hfrom = -1, g_hreload;
+static int g_hop, g_hjob = -1, g_hwant, g_hslot = -1, g_hidx = -1, g_hfrom = -1, g_hpos = -1, g_hreload;
 static char g_htoken[48], g_hstate[48] = "";
 static ULONGLONG g_hlast;
 static int g_in_hold;
 static int writes_pending(void);
 static void wr_job(HANDLE h, const char *fmt, const char *token, const char *state);
+static int chat_room_open(void);
+static void chat_end(BYTE *b);
 
 static int get_chr(BYTE *b, int i, BYTE *rec)
 {
@@ -5008,14 +5035,28 @@ static void handle_switch_start(BYTE *b)
     if (t < 0) { handle_done(failed(t)); return; }
     g_hjob = t;
 }
+/* polcore links into the first free one of a handle's 8, which needn't be where it was. Put back by hand in the
+   records (polcore.dll 0x10403080 Content IDs, 0x10405800 handles), all on this thread like polcore's own calls */
+static void handle_place(BYTE *b, int idx, int slot, int pos)
+{
+    BYTE *hs = b + 0x405820 + slot * 0x28;
+    DWORD *f = (DWORD *)(b + 0x403090 + idx * 0x68);
+    int now = (int)((*f >> 22) & 7);
+    if (pos < 0 || pos > 7 || now == pos || !(*f & CHR_LINKED) || (int)CHR_HANDLE(*f) != slot || (hs[pos] & 1) ||
+        ((hs[now] >> 1) & 0x3f) != idx)
+        return;
+    hs[pos] = hs[now];
+    hs[now] &= 0xfe;
+    *f = (*f & ~(7u << 22)) | (DWORD)pos << 22;
+}
 /* a put that didn't go puts polcore back how the server has it, which costs nothing (no reload, the viewer doesn't) */
 static void handle_undo(BYTE *b)
 {
     if (g_hop == HOP_LINK) {
         ((int (__cdecl *)(int, int))SVC(0x2e0))(g_hidx, g_hslot);
-        if (g_hfrom >= 0) ((int (__cdecl *)(int, int))SVC(0x2dc))(g_hidx, g_hfrom);
-    } else {
-        ((int (__cdecl *)(int, int))SVC(0x2dc))(g_hidx, g_hslot);
+        if (g_hfrom >= 0 && ((int (__cdecl *)(int, int))SVC(0x2dc))(g_hidx, g_hfrom) >= 0) handle_place(b, g_hidx, g_hfrom, g_hpos);
+    } else if (((int (__cdecl *)(int, int))SVC(0x2dc))(g_hidx, g_hslot) >= 0) {
+        handle_place(b, g_hidx, g_hslot, g_hpos);
     }
 }
 /* the put only goes when polcore's stamps say the server's list isn't newer, else it quietly loads instead and
@@ -5048,7 +5089,8 @@ static void handle_put_done(BYTE *b, int r)
     /* a put that became a load already has the server's copy in polcore */
     f = get_chr(b, g_hidx, c) ? *(DWORD *)(c + 0x10) : 0;
     linked = (f & CHR_LINKED) && (int)CHR_HANDLE(f) == g_hslot;
-    if (g_hreload || linked != (g_hop == HOP_LINK)) handle_done("failed:not saved");
+    if (g_hreload) handle_done("failed:reloaded");
+    else if (linked != (g_hop == HOP_LINK)) handle_done("failed:not saved");
     else handle_done("saved");
 }
 /* my profile's the handle's, so a loaded one's the old handle's now */
@@ -5062,6 +5104,17 @@ static void handle_switched(BYTE *b)
     lg("handles: active handle now slot %d\r\n", g_my_slot);
 }
 
+static ULONGLONG last_request(void)
+{
+    ULONGLONG t = g_hlast;
+    if (g_edit_last > t) t = g_edit_last;
+    if (g_grp_last > t) t = g_grp_last;
+    if (g_me_last > t) t = g_me_last;
+    if (g_db_last > t) t = g_db_last;
+    if (g_pic_last > t) t = g_pic_last;
+    return t;
+}
+
 /* <op> switch|link|unlink, <token>, <handle slot>, <handle key>, then for link/unlink <content index>, <content key>.
    The keys are the snapshot's, so a request never lands on a record that changed */
 static void handle_request(BYTE *b)
@@ -5070,7 +5123,7 @@ static void handle_request(BYTE *b)
     BYTE h[0x28], c[0x68];
     int slot, idx = -1, kind, cur, old = -1, r;
     DWORD f;
-    if (GetTickCount64() - g_hlast < 3000) return;
+    if (GetTickCount64() - last_request() < 3000) return;
     if (take_request("handle", buf, sizeof buf) < 0) return;
     g_hlast = GetTickCount64();
     p = buf;
@@ -5091,13 +5144,20 @@ static void handle_request(BYTE *b)
     if (kind == HOP_SWITCH) {
         cur = ((svc_v)SVC(0x2f8))();
         if (slot == cur) { handle_fail("failed:already active"); return; }
-        /* they went under the old handle, some with its slot in them */
-        if (writes_pending() || g_me_step || g_status_want >= 0) { handle_fail("failed:busy"); return; }
+        /* they went under the old handle, some with its slot in them, and a read's answer is what the old handle
+           was allowed to see */
+        if (writes_pending() || g_me_step || g_status_want >= 0 || g_srch_step || g_prof_step || g_ch_step ||
+            g_fp_step || g_cr_db) {
+            handle_fail("failed:busy");
+            return;
+        }
         g_hop = HOP_SWITCH;
         g_hslot = slot;
         lstrcpyA(g_hstate, "working");
         lg("handles: switch from slot %d to slot %d\r\n", cur, slot);
         g_snap_dirty = 1;
+        /* the viewer quits private chat before a switch, so a room's left first, through the one PART there is */
+        if (chat_room_open()) chat_end(b);
         handle_switch_start(b);
         return;
     }
@@ -5108,9 +5168,12 @@ static void handle_request(BYTE *b)
     if (kind == HOP_LINK) {
         if ((f & CHR_LINKED) && (int)CHR_HANDLE(f) == slot) { handle_fail("failed:already linked"); return; }
         if (handle_used(h) >= 8) { handle_fail("failed:handle full"); return; }
-        /* polcore won't link one that's linked anywhere, so a move's an unlink first, like the viewer's */
+        /* polcore won't link one that's linked anywhere, so a move's an unlink first, like the viewer's. One linked to
+           a slot with no handle can't be unlinked either (-0x1c04), so it's left as it is */
         if (f & CHR_LINKED) {
+            BYTE oh[0x28];
             old = (int)CHR_HANDLE(f);
+            if (!handle_ok(b, old, oh)) { handle_fail("failed:orphan"); return; }
             r = ((int (__cdecl *)(int, int))SVC(0x2e0))(idx, old);
             if (r < 0) { handle_fail(failed(r)); return; }
         }
@@ -5129,6 +5192,7 @@ static void handle_request(BYTE *b)
     g_hslot = slot;
     g_hidx = idx;
     g_hfrom = old;
+    g_hpos = (f & CHR_LINKED) ? (int)((f >> 22) & 7) : -1;
     lstrcpyA(g_hstate, "working");
     lg("handles: %s content index %d %s slot %d%s\r\n", kind == HOP_LINK ? "link" : "unlink", idx,
        kind == HOP_LINK ? "to" : "from", slot, old >= 0 ? " (moved)" : "");
@@ -5160,6 +5224,14 @@ static void handle_pump(BYTE *b, int ctl)
     } else {
         handle_done(failed(r));
     }
+}
+/* Play with a change still going: FFXI's world login reads polcore's records, so a link the server never confirmed
+   is taken back first */
+static void handle_abandon(BYTE *b)
+{
+    if (g_hop == HOP_NONE) return;
+    if (g_hop != HOP_SWITCH) handle_undo(b);
+    handle_done("failed:cancelled");
 }
 static void handles_json(BYTE *b, HANDLE out)
 {
@@ -5280,6 +5352,11 @@ static void snapshot_social(BYTE *b)
                   g_send_hist[k].time, g_send_hist[k].seq);
         wr(h, line);
         first = 0;
+    }
+    wr(h, "],\"returned\":[");
+    for (i = 0; i < g_returned_n; i++) {
+        wsprintfA(line, "%s{\"time\":%lu,\"seq\":%lu}", i ? "," : "", g_returned[i].time, g_returned[i].seq);
+        wr(h, line);
     }
     /* the messages the hook has, and whether each one's PUT has started */
     wr(h, "],\"queue\":[");
@@ -5557,6 +5634,40 @@ static int idle_timeout_for_game(BYTE *b)
     return mins;
 }
 
+/* one turn of the requests and jobs. Nothing new starts mid-switch, it'd go under whichever handle polcore has by then,
+   and chat waits it out completely */
+static void hold_turn(BYTE *b, int ctl)
+{
+    static ULONGLONG lastStatusReq;
+    char sv[8];
+    int wctl, want;
+    handle_pump(b, ctl);
+    wctl = ctl && !handle_switching();
+    mail_send_pump(b);
+    friend_edit_pump(b, wctl);
+    search_pump(b, wctl);
+    profile_pump(b, wctl);
+    character_pump(b, wctl);
+    ffxiprofile_pump(b, wctl);
+    group_pump(b, wctl);
+    me_pump(b, wctl);
+    answer_pump(b, wctl);
+    pic_pump(b, wctl);
+    if (!g_lean && !handle_switching()) chat_pump(b, wctl);
+    if (wctl && g_status_job < 0 && GetTickCount64() - lastStatusReq >= 2000 &&
+        take_request("status", sv, sizeof sv) >= 0) {
+        want = sv[0] - '0';
+        lastStatusReq = GetTickCount64();
+        /* the viewer's OK maps busy (2) to online and 3 to appear offline */
+        if (want == 2) want = 0;
+        if (want == 3) want = 4;
+        if (want == 0 || want == 1 || want == 4) {
+            if (g_my_slot >= 0) status_start(b, g_my_slot, want, -2);   /* -2 keeps the rest, never handle -1 */
+            else lg("presence: status %d ignored - no handle selected\r\n", want);
+        }
+    }
+}
+
 /* writes under way get 5 s to finish, then the viewer's sign-out */
 static void hold_sign_out(BYTE *b, const char *spath)
 {
@@ -5577,10 +5688,10 @@ static void hold_sign_out(BYTE *b, const char *spath)
    sends more than the viewer would. */
 static void pol_hold(BYTE *b)
 {
-    static ULONGLONG lastCtl, lastStatusReq, lastMailReq;
+    static ULONGLONG lastCtl, lastMailReq;
     ULONGLONG lastSnap = 0, until;
-    char spath[MAX_PATH + 64], path[MAX_PATH + 64], num[16], sv[8], rq[16];
-    int ctl, wctl, idle, reason, why, want;
+    char spath[MAX_PATH + 64], path[MAX_PATH + 64], num[16], rq[16];
+    int ctl, idle, reason, why;
     HANDLE ef;
     DWORD wn;
     if (!b) return;
@@ -5657,20 +5768,7 @@ static void pol_hold(BYTE *b)
         }
         if (ctl && !g_lean) mail_ack_request();
         if (!g_lean) mail_pump(b);
-        handle_pump(b, ctl);
-        /* nothing new starts mid-switch, it'd go under whichever handle polcore has by then */
-        wctl = ctl && !handle_switching();
-        mail_send_pump(b);
-        friend_edit_pump(b, wctl);
-        search_pump(b, wctl);
-        profile_pump(b, wctl);
-        character_pump(b, wctl);
-        ffxiprofile_pump(b, wctl);
-        group_pump(b, wctl);
-        me_pump(b, wctl);
-        answer_pump(b, wctl);
-        pic_pump(b, wctl);
-        if (!g_lean) chat_pump(b, wctl);
+        hold_turn(b, ctl);
         if (ctl && play_signalled()) {
             if (g_ffxi_service != 1 || notice_blocks(g_notice)) {
                 const char *no = g_ffxi_service == 0 ? "refused:no-content-id"
@@ -5697,6 +5795,7 @@ static void pol_hold(BYTE *b)
                 for (int i = 0; i < g_sq_n; i++) if (g_sq[i].job >= 0) CANCEL_JOB(g_sq[i].job);
                 if (g_status_job >= 0) CANCEL_JOB(g_status_job);
                 if (g_hjob >= 0) CANCEL_JOB(g_hjob);
+                handle_abandon(b);
                 g_in_hold = 0;
                 if (g_edit_job >= 0) CANCEL_JOB(g_edit_job);
                 if (g_pic_want >= 0) profile_pic_cancel(b);
@@ -5727,18 +5826,6 @@ static void pol_hold(BYTE *b)
         if (ctl && owner_gone()) {
             lg("hold: Provenance ended - signing out and exiting\r\n");
             hold_sign_out(b, spath);
-        }
-        if (wctl && g_status_job < 0 && GetTickCount64() - lastStatusReq >= 2000 &&
-            take_request("status", sv, sizeof sv) >= 0) {
-            want = sv[0] - '0';
-            lastStatusReq = GetTickCount64();
-            /* the viewer's OK maps busy (2) to online and 3 to appear offline */
-            if (want == 2) want = 0;
-            if (want == 3) want = 4;
-            if (want == 0 || want == 1 || want == 4) {
-                if (g_my_slot >= 0) status_start(b, g_my_slot, want, -2);   /* -2 keeps the rest, never handle -1 */
-                else lg("presence: status %d ignored - no handle selected\r\n", want);
-            }
         }
         if (ctl && request_waiting("mail") && (!lastMailReq || GetTickCount64() - lastMailReq >= 30000) &&
             take_request("mail", rq, sizeof rq) >= 0) {

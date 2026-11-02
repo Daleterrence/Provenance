@@ -1422,25 +1422,43 @@ public partial class MainViewModel : ObservableObject
         Log.Warning("No game window from pol.exe {Pid} after 90 s", pid);
     }
 
+    private HandlesViewModel? _handles;
+
+    // made once and fed every snapshot, so a change still going when Settings closes is answered all the same
+    internal HandlesViewModel Handles
+    {
+        get
+        {
+            if (_handles != null) return _handles;
+            _handles = new HandlesViewModel(() => _pol.Pid, _avatars.ProfilePicture)
+            {
+                SwitchBlocked = () => EditProfileWindow.Current is not null
+                    ? "Close the profile editor first. It's editing the active handle's profile." : null,
+            };
+            Social.SnapshotApplied += _ => ShowHandles();
+            PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName is nameof(SocialConnected) or nameof(MultiRunning)) ShowHandles();
+            };
+            Social.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SocialViewModel.GameRunning)) ShowHandles(); };
+            return _handles;
+        }
+    }
+
+    // a multi-account run's lean sessions take no requests
+    private void ShowHandles()
+    {
+        bool on = SocialConnected && _pol.Pid is not null;
+        Handles.Update(on ? Social.Last : null, on,
+                       Social.GameRunning ? HandleList.ReadOnlyText : MultiRunning ? HandleList.MultiRunText : null);
+    }
+
     [RelayCommand]
     private void OpenSettings()
     {
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
-        var handles = new HandlesViewModel(() => _pol.Pid, _avatars.ProfilePicture);
-        // a multi-account run's lean sessions take no requests
-        void ShowHandles() => handles.Update(SocialConnected && _pol.Pid is not null ? Social.Last : null,
-                                             SocialConnected && _pol.Pid is not null,
-                                             Social.GameRunning || MultiRunning || IsLaunching);
-        void OnSnap(PolSocialSnapshot _) => ShowHandles();
-        void OnChange(object? s, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName is nameof(SocialConnected) or nameof(IsLaunching) or nameof(MultiRunning)
-                or nameof(SocialViewModel.GameRunning)) ShowHandles();
-        }
+        var handles = Handles;
         ShowHandles();
-        Social.SnapshotApplied += OnSnap;
-        PropertyChanged += OnChange;
-        Social.PropertyChanged += OnChange;
         var vm = new SettingsViewModel(_settings, multiRunning: () => MultiRunning,
                                        holdPrestarts: _pol.HoldPrestarts, releasePrestarts: _pol.ReleasePrestarts,
                                        largeAddressAwareBlocked: LargeAddressAwareBlocked,
@@ -1452,13 +1470,7 @@ public partial class MainViewModel : ObservableObject
         if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
         _openSettings = vm;
         try { w.ShowDialog(); }
-        finally
-        {
-            _openSettings = null;
-            Social.SnapshotApplied -= OnSnap;
-            PropertyChanged -= OnChange;
-            Social.PropertyChanged -= OnChange;
-        }
+        finally { _openSettings = null; }
         if (vm.RestartWanted)
         {
             RequestRestart?.Invoke();

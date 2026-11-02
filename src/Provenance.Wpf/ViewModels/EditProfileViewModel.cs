@@ -111,6 +111,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private DateTime _at;
     private string _noMail = "No Mail address";
     private string _savedHandle = "";
+    private string _loadedKey = "";
     private string _savedMail = "";
     private int _savedLevel;
     private readonly Dictionary<string, long> _saved = new();
@@ -328,6 +329,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private void Fill(MyProfile p)
     {
+        _loadedKey = p.Key;
         _loadingValues = true;
         try
         {
@@ -415,7 +417,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     {
         _renameAfterSave = false;
         Start(Job.Rename, "Renaming your handle...");
-        if (!SocialSnapshot.RenameHandle(pid, _token!, HandleName.Trim())) Fail(WriteFailed);
+        if (!SocialSnapshot.RenameHandle(pid, _token!, HandleName.Trim(), _loadedKey)) Fail(WriteFailed);
     }
 
     private void OnSnapshot(PolSocialSnapshot snap)

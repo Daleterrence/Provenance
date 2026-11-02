@@ -101,6 +101,25 @@ public partial class SocialViewModel
         ProfileNoteIsError = true;
     }
 
+    // after a switch: nothing read under the old handle stays on screen or in the cache
+    private void ForgetProfiles()
+    {
+        _profileCache.Clear();
+        if (_profileFor.Length == 0) return;
+        ProfileRows.Clear();
+        ProfileName = ProfileHid = ProfileMail = ProfileUpdated = ProfilePrivacy = ProfileAway = ProfileAwayFrom = "";
+        ProfileGameLine = "";
+        ProfilePicture = _avatars.NoProfilePicture;
+        ProfileTabs.Clear();
+        HasProfileTabs = false;
+        _handleProfile = null;
+        _characterShown = null;
+        _profileToken = _ffxiToken = null;
+        ProfileLoading = false;
+        ProfileNoteIsError = false;
+        ProfileNote = "Your active handle changed. Open the profile again to see it from this handle.";
+    }
+
     private string StateText(int state) => state switch
     {
         PolProfile.Private => ViewerText(0x4a73, "Private"),

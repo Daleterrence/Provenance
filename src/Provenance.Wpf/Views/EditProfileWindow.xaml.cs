@@ -45,7 +45,7 @@ public partial class EditProfileWindow : Window
     }
 
     public static EditProfileWindow? Current =>
-        Application.Current.Windows.OfType<EditProfileWindow>().FirstOrDefault();
+        Application.Current?.Windows.OfType<EditProfileWindow>().FirstOrDefault();
 
     // a load has nothing of theirs in it yet, closing just withdraws the request
     private bool Saving => _vm.Busy && !_vm.LoadingProfile;

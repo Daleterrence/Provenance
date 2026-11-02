@@ -107,8 +107,7 @@ public partial class SocialViewModel : ObservableObject
 
     private static string NewToken() => Guid.NewGuid().ToString("N")[..12];
 
-    internal static string FailReason(string state) =>
-        state.StartsWith("failed:", StringComparison.Ordinal) ? state[7..] : state;
+    internal static string FailReason(string state) => SocialSnapshot.FailReason(state);
 
     // a job's last word (ok or "failed:..."), "timeout" once it's run past secs, or null while it's still going
     private static string? Settled(string? state, string ok, DateTime since, int secs) =>
@@ -335,7 +334,7 @@ public partial class SocialViewModel : ObservableObject
     private void ApplyCore(PolSocialSnapshot snap)
     {
         // a friend's profile shows what they let this handle see, so ones read under another handle go
-        if (_last.MyKey.Length > 0 && snap.MyKey.Length > 0 && _last.MyKey != snap.MyKey) _profileCache.Clear();
+        if (_last.MyKey.Length > 0 && snap.MyKey.Length > 0 && _last.MyKey != snap.MyKey) ForgetProfiles();
         _last = snap;
         bool chatChanged = _chat != null && MergeChat(_chat, snap);
         if (FilterOn != _filterWasOn)
@@ -458,7 +457,7 @@ public partial class SocialViewModel : ObservableObject
                 if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
                 continue;
             }
-            // a line of mine coming back isn't something I received, and it's left where it is on the server
+            // a line of mine coming back isn't something I received. The hook deletes it, so it's never acked here
             if (m.IsChat && Mine(snap, m)) continue;
             if (chat.MergeIncoming(m))
             {
@@ -475,6 +474,7 @@ public partial class SocialViewModel : ObservableObject
                 changed |= chat.SetSendState(token, state, time, seq);
                 _sendInFlight.RemoveAll(x => x.Token == token);
             }
+        foreach (var (time, seq) in snap.Returned) changed |= chat.MarkReturned(time, seq);
         foreach (var (token, state) in snap.SendQueue)
             if (_sendInFlight.FindIndex(x => x.Token == token) is var i and >= 0)
                 _sendInFlight[i] = _sendInFlight[i] with { HookState = state, HookSaid = DateTime.UtcNow };

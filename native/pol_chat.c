@@ -1000,6 +1000,8 @@ static void chat_pump(BYTE *b, int ctl)
     if (request_new("chatrooms")) cr_rooms_request(b);
 }
 
+static int chat_room_open(void) { return g_cr_st != CR_OUT; }
+
 /* Play: FFXI takes the link over, so a room gets a PART first (the user's leaving chat for the game) */
 static void chat_end(BYTE *b)
 {

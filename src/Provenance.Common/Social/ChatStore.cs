@@ -60,6 +60,7 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
         "failed:hourly limit" => "Not sent: you've sent 600 messages in the last hour. Try again later.",
         "failed:session" => "Not sent: the PlayOnline session ended before it went.",
         "failed:game" => "Not sent: FINAL FANTASY XI started before it went.",
+        "failed:returned" => "Not delivered: PlayOnline sent it back.",
         var s when s.StartsWith("failed", StringComparison.Ordinal) => "Not sent: PlayOnline didn't accept it.",
         _ => "",
     };
@@ -190,6 +191,17 @@ public sealed class ChatStore
         _entries[i] = stamp ? e with { State = state, Time = time, Seq = seq } : e with { State = state };
         _version++;
         Changed();
+        return true;
+    }
+
+    // a line of mine that came back with this header time and seq went to PlayOnline but never reached anyone
+    public bool MarkReturned(long time, long seq)
+    {
+        int i = _entries.FindLastIndex(e => e.Outgoing && e.State == "sent" && e.Time == time && e.Seq == seq);
+        if (i < 0) return false;
+        _entries[i] = _entries[i] with { State = "failed:returned" };
+        _version++;
+        Dirty = true;
         return true;
     }
 

@@ -205,6 +205,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public IReadOnlyList<(string Token, string State, long Time, long Seq)> SendResults { get; init; } = [];
     // the lines the hook has, "sending" once its PUT's started, "queued" before
     public IReadOnlyList<(string Token, string State)> SendQueue { get; init; } = [];
+    // the header time and seq of chat lines from my own POL ID the hook got back, which never reached anyone
+    public IReadOnlyList<(long Time, long Seq)> Returned { get; init; } = [];
 
     public string? SendStateFor(string? token)
     {
@@ -380,8 +382,12 @@ public static class SocialSnapshot
         return WriteRequest(pid, "saveprofile", sb.ToString());
     }
 
-    public static bool RenameHandle(int pid, string token, string name) =>
-        WriteRequest(pid, "rename", $"{OneLine(token)}\n{OneLine(name)}");
+    // key is the loaded profile's, so a rename never lands on a handle that's become active since
+    public static bool RenameHandle(int pid, string token, string name, string key) =>
+        WriteRequest(pid, "rename", $"{OneLine(token)}\n{OneLine(name)}\n{OneLine(key)}");
+
+    public static string FailReason(string state) =>
+        state.StartsWith("failed:", StringComparison.Ordinal) ? state[7..] : state;
 
     public enum HandleChange { Switch, Link, Unlink }
 
@@ -492,6 +498,7 @@ public static class SocialSnapshot
                 Play = Str(root, "play"),
                 SendResults = Arr(root, "sends", s => (Str(s, "token"), Str(s, "state"), Long(s, "time"), Long(s, "seq"))),
                 SendQueue = Arr(root, "queue", q => (Str(q, "token"), Str(q, "state"))),
+                Returned = Arr(root, "returned", r => (Long(r, "time"), Long(r, "seq"))),
                 EditToken = editToken,
                 EditState = editState,
                 MyComment = Str(root, "myComment").Trim(),

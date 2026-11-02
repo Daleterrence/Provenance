@@ -80,6 +80,7 @@ public partial class SettingsWindow : Window
             menu.Items.Add(item);
         }
         if (menu.Items.Count > 0) menu.IsOpen = true;
+        else vm.Handles.NoTarget();
     }
 
     // settings.xml takes 255, and Ashita's file names stop well short of that
