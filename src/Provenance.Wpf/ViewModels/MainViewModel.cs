@@ -116,10 +116,13 @@ public partial class MainViewModel : ObservableObject
             Alert(who, $"{who} invited you to a friend group. Open Friends and messages to answer it.", "BellOutline",
                   request: mid);
         Social.NoticeReceived += (who, text) => Alert(who, text, "BellOutline");
+        Social.GroupChatRequested += OpenGroupChat;
+        Social.GroupChat.LineArrived += OnGroupChatLine;
         Social.SnapshotApplied += _ => DropAnsweredNotice();
         Social.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(SocialViewModel.UnseenCount) && Social.UnseenCount == 0) AttentionCleared?.Invoke();
+            if (e.PropertyName is nameof(SocialViewModel.UnseenCount) or nameof(SocialViewModel.GroupChatUnread) && !WantsAttention)
+                AttentionCleared?.Invoke();
         };
         // a quiet one, no taskbar flash, and it never covers a message notice
         Social.FriendCameOnline += who =>
@@ -293,7 +296,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     // false once everything's been read or seen, like a message landing in a conversation that's already on screen
-    public bool WantsAttention => Social.UnseenCount > 0;
+    public bool WantsAttention => Social.UnseenCount > 0 || (_settings.Current.GroupChatFlash && Social.GroupChatUnread > 0);
 
     // answered here, the request leaves the list and the notice goes with it. Answering it anywhere else takes another
     // login of this POL ID, which ends this session, and logging out takes the notice down
@@ -338,9 +341,52 @@ public partial class MainViewModel : ObservableObject
         CurrentNews = plain;
     }
 
+    private bool _noticeGroupChat;
+
+    // a line in the group chat with its window hidden or behind, as the settings say
+    private void OnGroupChatLine(string group, string who, string text)
+    {
+        if (_settings.Current.GroupChatNotice)
+        {
+            ShowNotice($"{who} in {group}: {Preview(text, 60)}", "Forum");
+            _noticeGroupChat = true;
+        }
+        if (_settings.Current.GroupChatNotice || _settings.Current.GroupChatFlash) RequestAttention?.Invoke();
+    }
+
+    // the window side, which tests with no windows swap out
+    internal Func<string, bool>? AskGroupHandle { get; set; }
+    internal Action<string>? TellGroupChat { get; set; }
+    internal Action? ShowGroupChat { get; set; }
+
+    // the Groups tab's Group Chat: the viewer's handle question (0x3eb0) first when it's needed, then the window
+    private void OpenGroupChat(SocialViewModel.GroupItem g)
+    {
+        if (MultiRunning || Social.Last.GroupList.FirstOrDefault(x => x.Id == g.Id) is not { } group) return;
+        Window? Owner() => Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current?.MainWindow;
+        var show = ShowGroupChat ?? (() => GroupChatWindow.ShowFor(Social.GroupChat, _settings));
+        var tell = TellGroupChat ?? (text => MessageDialog.ShowInfo(Owner(), "Group Chat", text));
+        if (Social.GroupChat.Open && string.Equals(Social.GroupChat.GroupId, group.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            show();
+            return;
+        }
+        // the Handles page might never have been opened, and the question needs this login's handles
+        ShowHandles();
+        Handles.OpenGroup(group,
+            ask: AskGroupHandle ?? (q => MessageDialog.Confirm(Owner(), GroupHandleCheck.Title, q, "YES", cancelLabel: "NO") == 0),
+            open: () =>
+            {
+                if (Social.GroupChat.Join(group)) show();
+                else tell(GroupChatViewModel.JoinFailedText);
+            },
+            tell: tell);
+    }
+
     private void ShowNotice(string text, string icon = "EmailOutline", bool opens = true, bool stays = false)
     {
         _noticeRequest = 0;
+        _noticeGroupChat = false;
         Notice = text;
         NoticeIcon = icon;
         NoticeOpens = opens;
@@ -910,6 +956,11 @@ public partial class MainViewModel : ObservableObject
     {
         Notice = null;
         if (!NoticeOpens) return;
+        if (_noticeGroupChat)
+        {
+            if (Social.GroupChat.Open) GroupChatWindow.ShowFor(Social.GroupChat, _settings);
+            return;
+        }
         if (_lastSender is { } who && Social.Friends.FirstOrDefault(f => f.Name == who) is { } f) OpenChatWith(f);
         else OpenSocial();
     }
@@ -1028,6 +1079,7 @@ public partial class MainViewModel : ObservableObject
     {
         EditProfileWindow.Current?.CloseQuietly();
         ChatRoomsWindow.Current?.CloseQuietly();
+        GroupChatWindow.Current?.CloseQuietly();
         foreach (var w in SocialWindows()) w.Close();
     }
 
@@ -1036,6 +1088,7 @@ public partial class MainViewModel : ObservableObject
         Social.SettleSends(end);
         _socialPoll.Stop();
         CloseSocialWindows();
+        Social.GroupChat.CloseQuietly();
         _sessionEnding = true;   // before SocialConnected, so the Repair button never shows enabled in between
         SocialConnected = false;
         Task.Run(() =>

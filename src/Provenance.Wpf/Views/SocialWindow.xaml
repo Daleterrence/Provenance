@@ -87,7 +87,11 @@
                             <TextBox x:Name="Body" Style="{x:Null}" Text="{Binding Display, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
                                      IsReadOnly="True" IsTabStop="False" BorderThickness="0" Background="Transparent" Padding="0"
                                      Foreground="{DynamicResource Text.1}" CaretBrush="Transparent" Cursor="IBeam"
-                                     SelectionBrush="{DynamicResource Primary}" />
+                                     SelectionBrush="{DynamicResource Primary}" Tag="{Binding}" ContextMenuOpening="OnLineMenu">
+                                <TextBox.ContextMenu>
+                                    <ContextMenu />
+                                </TextBox.ContextMenu>
+                            </TextBox>
                         </Border>
                         <TextBlock x:Name="Meta" FontSize="10.5" Margin="6,2,6,0" Foreground="{DynamicResource Text.3}"
                                    Text="{Binding TimeText}" ToolTip="{Binding WhenText}" />
@@ -318,14 +322,29 @@
                                             <Border.ContextMenu>
                                                 <ContextMenu />
                                             </Border.ContextMenu>
-                                            <Grid ColumnDefinitions="*,Auto">
+                                            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                                                 <StackPanel VerticalAlignment="Center">
                                                     <TextBlock FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
                                                         <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding RoleText, Mode=OneWay}" FontSize="11" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
                                                     </TextBlock>
                                                     <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="{DynamicResource Text.3}" />
                                                 </StackPanel>
-                                                <Button Grid.Column="1" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                <Border Grid.Column="1" MinWidth="20" Height="20" CornerRadius="10" Padding="6,0" Margin="8,0,0,0"
+                                                        Background="{DynamicResource Primary}" VerticalAlignment="Center"
+                                                        Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}" ToolTip="New group chat lines">
+                                                    <TextBlock Text="{Binding Unread}" FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource Text.OnPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <Button x:Name="GroupChatButton" Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                        Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Primary}"
+                                                        ToolTip="Display the group chat screen." AutomationProperties.Name="Group Chat"
+                                                        Command="{Binding DataContext.OpenGroupChatCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding DataContext.CanGroupChat, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        Visibility="{Binding CanChat, Converter={StaticResource BoolToVis}}">
+                                                    <materialDesign:PackIcon Kind="ForumOutline" Width="18" Height="18" />
+                                                </Button>
+                                                <Button Grid.Column="3" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
                                                         Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.3}"
                                                         ToolTip="Group actions" AutomationProperties.Name="Group actions" Click="OnRowMenuButton">
                                                     <materialDesign:PackIcon Kind="DotsVertical" Width="18" Height="18" />

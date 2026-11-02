@@ -70,6 +70,11 @@ public sealed class LauncherSettings
 
     public bool NotifyFriendsOnline { get; set; } = true;
 
+    // a busy group chat with its window hidden or behind
+    public bool GroupChatNotice { get; set; } = true;
+    public bool GroupChatFlash { get; set; } = true;
+    public bool GroupChatTimes { get; set; }
+
     // 0 online, 1 away, 2 busy, 4 appear offline
     public int PlayOnlineStatus { get; set; }
 

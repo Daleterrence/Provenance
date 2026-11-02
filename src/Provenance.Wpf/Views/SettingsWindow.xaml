@@ -385,6 +385,17 @@
                             <TextBlock Text="Tell me when a friend comes online" TextWrapping="Wrap" />
                         </CheckBox>
 
+                        <TextBlock Text="Group chat" Style="{StaticResource Section}" Margin="0,14,0,8" />
+                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding GroupChatNotice}" Margin="0,0,0,8">
+                            <TextBlock Text="Show a notice for new lines when the group chat isn't in front" TextWrapping="Wrap" />
+                        </CheckBox>
+                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding GroupChatFlash}" Margin="0,0,0,8">
+                            <TextBlock Text="Flash the taskbar for new lines when the group chat isn't in front" TextWrapping="Wrap" />
+                        </CheckBox>
+                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding GroupChatTimes}" Margin="0,0,0,8">
+                            <TextBlock Text="Show the time on each group chat line" TextWrapping="Wrap" />
+                        </CheckBox>
+
                         <TextBlock Margin="0,26,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding VersionText}" />
                     </StackPanel>
                 </ScrollViewer>

@@ -55,6 +55,9 @@ public partial class SettingsViewModel : ObservableObject
         _keepSignedInInTray = settings.Current.KeepSignedInInTray;
         _minimizeToTray = settings.Current.MinimizeToTray;
         _notifyFriendsOnline = settings.Current.NotifyFriendsOnline;
+        _groupChatNotice = settings.Current.GroupChatNotice;
+        _groupChatFlash = settings.Current.GroupChatFlash;
+        _groupChatTimes = settings.Current.GroupChatTimes;
         _largeAddressAwareOn = settings.Current.LargeAddressAware;
         _traySignOutIndex = Math.Max(0, Array.IndexOf(TraySignOutMinutes, settings.Current.TraySignOutMinutes));
         _chatLanguageFilter = PolOptions.ChatFilter(settings.Current);
@@ -103,6 +106,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _keepSignedInInTray;
     [ObservableProperty] private bool _minimizeToTray;
     [ObservableProperty] private bool _notifyFriendsOnline;
+    [ObservableProperty] private bool _groupChatNotice;
+    [ObservableProperty] private bool _groupChatFlash;
+    [ObservableProperty] private bool _groupChatTimes;
     [ObservableProperty] private int _traySignOutIndex;
     [ObservableProperty] private int _feedRegionIndex;
 
@@ -110,6 +116,9 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnKeepSignedInInTrayChanged(bool value) => Save(s => s.KeepSignedInInTray = value);
     partial void OnMinimizeToTrayChanged(bool value) => Save(s => s.MinimizeToTray = value);
     partial void OnNotifyFriendsOnlineChanged(bool value) => Save(s => s.NotifyFriendsOnline = value);
+    partial void OnGroupChatNoticeChanged(bool value) => Save(s => s.GroupChatNotice = value);
+    partial void OnGroupChatFlashChanged(bool value) => Save(s => s.GroupChatFlash = value);
+    partial void OnGroupChatTimesChanged(bool value) => Save(s => s.GroupChatTimes = value);
 
     partial void OnTraySignOutIndexChanged(int value)
     {

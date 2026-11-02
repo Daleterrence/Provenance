@@ -31,6 +31,7 @@ public partial class MainViewModel : IMultiRunHost
 
     partial void OnMultiRunningChanged(bool value)
     {
+        Social.GroupChatBlocked = value;
         RefreshRepair();
         if (!value) _ = ProbeRepairAsync();
     }

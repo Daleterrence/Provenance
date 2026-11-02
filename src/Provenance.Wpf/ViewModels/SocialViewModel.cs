@@ -53,7 +53,17 @@ public partial class SocialViewModel : ObservableObject
         _settings = settings;
         FriendsView = CollectionViewSource.GetDefaultView(Friends);
         FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.Section)));
+        GroupChat = new GroupChatViewModel(this, () => _settings.Current.GroupChatTimes);
+        GroupChat.UnreadChanged += () =>
+        {
+            _groupsSignature = "";
+            RebuildGroups(_last);
+            OnPropertyChanged(nameof(GroupChatUnread));
+        };
     }
+
+    public GroupChatViewModel GroupChat { get; }
+    public int GroupChatUnread => GroupChat.UnreadTotal;
 
     public ObservableCollection<FriendItem> Friends { get; } = new();
     public ICollectionView FriendsView { get; }
@@ -160,7 +170,26 @@ public partial class SocialViewModel : ObservableObject
     private bool _gameRunning;
     public const string GameRunningNote = "That has to wait till FINAL FANTASY XI is closed.";
 
-    partial void OnGameRunningChanged(bool value) => StatusNote = value ? GameRunningNote : "";
+    partial void OnGameRunningChanged(bool value)
+    {
+        StatusNote = value ? GameRunningNote : "";
+        OnPropertyChanged(nameof(CanGroupChat));
+    }
+
+    // more than one account running means lean sessions, which have no chat at all
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanGroupChat))] private bool _groupChatBlocked;
+    public bool CanGroupChat => Connected && !GameRunning && !HandleSwitching && !GroupChatBlocked;
+
+    partial void OnConnectedChanged(bool value) => OnPropertyChanged(nameof(CanGroupChat));
+
+    // the Groups tab's Group Chat button. The main window asks the handle question and opens the window
+    public event Action<GroupItem>? GroupChatRequested;
+
+    [RelayCommand]
+    private void OpenGroupChat(GroupItem? g)
+    {
+        if (g is { CanChat: true } && CanGroupChat) GroupChatRequested?.Invoke(g);
+    }
     public bool CanCompose => SelectedFriend is { CanMessage: true } && !GameRunning && !HandleSwitching;
 
     // a handle switch going: nothing writes till it's done, it'd go from the new handle
@@ -172,6 +201,7 @@ public partial class SocialViewModel : ObservableObject
 
     partial void OnHandleSwitchingChanged(bool value)
     {
+        OnPropertyChanged(nameof(CanGroupChat));
         if (!value && EditNote == SwitchingNote) EditNote = "";
         if (GameRunning) return;
         StatusNote = value ? SwitchingNote : StatusNote == SwitchingNote ? "" : StatusNote;
@@ -300,6 +330,7 @@ public partial class SocialViewModel : ObservableObject
     public void Start(string profileId, string? storeRoot = null)
     {
         _chat = new ChatStore(profileId, storeRoot) { Log = line => Serilog.Log.Warning("Chat log: {Line}", line) };
+        GroupChat.SetLog(new GroupChatLog(profileId, storeRoot) { Log = line => Serilog.Log.Warning("Group chat log: {Line}", line) });
         _chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
         _friendsSignature = "";
         _acked.Clear();
@@ -1250,6 +1281,27 @@ public partial class SocialViewModel : ObservableObject
     public void RemoveFailedLine(ChatEntry e)
     {
         if (e.Failed && _chat != null && _chat.RemoveFailed(e.Key)) RefreshConversation();
+    }
+
+    // this PC's copy only. It stays gone, the next login's read of the game's store won't bring it back
+    public void DeleteLine(ChatEntry e)
+    {
+        if (_chat == null || !ChatStore.CanDelete(e) || !_chat.Delete(e.Key)) return;
+        AfterDelete();
+    }
+
+    public void ClearConversation()
+    {
+        if (_chat == null || SelectedFriend is not { } f || _chat.Clear(f.Name, f.Key) == 0) return;
+        AfterDelete();
+    }
+
+    private void AfterDelete()
+    {
+        RefreshConversation();
+        UnreadCount = _chat?.Unread ?? 0;
+        _friendsSignature = "";
+        RebuildFriends(_last);
     }
 
     public void Resend(ChatEntry e)

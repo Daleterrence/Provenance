@@ -19,7 +19,12 @@ public partial class SocialViewModel
         public bool IsMaster => MyClass == 5;
         public bool CanInvite => MyClass is 4 or 5;
         public bool IsInvited => MyClass == 2;
+        // the viewer's picker only offers groups I'm a member, sub-master or master of
+        public bool CanChat => MyClass is 3 or 4 or 5;
         public string Summary => $"{Members.Count} {(Members.Count == 1 ? "member" : "members")}, {OnlineCount} online";
+        // group chat lines that came in with its window hidden or behind
+        public int Unread { get; init; }
+        public bool HasUnread => Unread > 0;
     }
 
     public ObservableCollection<GroupItem> Groups { get; } = new();
@@ -35,6 +40,7 @@ public partial class SocialViewModel
     private string _groupsSignature = "";
     private string? _groupToken;
     private string _groupDone = "";
+    private string? _groupLeaving;
     private DateTime _groupAt;
     private bool _groupBySend;
 
@@ -61,7 +67,7 @@ public partial class SocialViewModel
         GroupsUnavailable = !snap.GroupsLoaded && snap.GroupList.Count == 0;
         static string MemberSig(PolGroupMember m) =>
             $"{m.Index}:{m.Name}:{m.Class}:{m.Status}:{m.ProfilePictureId}:{m.Comment}";
-        var sig = string.Join("|", snap.GroupList.Select(g => g.Id + "/" + g.Name + "/" + g.MyClass + "/" +
+        var sig = string.Join("|", snap.GroupList.Select(g => g.Id + "/" + g.Name + "/" + g.MyClass + "/" + GroupChat.UnreadFor(g.Id) + "/" +
                                                               string.Join(",", g.Members.Select(MemberSig))));
         if (sig == _groupsSignature) return;
         _groupsSignature = sig;
@@ -76,7 +82,8 @@ public partial class SocialViewModel
                                                  m.Me ? m.Comment : Filtered(m.Comment)))   // mine fills its edit box
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
-            Groups.Add(new GroupItem(g.Id, g.Name, g.MyClass, RoleText(g.MyClass), online, members));
+            Groups.Add(new GroupItem(g.Id, g.Name, g.MyClass, RoleText(g.MyClass), online, members)
+                       { Unread = GroupChat.UnreadFor(g.Id) });
         }
         HasGroups = Groups.Count > 0;
     }
@@ -90,6 +97,7 @@ public partial class SocialViewModel
         _groupDone = doneText;
         _groupAt = DateTime.UtcNow;
         _groupBySend = op is GroupOp.Invite or GroupOp.AcceptInvite or GroupOp.DeclineInvite;   // these report as sends
+        _groupLeaving = op == GroupOp.Leave ? groupId : null;
         _answerFor = invite;   // only now, a refused click must never mark it answered
         if (SocialSnapshot.ChangeGroup(pid, op, token, groupId, a, b, c, key)) return;
         _groupToken = null;
@@ -118,7 +126,8 @@ public partial class SocialViewModel
     // a member or sub-master, an invitation gets answered instead
     public void LeaveGroup(GroupItem g)
     {
-        if (g.MyClass is not (< 3 or 5)) BeginGroup(GroupOp.Leave, g.Id, $"You left the group \"{g.Name}\".");
+        if (g.MyClass is not (< 3 or 5))
+            BeginGroup(GroupOp.Leave, g.Id, ViewerText(0x3eab, "You have left the group \"%s.\"").Replace("%s", g.Name));
     }
 
     // masters and sub-masters remove (1) non-masters and relieve (3) sub-masters, only the master promotes to
@@ -188,6 +197,8 @@ public partial class SocialViewModel
         bool done = state is "sent" or "saved";
         if (Settled(done ? "ok" : state, "ok", _groupAt, 130) is not { } st) return;
         var invite = _answerFor is { IsGroupInvite: true } inv ? inv : null;
+        var left = _groupLeaving;
+        _groupLeaving = null;
         _groupToken = null;
         _answerFor = null;
         EditBusy = false;
@@ -195,6 +206,8 @@ public partial class SocialViewModel
         if (invite != null && st is "ok" or "timeout") Answered(invite.RequestMid, ack: st == "ok");
         if (st == "ok")
         {
+            // with its chat open, the chat says it (and only once), and the lines kept for it go either way
+            if (left != null && GroupChat.GroupLeft(left, _groupDone)) return;
             _noteIsSuccess = true;
             EditNote = _groupDone;
             return;

@@ -81,6 +81,9 @@ public sealed class ChatStore
     private readonly string? _path;
     private readonly List<ChatEntry> _entries = new();
     private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
+    // lines deleted here. The game's message store's read again at every login and a line can still be on the server
+    // when it's deleted, so without these it'd just come back
+    private readonly HashSet<string> _deleted = new(StringComparer.Ordinal);
     // the 2 sec poll asks for counts every time, so they're worked out once per change, not per ask
     private int _version;
     private Stats? _stats;
@@ -99,6 +102,7 @@ public sealed class ChatStore
             root = Path.Combine(appData, "Provenance", "messages");
         }
         _path = Path.Combine(root, profileId + ".dat");
+        LoadDeleted();
         if (!File.Exists(_path)) return;
         try
         {
@@ -126,6 +130,7 @@ public sealed class ChatStore
 
     private bool AddOnce(PolMessage m, string subject, string text, string state)
     {
+        if (_deleted.Contains(m.Key)) return false;
         bool read = m.IsLocal && m.Read;
         // read in game: the line's read here too, even one that came in from the server before Play
         if (_keys.Contains(m.Key))
@@ -140,6 +145,7 @@ public sealed class ChatStore
     // keyed on the header, and a line from the game's outbox becomes sent if a later look finds it went
     public bool AddGameSent(string peer, PolSentLine s)
     {
+        if (_deleted.Contains(s.Key)) return false;
         if (_keys.Contains(s.Key))
             return s.State == "sent" && Stat().UnsentKeys.Contains(s.Key) &&
                    Replace(s.Key, e => e with { State = "sent", Time = s.Time > 0 ? s.Time : e.Time, Seq = s.Seq });
@@ -203,8 +209,67 @@ public sealed class ChatStore
     // own handles never counts, its copy coming in is that handle getting it for real
     public bool SentAt(long time, long seq, int fromSlot) =>
         time > 0 && fromSlot >= 0 &&
-        _entries.Any(e => e.Outgoing && e.Time == time && e.Seq == seq && e.FromSlot == fromSlot && e.ToOther == true &&
-                          e.State is "sent" or "failed:returned");
+        (_deleted.Contains(SentKey(time, seq, fromSlot)) ||
+         _entries.Any(e => e.Outgoing && e.Time == time && e.Seq == seq && e.FromSlot == fromSlot && e.ToOther == true &&
+                           e.State is "sent" or "failed:returned"));
+
+    private static string SentKey(long time, long seq, int fromSlot) => $"sent:{time}|{seq}|{fromSlot}";
+
+    // a line still going can't be deleted, its answer has to land somewhere
+    public static bool CanDelete(ChatEntry e) => !Waiting(e);
+
+    public bool Delete(string key) => DeleteWhere(e => e.Key == key) > 0;
+
+    // every line with one person, bar any still going
+    public int Clear(string peer, string key = "") => DeleteWhere(e => e.IsWith(peer, key));
+
+    private int DeleteWhere(Func<ChatEntry, bool> match)
+    {
+        var gone = _entries.Where(e => match(e) && CanDelete(e)).ToList();
+        if (gone.Count == 0) return 0;
+        foreach (var e in gone)
+        {
+            _deleted.Add(e.Key);
+            // a copy of a sent line coming back is matched by its header, not its key
+            if (e.Outgoing && e.ToOther == true && e.Time > 0) _deleted.Add(SentKey(e.Time, e.Seq, e.FromSlot));
+        }
+        var keys = gone.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+        _entries.RemoveAll(e => keys.Contains(e.Key) && CanDelete(e));
+        foreach (var k in keys) if (!_entries.Any(e => e.Key == k)) _keys.Remove(k);
+        _version++;
+        SaveDeleted();
+        Changed();
+        return gone.Count;
+    }
+
+    private string? DeletedPath => _path is null ? null : _path[..^4] + ".deleted.dat";
+    private static readonly byte[] DeletedEntropy = Encoding.ASCII.GetBytes("Provenance PlayOnline deleted lines v1");
+
+    private void LoadDeleted()
+    {
+        if (DeletedPath is not { } p || !File.Exists(p)) return;
+        try
+        {
+            var plain = Dpapi.Unprotect(File.ReadAllBytes(p), DeletedEntropy);
+            if (plain != null && JsonSerializer.Deserialize<List<string>>(plain) is { } keys) _deleted.UnionWith(keys);
+        }
+        catch { }
+    }
+
+    private void SaveDeleted()
+    {
+        if (DeletedPath is not { } p) return;
+        try
+        {
+            var cipher = Dpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(_deleted.ToList()), DeletedEntropy);
+            if (cipher is null) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(p)!);
+            var tmp = $"{p}.{Guid.NewGuid():N}.tmp";
+            File.WriteAllBytes(tmp, cipher);
+            File.Move(tmp, p, overwrite: true);
+        }
+        catch (Exception e) { Log?.Invoke($"{Path.GetFileName(p)} couldn't be saved ({e.GetType().Name}: {e.Message})"); }
+    }
 
     public bool SetSentFrom(string token, int fromSlot, bool toOther)
     {

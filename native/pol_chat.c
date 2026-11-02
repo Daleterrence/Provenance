@@ -226,6 +226,7 @@ static int cr_hex(WCHAR c)
 }
 static int cr_key_ok(const char *s);
 static int cr_new_key_ok(const char *k);
+static int gc_busy(void);
 static int cr_zone_known(DWORD code);
 
 /* the name runs from just past the header (6 chars, 8 with the language) to the tab */
@@ -1064,7 +1065,10 @@ static void cr_room_pump(BYTE *b, int ctl)
         }
         if (!cr_msg_ready()) return;
         if (g_cr_hello) { g_cr_hello = 0; cr_frame_out(b, CRM_HELLO); return; }
-        if (g_cr_mop) { cr_master_step(b); return; }
+        if (g_cr_mop) {
+            if (!gc_busy()) cr_master_step(b);
+            return;
+        }
         if (ctl && request_new("chatmaster")) { cr_master_request(b); return; }
         if (ctl && request_new("chatsend")) { cr_send_request(b); return; }
         if (g_cr_replies > 0) { g_cr_replies--; cr_frame_out(b, CRM_REPLY); }
@@ -1080,6 +1084,8 @@ static void cr_room_pump(BYTE *b, int ctl)
         cr_frame_out(b, CRM_HELLO);
         return;
     }
+    /* polcore's group chat reads the same one command answer for its JOIN and PART, so they never overlap */
+    if (gc_busy()) return;
     r = cr_command(b, g_cr_st);
     if (r == 0) {
         if (++g_cr_tries < CR_TRIES) return;
@@ -1152,10 +1158,11 @@ static const pfb_tab *cr_tab_of(const pfb_hdr *p, int field)
     const pfb_item *it = p ? pf_item(p, field) : NULL;
     return it ? it->tab : NULL;
 }
+/* one the list shows, so a room can't be made in a zone the viewer hides */
 static int cr_zone_known(DWORD code)
 {
-    const pfb_tab *t = cr_tab_of(g_cr_cpfb, 0);
-    return pf_find(t, code) >= 0;
+    for (int i = 0; i < g_cr_zone_n; i++) if (g_cr_zone[i].code == code) return 1;
+    return 0;
 }
 
 static void cr_db_done(int rooms, const char *state)
@@ -1257,6 +1264,15 @@ static void cr_parse_rooms(BYTE *b)
         g_cr_rooms_n++;
     }
 }
+/* this entry's own part k, not one pf_part would borrow from the entry before */
+static int cr_part_there(const pfb_tab *t, int i, int k)
+{
+    const char *x = t->e[i].text;
+    int j = 0;
+    if (!x) return 0;
+    for (; j < k && *x; x++) if (*x == '\n') j++;
+    return j == k && *x && *x != '\n';
+}
 static int cr_db_load(BYTE *b, int rooms)
 {
     if (!g_cr_cpib) g_cr_cpib = pib_load(b, L"ch_count.pib", "ch_count", cr_check_count);
@@ -1266,7 +1282,16 @@ static int cr_db_load(BYTE *b, int rooms)
     if (!g_cr_rpfb) g_cr_rpfb = cr_pfb(b, L"c_chan.pfb");
     if (!g_cr_zone_n) {
         const pfb_tab *t = cr_tab_of(g_cr_cpfb, 0);
-        for (int i = 0; i < t->n && g_cr_zone_n < CR_ZONES; i++) g_cr_zone[g_cr_zone_n++].code = (WORD)t->e[i].code;
+        int lang = SVC(0xf18) ? ((svc_v)SVC(0xf18))() : 0, row = 0;
+        for (int i = 0; i < t->n && g_cr_zone_n < CR_ZONES; i++) {
+            /* the viewer's list has a row for a group's name (part 0) and one for the zone (part 2), and it leaves rows
+               5-8 out in any language but Japanese and 6-8 in Japanese (app.dll FUN_100a12bd, by svc 0xf18). By row,
+               not by name, the same as it does */
+            if (cr_part_there(t, i, 0)) row++;
+            if (!cr_part_there(t, i, 2)) continue;
+            if (row < (lang == 0 ? 6 : 5) || row > 8) g_cr_zone[g_cr_zone_n++].code = (WORD)t->e[i].code;
+            row++;
+        }
     }
     if (!rooms) return 1;
     if (!g_cr_rpib) g_cr_rpib = pib_load(b, L"c_chan.pib", "c_chan", cr_check_chan);
@@ -1396,6 +1421,7 @@ static void chat_pump(BYTE *b, int ctl)
 }
 
 static int chat_room_open(void) { return g_cr_st != CR_OUT; }
+static int cr_cmd_busy(void) { return g_cr_wait == CRW_CMD; }
 
 /* an enter or a line asked for while the handle's changing, answered as not done */
 static void chat_join_refused(const char *tok, const char *haskey)

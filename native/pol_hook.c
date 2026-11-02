@@ -1045,12 +1045,14 @@ static void notice_read(BYTE *b)
         lg("phase_c: LM-02 days left %u\r\n", g_notice_days);
     }
 }
+static void gc_signed_out(void);
 /* the viewer's sign-out (app.dll 0x101983fb). 0xcc4 runs once, it returns 0, not 7, for the hook's connection type */
 static void viewer_sign_out(BYTE *b)
 {
     if (SVC(0xcc0)) ((void (__cdecl *)(int))SVC(0xcc0))(1);
     if (SVC(0xcc4)) ((svc_v)SVC(0xcc4))();
     if (SVC(0x6c8)) ((void (__cdecl *)(void))SVC(0x6c8))();
+    gc_signed_out();
 }
 static void account_blocked(BYTE *b, const char *what)
 {
@@ -1619,6 +1621,7 @@ static void sweep_stale_social(void)
     sweep_stale("pol_hook.*.chatjoin*");
     sweep_stale("pol_hook.*.chatcreate*");
     sweep_stale("pol_hook.*.chatmaster*");
+    sweep_stale("pol_hook.*.groupchat*");
 }
 static void sweep_stale(const char *pattern)
 {
@@ -2735,9 +2738,12 @@ static void store_drop(void)
     DeleteFileA(p);
     ipc_file(p, "chatroom.json");   /* the chat room's lines, other people's words like the messages */
     DeleteFileA(p);
-    /* and an enter, a create or a master's change that never got taken */
-    for (int i = 0; i < 9; i++) {
-        ipc_file(p, i < 3 ? "chatjoin" : i < 6 ? "chatcreate" : "chatmaster");
+    ipc_file(p, "groupchat.json");
+    DeleteFileA(p);
+    /* and an enter, a create, a master's change or a group chat request that never got taken */
+    for (int i = 0; i < 18; i++) {
+        static const char *const ext[] = { "chatjoin", "chatcreate", "chatmaster", "groupchatjoin", "groupchatsend", "groupchatleave" };
+        ipc_file(p, ext[i / 3]);
         lstrcatA(p, i % 3 == 0 ? "" : i % 3 == 1 ? ".taking" : ".taking2");
         DeleteFileA(p);
     }
@@ -5097,6 +5103,10 @@ static void chat_join_refused(const char *tok, const char *haskey);
 static void chat_send_refused(const char *tok);
 static void chat_create_refused(const char *tok, const char *haskey);
 static void chat_master_refused(const char *tok, const char *haskey);
+static int gc_open(void);
+static void gc_end(BYTE *b, const char *state, int reset);
+static void gc_join_refused(const char *tok, const char *state);
+static void gc_send_refused(const char *tok, const char *state);
 
 static int get_chr(BYTE *b, int i, BYTE *rec)
 {
@@ -5227,7 +5237,8 @@ static void handle_switched(BYTE *b)
 static void writes_refuse(BYTE *b)
 {
     static const char *const ext[] = { "send", "friend", "comment", "answer", "group", "pic", "status", "myprofile",
-                                       "saveprofile", "rename", "chatjoin", "chatsend", "chatcreate", "chatmaster" };
+                                       "saveprofile", "rename", "chatjoin", "chatsend", "chatcreate", "chatmaster",
+                                       "groupchatjoin", "groupchatsend" };
     char buf[512], *p, *l1, *l2, *l3;
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) {
         if (take_request(ext[i], buf, sizeof buf) < 0) continue;
@@ -5245,6 +5256,8 @@ static void writes_refuse(BYTE *b)
         case 11: chat_send_refused(l1); break;
         case 12: chat_create_refused(l1, l2); break;
         case 13: chat_master_refused(l1, l2); break;
+        case 14: gc_join_refused(l1, SWITCHING); break;
+        case 15: gc_send_refused(l1, SWITCHING); break;
         }
     }
 }
@@ -5352,6 +5365,7 @@ static void handle_request(BYTE *b)
         g_snap_dirty = 1;
         /* the viewer quits private chat before a switch, so a room's left first, through the one PART there is */
         if (chat_room_open()) chat_end(b);
+        if (gc_open()) gc_end(b, "left:handle", 0);
         handle_switch_start(b);
         if (handle_switching()) writes_refuse(b);
         return;
@@ -5499,6 +5513,7 @@ static void search_mark(BYTE *b)
     g_srch_marked_for = sig;
 }
 #include "pol_chat.c"
+#include "pol_groupchat.c"
 
 static void wr(HANDLE h, const char *s)
 {
@@ -5612,6 +5627,7 @@ static void snapshot_social(BYTE *b)
     if (g_fp_json[0] && lstrcmpA(g_fp_state, "done") == 0) { wr(h, ","); wr(h, g_fp_json); }
     wr(h, "}");
     chat_snapshot(b, h);
+    gc_snapshot(b, h);
     if (SVC(0x648) && SVC(0x618) && SVC(0x61c)) {
         ng = ((int (__cdecl *)(DWORD *))SVC(0x648))(ids);
         wr(h, ",\"groupList\":[");
@@ -5636,10 +5652,12 @@ static void snapshot_social(BYTE *b)
                 /* +0x20 is a handle word like a handle record's +0x00: H-ID in bits 1-44, slot in 45-50 */
                 handle_key((const BYTE *)&m.hLo, hk);
                 wsprintfA(one, "%s{\"index\":%d,\"name\":%s,\"key\":\"%s\",\"slot\":%u,\"hid\":\"%s\",\"mine\":%s,"
-                               "\"pic\":%u,\"class\":%u,\"status\":%u,\"me\":%s,\"ignored\":%s,\"text\":%s,\"comment\":%s}",
+                               "\"pic\":%u,\"class\":%u,\"status\":%u,\"me\":%s,\"ignored\":%s,\"inChat\":%s,\"text\":%s,"
+                               "\"comment\":%s}",
                           mfirst ? "" : ",", mi, nm, sk, (m.hHi >> 13) & 0x3f, hk, is_me(b, m.idLo, m.idHi) ? "true" : "false",
                           m.pic, (m.flags >> 18) & 7, (m.flags >> 4) & 7,
-                          ((m.flags >> 21) & 1) ? "true" : "false", ((m.flags >> 1) & 1) ? "true" : "false", mt, mc);
+                          ((m.flags >> 21) & 1) ? "true" : "false", ((m.flags >> 1) & 1) ? "true" : "false",
+                          ((m.flags >> 22) & 1) ? "true" : "false", mt, mc);
                 wr(h, one);
                 mfirst = 0;
             }
@@ -5866,6 +5884,7 @@ static void hold_turn(BYTE *b, int ctl)
     answer_pump(b, wctl);
     pic_pump(b, wctl);
     if (!g_lean && !handle_switching()) chat_pump(b, wctl);
+    if (!g_lean && !handle_switching()) gc_pump(b, wctl);
     if (wctl && g_status_job < 0 && GetTickCount64() - lastStatusReq >= 2000 &&
         take_request("status", sv, sizeof sv) >= 0) {
         want = sv[0] - '0';
@@ -5890,6 +5909,7 @@ static void play_drain(BYTE *b, const char *spath, DWORD ms)
     db_reads_abandon(b);
     me_abandon(b, "cancelled");
     chat_end(b);
+    gc_end(b, "left", 1);
     while (writes_pending() && GetTickCount64() < until)
         drain_turn(b, !g_lean);
     for (int i = 0; i < MAIL_LANES; i++) if (g_rd[i].job >= 0) CANCEL_JOB(g_rd[i].job);

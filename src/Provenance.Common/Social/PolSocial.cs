@@ -99,6 +99,8 @@ public sealed record PolGroupMember(int Index, string Name, string Key, int Prof
     public int Slot { get; init; } = -1;
     public string Hid { get; init; } = "";
     public bool Mine { get; init; }
+    // in the group's chat, from the channel's own member list. Only means anything while I'm in it
+    public bool InChat { get; init; }
 }
 
 public sealed record PolGroup(string Id, string Name, int MyClass, int MySlot, int MyStatus, int MyIndex,
@@ -274,6 +276,7 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public string HandleOp { get; init; } = "";
     // null till chat rooms get used this session
     public ChatRoomsSnapshot? Chat { get; init; }
+    public GroupChatSnapshot? GroupChat { get; init; }
 
     public static readonly PolSocialSnapshot Empty = new(PolStatus.AppearOffline, 0, "", -1, [], []);
 }
@@ -565,6 +568,7 @@ public static class SocialSnapshot
                 HandleState = handleState,
                 HandleOp = Obj(root, "handleJob") is { ValueKind: JsonValueKind.Object } hj ? Str(hj, "op") : "",
                 Chat = ChatRoomsSnapshot.Read(Obj(root, "chat")),
+                GroupChat = GroupChatSnapshot.Read(Obj(root, "groupChat")),
             };
         }
         catch
@@ -617,7 +621,8 @@ public static class SocialSnapshot
             (int)Long(g, "myIndex"),
             Arr(g, "members", m => new PolGroupMember((int)Long(m, "index"), Str(m, "name"), Str(m, "key"),
                 (int)Long(m, "pic"), (int)Long(m, "class"), (int)Long(m, "status"), Bool(m, "me"),
-                Bool(m, "ignored"), Str(m, "text"), Str(m, "comment")) { Slot = Int(m, "slot", -1), Hid = Str(m, "hid"), Mine = Bool(m, "mine") }));
+                Bool(m, "ignored"), Str(m, "text"), Str(m, "comment"))
+                { Slot = Int(m, "slot", -1), Hid = Str(m, "hid"), Mine = Bool(m, "mine"), InChat = Bool(m, "inChat") }));
 
     private static PolFriendGame? ReadGame(JsonElement g) =>
         g.ValueKind == JsonValueKind.Object

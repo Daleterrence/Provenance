@@ -118,7 +118,7 @@ public sealed class PolSessionService : IDisposable
     private static readonly string[] RequestFiles =
         ["send", "status", "mail", "ack", "comment", "pic", "friend", "answer", "search", "profile", "group",
          "myprofile", "saveprofile", "rename", "character", "ffxiprofile", "chatzones", "chatrooms", "chatjoin",
-         "chatsend", "chatleave", "chatcreate", "chatmaster", "handle"];
+         "chatsend", "chatleave", "chatcreate", "chatmaster", "handle", "groupchatjoin", "groupchatsend", "groupchatleave"];
 
     // Has to match prestart_wait's allow-list in pol_hook.c, the hook drops any other key
     private static readonly string[] GoFileKeys =
@@ -1423,6 +1423,7 @@ public sealed class PolSessionService : IDisposable
     {
         ChatRoomFiles.Delete(pid);
         ChatRoomFiles.DeleteRequests(pid);
+        GroupChatFiles.Delete(pid);
         DropChatPassword();
     }
 

@@ -330,11 +330,40 @@ public partial class SocialWindow : Window
 
     private void OnConversationMenu(object sender, RoutedEventArgs e)
     {
-        if (MenuJustClosed || sender is not FrameworkElement button || Vm is not { SelectedFriend: { } f }) return;
+        if (MenuJustClosed || sender is not FrameworkElement button || Vm is not { SelectedFriend: { } f } vm) return;
         var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom };
         menu.Closed += OnMenuClosed;
         FriendList.FillMenu(menu, f);
-        if (menu.Items.Count > 0) menu.IsOpen = true;
+        if (menu.Items.Count > 0) menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Clear conversation...", vm.Conversation.Any(ChatStore.CanDelete), () => ClearConversation(vm, f)));
+        menu.IsOpen = true;
+    }
+
+    public static string ClearQuestion(string name) =>
+        $"Delete every message with {name} that Provenance has kept on this PC? This can't be undone.";
+
+    internal void ClearConversation(SocialViewModel vm, FriendItem f)
+    {
+        if (MessageDialog.Confirm(this, "Clear conversation", ClearQuestion(f.Name), "CLEAR", destructive: true) != 0) return;
+        vm.ClearConversation();
+    }
+
+    // a line's own menu: copy, or delete this PC's copy of it
+    private void OnLineMenu(object sender, ContextMenuEventArgs e)
+    {
+        if (Vm is not { } vm || sender is not TextBox { Tag: ChatEntry entry, ContextMenu: { } menu } box)
+        {
+            e.Handled = true;
+            return;
+        }
+        FillLineMenu(vm, menu, box, entry);
+    }
+
+    internal static void FillLineMenu(SocialViewModel vm, ContextMenu menu, TextBox? box, ChatEntry entry)
+    {
+        menu.Items.Clear();
+        menu.Items.Add(new MenuItem { Header = "Copy", Command = ApplicationCommands.Copy, CommandTarget = box });
+        menu.Items.Add(Item("Delete message", ChatStore.CanDelete(entry), () => vm.DeleteLine(entry)));
     }
 
     // a right-click opens it at the pointer again, after the dots button put it below itself
@@ -375,6 +404,11 @@ public partial class SocialWindow : Window
             return;
         }
         bool can = vm.CanEdit;
+        if (g.CanChat)
+        {
+            menu.Items.Add(Item("Group Chat", vm.CanGroupChat, () => vm.OpenGroupChatCommand.Execute(g)));
+            menu.Items.Add(new Separator());
+        }
         menu.Items.Add(Item("Edit my group comment...", can, () =>
         {
             var mine = g.Members.FirstOrDefault(m => m.Me)?.Comment ?? "";
