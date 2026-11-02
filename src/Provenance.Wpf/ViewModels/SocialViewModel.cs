@@ -102,6 +102,7 @@ public partial class SocialViewModel : ObservableObject
     private void ChangeProfilePicture()
     {
         if (GameRunning) EditNote = GameRunningNote;
+        else if (HandleSwitching) EditNote = SwitchingNote;
         else if (!ProfilePictureSaving) ChangeProfilePictureRequested?.Invoke();
     }
 
@@ -135,7 +136,7 @@ public partial class SocialViewModel : ObservableObject
     [ObservableProperty] private int _myStatusIndex;
     [ObservableProperty] private string _statusNote = "";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(StatusEditable))] private bool _statusPending;
-    public bool StatusEditable => !StatusPending && !GameRunning;
+    public bool StatusEditable => !StatusPending && !GameRunning && !HandleSwitching;
     private PolStatus? _requestedStatus;
     private DateTime _requestedAt;
     private bool _applyingSnapshot;
@@ -158,7 +159,21 @@ public partial class SocialViewModel : ObservableObject
     public const string GameRunningNote = "That has to wait till FINAL FANTASY XI is closed.";
 
     partial void OnGameRunningChanged(bool value) => StatusNote = value ? GameRunningNote : "";
-    public bool CanCompose => SelectedFriend is { CanMessage: true } && !GameRunning;
+    public bool CanCompose => SelectedFriend is { CanMessage: true } && !GameRunning && !HandleSwitching;
+
+    // a handle switch going: nothing writes till it's done, it'd go from the new handle
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCompose), nameof(ComposeNote), nameof(CanEdit), nameof(StatusEditable))]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+    private bool _handleSwitching;
+    public const string SwitchingNote = "Wait for the handle switch to finish.";
+
+    partial void OnHandleSwitchingChanged(bool value)
+    {
+        if (GameRunning) return;
+        StatusNote = value ? SwitchingNote : StatusNote == SwitchingNote ? "" : StatusNote;
+        if (!value && EditNote == SwitchingNote) EditNote = "";
+    }
 
     // the box counts in the bytes FFXI goes by, a Japanese character's two
     public int ComposeBytes => PolMessage.TextBytes(Compose.Trim());
@@ -178,6 +193,7 @@ public partial class SocialViewModel : ObservableObject
     {
         null => "",
         _ when GameRunning => "While FINAL FANTASY XI is running, replies go through the game.",
+        _ when HandleSwitching => SwitchingNote,
         { CanMessage: true } when ComposeCountShown && ComposeHasWide =>
             PolMessage.HasDoubleByte(Compose) ? "Japanese characters count as two." : "Some characters count as two.",
         { CanMessage: true, Online: true } => "This sends a PlayOnline message.",
@@ -466,14 +482,15 @@ public partial class SocialViewModel : ObservableObject
                 if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
                 continue;
             }
-            // a line I sent coming back (the same header time and seq as one in the log) isn't something I received. It
-            // goes from the server like any read line, and one of mine it can't match is shown like any other
+            // a line I sent to another POL ID coming back isn't something I received, and goes from the server like any
+            // read line. One of mine it can't match yet waits while a send of mine could still turn out to be it
             if (Echo(snap, m, chat))
             {
                 changed |= chat.MarkReturned(m.Time, m.Seq, m.FromSlot);
                 if (m.HasBody && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
                 continue;
             }
+            if (m.IsChat && Mine(snap, m) && SendsGoing) continue;
             if (chat.MergeIncoming(m))
             {
                 changed = true;
@@ -514,6 +531,9 @@ public partial class SocialViewModel : ObservableObject
     private static bool Echo(PolSocialSnapshot snap, PolMessage m, ChatStore chat) =>
         m.IsChat && Mine(snap, m) &&
         ((m.ToMe && m.ToKey.Length > 0 && m.ToKey == m.FromKey) || chat.SentAt(m.Time, m.Seq, m.FromSlot));
+
+    // one of mine still on its way to the hook or the server, so a line of mine coming in could be its echo
+    private bool SendsGoing => _sendQueue.Count > 0 || _sendInFlight.Count > 0;
 
     // what's still on its way under the active handle. A switch waits for it, it'd go from the new one otherwise
     internal string? PendingWrite() =>
@@ -714,7 +734,7 @@ public partial class SocialViewModel : ObservableObject
     public string EditStatus => EditBusy ? "Saving the change to PlayOnline..."
                               : ProfilePictureSaving ? "Saving your profile picture to PlayOnline..." : EditNote;
     public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote);
-    public bool CanEdit => Connected && !EditBusy && !FriendsUnavailable && _pol.Pid != null && !GameRunning;
+    public bool CanEdit => Connected && !EditBusy && !FriendsUnavailable && _pol.Pid != null && !GameRunning && !HandleSwitching;
 
     private DispatcherTimer? _noteTimer;
     // success notes go by themselves, failures stay until dismissed. A note's a failure unless the setter says so
@@ -815,6 +835,7 @@ public partial class SocialViewModel : ObservableObject
         "failed:bad name" => "Use 1 to 15 English letters, numbers or symbols.",
         "failed:friends not loaded" => "Your friend list didn't load, so this can't be changed right now. Log out and back in again.",
         "failed:account notice" => "This PlayOnline account can't change its friends right now.",
+        "failed:handle changing" => "Not changed: your handle was changing. Try again.",
         "failed:reloaded" => "PlayOnline had a newer friend list, so Provenance loaded it instead. Try again.",
         "failed:no handle" => "This account doesn't have a PlayOnline handle.",
         "failed:-7187" => "That person is already on your ignore list.",
@@ -916,6 +937,7 @@ public partial class SocialViewModel : ObservableObject
             "timeout" => "PlayOnline didn't reply, so it's not certain your answer got through. If the request's still open, it'll show again next time you log in.",
             "failed:friends not loaded" => "Your friend list didn't load, so this can't be changed right now. Log out and back in again.",
             "failed:account notice" => "This PlayOnline account can't answer friend requests right now.",
+            "failed:handle changing" => "Not sent: your handle was changing. Try again.",
             "failed:no such request" => "That friend request isn't there any more.",
             "failed:self" => "That request is from one of your own handles. You can only decline it.",
             "failed:already ignored" => "That person is already on your ignore list.",
@@ -1193,6 +1215,7 @@ public partial class SocialViewModel : ObservableObject
         {
             "timeout" => "PlayOnline didn't answer the profile picture change.",
             "failed:account notice" => "This PlayOnline account can't change its profile picture right now.",
+            "failed:handle changing" => "Not saved: your handle was changing. Try again.",
             "failed:no handle" => "This account doesn't have a PlayOnline handle.",
             _ => $"PlayOnline didn't save the profile picture ({FailReason(st)}).",
         };
@@ -1269,7 +1292,7 @@ public partial class SocialViewModel : ObservableObject
             if (!withdrawn && _chat?.SetSendState(x.Token, "unconfirmed") == true) RefreshConversation();
             _sendInFlight.RemoveAt(i);
         }
-        while (!_sendsClosed && _sendInFlight.Count < SendsAtOnce && !GameRunning && _sendQueue.Count > 0 &&
+        while (!_sendsClosed && _sendInFlight.Count < SendsAtOnce && !GameRunning && !HandleSwitching && _sendQueue.Count > 0 &&
                _pol.Pid is { } pid && !SocialSnapshot.SendPending(pid))
         {
             var (row, name, token, text) = _sendQueue.Dequeue();
@@ -1330,7 +1353,7 @@ public partial class SocialViewModel : ObservableObject
 
     partial void OnMyStatusIndexChanged(int value)
     {
-        if (_applyingSnapshot || GameRunning || value < 0 || value >= StatusChoices.Length) return;
+        if (_applyingSnapshot || GameRunning || HandleSwitching || value < 0 || value >= StatusChoices.Length) return;
         if (StatusPending) return;
         var want = StatusChoices[value];
         _requestedStatus = want;

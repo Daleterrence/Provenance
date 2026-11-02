@@ -203,6 +203,7 @@ public partial class SocialViewModel
         {
             "timeout" => "PlayOnline didn't answer.",
             "failed:not master" => "Only the group master can disband the group.",
+            "failed:handle changing" => "Not done: your handle was changing. Try again.",
             "failed:not allowed" => "Only the group master (or a sub-master) can do that.",
             "failed:self" => "You can't invite yourself to a group.",
             "failed:not a member" => "You've only been invited to that group. Accept the invitation first.",

@@ -1031,7 +1031,22 @@ static void chat_pump(BYTE *b, int ctl)
     if (request_waiting("chatrooms")) cr_rooms_request(b);
 }
 
-static int chat_room_open(void) { return g_cr_st != CR_OUT || g_cr_joined; }
+static int chat_room_open(void) { return g_cr_st != CR_OUT; }
+
+/* an enter or a line asked for while the handle's changing, answered as not done */
+static void chat_join_refused(const char *tok, const char *haskey)
+{
+    g_cr_used = 1;
+    lstrcpynA(g_cr_tok, tok, sizeof g_cr_tok);
+    if (haskey[0]) cr_password(tok, g_cr_key, sizeof g_cr_key);   /* only to delete it */
+    cr_join_refused("failed:handle changing");
+}
+static void chat_send_refused(const char *tok)
+{
+    g_cr_used = 1;
+    lstrcpynA(g_cr_stok, tok, sizeof g_cr_stok);
+    cr_send_state("failed:handle changing");
+}
 
 /* Play: FFXI takes the link over, so a room gets a PART first (the user's leaving chat for the game) */
 static void chat_end(BYTE *b)

@@ -113,7 +113,7 @@ public sealed record PolBlocked(int Index, string Name, string Key, bool AllHand
 public sealed record PolHandle(int Slot, string Name, string Key, int ProfilePictureId, int Order, bool Active,
                                IReadOnlyList<int> ContentIds);
 
-// a Content ID record. Type 1 is FFXI, Handle the slot it's linked to or -1. What Text holds isn't known yet
+// a Content ID record, type 1 is FFXI. Handle is the slot it's linked to or -1, and what Text holds isn't known yet
 public sealed record PolContentId(int Index, int Type, string Name, string Text, int Order, int Handle, string Key);
 
 // State is "read" (body downloaded), "pending", "failed", "realtime" or "local" (from the game's message store, not

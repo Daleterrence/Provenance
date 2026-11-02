@@ -167,7 +167,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanPrevious))]
     private void PreviousPage() => RequestRooms(Math.Max(0, Offset - ChatRoomFiles.PageSize));
 
-    private bool CanEnter => SelectedRoom != null && !Entering && !Searching && Current == Page.Lobby;
+    private bool CanEnter => SelectedRoom != null && !Entering && !Searching && Current == Page.Lobby && !_social.HandleSwitching;
 
     [RelayCommand(CanExecute = nameof(CanEnter))]
     private void Enter()
@@ -266,7 +266,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     }
 
     private bool CanSend => Current == Page.Room && Compose.Trim().Length > 0 && _gate.CanSend(DateTime.UtcNow)
-                            && !_social.GameRunning;
+                            && !_social.GameRunning && !_social.HandleSwitching;
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
@@ -290,6 +290,13 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     // the game starting leaves the room straight away, the hook might never see the Play. TRY AGAIN once it's closed
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(SocialViewModel.HandleSwitching))
+        {
+            EnterCommand.NotifyCanExecuteChanged();
+            SendCommand.NotifyCanExecuteChanged();
+            SendNote = _social.HandleSwitching ? SocialViewModel.SwitchingNote : SendNote == SocialViewModel.SwitchingNote ? "" : SendNote;
+            return;
+        }
         if (e.PropertyName != nameof(SocialViewModel.GameRunning)) return;
         if (_social.GameRunning)
         {
@@ -419,6 +426,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             "failed:full" => "Selected chat room is currently full and cannot be entered.",
             "failed:closed" => "This room is already closed and cannot be entered.",
             "failed:no chat" => NotNow,
+            "failed:handle changing" => "Your handle was changing, so the room wasn't entered.",
             _ => "Chat communication error.",
         };
         BackToLobby();
@@ -470,6 +478,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             {
                 "failed:too long" => "That's too long for one line.",
                 "failed:timeout" => "PlayOnline didn't answer, so that line may not have gone.",
+                "failed:handle changing" => "Not sent: your handle was changing.",
                 _ => "Chat communication error.",
             };
         SendCommand.NotifyCanExecuteChanged();

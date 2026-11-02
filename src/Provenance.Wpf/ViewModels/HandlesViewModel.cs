@@ -24,8 +24,8 @@ public sealed record HandleRow(HandleGroup Group, ImageSource? Picture, IReadOnl
     public bool NoCharacters => Characters.Count == 0;
 }
 
-// Settings > Handles. Everything shown comes from the hook's snapshot, and a change is one request the hook checks
-// again. One lives as long as the app, so a change still going when Settings closes says how it went next time
+// Settings > Handles, from the hook's snapshot. It lives as long as the app, so a change still going when Settings
+// closes says how it went next time
 public partial class HandlesViewModel : ObservableObject
 {
     private readonly Func<int?> _pid;
@@ -63,6 +63,7 @@ public partial class HandlesViewModel : ObservableObject
     public string NoCharactersText => HandleList.NoCharactersText;
     public string NoHandlesText => HandleList.NoHandlesText;
     public bool InChatRoom => _snap.Chat is { RoomState: "in" or "entering" };
+    public bool Switching => Busy && _op == HandleChange.Switch;
 
     // title, question, OK label -> yes
     public Func<string, string, string, bool>? Confirm { get; set; }

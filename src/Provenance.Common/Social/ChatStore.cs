@@ -64,6 +64,7 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
         "failed:hourly limit" => "Not sent: you've sent 600 messages in the last hour. Try again later.",
         "failed:session" => "Not sent: the PlayOnline session ended before it went.",
         "failed:game" => "Not sent: FINAL FANTASY XI started before it went.",
+        "failed:handle changing" => "Not sent: your handle was changing.",
         "failed:returned" => "Not delivered: PlayOnline sent it back.",
         var s when s.StartsWith("failed", StringComparison.Ordinal) => "Not sent: PlayOnline didn't accept it.",
         _ => "",

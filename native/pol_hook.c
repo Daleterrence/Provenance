@@ -2093,8 +2093,14 @@ static void mail_returned(const BYTE *h)
     if (g_returned_n < RETURNED_MAX) g_returned_n++;
     g_snap_dirty = 1;
 }
-/* a pushed line's looked at again whenever one lands and whenever a send's answer comes in, so one that came back
-   before its own send was answered still gets caught, and never makes it into a snapshot first */
+/* a line of mine can't be told from an echo while a send of mine is still going, so it waits, unread and out of the
+   snapshot's bodies, till they've all been answered */
+static int sends_going(void);
+static int mail_undecided(BYTE *b, const mailrec *m)
+{
+    return sends_going() && (m->state == 0 || m->state == 3) && mail_mine(b, m->hdr);
+}
+/* looked at again whenever a line lands and whenever a send's answer comes in or a send's dropped */
 static void mail_recheck(BYTE *b)
 {
     if (!g_mail_raw_new) return;
@@ -2208,6 +2214,7 @@ static void mail_fetch_start(BYTE *b, int lane)
             m->state = 4;
             continue;
         }
+        if (mail_undecided(b, m)) continue;
         /* chat 0, friend request 1, answers 9/10, group invitation 0xe and its notices, the rest stay unread */
         if (!(kd == 0 || kd == 1 || kd == 9 || kd == 10 || kd == 0xe || kd == 0xf || kd == 0x10 ||
               kd == 0x12 || kd == 0x13)) {
@@ -2925,6 +2932,7 @@ static char g_send_state[48] = "";
 typedef struct { BYTE *msg; int job; ULONGLONG started; char token[48]; } sendrec;
 static sendrec g_sq[SEND_MAX];
 static int g_sq_n;
+static int sends_going(void) { return g_sq_n > 0; }
 static int msg_jobs(void)
 {
     int n = g_del_job >= 0, i;
@@ -3066,6 +3074,7 @@ static void send_drop(int i)
     HeapFree(GetProcessHeap(), 0, g_sq[i].msg);
     for (; i < g_sq_n - 1; i++) g_sq[i] = g_sq[i + 1];
     g_sq_n--;
+    g_mail_raw_new = 1;
 }
 /* chat lines, answers and group messages all get paced here (a chat take only checks first), oldest built first */
 static void mail_send_start(BYTE *b)
@@ -4114,7 +4123,7 @@ static int ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
 static int user_db_waiting(void)
 {
     static const char *const ext[] = { "search", "profile", "ffxiprofile", "myprofile", "saveprofile", "rename", "pic",
-                                       "chatzones", "chatrooms" };
+                                       "chatzones", "chatrooms", "handle" };
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (request_waiting(ext[i])) return 1;
     return 0;
 }
@@ -5055,8 +5064,8 @@ static void pic_pump(BYTE *b, int ctl)
     g_snap_dirty = 1;
 }
 
-/* Handles and Content IDs. Listing is GetHandle/GetChr (svc 0x2b4/0x2c4, memory only). A switch is the viewer's one
-   ChangeMyStatus (app.dll 0x10040c9e), a link or unlink is local (0x2dc/0x2e0) and then one PutChrList (0x1038) */
+/* Handles and Content IDs, listed from memory (svc 0x2b4/0x2c4). A switch is the viewer's one ChangeMyStatus (app.dll
+   0x10040c9e), a link or unlink a local 0x2dc/0x2e0 and then one PutChrList (0x1038) */
 #define CHR_LINKED 0x8000
 #define CHR_HANDLE(f) (((f) >> 16) & 0x3f)
 enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_UNLINK };
@@ -5068,6 +5077,8 @@ static int writes_pending(void);
 static void wr_job(HANDLE h, const char *fmt, const char *token, const char *state);
 static int chat_room_open(void);
 static void chat_end(BYTE *b);
+static void chat_join_refused(const char *tok, const char *haskey);
+static void chat_send_refused(const char *tok);
 
 static int get_chr(BYTE *b, int i, BYTE *rec)
 {
@@ -5186,6 +5197,32 @@ static void handle_switched(BYTE *b)
     lg("handles: active handle now slot %d\r\n", g_my_slot);
 }
 
+/* while a switch runs, a write is taken and answered as not done, it'd go from the new handle otherwise. A chat
+   enter waiting when the switch is taken is called off the same way */
+#define SWITCHING "failed:handle changing"
+static void writes_refuse(BYTE *b)
+{
+    static const char *const ext[] = { "send", "friend", "comment", "answer", "group", "pic", "status", "myprofile",
+                                       "saveprofile", "rename", "chatjoin", "chatsend" };
+    char buf[512], *p, *l1, *l2, *l3;
+    for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) {
+        if (take_request(ext[i], buf, sizeof buf) < 0) continue;
+        lg("handles: %s request refused - the handle's changing\r\n", ext[i]);
+        p = buf;
+        l1 = req_line(&p); l2 = req_line(&p); l3 = req_line(&p);
+        switch (i) {
+        case 0: case 3: lstrcpynA(g_send_token, l2, sizeof g_send_token); send_fail(SWITCHING); break;
+        case 1: lstrcpynA(g_edit_token, l2, sizeof g_edit_token); edit_fail(SWITCHING); break;
+        case 2: lstrcpynA(g_edit_token, l1, sizeof g_edit_token); edit_fail(SWITCHING); break;
+        case 4: lstrcpynA(g_grp_token, l2, sizeof g_grp_token); group_fail(SWITCHING); break;
+        case 5: lstrcpynA(g_pic_token, l2, sizeof g_pic_token); pic_fail(SWITCHING); break;
+        case 6: break;
+        case 7: case 8: case 9: lstrcpynA(g_me_token, l1, sizeof g_me_token); me_done(SWITCHING); break;
+        case 10: chat_join_refused(l1, l3); break;
+        case 11: chat_send_refused(l1); break;
+        }
+    }
+}
 /* written by the app for the handle that's active now, but not taken yet */
 static int writes_asked(void)
 {
@@ -5213,7 +5250,8 @@ static void handle_request(BYTE *b)
     BYTE h[0x28], c[0x68];
     int slot, idx = -1, kind, cur, old = -1, r;
     DWORD f;
-    if (GetTickCount64() - last_request() < 3000) return;
+    /* a background character lookup finishes first, rather than the switch being turned away as busy */
+    if (GetTickCount64() - last_request() < 3000 || g_ch_step) return;
     if (take_request("handle", buf, sizeof buf) < 0) return;
     g_hlast = GetTickCount64();
     p = buf;
@@ -5248,6 +5286,7 @@ static void handle_request(BYTE *b)
         g_snap_dirty = 1;
         /* the viewer quits private chat before a switch, so a room's left first, through the one PART there is */
         if (chat_room_open()) chat_end(b);
+        writes_refuse(b);
         handle_switch_start(b);
         return;
     }
@@ -5616,12 +5655,12 @@ static void snapshot_social(BYTE *b)
     /* states 0-3, oldest first since slots get reused */
     for (i = mail_next(0, 0xf), first = 1; i >= 0; i = mail_next(g_mail[i].mid, 0xf)) {
         const mailrec *ml = &g_mail[i];
-        int o = 0, hold = mail_held(ml);
+        int o = 0, hold = mail_held(ml) || mail_undecided(b, ml);
         held += hold;
         if (!first) mj[o++] = ',';
         o += msg_json(b, mj + o, (int)sizeof mj - o, ml->hdr, ml->mid,
-                      ml->state == 3 ? "realtime" : ml->state == 2 ? "failed" : ml->state == 1 && !hold ? "read"
-                                                                                                   : "pending",
+                      hold ? "pending" : ml->state == 3 ? "realtime" : ml->state == 2 ? "failed"
+                                                     : ml->state == 1 ? "read" : "pending",
                       -1,   /* no read bit, a server copy hasn't got one */
                       hold ? "" : ml->subj, hold ? "" : ml->text, ml->has_att && !hold ? ml->att : NULL);
         WriteFile(h, mj, (DWORD)o, &n, NULL);
@@ -5740,8 +5779,10 @@ static void hold_turn(BYTE *b, int ctl)
 {
     static ULONGLONG lastStatusReq;
     char sv[8];
-    int wctl, want;
+    int wctl, want, was = handle_switching();
     handle_pump(b, ctl);
+    /* every turn, the one it finishes on too, so nothing written while it ran is taken after under the new handle */
+    if (was || handle_switching()) writes_refuse(b);
     wctl = ctl && !handle_switching();
     mail_send_pump(b);
     friend_edit_pump(b, wctl);

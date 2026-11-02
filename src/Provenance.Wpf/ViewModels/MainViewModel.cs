@@ -1437,6 +1437,10 @@ public partial class MainViewModel : ObservableObject
                     ? "Close the profile editor first. It's editing the active handle's profile." : Social.PendingWrite(),
             };
             Social.SnapshotApplied += _ => ShowHandles();
+            _handles.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(HandlesViewModel.Busy)) Social.HandleSwitching = _handles.Switching;
+            };
             PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName is nameof(SocialConnected) or nameof(MultiRunning)) ShowHandles();
