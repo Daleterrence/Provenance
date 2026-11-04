@@ -116,7 +116,7 @@ public sealed class PolSessionService : IDisposable
     private static readonly TimeSpan LeftoverAge = TimeSpan.FromMinutes(10);
 
     // a new request file goes here too (I'll forget)
-    private static readonly string[] RequestFiles =
+    internal static readonly string[] RequestFiles =
         ["send", "status", "mail", "ack", "comment", "pic", "friend", "answer", "search", "profile", "group",
          "myprofile", "saveprofile", "rename", "xiprofile", "character", "ffxiprofile", "chatzones", "chatrooms",
          "chatjoin", "chatsend", "chatleave", "chatcreate", "chatmaster", "handle", "groupchatjoin", "groupchatsend",
@@ -144,7 +144,7 @@ public sealed class PolSessionService : IDisposable
         get { lock (SessionDirGate) return _sessionDir ??= SecureFiles.SubDir("sessions"); }
     }
 
-    private static long _dnsWarmedAt;
+    internal static long _dnsWarmedAt;
 
     private readonly ISettingsService _settings;
     private readonly WindowsCredentialStore _store;
@@ -158,14 +158,14 @@ public sealed class PolSessionService : IDisposable
     private readonly StringBuilder _pending = new();
     private volatile bool _disposed;
     private int _sweepRuns;
-    private string? _launchId;
+    internal string? _launchId;
     private long _logOffset;
-    private bool _played;   // the held pol.exe is the game now, never kill it
+    internal bool _played;   // the held pol.exe is the game now, never kill it
     private DateTime? _pidStarted;
-    private Process? _polProc;
+    internal Process? _polProc;
     private FileSystemWatcher? _watcher;
     private Timer? _debounce;
-    private Task<Prestarted?>? _prestart;
+    internal Task<Prestarted?>? _prestart;
     private int _prestartHolds;   // under _gate
     private string? _sessionFile;
     private string? _sessionProfile;
@@ -195,7 +195,7 @@ public sealed class PolSessionService : IDisposable
         _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
     }
 
-    public int? Pid { get; private set; }
+    public int? Pid { get; internal set; }
 
     // everything a pol.exe start (or ending an earlier copy's) reaches outside this class, so they can be checked
     // offline with stand-ins
@@ -884,7 +884,7 @@ public sealed class PolSessionService : IDisposable
 
     // Nothing's sent till the go file's written, so a cancel before that leaves it waiting, hidden, for the next login.
     // Only a live one goes back, a dead one would stop the Prestart after the cancel making a fresh one
-    private int? TakePrestarted(ProcessStartInfo psi, CancellationToken ct)
+    internal int? TakePrestarted(ProcessStartInfo psi, CancellationToken ct)
     {
         if (TakePrestart(ct) is not { } pre) return null;
         int pid = pre.Pid;

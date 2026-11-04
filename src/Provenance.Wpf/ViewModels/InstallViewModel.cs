@@ -34,7 +34,7 @@ public partial class InstallViewModel : ObservableObject
 
     internal static Func<PolRegion> LocaleRegion { get; set; } = PolLocale.FromWindows;
 
-    private PolRegion _region;
+    internal PolRegion _region;
     private readonly PolRegion _autoRegion;
     private readonly Action? _holdPrestarts, _releasePrestarts;
     private readonly GameInstaller _installer = new();
@@ -453,7 +453,7 @@ public partial class InstallViewModel : ObservableObject
 
     // verified current files from the mirror, the installer's steps without the copy, then patch.ver last. False sends
     // it to SE's parts, but a problem on this PC is an error
-    private async Task<bool> InstallFromMirrorAsync(string work, CancellationToken ct)
+    internal async Task<bool> InstallFromMirrorAsync(string work, CancellationToken ct)
     {
         _mirror = null;
         if (MirrorLayout.RegionFolder(_region) is not { } mirrorRegion)

@@ -911,7 +911,7 @@ public partial class SocialViewModel : ObservableObject
         _ => $"PlayOnline didn't accept the change ({FailReason(state)}).",
     };
 
-    private string? _answerToken;
+    internal string? _answerToken;
     private FriendItem? _answerFor;
     private RequestAnswer _answerKind;
     private DateTime _answerAt;
@@ -1066,7 +1066,7 @@ public partial class SocialViewModel : ObservableObject
     public int SearchMaxLength => SearchKind == FriendSearchKind.Hid ? 20 : 15;
 
     private string? _searchToken;
-    private DateTime _searchAt;
+    internal DateTime _searchAt;
     private FriendSearchKind _searchedKind;
     private string _searchedValue = "";
     private string? _requestToken;
@@ -1248,7 +1248,7 @@ public partial class SocialViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(EditNoteShown), nameof(Saving), nameof(EditStatus), nameof(EditStatusShown))]
     private bool _profilePictureSaving;
     private string? _picToken;
-    private DateTime _picAt;
+    internal DateTime _picAt;
 
     public void SaveProfilePicture(int picId)
     {
@@ -1344,9 +1344,9 @@ public partial class SocialViewModel : ObservableObject
     private const int SendsAtOnce = 2;
     private readonly Queue<(int Row, string Name, string Token, string Text)> _sendQueue = new();
     // the pol.exe each went to, and what the hook last said about it and when ("sending" once its PUT's started)
-    private readonly record struct SendOut(string Token, DateTime At, int Pid, string HookState = "",
+    internal readonly record struct SendOut(string Token, DateTime At, int Pid, string HookState = "",
                                            DateTime HookSaid = default);
-    private readonly List<SendOut> _sendInFlight = new();
+    internal readonly List<SendOut> _sendInFlight = new();
     private bool _sendsClosed;   // the session's ending, nothing more goes to its hook
 
     // lines that mustn't expire yet. With nothing in flight, queued lines age from when they were typed

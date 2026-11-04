@@ -43,12 +43,12 @@ public partial class SocialViewModel
     private string? _profileToken;
     private string _profileKey = "", _profileFor = "";
     private int _profileRow = -1;
-    private DateTime _profileAt;
+    internal DateTime _profileAt;
     // what's on screen: the handle's answer and the last character one that loaded, so going back never reads again
     private PolProfile? _handleProfile;
     private PolFfxiProfile? _characterShown;
     private string? _ffxiToken;
-    private DateTime _ffxiAt;
+    internal DateTime _ffxiAt;
     private ProfileTab? _ffxiFor, _ffxiFrom;
     private readonly Dictionary<string, (PolProfile Profile, DateTime At)> _profileCache = new();
     private ProfilePictureCatalog.Catalog? _picCatalog;

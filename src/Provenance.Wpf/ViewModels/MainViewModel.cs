@@ -385,7 +385,7 @@ public partial class MainViewModel : ObservableObject
             tell: tell);
     }
 
-    private void ShowNotice(string text, string icon = "mail", bool opens = true, bool stays = false)
+    internal void ShowNotice(string text, string icon = "mail", bool opens = true, bool stays = false)
     {
         _noticeRequest = 0;
         _noticeGroupChat = false;
@@ -422,9 +422,9 @@ public partial class MainViewModel : ObservableObject
     public System.Windows.Media.ImageSource? ProfilePicture =>
         _avatars.ProfilePicture(SelectedProfile?.ProfilePictureId ?? 0);
 
-    private string? _sessionProfileId;   // can differ from the selection
+    internal string? _sessionProfileId;   // can differ from the selection
 
-    private void LearnIdentity(PolSocialSnapshot snap)
+    internal void LearnIdentity(PolSocialSnapshot snap)
     {
         if (string.IsNullOrWhiteSpace(snap.MyHandle) || _sessionProfileId is null) return;
         if (Profiles.FirstOrDefault(p => p.Id == _sessionProfileId) is not { } prof) return;
@@ -691,7 +691,7 @@ public partial class MainViewModel : ObservableObject
     }
 
 
-    private static string TitleFor(int code) => code switch
+    internal static string TitleFor(int code) => code switch
     {
         PolSessionService.ErrorAuthFailed => "Login not accepted",
         PolSessionService.ErrorUnfinished => "Login didn't finish",
@@ -734,7 +734,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _worldsState = "";
     [ObservableProperty] private string _worldsCheckedText = "";
 
-    private DateTime _worldsAt = DateTime.MinValue, _feedsAt = DateTime.MinValue;
+    internal DateTime _worldsAt = DateTime.MinValue;
+    internal DateTime _feedsAt = DateTime.MinValue;
     private bool _worldsLoading, _feedsLoading, _feedsAgain, _windowShown = true;
     private static readonly TimeSpan WorldsMaxAge = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan FeedsMaxAge = TimeSpan.FromMinutes(30);
@@ -1291,7 +1292,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     // the US viewer asks once per PlayOnline ID, here it's once per install
-    private bool EnsureMemberAgreement(Window? owner)
+    internal bool EnsureMemberAgreement(Window? owner)
     {
         if (_settings.Current.AcceptedMemberAgreement) return true;
         if (!PolPaths.Supported(_settings.DetectedRegion)) return true;
@@ -1502,7 +1503,7 @@ public partial class MainViewModel : ObservableObject
         && PolPaths.TryGetInstallFolder(PlayRegion, PolPaths.ViewerProduct) is { } viewer
             ? (ffxi, viewer, PlayRegion) : null;
 
-    private async Task<bool> UpdateGameAsync()
+    internal async Task<bool> UpdateGameAsync()
     {
         if (GameFolders() is not { } dirs) return true;
         var ct = BeginCancellable("Updating FINAL FANTASY XI", "Checking for FINAL FANTASY XI updates...");

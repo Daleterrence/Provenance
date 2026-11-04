@@ -12,9 +12,9 @@ namespace Provenance.Wpf.Services;
 public sealed class AvatarService(ISettingsService settings)
 {
     private const int PicsPerSheet = PolAvatar.Columns * PolAvatar.Rows;
-    private string? _viewerDir;
+    internal string? _viewerDir;
     private readonly object _lock = new();
-    private readonly Dictionary<int, ImageSource?> _cache = new();
+    internal readonly Dictionary<int, ImageSource?> _cache = new();
     private readonly Dictionary<int, BitmapSource?> _sheets = new();
 
     private string? ViewerDir

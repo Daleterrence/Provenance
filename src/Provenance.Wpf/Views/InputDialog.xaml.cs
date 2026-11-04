@@ -11,7 +11,7 @@ public partial class InputDialog : Window
 
     private string Value => _secret ? SecretBox.Password : InputBox.Text.Trim();
 
-    private InputDialog()
+    internal InputDialog()
     {
         InitializeComponent();
         WindowFrame.Attach(this);

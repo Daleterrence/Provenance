@@ -136,7 +136,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private Job _job;
     private string? _token;
     private int _pid;
-    private DateTime _at;
+    internal DateTime _at;
     private string _noMail = "No Mail address";
     private string _savedHandle = "";
     private string _loadedKey = "";
@@ -412,7 +412,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     }
 
     // the hook times out on its own (120 secs a slot and job, 240 + 30 for a rename), this catches one gone quiet
-    private void CheckTimeout()
+    internal void CheckTimeout()
     {
         if (_job == Job.None)
         {

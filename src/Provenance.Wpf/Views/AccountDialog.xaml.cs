@@ -34,7 +34,7 @@ public partial class AccountDialog : Window
     private ToolView _view;
     public AccountDialogResult? Result { get; private set; }
 
-    private AccountDialog(string? accountName, bool useOtp, bool edit, string otpSource, string otpItem, bool requireAll,
+    internal AccountDialog(string? accountName, bool useOtp, bool edit, string otpSource, string otpItem, bool requireAll,
                           string polId, string seaId, string otpAccount)
     {
         InitializeComponent();

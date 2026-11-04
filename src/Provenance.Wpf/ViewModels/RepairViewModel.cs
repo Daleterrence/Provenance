@@ -30,7 +30,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
     private volatile bool _changing;   // MirrorRepair says so right before the first game file changes
     private volatile bool _fixed;      // and once the registry pass has put something right, or DXSETUP's started
     private volatile bool _fixing;     // as the registry pass or DXSETUP starts
-    private bool _started;
+    internal bool _started;
     private DownloadMeter? _meter;
 
     public Func<string, string, bool>? Ask { get; set; }
@@ -277,13 +277,13 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
         : "Nothing was changed.";
 
     // the result on its own, no heading over it
-    private void Done(string text)
+    internal void Done(string text)
     {
         End("", text, failed: false);
         Succeeded = true;
     }
 
-    private void End(string stage, string text, bool failed)
+    internal void End(string stage, string text, bool failed)
     {
         Stage = stage;
         Status = text;

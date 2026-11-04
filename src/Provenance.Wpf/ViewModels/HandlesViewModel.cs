@@ -32,7 +32,7 @@ public partial class HandlesViewModel : ObservableObject
     private readonly Func<int, ImageSource?>? _picture;
     private PolSocialSnapshot _snap = PolSocialSnapshot.Empty;
     private string? _token;
-    private DateTime _at;
+    internal DateTime _at;
     private HandleChange _op;
     private string _doneText = "";
     private string _signature = "";

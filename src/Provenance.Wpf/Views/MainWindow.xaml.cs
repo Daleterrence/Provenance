@@ -10,9 +10,9 @@ namespace Provenance.Wpf.Views;
 
 public partial class MainWindow : Window
 {
-    private Services.TrayIcon? _tray;
+    internal Services.TrayIcon? _tray;
     private bool _exiting, _askingToExit, _cancellingSignIn, _flashing;
-    private System.Windows.Threading.DispatcherTimer? _traySignOut;
+    internal System.Windows.Threading.DispatcherTimer? _traySignOut;
     private DateTime _worldsClosedAt;
     private int _newsShown = -1;
 
@@ -198,7 +198,7 @@ public partial class MainWindow : Window
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
-    private void OnMinimize(object sender, RoutedEventArgs e)
+    internal void OnMinimize(object sender, RoutedEventArgs e)
     {
         if (Vm is { MinimizeGoesToTray: true } vm)
         {
@@ -308,7 +308,7 @@ public partial class MainWindow : Window
     }
 
     // like the viewer's idle sign-out it asks nothing, so an open profile editor just closes as it is
-    private void OnTraySignOutTick(object? sender, EventArgs e)
+    internal void OnTraySignOutTick(object? sender, EventArgs e)
     {
         if (Vm is { IsLaunching: true }) return;   // not idle while the game updates or starts, so it waits another round
         _traySignOut?.Stop();
@@ -316,7 +316,7 @@ public partial class MainWindow : Window
         ExitApp();
     }
 
-    private void ShowFromTray()
+    internal void ShowFromTray()
     {
         _traySignOut?.Stop();
         if (_tray != null) _tray.Visible = false;

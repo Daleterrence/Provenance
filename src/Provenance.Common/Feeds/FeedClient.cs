@@ -91,7 +91,7 @@ public sealed class FeedClient
         catch when (!ct.IsCancellationRequested) { return null; }
     }
 
-    private static IReadOnlyList<FeedItem> ParseWorker(string json)
+    internal static IReadOnlyList<FeedItem> ParseWorker(string json)
     {
         using var doc = JsonDocument.Parse(json);
         var items = new List<FeedItem>();
@@ -108,7 +108,7 @@ public sealed class FeedClient
         return items;
     }
 
-    private static IReadOnlyList<WorldStatus> ParseWorkerWorlds(string json)
+    internal static IReadOnlyList<WorldStatus> ParseWorkerWorlds(string json)
     {
         using var doc = JsonDocument.Parse(json);
         var list = new List<WorldStatus>();
@@ -235,7 +235,7 @@ public sealed class FeedClient
         return IsPlayOnlineUrl(https) ? https : null;
     }
 
-    private static async Task<byte[]?> GetImageBytesAsync(Uri u, CancellationToken ct)
+    internal static async Task<byte[]?> GetImageBytesAsync(Uri u, CancellationToken ct)
     {
         for (int hop = 0; hop < 4; hop++)
         {
@@ -291,7 +291,7 @@ public sealed class FeedClient
         catch { return null; }
     }
 
-    private static bool LooksLikeImage(byte[] b) =>
+    internal static bool LooksLikeImage(byte[] b) =>
         b.Length >= 4 && ((b[0] == 0xFF && b[1] == 0xD8) || (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) ||
                           (b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46));
 

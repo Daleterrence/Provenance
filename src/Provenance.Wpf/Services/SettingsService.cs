@@ -13,7 +13,7 @@ public sealed class SettingsService : ISettingsService
 
     private readonly string _path;
     private bool _saveFailedRaised;
-    private PolRegion? _region;
+    internal PolRegion? _region;
     // this copy's settings as it last read or saved them, which is what tells its own changes from another copy's
     private JsonObject _known;
 

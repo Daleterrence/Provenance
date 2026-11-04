@@ -22,8 +22,9 @@ public partial class MainViewModel
     internal static string RepairNotYetText(PolRegion region) =>
         $"Repair isn't available for the {PolPaths.VersionName(region)} version of PlayOnline yet.";
 
-    private DispatcherTimer? _repairProbe;
-    private bool _sessionEnding, _probing;
+    internal DispatcherTimer? _repairProbe;
+    internal bool _sessionEnding;
+    private bool _probing;
     // while the repair window's up
     [ObservableProperty] private bool _repairing;
 
@@ -70,7 +71,7 @@ public partial class MainViewModel
     }
 
     // Pid and the end of a sign-out have no change notice of their own
-    private void RefreshRepair()
+    internal void RefreshRepair()
     {
         OnPropertyChanged(nameof(RepairBlockedReason));
         OnPropertyChanged(nameof(RepairTooltip));

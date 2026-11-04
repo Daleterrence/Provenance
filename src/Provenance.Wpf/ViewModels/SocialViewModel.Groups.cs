@@ -41,7 +41,7 @@ public partial class SocialViewModel
     [RelayCommand] private void ShowGroupsTab() => ShowGroups = true;
 
     private string _groupsSignature = "";
-    private string? _groupToken;
+    internal string? _groupToken;
     private string _groupDone = "";
     private string? _groupLeaving;
     internal string? LeavingGroupId => _groupLeaving;
