@@ -15,7 +15,7 @@
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
 
     <shell:WindowChrome.WindowChrome>
-        <shell:WindowChrome CaptionHeight="34" ResizeBorderThickness="0" GlassFrameThickness="0" CornerRadius="0"
+        <shell:WindowChrome CaptionHeight="40" ResizeBorderThickness="0" GlassFrameThickness="0" CornerRadius="0"
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
 
@@ -41,12 +41,11 @@
             </Setter>
         </Style>
         <!-- only on the signed-out cards, a signed-in pol.exe keeps the files a repair replaces open -->
-        <Style x:Key="RepairButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
+        <Style x:Key="RepairButton" TargetType="Button" BasedOn="{StaticResource PolButton}">
             <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="Height" Value="28" />
-            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Padding" Value="5,0,10,0" />
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
             <Setter Property="Command" Value="{Binding RepairGameFilesCommand}" />
             <Setter Property="Visibility" Value="{Binding RepairAvailable, Converter={StaticResource BoolToVis}}" />
             <Setter Property="ToolTip" Value="{Binding RepairTooltip}" />
@@ -56,8 +55,9 @@
                 <Setter.Value>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="WrenchOutline" Width="15" Height="15" VerticalAlignment="Center" />
-                            <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="Repair game files" />
+                            <local:SvgIcon Glyph="ring" Width="20" Height="20"
+                                           IsOpen="{Binding DataContext.Repairing, RelativeSource={RelativeSource AncestorType=Window}}" />
+                            <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="REPAIR GAME FILES" />
                         </StackPanel>
                     </DataTemplate>
                 </Setter.Value>
@@ -75,12 +75,12 @@
         </Style>
     </Window.Resources>
 
-    <Grid RowDefinitions="34,*,Auto">
+    <Grid RowDefinitions="40,*,Auto">
         <Border Grid.Row="1" VerticalAlignment="Top" Height="160" IsHitTestVisible="False">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#2F5ACF" Offset="0" />
-                    <GradientStop Color="#000A0E14" Offset="1" />
+                    <GradientStop Color="{DynamicResource Bg.Glow}" Offset="0" />
+                    <GradientStop Color="{DynamicResource Bg.Glow}" Offset="1" />
                 </LinearGradientBrush>
             </Border.Background>
             <Border.OpacityMask>
@@ -91,8 +91,11 @@
             </Border.OpacityMask>
         </Border>
 
-        <Grid Background="{DynamicResource Surface.1}" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
-            <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
+        <Grid Background="{DynamicResource Title.Bg}" TextElement.Foreground="{DynamicResource Text.1}" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+            <Grid.Resources>
+                <ResourceDictionary Source="/Provenance;component/Themes/TitleBar.xaml" />
+            </Grid.Resources>
+            <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
                 <Image Source="{StaticResource TitleIcon}" Width="20" Height="20" Margin="0,0,8,0"
                        RenderOptions.BitmapScalingMode="HighQuality" />
                 <TextBlock VerticalAlignment="Center" FontSize="13" Foreground="{DynamicResource Text.2}"
@@ -132,87 +135,87 @@
                         </Ellipse.Style>
                     </Ellipse>
                     <TextBlock Text="{Binding WorldsSummary}" FontSize="12" Foreground="{DynamicResource Text.2}" VerticalAlignment="Center" />
-                    <materialDesign:PackIcon Kind="ChevronDown" Width="14" Height="14" Margin="6,0,0,0"
-                                             VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" />
+                    <local:SvgIcon Glyph="down" Flat="True" Width="14" Height="14" Margin="6,0,0,0"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" />
                 </StackPanel>
             </ToggleButton>
-            <Popup x:Name="WorldsPopup" IsOpen="{Binding IsChecked, ElementName=WorldsChip}" StaysOpen="False"
-                   Closed="OnWorldsPopupClosed" PlacementTarget="{Binding ElementName=WorldsChip}"
-                   Placement="Bottom" VerticalOffset="4" AllowsTransparency="True" PopupAnimation="Fade">
-                <Border CornerRadius="10" Padding="14,10" Background="{DynamicResource Surface.2}" MinWidth="240"
-                        BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
-                    <StackPanel>
-                        <TextBlock Text="World status" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                        <ItemsControl ItemsSource="{Binding Worlds}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="0,2,16,2" ToolTip="{Binding Label}">
-                                        <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
-                                            <Ellipse.Style>
-                                                <Style TargetType="Ellipse">
-                                                    <Setter Property="Fill" Value="{DynamicResource State.Down}" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Status}" Value="up">
-                                                            <Setter Property="Fill" Value="{DynamicResource State.Online}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="maintenance">
-                                                            <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="partial-maintenance">
-                                                            <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Ellipse.Style>
-                                        </Ellipse>
-                                        <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource Text.2}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Margin="0,8,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding WorldsCheckedText}"
-                                   Visibility="{Binding WorldsCheckedText, Converter={StaticResource NullToVisibilityConverter}}" />
-                        <Button Margin="0,6,0,0" FontSize="12" Style="{StaticResource LinkButton}"
-                                Command="{Binding OpenServerStatusCommand}" AutomationProperties.Name="Open PlayOnline Server Status">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Open PlayOnline Server Status" VerticalAlignment="Center" />
-                                <materialDesign:PackIcon Kind="ChevronRight" Width="14" Height="14" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-                </Border>
-            </Popup>
-            <Button Grid.Column="2" Width="38" Height="34" Padding="0"
-                    Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+            <Button Grid.Column="2" Width="44" Height="40" Padding="0"
+                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True"
                     Command="{Binding OpenSettingsCommand}" ToolTip="Settings" AutomationProperties.Name="Settings">
-                <materialDesign:PackIcon Kind="Cog" Width="17" Height="17" />
+                <local:SvgIcon Glyph="settings" Flat="True" Width="17" Height="17" />
             </Button>
-            <Button Grid.Column="3" Width="38" Height="34" Padding="0"
-                    Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+            <Button Grid.Column="3" Width="44" Height="40" Padding="0"
+                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True"
                     Click="OnMinimize" ToolTip="Minimise" AutomationProperties.Name="Minimise">
                 <materialDesign:PackIcon Kind="WindowMinimize" Width="17" Height="17" />
             </Button>
-            <Button Grid.Column="4" Width="38" Height="34" Padding="0"
-                    Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+            <Button Grid.Column="4" Width="44" Height="40" Padding="0"
+                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True"
                     Click="OnClose" ToolTip="{Binding CloseTooltip}" AutomationProperties.Name="{Binding CloseTooltip}">
-                <materialDesign:PackIcon Kind="WindowClose" Width="17" Height="17" />
+                <local:SvgIcon Glyph="close" Flat="True" Width="17" Height="17" />
             </Button>
+            <Border Style="{StaticResource TitleEdge}" />
         </Grid>
+
+        <!-- out of the title bar, which has its own colours for what sits on it -->
+        <Popup x:Name="WorldsPopup" IsOpen="{Binding IsChecked, ElementName=WorldsChip}" StaysOpen="False"
+               Closed="OnWorldsPopupClosed" PlacementTarget="{Binding ElementName=WorldsChip}"
+               Placement="Bottom" VerticalOffset="4" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border CornerRadius="{StaticResource Radius.Panel}" Padding="14,10" Background="{DynamicResource Surface.2}" MinWidth="240"
+                    BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="World status" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <ItemsControl ItemsSource="{Binding Worlds}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,16,2" ToolTip="{Binding Label}">
+                                    <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="{DynamicResource State.Down}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Status}" Value="up">
+                                                        <Setter Property="Fill" Value="{DynamicResource State.Online}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="maintenance">
+                                                        <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="partial-maintenance">
+                                                        <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                    <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource Text.2}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Margin="0,8,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding WorldsCheckedText}"
+                               Visibility="{Binding WorldsCheckedText, Converter={StaticResource NullToVisibilityConverter}}" />
+                    <Button Margin="0,6,0,0" FontSize="12" Style="{StaticResource LinkButton}"
+                            Command="{Binding OpenServerStatusCommand}" AutomationProperties.Name="Open PlayOnline Server Status">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Open PlayOnline Server Status" VerticalAlignment="Center" />
+                            <local:SvgIcon Glyph="right" Flat="True" Width="14" Height="14" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
 
         <Grid Grid.Row="1" ColumnDefinitions="1.5*,400">
             <Grid Margin="24" RowDefinitions="3*,Auto,1.1*">
                 <!-- laid out like POL's own topic cards: the 415x100 banner, then title, local date and summary -->
-                <Border CornerRadius="12" Padding="16,16,16,10" Background="{DynamicResource Surface.2}"
-                        BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.4" Color="#000000" />
-                    </Border.Effect>
+                <Border CornerRadius="{StaticResource Radius.Panel}" Padding="16,16,16,10" Background="{DynamicResource Surface.2}"
+                        BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1" Effect="{DynamicResource Shadow.Card}">
                     <Grid ClipToBounds="True" Background="Transparent" MouseEnter="OnNewsHover" MouseLeave="OnNewsLeave"
                           IsKeyboardFocusWithinChanged="OnNewsFocus" RowDefinitions="Auto,Auto,Auto,*,Auto">
                         <Grid x:Name="NewsContent" Grid.RowSpan="4" RowDefinitions="Auto,Auto,Auto,*">
@@ -226,14 +229,14 @@
                             </Grid.InputBindings>
                             <!-- invisible sizer, a Border won't size to its ImageBrush (hacky, but round corners) -->
                             <Image Source="{Binding CurrentNews.ImageUrl}" Stretch="Uniform" Opacity="0" ImageFailed="OnBannerFailed" />
-                            <Border CornerRadius="8">
+                            <Border CornerRadius="4">
                                 <Border.Background>
                                     <ImageBrush ImageSource="{Binding CurrentNews.ImageUrl}" Stretch="Fill" />
                                 </Border.Background>
                             </Border>
                             <Grid Visibility="{Binding CurrentNews.ImageUrl, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=invert}">
                                 <Image Source="{StaticResource NoImage}" Stretch="Uniform" Opacity="0" />
-                                <Border CornerRadius="8">
+                                <Border CornerRadius="4">
                                     <Border.Background>
                                         <ImageBrush ImageSource="{StaticResource NoImage}" Stretch="Fill" />
                                     </Border.Background>
@@ -268,14 +271,14 @@
                                     AutomationProperties.Name="Read on PlayOnline">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Read on PlayOnline" VerticalAlignment="Center" />
-                                    <materialDesign:PackIcon Kind="ChevronRight" Width="16" Height="16" VerticalAlignment="Center" />
+                                    <local:SvgIcon Glyph="right" Flat="True" Width="16" Height="16" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button Grid.Column="1" Width="28" Height="28" Padding="0"
-                                    Style="{StaticResource MaterialDesignIconButton}"
+                                    Style="{StaticResource IconButton}"
                                     Foreground="{DynamicResource Text.2}" ToolTip="Previous" AutomationProperties.Name="Previous"
                                     Command="{Binding PrevNewsCommand}">
-                                <materialDesign:PackIcon Kind="ChevronLeft" Width="20" Height="20" />
+                                <local:SvgIcon Glyph="left" Flat="True" Width="20" Height="20" />
                             </Button>
                             <ListBox Grid.Column="2" VerticalAlignment="Center" Margin="2,0"
                                      ItemsSource="{Binding NewsItems}"
@@ -312,10 +315,10 @@
                                 </ListBox.ItemContainerStyle>
                             </ListBox>
                             <Button Grid.Column="3" Width="28" Height="28" Padding="0"
-                                    Style="{StaticResource MaterialDesignIconButton}"
+                                    Style="{StaticResource IconButton}"
                                     Foreground="{DynamicResource Text.2}" ToolTip="Next" AutomationProperties.Name="Next"
                                     Command="{Binding NextNewsCommand}">
-                                <materialDesign:PackIcon Kind="ChevronRight" Width="20" Height="20" />
+                                <local:SvgIcon Glyph="right" Flat="True" Width="20" Height="20" />
                             </Button>
                         </Grid>
 
@@ -324,7 +327,7 @@
                             <TextBlock Text="{Binding FeedsHint}" Foreground="{DynamicResource Text.3}" FontSize="13"
                                        HorizontalAlignment="Center" />
                             <Button Content="TRY AGAIN" Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="12"
-                                    Style="{StaticResource MaterialDesignFlatButton}" Command="{Binding RetryFeedsCommand}"
+                                    Style="{StaticResource PolButton}" Command="{Binding RetryFeedsCommand}"
                                     Visibility="{Binding FeedsFailed, Converter={StaticResource BoolToVis}}" />
                         </StackPanel>
                     </Grid>
@@ -392,27 +395,24 @@
 
             <Grid Grid.Column="1" Margin="0,24,24,24">
                 <!-- the shadow's on its own empty Border, so the blur isn't redrawn every frame of the spinner -->
-                <Border CornerRadius="16" Background="{DynamicResource Surface.2}" IsHitTestVisible="False">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="48" ShadowDepth="16" Opacity="0.6" Color="#000000" />
-                    </Border.Effect>
-                </Border>
-                <Border CornerRadius="16" Background="{DynamicResource Surface.2}"
+                <Border CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.2}" IsHitTestVisible="False"
+                        Effect="{DynamicResource Shadow.Panel}" />
+                <Border CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.2}"
                         BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                     <Grid>
                         <Grid Margin="28,22" VerticalAlignment="Center"
                               Visibility="{Binding ShowInstallCard, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
-                                <materialDesign:PackIcon Kind="DownloadOutline" Width="46" Height="46"
-                                                         HorizontalAlignment="Center" Foreground="{DynamicResource Primary}" />
+                                <local:SvgIcon Glyph="download" Flat="True" Width="46" Height="46"
+                                               HorizontalAlignment="Center" Foreground="{DynamicResource Primary}" />
                                 <TextBlock Text="FINAL FANTASY XI isn't installed" FontSize="17" FontWeight="SemiBold"
                                            TextAlignment="Center" TextWrapping="Wrap" Margin="0,12,0,4" />
                                 <TextBlock TextAlignment="Center" TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource Text.2}"
                                            Text="Provenance can download and install the game for you, or use an install you already have." />
                                 <Button Margin="0,22,0,0" Height="48" FontSize="15" Command="{Binding DownloadInstallCommand}"
-                                        Style="{StaticResource AccentRaisedButton}" Content="DOWNLOAD AND INSTALL" />
+                                        Style="{StaticResource PolButton}" Content="DOWNLOAD AND INSTALL" />
                                 <Button Margin="0,10,0,0" Height="42" FontSize="14" Command="{Binding LocateInstallCommand}"
-                                        Style="{StaticResource MaterialDesignOutlinedButton}" Content="LOCATE EXISTING INSTALL" />
+                                        Style="{StaticResource PolButton}" Content="LOCATE EXISTING INSTALL" />
                                 <Button Margin="0,14,0,0" Style="{StaticResource RepairButton}" />
                                 <TextBlock Style="{StaticResource RepairReason}" />
                             </StackPanel>
@@ -421,7 +421,7 @@
                         <!-- no ID or password fields here, the IDs stay off screen -->
                         <Grid Margin="28,22,28,14" RowDefinitions="*,Auto,Auto"
                               Visibility="{Binding ShowSignInCard, Converter={StaticResource BoolToVis}}">
-                            <Image Source="{StaticResource BgLogo}" MaxHeight="340" Margin="0,0,0,10"
+                            <Image Source="{StaticResource BgLogo}" OpacityMask="{DynamicResource Logo.Mask}" MaxHeight="340" Margin="0,0,0,10"
                                    Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
 
                             <StackPanel Grid.Row="1"
@@ -431,7 +431,7 @@
                                            Foreground="{DynamicResource Text.2}"
                                            Text="Add your PlayOnline account to get started. Your login details stay in Windows Credential Manager." />
                                 <Button Height="46" FontSize="15" Command="{Binding AddAccountCommand}"
-                                        Style="{StaticResource AccentRaisedButton}" Content="ADD ACCOUNT" />
+                                        Style="{StaticResource PolButton}" Content="ADD ACCOUNT" />
                             </StackPanel>
 
                             <StackPanel Grid.Row="1" Visibility="{Binding HasProfile, Converter={StaticResource BoolToVis}}">
@@ -441,33 +441,22 @@
                                                                 Source="{Binding ProfilePicture}" />
                                     <!-- a floating hint draws a grey strip MaterialDesign 5 won't recolour -->
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="Account" FontSize="11.5" Margin="2,0,0,4" Foreground="{DynamicResource Text.3}" />
-                                        <ComboBox Style="{StaticResource MaterialDesignOutlinedComboBox}" FontSize="16"
+                                        <TextBlock Text="Account" FontSize="11.5" Margin="0,0,0,4" Foreground="{DynamicResource Text.3}" />
+                                        <ComboBox Style="{StaticResource OutlinedCombo}" FontSize="16"
                                                   Padding="14,10,10,10" materialDesign:HintAssist.IsFloating="False"
                                                   ItemsSource="{Binding Profiles}" DisplayMemberPath="DisplayName"
                                                   SelectedItem="{Binding SelectedProfile}" />
                                     </StackPanel>
                                 </Grid>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
-                                    <Button Style="{StaticResource AccentFlatButton}" Padding="6,0" Height="26" FontSize="12"
-                                            Command="{Binding EditAccountCommand}" Content="Edit account" />
-                                    <Button Style="{StaticResource AccentFlatButton}" Padding="6,0" Height="26" FontSize="12"
-                                            Command="{Binding AddAccountCommand}" Content="Add account" />
-                                    <Button Padding="6,0" Height="26" FontSize="12"
-                                            Command="{Binding RemoveAccountCommand}" Content="Remove"
+                                    <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12"
+                                            Command="{Binding EditAccountCommand}" Content="EDIT ACCOUNT" />
+                                    <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12" Margin="6,0,0,0"
+                                            Command="{Binding AddAccountCommand}" Content="ADD ACCOUNT" />
+                                    <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12" Margin="6,0,0,0"
+                                            Command="{Binding RemoveAccountCommand}" Content="REMOVE"
                                             ToolTip="Remove this account and its saved passwords from this PC"
-                                            AutomationProperties.Name="Remove this account and its saved passwords from this PC">
-                                        <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
-                                                <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Foreground" Value="{DynamicResource State.Down}" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
+                                            AutomationProperties.Name="Remove this account and its saved passwords from this PC" />
                                 </StackPanel>
 
                                 <CheckBox Content="This account uses a one-time password" FontSize="13" Margin="0,0,0,10"
@@ -481,11 +470,22 @@
                                           Foreground="{DynamicResource Text.2}" IsChecked="{Binding StartGameImmediately}" />
 
                                 <Button Margin="0,18,0,0" Height="48" FontSize="16" Command="{Binding SignInCommand}"
-                                        Style="{StaticResource ActionButton}" Content="LOG IN" IsDefault="True" />
-                                <Button Margin="0,8,0,0" Height="36" Style="{StaticResource AccentFlatButton}"
-                                        Command="{Binding StartAllAccountsCommand}" Content="{Binding StartAllText}"
-                                        Visibility="{Binding HasMultiAccounts, Converter={StaticResource BoolToVis}}"
-                                        ToolTip="Logs in and starts the game for each account you've turned on in Settings, under Multi-account, one after another." />
+                                        Style="{StaticResource ActionButton}" IsDefault="True" AutomationProperties.Name="Log in">
+                                    <StackPanel Orientation="Horizontal">
+                                        <local:SvgIcon Glyph="key" Width="24" Height="24" IsOpen="{Binding IsLaunching}" />
+                                        <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Text="LOG IN" />
+                                    </StackPanel>
+                                </Button>
+                                <Grid Margin="0,8,0,0" Visibility="{Binding HasMultiAccounts, Converter={StaticResource BoolToVis}}">
+                                    <Button Height="36" Style="{StaticResource PolButton}"
+                                            Command="{Binding StartAllAccountsCommand}" Content="{Binding StartAllText}"
+                                            Visibility="{Binding MultiRunning, Converter={StaticResource InvertBoolToVis}}"
+                                            ToolTip="Logs in and starts the game for each account you've turned on in Settings, under Multi-account, one after another." />
+                                    <!-- it's a stop button while the run's going -->
+                                    <Button Height="36" Style="{StaticResource RedButton}"
+                                            Command="{Binding StartAllAccountsCommand}" Content="{Binding StartAllText}"
+                                            Visibility="{Binding MultiRunning, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
                                 <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="{DynamicResource Text.2}" TextWrapping="Wrap"
                                            TextAlignment="Center" Text="{Binding MultiStatus}"
                                            Visibility="{Binding MultiStatus, Converter={StaticResource NullToVisibilityConverter}}" />
@@ -499,35 +499,13 @@
 
                         <Grid Margin="14,14,14,18" RowDefinitions="Auto,*,Auto"
                               Visibility="{Binding ShowFriendsCard, Converter={StaticResource BoolToVis}}">
-                            <Grid Margin="8,0,4,6">
-                                <TextBlock FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center">
-                                    <Run Text="Friends" /><Run Text="   " /><Run Text="{Binding Social.Summary, Mode=OneWay}" FontSize="12" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
-                                </TextBlock>
-                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                                <Button Style="{StaticResource AccentFlatButton}" Padding="8,0" Height="30" Width="36"
-                                        Command="{Binding OpenChatRoomsCommand}"
-                                        ToolTip="Open chat rooms" AutomationProperties.Name="Open chat rooms">
-                                    <materialDesign:PackIcon Kind="Forum" Width="16" Height="16" />
-                                </Button>
-                                <Button Style="{StaticResource AccentFlatButton}" Padding="8,0" Height="30"
-                                        FontSize="12" Command="{Binding OpenSocialCommand}"
-                                        ToolTip="Open friends and messages" AutomationProperties.Name="Open friends and messages">
-                                    <StackPanel Orientation="Horizontal">
-                                        <materialDesign:PackIcon Kind="MessageTextOutline" Width="16" Height="16" VerticalAlignment="Center" />
-                                        <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="MESSAGES" />
-                                        <Border Margin="6,0,0,0" MinWidth="18" Height="18" CornerRadius="9" Padding="5,0"
-                                                Background="{DynamicResource Primary}"
-                                                Visibility="{Binding Social.NeedsAttention, Converter={StaticResource BoolToVis}}"
-                                                ToolTip="Unread messages, plus friend requests and group invitations waiting for an answer">
-                                            <TextBlock Text="{Binding Social.AttentionCount}" FontSize="10.5" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource Text.OnPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                </StackPanel>
-                            </Grid>
-                            <local:FriendsList Grid.Row="1" DataContext="{Binding Social}" FriendActivated="OnFriendActivated" />
+                            <TextBlock Margin="8,0,4,8" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
+                                <Run Text="Friends" /><Run Text="   " /><Run Text="{Binding Social.Summary, Mode=OneWay}" FontSize="12" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
+                            </TextBlock>
+                            <local:FriendsList Grid.Row="1" DataContext="{Binding Social}" OwnSelection="True" FriendActivated="OnFriendActivated" />
                             <StackPanel Grid.Row="2" Margin="8,10,8,0">
+                                <!-- edge to edge of the card, so Play reads as its own thing and not part of the list -->
+                                <Border Height="1" Margin="-22,0,-22,16" Background="{DynamicResource Border.Pane}" />
                                 <TextBlock Margin="0,0,0,8" TextWrapping="Wrap" TextAlignment="Center" FontSize="12"
                                            Foreground="{DynamicResource State.Down}" Text="{Binding Social.PlayBlockedReason}"
                                            Visibility="{Binding Social.PlayBlockedReason, Converter={StaticResource NullToVisibilityConverter}}" />
@@ -538,58 +516,53 @@
                                     <Border.Style>
                                         <Style TargetType="Border" BasedOn="{StaticResource ActionShell}">
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Social.CanPlay}" Value="False">
-                                                    <Setter Property="Background" Value="{DynamicResource Surface.3}" />
-                                                    <Setter Property="BorderBrush" Value="{DynamicResource Surface.3}" />
+                                                <DataTrigger Binding="{Binding IsEnabled, ElementName=PlayButton}" Value="False">
+                                                    <Setter Property="BorderBrush" Value="Transparent" />
                                                     <Setter Property="Effect" Value="{x:Null}" />
-                                                    <Setter Property="TextElement.Foreground" Value="{DynamicResource Text.3}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
                                     <Grid ColumnDefinitions="*,Auto,Auto">
-                                        <Button Command="{Binding PlayCommand}" IsEnabled="{Binding Social.CanPlay}" IsDefault="True"
-                                                AutomationProperties.Name="Play">
-                                            <Button.Style>
-                                                <Style TargetType="Button" BasedOn="{StaticResource ActionSegment}">
-                                                    <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="1,0,0,1" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding HasPlayChoices}" Value="False">
-                                                            <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="1" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Social.CanPlay}" Value="False">
-                                                            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Button.Style>
+                                        <Button x:Name="PlayButton" Command="{Binding PlayCommand}" IsEnabled="{Binding Social.CanPlay}" IsDefault="True"
+                                                Style="{StaticResource ActionSegment}" AutomationProperties.Name="Play">
                                             <!-- an invisible copy of the line above PLAY keeps PLAY in the middle, nudged up a touch -->
                                             <StackPanel Margin="0,0,0,6">
                                                 <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0" Margin="0,0,0,-4"
                                                            HorizontalAlignment="Center" AutomationProperties.Name=""
                                                            Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
-                                                <TextBlock Text="PLAY" FontSize="18" HorizontalAlignment="Center" />
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                    <local:SvgIcon Glyph="sword" Width="18" Height="18" Margin="3,0,10,0" />
+                                                    <TextBlock Text="PLAY" FontSize="18" VerticalAlignment="Center" />
+                                                </StackPanel>
                                                 <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0.8" Margin="0,-4,0,0"
                                                            HorizontalAlignment="Center"
                                                            Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
                                             </StackPanel>
                                         </Button>
-                                        <Rectangle Grid.Column="1" Width="1" Margin="0,9,0,9" Fill="{DynamicResource Action.Divider}"
-                                                   Visibility="{Binding HasPlayChoices, Converter={StaticResource BoolToVis}}" />
-                                        <Button Grid.Column="2" Width="52" Click="OnPlayChoices" IsEnabled="{Binding Social.CanPlay}"
-                                                ToolTip="{Binding PlayChoicesTitle}" AutomationProperties.Name="{Binding PlayChoicesTitle}"
+                                        <Border Grid.Column="1" Width="1"
                                                 Visibility="{Binding HasPlayChoices, Converter={StaticResource BoolToVis}}">
-                                            <Button.Style>
-                                                <Style TargetType="Button" BasedOn="{StaticResource ActionSegment}">
-                                                    <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="0,1,1,0" />
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="{DynamicResource Play.Fill}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Play.Sheen}" />
+                                                    <Setter Property="BorderThickness" Value="{DynamicResource Play.Sheen.Width}" />
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Social.CanPlay}" Value="False">
-                                                            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+                                                        <DataTrigger Binding="{Binding IsEnabled, ElementName=PlayButton}" Value="False">
+                                                            <Setter Property="Background" Value="{DynamicResource Btn.Disabled.Fill}" />
+                                                            <Setter Property="BorderBrush" Value="Transparent" />
+                                                            <Setter Property="Opacity" Value="0.5" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
-                                            </Button.Style>
-                                            <materialDesign:PackIcon Kind="Cog" Width="22" Height="22" />
+                                            </Border.Style>
+                                            <Rectangle Margin="0,9" Fill="{DynamicResource Play.Divider}" />
+                                        </Border>
+                                        <Button Grid.Column="2" Width="52" Click="OnPlayChoices" IsEnabled="{Binding Social.CanPlay}"
+                                                Style="{StaticResource ActionSegment}"
+                                                ToolTip="{Binding PlayChoicesTitle}" AutomationProperties.Name="{Binding PlayChoicesTitle}"
+                                                Visibility="{Binding HasPlayChoices, Converter={StaticResource BoolToVis}}">
+                                            <local:SvgIcon x:Name="PlayChoicesIcon" Glyph="list" Width="22" Height="22" />
                                         </Button>
                                     </Grid>
                                 </Border>
@@ -598,7 +571,7 @@
 
                         <Grid Margin="28,24" VerticalAlignment="Center" Visibility="{Binding IsLaunching, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
-                                <Image Source="{StaticResource BgLogo}" Height="120" Stretch="Uniform"
+                                <Image Source="{StaticResource BgLogo}" OpacityMask="{DynamicResource Logo.Mask}" Height="120" Stretch="Uniform"
                                        RenderOptions.BitmapScalingMode="HighQuality" />
                                 <TextBlock Margin="0,10,0,0" FontSize="17" FontWeight="SemiBold" Text="{Binding ProgressTitle}"
                                            TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" />
@@ -614,7 +587,7 @@
                                                Foreground="{DynamicResource Text.3}" Text="{Binding ElapsedText}" />
                                 </Grid>
                                 <Button Margin="0,22,0,0" Height="40" FontSize="14" Command="{Binding CancelLaunchCommand}"
-                                        Style="{StaticResource ActionButton}" Content="CANCEL" />
+                                        Style="{StaticResource RedActionButton}" Content="CANCEL" />
                             </StackPanel>
                         </Grid>
                     </Grid>
@@ -623,10 +596,11 @@
         </Grid>
 
         <Border Grid.Row="1" Panel.ZIndex="10" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="24,0,0,18"
-                MaxWidth="560" Padding="14,10" CornerRadius="10"
+                MaxWidth="560" Padding="14,10" CornerRadius="{StaticResource Radius.Panel}"
                 Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Primary}" BorderThickness="1"
                 Visibility="{Binding Notice, Converter={StaticResource NullToVisibilityConverter}}"
-                MouseLeftButtonUp="OnOpenNotice" MouseEnter="OnNoticeHover" MouseLeave="OnNoticeLeave">
+                MouseLeftButtonUp="OnOpenNotice" MouseEnter="OnNoticeHover" MouseLeave="OnNoticeLeave"
+                Effect="{DynamicResource Shadow.Notice}">
             <Border.Style>
                 <Style TargetType="Border">
                     <Setter Property="Cursor" Value="Hand" />
@@ -637,12 +611,33 @@
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.5" Color="#000000" />
-            </Border.Effect>
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <materialDesign:PackIcon Kind="{Binding NoticeIcon}" Width="20" Height="20" Margin="0,0,10,0"
-                                         VerticalAlignment="Center" Foreground="{DynamicResource Primary}" />
+                <local:SvgIcon Glyph="mail" Flat="True" Width="20" Height="20" Margin="0,0,10,0"
+                               VerticalAlignment="Center" Foreground="{DynamicResource Primary}">
+                    <local:SvgIcon.Style>
+                        <Style TargetType="local:SvgIcon">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding NoticeIcon}" Value="mail">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </local:SvgIcon.Style>
+                </local:SvgIcon>
+                <materialDesign:PackIcon Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource Primary}">
+                    <materialDesign:PackIcon.Style>
+                        <Style TargetType="materialDesign:PackIcon">
+                            <Setter Property="Kind" Value="{Binding NoticeIcon}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding NoticeIcon}" Value="mail">
+                                    <Setter Property="Kind" Value="BellOutline" />
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </materialDesign:PackIcon.Style>
+                </materialDesign:PackIcon>
                 <!-- the text's a button too, so Tab and Enter can open the notice -->
                 <Button Grid.Column="1" Style="{x:Null}" Click="OnOpenNotice" VerticalAlignment="Center"
                         Cursor="{Binding Cursor, RelativeSource={RelativeSource AncestorType=Border}}"
@@ -659,43 +654,102 @@
                     </Button.Template>
                 </Button>
                 <Button Grid.Column="2" Width="26" Height="26" Padding="0" Margin="10,0,0,0"
-                        Style="{StaticResource MaterialDesignIconButton}" Foreground="{DynamicResource Text.3}"
+                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
                         Command="{Binding DismissNoticeCommand}" ToolTip="Dismiss" AutomationProperties.Name="Dismiss">
-                    <materialDesign:PackIcon Kind="Close" Width="14" Height="14" />
+                    <local:SvgIcon Glyph="dismiss" Width="14" Height="14" />
                 </Button>
             </Grid>
         </Border>
 
         <Border Grid.Row="2" Height="44"
-                Background="{DynamicResource Surface.1}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0"
+                Style="{StaticResource FooterBar}" Padding="16,0"
                 Visibility="{Binding SocialConnected, Converter={StaticResource BoolToVis}}">
-            <Grid Margin="16,0">
+            <Grid ColumnDefinitions="Auto,*,Auto">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <local:ProfilePictureCircle Diameter="32" Margin="0,0,10,0" Source="{Binding Social.Avatar}"
                                                 Cursor="Hand" ToolTip="Change your profile picture"
                                                 MouseLeftButtonUp="OnAvatarClick" />
                     <TextBlock Text="{Binding Social.AccountName}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
-                    <Button Margin="4,0,0,0" Width="26" Height="24" Padding="0" VerticalAlignment="Center"
-                            Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.3}"
+                    <Button Margin="4,0,0,0" Width="28" Height="28" Padding="0" VerticalAlignment="Center"
+                            Style="{StaticResource IconButton}"
                             ToolTip="Edit your PlayOnline profile" AutomationProperties.Name="Edit your PlayOnline profile" Click="OnEditProfile">
-                        <materialDesign:PackIcon Kind="AccountEditOutline" Width="16" Height="16" />
+                        <local:SvgIcon Glyph="card" />
                     </Button>
                     <!-- locked with a spinner until POL confirms -->
                     <ComboBox Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource StatusPicker}"
                               IsEnabled="{Binding Social.StatusEditable}"
                               ItemsSource="{Binding Social.StatusLabels}" SelectedIndex="{Binding Social.MyStatusIndex}" />
-                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="11.5" MaxWidth="320"
+                </StackPanel>
+                <!-- left aligned, so the spinner sits right after the note and the note trims before it reaches the buttons -->
+                <Grid Grid.Column="1" ColumnDefinitions="*,Auto" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="11.5"
                                TextTrimming="CharacterEllipsis" Foreground="{DynamicResource State.Warn}"
                                Text="{Binding Social.StatusNote}" ToolTip="{Binding Social.StatusNote}"
                                Visibility="{Binding Social.StatusNote, Converter={StaticResource NullToVisibilityConverter}}" />
-                    <ProgressBar Width="14" Height="14" Margin="8,0,0,0" IsIndeterminate="True"
+                    <ProgressBar Grid.Column="1" Width="14" Height="14" Margin="8,0,0,0" IsIndeterminate="True"
                                  Style="{StaticResource MaterialDesignCircularProgressBar}"
                                  ToolTip="Waiting for PlayOnline to confirm"
                                  Visibility="{Binding Social.StatusPending, Converter={StaticResource BoolToVis}}" />
+                </Grid>
+                <StackPanel x:Name="SocialButtons" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- one row of equal cells, so all four are as wide as the widest -->
+                    <UniformGrid x:Name="SocialSet" Rows="1" Margin="6,0,0,0">
+                        <UniformGrid.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource PolButton}">
+                                <Setter Property="Padding" Value="5,0,8,0" />
+                                <Setter Property="Height" Value="30" />
+                                <Setter Property="Margin" Value="6,0,0,0" />
+                                <Setter Property="FontSize" Value="12" />
+                            </Style>
+                        </UniformGrid.Resources>
+                        <Button Command="{Binding OpenChatRoomsCommand}" ToolTip="Open chat rooms" AutomationProperties.Name="Open chat rooms">
+                            <StackPanel Orientation="Horizontal">
+                                <local:SvgIcon Glyph="bubble" IsOpen="{Binding ChatRoomsOpen}" />
+                                <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="CHAT ROOMS" />
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding OpenGroupsCommand}" ToolTip="Open your friend groups" AutomationProperties.Name="Open your friend groups">
+                            <StackPanel Orientation="Horizontal">
+                                <local:SvgIcon Glyph="groupchat2" IsOpen="{Binding Social.GroupsTabVisible}" />
+                                <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="GROUP CHAT" />
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding OpenMessagesCommand}" ToolTip="Open messages" AutomationProperties.Name="Open messages">
+                            <StackPanel Orientation="Horizontal">
+                                <local:SvgIcon Glyph="chat" IsOpen="{Binding Social.ConversationVisible}" />
+                                <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="MESSAGES" />
+                                <Border Margin="6,0,0,0" MinWidth="18" Height="18" CornerRadius="9" Padding="5,0"
+                                        Background="White" BorderBrush="{DynamicResource Btn.Rim}" BorderThickness="1"
+                                        Visibility="{Binding Social.HasUnread, Converter={StaticResource BoolToVis}}"
+                                        ToolTip="Unread messages">
+                                    <TextBlock Text="{Binding Social.UnreadCount}" FontSize="10.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Btn.Rim}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding OpenSocialCommand}" ToolTip="Open friends" AutomationProperties.Name="Open friends">
+                            <StackPanel Orientation="Horizontal">
+                                <local:SvgIcon Glyph="smiley" IsOpen="{Binding Social.FriendsTabVisible}" />
+                                <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="FRIENDS" />
+                                <Border Margin="6,0,0,0" MinWidth="18" Height="18" CornerRadius="9" Padding="5,0"
+                                        Background="White" BorderBrush="{DynamicResource Btn.Rim}" BorderThickness="1"
+                                        Visibility="{Binding Social.HasPendingAnswers, Converter={StaticResource BoolToVis}}"
+                                        ToolTip="Friend requests and group invitations waiting for an answer">
+                                    <TextBlock Text="{Binding Social.PendingAnswers}" FontSize="10.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Btn.Rim}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </StackPanel>
+                        </Button>
+                    </UniformGrid>
+                    <Border x:Name="LogOutDivider" Width="1" Height="20" Margin="12,0" Background="{DynamicResource Border.Pane}" />
+                    <Button Style="{StaticResource RedButton}" Padding="6,0,8,0" Height="30" FontSize="12"
+                            Command="{Binding SignOutCommand}" AutomationProperties.Name="Log out">
+                        <StackPanel Orientation="Horizontal">
+                            <local:SvgIcon Glyph="wave" />
+                            <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="LOG OUT" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Padding="8,0" Height="30" FontSize="12"
-                        HorizontalAlignment="Right" VerticalAlignment="Center"
-                        Foreground="{DynamicResource Text.2}" Command="{Binding SignOutCommand}" Content="LOG OUT" />
             </Grid>
         </Border>
     </Grid>

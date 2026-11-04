@@ -31,8 +31,11 @@ public partial class SocialViewModel
     [ObservableProperty, NotifyPropertyChangedFor(nameof(NoGroups))] private bool _hasGroups;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(NoGroups))] private bool _groupsUnavailable;
     public bool NoGroups => !HasGroups && !GroupsUnavailable;   // a list that didn't load isn't "no groups"
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowFriends))] private bool _showGroups;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowFriends), nameof(FriendsTabVisible), nameof(GroupsTabVisible))]
+    private bool _showGroups;
     public bool ShowFriends => !ShowGroups;
+    public bool FriendsTabVisible => FriendsListVisible && !ShowGroups;
+    public bool GroupsTabVisible => FriendsListVisible && ShowGroups;
 
     [RelayCommand] private void ShowFriendsTab() => ShowGroups = false;
     [RelayCommand] private void ShowGroupsTab() => ShowGroups = true;
@@ -68,7 +71,7 @@ public partial class SocialViewModel
         GroupsUnavailable = !snap.GroupsLoaded && snap.GroupList.Count == 0;
         static string MemberSig(PolGroupMember m) =>
             $"{m.Index}:{m.Name}:{m.Class}:{m.Status}:{m.ProfilePictureId}:{m.Comment}";
-        var sig = string.Join("|", snap.GroupList.Select(g => g.Id + "/" + g.Name + "/" + g.MyClass + "/" + GroupChat.UnreadFor(g.Id) + "/" +
+        var sig = snap.GroupList.Count + ":" + string.Join("|", snap.GroupList.Select(g => g.Id + "/" + g.Name + "/" + g.MyClass + "/" + GroupChat.UnreadFor(g.Id) + "/" +
                                                               string.Join(",", g.Members.Select(MemberSig))));
         if (sig == _groupsSignature) return;
         _groupsSignature = sig;

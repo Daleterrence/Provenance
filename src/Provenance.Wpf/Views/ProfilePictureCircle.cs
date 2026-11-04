@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Views;
 
@@ -15,6 +16,10 @@ public sealed class ProfilePictureCircle : ContentControl
         nameof(Diameter), typeof(double), typeof(ProfilePictureCircle),
         new PropertyMetadata(36.0, (d, _) => ((ProfilePictureCircle)d).Rebuild()));
 
+    public static readonly DependencyProperty InGameProperty = DependencyProperty.Register(
+        nameof(InGame), typeof(bool), typeof(ProfilePictureCircle),
+        new PropertyMetadata(false, (d, _) => ((ProfilePictureCircle)d).Rebuild()));
+
     public ImageSource? Source
     {
         get => (ImageSource?)GetValue(SourceProperty);
@@ -26,6 +31,15 @@ public sealed class ProfilePictureCircle : ContentControl
         get => (double)GetValue(DiameterProperty);
         set => SetValue(DiameterProperty, value);
     }
+
+    // a friend in FFXI gets the XI badge, tucked behind the top right so just the letters show
+    public bool InGame
+    {
+        get => (bool)GetValue(InGameProperty);
+        set => SetValue(InGameProperty, value);
+    }
+
+    internal Image? Badge { get; private set; }
 
     public ProfilePictureCircle()
     {
@@ -52,6 +66,23 @@ public sealed class ProfilePictureCircle : ContentControl
         };
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
         grid.Children.Add(img);
-        Content = grid;
+        Badge = null;
+        if (!InGame || SvgIcons.XiBadge is not { } badge)
+        {
+            Content = grid;
+            return;
+        }
+        // a Canvas, so the bit hanging off the edge isn't clipped by the layout
+        double w = d * 0.64;
+        Badge = new Image { Source = badge, Width = w, Height = w * badge.Height / badge.Width, Stretch = Stretch.Uniform };
+        // its top edge level with the picture's (the icon starts a unit into its 20 high box)
+        Canvas.SetLeft(Badge, d * 0.62);
+        Canvas.SetTop(Badge, -Badge.Height / 20);
+        var under = new Canvas();
+        under.Children.Add(Badge);
+        var both = new Grid { Width = d, Height = d };
+        both.Children.Add(under);
+        both.Children.Add(grid);
+        Content = both;
     }
 }

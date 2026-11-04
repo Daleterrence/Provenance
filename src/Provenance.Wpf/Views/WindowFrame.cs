@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Views;
 
@@ -31,10 +32,12 @@ internal static class WindowFrame
             HwndSource.FromHwnd(hwnd)?.AddHook(Hook);
             if (Rounded && RoundCorners(hwnd))
             {
-                var edge = ((SolidColorBrush)w.FindResource(Edge)).Color;
                 // the docs only promise DWM stops rounding a maximised window, not that the line goes too
-                DwmEdge(w, hwnd, edge);
-                w.StateChanged += (_, _) => DwmEdge(w, hwnd, edge);
+                Action edge = () => DwmEdge(w, hwnd, ((SolidColorBrush)w.FindResource(Edge)).Color);
+                edge();
+                w.StateChanged += (_, _) => edge();
+                AppTheme.Changed += edge;
+                w.Closed += (_, _) => AppTheme.Changed -= edge;
                 return;
             }
             w.SetResourceReference(Control.BorderBrushProperty, Edge);

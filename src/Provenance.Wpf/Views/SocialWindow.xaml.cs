@@ -134,11 +134,11 @@ public partial class SocialWindow : Window
             SplitterColumn.Width = new GridLength(0);
             MessagesColumn.Width = HasMessages ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         }
-        (Title, TitleIcon.Kind, MinWidth, Width) = Part switch
+        (Title, TitleIcon.Glyph, MinWidth, Width) = Part switch
         {
-            SocialPart.Friends => ("Friends", PackIconKind.AccountMultiple, 300.0, 360.0),
-            SocialPart.Messages => ("Messages", PackIconKind.MessageTextOutline, 420.0, 640.0),
-            _ => ("Friends and messages", PackIconKind.AccountMultiple, 720.0, 900.0),
+            SocialPart.Friends => ("Friends", "smiley", 300.0, 360.0),
+            SocialPart.Messages => ("Messages", "chat", 420.0, 640.0),
+            _ => ("Friends and messages", "smiley", 720.0, 900.0),
         };
         TitleText.Text = Title;
         LayoutIcon.Kind = Part == SocialPart.Both ? PackIconKind.ArrowSplitVertical
@@ -299,8 +299,9 @@ public partial class SocialWindow : Window
             MessageDialog.ShowInfo(this, "Friend groups", "You can only be in 4 friend groups.");
             return;
         }
-        var name = InputDialog.Prompt(this, "Create a group",
-            "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", "", maxLength: 20);
+        string? name = null;
+        SvgIcon.OpenWhile(sender, () => name = InputDialog.Prompt(this, "Create a group",
+            "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", "", maxLength: 20));
         if (!string.IsNullOrWhiteSpace(name)) vm.CreateGroup(name);
     }
 
@@ -459,7 +460,7 @@ public partial class SocialWindow : Window
 
     private void OnAddFriend(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) new AddFriendDialog(vm) { Owner = this }.ShowDialog();
+        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => new AddFriendDialog(vm) { Owner = this }.ShowDialog());
     }
 
     private void OnUnignore(object sender, RoutedEventArgs e)

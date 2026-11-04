@@ -1,7 +1,6 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
-using MaterialDesignThemes.Wpf;
 
 namespace Provenance.Wpf.Views;
 
@@ -14,10 +13,13 @@ public partial class MessageDialog : Window
     }
 
     public static void ShowError(Window? owner, string title, string body, bool offerLogs = false) =>
-        Create(title, body, null, offerLogs).ShowOver(owner);
+        ForNotice(title, body, offerLogs).ShowOver(owner);
 
     public static void ShowInfo(Window? owner, string title, string body) =>
-        Create(title, body, PackIconKind.InformationOutline).ShowOver(owner);
+        ForNotice(title, body).ShowOver(owner);
+
+    // an error or a notice, set up but not shown yet
+    internal static MessageDialog ForNotice(string title, string body, bool offerLogs = false) => Create(title, body, notice: true, offerLogs);
 
     // Null when cancelled, else 0 (or 1 for the second of two choices). Destructive and safeKeys ones put Enter and Esc
     // on cancel so a stray key can't do it, and only destructive goes red.
@@ -35,7 +37,8 @@ public partial class MessageDialog : Window
                                              string? choiceA = null, string? choiceB = null, bool destructive = false, bool safeKeys = false,
                                              string? cancelLabel = null)
     {
-        var dlg = Create(title, body, PackIconKind.HelpCircleOutline);
+        // a plain question keeps its question mark, one that deletes something is a warning
+        var dlg = Create(title, body, notice: destructive);
         dlg.CancelButton.Visibility = Visibility.Visible;
         if (cancelLabel != null) dlg.CancelButton.Content = cancelLabel;
         dlg.OkButton.Content = okLabel;
@@ -47,7 +50,9 @@ public partial class MessageDialog : Window
             dlg.CancelButton.IsDefault = true;
             dlg.Loaded += (_, _) => dlg.CancelButton.Focus();
         }
-        if (destructive) dlg.OkButton.SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, "State.Down");
+        // one red button per dialog: the delete when there is one, otherwise cancel. A NO answering a question stays blue
+        if (destructive) dlg.OkButton.SetResourceReference(StyleProperty, "RedButton");
+        if (destructive || cancelLabel != null) dlg.CancelButton.SetResourceReference(StyleProperty, "PolButton");
         if (choiceA != null && choiceB != null)
         {
             dlg.ChoiceA.Content = choiceA;
@@ -57,20 +62,22 @@ public partial class MessageDialog : Window
         return dlg;
     }
 
-    // a null icon keeps the red error mark from the XAML
-    private static MessageDialog Create(string title, string body, PackIconKind? icon, bool offerLogs = false)
+    private static MessageDialog Create(string title, string body, bool notice, bool offerLogs = false)
     {
         var dlg = new MessageDialog();
         dlg.TitleText.Text = title;
         dlg.BodyText.Text = body;
         if (!offerLogs) dlg.LogsButton.Visibility = Visibility.Collapsed;
-        if (icon is { } kind)
+        if (notice && Services.SvgIcons.Notice is { } art)
         {
-            dlg.KindIcon.Kind = kind;
-            dlg.KindIcon.Foreground = (System.Windows.Media.Brush)dlg.FindResource("Primary");
+            dlg.NoticeArt.Source = art;
+            dlg.NoticeArt.Visibility = Visibility.Visible;
+            dlg.KindIcon.Visibility = Visibility.Collapsed;
         }
         return dlg;
     }
+
+    internal bool ShowsNotice => NoticeArt.Visibility == Visibility.Visible;
 
     private bool? ShowOver(Window? owner)
     {

@@ -25,6 +25,12 @@ public sealed class InvertBoolConverter : OneWayConverter
         value is not true;
 }
 
+public sealed class UpperCaseConverter : OneWayConverter
+{
+    public override object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        (value as string)?.ToUpper(culture) ?? value ?? string.Empty;
+}
+
 public sealed class InvertBoolToVisibilityConverter : OneWayConverter
 {
     public override object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>

@@ -58,7 +58,7 @@ public partial class SettingsViewModel
     // on Addons and plugins while every profile gets the same list
     public bool ShowProfileSwitcher => ShownTab is 1 or 2 or 3 && (IsWindower || IsAshita) && !(ShownTab == 3 && Addons is { SameListForEveryProfile: true });
     public bool ShowProfileTools => ShownTab == 1;
-    public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita Boot Configuration:" : "Editing Windower Profile:";
+    public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita boot configuration:" : "Editing Windower profile:";
     internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = WindowerUpdates.NewUpdater;
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
 

@@ -7,10 +7,13 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <materialDesign:BundledTheme BaseTheme="Dark" PrimaryColor="Cyan" SecondaryColor="Amber" />
+                <!-- AppTheme hands MaterialDesign each palette's own blue, these are just its starting point -->
+                <materialDesign:BundledTheme BaseTheme="Dark" PrimaryColor="Blue" SecondaryColor="Blue" />
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
-                <!-- merged last so the palette wins any clash -->
-                <ResourceDictionary Source="Themes/Palette.xaml" />
+                <ResourceDictionary Source="Themes/Shared.xaml" />
+                <ResourceDictionary Source="Themes/Buttons.xaml" />
+                <!-- merged last so the palette wins any clash. AppTheme swaps it for Light.xaml -->
+                <ResourceDictionary Source="Themes/Dark.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <conv:LocalTimeConverter x:Key="LocalTimeConverter" />
@@ -19,6 +22,7 @@
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
             <conv:InvertBoolToVisibilityConverter x:Key="InvertBoolToVis" />
             <conv:InvertBoolConverter x:Key="InvertBool" />
+            <conv:UpperCaseConverter x:Key="UpperCase" />
 
             <!-- Tag is the error flag, every window binds its own -->
             <Style x:Key="StatusText" TargetType="TextBlock">
@@ -35,7 +39,7 @@
 
             <!-- the profile a Settings page is changing, in its app's colour. Tag is the platform -->
             <Style x:Key="PlatformCard" TargetType="Border">
-                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="CornerRadius" Value="{StaticResource Radius.Panel}" />
                 <Setter Property="Padding" Value="16,12" />
                 <Setter Property="Background" Value="{DynamicResource Surface.1}" />
                 <Setter Property="TextElement.Foreground" Value="White" />
@@ -68,7 +72,9 @@
                     <Setter.Value>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
-                                <views:StatusMark Status="{Binding}" Margin="0,0,6,0" />
+                                <!-- in the list only the status you're on keeps its fill, the box itself isn't in a ComboBoxItem -->
+                                <views:StatusMark Status="{Binding}" Margin="0,0,6,0"
+                                                  Filled="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ComboBoxItem}, FallbackValue=True}" />
                                 <TextBlock Text="{Binding}" VerticalAlignment="Center" />
                             </StackPanel>
                         </DataTemplate>
@@ -76,68 +82,42 @@
                 </Setter>
             </Style>
 
-            <!-- setters so the disabled trigger can swap them for grey, MaterialDesign only fades them -->
-            <Style x:Key="AccentFlatButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
-                <Setter Property="Foreground" Value="{DynamicResource Primary}" />
-                <Style.Triggers>
-                    <Trigger Property="IsEnabled" Value="False">
-                        <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
-                    </Trigger>
-                </Style.Triggers>
-            </Style>
-            <Style x:Key="AccentRaisedButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
-                <Setter Property="Background" Value="{DynamicResource Primary}" />
-                <Setter Property="BorderBrush" Value="{x:Null}" />
-                <Setter Property="Foreground" Value="{DynamicResource Text.OnPrimary}" />
-                <Style.Triggers>
-                    <Trigger Property="IsEnabled" Value="False">
-                        <Setter Property="Background" Value="{DynamicResource Surface.3}" />
-                        <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
-                    </Trigger>
-                </Style.Triggers>
-            </Style>
-
-            <!-- the big Play and LOG IN buttons: square like the rest, but shaded and outlined so they read as something to press -->
-            <Style x:Key="ActionShell" TargetType="Border">
-                <Setter Property="CornerRadius" Value="2" />
-                <Setter Property="Background" Value="{DynamicResource Action.Fill}" />
-                <Setter Property="BorderBrush" Value="{DynamicResource Action.Edge}" />
-                <Setter Property="BorderThickness" Value="1,1,1,2" />
-                <Setter Property="Effect">
-                    <Setter.Value>
-                        <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.5" Color="#000000" />
-                    </Setter.Value>
-                </Setter>
-            </Style>
-
-            <Style x:Key="ActionSegment" TargetType="Button">
-                <Setter Property="Foreground" Value="White" />
-                <Setter Property="FontWeight" Value="SemiBold" />
+            <!-- icons with no text: no fill till they're hovered -->
+            <Style x:Key="IconButton" TargetType="ButtonBase">
+                <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="Cursor" Value="Hand" />
                 <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-                <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="1" />
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+                <Setter Property="views:FocusCue.Track" Value="True" />
                 <Setter Property="Template">
                     <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <Grid Background="Transparent">
-                                <Border x:Name="Tint" Background="White" Opacity="0"
-                                        CornerRadius="{TemplateBinding materialDesign:ButtonAssist.CornerRadius}" />
-                                <Border x:Name="Ring" BorderBrush="White" BorderThickness="2" Opacity="0" Margin="3"
-                                        CornerRadius="1" />
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+                        <ControlTemplate TargetType="ButtonBase">
+                            <Grid>
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}" />
+                                <Border x:Name="Ring" BorderBrush="{DynamicResource Focus.Ring}" BorderThickness="1" Opacity="0" />
+                                <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" RecognizesAccessKey="True"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Tint" Property="Opacity" Value="0.1" />
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover.Fill}" />
+                                </Trigger>
+                                <Trigger Property="views:FocusCue.Shown" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover.Fill}" />
+                                    <Setter TargetName="Ring" Property="Opacity" Value="1" />
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="Tint" Property="Background" Value="Black" />
-                                    <Setter TargetName="Tint" Property="Opacity" Value="0.18" />
-                                </Trigger>
-                                <Trigger Property="IsKeyboardFocused" Value="True">
-                                    <Setter TargetName="Ring" Property="Opacity" Value="0.85" />
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Press.Fill}" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Content" Property="Opacity" Value="0.4" />
                                     <Setter Property="Cursor" Value="Arrow" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
@@ -146,64 +126,96 @@
                 </Setter>
             </Style>
 
-            <!-- LOG IN: one segment in its own shell -->
-            <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource ActionSegment}">
+            <!-- MaterialDesign's fields, with a placeholder strength each theme picks -->
+            <Style x:Key="OutlinedField" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
+                <Setter Property="materialDesign:HintAssist.HintOpacity" Value="{DynamicResource Field.HintOpacity}" />
+            </Style>
+            <Style x:Key="PlainField" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignTextBox}">
+                <Setter Property="materialDesign:HintAssist.HintOpacity" Value="{DynamicResource Field.HintOpacity}" />
+            </Style>
+            <Style x:Key="OutlinedCombo" TargetType="ComboBox" BasedOn="{StaticResource MaterialDesignOutlinedComboBox}">
+                <Setter Property="materialDesign:HintAssist.HintOpacity" Value="{DynamicResource Field.HintOpacity}" />
+            </Style>
+
+            <!-- labels go beside or above, never a floating hint -->
+            <Style x:Key="FieldText" TargetType="TextBox" BasedOn="{StaticResource OutlinedField}">
+                <Setter Property="Padding" Value="12,8" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
+            </Style>
+
+            <!-- a row that can be picked, the same hover and selection in every list -->
+            <Style x:Key="RowItem" TargetType="ListBoxItem">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="SnapsToDevicePixels" Value="True" />
                 <Setter Property="Template">
                     <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="Shell" Style="{StaticResource ActionShell}">
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="Bd" CornerRadius="{StaticResource Radius.Panel}" Background="Transparent">
                                 <Grid>
-                                    <Border x:Name="Tint" Background="White" Opacity="0" CornerRadius="1" />
-                                    <Border x:Name="Ring" BorderBrush="White" BorderThickness="2" Opacity="0" Margin="3" CornerRadius="1" />
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+                                    <!-- a pale fill alone barely shows on the panel, so the picked row gets a bar too -->
+                                    <Border x:Name="Mark" Width="3" Margin="0,4" HorizontalAlignment="Left" CornerRadius="1.5"
+                                            Background="{DynamicResource Primary}" Visibility="Collapsed" />
+                                    <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                                 </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Tint" Property="Opacity" Value="0.1" />
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.3}" />
                                 </Trigger>
-                                <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="Tint" Property="Background" Value="Black" />
-                                    <Setter TargetName="Tint" Property="Opacity" Value="0.18" />
-                                </Trigger>
-                                <Trigger Property="IsKeyboardFocused" Value="True">
-                                    <Setter TargetName="Ring" Property="Opacity" Value="0.85" />
-                                </Trigger>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter TargetName="Shell" Property="Background" Value="{DynamicResource Surface.3}" />
-                                    <Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource Surface.3}" />
-                                    <Setter TargetName="Shell" Property="Effect" Value="{x:Null}" />
-                                    <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
-                                    <Setter Property="Cursor" Value="Arrow" />
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Row.Selected}" />
+                                    <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
             </Style>
+            <Style x:Key="NavItem" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+                <Setter Property="Margin" Value="10,2" />
+                <Setter Property="Padding" Value="14,10" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="Bd" Padding="{TemplateBinding Padding}" CornerRadius="{StaticResource Radius.Panel}" Background="Transparent">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.3}" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Primary.Muted}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <!-- a ring for keyboard focus only, a click shows none -->
+                <Setter Property="FocusVisualStyle">
+                    <Setter.Value>
+                        <Style>
+                            <Setter Property="Control.Template">
+                                <Setter.Value>
+                                    <ControlTemplate>
+                                        <Rectangle RadiusX="6" RadiusY="6" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
-            <!-- MaterialDesign pads a floating hint with its own grey background, which leaves a chip round the label.
-                 These pad it with Surface.2, the dialogs they sit on -->
-            <Style x:Key="DialogTextBox" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
-                <Style.Resources>
-                    <SolidColorBrush x:Key="MaterialDesign.Brush.Background" Color="{StaticResource Surface.2.Color}" />
-                </Style.Resources>
-            </Style>
-            <Style x:Key="DialogPasswordBox" TargetType="PasswordBox" BasedOn="{StaticResource MaterialDesignOutlinedPasswordBox}">
-                <Style.Resources>
-                    <SolidColorBrush x:Key="MaterialDesign.Brush.Background" Color="{StaticResource Surface.2.Color}" />
-                </Style.Resources>
-            </Style>
-            <Style x:Key="DialogRevealPasswordBox" TargetType="PasswordBox" BasedOn="{StaticResource MaterialDesignOutlinedRevealPasswordBox}">
-                <Style.Resources>
-                    <SolidColorBrush x:Key="MaterialDesign.Brush.Background" Color="{StaticResource Surface.2.Color}" />
-                </Style.Resources>
-            </Style>
-
+            <!-- keys of their own, so a tooltip on a title bar doesn't take the bar's light text -->
             <Style TargetType="ToolTip" BasedOn="{StaticResource MaterialDesignToolTip}">
-                <Setter Property="Background" Value="{DynamicResource Surface.3}" />
-                <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
-                <Setter Property="BorderBrush" Value="{DynamicResource Border.Hair}" />
+                <Setter Property="Background" Value="{DynamicResource Tip.Bg}" />
+                <Setter Property="Foreground" Value="{DynamicResource Tip.Text}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Tip.Edge}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Padding" Value="10,7" />
                 <Setter Property="FontSize" Value="12" />

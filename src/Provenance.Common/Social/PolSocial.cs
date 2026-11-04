@@ -255,6 +255,13 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public string GroupState { get; init; } = "";
     public string MeToken { get; init; } = "";
     public string MeState { get; init; } = "";
+    // one of my FFXI characters on the profile editor. Key is the character's, Level 0 till one's read or saved
+    public string XiToken { get; init; } = "";
+    public string XiState { get; init; } = "";
+    public string XiKey { get; init; } = "";
+    public int XiLevel { get; init; }
+    public string XiName { get; init; } = "";
+    public string XiWorldName { get; init; } = "";
     public string CharacterToken { get; init; } = "";
     public string CharacterState { get; init; } = "";
     public PolCharacterLookup? Character { get; init; }
@@ -263,7 +270,7 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public PolFfxiProfile? FfxiProfile { get; init; }
     // the hook runs one profile server job at a time, so while one's going any other just waits its turn
     public bool ProfileServerBusy => SearchState == "searching" || ProfileState == "loading" || CharacterState == "loading" ||
-                                     FfxiProfileState == "loading" || MeState is "loading" or "saving" ||
+                                     FfxiProfileState == "loading" || MeState is "loading" or "saving" || XiState is "loading" or "saving" ||
                                      ProfilePictureState == "saving" ||
                                      Chat is { ZonesState: "searching" } or { RoomsState: "searching" } ||
                                      (HandleState == "working" && HandleOp == "switch");
@@ -390,6 +397,15 @@ public static class SocialSnapshot
 
     public static bool RequestMyProfile(int pid, string token) => WriteRequest(pid, "myprofile", OneLine(token));
 
+    // one of the characters from the loaded profile, by its key there. handleKey is the profile's, so neither ever
+    // lands on a handle that's become active since
+    public static bool RequestXiProfile(int pid, string token, string handleKey, string characterKey) =>
+        WriteRequest(pid, "xiprofile", $"{OneLine(token)}\n{OneLine(handleKey)}\n{OneLine(characterKey)}");
+
+    // one that's been read, level is 1 Private, 2 Friends only, 3 POL
+    public static bool SaveXiProfile(int pid, string token, string handleKey, string characterKey, int level) =>
+        WriteRequest(pid, "savexi", $"{OneLine(token)}\n{OneLine(handleKey)}\n{OneLine(characterKey)}\n{level}");
+
     // load first, the save keeps each field's own level. level is 1 Private, 2 Friends only, 3 POL
     public static bool SaveMyProfile(int pid, string token, int level, IEnumerable<KeyValuePair<string, string>> fields,
                                      string noMailText = "")
@@ -508,6 +524,8 @@ public static class SocialSnapshot
             var (profileToken, profileState) = Job(root, "profile");
             var (groupToken, groupState) = Job(root, "group");
             var (meToken, meState) = Job(root, "me");
+            var (xiToken, xiState) = Job(root, "xi");
+            var xi = Obj(root, "xi");
             var (charToken, charState) = Job(root, "character");
             var (ffxiToken, ffxiState) = Job(root, "ffxiprofile");
             var (handleToken, handleState) = Job(root, "handleJob");
@@ -553,6 +571,12 @@ public static class SocialSnapshot
                 GroupState = groupState,
                 MeToken = meToken,
                 MeState = meState,
+                XiToken = xiToken,
+                XiState = xiState,
+                XiKey = xi.ValueKind == JsonValueKind.Object ? Str(xi, "key") : "",
+                XiLevel = xi.ValueKind == JsonValueKind.Object ? Int(xi, "level", 0) : 0,
+                XiName = xi.ValueKind == JsonValueKind.Object ? Str(xi, "name") : "",
+                XiWorldName = xi.ValueKind == JsonValueKind.Object ? Str(xi, "worldName") : "",
                 CharacterToken = charToken,
                 CharacterState = charState,
                 Character = ReadCharacter(Obj(root, "character")),

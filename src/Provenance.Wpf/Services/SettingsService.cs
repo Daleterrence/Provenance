@@ -28,8 +28,10 @@ public sealed class SettingsService : ISettingsService
 
     public void RedetectRegion() => _region = null;
 
-    public SettingsService()
-        : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "settings.json")) { }
+    internal static string DefaultPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "settings.json");
+
+    public SettingsService() : this(DefaultPath) { }
 
     internal SettingsService(string path)
     {

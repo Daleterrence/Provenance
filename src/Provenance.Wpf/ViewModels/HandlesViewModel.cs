@@ -81,7 +81,8 @@ public partial class HandlesViewModel : ObservableObject
     {
         LoggedIn = loggedIn && snap != null;
         ReadOnlyText = readOnly;
-        if (snap != null) _snap = snap;
+        // logged out, the last account's handles go with it
+        _snap = LoggedIn ? snap! : PolSocialSnapshot.Empty;
         if (!LoggedIn && _token != null)
         {
             // the session that had it is gone, and so is anything that could say how it went

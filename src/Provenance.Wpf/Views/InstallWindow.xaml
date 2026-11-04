@@ -14,10 +14,10 @@
         TextElement.Foreground="{DynamicResource Text.1}" FontFamily="{DynamicResource Font.Body}"
         MouseLeftButtonDown="OnDrag">
 
-    <Border Margin="12" CornerRadius="8" Background="{DynamicResource Surface.2}"
+    <Border Margin="12" CornerRadius="{StaticResource Radius.Dialog}" Background="{DynamicResource Surface.2}"
             BorderBrush="{DynamicResource Border.Window}" BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.6" Color="#000000" />
+            <DynamicResource ResourceKey="Shadow.Window" />
         </Border.Effect>
         <Grid Margin="28,22" RowDefinitions="Auto,Auto,*,Auto">
             <Grid>
@@ -26,39 +26,39 @@
                     <TextBlock Text="Install FINAL FANTASY XI" FontSize="19" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <Button HorizontalAlignment="Right" VerticalAlignment="Top" Width="30" Height="30" Padding="0"
-                        Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
-                    <materialDesign:PackIcon Kind="WindowClose" Width="16" Height="16" />
+                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
+                    <local:SvgIcon Glyph="close" Flat="True" Width="16" Height="16" />
                 </Button>
             </Grid>
 
             <!-- before a run, and after a stop or a failure so the folders can change -->
             <StackPanel Grid.Row="1" Margin="0,18,0,0" Visibility="{Binding CanStart, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="This downloads the official game (about " Foreground="{DynamicResource Text.2}" FontSize="13">
+                <TextBlock Text="This downloads the official game (about " Foreground="{DynamicResource Text.2}" FontSize="13" TextWrapping="Wrap">
                     <Run Text="{Binding TotalGib, Mode=OneWay}" /><Run Text=") and installs it the way Square Enix's own installer does." />
                 </TextBlock>
 
                 <StackPanel x:Name="RegionChoice" Visibility="{Binding ShowRegionChoice, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="Region" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
                     <ComboBox Width="260" HorizontalAlignment="Left" Padding="12,8,8,8" FontSize="13"
-                              Style="{StaticResource MaterialDesignOutlinedComboBox}" AutomationProperties.Name="Region"
+                              Style="{StaticResource OutlinedCombo}" AutomationProperties.Name="Region"
                               ItemsSource="{Binding RegionChoices}" SelectedIndex="{Binding RegionIndex}" IsEnabled="{Binding CanChooseRegion}" />
                 </StackPanel>
 
                 <TextBlock Text="Install to" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
                 <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Text="{Binding InstallFolder}" Style="{StaticResource MaterialDesignOutlinedTextBox}" />
-                    <Button Grid.Column="1" Margin="8,0,0,0" Content="BROWSE" Style="{StaticResource MaterialDesignOutlinedButton}"
+                    <TextBox Text="{Binding InstallFolder}" Style="{StaticResource FieldText}" />
+                    <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
                             Command="{Binding BrowseInstallCommand}" />
                 </Grid>
-                <TextBlock Text="{Binding GameFolderText}" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="2,4,0,0" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding FreeSpaceText}" FontSize="11" Margin="2,2,0,0" TextWrapping="Wrap"
+                <TextBlock Text="{Binding GameFolderText}" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding FreeSpaceText}" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"
                            Tag="{Binding EnoughSpace, Converter={StaticResource InvertBool}}"
                            Style="{StaticResource DimStatusText}" />
 
                 <TextBlock Text="Download the installer to" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,12,0,2" />
                 <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Text="{Binding DownloadFolder}" Style="{StaticResource MaterialDesignOutlinedTextBox}" />
-                    <Button Grid.Column="1" Margin="8,0,0,0" Content="BROWSE" Style="{StaticResource MaterialDesignOutlinedButton}"
+                    <TextBox Text="{Binding DownloadFolder}" Style="{StaticResource FieldText}" />
+                    <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
                             Command="{Binding BrowseDownloadCommand}" />
                 </Grid>
             </StackPanel>
@@ -86,14 +86,13 @@
             </StackPanel>
 
             <Grid Grid.Row="3">
-                <Button HorizontalAlignment="Left" Content="CANCEL" Style="{StaticResource MaterialDesignFlatButton}"
-                        Foreground="{DynamicResource Text.2}" Command="{Binding CancelCommand}"
+                <Button HorizontalAlignment="Left" Width="120" Height="46" FontSize="15" Content="CANCEL" Style="{StaticResource RedButton}" Command="{Binding CancelCommand}"
                         Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
                 <Button HorizontalAlignment="Right" MinWidth="180" Padding="20,0" Height="46" FontSize="15" Content="{Binding StartLabel}"
-                        Style="{StaticResource AccentRaisedButton}" Command="{Binding StartCommand}"
+                        Style="{StaticResource PolButton}" Command="{Binding StartCommand}"
                         Visibility="{Binding CanStart, Converter={StaticResource BoolToVis}}" />
                 <Button HorizontalAlignment="Right" Width="120" Height="46" FontSize="15" Content="DONE"
-                        Style="{StaticResource AccentRaisedButton}"
+                        Style="{StaticResource PolButton}"
                         Click="OnClose" Visibility="{Binding Done, Converter={StaticResource BoolToVis}}" />
             </Grid>
         </Grid>

@@ -24,6 +24,8 @@
     <NativeToolsDir Condition="'$(NativeToolsDir)' == ''">..\..\native\bin</NativeToolsDir>
   </PropertyGroup>
 
+  <Import Project="ReadyToRun.props" />
+
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <PublishReadyToRun>true</PublishReadyToRun>
     <TieredPGO>true</TieredPGO>
@@ -42,12 +44,14 @@
     <Resource Include="$(ProvenanceAssetsDir)\app\provenance-256.png" Link="Assets\provenance-256.png" />
     <Resource Include="$(ProvenanceAssetsDir)\app\bg-logo.png" Link="Assets\bg-logo.png" />
     <Resource Include="$(ProvenanceAssetsDir)\app\no-image.jpg" Link="Assets\no-image.jpg" />
+    <Resource Include="$(ProvenanceAssetsDir)\app\icons\*.svg" Link="Assets\icons\%(Filename)%(Extension)" />
     <None Include="$(ProvenanceAssetsDir)\installer\zones\*.jpg" Link="zones\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="MaterialDesignThemes" Version="5.1.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="SharpVectors.Wpf" Version="1.8.6" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
     <PackageReference Include="Serilog" Version="4.2.0" />

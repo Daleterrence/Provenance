@@ -75,9 +75,6 @@ public partial class MainViewModel : ObservableObject
             MessageDialog.ShowInfo(Application.Current.MainWindow, "PlayOnline session ended", why);
             Log.Information("Session ended: the notice was closed");
         });
-        LoadStatusIcons();
-        StatusMark.IconSource = StatusIconService.Get;
-        StatusMark.IconsAvailable = () => StatusIconService.Available;
         Social = new SocialViewModel(_pol, avatars, _settings);
         Social.ChangeProfilePictureRequested += OpenProfilePicturePicker;
         Social.LayoutRequested += OnSocialLayout;
@@ -251,7 +248,8 @@ public partial class MainViewModel : ObservableObject
     }
 
     [ObservableProperty] private string? _notice;
-    [ObservableProperty] private string _noticeIcon = "EmailOutline";
+    // "mail" is POL's envelope, anything else is a Material icon name
+    [ObservableProperty] private string _noticeIcon = "mail";
     [ObservableProperty] private bool _noticeOpens = true;
     private bool _noticeStays;
     private int _noticeRequest;   // the request or invitation the notice is about
@@ -290,7 +288,7 @@ public partial class MainViewModel : ObservableObject
         _settings.Save(_settings.Current);
     }
 
-    private void Alert(string? sender, string text, string icon = "EmailOutline", bool stays = false, int request = 0)
+    private void Alert(string? sender, string text, string icon = "mail", bool stays = false, int request = 0)
     {
         _lastSender = sender;
         ShowNotice(text, icon, stays: stays);
@@ -387,7 +385,7 @@ public partial class MainViewModel : ObservableObject
             tell: tell);
     }
 
-    private void ShowNotice(string text, string icon = "EmailOutline", bool opens = true, bool stays = false)
+    private void ShowNotice(string text, string icon = "mail", bool opens = true, bool stays = false)
     {
         _noticeRequest = 0;
         _noticeGroupChat = false;
@@ -430,12 +428,15 @@ public partial class MainViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(snap.MyHandle) || _sessionProfileId is null) return;
         if (Profiles.FirstOrDefault(p => p.Id == _sessionProfileId) is not { } prof) return;
+        var key = snap.Handles.FirstOrDefault(h => h.Active)?.Key;
         // no profile picture (-1) says nothing, comparing it anyway would rewrite settings.json every 2 s
         if (prof.DisplayName == snap.MyHandle && prof.HandleName == snap.MyHandle &&
-            (snap.MyProfilePictureId < 0 || prof.ProfilePictureId == snap.MyProfilePictureId)) return;
+            (snap.MyProfilePictureId < 0 || prof.ProfilePictureId == snap.MyProfilePictureId) &&
+            (string.IsNullOrEmpty(key) || prof.HandleKey == key)) return;
         prof.DisplayName = snap.MyHandle;
         prof.HandleName = snap.MyHandle;
         if (snap.MyProfilePictureId >= 0) prof.ProfilePictureId = snap.MyProfilePictureId;
+        if (!string.IsNullOrEmpty(key)) prof.HandleKey = key;
         PersistProfileList();
         if (prof == SelectedProfile) RefreshProfileDisplay();
         else { var i = Profiles.IndexOf(prof); if (i >= 0) Profiles[i] = prof; }
@@ -473,6 +474,11 @@ public partial class MainViewModel : ObservableObject
             if (slots) HomeSlots.Assign(s, _settings.ReadSaved());
         });
     }
+
+    internal Task<int> ConnectProfileAsync(Profile p, PolAccount pol, SeaAccount sea, string otp, int? keyGeneration,
+                                           IProgress<LaunchProgress>? progress, CancellationToken token) =>
+        _pol.ConnectAsync(pol, sea, otp, p.Id, progress, PromptHandleName, token,
+                          new SessionOptions(false, null, keyGeneration, HomeSlotFor(p), HandleKey: p.HandleKey));
 
     // a login always goes with the account's own home slot, so one without gets it now
     internal int HomeSlotFor(Profile p)
@@ -875,10 +881,7 @@ public partial class MainViewModel : ObservableObject
                         PolPaths.TryGetInstallFolder(r, PolPaths.FfxiProduct) is { } f &&
                         File.Exists(Path.Combine(f, "FFXiMain.dll"));
         RefreshRepairAvailable(region);
-        if (!StatusIconService.Available) LoadStatusIcons();
     }
-
-    private void LoadStatusIcons() => StatusIconService.Load(ViewerFolder(_settings.DetectedRegion));
 
     [RelayCommand]
     private void LocateInstall()
@@ -989,14 +992,39 @@ public partial class MainViewModel : ObservableObject
     private void OpenSocial()
     {
         if (MultiRunning) return;
+        Social.ShowGroups = false;
         ShowSocialWindow(_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both, activate: true);
     }
+
+    // groups live on the friends side's Groups tab
+    [RelayCommand]
+    private void OpenGroups()
+    {
+        if (MultiRunning) return;
+        Social.ShowGroups = true;
+        ShowSocialWindow(_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both, activate: true);
+    }
+
+    // split, that's the Messages window on its own
+    [RelayCommand]
+    private void OpenMessages()
+    {
+        if (MultiRunning) return;
+        ShowSocialWindow(_settings.Current.SocialSplit ? SocialPart.Messages : SocialPart.Both, activate: true);
+    }
+
+    [ObservableProperty] private bool _chatRoomsOpen;
+    private ChatRoomsWindow? _chatRooms;
 
     [RelayCommand]
     private void OpenChatRooms()
     {
         if (MultiRunning) return;
-        ChatRoomsWindow.ShowFor(Social, _pol.SaveChatPassword, _pol.DropChatPassword, _avatars.ChatEmote);
+        ChatRoomsWindow.ShowFor(Social, _pol.SaveChatPassword, _pol.DropChatPassword, SvgIcons.Emote);
+        if (ChatRoomsWindow.Current is not { } w || w == _chatRooms) return;
+        _chatRooms = w;
+        ChatRoomsOpen = true;
+        w.Closed += (_, _) => (_chatRooms, ChatRoomsOpen) = (null, false);
     }
 
     private static List<SocialWindow> SocialWindows() => Application.Current.Windows.OfType<SocialWindow>().ToList();
@@ -1144,8 +1172,7 @@ public partial class MainViewModel : ObservableObject
         });
         try
         {
-            int code = await _pol.ConnectAsync(pol, sea, otp, profile.Id, progress, PromptHandleName, token,
-                                               new SessionOptions(false, null, keyGeneration, HomeSlotFor(profile)));
+            int code = await ConnectProfileAsync(profile, pol, sea, otp, keyGeneration, progress, token);
             await Application.Current!.Dispatcher.InvokeAsync(() => { });   // an empty hop so queued progress reports land first (yes, really)
             if (code == 0)
             {

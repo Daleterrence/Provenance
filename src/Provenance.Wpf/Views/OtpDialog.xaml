@@ -8,10 +8,10 @@
         TextElement.Foreground="{DynamicResource Text.1}" FontFamily="{DynamicResource Font.Body}"
         MouseLeftButtonDown="OnDrag">
 
-    <Border Margin="14" CornerRadius="8" Background="{DynamicResource Surface.2}"
+    <Border Margin="14" CornerRadius="{StaticResource Radius.Dialog}" Background="{DynamicResource Surface.2}"
             BorderBrush="{DynamicResource Border.Window}" BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.55" Color="Black" />
+            <DynamicResource ResourceKey="Shadow.Dialog" />
         </Border.Effect>
         <StackPanel Margin="22,20,22,16">
             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
@@ -32,30 +32,30 @@
                     <TextBlock x:Name="SourceText" FontSize="12" TextWrapping="Wrap" MaxWidth="290" Foreground="{DynamicResource Text.2}" />
                 </StackPanel>
                 <Grid x:Name="MasterPanel" Visibility="Collapsed" Margin="0,10,0,0" ColumnDefinitions="*,Auto">
-                    <PasswordBox x:Name="MasterBox" Style="{StaticResource DialogPasswordBox}" Padding="10,6"
+                    <PasswordBox x:Name="MasterBox" Style="{DynamicResource DialogPasswordBox}" Padding="10,6"
                                  materialDesign:HintAssist.Hint="Bitwarden master password" KeyDown="OnMasterKey" />
-                    <Button Grid.Column="1" Margin="8,0,0,0" Content="UNLOCK" Style="{StaticResource AccentFlatButton}" Click="OnUnlock" />
+                    <Button Grid.Column="1" Margin="8,0,0,0" Content="UNLOCK" Style="{StaticResource PolButton}" Click="OnUnlock" />
                 </Grid>
-                <Button x:Name="RetryButton" Visibility="Collapsed" HorizontalAlignment="Left" Margin="-8,4,0,0"
-                        Style="{StaticResource AccentFlatButton}" Click="OnRetry" />
+                <Button x:Name="RetryButton" Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,4,0,0"
+                        Style="{StaticResource PolButton}" Click="OnRetry" />
             </StackPanel>
 
             <!-- the six digit boxes get made in code -->
             <UniformGrid x:Name="Digits" Rows="1" Columns="6" HorizontalAlignment="Center"
                          AutomationProperties.Name="One-time password, 6 digits" />
 
-            <TextBlock x:Name="ErrorText" Margin="2,6,0,0" FontSize="12" Foreground="{DynamicResource State.Down}"
+            <TextBlock x:Name="ErrorText" Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource State.Down}"
                        Visibility="Collapsed" Text="Enter all 6 digits." />
-            <TextBlock x:Name="BusyText" Margin="2,6,0,0" FontSize="12" Foreground="{DynamicResource Text.2}"
+            <TextBlock x:Name="BusyText" Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource Text.2}"
                        Visibility="Collapsed" Text="Checking the code..." />
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Content="PASTE"
+                <Button Style="{StaticResource PolButton}" Content="PASTE"
                         Margin="0,0,8,0" Click="OnPaste" />
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Content="CANCEL"
+                <Button Style="{StaticResource RedButton}" Content="CANCEL"
                         Margin="0,0,8,0" IsCancel="True" Click="OnCancel" />
                 <Button x:Name="OkButton" Content="OK" MinWidth="72" IsDefault="True" Click="OnOk"
-                        Style="{StaticResource AccentRaisedButton}" />
+                        Style="{StaticResource PolButton}" />
             </StackPanel>
         </StackPanel>
     </Border>

@@ -8,10 +8,10 @@
         TextElement.Foreground="{DynamicResource Text.1}" FontFamily="{DynamicResource Font.Body}"
         MouseLeftButtonDown="OnDrag">
 
-    <Border Margin="12" CornerRadius="8" Padding="26,22" Background="{DynamicResource Surface.2}"
+    <Border Margin="12" CornerRadius="{StaticResource Radius.Dialog}" Padding="26,22" Background="{DynamicResource Surface.2}"
             BorderBrush="{DynamicResource Border.Window}" BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.55" Color="#000000" />
+            <DynamicResource ResourceKey="Shadow.Dialog" />
         </Border.Effect>
         <StackPanel>
             <TextBlock x:Name="HeaderText" Text="Add account" FontSize="18" FontWeight="SemiBold" />
@@ -21,19 +21,19 @@
                        Text="Your IDs and passwords are kept in Windows Credential Manager, and Provenance never shows them again. Once you've logged in, the main screen shows your PlayOnline handle and picture instead." />
 
             <TextBox x:Name="PolIdBox" Margin="0,0,0,10" MaxLength="8" CharacterCasing="Upper"
-                     materialDesign:HintAssist.Hint="PlayOnline ID" materialDesign:HintAssist.Background="{DynamicResource Surface.2}"
+                     materialDesign:HintAssist.Hint="PlayOnline ID"
                      materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
-                     Style="{StaticResource DialogTextBox}" />
+                     Style="{DynamicResource DialogTextBox}" />
             <PasswordBox x:Name="PolPasswordBox" Margin="0,0,0,10"
-                         materialDesign:HintAssist.Hint="PlayOnline password" materialDesign:HintAssist.Background="{DynamicResource Surface.2}"
-                         Style="{StaticResource DialogRevealPasswordBox}" />
+                         materialDesign:HintAssist.Hint="PlayOnline password"
+                         Style="{DynamicResource DialogRevealPasswordBox}" />
             <TextBox x:Name="SeaIdBox" Margin="0,0,0,10"
-                     materialDesign:HintAssist.Hint="Square Enix ID" materialDesign:HintAssist.Background="{DynamicResource Surface.2}"
-                     Style="{StaticResource DialogTextBox}" />
+                     materialDesign:HintAssist.Hint="Square Enix ID"
+                     Style="{DynamicResource DialogTextBox}" />
             <PasswordBox x:Name="SeaPasswordBox" Margin="0,0,0,8"
-                         materialDesign:HintAssist.Hint="Square Enix password" materialDesign:HintAssist.Background="{DynamicResource Surface.2}"
-                         Style="{StaticResource DialogRevealPasswordBox}" />
-            <TextBlock x:Name="KeepHint" Visibility="Collapsed" Margin="2,0,0,8" FontSize="11"
+                         materialDesign:HintAssist.Hint="Square Enix password"
+                         Style="{DynamicResource DialogRevealPasswordBox}" />
+            <TextBlock x:Name="KeepHint" Visibility="Collapsed" Margin="0,0,0,8" FontSize="11"
                        Foreground="{DynamicResource Text.3}"
                        Text="Leave a field empty to keep what's already saved." />
 
@@ -43,22 +43,22 @@
                         IsEnabled="{Binding IsChecked, ElementName=OtpBox}">
                 <TextBlock Text="Get the code from" FontSize="12" Foreground="{DynamicResource Text.3}" Margin="0,0,0,4" />
                 <ComboBox x:Name="OtpSourceBox" Width="240" HorizontalAlignment="Left"
-                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Padding="10,6"
+                          Style="{StaticResource OutlinedCombo}" Padding="10,6"
                           SelectionChanged="OnOtpSourceChanged">
                     <ComboBoxItem Content="Type it in each time" Tag="" />
                     <ComboBoxItem Content="Bitwarden" Tag="bitwarden" />
                     <ComboBoxItem Content="1Password" Tag="1password" />
                     <ComboBoxItem Content="KeePassXC" Tag="keepassxc" />
                 </ComboBox>
-                <TextBox x:Name="OtpItemBox" Margin="0,10,0,0" Style="{StaticResource DialogTextBox}"
+                <TextBox x:Name="OtpItemBox" Margin="0,10,0,0" Style="{DynamicResource DialogTextBox}"
                          Padding="10,8" MaxLength="200" Visibility="Collapsed"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                          materialDesign:HintAssist.Hint="Item name or ID" materialDesign:HintAssist.IsFloating="True" />
                 <!-- only with more than one account in 1Password -->
                 <StackPanel x:Name="OpAccountPanel" Margin="0,10,0,0" Visibility="Collapsed">
                     <TextBlock Text="1Password account" FontSize="12" Foreground="{DynamicResource Text.3}" Margin="0,0,0,4" />
-                    <ComboBox x:Name="OpAccountBox" Style="{StaticResource MaterialDesignOutlinedComboBox}" Padding="10,6" />
-                    <TextBlock Text="The account that holds this item" Margin="2,4,0,0" FontSize="11"
+                    <ComboBox x:Name="OpAccountBox" Style="{StaticResource OutlinedCombo}" Padding="10,6" />
+                    <TextBlock Text="The account that holds this item" Margin="0,4,0,0" FontSize="11"
                                Foreground="{DynamicResource Text.3}" />
                 </StackPanel>
                 <TextBlock x:Name="OtpSourceHelp" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap"
@@ -71,24 +71,24 @@
                         <TextBlock x:Name="ToolText" Grid.Column="1" FontSize="12" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Text.2}" />
                     </Grid>
-                    <Button x:Name="ToolButton" Visibility="Collapsed" HorizontalAlignment="Left" Margin="-8,4,0,0"
-                            Style="{StaticResource AccentFlatButton}" Click="OnToolButton" />
+                    <Button x:Name="ToolButton" Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,4,0,0"
+                            Style="{StaticResource PolButton}" Click="OnToolButton" />
                     <StackPanel x:Name="BitwardenLoginPanel" Margin="0,10,0,0" Visibility="Collapsed">
                         <TextBlock Text="Bitwarden server" FontSize="12" Foreground="{DynamicResource Text.3}" Margin="0,0,0,4" />
                         <ComboBox x:Name="BwServerBox" Width="240" HorizontalAlignment="Left"
-                                  Style="{StaticResource MaterialDesignOutlinedComboBox}" Padding="10,6"
+                                  Style="{StaticResource OutlinedCombo}" Padding="10,6"
                                   SelectionChanged="OnBwServerChanged">
                             <ComboBoxItem Content="bitwarden.com" Tag="bitwarden.com" IsSelected="True" />
                             <ComboBoxItem Content="bitwarden.eu" Tag="https://vault.bitwarden.eu" />
                             <ComboBoxItem Content="Self-hosted" Tag="" />
                         </ComboBox>
-                        <TextBox x:Name="BwServerUrlBox" Margin="0,10,0,0" Style="{StaticResource DialogTextBox}"
+                        <TextBox x:Name="BwServerUrlBox" Margin="0,10,0,0" Style="{DynamicResource DialogTextBox}"
                                  Padding="10,8" MaxLength="300" Visibility="Collapsed"
                                  materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                                  materialDesign:HintAssist.Hint="Server address" materialDesign:HintAssist.IsFloating="True" />
-                        <Button x:Name="BwLoginButton" Content="LOG IN TO BITWARDEN" HorizontalAlignment="Left" Margin="-8,6,0,0"
-                                Style="{StaticResource AccentFlatButton}" Click="OnBitwardenLogin" />
-                        <Grid ColumnDefinitions="Auto,*">
+                        <Button x:Name="BwLoginButton" Content="LOG IN TO BITWARDEN" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                Style="{StaticResource PolButton}" Click="OnBitwardenLogin" />
+                        <Grid Margin="0,6,0,0" ColumnDefinitions="Auto,*">
                             <ProgressBar x:Name="BwLoginSpinner" Width="14" Height="14" IsIndeterminate="True" Value="0" VerticalAlignment="Top"
                                          Margin="0,1,8,0" Style="{StaticResource MaterialDesignCircularProgressBar}" Visibility="Collapsed" />
                             <TextBlock x:Name="BwLoginText" Grid.Column="1" FontSize="11" TextWrapping="Wrap"
@@ -103,9 +103,9 @@
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                 <Button Content="CANCEL" Width="100" Margin="0,0,10,0" IsCancel="True"
-                        Style="{StaticResource MaterialDesignFlatButton}" Click="OnCancel" />
+                        Style="{StaticResource RedButton}" Click="OnCancel" />
                 <Button Content="SAVE" Width="100" IsDefault="True"
-                        Style="{StaticResource AccentRaisedButton}" Click="OnSave" />
+                        Style="{StaticResource PolButton}" Click="OnSave" />
             </StackPanel>
         </StackPanel>
     </Border>

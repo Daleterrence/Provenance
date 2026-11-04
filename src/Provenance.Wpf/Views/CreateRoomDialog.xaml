@@ -20,10 +20,10 @@
         </Style>
     </Window.Resources>
 
-    <Border Margin="14" CornerRadius="8" Background="{DynamicResource Surface.2}"
+    <Border Margin="14" CornerRadius="{StaticResource Radius.Dialog}" Background="{DynamicResource Surface.2}"
             BorderBrush="{DynamicResource Border.Window}" BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.55" Color="Black" />
+            <DynamicResource ResourceKey="Shadow.Dialog" />
         </Border.Effect>
         <StackPanel Margin="22,20,22,16">
             <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
@@ -37,9 +37,9 @@
                     <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
                     <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
                 </Grid.RowDefinitions>
-                <TextBlock Style="{StaticResource Label}" Text="Room Name" />
+                <TextBlock Style="{StaticResource Label}" Text="Room name" />
                 <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,5" MaxLength="30" FontSize="13" Padding="10,6"
-                         Style="{StaticResource MaterialDesignOutlinedTextBox}" materialDesign:HintAssist.IsFloating="False"
+                         Style="{StaticResource OutlinedField}" materialDesign:HintAssist.IsFloating="False"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" TextChanged="OnChanged" />
 
                 <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Zone" />
@@ -55,10 +55,10 @@
                     <RadioButton x:Name="PasswordOff" Content="Off" IsChecked="True" Checked="OnPasswordSwitch" />
                 </StackPanel>
                 <PasswordBox x:Name="PasswordBox" Grid.Row="4" Grid.Column="1" Margin="0,5" MaxLength="16" FontSize="13" Padding="10,6"
-                             Style="{StaticResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Enter Room Password"
+                             Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Enter room password"
                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
                 <PasswordBox x:Name="ConfirmBox" Grid.Row="5" Grid.Column="1" Margin="0,5" MaxLength="16" FontSize="13" Padding="10,6"
-                             Style="{StaticResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Confirm Password"
+                             Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Confirm password"
                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
 
                 <TextBlock Grid.Row="6" Style="{StaticResource Label}" Text="Members" />
@@ -69,12 +69,12 @@
                 <ComboBox x:Name="LanguageBox" Grid.Row="8" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
             </Grid>
 
-            <TextBlock x:Name="ErrorText" Margin="2,8,0,0" FontSize="12" Foreground="{DynamicResource State.Down}"
+            <TextBlock x:Name="ErrorText" Margin="0,8,0,0" FontSize="12" Foreground="{DynamicResource State.Down}"
                        TextWrapping="Wrap" Visibility="Collapsed" />
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Content="CANCEL" Margin="0,0,8,0" Click="OnCancel" IsCancel="True" />
-                <Button Content="CREATE" MinWidth="72" IsDefault="True" Click="OnCreate" Style="{StaticResource AccentRaisedButton}" />
+                <Button Style="{StaticResource RedButton}" Content="CANCEL" Margin="0,0,8,0" Click="OnCancel" IsCancel="True" />
+                <Button Content="CREATE" MinWidth="72" IsDefault="True" Click="OnCreate" Style="{StaticResource PolButton}" />
             </StackPanel>
         </StackPanel>
     </Border>

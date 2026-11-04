@@ -40,6 +40,7 @@ public partial class ProfileWindow : Window
     private void SetFriend(FriendItem friend)
     {
         _friend = friend;
+        Picture.InGame = friend.InGame;
         SendButton.Visibility = friend.CanMessage ? Visibility.Visible : Visibility.Collapsed;
     }
 

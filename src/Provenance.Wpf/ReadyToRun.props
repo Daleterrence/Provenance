@@ -1,0 +1,8 @@
+<Project>
+  <!-- crossgen'd SharpVectors starts throwing EntryPointNotFoundException out of its own interface calls once it's warmed
+       up (x86, .NET 10), so every icon loaded after that comes out blank. Left as IL it's JIT'd and behaves -->
+  <ItemGroup>
+    <PublishReadyToRunExclude Include="SharpVectors.Converters.Wpf.dll;SharpVectors.Core.dll;SharpVectors.Css.dll;SharpVectors.Dom.dll" />
+    <PublishReadyToRunExclude Include="SharpVectors.Model.dll;SharpVectors.Rendering.Wpf.dll;SharpVectors.Runtime.Wpf.dll" />
+  </ItemGroup>
+</Project>

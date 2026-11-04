@@ -61,6 +61,9 @@ public sealed class LauncherSettings
 
     public bool SocialSplit { get; set; }
 
+    // "dark" or "light"
+    public string Theme { get; set; } = "dark";
+
     public bool MinimizeToTray { get; set; }
 
     // 0 = never, otherwise 10-60 mins like POL's own sign-out timer
@@ -138,6 +141,9 @@ public sealed class Profile
     public string DisplayName { get; set; } = "New account";
 
     public string? HandleName { get; set; }
+
+    // the active handle's Handle ID, for a login where the server doesn't say which handle was last active
+    public string? HandleKey { get; set; }
 
     // profile picture, 0 = none. The JSON name has to stay, saved accounts find their pics by it
     [JsonPropertyName("FaceId")]

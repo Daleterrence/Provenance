@@ -7,10 +7,10 @@
         TextElement.Foreground="{DynamicResource Text.1}" FontFamily="{DynamicResource Font.Body}"
         MouseLeftButtonDown="OnDrag">
 
-    <Border Margin="14" CornerRadius="8" Background="{DynamicResource Surface.2}"
+    <Border Margin="14" CornerRadius="{StaticResource Radius.Dialog}" Background="{DynamicResource Surface.2}"
             BorderBrush="{DynamicResource Border.Window}" BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.55" Color="Black" />
+            <DynamicResource ResourceKey="Shadow.Dialog" />
         </Border.Effect>
         <StackPanel Margin="22,20,22,16">
             <StackPanel Orientation="Horizontal">
@@ -25,7 +25,7 @@
             <Grid Margin="0,8,0,0" MinHeight="36">
                 <TextBlock x:Name="DetailText" FontSize="12" Foreground="{DynamicResource Text.3}" VerticalAlignment="Center" />
                 <Button x:Name="SkipButton" HorizontalAlignment="Right" Content="SKIP" Click="OnSkip"
-                        Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                        Style="{StaticResource PolButton}"
                         ToolTip="Start Provenance now. It'll check for updates again next time." />
             </Grid>
         </StackPanel>

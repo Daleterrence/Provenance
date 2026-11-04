@@ -32,10 +32,10 @@ public partial class OtpDialog : Window
         {
             var box = new TextBox
             {
-                Width = 42, Height = 52, Margin = new Thickness(i == 0 ? 0 : 6, 0, 0, 0), MaxLength = 1,
+                Width = 42, Height = 52, Margin = new Thickness(3, 0, 3, 0), MaxLength = 1,
                 FontSize = 24, HorizontalContentAlignment = HorizontalAlignment.Center,
                 VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(0),
-                Style = (Style)FindResource("MaterialDesignOutlinedTextBox"), Tag = i,
+                Style = (Style)FindResource("OutlinedField"), Tag = i,
             };
             MaterialDesignThemes.Wpf.TextFieldAssist.SetCharacterCounterVisibility(box, Visibility.Collapsed);
             System.Windows.Automation.AutomationProperties.SetName(box, $"Digit {i + 1} of 6");

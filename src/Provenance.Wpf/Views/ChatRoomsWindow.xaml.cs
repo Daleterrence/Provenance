@@ -23,7 +23,7 @@ public partial class ChatRoomsWindow : Window
         {
             AskChatName = initial => InputDialog.Prompt(this, DialogTitle, "Enter chat name.", initial,
                                                         maxLength: ChatRoomFiles.MaxNameBytes, validate: ChatRoomFiles.NameProblem),
-            AskPassword = () => InputDialog.PromptSecret(this, "Enter Room Password", "Enter password.",
+            AskPassword = () => InputDialog.PromptSecret(this, "Enter room password", "Enter password.",
                                                          ChatRoomFiles.MaxPasswordLength, ChatRoomFiles.PasswordProblem),
             ConfirmLeave = question => MessageDialog.Confirm(this, DialogTitle, question, "LEAVE") is not null,
             ShowError = text => MessageDialog.ShowError(this, DialogTitle, text),
@@ -112,10 +112,10 @@ public partial class ChatRoomsWindow : Window
     // the viewer asks for the new one and then again to confirm it
     private string? AskNewPassword()
     {
-        var pw = InputDialog.PromptSecret(this, "Set Password", "Enter password.", ChatRoomFiles.MaxNewPassword,
+        var pw = InputDialog.PromptSecret(this, "Set password", "Enter password.", ChatRoomFiles.MaxNewPassword,
                                           ChatRoomFiles.NewPasswordProblem);
         if (pw is null) return null;
-        var again = InputDialog.PromptSecret(this, "Confirm Password", "Enter password.", ChatRoomFiles.MaxNewPassword);
+        var again = InputDialog.PromptSecret(this, "Confirm password", "Enter password.", ChatRoomFiles.MaxNewPassword);
         if (again is null) return null;
         if (again == pw) return pw;
         MessageDialog.ShowError(this, DialogTitle, "The password entered in Room Password(Confirm) does not match.");
@@ -180,17 +180,15 @@ public partial class ChatRoomsWindow : Window
     {
         var panel = new WrapPanel { Width = 8 * 38 };
         var none = new Button { Content = "NO", Width = 34, Height = 34, Margin = new Thickness(2), Padding = new Thickness(0),
-                                Style = (Style)FindResource("MaterialDesignFlatButton"), FontSize = 11 };
+                                Style = (Style)FindResource("IconButton"), FontSize = 11 };
         System.Windows.Automation.AutomationProperties.SetName(none, "No emoticon");
+        var frame = new Border { BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(6), Child = panel };
+        frame.SetResourceReference(Border.BackgroundProperty, "Surface.2");
+        frame.SetResourceReference(Border.BorderBrushProperty, "Border.Window");
         var popup = new System.Windows.Controls.Primitives.Popup
         {
             PlacementTarget = button, Placement = System.Windows.Controls.Primitives.PlacementMode.Top, StaysOpen = false,
-            AllowsTransparency = true,
-            Child = new Border
-            {
-                Background = (Brush)FindResource("Surface.2"), BorderBrush = (Brush)FindResource("Border.Window"),
-                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(6), Child = panel,
-            },
+            AllowsTransparency = true, Child = frame,
         };
         none.Click += (_, _) => { _vm.Emoticon = 0; popup.IsOpen = false; };
         panel.Children.Add(none);
@@ -199,7 +197,7 @@ public partial class ChatRoomsWindow : Window
             var b = new Button
             {
                 Content = new Image { Source = f.Image, Width = 32, Height = 32 }, Width = 34, Height = 34, Margin = new Thickness(2),
-                Padding = new Thickness(0), Style = (Style)FindResource("MaterialDesignFlatButton"), ToolTip = f.Name,
+                Padding = new Thickness(0), Style = (Style)FindResource("IconButton"), ToolTip = f.Name,
             };
             System.Windows.Automation.AutomationProperties.SetName(b, f.Name);
             b.Click += (_, _) => { _vm.Emoticon = f.Index; popup.IsOpen = false; };

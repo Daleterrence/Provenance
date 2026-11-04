@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:local="clr-namespace:Provenance.Wpf.Views"
              xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels"
              TextElement.Foreground="{DynamicResource Text.1}">
     <UserControl.Resources>
@@ -24,7 +25,7 @@
         <Style x:Key="Switch" TargetType="ToggleButton" BasedOn="{StaticResource MaterialDesignSwitchToggleButton}">
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
-        <Style x:Key="Search" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
+        <Style x:Key="Search" TargetType="TextBox" BasedOn="{StaticResource OutlinedField}">
             <Setter Property="Padding" Value="12,8" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -52,7 +53,7 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="Bd" Margin="3,0" Padding="16,8" CornerRadius="8" Background="Transparent"
+                                    <Border x:Name="Bd" Margin="3,0" Padding="16,8" CornerRadius="{StaticResource Radius.Panel}" Background="Transparent"
                                             BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                                         <TextBlock x:Name="Label" Text="{Binding}" FontSize="13" Foreground="{DynamicResource Text.2}"
                                                    HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
@@ -130,7 +131,7 @@
                 <StackPanel Visibility="{Binding HasLists, Converter={StaticResource BoolToVis}}">
                     <Border Style="{StaticResource PlatformCard}" Tag="{Binding CardPlatform}" Margin="0,0,0,12">
                         <Grid ColumnDefinitions="Auto,*">
-                            <materialDesign:PackIcon Kind="PuzzleOutline" Width="22" Height="22" VerticalAlignment="Center" />
+                            <local:SvgIcon Glyph="plugin" Flat="True" Width="22" Height="22" VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" Margin="12,0,0,0">
                                 <TextBlock Text="{Binding CardHeading}" FontSize="12" FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding CardName}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -184,11 +185,11 @@
                     <StackPanel VerticalAlignment="Center">
                         <WrapPanel>
                             <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
-                            <materialDesign:PackIcon Kind="ShieldCheck" Width="15" Height="15" Margin="-4,0,8,0" VerticalAlignment="Center" Background="Transparent"
-                                                     ToolTip="{Binding VerifiedTip}" AutomationProperties.Name="{Binding VerifiedTip}"
-                                                     Visibility="{Binding VerifiedTip, Converter={StaticResource NullToVisibilityConverter}}">
-                                <materialDesign:PackIcon.Style>
-                                    <Style TargetType="materialDesign:PackIcon">
+                            <local:SvgIcon Glyph="verified" Flat="True" Width="15" Height="15" Margin="-4,0,8,0" VerticalAlignment="Center" Background="Transparent"
+                                           ToolTip="{Binding VerifiedTip}" AutomationProperties.Name="{Binding VerifiedTip}"
+                                           Visibility="{Binding VerifiedTip, Converter={StaticResource NullToVisibilityConverter}}">
+                                <local:SvgIcon.Style>
+                                    <Style TargetType="local:SvgIcon">
                                         <Setter Property="Foreground" Value="{DynamicResource Primary}" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding Team}" Value="Windower">
@@ -199,8 +200,8 @@
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </materialDesign:PackIcon.Style>
-                            </materialDesign:PackIcon>
+                                </local:SvgIcon.Style>
+                            </local:SvgIcon>
                             <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,0,8,0" VerticalAlignment="Center"
                                        Visibility="{Binding Details, Converter={StaticResource NullToVisibilityConverter}}" />
                             <ItemsControl ItemsSource="{Binding Badges}" ItemTemplate="{StaticResource Badge}" Focusable="False" VerticalAlignment="Center">
@@ -215,18 +216,18 @@
                                    Visibility="{Binding Description, Converter={StaticResource NullToVisibilityConverter}}" />
                     </StackPanel>
                     <Button Grid.Column="1" Margin="12,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
-                            Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                            Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                             Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding}" ToolTip="Open folder" AutomationProperties.Name="Open folder"
                             Visibility="{Binding Location, Converter={StaticResource NullToVisibilityConverter}}">
-                        <materialDesign:PackIcon Kind="FolderOpenOutline" Width="18" Height="18" />
+                        <local:SvgIcon Glyph="folder" Width="18" Height="18" />
                     </Button>
                     <Button Grid.Column="2" Margin="16,0,0,0" Height="30" Padding="12,0" FontSize="12" VerticalAlignment="Center"
                             Command="{Binding DataContext.InstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name, StringFormat=Install {0}}"
                             Visibility="{Binding CanInstall, Converter={StaticResource BoolToVis}}">
                         <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                            <Style TargetType="Button" BasedOn="{StaticResource PolButton}">
                                 <Setter Property="Content" Value="INSTALL" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Installing}" Value="True">
@@ -274,7 +275,7 @@
         </ItemsControl>
 
         <!-- down here so a switch far down the list still shows what happened -->
-        <Border Grid.Row="1" Background="{DynamicResource Surface.1}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0" Padding="20,12"
+        <Border Grid.Row="1" Style="{StaticResource FooterBar}"
                 Visibility="{Binding Status, Converter={StaticResource NullToVisibilityConverter}}">
             <TextBlock Text="{Binding Status}" Tag="{Binding StatusIsError}" Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12" />
         </Border>

@@ -58,6 +58,7 @@ public partial class SettingsViewModel : ObservableObject
         _groupChatNotice = settings.Current.GroupChatNotice;
         _groupChatFlash = settings.Current.GroupChatFlash;
         _groupChatTimes = settings.Current.GroupChatTimes;
+        _themeIndex = Array.IndexOf(AppTheme.Names, AppTheme.Normalise(settings.Current.Theme));
         _largeAddressAwareOn = settings.Current.LargeAddressAware;
         _traySignOutIndex = Math.Max(0, Array.IndexOf(TraySignOutMinutes, settings.Current.TraySignOutMinutes));
         _chatLanguageFilter = PolOptions.ChatFilter(settings.Current);
@@ -92,6 +93,8 @@ public partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<string> FeedRegionChoices { get; } =
         new[] { "Automatic (matches your install)", "North America", "Europe", "Japan" };
+
+    public IReadOnlyList<string> ThemeChoices { get; } = ["Dark", "Light"];
 
     public IReadOnlyList<string> AutoDisconnectChoices { get; } =
         PolOptions.AutoDisconnectChoices.Select(m => m < 0 ? "Off" : $"{m} minutes").ToList();
@@ -144,6 +147,15 @@ public partial class SettingsViewModel : ObservableObject
             s.AutoDisconnectMinutes = PolOptions.AutoDisconnectChoices[value];
             s.ChatLanguageFilter ??= PolOptions.ChatFilter(s);
         });
+    }
+
+    [ObservableProperty] private int _themeIndex;
+
+    partial void OnThemeIndexChanged(int value)
+    {
+        if (value < 0 || value >= AppTheme.Names.Length) return;
+        Save(s => s.Theme = AppTheme.Names[value]);
+        AppTheme.Apply(AppTheme.Names[value]);
     }
 
     partial void OnFeedRegionIndexChanged(int value)

@@ -7,6 +7,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels"
         xmlns:local="clr-namespace:Provenance.Wpf.Views"
+        xmlns:services="clr-namespace:Provenance.Wpf.Services"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:EditProfileViewModel}"
         Title="Edit your PlayOnline profile" Icon="/Assets/provenance.ico"
         Width="560" Height="780" MinHeight="420" MinWidth="480" WindowStyle="None"
@@ -36,13 +37,124 @@
             <Setter Property="Margin" Value="2,6,0,0" />
         </Style>
         <!-- labels above, never a floating hint (it draws an ugly chip behind itself on this background) -->
-        <Style x:Key="Field" TargetType="ComboBox" BasedOn="{StaticResource MaterialDesignOutlinedComboBox}">
+        <Style x:Key="Field" TargetType="ComboBox" BasedOn="{StaticResource OutlinedCombo}">
             <Setter Property="Padding" Value="12,8,8,8" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
             <Setter Property="MaxDropDownHeight" Value="360" />
         </Style>
-        <Style x:Key="FieldText" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
+        <!-- the privacy choices as pills, with no ScrollViewer in the list. Its clip sat right on the first row's top
+             line and ate it on a scaled screen -->
+        <Style x:Key="Pills" TargetType="ListBox">
+            <Setter Property="SelectedValuePath" Value="Code" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBox">
+                        <ItemsPresenter Margin="2" SnapsToDevicePixels="True" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="SnapsToDevicePixels" Value="True" />
+                        <Setter Property="FocusVisualStyle">
+                            <Setter.Value>
+                                <Style>
+                                    <Setter Property="Control.Template">
+                                        <Setter.Value>
+                                            <ControlTemplate>
+                                                <Rectangle Margin="-2,-2,6,4" RadiusX="18" RadiusY="18" StrokeThickness="2"
+                                                           Stroke="{DynamicResource Primary}" />
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Setter.Value>
+                        </Setter>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Pill" Margin="0,0,8,6" Padding="16,7" CornerRadius="16" Cursor="Hand"
+                                            BorderThickness="1" BorderBrush="{DynamicResource Border.Hair}"
+                                            Background="{DynamicResource Surface.1}">
+                                        <TextBlock x:Name="Txt" Text="{Binding Text}" FontSize="12.5"
+                                                   Foreground="{DynamicResource Text.2}" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Primary.Muted}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Primary.Muted}" />
+                                            <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Primary}" />
+                                            <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource Text.1}" />
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter TargetName="Pill" Property="Cursor" Value="Arrow" />
+                                            <Setter TargetName="Pill" Property="Opacity" Value="0.75" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- a profile along the top. Picked has the pill's colours, an unsaved one gets a dot -->
+        <Style x:Key="ProfileCardButton" TargetType="Button">
+            <Setter Property="Focusable" Value="True" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Width="160" Height="62" Padding="10,0,12,0" CornerRadius="{StaticResource Radius.Panel}"
+                                BorderThickness="1" BorderBrush="{DynamicResource Border.Hair}" Background="{DynamicResource Surface.1}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Primary.Muted}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Primary.Muted}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Primary}" />
+                            </DataTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="FocusVisualStyle">
+                <Setter.Value>
+                    <Style>
+                        <Setter Property="Control.Template">
+                            <Setter.Value>
+                                <ControlTemplate>
+                                    <Rectangle Margin="-3" RadiusX="9" RadiusY="9" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="FieldText" TargetType="TextBox" BasedOn="{StaticResource OutlinedField}">
             <Setter Property="Padding" Value="12,8" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -51,19 +163,84 @@
         </Style>
     </Window.Resources>
 
-    <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,*,Auto">
-        <Grid Background="{DynamicResource Surface.1}">
-            <TextBlock Margin="14,0" VerticalAlignment="Center" FontSize="14" Text="Edit your PlayOnline profile" />
+    <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,*,Auto">
+        <Grid Background="{DynamicResource Title.Bg}" TextElement.Foreground="{DynamicResource Text.1}">
+            <Grid.Resources>
+                <ResourceDictionary Source="/Provenance;component/Themes/TitleBar.xaml" />
+            </Grid.Resources>
+            <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
+                <Image Source="/Assets/provenance-256.png" Width="20" Height="20" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                <TextBlock VerticalAlignment="Center" FontSize="14" Text="Edit your PlayOnline profile" />
+            </StackPanel>
             <Button HorizontalAlignment="Right" Width="44" Height="40" Padding="0"
-                    Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
-                <materialDesign:PackIcon Kind="WindowClose" Width="18" Height="18" />
+                <local:SvgIcon Glyph="close" Flat="True" Width="18" Height="18" />
             </Button>
+            <Border Style="{StaticResource TitleEdge}" />
         </Grid>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20,16,20,18"
+        <!-- the cards stay put while the form scrolls. A wheel over them scrolls them sideways -->
+        <Border Grid.Row="1" Padding="20,16,20,4">
+            <ScrollViewer x:Name="CardStrip" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                          PreviewMouseWheel="OnCardsWheel" Focusable="False">
+                <ItemsControl ItemsSource="{Binding Cards}" Focusable="False" Margin="0,3,0,3" IsEnabled="{Binding CanSelectCard}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Margin="3,0" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:ProfileCard}">
+                            <Button Style="{StaticResource ProfileCardButton}"
+                                    Command="{Binding DataContext.SelectCardCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title}"
+                                    ToolTip="{Binding Title}">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <Grid Width="40" Height="40" VerticalAlignment="Center">
+                                        <local:ProfilePictureCircle Diameter="40" Source="{Binding Picture}"
+                                                                    Visibility="{Binding IsHandle, Converter={StaticResource BoolToVis}}" />
+                                        <Border Width="40" Height="40" CornerRadius="20" Background="{DynamicResource Surface.3}"
+                                                Visibility="{Binding IsHandle, Converter={StaticResource InvertBoolToVis}}">
+                                            <Image Source="{x:Static services:SvgIcons.XiBadge}" Width="26" Stretch="Uniform"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </Grid>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Text.1}" TextTrimming="CharacterEllipsis" />
+                                            <Ellipse Grid.Column="1" Width="7" Height="7" Margin="6,1,0,0" VerticalAlignment="Center"
+                                                     Fill="{DynamicResource Primary}" ToolTip="Not saved yet"
+                                                     Visibility="{Binding HasChanges, Converter={StaticResource BoolToVis}}" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource Text.3}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="20,12,20,18"
                       IsEnabled="{Binding LoadingProfile, Converter={StaticResource InvertBool}}">
-            <StackPanel IsEnabled="{Binding CanEditFields}">
+            <Grid>
+            <StackPanel IsEnabled="{Binding CanEditXi}" Visibility="{Binding IsXiCard, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding SelectedCard.Title}" FontSize="17" FontWeight="SemiBold" Margin="0,4,0,0" />
+                <TextBlock Text="{Binding SelectedCard.Subtitle}" FontSize="12.5" Foreground="{DynamicResource Text.3}" Margin="0,2,0,0" />
+                <TextBlock Text="Who can see this character's profile" Style="{StaticResource Section}" />
+                <ListBox Style="{StaticResource Pills}" ItemsSource="{Binding VisibilityChoices}"
+                         SelectedValue="{Binding SelectedCard.Level}" AutomationProperties.Name="Who can see this character's profile" />
+                <TextBlock Style="{StaticResource Help}" Margin="0" Text="{Binding SelectedCard.VisibilityHelp}" />
+                <TextBlock Style="{StaticResource Help}" Margin="0,14,0,0"
+                           Text="Provenance can't change a character's privacy yet. This is what PlayOnline has it set to."
+                           Visibility="{Binding XiReadOnly, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Style="{StaticResource Help}" Margin="0,14,0,0"
+                           Text="This is the only part of a character's profile PlayOnline lets you change."
+                           Visibility="{Binding XiReadOnly, Converter={StaticResource InvertBoolToVis}}" />
+            </StackPanel>
+            <StackPanel IsEnabled="{Binding CanEditFields}" Visibility="{Binding IsHandleCard, Converter={StaticResource BoolToVis}}">
                 <Grid ColumnDefinitions="Auto,*">
                     <!-- a button so the keyboard can reach it, drawn as just the picture -->
                     <Button VerticalAlignment="Top" Cursor="Hand" ToolTip="Change your profile picture" AutomationProperties.Name="Change your profile picture"
@@ -104,8 +281,8 @@
                                          Visibility="{Binding Social.ProfilePictureSaving, Converter={StaticResource BoolToVis}}" />
                             <Border Width="24" Height="24" CornerRadius="12" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                     Background="{DynamicResource Surface.3}" BorderBrush="{DynamicResource Bg.Base}" BorderThickness="2">
-                                <materialDesign:PackIcon Kind="Pencil" Width="12" Height="12" HorizontalAlignment="Center"
-                                                         VerticalAlignment="Center" Foreground="{DynamicResource Text.1}" />
+                                <local:SvgIcon Glyph="edit" Flat="True" Width="12" Height="12" HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" Foreground="{DynamicResource Text.1}" />
                             </Border>
                         </Grid>
                     </Button>
@@ -119,54 +296,9 @@
                 </Grid>
 
                 <TextBlock Text="Who can see your profile" Style="{StaticResource Section}" />
-                <ListBox ItemsSource="{Binding VisibilityChoices}" SelectedValuePath="Code" SelectedValue="{Binding Level}"
-                         Background="Transparent" BorderThickness="0" Padding="0"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemsPanel>
-                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                    </ListBox.ItemsPanel>
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="FocusVisualStyle">
-                                <Setter.Value>
-                                    <Style>
-                                        <Setter Property="Control.Template">
-                                            <Setter.Value>
-                                                <ControlTemplate>
-                                                    <Rectangle Margin="-2,-2,6,4" RadiusX="18" RadiusY="18" StrokeThickness="2"
-                                                               Stroke="{DynamicResource Primary}" />
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </Setter.Value>
-                            </Setter>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ListBoxItem">
-                                        <Border x:Name="Pill" Margin="0,0,8,6" Padding="16,7" CornerRadius="16" Cursor="Hand"
-                                                BorderThickness="1" BorderBrush="{DynamicResource Border.Hair}"
-                                                Background="{DynamicResource Surface.1}">
-                                            <TextBlock x:Name="Txt" Text="{Binding Text}" FontSize="12.5"
-                                                       Foreground="{DynamicResource Text.2}" />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Primary.Muted}" />
-                                            </Trigger>
-                                            <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Primary.Muted}" />
-                                                <Setter TargetName="Pill" Property="BorderBrush" Value="{DynamicResource Primary}" />
-                                                <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource Text.1}" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                </ListBox>
-                <TextBlock Style="{StaticResource Help}" Margin="2,0,0,0"
+                <ListBox Style="{StaticResource Pills}" ItemsSource="{Binding VisibilityChoices}" SelectedValue="{Binding Level}"
+                         AutomationProperties.Name="Who can see your profile" />
+                <TextBlock Style="{StaticResource Help}" Margin="0,0,0,0"
                            Text="{Binding VisibilityHelp}" />
 
                 <TextBlock Text="About you" Style="{StaticResource Section}" />
@@ -194,7 +326,7 @@
                                   SelectedValuePath="Code" SelectedValue="{Binding Job1}" />
                     </StackPanel>
                 </Grid>
-                <TextBlock Text="Mail address" Style="{StaticResource Label}" Margin="2,12,0,4" />
+                <TextBlock Text="Mail address" Style="{StaticResource Label}" Margin="0,12,0,4" />
                 <TextBox Style="{StaticResource FieldText}" MaxLength="319" materialDesign:HintAssist.Hint="No mail address"
                          Text="{Binding Mail, UpdateSourceTrigger=PropertyChanged}" />
                 <TextBlock Style="{StaticResource Help}" Text="Leave it empty if you don't want to show a mail address." />
@@ -256,10 +388,11 @@
                     <ContentControl Content="{Binding Interest3}" ContentTemplate="{StaticResource InterestRow}" Focusable="False" />
                 </StackPanel>
             </StackPanel>
+            </Grid>
         </ScrollViewer>
 
         <!-- over the form while POL sends the profile. The form's disabled underneath too, so Tab can't get in either -->
-        <Grid x:Name="LoadingOverlay" Grid.Row="1" Visibility="Collapsed" Opacity="0" IsHitTestVisible="{Binding LoadingProfile}">
+        <Grid x:Name="LoadingOverlay" Grid.Row="2" Visibility="Collapsed" Opacity="0" IsHitTestVisible="{Binding LoadingProfile}">
             <Grid.Style>
                 <Style TargetType="Grid">
                     <Style.Triggers>
@@ -297,18 +430,17 @@
                 </Style>
             </Grid.Style>
             <Rectangle Fill="{DynamicResource Bg.Base}" Opacity="0.82" />
-            <Border HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20,14,24,14" CornerRadius="10"
+            <Border HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20,14,24,14" CornerRadius="{StaticResource Radius.Panel}"
                     Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                 <StackPanel Orientation="Horizontal">
                     <ProgressBar Width="20" Height="20" IsIndeterminate="True" Value="0" Foreground="{DynamicResource Primary}"
                                  Style="{StaticResource MaterialDesignCircularProgressBar}" />
-                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="14" Text="Loading your profile..." />
+                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="14" Text="{Binding LoadingText}" />
                 </StackPanel>
             </Border>
         </Grid>
 
-        <Border Grid.Row="2" Padding="16,10" Background="{DynamicResource Surface.1}"
-                BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="3" Style="{StaticResource FooterBar}">
             <Grid ColumnDefinitions="*,Auto">
                 <!-- the overlay has its own spinner while the profile loads -->
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
@@ -321,11 +453,11 @@
                                Style="{StaticResource StatusText}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Style="{StaticResource MaterialDesignFlatButton}" Content="TRY AGAIN" Margin="0,0,8,0"
+                    <Button Style="{StaticResource PolButton}" Content="TRY AGAIN" Margin="0,0,8,0"
                             Command="{Binding RetryLoadCommand}" Visibility="{Binding CanRetryLoad, Converter={StaticResource BoolToVis}}" />
-                    <Button Style="{StaticResource MaterialDesignFlatButton}" Content="CLOSE" Margin="0,0,8,0" Click="OnClose" IsCancel="True" />
-                    <Button Content="SAVE" Command="{Binding SaveCommand}" IsDefault="True"
-                            Style="{StaticResource AccentRaisedButton}" />
+                    <Button Style="{StaticResource PolButton}" Content="CLOSE" Click="OnClose" IsCancel="True" />
+                    <Button Content="SAVE" Command="{Binding SaveCommand}" IsDefault="True" Margin="{StaticResource Footer.Gap}"
+                            Style="{StaticResource PolButton}" />
                 </StackPanel>
             </Grid>
         </Border>

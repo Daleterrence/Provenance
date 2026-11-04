@@ -56,7 +56,7 @@
         </Style>
 
         <!-- the tooltip and icon (Tag) follow the window's state -->
-        <Style x:Key="MaxButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
+        <Style x:Key="MaxButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
             <Setter Property="ToolTip" Value="Maximise" />
             <Setter Property="Tag" Value="{x:Static materialDesign:PackIconKind.WindowMaximize}" />
             <Style.Triggers>
@@ -76,12 +76,13 @@
                 <Grid ColumnDefinitions="Auto,*,Auto">
                     <local:ProfilePictureCircle x:Name="TheirProfilePicture" Diameter="30" Margin="0,6,8,0"
                                                 VerticalAlignment="Top"
-                                                Source="{Binding DataContext.SelectedFriend.Avatar, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                Source="{Binding DataContext.SelectedFriend.Avatar, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                InGame="{Binding DataContext.SelectedFriend.InGame, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
                     <local:ProfilePictureCircle x:Name="MyProfilePicture" Grid.Column="2" Diameter="30" Margin="8,6,0,0"
                                                 VerticalAlignment="Top" Visibility="Collapsed"
                                                 Source="{Binding DataContext.Avatar, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
                     <StackPanel x:Name="Line" Grid.Column="1" Margin="0,4" HorizontalAlignment="Left">
-                        <Border x:Name="Bubble" MaxWidth="420" Padding="12,8" CornerRadius="12"
+                        <Border x:Name="Bubble" MaxWidth="420" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}"
                                 Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                             <!-- read-only so it can be copied, no Tab stop so Tab goes on to the compose box -->
                             <TextBox x:Name="Body" Style="{x:Null}" Text="{Binding Display, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
@@ -138,22 +139,24 @@
     </Window.Resources>
 
     <Grid RowDefinitions="40,*">
-        <Grid Background="{DynamicResource Surface.1}">
+        <Grid Background="{DynamicResource Title.Bg}" TextElement.Foreground="{DynamicResource Text.1}">
+            <Grid.Resources>
+                <ResourceDictionary Source="/Provenance;component/Themes/TitleBar.xaml" />
+            </Grid.Resources>
             <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
-                <materialDesign:PackIcon x:Name="TitleIcon" Kind="AccountMultiple" Width="18" Height="18" Foreground="{DynamicResource Primary}" />
+                <local:SvgIcon x:Name="TitleIcon" Glyph="smiley" Width="22" Height="22" />
                 <TextBlock x:Name="TitleText" Text="Friends and messages" FontSize="14" Margin="10,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button x:Name="AddFriendButton" Height="40" Padding="12,0" Style="{StaticResource MaterialDesignFlatButton}"
-                        Foreground="{DynamicResource Text.2}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                <Button x:Name="AddFriendButton" Height="28" Margin="0,0,8,0" Padding="6,0,10,0" Style="{StaticResource PolButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
                         IsEnabled="{Binding CanEdit}" Click="OnAddFriend" ToolTip="Search PlayOnline and send a friend request" AutomationProperties.Name="Search PlayOnline and send a friend request">
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="AccountPlusOutline" Width="18" Height="18" VerticalAlignment="Center" />
-                        <TextBlock Text="ADD FRIEND" Margin="8,0,0,0" FontSize="12" VerticalAlignment="Center" />
+                        <local:SvgIcon Glyph="search" />
+                        <TextBlock Text="ADD A FRIEND" Margin="6,0,0,0" FontSize="12" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="LayoutButton" Width="44" Height="40" Padding="0" Foreground="{DynamicResource Text.2}"
-                        Style="{StaticResource MaterialDesignFlatButton}"
+                        Style="{StaticResource IconButton}"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnLayout">
                     <materialDesign:PackIcon x:Name="LayoutIcon" Kind="ArrowSplitVertical" Width="18" Height="18" />
                 </Button>
@@ -163,11 +166,12 @@
                     <materialDesign:PackIcon Width="18" Height="18" Kind="{Binding Tag, ElementName=MaximizeButton}" />
                 </Button>
                 <Button Width="44" Height="40" Padding="0"
-                        Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
-                    <materialDesign:PackIcon Kind="WindowClose" Width="18" Height="18" />
+                    <local:SvgIcon Glyph="close" Flat="True" Width="18" Height="18" />
                 </Button>
             </StackPanel>
+            <Border Style="{StaticResource TitleEdge}" />
         </Grid>
 
         <Grid Grid.Row="1">
@@ -178,7 +182,7 @@
             </Grid.ColumnDefinitions>
 
             <Grid x:Name="FriendsPart" Background="{DynamicResource Surface.1}" RowDefinitions="Auto,*,Auto">
-                <Expander Grid.Row="2" Background="{DynamicResource Surface.1}" BorderBrush="{DynamicResource Border.Hair}"
+                <Expander Grid.Row="2" Background="{DynamicResource Surface.1}" BorderBrush="{DynamicResource Border.Pane}"
                           BorderThickness="0,1,0,0" Padding="8,0,8,8"
                           Visibility="{Binding HasBlocked, Converter={StaticResource BoolToVis}}">
                     <Expander.Header>
@@ -199,7 +203,7 @@
                                                        ToolTip="Every handle on this person's PlayOnline ID is ignored, not just this one."
                                                        Visibility="{Binding AllHandles, Converter={StaticResource BoolToVis}}" />
                                         </StackPanel>
-                                        <Button Grid.Column="1" Style="{StaticResource MaterialDesignFlatButton}" FontSize="11" Height="26"
+                                        <Button Grid.Column="1" Style="{StaticResource PolButton}" FontSize="11" Height="26"
                                                 Padding="8,0" Content="STOP IGNORING" Tag="{Binding}" Click="OnUnignore"
                                                 IsEnabled="{Binding DataContext.CanEdit, RelativeSource={RelativeSource AncestorType=Window}}" />
                                     </Grid>
@@ -223,10 +227,10 @@
                             <Grid ColumnDefinitions="Auto,*">
                                 <TextBlock Text="{Binding AccountName}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center" />
-                                <Button Grid.Column="1" HorizontalAlignment="Left" Margin="6,0,0,0" Width="26" Height="24" Padding="0"
-                                        Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.3}"
+                                <Button Grid.Column="1" HorizontalAlignment="Left" Margin="6,0,0,0" Width="28" Height="28" Padding="0"
+                                        Style="{StaticResource IconButton}"
                                         ToolTip="Edit your PlayOnline profile" AutomationProperties.Name="Edit your PlayOnline profile" Click="OnEditProfile" IsEnabled="{Binding Connected}">
-                                    <materialDesign:PackIcon Kind="AccountEditOutline" Width="16" Height="16" />
+                                    <local:SvgIcon Glyph="card" />
                                 </Button>
                             </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
@@ -260,7 +264,7 @@
                                 </Border.Style>
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBox x:Name="CommentBox" Padding="0,2" FontSize="12" FontStyle="Italic" MaxLength="49"
-                                             Style="{StaticResource MaterialDesignTextBox}" BorderThickness="0"
+                                             Style="{StaticResource PlainField}" BorderThickness="0"
                                              Foreground="{DynamicResource Text.2}"
                                              materialDesign:HintAssist.Hint="Add a comment" materialDesign:HintAssist.IsFloating="False"
                                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
@@ -268,11 +272,11 @@
                                              Text="{Binding MyComment, Mode=OneWay}"
                                              ToolTip="Your friends see this comment. Press Enter to save it, or press Esc or click away to cancel."
                                              KeyDown="OnCommentKey" GotKeyboardFocus="OnCommentFocus" LostKeyboardFocus="OnCommentLostFocus" />
-                                    <materialDesign:PackIcon Grid.Column="1" Kind="Pencil" Width="12" Height="12" Margin="4,0,2,0"
-                                                             VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" Cursor="Hand"
-                                                             Background="Transparent" ToolTip="Edit your comment" MouseLeftButtonUp="OnCommentPencil">
-                                        <materialDesign:PackIcon.Style>
-                                            <Style TargetType="materialDesign:PackIcon">
+                                    <local:SvgIcon Grid.Column="1" Glyph="edit" Flat="True" Width="12" Height="12" Margin="4,0,2,0"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" Cursor="Hand"
+                                                   Background="Transparent" ToolTip="Edit your comment" MouseLeftButtonUp="OnCommentPencil">
+                                        <local:SvgIcon.Style>
+                                            <Style TargetType="local:SvgIcon">
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsKeyboardFocused, ElementName=CommentBox}" Value="True">
                                                         <Setter Property="Visibility" Value="Hidden" />
@@ -282,13 +286,13 @@
                                                     </Trigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </materialDesign:PackIcon.Style>
-                                    </materialDesign:PackIcon>
+                                        </local:SvgIcon.Style>
+                                    </local:SvgIcon>
                                 </Grid>
                             </Border>
                         </StackPanel>
                     </Grid>
-                    <TextBlock Margin="2,4,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
+                    <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
                                Text="{Binding StatusNote}"
                                Visibility="{Binding StatusNote, Converter={StaticResource NullToVisibilityConverter}}" />
                     <StackPanel Orientation="Horizontal" Margin="-6,8,0,0">
@@ -303,8 +307,13 @@
 
                 <Grid Grid.Row="1" RowDefinitions="Auto,*"
                       Visibility="{Binding ShowGroups, Converter={StaticResource BoolToVis}}">
-                    <Button HorizontalAlignment="Left" Margin="10,4,0,4" Style="{StaticResource AccentFlatButton}"
-                            FontSize="12" Content="CREATE GROUP" IsEnabled="{Binding CanEdit}" Click="OnCreateGroup" />
+                    <Button HorizontalAlignment="Left" Margin="10,4,0,4" Padding="6,0,10,0" Style="{StaticResource PolButton}"
+                            FontSize="12" IsEnabled="{Binding CanEdit}" Click="OnCreateGroup" AutomationProperties.Name="Create group">
+                        <StackPanel Orientation="Horizontal">
+                            <local:SvgIcon Glyph="groupchat2" />
+                            <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="CREATE GROUP" />
+                        </StackPanel>
+                    </Button>
                     <TextBlock Grid.Row="1" Margin="16,8" FontSize="12" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
                                Text="You're not in any friend groups yet. A group lets up to 64 friends see each other."
                                Visibility="{Binding NoGroups, Converter={StaticResource BoolToVis}}" />
@@ -336,7 +345,7 @@
                                                                Foreground="{DynamicResource Text.OnPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                 </Border>
                                                 <Button x:Name="GroupChatButton" Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
-                                                        Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Primary}"
+                                                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Primary}"
                                                         ToolTip="Display the group chat screen." AutomationProperties.Name="Group Chat"
                                                         Command="{Binding DataContext.OpenGroupChatCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
@@ -345,9 +354,9 @@
                                                     <materialDesign:PackIcon Kind="ForumOutline" Width="18" Height="18" />
                                                 </Button>
                                                 <Button Grid.Column="3" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
-                                                        Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.3}"
+                                                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
                                                         ToolTip="Group actions" AutomationProperties.Name="Group actions" Click="OnRowMenuButton">
-                                                    <materialDesign:PackIcon Kind="DotsVertical" Width="18" Height="18" />
+                                                    <local:SvgIcon Glyph="more" Width="18" Height="18" />
                                                 </Button>
                                             </Grid>
                                         </Border>
@@ -366,7 +375,7 @@
                                                         <Button Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
                                                                 Foreground="{DynamicResource Text.3}" ToolTip="Member actions" AutomationProperties.Name="Member actions" Click="OnRowMenuButton">
                                                             <Button.Style>
-                                                                <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
+                                                                <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding Me}" Value="True">
                                                                             <Setter Property="Visibility" Value="Collapsed" />
@@ -374,18 +383,18 @@
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </Button.Style>
-                                                            <materialDesign:PackIcon Kind="DotsVertical" Width="18" Height="18" />
+                                                            <local:SvgIcon Glyph="more" Width="18" Height="18" />
                                                         </Button>
                                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                             <TextBlock FontSize="13" TextTrimming="CharacterEllipsis">
                                                                 <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding RoleText, Mode=OneWay}" FontSize="11" Foreground="{DynamicResource Text.3}" />
                                                             </TextBlock>
-                                                            <StackPanel Orientation="Horizontal">
-                                                                <local:StatusMark Status="{Binding StatusLabel}" Margin="0,0,6,0" />
+                                                            <DockPanel>
+                                                                <local:StatusMark DockPanel.Dock="Left" Status="{Binding StatusLabel}" Margin="0,0,6,0" />
                                                                 <TextBlock FontSize="11" Foreground="{DynamicResource Text.3}" TextTrimming="CharacterEllipsis">
                                                                     <Run Text="{Binding StatusLabel, Mode=OneWay}" /><Run Text="{Binding Comment, Mode=OneWay, StringFormat={}   {0}}" />
                                                                 </TextBlock>
-                                                            </StackPanel>
+                                                            </DockPanel>
                                                         </StackPanel>
                                                     </Grid>
                                                 </DataTemplate>
@@ -399,13 +408,13 @@
                 </Grid>
             </Grid>
 
-            <GridSplitter x:Name="PartSplitter" Grid.Column="1" Width="7" HorizontalAlignment="Stretch" Background="{DynamicResource Surface.2}" Cursor="SizeWE" ToolTip="Drag to resize" />
+            <GridSplitter x:Name="PartSplitter" Grid.Column="1" Style="{StaticResource PaneSplitter}" ToolTip="Drag to resize" />
 
             <Grid x:Name="MessagesPart" Grid.Column="2" Background="{DynamicResource Bg.Base}">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24"
                             Visibility="{Binding NoSelection, Converter={StaticResource BoolToVis}}">
-                    <materialDesign:PackIcon Kind="EmailOutline" Width="44" Height="44"
-                                             HorizontalAlignment="Center" Foreground="{DynamicResource Text.3}" />
+                    <local:SvgIcon Glyph="mail" Flat="True" Width="44" Height="44"
+                                   HorizontalAlignment="Center" Foreground="{DynamicResource Text.3}" />
                     <TextBlock Margin="0,10,0,4" HorizontalAlignment="Center" FontSize="14"
                                Text="{Binding NothingSelected}" />
                     <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="{DynamicResource Text.3}"
@@ -415,23 +424,23 @@
                     <TextBlock Margin="0,12,0,0" HorizontalAlignment="Center" FontSize="12" Foreground="{DynamicResource State.Warn}"
                                Text="Provenance couldn't get your messages from PlayOnline."
                                Visibility="{Binding MessagesUnavailable, Converter={StaticResource BoolToVis}}" />
-                    <Button Margin="0,10,0,0" Style="{StaticResource AccentFlatButton}" FontSize="12" Command="{Binding RefreshMailCommand}" Content="TRY AGAIN"
+                    <Button Margin="0,10,0,0" Style="{StaticResource PolButton}" FontSize="12" Command="{Binding RefreshMailCommand}" Content="TRY AGAIN"
                             Visibility="{Binding MessagesUnavailable, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
 
                 <Grid RowDefinitions="Auto,*,Auto"
                       Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
-                    <Border Padding="16,10" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,0,0,1"
+                    <Border Padding="16,10" BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
                             Background="{DynamicResource Surface.1}">
                         <Grid>
                             <Button HorizontalAlignment="Right" VerticalAlignment="Center" Width="32" Height="32" Padding="0"
-                                    Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.3}"
+                                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
                                     ToolTip="Actions for this person" AutomationProperties.Name="Actions for this person" Click="OnConversationMenu">
-                                <materialDesign:PackIcon Kind="DotsVertical" Width="20" Height="20" />
+                                <local:SvgIcon Glyph="more" Width="20" Height="20" />
                             </Button>
                             <Grid Margin="0,0,40,0" ColumnDefinitions="Auto,*">
                                 <local:ProfilePictureCircle Diameter="40" Margin="0,0,12,0" VerticalAlignment="Center"
-                                                            Source="{Binding SelectedFriend.Avatar}" />
+                                                            Source="{Binding SelectedFriend.Avatar}" InGame="{Binding SelectedFriend.InGame}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding SelectedFriend.Name}" FontSize="15" FontWeight="SemiBold" />
                                     <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,Auto,*">
@@ -462,22 +471,21 @@
                         </TextBlock.Style>
                         <Run Text="No messages with " /><Run Text="{Binding SelectedFriend.Name, Mode=OneWay}" /><Run Text=" yet." />
                     </TextBlock>
-                    <Border Grid.Row="2" Padding="12,10" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0"
-                            Background="{DynamicResource Surface.1}">
+                    <Border Grid.Row="2" Style="{StaticResource FooterBar}">
                         <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
                             <!-- MaxLength's only a backstop, the real limit's 300 bytes -->
                             <TextBox x:Name="ComposeBox" MinHeight="40" MaxHeight="120" FontSize="13"
                                      Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
                                      TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="300"
-                                     Style="{StaticResource MaterialDesignOutlinedTextBox}" Padding="10,8"
+                                     Style="{StaticResource OutlinedField}" Padding="10,8"
                                      materialDesign:HintAssist.Hint="Write a message (Enter sends, Shift+Enter adds a line)"
                                      materialDesign:HintAssist.IsFloating="False"
                                      materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                                      IsEnabled="{Binding CanCompose}" PreviewKeyDown="OnComposeKey"
                                      PreviewTextInput="OnComposeInput" DataObject.Pasting="OnComposePaste" />
-                            <Button Grid.Column="1" Margin="10,0,0,0" Height="40" VerticalAlignment="Bottom"
-                                    Style="{StaticResource AccentRaisedButton}" Command="{Binding SendCommand}" Content="SEND" />
-                            <DockPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="2,6,0,0">
+                            <Button Grid.Column="1" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom"
+                                    Style="{StaticResource PolButton}" Command="{Binding SendCommand}" Content="SEND" />
+                            <DockPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0">
                                 <!-- the "n/300" count only shows near the limit -->
                                 <TextBlock DockPanel.Dock="Right" Margin="10,0,0,0" FontSize="11" Foreground="{DynamicResource Text.3}"
                                            Text="{Binding ComposeCount}"

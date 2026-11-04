@@ -16,10 +16,11 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// Lean is POL_LEAN, a multi-account sign-in with no social side. HomeSlot is POL_HOME, the account's pub\homeNN
+// Lean is POL_LEAN, a multi-account sign-in with no social side. HomeSlot is POL_HOME, the account's pub\homeNN.
+// HandleKey is POL_HANDLE, the Handle ID of the handle the account last had active
 public sealed record SessionOptions(bool Lean, string? ThirdPartyHookProfile, int? KeyGeneration = null,
                                     int HomeSlot = 0, IReadOnlyDictionary<string, WindowerAddonList>? WindowerLists = null,
-                                    WindowerAddonList? WindowerShared = null);
+                                    WindowerAddonList? WindowerShared = null, string? HandleKey = null);
 
 internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? problem);
 
@@ -117,13 +118,14 @@ public sealed class PolSessionService : IDisposable
     // a new request file goes here too (I'll forget)
     private static readonly string[] RequestFiles =
         ["send", "status", "mail", "ack", "comment", "pic", "friend", "answer", "search", "profile", "group",
-         "myprofile", "saveprofile", "rename", "character", "ffxiprofile", "chatzones", "chatrooms", "chatjoin",
-         "chatsend", "chatleave", "chatcreate", "chatmaster", "handle", "groupchatjoin", "groupchatsend", "groupchatleave"];
+         "myprofile", "saveprofile", "rename", "xiprofile", "savexi", "character", "ffxiprofile", "chatzones", "chatrooms",
+         "chatjoin", "chatsend", "chatleave", "chatcreate", "chatmaster", "handle", "groupchatjoin", "groupchatsend",
+         "groupchatleave"];
 
     // Has to match prestart_wait's allow-list in pol_hook.c, the hook drops any other key
     private static readonly string[] GoFileKeys =
         ["POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP", "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_CRED_CHAT", "POL_STATUS",
-         "POL_HOME"];
+         "POL_HOME", "POL_HANDLE"];
 
     private enum LaunchOutcome { Started, Failed, Refused, Cancelled }
 
@@ -430,6 +432,7 @@ public sealed class PolSessionService : IDisposable
         if (options.Lean) env["POL_LEAN"] = "1";
         if (HomeSlots.Valid(options.HomeSlot))
             env["POL_HOME"] = options.HomeSlot.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        SetHandleEnvironment(env, options.HandleKey);
 
         if (ct.IsCancellationRequested) return Stopped("The login was cancelled.");
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.02));
@@ -864,6 +867,13 @@ public sealed class PolSessionService : IDisposable
     {
         SetBaseEnvironment(env, region);
         env["POL_PRESTART"] = "1";
+    }
+
+    // the hook's key for a Handle ID is 11 hex digits, anything else from a hand-edited settings.json stays out
+    internal static void SetHandleEnvironment(IDictionary<string, string?> env, string? key)
+    {
+        if (key is { Length: 11 } && key.All(char.IsAsciiHexDigit)) env["POL_HANDLE"] = key;
+        else env.Remove("POL_HANDLE");
     }
 
     internal static IEnumerable<string> GoFileEntries(IDictionary<string, string?> env)

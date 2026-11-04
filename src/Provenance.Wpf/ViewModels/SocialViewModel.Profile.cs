@@ -106,6 +106,12 @@ public partial class SocialViewModel
     {
         _profileCache.Clear();
         if (_profileFor.Length == 0) return;
+        ClearProfile();
+        ProfileNote = "Your active handle changed. Open the profile again to see it from this handle.";
+    }
+
+    private void ClearProfile()
+    {
         ProfileRows.Clear();
         ProfileName = ProfileHid = ProfileMail = ProfileUpdated = ProfilePrivacy = ProfileAway = ProfileAwayFrom = "";
         ProfileGameLine = "";
@@ -117,7 +123,6 @@ public partial class SocialViewModel
         _profileToken = _ffxiToken = null;
         ProfileLoading = false;
         ProfileNoteIsError = false;
-        ProfileNote = "Your active handle changed. Open the profile again to see it from this handle.";
     }
 
     private string StateText(int state) => state switch

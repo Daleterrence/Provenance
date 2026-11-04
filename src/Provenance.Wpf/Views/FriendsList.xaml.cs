@@ -1,6 +1,10 @@
+using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Provenance.Wpf.ViewModels;
 using RequestAnswer = Provenance.Common.Social.SocialSnapshot.RequestAnswer;
 
@@ -8,7 +12,26 @@ namespace Provenance.Wpf.Views;
 
 public partial class FriendsList : UserControl
 {
-    public FriendsList() => InitializeComponent();
+    // the main window's list picks on its own, only the friends window's follows the open conversation
+    public static readonly DependencyProperty OwnSelectionProperty = DependencyProperty.Register(
+        nameof(OwnSelection), typeof(bool), typeof(FriendsList), new PropertyMetadata(false, (d, e) =>
+        {
+            if ((bool)e.NewValue) BindingOperations.ClearBinding(((FriendsList)d).List, Selector.SelectedItemProperty);
+        }));
+
+    private FriendItem? _kept;
+
+    public FriendsList()
+    {
+        InitializeComponent();
+        ((INotifyCollectionChanged)List.Items).CollectionChanged += OnRowsChanged;
+    }
+
+    public bool OwnSelection
+    {
+        get => (bool)GetValue(OwnSelectionProperty);
+        set => SetValue(OwnSelectionProperty, value);
+    }
 
     public event Action<FriendItem>? FriendActivated;
 
@@ -19,7 +42,29 @@ public partial class FriendsList : UserControl
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (OwnSelection)
+        {
+            // a row swapped out by an update drops the selection, which isn't the user picking nobody
+            if (List.SelectedItem is FriendItem picked) _kept = picked;
+            else if (e.RemovedItems.OfType<object>().All(List.Items.Contains)) _kept = null;
+        }
         if (List.IsKeyboardFocusWithin && List.SelectedItem is FriendItem f) FriendSelected?.Invoke(f);
+    }
+
+    // the view model keeps its own selection across updates, so the list with its own has to do the same. Once the whole
+    // update's in, as a swapped row comes through the grouping as a remove and then an add
+    private bool _reselecting;
+    private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (!OwnSelection || _reselecting || List.SelectedItem is not null || _kept is null) return;
+        _reselecting = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.DataBind, () =>
+        {
+            _reselecting = false;
+            if (List.SelectedItem is not null || _kept is not { } was) return;
+            _kept = List.Items.OfType<FriendItem>().FirstOrDefault(f => f.Is(was));
+            if (_kept is not null) List.SelectedItem = _kept;
+        });
     }
 
     // the row under the pointer, not whatever was selected before
@@ -142,7 +187,7 @@ public partial class FriendsList : UserControl
 
     private void OnAddFriend(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) new AddFriendDialog(vm) { Owner = Owner }.ShowDialog();
+        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => new AddFriendDialog(vm) { Owner = Owner }.ShowDialog());
     }
 
     private void Rename(SocialViewModel vm, FriendItem f)

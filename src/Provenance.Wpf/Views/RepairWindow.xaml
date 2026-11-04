@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:local="clr-namespace:Provenance.Wpf.Views"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:RepairViewModel}"
         Title="Repair game files" Icon="/Assets/provenance.ico"
@@ -13,10 +14,10 @@
         TextElement.Foreground="{DynamicResource Text.1}" FontFamily="{DynamicResource Font.Body}"
         MouseLeftButtonDown="OnDrag">
 
-    <Border Margin="12" CornerRadius="8" Background="{DynamicResource Surface.2}"
+    <Border Margin="12" CornerRadius="{StaticResource Radius.Dialog}" Background="{DynamicResource Surface.2}"
             BorderBrush="{DynamicResource Border.Window}" BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.6" Color="#000000" />
+            <DynamicResource ResourceKey="Shadow.Window" />
         </Border.Effect>
         <Grid Margin="28,22" RowDefinitions="Auto,*,Auto">
             <Grid>
@@ -25,15 +26,15 @@
                     <TextBlock Text="Repair game files" FontSize="19" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <Button HorizontalAlignment="Right" VerticalAlignment="Top" Width="30" Height="30" Padding="0"
-                        Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
-                    <materialDesign:PackIcon Kind="WindowClose" Width="16" Height="16" />
+                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
+                    <local:SvgIcon Glyph="close" Flat="True" Width="16" Height="16" />
                 </Button>
             </Grid>
 
             <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,24,0,20">
-                <materialDesign:PackIcon Kind="CheckCircleOutline" Width="44" Height="44" Margin="0,0,0,14" HorizontalAlignment="Center"
-                                         Foreground="{DynamicResource Primary}"
-                                         Visibility="{Binding Succeeded, Converter={StaticResource BoolToVis}}" />
+                <local:SvgIcon Glyph="ok" Flat="True" Width="44" Height="44" Margin="0,0,0,14" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource Primary}"
+                               Visibility="{Binding Succeeded, Converter={StaticResource BoolToVis}}" />
                 <TextBlock Text="{Binding Stage}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"
                            TextAlignment="Center" TextWrapping="Wrap"
                            Visibility="{Binding Stage, Converter={StaticResource NullToVisibilityConverter}}" />
@@ -63,11 +64,10 @@
             </StackPanel>
 
             <Grid Grid.Row="2">
-                <Button HorizontalAlignment="Left" Content="CANCEL" Style="{StaticResource MaterialDesignFlatButton}"
-                        Foreground="{DynamicResource Text.2}" Command="{Binding CancelCommand}"
+                <Button HorizontalAlignment="Left" Width="120" Height="40" Content="CANCEL" Style="{StaticResource RedButton}" Command="{Binding CancelCommand}"
                         Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
                 <Button HorizontalAlignment="Right" Width="120" Height="40" Content="CLOSE"
-                        Style="{StaticResource AccentRaisedButton}" Click="OnClose"
+                        Style="{StaticResource PolButton}" Click="OnClose"
                         Visibility="{Binding Finished, Converter={StaticResource BoolToVis}}" />
             </Grid>
         </Grid>

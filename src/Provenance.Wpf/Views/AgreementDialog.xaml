@@ -14,14 +14,21 @@
     </shell:WindowChrome.WindowChrome>
 
     <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,*,Auto">
-        <Grid Background="{DynamicResource Surface.1}">
-            <TextBlock x:Name="TitleText" Margin="14,0" VerticalAlignment="Center" FontSize="14" />
+        <Grid Background="{DynamicResource Title.Bg}" TextElement.Foreground="{DynamicResource Text.1}">
+            <Grid.Resources>
+                <ResourceDictionary Source="/Provenance;component/Themes/TitleBar.xaml" />
+            </Grid.Resources>
+            <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
+                <Image Source="/Assets/provenance-256.png" Width="20" Height="20" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                <TextBlock x:Name="TitleText" VerticalAlignment="Center" FontSize="14" />
+            </StackPanel>
+            <Border Style="{StaticResource TitleEdge}" />
         </Grid>
 
         <TextBlock x:Name="IntroText" Grid.Row="1" Margin="18,14,18,8" FontSize="13" TextWrapping="Wrap"
                    Foreground="{DynamicResource Text.2}" />
 
-        <Border Grid.Row="2" Margin="18,0,18,0" CornerRadius="8" Background="{DynamicResource Surface.1}"
+        <Border Grid.Row="2" Margin="18,0,18,0" CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.1}"
                 BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
             <!-- read-only so it can be copied, and it scrolls itself, an outer ScrollViewer fights it for the wheel -->
             <TextBox x:Name="BodyText" Style="{x:Null}" FontSize="12.5" TextWrapping="Wrap" TextBlock.LineHeight="18"
@@ -31,12 +38,11 @@
                      SelectionBrush="{DynamicResource Primary}" PreviewKeyDown="OnBodyKey" />
         </Border>
 
-        <Border Grid.Row="3" Margin="0,12,0,0" Padding="18,10" Background="{DynamicResource Surface.1}"
-                BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FooterBar}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Content="I DO NOT ACCEPT" Margin="0,0,8,0"
+                <Button Style="{StaticResource RedButton}" Content="I DO NOT ACCEPT"
                         IsCancel="True" Click="OnDecline" />
-                <Button Style="{StaticResource AccentRaisedButton}" Content="I ACCEPT" Click="OnAccept" />
+                <Button Style="{StaticResource PolButton}" Content="I ACCEPT" Click="OnAccept" Margin="{StaticResource Footer.Gap}" />
             </StackPanel>
         </Border>
     </Grid>

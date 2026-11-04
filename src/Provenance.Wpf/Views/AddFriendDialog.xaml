@@ -53,13 +53,20 @@
     </Window.Resources>
 
     <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,*,Auto">
-        <Grid Background="{DynamicResource Surface.1}">
-            <TextBlock Margin="14,0" VerticalAlignment="Center" FontSize="14" Text="Add a friend" />
+        <Grid Background="{DynamicResource Title.Bg}" TextElement.Foreground="{DynamicResource Text.1}">
+            <Grid.Resources>
+                <ResourceDictionary Source="/Provenance;component/Themes/TitleBar.xaml" />
+            </Grid.Resources>
+            <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
+                <Image Source="/Assets/provenance-256.png" Width="20" Height="20" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                <TextBlock VerticalAlignment="Center" FontSize="14" Text="Add a friend" />
+            </StackPanel>
             <Button HorizontalAlignment="Right" Width="44" Height="40" Padding="0"
-                    Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
-                <materialDesign:PackIcon Kind="WindowClose" Width="18" Height="18" />
+                <local:SvgIcon Glyph="close" Flat="True" Width="18" Height="18" />
             </Button>
+            <Border Style="{StaticResource TitleEdge}" />
         </Grid>
 
         <StackPanel Grid.Row="1" Margin="16,8,16,6">
@@ -74,13 +81,13 @@
             <TextBlock FontSize="12" Foreground="{DynamicResource Text.2}" TextWrapping="Wrap" Text="{Binding SearchIntro}" />
             <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
                 <TextBox x:Name="NameBox" FontSize="13" Height="40" Padding="10,6" MaxLength="{Binding SearchMaxLength}"
-                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                         Style="{StaticResource OutlinedField}"
                          materialDesign:HintAssist.Hint="{Binding SearchHint}" materialDesign:HintAssist.IsFloating="False"
                          AutomationProperties.Name="{Binding SearchHint}" KeyDown="OnNameKey" />
                 <Button Grid.Column="1" Margin="10,0,0,0" Height="40" Content="SEARCH" Click="OnSearch"
-                        Style="{StaticResource AccentRaisedButton}" />
+                        Style="{StaticResource PolButton}" />
             </Grid>
-            <StackPanel Orientation="Horizontal" Margin="2,8,0,0">
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                 <ProgressBar Width="14" Height="14" Margin="0,0,8,0" IsIndeterminate="True" Value="0"
                              Style="{StaticResource MaterialDesignCircularProgressBar}"
                              Visibility="{Binding SearchBusy, Converter={StaticResource BoolToVis}}" />
@@ -90,7 +97,7 @@
         </StackPanel>
 
         <ListBox x:Name="Hits" Grid.Row="2" Margin="10,4" ItemsSource="{Binding SearchHits}"
-                 HorizontalContentAlignment="Stretch" BorderThickness="0" Background="Transparent"
+                 HorizontalContentAlignment="Stretch" BorderThickness="0" Background="Transparent" ItemContainerStyle="{StaticResource RowItem}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
                 <DataTemplate>
@@ -105,12 +112,11 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <Border Grid.Row="3" Padding="16,10" Background="{DynamicResource Surface.1}"
-                BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="3" Style="{StaticResource FooterBar}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Content="CLOSE" Margin="0,0,8,0" Click="OnClose" />
-                <Button x:Name="SendButton" Content="SEND FRIEND REQUEST" Click="OnSend"
-                        Style="{StaticResource AccentRaisedButton}" />
+                <Button Style="{StaticResource PolButton}" Content="CLOSE" Click="OnClose" />
+                <Button x:Name="SendButton" Content="SEND FRIEND REQUEST" Click="OnSend" Margin="{StaticResource Footer.Gap}"
+                        Style="{StaticResource PolButton}" />
             </StackPanel>
         </Border>
     </Grid>

@@ -29,6 +29,7 @@ public sealed record FriendItem(string Name, string Playing, string Comment, str
     public bool IsMe { get; init; }           // one of my own handles on my list, it can only be removed
     public bool IsRequest => RequestMid > 0 && !IsGroupInvite;
     public bool HasUnread => Unread > 0;
+    public bool InGame { get; init; }
     public bool IsFriend => Row >= 0;
     public bool CanMessage => Row >= 0 && !Pending && !IsMe;
 
@@ -80,18 +81,17 @@ public partial class SocialViewModel : ObservableObject
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanEdit))] private bool _friendsUnavailable;
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RefreshMailCommand))] private bool _messagesUnavailable;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanPlay))] private string? _playBlockedReason;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasUnread), nameof(AttentionCount), nameof(NeedsAttention))]
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasUnread))]
     private int _unreadCount;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(AttentionCount), nameof(NeedsAttention))]
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasPendingAnswers))]
     private int _pendingAnswers;
     // unread, plus requests no friend list has had on screen yet. The taskbar stays lit while it's above 0
     [ObservableProperty] private int _unseenCount;
     public int MyProfilePictureId { get; private set; }
 
     public bool HasUnread => UnreadCount > 0;
-    // requests go in the badge too, so one's never just an 8 sec banner
-    public int AttentionCount => UnreadCount + PendingAnswers;
-    public bool NeedsAttention => AttentionCount > 0;
+    // requests get a badge too (on FRIENDS), so one's never just an 8 sec banner
+    public bool HasPendingAnswers => PendingAnswers > 0;
     public bool CanPlay => PolAccountNotices.CanPlay(PlayBlockedReason);
     public string Summary => OnlineCount switch { 0 => "No friends online", 1 => "1 friend online", var n => $"{n} friends online" };
     public bool NoFriends => Connected && !FriendsUnavailable && Friends.Count == 0;
@@ -254,7 +254,14 @@ public partial class SocialViewModel : ObservableObject
         get => _friendsListVisible;
         set
         {
+            bool changed = _friendsListVisible != value;
             _friendsListVisible = value;
+            if (changed)
+            {
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(FriendsTabVisible));
+                OnPropertyChanged(nameof(GroupsTabVisible));
+            }
             RefreshUnseen();
         }
     }
@@ -327,8 +334,10 @@ public partial class SocialViewModel : ObservableObject
         _onlineFriends = now.Select(Id).ToHashSet();
     }
 
+    // a new login, maybe on another account, so nothing from the last one can show under this one
     public void Start(string profileId, string? storeRoot = null)
     {
+        _last = PolSocialSnapshot.Empty;
         _chat = new ChatStore(profileId, storeRoot) { Log = line => Serilog.Log.Warning("Chat log: {Line}", line) };
         GroupChat.SetLog(new GroupChatLog(profileId, storeRoot) { Log = line => Serilog.Log.Warning("Group chat log: {Line}", line) });
         _chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
@@ -369,6 +378,19 @@ public partial class SocialViewModel : ObservableObject
         SearchHits.Clear();
         Conversation.Clear();
         SelectedFriend = null;
+        Friends.Clear();
+        Blocked.Clear();
+        HasBlocked = false;
+        OnlineCount = UnreadCount = PendingAnswers = 0;
+        MyComment = "";
+        Avatar = null;
+        AccountNotice = PlayBlockedReason = null;
+        FriendsUnavailable = MessagesUnavailable = GroupsUnavailable = false;
+        ShowGroups = false;
+        ClearProfile();
+        RefreshUnseen();
+        OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(NoFriends));
     }
 
     public void Apply(PolSocialSnapshot snap)
@@ -630,7 +652,7 @@ public partial class SocialViewModel : ObservableObject
                 f.Pending ? "Friend request sent" : f.Online ? f.StatusLabel : "Offline", f.Online && !f.Pending, f.Row,
                 _avatars.ProfilePicture(f.ProfilePictureId), _chat?.UnreadFrom(f.Name, f.Key) ?? 0,
                 f.Pending ? "REQUESTS SENT" : f.Online ? "ONLINE" : "OFFLINE")
-            { Key = f.Key, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort };
+            { Key = f.Key, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, InGame = f.Online && !f.Pending && f.Game is not null };
         }).ToList();
         // invitations (kind 0xe) and requests (kind 1) stay on the server until they're answered
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_answered.Contains(m.Mid)))
@@ -659,9 +681,10 @@ public partial class SocialViewModel : ObservableObject
         }
         items = items.OrderBy(i => Array.IndexOf(Sections, i.Section))
                      .ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-        var sig = string.Join("|", items.Select(i => $"{i.Name}/{i.Key}/{i.StatusLabel}/{i.Playing}/{i.PlayingShort}/{i.Comment}/" +
+        // counted, so an empty list never matches the "" that forces a rebuild and leaves the old rows up
+        var sig = items.Count + ":" + string.Join("|", items.Select(i => $"{i.Name}/{i.Key}/{i.StatusLabel}/{i.Playing}/{i.PlayingShort}/{i.Comment}/" +
                                                      $"{i.Unread}/{i.Avatar != null}/{i.Section}/{i.Row}/" +
-                                                     $"{i.Pending}/{i.RequestMid}"));
+                                                     $"{i.Pending}/{i.RequestMid}/{i.InGame}"));
         if (sig == _friendsSignature) return;
         _friendsSignature = sig;
         // patched in place rather than cleared, so the list keeps its scroll position and selection and only the rows
@@ -703,6 +726,7 @@ public partial class SocialViewModel : ObservableObject
         {
             if (_conversationVisible == value) return;
             _conversationVisible = value;
+            OnPropertyChanged();
             if (value && SelectedFriend is { } f && _chat != null && _chat.UnreadFrom(f.Name, f.Key) > 0)
                 ReadConversation(f, rebuild: true);
         }

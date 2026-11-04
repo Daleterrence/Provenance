@@ -43,6 +43,8 @@ public partial class App : Application
         if (Program.VelopackStartError is { } velopackError)
             Log.Warning(velopackError, "Velopack start-up failed");
         LaunchArgs.Parse(e.Args);
+        // before the first window, the update one included, so nothing opens in the other theme first
+        AppTheme.Apply(AppTheme.FromSettingsFile(SettingsService.DefaultPath));
         if (LaunchArgs.ProfileId is { } forAccount)
             Log.Information("Started for account {Account} (play {Play})", forAccount, LaunchArgs.Play);
 

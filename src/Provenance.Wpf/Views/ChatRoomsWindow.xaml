@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:local="clr-namespace:Provenance.Wpf.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels"
@@ -18,7 +19,7 @@
 
     <Window.Resources>
         <!-- the tooltip and icon (Tag) follow the window's state -->
-        <Style x:Key="MaxButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
+        <Style x:Key="MaxButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
             <Setter Property="ToolTip" Value="Maximise" />
             <Setter Property="Tag" Value="{x:Static materialDesign:PackIconKind.WindowMaximize}" />
             <Style.Triggers>
@@ -29,7 +30,7 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="ListRow" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+        <Style x:Key="ListRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
             <Setter Property="Padding" Value="12,6" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
@@ -68,7 +69,10 @@
     </Window.Resources>
 
     <Grid RowDefinitions="40,*">
-        <Grid Background="{DynamicResource Surface.1}">
+        <Grid Background="{DynamicResource Title.Bg}" TextElement.Foreground="{DynamicResource Text.1}">
+            <Grid.Resources>
+                <ResourceDictionary Source="/Provenance;component/Themes/TitleBar.xaml" />
+            </Grid.Resources>
             <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
                 <materialDesign:PackIcon Kind="Forum" Width="18" Height="18" Foreground="{DynamicResource Primary}" />
                 <TextBlock Text="Chat rooms" FontSize="14" Margin="10,0,0,0" VerticalAlignment="Center" />
@@ -78,11 +82,12 @@
                         Style="{StaticResource MaxButton}" Click="OnMaximize" shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <materialDesign:PackIcon Width="18" Height="18" Kind="{Binding Tag, ElementName=MaximizeButton}" />
                 </Button>
-                <Button Width="44" Height="40" Padding="0" Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                <Button Width="44" Height="40" Padding="0" Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
-                    <materialDesign:PackIcon Kind="WindowClose" Width="18" Height="18" />
+                    <local:SvgIcon Glyph="close" Flat="True" Width="18" Height="18" />
                 </Button>
             </StackPanel>
+            <Border Style="{StaticResource TitleEdge}" />
         </Grid>
 
         <!-- not available: logged out, the game's running, or POL's chat isn't answering -->
@@ -91,7 +96,7 @@
             <materialDesign:PackIcon Kind="ForumOutline" Width="44" Height="44" HorizontalAlignment="Center" Foreground="{DynamicResource Text.3}" />
             <TextBlock Margin="0,10,0,0" HorizontalAlignment="Center" FontSize="14" TextWrapping="Wrap" TextAlignment="Center"
                        Text="{Binding Unavailable}" />
-            <Button Margin="0,12,0,0" HorizontalAlignment="Center" Style="{StaticResource AccentFlatButton}"
+            <Button Margin="0,12,0,0" HorizontalAlignment="Center" Style="{StaticResource PolButton}"
                     FontSize="12" Content="TRY AGAIN" Command="{Binding StartCommand}"
                     Visibility="{Binding CanRetry, Converter={StaticResource BoolToVis}}" />
         </StackPanel>
@@ -146,10 +151,10 @@
                 </ListBox>
             </Grid>
 
-            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource Surface.2}" Cursor="SizeWE" />
+            <GridSplitter Grid.Column="1" Style="{StaticResource PaneSplitter}" />
 
             <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*,Auto">
-                <Border Padding="16,10" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,0,0,1" Background="{DynamicResource Surface.1}">
+                <Border Padding="16,10" BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1" Background="{DynamicResource Surface.1}">
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
@@ -157,9 +162,9 @@
                             <TextBlock FontSize="12" Foreground="{DynamicResource Text.3}" Text="{Binding RoomsNote}" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Style="{StaticResource AccentFlatButton}" FontSize="12" Content="CREATE ROOM"
+                            <Button Style="{StaticResource PolButton}" FontSize="12" Content="CREATE ROOM"
                                     Command="{Binding CreateRoomCommand}" ToolTip="Create a new chat room." />
-                            <Button Style="{StaticResource AccentFlatButton}" FontSize="12" Content="UPDATE LIST"
+                            <Button Style="{StaticResource PolButton}" FontSize="12" Content="UPDATE LIST"
                                     Command="{Binding UpdateListCommand}" ToolTip="Update room list for selected zone." />
                         </StackPanel>
                     </Grid>
@@ -176,8 +181,8 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:ChatRoomItem}">
                             <Grid ColumnDefinitions="22,*,Auto,Auto">
-                                <materialDesign:PackIcon Kind="Lock" Width="14" Height="14" VerticalAlignment="Center" Foreground="{DynamicResource Text.3}"
-                                                         ToolTip="Password" Visibility="{Binding Locked, Converter={StaticResource BoolToVis}}" />
+                                <local:SvgIcon Glyph="lock" Flat="True" Width="14" Height="14" VerticalAlignment="Center" Foreground="{DynamicResource Text.3}"
+                                               ToolTip="Password" Visibility="{Binding Locked, Converter={StaticResource BoolToVis}}" />
                                 <StackPanel Grid.Column="1" Margin="0,0,12,0">
                                     <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding Categories}" FontSize="11" Foreground="{DynamicResource Text.3}" TextTrimming="CharacterEllipsis"
@@ -196,15 +201,15 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
-                <Border Grid.Row="3" Padding="12,8" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0" Background="{DynamicResource Surface.1}">
+                <Border Grid.Row="3" Style="{StaticResource FooterBar}">
                     <Grid ColumnDefinitions="Auto,Auto,*,Auto">
-                        <Button Style="{StaticResource MaterialDesignFlatButton}" FontSize="12" Padding="8,0" Content="PREVIOUS 100"
+                        <Button Style="{StaticResource PolButton}" FontSize="12" Padding="8,0" Content="PREVIOUS 100"
                                 Command="{Binding PreviousPageCommand}" />
-                        <Button Grid.Column="1" Style="{StaticResource MaterialDesignFlatButton}" FontSize="12" Padding="8,0" Content="NEXT 100"
+                        <Button Grid.Column="1" Style="{StaticResource PolButton}" FontSize="12" Padding="8,0" Content="NEXT 100" Margin="{StaticResource Footer.Gap}"
                                 Command="{Binding NextPageCommand}" />
                         <TextBlock Grid.Column="2" Margin="10,0" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Text.3}"
                                    Text="{Binding PageText}" />
-                        <Button Grid.Column="3" Style="{StaticResource AccentRaisedButton}" Height="36" Content="ENTER"
+                        <Button Grid.Column="3" Style="{StaticResource PolButton}" Height="36" Content="ENTER"
                                 Command="{Binding EnterCommand}" />
                     </Grid>
                 </Border>
@@ -227,16 +232,16 @@
                     </Style.Triggers>
                 </Style>
             </Grid.Style>
-            <Border Padding="16,10" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,0,0,1" Background="{DynamicResource Surface.1}">
+            <Border Padding="16,10" BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1" Background="{DynamicResource Surface.1}">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBlock VerticalAlignment="Center" FontSize="15" TextTrimming="CharacterEllipsis">
                         <Run Text="{Binding RoomName, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="   " /><Run Text="{Binding RoomCount, Mode=OneWay}" FontSize="13" Foreground="{DynamicResource Text.3}" />
                     </TextBlock>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Style="{StaticResource AccentFlatButton}" FontSize="12" Content="ROOM PASSWORD" Click="OnPasswordMenu"
+                        <Button Style="{StaticResource PolButton}" FontSize="12" Content="ROOM PASSWORD" Click="OnPasswordMenu"
                                 IsEnabled="{Binding MasterIdle}"
                                 Visibility="{Binding IsMaster, Converter={StaticResource BoolToVis}}" ToolTip="Set or remove the room's password." />
-                        <Button Style="{StaticResource AccentFlatButton}" FontSize="12" Content="EXIT"
+                        <Button Style="{StaticResource RedButton}" FontSize="12" Content="EXIT"
                                 Command="{Binding ExitCommand}" ToolTip="Exit chat room and return to the room list." />
                     </StackPanel>
                 </Grid>
@@ -250,7 +255,7 @@
                 <ScrollViewer x:Name="LineScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
                     <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource RoomLine}" />
                 </ScrollViewer>
-                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource Surface.2}" Cursor="SizeWE" />
+                <GridSplitter Grid.Column="1" Style="{StaticResource PaneSplitter}" HorizontalContentAlignment="Right" />
                 <Grid Grid.Column="2" Background="{DynamicResource Surface.1}" RowDefinitions="Auto,*">
                     <TextBlock Margin="14,10,14,4" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Text.3}" Text="Members" />
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -262,9 +267,9 @@
                                         <Grid.ContextMenu>
                                             <ContextMenu />
                                         </Grid.ContextMenu>
-                                        <materialDesign:PackIcon Kind="Star" Width="14" Height="14" VerticalAlignment="Center"
-                                                                 Foreground="{DynamicResource Accent.Gold}" ToolTip="Room master"
-                                                                 Visibility="{Binding Master, Converter={StaticResource BoolToVis}}" />
+                                        <local:SvgIcon Glyph="star" Flat="True" Width="14" Height="14" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource Accent.Gold}" ToolTip="Room master"
+                                                       Visibility="{Binding Master, Converter={StaticResource BoolToVis}}" />
                                         <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                         <TextBlock Grid.Column="2" Text="{Binding Note}" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
                                                    Foreground="{DynamicResource Text.3}" />
@@ -275,10 +280,10 @@
                     </ScrollViewer>
                 </Grid>
             </Grid>
-            <Border Grid.Row="2" Padding="12,10" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="0,1,0,0" Background="{DynamicResource Surface.1}">
+            <Border Grid.Row="2" Style="{StaticResource FooterBar}">
                 <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,*,Auto">
                     <!-- the viewer's Text Color and Emoticon, both back to none after each line -->
-                    <Button Height="40" Width="40" Padding="0" VerticalAlignment="Bottom" Style="{StaticResource MaterialDesignFlatButton}"
+                    <Button Height="40" Width="40" Padding="0" VerticalAlignment="Bottom" Style="{StaticResource IconButton}"
                             x:Name="ColourButton" Click="OnColourMenu" ToolTip="Text Color" AutomationProperties.Name="Text Color">
                         <Grid>
                             <materialDesign:PackIcon Kind="FormatColorText" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
@@ -287,7 +292,7 @@
                         </Grid>
                     </Button>
                     <Button Grid.Column="1" Height="40" Width="40" Padding="0" Margin="0,0,6,0" VerticalAlignment="Bottom"
-                            x:Name="EmoteButton" Style="{StaticResource MaterialDesignFlatButton}" Click="OnEmoteMenu" ToolTip="Emoticon" AutomationProperties.Name="Emoticon"
+                            x:Name="EmoteButton" Style="{StaticResource IconButton}" Click="OnEmoteMenu" ToolTip="Emoticon" AutomationProperties.Name="Emoticon"
                             Visibility="{Binding HasEmotes, Converter={StaticResource BoolToVis}}">
                         <Grid>
                             <materialDesign:PackIcon Kind="EmoticonOutline" Width="20" Height="20" Foreground="{DynamicResource Text.2}"
@@ -296,13 +301,13 @@
                         </Grid>
                     </Button>
                     <TextBox x:Name="ComposeBox" Grid.Column="2" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
-                             TextWrapping="Wrap" MaxLength="300" Style="{StaticResource MaterialDesignOutlinedTextBox}" Padding="10,8"
+                             TextWrapping="Wrap" MaxLength="300" Style="{StaticResource OutlinedField}" Padding="10,8"
                              materialDesign:HintAssist.Hint="Say something to the room (Enter sends)" materialDesign:HintAssist.IsFloating="False"
                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                              PreviewKeyDown="OnComposeKey" PreviewTextInput="OnComposeInput" DataObject.Pasting="OnComposePaste" />
-                    <Button Grid.Column="3" Margin="10,0,0,0" Height="40" VerticalAlignment="Bottom" Style="{StaticResource AccentRaisedButton}"
+                    <Button Grid.Column="3" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom" Style="{StaticResource PolButton}"
                             Command="{Binding SendCommand}" Content="SEND" />
-                    <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Margin="2,6,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}"
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}"
                                Text="{Binding SendNote}" Visibility="{Binding SendNote, Converter={StaticResource NullToVisibilityConverter}}" />
                 </Grid>
             </Border>
@@ -314,7 +319,7 @@
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ProgressBar Width="28" Height="28" IsIndeterminate="True" Value="0" Style="{StaticResource MaterialDesignCircularProgressBar}" />
                 <TextBlock Margin="0,12,0,0" FontSize="14" HorizontalAlignment="Center" Text="{Binding BusyText}" />
-                <Button Margin="0,14,0,0" HorizontalAlignment="Center" Style="{StaticResource AccentFlatButton}" FontSize="12"
+                <Button Margin="0,14,0,0" HorizontalAlignment="Center" Style="{StaticResource RedButton}" FontSize="12"
                         Content="CANCEL" Command="{Binding CancelEnterCommand}" />
             </StackPanel>
         </Border>

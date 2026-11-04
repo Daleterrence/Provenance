@@ -1092,14 +1092,15 @@ static int owner_gone(void)
     return g_owner_gone;
 }
 
-/* presence only gets pushed once we're there with a handle, the viewer's last sign-in step is ChangeMyStatus(slot,
-   location 1000). Handle -1 = signed off. */
+/* presence only gets pushed once we're there with a handle, the viewer's last login step is (-2,-1,1,-2,0,1000).
+   Handle -1 = signed off */
 static void status_start(BYTE *b, int handle, int status, int location)
 {
-    int t = ((int (__cdecl *)(int, int, int, int, int, int))SVC(0x30c))(handle, -2, 1, status, 0, location);
+    int chr = location >= 0 ? -1 : -2;   /* a location clears the game, like the viewer's (app.dll 0x10041342) */
+    int t = ((int (__cdecl *)(int, int, int, int, int, int))SVC(0x30c))(handle, chr, 1, status, 0, location);
     if (t == NO_SLOT) { g_status_want = status; g_status_loc = location; return; }
     g_status_want = -1;
-    lg("presence: ChangeMyStatus(%d,-2,1,%d,0,%d) -> ticket %d\r\n", handle, status, location, t);
+    lg("presence: ChangeMyStatus(%d,%d,1,%d,0,%d) -> ticket %d\r\n", handle, chr, status, location, t);
     if (t >= 0) g_status_job = t;
     else wsprintfA(g_presence, "failed:%d", t);
 }
@@ -1116,6 +1117,18 @@ static void status_pump(BYTE *b)
 }
 
 struct pload { const char *name; unsigned o_load, o_check; int ticket, res, write; };
+/* read only. LOAD_MY_STATUS's answer, via the pointer at polcore.dll 0x10404df8 + job * 0x338: +0 handle slot, +6
+   status + 1, at 0 polcore drops the slot */
+static void status_reply_log(BYTE *b, int t)
+{
+    BYTE *r = t >= 0 && t <= 3 ? *(BYTE **)(b + 0x404df8 + t * 0x338) : NULL;
+    if (!r || IsBadReadPtr(r, 8)) {
+        lg("profile: my status from the server: unreadable (current handle %d)\r\n", ((svc_v)SVC(0x2f8))());
+        return;
+    }
+    lg("profile: my status from the server: handle %u, status byte %u (current handle %d, my status %d)\r\n", r[0],
+       r[6], ((svc_v)SVC(0x2f8))(), SVC(0x338) ? ((svc_v)SVC(0x338))() : -1);
+}
 #define LOADS_IN_FLIGHT 4   /* polcore's job slots, the viewer's own peak */
 static void run_loads(BYTE *b, struct pload *items, int n)
 {
@@ -1146,6 +1159,7 @@ static void run_loads(BYTE *b, struct pload *items, int n)
             if (items[i].res == 0) { pending++; continue; }
             lg("profile: %s -> %d after %u ms\r\n", items[i].name, items[i].res,
                (unsigned)(GetTickCount64() - started[i]));
+            if (items[i].o_load == 0x5d8 && items[i].res == 1) status_reply_log(b, items[i].ticket);
         }
         status_pump(b);
         if (!pending) break;
@@ -1304,7 +1318,8 @@ static int handle_bootstrap(BYTE *b, int handles_loaded)
 static void prestart_wait(void)
 {
     static const char *allowed[] = { "POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP",
-                                     "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_CRED_CHAT", "POL_STATUS", "POL_HOME" };
+                                     "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_CRED_CHAT", "POL_STATUS", "POL_HOME",
+                                     "POL_HANDLE" };
     char gp[MAX_PATH + 64];
     if (!getenv_set("POL_PRESTART")) return;
     ipc_file(gp, "go");
@@ -1354,6 +1369,22 @@ static void ffxi_gate_read(BYTE *b)
     lg("phase_c: content ids: %d valid, %d FFXI\r\n", any, ffxi);
 }
 static void home_pick(BYTE *b);
+/* status, friends, handles, characters, groups. A lean session only loads handles and characters */
+static struct pload *login_set(struct pload *all, int *n)
+{
+    *n = g_lean ? 2 : 5;
+    return g_lean ? all + 2 : all;
+}
+/* the viewer loads my status on its own and starts the lists from its OnSuccess (app.dll 0x10040822, 0x10040650) */
+static void login_loads(BYTE *b, struct pload *run, int n)
+{
+    if (run[0].o_load != 0x5d8) {
+        run_loads(b, run, n);
+        return;
+    }
+    run_loads(b, run, 1);
+    if (run[0].res == 1) run_loads(b, run + 1, n - 1);
+}
 static void phase_c_seed(HMODULE pc)
 {
     BYTE *b = (BYTE *)pc;
@@ -1467,9 +1498,8 @@ static void phase_c_seed(HMODULE pc)
     if (!g_lean)
         ((svc_i)SVC(0x1020))(1);
     ((svc_v)SVC(0xd10))();   /* POLCON_CLEAR_ERROR */
-    run = g_lean ? all + 2 : all;
-    nrun = g_lean ? 2 : 5;
-    run_loads(b, run, nrun);
+    run = login_set(all, &nrun);
+    login_loads(b, run, nrun);
     g_friends_loaded = all[1].res == 1;
     g_groups_loaded = all[4].res == 1;
     /* a load refused with an account status (-0x1450 and down: suspended, IP restricted, password changed...) turns
@@ -3422,13 +3452,14 @@ static pdb_item *pdb_get(BYTE *b, pdb_schema *s, const char *name, pdb_rec *rec)
 static ULONGLONG g_db_last;
 static int g_srch_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
 static int g_prof_step, g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
+static int g_xi_step;   /* my FFXI character's privacy: 1 load waits for a slot, 2 load job, 3 save waits, 4 save job */
 static int g_pic_want;
 static int g_cr_db;   /* chat's zone and room lists, 0 idle, the steps are pol_chat.c's cr_db_pump */
 static ULONGLONG g_cr_last;   /* chat's last enter, leave or list, pol_chat.c */
 static int db_free(void)
 {
     return GetTickCount64() - g_db_last >= 3000 && !g_srch_step && !g_prof_step && !g_ch_step && !g_fp_step &&
-           !g_cr_db && (g_me_step < 1 || g_me_step > 5) && g_pic_want < 0;
+           !g_cr_db && (g_me_step < 1 || g_me_step > 5) && !g_xi_step && g_pic_want < 0;
 }
 
 /* prof_001, the FFXI table (title 1). z_phead's what a search hit gets added from */
@@ -4145,7 +4176,7 @@ static int ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
 static int user_db_waiting(void)
 {
     static const char *const ext[] = { "search", "profile", "ffxiprofile", "myprofile", "saveprofile", "rename", "pic",
-                                       "chatzones", "chatrooms", "handle" };
+                                       "chatzones", "chatrooms", "handle", "xiprofile", "savexi" };
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (request_waiting(ext[i])) return 1;
     return 0;
 }
@@ -4428,6 +4459,77 @@ static void mask_mail(const char *in, char *out, int cap)
     lstrcatA(out, "***");
     lstrcatA(out, at);
 }
+static int get_chr(BYTE *b, int i, BYTE *rec);
+
+/* my FFXI characters, the viewer's edit page tabs (app.dll 0x10224e5c): my record's z_phead slots when it's this
+   handle's, else the Content IDs linked to the handle. Only title 1 gets one here */
+typedef struct me_chr { int slot; DWORD ctsid, lo, hi; } me_chr;
+static int me_chars(BYTE *b, me_chr *out, const char **from)
+{
+    pdb_item *ph = g_me_rec && g_me_rec->items && g_fs_pib ? pdb_get(b, g_fs_pib, "z_phead", g_me_rec) : NULL;
+    const BYTE *h = ph && (ph->flags & 1) ? (const BYTE *)ph->v.bytes.p : NULL;
+    BYTE c[0x68];
+    pol_handle me;
+    int n = 0, i;
+    *from = "nowhere";
+    if (h && !IsBadReadPtr(h, 0xb0) && (*(const DWORD *)(h + 0x98) & 1) && fr_hid(h) == g_me_hid) {
+        *from = "z_phead";
+        for (i = 0; i < 8; i++) {
+            const BYTE *sl = h + 0x18 + i * 0x10;
+            if (!(*(const WORD *)sl & 1) || *(const WORD *)(sl + 2) != 1) continue;
+            out[n].slot = i;
+            out[n].ctsid = *(const DWORD *)(sl + 4);
+            out[n].lo = *(const DWORD *)(sl + 8);
+            out[n].hi = *(const DWORD *)(sl + 0xc);
+            n++;
+        }
+        return n;
+    }
+    memset(&me, 0, sizeof me);
+    if (get_handle(b, g_my_slot, &me) < 0 || !(me.lo & 1) ||
+        ((((unsigned __int64)me.hi << 32 | me.lo) >> 1) & 0xfffffffffffULL) != g_me_hid)
+        return 0;
+    *from = "handle";
+    for (i = 0; i < 8; i++) {
+        if (!(me.chars[i] & 1) || !get_chr(b, (me.chars[i] >> 1) & 0x3f, c) || *(WORD *)(c + 2) != 1) continue;
+        out[n].slot = (me.chars[i] >> 1) & 0x3f;
+        out[n].ctsid = *(DWORD *)(c + 4);
+        out[n].lo = *(DWORD *)(c + 8);
+        out[n].hi = *(DWORD *)(c + 0xc);
+        n++;
+    }
+    return n;
+}
+static void me_chr_key(const me_chr *c, char k[25])
+{
+    wsprintfA(k, "%08x%08x%08x", c->ctsid, c->lo, c->hi);
+}
+/* the name's the Content ID list's, z_phead doesn't have one */
+static int me_chars_json(BYTE *b, char *out, int cap)
+{
+    me_chr ch[8];
+    BYTE c[0x68];
+    char k[25], nm[64];
+    const char *from;
+    int n = me_chars(b, ch, &from), o, i, j;
+    o = wsprintfA(out, ",\"charactersFrom\":\"%s\",\"characters\":[", from);
+    for (i = 0; i < n && o < cap - 200; i++) {
+        lstrcpyA(nm, "\"\"");
+        for (j = 0; j < 64; j++)
+            if (get_chr(b, j, c) && *(DWORD *)(c + 4) == ch[i].ctsid && *(DWORD *)(c + 8) == ch[i].lo &&
+                *(DWORD *)(c + 0xc) == ch[i].hi) {
+                sjis_json(nm, sizeof nm, c + 0x18, 0x0f);
+                break;
+            }
+        me_chr_key(&ch[i], k);
+        o += wsprintfA(out + o, "%s{\"slot\":%d,\"key\":\"%s\",\"world\":%u,\"name\":%s}", i ? "," : "", ch[i].slot, k,
+                       (ch[i].ctsid >> 16) & 0xff, nm);
+    }
+    out[o++] = ']';
+    out[o] = 0;
+    lg("profile edit: %d FFXI characters (from %s)\r\n", n, from);
+    return o;
+}
 static int me_write_json(BYTE *b)
 {
     static const struct { const char *name; int parts; } tabs[] = {
@@ -4487,7 +4589,9 @@ static int me_write_json(BYTE *b)
         o += wsprintfA(out + o, "%s\"%s\":", i ? "," : "", tabs[i].name);
         o += me_table(b, out + o, cap - o - 16, idx >= 0 ? pf_item(p, idx) : NULL, tabs[i].parts);
     }
-    lstrcpyA(out + o, "}}"); o += 2;
+    out[o++] = '}';
+    o += me_chars_json(b, out + o, cap - o - 4);
+    out[o++] = '}';
     ipc_file(path, "myprofile.json");
     lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
     HANDLE f = CreateFileA(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -5088,6 +5192,220 @@ static void pic_pump(BYTE *b, int ctl)
     g_snap_dirty = 1;
 }
 
+/* my characters' tabs on the viewer's editor (app.dll 0x10228190, 0x10225627). prof_001 has nothing editable and no
+   z_utime, so a save's SET is only the record level */
+static int g_xi_job = -1, g_xi_level;
+static char g_xi_token[48], g_xi_state[32] = "", g_xi_json[0x200], g_xi_key[25];
+static __declspec(align(8)) pdb_cond g_xi_cond[2];
+static pdb_cond *g_xi_where;
+static pdb_rec *g_xi_rec;
+static unsigned __int64 g_xi_ctid;
+static DWORD g_xi_ctsid;
+static ULONGLONG g_xi_t0, g_xi_last;
+/* the ones read so far, a save only goes for one of these. The viewer reads a tab again each time it's picked */
+typedef struct xi_known { char key[25]; unsigned __int64 hid, ctid; DWORD ctsid; int level; } xi_known;
+static xi_known g_xi_known[8];
+static int g_xi_nknown;
+
+static xi_known *xi_known_find(const char *key, unsigned __int64 hid)
+{
+    for (int i = 0; i < g_xi_nknown; i++)
+        if (g_xi_known[i].hid == hid && !lstrcmpA(g_xi_known[i].key, key)) return &g_xi_known[i];
+    return NULL;
+}
+
+static void xi_done(const char *state)
+{
+    lstrcpynA(g_xi_state, state, sizeof g_xi_state);
+    g_xi_step = 0;
+    g_xi_job = -1;
+    lg("ffxi profile edit: %s\r\n", state);
+    g_snap_dirty = 1;
+}
+static void xi_remember(int level)
+{
+    xi_known *k = xi_known_find(g_xi_key, g_me_hid);
+    if (!k) {
+        if (g_xi_nknown == 8) memmove(&g_xi_known[0], &g_xi_known[1], 7 * sizeof g_xi_known[0]);
+        else g_xi_nknown++;
+        k = &g_xi_known[g_xi_nknown - 1];
+        lstrcpyA(k->key, g_xi_key);
+        k->hid = g_me_hid;
+    }
+    k->ctsid = g_xi_ctsid;
+    k->ctid = g_xi_ctid;
+    k->level = level;
+}
+static void xi_load_start(BYTE *b)
+{
+    int t = ((svc4b4_t)SVC(0x4b4))(g_ch_pib, g_xi_where, g_xi_rec);
+    if (t == NO_SLOT) { g_xi_step = 1; return; }
+    lg("ffxi profile edit: load -> %d\r\n", t);
+    if (t < 0) { xi_done(failed(t)); return; }
+    g_xi_job = t;
+    g_xi_step = 2;
+    g_xi_t0 = GetTickCount64();
+}
+static void xi_save_start(BYTE *b)
+{
+    pdb_cond k[2];
+    pdb_cond *where;
+    pdb_rec set;
+    int t;
+    memset(k, 0, sizeof k);
+    memset(&set, 0, sizeof set);
+    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &k[0].item, "z_ctsid", &g_xi_ctsid, 1);
+    ((svc4a8_t)SVC(0x4a8))(&k[0], 1);
+    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &k[1].item, "z_ctid", &g_xi_ctid, 1);
+    ((svc4a8_t)SVC(0x4a8))(&k[1], 1);
+    if (!(k[0].item.flags & 1) || !(k[1].item.flags & 1)) { xi_done("failed:schema"); return; }
+    where = ((svc4ac_t)SVC(0x4ac))(2, &k[0], &k[1]);
+    if (!where) { xi_done("failed:schema"); return; }
+    ((svc4d0_t)SVC(0x4d0))(&set, g_xi_level, 0);
+    t = ((svc4d4_t)SVC(0x4d4))(g_ch_pib, where, &set);
+    if (t == NO_SLOT) { g_xi_step = 3; return; }
+    lg("ffxi profile edit: save level %d -> %d\r\n", g_xi_level, t);
+    if (t < 0) { xi_done(failed(t)); return; }
+    g_xi_job = t;
+    g_xi_step = 4;
+    g_xi_t0 = GetTickCount64();
+}
+/* only a character from the loaded profile's own list, the ids are never the app's */
+static int xi_find(BYTE *b, const char *key, me_chr *out)
+{
+    me_chr ch[8];
+    char k[25];
+    const char *from;
+    int n = me_chars(b, ch, &from);
+    for (int i = 0; i < n; i++) {
+        me_chr_key(&ch[i], k);
+        if (!lstrcmpA(k, key)) { *out = ch[i]; return 1; }
+    }
+    return 0;
+}
+static void xi_request(BYTE *b)
+{
+    char buf[256], *p, *hk, *ck, *lv, now[17];
+    int kind;
+    me_chr c;
+    pol_handle h;
+    if (GetTickCount64() - g_xi_last < 3000 || !db_free()) return;
+    kind = take_request("xiprofile", buf, sizeof buf) >= 0 ? 1 : take_request("savexi", buf, sizeof buf) >= 0 ? 2 : 0;
+    if (!kind) return;
+    g_xi_last = g_db_last = GetTickCount64();
+    p = buf;
+    lstrcpynA(g_xi_token, req_line(&p), sizeof g_xi_token);
+    hk = req_line(&p);
+    ck = req_line(&p);
+    lv = req_line(&p);
+    if (notice_blocks(g_notice)) { xi_done("failed:account notice"); return; }
+    if (g_my_slot < 0) { xi_done("failed:no handle"); return; }
+    memset(&h, 0, sizeof h);
+    if (get_handle(b, g_my_slot, &h) < 0 || !(h.lo & 1)) { xi_done("failed:no handle"); return; }
+    wsprintfA(now, "%03x%08x", (h.hi >> 1) & 0xfff, h.lo >> 1 | h.hi << 31);
+    /* my profile has to be loaded, and for this handle, since the characters come from it */
+    if (lstrcmpA(hk, now) != 0 || !g_me_rec || !g_me_rec->items ||
+        ((((unsigned __int64)h.hi << 32 | h.lo) >> 1) & 0xfffffffffffULL) != g_me_hid) {
+        xi_done("failed:not loaded");
+        return;
+    }
+    if (kind == 2) {
+        xi_known *k = xi_known_find(ck, g_me_hid);
+        if (!k) { xi_done("failed:not loaded"); return; }
+        if (lv[0] < '1' || lv[0] > '3' || lv[1]) { xi_done("failed:bad request"); return; }
+        if (!ch_load_pib(b)) { xi_done("failed:no schema"); return; }
+        g_xi_level = lv[0] - '0';
+        if (g_xi_level == k->level) { xi_done("failed:nothing to save"); return; }
+        lstrcpyA(g_xi_key, ck);
+        g_xi_ctsid = k->ctsid;
+        g_xi_ctid = k->ctid;
+        g_xi_json[0] = 0;
+        lstrcpyA(g_xi_state, "saving");
+        g_snap_dirty = 1;
+        g_xi_t0 = GetTickCount64();
+        xi_save_start(b);
+        return;
+    }
+    if (!xi_find(b, ck, &c)) { xi_done("failed:no character"); return; }
+    if (!ch_load_pib(b)) { xi_done("failed:no schema"); return; }
+    if (!g_xi_rec) g_xi_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
+    else memset(g_xi_rec, 0, g_ch_pib->rec_size + 8);
+    if (!g_xi_rec) { xi_done("failed:alloc"); return; }
+    g_xi_json[0] = 0;
+    lstrcpyA(g_xi_key, ck);
+    g_xi_ctsid = c.ctsid;
+    g_xi_ctid = (unsigned __int64)c.hi << 32 | c.lo;
+    memset(g_xi_cond, 0, sizeof g_xi_cond);
+    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &g_xi_cond[0].item, "z_ctsid", &g_xi_ctsid, 1);
+    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &g_xi_cond[1].item, "z_ctid", &g_xi_ctid, 1);
+    if (!(g_xi_cond[0].item.flags & 1) || !(g_xi_cond[1].item.flags & 1)) { xi_done("failed:schema"); return; }
+    ((svc4a8_t)SVC(0x4a8))(&g_xi_cond[0], 1);
+    ((svc4a8_t)SVC(0x4a8))(&g_xi_cond[1], 1);
+    g_xi_where = ((svc4ac_t)SVC(0x4ac))(2, &g_xi_cond[0], &g_xi_cond[1]);
+    if (!g_xi_where) { xi_done("failed:schema"); return; }
+    lg("ffxi profile edit: slot %d\r\n", c.slot);
+    lstrcpyA(g_xi_state, "loading");
+    g_snap_dirty = 1;
+    g_xi_t0 = GetTickCount64();
+    xi_load_start(b);
+}
+static void xi_pump(BYTE *b, int ctl)
+{
+    pdb_item *a, *c;
+    char nm[0x100], wn[0x100];
+    int r;
+    switch (g_xi_step) {
+    case 0:
+        if (ctl && !g_draining) xi_request(b);
+        return;
+    case 1:
+        if (g_draining) xi_done("cancelled");
+        else if (GetTickCount64() - g_xi_t0 >= 120000) xi_done("failed:busy");
+        else xi_load_start(b);
+        return;
+    case 2:
+        r = ((svc4b8_t)SVC(0x4b8))(g_xi_job);
+        if (r == 0) {
+            if (GetTickCount64() - g_xi_t0 >= 120000 || g_draining) {
+                ((svc4dc_t)SVC(0x4dc))(g_xi_job);
+                g_xi_rec = NULL;   /* a cancelled read can still write, so never freed */
+                xi_done(g_draining ? "cancelled" : "failed:timeout");
+            }
+            return;
+        }
+        g_xi_job = -1;
+        if (r < 0) { xi_done(failed(r)); return; }
+        if (!g_xi_rec->items) { xi_done("failed:no profile"); return; }
+        a = pdb_get(b, g_ch_pib, "z_ctsid", g_xi_rec);
+        c = pdb_get(b, g_ch_pib, "z_ctid", g_xi_rec);
+        if (!a || !c || a->v.u32 != g_xi_ctsid || c->v.u64 != g_xi_ctid) { xi_done("failed:mismatch"); return; }
+        ch_text(b, g_xi_rec, "z_name", nm, sizeof nm, NULL);
+        ch_text(b, g_xi_rec, "z_worldname", wn, sizeof wn, NULL);
+        wsprintfA(g_xi_json, "\"key\":\"%s\",\"level\":%u,\"name\":%s,\"worldName\":%s", g_xi_key, g_xi_rec->level, nm, wn);
+        xi_remember(g_xi_rec->level);
+        lg("ffxi profile edit: record level %u\r\n", g_xi_rec->level);
+        xi_done("ready");
+        return;
+    case 3:
+        if (GetTickCount64() - g_xi_t0 >= 120000) xi_done("failed:busy");
+        else xi_save_start(b);   /* a write, so it still runs during a drain */
+        return;
+    case 4:
+        r = ((svc4d8_t)SVC(0x4d8))(g_xi_job);
+        if (r == 0) {
+            if (GetTickCount64() - g_xi_t0 >= 120000) { ((svc4dc_t)SVC(0x4dc))(g_xi_job); xi_done("failed:timeout"); }
+            return;
+        }
+        g_xi_job = -1;
+        if (r == 1) {
+            xi_remember(g_xi_level);
+            wsprintfA(g_xi_json, "\"key\":\"%s\",\"level\":%d", g_xi_key, g_xi_level);
+        }
+        xi_done(r == 1 ? "saved" : failed(r));
+        return;
+    }
+}
+
 /* Handles and Content IDs, listed from memory (svc 0x2b4/0x2c4). A switch is the viewer's one ChangeMyStatus (app.dll
    0x10040c9e), a link or unlink a local 0x2dc/0x2e0 and then one PutChrList (0x1038) */
 #define CHR_LINKED 0x8000
@@ -5242,7 +5560,7 @@ static void writes_refuse(BYTE *b)
 {
     static const char *const ext[] = { "send", "friend", "comment", "answer", "group", "pic", "status", "myprofile",
                                        "saveprofile", "rename", "chatjoin", "chatsend", "chatcreate", "chatmaster",
-                                       "groupchatjoin", "groupchatsend" };
+                                       "groupchatjoin", "groupchatsend", "xiprofile", "savexi" };
     char buf[512], *p, *l1, *l2, *l3;
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) {
         if (take_request(ext[i], buf, sizeof buf) < 0) continue;
@@ -5262,6 +5580,7 @@ static void writes_refuse(BYTE *b)
         case 13: chat_master_refused(l1, l2); break;
         case 14: gc_join_refused(l1, SWITCHING); break;
         case 15: gc_send_refused(l1, SWITCHING); break;
+        case 16: case 17: lstrcpynA(g_xi_token, l1, sizeof g_xi_token); xi_done(SWITCHING); break;
         }
     }
 }
@@ -5358,7 +5677,7 @@ static void handle_request(BYTE *b)
         /* they went under the old handle, some with its slot in them, and a read's answer is what the old handle
            was allowed to see */
         if (writes_pending() || writes_asked() || g_me_step || g_status_want >= 0 || g_srch_step || g_prof_step ||
-            g_fp_step || g_cr_db) {
+            g_fp_step || g_xi_step || g_cr_db) {
             handle_fail("failed:busy");
             return;
         }
@@ -5615,6 +5934,9 @@ static void snapshot_social(BYTE *b)
     }
     wr(h, "]}");
     wr_job(h, ",\"me\":{\"token\":%s,\"state\":\"%s\"}", g_me_token, g_me_state);
+    wr_job(h, ",\"xi\":{\"token\":%s,\"state\":\"%s\"", g_xi_token, g_xi_state);
+    if (g_xi_json[0] && (!lstrcmpA(g_xi_state, "ready") || !lstrcmpA(g_xi_state, "saved"))) { wr(h, ","); wr(h, g_xi_json); }
+    wr(h, "}");
     wr_job(h, ",\"group\":{\"token\":%s,\"state\":\"%s\"}", g_grp_token, g_grp_state);
     wr_job(h, ",\"profile\":{\"token\":%s,\"state\":\"%s\"", g_prof_token, g_prof_state);
     if (g_prof_json && g_prof_json[0] && lstrcmpA(g_prof_state, "done") == 0) { wr(h, ","); wr(h, g_prof_json); }
@@ -5793,18 +6115,41 @@ static int play_signalled(void)
     }
     return 0;
 }
+/* the server's handle, else the first in use (app.dll 0x10028a76). Provenance's last one (POL_HANDLE) goes before
+   the first in use, since so far the server's never given our sessions one back */
+static int login_handle(BYTE *b, const char **why)
+{
+    BYTE rec[0x28];
+    char want[24], k[17];
+    int slot = ((svc_v)SVC(0x2f8))(), i;
+    DWORD n = GetEnvironmentVariableA("POL_HANDLE", want, sizeof want);
+    *why = "the server's";
+    if (slot >= 0) return slot;
+    for (i = 0; n > 0 && n < sizeof want && i < 64; i++) {
+        if (get_handle(b, i, rec) != 0 || !(rec[0] & 1)) continue;
+        handle_key(rec, k);
+        if (!lstrcmpiA(k, want)) { *why = "the one last active in Provenance"; return i; }
+    }
+    *why = "the first in use";
+    for (i = 0; i < 64; i++)
+        if (get_handle(b, i, rec) == 0 && (rec[0] & 1)) return i;
+    return -1;
+}
 static int g_online_started;
 static void go_online(BYTE *b)
 {
-    char nm[16], sv[8];
+    char sv[8];
+    const char *why;
     int want = 0;
     if (g_online_started) return;
     if (notice_blocks(g_notice)) return;
     if (GetEnvironmentVariableA("POL_STATUS", sv, sizeof sv) > 0 &&
         (sv[0] == '0' || sv[0] == '1' || sv[0] == '4'))
         want = sv[0] - '0';
-    g_my_slot = my_handle(b, nm);
+    g_my_slot = login_handle(b, &why);
     if (g_my_slot < 0) return;
+    lg("presence: going online on handle slot %d, %s (current handle %d)\r\n", g_my_slot, why,
+       ((svc_v)SVC(0x2f8))());
     g_online_started = 1;
     status_start(b, g_my_slot, want, 1000);
 }
@@ -5820,12 +6165,14 @@ static void db_reads_abandon(BYTE *b)
 static int writes_pending(void)
 {
     return g_sq_n || g_status_job >= 0 || g_edit_job >= 0 || g_edit_upload_want ||
-           g_comment_wanted || g_pic_want >= 0 || g_grp_job >= 0 || g_answer_kind || g_me_step >= 3 || g_hop;
+           g_comment_wanted || g_pic_want >= 0 || g_grp_job >= 0 || g_answer_kind || g_me_step >= 3 || g_xi_step >= 3 ||
+           g_hop;
 }
 /* writes that are due but haven't got a job slot yet, or an answer's message still to come */
 static int writes_waiting(void)
 {
-    return send_built() || g_answer_kind || g_edit_upload_want || g_comment_wanted || g_me_step == 3 || g_hwant;
+    return send_built() || g_answer_kind || g_edit_upload_want || g_comment_wanted || g_me_step == 3 || g_xi_step == 3 ||
+           g_hwant;
 }
 static void drain_turn(BYTE *b, int mail)
 {
@@ -5839,6 +6186,7 @@ static void drain_turn(BYTE *b, int mail)
     group_pump(b, 0);
     answer_pump(b, 0);
     me_pump(b, 0);
+    xi_pump(b, 0);
     handle_pump(b, 0);
     Sleep(16);
 }
@@ -5885,6 +6233,7 @@ static void hold_turn(BYTE *b, int ctl)
     ffxiprofile_pump(b, wctl);
     group_pump(b, wctl);
     me_pump(b, wctl);
+    xi_pump(b, wctl);
     answer_pump(b, wctl);
     pic_pump(b, wctl);
     if (!g_lean && !handle_switching()) chat_pump(b, wctl);
@@ -5897,7 +6246,8 @@ static void hold_turn(BYTE *b, int ctl)
         if (want == 2) want = 0;
         if (want == 3) want = 4;
         if (want == 0 || want == 1 || want == 4) {
-            if (g_my_slot >= 0) status_start(b, g_my_slot, want, -2);   /* -2 keeps the rest, never handle -1 */
+            /* a go-online still waiting for a slot keeps its location, -2 keeps the rest. Never handle -1 */
+            if (g_my_slot >= 0) status_start(b, g_my_slot, want, g_status_want >= 0 ? g_status_loc : -2);
             else lg("presence: status %d ignored - no handle selected\r\n", want);
         }
     }

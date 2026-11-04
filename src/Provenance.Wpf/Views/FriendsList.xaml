@@ -12,7 +12,7 @@
         <DataTemplate x:Key="FriendRow" DataType="{x:Type vm:FriendItem}">
             <Grid Margin="6,4" Background="Transparent" ColumnDefinitions="Auto,*,Auto">
                 <local:ProfilePictureCircle Diameter="40" Margin="0,0,12,0" VerticalAlignment="Center"
-                                            Source="{Binding Avatar}" />
+                                            Source="{Binding Avatar}" InGame="{Binding InGame}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <!-- docked, the name's measured against the whole width so it still trims, and the Playing line gets what's left -->
                     <DockPanel Background="Transparent">
@@ -24,15 +24,16 @@
                         <local:FitText Long="{Binding Playing}" Short="{Binding PlayingShort}" FontSize="12"
                                        Foreground="{DynamicResource Text.3}" Margin="12,0,0,1" VerticalAlignment="Bottom" />
                     </DockPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                        <local:StatusMark Status="{Binding StatusLabel}" Margin="0,0,6,0" />
+                    <!-- docked, so a long comment trims to the row instead of running off it -->
+                    <DockPanel Margin="0,2,0,0">
+                        <local:StatusMark DockPanel.Dock="Left" Status="{Binding StatusLabel}" Margin="0,0,6,0" />
                         <TextBlock FontSize="12" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Text.3}">
                             <TextBlock.ToolTip>
                                 <TextBlock MaxWidth="320" TextWrapping="Wrap"><Run Text="{Binding StatusLabel, Mode=OneWay}" /><Run Text="{Binding Comment, Mode=OneWay, StringFormat={}   {0}}" /></TextBlock>
                             </TextBlock.ToolTip>
                             <Run Text="{Binding StatusLabel, Mode=OneWay}" Foreground="{DynamicResource Text.2}" /><Run Text="{Binding Comment, Mode=OneWay, StringFormat={}   {0}}" />
                         </TextBlock>
-                    </StackPanel>
+                    </DockPanel>
                 </StackPanel>
                 <Border Grid.Column="2" MinWidth="20" Height="20" CornerRadius="10" Padding="6,0" Margin="8,0,0,0"
                         Background="{DynamicResource Primary}" VerticalAlignment="Center"
@@ -47,7 +48,7 @@
     <Grid>
         <ListBox x:Name="List" ItemsSource="{Binding FriendsView}" SelectedItem="{Binding SelectedFriend}"
                  IsSynchronizedWithCurrentItem="False"
-                 ItemTemplate="{StaticResource FriendRow}" HorizontalContentAlignment="Stretch"
+                 ItemTemplate="{StaticResource FriendRow}" HorizontalContentAlignment="Stretch" ItemContainerStyle="{StaticResource RowItem}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" BorderThickness="0" Background="Transparent"
                  MouseDoubleClick="OnDoubleClick" SelectionChanged="OnSelectionChanged" KeyDown="OnListKeyDown" ContextMenuOpening="OnContextMenuOpening">
             <ListBox.Style>
@@ -81,12 +82,17 @@
                     Visibility="{Binding NoFriends, Converter={StaticResource BoolToVis}}">
             <TextBlock FontSize="12" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
                        Text="You don't have any friends on this PlayOnline account yet." />
-            <Button Margin="0,6,0,0" Padding="0" HorizontalAlignment="Left" Style="{StaticResource AccentFlatButton}"
+            <Button Margin="0,8,0,0" Padding="6,0,10,0" Height="28" HorizontalAlignment="Left" Style="{StaticResource PolButton}"
                     FontSize="12" IsEnabled="{Binding CanEdit}" Click="OnAddFriend"
-                    ToolTip="Search PlayOnline and send a friend request" AutomationProperties.Name="Search PlayOnline and send a friend request" Content="ADD A FRIEND" />
+                    ToolTip="Search PlayOnline and send a friend request" AutomationProperties.Name="Search PlayOnline and send a friend request">
+                <StackPanel Orientation="Horizontal">
+                    <local:SvgIcon Glyph="search" />
+                    <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="ADD A FRIEND" />
+                </StackPanel>
+            </Button>
         </StackPanel>
 
-        <Border VerticalAlignment="Bottom" Margin="10" Padding="12,8" CornerRadius="8"
+        <Border VerticalAlignment="Bottom" Margin="10" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}"
                 Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1"
                 Visibility="{Binding EditStatusShown, Converter={StaticResource BoolToVis}}">
             <StackPanel Orientation="Horizontal">
@@ -96,15 +102,15 @@
                 <TextBlock FontSize="12" TextWrapping="Wrap" MaxWidth="260" Text="{Binding EditStatus}" />
                 <!-- only success notes go by themselves -->
                 <Button Width="22" Height="22" Padding="0" Margin="8,0,0,0" VerticalAlignment="Top"
-                        Style="{StaticResource MaterialDesignIconButton}" Foreground="{DynamicResource Text.3}"
+                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
                         Command="{Binding DismissEditNoteCommand}" ToolTip="Dismiss" AutomationProperties.Name="Dismiss"
                         Visibility="{Binding EditNoteShown, Converter={StaticResource BoolToVis}}">
-                    <materialDesign:PackIcon Kind="Close" Width="12" Height="12" />
+                    <local:SvgIcon Glyph="dismiss" Width="12" Height="12" />
                 </Button>
             </StackPanel>
         </Border>
 
-        <Border VerticalAlignment="Center" Margin="16" Padding="16,12" CornerRadius="10"
+        <Border VerticalAlignment="Center" Margin="16" Padding="16,12" CornerRadius="{StaticResource Radius.Panel}"
                 Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1"
                 Visibility="{Binding FriendsUnavailable, Converter={StaticResource BoolToVis}}">
             <TextBlock Text="Provenance couldn't get your friend list from PlayOnline." FontSize="13" TextWrapping="Wrap"

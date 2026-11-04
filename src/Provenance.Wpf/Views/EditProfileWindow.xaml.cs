@@ -19,6 +19,7 @@ public partial class EditProfileWindow : Window
         // 1366x768, or 1080p with scaling, is shorter than 780
         MaxHeight = SystemParameters.WorkArea.Height;
         if (Height > MaxHeight - 20) Height = MaxHeight - 20;
+        _vm.SaveRefused += text => MessageDialog.ShowError(this, "Not saved", text);
         Closing += OnClosing;
         Closed += (_, _) => _vm.Dispose();
         Loaded += (_, _) => _vm.Load();
@@ -103,4 +104,11 @@ public partial class EditProfileWindow : Window
     }
 
     private void OnDigitsOnly(object sender, TextCompositionEventArgs e) => e.Handled = !e.Text.All(char.IsAsciiDigit);
+
+    private void OnCardsWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (CardStrip.ScrollableWidth <= 0) return;
+        CardStrip.ScrollToHorizontalOffset(CardStrip.HorizontalOffset - e.Delta);
+        e.Handled = true;
+    }
 }

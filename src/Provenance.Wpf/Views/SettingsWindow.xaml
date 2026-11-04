@@ -34,15 +34,9 @@
 
         <!-- labels go beside or above, never a floating hint (it draws a dark chip on this background, and I've lost
              that fight before) -->
-        <Style TargetType="ComboBox" BasedOn="{StaticResource MaterialDesignOutlinedComboBox}">
+        <Style TargetType="ComboBox" BasedOn="{StaticResource OutlinedCombo}">
             <Setter Property="Padding" Value="12,8,8,8" />
             <Setter Property="FontSize" Value="13" />
-        </Style>
-        <Style x:Key="FieldText" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
         </Style>
         <!-- the other controls fill the row's column, so this puts a switch against the card's edge like them -->
         <Style x:Key="Switch" TargetType="ToggleButton" BasedOn="{StaticResource MaterialDesignSwitchToggleButton}">
@@ -56,17 +50,20 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="ProfileTool" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
+        <Style x:Key="ProfileTool" TargetType="Button" BasedOn="{StaticResource IconButton}">
             <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="32" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
             <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
         </Style>
-        <Style x:Key="TitleCombo" TargetType="ComboBox" BasedOn="{StaticResource MaterialDesignOutlinedComboBox}">
+        <Style x:Key="TitleCombo" TargetType="ComboBox" BasedOn="{StaticResource OutlinedCombo}">
             <Setter Property="Padding" Value="10,5,6,5" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <!-- a field pill on the dark title bar, the way POL draws its fields -->
+            <Setter Property="Background" Value="{DynamicResource Title.Field}" />
+            <Setter Property="Foreground" Value="{DynamicResource Title.FieldText}" />
         </Style>
         <Style x:Key="ProfileStatusText" TargetType="TextBlock" BasedOn="{StaticResource StatusText}">
             <Setter Property="TextWrapping" Value="Wrap" />
@@ -82,7 +79,7 @@
             <Setter Property="Background" Value="{DynamicResource Surface.1}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Border.Hair}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Panel}" />
             <Setter Property="Padding" Value="16,6" />
             <Setter Property="Margin" Value="0,0,0,22" />
         </Style>
@@ -130,10 +127,10 @@
             <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="32">
                 <TextBlock Text="{Binding Label}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <Button Grid.Column="1" Content="LINK TO..." FontSize="12" Height="30" Padding="10,0" Margin="8,0,0,0"
-                        Style="{StaticResource MaterialDesignFlatButton}" IsEnabled="{Binding CanLink}" Click="OnLinkCharacter"
+                        Style="{StaticResource PolButton}" IsEnabled="{Binding CanLink}" Click="OnLinkCharacter"
                         AutomationProperties.Name="{Binding Label, StringFormat=Link {0} to a handle}" />
                 <Button Grid.Column="2" Content="UNLINK" FontSize="12" Height="30" Padding="10,0" Margin="4,0,0,0"
-                        Style="{StaticResource MaterialDesignFlatButton}" IsEnabled="{Binding CanUnlink}" Click="OnUnlinkCharacter"
+                        Style="{StaticResource PolButton}" IsEnabled="{Binding CanUnlink}" Click="OnUnlinkCharacter"
                         Visibility="{Binding Handle, Converter={StaticResource NullToVisibilityConverter}}"
                         AutomationProperties.Name="{Binding Label, StringFormat=Unlink {0}}" />
             </Grid>
@@ -143,7 +140,10 @@
     <Grid RowDefinitions="40,*">
         <!-- only the switcher's controls take clicks, the rest of the bar still drags the window. The dropdown gives up
              its width before the title does -->
-        <Grid Background="{DynamicResource Surface.1}">
+        <Grid Background="{DynamicResource Title.Bg}" TextElement.Foreground="{DynamicResource Text.1}">
+            <Grid.Resources>
+                <ResourceDictionary Source="/Provenance;component/Themes/TitleBar.xaml" />
+            </Grid.Resources>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="104" />
                 <ColumnDefinition Width="Auto" />
@@ -169,96 +169,61 @@
                 <StackPanel Orientation="Horizontal" Visibility="{Binding IsWindower, Converter={StaticResource BoolToVis}}">
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding AddProfileCommand}" IsEnabled="{Binding CanManageProfiles}"
                             ToolTip="Add a profile" AutomationProperties.Name="Add a profile">
-                        <materialDesign:PackIcon Kind="Plus" Width="20" Height="20" />
+                        <views:SvgIcon Glyph="add" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding DuplicateProfileCommand}" IsEnabled="{Binding CanCopyProfile}"
                             ToolTip="Duplicate this profile" AutomationProperties.Name="Duplicate this profile">
-                        <materialDesign:PackIcon Kind="ContentCopy" Width="18" Height="18" />
+                        <views:SvgIcon Glyph="copy" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding RenameProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
                             ToolTip="Rename this profile" AutomationProperties.Name="Rename this profile">
-                        <materialDesign:PackIcon Kind="PencilOutline" Width="18" Height="18" />
+                        <views:SvgIcon Glyph="edit" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
                             ToolTip="Delete this profile" AutomationProperties.Name="Delete this profile">
-                        <materialDesign:PackIcon Kind="DeleteOutline" Width="20" Height="20" />
+                        <views:SvgIcon Glyph="delete" Width="20" Height="20" />
                     </Button>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Visibility="{Binding IsAshita, Converter={StaticResource BoolToVis}}">
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding AddProfileCommand}" IsEnabled="{Binding CanManageProfiles}"
                             ToolTip="Add a boot configuration" AutomationProperties.Name="Add a boot configuration">
-                        <materialDesign:PackIcon Kind="Plus" Width="20" Height="20" />
+                        <views:SvgIcon Glyph="add" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding DuplicateProfileCommand}" IsEnabled="{Binding CanCopyProfile}"
                             ToolTip="Duplicate this boot configuration" AutomationProperties.Name="Duplicate this boot configuration">
-                        <materialDesign:PackIcon Kind="ContentCopy" Width="18" Height="18" />
+                        <views:SvgIcon Glyph="copy" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding RenameProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
                             ToolTip="Rename this boot configuration" AutomationProperties.Name="Rename this boot configuration">
-                        <materialDesign:PackIcon Kind="PencilOutline" Width="18" Height="18" />
+                        <views:SvgIcon Glyph="edit" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
                             ToolTip="Delete this boot configuration" AutomationProperties.Name="Delete this boot configuration">
-                        <materialDesign:PackIcon Kind="DeleteOutline" Width="20" Height="20" />
+                        <views:SvgIcon Glyph="delete" Width="20" Height="20" />
                     </Button>
                 </StackPanel>
             </StackPanel>
             <Button Grid.Column="4" Width="44" Height="40" Padding="0"
-                    Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
-                <materialDesign:PackIcon Kind="WindowClose" Width="18" Height="18" />
+                <views:SvgIcon Glyph="close" Flat="True" Width="18" Height="18" />
             </Button>
+            <Border Style="{StaticResource TitleEdge}" />
         </Grid>
 
         <Grid Grid.Row="1" ColumnDefinitions="210,*">
-            <ListBox x:Name="Tabs" Background="{DynamicResource Surface.1}" BorderThickness="0"
+            <ListBox x:Name="Tabs" Background="{DynamicResource Surface.1}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Border.Pane}" ItemContainerStyle="{StaticResource NavItem}"
                      Padding="0,10" SelectedIndex="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
-                        <!-- a ring for keyboard focus only, a click shows none -->
-                        <Setter Property="FocusVisualStyle">
-                            <Setter.Value>
-                                <Style>
-                                    <Setter Property="Control.Template">
-                                        <Setter.Value>
-                                            <ControlTemplate>
-                                                <Rectangle Margin="8,0" RadiusX="9" RadiusY="9" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Setter.Value>
-                        </Setter>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="Bd" Margin="10,2" Padding="14,10" CornerRadius="8" Background="Transparent">
-                                        <ContentPresenter />
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.3}" />
-                                        </Trigger>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Primary.Muted}" />
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                        <Setter Property="Cursor" Value="Hand" />
-                    </Style>
-                </ListBox.ItemContainerStyle>
                 <StackPanel Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="Cog" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
+                    <views:SvgIcon Glyph="settings" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="General" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="PuzzleOutline" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
+                    <views:SvgIcon Glyph="plugin" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="Windower/Ashita" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="GamepadVariantOutline" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
+                    <views:SvgIcon Glyph="gamepad" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="Game" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
@@ -266,17 +231,17 @@
                     <TextBlock Text="Addons and plugins" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="AccountMultiplePlusOutline" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
+                    <views:SvgIcon Glyph="accounts" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="Multi-account" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="CardAccountDetailsOutline" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
+                    <views:SvgIcon Glyph="person" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="Handles" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
             </ListBox>
 
             <Grid Grid.Column="1" Background="{DynamicResource Bg.Base}">
-                <ScrollViewer x:Name="Panel0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer x:Name="Panel0" Visibility="Collapsed" VerticalScrollBarVisibility="Visible">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Installation" Style="{StaticResource Section}" />
                         <TextBlock Text="Region" Style="{StaticResource Label}" />
@@ -309,7 +274,7 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Text="Global Settings" Style="{StaticResource Section}" />
+                        <TextBlock Text="Global settings" Style="{StaticResource Section}" />
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <HeaderedContentControl Header="Chat language filter"
@@ -337,70 +302,100 @@
                                     <TextBlock Text="Backups folder" FontSize="13" Foreground="{DynamicResource Text.1}" />
                                     <Border Height="8" />
                                     <Grid ColumnDefinitions="*,Auto,Auto">
-                                        <TextBox Text="{Binding BackupFolder, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
-                                                 materialDesign:HintAssist.Hint="{Binding DefaultBackupFolder}" AutomationProperties.Name="Backups folder" />
-                                        <Button Grid.Column="1" Margin="8,0,0,0" Content="BROWSE" Style="{StaticResource MaterialDesignOutlinedButton}"
+                                        <TextBox Text="{Binding BackupFolder, UpdateSourceTrigger=LostFocus}"
+                                                 materialDesign:HintAssist.Hint="%APPDATA%\Provenance\Backups" AutomationProperties.Name="Backups folder">
+                                            <TextBox.Style>
+                                                <!-- the full default path, only while the box is empty and it's the one in use -->
+                                                <Style TargetType="TextBox" BasedOn="{StaticResource FieldText}">
+                                                    <Style.Triggers>
+                                                        <Trigger Property="Text" Value="">
+                                                            <Setter Property="ToolTip" Value="{Binding DefaultBackupFolder}" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                        <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
                                                 Command="{Binding BrowseBackupFolderCommand}" />
                                         <Button Grid.Column="2" Margin="6,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
-                                                Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                                                Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                                                 Command="{Binding OpenBackupFolderCommand}" ToolTip="Open folder" AutomationProperties.Name="Open folder">
-                                            <materialDesign:PackIcon Kind="FolderOpenOutline" Width="18" Height="18" />
+                                            <views:SvgIcon Glyph="folder" Width="18" Height="18" />
                                         </Button>
                                     </Grid>
                                     <TextBlock Text="{Binding BackupStatus}" Tag="{Binding BackupStatusIsError}" Style="{StaticResource ProfileStatusText}" Margin="0,8,0,0" />
                                 </StackPanel>
                                 <HeaderedContentControl Header="Restore a backup" Tag="Puts your game settings back from one of your backups.">
-                                    <Button Content="RESTORE" Style="{StaticResource MaterialDesignOutlinedButton}" FontSize="12"
+                                    <Button Content="RESTORE" Style="{StaticResource PolButton}" FontSize="12"
                                             Command="{Binding RestoreBackupCommand}" />
                                 </HeaderedContentControl>
                             </StackPanel>
                         </Border>
 
+                        <TextBlock Text="Appearance" Style="{StaticResource Section}" />
+                        <Border Style="{StaticResource Card}">
+                            <HeaderedContentControl Header="Theme">
+                                <ComboBox ItemsSource="{Binding ThemeChoices}" SelectedIndex="{Binding ThemeIndex}" AutomationProperties.Name="Theme" />
+                            </HeaderedContentControl>
+                        </Border>
+
                         <TextBlock Text="News and status" Style="{StaticResource Section}" />
-                        <TextBlock Text="News region" Style="{StaticResource Label}" />
-                        <ComboBox Width="260" HorizontalAlignment="Left"
-                                  ItemsSource="{Binding FeedRegionChoices}" SelectedIndex="{Binding FeedRegionIndex}" />
-                        <TextBlock Style="{StaticResource Help}" Margin="0,6,0,18"
-                                   Text="This is the PlayOnline site the news and server status come from." />
+                        <Border Style="{StaticResource Card}">
+                            <HeaderedContentControl Header="News region" Tag="This is the PlayOnline site the news and server status come from.">
+                                <ComboBox ItemsSource="{Binding FeedRegionChoices}" SelectedIndex="{Binding FeedRegionIndex}" AutomationProperties.Name="News region" />
+                            </HeaderedContentControl>
+                        </Border>
 
                         <TextBlock Text="Behaviour" Style="{StaticResource Section}" />
-                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding ExitAfterGameExits}" Margin="0,0,0,8">
-                            <TextBlock Text="Close Provenance when the game exits" TextWrapping="Wrap" />
-                        </CheckBox>
-                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding MinimizeToTray}" Margin="0,0,0,8">
-                            <TextBlock Text="Minimise Provenance to the tray instead of the taskbar" TextWrapping="Wrap" />
-                        </CheckBox>
-                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding KeepSignedInInTray}" Margin="0,0,0,4">
-                            <TextBlock Text="Keep me logged in to PlayOnline in the tray when I close the window" TextWrapping="Wrap" />
-                        </CheckBox>
-                        <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource Text.3}" Margin="26,0,0,8"
-                                   Text="Your friends and messages stay up to date, and you won't need to log in again when you open Provenance. To log out, right-click the tray icon." />
-                        <StackPanel Orientation="Horizontal" Margin="26,0,0,8" IsEnabled="{Binding KeepSignedInInTray}">
-                            <TextBlock Text="Log out and close after this long in the tray:" VerticalAlignment="Center" Foreground="{DynamicResource Text.2}"
-                                       Style="{StaticResource DimWhenOff}" />
-                            <ComboBox Width="140" Margin="10,0,0,0" Padding="10,5,6,5"
-                                      ItemsSource="{Binding TraySignOutChoices}" SelectedIndex="{Binding TraySignOutIndex}" />
-                        </StackPanel>
-                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding NotifyFriendsOnline}" Margin="0,4,0,8">
-                            <TextBlock Text="Tell me when a friend comes online" TextWrapping="Wrap" />
-                        </CheckBox>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <HeaderedContentControl Header="Close Provenance when the game exits">
+                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ExitAfterGameExits}"
+                                                  AutomationProperties.Name="Close Provenance when the game exits" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="Minimise Provenance to the tray instead of the taskbar">
+                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding MinimizeToTray}"
+                                                  AutomationProperties.Name="Minimise Provenance to the tray instead of the taskbar" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="Keep me logged in to PlayOnline in the tray when I close the window"
+                                                        Tag="Your friends and messages stay up to date, and you won't need to log in again when you open Provenance. To log out, right-click the tray icon.">
+                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding KeepSignedInInTray}"
+                                                  AutomationProperties.Name="Keep me logged in to PlayOnline in the tray when I close the window" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="Log out and close after this long in the tray" IsEnabled="{Binding KeepSignedInInTray}">
+                                    <ComboBox ItemsSource="{Binding TraySignOutChoices}" SelectedIndex="{Binding TraySignOutIndex}"
+                                              AutomationProperties.Name="Log out and close after this long in the tray" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="Tell me when a friend comes online">
+                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding NotifyFriendsOnline}"
+                                                  AutomationProperties.Name="Tell me when a friend comes online" />
+                                </HeaderedContentControl>
+                            </StackPanel>
+                        </Border>
 
-                        <TextBlock Text="Group chat" Style="{StaticResource Section}" Margin="0,14,0,8" />
-                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding GroupChatNotice}" Margin="0,0,0,8">
-                            <TextBlock Text="Show a notice for new lines when the group chat isn't in front" TextWrapping="Wrap" />
-                        </CheckBox>
-                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding GroupChatFlash}" Margin="0,0,0,8">
-                            <TextBlock Text="Flash the taskbar for new lines when the group chat isn't in front" TextWrapping="Wrap" />
-                        </CheckBox>
-                        <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding GroupChatTimes}" Margin="0,0,0,8">
-                            <TextBlock Text="Show the time on each group chat line" TextWrapping="Wrap" />
-                        </CheckBox>
+                        <TextBlock Text="Group chat" Style="{StaticResource Section}" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <HeaderedContentControl Header="Show a notice for new lines when the group chat isn't in front">
+                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GroupChatNotice}"
+                                                  AutomationProperties.Name="Show a notice for new lines when the group chat isn't in front" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="Flash the taskbar for new lines when the group chat isn't in front">
+                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GroupChatFlash}"
+                                                  AutomationProperties.Name="Flash the taskbar for new lines when the group chat isn't in front" />
+                                </HeaderedContentControl>
+                                <HeaderedContentControl Header="Show the time on each group chat line">
+                                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GroupChatTimes}"
+                                                  AutomationProperties.Name="Show the time on each group chat line" />
+                                </HeaderedContentControl>
+                            </StackPanel>
+                        </Border>
 
-                        <TextBlock Margin="0,26,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding VersionText}" />
+                        <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding VersionText}" />
                     </StackPanel>
                 </ScrollViewer>
 
-                <ScrollViewer x:Name="Panel1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="Panel1" Visibility="Collapsed" VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Windower/Ashita" Style="{StaticResource Section}" />
                         <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,14"
@@ -417,7 +412,7 @@
                             <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
                                 <TextBox Text="{Binding AshitaPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                          AutomationProperties.Name="Ashita folder" />
-                                <Button Grid.Column="1" Margin="8,0,0,0" Content="BROWSE" Style="{StaticResource MaterialDesignOutlinedButton}"
+                                <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
                                         Command="{Binding BrowseAshitaCommand}" />
                             </Grid>
                             <TextBlock Text="{Binding ProfileStatus}" Tag="{Binding ProfileStatusIsError}" Style="{StaticResource ProfileStatusText}" />
@@ -456,16 +451,16 @@
                             <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
                                 <TextBox Text="{Binding WindowerPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                          AutomationProperties.Name="Windower folder" />
-                                <Button Grid.Column="1" Margin="8,0,0,0" Content="BROWSE" Style="{StaticResource MaterialDesignOutlinedButton}"
+                                <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
                                         Command="{Binding BrowseWindowerCommand}" />
                             </Grid>
                             <TextBlock Text="{Binding ProfileStatus}" Tag="{Binding ProfileStatusIsError}" Style="{StaticResource ProfileStatusText}" />
-                            <Border Margin="0,0,0,14" Padding="14,10" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource State.Warn}"
+                            <Border Margin="0,0,0,14" Padding="14,10" CornerRadius="{StaticResource Radius.Panel}" BorderThickness="1" BorderBrush="{DynamicResource State.Warn}"
                                     Visibility="{Binding WindowerSettingsProblem, Converter={StaticResource NullToVisibilityConverter}}">
                                 <StackPanel>
                                     <TextBlock Text="{Binding WindowerSettingsProblem}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource State.Warn}" />
                                     <Button Content="START A NEW SETTINGS FILE" HorizontalAlignment="Left" Margin="0,10,0,0" FontSize="12"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}" Command="{Binding StartNewWindowerSettingsCommand}"
+                                            Style="{StaticResource PolButton}" Command="{Binding StartNewWindowerSettingsCommand}"
                                             Visibility="{Binding CanStartNewWindowerSettings, Converter={StaticResource BoolToVis}}" />
                                 </StackPanel>
                             </Border>
@@ -478,11 +473,21 @@
                                                 PreviewKeyDown="OnConsoleKeyDown" PreviewKeyUp="OnConsoleKeyUp" LostKeyboardFocus="OnConsoleKeyFocusLost"
                                                 AutomationProperties.Name="Console key">
                                             <Button.Style>
-                                                <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                <Style TargetType="Button" BasedOn="{StaticResource PolButton}">
                                                     <Style.Triggers>
+                                                        <!-- its own look while it waits for a key, so a hover can't hide it -->
                                                         <DataTrigger Binding="{Binding WaitingForConsoleKey}" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource Primary.Muted}" />
                                                             <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="Button">
+                                                                        <Border Background="{DynamicResource Primary.Muted}" BorderBrush="{DynamicResource Primary}"
+                                                                                BorderThickness="1" Padding="{TemplateBinding Padding}">
+                                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                        </Border>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -503,7 +508,7 @@
                                         <HeaderedContentControl.Tag>
                                             <TextBlock Style="{StaticResource Help}"><Run Text="Switches Windower, its plugins and its addons between Stable and Development. The switch happens the next time you log in. " /><Bold>Leave this on Stable unless you know what you're doing.</Bold></TextBlock>
                                         </HeaderedContentControl.Tag>
-                                        <Button Content="{Binding WindowerBranchName}" Style="{StaticResource MaterialDesignOutlinedButton}" FontSize="12"
+                                        <Button Content="{Binding WindowerBranchName, Converter={StaticResource UpperCase}}" Style="{StaticResource PolButton}" FontSize="12"
                                                 Command="{Binding FlipWindowerBranchCommand}" AutomationProperties.Name="Branch" />
                                     </HeaderedContentControl>
                                     <TextBlock Text="{Binding WindowerVersionText}" TextWrapping="Wrap" FontSize="12" Margin="0,2,0,10"
@@ -516,7 +521,7 @@
 
                 <views:AddonsPluginsView x:Name="Panel3" Visibility="Collapsed" DataContext="{Binding Addons}" />
 
-                <ScrollViewer x:Name="Panel4" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer x:Name="Panel4" Visibility="Collapsed" VerticalScrollBarVisibility="Visible">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Multi-account mode" Style="{StaticResource Section}" />
                         <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,8"
@@ -540,10 +545,10 @@
                                 </Style>
                             </StackPanel.Style>
                             <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding MultiContinueOnError}" Margin="0,0,0,4">
-                                <TextBlock Text="Continue multi-login process on error" TextWrapping="Wrap" />
+                                <TextBlock Text="Continue multi-account process on error" TextWrapping="Wrap" />
                             </CheckBox>
                             <TextBlock Style="{StaticResource Help}" Margin="26,0,0,10"
-                                       Text="If one of the accounts fails to log in due to an incorrect password, no subscription, or other problem, continue logging on the other accounts. Disabling this option will make Provenance stop upon an error logging in an account. Some problems, like a failed game update, always stop the run." />
+                                       Text="If one of the accounts fails to log in due to an incorrect password, no subscription, or other problem, carry on logging in the other accounts. Disabling this option will make Provenance stop if there's an error logging in to an account. Some problems, like a failed game update, always stop the run." />
                             <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding MultiCloseWhenFinished}" Margin="0,0,0,4">
                                 <TextBlock Text="Close Provenance when finished" TextWrapping="Wrap" />
                             </CheckBox>
@@ -564,7 +569,7 @@
                             <ItemsControl ItemsSource="{Binding MultiAccountRows}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Margin="0,0,0,8" Padding="12,8" CornerRadius="10" Background="{DynamicResource Surface.1}"
+                                        <Border Margin="0,0,0,8" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.1}"
                                                 BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                                             <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                                                 <StackPanel Margin="0,0,10,0" VerticalAlignment="Center">
@@ -602,15 +607,15 @@
                                                           ToolTip="{Binding DataContext.MultiProfileLabel, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                           Visibility="{Binding DataContext.MultiHasThirdPartyHook, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVis}}" />
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
-                                                    <Button Width="32" Height="32" Padding="0" Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                                                    <Button Width="32" Height="32" Padding="0" Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                                                             Command="{Binding DataContext.MoveMultiUpCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}" ToolTip="Start earlier" AutomationProperties.Name="Start earlier">
-                                                        <materialDesign:PackIcon Kind="ChevronUp" Width="20" Height="20" />
+                                                        <views:SvgIcon Glyph="up" Width="20" Height="20" />
                                                     </Button>
-                                                    <Button Width="32" Height="32" Padding="0" Style="{StaticResource MaterialDesignFlatButton}" Foreground="{DynamicResource Text.2}"
+                                                    <Button Width="32" Height="32" Padding="0" Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                                                             Command="{Binding DataContext.MoveMultiDownCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}" ToolTip="Start later" AutomationProperties.Name="Start later">
-                                                        <materialDesign:PackIcon Kind="ChevronDown" Width="20" Height="20" />
+                                                        <views:SvgIcon Glyph="down" Width="20" Height="20" />
                                                     </Button>
                                                 </StackPanel>
                                                 <CheckBox Grid.Column="3" Margin="8,0,0,0" IsChecked="{Binding Enabled}" VerticalAlignment="Center"
@@ -626,7 +631,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <ScrollViewer x:Name="Panel5" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" DataContext="{Binding Handles}">
+                <ScrollViewer x:Name="Panel5" Visibility="Collapsed" VerticalScrollBarVisibility="Visible" DataContext="{Binding Handles}">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Handles" Style="{StaticResource Section}" />
                         <TextBlock Text="{Binding LoggedOutText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
@@ -657,7 +662,7 @@
                                                         </Border>
                                                     </StackPanel>
                                                     <Button Grid.Column="2" Content="SWITCH" FontSize="12" VerticalAlignment="Center"
-                                                            Style="{StaticResource MaterialDesignOutlinedButton}" IsEnabled="{Binding CanSwitch}"
+                                                            Style="{StaticResource PolButton}" IsEnabled="{Binding CanSwitch}"
                                                             Click="OnSwitchHandle" AutomationProperties.Name="{Binding Name, StringFormat=Make {0} active}" />
                                                 </Grid>
                                                 <TextBlock Text="{Binding DataContext.NoCharactersText, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -684,12 +689,12 @@
                 </ScrollViewer>
 
                 <Grid x:Name="Panel2" Visibility="Collapsed" DataContext="{Binding Game}" RowDefinitions="*,Auto">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="28,22,28,6">
                             <Border Style="{StaticResource PlatformCard}" Tag="{Binding Platform}" Margin="0,0,0,12"
                                     Visibility="{Binding HasProfile, Converter={StaticResource BoolToVis}}">
                                 <Grid ColumnDefinitions="Auto,*">
-                                    <materialDesign:PackIcon Kind="PuzzleOutline" Width="22" Height="22" VerticalAlignment="Center" />
+                                    <views:SvgIcon Glyph="plugin" Flat="True" Width="22" Height="22" VerticalAlignment="Center" />
                                     <StackPanel Grid.Column="1" Margin="12,0,0,0">
                                         <TextBlock Text="{Binding ProfileHeading}" FontSize="12" FontWeight="SemiBold" />
                                         <TextBlock Text="{Binding ProfileShown}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -738,16 +743,21 @@
                             <TextBlock Text="Graphics" Style="{StaticResource Section}" />
                             <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                                 <StackPanel>
-                                    <HeaderedContentControl Header="Quick preset" Tag="A preset changes the graphics settings below in one go. Press Save to keep the changes.">
-                                        <UniformGrid Rows="1" Columns="3">
-                                            <Button Content="ULTRA" Style="{StaticResource MaterialDesignOutlinedButton}" Padding="2,0" FontSize="12"
-                                                    Margin="0,0,4,0" Command="{Binding PresetCommand}" CommandParameter="Ultra" />
-                                            <Button Content="HIGH" Style="{StaticResource MaterialDesignOutlinedButton}" Padding="2,0" FontSize="12"
-                                                    Margin="2,0" Command="{Binding PresetCommand}" CommandParameter="High" />
-                                            <Button Content="STANDARD" Style="{StaticResource MaterialDesignOutlinedButton}" Padding="2,0" FontSize="12"
-                                                    Margin="4,0,0,0" Command="{Binding PresetCommand}" CommandParameter="Standard" />
-                                        </UniformGrid>
-                                    </HeaderedContentControl>
+                                    <Grid Margin="0,8,0,6" ColumnDefinitions="*,Auto">
+                                        <StackPanel Style="{StaticResource DimWhenOff}" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <TextBlock Text="Quick preset" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource Text.1}" />
+                                            <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
+                                                       Text="A preset changes the graphics settings below in one go. Press Save to keep the changes." />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Content="ULTRA" Style="{StaticResource PolButton}" Padding="12,0" MinWidth="76" FontSize="12"
+                                                    Command="{Binding PresetCommand}" CommandParameter="Ultra" />
+                                            <Button Content="HIGH" Style="{StaticResource PolButton}" Padding="12,0" MinWidth="76" FontSize="12"
+                                                    Margin="8,0,0,0" Command="{Binding PresetCommand}" CommandParameter="High" />
+                                            <Button Content="STANDARD" Style="{StaticResource PolButton}" Padding="12,0" MinWidth="76" FontSize="12"
+                                                    Margin="8,0,0,0" Command="{Binding PresetCommand}" CommandParameter="Standard" />
+                                        </StackPanel>
+                                    </Grid>
                                     <HeaderedContentControl Header="3D resolution" Tag="This is the resolution the game draws its 3D graphics at, before scaling them to the game resolution.">
                                         <ComboBox ItemsSource="{Binding RenderSizes}" SelectedItem="{Binding RenderSize}" />
                                     </HeaderedContentControl>
@@ -821,7 +831,7 @@
                                         </HeaderedContentControl>
                                     </StackPanel>
                                     <HeaderedContentControl Header="Buttons" Tag="This opens the FINAL FANTASY XI gamepad tool, where you can choose what each button does.">
-                                        <Button Content="SET UP BUTTONS" Style="{StaticResource MaterialDesignOutlinedButton}" FontSize="12"
+                                        <Button Content="SET UP BUTTONS" Style="{StaticResource PolButton}" FontSize="12"
                                                 Command="{Binding OpenPadConfigCommand}" />
                                     </HeaderedContentControl>
                                 </StackPanel>
@@ -846,7 +856,7 @@
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBox Text="{Binding ScreenshotFolder}" Style="{StaticResource FieldText}"
                                                      materialDesign:HintAssist.Hint="Documents\My Games\FINAL FANTASY XI" />
-                                            <Button Grid.Column="1" Margin="8,0,0,0" Content="BROWSE" Style="{StaticResource MaterialDesignOutlinedButton}"
+                                            <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
                                                     Command="{Binding BrowseScreenshotsCommand}" />
                                         </Grid>
                                     </StackPanel>
@@ -869,16 +879,16 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <Border Grid.Row="1" Background="{DynamicResource Surface.1}" BorderBrush="{DynamicResource Border.Hair}"
-                            BorderThickness="0,1,0,0" Padding="20,10">
+                    <!-- padded like the page above it, the right side with the page's scrollbar (17) added -->
+                    <Border Grid.Row="1" Style="{StaticResource FooterBar}" Padding="28,10,45,10">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Text="{Binding Status}" Tag="{Binding StatusIsError}"
                                        Style="{StaticResource StatusText}" VerticalAlignment="Center"
                                        TextWrapping="Wrap" FontSize="12" Margin="0,0,12,0" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Button Content="DEFAULTS" Style="{StaticResource MaterialDesignFlatButton}" Command="{Binding DefaultsCommand}" Margin="0,0,6,0" IsEnabled="{Binding Editable}" />
-                                <Button Content="REVERT" Style="{StaticResource MaterialDesignOutlinedButton}" Command="{Binding RevertCommand}" Margin="0,0,8,0" IsEnabled="{Binding Editable}" />
-                                <Button Content="SAVE" Width="100" Style="{StaticResource AccentRaisedButton}"
+                                <Button Content="DEFAULTS" MinWidth="100" Style="{StaticResource PolButton}" Command="{Binding DefaultsCommand}" IsEnabled="{Binding Editable}" />
+                                <Button Content="REVERT" MinWidth="100" Style="{StaticResource PolButton}" Command="{Binding RevertCommand}" Margin="{StaticResource Footer.Gap}" IsEnabled="{Binding Editable}" />
+                                <Button Content="SAVE" MinWidth="100" Margin="{StaticResource Footer.Gap}" Style="{StaticResource PolButton}"
                                         Command="{Binding SaveCommand}" IsEnabled="{Binding Editable}" />
                             </StackPanel>
                         </Grid>

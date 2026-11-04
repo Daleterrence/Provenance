@@ -23,7 +23,9 @@ public partial class MainViewModel
         $"Repair isn't available for the {PolPaths.VersionName(region)} version of PlayOnline yet.";
 
     private DispatcherTimer? _repairProbe;
-    private bool _repairing, _sessionEnding, _probing;
+    private bool _sessionEnding, _probing;
+    // while the repair window's up
+    [ObservableProperty] private bool _repairing;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RepairBlockedReason), nameof(RepairTooltip))]
@@ -76,7 +78,7 @@ public partial class MainViewModel
         RefreshLargeAddressAware();
     }
 
-    private bool CanRepair() => RepairAvailable && !_repairing && !IsLaunching && !SocialConnected && RepairBlockedReason is null;
+    private bool CanRepair() => RepairAvailable && !Repairing && !IsLaunching && !SocialConnected && RepairBlockedReason is null;
 
     [RelayCommand(CanExecute = nameof(CanRepair))]
     private void RepairGameFiles()
@@ -90,12 +92,12 @@ public partial class MainViewModel
         }));
         if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
         else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        _repairing = true;
+        Repairing = true;
         RepairGameFilesCommand.NotifyCanExecuteChanged();
         try { w.ShowDialog(); }
         finally
         {
-            _repairing = false;
+            Repairing = false;
             RefreshRepair();
             RefreshInstallState();
         }
@@ -112,7 +114,7 @@ public partial class MainViewModel
     public async Task ProbeRepairAsync()
     {
         // a multi-account run holds the update lock in this copy, which isn't "another copy"
-        if (_probing || _repairing || !_windowShown || !RepairAvailable || RepairNotYet is not null || SocialConnected || IsLaunching || MultiRunning) return;
+        if (_probing || Repairing || !_windowShown || !RepairAvailable || RepairNotYet is not null || SocialConnected || IsLaunching || MultiRunning) return;
         _probing = true;
         try { RepairBusyReason = await Task.Run(RepairBusy); }
         finally { _probing = false; }

@@ -173,6 +173,8 @@ public partial class MainWindow : Window
             item.Click += (_, _) => vm.PickPlayChoice(name);
             menu.Items.Add(item);
         }
+        PlayChoicesIcon.IsOpen = true;
+        menu.Closed += (_, _) => PlayChoicesIcon.IsOpen = false;
         menu.IsOpen = true;
     }
 
