@@ -270,7 +270,7 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public PolFfxiProfile? FfxiProfile { get; init; }
     // the hook runs one profile server job at a time, so while one's going any other just waits its turn
     public bool ProfileServerBusy => SearchState == "searching" || ProfileState == "loading" || CharacterState == "loading" ||
-                                     FfxiProfileState == "loading" || MeState is "loading" or "saving" || XiState is "loading" or "saving" ||
+                                     FfxiProfileState == "loading" || MeState is "loading" or "saving" || XiState == "loading" ||
                                      ProfilePictureState == "saving" ||
                                      Chat is { ZonesState: "searching" } or { RoomsState: "searching" } ||
                                      (HandleState == "working" && HandleOp == "switch");
@@ -401,10 +401,6 @@ public static class SocialSnapshot
     // lands on a handle that's become active since
     public static bool RequestXiProfile(int pid, string token, string handleKey, string characterKey) =>
         WriteRequest(pid, "xiprofile", $"{OneLine(token)}\n{OneLine(handleKey)}\n{OneLine(characterKey)}");
-
-    // one that's been read, level is 1 Private, 2 Friends only, 3 POL
-    public static bool SaveXiProfile(int pid, string token, string handleKey, string characterKey, int level) =>
-        WriteRequest(pid, "savexi", $"{OneLine(token)}\n{OneLine(handleKey)}\n{OneLine(characterKey)}\n{level}");
 
     // load first, the save keeps each field's own level. level is 1 Private, 2 Friends only, 3 POL
     public static bool SaveMyProfile(int pid, string token, int level, IEnumerable<KeyValuePair<string, string>> fields,

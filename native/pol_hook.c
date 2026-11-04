@@ -3452,7 +3452,7 @@ static pdb_item *pdb_get(BYTE *b, pdb_schema *s, const char *name, pdb_rec *rec)
 static ULONGLONG g_db_last;
 static int g_srch_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
 static int g_prof_step, g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
-static int g_xi_step;   /* my FFXI character's privacy: 1 load waits for a slot, 2 load job, 3 save waits, 4 save job */
+static int g_xi_step;   /* my FFXI character's privacy: 1 load waits for a slot, 2 load job */
 static int g_pic_want;
 static int g_cr_db;   /* chat's zone and room lists, 0 idle, the steps are pol_chat.c's cr_db_pump */
 static ULONGLONG g_cr_last;   /* chat's last enter, leave or list, pol_chat.c */
@@ -4176,7 +4176,7 @@ static int ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
 static int user_db_waiting(void)
 {
     static const char *const ext[] = { "search", "profile", "ffxiprofile", "myprofile", "saveprofile", "rename", "pic",
-                                       "chatzones", "chatrooms", "handle", "xiprofile", "savexi" };
+                                       "chatzones", "chatrooms", "handle", "xiprofile" };
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (request_waiting(ext[i])) return 1;
     return 0;
 }
@@ -5192,9 +5192,8 @@ static void pic_pump(BYTE *b, int ctl)
     g_snap_dirty = 1;
 }
 
-/* my characters' tabs on the viewer's editor (app.dll 0x10228190, 0x10225627). prof_001 has nothing editable and no
-   z_utime, so a save's SET is only the record level */
-static int g_xi_job = -1, g_xi_level;
+/* my characters' tabs on the viewer's editor (app.dll 0x10228190), read only */
+static int g_xi_job = -1;
 static char g_xi_token[48], g_xi_state[32] = "", g_xi_json[0x200], g_xi_key[25];
 static __declspec(align(8)) pdb_cond g_xi_cond[2];
 static pdb_cond *g_xi_where;
@@ -5202,17 +5201,6 @@ static pdb_rec *g_xi_rec;
 static unsigned __int64 g_xi_ctid;
 static DWORD g_xi_ctsid;
 static ULONGLONG g_xi_t0, g_xi_last;
-/* the ones read so far, a save only goes for one of these. The viewer reads a tab again each time it's picked */
-typedef struct xi_known { char key[25]; unsigned __int64 hid, ctid; DWORD ctsid; int level; } xi_known;
-static xi_known g_xi_known[8];
-static int g_xi_nknown;
-
-static xi_known *xi_known_find(const char *key, unsigned __int64 hid)
-{
-    for (int i = 0; i < g_xi_nknown; i++)
-        if (g_xi_known[i].hid == hid && !lstrcmpA(g_xi_known[i].key, key)) return &g_xi_known[i];
-    return NULL;
-}
 
 static void xi_done(const char *state)
 {
@@ -5222,20 +5210,6 @@ static void xi_done(const char *state)
     lg("ffxi profile edit: %s\r\n", state);
     g_snap_dirty = 1;
 }
-static void xi_remember(int level)
-{
-    xi_known *k = xi_known_find(g_xi_key, g_me_hid);
-    if (!k) {
-        if (g_xi_nknown == 8) memmove(&g_xi_known[0], &g_xi_known[1], 7 * sizeof g_xi_known[0]);
-        else g_xi_nknown++;
-        k = &g_xi_known[g_xi_nknown - 1];
-        lstrcpyA(k->key, g_xi_key);
-        k->hid = g_me_hid;
-    }
-    k->ctsid = g_xi_ctsid;
-    k->ctid = g_xi_ctid;
-    k->level = level;
-}
 static void xi_load_start(BYTE *b)
 {
     int t = ((svc4b4_t)SVC(0x4b4))(g_ch_pib, g_xi_where, g_xi_rec);
@@ -5244,30 +5218,6 @@ static void xi_load_start(BYTE *b)
     if (t < 0) { xi_done(failed(t)); return; }
     g_xi_job = t;
     g_xi_step = 2;
-    g_xi_t0 = GetTickCount64();
-}
-static void xi_save_start(BYTE *b)
-{
-    pdb_cond k[2];
-    pdb_cond *where;
-    pdb_rec set;
-    int t;
-    memset(k, 0, sizeof k);
-    memset(&set, 0, sizeof set);
-    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &k[0].item, "z_ctsid", &g_xi_ctsid, 1);
-    ((svc4a8_t)SVC(0x4a8))(&k[0], 1);
-    ((svc4a0_t)SVC(0x4a0))(g_ch_pib, &k[1].item, "z_ctid", &g_xi_ctid, 1);
-    ((svc4a8_t)SVC(0x4a8))(&k[1], 1);
-    if (!(k[0].item.flags & 1) || !(k[1].item.flags & 1)) { xi_done("failed:schema"); return; }
-    where = ((svc4ac_t)SVC(0x4ac))(2, &k[0], &k[1]);
-    if (!where) { xi_done("failed:schema"); return; }
-    ((svc4d0_t)SVC(0x4d0))(&set, g_xi_level, 0);
-    t = ((svc4d4_t)SVC(0x4d4))(g_ch_pib, where, &set);
-    if (t == NO_SLOT) { g_xi_step = 3; return; }
-    lg("ffxi profile edit: save level %d -> %d\r\n", g_xi_level, t);
-    if (t < 0) { xi_done(failed(t)); return; }
-    g_xi_job = t;
-    g_xi_step = 4;
     g_xi_t0 = GetTickCount64();
 }
 /* only a character from the loaded profile's own list, the ids are never the app's */
@@ -5285,19 +5235,16 @@ static int xi_find(BYTE *b, const char *key, me_chr *out)
 }
 static void xi_request(BYTE *b)
 {
-    char buf[256], *p, *hk, *ck, *lv, now[17];
-    int kind;
+    char buf[256], *p, *hk, *ck, now[17];
     me_chr c;
     pol_handle h;
     if (GetTickCount64() - g_xi_last < 3000 || !db_free()) return;
-    kind = take_request("xiprofile", buf, sizeof buf) >= 0 ? 1 : take_request("savexi", buf, sizeof buf) >= 0 ? 2 : 0;
-    if (!kind) return;
+    if (take_request("xiprofile", buf, sizeof buf) < 0) return;
     g_xi_last = g_db_last = GetTickCount64();
     p = buf;
     lstrcpynA(g_xi_token, req_line(&p), sizeof g_xi_token);
     hk = req_line(&p);
     ck = req_line(&p);
-    lv = req_line(&p);
     if (notice_blocks(g_notice)) { xi_done("failed:account notice"); return; }
     if (g_my_slot < 0) { xi_done("failed:no handle"); return; }
     memset(&h, 0, sizeof h);
@@ -5307,23 +5254,6 @@ static void xi_request(BYTE *b)
     if (lstrcmpA(hk, now) != 0 || !g_me_rec || !g_me_rec->items ||
         ((((unsigned __int64)h.hi << 32 | h.lo) >> 1) & 0xfffffffffffULL) != g_me_hid) {
         xi_done("failed:not loaded");
-        return;
-    }
-    if (kind == 2) {
-        xi_known *k = xi_known_find(ck, g_me_hid);
-        if (!k) { xi_done("failed:not loaded"); return; }
-        if (lv[0] < '1' || lv[0] > '3' || lv[1]) { xi_done("failed:bad request"); return; }
-        if (!ch_load_pib(b)) { xi_done("failed:no schema"); return; }
-        g_xi_level = lv[0] - '0';
-        if (g_xi_level == k->level) { xi_done("failed:nothing to save"); return; }
-        lstrcpyA(g_xi_key, ck);
-        g_xi_ctsid = k->ctsid;
-        g_xi_ctid = k->ctid;
-        g_xi_json[0] = 0;
-        lstrcpyA(g_xi_state, "saving");
-        g_snap_dirty = 1;
-        g_xi_t0 = GetTickCount64();
-        xi_save_start(b);
         return;
     }
     if (!xi_find(b, ck, &c)) { xi_done("failed:no character"); return; }
@@ -5382,26 +5312,8 @@ static void xi_pump(BYTE *b, int ctl)
         ch_text(b, g_xi_rec, "z_name", nm, sizeof nm, NULL);
         ch_text(b, g_xi_rec, "z_worldname", wn, sizeof wn, NULL);
         wsprintfA(g_xi_json, "\"key\":\"%s\",\"level\":%u,\"name\":%s,\"worldName\":%s", g_xi_key, g_xi_rec->level, nm, wn);
-        xi_remember(g_xi_rec->level);
         lg("ffxi profile edit: record level %u\r\n", g_xi_rec->level);
         xi_done("ready");
-        return;
-    case 3:
-        if (GetTickCount64() - g_xi_t0 >= 120000) xi_done("failed:busy");
-        else xi_save_start(b);   /* a write, so it still runs during a drain */
-        return;
-    case 4:
-        r = ((svc4d8_t)SVC(0x4d8))(g_xi_job);
-        if (r == 0) {
-            if (GetTickCount64() - g_xi_t0 >= 120000) { ((svc4dc_t)SVC(0x4dc))(g_xi_job); xi_done("failed:timeout"); }
-            return;
-        }
-        g_xi_job = -1;
-        if (r == 1) {
-            xi_remember(g_xi_level);
-            wsprintfA(g_xi_json, "\"key\":\"%s\",\"level\":%d", g_xi_key, g_xi_level);
-        }
-        xi_done(r == 1 ? "saved" : failed(r));
         return;
     }
 }
@@ -5560,7 +5472,7 @@ static void writes_refuse(BYTE *b)
 {
     static const char *const ext[] = { "send", "friend", "comment", "answer", "group", "pic", "status", "myprofile",
                                        "saveprofile", "rename", "chatjoin", "chatsend", "chatcreate", "chatmaster",
-                                       "groupchatjoin", "groupchatsend", "xiprofile", "savexi" };
+                                       "groupchatjoin", "groupchatsend", "xiprofile" };
     char buf[512], *p, *l1, *l2, *l3;
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) {
         if (take_request(ext[i], buf, sizeof buf) < 0) continue;
@@ -5580,7 +5492,7 @@ static void writes_refuse(BYTE *b)
         case 13: chat_master_refused(l1, l2); break;
         case 14: gc_join_refused(l1, SWITCHING); break;
         case 15: gc_send_refused(l1, SWITCHING); break;
-        case 16: case 17: lstrcpynA(g_xi_token, l1, sizeof g_xi_token); xi_done(SWITCHING); break;
+        case 16: lstrcpynA(g_xi_token, l1, sizeof g_xi_token); xi_done(SWITCHING); break;
         }
     }
 }
@@ -5935,7 +5847,7 @@ static void snapshot_social(BYTE *b)
     wr(h, "]}");
     wr_job(h, ",\"me\":{\"token\":%s,\"state\":\"%s\"}", g_me_token, g_me_state);
     wr_job(h, ",\"xi\":{\"token\":%s,\"state\":\"%s\"", g_xi_token, g_xi_state);
-    if (g_xi_json[0] && (!lstrcmpA(g_xi_state, "ready") || !lstrcmpA(g_xi_state, "saved"))) { wr(h, ","); wr(h, g_xi_json); }
+    if (g_xi_json[0] && !lstrcmpA(g_xi_state, "ready")) { wr(h, ","); wr(h, g_xi_json); }
     wr(h, "}");
     wr_job(h, ",\"group\":{\"token\":%s,\"state\":\"%s\"}", g_grp_token, g_grp_state);
     wr_job(h, ",\"profile\":{\"token\":%s,\"state\":\"%s\"", g_prof_token, g_prof_state);
@@ -6165,13 +6077,13 @@ static void db_reads_abandon(BYTE *b)
 static int writes_pending(void)
 {
     return g_sq_n || g_status_job >= 0 || g_edit_job >= 0 || g_edit_upload_want ||
-           g_comment_wanted || g_pic_want >= 0 || g_grp_job >= 0 || g_answer_kind || g_me_step >= 3 || g_xi_step >= 3 ||
+           g_comment_wanted || g_pic_want >= 0 || g_grp_job >= 0 || g_answer_kind || g_me_step >= 3 ||
            g_hop;
 }
 /* writes that are due but haven't got a job slot yet, or an answer's message still to come */
 static int writes_waiting(void)
 {
-    return send_built() || g_answer_kind || g_edit_upload_want || g_comment_wanted || g_me_step == 3 || g_xi_step == 3 ||
+    return send_built() || g_answer_kind || g_edit_upload_want || g_comment_wanted || g_me_step == 3 ||
            g_hwant;
 }
 static void drain_turn(BYTE *b, int mail)

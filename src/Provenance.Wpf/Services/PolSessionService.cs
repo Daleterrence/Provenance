@@ -118,7 +118,7 @@ public sealed class PolSessionService : IDisposable
     // a new request file goes here too (I'll forget)
     private static readonly string[] RequestFiles =
         ["send", "status", "mail", "ack", "comment", "pic", "friend", "answer", "search", "profile", "group",
-         "myprofile", "saveprofile", "rename", "xiprofile", "savexi", "character", "ffxiprofile", "chatzones", "chatrooms",
+         "myprofile", "saveprofile", "rename", "xiprofile", "character", "ffxiprofile", "chatzones", "chatrooms",
          "chatjoin", "chatsend", "chatleave", "chatcreate", "chatmaster", "handle", "groupchatjoin", "groupchatsend",
          "groupchatleave"];
 

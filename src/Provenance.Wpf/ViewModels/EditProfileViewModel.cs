@@ -100,8 +100,7 @@ public sealed partial class CascadePick : ObservableObject
     }
 }
 
-// a card along the top of the editor: my handle's profile, or one of my FFXI characters. A character only has its
-// privacy to change, it's the only part of prof_001 the viewer can save
+// a card along the top of the editor: my handle's profile, or one of my FFXI characters (read only)
 public sealed partial class ProfileCard : ObservableObject
 {
     private readonly Func<long, string> _help;
@@ -124,19 +123,13 @@ public sealed partial class ProfileCard : ObservableObject
     [ObservableProperty] private bool _loaded;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(VisibilityHelp))] private long _level;
 
-    // what was read or last saved, 0 when the record's level is none of the three
-    public int SavedLevel { get; set; }
-
     public string VisibilityHelp => _help(Level);
-
-    partial void OnLevelChanged(long value) => HasChanges = Loaded && value != SavedLevel;
 }
 
-// only changed fields get sent, and a rename goes after the save. Characters are saved after the handle's profile,
-// one at a time
+// only changed fields get sent, and a rename goes after the save
 public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 {
-    private enum Job { None, Load, Save, Rename, LoadXi, SaveXi }
+    private enum Job { None, Load, Save, Rename, LoadXi }
 
     private readonly SocialViewModel _social;
     private readonly System.Windows.Threading.DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -154,8 +147,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private bool _loadingValues;
     private bool _handleChanges;
     private ProfileCard? _xiCard;
-    private readonly List<ProfileCard> _xiQueue = new();
-    private readonly List<ProfileCard> _savedNow = new();
     private readonly ProfileCard _handleCard;
 
     public EditProfileViewModel(SocialViewModel social)
@@ -187,13 +178,11 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     public ObservableCollection<ProfileCard> Cards { get; } = new();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsHandleCard), nameof(IsXiCard), nameof(CanEditXi), nameof(CanRetryLoad))]
+    [NotifyPropertyChangedFor(nameof(IsHandleCard), nameof(IsXiCard), nameof(CanRetryLoad))]
     private ProfileCard _selectedCard = null!;
 
     public bool IsHandleCard => SelectedCard.IsHandle;
     public bool IsXiCard => !SelectedCard.IsHandle;
-    public bool CanEditXi => CharacterPrivacySaves && IsXiCard && SelectedCard.Loaded && !Busy;
-    public bool XiReadOnly => !CharacterPrivacySaves;
     public bool CanSelectCard => !Busy;
 
     [ObservableProperty] private string _loadingText = "Loading your profile...";
@@ -225,7 +214,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanEditFields), nameof(CanRetryLoad))] private bool _isLoaded;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEditFields), nameof(FooterText), nameof(FooterIsError), nameof(CanRetryLoad),
-                              nameof(CanEditXi), nameof(CanSelectCard))]
+                              nameof(CanSelectCard))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private bool _busy;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(FooterText), nameof(FooterIsError))] private string _note = "";
@@ -291,7 +280,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Problem = Check();
         _handleChanges = ChangedFields().Count > 0 || Level != _savedLevel || HandleChanged;
         _handleCard.HasChanges = _handleChanges;
-        HasChanges = _handleChanges || Cards.Any(c => !c.IsHandle && c.HasChanges);
+        HasChanges = _handleChanges;
         SaveCommand.NotifyCanExecuteChanged();
         if (!Busy && !NoteIsError) Note = "";
     }
@@ -401,8 +390,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private void Fail(string text)
     {
         _renameAfterSave = false;
-        _xiQueue.Clear();
-        _savedNow.Clear();
         EndJob();
         NoteIsError = true;
         Note = text;
@@ -414,7 +401,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Job.Save => "saveprofile",
         Job.Rename => "rename",
         Job.LoadXi => "xiprofile",
-        Job.SaveXi => "savexi",
         _ => null,
     };
 
@@ -525,22 +511,13 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private void OnCardChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ProfileCard.HasChanges)) Dirty();
-        if (e.PropertyName == nameof(ProfileCard.Loaded) && sender == SelectedCard)
-        {
-            OnPropertyChanged(nameof(CanEditXi));
-            OnPropertyChanged(nameof(CanRetryLoad));
-        }
+        if (e.PropertyName == nameof(ProfileCard.Loaded) && sender == SelectedCard) OnPropertyChanged(nameof(CanRetryLoad));
     }
 
     private bool CanSave() => IsLoaded && !Busy && HasChanges && Problem.Length == 0;
 
     // a save PlayOnline turned down, said out loud as well as in the footer
     internal event Action<string>? SaveRefused;
-
-    // PlayOnline refused this save (POL-5440, "not authorised") on the one account it's been tried on, so a
-    // character's privacy is read-only till it's seen working
-    internal static bool CharacterPrivacySaves { get; set; }
 
     // asks before a rename (old name, new name), true to go ahead. Null skips the question
     internal Func<string, string, bool>? ConfirmRename { get; set; }
@@ -560,14 +537,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         }
         if (_handleChanges && HandleChanged && ConfirmRename is { } ask && !ask(_savedHandle, HandleName.Trim())) return;
         var fields = ChangedFields();
-        _xiQueue.Clear();
-        _xiQueue.AddRange(Cards.Where(c => !c.IsHandle && c.HasChanges));
-        _savedNow.Clear();
-        if (!_handleChanges)
-        {
-            NextXi();
-            return;
-        }
         _renameAfterSave = HandleChanged;
         if (fields.Count == 0 && Level == _savedLevel)
         {
@@ -581,29 +550,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         if (!SocialSnapshot.SaveMyProfile(pid, _token!, level, fields, noMail)) Fail(WriteFailed);
     }
 
-    // the next character waiting to be saved, or the end of the save
-    private void NextXi()
-    {
-        if (_xiQueue.Count == 0)
-        {
-            Done(_savedNow.Count == 1 && !_savedNow[0].IsHandle ? $"{_savedNow[0].Title}'s profile is saved."
-                 : _savedNow.Count > 1 ? "Your changes are saved." : "Your profile is saved.");
-            _savedNow.Clear();
-            return;
-        }
-        if (_social.GameRunning || _social.HandleSwitching || _social.SessionPid is not { } pid)
-        {
-            var why = _social.GameRunning ? SocialViewModel.GameRunningNote
-                    : _social.HandleSwitching ? SocialViewModel.SwitchingNote : "Log in to edit your profile.";
-            Fail(_savedNow.Count > 0 ? "Some of your changes are saved. " + why : why);
-            return;
-        }
-        _xiCard = _xiQueue[0];
-        _xiQueue.RemoveAt(0);
-        Start(Job.SaveXi, $"Saving {_xiCard.Title}'s profile...");
-        if (!SocialSnapshot.SaveXiProfile(pid, _token!, _loadedKey, _xiCard.Key, (int)_xiCard.Level)) Fail(WriteFailed);
-    }
-
     private void StartRename(int pid)
     {
         _renameAfterSave = false;
@@ -613,7 +559,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private void OnSnapshot(PolSocialSnapshot snap)
     {
-        bool xi = _job is Job.LoadXi or Job.SaveXi;
+        bool xi = _job == Job.LoadXi;
         var hookToken = xi ? snap.XiToken : snap.MeToken;
         // waiting its turn behind another profile server job in the hook, so its clock hasn't started
         if (_job != Job.None && _token is not null && hookToken != _token && snap.ProfileServerBusy) _at = DateTime.UtcNow;
@@ -624,7 +570,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             var job = _job;
             var text = FailText(job, state);
             Fail(text);
-            if (job is Job.Save or Job.Rename or Job.SaveXi && state != "cancelled") SaveRefused?.Invoke(text);
+            if (job is Job.Save or Job.Rename && state != "cancelled") SaveRefused?.Invoke(text);
             return;
         }
         switch (_job)
@@ -649,7 +595,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                 {
                     // Play was pressed while it saved, so the handle stays changed for later
                     _renameAfterSave = false;
-                    _xiQueue.Clear();
                     Done("Your profile is saved. Your handle wasn't renamed because FINAL FANTASY XI started.");
                     return;
                 }
@@ -658,16 +603,12 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                     StartRename(_pid);
                     return;
                 }
-                _savedNow.Add(_handleCard);
-                EndJob();
-                NextXi();
+                Done("Your profile is saved.");
                 break;
             case Job.Rename when state == "saved":
                 _savedHandle = HandleName.Trim();
                 _handleCard.Title = _savedHandle;
-                _savedNow.Add(_handleCard);
-                EndJob();
-                NextXi();
+                Done("Your profile is saved.");
                 break;
             case Job.LoadXi when state == "ready":
                 if (_xiCard is not { } card || snap.XiKey != card.Key)
@@ -677,20 +618,9 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                 }
                 EndJob();
                 Note = "";
-                card.SavedLevel = snap.XiLevel is >= 1 and <= 3 ? snap.XiLevel : 0;
                 card.Loaded = true;
-                card.Level = card.SavedLevel;
+                card.Level = snap.XiLevel is >= 1 and <= 3 ? snap.XiLevel : 0;
                 if (card.Character is { Name.Length: 0 } && snap.XiName.Trim().Length > 0) card.Title = snap.XiName.Trim();
-                break;
-            case Job.SaveXi when state == "saved":
-                if (_xiCard is { } done)
-                {
-                    done.SavedLevel = (int)done.Level;
-                    done.HasChanges = false;
-                    _savedNow.Add(done);
-                }
-                EndJob();
-                NextXi();
                 break;
         }
     }
@@ -722,7 +652,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         "failed:-261" or "failed:-5429" => "The entered name could not be registered. Please register with a different name.",
         "failed:reloaded" => "PlayOnline didn't keep the new handle name. Try again later.",
         "failed:busy" => "PlayOnline was busy with other requests. Try again.",
-        "failed:mismatch" => job is Job.LoadXi or Job.SaveXi
+        "failed:mismatch" => job == Job.LoadXi
             ? "PlayOnline sent a profile that isn't this character's, so nothing was changed."
             : "PlayOnline sent a profile that isn't this handle's, so nothing was changed.",
         "failed:no character" => "That character isn't on your profile any more. Open the profile again.",
@@ -732,7 +662,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         {
             Job.Load => $"PlayOnline didn't send your profile{Why(state)}",
             Job.LoadXi => $"PlayOnline didn't send the character's profile{Why(state)}",
-            Job.SaveXi => $"PlayOnline didn't save the character's profile{Why(state)}",
             Job.Rename => $"PlayOnline didn't rename the handle{Why(state)}",
             _ => $"PlayOnline didn't save your profile{Why(state)}",
         },
