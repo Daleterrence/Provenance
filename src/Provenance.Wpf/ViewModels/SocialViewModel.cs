@@ -538,12 +538,6 @@ public partial class SocialViewModel : ObservableObject
                 GroupInviteReceived?.Invoke(m.From, m.Mid);
             if (m.HasBody && m.Kind == PolMessage.KindFriendRequest && m.Mid > 0 && _seenRequests.Add(m.Mid))
                 FriendRequestReceived?.Invoke(m.From, m.Mid);
-            // chat from someone I ignore gets binned unread. The hook only catches listed mail, not a push
-            if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey))
-            {
-                if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
-                continue;
-            }
             // a line I sent to another POL ID coming back isn't something I received, and goes from the server like any
             // read line. One of mine it can't match yet waits while a send of mine could still turn out to be it
             if (Echo(snap, m, chat))

@@ -100,10 +100,7 @@ public partial class MainViewModel : ObservableObject
         if (changed) PersistProfileList();   // no settings write on an ordinary start
         avatars.Prewarm(Profiles.Select(p => p.ProfilePictureId));
 
-        // --account never falls back to another account when that one's gone
-        var active = LaunchArgs.ProfileId is { } forAccount
-            ? Profiles.FirstOrDefault(p => p.Id == forAccount)
-            : Profiles.FirstOrDefault(p => p.Id == _settings.Current.ActiveProfileId) ?? Profiles.FirstOrDefault();
+        var active = Profiles.FirstOrDefault(p => p.Id == _settings.Current.ActiveProfileId) ?? Profiles.FirstOrDefault();
         _selectedProfile = active;
         _autoLogin = _settings.Current.AutoLogin;
         if (active != null) LoadCredentialsForProfile(active);
@@ -277,7 +274,6 @@ public partial class MainViewModel : ObservableObject
 
     // an open Settings page's Large Address Aware row goes by the same sign-in and run state as Repair
     private void RefreshLargeAddressAware() => _ = _openSettings?.ReadLargeAddressAwareAsync();
-    public int TraySignOutMinutes => _settings.Current.TraySignOutMinutes;
     public bool TrayTipShown => _settings.Current.TrayTipShown;
 
     public void MarkTrayTipShown() => SaveSetting(s => s.TrayTipShown = true);
@@ -445,7 +441,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedProfileChanged(Profile? value)
     {
         if (value == null) return;
-        if (LaunchArgs.ProfileId is null) SaveSetting(s => s.ActiveProfileId = value.Id);
+        SaveSetting(s => s.ActiveProfileId = value.Id);
         LoadCredentialsForProfile(value);
     }
 
@@ -920,13 +916,7 @@ public partial class MainViewModel : ObservableObject
     {
         _pol.EndOrphans();
         _pol.Prestart();
-        if (LaunchArgs.Play && SelectedProfile != null && SelectedProfile.Id == (LaunchArgs.ProfileId ?? SelectedProfile.Id))
-        {
-            Log.Information("Signing in {Account} to start the game (--play)", SelectedProfile.Id);
-            SignInCommand.Execute(null);
-            return;
-        }
-        if (LaunchArgs.ProfileId != null || !AutoLogin || autoLoginSuppressed || !HasSavedCredentials) return;
+        if (!AutoLogin || autoLoginSuppressed || !HasSavedCredentials) return;
         Log.Information("Auto sign-in for {Account}", SelectedProfile?.Id);
         SignInCommand.Execute(null);
     }
@@ -1181,7 +1171,7 @@ public partial class MainViewModel : ObservableObject
                 _elapsedTimer.Stop();
                 SocialConnected = true;
                 _socialPoll.Start();
-                startAfter = StartGameImmediately || LaunchArgs.Play;
+                startAfter = StartGameImmediately;
             }
             else
             {

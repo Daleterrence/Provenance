@@ -66,9 +66,6 @@ public sealed class LauncherSettings
 
     public bool MinimizeToTray { get; set; }
 
-    // 0 = never, otherwise 10-60 mins like POL's own sign-out timer
-    public int TraySignOutMinutes { get; set; }
-
     public bool TrayTipShown { get; set; }
 
     public bool NotifyFriendsOnline { get; set; } = true;

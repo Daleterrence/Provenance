@@ -104,10 +104,6 @@ public sealed class PolSessionService : IDisposable
         _ => "Your PlayOnline session has closed. Log in again to see your friends and messages.",
     };
 
-    // same rule as ipc_dir in pol_hook.c, checked up front so exit 12 gets a proper message
-    internal static bool IpcDirUsable(string? dir) =>
-        !string.IsNullOrEmpty(dir) && dir.Length < 260 - 64 && Directory.Exists(dir);
-
     private const string LaunchKeyPrefix = "LAUNCH:";
 
     // the room password's one-shot entry, and the full target the hook gets as POL_CRED_CHAT
@@ -333,11 +329,6 @@ public sealed class PolSessionService : IDisposable
         var (viewerDir, polExe, launcherExe) = FindLaunchFiles();
         if (polExe is null)
             return Fail("Some of the files needed to start PlayOnline are missing. Check FINAL FANTASY XI is installed, and if it is, reinstall Provenance.");
-        if (!IpcDirUsable(HookFiles.Dir))
-        {
-            Log.Error("The folder of the hook's files cannot be used: {Dir}", HookFiles.Dir);
-            return Fail(PrivateFolderText);
-        }
         if (KeyForSignIn(options.KeyGeneration) is { } keyProblem) return Fail(keyProblem.Text, keyProblem.Code);
         // the viewer checks for its own update on every connect and always says yes
         try

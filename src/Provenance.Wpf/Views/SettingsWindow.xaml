@@ -362,10 +362,6 @@
                                     <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding KeepSignedInInTray}"
                                                   AutomationProperties.Name="Keep me logged in to PlayOnline in the tray when I close the window" />
                                 </HeaderedContentControl>
-                                <HeaderedContentControl Header="Log out and close after this long in the tray" IsEnabled="{Binding KeepSignedInInTray}">
-                                    <ComboBox ItemsSource="{Binding TraySignOutChoices}" SelectedIndex="{Binding TraySignOutIndex}"
-                                              AutomationProperties.Name="Log out and close after this long in the tray" />
-                                </HeaderedContentControl>
                                 <HeaderedContentControl Header="Tell me when a friend comes online">
                                     <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding NotifyFriendsOnline}"
                                                   AutomationProperties.Name="Tell me when a friend comes online" />

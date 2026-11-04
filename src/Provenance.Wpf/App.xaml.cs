@@ -41,11 +41,8 @@ public partial class App : Application
         if (!SecureFiles.OwnNewFilesAsAdministrators()) Log.Warning("New files won't be Administrators' if this PC's policy says otherwise");
         if (Program.VelopackStartError is { } velopackError)
             Log.Warning(velopackError, "Velopack start-up failed");
-        LaunchArgs.Parse(e.Args);
         // before the first window, the update one included, so nothing opens in the other theme first
         AppTheme.Apply(AppTheme.FromSettingsFile(SettingsService.DefaultPath));
-        if (LaunchArgs.ProfileId is { } forAccount)
-            Log.Information("Started for account {Account} (play {Play})", forAccount, LaunchArgs.Play);
 
         // first, while nothing else runs, so an update can restart the app straight away. Closing the update window or
         // the start-up error card mustn't end the app (last window closed)
@@ -219,11 +216,6 @@ public partial class App : Application
         try
         {
             var psi = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, WorkingDirectory = AppContext.BaseDirectory };
-            if (LaunchArgs.ProfileId is { } account)
-            {
-                psi.ArgumentList.Add("--account");
-                psi.ArgumentList.Add(account);
-            }
             using var started = System.Diagnostics.Process.Start(psi);
             Log.Information("Started Provenance again (pid {Pid})", started?.Id);
         }

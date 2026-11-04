@@ -26,8 +26,7 @@ internal static class Program
         catch (Exception ex) { Note("Velopack start-up failed", ex); }
 
         // Run() normally exits on a hook. If it threw instead, a hook still mustn't start the app (UAC mid-uninstall)
-        if (args.Length > 0 && (args[0].StartsWith("--veloapp-", StringComparison.OrdinalIgnoreCase) ||
-                                args[0].StartsWith("--squirrel-", StringComparison.OrdinalIgnoreCase)))
+        if (args.Length > 0 && args[0].StartsWith("--veloapp-", StringComparison.OrdinalIgnoreCase))
             return 0;
 
         // ShellExecute so Provenance.exe's manifest gets its UAC prompt, CreateProcess just fails with 740

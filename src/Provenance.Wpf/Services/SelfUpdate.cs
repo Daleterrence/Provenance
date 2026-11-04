@@ -264,11 +264,7 @@ public static class SelfUpdate
                                                                      Guid? stagingId = null, VelopackAsset? latestLocalRelease = null)
         {
             if (installed?.IsPrerelease != true)
-            {
-                // a beta on the stable feed would be a publishing mistake, and stable copies don't follow it
-                var stable = await base.GetReleaseFeed(logger, appId, Stable, stagingId, latestLocalRelease);
-                return new VelopackAssetFeed { Assets = [.. stable.Assets.Where(a => !a.Version.IsPrerelease)] };
-            }
+                return await base.GetReleaseFeed(logger, appId, Stable, stagingId, latestLocalRelease);
             var feeds = await Task.WhenAll(StableOrNothing(logger, appId, stagingId, latestLocalRelease),
                                            base.GetReleaseFeed(logger, appId, Beta, stagingId, latestLocalRelease));
             return new VelopackAssetFeed { Assets = [.. feeds.SelectMany(f => f.Assets)] };

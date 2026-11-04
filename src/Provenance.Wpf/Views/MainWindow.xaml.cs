@@ -12,7 +12,6 @@ public partial class MainWindow : Window
 {
     internal Services.TrayIcon? _tray;
     private bool _exiting, _askingToExit, _cancellingSignIn, _flashing;
-    internal System.Windows.Threading.DispatcherTimer? _traySignOut;
     private DateTime _worldsClosedAt;
     private int _newsShown = -1;
 
@@ -201,7 +200,6 @@ public partial class MainWindow : Window
         if (Vm is { MinimizeGoesToTray: true } vm)
         {
             ToTray(vm, vm.SocialConnected);
-            if (vm.KeepInTrayOnClose) StartTraySignOut(vm);   // the timer's part of keep me logged in, Settings greys it out otherwise
             return;
         }
         WindowState = WindowState.Minimized;
@@ -220,7 +218,6 @@ public partial class MainWindow : Window
                     "You're still logged in to PlayOnline, so your friends and messages stay up to date. Right-click this icon to exit.");
                 vm.MarkTrayTipShown();
             }
-            StartTraySignOut(vm);
             return;
         }
         if (Vm is { SigningIn: true } signing)
@@ -272,7 +269,6 @@ public partial class MainWindow : Window
     // a shutdown closes the window whatever OnClosing says, so the icon can't be left behind
     protected override void OnClosed(EventArgs e)
     {
-        _traySignOut?.Stop();
         _tray?.Dispose();
         _tray = null;
         base.OnClosed(e);
@@ -295,28 +291,8 @@ public partial class MainWindow : Window
         Hide();   // the friends windows are their own windows and stay as they are
     }
 
-    private void StartTraySignOut(MainViewModel vm)
-    {
-        if (vm.TraySignOutMinutes <= 0) return;
-        _traySignOut ??= new System.Windows.Threading.DispatcherTimer();
-        _traySignOut.Interval = TimeSpan.FromMinutes(vm.TraySignOutMinutes);
-        _traySignOut.Tick -= OnTraySignOutTick;
-        _traySignOut.Tick += OnTraySignOutTick;
-        _traySignOut.Start();
-    }
-
-    // like the viewer's idle sign-out it asks nothing, so an open profile editor just closes as it is
-    internal void OnTraySignOutTick(object? sender, EventArgs e)
-    {
-        if (Vm is { IsLaunching: true }) return;   // not idle while the game updates or starts, so it waits another round
-        _traySignOut?.Stop();
-        EditProfileWindow.Current?.CloseQuietly();
-        ExitApp();
-    }
-
     internal void ShowFromTray()
     {
-        _traySignOut?.Stop();
         if (_tray != null) _tray.Visible = false;
         Show();
         WindowState = WindowState.Normal;
@@ -324,7 +300,7 @@ public partial class MainWindow : Window
     }
 
     // the uninstaller, Windows logging off and closing when the game exits have nobody there to answer questions, so
-    // like the idle sign-out it asks nothing
+    // it asks nothing and an open profile editor just closes as it is
     internal void ExitWithoutAsking()
     {
         EditProfileWindow.Current?.CloseQuietly();

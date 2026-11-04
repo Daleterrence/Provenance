@@ -12,7 +12,6 @@ namespace Provenance.Wpf.ViewModels;
 // Every change saves straight away. The install region's detected, not picked, but news can come from any region's site
 public partial class SettingsViewModel : ObservableObject
 {
-    private static readonly int[] TraySignOutMinutes = [0, 10, 20, 30, 40, 50, 60];
     private static readonly string[] FeedRegionCodes = ["auto", "na", "eu", "jp"];
 
     private readonly ISettingsService _settings;
@@ -60,7 +59,6 @@ public partial class SettingsViewModel : ObservableObject
         _groupChatTimes = settings.Current.GroupChatTimes;
         _themeIndex = Array.IndexOf(AppTheme.Names, AppTheme.Normalise(settings.Current.Theme));
         _largeAddressAwareOn = settings.Current.LargeAddressAware;
-        _traySignOutIndex = Math.Max(0, Array.IndexOf(TraySignOutMinutes, settings.Current.TraySignOutMinutes));
         _chatLanguageFilter = PolOptions.ChatFilter(settings.Current);
         _autoDisconnectIndex = Math.Max(0, Array.IndexOf(PolOptions.AutoDisconnectChoices, PolOptions.AutoDisconnect(settings.Current)));
         _backupGameSettings = settings.Current.BackupGameSettings;
@@ -88,9 +86,6 @@ public partial class SettingsViewModel : ObservableObject
         "Version " + (typeof(SettingsViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion.Split('+')[0] ?? "dev");
 
-    public IReadOnlyList<string> TraySignOutChoices { get; } =
-        TraySignOutMinutes.Select(m => m == 0 ? "Never" : $"{m} minutes").ToList();
-
     public IReadOnlyList<string> FeedRegionChoices { get; } =
         new[] { "Automatic (matches your install)", "North America", "Europe", "Japan" };
 
@@ -112,7 +107,6 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _groupChatNotice;
     [ObservableProperty] private bool _groupChatFlash;
     [ObservableProperty] private bool _groupChatTimes;
-    [ObservableProperty] private int _traySignOutIndex;
     [ObservableProperty] private int _feedRegionIndex;
 
     partial void OnExitAfterGameExitsChanged(bool value) => Save(s => s.ExitAfterGameExits = value);
@@ -122,12 +116,6 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnGroupChatNoticeChanged(bool value) => Save(s => s.GroupChatNotice = value);
     partial void OnGroupChatFlashChanged(bool value) => Save(s => s.GroupChatFlash = value);
     partial void OnGroupChatTimesChanged(bool value) => Save(s => s.GroupChatTimes = value);
-
-    partial void OnTraySignOutIndexChanged(int value)
-    {
-        if (value >= 0 && value < TraySignOutMinutes.Length)
-            Save(s => s.TraySignOutMinutes = TraySignOutMinutes[value]);
-    }
 
     [ObservableProperty] private bool _chatLanguageFilter;
     [ObservableProperty] private int _autoDisconnectIndex;
