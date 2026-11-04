@@ -8,7 +8,7 @@ public sealed record WindowerRegistryValue(string Name, RegistryValueKind Kind, 
 // settings and stays as it is
 public static class WindowerGameRegistry
 {
-    public const string DefaultPadMode = "0,0,0,0,0,0";
+    private const string DefaultPadMode = "0,0,0,0,0,0";
 
     public static string RegionKeyPath(WindowerRegion region) => region switch
     {

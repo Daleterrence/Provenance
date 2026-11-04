@@ -66,10 +66,10 @@ public static partial class WindowerAddons
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return ""; }
     }
 
-    public sealed record Header(string? Name, string? Author, string? Version);
+    internal sealed record Header(string? Name, string? Author, string? Version);
 
     // regexes, not a Lua parser. First assignment not behind a -- wins
-    public static Header ReadHeader(string lua)
+    internal static Header ReadHeader(string lua)
     {
         if (lua.Length > MaxRead) lua = lua[..MaxRead];
         string? name = null, author = null, version = null;

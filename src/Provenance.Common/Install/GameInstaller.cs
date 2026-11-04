@@ -122,7 +122,7 @@ public sealed class GameInstaller
     public static long TotalBytes(PolRegion region) => PartsFor(region).Sum(p => p.Size);
 
     // SE's CDN starts the ETag with the file's MD5 (handy, if a bit fragile to lean on, hence the fallback below)
-    public async Task<(long size, string? md5)> HeadAsync(GamePart part, CancellationToken ct = default)
+    internal async Task<(long size, string? md5)> HeadAsync(GamePart part, CancellationToken ct = default)
     {
         using var req = new HttpRequestMessage(HttpMethod.Head, part.Url);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);

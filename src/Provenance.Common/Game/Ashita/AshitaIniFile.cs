@@ -133,8 +133,6 @@ public sealed class AshitaIniFile
         return ms.ToArray();
     }
 
-    public static bool IsRedirect(string path) => LinkCheck.IsRedirect(path);
-
     internal static void RefuseLinks(params string[] paths) => LinkCheck.Refuse(paths);
 
     public void Save(string path, bool backup = true)

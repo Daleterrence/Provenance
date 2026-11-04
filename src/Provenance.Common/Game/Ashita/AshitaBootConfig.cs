@@ -9,7 +9,7 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
     private const string Launcher = "ashita.launcher", Boot = "ashita.boot", PolPluginSection = "ashita.polplugins", Registry = "ffxi.registry";
 
     // 0044 and 0045 aren't among the values Ashita fakes, so keep aspect and legacy settings stay registry only
-    public static readonly IReadOnlyList<string> GameValues =
+    internal static readonly IReadOnlyList<string> GameValues =
     [
         "0000", "0001", "0002", "0003", "0004", "0007", "0011", "0017", "0018", "0019", "0021", "0022", "0023", "0028",
         "0029", "0034", "0035", "0036", "0037", "0038", "0040", "0042", "0043", "padmode000",
@@ -167,7 +167,7 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
     }
 
     // strtoll(v, 0, 0) cut to 32 bits like Ashita.dll, so 010 is 8 (because of course it is) and "" is 0
-    public static int ToInt(string v) => unchecked((int)Number(v));
+    internal static int ToInt(string v) => unchecked((int)Number(v));
 
     private static long Number(string v)
     {

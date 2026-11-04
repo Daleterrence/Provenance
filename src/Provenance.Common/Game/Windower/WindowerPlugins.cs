@@ -22,7 +22,7 @@ public sealed record WindowerPluginInfo
 
 public static class WindowerPlugins
 {
-    public static readonly IReadOnlyList<string> RequiredExports = ["GetInterfaceVersion", "CreateInstance"];
+    private static readonly IReadOnlyList<string> RequiredExports = ["GetInterfaceVersion", "CreateInstance"];
 
     // manifest plugins first in the manifest's order (installed or not), then any other DLL in plugins\ by name
     public static IReadOnlyList<WindowerPluginInfo> Scan(string windowerDir)

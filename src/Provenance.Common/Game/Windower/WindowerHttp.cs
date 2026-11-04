@@ -25,7 +25,7 @@ public sealed class WindowerHttp : IDisposable
 {
     public static readonly TimeSpan HeaderTimeout = TimeSpan.FromSeconds(5);
     public static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(45);
-    public const int MaxRedirects = 50;
+    private const int MaxRedirects = 50;
 
     // what File.GetLastWriteTimeUtc gives for a file that isn't there, and Windower sends it as is
     public static readonly DateTime NoFile = DateTime.FromFileTimeUtc(0);

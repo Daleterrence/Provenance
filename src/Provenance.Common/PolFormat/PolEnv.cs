@@ -37,7 +37,7 @@ public static class PolEnv
 
     // the one pol.exe reads (WinMain 0x00414560 through 0x0040f5c0): EU\env.dat when there is one, data\utf\env.dat
     // otherwise. An EU install has both and the utf one says US
-    public static string? FileIn(string viewerDir) =>
+    private static string? FileIn(string viewerDir) =>
         new[] { Path.Combine("EU", "env.dat"), Path.Combine("data", "utf", "env.dat") }
             .Select(rel => Path.Combine(viewerDir, rel)).FirstOrDefault(File.Exists);
 
