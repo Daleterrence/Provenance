@@ -34,7 +34,6 @@ public partial class App : Application
             .WriteTo.File(Path.Combine(logDir, "launcher-.log"), rollingInterval: RollingInterval.Day,
                           retainedFileCountLimit: 14,
                           outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.Console()
             .CreateLogger();
 
         Log.Information("Provenance starting");
@@ -48,8 +47,8 @@ public partial class App : Application
         if (LaunchArgs.ProfileId is { } forAccount)
             Log.Information("Started for account {Account} (play {Play})", forAccount, LaunchArgs.Play);
 
-        // first, while nothing else runs, so an update can restart the app straight away. The update window closing
-        // mustn't end the app (last window closed)
+        // first, while nothing else runs, so an update can restart the app straight away. Closing the update window or
+        // the start-up error card mustn't end the app (last window closed)
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         if (await SelfUpdate.RunAsync(e.Args, noAutoLogin: shiftAtStart))
         {
@@ -66,8 +65,6 @@ public partial class App : Application
         catch (Exception ex)
         {
             Log.Fatal(ex, "Could not prepare the protected folder for the hook's files");
-            // closing the card mustn't end the app with exit code 0 (last window closed) before Shutdown(1)
-            ShutdownMode = ShutdownMode.OnExplicitShutdown;
             var text = "Provenance couldn't set up its folder in ProgramData. Close any program that's using that " +
                        "folder, then start Provenance again.";
             try { MessageDialog.ShowError(null, "Provenance can't start", text, offerLogs: true); }

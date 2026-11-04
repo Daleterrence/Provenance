@@ -183,8 +183,8 @@ public partial class SocialViewModel
         "failed:account notice" => "This PlayOnline account can't view profiles right now.",
         NoCharacter => "Provenance couldn't find that character. Open the profile again from your friends list.",
         // only a number is PlayOnline's own error, the rest never got as far as asking
-        _ when int.TryParse(FailReason(st), out _) => $"PlayOnline didn't send the profile ({FailReason(st)}).",
-        _ => $"Provenance couldn't ask PlayOnline for the profile ({FailReason(st)}).",
+        _ when int.TryParse(SocialSnapshot.FailReason(st), out _) => $"PlayOnline didn't send the profile ({SocialSnapshot.FailReason(st)}).",
+        _ => $"Provenance couldn't ask PlayOnline for the profile ({SocialSnapshot.FailReason(st)}).",
     };
 
     private const string NoCharacter = "failed:no character";

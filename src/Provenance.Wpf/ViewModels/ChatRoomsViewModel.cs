@@ -146,7 +146,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public Func<string, bool>? Confirm { get; set; }
     public Func<string?>? AskNewPassword { get; set; }
 
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(InLobby), nameof(InRoom), nameof(MasterIdle)), NotifyCanExecuteChangedFor(nameof(EnterCommand), nameof(ExitCommand), nameof(CreateRoomCommand))]
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(InLobby), nameof(InRoom), nameof(CanMaster)), NotifyCanExecuteChangedFor(nameof(EnterCommand), nameof(ExitCommand), nameof(CreateRoomCommand))]
     private Page _current = Page.Lobby;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Available), nameof(CanRetry))] private string? _unavailable;
     [ObservableProperty] private string _zonesNote = "";
@@ -166,11 +166,9 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(NextPageCommand))] private int _total;
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(UpdateListCommand), nameof(EnterCommand), nameof(ExitCommand), nameof(CancelEnterCommand), nameof(CreateRoomCommand))]
     private bool _entering;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(MasterIdle))] private bool _isMaster;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanMaster))] private bool _isMaster;
     [ObservableProperty] private bool _roomLocked;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(MasterIdle))] private bool _masterBusy;
-    // ROOM PASSWORD's button, which greys with everything else the master can't do right now
-    public bool MasterIdle => CanMaster;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanMaster))] private bool _masterBusy;
 
     public bool Available => Unavailable is null;
     public bool CanRetry => Unavailable is not null && Unavailable != GameRunningText;
@@ -301,7 +299,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         $"Create chat room with these settings?\n\nZone: {zone}\nOccupancy: {occupancy}\nPassword: {(password ? "ON" : "Off")}\n" +
         $"Category 1: {members}\nCategory 2: {purpose}\nCategory 3: {language}";
 
-    private bool CanMaster => Current == Page.Room && IsMaster && !MasterBusy && !_social.HandleSwitching && !_social.GameRunning;
+    public bool CanMaster => Current == Page.Room && IsMaster && !MasterBusy && !_social.HandleSwitching && !_social.GameRunning;
 
     public bool CanKick(ChatMemberItem? m) => m is { Me: false } && CanMaster;
 
@@ -451,7 +449,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _masterToken = null;
         MasterBusy = false;
         IsMaster = false;
-        OnPropertyChanged(nameof(MasterIdle));
+        OnPropertyChanged(nameof(CanMaster));
         Colour = -1;
         Emoticon = 0;
         Members.Clear();
@@ -489,7 +487,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(SocialViewModel.HandleSwitching) or nameof(SocialViewModel.GameRunning))
-            OnPropertyChanged(nameof(MasterIdle));
+            OnPropertyChanged(nameof(CanMaster));
         if (e.PropertyName == nameof(SocialViewModel.HandleSwitching))
         {
             EnterCommand.NotifyCanExecuteChanged();
@@ -561,7 +559,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (chat.RoomsState == "failed:no chat") { Unavailable = NotNow; return; }
         if (chat.RoomsState != "done")
         {
-            RoomsNote = $"The room list didn't load ({SocialViewModel.FailReason(chat.RoomsState)}).";
+            RoomsNote = $"The room list didn't load ({SocialSnapshot.FailReason(chat.RoomsState)}).";
             return;
         }
         Offset = chat.Offset;

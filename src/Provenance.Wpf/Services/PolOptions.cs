@@ -50,7 +50,7 @@ public static class PolOptions
     {
         if (!HomeSlots.Valid(slot)) return HomeSlots.Shared;
         var msg = Path.Combine(viewerDir, "pub", $"home{slot:00}", "msg");
-        return MessageFolders.All(f => Plain(viewerDir, Path.Combine(msg, f), lastIsFolder: true)) ? slot : HomeSlots.Shared;
+        return MessageFolders.All(f => FolderPins.Plain(viewerDir, Path.Combine(msg, f), lastIsFolder: true)) ? slot : HomeSlots.Shared;
     }
 
     // before every game start. A slot with no option.bin (or one polcore can't read) gets the viewer's template first,
@@ -59,7 +59,7 @@ public static class PolOptions
     {
         if (s.ChatLanguageFilter is null && s.AutoDisconnectMinutes is null) return;
         // an install moved to another drive (a junction above it, SUBST, a mount point) is pinned where it really is.
-        // Below the viewer folder nothing can be a link
+        // The viewer folder may be one users can write to, so nothing below it can be a link
         if (FolderPins.RealPath(viewerDir) is not { } real)
         {
             Log.Warning("The viewer folder {Viewer} couldn't be opened, POL settings not written for home{Slot:00}", viewerDir, slot);
@@ -68,7 +68,7 @@ public static class PolOptions
         viewerDir = real;
         var dir = Path.Combine(viewerDir, "pub", $"home{slot:00}");
         var path = Path.Combine(dir, "option.bin");
-        if (!Plain(viewerDir, path, lastIsFolder: false))
+        if (!FolderPins.Plain(viewerDir, path, lastIsFolder: false))
         {
             Log.Warning("pub\\home{Slot:00} goes through a link, its POL settings are left alone", slot);
             return;
@@ -112,9 +112,4 @@ public static class PolOptions
         }
         finally { try { File.Delete(tmp); } catch { } }
     }
-
-    // the viewer folder may be one users can write to, so nothing below it can be a link that sends a write elsewhere
-    internal static bool Plain(string viewerDir, string path, bool lastIsFolder) => FolderPins.Plain(viewerDir, path, lastIsFolder);
-
-    internal static IDisposable? HoldFolders(string viewerDir, string dir) => FolderPins.Hold(viewerDir, dir);
 }

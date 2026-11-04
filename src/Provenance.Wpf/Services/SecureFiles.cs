@@ -707,14 +707,6 @@ public static class SecureFiles
 
     private static bool Gone(uint status) => status is 0xC0000034 or 0xC000003A or 0xC0000056 or 0xC0000123;   // not found, path not found, delete pending, deleted
 
-    // how many names the file has (hard links), read without following a link. Null when it can't be told
-    internal static int? Names(string path)
-    {
-        using var handle = CreateFile(path, ReadAttributes, ShareAll, IntPtr.Zero, 3, OpenLinkItself, IntPtr.Zero);
-        if (handle.IsInvalid || !GetFileInformationByHandle(handle, out var info)) return null;
-        return (int)info.NumberOfLinks;
-    }
-
     // false when something else made it first, which is never taken as this one
     private static bool CreateLocked(string path, DirectorySecurity sec)
     {

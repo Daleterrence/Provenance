@@ -239,7 +239,7 @@
                     </TextBlock>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Style="{StaticResource PolButton}" FontSize="12" Content="ROOM PASSWORD" Click="OnPasswordMenu"
-                                IsEnabled="{Binding MasterIdle}"
+                                IsEnabled="{Binding CanMaster}"
                                 Visibility="{Binding IsMaster, Converter={StaticResource BoolToVis}}" ToolTip="Set or remove the room's password." />
                         <Button Style="{StaticResource RedButton}" FontSize="12" Content="EXIT"
                                 Command="{Binding ExitCommand}" ToolTip="Exit chat room and return to the room list." />

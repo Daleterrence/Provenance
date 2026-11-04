@@ -30,7 +30,7 @@ public static class GameBackups
         var boot = accountBoot is { Length: > 0 } ? accountBoot
                  : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? ThirdPartyHookService.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
         if (dir is null || boot is not { Length: > 0 } || !ThirdPartyHookLauncher.IsBootFileName(boot)) return windows;
-        try { return new AshitaGameStore(dir, boot, registry).Load().Settings.ScreenshotFolder; }
+        try { return new AshitaGameStore(dir, boot, registry).Load().ScreenshotFolder; }
         catch (Exception ex)
         {
             Log.Debug(ex, "Game settings backup: couldn't read the settings folder from {Boot}, using Windows' one", boot);

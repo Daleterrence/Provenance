@@ -53,7 +53,7 @@
                     BorderThickness="{TemplateBinding BorderThickness}" />
             <Border x:Name="Sheen" Margin="1" BorderBrush="{DynamicResource Btn.Sheen}" BorderThickness="0,1,0,0" />
             <!-- outside the button, so keyboard focus never looks like a hover -->
-            <Border x:Name="Ring" Margin="-4" BorderThickness="2" BorderBrush="{DynamicResource Btn.Focus}" Visibility="Collapsed" />
+            <Border x:Name="Ring" Margin="-4" BorderThickness="2" BorderBrush="{DynamicResource Focus.Ring}" Visibility="Collapsed" />
             <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" RecognizesAccessKey="True"
                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />

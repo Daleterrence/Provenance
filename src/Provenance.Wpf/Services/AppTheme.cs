@@ -18,8 +18,6 @@ internal static class AppTheme
     public static string Current =>
         Application.Current?.Resources.MergedDictionaries.Select(PaletteName).LastOrDefault(n => n is not null) ?? Dark;
 
-    public static bool IsLight => Current == Light;
-
     public static event Action? Changed;
 
     public static string Normalise(string? name) =>

@@ -9,9 +9,6 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Wpf.Services;
 
-// ProfileFields are the Game tab's fields this store keeps for the one profile, the rest apply to every profile
-public sealed record GameStoreLoad(FfxiSettings Settings, IReadOnlySet<string> ProfileFields);
-
 public readonly record struct GameSaveResult(int Changed, bool Wrote);
 
 public interface IGameSettingsStore
@@ -26,7 +23,7 @@ public interface IGameSettingsStore
     bool ReadOnly { get; }
 
     // throws when there's nothing to load, Shown with the reason
-    GameStoreLoad Load();
+    FfxiSettings Load();
     GameSaveResult Save(FfxiSettings settings, FfxiSettings original);
 }
 
@@ -86,8 +83,6 @@ public static class GameFields
         [GraphicsFix] = Int(s => s.GraphicsFix, (s, v) => s.GraphicsFix = v),
     };
 
-    public static IReadOnlyCollection<string> All => Table.Keys;
-
     // what Windower writes into the registry from a profile at every launch
     public static readonly IReadOnlySet<string> Windower = new HashSet<string>
     {
@@ -97,8 +92,6 @@ public static class GameFields
 
     // Ashita fakes everything but these two, so they stay Windows' own
     public static readonly IReadOnlySet<string> Ashita = Table.Keys.Except([KeepAspect, LegacySettings]).ToHashSet();
-
-    public static IReadOnlySet<string> None { get; } = new HashSet<string>();
 
     public static List<string> Changed(FfxiSettings edited, FfxiSettings original) =>
         Table.Where(kv => !kv.Value.Same(edited, original)).Select(kv => kv.Key).ToList();
@@ -123,14 +116,14 @@ public sealed class RegistryGameStore(PolRegion? region, Func<bool, RegistryKey?
     private RegistryKey? Open(bool write) => openKey is not null ? openKey(write) : region is { } r ? FfxiConfig.Open(r, write) : null;
 
     // the game makes its settings on its first start
-    public GameStoreLoad Load()
+    public FfxiSettings Load()
     {
         using var k = Open(false);
         if (k is null)
             throw Shown.Mark(new InvalidOperationException(region is { } r && PolPaths.TryGetInstallFolder(r, PolPaths.FfxiProduct) != null
                 ? "FINAL FANTASY XI is installed, but it has no saved settings yet. Open the FINAL FANTASY XI Config Tool once as an administrator so it saves them, then open these settings again."
                 : "FINAL FANTASY XI isn't installed on this PC, so there are no game settings to change."));
-        return new(FfxiConfig.LoadFrom(k), GameFields.None);
+        return FfxiConfig.LoadFrom(k);
     }
 
     public FfxiSettings LoadWindows()
@@ -163,16 +156,16 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
         ?? throw Shown.Mark(new InvalidOperationException($"The Windower profile {profileName} isn't in Windower's settings any more. Choose another one under Windower/Ashita."));
 
     // a link is refused here rather than only when Save gets to it
-    public GameStoreLoad Load()
+    public FfxiSettings Load()
     {
         if (ThirdPartyHookService.IsLinkedFolder(windowerDir)) throw Shown.Mark(new IOException(ThirdPartyHookService.LinkedWindowerText));
         if (LinkCheck.IsRedirect(WindowerSettingsFile.PathIn(windowerDir)))
             throw Shown.Mark(new IOException("Windower's settings.xml is a link to somewhere else, so Provenance won't change it."));
-        var windows = registry.Load().Settings;
+        var windows = registry.Load();
         var file = WindowerSettingsFile.Load(windowerDir);
         if (file.LoadError is not null)
             throw Shown.Mark(new InvalidDataException("Windower's settings.xml couldn't be read, so these settings can't be changed until it's fixed or a new one is started under Windower/Ashita."));
-        return new(Read(Profile(file), windows), GameFields.Windower);
+        return Read(Profile(file), windows);
     }
 
     // exactly what Windower writes at launch, on top of what the registry has for everything else
@@ -266,11 +259,11 @@ public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryG
     }
 
     // what the file leaves to Windows shows the registry's value
-    public GameStoreLoad Load()
+    public FfxiSettings Load()
     {
-        var windows = registry.Load().Settings;
+        var windows = registry.Load();
         var cfg = AshitaBootConfig.Load(PathOf());
-        return new(cfg.ReadGame(windows), GameFields.Ashita);
+        return cfg.ReadGame(windows);
     }
 
     // every value goes in, so nothing's left to a registry the game may never see (sandbox empties it)

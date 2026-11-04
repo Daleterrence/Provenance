@@ -240,7 +240,7 @@ public partial class SocialViewModel
             "failed:-5428" or "failed:-261" => "That group name can't be used.",
             "failed:stopped" => "PlayOnline didn't take your recent messages, so invitations can't be sent or answered until you log in again.",
             "failed:hourly limit" => "You've sent 600 messages in the last hour. Try again later.",
-            var s => $"PlayOnline didn't accept the change ({FailReason(s)}).",
+            var s => $"PlayOnline didn't accept the change ({SocialSnapshot.FailReason(s)}).",
         };
         // the hook leaves the group's chat before the group, so a refused leave can still have closed it
         if (left != null && GroupChat.LeaveFailed(left, snap)) EditNote += " " + ChatClosedNote;

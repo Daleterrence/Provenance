@@ -25,7 +25,6 @@
 
     <!-- links and small accents, POL's separator blue -->
     <SolidColorBrush x:Key="Primary"        Color="#0B53A0" />
-    <SolidColorBrush x:Key="Primary.Glow"   Color="#0A52A1" />
     <!-- a picked row in a list, toned so the row's grey and blue text still reads on it -->
     <SolidColorBrush x:Key="Row.Selected"   Color="#BFCCDA" />
     <!-- POL's selected row, #386497 at half over the panel -->
@@ -52,9 +51,8 @@
 
     <SolidColorBrush x:Key="Hover.Fill"     Color="#386497" Opacity="0.18" />
     <SolidColorBrush x:Key="Press.Fill"     Color="#386497" Opacity="0.32" />
-    <SolidColorBrush x:Key="Focus.Ring"     Color="#0A52A1" />
+    <SolidColorBrush x:Key="Focus.Ring"     Color="#0B53A0" />
 
-    <SolidColorBrush x:Key="Btn.Focus"         Color="#0B53A0" />
     <SolidColorBrush x:Key="Btn.Disabled.Fill" Color="#174271" Opacity="0.2" />
     <!-- dark, as white all but vanishes on a greyed-out button over a light panel -->
     <SolidColorBrush x:Key="Btn.Disabled.Text" Color="#404A57" />

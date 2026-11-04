@@ -51,8 +51,6 @@ public sealed class ThirdPartyHookService
                 if (!string.IsNullOrEmpty(pf)) yield return Path.Combine(pf, n);
     }
 
-    public static IReadOnlyList<string> AshitaBootConfigs(string? ashitaDir) => AshitaBootFiles.List(ashitaDir);
-
     public const string IncompatibleText = "Incompatible with Provenance";
     public const string IncompatibleNote = "The ones marked incompatible stay off whenever Provenance starts the game. Your Ashita settings aren't changed.";
 

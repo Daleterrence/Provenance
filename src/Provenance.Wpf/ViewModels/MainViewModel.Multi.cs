@@ -353,12 +353,7 @@ public partial class MainViewModel : IMultiRunHost
         }
         if (token.IsCancellationRequested) return await Stopped();
 
-        try { InstallViewModel.WriteFirstStartSettings(PlayRegion); }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Multi-account mode: the first-start game settings were not written for {Account}", account.ProfileId);
-            return await LetGo(AccountFailureKind.Account, ErrorText.Of(ex, "Provenance couldn't set up the game's settings for its first start."));
-        }
+        InstallViewModel.WriteFirstStartSettings(PlayRegion);
         WritePolOptions(account.ProfileId);
         if (await BackUpForRunAsync(hookProfile))
         {
@@ -418,9 +413,7 @@ public partial class MainViewModel : IMultiRunHost
 
     // both entries there but unusable is a Credential failure, so it stays off until edited (like hook exit 11)
     internal static AccountFailure MissingDetailsFailure((string? PolId, string? SeaId) ids) =>
-        !string.IsNullOrEmpty(ids.PolId) && !string.IsNullOrEmpty(ids.SeaId)
-            ? new(AccountFailureKind.Credential, PolSessionService.DetailsAgainText)
-            : new(AccountFailureKind.Account, MissingDetailsText(ids));
+        new(BothIds(ids) ? AccountFailureKind.Credential : AccountFailureKind.Account, MissingDetailsText(ids));
 
     // the login only finishes once the hook's written a snapshot, so a missing one is the file being gone or unreadable
     // since (the session ending, say), not anything PlayOnline did

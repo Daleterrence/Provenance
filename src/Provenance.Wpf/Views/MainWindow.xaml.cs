@@ -132,11 +132,9 @@ public partial class MainWindow : Window
     }
 
     // a tray tip only for a notice that's just been shown, never an old one again for a flash on its own
-    internal static bool TipFor(bool tip, bool inTray, string? notice) => tip && inTray && notice is not null;
-
     private void OnRequestAttention(bool tip) => Dispatcher.InvokeAsync(() =>
     {
-        if (_tray is { Visible: true } tray && TipFor(tip, true, Vm?.Notice) && Vm?.Notice is { } text)
+        if (tip && _tray is { Visible: true } tray && Vm?.Notice is { } text)
         {
             tray.ShowTip("PlayOnline", text);
             return;

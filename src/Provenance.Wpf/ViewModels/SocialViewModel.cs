@@ -97,7 +97,7 @@ public partial class SocialViewModel : ObservableObject
     public bool NoFriends => Connected && !FriendsUnavailable && Friends.Count == 0;
     public string NothingSelected => NoFriends ? NoFriendsText
                                                : "Select a friend to see your messages.";
-    public const string NoFriendsText = "You don't have any friends on this PlayOnline account yet.";
+    private const string NoFriendsText = "You don't have any friends on this PlayOnline account yet.";
     public int? SessionPid => _pol.Pid;
 
     public event Action? ChangeProfilePictureRequested;
@@ -119,8 +119,6 @@ public partial class SocialViewModel : ObservableObject
     }
 
     private static string NewToken() => Guid.NewGuid().ToString("N")[..12];
-
-    internal static string FailReason(string state) => SocialSnapshot.FailReason(state);
 
     // a job's last word (ok or "failed:..."), "timeout" once it's run past secs, or null while it's still going
     private static string? Settled(string? state, string ok, DateTime since, int secs) =>
@@ -908,7 +906,7 @@ public partial class SocialViewModel : ObservableObject
         "failed:no handle" => "This account doesn't have a PlayOnline handle.",
         "failed:-7187" => "That person is already on your ignore list.",
         "failed:-7188" or "failed:-516" => "Your ignore list is full (100 people).",
-        _ => $"PlayOnline didn't accept the change ({FailReason(state)}).",
+        _ => $"PlayOnline didn't accept the change ({SocialSnapshot.FailReason(state)}).",
     };
 
     internal string? _answerToken;
@@ -1015,7 +1013,7 @@ public partial class SocialViewModel : ObservableObject
             "failed:hourly limit" => "You've sent 600 messages in the last hour, so your answer wasn't sent. Try again later.",
             var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
                 "PlayOnline didn't save the friend list, so your answer wasn't sent. Try again.",
-            var s => $"PlayOnline didn't accept your answer ({FailReason(s)}).",
+            var s => $"PlayOnline didn't accept your answer ({SocialSnapshot.FailReason(s)}).",
         };
     }
 
@@ -1210,7 +1208,7 @@ public partial class SocialViewModel : ObservableObject
                 "failed:no schema" when characters =>
                     "Provenance couldn't read the FINAL FANTASY XI profile layout from your PlayOnline install, so it can't search for characters.",
                 "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't search for handles.",
-                _ => $"PlayOnline couldn't run the search ({FailReason(st)}).",
+                _ => $"PlayOnline couldn't run the search ({SocialSnapshot.FailReason(st)}).",
             });
         }
         if (_requestToken is null) return;
@@ -1233,7 +1231,7 @@ public partial class SocialViewModel : ObservableObject
                 "failed:hourly limit" => "You've sent 600 messages in the last hour, so the request wasn't sent. Try again later.",
                 var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
                     "PlayOnline didn't save the friend list, so your request wasn't sent. Try again.",
-                var s => $"PlayOnline didn't accept the request ({FailReason(s)}).",
+                var s => $"PlayOnline didn't accept the request ({SocialSnapshot.FailReason(s)}).",
             });
             return;
         }
@@ -1285,7 +1283,7 @@ public partial class SocialViewModel : ObservableObject
             "failed:account notice" => "This PlayOnline account can't change its profile picture right now.",
             "failed:handle changing" => "Not saved: your handle was changing. Try again.",
             "failed:no handle" => "This account doesn't have a PlayOnline handle.",
-            _ => $"PlayOnline didn't save the profile picture ({FailReason(st)}).",
+            _ => $"PlayOnline didn't save the profile picture ({SocialSnapshot.FailReason(st)}).",
         };
     }
 

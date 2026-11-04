@@ -11,7 +11,6 @@
     <SolidColorBrush x:Key="Hover.Fill"  Color="White" Opacity="0.14" />
     <SolidColorBrush x:Key="Press.Fill"  Color="White" Opacity="0.24" />
     <SolidColorBrush x:Key="Focus.Ring"  Color="#9CC3F2" />
-    <SolidColorBrush x:Key="Btn.Focus"   Color="#9CC3F2" />
     <SolidColorBrush x:Key="Btn.Disabled.Text" Color="#A0A0A0" />
     <!-- the worlds dot, light theme's darker ones vanish on the bar -->
     <SolidColorBrush x:Key="State.Online" Color="#3FD07F" />

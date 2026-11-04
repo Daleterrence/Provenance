@@ -48,7 +48,7 @@ public partial class HandlesViewModel : ObservableObject
     public ObservableCollection<HandleRow> Rows { get; } = new();
     public ObservableCollection<HandleCharacterRow> Unlinked { get; } = new();
 
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowList), nameof(Editable))] private bool _loggedIn;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable))] private bool _loggedIn;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ReadOnly), nameof(Editable))] private string? _readOnlyText;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable))] private bool _busy;
     [ObservableProperty] private string _note = "";
@@ -57,7 +57,6 @@ public partial class HandlesViewModel : ObservableObject
     [ObservableProperty] private bool _hasUnlinked;
     [ObservableProperty] private bool _noHandles;
 
-    public bool ShowList => LoggedIn;
     public bool ReadOnly => ReadOnlyText != null;
     public bool Editable => LoggedIn && !ReadOnly && !Busy;
     public string LoggedOutText => HandleList.LoggedOutText;

@@ -671,7 +671,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     // general "not authorised", so it gets plain ones
     private static string Why(string state)
     {
-        var reason = SocialViewModel.FailReason(state);
+        var reason = SocialSnapshot.FailReason(state);
         if (!int.TryParse(reason, out var n) || n >= 0) return $" ({reason}).";
         int code = -n;
         var text = code == 5440 ? "PlayOnline said this account isn't allowed to make that change." : PolErrors.Text(code);

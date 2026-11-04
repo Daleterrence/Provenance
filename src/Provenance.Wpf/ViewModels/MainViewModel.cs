@@ -1236,10 +1236,10 @@ public partial class MainViewModel : ObservableObject
                       sea.Username, profile.OtpAccount);
 
     // both IDs there means the entries exist but won't unwrap (a key that's gone, say)
+    private static bool BothIds((string? PolId, string? SeaId) ids) => !string.IsNullOrEmpty(ids.PolId) && !string.IsNullOrEmpty(ids.SeaId);
+
     internal static string MissingDetailsText((string? PolId, string? SeaId) ids) =>
-        !string.IsNullOrEmpty(ids.PolId) && !string.IsNullOrEmpty(ids.SeaId)
-            ? PolSessionService.DetailsAgainText
-            : "This account's login details are missing. Press Edit account to add them.";
+        BothIds(ids) ? PolSessionService.DetailsAgainText : "This account's login details are missing. Press Edit account to add them.";
 
     private async Task<(PolAccount Pol, SeaAccount Sea, int KeyGeneration)?> LoadForSignInAsync(Window? owner, Profile profile)
     {

@@ -180,7 +180,7 @@ public partial class GameSettingsViewModel : ObservableObject
 
     private void Load()
     {
-        GameStoreLoad? loaded = null;
+        FfxiSettings? loaded = null;
         string? problem = null;
         try { loaded = _store.Load(); }
         catch (Exception ex)
@@ -189,7 +189,7 @@ public partial class GameSettingsViewModel : ObservableObject
             problem = ErrorText.Of(ex, "Provenance couldn't read the game settings.");
         }
         _loaded = loaded is not null;
-        _original = loaded?.Settings ?? FfxiSettings.Defaults();
+        _original = loaded ?? FfxiSettings.Defaults();
         Apply(_original);
         OnPropertyChanged(nameof(Available));
         OnPropertyChanged(nameof(Editable));
@@ -292,7 +292,7 @@ public partial class GameSettingsViewModel : ObservableObject
         try
         {
             var saved = _store.Save(Collect(), _original);
-            _original = _store.Load().Settings;
+            _original = _store.Load();
             Apply(_original);
             bool running = Process.GetProcessesByName("pol").Length > 0;
             Status = !saved.Wrote ? "You haven't changed anything, so there's nothing to save." :

@@ -25,7 +25,6 @@
 
     <!-- links, ticks, switches, focus and picked rows. A lighter take on the buttons' blue so it reads on the dark -->
     <SolidColorBrush x:Key="Primary"        Color="#6A9BD8" />
-    <SolidColorBrush x:Key="Primary.Glow"   Color="#8DB8EE" />
     <!-- a picked row in a list, toned so the row's grey and blue text still reads on it -->
     <SolidColorBrush x:Key="Row.Selected"   Color="#182F50" />
     <!-- the nav pills and my own messages -->
@@ -52,7 +51,6 @@
     <SolidColorBrush x:Key="Press.Fill"     Color="#A7B2C2" Opacity="0.22" />
     <SolidColorBrush x:Key="Focus.Ring"     Color="#8DB8EE" />
 
-    <SolidColorBrush x:Key="Btn.Focus"         Color="#8DB8EE" />
     <SolidColorBrush x:Key="Btn.Disabled.Fill" Color="#3A5A85" Opacity="0.35" />
     <SolidColorBrush x:Key="Btn.Disabled.Text" Color="#8994A6" />
 

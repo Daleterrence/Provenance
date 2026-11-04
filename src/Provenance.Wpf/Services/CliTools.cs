@@ -314,8 +314,6 @@ public static class CliTools
              : s;
     }
 
-    public static bool IsGenuine(string path, string tool) => Check(path, tool, online: false) == Verdict.Genuine;
-
     internal static Verdict Check(string path, string tool, bool online)
     {
         using var file = Open(path);
@@ -518,15 +516,7 @@ public static class CliTools
         }
     }
 
-    // test only: the leaf WinVerifyTrust checked, or null when it didn't pass
-    internal static X509Certificate2? VerifiedSigner(string path)
-    {
-        using var file = Open(path);
-        if (file is null) return null;
-        using var sig = WinVerify(file, path);
-        return sig.Result == 0 && sig.Chain.Count > 0 ? new X509Certificate2(sig.Chain[0]) : null;
-    }
-
+    // test only, the app always goes through Check
     internal static Signature? VerifiedSignature(string path)
     {
         using var file = Open(path);

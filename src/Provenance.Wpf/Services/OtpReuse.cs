@@ -57,6 +57,7 @@ public static class OtpReuse
         }
     }
 
+    // test only, so a check can tell the in-memory key from the file's
     internal static byte[] KeyForTest() => KeyAsync().GetAwaiter().GetResult();
 
     internal static bool IsFallbackKey(byte[] key) => FallbackKey.IsValueCreated && ReferenceEquals(key, FallbackKey.Value);

@@ -53,8 +53,6 @@ public static class PathSafety
     // too, in case they're stored unmapped
     private const int MoveRights = 0x00010000 | 0x00000040 | 0x00040000 | 0x00080000 | 0x10000000 | 0x40000000;
 
-    public static bool OnlyAdminsCanMove(string folder) => AdminOnlyProblem(folder) is null;
-
     // why someone other than Administrators, SYSTEM or TrustedInstaller could rename, delete or re-permission the
     // folder or one above it, or null. It only holds while the caller keeps the folder open
     public static string? AdminOnlyProblem(string folder)
