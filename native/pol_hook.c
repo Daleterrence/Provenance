@@ -1916,19 +1916,9 @@ static int g_mail_n, g_mail_mid;
 static BYTE g_mail_seen[MAIL_SEEN][0x1a];
 static int g_mail_seen_n, g_mail_seen_next;
 static __declspec(align(8)) BYTE g_inbox[0x50 * MAIL_MAX];
-/* two reads at once like the viewer's fetch queue, kind 1 list (one at a time), 2 read. 1 goes back to one lane */
-#ifndef MAIL_LANES
-#define MAIL_LANES 2
-#endif
-#if MAIL_LANES != 1 && MAIL_LANES != 2
-#error MAIL_LANES is 1 or 2
-#endif
-static struct { int job, kind, idx; char *body; } g_rd[MAIL_LANES] = {
-    { -1 },
-#if MAIL_LANES == 2
-    { -1 },
-#endif
-};
+/* two reads at once like the viewer's fetch queue, kind 1 list (one at a time), 2 read */
+#define FETCH_LANES 2
+static struct { int job, kind, idx; char *body; } g_rd[FETCH_LANES] = { { -1 }, { -1 } };
 static int g_del_job = -1, g_del_idx;
 static int g_mail_fresh;
 static char g_mail_state[16] = "pending";
@@ -2224,7 +2214,7 @@ static int writes_waiting(void);
 static int handle_switching(void);
 static int mail_lane_busy(int kind, int idx)
 {
-    for (int l = 0; l < MAIL_LANES; l++)
+    for (int l = 0; l < FETCH_LANES; l++)
         if (g_rd[l].job >= 0 && g_rd[l].kind == kind && (kind == 1 || g_rd[l].idx == idx)) return 1;
     return 0;
 }
@@ -2312,7 +2302,7 @@ static void mail_pump(BYTE *b)
     g_push_n = 0;
     mail_recheck(b);
     /* never cancelled here, polcore fails a stuck job at 100 s itself and svc 0x520 stalls every job poll 10 s */
-    for (i = 0; i < MAIL_LANES; i++)
+    for (i = 0; i < FETCH_LANES; i++)
         if (g_rd[i].job >= 0 && (r = ((svc_i)SVC(g_rd[i].kind == 1 ? 0x528 : 0x51c))(g_rd[i].job)) != 0) {
             g_rd[i].job = -1;
             if (g_rd[i].kind == 1) mail_list_done(r); else mail_read_done(i, r);
@@ -2328,7 +2318,7 @@ static void mail_pump(BYTE *b)
     /* a freed lane waits a turn, so a waiting send gets it first */
     if (done) return;
     if (!g_draining)
-        for (i = 0; i < MAIL_LANES && msg_slot_ok(b); i++) {
+        for (i = 0; i < FETCH_LANES && msg_slot_ok(b); i++) {
             if (g_rd[i].job >= 0) continue;
             mail_fetch_start(b, i);
             if (g_rd[i].job < 0) break;   /* nothing to read, or polcore said no */
@@ -2978,9 +2968,7 @@ static void home_pick(BYTE *b)
 static char g_send_token[48];      /* the snapshot's "send", the newest message and its state */
 static char g_send_state[48] = "";
 /* built messages in the order they were built, job -1 until the PUT starts. Two at once, the viewer's own most */
-#ifndef SEND_MAX
 #define SEND_MAX 2
-#endif
 typedef struct { BYTE *msg; int job; ULONGLONG started; char token[48]; } sendrec;
 static sendrec g_sq[SEND_MAX];
 static int g_sq_n;
@@ -2988,7 +2976,7 @@ static int sends_going(void) { return g_sq_n > 0; }
 static int msg_jobs(void)
 {
     int n = g_del_job >= 0, i;
-    for (i = 0; i < MAIL_LANES; i++) n += g_rd[i].job >= 0;
+    for (i = 0; i < FETCH_LANES; i++) n += g_rd[i].job >= 0;
     for (i = 0; i < g_sq_n; i++) n += g_sq[i].job >= 0;
     return n;
 }
@@ -3000,9 +2988,7 @@ static int slots_free(BYTE *b)
 }
 /* the viewer's rule (app.dll 0x100512cf) plus a job. 2 of 4 polcore slots free (svc 0xff4) means a third only
    starts with nothing else running */
-#ifndef MSG_JOBS_MAX
 #define MSG_JOBS_MAX 3
-#endif
 static int msg_slot_ok(BYTE *b) { return msg_jobs() < MSG_JOBS_MAX && slots_free(b) >= 2; }
 static int send_built(void)
 {
@@ -3010,22 +2996,14 @@ static int send_built(void)
     return 0;
 }
 
-/* manual runs keep requests in %TEMP% where anything of the user's can write one, so sends are capped. The gap
-   after each send is for a back-off build */
-#ifndef PACE_PER_MIN
+/* manual runs keep requests in %TEMP% where anything of the user's can write one, so sends are capped */
 #define PACE_PER_MIN 40
-#endif
-#ifndef PACE_PER_HOUR
 #define PACE_PER_HOUR 600
-#endif
-#ifndef PACE_GAP_MS
-#define PACE_GAP_MS 0
-#endif
-enum { PACE_OK, PACE_GAP, PACE_MIN, PACE_HOUR, PACE_HELD, PACE_STOPPED };
+enum { PACE_OK, PACE_MIN, PACE_HOUR, PACE_HELD, PACE_STOPPED };
 typedef struct {
     ULONGLONG take[PACE_PER_HOUR];   /* ring of PUT start times */
     int next, count;
-    ULONGLONG done, hold, failed;    /* the last result, no PUT before hold, when the last failure landed */
+    ULONGLONG hold, failed;          /* no PUT before hold, when the last failure landed */
     int fails, stopped;              /* failed sends in a row, no more sends this session */
 } send_pace;
 static send_pace g_pace;
@@ -3033,7 +3011,6 @@ static int pace_check(const send_pace *p, ULONGLONG now)
 {
     if (p->stopped) return PACE_STOPPED;
     if (now < p->hold) return PACE_HELD;
-    if (PACE_GAP_MS && p->done && now - p->done < PACE_GAP_MS) return PACE_GAP;
     if (p->count >= PACE_PER_MIN &&
         now - p->take[(p->next + PACE_PER_HOUR - PACE_PER_MIN) % PACE_PER_HOUR] < 60000) return PACE_MIN;
     if (p->count >= PACE_PER_HOUR && now - p->take[p->next] < 3600000) return PACE_HOUR;
@@ -3051,7 +3028,6 @@ static void pace_done(send_pace *p, ULONGLONG now, int r, ULONGLONG ms)
 {
     ULONGLONG h;
     if (r == NO_SLOT) return;
-    p->done = now;
     if (r == 1) p->fails = 0;
     /* -0x153a suspended, -0x1540 not authorised: that's the account, not the line */
     else if (r == -0x153a || r == -0x1540) p->stopped = 1;
@@ -6177,7 +6153,7 @@ static void play_drain(BYTE *b, const char *spath, DWORD ms)
     gc_end(b, "left", 1);
     while (writes_pending() && GetTickCount64() < until)
         drain_turn(b, !g_lean);
-    for (int i = 0; i < MAIL_LANES; i++) if (g_rd[i].job >= 0) CANCEL_JOB(g_rd[i].job);
+    for (int i = 0; i < FETCH_LANES; i++) if (g_rd[i].job >= 0) CANCEL_JOB(g_rd[i].job);
     if (g_del_job >= 0) CANCEL_JOB(g_del_job);
     for (int i = 0; i < g_sq_n; i++) if (g_sq[i].job >= 0) CANCEL_JOB(g_sq[i].job);
     if (g_status_job >= 0) CANCEL_JOB(g_status_job);
