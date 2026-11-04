@@ -50,22 +50,26 @@ public sealed class PolSessionService : IDisposable
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
 
     // pol_hook.c exits 11 on unreadable saved entries, 12 on a bad POL_IPC_DIR, 13 when its mutexes can't get secret
-    // names (never the stock ones, anything can create those first), 14 when pol.exe's region isn't POL_REGION and 15
-    // when FFXI's GameStart fails
+    // names (never the stock ones, anything can create those first), 14 when pol.exe's region isn't POL_REGION, 15
+    // when FFXI's GameStart fails and 16 when POL_IPC_DIR, POL_CRED_KEYFILE or POL_HOLD isn't there
     internal const int UnsafeStartExitCode = 13;
     internal const int RegionExitCode = 14;
     internal const int GameStartExitCode = 15;
+    internal const int MissingEnvExitCode = 16;
     public const string RegionChangedText = "PlayOnline started as a different version than the one Provenance checked. Restart Provenance and try again.";
     public const string GameStartFailedText = "FINAL FANTASY XI couldn't start. Try again, and if it keeps happening, check the game's files with Repair.";
+    public const string MissingEnvText = "Provenance couldn't pass PlayOnline what it needs to log in. Restart Provenance and try again.";
 
     internal static bool DetailsUnreadable(string? line = null, int? exitCode = null) =>
         (line?.Contains("phase_c: SAVED DETAILS UNREADABLE", StringComparison.Ordinal) ?? false) || exitCode == 11;
 
+    // exit 16 happens while pol.exe's still suspended, so the exit code's gone before anything reads it, the line isn't
+    internal static bool NotStartedByProvenance(string line) => line.Contains("so not started by Provenance", StringComparison.Ordinal);
+
     public const string UnfinishedText = "The PlayOnline login didn't finish. Try again.";
 
-    // the hook gave up with no session to hold or no Content ID list, nothing got refused
-    internal static bool LoginUnfinished(string line) =>
-        line.Contains("phase_c: FFXI SERVICE UNKNOWN", StringComparison.Ordinal) || line.Contains("hold: no signed-in session", StringComparison.Ordinal);
+    // the hook gave up with no session to hold, nothing got refused
+    internal static bool LoginUnfinished(string line) => line.Contains("hold: no signed-in session", StringComparison.Ordinal);
 
     internal enum PlayAnswer { None, Started, Unreadable, Refused }
 
@@ -84,6 +88,7 @@ public sealed class PolSessionService : IDisposable
         UnsafeStartExitCode => (ErrorLauncherFailed, UnsafeStartText),
         RegionExitCode => (ErrorLauncherFailed, RegionChangedText),
         GameStartExitCode => (ErrorLauncherFailed, GameStartFailedText),
+        MissingEnvExitCode => (ErrorLauncherFailed, MissingEnvText),
         3 => (ErrorAuthFailed, RefusedText),
         7 => (ErrorAccountBlocked, "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why."),
         10 => (ErrorUnfinished, LoadFailedText("")),
@@ -503,6 +508,7 @@ public sealed class PolSessionService : IDisposable
             if (Regex.Match(line, @"viewer_init: lang=(\d+)") is { Success: true } lm && int.TryParse(lm.Groups[1].Value, out var lang))
                 viewerLanguage = lang;
             if (DetailsUnreadable(line)) return Fail(ErrorDetailsUnreadable, DetailsAgainText);
+            if (NotStartedByProvenance(line)) return Fail(ErrorLauncherFailed, MissingEnvText);
             if (line.Contains("phase_c: AUTH FAILED"))
             {
                 var rm = Regex.Match(line, @"reason=(-?\d+)");

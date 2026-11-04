@@ -56,7 +56,7 @@
     <InternalsVisibleTo Include="provenance-app-tests" />
   </ItemGroup>
 
-  <!-- Provenance Watcher.exe injects pol_hook.dll, which it expects next to itself -->
+  <!-- Provenance Watcher.exe injects pol_hook.dll, the app hands it the copy in native\ -->
   <ItemGroup>
     <NativeFile Include="$(NativeToolsDir)\pol_hook.dll" />
     <NativeFile Include="$(NativeToolsDir)\Provenance Watcher.exe" />

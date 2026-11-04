@@ -1,6 +1,6 @@
-/* "Provenance Watcher.exe" [pol.exe] [hook dll]: pol.exe starts suspended, gets the hook, then resumes.
-   --attach <pid> [hook dll] is for a pol.exe Windower or Ashita started, which it never ends.
-   --windower <Hook.dll> <pol.exe> [hook dll] puts Windower's Hook.dll in before the hook, the way Windower.exe does */
+/* "Provenance Watcher.exe" <pol.exe> <hook dll>: pol.exe starts suspended, gets the hook, then resumes.
+   --attach <pid> <hook dll> is for a pol.exe Windower or Ashita started, which it never ends.
+   --windower <Hook.dll> <pol.exe> <hook dll> puts Windower's Hook.dll in before the hook, the way Windower.exe does */
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,27 +15,11 @@ static void die(const char *m)
     exit(1);
 }
 
-static int get_pol_path(WCHAR *out, int cap)
+static void usage(void)
 {
-    static const WCHAR *const keys[] = { L"SOFTWARE\\WOW6432Node\\PlayOnlineUS\\InstallFolder",
-                                         L"SOFTWARE\\WOW6432Node\\PlayOnlineEU\\InstallFolder",
-                                         L"SOFTWARE\\WOW6432Node\\PlayOnline\\InstallFolder" };
-    HKEY k;
-    DWORD n = 0, t;
-    int i, found = 0;
-    for (i = 0; i < 3 && !found; i++) {
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, keys[i], 0, KEY_READ, &k)) continue;
-        n = cap * sizeof(WCHAR);
-        found = !RegQueryValueExW(k, L"1000", NULL, &t, (BYTE *)out, &n) && t == REG_SZ;
-        RegCloseKey(k);
-    }
-    if (!found) return 0;
-    n /= sizeof(WCHAR);
-    if (n && !out[n - 1]) n--;
-    if (n < 3 || n >= (DWORD)cap) return 0;
-    if (out[n - 1] != L'\\') out[n++] = L'\\';
-    lstrcpyW(out + n, L"pol.exe");
-    return 1;
+    fprintf(stderr, "watcher: usage: <pol.exe> <hook dll> | --attach <pid> <hook dll> | "
+                    "--windower <Hook.dll> <pol.exe> <hook dll>\n");
+    exit(1);
 }
 
 static DWORD remote_call(HANDLE p, FARPROC fn, void *arg, const char *what)
@@ -77,16 +61,6 @@ static int attach(DWORD pid, const WCHAR *dll)
     if (!code) die("hook dll was refused or failed to load in target");
     printf("watcher: attached to pol.exe (pid %lu)\n", pid);
     return 0;
-}
-
-/* never just the name, an elevated pol.exe would go looking for that along PATH */
-static void default_hook(WCHAR *dll)
-{
-    WCHAR *slash;
-    DWORD n = GetModuleFileNameW(NULL, dll, MAX_PATH);
-    if (!n || n >= MAX_PATH || !(slash = wcsrchr(dll, L'\\')) || slash - dll + 14 > MAX_PATH)
-        die("can't find pol_hook.dll next to the watcher");
-    lstrcpyW(slash + 1, L"pol_hook.dll");
 }
 
 static int hook_and_resume(PROCESS_INFORMATION *pi, const void *dll, DWORD size, UINT errmode, FARPROC load_library,
@@ -145,7 +119,7 @@ static WCHAR *full_path(const WCHAR *path, const char *what)
    mapping's missing, so that's refused before pol.exe even starts */
 static int windower(int argc, WCHAR **arg)
 {
-    WCHAR *hook, *pol, *polhook, *cmd, *cwd, *slash, def[MAX_PATH];
+    WCHAR *hook, *pol, *polhook, *cmd, *cwd, *slash;
     char dll[MAX_PATH] = {0}, wait_s[16] = {0};
     STARTUPINFOW si = { sizeof si };
     PROCESS_INFORMATION pi;
@@ -157,16 +131,11 @@ static int windower(int argc, WCHAR **arg)
     UINT errmode;
     BOOL lossy = FALSE;
 
-    if (argc < 4) die("--windower needs Hook.dll and pol.exe");
+    if (argc < 5) usage();
     pol = arg[3];
-    if (argc > 4) polhook = arg[4];
-    else {
-        default_hook(def);
-        polhook = def;
-    }
     /* full paths, so what gets checked here is what pol.exe loads from its own working folder */
     hook = full_path(arg[2], "Windower's Hook.dll path is no good");
-    polhook = full_path(polhook, "pol_hook.dll path is no good");
+    polhook = full_path(arg[4], "pol_hook.dll path is no good");
     if (!WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, polhook, -1, dll, MAX_PATH, NULL, &lossy) || lossy)
         die("pol_hook.dll path won't go into ANSI");
     if (GetFileAttributesW(hook) == INVALID_FILE_ATTRIBUTES) die("Windower's Hook.dll not found");
@@ -237,34 +206,25 @@ static int windower(int argc, WCHAR **arg)
 /* wide all the way, Provenance's folder has the Windows user name in it and that can be anything */
 int wmain(int argc, WCHAR **argv)
 {
-    WCHAR reg[MAX_PATH] = {0}, def[MAX_PATH], *pol = NULL, *dll, *cmd, *cwd, *slash;
+    WCHAR *pol, *dll, *cmd, *cwd, *slash;
     STARTUPINFOW si = { sizeof si };
     PROCESS_INFORMATION pi;
     UINT errmode;
     DWORD n;
 
-    int attaching = argc > 2 && lstrcmpW(argv[1], L"--attach") == 0;
+    int attaching = argc > 1 && lstrcmpW(argv[1], L"--attach") == 0;
     int dllarg = attaching ? 3 : 2;
 
     if (argc > 1 && lstrcmpW(argv[1], L"--windower") == 0) return windower(argc, argv);
-    if (!attaching) {
-        if (argc > 1) pol = argv[1];
-        else if (get_pol_path(reg, MAX_PATH - 16)) pol = reg;
-        else die("cannot resolve pol.exe (pass path as arg1)");
-    }
-    if (argc > dllarg) dll = argv[dllarg];
-    else {
-        default_hook(def);
-        dll = def;
-    }
+    if (argc <= dllarg) usage();
     /* pol.exe would look for a relative one from its own working folder */
-    dll = full_path(dll, "pol_hook.dll path is no good");
+    dll = full_path(argv[dllarg], "pol_hook.dll path is no good");
     if (attaching) {
         DWORD pid = (DWORD)wcstoul(argv[2], NULL, 10);
         if (!pid) die("--attach needs a pid");
         return attach(pid, dll);
     }
-    pol = full_path(pol, "pol.exe path is no good");
+    pol = full_path(argv[1], "pol.exe path is no good");
     if (GetFileAttributesW(pol) == INVALID_FILE_ATTRIBUTES) die("pol.exe not found");
     if (GetFileAttributesW(dll) == INVALID_FILE_ATTRIBUTES) die("pol_hook.dll not found");
 

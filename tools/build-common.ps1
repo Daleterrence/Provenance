@@ -4,9 +4,7 @@
     and CI, and the libraries the natives link. Dot-source it, it only defines functions and those two lists.
 #>
 
-# ole32 for CoTaskMemFree (pol.exe imports it anyway), uuid for FOLDERID_ProgramData. shell32 gets looked up at run
-# time, so the hook adds no DLL to pol.exe's start-up
-$HookLibs = 'user32.lib advapi32.lib crypt32.lib ole32.lib uuid.lib bcrypt.lib'
+$HookLibs = 'user32.lib advapi32.lib crypt32.lib bcrypt.lib'
 $UninstallLibs = 'user32.lib advapi32.lib ole32.lib oleaut32.lib shell32.lib ntdll.lib'
 
 # the version, the assets folder and the package versions as the build sees them, asked once a script. Through a file, so

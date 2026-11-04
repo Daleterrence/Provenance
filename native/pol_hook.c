@@ -3,7 +3,6 @@
 #include <windows.h>
 #include <wincred.h>
 #include <string.h>
-#include <shlobj.h>
 #include <bcrypt.h>
 #include <sddl.h>
 #include <tlhelp32.h>
@@ -60,22 +59,23 @@ static void end_pol(UINT code)
     TerminateProcess(GetCurrentProcess(), code);
 }
 
-/* Provenance's admin-only POL_IPC_DIR, or %TEMP% when it's unset or empty (manual runs) */
+#define NO_ENV_EXIT 16   /* not started by Provenance, its environment isn't there */
+
+/* Provenance's admin-only POL_IPC_DIR. Missing, too long or not a folder ends pol.exe so nothing lands anywhere
+   readable. No lg() here, it'd recurse */
 static void ipc_dir(char out[MAX_PATH])
 {
-    DWORD n = GetEnvironmentVariableA("POL_IPC_DIR", out, MAX_PATH);
-    if (n > 0) {
-        DWORD a = n < MAX_PATH - 64 ? GetFileAttributesA(out) : INVALID_FILE_ATTRIBUTES;
-        if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) {
-            /* too long or not a folder: end pol.exe so nothing lands anywhere readable. No lg() here, it'd recurse */
-            end_pol(12);
-            ExitProcess(12);
-        }
-        if (out[n - 1] != '\\' && out[n - 1] != '/') { out[n] = '\\'; out[n + 1] = 0; }
-        return;
+    DWORD n = GetEnvironmentVariableA("POL_IPC_DIR", out, MAX_PATH), a;
+    if (n == 0) {
+        end_pol(NO_ENV_EXIT);
+        ExitProcess(NO_ENV_EXIT);
     }
-    n = GetTempPathA(MAX_PATH, out);
-    if (n == 0 || n >= MAX_PATH) out[0] = 0;
+    a = n < MAX_PATH - 64 ? GetFileAttributesA(out) : INVALID_FILE_ATTRIBUTES;
+    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) {
+        end_pol(12);
+        ExitProcess(12);
+    }
+    if (out[n - 1] != '\\' && out[n - 1] != '/') { out[n] = '\\'; out[n + 1] = 0; }
 }
 
 static void ipc_file(char *out, const char *ext)
@@ -104,6 +104,16 @@ static void lg(const char *fmt, ...)
         CloseHandle(h);
     }
     if (g_lgcs_ready) LeaveCriticalSection(&g_lgcs);
+}
+
+/* every Provenance start sets these (and POL_IPC_DIR, which ipc_dir checks) */
+static void env_check(void)
+{
+    if (getenv_set("POL_HOLD") && getenv_set("POL_CRED_KEYFILE")) return;
+    lg("pol_hook: no POL_HOLD or POL_CRED_KEYFILE, so not started by Provenance - ending pol.exe (exit %d)\r\n",
+       NO_ENV_EXIT);
+    end_pol(NO_ENV_EXIT);
+    ExitProcess(NO_ENV_EXIT);
 }
 
 /* WinMain's single-instance gates are mutexes. Each name gets "_X" + 16 bytes of HMAC-SHA256(per-process secret,
@@ -236,33 +246,6 @@ static int hook_slot(HMODULE exe, DWORD rva, DWORD thunk_rva, void *hook, const 
     return 1;
 }
 
-static int patch_iat(HMODULE exe, const char *dll, const char *fn, int ord, void *hook, FARPROC *orig)
-{
-    IMAGE_DOS_HEADER *dh = (IMAGE_DOS_HEADER *)exe;
-    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)((BYTE *)exe + dh->e_lfanew);
-    IMAGE_IMPORT_DESCRIPTOR *imp = (IMAGE_IMPORT_DESCRIPTOR *)
-        ((BYTE *)exe + nt->OptionalHeader.DataDirectory[1].VirtualAddress);
-    for (; imp->Name; imp++) {
-        if (lstrcmpiA((char *)((BYTE *)exe + imp->Name), dll)) continue;
-        IMAGE_THUNK_DATA *t = (IMAGE_THUNK_DATA *)((BYTE *)exe + imp->FirstThunk);
-        IMAGE_THUNK_DATA *n = imp->OriginalFirstThunk
-            ? (IMAGE_THUNK_DATA *)((BYTE *)exe + imp->OriginalFirstThunk) : t;
-        for (; n->u1.AddressOfData; t++, n++) {
-            int by_ord = IMAGE_SNAP_BY_ORDINAL(n->u1.Ordinal);
-            IMAGE_IMPORT_BY_NAME *ibn = (IMAGE_IMPORT_BY_NAME *)((BYTE *)exe + n->u1.AddressOfData);
-            if (fn && (by_ord || lstrcmpA((char *)ibn->Name, fn))) continue;
-            if (!fn && (!by_ord || (int)(n->u1.Ordinal & 0xffff) != ord)) continue;
-            DWORD old;
-            VirtualProtect(&t->u1.Function, sizeof(void *), PAGE_EXECUTE_READWRITE, &old);
-            *orig = (FARPROC)t->u1.Function;
-            t->u1.Function = (ULONG_PTR)hook;
-            VirtualProtect(&t->u1.Function, sizeof(void *), old, &old);
-            return 1;
-        }
-    }
-    return 0;
-}
-
 static LONG WINAPI veh_proc(EXCEPTION_POINTERS *ep)
 {
     unsigned eip = (unsigned)(ULONG_PTR)ep->ExceptionRecord->ExceptionAddress;
@@ -283,135 +266,6 @@ static LONG WINAPI veh_proc(EXCEPTION_POINTERS *ep)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-/* FFXiMain imports ws2_32 itself (by ordinal bar two), so its sockets skip polcore. UINT_PTR stands in for SOCKET. */
-static int (__stdcall *g_fx_connect)(UINT_PTR, const void *, int);
-static int (__stdcall *g_fx_closesocket)(UINT_PTR);
-static int (__stdcall *g_fx_send)(UINT_PTR, char *, int, int);
-static int (__stdcall *g_fx_recv)(UINT_PTR, char *, int, int);
-static int (__stdcall *g_fxi_socket)(int, int, int);
-static int (__stdcall *g_fx_recvfrom)(UINT_PTR, char *, int, int, void *, int *);
-static int (__stdcall *g_fx_sendto)(UINT_PTR, const char *, int, int, const void *, int);
-static int (__stdcall *g_fx_evsel)(UINT_PTR, HANDLE, long);
-static int (__stdcall *g_fx_enumev)(UINT_PTR, HANDLE, void *);
-static int (__stdcall *g_fx_wsagle)(void);
-static void (__stdcall *g_fx_wsaset)(int);
-static int g_fx_iat_done;
-/* WSAGetLastError is GetLastError underneath, an lg() would clobber the caller's EWOULDBLOCK (cue mystery -2068s) */
-static int le_save(void) { return g_fx_wsagle ? g_fx_wsagle() : 0; }
-static void le_restore(int e) { if (g_fx_wsaset) g_fx_wsaset(e); }
-
-static int __stdcall fx_connect(UINT_PTR s, const void *name, int len)
-{
-    const unsigned char *a = (const unsigned char *)name;
-    int r = g_fx_connect(s, name, len);
-    int le = le_save();   /* straight away: polcore checks WSAGetLastError == 10035 */
-    if (len >= 8 && a && (unsigned short)(a[0] | (a[1] << 8)) == 2)
-        lg("wireF connect fd=%u -> %u.%u.%u.%u:%u = %d err=%u\r\n",
-           (unsigned)s, a[4], a[5], a[6], a[7], (unsigned)((a[2] << 8) | a[3]), r, (unsigned)le);
-    else
-        lg("wireF connect fd=%u len=%d = %d err=%u\r\n", (unsigned)s, len, r, (unsigned)le);
-    le_restore(le);
-    return r;
-}
-static int __stdcall fx_send(UINT_PTR s, const char *buf, int len, int flags)
-{
-    int r = g_fx_send(s, (char *)buf, len, flags);
-    int le = le_save();
-    if (r < 0)
-        lg("wireF send fd=%u = -1 err=%u\r\n", (unsigned)s, (unsigned)le);
-    le_restore(le);
-    return r;
-}
-static int __stdcall fx_recv(UINT_PTR s, char *buf, int len, int flags)
-{
-    int r = g_fx_recv(s, buf, len, flags);
-    int le = le_save();
-    if (r == 0) lg("wireF recv fd=%u = 0 (closed)\r\n", (unsigned)s);
-    else if (r < 0 && le != 10035)
-        lg("wireF recv fd=%u = -1 err=%u\r\n", (unsigned)s, (unsigned)le);
-    le_restore(le);
-    return r;
-}
-static int __stdcall fx_closesocket(UINT_PTR s)
-{
-    int r = g_fx_closesocket(s);
-    int le = le_save();
-    lg("wireF close fd=%u\r\n", (unsigned)s);
-    le_restore(le);
-    return r;
-}
-static int __stdcall fxi_socket(int af, int type, int proto)
-{
-    int r = g_fxi_socket(af, type, proto);
-    int le = le_save();
-    lg("wireF open af=%d type=%d proto=%d -> fd=%d\r\n", af, type, proto, r);
-    le_restore(le);
-    return r;
-}
-static int __stdcall fx_recvfrom(UINT_PTR s, char *buf, int len, int flags, void *from, int *fromlen)
-{
-    return g_fx_recvfrom(s, buf, len, flags, from, fromlen);
-}
-static int __stdcall fx_sendto(UINT_PTR s, const char *buf, int len, int flags, const void *to, int tolen)
-{
-    static unsigned cnt;
-    const unsigned char *sa = (const unsigned char *)to;
-    int r = g_fx_sendto(s, buf, len, flags, to, tolen);
-    int le = le_save();
-    if (++cnt <= 1) {   /* zone leg (UDP): only the first send, the launcher's "In game" line */
-        if (sa && (sa[0] | (sa[1] << 8)) == 2)
-            lg("wireF %s fd=%u peer=%u.%u.%u.%u:%u len=%d #%u\r\n", ">>U", (unsigned)s,
-               sa[4], sa[5], sa[6], sa[7], (unsigned)((sa[2] << 8) | sa[3]), len, cnt);
-        else
-            lg("wireF %s fd=%u len=%d #%u\r\n", ">>U", (unsigned)s, len, cnt);
-    }
-    if (r < 0) lg("wireF sendto fd=%u = -1 err=%u\r\n", (unsigned)s, (unsigned)le);
-    le_restore(le);
-    return r;
-}
-static int __stdcall fx_evsel(UINT_PTR s, HANDLE ev, long mask)
-{
-    int r = g_fx_evsel(s, ev, mask);
-    int le = le_save();
-    lg("wireF eventselect fd=%u mask=%03x = %d\r\n", (unsigned)s, (unsigned)mask, r);
-    le_restore(le);
-    return r;
-}
-/* WSANETWORKEVENTS = { long lNetworkEvents; int iErrorCode[10]; }, connect is 0x10 (error 4), close 0x20 (5) */
-static int __stdcall fx_enumev(UINT_PTR s, HANDLE ev, void *out)
-{
-    int r = g_fx_enumev(s, ev, out);
-    int le = le_save();
-    if (r == 0 && out) {
-        long m = *(long *)out;
-        int *ec = (int *)((BYTE *)out + 4);
-        if (m & 0x30)
-            lg("wireF events fd=%u ev=%02x connect_err=%d close_err=%d\r\n",
-               (unsigned)s, (unsigned)m, (m & 0x10) ? ec[4] : 0, (m & 0x20) ? ec[5] : 0);
-    }
-    le_restore(le);
-    return r;
-}
-static void patch_fx_sockets(BYTE *fx)
-{
-    HMODULE ws = GetModuleHandleA("ws2_32.dll");
-    int n = patch_iat((HMODULE)fx, "ws2_32.dll", NULL, 4, fx_connect, (FARPROC *)&g_fx_connect);
-    n += patch_iat((HMODULE)fx, "ws2_32.dll", NULL, 16, fx_recv, (FARPROC *)&g_fx_recv);
-    n += patch_iat((HMODULE)fx, "ws2_32.dll", NULL, 19, fx_send, (FARPROC *)&g_fx_send);
-    n += patch_iat((HMODULE)fx, "ws2_32.dll", NULL, 3, fx_closesocket, (FARPROC *)&g_fx_closesocket);
-    n += patch_iat((HMODULE)fx, "ws2_32.dll", NULL, 23, fxi_socket, (FARPROC *)&g_fxi_socket);
-    n += patch_iat((HMODULE)fx, "ws2_32.dll", NULL, 17, fx_recvfrom, (FARPROC *)&g_fx_recvfrom);
-    n += patch_iat((HMODULE)fx, "ws2_32.dll", NULL, 20, fx_sendto, (FARPROC *)&g_fx_sendto);
-    n += patch_iat((HMODULE)fx, "ws2_32.dll", "WSAEventSelect", 0, fx_evsel, (FARPROC *)&g_fx_evsel);
-    n += patch_iat((HMODULE)fx, "ws2_32.dll", "WSAEnumNetworkEvents", 0, fx_enumev, (FARPROC *)&g_fx_enumev);
-    if (ws) {
-        g_fx_wsagle = (void *)GetProcAddress(ws, "WSAGetLastError");
-        g_fx_wsaset = (void *)GetProcAddress(ws, "WSASetLastError");
-    }
-    lg("wireF: FFXiMain IAT patched %d/9 (gle=%d)\r\n", n, g_fx_wsagle != 0);
-    g_fx_iat_done = 1;
-}
-
 /* polcore's own SHA-1 (polcore.dll 0x1002d6a0/d6d0/dac0), the exact hash the wire uses. 0x5c-byte context. */
 static void pc_sha1(BYTE *b, const void *data, unsigned len, BYTE out[20])
 {
@@ -421,24 +275,16 @@ static void pc_sha1(BYTE *b, const void *data, unsigned len, BYTE out[20])
     ((void (__cdecl *)(void *, void *))(b + 0x2dac0))(out, ctx);
 }
 
-static int launcher_mode(void)
-{
-    return getenv_set("POL_CRED_ONESHOT");   /* Provenance always sets it, "OTP" at least */
-}
-/* In launcher mode a missing or bad name is NULL, never def (that could be another account's) */
-static const WCHAR *cred_target(const char *env, const WCHAR *def, WCHAR *buf, int n, int *from_env)
+/* NULL when it's missing, too long or won't convert */
+static const WCHAR *cred_target(const char *env, WCHAR *buf, int n)
 {
     char a[256];
     DWORD k = GetEnvironmentVariableA(env, a, sizeof a);
-    int strict = launcher_mode();
-    if (from_env) *from_env = 0;
-    if (k == 0) return strict && def[0] ? NULL : def;
-    if (k >= sizeof a || !MultiByteToWideChar(CP_ACP, strict ? MB_ERR_INVALID_CHARS : 0, a, -1, buf, n)) {
-        if (!strict) return def;
+    if (k == 0) return NULL;
+    if (k >= sizeof a || !MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, a, -1, buf, n)) {
         lg("phase_c: %s target refused (too long or not convertible)\r\n", env);
         return NULL;
     }
-    if (from_env) *from_env = 1;
     return buf;
 }
 static int launch_target(const WCHAR *t)
@@ -449,62 +295,33 @@ static int launch_target(const WCHAR *t)
         if (t[i] != pre[i]) return 0;
     return 1;
 }
-/* Manual runs use <ProgramData>\Provenance\ipc\cred.key, ProgramData from Windows, never the env (whoever starts
-   pol.exe sets that) */
 static const char *cred_keyfile(char *buf, DWORD n)
 {
-    typedef HRESULT (WINAPI *known_folder_fn)(REFKNOWNFOLDERID, DWORD, HANDLE, PWSTR *);
-    static const WCHAR tail[] = L"\\Provenance\\ipc\\cred.key";
     static int warned;
-    WCHAR w[MAX_PATH + 64];
-    PWSTR pd = NULL;
-    BOOL lossy = FALSE;
-    int utf8 = GetACP() == CP_UTF8, ok;
     DWORD k = GetEnvironmentVariableA("POL_CRED_KEYFILE", buf, n);
     if (k > 0 && k < n) return buf;
-    if (launcher_mode()) {
-        if (!warned) {
-            warned = 1;
-            lg("phase_c: POL_CRED_KEYFILE unusable (unset, empty or too long) - no key file, no saved entry is read\r\n");
-        }
-        return NULL;
+    if (!warned) {
+        warned = 1;
+        lg("phase_c: POL_CRED_KEYFILE unusable (unset, empty or too long) - no key file, no saved entry is read\r\n");
     }
-    /* looked up, not imported, so the hook adds no DLL to pol.exe's start-up (a KnownDLL, so always the system copy) */
-    HMODULE sh = LoadLibraryW(L"shell32.dll");
-    known_folder_fn kf = sh ? (known_folder_fn)GetProcAddress(sh, "SHGetKnownFolderPath") : NULL;
-    ok = kf && SUCCEEDED(kf(&FOLDERID_ProgramData, KF_FLAG_DEFAULT, NULL, &pd)) && pd &&
-         lstrlenW(pd) + (int)(sizeof tail / sizeof tail[0]) <= (int)(sizeof w / sizeof w[0]);
-    if (ok) {
-        lstrcpyW(w, pd);
-        lstrcatW(w, tail);
-    }
-    CoTaskMemFree(pd);
-    if (sh) FreeLibrary(sh);
-    if (!ok) return NULL;
-    /* no best fit, so a folder name the code page lacks never narrows to another path */
-    if (WideCharToMultiByte(CP_ACP, utf8 ? 0 : WC_NO_BEST_FIT_CHARS, w, -1, buf, (int)n,
-                            NULL, utf8 ? NULL : &lossy) <= 0 || lossy) {
-        if (n) buf[0] = 0;
-        return NULL;
-    }
-    return buf;
+    return NULL;
 }
-/* launcher mode only takes wrapped secrets, any program of the user can write a plain entry */
+/* only wrapped secrets, any program of the user can write a plain entry */
 static int cred_read(const WCHAR *target, char *user, int ucap, char *secret, int scap)
 {
     char kf[MAX_PATH + 64];
-    return pc_cred_read(target, cred_keyfile(kf, sizeof kf), launcher_mode(), user, ucap, secret, scap);
+    return pc_cred_read(target, cred_keyfile(kf, sizeof kf), 1, user, ucap, secret, scap);
 }
 static const char *cred_why(int rc)
 {
     static const char *const why[] = { "unknown", "not found", "not wrapped", "unwrap failed", "too long" };
     return rc >= PC_NOT_FOUND && rc <= PC_TOO_LONG ? why[rc] : why[0];
 }
-static void cred_consume(const WCHAR *target, int from_env, const char *kind)
+static void cred_consume(const WCHAR *target, const char *kind)
 {
     char kinds[64];
     DWORD k = GetEnvironmentVariableA("POL_CRED_ONESHOT", kinds, sizeof kinds);
-    if (!from_env || k == 0 || k >= sizeof kinds || !strstr(kinds, kind)) return;
+    if (k == 0 || k >= sizeof kinds || !strstr(kinds, kind)) return;
     if (!launch_target(target)) {
         lg("phase_c: one-shot %s target is not a launch entry - left in place\r\n", kind);
         return;
@@ -512,30 +329,26 @@ static void cred_consume(const WCHAR *target, int from_env, const char *kind)
     if (!CredDeleteW(target, CRED_TYPE_GENERIC, 0))
         lg("phase_c: one-shot target '%ls' delete failed err=%u\r\n", target, GetLastError());
 }
-/* launcher mode ends pol.exe on a failure (exit 11) so Provenance asks for the details again, manual runs carry on */
-static int read_details(const char *env, const WCHAR *def, const char *kind, const char *manual,
-                        const char *bad_shape, char *id, int idcap, char *pw, int pwcap)
+/* a failure ends pol.exe (exit 11) so Provenance asks for the details again */
+static int read_details(const char *env, const char *kind, char *id, int idcap, char *pw, int pwcap)
 {
     WCHAR tbuf[256];
-    int from_env = 0, rc = PC_OK;
-    const WCHAR *t = cred_target(env, def, tbuf, 256, &from_env);
+    int rc = PC_OK;
+    const WCHAR *t = cred_target(env, tbuf, 256);
     if (t) {
         rc = cred_read(t, id, idcap, pw, pwcap);
-        if (rc != PC_NOT_FOUND) cred_consume(t, from_env, kind);
+        if (rc != PC_NOT_FOUND) cred_consume(t, kind);
     }
-    const char *tail = launcher_mode() ? "pol.exe ends" : manual;
-    if (!t) lg("phase_c: no %s target - %s\r\n", kind, tail);
-    else if (rc == PC_NOT_FOUND) lg("phase_c: no CredMan '%ls' creds - %s\r\n", t, tail);
-    else if (rc != PC_OK) lg("phase_c: CredMan '%ls' %s - %s\r\n", t, cred_why(rc), tail);
+    if (!t) lg("phase_c: no %s target - pol.exe ends\r\n", kind);
+    else if (rc == PC_NOT_FOUND) lg("phase_c: no CredMan '%ls' creds - pol.exe ends\r\n", t);
+    else if (rc != PC_OK) lg("phase_c: CredMan '%ls' %s - pol.exe ends\r\n", t, cred_why(rc));
     else if (id[0] == 0 || pw[0] == 0) {
         SecureZeroMemory(id, idcap);
         SecureZeroMemory(pw, pwcap);
-        lg(bad_shape, tail);
+        lg("phase_c: bad %s cred shape (id/pw empty) - pol.exe ends\r\n", kind);
     } else return 1;
-    if (launcher_mode()) {
-        lg("phase_c: SAVED DETAILS UNREADABLE (%s) - exiting, FFXI NOT started\r\n", kind);
-        end_pol(11);
-    }
+    lg("phase_c: SAVED DETAILS UNREADABLE (%s) - exiting, FFXI NOT started\r\n", kind);
+    end_pol(11);
     return 0;
 }
 /* account IDs in the log: first 2 chars + length only (the log stays on disk) */
@@ -553,10 +366,8 @@ static void sea_seed(BYTE *b)
     char seid[32] = {0}, sepw[64] = {0}, hex[41], otp[8] = {0}, m[24];
     BYTE h1[20], secret[20], material[64];
     WCHAR obuf[256];
-    int mode = 1, otp_env = 0, orc;
-    if (!read_details("POL_CRED_SEA", L"POL-SEA", "SEA", "SEA upload unseeded",
-                      "phase_c: bad POL-SEA cred shape - %s\r\n", seid, sizeof seid, sepw, sizeof sepw))
-        return;
+    int mode = 1, orc;
+    if (!read_details("POL_CRED_SEA", "SEA", seid, sizeof seid, sepw, sizeof sepw)) return;
     pc_sha1(b, sepw, lstrlenA(sepw), h1);
     for (int i = 0; i < 20; i++) wsprintfA(hex + i * 2, "%02x", h1[i]);
     lstrcpyA((char *)material, hex);
@@ -566,10 +377,9 @@ static void sea_seed(BYTE *b)
     SecureZeroMemory(material, sizeof material);
     SecureZeroMemory(h1, sizeof h1);
     SecureZeroMemory(hex, sizeof hex);
-    /* launcher mode without an OTP target means no OTP, never a manual POL-OTP that may be another account's */
-    const WCHAR *totp = cred_target("POL_CRED_OTP", L"POL-OTP", obuf, 256, &otp_env);
-    orc = (!launcher_mode() || otp_env) && totp ? cred_read(totp, NULL, 0, otp, sizeof otp) : PC_NOT_FOUND;
-    if (orc != PC_NOT_FOUND) cred_consume(totp, otp_env, "OTP");
+    const WCHAR *totp = cred_target("POL_CRED_OTP", obuf, 256);
+    orc = totp ? cred_read(totp, NULL, 0, otp, sizeof otp) : PC_NOT_FOUND;
+    if (orc != PC_NOT_FOUND) cred_consume(totp, "OTP");
     if (orc != PC_OK && orc != PC_NOT_FOUND)
         lg("phase_c: CredMan '%ls' %s - no OTP\r\n", totp, cred_why(orc));
     if (orc == PC_OK) {
@@ -598,13 +408,10 @@ typedef int (__cdecl *svc_ip)(int, void *);
 #define POLCON_STEP(b) ((svc_v)((b) + 0x44a50))()
 #define POLCON_IDLE(b) ((svc_v)((b) + 0x45480))()
 
-/* the unwrapped GetHandle: the wrapper's "polhandle scan" line would read as an in-game failure */
-static void *g_svc_2c4, *g_svc_2b4;
 #define FS_LOG lg
-#define FS_GETHANDLE_FN (g_svc_2b4 ? g_svc_2b4 : SVC(0x2b4))
 #include "pol_pic_save.c"
 #include "pol_profile_edit.c"
-static int get_handle(BYTE *b, int slot, void *rec) { return ((svc_ip)FS_GETHANDLE_FN)(slot, rec); }
+static int get_handle(BYTE *b, int slot, void *rec) { return ((svc_ip)SVC(0x2b4))(slot, rec); }
 
 /* each region as its app.dll sets polcore up. svc 0x17dc(1) swaps in the JP half of polcore's conversion table, and
    svc 0x690's language is what FFXI reads back through 0x694 as its area code */
@@ -835,6 +642,7 @@ static void viewer_folder(char folder[MAX_PATH])
     RegCloseKey(hk);
 }
 
+#define LEGACY_HOME 84   /* shared by every account without a slot of its own, where older builds kept them all */
 static char g_viewer[MAX_PATH];
 static int g_home = -1, g_home_made;
 
@@ -873,9 +681,6 @@ static void viewer_init(BYTE *b)
     DWORD lang = viewer_lang();
     char key[32];
     char folder[MAX_PATH] = "C:\\Program Files (x86)\\PlayOnline\\SquareEnix\\PlayOnlineViewer";
-    char polid[16] = {0};
-    unsigned h = 0;
-    int slot, i;
     wsprintfA(key, "SOFTWARE\\%s", pol_hive());
     viewer_folder(folder);
     lg("viewer_init: lang=%u key='%s' folder='%s'\r\n", lang, key, folder);
@@ -884,14 +689,10 @@ static void viewer_init(BYTE *b)
     ((int (__cdecl *)(const char *))PSLOT(0x07D))(folder);
     ((int (__cdecl *)(void))PSLOT(0x3A4))();
     lstrcpynA(g_viewer, folder, sizeof g_viewer);
-    /* the placeholder ID still, so always 84. home_pick moves the account to its own after the login, then the folders
-       get made */
-    CopyMemory(polid, b + 0x99280, 8);
-    for (i = 0; i < 8; i++) h = h * 31 + (unsigned char)polid[i];
-    slot = 50 + (int)(h % 50);
-    ((int (__cdecl *)(int))PSLOT(0x366))(slot);
-    g_home = slot;
-    lg("viewer_init: user slot %d for now\r\n", slot);
+    /* home84 till home_pick moves the account to its own after the login, then the folders get made */
+    ((int (__cdecl *)(int))PSLOT(0x366))(LEGACY_HOME);
+    g_home = LEGACY_HOME;
+    lg("viewer_init: user slot %d for now\r\n", LEGACY_HOME);
     set_messages(b, folder);
 }
 
@@ -916,40 +717,6 @@ static int __cdecl poll_masked(void)
     }
     return 0;
 }
-/* the lobby ticket legs (FFXiMain.dll 0x0431d7f0, states 0xb-0xd), only logged. FFXiMain reads the table every call. */
-static void *g_svc_30c, *g_svc_310, *g_svc_ea0, *g_svc_fac;
-static int __cdecl w_svc_30c(int a, int b, int c, int d, int e, int f)
-{
-    int r = ((int (__cdecl *)(int, int, int, int, int, int))g_svc_30c)(a, b, c, d, e, f);
-    DWORD le = GetLastError();
-    lg("svc 0x30c ChangeMyStatus(%d,%d,%d,%d,%d,%d) -> ticket %d\r\n", a, b, c, d, e, f, r);
-    SetLastError(le);
-    return r;
-}
-static int __cdecl w_svc_310(int t)
-{
-    static int last_t = -99, last_r = -99;
-    int r = ((int (__cdecl *)(int))g_svc_310)(t);
-    if (t != last_t || r != last_r) {
-        DWORD le = GetLastError();
-        lg("svc 0x310 poll(ticket %d) -> %d\r\n", t, r);
-        SetLastError(le);
-        last_t = t; last_r = r;
-    }
-    return r;
-}
-/* only the result, the ticket and account bytes are sign-in material */
-static int log_out(void *orig, void *out, const char *what)
-{
-    int r = ((int (__cdecl *)(void *))orig)(out);
-    DWORD le = GetLastError();
-    lg("%s -> %d\r\n", what, r);
-    SetLastError(le);
-    return r;
-}
-/* 0xea0 gives the 0x34B ticket that becomes the 0x26 AuthCode, 0xfac the 16-byte 0x26 PolAccount */
-static int __cdecl w_svc_ea0(void *out) { return log_out(g_svc_ea0, out, "svc 0xea0 ticket(0x34B)"); }
-static int __cdecl w_svc_fac(void *out) { return log_out(g_svc_fac, out, "svc 0xfac account(16B)"); }
 static int wrap_slot(BYTE *b, unsigned off, void *w, void **orig)
 {
     DWORD vp;
@@ -959,39 +726,6 @@ static int wrap_slot(BYTE *b, unsigned off, void *w, void **orig)
     *slot = w;
     VirtualProtect(slot, 4, vp, &vp);
     return 1;
-}
-/* FFXiMain's world login at 0x0431e170 wants the character linked to a handle (svc 0x2c4, flag 0x8000) or a
-   handle with a free character slot (svc 0x2b4), else it's POL-0001 */
-static int __cdecl w_svc_2c4(unsigned i, void *out)
-{
-    static int budget = 120;
-    int r = ((int (__cdecl *)(unsigned, void *))g_svc_2c4)(i, out);
-    DWORD le = GetLastError();
-    const BYTE *e = (const BYTE *)out;
-    if (r >= 0 && e && budget > 0 && IsBadReadPtr(e, 0x14) == 0 && (e[0] & 1) && budget--)
-        lg("polchar[%u] type=%u flags=%08x linked=%d\r\n", i, *(const unsigned short *)(e + 2),
-           *(const unsigned *)(e + 0x10), (*(const unsigned *)(e + 0x10) & 0x8000) != 0);
-    SetLastError(le);
-    return r;
-}
-static int __cdecl w_svc_2b4(unsigned i, void *out)
-{
-    static int valid, budget = 40;
-    int r = ((int (__cdecl *)(unsigned, void *))g_svc_2b4)(i, out);
-    DWORD le = GetLastError();
-    const BYTE *e = (const BYTE *)out;
-    if (i == 0) valid = 0;
-    if (r >= 0 && e && IsBadReadPtr(e, 0x28) == 0 && (e[0] & 1)) {
-        int used = 0;
-        for (int k = 0; k < 8; k++) used += e[0x20 + k] & 1;
-        valid++;
-        if (budget > 0 && budget--)
-            lg("polhandle[%u] valid, char slots used %d/8\r\n", i, used);
-    }
-    if (i == 63 && budget > 0 && budget--)
-        lg("polhandle scan: %d valid handle(s)\r\n", valid);
-    SetLastError(le);
-    return r;
 }
 
 static int g_ffxi_service = -1;
@@ -1207,10 +941,9 @@ static int wait_handle_name(BYTE *b, char *name, int cap)
 {
     WCHAR tbuf[256];
     char user[64], ans[256];
-    int from_env = 0, warned = 0;
-    const WCHAR *t = cred_target("POL_CRED_HANDLE", L"", tbuf, 256, &from_env);
+    int warned = 0;
+    const WCHAR *t = cred_target("POL_CRED_HANDLE", tbuf, 256);
     if (!t) return -2;
-    if (!from_env) return 0;
     lg("phase_c: waiting for handle name from launcher\r\n");   /* Provenance watches for this line */
     /* waits rather than exits, as exiting skips the QUIT and a stale session blocks the next login for a while */
     for (int ticks = 0; ticks < 10 * 60 * 5; ticks++) {
@@ -1250,8 +983,7 @@ static int wait_handle_name(BYTE *b, char *name, int cap)
    handle). Handles are permanent and public, so only the name the user typed gets used */
 static int handle_bootstrap(BYTE *b, int handles_loaded)
 {
-    static const char *const why[] = { "no launcher to ask", "creation cancelled", "launcher target refused",
-                                       "no answer within 10 minutes" };
+    static const char *const why[] = { "creation cancelled", "no launcher target", "no answer within 10 minutes" };
     struct pload fresh = { "handles (pre-claim)", 0x2ac, 0x2b0, 0, 0 };
     struct pload put = { "handle save", 0x1030, 0x1034, 0, 0, 1 };
     struct pload re[2] = { { "handles (post-save)", 0x2ac, 0x2b0, 0, 0 },
@@ -1268,9 +1000,9 @@ static int handle_bootstrap(BYTE *b, int handles_loaded)
     lg("phase_c: POL handles on account: %d\r\n", n);
     if (n > 0) return 0;
     w = wait_handle_name(b, name, sizeof name);
-    if (w <= 0) {
+    if (w < 0) {
         lg("phase_c: NO POL HANDLE - this account needs a PlayOnline handle before FFXI "
-           "can log in (%s)\r\n", w >= -3 ? why[-w] : "unknown");
+           "can log in (%s)\r\n", w >= -3 ? why[-w - 1] : "unknown");
         return 4;
     }
     if (!ascii_name_ok(name)) {
@@ -1356,7 +1088,7 @@ static void prestart_wait(void)
 /* the viewer's FFXI gate (app.dll 0x10199093), a valid Content ID record for content 1 */
 static void ffxi_gate_read(BYTE *b)
 {
-    void *get = g_svc_2c4 ? g_svc_2c4 : SVC(0x2c4);
+    void *get = SVC(0x2c4);
     BYTE rec[0x68];
     int any = 0, ffxi = 0;
     for (int i = 0; i < 64; i++)
@@ -1403,14 +1135,12 @@ static void phase_c_seed(HMODULE pc)
     int r, i, rc, nrun, jail, last = -1;
     prestart_wait();
     g_lean = getenv_set("POL_LEAN");
-    if (!read_details("POL_CRED_POL", L"POL-POL", "POL", "staying on fake session",
-                      "phase_c: bad cred shape (id/pw empty) - %s\r\n", id, sizeof id, pw, sizeof pw))
-        return;
+    if (!read_details("POL_CRED_POL", "POL", id, sizeof id, pw, sizeof pw)) return;
     /* POL's own password box stops at 16, and polcore's copy of the encoded one has no room for more */
     if (lstrlenA(pw) > 16) {
         SecureZeroMemory(pw, sizeof pw);
         lg("phase_c: POL password longer than 16 characters - exiting, FFXI NOT started\r\n");
-        if (launcher_mode()) end_pol(11);
+        end_pol(11);
         return;
     }
     lg("phase_c: REAL auth: POL ID='%s'\r\n", mask_id(id, m));
@@ -1421,13 +1151,6 @@ static void phase_c_seed(HMODULE pc)
     lg("phase_c: inet init -> %d\r\n", r);
     if (wrap_slot(b, 0xb04, (void *)poll_masked, &g_polcon_poll_orig))
         lg("poll mask: POLCON_POLL wrapped (negative -> 0)\r\n");
-    wrap_slot(b, 0x30c, (void *)w_svc_30c, &g_svc_30c);
-    wrap_slot(b, 0x310, (void *)w_svc_310, &g_svc_310);
-    wrap_slot(b, 0xea0, (void *)w_svc_ea0, &g_svc_ea0);
-    wrap_slot(b, 0xfac, (void *)w_svc_fac, &g_svc_fac);
-    wrap_slot(b, 0x2c4, (void *)w_svc_2c4, &g_svc_2c4);
-    wrap_slot(b, 0x2b4, (void *)w_svc_2b4, &g_svc_2b4);
-    lg("lobby: svc slots wrapped (0x30c/0x310/0xea0/0xfac/0x2c4/0x2b4, log only)\r\n");
     /* POLCON_OPEN (polcore.dll 0x100448a0) type 3 = network, kind 1 + five zeroed dial-up buffers. It overwrites
        the password and host, so both go in after it. */
     r = ((int (__cdecl *)(int, void *))(b + 0x448a0))(3, &conn);
@@ -1518,26 +1241,8 @@ static void phase_c_seed(HMODULE pc)
         g_bad_password = 1;
         lg("phase_c: bad password flag set (Viewer message 0x7007)\r\n");
     }
-    /* the FFXI gate goes before the handle bootstrap, no FFXI service means no handle prompt */
     if (all[3].res == 1) ffxi_gate_read(b);
     else lg("phase_c: content ids: unknown (characters load %d)\r\n", all[3].res);
-    if (!getenv_set("POL_HOLD")) {
-        if (g_ffxi_service == 0) {
-            lg("phase_c: NO FFXI CONTENT ID - FFXI NOT started (Viewer string 0x65d9)\r\n");
-            viewer_sign_out(b);
-            end_pol(6);
-        }
-        if (g_ffxi_service < 0) {
-            lg("phase_c: FFXI SERVICE UNKNOWN - the Content ID list did not load, FFXI NOT started\r\n");
-            viewer_sign_out(b);
-            end_pol(9);
-        }
-        if (notice_blocks(g_notice)) {
-            lg("phase_c: ACCOUNT NOTICE LM-%02u blocks play - FFXI NOT started\r\n", g_notice - 220);
-            viewer_sign_out(b);
-            end_pol(7);
-        }
-    }
     rc = handle_bootstrap(b, all[2].res == 1);
     if (rc) {
         lg("phase_c: stopping before FFXI boots (exit %d) - signing out\r\n", rc);
@@ -1550,23 +1255,11 @@ static void phase_c_seed(HMODULE pc)
 
 static void prime_session(void)
 {
-    const struct pol_region *r = region();
     HMODULE pc = polcore_module();
-    static const unsigned char id64[8] = { 0xef,0xbe,0xad,0xde,0x78,0x56,0x34,0x12 };
-    static const char name17[17] = "Kupo";
     if (!pc) { lg("pol_hook: polcore.dll not loaded at menu time?!\r\n"); return; }
     /* before the login, so a crash during it gets a CRASH line too. Not a VEH, that'd catch IsBadReadPtr's
        first-chance probes and recurse through lg (yes, IsBadReadPtr, I know) */
     SetUnhandledExceptionFilter(veh_proc);
-    *(unsigned *)((BYTE *)pc + 0x992e0) = 0;   /* login status >= 0 = in */
-    *(unsigned *)((BYTE *)pc + 0x99254) = 1;   /* ready flag (svc+0xd10) */
-    CopyMemory((BYTE *)pc + 0x99280, id64, 8);
-    CopyMemory((BYTE *)pc + 0x99288, name17, 17);
-    /* svc+0x730's state (polcore.dll 0x1009aa58) is -1 without a real menu session, 0 suits the pre-flight */
-    *(unsigned *)((BYTE *)pc + 0x9aa58) = 0;
-    /* the JP/US selector (polcore.dll 0x100aa318), 0 JP, 1 anything else. svc 0xf14 sets it again in viewer_init */
-    *(unsigned *)((BYTE *)pc + 0xaa318) = (unsigned)r->selector;
-    lg("pol_hook: fake session poked into polcore @ %08x\r\n", (unsigned)(ULONG_PTR)pc);
     viewer_init((BYTE *)pc);
     phase_c_seed(pc);
     if (!g_home_made && home_set((BYTE *)pc, g_home))
@@ -1629,52 +1322,6 @@ static int json_text(char *out, int cap, const char *s)
     out[o++] = '"';
     out[o] = 0;
     return o;
-}
-/* access denied counts as alive, so the sweep never deletes a live session's snapshot */
-static int pid_alive(DWORD pid)
-{
-    if (pid == 0) return 0;
-    HANDLE p = OpenProcess(SYNCHRONIZE, FALSE, pid);
-    if (!p) return GetLastError() == ERROR_ACCESS_DENIED;
-    DWORD w = WaitForSingleObject(p, 0);
-    CloseHandle(p);
-    return w == WAIT_TIMEOUT;
-}
-/* Deletes social snapshots a killed session left behind (other people's data). Another live pol.exe's stays, and
-   one with our pid is from an earlier process, so it goes. */
-static void sweep_stale(const char *pattern);
-static void sweep_stale_social(void)
-{
-    sweep_stale("pol_hook.*.social.json*");   /* the end * catches crash-left .tmp files */
-    sweep_stale("pol_hook.*.store.json*");
-    sweep_stale("pol_hook.*.chatroom.json*");
-    sweep_stale("pol_hook.*.chatjoin*");
-    sweep_stale("pol_hook.*.chatcreate*");
-    sweep_stale("pol_hook.*.chatmaster*");
-    sweep_stale("pol_hook.*.groupchat*");
-}
-static void sweep_stale(const char *pattern)
-{
-    char dir[MAX_PATH + 32], glob[MAX_PATH + 48], full[MAX_PATH + 64];
-    WIN32_FIND_DATAA fd;
-    ipc_dir(dir);
-    if (!dir[0]) return;
-    lstrcpyA(glob, dir); lstrcatA(glob, pattern);
-    HANDLE h = FindFirstFileA(glob, &fd);
-    if (h == INVALID_HANDLE_VALUE) return;
-    do {
-        const char *q = lstrlenA(fd.cFileName) > 9 ? fd.cFileName + 9 : "";
-        ULONGLONG v = 0;
-        int nd = 0;
-        for (; *q >= '0' && *q <= '9' && nd < 11; q++, nd++) v = v * 10 + (ULONGLONG)(*q - '0');
-        if (nd > 0 && *q == '.' && v <= 0xFFFFFFFFull && (DWORD)v != GetCurrentProcessId() && pid_alive((DWORD)v))
-            continue;
-        if (lstrlenA(dir) + lstrlenA(fd.cFileName) < (int)sizeof full) {
-            lstrcpyA(full, dir); lstrcatA(full, fd.cFileName);
-            DeleteFileA(full);
-        }
-    } while (FindNextFileA(h, &fd));
-    FindClose(h);
 }
 static void sjis_json(char *out, int cap, const BYTE *src, int srcMax)
 {
@@ -2421,7 +2068,7 @@ static int peer_secret_name(WCHAR *out, int cap)
     LocalFree(sid);
     return ok;
 }
-/* in the admin-only POL_IPC_DIR, so manual runs without one get no conversation keys */
+/* kept in the admin-only POL_IPC_DIR */
 static int peer_secret(void)
 {
     WCHAR path[MAX_PATH + 256], name[256];
@@ -2562,7 +2209,6 @@ static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const c
 #define STORE_SCAN_MAX 20000
 #define STORE_BODY_MAX 0x1100
 #define STORE_JSON_MAX (3 * 1024 * 1024)
-#define LEGACY_HOME 84   /* the placeholder ID's slot, shared by every account without one of its own */
 static const char *const g_store_sub[4] = { "r\\a", "r\\b", "s\\a", "s\\b" };
 typedef struct { BYTE hdr[0x48]; char name[100]; int home, sub, alt_home, alt_sub; char alt[100]; } storefile;
 
@@ -2952,7 +2598,7 @@ static void home_copy(BYTE *b, int slot, unsigned __int64 me)
        had_o ? "done before" : opt > 0 ? "copied" : opt < 0 ? "failed, tried again next time" : "not needed", copied,
        failed, had_m ? " (messages done before)" : !me ? " (messages next time, no POL ID yet)" : "");
 }
-/* the account's own slot, or home84 when Provenance didn't send one (a manual run) */
+/* the account's own slot, or home84 when Provenance didn't send one (it's run out of slots) */
 static void home_pick(BYTE *b)
 {
     int slot = home_from_env();
@@ -2996,7 +2642,7 @@ static int send_built(void)
     return 0;
 }
 
-/* manual runs keep requests in %TEMP% where anything of the user's can write one, so sends are capped */
+/* sends are capped, so nothing (a stuck app included) can hammer the server with them */
 #define PACE_PER_MIN 40
 #define PACE_PER_HOUR 600
 enum { PACE_OK, PACE_MIN, PACE_HOUR, PACE_HELD, PACE_STOPPED };
@@ -5317,7 +4963,7 @@ static int gc_joined(BYTE *b);
 
 static int get_chr(BYTE *b, int i, BYTE *rec)
 {
-    void *get = g_svc_2c4 ? g_svc_2c4 : SVC(0x2c4);
+    void *get = SVC(0x2c4);
     memset(rec, 0, 0x68);
     return get && ((int (__cdecl *)(unsigned, void *))get)((unsigned)i, rec) == 0 && (rec[0] & 1);
 }
@@ -5901,7 +5547,7 @@ static void snapshot_social(BYTE *b)
         int slot = ((svc_v)SVC(0x2f8))();
         BYTE rec[0x28] = {0};
         if (slot < 0) slot = g_my_slot;
-        if (slot >= 0 && get_handle(b, slot, rec) == 0) {   /* unwrapped, the log budget's for FFXI's world login */
+        if (slot >= 0 && get_handle(b, slot, rec) == 0) {
             sjis_json(hn, sizeof hn, rec + 0x08, 0x0f);
             pic = *(unsigned *)(rec + 0x1c);
         }
@@ -5971,13 +5617,13 @@ static int play_signalled(void)
 {
     static WCHAR tbuf[256];
     static const WCHAR *t;
-    static int from_env, resolved, warned;
+    static int resolved, warned;
     char user[64], go[64];
     if (!resolved) {
-        t = cred_target("POL_CRED_PLAY", L"", tbuf, 256, &from_env);
+        t = cred_target("POL_CRED_PLAY", tbuf, 256);
         resolved = 1;
     }
-    if (!t || !from_env) return 0;
+    if (!t) return 0;
     int rc = cred_read(t, user, sizeof user, go, sizeof go);
     SecureZeroMemory(go, sizeof go);
     if (rc == PC_OK && strcmp(user, "play") == 0) {
@@ -6314,8 +5960,7 @@ static void pol_hold(BYTE *b)
                 return;
             }
         }
-        /* Only an admin can write the stop file in Provenance's folder, but in %TEMP% (manual runs) any user process
-           can, so tools can end an elevated pol.exe cleanly */
+        /* only an admin can write in Provenance's folder, so a stop file there really is Provenance asking */
         ipc_file(path, "stop");
         if (ctl && GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) {
             lg("hold: stop file seen - signing out and exiting\r\n");
@@ -6339,17 +5984,6 @@ static void pol_hold(BYTE *b)
         }
         Sleep(16);
     }
-}
-
-static DWORD WINAPI fx_hook_once(void *unused)
-{
-    (void)unused;
-    for (int i = 0; i < 1500 && !g_fx_iat_done; i++) {
-        BYTE *fx = (BYTE *)GetModuleHandleA("FFXiMain.dll");
-        if (fx) { patch_fx_sockets(fx); break; }
-        Sleep(200);
-    }
-    return 0;
 }
 
 #define GAME_START_EXIT 15
@@ -6522,13 +6156,9 @@ static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned
         set_cwd_ffxi();
         /* pol.exe 0x00406a10 destroys the hidden splash on the thread that made it */
         ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x6a10))();
-        if (getenv_set("POL_HOLD")) {
-            sweep_stale_social();
-            pol_hold((BYTE *)polcore_module());
-        }
+        pol_hold((BYTE *)polcore_module());
         lg("pol_hook: menu call 1 -> content code 1 (FFXiEntry)\r\n");
         g_game_started = 1;
-        CloseHandle(CreateThread(NULL, 0, fx_hook_once, NULL, 0, NULL));
         CloseHandle(CreateThread(NULL, 0, game_watch, NULL, 0, NULL));
         return 1;
     }
@@ -6597,6 +6227,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, void *r)
        first line, the app reads a reused pid's log from the last one on */
     GetSystemInfo(&si);
     lg("pol_hook: highest user address %08x\r\n", (unsigned)(ULONG_PTR)si.lpMaximumApplicationAddress);
+    env_check();
     owner_open();
     install();
     idn = GetEnvironmentVariableA("PROVENANCE_LAUNCH_ID", id, sizeof id);

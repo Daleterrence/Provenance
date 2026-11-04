@@ -10,7 +10,6 @@ public sealed class HookLogTranslator
 
     private readonly HashSet<string> _seen = new();
     private bool _ready;
-    private bool _inGame;
     private int _loadsDone;
 
     // polcore's sign-in state machine (the fractions only keep the bar moving, don't read much into them)
@@ -54,22 +53,8 @@ public sealed class HookLogTranslator
             _ready = true;
             return Once("held", "Connected", "Going online...", LaunchSteps.StartGame, 0.95);
         }
-        if (line.Contains("menu call 1"))
-        {
-            _ready = true;
-            return Once("boot", "Starting game", "Starting FINAL FANTASY XI...", LaunchSteps.StartGame, 0.95);
-        }
         if (line.Contains("phase_c: stop requested"))
             return Once("stop", "Stopped", "The login was cancelled, and PlayOnline has been closed.");
-        if (line.Contains("wireF connect") && line.Contains(":54001") && !_inGame)
-            return Once("lobby", "Lobby", "Connecting to the FINAL FANTASY XI lobby...");
-        if (line.Contains("wireF >>U "))
-        {
-            _inGame = true;
-            return Once("zone", "In game", "You're in the game.");
-        }
-        if (line.Contains("content exited"))
-            return Once("exited", "Stopped", "FINAL FANTASY XI has closed.");
         return null;
     }
 }

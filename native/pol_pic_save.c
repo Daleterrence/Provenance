@@ -1,5 +1,5 @@
 /* the viewer's profile pic save (app.dll CProfileCli): load my record, UPDATE z_ficon + z_utime, then SetHandle
-   locally. Only built inside pol_hook.c, which defines SVC, FS_LOG and FS_GETHANDLE_FN first */
+   locally. Only built inside pol_hook.c, which defines SVC and FS_LOG first */
 #pragma pack(push, 1)
 
 typedef struct pdb_field {
@@ -201,7 +201,7 @@ static pdb_schema *fs_load_pib(BYTE *b)
 static int fs_handle(BYTE *b, int slot, pol_handle *h)
 {
     memset(h, 0, sizeof *h);
-    return ((svc2b4_t)FS_GETHANDLE_FN)((unsigned)slot, h) >= 0 && (h->lo & 1);
+    return ((svc2b4_t)SVC(0x2b4))((unsigned)slot, h) >= 0 && (h->lo & 1);
 }
 
 static unsigned __int64 fs_hid(const pol_handle *h)

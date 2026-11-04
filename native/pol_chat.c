@@ -825,10 +825,10 @@ static int cr_password(const char *tok, char *key, int cap)
 {
     WCHAR tbuf[256];
     char user[64];
-    int from_env = 0, rc;
-    const WCHAR *t = cred_target("POL_CRED_CHAT", L"", tbuf, 256, &from_env);
+    int rc;
+    const WCHAR *t = cred_target("POL_CRED_CHAT", tbuf, 256);
     key[0] = 0;
-    if (!t || !from_env || !launch_target(t)) return 0;
+    if (!t || !launch_target(t)) return 0;
     rc = cred_read(t, user, sizeof user, key, cap);
     if (rc != PC_NOT_FOUND) CredDeleteW(t, CRED_TYPE_GENERIC, 0);
     if (rc == PC_OK && !lstrcmpA(user, tok)) return 1;
