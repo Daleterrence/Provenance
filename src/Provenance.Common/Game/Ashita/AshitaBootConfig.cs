@@ -4,13 +4,9 @@ namespace Provenance.Common.Game.Ashita;
 
 public readonly record struct AshitaPolPlugin(string Name, bool On);
 
-// Blank is the text values the file leaves out or empty, which Ashita hands the game as empty strings
-public sealed record AshitaGameValues(FfxiSettings Settings, IReadOnlySet<string> Own, IReadOnlySet<string> Blank);
-
 public sealed class AshitaBootConfig(AshitaIniFile ini)
 {
-    private const string Launcher = "ashita.launcher", Boot = "ashita.boot", Language = "ashita.language",
-                         PolPluginSection = "ashita.polplugins", Misc = "ashita.misc", Registry = "ffxi.registry";
+    private const string Launcher = "ashita.launcher", Boot = "ashita.boot", PolPluginSection = "ashita.polplugins", Registry = "ffxi.registry";
 
     // 0044 and 0045 aren't among the values Ashita fakes, so keep aspect and legacy settings stay registry only
     public static readonly IReadOnlyList<string> GameValues =
@@ -41,21 +37,8 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
     }
 
     public string? Name { get => Ini.Get(Launcher, "name"); set => SetText(Launcher, "name", value); }
-    public bool? AutoClose { get => Bool(Launcher, "autoclose"); set => SetBool(Launcher, "autoclose", value); }
-
-    public string? LaunchFile { get => Ini.Get(Boot, "file"); set => SetText(Boot, "file", value); }
-    public string? Command { get => Ini.Get(Boot, "command"); set => SetText(Boot, "command", value); }
-    public string? GameModule { get => Ini.Get(Boot, "gamemodule"); set => SetText(Boot, "gamemodule", value); }
     public string? Script { get => Ini.Get(Boot, "script"); set => SetText(Boot, "script", value); }
     public string? ScriptArgs { get => Ini.Get(Boot, "args"); set => SetText(Boot, "args", value); }
-
-    // 0 and 2 English, 1 Japanese, 3 European
-    public int? PlayOnlineLanguage { get => Int(Language, "playonline"); set => SetInt(Language, "playonline", value); }
-    public int? AshitaLanguage { get => Int(Language, "ashita"); set => SetInt(Language, "ashita", value); }
-
-    public bool? AddonsSilent { get => Bool(Misc, "addons.silent"); set => SetBool(Misc, "addons.silent", value); }
-    public bool? AliasesSilent { get => Bool(Misc, "aliases.silent"); set => SetBool(Misc, "aliases.silent", value); }
-    public bool? PluginsSilent { get => Bool(Misc, "plugins.silent"); set => SetBool(Misc, "plugins.silent", value); }
 
     // Ashita.dll only loads one whose value is exactly 1
     public IReadOnlyList<AshitaPolPlugin> PolPlugins =>
@@ -63,23 +46,12 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
            .DistinctBy(e => e.Key, StringComparer.OrdinalIgnoreCase)
            .Select(e => new AshitaPolPlugin(e.Key, Ini.Get(PolPluginSection, e.Key) == "1")).ToList();
 
-    public void SetPolPlugin(string name, bool on)
-    {
-        CheckPolPlugin(name);
-        Ini.Set(PolPluginSection, name, on ? "1" : "0");
-    }
-
-    public bool RemovePolPlugin(string name)
-    {
-        CheckPolPlugin(name);
-        return Ini.Remove(PolPluginSection, name) > 0;
-    }
-
     // it ends up as polplugins\<name>.dll
-    private static void CheckPolPlugin(string name)
+    public void SetPolPlugin(string name, bool on)
     {
         if (name.Length == 0 || name[0] == '.' || name.Contains("..") || !name.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.'))
             throw Shown.Mark(new ArgumentException($"Ashita can't load a PlayOnline plugin called \"{name}\"."));
+        Ini.Set(PolPluginSection, name, on ? "1" : "0");
     }
 
     private static int InRange(string name, int v) => name switch
@@ -94,28 +66,20 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
 
     private static float InRange(float brightness) => float.IsFinite(brightness) ? Math.Clamp(brightness, -1f, 1f) : 0f;
 
-    public AshitaGameValues ReadGame(FfxiSettings windows)
+    public FfxiSettings ReadGame(FfxiSettings windows)
     {
         var s = windows.Clone();
-        var own = new HashSet<string>();
-        var blank = new HashSet<string>();
         void ReadInt(string name, Action<int> apply)
         {
             var v = Ini.Get(Registry, name);
-            if (v is null || ToInt(v) == -1) return;
-            apply(InRange(name, ToInt(v)));
-            own.Add(name);
+            if (v is not null && ToInt(v) != -1) apply(InRange(name, ToInt(v)));
         }
-        // the registry's when it starts -1, but "-1,..." is a pad value like any other
-        void ReadText(string name, Action<string>? apply)
+        // the registry's when it starts -1, but "-1,..." is a pad value like any other. An empty one shows the registry's
+        // too, Warnings flags it
+        void ReadText(string name, Action<string> apply)
         {
             var v = Ini.Get(Registry, name);
-            if (string.IsNullOrEmpty(v)) blank.Add(name);
-            else if (!v.StartsWith("-1", StringComparison.Ordinal) || v.StartsWith("-1,", StringComparison.Ordinal))
-            {
-                apply?.Invoke(v);
-                own.Add(name);
-            }
+            if (!string.IsNullOrEmpty(v) && (!v.StartsWith("-1", StringComparison.Ordinal) || v.StartsWith("-1,", StringComparison.Ordinal))) apply(v);
         }
         // a mip level 0-6 here, not FfxiSettings' on/off
         ReadInt("0000", v => s.DrawDistanceMip = v);
@@ -142,8 +106,7 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
         ReadInt("0043", v => s.FullResScreenshots = v);
         ReadText("0042", v => s.ScreenshotFolder = v);
         ReadText("padmode000", v => s.PadMode = Pad(v, windows.PadMode));
-        foreach (var n in TextValues.Except(["0042", "padmode000"])) ReadText(n, null);
-        return new AshitaGameValues(s, own, blank);
+        return s;
     }
 
     private static int[] Pad(string v, int[] fallback)
@@ -196,43 +159,29 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
         else Ini.Set(section, key, value);
     }
 
-    private int? Int(string section, string key) => Ini.Get(section, key) is { } v ? ToInt(v) : null;
-
-    private bool? Bool(string section, string key) => Ini.Get(section, key) is { } v ? ToBool(v) : null;
-
     // a value that already reads as this number keeps its own text, so nothing changes that doesn't have to
-    private void SetInt(string section, string key, int? value)
+    private void SetInt(string section, string key, int value)
     {
         var old = Ini.Get(section, key);
-        SetText(section, key, value is not { } n ? null : old is not null && ToInt(old) == n ? old : n.ToString(CultureInfo.InvariantCulture));
-    }
-
-    private void SetBool(string section, string key, bool? value)
-    {
-        var old = Ini.Get(section, key);
-        SetText(section, key, value is not { } b ? null : old is not null && ToBool(old) == b ? old : b ? "1" : "0");
+        SetText(section, key, old is not null && ToInt(old) == value ? old : value.ToString(CultureInfo.InvariantCulture));
     }
 
     // strtoll(v, 0, 0) cut to 32 bits like Ashita.dll, so 010 is 8 (because of course it is) and "" is 0
-    public static int ToInt(string v) => unchecked((int)Number(v, true));
+    public static int ToInt(string v) => unchecked((int)Number(v));
 
-    public static bool ToBool(string v) =>
-        v.Equals("true", StringComparison.OrdinalIgnoreCase)
-        || (!v.Equals("false", StringComparison.OrdinalIgnoreCase) && Math.Clamp(Number(v, false), int.MinValue, int.MaxValue) > 0);
-
-    private static long Number(string v, bool anyBase)
+    private static long Number(string v)
     {
         int i = 0;
         while (i < v.Length && v[i] is ' ' or '\t' or '\r' or '\n' or '\v' or '\f') i++;
         bool negative = false;
         if (i < v.Length && v[i] is '+' or '-') negative = v[i++] == '-';
         int radix = 10;
-        if (anyBase && i + 2 < v.Length && v[i] == '0' && v[i + 1] is 'x' or 'X' && char.IsAsciiHexDigit(v[i + 2]))
+        if (i + 2 < v.Length && v[i] == '0' && v[i + 1] is 'x' or 'X' && char.IsAsciiHexDigit(v[i + 2]))
         {
             radix = 16;
             i += 2;
         }
-        else if (anyBase && i < v.Length && v[i] == '0') radix = 8;
+        else if (i < v.Length && v[i] == '0') radix = 8;
         ulong n = 0;
         bool over = false;
         for (; i < v.Length; i++)

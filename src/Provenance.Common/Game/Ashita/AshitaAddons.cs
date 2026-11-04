@@ -4,8 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace Provenance.Common.Game.Ashita;
 
-public sealed record AshitaAddon(string LoadName, string Folder, string Name, string? Author, string? Version, string? Description,
-                                 string? Link, bool NotForAshitaV4);
+public sealed record AshitaAddon(string LoadName, string Folder, string Name, string? Author, string? Version, string? Description, bool NotForAshitaV4);
 
 public static partial class AshitaAddons
 {
@@ -57,7 +56,7 @@ public static partial class AshitaAddons
         }
         catch (RegexMatchTimeoutException) { }
         return new AshitaAddon(name, dir, fields.GetValueOrDefault("name") ?? name, fields.GetValueOrDefault("author"),
-                               fields.GetValueOrDefault("version"), fields.GetValueOrDefault("desc"), fields.GetValueOrDefault("link"), foreign);
+                               fields.GetValueOrDefault("version"), fields.GetValueOrDefault("desc"), foreign);
     }
 
     private static Dictionary<string, string> Locals(string text)
@@ -83,7 +82,7 @@ public static partial class AshitaAddons
         return t.Length == 0 ? null : t;
     }
 
-    [GeneratedRegex(@"^[ \t]*addon\.(?<key>name|author|version|desc|link)[ \t]*=[ \t]*(?:(['""])(?<value>(?:\\.|(?!\1)[^\\\r\n])*)\1|(?<local>[A-Za-z_][A-Za-z0-9_]*)(?=[ \t]*(?:;|--|\r|$)))",
+    [GeneratedRegex(@"^[ \t]*addon\.(?<key>name|author|version|desc)[ \t]*=[ \t]*(?:(['""])(?<value>(?:\\.|(?!\1)[^\\\r\n])*)\1|(?<local>[A-Za-z_][A-Za-z0-9_]*)(?=[ \t]*(?:;|--|\r|$)))",
                     RegexOptions.Multiline, 1000)]
     private static partial Regex Field();
 

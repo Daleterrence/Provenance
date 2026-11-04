@@ -3983,9 +3983,7 @@ static void profile_build(BYTE *b)
         pdb_item *a2 = pdb_get(b, s, aa[k], g_prof_rec);
         if (a2 && a2->v.bytes.p && *(BYTE *)a2->v.bytes.p) set = 1;
     }
-    if (!set || !SVC(0x1200)) {
-        PJ(",\"awayResult\":0");
-    } else {
+    if (set && SVC(0x1200)) {
         memset(t, 0, sizeof t);
         memset(f, 0, sizeof f);
         r = ((int (__cdecl *)(void *, void *, void *, int, char *, int, char *, int))SVC(0x1200))(
@@ -3997,7 +3995,7 @@ static void profile_build(BYTE *b)
             PS(js);
             pol_json(b, f, 0x600, js, sizeof js);
             PJ(",\"awayFrom\":%s", js);
-        } else PJ(",\"awayResult\":%d", r);
+        }
     }
 #undef PJ
 #undef PS
@@ -4487,7 +4485,7 @@ static int me_chars_json(BYTE *b, char *out, int cap)
     char k[25], nm[64];
     const char *from;
     int n = me_chars(b, ch, &from), o, i, j;
-    o = wsprintfA(out, ",\"charactersFrom\":\"%s\",\"characters\":[", from);
+    o = wsprintfA(out, ",\"characters\":[");
     for (i = 0; i < n && o < cap - 200; i++) {
         lstrcpyA(nm, "\"\"");
         for (j = 0; j < 64; j++)
@@ -5744,7 +5742,7 @@ static void snapshot_social(BYTE *b)
     char gn[96], mt[96], mc[0x33 * 3 + 8], cu[0x33 * 3 + 1], u8[0x33 * 3 + 1], js[0x33 * 6 + 8], hn[64] = "\"\"", hk[17];
     WCHAR wc[0x34];
     DWORD n, ids[8];
-    int i, k, ng, st, first = 1, groups = 0, held = 0;
+    int i, k, ng, st, first = 1, held = 0;
     unsigned pic = 0;
     unsigned __int64 me;
     const char *name;
@@ -5756,14 +5754,10 @@ static void snapshot_social(BYTE *b)
     lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
     HANDLE h = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) return;
-    if (SVC(0x604)) groups = ((svc_v)SVC(0x604))();
-    wr(h, "{\"groups\":");
-    wsprintfA(line, "%d", groups);
-    wr(h, line);
-    wsprintfA(line, ",\"ffxiService\":\"%s\",\"notice\":%u,\"noticeDays\":%u,\"presence\":\"%s\",\"play\":\"%s\","
+    wsprintfA(line, "{\"ffxiService\":\"%s\",\"notice\":%u,\"noticeDays\":%u,\"presence\":\"%s\","
                     "\"friendsLoaded\":%s,\"groupsLoaded\":%s,\"mail\":\"%s\",\"statusBusy\":%s,\"badPassword\":%s",
               g_ffxi_service == 1 ? "active" : g_ffxi_service == 0 ? "none" : "unknown", g_notice, g_notice_days,
-              g_presence, g_play_state, g_friends_loaded ? "true" : "false", g_groups_loaded ? "true" : "false",
+              g_presence, g_friends_loaded ? "true" : "false", g_groups_loaded ? "true" : "false",
               g_mail_state, (g_status_job >= 0 || g_status_want >= 0) ? "true" : "false",
               g_bad_password ? "true" : "false");
     wr(h, line);
@@ -5847,10 +5841,8 @@ static void snapshot_social(BYTE *b)
         for (int g = 0, gfirst = 1; g < ng && g < 4; g++) {
             if (!get_group(b, ids[2 * g], ids[2 * g + 1], &gh)) continue;
             sjis_json(gn, sizeof gn, (const BYTE *)gh.name, 0x14);
-            wsprintfA(one, "%s{\"id\":\"%08x%08x\",\"name\":%s,\"myClass\":%u,\"mySlot\":%u,\"myStatus\":%u,"
-                           "\"myIndex\":%u,\"members\":[",
-                      gfirst ? "" : ",", gh.idHi, gh.idLo, gn, (gh.flags >> 1) & 7, (gh.flags >> 4) & 0x3f,
-                      (gh.flags >> 10) & 7, gh.myIndex);
+            wsprintfA(one, "%s{\"id\":\"%08x%08x\",\"name\":%s,\"myClass\":%u,\"myStatus\":%u,\"members\":[",
+                      gfirst ? "" : ",", gh.idHi, gh.idLo, gn, (gh.flags >> 1) & 7, (gh.flags >> 10) & 7);
             wr(h, one);
             gfirst = 0;
             for (int mi = 0, mfirst = 1; mi < 64; mi++) {
@@ -5943,13 +5935,11 @@ static void snapshot_social(BYTE *b)
         if (friend_ffxi(a, &cs, &cl, &chi))
             wsprintfA(gm, ",\"game\":{\"world\":%u,\"ctsid\":%u,\"ctidLow\":%u,\"ctidHigh\":%u}", (cs >> 16) & 0xff,
                       cs, cl, chi);
-        /* location = A+0x0c bits 1-10 (1000/1001 = in the viewer or chat, where real-time messages reach) */
         wsprintfA(line, "%s{\"row\":%d,\"key\":\"%s\",\"name\":%s,\"comment\":%s,\"status\":\"%s\",\"online\":%s,"
-                        "\"pending\":%s,\"idLow\":%u,\"idHigh\":%u,\"pic\":%u,\"location\":%u,\"a08\":%u,\"me\":%s%s}",
+                        "\"pending\":%s,\"pic\":%u,\"me\":%s%s}",
                   first ? "" : ",", i, sk, nm, cm, friend_status(fa),
-                  friend_online(fa) ? "true" : "false", (fa & 0x10000000) ? "true" : "false", idLo, idHi,
-                  *(unsigned *)(bn + 0x00), (*(unsigned *)(a + 0x0c) >> 1) & 0x3ff, fa,
-                  is_me(b, idLo, idHi) ? "true" : "false", gm);
+                  friend_online(fa) ? "true" : "false", (fa & 0x10000000) ? "true" : "false",
+                  *(unsigned *)(bn + 0x00), is_me(b, idLo, idHi) ? "true" : "false", gm);
         wr(h, line);
         first = 0;
     }
@@ -6313,7 +6303,6 @@ static void pol_hold(BYTE *b)
                 if (lstrcmpA(g_play_state, no) != 0) {
                     lstrcpyA(g_play_state, no);
                     lg("hold: Play %s\r\n", no);
-                    g_snap_dirty = 1;
                 }
             } else {
                 lg("hold: Play signalled - finishing PlayOnline writes, then booting FFXI\r\n");

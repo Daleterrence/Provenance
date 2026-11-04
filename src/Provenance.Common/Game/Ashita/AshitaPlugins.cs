@@ -5,7 +5,7 @@ namespace Provenance.Common.Game.Ashita;
 public enum AshitaPluginKind { Plugin, PolPlugin }
 
 public sealed record AshitaPlugin(string LoadName, string Dll, AshitaPluginKind Kind, string Name, string? Author, string? Description,
-                                  string? Link, double? Version, double? InterfaceVersion, bool ForOtherAshita)
+                                  double? Version, double? InterfaceVersion, bool ForOtherAshita)
 {
     // the getters hand back float constants widened to double (4.0999...), Ashita prints them with %.2f
     public string? VersionText => Version?.ToString("0.00", CultureInfo.InvariantCulture);
@@ -82,6 +82,6 @@ public static class AshitaPlugins
         double? iface = exports.TryGetValue("expGetInterfaceVersion", out var rva) ? pe.ExportedDouble(rva) : null;
         var meta = pe.Vtable();
         return new AshitaPlugin(loadName, dll, kind, AshitaAddons.Clean(meta?.Name) ?? loadName, AshitaAddons.Clean(meta?.Author),
-                                AshitaAddons.Clean(meta?.Description), AshitaAddons.Clean(meta?.Link), meta?.Version, iface, iface is { } i && i != core);
+                                AshitaAddons.Clean(meta?.Description), meta?.Version, iface, iface is { } i && i != core);
     }
 }

@@ -66,7 +66,6 @@ public sealed class AshitaIniFile
 
     public bool IsUtf16 { get; }
     public bool Changed { get; private set; }
-    public int CodePage => ansi.CodePage;
 
     [DllImport("kernel32.dll")]
     private static extern int GetACP();
@@ -351,28 +350,10 @@ public sealed class AshitaIniFile
         }
     }
 
-    // the values, so lowercasing "Command=" doesn't look like a token being taken out
     private HashSet<string> Secrets() =>
         LinesIn(null).Where(i => KeyOf(lines[i].Text) is { } k && Same(k.Key, "command"))
                      .Concat(LinesIn("ashita.polplugins.args"))
                      .Select(i => KeyOf(lines[i].Text)?.Value).OfType<string>().Where(v => v.Length > 0).ToHashSet();
-
-    public int LowercaseNames()
-    {
-        var p = Scan();
-        int n = 0;
-        string? section = null;
-        for (int i = 0; i < p.Length; i++)
-        {
-            if (p[i].Kind == Kind.Section) section = p[i].Name;
-            if (!NeedsLowercase(p[i], section)) continue;
-            var text = lines[i].Text;
-            int at = text.IndexOf(p[i].Name, p[i].Kind == Kind.Section ? text.IndexOf('[') : 0, StringComparison.Ordinal);
-            Replace(i, text[..at] + p[i].Name.ToLowerInvariant() + text[(at + p[i].Name.Length)..]);
-            n++;
-        }
-        return n;
-    }
 
     // Ashita.dll looks names up by their exact bytes, so it never sees [Ashita.Boot]. Plugins' sections and polplugin
     // names aren't its to look up

@@ -11,10 +11,7 @@ public sealed record WindowerAddonInfo
     public required string DisplayName { get; init; }
     public string? Author { get; init; }
     public string? Version { get; init; }
-    public IReadOnlyList<string> Commands { get; init; } = [];
     public string? Description { get; init; }
-    public string? BugTracker { get; init; }
-    public string? Support { get; init; }
     public required string MainFile { get; init; }
 }
 
@@ -51,8 +48,7 @@ public static partial class WindowerAddons
             list.Add(new WindowerAddonInfo
             {
                 Name = name, DisplayName = h.Name ?? name, Author = h.Author ?? Blank(x?.Author), Version = h.Version,
-                Commands = h.Commands, Description = x?.Description, BugTracker = x?.BugTracker, Support = x?.Support,
-                MainFile = main,
+                Description = x?.Description, MainFile = main,
             });
         }
         return list.OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
@@ -70,15 +66,13 @@ public static partial class WindowerAddons
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return ""; }
     }
 
-    public sealed record Header(string? Name, string? Author, string? Version, IReadOnlyList<string> Commands);
+    public sealed record Header(string? Name, string? Author, string? Version);
 
-    // regexes, not a Lua parser. First assignment not behind a -- wins, and commands only count when they're all strings
+    // regexes, not a Lua parser. First assignment not behind a -- wins
     public static Header ReadHeader(string lua)
     {
         if (lua.Length > MaxRead) lua = lua[..MaxRead];
         string? name = null, author = null, version = null;
-        var commands = new List<string>();
-        bool commandsSeen = false, commandSeen = false;
         try
         {
             foreach (Match m in Field().Matches(lua))
@@ -91,17 +85,11 @@ public static partial class WindowerAddons
                     case "name": name ??= Text(value); break;
                     case "author": author ??= Text(value); break;
                     case "version": version ??= Text(value) ?? (Number().IsMatch(value) ? value : null); break;
-                    case "commands" when !commandsSeen:
-                    case "command" when !commandSeen:
-                        if (key == "commands") commandsSeen = true; else commandSeen = true;
-                        foreach (var c in Strings(value))
-                            if (!commands.Contains(c, StringComparer.OrdinalIgnoreCase)) commands.Add(c);
-                        break;
                 }
             }
         }
         catch (RegexMatchTimeoutException) { }
-        return new Header(Blank(name), Blank(author), Blank(version), commands);
+        return new Header(Blank(name), Blank(author), Blank(version));
     }
 
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -114,43 +102,23 @@ public static partial class WindowerAddons
 
     private static string? Text(string value) => StringLiteral().Match(value) is { Success: true, Index: 0 } m && m.Length == value.Length ? Unquote(m) : null;
 
-    private static IReadOnlyList<string> Strings(string value)
-    {
-        if (Text(value) is { } single) return [single];
-        var table = Table().Match(value);
-        if (!table.Success) return [];
-        var items = new List<string>();
-        var rest = table.Groups["t"].Value;
-        int at = 0;
-        foreach (Match m in StringLiteral().Matches(rest))
-        {
-            if (rest[at..m.Index].Trim().Trim(',', ';').Trim().Length > 0) return [];
-            items.Add(Unquote(m));
-            at = m.Index + m.Length;
-        }
-        return rest[at..].Trim().Trim(',', ';').Trim().Length > 0 ? [] : items.Where(s => s.Length > 0).ToList();
-    }
-
     private static string Unquote(Match m) =>
         m.Groups["long"].Success ? m.Groups["long"].Value
             : Regex.Replace(m.Groups["s"].Value, @"\\(.)", e => e.Groups[1].Value switch { "n" => "\n", "t" => "\t", var c => c }, RegexOptions.None, TimeSpan.FromMilliseconds(RegexMs));
 
     // every value has a length cap, so a file full of unclosed quotes or [[ can't make this quadratic
-    [GeneratedRegex(@"(?<![\w.])_addon\s*\.\s*(?<k>name|author|version|commands|command)\s*=\s*(?<v>'(?:\\.|[^'\\\r\n]){0,256}'|""(?:\\.|[^""\\\r\n]){0,256}""|\[(=*)\[[^\r\n]{0,256}?\]\1\]|\{[^{}]{0,1024}\}|[0-9][0-9.]{0,31})", RegexOptions.None, RegexMs)]
+    [GeneratedRegex(@"(?<![\w.])_addon\s*\.\s*(?<k>name|author|version)\s*=\s*(?<v>'(?:\\.|[^'\\\r\n]){0,256}'|""(?:\\.|[^""\\\r\n]){0,256}""|\[(=*)\[[^\r\n]{0,256}?\]\1\]|[0-9][0-9.]{0,31})", RegexOptions.None, RegexMs)]
     private static partial Regex Field();
 
     [GeneratedRegex(@"'(?<s>(?:\\.|[^'\\\r\n]){0,256})'|""(?<s>(?:\\.|[^""\\\r\n]){0,256})""|\[(?<eq>=*)\[(?<long>[^\r\n]{0,256}?)\]\k<eq>\]", RegexOptions.None, RegexMs)]
     private static partial Regex StringLiteral();
 
-    [GeneratedRegex(@"^\{(?<t>[^{}]*)\}$", RegexOptions.None, RegexMs)]
-    private static partial Regex Table();
-
     [GeneratedRegex(@"^[0-9][0-9.]*$", RegexOptions.None, RegexMs)]
     private static partial Regex Number();
 
-    private sealed record Listed(string Author, string? Description, string BugTracker, string Support);
+    private sealed record Listed(string Author, string? Description);
 
-    // updates\addons.xml, out of the Lua repo. First entry for a name wins, with Windower's own default links
+    // updates\addons.xml, out of the Lua repo. First entry for a name wins
     private static Dictionary<string, Listed> ReadAddonsXml(string windowerDir)
     {
         var map = new Dictionary<string, Listed>(StringComparer.OrdinalIgnoreCase);
@@ -165,11 +133,7 @@ public static partial class WindowerAddons
                 var name = ((string?)a.Element("name"))?.Trim();
                 if (string.IsNullOrEmpty(name) || map.ContainsKey(name)) continue;
                 var desc = (string?)a.Element("description");
-                map[name] = new Listed(
-                    ((string?)a.Element("author"))?.Trim() ?? "",
-                    desc is null ? null : Spaces().Replace(desc, " ").Trim(),
-                    ((string?)a.Element("bugtracker"))?.Trim() ?? "https://github.com/Windower/Lua/issues",
-                    ((string?)a.Element("support"))?.Trim() ?? "https://discord.gg/aUrHCvk");
+                map[name] = new Listed(((string?)a.Element("author"))?.Trim() ?? "", desc is null ? null : Spaces().Replace(desc, " ").Trim());
             }
         }
         catch (Exception e) when (e is XmlException or IOException or UnauthorizedAccessException) { }

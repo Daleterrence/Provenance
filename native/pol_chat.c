@@ -16,7 +16,7 @@
 typedef struct { char text[0x200]; char chan[0x40]; DWORD lo, hi; int whisper; } cr_raw;
 typedef struct { DWORD lo, hi; int key, member, away, master, answered; WCHAR name[0x21]; } cr_person;
 typedef struct { DWORD seq, time; int kind, me, from, colour, emote; WCHAR name[0x21]; WCHAR text[0x201]; } cr_line;
-typedef struct { char irc[64]; char topic[80]; int official, locked; DWORD people, capa, ctime; WORD cate[3]; } cr_room;
+typedef struct { char irc[64]; char topic[80]; int locked; DWORD people, capa, ctime; WORD cate[3]; } cr_room;
 typedef struct { BYTE order, field; WORD pad; void *next; } cr_sort;
 
 enum { CRK_SAY, CRK_ENTERED, CRK_LEFT, CRK_AWAY, CRK_BACK, CRK_MASTER, CRK_KICKED, CRK_WHISPER };
@@ -1253,7 +1253,6 @@ static void cr_parse_rooms(BYTE *b)
         lstrcpynA(r->irc + 5, idx, sizeof r->irc - 5);
         if (!cr_irc_ok(r->irc)) continue;
         cr_str(b, g_cr_rpib, "z_topic", pr, r->topic, 74);
-        r->official = kind != 'U';
         r->locked = cr_u(b, g_cr_rpib, "z_chlock", pr, 1) != 0;
         r->people = cr_u(b, g_cr_rpib, "z_npers", pr, 0);
         r->capa = cr_u(b, g_cr_rpib, "z_capa", pr, 0);
@@ -1559,9 +1558,9 @@ static void chat_snapshot(BYTE *b, HANDLE h)
         const cr_room *r = &g_cr_rooms[i];
         json_str(tk, sizeof tk, r->irc);
         pol_json(b, r->topic, 0x100, js, sizeof js);
-        wsprintfA(line, "%s{\"irc\":%s,\"name\":%s,\"official\":%s,\"locked\":%s,\"people\":%lu,\"capacity\":%lu,"
+        wsprintfA(line, "%s{\"irc\":%s,\"name\":%s,\"locked\":%s,\"people\":%lu,\"capacity\":%lu,"
                         "\"categories\":[%u,%u,%u],\"created\":%lu}",
-                  i ? "," : "", tk, js, r->official ? "true" : "false", r->locked ? "true" : "false", r->people, r->capa,
+                  i ? "," : "", tk, js, r->locked ? "true" : "false", r->people, r->capa,
                   r->cate[0], r->cate[1], r->cate[2], r->ctime);
         wr(h, line);
     }

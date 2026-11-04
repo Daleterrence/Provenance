@@ -30,8 +30,7 @@ public static class PolStatusText
 }
 
 public sealed record PolFriend(string Name, string Comment, PolStatus Status,
-                               bool Online, bool Pending, uint IdLow, uint IdHigh, int Row = -1,
-                               int ProfilePictureId = -1, int Location = 0, string Key = "")
+                               bool Online, bool Pending, int Row = -1, int ProfilePictureId = -1, string Key = "")
 {
     public bool HasComment => !string.IsNullOrWhiteSpace(Comment);
     public string StatusLabel => PolStatusText.Label(Status);
@@ -103,8 +102,7 @@ public sealed record PolGroupMember(int Index, string Name, string Key, int Prof
     public bool InChat { get; init; }
 }
 
-public sealed record PolGroup(string Id, string Name, int MyClass, int MySlot, int MyStatus, int MyIndex,
-                              IReadOnlyList<PolGroupMember> Members);
+public sealed record PolGroup(string Id, string Name, int MyClass, int MyStatus, IReadOnlyList<PolGroupMember> Members);
 
 // Name is the character's for a character search, Handle is always the handle's
 public sealed record PolSearchHit(int Index, string Name, int ProfilePictureId, string Key, bool IsFriend)
@@ -199,7 +197,7 @@ public sealed record PolSentLine(string To, string ToKey, int ToSlot, long Time,
 
 // pol_hook.<pid>.social.json, rewritten every couple of secs. FfxiService is the Content ID check ("active", "none",
 // "unknown"), Notice the account notice status (221..252 = LM-01..LM-32)
-public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string MyHandle, int MyProfilePictureId,
+public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int MyProfilePictureId,
                                        IReadOnlyList<PolFriend> Friends, IReadOnlyList<PolMessage> Messages,
                                        string FfxiService = "unknown", int Notice = 0,
                                        string SendToken = "", string SendState = "", string Presence = "")
@@ -212,7 +210,6 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public int NoticeDays { get; init; }
     // viewer message 0x7007
     public bool BadPassword { get; init; }
-    public string Play { get; init; } = "";   // "refused:..." when the hook's gate stopped a Play
     // chat lines, answers and group invites share the send slots, so a result can get bumped between snapshots. Time and
     // Seq are the sent message's header ones, 0 when nothing went
     public IReadOnlyList<(string Token, string State, long Time, long Seq)> SendResults { get; init; } = [];
@@ -285,7 +282,7 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, int Groups, string My
     public ChatRoomsSnapshot? Chat { get; init; }
     public GroupChatSnapshot? GroupChat { get; init; }
 
-    public static readonly PolSocialSnapshot Empty = new(PolStatus.AppearOffline, 0, "", -1, [], []);
+    public static readonly PolSocialSnapshot Empty = new(PolStatus.AppearOffline, "", -1, [], []);
 }
 
 // the hook's per-session files. Requests get written whole (temp file then move) so the hook never sees half of one
@@ -508,8 +505,7 @@ public static class SocialSnapshot
             var root = doc.RootElement;
             var friends = Arr(root, "friends", f => new PolFriend(Str(f, "name"),
                 Str(f, "comment"), PolStatusText.Parse(Str(f, "status")), Bool(f, "online"), Bool(f, "pending"),
-                UInt(f, "idLow"), UInt(f, "idHigh"), Int(f, "row", -1), Int(f, "pic", -1), (int)Long(f, "location"),
-                Str(f, "key")) { IsMe = Bool(f, "me"), Game = ReadGame(Obj(f, "game")) });
+                Int(f, "row", -1), Int(f, "pic", -1), Str(f, "key")) { IsMe = Bool(f, "me"), Game = ReadGame(Obj(f, "game")) });
             var messages = Arr(root, "messages", ReadMessage);
             var (sendToken, sendState) = Job(root, "send");
             var (editToken, editState) = Job(root, "edit");
@@ -526,7 +522,7 @@ public static class SocialSnapshot
             var (ffxiToken, ffxiState) = Job(root, "ffxiprofile");
             var (handleToken, handleState) = Job(root, "handleJob");
             var ffxi = Str(root, "ffxiService");
-            return new PolSocialSnapshot(PolStatusText.Parse(Str(root, "myStatus")), Int(root, "groups", 0),
+            return new PolSocialSnapshot(PolStatusText.Parse(Str(root, "myStatus")),
                                          Str(root, "myHandle"), Int(root, "myPic", -1), friends, messages,
                                          ffxi.Length > 0 ? ffxi : "unknown", (int)Long(root, "notice"),
                                          sendToken, sendState, Str(root, "presence"))
@@ -537,7 +533,6 @@ public static class SocialSnapshot
                 StatusBusy = Bool(root, "statusBusy"),
                 NoticeDays = Int(root, "noticeDays", 0),
                 BadPassword = Bool(root, "badPassword"),
-                Play = Str(root, "play"),
                 SendResults = Arr(root, "sends", s => (Str(s, "token"), Str(s, "state"), Long(s, "time"), Long(s, "seq"))),
                 SentFrom = Arr(root, "sends", s => (Str(s, "token"), Int(s, "fromSlot", -1), Bool(s, "toOther")))
                            .Where(x => x.Item2 >= 0).ToList(),
@@ -637,8 +632,7 @@ public static class SocialSnapshot
     }
 
     private static PolGroup ReadGroup(JsonElement g) =>
-        new(Str(g, "id"), Str(g, "name"), (int)Long(g, "myClass"), (int)Long(g, "mySlot"), (int)Long(g, "myStatus"),
-            (int)Long(g, "myIndex"),
+        new(Str(g, "id"), Str(g, "name"), (int)Long(g, "myClass"), (int)Long(g, "myStatus"),
             Arr(g, "members", m => new PolGroupMember((int)Long(m, "index"), Str(m, "name"), Str(m, "key"),
                 (int)Long(m, "pic"), (int)Long(m, "class"), (int)Long(m, "status"), Bool(m, "me"),
                 Bool(m, "ignored"), Str(m, "text"), Str(m, "comment"))

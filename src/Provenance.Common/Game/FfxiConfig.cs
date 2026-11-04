@@ -90,26 +90,14 @@ public static class FfxiConfig
         _ => @"SOFTWARE\PlayOnlineUS\SquareEnix\FinalFantasyXI",
     };
 
-    private static RegistryKey? Open(PolRegion region, bool write)
+    public static RegistryKey? Open(PolRegion region, bool write)
     {
-        var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
+        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
         return write ? hklm.CreateSubKey(KeyPath(region), writable: true) : hklm.OpenSubKey(KeyPath(region));
     }
 
     private static RegistryKey OpenForWrite(PolRegion region) =>
         Open(region, true) ?? throw Shown.Mark(new InvalidOperationException("Provenance couldn't open the FINAL FANTASY XI settings."));
-
-    public static bool Exists(PolRegion region)
-    {
-        using var k = Open(region, false);
-        return k != null;
-    }
-
-    public static FfxiSettings Load(PolRegion region)
-    {
-        using var k = Open(region, false);
-        return k == null ? FfxiSettings.Defaults() : LoadFrom(k);
-    }
 
     public static FfxiSettings LoadFrom(RegistryKey k)
     {
@@ -245,12 +233,6 @@ public static class FfxiConfig
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool EnumDisplaySettingsW(string? deviceName, int modeNum, ref DevMode devMode);
-
-    public static int Save(PolRegion region, FfxiSettings s, FfxiSettings original)
-    {
-        using var k = OpenForWrite(region);
-        return SaveTo(k, s, original);
-    }
 
     public static int SaveTo(RegistryKey k, FfxiSettings s, FfxiSettings original)
     {

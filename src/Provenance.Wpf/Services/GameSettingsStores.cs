@@ -120,13 +120,7 @@ public sealed class RegistryGameStore(PolRegion? region, Func<bool, RegistryKey?
     public bool SameShapeRenderSizes => false;
     public bool ReadOnly => false;
 
-    private RegistryKey? Open(bool write)
-    {
-        if (openKey is not null) return openKey(write);
-        if (region is not { } r) return null;
-        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
-        return write ? hklm.CreateSubKey(FfxiConfig.KeyPath(r), writable: true) : hklm.OpenSubKey(FfxiConfig.KeyPath(r));
-    }
+    private RegistryKey? Open(bool write) => openKey is not null ? openKey(write) : region is { } r ? FfxiConfig.Open(r, write) : null;
 
     // the game makes its settings on its first start
     public GameStoreLoad Load()
@@ -276,7 +270,7 @@ public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryG
     {
         var windows = registry.Load().Settings;
         var cfg = AshitaBootConfig.Load(PathOf());
-        return new(cfg.ReadGame(windows).Settings, GameFields.Ashita);
+        return new(cfg.ReadGame(windows), GameFields.Ashita);
     }
 
     // every value goes in, so nothing's left to a registry the game may never see (sandbox empties it)

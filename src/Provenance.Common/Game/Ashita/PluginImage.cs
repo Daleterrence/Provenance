@@ -89,7 +89,7 @@ internal sealed class PluginImage
 
     // four string getters then a double getter (IPluginBase's GetName, GetAuthor, GetDescription, GetLink, GetVersion)
     // is a plugin's vtable, bar the SDK's own base classes. Bit hacky, but nothing gets loaded
-    public (string Name, string Author, string Description, string Link, double Version)? Vtable()
+    public (string Name, string Author, string Description, double Version)? Vtable()
     {
         long budget = MaxScanned;
         int candidates = 0;
@@ -104,7 +104,7 @@ internal sealed class PluginImage
                     continue;
                 if (++candidates > MaxCandidates) return null;
                 if (String(name) is not { } n || n is "PluginBase" or "PolPluginBase") continue;
-                if (String(author) is { } a && String(description) is { } d && String(link) is { } l && Double(version) is { } v) return (n, a, d, l, v);
+                if (String(author) is { } a && String(description) is { } d && String(link) is not null && Double(version) is { } v) return (n, a, d, v);
             }
         return null;
     }

@@ -11,7 +11,7 @@ public sealed record ChatZone(int Code, string Group, string Name, int Rooms, in
 public sealed record ChatCategory(int Code, string Group, string Name);
 
 // one row of the room list. Irc is the name the hook joins, Name what people see, Created is Unix seconds
-public sealed record ChatRoomEntry(string Irc, string Name, bool Official, bool Locked, int People, int Capacity,
+public sealed record ChatRoomEntry(string Irc, string Name, bool Locked, int People, int Capacity,
                                    IReadOnlyList<int> Categories, long Created);
 
 // Key only means something inside the one room, the hook never hands out ids
@@ -90,7 +90,7 @@ public sealed record ChatRoomsSnapshot(long LineSeq,
             Arr(z, "list", x => new ChatZone(Int(x, "code", 0), Str(x, "group"), Str(x, "name"), Int(x, "rooms", 0), Int(x, "people", 0))),
             Arr(c, "categories", x => new ChatCategory(Int(x, "code", 0), Str(x, "group"), Str(x, "name"))),
             Str(r, "token"), Str(r, "state"), Int(r, "zone", 0), Int(r, "offset", 0), Int(r, "total", 0),
-            Arr(r, "list", x => new ChatRoomEntry(Str(x, "irc"), Str(x, "name"), Bool(x, "official"), Bool(x, "locked"),
+            Arr(r, "list", x => new ChatRoomEntry(Str(x, "irc"), Str(x, "name"), Bool(x, "locked"),
                 Int(x, "people", 0), Int(x, "capacity", 0), Arr(x, "categories", n => n.TryGetInt32(out var v) ? v : 0),
                 Long(x, "created"))),
             Str(room, "token"), Str(room, "state"), Str(room, "irc"), Int(room, "limit", 0), Bool(room, "locked"),

@@ -41,12 +41,6 @@ public static class MirrorCodec
             ArrayPool<byte>.Shared.Return(output);
         }
     }
-
-    public static void Decompress(Stream source, Stream destination)
-    {
-        using var br = new BrotliStream(source, CompressionMode.Decompress, leaveOpen: true);
-        br.CopyTo(destination);
-    }
 }
 
 // lowercase hex SHA-256, which is also how mirror objects are named

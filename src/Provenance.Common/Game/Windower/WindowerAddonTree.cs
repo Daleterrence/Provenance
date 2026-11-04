@@ -16,7 +16,6 @@ public sealed class WindowerAddonTree
     {
         Sha = sha;
         Url = url;
-        Blobs = blobs;
         var folders = new Dictionary<string, List<WindowerAddonFile>>(StringComparer.Ordinal);
         var addons = new List<WindowerAddon>();
         foreach (var b in blobs)
@@ -40,7 +39,6 @@ public sealed class WindowerAddonTree
 
     public string Sha { get; }
     public string Url { get; }
-    public IReadOnlyList<WindowerAddonFile> Blobs { get; }
     public IReadOnlyList<WindowerAddon> Addons { get; }
     public IReadOnlyList<WindowerAddonFile> Libs { get; }
 
