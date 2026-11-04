@@ -100,11 +100,9 @@ typedef int         (__cdecl *svc16c4_t)(int id, WCHAR *out, int cap, int flags)
 #define FS_E_MEM      (-0x7f05)
 #define FS_E_NOREC    (-0x7f06)
 #define FS_E_MISMATCH (-0x7f07)
-#define FS_E_TIMEOUT  (-0x7f08)
 #define FS_E_ITEM     (-0x7f09)
 #define FS_E_CANCELLED (-0x7f0a)
 
-#define FS_JOB_GUARD_MS 120000u   /* polcore fails a job by itself at 100 s anyway */
 #define FS_STRICT_PNUM  1
 
 enum { ST_IDLE, ST_LOAD_START, ST_LOAD_POLL, ST_UPD_START, ST_UPD_POLL };
@@ -115,9 +113,8 @@ static struct {
     unsigned   pic;
     unsigned __int64 hid;
     int        job;
-    DWORD      t0;
     pdb_rec   *rec;
-} g_fs = { ST_IDLE, -1, 0, 0, -1, 0, NULL };
+} g_fs = { ST_IDLE, -1, 0, 0, -1, NULL };
 
 static pdb_schema *g_fs_pib;    /* never freed, polcore's job slots point into it */
 
@@ -274,7 +271,6 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
         if (r == -0x100) return FS_PENDING;              /* all 4 job slots busy, try again next turn */
         if (r < 0) return fs_fail(r, "profile load start (svc 0x4b4)");
         g_fs.job = r;
-        g_fs.t0 = GetTickCount();
         g_fs.st = ST_LOAD_POLL;
         FS_LOG("pic: loading profile of slot %d (hid 0x%08x%08x), job %d\r\n", slot,
                (unsigned)(g_fs.hid >> 32), (unsigned)g_fs.hid, r);
@@ -284,14 +280,7 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
         pdb_item *it;
         s = g_fs_pib;
         r = ((svc4b8_t)SVC(0x4b8))(g_fs.job);
-        if (r == 0) {
-            if (GetTickCount() - g_fs.t0 > FS_JOB_GUARD_MS) {
-                ((svc4dc_t)SVC(0x4dc))(g_fs.job);
-                g_fs.rec = NULL;          /* polcore can still write into a cancelled read, so it's never freed */
-                return fs_fail(FS_E_TIMEOUT, "profile load");
-            }
-            return FS_PENDING;
-        }
+        if (r == 0) return FS_PENDING;
         g_fs.job = -1;
         if (r < 0) return fs_fail(r, "profile load (svc 0x4b8)");
         if (!g_fs.rec->items) return fs_fail(FS_E_NOREC, "no profile record on the server");
@@ -341,7 +330,6 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
         if (r == -0x100) return FS_PENDING;
         if (r < 0) return fs_fail(r, "profile update start (svc 0x4d4)");
         g_fs.job = r;
-        g_fs.t0 = GetTickCount();
         g_fs.st = ST_UPD_POLL;
         FS_LOG("pic: update z_ficon=%u z_utime=%u level %u/%u/%u where z_pnum=%u, job %d\r\n",
                fval, now, g_fs.rec->level, rf->level, ru->level, pnum, r);
@@ -349,16 +337,10 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
     }
     case ST_UPD_POLL: {
         r = ((svc4d8_t)SVC(0x4d8))(g_fs.job);
-        if (r == 0) {
-            /* the viewer shits itself after 18000 polls and calls the save done anyway regardless (luv me playonline
-               innit), for us, it's an error */
-            if (GetTickCount() - g_fs.t0 > FS_JOB_GUARD_MS) {
-                ((svc4dc_t)SVC(0x4dc))(g_fs.job);
-                return fs_fail(FS_E_TIMEOUT, "profile update");
-            }
-            return FS_PENDING;
-        }
+        if (r == 0) return FS_PENDING;
         g_fs.job = -1;
+        /* the viewer shits itself after 18000 polls and calls the save done anyway regardless (luv me playonline
+           innit), for us polcore's own fail at 100 s is an error */
         if (r < 0) return fs_fail(r, "profile update (svc 0x4d8)");
         r = fs_apply_local(b, g_fs.slot, g_fs.pic, g_fs.hid);
         if (r < 0) FS_LOG("pic: server updated, local handle apply failed %d\r\n", r);

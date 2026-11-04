@@ -125,7 +125,7 @@ public static class ChatRoomFiles
     public static void DeleteRequests(int pid)
     {
         foreach (var ext in new[] { "chatjoin", "chatcreate", "chatmaster" })
-            foreach (var tail in new[] { "", ".taking", ".taking2", ".tmp" })
+            foreach (var tail in new[] { "", ".taking", ".tmp" })
                 try { File.Delete(HookFiles.PathFor(pid, ext) + tail); } catch { }
     }
 
@@ -224,17 +224,16 @@ public static class ChatRoomFiles
     }
 }
 
-// the app's half of the hook's send rule: one line in flight, and never two inside a second
+// the app's half of the hook's send rule: one line in flight
 public sealed class ChatSendGate
 {
-    public static readonly TimeSpan Gap = TimeSpan.FromSeconds(1);
     // the hook gives up on an ack after 120 s, a little past that the line counts as gone either way
     public static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(125);
 
     private DateTime? _sentAt;
     public string? Token { get; private set; }
 
-    public bool CanSend(DateTime now) => Token == null && (_sentAt is not { } at || now - at >= Gap);
+    public bool CanSend => Token == null;
 
     public void Sent(string token, DateTime now)
     {

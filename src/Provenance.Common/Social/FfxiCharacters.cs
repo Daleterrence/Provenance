@@ -159,7 +159,7 @@ public sealed class CharacterNames
 public sealed class CharacterLookups(CharacterNames names)
 {
     public static readonly TimeSpan Gap = TimeSpan.FromSeconds(3);
-    // the hook gives up on a read after 120 secs
+    // polcore fails a read at 100 secs
     public static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(130);
 
     private Dictionary<string, string> _seen = new(StringComparer.Ordinal);

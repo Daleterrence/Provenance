@@ -6,8 +6,6 @@
 #define CR_ZONES 32
 #define CR_ROOMS 100
 #define CR_REPLIES 8
-#define CR_GAP_MS 3000        /* between the user's own actions that reach the server */
-#define CR_SEND_GAP_MS 1000   /* between PRIVMSGs */
 #define CR_WAIT_MS 120000
 #define CR_TRIES 3600         /* turns a command can't be queued (another one's waiting), about the viewer's minute */
 #define CR_TEXT_MAX 300       /* Shift-JIS bytes in a line, the app holds to the same */
@@ -45,7 +43,6 @@ static pfb_hdr *g_cr_cpfb, *g_cr_rpfb;
 static int g_cr_job = -1;
 static int g_cr_set, g_cr_count;
 static BYTE *g_cr_buf;
-static ULONGLONG g_cr_db_t0;
 static char g_cr_ztok[48], g_cr_zstate[32] = "";
 static char g_cr_rtok[48], g_cr_rstate[32] = "";
 static struct { WORD code; DWORD rooms, people; } g_cr_zone[CR_ZONES];
@@ -63,7 +60,7 @@ static int g_cr_joined;   /* a JOIN's gone and no PART since: the server might h
 static char g_cr_cancel_tok[48];
 static DWORD g_cr_written_seq;
 static ULONGLONG g_cr_written_at;
-static ULONGLONG g_cr_sent_at, g_cr_msg_at;
+static ULONGLONG g_cr_sent_at;
 static char g_cr_room[64], g_cr_key[32];
 static WCHAR g_cr_nick[CR_NAME_MAX + 1];
 static char g_cr_frame[0x200];
@@ -561,11 +558,10 @@ static int cr_privmsg(BYTE *b, const char *frame)
     return ((int (__cdecl *)(int, DWORD, DWORD, const char *, const char *))SVC(0x22c))(s, 0, 0, g_cr_room, frame);
 }
 
-/* one PRIVMSG in flight, never two inside a second */
+/* one PRIVMSG in flight */
 static int cr_msg_ready(void)
 {
-    return (g_cr_st == CR_IN || g_cr_st == CR_SETTOPIC) && g_cr_wait == CRW_NONE && !g_cr_leave &&
-           GetTickCount64() - g_cr_msg_at >= CR_SEND_GAP_MS;
+    return (g_cr_st == CR_IN || g_cr_st == CR_SETTOPIC) && g_cr_wait == CRW_NONE && !g_cr_leave;
 }
 static void cr_msg_start(BYTE *b, int kind)
 {
@@ -575,7 +571,6 @@ static void cr_msg_start(BYTE *b, int kind)
         r = -1;
     }
     g_cr_tries = 0;
-    g_cr_msg_at = GetTickCount64();
     if (r < 0) {
         g_cr_msg_kind = -1;
         lg("chat: PRIVMSG (%d) refused %d\r\n", kind, r);
@@ -853,9 +848,9 @@ static void cr_enter(BYTE *b)
 {
     /* a line the hook renamed but never read belongs to the last room, it never goes into this one */
     char path[MAX_PATH + 64];
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 2; i++) {
         ipc_file(path, "chatsend");
-        lstrcatA(path, i == 0 ? "" : i == 1 ? ".taking" : ".taking2");
+        lstrcatA(path, i ? ".taking" : "");
         DeleteFileA(path);
     }
     cr_room_clear();
@@ -873,7 +868,6 @@ static void cr_join_request(BYTE *b)
     int pw = 0;
     if (take_request("chatjoin", buf, sizeof buf) < 0) return;
     g_cr_used = 1;
-    g_cr_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);
     irc = req_line(&p);
@@ -929,7 +923,6 @@ static void cr_create_request(BYTE *b)
     int pw = 0, z, l, k0, k1, k2, n, any = 0, s, lang;
     if (take_request("chatcreate", buf, sizeof buf) < 0) return;
     g_cr_used = 1;
-    g_cr_last = GetTickCount64();
     p = buf;
     tok = req_line(&p); haskey = req_line(&p); zone = req_line(&p); limit = req_line(&p);
     c0 = req_line(&p); c1 = req_line(&p); c2 = req_line(&p); nick = req_line(&p); name = req_line(&p);
@@ -984,7 +977,6 @@ static void cr_leave_request(BYTE *b)
     (void)b;
     char *p = buf, *join;
     if (take_request("chatleave", buf, sizeof buf) < 0) return;
-    g_cr_last = GetTickCount64();
     req_line(&p);
     join = req_line(&p);
     /* the app couldn't withdraw its enter, so it's called off here instead, even with a PART still going */
@@ -1060,7 +1052,7 @@ static void cr_room_pump(BYTE *b, int ctl)
         /* a PRIVMSG reads the same answer as the group chat's JOIN, WHO and PART, so nothing goes while one's out */
         if (gc_busy()) return;
         if (g_cr_msg_kind >= 0) {
-            if (GetTickCount64() - g_cr_msg_at >= CR_SEND_GAP_MS) cr_msg_start(b, g_cr_msg_kind);
+            cr_msg_start(b, g_cr_msg_kind);
             return;
         }
         if (!cr_msg_ready()) return;
@@ -1074,7 +1066,7 @@ static void cr_room_pump(BYTE *b, int ctl)
     if (g_cr_st == CR_SETTOPIC && (g_cr_hello || g_cr_msg_kind >= 0)) {
         if (gc_busy()) return;
         if (g_cr_msg_kind >= 0) {
-            if (GetTickCount64() - g_cr_msg_at >= CR_SEND_GAP_MS) cr_msg_start(b, g_cr_msg_kind);
+            cr_msg_start(b, g_cr_msg_kind);
             return;
         }
         if (!cr_msg_ready()) return;
@@ -1189,7 +1181,6 @@ static void cr_db_start(BYTE *b)
     if (t < 0) { cr_db_done(rooms, failed(t)); return; }
     g_cr_job = t;
     g_cr_db = rooms ? 12 : 2;
-    g_cr_db_t0 = GetTickCount64();
 }
 static void cr_db_fetch(BYTE *b)
 {
@@ -1201,7 +1192,6 @@ static void cr_db_fetch(BYTE *b)
     if (r < 0) { cr_db_done(rooms, failed(r)); return; }
     g_cr_job = r;
     g_cr_db = rooms ? 14 : 4;
-    g_cr_db_t0 = GetTickCount64();
 }
 static DWORD cr_u(BYTE *b, pdb_schema *s, const char *n, pdb_rec *rec, int bytes)
 {
@@ -1299,7 +1289,7 @@ static void cr_zones_request(BYTE *b)
     char buf[128], *p;
     if (take_request("chatzones", buf, sizeof buf) < 0) return;
     g_cr_used = 1;
-    g_cr_last = g_db_last = GetTickCount64();
+    g_db_last = GetTickCount64();
     p = buf;
     lstrcpynA(g_cr_ztok, req_line(&p), sizeof g_cr_ztok);
     if (cr_session(b) < 0) { cr_db_done(0, "failed:no chat"); return; }
@@ -1315,7 +1305,7 @@ static void cr_rooms_request(BYTE *b)
     int zone, off;
     if (take_request("chatrooms", buf, sizeof buf) < 0) return;
     g_cr_used = 1;
-    g_cr_last = g_db_last = GetTickCount64();
+    g_db_last = GetTickCount64();
     p = buf;
     lstrcpynA(g_cr_rtok, req_line(&p), sizeof g_cr_rtok);
     g_cr_rooms_n = g_cr_rtotal = 0;
@@ -1360,10 +1350,7 @@ static void cr_db_pump(BYTE *b)
     if (step == 2) {
         int set = -1, count = 0;
         r = ((int (__cdecl *)(int, int *, int *))SVC(0x4c4))(g_cr_job, &set, &count);
-        if (r == 0) {
-            if (GetTickCount64() - g_cr_db_t0 >= CR_WAIT_MS) cr_db_abandon(b, "failed:timeout");
-            return;
-        }
+        if (r == 0) return;
         g_cr_job = -1;
         if (r == -0x14cc || (r > 0 && (set < 0 || count < 1))) {
             if (rooms) g_cr_rtotal = 0;
@@ -1387,17 +1374,14 @@ static void cr_db_pump(BYTE *b)
         return;
     }
     r = ((svc_i)SVC(0x4cc))(g_cr_job);
-    if (r == 0) {
-        if (GetTickCount64() - g_cr_db_t0 >= CR_WAIT_MS) cr_db_abandon(b, "failed:timeout");
-        return;
-    }
+    if (r == 0) return;
     g_cr_job = -1;
     if (r < 0) { cr_db_done(rooms, failed(r)); return; }
     if (rooms) cr_parse_rooms(b); else cr_parse_zones(b);
     cr_db_done(rooms, "done");
 }
 
-/* every hold loop turn. Requests only on control turns, and the user's own actions keep a 3 s gap */
+/* every hold loop turn, requests only on control turns */
 static void chat_pump(BYTE *b, int ctl)
 {
     if (g_draining) return;
@@ -1405,7 +1389,7 @@ static void chat_pump(BYTE *b, int ctl)
     if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting("chatsend")) cr_send_request(b);
     if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting("chatmaster")) cr_master_request(b);
     if (g_cr_db) cr_db_pump(b);
-    if (!ctl || GetTickCount64() - g_cr_last < CR_GAP_MS) return;
+    if (!ctl) return;
     /* waiting, not new: a .taking left by a read that failed is tried again first */
     if (request_waiting("chatleave")) { cr_leave_request(b); return; }
     if (g_cr_st == CR_OUT && request_waiting("chatjoin")) { cr_join_request(b); return; }   /* a PART goes first */

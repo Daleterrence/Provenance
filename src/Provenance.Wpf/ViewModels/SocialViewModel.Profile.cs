@@ -176,7 +176,7 @@ public partial class SocialViewModel
 
     private static string ProfileFailText(string st) => st switch
     {
-        "timeout" or "failed:timeout" => "PlayOnline didn't answer.",
+        "timeout" => "PlayOnline didn't answer.",
         "failed:no such friend" or "failed:friend list changed" => "Your friend list changed. Try again.",
         "failed:pending" => "You can only view your friends' profiles.",
         "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.",

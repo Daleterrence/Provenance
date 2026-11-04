@@ -411,7 +411,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Fail(text);
     }
 
-    // the hook times out on its own (120 secs a slot and job, 240 + 30 for a rename), this catches one gone quiet
+    // the hook gives up waiting for a slot at 120 secs and on a rename at 240, and polcore fails a job at 100, this
+    // catches one gone quiet
     internal void CheckTimeout()
     {
         if (_job == Job.None)
@@ -424,7 +425,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             Abandon("Your PlayOnline session ended, so the request stopped.");
             return;
         }
-        if (DateTime.UtcNow - _at > TimeSpan.FromSeconds(_job == Job.Rename ? 290 : 250))
+        if (DateTime.UtcNow - _at > TimeSpan.FromSeconds(_job == Job.Rename ? 260 : 250))
             Abandon(_job is Job.Load or Job.LoadXi ? "PlayOnline didn't answer." : SaveUnconfirmed);
     }
 

@@ -43,7 +43,7 @@ public static class GroupChatFiles
     {
         try { File.Delete(LinesPathForPid(pid)); } catch { }
         foreach (var ext in new[] { "groupchatjoin", "groupchatsend", "groupchatleave" })
-            foreach (var tail in new[] { "", ".taking", ".taking2", ".tmp" })
+            foreach (var tail in new[] { "", ".taking", ".tmp" })
                 try { File.Delete(HookFiles.PathFor(pid, ext) + tail); } catch { }
     }
 

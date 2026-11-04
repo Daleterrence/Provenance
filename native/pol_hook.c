@@ -696,38 +696,6 @@ static void viewer_init(BYTE *b)
     set_messages(b, folder);
 }
 
-static void *g_polcon_poll_orig;
-static int g_real_auth;
-/* a negative POLCON_POLL ends the game with a POL-xxxx dialog: the fake session's noise gets masked, a real
-   session's loss still gets through */
-static int __cdecl poll_masked(void)
-{
-    static int last = 0x7fffffff;
-    int r = ((svc_v)g_polcon_poll_orig)();
-    if (r >= 0) return r;
-    /* another login -0x40f, dropped -0x400/-0x401/-0x40e, KILL -251, revoked -207, LM refusals -221..-252 */
-    if (g_real_auth && (r == -0x40f || r == -0x400 || r == -0x401 || r == -0x40e || r == -251 || r == -207 ||
-                        (r <= -221 && r >= -252))) {
-        lg("poll mask: POLCON_POLL %d passed to the game (session lost)\r\n", r);
-        return r;
-    }
-    if (r != last) {
-        lg("poll mask: POLCON_POLL %d -> 0 (POL-xxxx suppressed)\r\n", r);
-        last = r;
-    }
-    return 0;
-}
-static int wrap_slot(BYTE *b, unsigned off, void *w, void **orig)
-{
-    DWORD vp;
-    void **slot = &SVC(off);
-    *orig = *slot;
-    if (!*orig || !VirtualProtect(slot, 4, PAGE_EXECUTE_READWRITE, &vp)) return 0;
-    *slot = w;
-    VirtualProtect(slot, 4, vp, &vp);
-    return 1;
-}
-
 static int g_ffxi_service = -1;
 static int g_friends_loaded;
 static int g_lean;
@@ -865,7 +833,7 @@ static void status_reply_log(BYTE *b, int t)
 #define LOADS_IN_FLIGHT 4   /* polcore's job slots, the viewer's own peak */
 static void run_loads(BYTE *b, struct pload *items, int n)
 {
-    ULONGLONG started[8] = {0}, t0 = GetTickCount64();
+    ULONGLONG started[8] = {0};
     int i, pending, active, writing;
     if (n > 8) n = 8;
     for (i = 0; i < n; i++) { items[i].ticket = -1; items[i].res = 0; }
@@ -905,19 +873,13 @@ static void run_loads(BYTE *b, struct pload *items, int n)
             viewer_sign_out(b);
             end_pol(8);
         }
-        if (GetTickCount64() - t0 > 240000) {
-            for (i = 0; i < n; i++)
-                if (items[i].res == 0 && started[i]) CANCEL_JOB(items[i].ticket);
-            break;
-        }
         POLCON_STEP(b);
         POLCON_IDLE(b);
         Sleep(1);
     }
     for (i = 0; i < n; i++)
         if (items[i].res != 1)
-            lg("profile: %s -> %d%s\r\n", items[i].name, items[i].res,
-               items[i].res == 0 ? " (TIMEOUT)" : " (FAILED)");
+            lg("profile: %s -> %d (FAILED)\r\n", items[i].name, items[i].res);
 }
 
 static int count_handles(BYTE *b)
@@ -1149,8 +1111,6 @@ static void phase_c_seed(HMODULE pc)
        One piece of the POL-2071 hunt, which was a fucking nightmare honestly good lord */
     r = ((svc_v)(b + 0xfe20))();
     lg("phase_c: inet init -> %d\r\n", r);
-    if (wrap_slot(b, 0xb04, (void *)poll_masked, &g_polcon_poll_orig))
-        lg("poll mask: POLCON_POLL wrapped (negative -> 0)\r\n");
     /* POLCON_OPEN (polcore.dll 0x100448a0) type 3 = network, kind 1 + five zeroed dial-up buffers. It overwrites
        the password and host, so both go in after it. */
     r = ((int (__cdecl *)(int, void *))(b + 0x448a0))(3, &conn);
@@ -1169,16 +1129,10 @@ static void phase_c_seed(HMODULE pc)
     *(unsigned *)(b + 0x9aa14) = 0xfffffbee;
     if (*(unsigned *)(b + 0x99408) == 0)
         *(unsigned *)(b + 0x99408) = 0x12;
-    ULONGLONG tState = GetTickCount64();
+    /* no give-up of our own, polcore fails a stuck step itself and Provenance ends a login that goes quiet */
     for (;;) {
         sm = *(unsigned *)(b + 0x99408);
-        /* 110 s per state, 180 s for 23, the chat-server login (polcore itself allows that one 400 s) */
-        if (GetTickCount64() - tState > (sm == 23 ? 180000ULL : 110000ULL)) {
-            lg("auth SM: no progress in state %u - giving up\r\n", sm);
-            break;
-        }
         if (sm != (unsigned)last) {
-            tState = GetTickCount64();
             last = (int)sm;
             lg("auth SM: state=%u res=%d err=%08x\r\n", sm, *(int *)(b + 0x996b4), *(unsigned *)(b + 0x9aa14));
         }
@@ -1203,7 +1157,6 @@ static void phase_c_seed(HMODULE pc)
         return;
     }
     lg("phase_c: AUTH OK (state 30) - session bound\r\n");
-    g_real_auth = 1;
     notice_read(b);
     /* stricter than the viewer on purpose, a blocked account stops here */
     flags = *(WORD *)(b + 0x993f4);
@@ -1408,10 +1361,7 @@ static BOOL request_waiting(const char *ext)
 {
     char path[MAX_PATH + 64], taken[MAX_PATH + 80];
     request_paths(ext, path, taken);
-    if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES || GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES)
-        return TRUE;
-    lstrcatA(taken, "2");
-    return GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES;
+    return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES || GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES;
 }
 static BOOL request_new(const char *ext)
 {
@@ -1446,77 +1396,21 @@ static int read_taken(const char *taken, char *buf, int cap, char **grown, DWORD
     buf[got] = 0;
     return (int)got;
 }
-static ULONGLONG file_age_ms(const char *p)
-{
-    WIN32_FILE_ATTRIBUTE_DATA a;
-    ULARGE_INTEGER t, n;
-    if (!GetFileAttributesExA(p, GetFileExInfoStandard, &a)) return 0;
-    GetSystemTimeAsFileTime((FILETIME *)&n);
-    t.LowPart = a.ftLastWriteTime.dwLowDateTime;
-    t.HighPart = a.ftLastWriteTime.dwHighDateTime;
-    return n.QuadPart > t.QuadPart ? (n.QuadPart - t.QuadPart) / 10000 : 0;
-}
-/* a rename keeps the app's write time, so the waits below count from the take instead */
-static void taken_now(const char *taken)
-{
-    FILETIME now;
-    HANDLE f = CreateFileA(taken, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
-                           OPEN_EXISTING, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) return;
-    GetSystemTimeAsFileTime(&now);
-    SetFileTime(f, NULL, NULL, &now);
-    CloseHandle(f);
-}
-/* past a .taking that can't be read, the next request's renamed to .taking2 first like any take, so the app
-   withdrawing it and this read can't both happen. One left there is tried again, then dropped after 10 s */
-static int take_second(const char *ext, const char *path, const char *second, char *buf, int cap, char **grown,
-                       DWORD most)
-{
-    int n;
-    if (GetFileAttributesA(second) == INVALID_FILE_ATTRIBUTES) {
-        if (!MoveFileExA(path, second, MOVEFILE_REPLACE_EXISTING)) return -1;
-        taken_now(second);
-    }
-    n = read_taken(second, buf, cap, grown, most);
-    if (n < 0 && file_age_ms(second) >= 10000 && DeleteFileA(second))
-        lg("request: %s.taking2 could not be read for 10 s - dropped\r\n", ext);
-    return n;
-}
 static int take_request_ex(const char *ext, char *buf, int cap, char **grown, DWORD most)
 {
-    char path[MAX_PATH + 64], taken[MAX_PATH + 80], second[MAX_PATH + 80];
+    char path[MAX_PATH + 64], taken[MAX_PATH + 80];
     int n;
     if (grown) *grown = NULL;
     request_paths(ext, path, taken);
-    lstrcpyA(second, taken);
-    lstrcatA(second, "2");
     /* a .taking left by a failed read goes first, so requests keep their order (Away, then back) */
     if (GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES) {
-        static ULONGLONG lastSaid;
         n = read_taken(taken, buf, cap, grown, most);
-        if (n < 0 && GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES &&
-            GetFileAttributesA(second) == INVALID_FILE_ATTRIBUTES) {
-            if (file_age_ms(taken) >= 60000 && DeleteFileA(taken))
-                lg("request: %s.taking could not be read for 60 s - dropped\r\n", ext);
-            return -1;
-        }
-        if (n < 0 && file_age_ms(taken) < 10000) return -1;
-        if (n < 0) {
-            if (GetTickCount64() - lastSaid > 60000) {
-                lastSaid = GetTickCount64();
-                lg("request: %s.taking could not be read for 10 s - newer requests are read in place\r\n", ext);
-            }
-            n = take_second(ext, path, second, buf, cap, grown, most);
-        }
-    } else if (GetFileAttributesA(second) != INVALID_FILE_ATTRIBUTES) {
-        n = take_second(ext, path, second, buf, cap, grown, most);
     } else {
         if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) return -1;
         /* Rename first, so anything written after this is a new file for next turn, never one deleted unread. A file a
            scanner still holds can't be renamed, so it waits.
            i am vry gud with computer and this was easy to find, honest! :X */
         if (!MoveFileExA(path, taken, MOVEFILE_REPLACE_EXISTING)) return -1;
-        taken_now(taken);
         n = read_taken(taken, buf, cap, grown, most);
     }
     if (n > 0) return n;
@@ -2406,10 +2300,10 @@ static void store_drop(void)
     ipc_file(p, "groupchat.json");
     DeleteFileA(p);
     /* and an enter, a create, a master's change or a group chat request that never got taken */
-    for (int i = 0; i < 18; i++) {
+    for (int i = 0; i < 12; i++) {
         static const char *const ext[] = { "chatjoin", "chatcreate", "chatmaster", "groupchatjoin", "groupchatsend", "groupchatleave" };
-        ipc_file(p, ext[i / 3]);
-        lstrcatA(p, i % 3 == 0 ? "" : i % 3 == 1 ? ".taking" : ".taking2");
+        ipc_file(p, ext[i / 2]);
+        lstrcatA(p, i % 2 ? ".taking" : "");
         DeleteFileA(p);
     }
 }
@@ -2916,7 +2810,6 @@ static int g_edit_kind;   /* 1 list upload, 2 comment, 3 upload that became a re
 static int g_edit_upload_want;
 static WCHAR g_comment_want[0x33];
 static int g_comment_wanted;
-static ULONGLONG g_edit_last, g_edit_started;
 typedef int (__cdecl *svc_add)(int, unsigned, unsigned, unsigned, unsigned, const char *);
 
 #define edit_fail(why) refuse(g_edit_state, sizeof g_edit_state, "friends: edit refused - %s\r\n", why)
@@ -2930,7 +2823,6 @@ static void friend_upload_start(BYTE *b)
     lg("friends: list upload start -> %d%s\r\n", t, reload ? " (the server list is newer: reload)" : "");
     if (t < 0) { wsprintfA(g_edit_state, "failed:%d", t); g_snap_dirty = 1; return; }
     g_edit_job = t;
-    g_edit_started = GetTickCount64();
     g_edit_kind = reload ? 3 : 1;
     lstrcpyA(g_edit_state, "saving");
     g_snap_dirty = 1;
@@ -2943,7 +2835,6 @@ static void comment_start(BYTE *b)
     lg("friends: my comment start -> %d\r\n", t);
     if (t < 0) { wsprintfA(g_edit_state, "failed:%d", t); g_snap_dirty = 1; return; }
     g_edit_job = t;
-    g_edit_started = GetTickCount64();
     g_edit_kind = 2;
     lstrcpyA(g_edit_state, "saving");
     g_snap_dirty = 1;
@@ -2965,11 +2856,9 @@ static void friend_edit_request(BYTE *b)
     WCHAR old[0x34];
     int row, r;
     BYTE fr[0x140];
-    if (GetTickCount64() - g_edit_last < 2000) return;
     if (g_answer_kind) return;
     if (take_request("friend", buf, sizeof buf) < 0) {
         if (take_request("comment", buf, sizeof buf) < 0) return;
-        g_edit_last = GetTickCount64();
         p = buf;
         tok = req_line(&p);
         lstrcpynA(g_edit_token, tok, sizeof g_edit_token);
@@ -2986,7 +2875,6 @@ static void friend_edit_request(BYTE *b)
         comment_start(b);
         return;
     }
-    g_edit_last = GetTickCount64();
     p = buf;
     op = req_line(&p); tok = req_line(&p); rows = req_line(&p); key = req_line(&p); arg = req_line(&p);
     lstrcpynA(g_edit_token, tok, sizeof g_edit_token);
@@ -3045,11 +2933,7 @@ static void friend_edit_pump(BYTE *b, int ctl)
     }
     /* a comment (svc 0x67c) is polled with 0x684. Not 0x680, however much it looks like it should be */
     int r = ((svc_i)SVC(g_edit_kind == 2 ? 0x684 : 0x102c))(g_edit_job);
-    if (r == 0) {
-        if (GetTickCount64() - g_edit_started < 120000) return;
-        CANCEL_JOB(g_edit_job);
-        r = -0x104;
-    }
+    if (r == 0) return;
     g_edit_job = -1;
     if (r == 1) lstrcpyA(g_edit_state, g_edit_kind == 3 ? "failed:reloaded" : "saved");
     else wsprintfA(g_edit_state, "failed:%d", r);
@@ -3070,11 +2954,10 @@ static int g_prof_step, g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 sta
 static int g_xi_step;   /* my FFXI character's privacy: 1 load waits for a slot, 2 load job */
 static int g_pic_want;
 static int g_cr_db;   /* chat's zone and room lists, 0 idle, the steps are pol_chat.c's cr_db_pump */
-static ULONGLONG g_cr_last;   /* chat's last enter, leave or list, pol_chat.c */
 static int db_free(void)
 {
     return GetTickCount64() - g_db_last >= 3000 && !g_srch_step && !g_prof_step && !g_ch_step && !g_fp_step &&
-           !g_cr_db && (g_me_step < 1 || g_me_step > 5) && !g_xi_step && g_pic_want < 0;
+           !g_cr_db && !g_me_step && !g_xi_step && g_pic_want < 0;
 }
 
 /* prof_001, the FFXI table (title 1). z_phead's what a search hit gets added from */
@@ -3135,7 +3018,6 @@ static char g_srch_clause[64];
 static BYTE *g_srch_buf;
 static pdb_schema *g_srch_pib;
 static DWORD g_srch_set, g_srch_want;
-static ULONGLONG g_srch_last, g_srch_t0;
 static int g_srch_marked;
 static DWORD g_srch_marked_for;
 
@@ -3166,7 +3048,6 @@ static void search_start(BYTE *b)
     if (t < 0) { search_done(failed(t)); return; }
     g_srch_job = t;
     g_srch_step = 2;
-    g_srch_t0 = GetTickCount64();
 }
 static void search_fetch(BYTE *b)
 {
@@ -3177,7 +3058,6 @@ static void search_fetch(BYTE *b)
     if (r < 0) { search_done(failed(r)); return; }
     g_srch_job = r;
     g_srch_step = 4;
-    g_srch_t0 = GetTickCount64();
 }
 /* an H-ID as the viewer shows it (00-1234567) or just the number: '-' and spaces go, then 1-13 digits */
 static int hid_parse(const char *s, unsigned __int64 *out)
@@ -3205,9 +3085,9 @@ static void search_request(BYTE *b)
     char buf[256], *p, *tok, *kind, *val, dec[24];
     unsigned __int64 hid = 0;
     int k = 0;
-    if (GetTickCount64() - g_srch_last < 5000 || !db_free()) return;
+    if (!db_free()) return;
     if (take_request("search", buf, sizeof buf) < 0) return;
-    g_srch_last = g_db_last = GetTickCount64();
+    g_db_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);
     kind = req_line(&p);
@@ -3264,10 +3144,7 @@ static void search_pump(BYTE *b, int ctl)
     if (g_srch_step == 2) {
         DWORD out[3] = { 0, 0, 0 };
         r = ((int (__cdecl *)(int, DWORD *))SVC(0x4e0))(g_srch_job, out);
-        if (r == 0) {
-            if (GetTickCount64() - g_srch_t0 >= 120000) search_abandon(b, "failed:timeout");
-            return;
-        }
+        if (r == 0) return;
         g_srch_job = -1;
         if (r == -0x14cc) { search_done("done"); return; }   /* "No matching results were found." */
         if (r < 0) { search_done(failed(r)); return; }
@@ -3286,10 +3163,7 @@ static void search_pump(BYTE *b, int ctl)
         return;
     }
     r = ((svc_i)SVC(0x4cc))(g_srch_job);
-    if (r == 0) {
-        if (GetTickCount64() - g_srch_t0 >= 120000) search_abandon(b, "failed:timeout");
-        return;
-    }
+    if (r == 0) return;
     g_srch_job = -1;
     if (r < 0) { search_done(failed(r)); return; }
     for (BYTE *rec = g_srch_buf; rec && g_srch_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
@@ -3475,7 +3349,6 @@ static unsigned __int64 g_prof_hid;
 static char g_prof_token[48], g_prof_state[32] = "";
 static char *g_prof_json;
 static pdb_rec *g_prof_rec;
-static ULONGLONG g_prof_t0;
 /* game slots (z_phead, or the friend row) from the last 16 profiles read, by H-ID. The app shows a profile again from
    its own copy and the tabs still need them */
 #define PROF_SLOTS_KEPT 16
@@ -3648,7 +3521,6 @@ static void profile_start(BYTE *b)
     if (t < 0) { profile_done(failed(t)); return; }
     g_prof_job = t;
     g_prof_step = 1;
-    g_prof_t0 = GetTickCount64();
 }
 static void profile_request(BYTE *b)
 {
@@ -3694,10 +3566,7 @@ static void profile_pump(BYTE *b, int ctl)
     }
     if (g_prof_step == 2) { if (!g_draining) profile_start(b); else profile_done("cancelled"); return; }
     int r = ((svc4b8_t)SVC(0x4b8))(g_prof_job);
-    if (r == 0) {
-        if (GetTickCount64() - g_prof_t0 >= 120000) profile_abandon(b, "failed:timeout");
-        return;
-    }
+    if (r == 0) return;
     g_prof_job = -1;
     if (r < 0) { profile_done(failed(r)); return; }
     if (!g_prof_rec->items) { profile_done("failed:no profile"); return; }
@@ -3713,7 +3582,6 @@ static int g_ch_job = -1;
 static DWORD g_ch_ctsid, g_ch_lo, g_ch_hi;
 static char g_ch_token[48], g_ch_state[32] = "", g_ch_json[0x400];
 static pdb_rec *g_ch_rec;
-static ULONGLONG g_ch_t0;
 
 static int parse_u32(const char *x, DWORD *out)
 {
@@ -3770,7 +3638,6 @@ static void character_start(BYTE *b)
     if (t < 0) { character_done(failed(t)); return; }
     g_ch_job = t;
     g_ch_step = 1;
-    g_ch_t0 = GetTickCount64();
 }
 static int ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
 {
@@ -3831,10 +3698,7 @@ static void character_pump(BYTE *b, int ctl)
     }
     if (g_ch_step == 2) { if (!g_draining) character_start(b); else character_done("cancelled"); return; }
     int r = ((svc4b8_t)SVC(0x4b8))(g_ch_job);
-    if (r == 0) {
-        if (GetTickCount64() - g_ch_t0 >= 120000) character_abandon(b, "failed:timeout");
-        return;
-    }
+    if (r == 0) return;
     g_ch_job = -1;
     if (r < 0) { character_done(failed(r)); return; }
     if (!g_ch_rec->items) { character_done("failed:no profile"); return; }
@@ -3850,7 +3714,6 @@ static int g_fp_job = -1, g_fp_slot = -1;
 static DWORD g_fp_ctsid, g_fp_lo, g_fp_hi;
 static char g_fp_token[48], g_fp_state[32] = "", g_fp_json[0x400];
 static pdb_rec *g_fp_rec;
-static ULONGLONG g_fp_t0;
 static const char *const g_fp_nums[][2] = {
     { "z_countryid", "countryId" }, { "z_zoneid", "zoneId" }, { "z_jobid", "jobId" }, { "z_joblevel", "jobLevel" },
     { "z_raceid", "raceId" },
@@ -3907,7 +3770,6 @@ static void ffxiprofile_start(BYTE *b)
     if (t < 0) { ffxiprofile_done(failed(t)); return; }
     g_fp_job = t;
     g_fp_step = 1;
-    g_fp_t0 = GetTickCount64();
 }
 static void ffxiprofile_request(BYTE *b)
 {
@@ -3969,10 +3831,7 @@ static void ffxiprofile_pump(BYTE *b, int ctl)
     }
     if (g_fp_step == 2) { if (!g_draining) ffxiprofile_start(b); else ffxiprofile_done("cancelled"); return; }
     int r = ((svc4b8_t)SVC(0x4b8))(g_fp_job);
-    if (r == 0) {
-        if (GetTickCount64() - g_fp_t0 >= 120000) ffxiprofile_abandon(b, "failed:timeout");
-        return;
-    }
+    if (r == 0) return;
     g_fp_job = -1;
     /* "Selected profile is hidden." */
     if (r == -0x14cc) { ffxiprofile_done("failed:hidden"); return; }
@@ -4021,7 +3880,7 @@ static pdb_cond g_me_cond;
 static pe_req g_me_req;
 static char g_me_mail[0x150];
 static WCHAR g_me_name[32];
-static ULONGLONG g_me_t0, g_me_last;
+static ULONGLONG g_me_t0;
 static unsigned __int64 g_me_hid;
 
 static void me_done(const char *state)
@@ -4229,7 +4088,6 @@ static void me_load_start(BYTE *b)
     if (t < 0) { me_done(failed(t)); return; }
     g_me_job = t;
     g_me_step = 2;
-    g_me_t0 = GetTickCount64();
 }
 static void me_save_start(BYTE *b)
 {
@@ -4239,7 +4097,6 @@ static void me_save_start(BYTE *b)
     if (t < 0) { me_done(failed(t)); return; }
     g_me_job = t;
     g_me_step = 4;
-    g_me_t0 = GetTickCount64();
 }
 static int me_field_ok(const char *n)
 {
@@ -4251,12 +4108,12 @@ static void me_request(BYTE *b)
     char buf[2048], *p, *tok, *lvl, *line, *name, nomail[0x80], jp[MAX_PATH + 64];
     int kind, level = 0, idx;
     pol_handle h;
-    if (GetTickCount64() - g_me_last < 3000 || !db_free()) return;
+    if (!db_free()) return;
     kind = take_request("myprofile", buf, sizeof buf) >= 0 ? 1
          : take_request("saveprofile", buf, sizeof buf) >= 0 ? 2
          : take_request("rename", buf, sizeof buf) >= 0 ? 3 : 0;
     if (!kind) return;
-    g_me_last = g_db_last = GetTickCount64();
+    g_db_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);
     lstrcpynA(g_me_token, tok, sizeof g_me_token);
@@ -4349,10 +4206,9 @@ static void me_request(BYTE *b)
 }
 static void me_pump(BYTE *b, int ctl)
 {
-    pol_handle h;
     pdb_item *it;
     int r;
-    switch (g_me_step) {   /* 1 load waits for a slot, 2 load job, 3 save waits, 4 save job, 5 rename, 6 renamed */
+    switch (g_me_step) {   /* 1 load waits for a slot, 2 load job, 3 save waits, 4 save job, 5 rename */
     case 0:
         if (ctl && !g_draining) me_request(b);
         return;
@@ -4364,10 +4220,10 @@ static void me_pump(BYTE *b, int ctl)
     case 2:
         r = ((svc4b8_t)SVC(0x4b8))(g_me_job);
         if (r == 0) {
-            if (GetTickCount64() - g_me_t0 >= 120000 || g_draining) {
+            if (g_draining) {
                 ((svc4dc_t)SVC(0x4dc))(g_me_job);
                 g_me_rec = NULL;   /* a cancelled read can still write, so never freed */
-                me_done(g_draining ? "cancelled" : "failed:timeout");
+                me_done("cancelled");
             }
             return;
         }
@@ -4390,10 +4246,7 @@ static void me_pump(BYTE *b, int ctl)
         return;
     case 4:
         r = ((svc4d8_t)SVC(0x4d8))(g_me_job);
-        if (r == 0) {
-            if (GetTickCount64() - g_me_t0 >= 120000) { ((svc4dc_t)SVC(0x4dc))(g_me_job); me_done("failed:timeout"); }
-            return;
-        }
+        if (r == 0) return;
         g_me_job = -1;
         me_done(r == 1 ? "saved" : failed(r));
         return;
@@ -4404,18 +4257,8 @@ static void me_pump(BYTE *b, int ctl)
             return;
         }
         if (r == 1) me_done("saved");
-        else if (r == HR_E_REVERT) {
-            /* right after the upload the slot can still show the old name for a moment, so look again in a bit */
-            g_me_step = 6;
-            g_me_t0 = GetTickCount64();
-        } else me_done(r == HR_E_NAME ? "failed:bad name" : r == HR_E_NGWORD ? "failed:word" : failed(r));
-        return;
-    case 6:
-        memset(&h, 0, sizeof h);
-        get_handle(b, g_my_slot, &h);
-        h.name[15] = 0;
-        if (strcmp(h.name, g_hr.want) == 0) me_done("saved");
-        else if (GetTickCount64() - g_me_t0 >= 30000 || g_draining) me_done("failed:reloaded");
+        else me_done(r == HR_E_REVERT ? "failed:reloaded" : r == HR_E_NAME ? "failed:bad name"
+                     : r == HR_E_NGWORD ? "failed:word" : failed(r));
         return;
     }
 }
@@ -4423,7 +4266,6 @@ static void me_pump(BYTE *b, int ctl)
 static int g_grp_job = -1, g_grp_poll;
 static DWORD g_grp_new[2];
 static char g_grp_token[48], g_grp_state[32] = "";
-static ULONGLONG g_grp_last, g_grp_t0;
 
 #define group_fail(why) refuse(g_grp_state, sizeof g_grp_state, "groups: refused - %s\r\n", why)
 static int hex8(const char *x, DWORD *v)
@@ -4441,7 +4283,6 @@ static void group_start(int t, int poll, const char *what)
     if (t < 0) { group_fail(failed(t)); return; }
     g_grp_job = t;
     g_grp_poll = poll;
-    g_grp_t0 = GetTickCount64();
     lstrcpyA(g_grp_state, "saving");
     g_snap_dirty = 1;
 }
@@ -4492,11 +4333,9 @@ static void group_request(BYTE *b)
     grp_hdr gh;
     grp_mem m;
     int myClass = 0, haveGroup = 0, mid, slot, idx, cls, tcls, me, row, used = 0;
-    if (GetTickCount64() - g_grp_last < 2000) return;
     /* a group job's -0x100 is a failure, so wait for a free polcore slot */
     if (g_sq_n || g_answer_kind || slots_free(b) < 1) return;
     if (take_request("group", buf, sizeof buf) < 0) return;
-    g_grp_last = GetTickCount64();
     p = buf;
     op = req_line(&p); tok = req_line(&p); gid = req_line(&p); a = req_line(&p); bb = req_line(&p); c = req_line(&p);
     d = req_line(&p);
@@ -4596,11 +4435,7 @@ static void group_pump(BYTE *b, int ctl)
     }
     int r = g_grp_poll == 0x60c ? ((int (__cdecl *)(int, DWORD *))SVC(0x60c))(g_grp_job, g_grp_new)
                                 : ((svc_i)SVC(g_grp_poll))(g_grp_job);
-    if (r == 0) {
-        if (GetTickCount64() - g_grp_t0 < 120000) return;
-        CANCEL_JOB(g_grp_job);
-        r = -0x104;
-    }
+    if (r == 0) return;
     g_grp_job = -1;
     if (r == 1) lstrcpyA(g_grp_state, "saved"); else wsprintfA(g_grp_state, "failed:%d", r);
     lg("groups: job done -> %d\r\n", r);
@@ -4649,7 +4484,6 @@ static void answer_request(BYTE *b)
     const mailrec *m = NULL;
     const srchrec *h;
     if (take_request("answer", buf, sizeof buf) < 0) return;
-    g_edit_last = GetTickCount64();
     p = buf;
     op = req_line(&p); tok = req_line(&p); mids = req_line(&p); subj = req_line(&p); arg = req_line(&p);
     hkey = req_line(&p);
@@ -4746,15 +4580,13 @@ static void answer_pump(BYTE *b, int ctl)
         answer_send(b);
         return;
     }
-    if (ctl && !g_draining && g_edit_job < 0 && !g_edit_upload_want && !g_comment_wanted &&
-        !g_sq_n && GetTickCount64() - g_edit_last >= 2000)
+    if (ctl && !g_draining && g_edit_job < 0 && !g_edit_upload_want && !g_comment_wanted && !g_sq_n)
         answer_request(b);
 }
 
 static int g_pic_want = -1;
 static char g_pic_state[32] = "";
 static char g_pic_token[48];
-static ULONGLONG g_pic_last;
 #define pic_fail(why) refuse(g_pic_state, sizeof g_pic_state, "pic: request refused - %s\r\n", why)
 static void pic_pump(BYTE *b, int ctl)
 {
@@ -4762,9 +4594,9 @@ static void pic_pump(BYTE *b, int ctl)
     if (g_pic_want < 0) {
         char buf[96], *p;
         int i, v = 0, d = 0;
-        if (!ctl || g_draining || GetTickCount64() - g_pic_last < 5000 || !db_free()) return;
+        if (!ctl || g_draining || !db_free()) return;
         if (take_request("pic", buf, sizeof buf) < 0) return;
-        g_pic_last = g_db_last = GetTickCount64();
+        g_db_last = GetTickCount64();
         for (i = 0; buf[i] >= '0' && buf[i] <= '9' && d < 5; i++, d++) v = v * 10 + (buf[i] - '0');
         p = buf + i;
         if (*p == '\r') p++;
@@ -4924,7 +4756,6 @@ enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_UNLINK, HOP_LINKALL };
 static int g_hop, g_hjob = -1, g_hwant, g_hslot = -1, g_hidx = -1, g_hfrom = -1, g_hpos = -1, g_hreload;
 static int g_hall[8], g_hall_n;
 static char g_htoken[48], g_hstate[48] = "";
-static ULONGLONG g_hlast;
 static int g_in_hold;
 static int writes_pending(void);
 static void wr_job(HANDLE h, const char *fmt, const char *token, const char *state);
@@ -5101,17 +4932,6 @@ static int writes_asked(void)
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (request_waiting(ext[i])) return 1;
     return 0;
 }
-static ULONGLONG last_request(void)
-{
-    ULONGLONG t = g_hlast;
-    if (g_edit_last > t) t = g_edit_last;
-    if (g_grp_last > t) t = g_grp_last;
-    if (g_me_last > t) t = g_me_last;
-    if (g_db_last > t) t = g_db_last;
-    if (g_pic_last > t) t = g_pic_last;
-    if (g_cr_last > t) t = g_cr_last;
-    return t;
-}
 
 /* the viewer's link before it starts a game (app.dll 0x100235d5): unlinked ones go on the active handle, all in one
    PutChrList. The app only sends what fits, so it's all or nothing here */
@@ -5162,9 +4982,8 @@ static void handle_request(BYTE *b)
     int slot, idx = -1, kind, cur, old = -1, r;
     DWORD f;
     /* a background character lookup finishes first, rather than the switch being turned away as busy */
-    if (GetTickCount64() - last_request() < 3000 || g_ch_step) return;
+    if (g_ch_step) return;
     if (take_request("handle", buf, sizeof buf) < 0) return;
-    g_hlast = GetTickCount64();
     p = buf;
     op = req_line(&p); tok = req_line(&p); sl = req_line(&p); hk = req_line(&p); ix = req_line(&p); ck = req_line(&p);
     lstrcpynA(g_htoken, tok, sizeof g_htoken);
@@ -5718,7 +5537,6 @@ static int idle_timeout_for_game(BYTE *b)
    and chat waits it out completely */
 static void hold_turn(BYTE *b, int ctl)
 {
-    static ULONGLONG lastStatusReq;
     char sv[8];
     int wctl, want, was = handle_switching();
     handle_pump(b, ctl);
@@ -5738,10 +5556,8 @@ static void hold_turn(BYTE *b, int ctl)
     pic_pump(b, wctl);
     if (!g_lean && !handle_switching()) chat_pump(b, wctl);
     if (!g_lean && !handle_switching()) gc_pump(b, wctl);
-    if (wctl && g_status_job < 0 && GetTickCount64() - lastStatusReq >= 2000 &&
-        take_request("status", sv, sizeof sv) >= 0) {
+    if (wctl && g_status_job < 0 && take_request("status", sv, sizeof sv) >= 0) {
         want = sv[0] - '0';
-        lastStatusReq = GetTickCount64();
         /* the viewer's OK maps busy (2) to online and 3 to appear offline */
         if (want == 2) want = 0;
         if (want == 3) want = 4;
@@ -6017,124 +5833,19 @@ static int hook_game_end(BYTE *exe)
     return 1;
 }
 
-#define WATCH_POLL_MS 500
-#define WATCH_GRACE_MS 15000
-enum { WATCH_WAIT, WATCH_GONE, WATCH_BACK, WATCH_END };
-struct game_watch { int seen, gone; ULONGLONG gone_at; };
-/* a window that's back before the grace runs out means it wasn't over */
-static int watch_step(struct game_watch *w, int window, ULONGLONG now)
-{
-    if (window) {
-        int back = w->gone;
-        w->seen = 1;
-        w->gone = 0;
-        return back ? WATCH_BACK : WATCH_WAIT;
-    }
-    if (!w->seen) return WATCH_WAIT;
-    if (!w->gone) {
-        w->gone = 1;
-        w->gone_at = now;
-        return WATCH_GONE;
-    }
-    return now - w->gone_at >= WATCH_GRACE_MS ? WATCH_END : WATCH_WAIT;
-}
-
-/* every pol.exe's game window has this class, so only ours counts */
-static int is_game_window(HWND h)
-{
-    char cls[16];
-    DWORD pid;
-    return GetClassNameA(h, cls, sizeof cls) && !lstrcmpiA(cls, "FFXiClass") && GetWindowThreadProcessId(h, &pid) &&
-           pid == GetCurrentProcessId();
-}
-/* kept once found, FindWindowEx only sees top-level windows and a reparented one would look gone */
-static int game_window_up(HWND *h)
-{
-    HWND w = NULL;
-    if (*h && IsWindow(*h) && is_game_window(*h)) return 1;
-    *h = NULL;
-    while ((w = FindWindowExA(NULL, w, "FFXiClass", NULL)) != NULL)
-        if (is_game_window(w)) {
-            *h = w;
-            return 1;
-        }
-    return 0;
-}
-
-#ifndef WER_FAULT_REPORTING_NO_UI
-#define WER_FAULT_REPORTING_NO_UI 0x20
-#endif
-typedef HRESULT (WINAPI *wer_get_t)(HANDLE, PDWORD);
-typedef HRESULT (WINAPI *wer_set_t)(DWORD);
-static UINT g_err_mode;
-static DWORD g_wer_flags;
-/* nobody needs a "pol.exe has stopped working" box after they've quit the game */
-static void quiet_crashes(void)
-{
-    HMODULE k = GetModuleHandleW(L"kernel32.dll");
-    wer_get_t get = (wer_get_t)GetProcAddress(k, "WerGetFlags");
-    wer_set_t set = (wer_set_t)GetProcAddress(k, "WerSetFlags");
-    g_wer_flags = 0;
-    if (get && get(GetCurrentProcess(), &g_wer_flags) != S_OK) g_wer_flags = 0;
-    if (set) set(g_wer_flags | WER_FAULT_REPORTING_NO_UI);
-    g_err_mode = GetErrorMode();
-    SetErrorMode(g_err_mode | SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS);
-}
-static void loud_crashes(void)
-{
-    wer_set_t set = (wer_set_t)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "WerSetFlags");
-    if (set) set(g_wer_flags);
-    SetErrorMode(g_err_mode);
-}
-
-/* for anything still going once the window's gone, or a missing content launcher hook. Not a hung add-on unload
-   though, that's in FFXI's D3D cleanup, before the window goes */
-static DWORD WINAPI game_watch(void *unused)
-{
-    struct game_watch w = { 0 };
-    HWND h = NULL;
-    (void)unused;
-    for (;;) {
-        switch (watch_step(&w, game_window_up(&h), GetTickCount64())) {
-        case WATCH_GONE:
-            quiet_crashes();
-            lg("pol_hook: game window gone - crash boxes off, ending pol.exe in %d s if it's still here\r\n",
-               WATCH_GRACE_MS / 1000);
-            break;
-        case WATCH_BACK:
-            loud_crashes();
-            lg("pol_hook: game window back - not over yet, crash boxes back on\r\n");
-            break;
-        case WATCH_END:
-            lg("pol_hook: still here %d s after the game window went - ending pol.exe\r\n", WATCH_GRACE_MS / 1000);
-            end_pol(0);   /* even under Ashita, something's stuck and a clean exit could get stuck behind it */
-            break;
-        }
-        Sleep(WATCH_POLL_MS);
-    }
-}
-
 /* The menu session detour, thiscall (this in ecx) + 4 args, callee pops 16 bytes. Returning 1 takes pol.exe's
    dispatch (0x0041406e) down its FFXI case: 0x00413140 CoCreates FFXiEntry {989D790D}, which boots FFXiMain. */
-static int g_menu_calls;
 static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned d)
 {
     (void)a; (void)b; (void)c; (void)d;
-    if (++g_menu_calls == 1) {
-        prime_session();
-        set_cwd_ffxi();
-        /* pol.exe 0x00406a10 destroys the hidden splash on the thread that made it */
-        ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x6a10))();
-        pol_hold((BYTE *)polcore_module());
-        lg("pol_hook: menu call 1 -> content code 1 (FFXiEntry)\r\n");
-        g_game_started = 1;
-        CloseHandle(CreateThread(NULL, 0, game_watch, NULL, 0, NULL));
-        return 1;
-    }
-    /* the game came back to the menu (closed, or it failed): end it here, never relaunch */
-    lg("pol_hook: menu call %d -> content exited, staying exited\r\n", g_menu_calls);
-    game_over(0);
-    return 1000;
+    prime_session();
+    set_cwd_ffxi();
+    /* pol.exe 0x00406a10 destroys the hidden splash on the thread that made it */
+    ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x6a10))();
+    pol_hold((BYTE *)polcore_module());
+    lg("pol_hook: menu call 1 -> content code 1 (FFXiEntry)\r\n");
+    g_game_started = 1;   /* from here ffxi_returned ends pol.exe when the game does, so this only runs once */
+    return 1;
 }
 
 static void install(void)
@@ -6161,13 +5872,13 @@ static void install(void)
            p[0], p[1], p[2]);
         return;
     }
-    if (!VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &old)) return;
+    /* the game's end is only ever caught at the content launcher's return, so no detour without that hook */
+    if (!hook_game_end((BYTE *)exe) || !VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &old)) return;
     rel = (DWORD)((BYTE *)menu_stub - (p + 5));
     p[0] = 0xE9;
     *(DWORD *)(p + 1) = rel;
     VirtualProtect(p, 5, old, &old);
     lg("pol_hook: menu session detoured -> %08x\r\n", (unsigned)(ULONG_PTR)menu_stub);
-    hook_game_end((BYTE *)exe);
 }
 
 /* PROVENANCE_LAUNCH_ID ends up in a file name in ipc_dir, so only what Provenance makes gets through: 1 to 32

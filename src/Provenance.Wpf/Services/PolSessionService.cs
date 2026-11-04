@@ -213,6 +213,9 @@ public sealed class PolSessionService : IDisposable
     };
     internal Func<Process, bool> IsViewerPol { get; init; } = PolProcess.IsViewerPol;
     internal Action ScreenSaverBack { get; init; } = PutScreenSaverBack;
+    // quiet this long and the login's stuck. polcore fails a list load or a login step at 100 s by itself, apart from
+    // state 23, which it sits in for 400 s
+    internal TimeSpan StallLimit { get; init; } = TimeSpan.FromSeconds(260);
 
     public event Action<PolSocialSnapshot>? SnapshotUpdated;
 
@@ -478,7 +481,6 @@ public sealed class PolSessionService : IDisposable
         {
             DeleteQuietly(HookFiles.PathFor(pid, ext));
             DeleteQuietly(HookFiles.PathFor(pid, ext) + ".taking");
-            DeleteQuietly(HookFiles.PathFor(pid, ext) + ".taking2");
         }
 
         var logPath = HookFiles.PathFor(pid, "log");
@@ -550,7 +552,7 @@ public sealed class PolSessionService : IDisposable
                 var (endedCode, endedText) = EndedBeforeSignIn(exit);
                 return Fail(endedCode, endedText);
             }
-            if (DateTime.UtcNow - lastActivity > TimeSpan.FromSeconds(260))   // above the hook's 240 s list-load limit
+            if (DateTime.UtcNow - lastActivity > StallLimit)
                 return Fail(ErrorStalled, "PlayOnline stopped responding during the login. Try again in a moment.");
             Thread.Sleep(250);
         }

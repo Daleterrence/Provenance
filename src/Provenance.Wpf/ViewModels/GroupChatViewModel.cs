@@ -252,7 +252,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         UnreadChanged?.Invoke();
     }
 
-    private bool CanSend => Current == Phase.In && Compose.Trim().Length > 0 && _gate.CanSend(DateTime.UtcNow) &&
+    private bool CanSend => Current == Phase.In && Compose.Trim().Length > 0 && _gate.CanSend &&
                             !_social.GameRunning && !_social.HandleSwitching;
 
     [RelayCommand(CanExecute = nameof(CanSend))]

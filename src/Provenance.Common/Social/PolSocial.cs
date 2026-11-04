@@ -445,7 +445,7 @@ public static class SocialSnapshot
     {
         var path = HookFiles.PathFor(pid, ext);
         bool removed = false;
-        foreach (var p in new[] { path, path + ".taking", path + ".taking2" })
+        foreach (var p in new[] { path, path + ".taking" })
             try { if (File.Exists(p)) { File.Delete(p); removed = true; } } catch { }
         return removed;
     }
@@ -473,13 +473,10 @@ public static class SocialSnapshot
         }
     }
 
-    // a .taking file stops holding the queue after 15 secs, the hook reads newer requests in place after 10
     public static bool SendPending(int pid)
     {
         var path = HookFiles.PathFor(pid, "send");
-        var taking = path + ".taking";
-        return File.Exists(path) ||
-               (File.Exists(taking) && DateTime.UtcNow - File.GetLastWriteTimeUtc(taking) < TimeSpan.FromSeconds(15));
+        return File.Exists(path) || File.Exists(path + ".taking");
     }
 
     private static string OneLine(string s) => s.Replace("\r", "").Replace("\n", " ");

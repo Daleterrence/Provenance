@@ -112,7 +112,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         SendCommand.NotifyCanExecuteChanged();
         MasterTick(DateTime.UtcNow);
-        if (_gate.Token is null && _gate.CanSend(DateTime.UtcNow) && _masterToken is null) _tick.Stop();
+        if (_gate.CanSend && _masterToken is null) _tick.Stop();
     }
 
     internal bool SendTicking => _tick.IsEnabled;
@@ -459,7 +459,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         ExitCommand.NotifyCanExecuteChanged();
     }
 
-    private bool CanSend => Current == Page.Room && Compose.Trim().Length > 0 && _gate.CanSend(DateTime.UtcNow)
+    private bool CanSend => Current == Page.Room && Compose.Trim().Length > 0 && _gate.CanSend
                             && !_social.GameRunning && !_social.HandleSwitching;
 
     [RelayCommand(CanExecute = nameof(CanSend))]

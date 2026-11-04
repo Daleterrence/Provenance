@@ -1151,7 +1151,7 @@ public partial class SocialViewModel : ObservableObject
 
     private void ApplySearchState(PolSocialSnapshot snap)
     {
-        // two profile-server jobs, each up to 120 secs in the hook
+        // two profile-server jobs, each up to polcore's 100 secs
         WaitingTurn(ref _searchAt, _searchToken, snap.SearchToken, snap);
         if (_searchToken != null &&
             Settled(snap.SearchToken == _searchToken ? snap.SearchState : null, "done", _searchAt, 250) is { } st)
@@ -1186,7 +1186,7 @@ public partial class SocialViewModel : ObservableObject
             }
             else SearchFailed(st switch
             {
-                "timeout" or "failed:timeout" => "PlayOnline didn't answer the search.",
+                "timeout" => "PlayOnline didn't answer the search.",
                 "failed:bad name" => BadHandleName,
                 "failed:quote" => QuoteInName,
                 "failed:bad hid" => BadHid,
