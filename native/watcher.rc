@@ -1,5 +1,5 @@
 #include <winver.h>
-/* build-native.ps1 writes this one from src\Directory.Build.props */
+/* build-native.ps1 writes this one from Directory.Build.props */
 #include "native_version.h"
 
 1 ICON "provenance.ico"

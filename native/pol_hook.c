@@ -8,7 +8,6 @@
 #include <sddl.h>
 #include <tlhelp32.h>
 #include "pol_cred.h"
-#pragma comment(lib, "bcrypt.lib")
 
 static FARPROC g_pCreateMutexW, g_pOpenMutexW;
 static CRITICAL_SECTION g_lgcs;

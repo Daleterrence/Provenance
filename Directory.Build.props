@@ -6,11 +6,22 @@
     <VersionSuffix>beta.5</VersionSuffix>
   </PropertyGroup>
 
+  <!-- polcore.dll and FFXi.dll are 32-bit in-process COM servers, a 64-bit host only gets a flaky DCOM surrogate. The
+       RID gets the exes a 32-bit apphost, Common's just a library so it goes without -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <RuntimeIdentifier Condition="'$(MSBuildProjectName)' != 'Provenance.Common'">win-x86</RuntimeIdentifier>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
   <!-- the images aren't in this repo. They come from PROVENANCE_ASSETS, or an assets folder next to the repo -->
   <PropertyGroup>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == ''">$(PROVENANCE_ASSETS)</ProvenanceAssetsDir>
+    <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == '' and Exists('$(MSBuildThisFileDirectory)..\assets\app')">$(MSBuildThisFileDirectory)..\assets</ProvenanceAssetsDir>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\assets\app')">$(MSBuildThisFileDirectory)..\..\assets</ProvenanceAssetsDir>
-    <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\..\assets\app')">$(MSBuildThisFileDirectory)..\..\..\assets</ProvenanceAssetsDir>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' != ''">$([System.IO.Path]::GetFullPath('$(ProvenanceAssetsDir)'))</ProvenanceAssetsDir>
   </PropertyGroup>
 

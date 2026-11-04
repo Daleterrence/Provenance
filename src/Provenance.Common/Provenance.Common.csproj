@@ -1,21 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <PlatformTarget>x86</PlatformTarget>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
-    <!-- polcore.dll and FFXi.dll are 32-bit in-process COM servers, a 64-bit host only gets a flaky DCOM surrogate.
-         The exe projects set the RID, not this library -->
     <RootNamespace>Provenance.Common</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="provenance-cli" />
     <InternalsVisibleTo Include="provenance-app-tests" />
-    <PackageReference Include="NaCl.Net" Version="0.1.13" />
-    <PackageReference Include="SharpCompress" Version="0.50.7" />
+    <PackageReference Include="NaCl.Net" />
+    <PackageReference Include="SharpCompress" />
   </ItemGroup>
 
 </Project>

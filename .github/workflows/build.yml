@@ -31,7 +31,10 @@ jobs:
 
       # has to be the same release as the Velopack package the app uses
       - name: Install vpk
-        run: dotnet tool install -g vpk --version 1.2.161
+        shell: pwsh
+        run: |
+          . ./tools/build-common.ps1
+          dotnet tool install -g vpk --version (Get-VelopackVersion)
 
       - name: Pack
         id: pack
@@ -39,17 +42,16 @@ jobs:
         env:
           PROVENANCE_ASSETS: ${{ github.workspace }}\assets
         run: |
-          $xml = [xml](Get-Content -Raw src/Directory.Build.props)
-          $prefix = "$($xml.SelectSingleNode('/Project/PropertyGroup/VersionPrefix').InnerText)".Trim()
-          $suffix = "$($xml.SelectSingleNode('/Project/PropertyGroup/VersionSuffix').InnerText)".Trim()
-          $version = if ($suffix) { "$prefix-$suffix" } else { $prefix }
+          . ./tools/build-common.ps1
+          $committed = Get-ProvenanceVersion
+          $version = $committed.Version
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -cne "v$version") {
-            throw "Tag $env:GITHUB_REF_NAME doesn't match the version in src\Directory.Build.props ($version)."
+            throw "Tag $env:GITHUB_REF_NAME doesn't match the version in Directory.Build.props ($version)."
           }
           $out = Join-Path $env:RUNNER_TEMP 'release'
           ./tools/pack-release.ps1 -Version $version -Out $out
           "version=$version" >> $env:GITHUB_OUTPUT
-          "prerelease=$(if ($suffix) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+          "prerelease=$(if ($committed.Suffix) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
           "out=$out" >> $env:GITHUB_OUTPUT
           "setup=$((Get-ChildItem -LiteralPath $out -Filter '*-Setup.exe').FullName)" >> $env:GITHUB_OUTPUT
 
@@ -86,12 +88,18 @@ jobs:
       group: update-server-${{ contains(github.event.release.tag_name, '-') && 'beta' || 'stable' }}
       cancel-in-progress: false
     steps:
+      # only for Velopack's version, as of the tag being published
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
       - name: Install vpk
-        run: dotnet tool install -g vpk --version 1.2.161
+        shell: pwsh
+        run: |
+          . ./tools/build-common.ps1
+          dotnet tool install -g vpk --version (Get-VelopackVersion)
 
       - name: Upload to R2
         shell: pwsh

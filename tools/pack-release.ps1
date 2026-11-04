@@ -7,7 +7,7 @@
     Provenance.Launcher and Provenance.Wpf (Release, win-x86, self-contained) into one folder with -Version as the exe
     version, then runs vpk pack.
     -Version is SemVer 2 with no build part, so 1.0.0 or 1.0.0-beta.1, and has to be the version committed in
-    src\Directory.Build.props. The exe's file version keeps just the numbers (1.0.0.0) and its product version gets the
+    Directory.Build.props. The exe's file version keeps just the numbers (1.0.0.0) and its product version gets the
     short commit (1.0.0-beta.1+1a2b3c4).
     It only packs committed code (a clean working tree) and needs an empty -Out outside the repo, by default
     %TEMP%\provenance-release\<version>. Nothing gets signed and nothing gets uploaded.
@@ -31,16 +31,15 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'build-common.ps1')
 
 $repo = Split-Path -Parent $PSScriptRoot
 $src = Join-Path $repo 'src'
 $wpf = Join-Path $src 'Provenance.Wpf\Provenance.Wpf.csproj'
 $launcher = Join-Path $src 'Provenance.Launcher\Provenance.Launcher.csproj'
-$assetsRoot = @($env:PROVENANCE_ASSETS, (Join-Path $repo '..\assets'), (Join-Path $repo '..\..\assets')) |
-    Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'app\provenance.ico')) } | Select-Object -First 1
-if (-not $assetsRoot) { throw "Provenance's images aren't in this repo. Put the assets folder next to the repo, or set PROVENANCE_ASSETS to where it is." }
+$assetsRoot = Find-ProvenanceAssets
 $icon = Join-Path $assetsRoot 'app\provenance.ico'
-$env:PROVENANCE_ASSETS = [IO.Path]::GetFullPath($assetsRoot)
+$env:PROVENANCE_ASSETS = $assetsRoot
 $buildNative = Join-Path $repo 'native\build-native.ps1'
 if (-not $Out) { $Out = Join-Path ([IO.Path]::GetTempPath()) "provenance-release\$Version" }
 $Out = [IO.Path]::GetFullPath($Out)
@@ -52,19 +51,9 @@ if ($dirty.Count) { throw "Commit or undo these first, a release only packs comm
 $commit = "$(& git -C $repo rev-parse HEAD)".Trim()
 
 # the commit carries its own version, so a local build of it says the same as the release
-$props = Join-Path $src 'Directory.Build.props'
-$xml = [xml](Get-Content -LiteralPath $props -Raw)
-# only the plain pair is read, so anything that could quietly win over it gets refused
-$odd = @($xml.SelectNodes('//Version | //PackageVersion')).Count -gt 0 -or
-       @($xml.SelectNodes('//VersionPrefix')).Count -ne 1 -or @($xml.SelectNodes('//VersionSuffix')).Count -gt 1 -or
-       @($xml.SelectNodes('//VersionPrefix/@Condition | //VersionSuffix/@Condition | //PropertyGroup[VersionPrefix or VersionSuffix]/@Condition')).Count -gt 0
-if ($odd) { throw "$props has to set the version with one plain VersionPrefix and at most one VersionSuffix." }
-$prefix = "$($xml.SelectSingleNode('/Project/PropertyGroup/VersionPrefix').InnerText)".Trim()
-$suffix = "$($xml.SelectSingleNode('/Project/PropertyGroup/VersionSuffix').InnerText)".Trim()
-if (-not $prefix) { throw "No VersionPrefix in $props" }
-$committed = if ($suffix) { "$prefix-$suffix" } else { $prefix }
+$committed = (Get-ProvenanceVersion).Version
 if ($committed -cne $Version) {
-    throw "src\Directory.Build.props says $committed. Set the version there to $Version and commit it first."
+    throw "Directory.Build.props says $committed. Set the version there to $Version and commit it first."
 }
 
 $repoPrefix = [IO.Path]::TrimEndingDirectorySeparator($repo) + '\'
@@ -73,17 +62,8 @@ if ((Test-Path -LiteralPath $Out) -and @(Get-ChildItem -LiteralPath $Out -Force)
     throw "$Out is not empty. Everything in it goes up with the release, so use an empty or new folder."
 }
 
-function Get-VelopackVersion([string]$Project) {
-    $m = Select-String -LiteralPath $Project -Pattern '<PackageReference Include="Velopack" Version="([^"]+)"'
-    if (-not $m) { throw "No Velopack package reference in $Project" }
-    $m.Matches[0].Groups[1].Value
-}
-
 # Update.exe comes from vpk and the update code from the package, so they have to be the same release
-$velopack = Get-VelopackVersion $wpf
-if ((Get-VelopackVersion $launcher) -ne $velopack) {
-    throw "Provenance.Wpf and Provenance.Launcher use different Velopack versions, make them the same."
-}
+$velopack = Get-VelopackVersion
 $vpk = (Get-Command vpk -ErrorAction SilentlyContinue)?.Source
 if (-not $vpk) { throw "vpk not found. Install it: dotnet tool install -g vpk --version $velopack" }
 $help = & $vpk --skip-updates -h 2>&1 | Out-String

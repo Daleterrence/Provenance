@@ -1,0 +1,23 @@
+<Project>
+  <!-- every package's version, once. No VersionOverride either, so nothing drifts off Velopack's -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageVersion Include="MaterialDesignThemes" Version="5.1.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageVersion Include="NaCl.Net" Version="0.1.13" />
+    <PackageVersion Include="Serilog" Version="4.2.0" />
+    <PackageVersion Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageVersion Include="SharpCompress" Version="0.50.7" />
+    <PackageVersion Include="SharpVectors.Wpf" Version="1.8.6" />
+    <!-- same release as vpk, Update.exe comes from vpk and the update code from this. tools/pack-release.ps1 checks -->
+    <PackageVersion Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
+</Project>

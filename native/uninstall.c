@@ -39,8 +39,6 @@
 #include <wctype.h>
 #include <stdlib.h>
 
-#pragma comment(lib, "ntdll.lib")
-
 #ifdef FFXI_UNINSTALL
 #define TITLE L"Provenance - FINAL FANTASY XI Uninstall"
 #define PRODUCT L"0001"
