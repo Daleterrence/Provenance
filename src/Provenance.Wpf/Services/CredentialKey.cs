@@ -52,59 +52,6 @@ public static class CredentialKey
         }
     }
 
-    // before each sign-in, on a worker. The hook rereads the file every sign-in, so a key file deleted or replaced
-    // while the app ran gets adopted here too
-    public static bool CheckFile()
-    {
-        lock (InUseGate) return Adopt(OpenFile(FilePath, SavedAccounts));
-    }
-
-    // CheckFile for just before a save, with the UI thread waiting, so a busy gate or lock skips the check and the
-    // next sign-in's catches it instead
-    public static bool CheckFileNow()
-    {
-        if (!Monitor.TryEnter(InUseGate))
-        {
-            Log.Information("The key check before this save was skipped: another check of the key file is running");
-            return false;
-        }
-        try
-        {
-            var onDisk = Guarded(() =>
-            {
-                var path = Path.GetFullPath(FilePath);
-                using var gate = AdminLock.TryAcquireFile(LockPathFor(path), TimeSpan.Zero);
-                if (gate is null)
-                {
-                    Log.Information("The key check before this save was skipped: another copy of Provenance holds the key file's lock");
-                    return null;
-                }
-                return LoadOrCreateLocked(path, SavedAccounts);
-            });
-            return onDisk is not null && Adopt(onDisk);
-        }
-        finally { Monitor.Exit(InUseGate); }
-    }
-
-    // under InUseGate. True only when a different key replaced the one in use
-    private static bool Adopt(byte[] onDisk)
-    {
-        if (_inUse is null)
-        {
-            _inUse = onDisk;
-            return false;
-        }
-        if (CryptographicOperations.FixedTimeEquals(_inUse, onDisk))
-        {
-            CryptographicOperations.ZeroMemory(onDisk);
-            return false;
-        }
-        Log.Warning("The key file changed while Provenance was running: the saved details are read and saved with the key in the file from now on");
-        DropInUse();
-        _inUse = onDisk;
-        return true;
-    }
-
     // the hook couldn't read an entry (exit 11, or "hold: Play entry unreadable"), so reread it now on this worker
     public static void Reload()
     {
@@ -124,11 +71,9 @@ public static class CredentialKey
         Interlocked.Increment(ref _generation);
     }
 
-    private static byte[] OpenFile(string path, string protects) => Guarded(() => LoadOrCreate(path, protects))!;
-
-    private static byte[]? Guarded(Func<byte[]?> open)
+    private static byte[] OpenFile(string path, string protects)
     {
-        try { return open(); }
+        try { return LoadOrCreate(path, protects); }
         catch (Exception ex)
         {
             Log.Error(ex, "Provenance could not open its key file");
@@ -142,25 +87,15 @@ public static class CredentialKey
         path = Path.GetFullPath(path ?? FilePath);
         // another copy only holds it for milliseconds, so the limit's only hit when that copy died half way
         using var gate = AdminLock.AcquireFile(LockPathFor(path), GateWait);
-        return LoadOrCreateLocked(path, protects);
-    }
-
-    private static byte[] LoadOrCreateLocked(string path, string protects)
-    {
-        // five goes is plenty, a file still fighting back after that is properly broken
-        for (int attempt = 0; attempt < 5; attempt++)
+        var (key, exists) = TryRead(path);
+        if (key != null) return key;
+        if (exists)
         {
-            var (key, exists) = TryRead(path);
-            if (key != null) return key;
-            if (exists)
-            {
-                Log.Warning("The key file {Path} is not a valid key; a new key is made. What it protected ({Protects}) cannot be read any more", path, protects);
-                try { File.Delete(path); }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }   // TryCreate then finds what's there
-            }
-            if (TryCreate(path) is { } made) return made;
+            Log.Warning("The key file {Path} is not a valid key; a new key is made. What it protected ({Protects}) cannot be read any more", path, protects);
+            try { File.Delete(path); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }   // TryCreate then fails on what's still there
         }
-        throw new IOException($"Provenance could not read or make its credential key {path}.");
+        return TryCreate(path) ?? throw new IOException($"Provenance could not read or make its credential key {path}.");
     }
 
     // never the key file itself: the hook opens cred.key with read sharing only, so locking it would lock the hook out

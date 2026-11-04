@@ -471,10 +471,10 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
-    internal Task<int> ConnectProfileAsync(Profile p, PolAccount pol, SeaAccount sea, string otp, int? keyGeneration,
+    internal Task<int> ConnectProfileAsync(Profile p, PolAccount pol, SeaAccount sea, string otp,
                                            IProgress<LaunchProgress>? progress, CancellationToken token) =>
         _pol.ConnectAsync(pol, sea, otp, p.Id, progress, PromptHandleName, token,
-                          new SessionOptions(false, null, keyGeneration, HomeSlotFor(p), HandleKey: p.HandleKey));
+                          new SessionOptions(false, null, HomeSlotFor(p), HandleKey: p.HandleKey));
 
     // a login always goes with the account's own home slot, so one without gets it now
     internal int HomeSlotFor(Profile p)
@@ -541,7 +541,6 @@ public partial class MainViewModel : ObservableObject
         if (SelectedProfile is not { } p) return false;
         requireAll |= NeedsAllDetails(_credentials.HasUsableDetails(p.Id),
                                       _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id)?.Problem);
-        _ = _credentials.CheckKeyAsync();
         var r = AccountDialog.Show(Application.Current.MainWindow, p.DisplayName, typed?.UseOtp ?? p.UseOtp, edit: true,
                                    typed?.OtpSource ?? p.OtpSource, typed?.OtpItem ?? p.OtpItem, requireAll: requireAll,
                                    polId: typed?.PolId ?? "", seaId: typed?.SeaId ?? "", otpAccount: typed?.OtpAccount ?? p.OtpAccount);
@@ -1135,8 +1134,8 @@ public partial class MainViewModel : ObservableObject
         if (!HasSavedCredentials && !EditAccount(requireAll: true)) return;
         if (!EnsureMemberAgreement(owner)) return;
         // a one-time code counts as used once typed, so the details dialog has to come first
-        if (await LoadForSignInAsync(owner, profile) is not { } details) return;
-        var (pol, sea, keyGeneration) = details;
+        if (LoadForSignIn(owner, profile) is not { } details) return;
+        var (pol, sea) = details;
         // claimed before the code's asked, so no other copy signs this account in meanwhile
         if (!_pol.TryClaimAccount(profile.Id, out var claimProblem))
         {
@@ -1163,7 +1162,7 @@ public partial class MainViewModel : ObservableObject
         });
         try
         {
-            int code = await ConnectProfileAsync(profile, pol, sea, otp, keyGeneration, progress, token);
+            int code = await ConnectProfileAsync(profile, pol, sea, otp, progress, token);
             await Application.Current!.Dispatcher.InvokeAsync(() => { });   // an empty hop so queued progress reports land first (yes, really)
             if (code == 0)
             {
@@ -1231,9 +1230,9 @@ public partial class MainViewModel : ObservableObject
     internal static string MissingDetailsText((string? PolId, string? SeaId) ids) =>
         BothIds(ids) ? PolSessionService.DetailsAgainText : "This account's login details are missing. Press Edit account to add them.";
 
-    private async Task<(PolAccount Pol, SeaAccount Sea, int KeyGeneration)?> LoadForSignInAsync(Window? owner, Profile profile)
+    private (PolAccount Pol, SeaAccount Sea)? LoadForSignIn(Window? owner, Profile profile)
     {
-        if (await PrepareSignInAsync(_credentials, profile, () => SelectedProfile) is not { } details) return null;
+        var details = PrepareSignIn(_credentials, profile.Id);
         if (details.Missing)
         {
             if (!EditAccount(requireAll: true)) return null;
@@ -1249,36 +1248,22 @@ public partial class MainViewModel : ObservableObject
             MessageDialog.ShowError(owner, "Account details incomplete", problem);
             return null;
         }
-        return (details.Pol!, details.Sea!, details.KeyGeneration);
+        return (details.Pol!, details.Sea!);
     }
 
-    internal sealed record SignInDetails(PolAccount? Pol, SeaAccount? Sea, string? Problem, int KeyGeneration = 0)
+    internal sealed record SignInDetails(PolAccount? Pol, SeaAccount? Sea, string? Problem)
     {
         public bool Missing => Pol is null && Problem is null;
     }
 
-    internal static async Task<SignInDetails> PrepareSignInAsync(ICredentialService credentials, string profileId)
-    {
-        await credentials.CheckKeyAsync();
-        return PrepareSignIn(credentials, profileId);
-    }
-
-    internal static async Task<SignInDetails?> PrepareSignInAsync(ICredentialService credentials, Profile profile, Func<Profile?> selected)
-    {
-        await credentials.CheckKeyAsync();
-        return ReferenceEquals(selected(), profile) ? PrepareSignIn(credentials, profile.Id) : null;
-    }
-
     internal static SignInDetails PrepareSignIn(ICredentialService credentials, string profileId)
     {
-        int generation = CredentialKey.Generation;   // read before the loads, so a key change during them shows up
         var pol = credentials.LoadPolAccount(profileId);
         var sea = credentials.LoadSeaAccount(profileId);
-        if (pol is null || sea is null) return new(null, null, null, generation);
+        if (pol is null || sea is null) return new(null, null, null);
         if (ValidateDetails(pol.PolId, pol.Password, sea.Username, sea.Password) is { } problem)
-            return new(null, null, problem + " Press Edit account to fix it.", generation);
-        return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SeaAccount(sea.Username.Trim(), sea.Password),
-                   null, generation);
+            return new(null, null, problem + " Press Edit account to fix it.");
+        return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SeaAccount(sea.Username.Trim(), sea.Password), null);
     }
 
     // the US viewer asks once per PlayOnline ID, here it's once per install

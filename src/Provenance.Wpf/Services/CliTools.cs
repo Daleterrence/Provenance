@@ -18,10 +18,9 @@ public enum ToolInstall { Installed, DownloadFailed, CheckFailed, CantCheck, Too
 internal enum Verdict { Genuine, NotGenuine, CantCheck, TooOld }
 
 // Path is held open (no writes, no deletes) until this is disposed, so what runs is the file that was checked
-public sealed class ToolFind(string? path, string? refusedFolder, bool cantCheck = false, SafeFileHandle? handle = null, bool tooOld = false) : IDisposable
+public sealed class ToolFind(string? path, bool cantCheck = false, SafeFileHandle? handle = null, bool tooOld = false) : IDisposable
 {
     public string? Path { get; } = path;
-    public string? RefusedFolder { get; } = refusedFolder;
     public bool CantCheck { get; } = cantCheck;
     public bool TooOld { get; } = tooOld;
 
@@ -93,9 +92,6 @@ public static class CliTools
     public static string MissingText(string tool) =>
         $"Provenance needs the {Name(tool)} command-line tool. It can download its own copy from {Name(tool)}.";
 
-    public static string RefusedText(string tool) =>
-        $"Provenance can't use your copy of the {Name(tool)} command-line tool. It can download its own copy from {Name(tool)}.";
-
     public static string CantCheckText(string tool) =>
         $"Provenance couldn't check the {Name(tool)} command-line tool. It can download its own copy from {Name(tool)}.";
 
@@ -120,79 +116,31 @@ public static class CliTools
     {
         if (FindForTest is { } fake) return fake(tool);
         var own = Path.Combine(Dir, tool + ".exe");
-        return Find(tool, File.Exists(own) && PathSafety.OnLocalFixedDrive(own) ? own : null, SearchDirs(), PathSafety.IsAdminOnly,
-                    (file, path, t) => CheckToRun(file, path, t, path == own));
+        return Find(tool, File.Exists(own) && PathSafety.OnLocalFixedDrive(own) ? own : null, CheckToRun);
     }
 
-    private static Verdict CheckToRun(SafeFileHandle file, string path, string tool, bool own)
+    private static Verdict CheckToRun(SafeFileHandle file, string path, string tool)
     {
         var verdict = Check(file, path, tool, online: false);
         if (verdict != Verdict.Genuine) return verdict;
-        var version = own ? NotedVersion(Path.GetDirectoryName(path)!, tool) ?? VersionOf(path) : VersionOf(path);
+        var version = NotedVersion(Path.GetDirectoryName(path)!, tool) ?? VersionOf(path);
         if (version is null) return Verdict.CantCheck;
         if (version >= Oldest[tool]) return Verdict.Genuine;
         Log.Warning("{Exe} in {Folder} is version {Version}, older than Provenance can use", tool + ".exe", Path.GetDirectoryName(path), version);
         return Verdict.TooOld;
     }
 
-    // Provenance's own copy first. IsAdminOnly says no to anything in ProgramData, so for that one it's the SecureFiles
-    // lock on the folder that does the job
-    internal static ToolFind Find(string tool, string? own, IEnumerable<string> dirs, Func<string, bool> isAdminOnly,
-                                  Func<SafeFileHandle, string, string, Verdict> check)
+    // only Provenance's own copy, the SecureFiles lock on its folder is what keeps it admin-only
+    internal static ToolFind Find(string tool, string? own, Func<SafeFileHandle, string, string, Verdict> check)
     {
-        var exe = tool + ".exe";
-        bool cantCheck = false, tooOld = false;
-        if (own is not null && Open(own) is { } ownFile)
-        {
-            Verdict verdict;
-            try { verdict = check(ownFile, own, tool); }
-            catch { ownFile.Dispose(); throw; }
-            if (verdict == Verdict.Genuine) return new ToolFind(own, null, handle: ownFile);
-            ownFile.Dispose();
-            if (verdict == Verdict.NotGenuine) DeleteOwn(own, tool, check);
-            cantCheck |= verdict == Verdict.CantCheck;
-            tooOld |= verdict == Verdict.TooOld;
-        }
-        string? refused = null;
-        foreach (var dir in dirs)
-        {
-            SafeFileHandle? file = null;
-            try
-            {
-                var candidate = Path.Combine(dir, exe);
-                if (!File.Exists(candidate) || Open(candidate) is not { } opened) continue;
-                file = opened;
-                // a link's followed and the file it ends at is what runs. It has to be called op.exe or bw.exe too
-                var real = RealPath(file);
-                if (real is null || !string.Equals(Path.GetFileName(real), exe, StringComparison.OrdinalIgnoreCase))
-                {
-                    Log.Information("{Candidate} isn't a file Provenance can follow, so it isn't used", candidate);
-                    continue;
-                }
-                if (!isAdminOnly(real))
-                {
-                    Log.Information("{Exe} in {Folder} isn't admin-only, so it isn't used", exe, Path.GetDirectoryName(real));
-                    refused ??= Path.GetDirectoryName(real);
-                    continue;
-                }
-                var verdict = check(file, real, tool);
-                if (verdict == Verdict.Genuine)
-                {
-                    var found = new ToolFind(real, null, handle: file);
-                    file = null;
-                    return found;
-                }
-                cantCheck |= verdict == Verdict.CantCheck;
-                tooOld |= verdict == Verdict.TooOld;
-                Log.Warning("{Exe} in {Folder} didn't pass the check ({Verdict}), so it isn't used", exe, Path.GetDirectoryName(real), verdict);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-            {
-                Log.Debug(ex, "Looking for {Exe} in {Folder} failed", exe, dir);
-            }
-            finally { file?.Dispose(); }
-        }
-        return new ToolFind(null, refused, cantCheck, tooOld: tooOld);
+        if (own is null || Open(own) is not { } ownFile) return new ToolFind(null);
+        Verdict verdict;
+        try { verdict = check(ownFile, own, tool); }
+        catch { ownFile.Dispose(); throw; }
+        if (verdict == Verdict.Genuine) return new ToolFind(own, handle: ownFile);
+        ownFile.Dispose();
+        if (verdict == Verdict.NotGenuine) DeleteOwn(own, tool, check);
+        return new ToolFind(null, verdict == Verdict.CantCheck, tooOld: verdict == Verdict.TooOld);
     }
 
     // checked again with the lock held, another window may have just put a good copy in
@@ -272,46 +220,6 @@ public static class CliTools
     {
         try { return File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
-    }
-
-    internal static List<string> SearchDirs() =>
-        ToolDirs(Environment.GetEnvironmentVariable("PATH"),
-                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WinGet", "Links"),
-                 Environment.GetEnvironmentVariable("ProgramW6432") is { Length: > 0 } pf64 ? Path.Combine(pf64, "WinGet", "Links") : "");
-
-    // fully qualified only. A relative entry (".", "bin", "C:x", "\x") would resolve against whatever folder the app
-    // happens to run in
-    internal static List<string> ToolDirs(string? pathVariable, params string[] extra) =>
-        (pathVariable ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries).Concat(extra)
-            .Select(d => d.Trim().Trim('"'))
-            .Where(d => d.Length > 0 && Path.IsPathFullyQualified(d))
-            .ToList();
-
-    // every link and junction on the way resolved. Null when it can't be opened (an app alias, say)
-    internal static string? RealPath(string path)
-    {
-        try
-        {
-            using var file = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            return RealPath(file);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
-    }
-
-    private static string? RealPath(SafeFileHandle file)
-    {
-        var buf = new char[512];
-        uint n = GetFinalPathNameByHandle(file, buf, (uint)buf.Length, 0);
-        if (n >= buf.Length)
-        {
-            buf = new char[n + 1];
-            n = GetFinalPathNameByHandle(file, buf, (uint)buf.Length, 0);
-        }
-        if (n == 0 || n >= buf.Length) return null;
-        var s = new string(buf, 0, (int)n);
-        return s.StartsWith(@"\\?\UNC\", StringComparison.Ordinal) ? @"\\" + s[8..]
-             : s.StartsWith(@"\\?\", StringComparison.Ordinal) ? s[4..]
-             : s;
     }
 
     internal static Verdict Check(string path, string tool, bool online)
@@ -558,7 +466,7 @@ public static class CliTools
             if (await Task.Run(() =>
                 {
                     using var file = File.Exists(own) ? Open(own) : null;
-                    return file is not null && CheckToRun(file, own, tool, own: true) == Verdict.Genuine;
+                    return file is not null && CheckToRun(file, own, tool) == Verdict.Genuine;
                 }, ct))
                 return ToolInstall.Installed;
             var (version, url) = await LatestAsync(tool, ct);
@@ -861,7 +769,4 @@ public static class CliTools
 
     [DllImport("wintrust.dll", ExactSpelling = true)]
     private static extern IntPtr WTHelperGetProvCertFromChain(IntPtr signer, uint cert);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "GetFinalPathNameByHandleW")]
-    private static extern uint GetFinalPathNameByHandle(SafeFileHandle file, [Out] char[] path, uint length, uint flags);
 }

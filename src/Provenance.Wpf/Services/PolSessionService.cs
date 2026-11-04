@@ -18,8 +18,7 @@ namespace Provenance.Wpf.Services;
 
 // Lean is POL_LEAN, a multi-account sign-in with no social side. HomeSlot is POL_HOME, the account's pub\homeNN.
 // HandleKey is POL_HANDLE, the Handle ID of the handle the account last had active
-public sealed record SessionOptions(bool Lean, string? ThirdPartyHookProfile, int? KeyGeneration = null,
-                                    int HomeSlot = 0, IReadOnlyDictionary<string, WindowerAddonList>? WindowerLists = null,
+public sealed record SessionOptions(bool Lean, string? ThirdPartyHookProfile, int HomeSlot = 0, IReadOnlyDictionary<string, WindowerAddonList>? WindowerLists = null,
                                     WindowerAddonList? WindowerShared = null, string? HandleKey = null);
 
 internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? problem);
@@ -150,7 +149,6 @@ public sealed class PolSessionService : IDisposable
     private readonly ISettingsService _settings;
     private readonly WindowsCredentialStore _store;
     private readonly WrappedStoreCache<WindowsCredentialStore> _wrapped;
-    private readonly Func<bool>? _checkKey;
     private readonly Action? _dropKey;
     private readonly System.Threading.Timer _sweepTimer;
     private readonly HashSet<string> _usedLaunchIds = [];
@@ -177,16 +175,15 @@ public sealed class PolSessionService : IDisposable
 
     public PolSessionService(ISettingsService settings)
         : this(settings, new WindowsCredentialStore(), () => new WindowsCredentialStore(wrapKey: CredentialKey.Open()),
-               SweepInterval, CredentialKey.CheckFile, CredentialKey.Reload) { }
+               SweepInterval, CredentialKey.Reload) { }
 
     internal PolSessionService(ISettingsService settings, WindowsCredentialStore store,
                                Func<WindowsCredentialStore> openWrapped, TimeSpan sweepEvery,
-                               Func<bool>? checkKey = null, Action? dropKey = null)
+                               Action? dropKey = null)
     {
         _settings = settings;
         _store = store;
         _wrapped = new WrappedStoreCache<WindowsCredentialStore>(openWrapped);
-        _checkKey = checkKey;
         _dropKey = dropKey;
         FindLaunchFiles = () => LaunchFiles(Region);
         GameIsInstalled = () => GameInstalled(Region);
@@ -233,16 +230,13 @@ public sealed class PolSessionService : IDisposable
     // a login or pre-start only gets this far on a supported region
     private PolRegion Region => _settings.DetectedRegion ?? PolRegion.UnitedStates;
 
-    // a changed key stops the sign-in, the hook would read the entries with the new one and exit 11
-    internal (int Code, string Text)? KeyForSignIn(int? detailsGeneration = null)
+    // the key's opened before anything starts, so one that can't be read gets its own text
+    internal (int Code, string Text)? KeyForSignIn()
     {
         try
         {
             _ = Wrapped;
-            bool changed = _checkKey?.Invoke() == true;
-            if (!changed && (detailsGeneration is null || detailsGeneration == CredentialKey.Generation)) return null;
-            Log.Warning("The key file changed before this sign-in: the account's details are asked for again");
-            return (ErrorDetailsUnreadable, DetailsAgainText);
+            return null;
         }
         catch (CredentialKeyUnavailableException) { return (ErrorLauncherFailed, CredentialKey.UnavailableText); }
     }
@@ -329,7 +323,7 @@ public sealed class PolSessionService : IDisposable
         var (viewerDir, polExe, launcherExe) = FindLaunchFiles();
         if (polExe is null)
             return Fail("Some of the files needed to start PlayOnline are missing. Check FINAL FANTASY XI is installed, and if it is, reinstall Provenance.");
-        if (KeyForSignIn(options.KeyGeneration) is { } keyProblem) return Fail(keyProblem.Text, keyProblem.Code);
+        if (KeyForSignIn() is { } keyProblem) return Fail(keyProblem.Text, keyProblem.Code);
         // the viewer checks for its own update on every connect and always says yes
         try
         {

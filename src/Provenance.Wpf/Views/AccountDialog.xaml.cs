@@ -21,7 +21,7 @@ public sealed record AccountDialogResult(string PolId, string PolPassword,
     }
 }
 
-internal enum ToolView { Hidden, Missing, Refused, CantCheck, TooOld, Installing, Ready, DownloadFailed, CheckFailed, DownloadCantCheck, DownloadTooOld, NotSupported }
+internal enum ToolView { Hidden, Missing, CantCheck, TooOld, Installing, Ready, DownloadFailed, CheckFailed, DownloadCantCheck, DownloadTooOld, NotSupported }
 
 // The only place the IDs and passwords get typed, they stay off screen everywhere else
 public partial class AccountDialog : Window
@@ -159,8 +159,7 @@ public partial class AccountDialog : Window
             if (mine.IsCancellationRequested) return;
             if (found.Path is not { } path)
             {
-                ShowTool(found.CantCheck ? ToolView.CantCheck : found.TooOld ? ToolView.TooOld
-                         : found.RefusedFolder is null ? ToolView.Missing : ToolView.Refused);
+                ShowTool(found.CantCheck ? ToolView.CantCheck : found.TooOld ? ToolView.TooOld : ToolView.Missing);
                 return;
             }
             ShowTool(ToolView.Ready);
@@ -195,7 +194,6 @@ public partial class AccountDialog : Window
         ToolText.Text = view switch
         {
             ToolView.Missing => CliTools.MissingText(tool),
-            ToolView.Refused => CliTools.RefusedText(tool),
             ToolView.CantCheck => CliTools.CantCheckText(tool),
             ToolView.TooOld => CliTools.TooOldText(tool),
             ToolView.Installing => CliTools.DownloadingText(tool),
@@ -209,7 +207,7 @@ public partial class AccountDialog : Window
         };
         ToolButton.Content = view switch
         {
-            ToolView.Missing or ToolView.Refused or ToolView.CantCheck or ToolView.TooOld => "INSTALL IT",
+            ToolView.Missing or ToolView.CantCheck or ToolView.TooOld => "INSTALL IT",
             ToolView.DownloadFailed or ToolView.CheckFailed or ToolView.DownloadCantCheck or ToolView.DownloadTooOld => "TRY AGAIN",
             ToolView.Ready when tool == CliTools.OnePassword => "OPEN 1PASSWORD SETTINGS",
             _ => null,

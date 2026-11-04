@@ -485,54 +485,44 @@ public static class SecureFiles
     internal static int ClearBin(string bin)
     {
         using var held = OpenBin(bin);
+        int budget = 200_000;
+        for (bool progress = true; progress && budget > 0;)
         {
-            int budget = 200_000;
-            for (int attempt = 0; ; attempt++)
+            progress = false;
+            var queue = new Queue<string>(List(held));
+            if (queue.Count == 0) return 0;
+            while (budget-- > 0 && queue.TryDequeue(out var name))
             {
-                for (bool progress = true; progress && budget > 0;)
+                ClearingForTest?.Invoke(Path.Combine(bin, name));
+                var (h, status) = OpenAt(held, name, Delete | ReadAttributes, 0);
+                using (h)
                 {
-                    progress = false;
-                    var queue = new Queue<string>(List(held));
-                    if (queue.Count == 0) return 0;
-                    while (budget-- > 0 && queue.TryDequeue(out var name))
+                    if (status != 0 || !GetFileInformationByHandle(h, out var info)) continue;
+                    if ((info.FileAttributes & 0x10) != 0 && (info.FileAttributes & 0x400) == 0)
                     {
-                        ClearingForTest?.Invoke(Path.Combine(bin, name));
-                        var (h, status) = OpenAt(held, name, Delete | ReadAttributes, 0);
-                        using (h)
-                        {
-                            if (status != 0 || !GetFileInformationByHandle(h, out var info)) continue;
-                            if ((info.FileAttributes & 0x10) != 0 && (info.FileAttributes & 0x400) == 0)
-                            {
-                                var (list, ls) = OpenAt(held, name, ListDirectory | ReadAttributes, DirectoryFile);
-                                using (list)
-                                    if (ls == 0)
-                                        foreach (var kid in List(list))
-                                        {
-                                            ClearingForTest?.Invoke(Path.Combine(bin, name, kid));
-                                            var (k, ks) = OpenAt(list, kid, Delete | ReadAttributes, 0);
-                                            using (k)
-                                            {
-                                                if (ks != 0) continue;
-                                                var to = Guid.NewGuid().ToString("N");
-                                                if (Rename(k, held, to) == 0) { queue.Enqueue(to); progress = true; }
-                                                else if (Remove(k)) progress = true;
-                                            }
-                                        }
-                            }
-                            if (Remove(h)) progress = true;
-                        }
+                        var (list, ls) = OpenAt(held, name, ListDirectory | ReadAttributes, DirectoryFile);
+                        using (list)
+                            if (ls == 0)
+                                foreach (var kid in List(list))
+                                {
+                                    ClearingForTest?.Invoke(Path.Combine(bin, name, kid));
+                                    var (k, ks) = OpenAt(list, kid, Delete | ReadAttributes, 0);
+                                    using (k)
+                                    {
+                                        if (ks != 0) continue;
+                                        var to = Guid.NewGuid().ToString("N");
+                                        if (Rename(k, held, to) == 0) { queue.Enqueue(to); progress = true; }
+                                        else if (Remove(k)) progress = true;
+                                    }
+                                }
                     }
+                    if (Remove(h)) progress = true;
                 }
-                int left = List(held).Count;
-                if (left == 0) return 0;
-                if (attempt == 3 || budget <= 0)
-                {
-                    Log.Information("{Count} item(s) in {Bin} couldn't be removed yet, so they're tried again at the next start", left, bin);
-                    return left;
-                }
-                Thread.Sleep(500);   // a virus scanner can have a file in there open for a moment
             }
         }
+        int left = List(held).Count;
+        if (left > 0) Log.Information("{Count} item(s) in {Bin} couldn't be removed yet, so they're tried again at the next start", left, bin);
+        return left;
     }
 
     // POSIX delete takes the name away at once, and read-only doesn't stop it

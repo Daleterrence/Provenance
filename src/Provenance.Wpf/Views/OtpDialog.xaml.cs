@@ -48,10 +48,7 @@ public partial class OtpDialog : Window
             {
                 e.CancelCommand();
                 if (e.DataObject.GetDataPresent(DataFormats.UnicodeText))
-                {
-                    var pasted = (string)e.DataObject.GetData(DataFormats.UnicodeText);
-                    ClearClipboardIfPasted(pasted, Fill(pasted, (int)box.Tag));
-                }
+                    Fill((string)e.DataObject.GetData(DataFormats.UnicodeText), (int)box.Tag);
             });
             _boxes[i] = box;
             Digits.Children.Add(box);
@@ -147,10 +144,7 @@ public partial class OtpDialog : Window
     internal static string DigitsFor(string text, int from) =>
         new(text.Where(char.IsAsciiDigit).Take(Math.Max(0, 6 - from)).ToArray());
 
-    // only a paste that wrote all six digits itself clears the clipboard, not one that topped up typed ones
-    internal static bool PasteWroteAll(int written) => written == 6;
-
-    private int Fill(string text, int from)
+    private void Fill(string text, int from)
     {
         var digits = DigitsFor(text, from);
         for (int i = 0; i < digits.Length; i++) _boxes[from + i].Text = digits[i].ToString();
@@ -158,7 +152,6 @@ public partial class OtpDialog : Window
         _boxes[next].Focus();
         if (digits.Length == 0) ShowError("There's no code on the clipboard.");
         else ErrorText.Visibility = Visibility.Collapsed;
-        return digits.Length;
     }
 
     private void OnDigitInput(object sender, TextCompositionEventArgs e)
@@ -331,18 +324,7 @@ public partial class OtpDialog : Window
         foreach (var b in _boxes) b.Text = "";
         string text = "";
         try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); } catch { }   // another program may hold the clipboard
-        ClearClipboardIfPasted(text, Fill(text, 0));
-    }
-
-    // read again first, so anything copied in the meantime is left alone
-    private void ClearClipboardIfPasted(string pasted, int written)
-    {
-        if (!PasteWroteAll(written)) return;
-        try
-        {
-            if (Clipboard.ContainsText() && Clipboard.GetText() == pasted) Clipboard.Clear();
-        }
-        catch { }
+        Fill(text, 0);
     }
 
     private void OnDrag(object sender, MouseButtonEventArgs e)

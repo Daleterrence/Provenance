@@ -287,6 +287,7 @@
                                     <ComboBox ItemsSource="{Binding AutoDisconnectChoices}" SelectedIndex="{Binding AutoDisconnectIndex}"
                                               AutomationProperties.Name="Auto-disconnect" />
                                 </HeaderedContentControl>
+                                <TextBlock Text="{Binding PolOptionsStatus}" Tag="True" Style="{StaticResource ProfileStatusText}" />
                             </StackPanel>
                         </Border>
 

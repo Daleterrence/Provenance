@@ -49,6 +49,8 @@ public partial class SettingsViewModel : ObservableObject
         };
         string Folder(string product) => (region is { } r ? PolPaths.TryGetInstallFolder(r, product) : null) ?? "Not found";
         ViewerFolder = Folder(PolPaths.ViewerProduct);
+        PolOptionsStatus = region is { } r && PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) is { } viewer && PolOptions.Linked(viewer)
+            ? PolOptions.LinkedText : "";
         FfxiFolder = Folder(PolPaths.FfxiProduct);
         _exitAfterGameExits = settings.Current.ExitAfterGameExits;
         _keepSignedInInTray = settings.Current.KeepSignedInInTray;
@@ -79,6 +81,7 @@ public partial class SettingsViewModel : ObservableObject
     public HandlesViewModel Handles { get; }
     public string RegionText { get; }
     public string ViewerFolder { get; }
+    public string PolOptionsStatus { get; }
     public string FfxiFolder { get; }
 
     // the SemVer one (1.0.0-beta.1), not the numeric assembly version, minus the "+<commit>" the build adds

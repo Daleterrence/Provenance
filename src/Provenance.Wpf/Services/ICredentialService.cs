@@ -16,9 +16,6 @@ public interface ICredentialService
 
     string? ReadPolId(string profileId);
 
-    // true when the key file changed, never throws
-    Task<bool> CheckKeyAsync();
-
     void SavePolAccount(string profileId, PolAccount account);
 
     void SaveSeaAccount(string profileId, SeaAccount account);

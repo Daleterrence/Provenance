@@ -113,16 +113,9 @@ try {
         }
     }
 
-    # vpk also takes signing settings from VPK_* variables, so none of them get through
-    $vpkVars = @(Get-ChildItem Env: | Where-Object Name -like 'VPK_*')
-    foreach ($v in $vpkVars) { Remove-Item -LiteralPath "Env:\$($v.Name)" }
-    try {
-        & $vpk --skip-updates pack -u Provenance -v $Version -p $publish -e ProvenanceLauncher.exe -i $icon -r win-x86 `
-            --packTitle Provenance --noPortable --channel $channel -o $Out
-        if ($LASTEXITCODE -ne 0) { throw "vpk pack failed (exit code $LASTEXITCODE)" }
-    } finally {
-        foreach ($v in $vpkVars) { Set-Item -LiteralPath "Env:\$($v.Name)" -Value $v.Value }
-    }
+    & $vpk --skip-updates pack -u Provenance -v $Version -p $publish -e ProvenanceLauncher.exe -i $icon -r win-x86 `
+        --packTitle Provenance --noPortable --channel $channel -o $Out
+    if ($LASTEXITCODE -ne 0) { throw "vpk pack failed (exit code $LASTEXITCODE)" }
 
     $packed = "Provenance-$channel-Setup.exe", "Provenance-$Version-$channel-full.nupkg", "releases.$channel.json", "assets.$channel.json"
     foreach ($file in $packed) {

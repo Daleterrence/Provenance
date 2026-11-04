@@ -9,23 +9,18 @@ public sealed class CredentialService : ICredentialService
 {
     private readonly WindowsCredentialStore _store;
     private readonly WrappedStoreCache<WindowsCredentialStore> _wrapped;
-    private readonly Func<bool>? _checkKey, _checkKeyBeforeSave;
 
     public CredentialService()
-        : this(new WindowsCredentialStore(), () => new WindowsCredentialStore(wrapKey: CredentialKey.Open()), CredentialKey.CheckFile,
-               CredentialKey.CheckFileNow) { }
+        : this(new WindowsCredentialStore(), () => new WindowsCredentialStore(wrapKey: CredentialKey.Open())) { }
 
     public CredentialService(WindowsCredentialStore store) : this(store, () => store) { }
 
-    internal CredentialService(WindowsCredentialStore store, Func<WindowsCredentialStore> openWrapped, Func<bool>? checkKey = null,
-                               Func<bool>? checkKeyBeforeSave = null)
+    internal CredentialService(WindowsCredentialStore store, Func<WindowsCredentialStore> openWrapped)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(openWrapped);
         _store = store;
         _wrapped = new WrappedStoreCache<WindowsCredentialStore>(openWrapped);
-        _checkKey = checkKey;
-        _checkKeyBeforeSave = checkKeyBeforeSave;
     }
 
     private WindowsCredentialStore Wrapped => _wrapped.Get();
@@ -36,16 +31,6 @@ public sealed class CredentialService : ICredentialService
         try { _ = Wrapped; }
         catch (CredentialKeyUnavailableException) { }
     });
-
-    public Task<bool> CheckKeyAsync()
-    {
-        if (_checkKey is not { } check) return Task.FromResult(false);
-        return Task.Run(() =>
-        {
-            try { return check(); }
-            catch (CredentialKeyUnavailableException) { return false; }
-        });
-    }
 
     public PolAccount? LoadPolAccount(string profileId) =>
         ReadOrNull(KeyFor(CredentialKeys.Pol, profileId)) is { } c ? new PolAccount(c.UserName, c.Secret) : null;
@@ -72,26 +57,13 @@ public sealed class CredentialService : ICredentialService
     public void SavePolAccount(string profileId, PolAccount account)
     {
         ArgumentNullException.ThrowIfNull(account);
-        ForSave().Save(KeyFor(CredentialKeys.Pol, profileId), account.PolId, account.Password);
+        Wrapped.Save(KeyFor(CredentialKeys.Pol, profileId), account.PolId, account.Password);
     }
 
     public void SaveSeaAccount(string profileId, SeaAccount account)
     {
         ArgumentNullException.ThrowIfNull(account);
-        ForSave().Save(KeyFor(CredentialKeys.Sea, profileId), account.Username, account.Password);
-    }
-
-    // rereads the key file first, so a key replaced while the account dialog was open gets caught. The UI thread
-    // only waits on that read, never on a lock
-    private WindowsCredentialStore ForSave()
-    {
-        if (_checkKeyBeforeSave is { } now)
-            Task.Run(() =>
-            {
-                try { now(); }
-                catch (CredentialKeyUnavailableException) { }
-            }).GetAwaiter().GetResult();
-        return Wrapped;
+        Wrapped.Save(KeyFor(CredentialKeys.Sea, profileId), account.Username, account.Password);
     }
 
     public void DeletePolAccount(string profileId) => Delete(KeyFor(CredentialKeys.Pol, profileId));

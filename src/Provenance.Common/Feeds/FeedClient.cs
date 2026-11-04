@@ -3,27 +3,13 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Feeds;
 
-// the feed worker's JSON when there's one, else POL's own RSS 1.0, normalised the same way the worker does it
+// the feed worker's JSON, and the last answer it gave when it can't be reached
 public sealed class FeedClient
 {
-    private static readonly XNamespace Rss = "http://purl.org/rss/1.0/";
-    private static readonly XNamespace Dc = "http://purl.org/dc/elements/1.1/";
-    private static readonly XNamespace Rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-
-    private static readonly IReadOnlyDictionary<string, string> ZoneOffset =
-        new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["JST"] = "+0900", ["GMT"] = "+0000", ["UTC"] = "+0000", ["UT"] = "+0000",
-            ["PST"] = "-0800", ["PDT"] = "-0700", ["EST"] = "-0500", ["EDT"] = "-0400",
-            ["CST"] = "-0600", ["CDT"] = "-0500", ["CET"] = "+0100", ["CEST"] = "+0200",
-        };
-
     private const int MaxImageBytes = 8 * 1024 * 1024;
 
     // redirects by hand: one mustn't take a banner download off POL's site
@@ -31,9 +17,6 @@ public sealed class FeedClient
         new(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(15) };
 
     private readonly HttpClient _http;
-
-    // the Server Status page was never changed from Shift_JIS after the website redesign, soooo here we are.
-    static FeedClient() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
     public FeedClient(HttpClient? http = null)
     {
@@ -45,50 +28,28 @@ public sealed class FeedClient
     private static string RegionToken(FeedRegion r) =>
         r switch { FeedRegion.EU => "ff11eu", FeedRegion.JP => "ff11", _ => "ff11us" };
 
-    public static string SourceUrl(FeedRegion r, FeedKind k) => k == FeedKind.News
-        ? $"https://www.playonline.com/pcd2/topics/{RegionToken(r)}/topics.xml"
-        : $"https://www.playonline.com/{RegionToken(r)}/polnews/news.xml";
-
-    public static string LatestUrl(FeedRegion r) =>
-        $"https://www.playonline.com/pcd2/topics/{RegionToken(r)}/topics_latest.html";
-
     public static string ServicePage(FeedRegion region) => PlayOnlineInfo.ServicePage(RegionToken(region));
 
     public async Task<FeedResult> GetAsync(FeedRegion region, FeedKind kind, string? workerBaseUrl, CancellationToken ct = default)
     {
         var path = $"feeds/{region.ToString().ToLowerInvariant()}/{(kind == FeedKind.News ? "news" : "status")}.json";
-        if (await FromWorkerAsync(workerBaseUrl, path, ParseWorker, ct).ConfigureAwait(false) is { } items)
-            return new FeedResult(region, kind, items);
-        try { return await Task.Run(() => GetDirectAsync(region, kind, ct), ct).ConfigureAwait(false); }
-        catch { return FeedResult.Empty(region, kind); }
+        return new FeedResult(region, kind, await FromWorkerAsync(workerBaseUrl, path, ParseWorker, ct).ConfigureAwait(false));
     }
 
-    // the worker 502s when it finds no worlds, which lands on POL's page too
-    public async Task<IReadOnlyList<WorldStatus>> GetWorldsAsync(FeedRegion region, string? workerBaseUrl, CancellationToken ct = default)
-    {
-        var path = $"worlds/{region.ToString().ToLowerInvariant()}.json";
-        if (await FromWorkerAsync(workerBaseUrl, path, ParseWorkerWorlds, ct).ConfigureAwait(false) is { } worlds)
-            return worlds;
-        try
-        {
-            return await Task.Run(() => FetchAsync(PlayOnlineInfo.WorldsUrl, PlayOnlineInfo.ParseWorlds, ct), ct)
-                .ConfigureAwait(false);
-        }
-        catch { return []; }
-    }
+    // the worker 502s when it finds no worlds
+    public Task<IReadOnlyList<WorldStatus>> GetWorldsAsync(FeedRegion region, string? workerBaseUrl, CancellationToken ct = default) =>
+        FromWorkerAsync(workerBaseUrl, $"worlds/{region.ToString().ToLowerInvariant()}.json", ParseWorkerWorlds, ct);
 
-    // null means go to POL. POL's lists are never empty, so an empty answer counts as trouble too
-    private async Task<IReadOnlyList<T>?> FromWorkerAsync<T>(string? workerBaseUrl, string path,
-                                                             Func<string, IReadOnlyList<T>> parse, CancellationToken ct)
+    private async Task<IReadOnlyList<T>> FromWorkerAsync<T>(string? workerBaseUrl, string path,
+                                                            Func<string, IReadOnlyList<T>> parse, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(workerBaseUrl)) return null;
+        if (string.IsNullOrWhiteSpace(workerBaseUrl)) return [];
         try
         {
             var url = $"{workerBaseUrl.TrimEnd('/')}/{path}";
-            var list = await Task.Run(() => FetchAsync(url, parse, ct), ct).ConfigureAwait(false);
-            return list.Count > 0 ? list : null;
+            return await Task.Run(() => FetchAsync(url, parse, ct), ct).ConfigureAwait(false);
         }
-        catch when (!ct.IsCancellationRequested) { return null; }
+        catch when (!ct.IsCancellationRequested) { return []; }
     }
 
     internal static IReadOnlyList<FeedItem> ParseWorker(string json)
@@ -118,35 +79,6 @@ public sealed class FeedClient
                     list.Add(new WorldStatus(n.GetString() ?? "",
                         w.TryGetProperty("status", out var st) && st.ValueKind == JsonValueKind.String ? st.GetString() ?? "unknown" : "unknown"));
         return list;
-    }
-
-    private async Task<FeedResult> GetDirectAsync(FeedRegion region, FeedKind kind, CancellationToken ct)
-    {
-        var xmlTask = FetchAsync(SourceUrl(region, kind), ParseRdf, ct);
-        // the Topics RSS has no header images and the Information RSS no categories, but the site's pages have both,
-        // so those get fetched alongside and joined by link
-        var latestTask = kind == FeedKind.News ? FetchAsync(LatestUrl(region), ParseBanners, ct) : null;
-        var infoTasks = kind == FeedKind.Status
-            ? PlayOnlineInfo.InfoUrls(RegionToken(region)).Select(u => FetchAsync(u, PlayOnlineInfo.ParseCategories, ct)).ToList()
-            : null;
-        var items = await xmlTask.ConfigureAwait(false);
-        if (latestTask != null)
-        {
-            try { items = WithBanners(items, await latestTask.ConfigureAwait(false)); }
-            catch { }   // banners are decoration
-        }
-        if (infoTasks != null)
-        {
-            var cats = new Dictionary<string, (InfoCategory Category, InfoBadge Badge)>();
-            foreach (var task in infoTasks)
-            {
-                try { foreach (var kv in await task.ConfigureAwait(false)) cats.TryAdd(kv.Key, kv.Value); }   // info_top wins
-                catch { }
-            }
-            items = items.Select(it => PlayOnlineInfo.LinkKey(it.Url) is { } k && cats.TryGetValue(k, out var c)
-                                       ? it with { Category = c.Category, Badge = c.Badge } : it).ToList();
-        }
-        return new FeedResult(region, kind, items);
     }
 
     private async Task<T> FetchAsync<T>(string url, Func<string, T> parse, CancellationToken ct)
@@ -317,65 +249,4 @@ public sealed class FeedClient
         }
         catch { }
     }
-
-    // each div.gutter has the link in h4.tx_topics_tl and the banner in img.tpimgL (the file name varies)
-    public static IReadOnlyDictionary<string, string> ParseBanners(string html)
-    {
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var chunk in html.Split("<div class=\"gutter\">").Skip(1))
-        {
-            var href = Regex.Match(chunk, @"class=""tx_topics_tl""[^>]*>\s*<a\s+href=""([^""]+)""", RegexOptions.IgnoreCase);
-            var img = Regex.Match(chunk, @"<img\b(?=[^>]*\bclass=""tpimgL"")[^>]*\bsrc=""([^""]+)""", RegexOptions.IgnoreCase);
-            if (href.Success && img.Success && PlayOnlineInfo.LinkKey(href.Groups[1].Value) is { } key &&
-                PlayOnlineInfo.ToAbsolute(img.Groups[1].Value) is { } src)
-                map.TryAdd(key, src.AbsoluteUri);
-        }
-        return map;
-    }
-
-    public static IReadOnlyList<FeedItem> WithBanners(IReadOnlyList<FeedItem> items, IReadOnlyDictionary<string, string> banners) =>
-        items.Select(i => PlayOnlineInfo.LinkKey(i.Url) is { } k && banners.TryGetValue(k, out var b)
-                          ? i with { ImageUrl = b } : i).ToList();
-
-    public static IReadOnlyList<FeedItem> ParseRdf(string xml) =>
-        XDocument.Parse(xml).Descendants(Rss + "item").Select(item =>
-        {
-            var link = (string?)item.Element(Rss + "link");
-            if (string.IsNullOrWhiteSpace(link)) link = (string?)item.Attribute(Rdf + "about");
-            var desc = (string?)item.Element(Rss + "description") ?? "";
-            return new FeedItem(Decode((string?)item.Element(Rss + "title") ?? ""), (link ?? "").Trim(),
-                                NormalizeDate((string?)item.Element(Dc + "date")), FirstImage(desc), Summarize(desc));
-        }).ToList();
-
-    public static DateTimeOffset? NormalizeDate(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return null;
-        var s = raw.Trim();
-        var m = Regex.Match(s, @"\b([A-Z]{2,4})\s*$");
-        if (m.Success && ZoneOffset.TryGetValue(m.Groups[1].Value, out var off))
-            s = Regex.Replace(s, @"\b[A-Z]{2,4}\s*$", off);
-        return DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dto) ? dto : null;
-    }
-
-    private static string? FirstImage(string html)
-    {
-        var m = Regex.Match(html, @"<img[^>]+src\s*=\s*[""']([^""']+)[""']", RegexOptions.IgnoreCase);
-        if (!m.Success) return null;
-        var u = m.Groups[1].Value.Trim();
-        return u.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? u : null;
-    }
-
-    private static string Summarize(string html, int max = 420)
-    {
-        var text = Decode(Regex.Replace(Regex.Replace(html, @"<br\s*/?>", " ", RegexOptions.IgnoreCase), @"<[^>]+>", ""));
-        text = Regex.Replace(text, @"[=\-_*~]{3,}", " ");   // "=====" style separator lines
-        text = Regex.Replace(text, @"\s+", " ").Trim();
-        return text.Length > max ? text[..(max - 3)].TrimEnd() + "..." : text;
-    }
-
-    private static string Decode(string t) => t
-        .Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", "\"")
-        .Replace("&apos;", "'").Replace("&#39;", "'").Replace("&nbsp;", " ")
-        .Replace("&amp;", "&").Trim();
 }

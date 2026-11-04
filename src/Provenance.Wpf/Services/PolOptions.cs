@@ -10,6 +10,8 @@ public static class PolOptions
 {
     public static readonly int[] AutoDisconnectChoices = [-1, 10, 20, 30, 40, 50, 60];
 
+    public const string LinkedText = "Provenance can't change these settings in a PlayOnline folder that's reached through a link.";
+
     private static readonly string[] MessageFolders = [@"s\a", @"s\b", @"r\a", @"r\b"];
 
     // nothing chosen yet shows what FFXI does on an account with no option.bin: the filter on, auto-disconnect off
@@ -45,6 +47,9 @@ public static class PolOptions
         return region == PolRegion.Europe && File.Exists(eu) ? eu : Path.Combine(viewerDir, "default", "pub", "home", "option.bin");
     }
 
+    // refused like a linked Windower folder, it'd be an elevated write through a link
+    public static bool Linked(string viewerDir) => ThirdPartyHookService.IsLinkedFolder(viewerDir);
+
     // the hook won't use a slot whose msg folders go through a link and stays in home84, so that's the one FFXI reads
     public static int SlotInUse(string viewerDir, int slot)
     {
@@ -58,14 +63,12 @@ public static class PolOptions
     public static void Apply(LauncherSettings s, string viewerDir, int slot, PolRegion region)
     {
         if (s.ChatLanguageFilter is null && s.AutoDisconnectMinutes is null) return;
-        // an install moved to another drive (a junction above it, SUBST, a mount point) is pinned where it really is.
-        // The viewer folder may be one users can write to, so nothing below it can be a link
-        if (FolderPins.RealPath(viewerDir) is not { } real)
+        // the viewer folder may be one users can write to, so nothing below it can be a link either
+        if (Linked(viewerDir))
         {
-            Log.Warning("The viewer folder {Viewer} couldn't be opened, POL settings not written for home{Slot:00}", viewerDir, slot);
+            Log.Warning("The viewer folder {Viewer} is reached through a link, POL settings not written for home{Slot:00}", viewerDir, slot);
             return;
         }
-        viewerDir = real;
         var dir = Path.Combine(viewerDir, "pub", $"home{slot:00}");
         var path = Path.Combine(dir, "option.bin");
         if (!FolderPins.Plain(viewerDir, path, lastIsFolder: false))

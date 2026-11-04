@@ -30,7 +30,4 @@ public sealed record FeedItem(string Title, string Url, DateTimeOffset? Date, st
     };
 }
 
-public sealed record FeedResult(FeedRegion Region, FeedKind Kind, IReadOnlyList<FeedItem> Items)
-{
-    public static FeedResult Empty(FeedRegion r, FeedKind k) => new(r, k, []);
-}
+public sealed record FeedResult(FeedRegion Region, FeedKind Kind, IReadOnlyList<FeedItem> Items);

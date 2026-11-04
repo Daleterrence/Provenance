@@ -248,7 +248,7 @@ public partial class MainViewModel : IMultiRunHost
 
         var profile = Profiles.FirstOrDefault(p => p.Id == account.ProfileId);
         if (profile is null) return MissingDetailsFailure(default);
-        var details = await PrepareSignInAsync(_credentials, profile.Id);
+        var details = PrepareSignIn(_credentials, profile.Id);
         if (details.Missing) return MissingDetailsFailure(_credentials.ReadIds(profile.Id));
         if (details.Problem is { } problem) return new(AccountFailureKind.Account, problem);
         var (pol, sea) = (details.Pol!, details.Sea!);
@@ -306,8 +306,7 @@ public partial class MainViewModel : IMultiRunHost
         {
             signIn = await _pol.ConnectAsync(pol, sea, otp, profile.Id, progress, AskHandleName, token,
                                              new SessionOptions(Lean: true, ThirdPartyHookProfile: hookProfile,
-                                                                HomeSlot: HomeSlotFor(profile),
-                                                                KeyGeneration: details.KeyGeneration));
+                                                                HomeSlot: HomeSlotFor(profile)));
         }
         catch (Exception) when (token.IsCancellationRequested) { return await Stopped(); }
         if (signIn != 0)

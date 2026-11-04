@@ -4,7 +4,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Serilog;
 using Provenance.Common.Credentials;
-using Provenance.Common.Locks;
 using Provenance.Common.Otp;
 
 namespace Provenance.Wpf.Services;
@@ -94,7 +93,6 @@ public static class OtpSources
     private static OtpFetchResult ToolProblem(string tool, ToolFind found) =>
         found.CantCheck ? Problem("couldn't check", $"Provenance couldn't check the {CliTools.Name(tool)} command-line tool.", OtpFix.Install, tool)
         : found.TooOld ? Problem("too old", $"The {CliTools.Name(tool)} command-line tool is too old for Provenance.", OtpFix.Install, tool)
-        : found.RefusedFolder is not null ? Problem("refused", $"Provenance can't use your copy of the {CliTools.Name(tool)} command-line tool.", OtpFix.Install, tool)
         : Problem("not installed", $"The {CliTools.Name(tool)} command-line tool isn't installed.", OtpFix.Install, tool);
 
     // a leading dash would make the item an option, and settings.json is the user's, so this is checked at the run too
@@ -398,8 +396,6 @@ public static class OtpSources
         var proxy = FindKeePassXcProxy();
         if (proxy is null)
             return Problem("not installed", "Provenance needs KeePassXC installed with its installer.", OtpFix.TypeInstead);
-        // a key replaced while the app runs means pairing again, never saving with the old key. Before the proxy starts
-        await Task.Run(CredentialKey.CheckFile, ct);
         var store = await AssociationStoreAsync().WaitAsync(ct);
         var psi = new ProcessStartInfo(proxy)
         {
@@ -447,29 +443,12 @@ public static class OtpSources
             }
             if (id is null || idKey is null || !await Paired(id, idKey))
             {
-                // first use, so KeePassXC asks to allow the app. One copy pairs at a time, after 2 mins it pairs anyway
-                IDisposable? pairing = null;
-                try
-                {
-                    // a file lock, so letting go on another thread is fine. Per Windows user, like the association
-                    pairing = await Task.Run(() => AdminLock.TryAcquire(AdminLock.PerUser("keepassxc-pairing"), TimeSpan.FromMinutes(2), ct), ct);
-                    // another copy may have paired while this one waited
-                    if (ReadAssociation(store) is { } again && again.Secret != saved?.Secret &&
-                        Convert.TryFromBase64String(again.Secret, new byte[64], out _) &&
-                        await Paired(again.UserName, Convert.FromBase64String(again.Secret)))
-                    {
-                        (id, idKey) = (again.UserName, Convert.FromBase64String(again.Secret));
-                    }
-                    else
-                    {
-                        idKey = KeePassXcClient.NewIdKey();
-                        var newKey = idKey;
-                        id = await Timed(t => client.AssociateAsync(newKey, t), TimeSpan.FromMinutes(2),
-                                         "KeePassXC didn't allow Provenance in time.");
-                        store.Save(KeePassXcKey, id, Convert.ToBase64String(idKey));
-                    }
-                }
-                finally { pairing?.Dispose(); }
+                // first use, so KeePassXC asks to allow the app
+                idKey = KeePassXcClient.NewIdKey();
+                var newKey = idKey;
+                id = await Timed(t => client.AssociateAsync(newKey, t), TimeSpan.FromMinutes(2),
+                                 "KeePassXC didn't allow Provenance in time.");
+                store.Save(KeePassXcKey, id, Convert.ToBase64String(idKey));
                 if (!await Paired(id, idKey))
                     return Problem("not paired", "KeePassXC didn't accept the connection.");
             }
