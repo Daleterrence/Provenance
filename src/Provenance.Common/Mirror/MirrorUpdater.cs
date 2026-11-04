@@ -46,11 +46,12 @@ public static class MirrorUpdater
     }
 
     // the change from the installed version's index when the mirror has it, otherwise whatever doesn't match on disk.
-    // Every path's checked before anything changes
+    // Every path in next is checked before anything's read or asked for
     private static async Task<IReadOnlyList<MirrorEntry>> WorkAsync(MirrorClient client, string region, string product, string folder,
         MirrorIndex next, string local, IReadOnlySet<string>? keep, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
     {
         if (keep is { Count: > 0 }) next = next with { Files = next.Files.Where(e => !keep.Contains(e.Path)).ToList() };
+        foreach (var e in next.Files) MirrorSync.SafePath(folder, e.Path);
         var old = local.Length > 0 ? await client.GetIndexAsync(region, product, local, ct) : null;
         IReadOnlyList<MirrorEntry> work;
         if (old is not null) work = MirrorSync.Diff(old, next);
@@ -59,7 +60,6 @@ public static class MirrorUpdater
             scanned?.Report((0, next.Files.Sum(f => f.Size)));
             work = await MirrorSync.ScanAsync(folder, next, scanned, ct, keepLargeAddressAware: true);
         }
-        foreach (var e in work) MirrorSync.SafePath(folder, e.Path);
         return work;
     }
 

@@ -13,13 +13,12 @@ public static class MirrorKeys
 
     public static IReadOnlyDictionary<string, ECDsa> Trusted { get; } = Build();
 
-    private static Dictionary<string, ECDsa> Build()
+    // one that won't import is a broken build, so it fails here instead of looking like a mirror outage
+    private static Dictionary<string, ECDsa> Build() => new()
     {
-        var keys = new Dictionary<string, ECDsa>();
-        if (TryImport(PrimaryPublic) is { } primary) keys[PrimaryId] = primary;
-        if (TryImport(RecoveryPublic) is { } recovery) keys[RecoveryId] = recovery;
-        return keys;
-    }
+        [PrimaryId] = TryImport(PrimaryPublic) ?? throw new InvalidOperationException("The built-in primary mirror key doesn't import."),
+        [RecoveryId] = TryImport(RecoveryPublic) ?? throw new InvalidOperationException("The built-in recovery mirror key doesn't import."),
+    };
 
     public static ECDsa? TryImport(string spkiBase64)
     {

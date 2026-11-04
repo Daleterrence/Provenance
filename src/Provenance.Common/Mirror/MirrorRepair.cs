@@ -105,7 +105,10 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         _changing = false;
         var products = ProductsOf(viewerDir, ffxiDir);
         foreach (var (slug, _) in products)
+        {
             if (!plan.Versions.ContainsKey(slug)) throw new ArgumentException($"The plan has no {slug} version.", nameof(plan));
+            if (!plan.Indexes.ContainsKey(slug)) throw new ArgumentException($"The plan has no {slug} index.", nameof(plan));
+        }
         var viewer = products[0].Product;
 
         // the installer data and the replacement files are one bar, the data's size is only known once it starts
