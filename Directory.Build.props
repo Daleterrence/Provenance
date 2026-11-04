@@ -17,12 +17,19 @@
     <LangVersion>latest</LangVersion>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
+  <PropertyGroup>
+    <ProvenanceGlobalConfig>$(MSBuildThisFileDirectory)Provenance.globalconfig</ProvenanceGlobalConfig>
+  </PropertyGroup>
   <ItemGroup>
-    <GlobalAnalyzerConfigFiles Include="$(MSBuildThisFileDirectory)Provenance.globalconfig" />
+    <GlobalAnalyzerConfigFiles Include="$(ProvenanceGlobalConfig)" />
   </ItemGroup>
+  <!-- without it everything still builds, just with none of the C# rules checked -->
+  <Target Name="RequireStyleRules" BeforeTargets="CoreCompile">
+    <Error Condition="!Exists('$(ProvenanceGlobalConfig)')" Text="$(ProvenanceGlobalConfig) is missing, so none of the C# rules would be checked." />
+  </Target>
 
   <!-- the images aren't in this repo. They come from PROVENANCE_ASSETS as given, or the assets folder with the icon in it next
-       to the repo or one folder up, the same as tools\build-common.ps1's Find-ProvenanceAssets -->
+       to the repo or one folder up -->
   <PropertyGroup>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == ''">$(PROVENANCE_ASSETS)</ProvenanceAssetsDir>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == '' and Exists('$(MSBuildThisFileDirectory)..\assets\app\provenance.ico')">$(MSBuildThisFileDirectory)..\assets</ProvenanceAssetsDir>

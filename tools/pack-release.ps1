@@ -39,7 +39,6 @@ $wpf = Join-Path $src 'Provenance.Wpf\Provenance.Wpf.csproj'
 $launcher = Join-Path $src 'Provenance.Launcher\Provenance.Launcher.csproj'
 $assetsRoot = Find-ProvenanceAssets
 $icon = Join-Path $assetsRoot 'app\provenance.ico'
-$env:PROVENANCE_ASSETS = $assetsRoot
 $buildNative = Join-Path $repo 'native\build-native.ps1'
 if (-not $Out) { $Out = Join-Path ([IO.Path]::GetTempPath()) "provenance-release\$Version" }
 $Out = [IO.Path]::GetFullPath($Out)

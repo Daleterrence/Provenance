@@ -20,12 +20,6 @@
 
   <Import Project="ReadyToRun.props" />
 
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <PublishReadyToRun>true</PublishReadyToRun>
-    <TieredPGO>true</TieredPGO>
-    <Optimize>true</Optimize>
-  </PropertyGroup>
-
   <!-- so WinForms names never clash with WPF's (Application, MessageBox...) -->
   <ItemGroup>
     <Using Remove="System.Windows.Forms" />
@@ -65,10 +59,10 @@
 
   <!-- Provenance Watcher.exe injects pol_hook.dll, which it expects next to itself -->
   <ItemGroup>
+    <NativeFile Include="$(NativeToolsDir)\pol_hook.dll" />
     <NativeFile Include="$(NativeToolsDir)\Provenance Watcher.exe" />
     <NativeFile Include="$(NativeToolsDir)\Provenance - PlayOnline Uninstall.exe" />
     <NativeFile Include="$(NativeToolsDir)\Provenance - FINAL FANTASY XI Uninstall.exe" />
-    <NativeFile Include="$(NativeToolsDir)\pol_hook.dll" />
     <None Include="@(NativeFile)" Link="native\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

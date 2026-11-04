@@ -9,37 +9,43 @@
 $HookLibs = 'user32.lib advapi32.lib crypt32.lib ole32.lib uuid.lib bcrypt.lib'
 $UninstallLibs = 'user32.lib advapi32.lib ole32.lib oleaut32.lib shell32.lib ntdll.lib'
 
-function Get-ProvenanceVersion {
-    $props = Join-Path (Split-Path -Parent $PSScriptRoot) 'Directory.Build.props'
-    $xml = [xml](Get-Content -LiteralPath $props -Raw)
-    # only the plain pair is read, so anything that could quietly win over it gets refused
-    $odd = @($xml.SelectNodes('//Version | //PackageVersion')).Count -gt 0 -or
-           @($xml.SelectNodes('//VersionPrefix')).Count -ne 1 -or @($xml.SelectNodes('//VersionSuffix')).Count -gt 1 -or
-           @($xml.SelectNodes('//VersionPrefix/@Condition | //VersionSuffix/@Condition | //PropertyGroup[VersionPrefix or VersionSuffix]/@Condition')).Count -gt 0
-    if ($odd) { throw "$props has to set the version with one plain VersionPrefix and at most one VersionSuffix." }
-    $prefix = "$($xml.SelectSingleNode('/Project/PropertyGroup/VersionPrefix').InnerText)".Trim()
-    $suffix = "$($xml.SelectSingleNode('/Project/PropertyGroup/VersionSuffix').InnerText)".Trim()
-    if ($prefix -notmatch '^\d+\.\d+\.\d+$') { throw "$props has no usable VersionPrefix ($prefix)" }
-    [pscustomobject]@{ Prefix = $prefix; Suffix = $suffix; Version = $(if ($suffix) { "$prefix-$suffix" } else { $prefix }) }
+# the version, the assets folder and the package versions as the build sees them, asked once a script. Through a file, so
+# nothing else dotnet prints gets in
+$BuildValues = @{}
+function Get-BuildValues {
+    if ($BuildValues.Count) { return $BuildValues.Common }
+    $project = Join-Path (Split-Path -Parent $PSScriptRoot) 'src\Provenance.Common\Provenance.Common.csproj'
+    $out = [IO.Path]::GetTempFileName()
+    try {
+        $ask = '-getProperty:Version', '-getProperty:ProvenanceAssetsDir', '-getItem:PackageVersion'
+        $null = & dotnet msbuild $project -nologo @ask "-getResultOutputFile:$out"
+        # with a result file MSBuild keeps its errors to itself, so a failure asks again without one to show them
+        if ($LASTEXITCODE -ne 0) { throw "dotnet msbuild couldn't read ${project}:`n$(& dotnet msbuild $project -nologo @ask 2>&1 | Out-String)" }
+        $BuildValues.Common = Get-Content -LiteralPath $out -Raw | ConvertFrom-Json
+        $BuildValues.Common
+    } finally {
+        Remove-Item -LiteralPath $out -Force -ErrorAction SilentlyContinue
+    }
 }
 
-# the same lookup as Directory.Build.props: PROVENANCE_ASSETS as given, or the first assets folder with the icon in it
+function Get-ProvenanceVersion {
+    $version = (Get-BuildValues).Properties.Version
+    $prefix, $suffix = $version -split '-', 2
+    if ($prefix -notmatch '^\d+\.\d+\.\d+$') { throw "Directory.Build.props gives a version the exes can't carry ($version)" }
+    [pscustomobject]@{ Prefix = $prefix; Suffix = "$suffix"; Version = $version }
+}
+
 function Find-ProvenanceAssets {
-    $repo = Split-Path -Parent $PSScriptRoot
-    $found = if ($env:PROVENANCE_ASSETS) { $env:PROVENANCE_ASSETS } else {
-        @((Join-Path $repo '..\assets'), (Join-Path $repo '..\..\assets')) |
-            Where-Object { Test-Path -LiteralPath (Join-Path $_ 'app\provenance.ico') } | Select-Object -First 1
-    }
+    $found = (Get-BuildValues).Properties.ProvenanceAssetsDir
     if (-not $found -or -not (Test-Path -LiteralPath (Join-Path $found 'app\provenance.ico'))) {
         throw "Provenance's images aren't in this repo. Put the assets folder next to the repo, or set PROVENANCE_ASSETS to where it is."
     }
-    [IO.Path]::GetFullPath($found)
+    $found
 }
 
 function Get-VelopackVersion {
-    $packages = Join-Path (Split-Path -Parent $PSScriptRoot) 'Directory.Packages.props'
-    $version = "$(([xml](Get-Content -LiteralPath $packages -Raw)).SelectSingleNode("/Project/ItemGroup/PackageVersion[@Include='Velopack']/@Version").Value)"
-    if (-not $version) { throw "No Velopack version in $packages" }
+    $version = "$((Get-BuildValues).Items.PackageVersion | Where-Object Identity -eq 'Velopack' | ForEach-Object Version)"
+    if (-not $version) { throw 'No Velopack version in Directory.Packages.props' }
     $version
 }
 
@@ -56,16 +62,33 @@ function Find-VcVars {
     $vcvars
 }
 
-# vcvarsall.bat runs vswhere.exe by name and the VS Installer folder isn't on PATH by default (cmd moans on every
-# build). PATH goes back in the finally
+# vcvarsall takes a couple of seconds, so its environment's kept for every command after. It runs vswhere.exe by name,
+# and the VS Installer folder isn't on PATH by default
+$VcVarsEnvironments = @{}
 function Invoke-VcVars([string]$VcVars, [string]$Command) {
-    $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
-    $oldPath = $env:PATH
+    if (-not $VcVarsEnvironments.ContainsKey($VcVars)) {
+        $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
+        $vars = @{}
+        foreach ($line in cmd /c "set ""PATH=$installer;%PATH%"" && call ""$VcVars"" x64_x86 >nul && set") {
+            if ($line -match '^([^=]+)=(.*)$') { $vars[$Matches[1]] = $Matches[2] }
+        }
+        if ($LASTEXITCODE -ne 0 -or -not $vars['INCLUDE']) { throw "vcvarsall.bat x64_x86 didn't set up the C++ tools ($VcVars)" }
+        $VcVarsEnvironments[$VcVars] = $vars
+    }
+    # the script's own environment goes back afterwards
+    $vars = $VcVarsEnvironments[$VcVars]
+    $saved = @{}
     try {
-        if (-not (($env:PATH -split ';') -contains $installer)) { $env:PATH = "$installer;$env:PATH" }
-        cmd /c "call ""$VcVars"" x64_x86 && $Command"
+        foreach ($name in $vars.Keys) {
+            $saved[$name] = [Environment]::GetEnvironmentVariable($name)
+            Set-Item -LiteralPath "Env:\$name" -Value $vars[$name]
+        }
+        cmd /c $Command
     } finally {
-        $env:PATH = $oldPath
+        foreach ($name in $saved.Keys) {
+            if ($null -eq $saved[$name]) { Remove-Item -LiteralPath "Env:\$name" -ErrorAction SilentlyContinue }
+            else { Set-Item -LiteralPath "Env:\$name" -Value $saved[$name] }
+        }
     }
 }
 
