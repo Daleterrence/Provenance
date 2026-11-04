@@ -421,8 +421,6 @@
                     <TextBlock Margin="0,12,0,0" HorizontalAlignment="Center" FontSize="12" Foreground="{DynamicResource State.Warn}"
                                Text="Provenance couldn't get your messages from PlayOnline."
                                Visibility="{Binding MessagesUnavailable, Converter={StaticResource BoolToVis}}" />
-                    <Button Margin="0,10,0,0" Style="{StaticResource PolButton}" FontSize="12" Command="{Binding RefreshMailCommand}" Content="TRY AGAIN"
-                            Visibility="{Binding MessagesUnavailable, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
 
                 <Grid RowDefinitions="Auto,*,Auto"

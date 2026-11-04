@@ -78,7 +78,7 @@ public partial class SocialViewModel : ObservableObject
     [ObservableProperty] private bool _hasBlocked;
     [ObservableProperty] private string? _accountNotice;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanEdit))] private bool _connected;
-    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RefreshMailCommand))] private bool _messagesUnavailable;
+    [ObservableProperty] private bool _messagesUnavailable;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanPlay))] private string? _playBlockedReason;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasUnread))]
     private int _unreadCount;
@@ -163,7 +163,7 @@ public partial class SocialViewModel : ObservableObject
     // from the Play press till the game closes nothing new goes to the hook, answers already asked for still land
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanCompose), nameof(ComposeNote), nameof(CanEdit), nameof(StatusEditable))]
-    [NotifyCanExecuteChangedFor(nameof(SendCommand), nameof(RefreshMailCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     private bool _gameRunning;
     public const string GameRunningNote = "That has to wait till FINAL FANTASY XI is closed.";
 
@@ -432,7 +432,6 @@ public partial class SocialViewModel : ObservableObject
         ApplyCharacters(snap);
         RebuildGroups(snap);
         MessagesUnavailable = snap.Mail == "failed";
-        RefreshMailCommand.NotifyCanExecuteChanged();
         RebuildFriends(snap);
         NoticeComingOnline(snap);
         OnlineCount = snap.Friends.Count(f => f.Online && !f.Pending);
@@ -1403,24 +1402,6 @@ public partial class SocialViewModel : ObservableObject
         _sendsClosed = true;
         RefreshConversation();
     }
-
-    private DateTime _mailAskedAt = DateTime.MinValue;
-
-    // new mail comes by push, so this is only offered after the inbox failed. 30 secs apart, the hook's own gap
-    [RelayCommand(CanExecute = nameof(CanRefreshMail))]
-    private void RefreshMail()
-    {
-        if (_pol.Pid is not { } pid) return;
-        SocialSnapshot.RefreshMail(pid);
-        _mailAskedAt = DateTime.UtcNow;
-        RefreshMailCommand.NotifyCanExecuteChanged();
-        // unlocks after the gap even if no snapshot turns up
-        _ = Task.Delay(TimeSpan.FromSeconds(31)).ContinueWith(_ => RefreshMailCommand.NotifyCanExecuteChanged(),
-                                                             TaskScheduler.FromCurrentSynchronizationContext());
-    }
-
-    private bool CanRefreshMail() => _pol.Pid != null && !GameRunning && _last.Mail != "pending" &&
-                                     DateTime.UtcNow - _mailAskedAt >= TimeSpan.FromSeconds(30);
 
     partial void OnMyStatusIndexChanged(int value)
     {

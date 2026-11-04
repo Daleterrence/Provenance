@@ -49,13 +49,11 @@ public sealed class PolSessionService : IDisposable
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
 
     // pol_hook.c exits 11 on unreadable saved entries, 12 on a bad POL_IPC_DIR, 13 when its mutexes can't get secret
-    // names (never the stock ones, anything can create those first), 14 when pol.exe's region isn't POL_REGION, 15
-    // when FFXI's GameStart fails and 16 when POL_IPC_DIR, POL_CRED_KEYFILE or POL_HOLD isn't there
+    // names (never the stock ones, anything can create those first), 15 when FFXI's GameStart fails and 16 when
+    // POL_IPC_DIR, POL_CRED_KEYFILE or POL_HOLD isn't there
     internal const int UnsafeStartExitCode = 13;
-    internal const int RegionExitCode = 14;
     internal const int GameStartExitCode = 15;
     internal const int MissingEnvExitCode = 16;
-    public const string RegionChangedText = "PlayOnline started as a different version than the one Provenance checked. Restart Provenance and try again.";
     public const string GameStartFailedText = "FINAL FANTASY XI couldn't start. Try again, and if it keeps happening, check the game's files with Repair.";
     public const string MissingEnvText = "Provenance couldn't pass PlayOnline what it needs to log in. Restart Provenance and try again.";
 
@@ -85,7 +83,6 @@ public sealed class PolSessionService : IDisposable
         _ when DetailsUnreadable(exitCode: exitCode) => (ErrorDetailsUnreadable, DetailsAgainText),
         12 => (ErrorLauncherFailed, PrivateFolderText),
         UnsafeStartExitCode => (ErrorLauncherFailed, UnsafeStartText),
-        RegionExitCode => (ErrorLauncherFailed, RegionChangedText),
         GameStartExitCode => (ErrorLauncherFailed, GameStartFailedText),
         MissingEnvExitCode => (ErrorLauncherFailed, MissingEnvText),
         3 => (ErrorAuthFailed, RefusedText),
@@ -98,7 +95,6 @@ public sealed class PolSessionService : IDisposable
     {
         12 => PrivateFolderText,
         UnsafeStartExitCode => UnsafeStartText,
-        RegionExitCode => RegionChangedText,
         GameStartExitCode => GameStartFailedText,
         _ => "Your PlayOnline session has closed. Log in again to see your friends and messages.",
     };
@@ -117,7 +113,7 @@ public sealed class PolSessionService : IDisposable
 
     // a new request file goes here too (I'll forget)
     internal static readonly string[] RequestFiles =
-        ["send", "status", "mail", "ack", "comment", "pic", "friend", "answer", "search", "profile", "group",
+        ["send", "status", "ack", "comment", "pic", "friend", "answer", "search", "profile", "group",
          "myprofile", "saveprofile", "rename", "xiprofile", "character", "ffxiprofile", "chatzones", "chatrooms",
          "chatjoin", "chatsend", "chatleave", "chatcreate", "chatmaster", "handle", "groupchatjoin", "groupchatsend",
          "groupchatleave"];
@@ -410,7 +406,7 @@ public sealed class PolSessionService : IDisposable
 
         var psi = LauncherStart(launcherExe, polExe);
         var env = psi.Environment;
-        SetBaseEnvironment(env, PolEnv.Region(Path.GetDirectoryName(polExe)!));
+        SetBaseEnvironment(env);
         // only the viewer's menu values, busy goes online
         var status = _settings.Current.PlayOnlineStatus;
         env["POL_STATUS"] = status is 0 or 1 or 4 ? status.ToString() : "0";
@@ -642,17 +638,14 @@ public sealed class PolSessionService : IDisposable
         return psi;
     }
 
-    // POL_REGION is the env.dat region the build check went by, as pol.exe's own index (0 JP, 1 US, 2 EU), which the
-    // hook holds pol.exe to. An env.dat that doesn't say leaves it to pol.exe. With POL_OWNER the hook logs out once this
-    // copy's gone, unless the game's started
-    internal static void SetBaseEnvironment(IDictionary<string, string?> env, PolRegion? region)
+    // with POL_OWNER the hook logs out once this copy's gone, unless the game's started
+    internal static void SetBaseEnvironment(IDictionary<string, string?> env)
     {
         LaunchEnvironment.Reset(env);
         env["POL_IPC_DIR"] = HookFiles.Dir;
         env["POL_CRED_KEYFILE"] = CredentialKey.FilePath;
         env["POL_HOLD"] = "1";
         env["POL_OWNER"] = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (region is { } r) env["POL_REGION"] = RegionIndex(r);
         if (ScreenSaverAtStart is { } saver) env["POL_SCREENSAVER"] = saver;
     }
 
@@ -733,13 +726,6 @@ public sealed class PolSessionService : IDisposable
 
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     private static extern bool SetSystemParameter(uint action, uint param, IntPtr value, uint winIni);
-
-    internal static string RegionIndex(PolRegion region) => region switch
-    {
-        PolRegion.Japan => "0",
-        PolRegion.Europe => "2",
-        _ => "1",
-    };
 
     private void StartWatcher(int pid)
     {
@@ -828,7 +814,7 @@ public sealed class PolSessionService : IDisposable
             LargeAddressAwareBeforeStart(viewerDir!, "before the pre-start");
             NoteScreenSaverNow();
             var psi = LauncherStart(launcherExe, polExe);
-            SetPrestartEnvironment(psi.Environment, PolEnv.Region(viewerDir!));
+            SetPrestartEnvironment(psi.Environment);
             using var launcher = StartProcess(psi);
             if (launcher is null || RunLauncher(launcher, WatcherLimit) is not { } run) return null;
             var m = PidLine.Match(run.Out);
@@ -856,9 +842,9 @@ public sealed class PolSessionService : IDisposable
         PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct) is { } ffxi && File.Exists(Path.Combine(ffxi, "FFXiMain.dll"));
 
     // POL_IPC_DIR, POL_CRED_KEYFILE and POL_OWNER have to go in here, the go file never carries them
-    internal static void SetPrestartEnvironment(IDictionary<string, string?> env, PolRegion? region)
+    internal static void SetPrestartEnvironment(IDictionary<string, string?> env)
     {
-        SetBaseEnvironment(env, region);
+        SetBaseEnvironment(env);
         env["POL_PRESTART"] = "1";
     }
 

@@ -127,17 +127,9 @@ static INIT_ONCE g_mutex_secret_once = INIT_ONCE_STATIC_INIT;
 /* pol.exe's first mutex call runs this, so never under the loader lock */
 static BOOL CALLBACK mutex_secret_init(PINIT_ONCE once, PVOID param, PVOID *ctx)
 {
-    BOOLEAN (WINAPI *rtl_gen_random)(PVOID, ULONG);
     (void)once; (void)param; (void)ctx;
     g_mutex_secret_ok =
         BCryptGenRandom(NULL, g_mutex_secret, sizeof g_mutex_secret, BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
-    if (g_mutex_secret_ok) return TRUE;
-    HMODULE a = GetModuleHandleW(L"advapi32.dll");
-    rtl_gen_random = a ? (BOOLEAN (WINAPI *)(PVOID, ULONG))GetProcAddress(a, "SystemFunction036") : NULL;
-    if (rtl_gen_random && rtl_gen_random(g_mutex_secret, sizeof g_mutex_secret)) {
-        lg("pol_hook: BCryptGenRandom failed; the mutex names use RtlGenRandom\r\n");
-        g_mutex_secret_ok = 1;
-    }
     return TRUE;
 }
 static void mutex_name(LPCWSTR name, WCHAR *out)
@@ -149,7 +141,7 @@ static void mutex_name(LPCWSTR name, WCHAR *out)
         || BCryptHash(BCRYPT_HMAC_SHA256_ALG_HANDLE, g_mutex_secret, sizeof g_mutex_secret,
                       (PUCHAR)name, (ULONG)n * sizeof(WCHAR), mac, sizeof mac) != 0) {
         lg("pol_hook: no safe mutex name (%s) - ending pol.exe (exit %d)\r\n",
-           g_mutex_secret_ok ? "HMAC failed" : "BCryptGenRandom and RtlGenRandom failed", MUTEX_EXIT);
+           g_mutex_secret_ok ? "HMAC failed" : "BCryptGenRandom failed", MUTEX_EXIT);
         end_pol(MUTEX_EXIT);
         ExitProcess(MUTEX_EXIT);
     }
@@ -424,37 +416,19 @@ static const struct pol_region {
     { "EU", "polcoreEU.dll", "PlayOnlineEU", "SquareEnix", "EU\\EN",               1, 0, -2 },
 };
 
-#define REGION_EXIT 14
-#define REGION_MISMATCH ((const struct pol_region *)0)
 static const struct pol_region *g_region;
 
-/* pol.exe's index (0 JP, 1 US, 2 EU) and Provenance's POL_REGION (n characters). Only both there and different is a
-   mismatch, anything else falls back to the other one, then the loaded polcore */
-static const struct pol_region *region_of(int idx, const char *passed, DWORD n)
+/* pol.exe's index (0 JP, 1 US, 2 EU), or the loaded polcore when it isn't one */
+static const struct pol_region *region_of(int idx)
 {
-    int want = n == 1 && passed[0] >= '0' && passed[0] <= '2' ? passed[0] - '0' : -1;
-    if (idx >= 0 && idx <= 2) return want >= 0 && want != idx ? REGION_MISMATCH : &g_regions[idx];
-    if (want >= 0) return &g_regions[want];
+    if (idx >= 0 && idx <= 2) return &g_regions[idx];
     return !GetModuleHandleA("polcore.dll") && GetModuleHandleA("polcoreEU.dll") ? &g_regions[2] : &g_regions[1];
 }
 
-/* pol.exe's region index (0x0045cd90), set from env.dat before it loads a polcore. A mismatch ends pol.exe before
-   polcore gets touched */
+/* pol.exe's region index (0x0045cd90), set from env.dat before it loads a polcore */
 static const struct pol_region *region(void)
 {
-    char want[4] = {0};
-    DWORD n;
-    int idx;
-    if (g_region) return g_region;
-    idx = *(int *)((BYTE *)GetModuleHandleW(NULL) + 0x5cd90);
-    n = GetEnvironmentVariableA("POL_REGION", want, sizeof want);
-    if (n > 1 || (n == 1 && (want[0] < '0' || want[0] > '2')))
-        lg("pol_hook: POL_REGION isn't 0, 1 or 2 - going by pol.exe's own region\r\n");
-    if ((g_region = region_of(idx, want, n)) == REGION_MISMATCH) {
-        lg("pol_hook: region mismatch (pol.exe %d, Provenance '%s') - ending pol.exe (exit %d)\r\n", idx, want, REGION_EXIT);
-        end_pol(REGION_EXIT);
-        ExitProcess(REGION_EXIT);
-    }
+    if (!g_region) g_region = region_of(*(int *)((BYTE *)GetModuleHandleW(NULL) + 0x5cd90));
     return g_region;
 }
 static HMODULE polcore_module(void) { return GetModuleHandleA(region()->polcore); }
@@ -948,8 +922,6 @@ static int handle_bootstrap(BYTE *b, int handles_loaded)
     static const char *const why[] = { "creation cancelled", "no launcher target", "no answer within 10 minutes" };
     struct pload fresh = { "handles (pre-claim)", 0x2ac, 0x2b0, 0, 0 };
     struct pload put = { "handle save", 0x1030, 0x1034, 0, 0, 1 };
-    struct pload re[2] = { { "handles (post-save)", 0x2ac, 0x2b0, 0, 0 },
-                           { "characters (post-save)", 0x2bc, 0x2c0, 0, 0 } };
     char name[32] = {0};
     WCHAR wname[32];
     BYTE id[16];
@@ -996,10 +968,10 @@ static int handle_bootstrap(BYTE *b, int handles_loaded)
         ((svc_i)SVC(0x318))(idx);
         return 5;
     }
-    run_loads(b, re, 2);
+    /* the viewer goes on with polcore's own list here, the claimed slot's already in it */
     n = count_handles(b);
     if (n < 1) {
-        lg("phase_c: handle save reported ok but the server list is still empty\r\n");
+        lg("phase_c: handle save reported ok but the handle list is still empty\r\n");
         return 5;
     }
     lg("phase_c: POL HANDLE CREATED '%s' (slot %d), handles now %d\r\n", name, idx, n);
@@ -1571,20 +1543,6 @@ static void mail_log_hdr(const char *what, const BYTE *h)
        h[0x3c], (unsigned)((*(WORD *)(h + 0x3e) >> 7) & 0x1f), *(DWORD *)(h + 0x38),
        *(DWORD *)(h + 0x30), *(DWORD *)(h + 0x34), *(WORD *)(h + 0x3e), *(WORD *)(h + 0x42));
 }
-/* whether a notice carries its body inline (H+0x4c), which the viewer never trusts. Its length and where the 0x07
-   sits only, never the text */
-static void mail_inline_log(const BYTE *h)
-{
-    const char *s = *(const char *const *)(h + 0x4c);
-    int n = 0, bel = -1;
-    if (s)
-        for (; n < 0x1000; n++) {
-            if ((n == 0 || !((ULONG_PTR)(s + n) & 0xfff)) && IsBadReadPtr(s + n, 1)) break;
-            if (!s[n]) break;
-            if (s[n] == 0x07 && bel < 0) bel = n;
-        }
-    lg("mail: notice inline text %d bytes, 0x07 at %d, body %u bytes\r\n", s ? n : -1, bel, *(const DWORD *)(h + 0x38));
-}
 /* push callbacks run inside polcore's IRC processing on the hold loop's thread, H on its stack, so copy and get out */
 static void __cdecl mail_evt(int code, void *arg)
 {
@@ -1594,7 +1552,6 @@ static void __cdecl mail_evt(int code, void *arg)
     if (code == 0 && arg && !IsBadReadPtr(arg, 0x48)) {
         LONG n = g_push_n;
         if (n < 8) { memcpy(g_push_q[n], arg, 0x48); g_push_n = n + 1; }
-        if (!IsBadReadPtr(arg, 0x50)) mail_inline_log((const BYTE *)arg);
     }
 }
 static void __cdecl mail_raw(void *arg)
@@ -1643,18 +1600,9 @@ static int polid_ok(BYTE *b, DWORD lo, DWORD hi)
    handle to itself. Anything else from my POL ID, another of my handles writing to this one say, is a real message */
 static int mail_echo(BYTE *b, const BYTE *h)
 {
-    static int said;
     DWORD lo = *(const DWORD *)(h + 8), hi = *(const DWORD *)(h + 0xc);
-    int ok, me;
     if (!mail_mine(b, h)) return 0;
-    ok = polid_ok(b, lo, hi);
-    me = ok && is_me(b, lo, hi);
-    if (!said) {
-        said = 1;
-        lg("mail: a chat line from my own POL ID, to %s, slot %u to slot %u\r\n",
-           !ok ? "no POL ID" : me ? "my POL ID" : "another POL ID", h[0x3c], h[0x3d]);
-    }
-    return sent_by_me(h) || (me && h[0x3c] == h[0x3d]);
+    return sent_by_me(h) || (polid_ok(b, lo, hi) && is_me(b, lo, hi) && h[0x3c] == h[0x3d]);
 }
 /* the ones that came back, so the app can mark the line it sent */
 #define RETURNED_MAX 16
@@ -1712,7 +1660,7 @@ static void mail_list_done(int r)
             g_mail_retry_at = GetTickCount64() + 30000;
             g_mail_refresh = 1;
         } else {
-            lg("mail: list failed %d again - waiting for new mail or a request\r\n", r);
+            lg("mail: list failed %d again - waiting for new mail\r\n", r);
             if (lstrcmpA(g_mail_state, "ok") != 0) lstrcpyA(g_mail_state, "failed");
             g_snap_dirty = 1;
         }
@@ -2853,7 +2801,6 @@ static int comment_text(const char *s, WCHAR *out)
 static void friend_edit_request(BYTE *b)
 {
     char buf[1024], *p, *op, *tok, *rows, *key, *arg, k[17], nm[16];
-    WCHAR old[0x34];
     int row, r;
     BYTE fr[0x140];
     if (g_answer_kind) return;
@@ -2867,10 +2814,6 @@ static void friend_edit_request(BYTE *b)
         { char *e = p + lstrlenA(p); while (e > p && (e[-1] == '\n' || e[-1] == '\r')) *--e = 0; }
         memset(g_comment_want, 0, sizeof g_comment_want);
         if (*p && !comment_text(p, g_comment_want)) { edit_fail("failed:bad text"); return; }
-        memset(old, 0, sizeof old);
-        ((int (__cdecl *)(int, WCHAR *))SVC(0x688))(-2, old);
-        lg("friends: my comment was %04x %04x %04x (%d chars), new %d chars\r\n",
-           old[0], old[1], old[2], lstrlenW(old), lstrlenW(g_comment_want));
         g_comment_wanted = 1;
         comment_start(b);
         return;
@@ -5511,7 +5454,7 @@ static void drain_turn(BYTE *b, int mail)
 }
 
 /* the viewer sets polcore's idle timeout from option.bin's GOPN1_AO at login and FFXI only ever switches the timer on,
-   so with the hold's 0 it'd never fire in game. Off still till FFXI turns it on, same as the viewer leaves it */
+   so with session init's 0 it'd never fire in game. Off still till FFXI turns it on, same as the viewer leaves it */
 static int idle_timeout_for_game(BYTE *b)
 {
     BYTE *rec = NULL;
@@ -5649,9 +5592,9 @@ static void link_watch(BYTE *b)
    sends more than the viewer would. */
 static void pol_hold(BYTE *b)
 {
-    static ULONGLONG lastCtl, lastMailReq;
+    static ULONGLONG lastCtl;
     ULONGLONG lastSnap = 0;
-    char spath[MAX_PATH + 64], path[MAX_PATH + 64], num[16], rq[16];
+    char spath[MAX_PATH + 64], path[MAX_PATH + 64], num[16];
     int ctl, idle, reason, why;
     HANDLE ef;
     DWORD wn;
@@ -5668,8 +5611,6 @@ static void pol_hold(BYTE *b)
     }
     lg("hold: POL-only session held; waiting for Play (POL_CRED_PLAY)\r\n");
     if (g_lean) lg("hold: lean session (no social)\r\n");
-    /* the viewer's auto log-off option (GOPN1_AO), which polcore starts off: keep it that way */
-    if (SVC(0x11d4)) ((void (__cdecl *)(int))SVC(0x11d4))(0);
     if (!g_lean && SVC(0xd9c)) {
         void *cb[6];
         push_callbacks(b, cb);
@@ -5755,12 +5696,6 @@ static void pol_hold(BYTE *b)
         if (ctl && owner_gone()) {
             lg("hold: Provenance ended - signing out and exiting\r\n");
             hold_sign_out(b, spath);
-        }
-        if (ctl && request_waiting("mail") && (!lastMailReq || GetTickCount64() - lastMailReq >= 30000) &&
-            take_request("mail", rq, sizeof rq) >= 0) {
-            lastMailReq = GetTickCount64();
-            g_mail_refresh = 1;
-            g_mail_fails = 0;
         }
         if ((g_snap_dirty && GetTickCount64() - lastSnap >= 250) || GetTickCount64() - lastSnap > 2000) {
             g_snap_dirty = 0;

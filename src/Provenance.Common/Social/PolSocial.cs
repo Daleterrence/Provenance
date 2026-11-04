@@ -450,8 +450,6 @@ public static class SocialSnapshot
         return removed;
     }
 
-    public static void RefreshMail(int pid) => WriteRequest(pid, "mail", "1");
-
     public enum Withdrawal { Withdrawn, Taken, Unknown }
 
     // the hook takes a request by renaming it, so this rename and a take can't both happen. A file a scanner has open

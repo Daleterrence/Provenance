@@ -12,7 +12,7 @@ enum { GS_NONE, GS_WAITING, GS_QUEUED };
 static int g_gc_st = GC_OUT, g_gc_used, g_gc_my = -1, g_gc_send, g_gc_leave_want, g_gc_lines_dirty, g_gc_have_row = 1;
 static DWORD g_gc_lo, g_gc_hi, g_gc_seq, g_gc_written_seq;
 static char g_gc_tok[48], g_gc_state[24] = "", g_gc_stok[48], g_gc_sstate[24] = "", g_gc_cancel_tok[48];
-static ULONGLONG g_gc_t0, g_gc_sent_at, g_gc_written_at, g_gc_part_at;
+static ULONGLONG g_gc_t0, g_gc_sent_at, g_gc_written_at;
 static gc_line g_gc_line[GC_LINES];
 static int g_gc_line_n, g_gc_line_next;
 static volatile LONG g_gc_echo;
@@ -169,7 +169,6 @@ static void gc_join_request(BYTE *b)
     g_gc_my = gh.myIndex;
     g_gc_line_n = g_gc_line_next = 0;
     g_gc_t0 = GetTickCount64();
-    g_gc_part_at = 0;
     /* in another group's chat already: polcore PARTs it and JOINs this one, the viewer's Switch Group */
     g_gc_st = GC_STARTING;
     gc_state("joining");
@@ -272,20 +271,10 @@ static void gc_send_pump(BYTE *b)
     else if (GetTickCount64() - g_gc_sent_at >= GC_SEND_MS) { g_gc_send = GS_NONE; gc_send_state("failed:timeout"); }
 }
 
-/* polcore's own PART after it's dropped me from the group, only noted */
-static void gc_part_watch(BYTE *b)
-{
-    if (!gc_joined(b)) lg("groupchat: polcore's PART went\r\n");
-    else if (GetTickCount64() - g_gc_part_at >= GC_GIVE_UP_MS) lg("groupchat: polcore's still in the channel\r\n");
-    else return;
-    g_gc_part_at = 0;
-}
-
 /* every hold loop turn. Requests on control turns only */
 static void gc_pump(BYTE *b, int ctl)
 {
     if (g_draining) return;
-    if (g_gc_part_at && g_gc_st == GC_OUT) gc_part_watch(b);
     if (g_gc_st == GC_STARTING) {
         if (GetTickCount64() - g_gc_t0 >= GC_GIVE_UP_MS) {
             if (gc_joined(b)) gc_force_leave(b);
@@ -308,7 +297,6 @@ static void gc_pump(BYTE *b, int ctl)
         if ((still = gc_still_in(b)) <= 0) {
             gc_force_leave(b);
             gc_out(still < 0 ? "removed" : "gone");
-            if (gc_joined(b)) g_gc_part_at = GetTickCount64();
             return;
         }
         if (!gc_joined(b)) { gc_out("lost"); return; }
@@ -375,10 +363,6 @@ static void gc_group_going(BYTE *b, DWORD lo, DWORD hi)
         gc_force_leave(b);
         gc_out("gone");
     } else gc_end_by(b, "gone", 0, until);
-    if (gc_joined(b)) {
-        lg("groupchat: PART not out in 3 s\r\n");
-        g_gc_part_at = GetTickCount64();
-    }
 }
 /* the sign-out's svc 0x6c8 has already dropped it */
 static void gc_signed_out(void)
