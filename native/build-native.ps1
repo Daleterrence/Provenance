@@ -37,20 +37,9 @@ if ($commit -match '^[0-9a-f]{7}$') { $product += "+$commit" }
     "#define NATIVE_PRODUCTVERSION_STR ""$product"""
 ) | Set-Content -LiteralPath (Join-Path $OutDir 'native_version.h') -Encoding ascii
 
-function Invoke-Cl([string]$cl, [string]$out) {
-    Invoke-VcVars $vcvars $cl
-    if ($LASTEXITCODE -ne 0) {
-        throw "native build failed: $out (exit code $LASTEXITCODE)"
-    }
-    Write-Host "built $(Join-Path $OutDir $out)"
-}
-
 function Source([string]$name) { '"' + (Join-Path $PSScriptRoot $name) + '"' }
 
-# ole32 for CoTaskMemFree (pol.exe imports it anyway), uuid for FOLDERID_ProgramData. shell32 gets looked
-# up at run time, so the hook adds no DLL to pol.exe's start-up.
-$hookLibs = 'user32.lib advapi32.lib crypt32.lib ole32.lib uuid.lib bcrypt.lib'
-$clHook = "cl /nologo /O2 /W3 /MT $(Source 'pol_hook.c') /LD /Fepol_hook.dll /link $hookLibs"
+$clHook = "cl /nologo /O2 /W3 /MT $(Source 'pol_hook.c') /LD /Fepol_hook.dll /link $HookLibs"
 $clWatcher = "rc /nologo /i ""$OutDir"" /i ""$assets"" /fo watcher.res $(Source 'watcher.rc') && " +
     "cl /nologo /O2 /W3 /MT $(Source 'watcher.c') watcher.res /Fe""Provenance Watcher.exe"" /link user32.lib advapi32.lib"
 # the uninstallers delete from Program Files and HKLM, so they always ask for admin. One build per product, so the
@@ -58,7 +47,7 @@ $clWatcher = "rc /nologo /i ""$OutDir"" /i ""$assets"" /fo watcher.res $(Source 
 function UninstallCl([string]$exe, [string]$tag, [string]$rcDefine, [string]$clDefine) {
     "rc /nologo $rcDefine /i ""$OutDir"" /i ""$assets"" /fo uninstall_$tag.res $(Source 'uninstall.rc') && " +
     "cl /nologo /O2 /W3 /MT $clDefine $(Source 'uninstall.c') uninstall_$tag.res /Founinstall_$tag.obj /Fe""$exe""" +
-    ' /link user32.lib advapi32.lib ole32.lib oleaut32.lib shell32.lib ntdll.lib /SUBSYSTEM:WINDOWS /MANIFEST:EMBED' +
+    " /link $UninstallLibs /SUBSYSTEM:WINDOWS /MANIFEST:EMBED" +
     " /MANIFESTUAC:""level='requireAdministrator' uiAccess='false'"""
 }
 $polUninstall = 'Provenance - PlayOnline Uninstall.exe'
@@ -66,10 +55,10 @@ $ffxiUninstall = 'Provenance - FINAL FANTASY XI Uninstall.exe'
 
 Push-Location -LiteralPath $OutDir
 try {
-    Invoke-Cl $clHook 'pol_hook.dll'
-    Invoke-Cl $clWatcher 'Provenance Watcher.exe'
-    Invoke-Cl (UninstallCl $polUninstall 'pol' '' '') $polUninstall
-    Invoke-Cl (UninstallCl $ffxiUninstall 'ffxi' '/d FFXI_UNINSTALL' '/DFFXI_UNINSTALL') $ffxiUninstall
+    Invoke-NativeBuild $vcvars $clHook (Join-Path $OutDir 'pol_hook.dll')
+    Invoke-NativeBuild $vcvars $clWatcher (Join-Path $OutDir 'Provenance Watcher.exe')
+    Invoke-NativeBuild $vcvars (UninstallCl $polUninstall 'pol' '' '') (Join-Path $OutDir $polUninstall)
+    Invoke-NativeBuild $vcvars (UninstallCl $ffxiUninstall 'ffxi' '/d FFXI_UNINSTALL' '/DFFXI_UNINSTALL') (Join-Path $OutDir $ffxiUninstall)
 } finally {
     Pop-Location
 }

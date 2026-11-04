@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <RootNamespace>Provenance.Common</RootNamespace>
+    <RuntimeIdentifier />
   </PropertyGroup>
 
   <ItemGroup>

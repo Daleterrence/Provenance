@@ -1,8 +1,13 @@
 <#
 .SYNOPSIS
     The version, the assets folder, Velopack's version and the C++ tools, looked up the same way for every build script
-    and CI. Dot-source it, it only defines functions.
+    and CI, and the libraries the natives link. Dot-source it, it only defines functions and those two lists.
 #>
+
+# ole32 for CoTaskMemFree (pol.exe imports it anyway), uuid for FOLDERID_ProgramData. shell32 gets looked up at run
+# time, so the hook adds no DLL to pol.exe's start-up
+$HookLibs = 'user32.lib advapi32.lib crypt32.lib ole32.lib uuid.lib bcrypt.lib'
+$UninstallLibs = 'user32.lib advapi32.lib ole32.lib oleaut32.lib shell32.lib ntdll.lib'
 
 function Get-ProvenanceVersion {
     $props = Join-Path (Split-Path -Parent $PSScriptRoot) 'Directory.Build.props'
@@ -18,12 +23,16 @@ function Get-ProvenanceVersion {
     [pscustomobject]@{ Prefix = $prefix; Suffix = $suffix; Version = $(if ($suffix) { "$prefix-$suffix" } else { $prefix }) }
 }
 
-# the same places Directory.Build.props looks
+# the same lookup as Directory.Build.props: PROVENANCE_ASSETS as given, or the first assets folder with the icon in it
 function Find-ProvenanceAssets {
     $repo = Split-Path -Parent $PSScriptRoot
-    $found = @($env:PROVENANCE_ASSETS, (Join-Path $repo '..\assets'), (Join-Path $repo '..\..\assets')) |
-        Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'app\provenance.ico')) } | Select-Object -First 1
-    if (-not $found) { throw "Provenance's images aren't in this repo. Put the assets folder next to the repo, or set PROVENANCE_ASSETS to where it is." }
+    $found = if ($env:PROVENANCE_ASSETS) { $env:PROVENANCE_ASSETS } else {
+        @((Join-Path $repo '..\assets'), (Join-Path $repo '..\..\assets')) |
+            Where-Object { Test-Path -LiteralPath (Join-Path $_ 'app\provenance.ico') } | Select-Object -First 1
+    }
+    if (-not $found -or -not (Test-Path -LiteralPath (Join-Path $found 'app\provenance.ico'))) {
+        throw "Provenance's images aren't in this repo. Put the assets folder next to the repo, or set PROVENANCE_ASSETS to where it is."
+    }
     [IO.Path]::GetFullPath($found)
 }
 
@@ -58,4 +67,11 @@ function Invoke-VcVars([string]$VcVars, [string]$Command) {
     } finally {
         $env:PATH = $oldPath
     }
+}
+
+# one compile or link that stops the script when it fails
+function Invoke-NativeBuild([string]$VcVars, [string]$Command, [string]$Out) {
+    Invoke-VcVars $VcVars $Command
+    if ($LASTEXITCODE -ne 0) { throw "native build failed: $Out (exit code $LASTEXITCODE)" }
+    Write-Host "built $Out"
 }
