@@ -729,7 +729,7 @@ static int wrap_slot(BYTE *b, unsigned off, void *w, void **orig)
 }
 
 static int g_ffxi_service = -1;
-static int g_friends_loaded, g_groups_loaded;
+static int g_friends_loaded;
 static int g_lean;
 static unsigned g_notice, g_notice_days;
 static int g_bad_password;
@@ -1223,7 +1223,6 @@ static void phase_c_seed(HMODULE pc)
     run = login_set(all, &nrun);
     login_loads(b, run, nrun);
     g_friends_loaded = all[1].res == 1;
-    g_groups_loaded = all[4].res == 1;
     /* a load refused with an account status (-0x1450 and down: suspended, IP restricted, password changed...) turns
        the account away, any other failure signs out too, like the viewer */
     for (i = 0; i < nrun; i++)
@@ -2854,7 +2853,6 @@ static void mail_send_parse(BYTE *b, char *buf)
     for (q = text; *q; q++) if ((BYTE)*q < 0x20 && *q != '\n') *q = ' ';
     for (q = subj; *q; q++) if ((BYTE)*q < 0x20) *q = ' ';
     mySlot = my_handle(b, myName);
-    if (mySlot < 0) { send_fail("failed:no handle"); return; }
     utf8_to_sjis(subj, sj_subj, 0x80);
     n = utf8_to_sjis(text, sj_text, 0x1000);
     if (!sj_text[0]) { send_fail("failed:empty"); return; }
@@ -2977,8 +2975,6 @@ static void friend_edit_request(BYTE *b)
         lstrcpynA(g_edit_token, tok, sizeof g_edit_token);
         /* no token line means it isn't the launcher's, and a stray empty file mustn't clear the comment */
         if (!tok[0] || p == tok + lstrlenA(tok)) { edit_fail("failed:bad request"); return; }
-        if (notice_blocks(g_notice)) { edit_fail("failed:account notice"); return; }
-        if (g_my_slot < 0) { edit_fail("failed:no handle"); return; }
         { char *e = p + lstrlenA(p); while (e > p && (e[-1] == '\n' || e[-1] == '\r')) *--e = 0; }
         memset(g_comment_want, 0, sizeof g_comment_want);
         if (*p && !comment_text(p, g_comment_want)) { edit_fail("failed:bad text"); return; }
@@ -2995,8 +2991,6 @@ static void friend_edit_request(BYTE *b)
     op = req_line(&p); tok = req_line(&p); rows = req_line(&p); key = req_line(&p); arg = req_line(&p);
     lstrcpynA(g_edit_token, tok, sizeof g_edit_token);
     if (!parse_num(rows, 4, &row)) { edit_fail("failed:bad request"); return; }
-    if (!g_friends_loaded) { edit_fail("failed:friends not loaded"); return; }
-    if (notice_blocks(g_notice)) { edit_fail("failed:account notice"); return; }
     /* <key> is the row's snapshot key, so an edit never lands on a row that changed */
     if (lstrcmpA(op, "unignore") == 0) {
         memset(fr, 0, sizeof fr);
@@ -3225,7 +3219,6 @@ static void search_request(BYTE *b)
     while (k < 3 && lstrcmpA(kind, g_srch_kinds[k]) != 0) k++;
     g_srch_kind = k < 3 ? k : SK_HANDLE;
     if (k == 3) { search_done("failed:bad request"); return; }
-    if (notice_blocks(g_notice)) { search_done("failed:account notice"); return; }
     if (k == SK_HANDLE) {
         if (!ascii_name_ok(val)) { search_done("failed:bad name"); return; }
         /* a name with a ' never goes out in a handle search (ascii_name_ok keeps 0x04 out) */
@@ -3673,7 +3666,6 @@ static void profile_request(BYTE *b)
     lstrcpynA(g_prof_token, tok, sizeof g_prof_token);
     if (g_prof_json) g_prof_json[0] = 0;
     if (!parse_num(rows, 4, &row) || row >= 200) { profile_done("failed:bad request"); return; }
-    if (notice_blocks(g_notice)) { profile_done("failed:account notice"); return; }
     if (!get_friend(b, row, fr)) { profile_done("failed:no such friend"); return; }
     friend_key(b, fr, k);
     if (lstrcmpA(k, key) != 0) { profile_done("failed:friend list changed"); return; }
@@ -3814,7 +3806,6 @@ static void character_request(BYTE *b)
         character_done("failed:bad request");
         return;
     }
-    if (notice_blocks(g_notice)) { character_done("failed:account notice"); return; }
     if (!ffxi_friend_on(b, g_ch_ctsid, g_ch_lo, g_ch_hi)) { character_done("failed:not playing"); return; }
     if (!ch_load_pib(b)) { character_done("failed:no schema"); return; }
     g_ch_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
@@ -3942,7 +3933,6 @@ static void ffxiprofile_request(BYTE *b)
         return;
     }
     g_fp_slot = n;
-    if (notice_blocks(g_notice)) { ffxiprofile_done("failed:account notice"); return; }
     if (!get_friend(b, row, fr)) { ffxiprofile_done("failed:no such friend"); return; }
     friend_key(b, fr, k);
     if (lstrcmpA(k, key) != 0) { ffxiprofile_done("failed:friend list changed"); return; }
@@ -4270,8 +4260,6 @@ static void me_request(BYTE *b)
     p = buf;
     tok = req_line(&p);
     lstrcpynA(g_me_token, tok, sizeof g_me_token);
-    if (notice_blocks(g_notice)) { me_done("failed:account notice"); return; }
-    if (g_my_slot < 0) { me_done("failed:no handle"); return; }
     if (!fs_load_pib(b) || !pf_load(b)) { me_done("failed:no schema"); return; }
     g_me_t0 = GetTickCount64();
     if (kind == 1) {
@@ -4517,7 +4505,6 @@ static void group_request(BYTE *b)
         group_fail(pace_refusal());
         return;
     }
-    if (notice_blocks(g_notice)) { group_fail("failed:account notice"); return; }
     if (!SVC(0x618) || !SVC(0x61c) || !SVC(0x608)) { group_fail("failed:no group services"); return; }
     if (lstrlenA(gid) == 16 && hex8(gid, &hi) && hex8(gid + 8, &lo)) {
         haveGroup = get_group(b, lo, hi, &gh) && (gh.flags & 1);
@@ -4536,7 +4523,6 @@ static void group_request(BYTE *b)
         utf8_to_sjis(a, nm, sizeof nm);
         if (!nm[0] || lstrlenA(nm) > 0x14) { group_fail("failed:name too long"); return; }
         if (slot < 0) slot = g_my_slot;
-        if (slot < 0) { group_fail("failed:no handle"); return; }
         g_grp_new[0] = g_grp_new[1] = 0xffffffff;
         group_start(((int (__cdecl *)(const char *, int))SVC(0x608))(nm, slot), 0x60c, "create");
         return;
@@ -4671,11 +4657,8 @@ static void answer_request(BYTE *b)
     /* every answer ends in a message, so refuse it before AddFriend or a list upload */
     if (pace_refusal()) { answer_fail(pace_refusal()); return; }
     if (!parse_num(mids, 6, &mid)) { answer_fail("failed:bad request"); return; }
-    if (notice_blocks(g_notice)) { answer_fail("failed:account notice"); return; }
     if (lstrcmpA(op, "request") == 0) {
         if (mid >= g_srch_n || g_srch_step != 0) { answer_fail("failed:no such result"); return; }
-        if (!g_friends_loaded) { answer_fail("failed:friends not loaded"); return; }
-        if (g_my_slot < 0) { answer_fail("failed:no handle"); return; }
         h = &g_srch[mid];
         /* the hit must be the one the launcher showed, a newer search replaces the list */
         peer_key(b, h->lo, h->hi, (unsigned)h->slot, k);
@@ -4715,7 +4698,6 @@ static void answer_request(BYTE *b)
         answer_send(b);
         return;
     }
-    if (!g_friends_loaded) { answer_fail("failed:friends not loaded"); return; }
     if (lstrcmpA(op, "accept") == 0) {
         /* the viewer refuses an acceptance into a full list (200) first, even for someone already on it */
         for (i = 0; i < 200; i++) used += get_friend(b, i, row);
@@ -4790,8 +4772,6 @@ static void pic_pump(BYTE *b, int ctl)
         lstrcpynA(g_pic_token, p, sizeof g_pic_token);
         for (p = g_pic_token; *p; p++) if (*p == '\r' || *p == '\n') { *p = 0; break; }
         if (!d || v > 9999 || (buf[i] && buf[i] != '\r' && buf[i] != '\n')) { pic_fail("failed:bad request"); return; }
-        if (notice_blocks(g_notice)) { pic_fail("failed:account notice"); return; }
-        if (g_my_slot < 0) { pic_fail("failed:no handle"); return; }
         g_pic_want = v;
         lstrcpyA(g_pic_state, "saving");
         lg("pic: save pic %d on slot %d\r\n", v, g_my_slot);
@@ -4864,7 +4844,6 @@ static void xi_request(BYTE *b)
     lstrcpynA(g_xi_token, req_line(&p), sizeof g_xi_token);
     hk = req_line(&p);
     ck = req_line(&p);
-    if (notice_blocks(g_notice)) { xi_done("failed:account notice"); return; }
     if (g_my_slot < 0) { xi_done("failed:no handle"); return; }
     memset(&h, 0, sizeof h);
     if (get_handle(b, g_my_slot, &h) < 0 || !(h.lo & 1)) { xi_done("failed:no handle"); return; }
@@ -5198,7 +5177,6 @@ static void handle_request(BYTE *b)
     }
     if (!g_in_hold) { handle_fail("failed:not in hold"); return; }
     if (g_draining) { handle_fail("failed:draining"); return; }
-    if (notice_blocks(g_notice)) { handle_fail("failed:account notice"); return; }
     if (!handle_ok(b, slot, h)) { handle_fail("failed:list changed"); return; }
     handle_key(h, k);
     if (lstrcmpA(k, hk) != 0) { handle_fail("failed:list changed"); return; }
@@ -5401,9 +5379,9 @@ static void snapshot_social(BYTE *b)
     HANDLE h = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) return;
     wsprintfA(line, "{\"ffxiService\":\"%s\",\"notice\":%u,\"noticeDays\":%u,\"presence\":\"%s\","
-                    "\"friendsLoaded\":%s,\"groupsLoaded\":%s,\"mail\":\"%s\",\"statusBusy\":%s,\"badPassword\":%s",
+                    "\"friendsLoaded\":%s,\"mail\":\"%s\",\"statusBusy\":%s,\"badPassword\":%s",
               g_ffxi_service == 1 ? "active" : g_ffxi_service == 0 ? "none" : "unknown", g_notice, g_notice_days,
-              g_presence, g_friends_loaded ? "true" : "false", g_groups_loaded ? "true" : "false",
+              g_presence, g_friends_loaded ? "true" : "false",
               g_mail_state, (g_status_job >= 0 || g_status_want >= 0) ? "true" : "false",
               g_bad_password ? "true" : "false");
     wr(h, line);
@@ -5665,7 +5643,6 @@ static void go_online(BYTE *b)
     const char *why;
     int want = 0;
     if (g_online_started) return;
-    if (notice_blocks(g_notice)) return;
     if (GetEnvironmentVariableA("POL_STATUS", sv, sizeof sv) > 0 &&
         (sv[0] == '0' || sv[0] == '1' || sv[0] == '4'))
         want = sv[0] - '0';
@@ -5771,7 +5748,6 @@ static void hold_turn(BYTE *b, int ctl)
         if (want == 0 || want == 1 || want == 4) {
             /* a go-online still waiting for a slot keeps its location, -2 keeps the rest. Never handle -1 */
             if (g_my_slot >= 0) status_start(b, g_my_slot, want, g_status_want >= 0 ? g_status_loc : -2);
-            else lg("presence: status %d ignored - no handle selected\r\n", want);
         }
     }
 }
@@ -5887,11 +5863,6 @@ static void pol_hold(BYTE *b)
     if (!g_lean && !g_online_started) {
         go_online(b);
         if (!g_online_started) {
-            struct pload hl = { "handles (hold)", 0x2ac, 0x2b0, 0, 0 };
-            run_loads(b, &hl, 1);
-            go_online(b);
-        }
-        if (!g_online_started) {
             lg("presence: no PlayOnline handle - cannot go online\r\n");
             lstrcpyA(g_presence, "no-handle");
         }
@@ -5943,12 +5914,10 @@ static void pol_hold(BYTE *b)
         if (!g_lean) mail_pump(b);
         hold_turn(b, ctl);
         if (ctl && play_signalled()) {
-            if (g_ffxi_service != 1 || notice_blocks(g_notice)) {
-                const char *no = g_ffxi_service == 0 ? "refused:no-content-id"
-                               : g_ffxi_service < 0 ? "refused:service-unknown" : "refused:account-notice";
-                if (lstrcmpA(g_play_state, no) != 0) {
-                    lstrcpyA(g_play_state, no);
-                    lg("hold: Play %s\r\n", no);
+            if (g_ffxi_service != 1) {
+                if (!g_play_state[0]) {
+                    lstrcpyA(g_play_state, "refused:no-content-id");
+                    lg("hold: Play %s\r\n", g_play_state);
                 }
             } else {
                 lg("hold: Play signalled - finishing PlayOnline writes, then booting FFXI\r\n");

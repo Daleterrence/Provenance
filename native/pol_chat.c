@@ -892,7 +892,6 @@ static void cr_join_request(BYTE *b)
         return;
     }
     lstrcpynA(g_cr_tok, tok, sizeof g_cr_tok);
-    if (notice_blocks(g_notice)) { cr_join_refused("failed:account notice"); return; }
     if (!cr_irc_ok(irc) || (haskey[0] && lstrcmpA(haskey, "1")) || !cr_nick_ok(b, nick)) {
         cr_join_refused("failed:bad request");
         return;
@@ -946,7 +945,6 @@ static void cr_create_request(BYTE *b)
         return;
     }
     lstrcpynA(g_cr_tok, tok, sizeof g_cr_tok);
-    if (notice_blocks(g_notice)) { cr_join_refused("failed:account notice"); return; }
     if (!parse_num(zone, 5, &z) || !cr_zone_known((DWORD)z) || !parse_num(limit, 2, &l) || l < 2 || l > 20 ||
         !cr_cate(c0, 100, 4, &k0) || !cr_cate(c1, 200, 5, &k1) || !cr_cate(c2, 300, 4, &k2) ||
         (haskey[0] && lstrcmpA(haskey, "1")) || !cr_nick_ok(b, nick)) {
@@ -1304,7 +1302,6 @@ static void cr_zones_request(BYTE *b)
     g_cr_last = g_db_last = GetTickCount64();
     p = buf;
     lstrcpynA(g_cr_ztok, req_line(&p), sizeof g_cr_ztok);
-    if (notice_blocks(g_notice)) { cr_db_done(0, "failed:account notice"); return; }
     if (cr_session(b) < 0) { cr_db_done(0, "failed:no chat"); return; }
     if (!cr_db_load(b, 0)) { cr_db_done(0, "failed:no schema"); return; }
     lstrcpyA(g_cr_zstate, "searching");
@@ -1326,7 +1323,6 @@ static void cr_rooms_request(BYTE *b)
         cr_db_done(1, "failed:bad request");
         return;
     }
-    if (notice_blocks(g_notice)) { cr_db_done(1, "failed:account notice"); return; }
     if (cr_session(b) < 0) { cr_db_done(1, "failed:no chat"); return; }
     if (!cr_db_load(b, 1)) { cr_db_done(1, "failed:no schema"); return; }
     if (!cr_zone_known((DWORD)zone)) { cr_db_done(1, "failed:bad zone"); return; }

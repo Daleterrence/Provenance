@@ -203,7 +203,6 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
                                        string SendToken = "", string SendState = "", string Presence = "")
 {
     public bool FriendsLoaded { get; init; } = true;
-    public bool GroupsLoaded { get; init; } = true;
     public string Mail { get; init; } = "";   // "pending", "ok" or "failed"
     public bool StatusBusy { get; init; }
     // LM-02's day count (svc 0xd24), 0 when the hook didn't read one
@@ -528,7 +527,6 @@ public static class SocialSnapshot
                                          sendToken, sendState, Str(root, "presence"))
             {
                 FriendsLoaded = Bool(root, "friendsLoaded"),
-                GroupsLoaded = Bool(root, "groupsLoaded"),
                 Mail = Str(root, "mail"),
                 StatusBusy = Bool(root, "statusBusy"),
                 NoticeDays = Int(root, "noticeDays", 0),

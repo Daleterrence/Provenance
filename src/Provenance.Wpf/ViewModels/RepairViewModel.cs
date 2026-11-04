@@ -96,8 +96,6 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
         bool stoppedPol = false;
         try
         {
-            // no keys means every mirror read would fail its signature, so not one request goes out
-            if (MirrorKeys.Trusted.Count == 0) { End("Repair isn't available", MirrorRepair.NotSetUp, failed: false); return; }
             var installed = region ?? PolRegion.UnitedStates;
             if (MirrorLayout.RegionFolder(installed) is not { } mirrorRegion)
             {

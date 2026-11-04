@@ -180,7 +180,6 @@ public partial class SocialViewModel
         "failed:no such friend" or "failed:friend list changed" => "Your friend list changed. Try again.",
         "failed:pending" => "You can only view your friends' profiles.",
         "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.",
-        "failed:account notice" => "This PlayOnline account can't view profiles right now.",
         NoCharacter => "Provenance couldn't find that character. Open the profile again from your friends list.",
         // only a number is PlayOnline's own error, the rest never got as far as asking
         _ when int.TryParse(SocialSnapshot.FailReason(st), out _) => $"PlayOnline didn't send the profile ({SocialSnapshot.FailReason(st)}).",

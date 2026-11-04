@@ -113,12 +113,12 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     // beforeChange only runs once an update's needed, and can throw to stop it
     public PatchResult Run(IProgress<PatchProgress>? progress, CancellationToken ct, Action? beforeChange = null, VersionCheck? check = null)
     {
-        product.CheckStream();
         if (check == null)
         {
             progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
             check = Check(ct);
         }
+        else product.CheckStream();
         var (local, server, ep) = check;
         if (check.UpToDate) return PatchResult.UpToDate;
         beforeChange?.Invoke();
@@ -162,13 +162,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         return PatchVer.Decode(blob, PatchVer.Key(product.Id, InterfaceValue()))
                ?? PatchVer.Decode(blob, PatchVer.Key(product.Id, null))
                ?? throw new InvalidDataException($"The {product.Name} version file (patch.ver) could not be read.");
-    }
-
-    // how POL reads it, with the Interface seed and no fallback. Null when that key doesn't open it
-    public string? SeededVersion()
-    {
-        var path = Path.Combine(Dir, "patch.ver");
-        return File.Exists(path) ? PatchVer.Decode(File.ReadAllBytes(path), PatchVer.Key(product.Id, InterfaceValue())) : null;
     }
 
     public void WriteLocalVersion(string version) =>
@@ -539,7 +532,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         if (File.Exists(ini))
         {
             var queued = new List<(string Target, string Staged)>();
-            bool lost = false;
             foreach (var line in RenameSection(ini))
             {
                 int eq = line.IndexOf('=');
@@ -548,7 +540,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
                 if (!IsInside(viewerDir, target) || !IsInside(viewerDir, staged))
                     throw new InvalidDataException($"patch.ini names a file outside the PlayOnline Viewer folder: {target}");
                 if (File.Exists(staged)) queued.Add((target, staged));
-                else lost = true;
             }
             // every copy before any delete, so a file in use leaves the whole queue to run again
             foreach (var (target, staged) in queued)
@@ -557,8 +548,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
                 File.Copy(staged, target, overwrite: true);
             }
             foreach (var (_, staged) in queued) DeleteFile(staged);
-            // a queued file that's gone means the version can't be trusted, so the next check looks at every file
-            if (lost && File.Exists(Path.Combine(viewerDir, "patch.ver"))) DeleteFile(Path.Combine(viewerDir, "patch.ver"));
             Writable(Path.Combine(viewerDir, "patch.bak"));
             File.Copy(ini, Path.Combine(viewerDir, "patch.bak"), overwrite: true);
             DeleteFile(ini);

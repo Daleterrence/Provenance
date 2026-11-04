@@ -319,7 +319,7 @@ public partial class MainViewModel : IMultiRunHost
         SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
 
         var snap = _runSnapshot ?? (_pol.Pid is { } pid ? SocialSnapshot.TryRead(pid) : null);
-        if (PlayGateFailure(snap, PlayRegion) is { } gate) return await LetGo(gate.Kind, gate.Text);
+        if (PlayGateFailure(snap) is { } gate) return await LetGo(gate.Kind, gate.Text);
         if (token.IsCancellationRequested) return await Stopped();
 
         if (GameFolders() is { } dirs)
@@ -416,12 +416,11 @@ public partial class MainViewModel : IMultiRunHost
 
     // the login only finishes once the hook's written a snapshot, so a missing one is the file being gone or unreadable
     // since (the session ending, say), not anything PlayOnline did
-    internal static AccountFailure? PlayGateFailure(PolSocialSnapshot? snap, PolRegion region)
+    internal static AccountFailure? PlayGateFailure(PolSocialSnapshot? snap)
     {
         if (snap is null)
             return new(AccountFailureKind.Account, "Provenance couldn't read this account's details after it logged in, so the game wasn't started.");
-        var blocked = PolAccountNotices.PlayBlockedReason(snap, region);
-        return PolAccountNotices.CanPlay(blocked) ? null : new(AccountFailureKind.Account, blocked!);
+        return PolAccountNotices.PlayBlockedReason(snap) is { } blocked ? new(AccountFailureKind.Account, blocked) : null;
     }
 
     // an unread or unanswered Play wants a restart so the run stops, a refusal or a lost session is this account's problem

@@ -317,9 +317,6 @@
                     <TextBlock Grid.Row="1" Margin="16,8" FontSize="12" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
                                Text="You're not in any friend groups yet. A group lets up to 64 friends see each other."
                                Visibility="{Binding NoGroups, Converter={StaticResource BoolToVis}}" />
-                    <TextBlock Grid.Row="1" Margin="16,8" FontSize="12" Foreground="{DynamicResource State.Warn}" TextWrapping="Wrap"
-                               Text="Provenance couldn't get your friend groups from PlayOnline."
-                               Visibility="{Binding GroupsUnavailable, Converter={StaticResource BoolToVis}}" />
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Groups}">
                             <ItemsControl.ItemTemplate>

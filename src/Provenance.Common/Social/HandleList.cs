@@ -75,7 +75,6 @@ public static class HandleList
         "failed:reloaded" => "Not saved: PlayOnline had a newer Content ID list, so Provenance loaded that instead. Try again.",
         "failed:not saved" => "Not saved: PlayOnline didn't keep the change. Try again.",
         "failed:orphan" => "That character is linked to a handle this account doesn't have any more, so it can't be changed.",
-        "failed:account notice" => "This PlayOnline account can't change its handles right now.",
         "failed:draining" or "failed:not in hold" =>
             "That couldn't be done while PlayOnline was closing or FINAL FANTASY XI was starting.",
         "failed:cancelled" => "FINAL FANTASY XI started before PlayOnline answered, so Provenance couldn't confirm the change.",

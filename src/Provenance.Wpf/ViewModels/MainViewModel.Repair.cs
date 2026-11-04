@@ -56,16 +56,16 @@ public partial class MainViewModel
 
     // A broken install can have lost FFXiMain.dll, so it only needs both folders registered. A region the mirror has no
     // copy of is shown but off
-    internal static (bool Available, string? NotYet) RepairState(PolRegion? region, bool haveKeys, Func<PolRegion, string, string?> folder)
+    internal static (bool Available, string? NotYet) RepairState(PolRegion? region, Func<PolRegion, string, string?> folder)
     {
         var r = region ?? PolRegion.UnitedStates;
-        bool available = haveKeys && folder(r, PolPaths.ViewerProduct) is not null && folder(r, PolPaths.FfxiProduct) is not null;
+        bool available = folder(r, PolPaths.ViewerProduct) is not null && folder(r, PolPaths.FfxiProduct) is not null;
         return (available, MirrorLayout.RegionFolder(r) is null ? RepairNotYetText(r) : null);
     }
 
     private void RefreshRepairAvailable(PolRegion? region)
     {
-        var (available, notYet) = RepairState(region, MirrorKeys.Trusted.Count > 0, PolPaths.TryGetInstallFolder);
+        var (available, notYet) = RepairState(region, PolPaths.TryGetInstallFolder);
         RepairNotYet = notYet;
         RepairAvailable = available;
     }

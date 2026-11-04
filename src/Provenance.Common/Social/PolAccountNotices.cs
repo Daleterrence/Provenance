@@ -12,11 +12,6 @@ public static class PolAccountNotices
         "You have no Content ID for FINAL FANTASY XI. Please obtain a new Content ID or reactivate " +
         "a cancelled one in order to play the game and/or to use the PlayOnline services.";
 
-    // the Content ID list didn't load (twice), so fail closed like the viewer does on a bad list
-    public const string ServiceUnknown =
-        "PlayOnline didn't send your Content ID list, so Provenance couldn't check your " +
-        "FINAL FANTASY XI service and the game wasn't started. Press Play to ask again.";
-
     // Blocks when the viewer's frame only offers Log Out or a fix-it page
     public sealed record Notice(int Status, string Code, bool Blocks, string Text);
 
@@ -71,15 +66,7 @@ public static class PolAccountNotices
     private static Notice N(int status, bool blocks, string text) =>
         new(status, $"LM-{status - 220:00}", blocks, text);
 
-    public static string? PlayBlockedReason(PolSocialSnapshot snap, PolRegion region = PolRegion.UnitedStates) => snap.FfxiService switch
-    {
-        "none" => NoFfxiContentId,
-        "unknown" => ServiceUnknown,
-        _ => For(snap.Notice, region) is { Blocks: true } notice ? $"{notice.Text} ({notice.Code})" : null,
-    };
-
-    // an unknown service isn't a refusal, Play stays on and asks POL again
-    public static bool CanPlay(string? reason) => reason is null || reason == ServiceUnknown;
+    public static string? PlayBlockedReason(PolSocialSnapshot snap) => snap.FfxiService == "none" ? NoFfxiContentId : null;
 
     // status byte from svc 0xd20. 253..255 have no row, the viewer shows LM-01 for them. A refused login has no day count
     // for LM-02, so that one says it in words

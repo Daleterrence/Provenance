@@ -13,8 +13,6 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
 
     private readonly Uri _base = new(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
 
-    public bool HasKeys => trusted.Count > 0;
-
     public async Task<MirrorPointer?> GetPointerAsync(string region, CancellationToken ct)
     {
         var payload = await GetSignedAsync(MirrorLayout.PointerKey(region), ct);

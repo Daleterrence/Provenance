@@ -28,7 +28,6 @@ public sealed record RepairResult(int FilesReplaced, int OtherFixes);
 // right gets written again, the registry included, and shortcuts are left alone
 public sealed class MirrorRepair(MirrorClient client, string region)
 {
-    public const string NotSetUp = "Repair isn't set up in this copy of Provenance.";
     public const string DirectXFailed =
         "The DirectX runtime FINAL FANTASY XI needs couldn't be installed. Run the repair again.";
 
@@ -62,7 +61,6 @@ public sealed class MirrorRepair(MirrorClient client, string region)
     public async Task<RepairPlan?> PlanAsync(string viewerDir, string ffxiDir, IProgress<(long Done, long Total)>? progress, CancellationToken ct)
     {
         MissingVersion = null;
-        if (!client.HasKeys) throw Shown.Mark(new InvalidOperationException(NotSetUp));
         var found = new List<(string Slug, PatchProduct Product, MirrorIndex Index)>();
         var stale = new List<string>();
         foreach (var (slug, product) in ProductsOf(viewerDir, ffxiDir))
@@ -106,16 +104,9 @@ public sealed class MirrorRepair(MirrorClient client, string region)
     {
         _changing = false;
         var products = ProductsOf(viewerDir, ffxiDir);
-        foreach (var (slug, product) in products)
-        {
+        foreach (var (slug, _) in products)
             if (!plan.Versions.ContainsKey(slug)) throw new ArgumentException($"The plan has no {slug} version.", nameof(plan));
-            Validate(product.Folder, WorkOf(plan, slug), $"{slug} index {plan.Versions[slug]}");
-        }
         var viewer = products[0].Product;
-        var viewerIndex = plan.Indexes.TryGetValue("viewer", out var known) ? known
-            : await client.GetIndexAsync(region, "viewer", plan.Versions["viewer"], ct)
-              ?? throw new MirrorUnusableException($"the viewer index {plan.Versions["viewer"]} is missing or failed verification", []);
-        Validate(viewer.Folder, viewerIndex.Files, $"viewer index {viewerIndex.Version}");
 
         // the installer data and the replacement files are one bar, the data's size is only known once it starts
         long downloadTotal = products.Sum(p => MirrorSync.DownloadSize(WorkOf(plan, p.Slug))), dataTotal = 0;
@@ -147,7 +138,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         if (queued)
         {
             Status?.Invoke("Checking the PlayOnline Viewer files again...");
-            var again = await MirrorSync.ScanAsync(viewer.Folder, viewerIndex, null, ct, keepLargeAddressAware: true);
+            var again = await MirrorSync.ScanAsync(viewer.Folder, plan.Indexes["viewer"], null, ct, keepLargeAddressAware: true);
             if (again.Count > 0) Log?.Invoke($"the Viewer's queued update files changed {again.Count} file(s); they are downloaded again");
             // no share of the bar for these, it'd have to start again from nothing
             ThrowIfFailed(await DownloadAsync("viewer", viewer, again, null, replaced, ct));
@@ -309,11 +300,11 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         }
     }
 
-    // POL reads it with the Interface seed, so one only the fallback key opens still counts as wrong
+    // POL tries the product id alone when the Interface-seeded key doesn't open it, so either one counts
     private static bool VersionRight(PatchProduct product, string version)
     {
-        try { return new PolUpdater(product).SeededVersion() == version; }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+        try { return new PolUpdater(product).LocalVersion() == version; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException) { return false; }
     }
 
     private PolRegion Region => MirrorLayout.RegionOf(region);

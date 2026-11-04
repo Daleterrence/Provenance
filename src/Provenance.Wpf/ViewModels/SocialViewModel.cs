@@ -78,7 +78,6 @@ public partial class SocialViewModel : ObservableObject
     [ObservableProperty] private bool _hasBlocked;
     [ObservableProperty] private string? _accountNotice;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanEdit))] private bool _connected;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanEdit))] private bool _friendsUnavailable;
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RefreshMailCommand))] private bool _messagesUnavailable;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanPlay))] private string? _playBlockedReason;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasUnread))]
@@ -92,9 +91,9 @@ public partial class SocialViewModel : ObservableObject
     public bool HasUnread => UnreadCount > 0;
     // requests get a badge too (on FRIENDS), so one's never just an 8 sec banner
     public bool HasPendingAnswers => PendingAnswers > 0;
-    public bool CanPlay => PolAccountNotices.CanPlay(PlayBlockedReason);
+    public bool CanPlay => PlayBlockedReason is null;
     public string Summary => OnlineCount switch { 0 => "No friends online", 1 => "1 friend online", var n => $"{n} friends online" };
-    public bool NoFriends => Connected && !FriendsUnavailable && Friends.Count == 0;
+    public bool NoFriends => Connected && Friends.Count == 0;
     public string NothingSelected => NoFriends ? NoFriendsText
                                                : "Select a friend to see your messages.";
     private const string NoFriendsText = "You don't have any friends on this PlayOnline account yet.";
@@ -383,7 +382,7 @@ public partial class SocialViewModel : ObservableObject
         MyComment = "";
         Avatar = null;
         AccountNotice = PlayBlockedReason = null;
-        FriendsUnavailable = MessagesUnavailable = GroupsUnavailable = false;
+        MessagesUnavailable = false;
         ShowGroups = false;
         ClearProfile();
         RefreshUnseen();
@@ -432,7 +431,6 @@ public partial class SocialViewModel : ObservableObject
         ApplyGroupState(snap);
         ApplyCharacters(snap);
         RebuildGroups(snap);
-        FriendsUnavailable = !snap.FriendsLoaded;
         MessagesUnavailable = snap.Mail == "failed";
         RefreshMailCommand.NotifyCanExecuteChanged();
         RebuildFriends(snap);
@@ -480,7 +478,7 @@ public partial class SocialViewModel : ObservableObject
         MyProfilePictureId = snap.MyProfilePictureId;
         var region = _settings.DetectedRegion ?? PolRegion.UnitedStates;
         var notice = PolAccountNotices.For(snap.Notice, region, snap.NoticeDays);
-        PlayBlockedReason = PolAccountNotices.PlayBlockedReason(snap, region);
+        PlayBlockedReason = PolAccountNotices.PlayBlockedReason(snap);
         AccountNotice = snap.BadPassword ? PolAccountNotices.BadPassword
                       : notice is { Blocks: false } ? $"{notice.Text} ({notice.Code})" : null;
         Connected = true;
@@ -794,7 +792,7 @@ public partial class SocialViewModel : ObservableObject
     public string EditStatus => EditBusy ? "Saving the change to PlayOnline..."
                               : ProfilePictureSaving ? "Saving your profile picture to PlayOnline..." : EditNote;
     public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote);
-    public bool CanEdit => Connected && !EditBusy && !FriendsUnavailable && _pol.Pid != null && !GameRunning && !HandleSwitching;
+    public bool CanEdit => Connected && !EditBusy && _pol.Pid != null && !GameRunning && !HandleSwitching;
 
     private DispatcherTimer? _noteTimer;
     // success notes go by themselves, failures stay until dismissed. A note's a failure unless the setter says so
@@ -893,11 +891,8 @@ public partial class SocialViewModel : ObservableObject
         "failed:friend list changed" or "failed:no such friend" => "Your friend list changed. Try again.",
         "failed:list changed" or "failed:no such entry" => "Your ignore list changed. Try again.",
         "failed:bad name" => "Use 1 to 15 English letters, numbers or symbols.",
-        "failed:friends not loaded" => "Your friend list didn't load, so this can't be changed right now. Log out and back in again.",
-        "failed:account notice" => "This PlayOnline account can't change its friends right now.",
         "failed:handle changing" => "Not changed: your handle was changing. Try again.",
         "failed:reloaded" => "PlayOnline had a newer friend list, so Provenance loaded it instead. Try again.",
-        "failed:no handle" => "This account doesn't have a PlayOnline handle.",
         "failed:-7187" => "That person is already on your ignore list.",
         "failed:-7188" or "failed:-516" => "Your ignore list is full (100 people).",
         _ => $"PlayOnline didn't accept the change ({SocialSnapshot.FailReason(state)}).",
@@ -995,8 +990,6 @@ public partial class SocialViewModel : ObservableObject
         EditNote = st switch
         {
             "timeout" => "PlayOnline didn't reply, so it's not certain your answer got through. If the request's still open, it'll show again next time you log in.",
-            "failed:friends not loaded" => "Your friend list didn't load, so this can't be changed right now. Log out and back in again.",
-            "failed:account notice" => "This PlayOnline account can't answer friend requests right now.",
             "failed:handle changing" => "Not sent: your handle was changing. Try again.",
             "failed:no such request" => "That friend request isn't there any more.",
             "failed:self" => "That request is from one of your own handles. You can only decline it.",
@@ -1132,7 +1125,6 @@ public partial class SocialViewModel : ObservableObject
         CanEdit ? null
         : GameRunning ? GameRunningNote
         : EditBusy ? "Wait for your last change to finish first."
-        : FriendsUnavailable ? "Your friend list didn't load, so friend requests can't be sent right now. Log out and back in again."
         : "Log in to send friend requests.";
 
     public void SendFriendRequest(SearchHitItem hit)
@@ -1219,7 +1211,6 @@ public partial class SocialViewModel : ObservableObject
                 "failed:-7181" => $"{_requestName} is on your ignore list. Stop ignoring them first.",
                 "failed:-7188" or "failed:-516" => "Your friend list is full (200 friends).",
                 "failed:no such result" => "Search again, then send the request.",
-                "failed:no handle" => "This account doesn't have a PlayOnline handle.",
                 "failed:no such friend" => $"Your friend list changed before the request to {_requestName} went, so it wasn't sent. Try again.",
                 "failed:stopped" => "PlayOnline didn't take your recent messages, so friend requests can't be sent until you log in again.",
                 "failed:hourly limit" => "You've sent 600 messages in the last hour, so the request wasn't sent. Try again later.",
@@ -1274,9 +1265,7 @@ public partial class SocialViewModel : ObservableObject
         EditNote = st switch
         {
             "timeout" => "PlayOnline didn't answer the profile picture change.",
-            "failed:account notice" => "This PlayOnline account can't change its profile picture right now.",
             "failed:handle changing" => "Not saved: your handle was changing. Try again.",
-            "failed:no handle" => "This account doesn't have a PlayOnline handle.",
             _ => $"PlayOnline didn't save the profile picture ({SocialSnapshot.FailReason(st)}).",
         };
     }

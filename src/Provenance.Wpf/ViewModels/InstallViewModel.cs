@@ -82,7 +82,6 @@ public partial class InstallViewModel : ObservableObject
         if (RegionLocked || value < 0 || value > RegionValues.Length) return;
         _region = value == 0 ? _autoRegion : RegionValues[value - 1];
         TotalGib = $"{GameInstaller.TotalBytes(_region) / 1024.0 / 1024 / 1024:0.0} GiB";
-        OnPropertyChanged(nameof(ShowKeepInstaller));
     }
 
     [ObservableProperty]
@@ -95,32 +94,21 @@ public partial class InstallViewModel : ObservableObject
     [ObservableProperty] private string _downloadFolder = "";
     [ObservableProperty] private string _totalGib = "";
     [ObservableProperty] private string _freeSpaceText = "";
-    [ObservableProperty] private bool _keepInstaller;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private bool _enoughSpace = true;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanStart), nameof(StepText), nameof(ShowKeepInstaller))]
+    [NotifyPropertyChangedFor(nameof(CanStart), nameof(StepText))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private bool _running;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanStart), nameof(ShowKeepInstaller))]
+    [NotifyPropertyChangedFor(nameof(CanStart))]
     private bool _done;
 
     public bool CanStart => !Running && !Done;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowKeepInstaller))]
-    private bool _fromParts;
-
-    // only SE's parts are ever kept, so it shows when they're the way in: up front when there's no mirror to try first,
-    // or once a run's fallen back to them (the tick's only read at the end)
-    public bool ShowKeepInstaller => Running ? FromParts : CanStart && StraightToParts(_region, MirrorKeys.Trusted.Count > 0);
-
-    internal static bool StraightToParts(PolRegion region, bool haveKeys) => MirrorLayout.RegionFolder(region) is null || !haveKeys;
 
     [ObservableProperty] private string _startLabel = "DOWNLOAD AND INSTALL";
     [ObservableProperty] private string _stage = "Ready to install";
@@ -284,11 +272,10 @@ public partial class InstallViewModel : ObservableObject
         try { Directory.Delete(dir, recursive: true); } catch (Exception e) { Log.Warning(e, "Could not remove {Dir}", dir); }
     }
 
-    internal static void RemoveParts(string work, PolRegion region, bool keepParts)
+    internal static void RemoveParts(string work, PolRegion region)
     {
         var unpacked = Path.Combine(work, "unpacked");
         if (Directory.Exists(unpacked)) RemoveDir(unpacked);
-        if (keepParts) return;
         foreach (var name in GameInstaller.PartsFor(region).SelectMany(p => new[] { p.FileName, p.FileName + ".part" }))
             try { File.Delete(Path.Combine(work, name)); } catch (Exception e) { Log.Warning(e, "Could not remove {Part}", name); }
     }
@@ -313,7 +300,6 @@ public partial class InstallViewModel : ObservableObject
         if (Running) return;
         Running = true;
         Done = false;
-        FromParts = false;
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         // the download takes hours on a slow line, and Windows mustn't sleep in the middle of it
@@ -354,15 +340,12 @@ public partial class InstallViewModel : ObservableObject
             workFolder = await Task.Run(() => LockWorkFolder(ownNames), ct);
             var work = workFolder.Path;
             if (await InstallFromMirrorAsync(work, ct)) return;
-            FromParts = true;
             var unpacked = Path.Combine(work, "unpacked");
             string root;
             for (int attempt = 1; ; attempt++)
             {
                 CurrentStep = 0;
                 Stage = "Downloading FINAL FANTASY XI";
-                Detail = "Checking Square Enix's installer files...";
-                foreach (var part in parts) await _installer.CheckServerAsync(part, ct);
                 StageIndeterminate = false;
                 long grandTotal = parts.Sum(p => p.Size);
                 long doneBefore = 0;
@@ -409,19 +392,12 @@ public partial class InstallViewModel : ObservableObject
 
             StageIndeterminate = true;
             Detail = "Removing the installer files...";
-            await Task.Run(() => RemoveParts(work, _region, KeepInstaller), CancellationToken.None);
+            await Task.Run(() => RemoveParts(work, _region), CancellationToken.None);
 
             // SE's files are from 2019, so the first sign-in updates POL and the first Play the game
             var updateBytes = await FirstUpdateSizeAsync(ct);
             Log.Information("Install finished in {Folder}; warnings: {Warnings}", InstallFolder, warnings);
             Finished(PartsNextText(updateBytes), warnings);
-        }
-        catch (RestartRequiredException e)
-        {
-            Log.Information("Install waits for a Windows restart (DirectPlay)");
-            Stage = "Restart Windows";
-            StartLabel = "CONTINUE";
-            Detail = e.Message;
         }
         catch (OperationCanceledException)
         {
@@ -536,7 +512,7 @@ public partial class InstallViewModel : ObservableObject
         {
             RemoveDir(staged);
             // a parts run stopped before this one leaves gigabytes of SE's parts behind otherwise
-            RemoveParts(work, _region, KeepInstaller);
+            RemoveParts(work, _region);
         }, CancellationToken.None);
 
         Log.Information("Install finished in {Folder} from the Provenance mirror; warnings: {Warnings}", InstallFolder, warnings);
@@ -555,7 +531,7 @@ public partial class InstallViewModel : ObservableObject
     // from POL (the mirror's try never got POL's version, or the mirror hasn't got it) or the mirror can't be reached
     private async Task<long?> FirstUpdateSizeAsync(CancellationToken ct)
     {
-        if (MirrorUpdater.RegionFor(_region, "ffxi") is not { } mirrorRegion || MirrorKeys.Trusted.Count == 0 || _mirror?.GameIndex is not { } index
+        if (MirrorUpdater.RegionFor(_region, "ffxi") is not { } mirrorRegion || _mirror?.GameIndex is not { } index
             || PolPaths.TryGetInstallFolder(_region, PolPaths.FfxiProduct) is not { } ffxiDir
             || PolPaths.TryGetInstallFolder(_region, PolPaths.ViewerProduct) is not { } viewerDir)
             return null;

@@ -51,16 +51,6 @@
                  ItemTemplate="{StaticResource FriendRow}" HorizontalContentAlignment="Stretch" ItemContainerStyle="{StaticResource RowItem}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" BorderThickness="0" Background="Transparent"
                  MouseDoubleClick="OnDoubleClick" SelectionChanged="OnSelectionChanged" KeyDown="OnListKeyDown" ContextMenuOpening="OnContextMenuOpening">
-            <ListBox.Style>
-                <Style TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding FriendsUnavailable}" Value="True">
-                            <Setter Property="Opacity" Value="0.35" />
-                            <Setter Property="IsEnabled" Value="False" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </ListBox.Style>
             <ListBox.ContextMenu>
                 <ContextMenu />
             </ListBox.ContextMenu>
@@ -108,13 +98,6 @@
                     <local:SvgIcon Glyph="dismiss" Width="12" Height="12" />
                 </Button>
             </StackPanel>
-        </Border>
-
-        <Border VerticalAlignment="Center" Margin="16" Padding="16,12" CornerRadius="{StaticResource Radius.Panel}"
-                Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1"
-                Visibility="{Binding FriendsUnavailable, Converter={StaticResource BoolToVis}}">
-            <TextBlock Text="Provenance couldn't get your friend list from PlayOnline." FontSize="13" TextWrapping="Wrap"
-                       HorizontalAlignment="Center" TextAlignment="Center" />
         </Border>
     </Grid>
 </UserControl>

@@ -29,8 +29,7 @@ public partial class SocialViewModel
 
     public ObservableCollection<GroupItem> Groups { get; } = new();
     [ObservableProperty, NotifyPropertyChangedFor(nameof(NoGroups))] private bool _hasGroups;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(NoGroups))] private bool _groupsUnavailable;
-    public bool NoGroups => !HasGroups && !GroupsUnavailable;   // a list that didn't load isn't "no groups"
+    public bool NoGroups => !HasGroups;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowFriends), nameof(FriendsTabVisible), nameof(GroupsTabVisible))]
     private bool _showGroups;
     public bool ShowFriends => !ShowGroups;
@@ -68,7 +67,6 @@ public partial class SocialViewModel
 
     private void RebuildGroups(PolSocialSnapshot snap)
     {
-        GroupsUnavailable = !snap.GroupsLoaded && snap.GroupList.Count == 0;
         static string MemberSig(PolGroupMember m) =>
             $"{m.Index}:{m.Name}:{m.Class}:{m.Status}:{m.ProfilePictureId}:{m.Comment}";
         var sig = snap.GroupList.Count + ":" + string.Join("|", snap.GroupList.Select(g => g.Id + "/" + g.Name + "/" + g.MyClass + "/" + GroupChat.UnreadFor(g.Id) + "/" +

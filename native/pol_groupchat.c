@@ -138,7 +138,6 @@ static void gc_join_request(BYTE *b)
         return;
     }
     g_gc_cancel_tok[0] = 0;
-    if (notice_blocks(g_notice)) { gc_join_refused(tok, "failed:account notice"); return; }
     if (lstrlenA(gid) != 16 || !hex8(gid, &hi) || !hex8(gid + 8, &lo) || !(lo | hi) || !parse_num(sl, 2, &slot) ||
         slot > 63) {
         gc_join_refused(tok, "failed:bad request");

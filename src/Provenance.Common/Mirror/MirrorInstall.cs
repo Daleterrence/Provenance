@@ -67,7 +67,6 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
         Staged = [];
         SkipReason = null;
         GameIndex = null;
-        if (!client.HasKeys) return Skip<string>("the mirror keys are not configured");
         if (await FetchInstallDataAsync(stagingDir, null, progress, ct) is not { } data) return null;
         var (pointer, _, viewerMsi, ffxiMsi) = data;
 

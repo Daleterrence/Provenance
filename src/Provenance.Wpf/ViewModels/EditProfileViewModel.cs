@@ -637,10 +637,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private static string FailText(Job job, string state) => state switch
     {
         "cancelled" => "Logging out or starting FINAL FANTASY XI stopped the request.",
-        "failed:account notice" => "This PlayOnline account can't change its profile right now.",
         "failed:handle changing" => job == Job.Load ? "Your handle was changing. Open the profile again."
                                                   : "Not saved: your handle was changing. Open the profile again.",
-        "failed:no handle" => "This account doesn't have a PlayOnline handle yet.",
         "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install.",
         "failed:no profile" => "PlayOnline doesn't have a profile for this handle.",
         "failed:not loaded" => "Open the profile again before saving.",

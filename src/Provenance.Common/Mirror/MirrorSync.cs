@@ -54,7 +54,6 @@ public static class MirrorSync
     public static async Task<IReadOnlyList<MirrorEntry>> ScanAsync(string folder, MirrorIndex index,
         IProgress<(long Done, long Total)>? progress, CancellationToken ct, bool keepLargeAddressAware = false)
     {
-        foreach (var e in index.Files) SafePath(folder, e.Path);
         long total = index.Files.Sum(f => f.Size), done = 0;
         var damaged = new bool[index.Files.Count];
         var opts = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount, CancellationToken = ct };
@@ -74,7 +73,7 @@ public static class MirrorSync
     {
         try
         {
-            var path = SafePath(folder, entry.Path);
+            var path = Path.Combine(folder, entry.Path);
             var info = new FileInfo(path);
             if (!info.Exists || info.Length != entry.Size) return false;
             await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);

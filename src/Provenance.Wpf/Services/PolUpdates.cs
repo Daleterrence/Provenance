@@ -15,7 +15,6 @@ public static class PolUpdates
 {
     private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
     private static readonly MirrorClient Mirror = new(MirrorHttp, MirrorKeys.Trusted);
-    private static int _noKeysLogged;
 
     // freeFiles ends our waiting pol.exe before any file changes
     public static PatchResult UpdateViewer(string viewerDir, PolRegion region, IProgress<PatchProgress>? progress, Action freeFiles,
@@ -78,11 +77,6 @@ public static class PolUpdates
             if (mirrorRegion is null)
             {
                 Log.Information("Update {Product}: the patch mirror has no copy of it for this region; using PlayOnline", product.Name);
-                outcome = new MirrorOutcome(false, [], 0);
-            }
-            else if (MirrorKeys.Trusted.Count == 0)
-            {
-                if (Interlocked.Exchange(ref _noKeysLogged, 1) == 0) Log.Information("mirror keys not configured; using PlayOnline");
                 outcome = new MirrorOutcome(false, [], 0);
             }
             else

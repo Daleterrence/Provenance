@@ -28,13 +28,6 @@ public sealed class DamagedPartException : IOException
     public string Part { get; }
 }
 
-public sealed class RestartRequiredException : InvalidOperationException
-{
-    public RestartRequiredException()
-        : base("Windows needs a restart to finish turning on DirectPlay, which FINAL FANTASY XI needs. " +
-               "Restart Windows, then open Provenance and continue the install.") => Shown.Mark(this);
-}
-
 public sealed class GameInstaller
 {
     public const long RequiredFreeBytes = 25L * 1024 * 1024 * 1024;
@@ -60,9 +53,7 @@ public sealed class GameInstaller
     private const string NeedsAdmin =
         "Windows didn't let Provenance save where the game is installed.";
 
-    private const string ViewerFolder = "PlayOnline", FfxiFolder = "FINAL_FANTASY_XI";
-    private static readonly string[] ViewerNames = ["PlayOnlineViewer.msi", "PlayOnlineViewer_us.msi"];
-    private static readonly string[] FfxiNames = ["FINAL_FANTASY_XI.msi", "FinalFantasyXI_us_full.msi", "FinalFantasyXI_full.msi"];
+    private const string ViewerPackage = @"PlayOnline\PlayOnlineViewer.msi", FfxiPackage = @"FINAL_FANTASY_XI\FINAL_FANTASY_XI.msi";
     private const string NoViewerPackage = "The unpacked installer doesn't have a PlayOnline Viewer package in it.";
     private const string NoFfxiPackage = "The unpacked installer doesn't have a FINAL FANTASY XI package in it.";
 
@@ -121,33 +112,6 @@ public sealed class GameInstaller
 
     public static long TotalBytes(PolRegion region) => PartsFor(region).Sum(p => p.Size);
 
-    // SE's CDN starts the ETag with the file's MD5 (handy, if a bit fragile to lean on, hence the fallback below)
-    internal async Task<(long size, string? md5)> HeadAsync(GamePart part, CancellationToken ct = default)
-    {
-        using var req = new HttpRequestMessage(HttpMethod.Head, part.Url);
-        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        limit.CancelAfter(IdleTimeout);
-        using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, limit.Token);
-        res.EnsureSuccessStatusCode();
-        long size = res.Content.Headers.ContentLength ?? 0;
-        string? md5 = res.Headers.ETag?.Tag.Trim('"').Split(':')[0];
-        return (size, string.IsNullOrEmpty(md5) ? null : md5);
-    }
-
-    // This runs as admin, so a part SE has replaced stops the install early. No answer's fine, the download's own MD5
-    // check decides.
-    public async Task CheckServerAsync(GamePart part, CancellationToken ct)
-    {
-        (long size, string? md5) server;
-        try { server = await HeadAsync(part, ct); }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested) { return; }
-        if (server.size > 0 && server.md5 is { Length: 32 } &&
-            (server.size != part.Size || !server.md5.Equals(part.Md5, StringComparison.OrdinalIgnoreCase)))
-            throw Shown.Mark(new InvalidOperationException(
-                $"Square Enix has changed the installer file {part.FileName}, and this version of Provenance only installs the files it knows. " +
-                "Check for a Provenance update."));
-    }
-
     public async Task DownloadPartAsync(GamePart part, string destDir, IProgress<long>? bytes, CancellationToken ct)
     {
         Directory.CreateDirectory(destDir);
@@ -203,7 +167,9 @@ public sealed class GameInstaller
         if (!Convert.ToHexString(md5.GetHashAndReset()).Equals(part.Md5, StringComparison.OrdinalIgnoreCase))
         {
             File.Delete(partial);
-            throw new InvalidDataException($"{part.FileName} failed its MD5 check after download.");
+            throw Shown.Mark(new InvalidDataException(
+                $"The installer part {part.FileName} didn't match the one this version of Provenance installs, so press Try again, " +
+                "and if it keeps happening, check for a Provenance update."));
         }
         File.Move(partial, dest, overwrite: true);
     }
@@ -324,11 +290,9 @@ public sealed class GameInstaller
             else if (dp != 0) throw Shown.Mark(new InvalidOperationException($"Windows couldn't turn on DirectPlay, which FINAL FANTASY XI needs (DISM code {dp})."));
         }
 
-        var polMsi = FindFirst(unpackedDir, ViewerFolder, ViewerNames)
-                     ?? throw Shown.Mark(new FileNotFoundException(NoViewerPackage));
+        var polMsi = Package(unpackedDir, ViewerPackage) ?? throw Shown.Mark(new FileNotFoundException(NoViewerPackage));
         await InstallPackageAsync(polMsi, viewerCode, region, PolPaths.ViewerProduct, "pol.exe", installRoot, PolShortcut,
-                                  "PlayOnline Viewer", Path.Combine(logDir, "playonline.log"), progress, warnings, ct, restartPending: false,
-                                  payloadInPlace);
+                                  "PlayOnline Viewer", Path.Combine(logDir, "playonline.log"), progress, warnings, ct, payloadInPlace);
 
         if (PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct) is { } viewer &&
             Directory.GetParent(viewer.TrimEnd('\\'))?.Parent is { } polRoot &&
@@ -339,10 +303,9 @@ public sealed class GameInstaller
             installRoot = polRoot.FullName;
         }
 
-        var ffxiMsi = FindFirst(unpackedDir, FfxiFolder, FfxiNames) ?? throw Shown.Mark(new FileNotFoundException(NoFfxiPackage));
+        var ffxiMsi = Package(unpackedDir, FfxiPackage) ?? throw Shown.Mark(new FileNotFoundException(NoFfxiPackage));
         await InstallPackageAsync(ffxiMsi, ffxiCode, region, PolPaths.FfxiProduct, "FFXiMain.dll", installRoot, FfxiShortcut,
-                                  "FINAL FANTASY XI", Path.Combine(logDir, "ffxi.log"), progress, warnings, ct, restartPending,
-                                  payloadInPlace);
+                                  "FINAL FANTASY XI", Path.Combine(logDir, "ffxi.log"), progress, warnings, ct, payloadInPlace);
         if (restartPending) warnings.Add("Restart Windows before you play, because DirectPlay (which the game needs) only turns on after a restart.");
         return warnings;
     }
@@ -368,7 +331,7 @@ public sealed class GameInstaller
     private static async Task InstallPackageAsync(string msi, string productCode, PolRegion region, string registryValue, string keyFile,
                                                   string installRoot, string shortcutProperty, string name, string logPath,
                                                   IProgress<InstallProgress>? progress, List<string> warnings, CancellationToken ct,
-                                                  bool restartPending, bool payloadInPlace)
+                                                  bool payloadInPlace)
     {
         // The main file alone never counts, the mirror might have only just put it there. The InstallFolder value is
         // what marks a product installed, Apply writes it last.
@@ -380,17 +343,6 @@ public sealed class GameInstaller
             return;
         }
         Say(progress, $"Preparing {name}...");
-        string? unsupported;
-        using (var pkg = new MsiPackage(msi)) unsupported = pkg.Supported();
-        if (unsupported != null)
-        {
-            if (payloadInPlace)
-                throw new NotSupportedException($"The {name} package uses {unsupported}, so it cannot be applied over files that are already in place.");
-            // the FFXI package's own DISM step fails the whole run while DirectPlay's waiting for a restart
-            if (restartPending) throw new RestartRequiredException();
-            await RunMsiAsync(msi, installRoot, shortcutProperty, name, logPath, progress, warnings, ct);
-            return;
-        }
         var report = new Progress<(long done, long total)>(p => progress?.Report(new InstallProgress("Installing",
             $"Installing {name}: {p.done / 1073741824.0:0.00} of {p.total / 1073741824.0:0.00} GiB",
             p.total > 0 ? (double)p.done / p.total : -1, p.done, p.total)));
@@ -420,54 +372,12 @@ public sealed class GameInstaller
                                                      hive, pol ? PolPaths.ViewerProduct : PolPaths.FfxiProduct, settings));
     }
 
-    private static async Task RunMsiAsync(string msi, string installRoot, string shortcutProperty, string name,
-                                          string logPath, IProgress<InstallProgress>? progress, List<string> warnings,
-                                          CancellationToken ct)
-    {
-        var props = new Dictionary<string, string>
-            { ["ALLUSERS"] = "1", ["INSTALLDIR"] = installRoot.TrimEnd('\\') + "\\", [shortcutProperty] = "1" };
-        var report = new Progress<MsiInstaller.Report>(r => progress?.Report(new InstallProgress(
-            "Installing", r.RollingBack ? $"Undoing the {name} install..." :
-                          r.Action.Length > 0 ? $"{name}: {r.Action}" : $"Installing {name}",
-            r.Fraction ?? -1, 0, 0)));
-        string? lastError = null;
-        for (int attempt = 0; ; attempt++)
-        {
-            Say(progress, $"Installing {name}...");
-            int code = await Task.Run(() => MsiInstaller.Install(msi, props, logPath, report, ct, e => lastError = e), CancellationToken.None);
-            switch (code)
-            {
-                case MsiInstaller.Success:
-                    return;
-                case MsiInstaller.RebootRequired:
-                case MsiInstaller.RebootInitiated:
-                    warnings.Add($"Windows needs a restart to finish the {name} install.");
-                    return;
-                case MsiInstaller.UserExit when ct.IsCancellationRequested:
-                    throw new OperationCanceledException(ct);
-                case MsiInstaller.AlreadyRunning when attempt < 20:
-                    Say(progress, "Waiting for another installation on this PC to finish...");
-                    await Task.Delay(TimeSpan.FromSeconds(30), ct);
-                    continue;
-                default:
-                    // Windows Installer's own words ride along for the log, the screen gets the code
-                    throw Shown.Mark(new InvalidOperationException(
-                        $"The {name} installer stopped with an error (Windows Installer code {code}). Its log is at {logPath}.",
-                        lastError is { Length: > 0 } ? new Exception(lastError) : null));
-            }
-        }
-    }
-
     public static (string Viewer, string Ffxi) FindPackages(string unpackedDir) =>
-        (FindFirst(unpackedDir, ViewerFolder, ViewerNames) ?? throw Shown.Mark(new FileNotFoundException(NoViewerPackage)),
-         FindFirst(unpackedDir, FfxiFolder, FfxiNames) ?? throw Shown.Mark(new FileNotFoundException(NoFfxiPackage)));
+        (Package(unpackedDir, ViewerPackage) ?? throw Shown.Mark(new FileNotFoundException(NoViewerPackage)),
+         Package(unpackedDir, FfxiPackage) ?? throw Shown.Mark(new FileNotFoundException(NoFfxiPackage)));
 
-    private static string? FindFirst(string root, string sub, IEnumerable<string> names)
-    {
-        var dir = Path.Combine(root, sub);
-        return names.Select(n => Path.Combine(dir, n)).FirstOrDefault(File.Exists)
-               ?? (Directory.Exists(dir) ? Directory.GetFiles(dir, "*.msi").FirstOrDefault() : null);
-    }
+    private static string? Package(string root, string relative) =>
+        File.Exists(Path.Combine(root, relative)) ? Path.Combine(root, relative) : null;
 
     // a stop waits for it to finish, DXSETUP or DISM killed part way can leave the DirectX runtime half installed
     internal static async Task<int> RunAsync(string exe, string args, CancellationToken ct, Action? stopping = null)
