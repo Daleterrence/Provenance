@@ -1,8 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
-using CommunityToolkit.Mvvm.ComponentModel;
 using Provenance.Common.PolFormat;
 using Provenance.Wpf.Services;
 
@@ -10,16 +8,6 @@ namespace Provenance.Wpf.Views;
 
 public partial class ProfilePicturePickerWindow : Window
 {
-    public sealed partial class ProfilePictureTile(ProfilePictureCatalog.ProfilePicture pic, ImageSource? image)
-        : ObservableObject
-    {
-        public ProfilePictureCatalog.ProfilePicture ProfilePicture { get; } = pic;
-        public ImageSource? Image { get; } = image;
-        public string Tip => string.IsNullOrEmpty(ProfilePicture.Artist)
-            ? ProfilePicture.Name : $"{ProfilePicture.Name}\n{ProfilePicture.Artist}";
-        [ObservableProperty] private bool _isSelected;
-    }
-
     private readonly ProfilePictureCatalog.Catalog _catalog;
     private readonly AvatarService _avatars;
     private readonly int _current;

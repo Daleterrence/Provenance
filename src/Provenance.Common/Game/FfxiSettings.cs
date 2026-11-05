@@ -1,3 +1,6 @@
+using Provenance.Common.PolFormat;
+using Serilog;
+
 namespace Provenance.Common.Game;
 
 // FFXI settings the way the official config tool keeps them: numbered values under the region's FinalFantasyXI key
@@ -60,6 +63,19 @@ public sealed class FfxiSettings
         // what the tool fills in when the folder's empty
         s.ScreenshotFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games", "FINAL FANTASY XI");
         return s;
+    }
+
+    // SE's installer only writes 3 of the game's settings, and the game just closes without the rest
+    public static void WriteFirstStartSettings(PolRegion region)
+    {
+        try
+        {
+            if (!FfxiRegistry.NeedsFirstStart(region)) return;
+            int n = FfxiRegistry.WriteFirstStart(region);
+            var d = FfxiRegistry.PrimaryDisplay();
+            Log.Information("FINAL FANTASY XI first-start settings: {Count} values written for a {W}x{H} display", n, d.Width, d.Height);
+        }
+        catch (Exception e) { Log.Warning(e, "Could not write the FINAL FANTASY XI first-start settings"); }
     }
 
     // menus get drawn at the window size over the scale, then stretched back up. Steps of 0.05, and 1x is 0 x 0

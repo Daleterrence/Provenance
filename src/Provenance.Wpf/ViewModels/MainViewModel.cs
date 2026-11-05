@@ -545,7 +545,7 @@ public partial class MainViewModel : ObservableObject
     private bool EditAccount(bool requireAll, AccountDialogResult? typed = null)
     {
         if (SelectedProfile is not { } p) return false;
-        requireAll |= NeedsAllDetails(_credentials.HasUsableDetails(p.Id),
+        requireAll |= AccountRules.NeedsAllDetails(_credentials.HasUsableDetails(p.Id),
                                       _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id)?.Problem);
         var r = AccountDialog.Show(Application.Current.MainWindow, p.DisplayName, typed?.UseOtp ?? p.UseOtp, edit: true,
                                    typed?.OtpSource ?? p.OtpSource, typed?.OtpItem ?? p.OtpItem, requireAll: requireAll,
@@ -557,19 +557,19 @@ public partial class MainViewModel : ObservableObject
                 $"This PlayOnline ID is already saved as {same.DisplayName}, so nothing was changed.");
             return false;
         }
-        var polEdit = SideEditOf(r.PolId, r.PolPassword);
-        var seaEdit = SideEditOf(r.SeaId, r.SeaPassword);
-        var pol = polEdit == SideEdit.Fill ? _credentials.LoadPolAccount(p.Id) : null;
-        var sea = seaEdit == SideEdit.Fill ? _credentials.LoadSquareEnixAccount(p.Id) : null;
-        if (FillFailed(polEdit, pol, seaEdit, sea))
-            return EditAccount(requireAll: true, typed: WithoutPasswords(r));
+        var polEdit = AccountRules.SideEditOf(r.PolId, r.PolPassword);
+        var seaEdit = AccountRules.SideEditOf(r.SeaId, r.SeaPassword);
+        var pol = polEdit == AccountRules.SideEdit.Fill ? _credentials.LoadPolAccount(p.Id) : null;
+        var sea = seaEdit == AccountRules.SideEdit.Fill ? _credentials.LoadSquareEnixAccount(p.Id) : null;
+        if (AccountRules.FillFailed(polEdit, pol, seaEdit, sea))
+            return EditAccount(requireAll: true, typed: AccountRules.WithoutPasswords(r));
         // read before anything's saved, so the typed details get compared with the saved ones
         var blocked = _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id && e.CredentialsRefused);
-        bool cures = blocked is not null && ChangesSignIn(r, _credentials.ReadIds(p.Id), p.UseOtp, p.OtpSource, p.OtpItem, p.OtpAccount);
-        if (polEdit != SideEdit.Keep)
+        bool cures = blocked is not null && AccountRules.ChangesSignIn(r, _credentials.ReadIds(p.Id), p.UseOtp, p.OtpSource, p.OtpItem, p.OtpAccount);
+        if (polEdit != AccountRules.SideEdit.Keep)
             _credentials.SavePolAccount(p.Id, new PolAccount(r.PolId.Length > 0 ? r.PolId : pol!.PolId,
                                                              r.PolPassword.Length > 0 ? r.PolPassword : pol!.Password));
-        if (seaEdit != SideEdit.Keep)
+        if (seaEdit != AccountRules.SideEdit.Keep)
             _credentials.SaveSquareEnixAccount(p.Id, new SquareEnixAccount(r.SeaId.Length > 0 ? r.SeaId : sea!.Username,
                                                              r.SeaPassword.Length > 0 ? r.SeaPassword : sea!.Password));
         p.UseOtp = r.UseOtp;
@@ -593,37 +593,8 @@ public partial class MainViewModel : ObservableObject
         return true;
     }
 
-    internal enum SideEdit
-    {
-        Keep,      // ID and password both empty, the saved entry's neither read nor written
-        Replace,
-        Fill,
-    }
-
-    internal static SideEdit SideEditOf(string id, string password) =>
-        id.Length == 0 && password.Length == 0 ? SideEdit.Keep
-        : id.Length > 0 && password.Length > 0 ? SideEdit.Replace
-        : SideEdit.Fill;
-
-    // a key that's gone still passes the header test, so the run's details-again text is what tells
-    internal static bool NeedsAllDetails(bool usable, string? multiProblem) =>
-        !usable || multiProblem == PolSession.DetailsAgainText;
-
-    internal static bool FillFailed(SideEdit polEdit, PolAccount? pol, SideEdit seaEdit, SquareEnixAccount? sea) =>
-        (polEdit == SideEdit.Fill && pol is null) || (seaEdit == SideEdit.Fill && sea is null);
-
     internal const string NothingChangedText =
         "You didn't change anything that affects logging in, so this account stays turned off for multi-account login.";
-
-    internal static bool ChangesSignIn(AccountDialogResult r, (string? PolId, string? SeaId) saved,
-                                       bool useOtp, string otpSource, string otpItem, string otpAccount = "") =>
-        (r.PolId.Length > 0 && !string.Equals(r.PolId, saved.PolId, StringComparison.OrdinalIgnoreCase))
-        || (r.SeaId.Length > 0 && !string.Equals(r.SeaId, saved.SeaId, StringComparison.OrdinalIgnoreCase))
-        || r.PolPassword.Length > 0 || r.SeaPassword.Length > 0
-        || r.UseOtp != useOtp || r.OtpSource != otpSource || r.OtpItem != otpItem || r.OtpAccount != otpAccount;
-
-    internal static AccountDialogResult WithoutPasswords(AccountDialogResult typed) =>
-        typed with { PolPassword = "", SeaPassword = "" };
 
     internal const string RemoveFailedText = "Provenance couldn't remove this account's saved details.";
 
@@ -665,18 +636,6 @@ public partial class MainViewModel : ObservableObject
 
     private bool CanLogin() => !IsLaunching && !MultiRunning;
 
-    private static string? ValidateDetails(string polId, string polPassword, string seaId, string seaPassword)
-    {
-        if (string.IsNullOrWhiteSpace(polId)) return "Enter your PlayOnline ID.";
-        if (polId.Trim().Length != 8 || !polId.Trim().All(char.IsAsciiLetterOrDigit))
-            return "A PlayOnline ID is 8 letters and numbers.";
-        if (string.IsNullOrEmpty(polPassword)) return "Enter your PlayOnline password.";
-        if (string.IsNullOrWhiteSpace(seaId)) return "Enter your Square Enix ID.";
-        if (seaId.Contains('@')) return "Use your Square Enix ID here, not your email address.";
-        if (string.IsNullOrEmpty(seaPassword)) return "Enter your Square Enix password.";
-        return null;
-    }
-
     [RelayCommand(CanExecute = nameof(CanLogin))]
     private Task SignInAsync() => _connectTask = ConnectSocialAsync();
 
@@ -689,19 +648,6 @@ public partial class MainViewModel : ObservableObject
         _launchCts?.Cancel();
         if (_connectTask is { } t) await Task.WhenAny(t, Task.Delay(TimeSpan.FromSeconds(15)));
     }
-
-    internal static string TitleFor(int code) => code switch
-    {
-        LoginCodes.AuthFailed => "Login not accepted",
-        LoginCodes.Unfinished => "Login didn't finish",
-        LoginCodes.NoPolHandle => "PlayOnline handle needed",
-        LoginCodes.HandleRejected => "Handle not accepted",
-        LoginCodes.Stalled => "PlayOnline stopped responding",
-        LoginCodes.AccountBlocked => "PlayOnline account notice",
-        LoginCodes.LauncherFailed => "PlayOnline didn't start",
-        LoginCodes.DetailsUnreadable => "Account details incomplete",
-        _ => "Couldn't log in",
-    };
 
     public ObservableCollection<FeedItem> NewsItems { get; } = new();
     public ObservableCollection<FeedItem> StatusItems { get; } = new();
@@ -1190,7 +1136,7 @@ public partial class MainViewModel : ObservableObject
                     _pol.StopHold();
                     _pol.Prestart();
                 });
-                var failure = LoginFailure(code, lastFailure, AutoLogin);
+                var failure = AccountRules.LoginFailure(code, lastFailure, AutoLogin);
                 if (failure.AutoOff) AutoLogin = false;
                 if (code != LoginCodes.Cancelled)
                     MessageDialog.ShowError(Application.Current?.MainWindow, failure.Title, failure.Text, offerLogs: failure.OfferLogs);
@@ -1213,43 +1159,21 @@ public partial class MainViewModel : ObservableObject
         if (startAfter && PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null);
     }
 
-    // never a retry by itself after a refusal, it'd stretch a three-strikes lockout. A refused password or a handle
-    // problem is the user's to fix, anything else might need the log
-    internal static (string Title, string Text, bool AutoOff, bool OfferLogs) LoginFailure(int code, string? detail, bool autoLogin)
-    {
-        bool autoOff = code is LoginCodes.AuthFailed or LoginCodes.AccountBlocked
-                           or LoginCodes.DetailsUnreadable && autoLogin;
-        var why = detail ?? $"Provenance couldn't log in to PlayOnline (code {code}).";
-        if (code == LoginCodes.AuthFailed)
-            why += "\n\nIf your password has changed, press Edit account to update it, then log in again.";
-        if (autoOff)
-            why += "\n\nProvenance has turned off Log in automatically, so it won't try this account again by itself.";
-        return (TitleFor(code), why, autoOff,
-                code is LoginCodes.Stalled or LoginCodes.LauncherFailed or LoginCodes.Unfinished
-                || TitleFor(code) == "Couldn't log in");
-    }
-
     // accounts on one SE ID share an authenticator
     private static string? AskOtp(Window? owner, Account profile, SquareEnixAccount sea) =>
         OtpDialog.Ask(owner, profile.OtpSource, profile.OtpItem, "sea:" + sea.Username.Trim().ToLowerInvariant(),
                       sea.Username, profile.OtpAccount);
 
-    // both IDs there means the entries exist but won't unwrap (a key that's gone, say)
-    private static bool BothIds((string? PolId, string? SeaId) ids) => !string.IsNullOrEmpty(ids.PolId) && !string.IsNullOrEmpty(ids.SeaId);
-
-    internal static string MissingDetailsText((string? PolId, string? SeaId) ids) =>
-        BothIds(ids) ? PolSession.DetailsAgainText : "This account's login details are missing. Press Edit account to add them.";
-
     private (PolAccount Pol, SquareEnixAccount Sea)? LoadForSignIn(Window? owner, Account profile)
     {
-        var details = PrepareSignIn(_credentials, profile.Id);
+        var details = AccountRules.PrepareSignIn(_credentials, profile.Id);
         if (details.Missing)
         {
             if (!EditAccount(requireAll: true)) return null;
-            details = PrepareSignIn(_credentials, profile.Id);
+            details = AccountRules.PrepareSignIn(_credentials, profile.Id);
             if (details.Missing)
             {
-                MessageDialog.ShowError(owner, "Account details incomplete", MissingDetailsText(_credentials.ReadIds(profile.Id)));
+                MessageDialog.ShowError(owner, "Account details incomplete", AccountRules.MissingDetailsText(_credentials.ReadIds(profile.Id)));
                 return null;
             }
         }
@@ -1259,21 +1183,6 @@ public partial class MainViewModel : ObservableObject
             return null;
         }
         return (details.Pol!, details.Sea!);
-    }
-
-    internal sealed record SignInDetails(PolAccount? Pol, SquareEnixAccount? Sea, string? Problem)
-    {
-        public bool Missing => Pol is null && Problem is null;
-    }
-
-    internal static SignInDetails PrepareSignIn(ICredentialService credentials, string profileId)
-    {
-        var pol = credentials.LoadPolAccount(profileId);
-        var sea = credentials.LoadSquareEnixAccount(profileId);
-        if (pol is null || sea is null) return new(null, null, null);
-        if (ValidateDetails(pol.PolId, pol.Password, sea.Username, sea.Password) is { } problem)
-            return new(null, null, problem + " Press Edit account to fix it.");
-        return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SquareEnixAccount(sea.Username.Trim(), sea.Password), null);
     }
 
     // the US viewer asks once per POL ID, here it's once per install
@@ -1345,7 +1254,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         // SE's installer only writes 3 of the game settings
-        InstallViewModel.WriteFirstStartSettings(PlayRegion);
+        FfxiSettings.WriteFirstStartSettings(PlayRegion);
         WritePolOptions(_sessionProfileId);
         ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         await BackUpGameSettingsAsync(null, text => ProgressText = text);
@@ -1650,7 +1559,7 @@ public partial class MainViewModel : ObservableObject
         {
             var names = WindowerInstall.Profiles(WindowerInstall.Detect(s.WindowerPath));
             var current = WindowerSettingsFile.OldCopySource(s.WindowerProfile);
-            return names.Select(n => new PlayChoice(n, SettingsViewModel.WindowerDisplay(n, names), n == current)).ToList();
+            return names.Select(n => new PlayChoice(n, WindowerProfileNames.WindowerDisplay(n, names), n == current)).ToList();
         }
         return [];
     }

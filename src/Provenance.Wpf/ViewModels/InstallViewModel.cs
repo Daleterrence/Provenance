@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Security;
@@ -23,7 +22,6 @@ public partial class InstallViewModel : ObservableObject
     private const long GameDriveBytes = 16_500_000_000;       // the installed and updated game, with update temp files
     private const long DownloadDriveBytes = 15_500_000_000;   // the parts and their unpacked copy
     private const string MirrorFolder = "mirror";
-    private const uint EsContinuous = 0x80000000, EsSystemRequired = 0x00000001;
     private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
 
     // Japanese installs work, but stay out of the list until a JP login has been seen working
@@ -268,19 +266,6 @@ public partial class InstallViewModel : ObservableObject
         });
     }
 
-    private static void RemoveDir(string dir)
-    {
-        try { Directory.Delete(dir, recursive: true); } catch (Exception e) { Log.Warning(e, "Could not remove {Dir}", dir); }
-    }
-
-    internal static void RemoveParts(string work, PolRegion region)
-    {
-        var unpacked = Path.Combine(work, "unpacked");
-        if (Directory.Exists(unpacked)) RemoveDir(unpacked);
-        foreach (var name in GameInstaller.PartsFor(region).SelectMany(p => new[] { p.FileName, p.FileName + ".part" }))
-            try { File.Delete(Path.Combine(work, name)); } catch (Exception e) { Log.Warning(e, "Could not remove {Part}", name); }
-    }
-
     // next is null when everything's already up to date
     private void Finished(string? next, IReadOnlyList<string> warnings)
     {
@@ -304,7 +289,7 @@ public partial class InstallViewModel : ObservableObject
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         // the download takes hours on a slow line, and Windows mustn't sleep in the middle of it
-        SetThreadExecutionState(EsContinuous | EsSystemRequired);
+        KeepAwake.Hold();
         bool held = false;
         InstallWorkFolder.WorkFolder? workFolder = null;
         try
@@ -330,7 +315,7 @@ public partial class InstallViewModel : ObservableObject
             running.ForEach(p => p.Dispose());
             if (running.Count > 0)
                 throw Shown.Mark(new InvalidOperationException("PlayOnline or FINAL FANTASY XI is running. Close it, then press Try again."));
-            if (OtherVersionIn(InstallFolder, _region, PolPaths.TryGetInstallFolder) is { } clash)
+            if (InstallFolderCheck.OtherVersionIn(InstallFolder, _region, PolPaths.TryGetInstallFolder) is { } clash)
                 throw Shown.Mark(new InvalidOperationException(clash));
             // only from here, a refused start leaves the choice open
             RegionLocked = true;
@@ -388,12 +373,12 @@ public partial class InstallViewModel : ObservableObject
             using (await UpdateLockAsync(ct))
             {
                 warnings = await _installer.RunInstallAsync(root, InstallFolder, Path.Combine(work, "logs"), _region, InstallStepProgress(), ct);
-                WriteFirstStartSettings(_region);
+                FfxiSettings.WriteFirstStartSettings(_region);
             }
 
             StageIndeterminate = true;
             Detail = "Removing the installer files...";
-            await Task.Run(() => RemoveParts(work, _region), CancellationToken.None);
+            await Task.Run(() => InstallParts.RemoveParts(work, _region), CancellationToken.None);
 
             // SE's files are from 2019, so the first sign-in updates POL and the first Play the game
             var updateBytes = await FirstUpdateSizeAsync(ct);
@@ -421,7 +406,7 @@ public partial class InstallViewModel : ObservableObject
                 catch (Exception e) { Log.Warning(e, "Could not let pre-starts go again after the install"); }
             }
             workFolder?.Dispose();
-            SetThreadExecutionState(EsContinuous);
+            KeepAwake.Release();
             _meter.Clear();
             StageIndeterminate = false;
             Running = false;
@@ -462,7 +447,7 @@ public partial class InstallViewModel : ObservableObject
             StageIndeterminate = true;
             DownloadFraction = 0;
             _meter.Clear();
-            await Task.Run(() => { if (Directory.Exists(staging)) RemoveDir(staging); }, CancellationToken.None);
+            await Task.Run(() => { if (Directory.Exists(staging)) InstallParts.RemoveDir(staging); }, CancellationToken.None);
             return false;
         }
         string? staged;
@@ -497,7 +482,7 @@ public partial class InstallViewModel : ObservableObject
             try
             {
                 warnings = await _installer.RunInstallAsync(staged, InstallFolder, Path.Combine(work, "logs"), _region, InstallStepProgress(), ct, payloadInPlace: true);
-                WriteFirstStartSettings(_region);
+                FfxiSettings.WriteFirstStartSettings(_region);
                 mirror.WriteVersions();   // last, so a stopped install never claims a version
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -511,9 +496,9 @@ public partial class InstallViewModel : ObservableObject
         Detail = "Removing the installer files...";
         await Task.Run(() =>
         {
-            RemoveDir(staged);
+            InstallParts.RemoveDir(staged);
             // a parts run stopped before this one leaves gigabytes of SE's parts behind otherwise
-            RemoveParts(work, _region);
+            InstallParts.RemoveParts(work, _region);
         }, CancellationToken.None);
 
         Log.Information("Install finished in {Folder} from the Provenance mirror; warnings: {Warnings}", InstallFolder, warnings);
@@ -560,26 +545,6 @@ public partial class InstallViewModel : ObservableObject
         finally { _meter.Clear(); }
     }
 
-    // another region's viewer or game in the same folders would get written over, with both regions' keys pointing
-    // there. This region's own install is fine, the installer carries on with it
-    internal static string? OtherVersionIn(string installFolder, PolRegion region, Func<PolRegion, string, string?> registered,
-                                           Func<string, bool>? fileExists = null)
-    {
-        fileExists ??= File.Exists;
-        var root = Path.Combine(installFolder, "SquareEnix");
-        var products = new[] { (PolPaths.ViewerProduct, "PlayOnlineViewer", "pol.exe", "PlayOnline"), (PolPaths.FfxiProduct, "FINAL FANTASY XI", "FFXiMain.dll", "FINAL FANTASY XI") };
-        foreach (var other in new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan }.Where(r => r != region))
-            foreach (var (code, folder, keyFile, name) in products)
-                // a switched PC keeps the old region's keys, so it only counts with the files really there
-                if (registered(other, code) is { } there && SameFolder(there, Path.Combine(root, folder)) && fileExists(Path.Combine(there, keyFile)))
-                    return $"The {PolPaths.VersionName(other)} version of {name} is already installed in {there}. Choose another folder for the {PolPaths.VersionName(region)} version.";
-        return null;
-    }
-
-    private static bool SameFolder(string a, string b) =>
-        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
-                      StringComparison.OrdinalIgnoreCase);
-
     // the lock updates and repairs take, so another copy can't write into the same folders meanwhile
     private async Task<IDisposable> UpdateLockAsync(CancellationToken ct)
     {
@@ -591,19 +556,6 @@ public partial class InstallViewModel : ObservableObject
         return await Task.Run(() => PolUpdates.Lock(PolUpdates.Job.Install, ct, waiting), ct);
     }
 
-    // SE's installer only writes 3 of the game's settings, and the game just closes without the rest
-    public static void WriteFirstStartSettings(PolRegion region)
-    {
-        try
-        {
-            if (!FfxiRegistry.NeedsFirstStart(region)) return;
-            int n = FfxiRegistry.WriteFirstStart(region);
-            var d = FfxiRegistry.PrimaryDisplay();
-            Log.Information("FINAL FANTASY XI first-start settings: {Count} values written for a {W}x{H} display", n, d.Width, d.Height);
-        }
-        catch (Exception e) { Log.Warning(e, "Could not write the FINAL FANTASY XI first-start settings"); }
-    }
-
     [RelayCommand]
     private void Cancel()
     {
@@ -612,7 +564,4 @@ public partial class InstallViewModel : ObservableObject
         Stage = "Stopping...";
         if (CurrentStep == 2) Detail = "The install will stop after its current step.";
     }
-
-    [DllImport("kernel32.dll")]
-    private static extern uint SetThreadExecutionState(uint flags);
 }

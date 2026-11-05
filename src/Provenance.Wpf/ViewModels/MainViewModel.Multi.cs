@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common;
 using Provenance.Common.Credentials;
+using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Login;
@@ -251,9 +252,9 @@ public partial class MainViewModel : IMultiRunHost
             return new(AccountFailureKind.Account, AshitaLauncher.AccountBootFileProblem);
 
         var profile = Profiles.FirstOrDefault(p => p.Id == account.ProfileId);
-        if (profile is null) return MissingDetailsFailure(default);
-        var details = PrepareSignIn(_credentials, profile.Id);
-        if (details.Missing) return MissingDetailsFailure(_credentials.ReadIds(profile.Id));
+        if (profile is null) return AccountRules.MissingDetailsFailure(default);
+        var details = AccountRules.PrepareSignIn(_credentials, profile.Id);
+        if (details.Missing) return AccountRules.MissingDetailsFailure(_credentials.ReadIds(profile.Id));
         if (details.Problem is { } problem) return new(AccountFailureKind.Account, problem);
         var (pol, sea) = (details.Pol!, details.Sea!);
 
@@ -323,7 +324,7 @@ public partial class MainViewModel : IMultiRunHost
         SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
 
         var snap = _runSnapshot ?? (_pol.Pid is { } pid ? SocialRequests.TryRead(pid) : null);
-        if (PlayGateFailure(snap) is { } gate) return await LetGo(gate.Kind, gate.Text);
+        if (AccountRules.PlayGateFailure(snap) is { } gate) return await LetGo(gate.Kind, gate.Text);
         if (token.IsCancellationRequested) return await Stopped();
 
         if (GameFolders() is { } dirs)
@@ -356,7 +357,7 @@ public partial class MainViewModel : IMultiRunHost
         }
         if (token.IsCancellationRequested) return await Stopped();
 
-        InstallViewModel.WriteFirstStartSettings(PlayRegion);
+        FfxiSettings.WriteFirstStartSettings(PlayRegion);
         WritePolOptions(account.ProfileId);
         if (await BackUpForRunAsync(hookProfile))
         {
@@ -374,7 +375,7 @@ public partial class MainViewModel : IMultiRunHost
         if (await _pol.WaitForPlayAnswerAsync(PlayAnswerTimeout) is { } playFailed)
         {
             Log.Error("Multi-account mode: the game did not start for {Account}: {Why}", account.ProfileId, playFailed);
-            return await LetGo(PlayFailureKind(playFailed), playFailed);
+            return await LetGo(AccountRules.PlayFailureKind(playFailed), playFailed);
         }
 
         var exited = _pol.WaitForExitAsync();
@@ -413,23 +414,6 @@ public partial class MainViewModel : IMultiRunHost
         }
         catch (Exception ex) { Log.Warning(ex, "Multi-account mode: couldn't tell how {Account}'s game ended", account.ProfileId); }
     }
-
-    // both entries there but unusable is a Credential failure, so it stays off until edited (like hook exit 11)
-    internal static AccountFailure MissingDetailsFailure((string? PolId, string? SeaId) ids) =>
-        new(BothIds(ids) ? AccountFailureKind.Credential : AccountFailureKind.Account, MissingDetailsText(ids));
-
-    // the login only finishes once the hook's written a snapshot, so a missing one is the file being gone or unreadable
-    // since (the session ending, say), not anything POL did
-    internal static AccountFailure? PlayGateFailure(PolSocialSnapshot? snap)
-    {
-        if (snap is null)
-            return new(AccountFailureKind.Account, "Provenance couldn't read this account's details after it logged in, so the game wasn't started.");
-        return PolAccountNotices.PlayBlockedReason(snap) is { } blocked ? new(AccountFailureKind.Account, blocked) : null;
-    }
-
-    // an unread or unanswered Play wants a restart so the run stops, a refusal or a lost session is this account's problem
-    internal static AccountFailureKind PlayFailureKind(string text) =>
-        text == PolSession.PlayUnreadableText ? AccountFailureKind.Install : AccountFailureKind.Account;
 
     // never throws. StopHold leaves a session that got to the game alone, so that one's just forgotten.
     private async Task LetGoOfAccountAsync()

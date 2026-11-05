@@ -10,51 +10,6 @@ using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.ViewModels;
 
-public sealed record ChatZoneItem(ChatZone Zone)
-{
-    public string Name => Zone.Name;
-    public string Group => Zone.Group;
-    public string Counts => $"Rooms: {Zone.Rooms}   Users: {Zone.People}";
-}
-
-public sealed record ChatRoomItem(ChatRoomEntry Room, string Name, string Categories)
-{
-    public string People => $"{Room.People}/{Room.Capacity}";
-    public bool Locked => Room.Locked;
-    public bool HasCategories => Categories.Length > 0;
-    public string Language => ChatLook.Language(Room.Categories);
-    public bool HasLanguage => Language.Length > 0;
-}
-
-// Style is say, notice (arrivals, leaving, master changes), status (away and back), whisper or mine. Colour is a say
-// line's own (null for the default), Emote its face
-public sealed record ChatLineItem(long Seq, string Text, string Style, DateTimeOffset When)
-{
-    public string TimeText => When.ToString("HH:mm");
-    public Brush? Colour { get; init; }
-    public uint? Argb { get; init; }
-    public ImageSource? Emote { get; init; }
-    public bool HasColour => Colour is not null;
-    public bool HasEmote => Emote is not null;
-}
-
-public sealed record ChatMemberItem(string Name, bool Me, bool Master, bool Away, int Key = 0)
-{
-    public string Note => Away ? "Away" : Me ? "You" : "";
-}
-
-public sealed record ChatColourItem(int Pick, Brush Swatch)
-{
-    public string Name => ChatLook.ColourName(Pick);
-}
-public sealed record ChatEmoteItem(int Index, ImageSource Image)
-{
-    public string Name => $"Emoticon {Index}";
-}
-
-// the viewer's Create Room form, Members/Purpose/Language 0 when not set
-public sealed record ChatRoomForm(int Zone, string Name, int Occupancy, string? Password, int Members, int Purpose, int Language);
-
 // one chat rooms window: the zone picker and room list, then the room. Everything goes through the hook's files, bar
 // the room password, which goes as a one-shot Credential Manager entry
 public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable

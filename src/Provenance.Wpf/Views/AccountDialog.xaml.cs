@@ -8,20 +8,6 @@ using Serilog;
 
 namespace Provenance.Wpf.Views;
 
-// In edit mode an empty string means keep the saved value. ToString prints *** for every ID and password
-public sealed record AccountDialogResult(string PolId, string PolPassword,
-                                         string SeaId, string SeaPassword, bool UseOtp,
-                                         string OtpSource = "", string OtpItem = "", string OtpAccount = "")
-{
-    private bool PrintMembers(System.Text.StringBuilder builder)
-    {
-        builder.Append("PolId = ***, PolPassword = ***, SeaId = ***, SeaPassword = ***, UseOtp = ").Append(UseOtp)
-               .Append(", OtpSource = ").Append(OtpSource).Append(", OtpItem = ").Append(OtpItem)
-               .Append(", OtpAccount = ").Append(OtpAccount);
-        return true;
-    }
-}
-
 internal enum ToolView { Hidden, Missing, CantCheck, TooOld, Installing, Ready, DownloadFailed, CheckFailed, DownloadCantCheck, DownloadTooOld, NotSupported }
 
 // The only place the IDs and passwords get typed, they stay off screen everywhere else
@@ -83,12 +69,12 @@ public partial class AccountDialog : Window
         else if (_required && polPw.Length == 0) problem = ("Enter your PlayOnline password.", PolPasswordBox);
         else if (polPw.Length > PolSession.MaxPolPasswordLength)
             problem = ("A PlayOnline password can't be longer than 16 characters.", PolPasswordBox);
-        else if (PasswordProblem(polPw) is { } polPwProblem) problem = (polPwProblem, PolPasswordBox);
+        else if (AccountRules.PasswordProblem(polPw) is { } polPwProblem) problem = (polPwProblem, PolPasswordBox);
         else if (_required && seaId.Length == 0) problem = ("Enter your Square Enix ID.", SeaIdBox);
         else if (seaId.Contains('@')) problem = ("Use your Square Enix ID here, not your email address.", SeaIdBox);
-        else if (SeaIdProblem(seaId) is { } seaIdProblem) problem = (seaIdProblem, SeaIdBox);
+        else if (AccountRules.SeaIdProblem(seaId) is { } seaIdProblem) problem = (seaIdProblem, SeaIdBox);
         else if (_required && seaPw.Length == 0) problem = ("Enter your Square Enix password.", SeaPasswordBox);
-        else if (PasswordProblem(seaPw) is { } seaPwProblem) problem = (seaPwProblem, SeaPasswordBox);
+        else if (AccountRules.PasswordProblem(seaPw) is { } seaPwProblem) problem = (seaPwProblem, SeaPasswordBox);
         else if (OtpBox.IsChecked == true && OtpSource.Length > 0 && OtpItemBox.Text.Trim().Length == 0)
             problem = ("Enter the item that holds the authenticator, or choose to type the code in.", OtpItemBox);
         else if (OtpBox.IsChecked == true && CliTools.ForSource(OtpSource) is not null && OtpSources.StartsWithDash(OtpItemBox.Text))
@@ -108,16 +94,6 @@ public partial class AccountDialog : Window
         SeaPasswordBox.Clear();
         DialogResult = true;
     }
-
-    // the hook hands these to POL in the ANSI code page, so anything outside printable ASCII arrives changed, gets
-    // refused, and the refusal counts toward the lockout
-    public static string? PasswordProblem(string password) =>
-        IsPrintableAscii(password) ? null : "Passwords can only use English letters, numbers and keyboard symbols.";
-
-    public static string? SeaIdProblem(string seaId) =>
-        IsPrintableAscii(seaId) ? null : "A Square Enix ID can only use English letters, numbers and keyboard symbols.";
-
-    private static bool IsPrintableAscii(string s) => s.All(c => c is >= '!' and <= '~');   // 0x21 to 0x7E
 
     private string OtpSource => (OtpSourceBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
 

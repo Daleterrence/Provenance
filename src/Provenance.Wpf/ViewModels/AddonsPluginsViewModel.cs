@@ -585,7 +585,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
         var profile = file.Find(profileName);
         page.Key = profile?.Name ?? profileName;
-        page.Display = SettingsViewModel.WindowerDisplay(page.Key, file.Profiles.Select(p => p.Name).ToList());
+        page.Display = WindowerProfileNames.WindowerDisplay(page.Key, file.Profiles.Select(p => p.Name).ToList());
         page.Branch = file.Branch;
         page.Intro = "Turn addons and plugins on or off. Changes save straight away.";
         var effective = WindowerAddonList.Effective(file, lists, page.Key, extras);
@@ -809,98 +809,4 @@ public partial class AddonsPluginsViewModel : ObservableObject
         public static readonly AddonBadge BadName = new("Name Ashita can't load",
             "Ashita can't load a name like this one from a script or boot configuration. Rename it to plain letters and numbers to use it.", Warn: true);
     }
-}
-
-public sealed partial class AddonsHeading(string? help = null) : ObservableObject
-{
-    public string? Help { get; } = help;
-    [ObservableProperty] private string? _note;
-    [ObservableProperty] private string? _warning;
-}
-
-internal sealed record RowData(AddonKind Kind, string Key, string Name, string? Version, string? Author, string? Description)
-{
-    public bool On { get; init; }
-    public bool HasSwitch { get; init; } = true;
-    public bool CanChange { get; init; } = true;
-    public bool CanInstall { get; init; }
-    public bool Incompatible { get; init; }
-    public IReadOnlyList<AddonBadge> Badges { get; init; } = [];
-    // the team that makes it, when it comes with Windower or Ashita
-    public string? Team { get; init; }
-    // an addon's folder or a plugin's DLL, only once it's installed
-    public string? Location { get; init; }
-}
-
-public sealed partial class AddonRow : ObservableObject
-{
-    private readonly AddonsPluginsViewModel _owner;
-    private bool _on;
-
-    internal AddonRow(AddonsPluginsViewModel owner, RowData d)
-    {
-        _owner = owner;
-        Kind = d.Kind;
-        Key = d.Key;
-        Update(d);
-    }
-
-    public AddonKind Kind { get; }
-    public string Key { get; }
-
-    [ObservableProperty] private string _name = "";
-    [ObservableProperty] private string? _details;
-    [ObservableProperty] private string? _description;
-    [ObservableProperty] private IReadOnlyList<AddonBadge> _badges = [];
-    [ObservableProperty] private bool _hasSwitch;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _canChange;
-    [ObservableProperty] private bool _canInstall;
-    [ObservableProperty] private bool _incompatible;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _installing;
-    [ObservableProperty] private bool _visible = true;
-    [ObservableProperty] private string? _verifiedTip;
-    [ObservableProperty] private string? _team;
-    [ObservableProperty] private string? _location;
-    private string? _author;
-
-    public bool SwitchEnabled => CanChange && !Installing;
-
-    // the page saves it and reads it all back, so a change that didn't save puts the switch back
-    public bool On
-    {
-        get => _on;
-        set
-        {
-            if (value == _on) return;
-            if (HasSwitch && SwitchEnabled) _owner.Switch(this, value);
-            OnPropertyChanged();
-        }
-    }
-
-    internal AddonRow Update(RowData d)
-    {
-        Name = d.Name;
-        _author = d.Author;
-        Details = d.Version is { } v ? d.Author is { } a ? $"{v} by {a}" : v : d.Author is { } by ? "by " + by : null;
-        Description = d.Description;
-        if (!d.Badges.SequenceEqual(Badges)) Badges = d.Badges;
-        HasSwitch = d.HasSwitch;
-        CanChange = d.CanChange;
-        CanInstall = d.CanInstall;
-        Incompatible = d.Incompatible;
-        Team = d.Team;
-        VerifiedTip = d.Team is { } team ? $"This {(Kind == AddonKind.Addon ? "addon" : "plugin")} is provided and maintained by the {team} development team." : null;
-        Location = d.Location;
-        if (_on != d.On)
-        {
-            _on = d.On;
-            OnPropertyChanged(nameof(On));
-        }
-        return this;
-    }
-
-    internal bool Matches(string[] words) =>
-        words.All(w => Name.Contains(w, StringComparison.OrdinalIgnoreCase) || Key.Contains(w, StringComparison.OrdinalIgnoreCase)
-                       || _author?.Contains(w, StringComparison.OrdinalIgnoreCase) == true
-                       || Description?.Contains(w, StringComparison.OrdinalIgnoreCase) == true);
 }

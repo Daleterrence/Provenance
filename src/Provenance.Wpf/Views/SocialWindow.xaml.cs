@@ -11,8 +11,6 @@ using Layout = Provenance.Wpf.ViewModels.SocialViewModel.LayoutAction;
 
 namespace Provenance.Wpf.Views;
 
-public enum SocialPart { Both, Friends, Messages }
-
 public static class SocialParts
 {
     public static string Title(this SocialPart part) => part switch

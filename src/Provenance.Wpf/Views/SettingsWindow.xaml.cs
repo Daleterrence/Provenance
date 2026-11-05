@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
+using Provenance.Common.Game.Windower;
 using Provenance.Common.Social;
 
 namespace Provenance.Wpf.Views;
@@ -154,10 +155,10 @@ public partial class SettingsWindow : Window
         if (msg.message is WmKeyDown or WmSysKeyDown && (int)msg.wParam == vk)
         {
             long lp = msg.lParam.ToInt64();
-            return ViewModels.WindowerKeyNames.DirectInputCode(vk, (int)(lp >> 16) & 0xFF, (lp & 0x1000000) != 0);
+            return WindowerKeyNames.DirectInputCode(vk, (int)(lp >> 16) & 0xFF, (lp & 0x1000000) != 0);
         }
         uint sc = MapVirtualKeyW((uint)vk, MapVkToVscEx);
-        return ViewModels.WindowerKeyNames.DirectInputCode(vk, (int)(sc & 0xFF), (sc & 0xFF00) is 0xE000 or 0xE100);
+        return WindowerKeyNames.DirectInputCode(vk, (int)(sc & 0xFF), (sc & 0xFF00) is 0xE000 or 0xE100);
     }
 
     private const int WmKeyDown = 0x100, WmSysKeyDown = 0x104;

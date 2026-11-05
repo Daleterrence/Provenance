@@ -7,18 +7,6 @@ using Provenance.Common.Social;
 
 namespace Provenance.Wpf.ViewModels;
 
-// Handle Profile (Slot -1) or one of the handle's FFXI characters
-public sealed partial class ProfileTab(int slot, string characterKey, string label) : ObservableObject
-{
-    public int Slot { get; } = slot;
-    public string CharacterKey { get; } = characterKey;
-    [ObservableProperty] private string _label = label;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(Clickable))] private bool _isSelected;
-    // a tab whose read failed can be clicked again to retry
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(Clickable))] private bool _failed;
-    public bool Clickable => !IsSelected || Failed;
-}
-
 public partial class SocialViewModel
 {
     public sealed record ProfileRowItem(string Label, string Value, ImageSource? Picture);
