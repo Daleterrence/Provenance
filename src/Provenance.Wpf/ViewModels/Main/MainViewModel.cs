@@ -219,7 +219,7 @@ public partial class MainViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(p.Detail)) ProgressText = p.Detail;
         if (p.Fraction >= 0)
         {
-            // after a viewer update at sign-in the sign-in's own steps share what's left, so the bar only moves forward
+            // after a viewer update at login the login's own steps share what's left, so the bar only moves forward
             if (p.Patch is not null) _updatedFirst = true;
             double f = _updatedFirst && p.Patch is null
                 ? LaunchProgress.LogInUpdateEnd + (1 - LaunchProgress.LogInUpdateEnd) * p.Fraction : p.Fraction;
@@ -1568,7 +1568,7 @@ public partial class MainViewModel : ObservableObject
         {
             var names = WindowerInstall.Profiles(WindowerInstall.Detect(s.WindowerPath));
             var current = WindowerSettingsFile.OldCopySource(s.WindowerProfile);
-            return names.Select(n => new PlayChoice(n, WindowerProfileNames.DisplayName(n, names), n == current)).ToList();
+            return names.Select(n => new PlayChoice(n, WindowerInstall.DisplayName(n, names), n == current)).ToList();
         }
         return [];
     }

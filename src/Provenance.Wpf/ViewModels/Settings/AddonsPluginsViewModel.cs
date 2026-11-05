@@ -585,7 +585,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
         var profile = file.Find(profileName);
         page.Key = profile?.Name ?? profileName;
-        page.Display = WindowerProfileNames.DisplayName(page.Key, file.Profiles.Select(p => p.Name).ToList());
+        page.Display = WindowerInstall.DisplayName(page.Key, file.Profiles.Select(p => p.Name).ToList());
         page.Branch = file.Branch;
         page.Intro = "Turn addons and plugins on or off. Changes save straight away.";
         var effective = WindowerAddonList.Effective(file, lists, page.Key, extras);

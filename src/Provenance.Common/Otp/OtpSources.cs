@@ -260,7 +260,7 @@ public static class OtpSources
     }
 
     // "bitwarden.com" puts bw back on its own default. Null for a self-hosted address that isn't a plain https URL
-    internal static string? BitwardenServer(string picked, string typed)
+    public static string? BitwardenServer(string picked, string typed)
     {
         if (picked.Length > 0) return picked;
         if (!Uri.TryCreate(typed.Trim(), UriKind.Absolute, out var u) || u.Scheme != Uri.UriSchemeHttps || u.Host.Length == 0

@@ -11,27 +11,27 @@ public static class LargeAddressAwareSwitch
 {
     public sealed record Reading(bool Available, string? Note);
 
-    internal sealed record Target(string? ViewerDir, Func<bool> PolRunning, Func<string?> Blocked, Func<string?> Busy);
+    public sealed record Target(string? ViewerDir, Func<bool> PolRunning, Func<string?> Blocked, Func<string?> Busy);
 
-    internal enum Outcome { Done, NextStart, Denied }
+    public enum Outcome { Done, NextStart, Denied }
 
     internal const string UnsupportedText = "Provenance can't apply this to your version of the PlayOnline Viewer.";
-    internal const string LoggedInText = "You can change this once you're logged out of PlayOnline.";
-    internal const string MultiRunText = "You can change this once Provenance has finished starting your accounts.";
+    public const string LoggedInText = "You can change this once you're logged out of PlayOnline.";
+    public const string MultiRunText = "You can change this once Provenance has finished starting your accounts.";
     internal static string LockedText(PolUpdates.Job? holder) =>
         $"Another copy of Provenance is {PolUpdates.Doing(holder)}. You can change this once it's finished.";
     internal const string OnNextStartText = "Provenance will turn this on the next time the game starts.";
     internal const string OffNextStartText = "Provenance will turn this off the next time the game starts.";
-    internal const string DeniedText = "Windows won't let Provenance change the PlayOnline Viewer's files, so this setting can't be applied.";
-    internal const string WaitText = "Hang on a moment while Provenance changes this setting.";
+    public const string DeniedText = "Windows won't let Provenance change the PlayOnline Viewer's files, so this setting can't be applied.";
+    public const string WaitText = "Hang on a moment while Provenance changes this setting.";
 
     private static readonly TimeSpan LockWait = TimeSpan.FromMilliseconds(500);
     private static volatile bool _lastWriteDenied;
 
     // the app hands in its hop onto the UI thread, with no app it just runs
-    internal static Action<Action> OnUiThread { get; set; } = run => run();
+    public static Action<Action> OnUiThread { get; set; } = run => run();
 
-    internal static Target For(PolRegion? region, Func<string?>? blocked = null) =>
+    public static Target For(PolRegion? region, Func<string?>? blocked = null) =>
         new(region is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null,
             PolUpdates.ViewerRunning, blocked ?? (() => null), Busy);
 
@@ -45,7 +45,7 @@ public static class LargeAddressAwareSwitch
         }
     }
 
-    internal static Reading Read(Target t, bool on, bool clearAtStart) =>
+    public static Reading Read(Target t, bool on, bool clearAtStart) =>
         (t.Blocked() ?? t.Busy()) is { } why ? new(false, why) : new(true, Note(t.ViewerDir, on, clearAtStart));
 
     private static string? Note(string? viewerDir, bool on, bool clearAtStart)
@@ -67,7 +67,7 @@ public static class LargeAddressAwareSwitch
         }
     }
 
-    internal static Outcome Change(Target t, bool on, Action? holdPrestarts, Action? releasePrestarts)
+    public static Outcome Change(Target t, bool on, Action? holdPrestarts, Action? releasePrestarts)
     {
         if (t.ViewerDir is not { } dir || !File.Exists(Path.Combine(dir, "pol.exe"))) return Outcome.Done;
         var polExe = Path.Combine(dir, "pol.exe");

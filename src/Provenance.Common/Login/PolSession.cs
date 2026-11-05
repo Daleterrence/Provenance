@@ -203,7 +203,7 @@ public sealed class PolSession : IDisposable
 
     public int? LastRefusalReason { get; private set; }
 
-    internal string Platform =>
+    public string Platform =>
         (_settings.Current.ThirdPartyHookPlatform ?? ThirdPartyHook.None).Trim().ToLowerInvariant();
 
     internal int SweepRuns => Volatile.Read(ref _sweepRuns);
@@ -631,7 +631,7 @@ public sealed class PolSession : IDisposable
     // it back
     internal static string? ScreenSaverAtStart { get; set; }
 
-    internal static void NoteScreenSaver(ISettingsService settings) =>
+    public static void NoteScreenSaver(ISettingsService settings) =>
         NoteScreenSaver(settings, AnyPolRunning, ReadScreenSaver, PolEndedUnseen, SetScreenSaver);
 
     private static bool AnyPolRunning()
@@ -643,7 +643,7 @@ public sealed class PolSession : IDisposable
 
     // Windows only has the real answer with no pol.exe about, so that's kept for starts while one runs. A settings.json
     // that didn't load is left for the user's next save
-    internal static void NoteScreenSaver(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows,
+    public static void NoteScreenSaver(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows,
                                          Func<bool>? endedUnseen = null, Action<bool>? set = null)
     {
         bool? on;
@@ -1642,7 +1642,7 @@ public sealed class PolSession : IDisposable
     }
 
     // what to tell the player once the game's pol.exe has ended, null for a normal end
-    internal static string? GameEndedText(int? exitCode) => exitCode == GameStartExitCode ? GameStartFailedText : null;
+    public static string? GameEndedText(int? exitCode) => exitCode == GameStartExitCode ? GameStartFailedText : null;
 
     private void CleanupOneShots(List<string> keys)
     {

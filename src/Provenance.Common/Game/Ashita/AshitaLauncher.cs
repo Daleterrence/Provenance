@@ -12,11 +12,11 @@ public static class AshitaLauncher
 {
     private const string PolExeName = "pol.exe";
 
-    internal const string AccountBootFileProblem =
+    public const string AccountBootFileProblem =
         "The Ashita boot configuration chosen for this account has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Multi-account.";
 
     // a plain .ini name in config\boot, never a path that'd get read or written somewhere else as admin
-    internal static bool IsBootFileName(string boot) =>
+    public static bool IsBootFileName(string boot) =>
         boot == Path.GetFileName(boot) && boot.EndsWith(".ini", StringComparison.OrdinalIgnoreCase);
 
     // nothing POL_ or PROVENANCE_ from the user's environment, every POL_ value of this sign-in, plus the launch marker

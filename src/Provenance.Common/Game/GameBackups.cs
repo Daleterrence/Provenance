@@ -15,7 +15,7 @@ public static class GameBackups
     internal static TimeSpan PlayWait = TimeSpan.FromSeconds(5);
     internal static TimeSpan RestoreWait = TimeSpan.FromSeconds(10);
 
-    internal const string WorkingText = "Backing up your game settings...";
+    public const string WorkingText = "Backing up your game settings...";
 
     public static BackupSources? SourcesFor(LauncherSettings s, PolRegion region, string? accountBoot) =>
         PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct) is { } ffxi
@@ -40,7 +40,7 @@ public static class GameBackups
     }
 
     // what the player's told, or null when there's nothing to say. Never throws, the game starts whatever happens here
-    internal static string? BeforePlay(LauncherSettings s, Func<BackupSources?> sources)
+    public static string? BeforePlay(LauncherSettings s, Func<BackupSources?> sources)
     {
         try
         {
@@ -68,16 +68,16 @@ public static class GameBackups
         }
     }
 
-    internal const string NotOursText = "That file isn't one of Provenance's game settings backups, or it's damaged, so nothing was restored.";
+    public const string NotOursText = "That file isn't one of Provenance's game settings backups, or it's damaged, so nothing was restored.";
     internal const string BusyText = "Another copy of Provenance is backing up your game settings. Try again in a moment.";
     internal const string PartlyText = "Not all of the settings could be put back. Your newest backup has them as they were before, so you can restore that one to undo this.";
 
     private static readonly CultureInfo British = CultureInfo.GetCultureInfo("en-GB");
 
-    internal static string When(BackupInfo b) => b.CreatedUtc.ToLocalTime().ToString("d MMMM yyyy 'at' HH:mm", British);
+    public static string When(BackupInfo b) => b.CreatedUtc.ToLocalTime().ToString("d MMMM yyyy 'at' HH:mm", British);
 
     // on a worker, the lock's held by this thread. What's shown afterwards, and whether it worked
-    internal static (bool Done, string Text) Restore(string zip, BackupInfo info, BackupSources sources, string folder, Func<string?> blocked)
+    public static (bool Done, string Text) Restore(string zip, BackupInfo info, BackupSources sources, string folder, Func<string?> blocked)
     {
         try
         {

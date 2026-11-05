@@ -107,12 +107,12 @@ public static class PolUpdates
         return r == PatchResult.UpToDate && outcome.Replaced > 0 ? PatchResult.Updated : r;
     }
 
-    internal static bool ViewerRunning() => Process.GetProcessesByName("pol").Any(p =>
+    public static bool ViewerRunning() => Process.GetProcessesByName("pol").Any(p =>
     {
         using (p) return PolProcess.IsViewerPol(p);
     });
 
-    internal static bool GameRunning() => Process.GetProcessesByName("pol").Any(p =>
+    public static bool GameRunning() => Process.GetProcessesByName("pol").Any(p =>
     {
         using (p)
         {
@@ -125,14 +125,14 @@ public static class PolUpdates
     public enum Job { Install, ViewerUpdate, GameUpdate, Repair, LargeAddressAware }
 
     // a thread-held AdminLock, so call it from a worker and keep the work synchronous
-    internal static T Locked<T>(Job job, CancellationToken ct, IProgress<PatchProgress>? progress, Func<T> work)
+    public static T Locked<T>(Job job, CancellationToken ct, IProgress<PatchProgress>? progress, Func<T> work)
     {
         using var gate = Lock(job, ct, progress);
         return work();
     }
 
     // what goes after "Another copy of Provenance is". Null is a holder that hasn't said or has gone
-    internal static string Doing(Job? holder) => holder switch
+    public static string Doing(Job? holder) => holder switch
     {
         Job.Install => "installing FINAL FANTASY XI",
         Job.ViewerUpdate => "updating PlayOnline",
@@ -145,7 +145,7 @@ public static class PolUpdates
     internal static string WaitingText(Job? holder) => $"Waiting for another copy of Provenance to finish {Doing(holder)}...";
 
     // one lock for every product (installs too), and a copy that dies mid-update lets go with its process
-    internal static IDisposable Lock(Job job, CancellationToken ct, IProgress<PatchProgress>? progress)
+    public static IDisposable Lock(Job job, CancellationToken ct, IProgress<PatchProgress>? progress)
     {
         for (int waits = 0; ; waits++)
         {
@@ -157,7 +157,7 @@ public static class PolUpdates
     }
 
     // a quick look, for whether a repair could start now. The short wait lets another copy's own quick look go by
-    internal static bool LockFree()
+    public static bool LockFree()
     {
         using var gate = AdminLock.TryAcquire("update", TimeSpan.FromMilliseconds(150));
         return gate is not null;
@@ -170,7 +170,7 @@ public static class PolUpdates
     // the holder's pid and start time go in with the job, so a copy that died holding the lock can't speak for the next
     private static string RecordPath() => Path.ChangeExtension(AdminLock.PathFor("update"), ".job");
 
-    internal static Job? Holder()
+    public static Job? Holder()
     {
         try
         {

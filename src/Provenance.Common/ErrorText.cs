@@ -5,7 +5,7 @@ public static class ErrorText
 {
     public static string Of(Exception ex, string fallback) => Marked(ex)?.Message ?? fallback;
 
-    internal static bool Ours(Exception ex) => Marked(ex) is not null;
+    public static bool Ours(Exception ex) => Marked(ex) is not null;
 
     // only what's marked with Shown, and a Task's single wrapped exception counts as itself
     private static Exception? Marked(Exception ex) =>
