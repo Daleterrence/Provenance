@@ -130,8 +130,7 @@ public static class ChatRoomFiles
     public static void DeleteRequests(int pid)
     {
         foreach (var ext in new[] { "chatjoin", "chatcreate", "chatmaster" })
-            foreach (var tail in new[] { "", ".taking", ".tmp" })
-                try { File.Delete(HookFiles.PathFor(pid, ext) + tail); } catch { }
+            HookFiles.DeleteRequest(pid, ext);
     }
 
     public static bool Zones(int pid, string token) => Write(pid, "chatzones", OneLine(token));
@@ -229,8 +228,7 @@ public static class ChatRoomFiles
     }
 }
 
-// the app's half of the hook's send rule: one line in flight. giveUp is a little past the hook's own wait for an
-// answer, by then the line counts as gone either way
+// the app's half of the hook's send rule: one line in flight
 public sealed class ChatSendGate(TimeSpan giveUp)
 {
     private DateTime? _sentAt;

@@ -943,7 +943,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (MultiRunning) return;
         Social.SelectedFriend = Social.Friends.FirstOrDefault(f => f.Is(friend)) ?? friend;
-        ShowSocialWindow(_settings.Current.SocialSplit ? SocialPart.Messages : SocialPart.Both, activate: true);
+        ShowSocialWindow(MessagesPart, activate: true);
     }
 
     public void OpenNotice()
@@ -975,15 +975,18 @@ public partial class MainViewModel : ObservableObject
             Social.SaveProfilePicture(pic);
     }
 
+    private SocialPart FriendsPart => _settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both;
+    private SocialPart MessagesPart => _settings.Current.SocialSplit ? SocialPart.Messages : SocialPart.Both;
+
     // the window OpenSocial brings up, where requests and invitations are answered
-    internal string FriendsWindowTitle => (_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both).Title();
+    internal string FriendsWindowTitle => FriendsPart.Title();
 
     [RelayCommand]
     private void OpenSocial()
     {
         if (MultiRunning) return;
         Social.ShowGroups = false;
-        ShowSocialWindow(_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both, activate: true);
+        ShowSocialWindow(FriendsPart, activate: true);
     }
 
     // groups live on the friends side's Groups tab
@@ -992,7 +995,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (MultiRunning) return;
         Social.ShowGroups = true;
-        ShowSocialWindow(_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both, activate: true);
+        ShowSocialWindow(FriendsPart, activate: true);
     }
 
     // split, that's the Messages window on its own
@@ -1000,7 +1003,7 @@ public partial class MainViewModel : ObservableObject
     private void OpenMessages()
     {
         if (MultiRunning) return;
-        ShowSocialWindow(_settings.Current.SocialSplit ? SocialPart.Messages : SocialPart.Both, activate: true);
+        ShowSocialWindow(MessagesPart, activate: true);
     }
 
     [ObservableProperty] private bool _chatRoomsOpen;

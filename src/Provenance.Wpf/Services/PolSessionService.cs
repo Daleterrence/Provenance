@@ -208,7 +208,7 @@ public sealed class PolSessionService : IDisposable
     // state 23, which it sits in for 400 s
     internal TimeSpan StallLimit { get; init; } = TimeSpan.FromSeconds(260);
     // the hook only looks for the stop file every 150 ms, then gives writes under way 5 s before it logs out
-    private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(6);
+    internal static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(6);
 
     public event Action<PolSocialSnapshot>? SnapshotUpdated;
 
@@ -470,11 +470,7 @@ public sealed class PolSessionService : IDisposable
         DropChatLeftovers(pid);
         DeleteQuietly(HookFiles.PathFor(pid, "stop"));
         DeleteQuietly(HookFiles.PathFor(pid, "ended"));
-        foreach (var ext in RequestFiles)
-        {
-            DeleteQuietly(HookFiles.PathFor(pid, ext));
-            DeleteQuietly(HookFiles.PathFor(pid, ext) + ".taking");
-        }
+        foreach (var ext in RequestFiles) HookFiles.DeleteRequest(pid, ext);
 
         var logPath = HookFiles.PathFor(pid, "log");
         try { if (File.Exists(logPath)) _logOffset = ThisRun(logPath).Start; }

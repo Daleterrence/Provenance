@@ -441,14 +441,7 @@ public static class SocialSnapshot
     }
 
     // an abandoned edit mustn't run later, so the .taking copy the hook would retry goes too
-    public static bool CancelRequest(int pid, string ext)
-    {
-        var path = HookFiles.PathFor(pid, ext);
-        bool removed = false;
-        foreach (var p in new[] { path, path + ".taking" })
-            try { if (File.Exists(p)) { File.Delete(p); removed = true; } } catch { }
-        return removed;
-    }
+    public static void CancelRequest(int pid, string ext) => HookFiles.DeleteRequest(pid, ext);
 
     public enum Withdrawal { Withdrawn, Taken, Unknown }
 
@@ -471,11 +464,8 @@ public static class SocialSnapshot
         }
     }
 
-    public static bool SendPending(int pid)
-    {
-        var path = HookFiles.PathFor(pid, "send");
-        return File.Exists(path) || File.Exists(path + ".taking");
-    }
+    // not the .tmp, one a failed write left would hold every send up
+    public static bool SendPending(int pid) => HookFiles.RequestPaths(pid, "send", tmp: false).Any(File.Exists);
 
     private static string OneLine(string s) => s.Replace("\r", "").Replace("\n", " ");
 

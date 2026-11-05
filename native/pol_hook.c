@@ -58,6 +58,12 @@ static void end_pol(UINT code)
     saver_restore();
     TerminateProcess(GetCurrentProcess(), code);
 }
+/* a way out that must never carry on, even if TerminateProcess somehow comes back */
+static void end_pol_or_exit(UINT code)
+{
+    end_pol(code);
+    ExitProcess(code);
+}
 
 #define NO_ENV_EXIT 16   /* not started by Provenance, its environment isn't there */
 
@@ -66,15 +72,9 @@ static void end_pol(UINT code)
 static void ipc_dir(char out[MAX_PATH])
 {
     DWORD n = GetEnvironmentVariableA("POL_IPC_DIR", out, MAX_PATH), a;
-    if (n == 0) {
-        end_pol(NO_ENV_EXIT);
-        ExitProcess(NO_ENV_EXIT);
-    }
+    if (n == 0) end_pol_or_exit(NO_ENV_EXIT);
     a = n < MAX_PATH - 64 ? GetFileAttributesA(out) : INVALID_FILE_ATTRIBUTES;
-    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) {
-        end_pol(12);
-        ExitProcess(12);
-    }
+    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) end_pol_or_exit(12);
     if (out[n - 1] != '\\' && out[n - 1] != '/') { out[n] = '\\'; out[n + 1] = 0; }
 }
 
@@ -112,8 +112,7 @@ static void env_check(void)
     if (getenv_set("POL_HOLD") && getenv_set("POL_CRED_KEYFILE")) return;
     lg("pol_hook: no POL_HOLD or POL_CRED_KEYFILE, so not started by Provenance - ending pol.exe (exit %d)\r\n",
        NO_ENV_EXIT);
-    end_pol(NO_ENV_EXIT);
-    ExitProcess(NO_ENV_EXIT);
+    end_pol_or_exit(NO_ENV_EXIT);
 }
 
 /* WinMain's single-instance gates are mutexes. Each name gets "_X" + 16 bytes of HMAC-SHA256(per-process secret,
@@ -142,8 +141,7 @@ static void mutex_name(LPCWSTR name, WCHAR *out)
                       (PUCHAR)name, (ULONG)n * sizeof(WCHAR), mac, sizeof mac) != 0) {
         lg("pol_hook: no safe mutex name (%s) - ending pol.exe (exit %d)\r\n",
            g_mutex_secret_ok ? "HMAC failed" : "BCryptGenRandom failed", MUTEX_EXIT);
-        end_pol(MUTEX_EXIT);
-        ExitProcess(MUTEX_EXIT);
+        end_pol_or_exit(MUTEX_EXIT);
     }
     if (n > MUTEX_NAME_KEEP) n = MUTEX_NAME_KEEP;
     CopyMemory(out, name, n * sizeof(WCHAR));
@@ -294,7 +292,7 @@ static const char *cred_keyfile(char *buf, DWORD n)
     if (k > 0 && k < n) return buf;
     if (!warned) {
         warned = 1;
-        lg("phase_c: POL_CRED_KEYFILE too long - no key file, no saved entry is read\r\n");
+        lg("phase_c: POL_CRED_KEYFILE empty or too long - no key file, no saved entry is read\r\n");
     }
     return NULL;
 }
@@ -5383,8 +5381,8 @@ static int login_handle(BYTE *b, const char **why)
         if (get_handle(b, i, rec) == 0 && (rec[0] & 1)) return i;
     return -1;
 }
-/* everything in the hold counts on g_my_slot being a handle in use. handle_bootstrap left the account one, so a
-   session with none by now gets signed out. A lean session never goes online */
+/* the hold counts on g_my_slot being a handle in use, and handle_bootstrap left the account one, so none by now
+   signs out */
 static void hold_handle(BYTE *b)
 {
     char sv[8];
@@ -5531,9 +5529,10 @@ static void play_drain(BYTE *b, const char *spath, DWORD ms)
 }
 
 /* writes under way get 5 s to finish, then the viewer's sign-out */
+#define SIGN_OUT_DRAIN_MS 5000
 static void hold_sign_out(BYTE *b, const char *spath)
 {
-    ULONGLONG until = GetTickCount64() + 5000;
+    ULONGLONG until = GetTickCount64() + SIGN_OUT_DRAIN_MS;
     DeleteFileA(spath);
     store_drop();
     g_draining = 1;
@@ -5765,8 +5764,7 @@ static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned
 static void not_hooked(void)
 {
     lg("pol_hook: menu session not detoured - ending pol.exe (exit %d)\r\n", NOT_HOOKED_EXIT);
-    end_pol(NOT_HOOKED_EXIT);
-    ExitProcess(NOT_HOOKED_EXIT);
+    end_pol_or_exit(NOT_HOOKED_EXIT);
 }
 
 static void install(void)

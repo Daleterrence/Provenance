@@ -16,6 +16,19 @@ public static class HookFiles
 
     public static string PathFor(int pid, string ext) => Path.Combine(Dir, $"pol_hook.{pid}.{ext}");
 
+    // a request, the .taking the hook renames it to while it reads it, and the .tmp the app writes it under first
+    public static string[] RequestPaths(int pid, string ext, bool tmp = true)
+    {
+        var path = PathFor(pid, ext);
+        return tmp ? [path, path + ".taking", path + ".tmp"] : [path, path + ".taking"];
+    }
+
+    public static void DeleteRequest(int pid, string ext)
+    {
+        foreach (var p in RequestPaths(pid, ext))
+            try { File.Delete(p); } catch { }
+    }
+
     // the hook inside a third-party hook's pol.exe writes its pid here
     public static string PidFile(string launchId) => Path.Combine(Dir, $"provenance.{launchId}.pid");
 
