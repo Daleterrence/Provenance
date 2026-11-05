@@ -38,7 +38,7 @@ if ($commit -match '^[0-9a-f]{7}$') { $product += "+$commit" }
 
 function Source([string]$name) { '"' + (Join-Path $PSScriptRoot $name) + '"' }
 
-$clHook = "cl /nologo /O2 /W3 /MT $(Source 'pol_hook.c') /LD /Fepol_hook.dll /link $HookLibs"
+$clHook = "cl /nologo /O2 /W3 /MT /I $(Source '.') $(Source 'hook\pol_hook.c') /LD /Fepol_hook.dll /link $HookLibs"
 $clWatcher = "rc /nologo /i ""$OutDir"" /i ""$assets"" /fo watcher.res $(Source 'watcher.rc') && " +
     "cl /nologo /O2 /W3 /MT $(Source 'watcher.c') watcher.res /Fe""Provenance Watcher.exe"" /link user32.lib advapi32.lib"
 # the uninstallers delete from Program Files and HKLM, so they always ask for admin. One build per product, so the

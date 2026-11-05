@@ -1,0 +1,438 @@
+static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, int read,
+                    const char *subj, const char *text, const BYTE *att)
+{
+    char nm[64], sk[17], tk[17], grp[80] = "";
+    WORD f = *(const WORD *)(e + 0x3e);
+    unsigned kind = (f >> 7) & 0x1f;
+    DWORD tlo = *(const DWORD *)(e + 0x08), thi = *(const DWORD *)(e + 0x0c);
+    int o, tome = polid_ok(b, tlo, thi) && is_me(b, tlo, thi);
+    sjis_json(nm, sizeof nm, e + 0x10, 0x0f);
+    peer_key(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04), e[0x3c], sk);
+    peer_key(b, tlo, thi, e[0x3d], tk);
+    /* removed from a group (0x12) or it was disbanded (0x13): the name's in the type-10 attachment, the text's empty */
+    if (att && (kind == 0x12 || kind == 0x13)) {
+        lstrcpyA(grp, ",\"group\":");
+        sjis_json(grp + 9, sizeof grp - 9, att + 8, 0x14);
+    }
+    o = wsprintfA(out, "{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"toKey\":\"%s\","
+                       "\"toMe\":%s,\"kind\":%u,\"time\":%u,\"seq\":%u,\"state\":\"%s\"%s%s,\"subject\":",
+                  mid, nm, sk, e[0x3c],
+                  is_me(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04)) ? "true" : "false", tk,
+                  tome ? "true" : "false",
+                  kind, *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state,
+                  read < 0 ? "" : read ? ",\"read\":true" : ",\"read\":false", grp);
+    o += json_text(out + o, cap - o - 16, subj);
+    lstrcpyA(out + o, ",\"text\":"); o += 8;
+    o += json_text(out + o, cap - o - 4, text);
+    out[o++] = '}';
+    out[o] = 0;
+    return o;
+}
+
+/* pub\homeNN\msg: r\b unread, r\a read (FFXI moves them there), s\b the game's outbox, s\a sent. A file's name is
+   its header in polcore's base64 */
+#define STORE_KEEP 200   /* per folder, the viewer's own cap */
+#define STORE_SCAN_MAX 20000
+#define STORE_BODY_MAX 0x1100
+#define STORE_JSON_MAX (3 * 1024 * 1024)
+static const char *const g_store_sub[4] = { "r\\a", "r\\b", "s\\a", "s\\b" };
+typedef struct { BYTE hdr[0x48]; char name[100]; int home, sub, alt_home, alt_sub; char alt[100]; } storefile;
+
+static int store_name_ok(const char *n)
+{
+    static const char abc[] = "TSG8IncW3HFKokOg79qzeCmZs2yBYEQVAUxR5rbwi4P@jMDLtpvad0f_J1hlN6uX";
+    int i;
+    for (i = 0; n[i]; i++) if (i >= 96 || !strchr(abc, n[i])) return 0;
+    return i == 96;
+}
+static int store_newer(const void *x, const void *y)
+{
+    const BYTE *a = ((const storefile *)x)->hdr, *c = ((const storefile *)y)->hdr;
+    DWORD ta = *(const DWORD *)(a + 0x34), tc = *(const DWORD *)(c + 0x34);
+    DWORD sa = *(const DWORD *)(a + 0x30), sc = *(const DWORD *)(c + 0x30);
+    if (ta != tc) return ta < tc ? 1 : -1;
+    return sa == sc ? 0 : sa < sc ? 1 : -1;
+}
+static void store_dir(char *out, int home, int sub)
+{
+    wsprintfA(out, "%s\\pub\\home%02d\\msg\\%s", g_viewer, home, g_store_sub[sub]);
+}
+/* pol.exe runs elevated, so it never goes through a junction or link someone else put in the viewer folder */
+static int plain_path(const char *path)
+{
+    char p[MAX_PATH + 160];
+    int base = lstrlenA(g_viewer);
+    DWORD a;
+    if (lstrlenA(path) >= (int)sizeof p || lstrlenA(path) <= base) return 0;
+    lstrcpyA(p, path);
+    for (char *c = p + base + 1;; c++) {
+        char was = *c;
+        if (was != '\\' && was) continue;
+        *c = 0;
+        a = GetFileAttributesA(p);
+        if (a != INVALID_FILE_ATTRIBUTES && (!(a & FILE_ATTRIBUTE_DIRECTORY) || (a & FILE_ATTRIBUTE_REPARSE_POINT)))
+            return 0;
+        if (!was) return 1;
+        *c = was;
+    }
+}
+static HANDLE open_plain(const char *path)
+{
+    BY_HANDLE_FILE_INFORMATION fi;
+    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                           OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    if (h == INVALID_HANDLE_VALUE) return h;
+    if (!GetFileInformationByHandle(h, &fi) || fi.nNumberOfLinks != 1 ||
+        (fi.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY))) {
+        CloseHandle(h);
+        return INVALID_HANDLE_VALUE;
+    }
+    return h;
+}
+static int store_owned(const BYTE *h, int sub, unsigned __int64 me)
+{
+    return memcmp(h + (sub >= 2 ? 0x00 : 0x08), &me, 8) == 0;
+}
+/* requests and invitations can't be answered from a copy, the server's is gone */
+static int store_wanted(const BYTE *h, int sub)
+{
+    WORD f = *(const WORD *)(h + 0x3e);
+    unsigned kd = (f >> 7) & 0x1f;
+    if (((f >> 12) & 3) == 1) return 0;
+    if (sub >= 2) return kd == 0;
+    return kd == 0 || kd == 9 || kd == 10 || kd == 0xf || kd == 0x10 || kd == 0x12 || kd == 0x13;
+}
+/* my newest STORE_KEEP in one folder, headers decoded by polcore (svc 0x540) so the ids are in this session's form */
+static int store_list(BYTE *b, int home, int sub, unsigned __int64 me, int wanted, storefile **out)
+{
+    char glob[MAX_PATH + 64];
+    WIN32_FIND_DATAA fd;
+    storefile *v = NULL;
+    int n = 0, looked = 0, cap = STORE_KEEP * 4;
+    HANDLE h;
+    *out = NULL;
+    if (!SVC(0x540) || !g_viewer[0]) return 0;
+    store_dir(glob, home, sub);
+    if (!plain_path(glob)) return 0;
+    lstrcatA(glob, "\\*");
+    if ((h = FindFirstFileA(glob, &fd)) == INVALID_HANDLE_VALUE) return 0;
+    if (!(v = (storefile *)HeapAlloc(GetProcessHeap(), 0, (cap + 1) * sizeof *v))) { FindClose(h); return 0; }
+    do {
+        if ((fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
+            !store_name_ok(fd.cFileName))
+            continue;
+        if (++looked > STORE_SCAN_MAX) {
+            lg("store: over %d files in home%02d\\msg\\%s, the rest aren't read\r\n", STORE_SCAN_MAX, home,
+               g_store_sub[sub]);
+            break;
+        }
+        memset(&v[n], 0, sizeof v[n]);
+        if (((int (__cdecl *)(void *, const char *))SVC(0x540))(v[n].hdr, fd.cFileName) != 0) continue;
+        if (!(*(WORD *)(v[n].hdr + 0x3e) & 0x8000)) continue;   /* the viewer's loader skips those too */
+        if (!store_owned(v[n].hdr, sub, me) || (wanted && !store_wanted(v[n].hdr, sub))) continue;
+        lstrcpyA(v[n].name, fd.cFileName);
+        v[n].home = home;
+        v[n].sub = sub;
+        v[n].alt_home = -1;
+        if (++n == cap) {
+            qsort(v, n, sizeof *v, store_newer);
+            n = STORE_KEEP;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    if (n > 1) qsort(v, n, sizeof *v, store_newer);
+    *out = v;
+    return n > STORE_KEEP ? STORE_KEEP : n;
+}
+static int store_read(const char *path, char *buf, int cap)
+{
+    DWORD got = 0;
+    BOOL ok;
+    HANDLE h = open_plain(path);
+    if (h == INVALID_HANDLE_VALUE) return -1;
+    ok = ReadFile(h, buf, (DWORD)cap, &got, NULL);
+    CloseHandle(h);
+    return ok ? (int)got : -1;
+}
+/* the other home's copy of the same message if this one won't read */
+static int store_body(const storefile *f, char *buf, int cap)
+{
+    char path[MAX_PATH + 160];
+    DWORD len = *(const DWORD *)(f->hdr + 0x38);
+    int got;
+    if (len == 0 || len > 0x101100) return -1;
+    if (cap > (int)len) cap = (int)len;
+    store_dir(path, f->home, f->sub);
+    lstrcatA(path, "\\");
+    lstrcatA(path, f->name);
+    if ((got = store_read(path, buf, cap)) > 0 || f->alt_home < 0) return got;
+    store_dir(path, f->alt_home, f->alt_sub);
+    lstrcatA(path, "\\");
+    lstrcatA(path, f->alt);
+    return store_read(path, buf, cap);
+}
+static int dir_exists(const char *p)
+{
+    DWORD a = GetFileAttributesA(p);
+    return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+static int legacy_home_there(void)
+{
+    char p[MAX_PATH + 32];
+    wsprintfA(p, "%s\\pub\\home%02d", g_viewer, LEGACY_HOME);
+    return g_viewer[0] && dir_exists(p) && plain_path(p);
+}
+
+static int sent_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, const char *subj,
+                     const char *text)
+{
+    char nm[64] = "\"\"", sk[17];
+    BYTE fr[0x140];
+    DWORD lo = *(const DWORD *)(e + 0x08), hi = *(const DWORD *)(e + 0x0c);
+    int row = find_friend_row(b, lo, hi, e[0x3d]), o;
+    peer_key(b, lo, hi, e[0x3d], sk);
+    if (row >= 0 && get_friend(b, row, fr)) sjis_json(nm, sizeof nm, fr + 0xa0, 0x0f);
+    o = wsprintfA(out, "{\"mid\":%d,\"to\":%s,\"toKey\":\"%s\",\"toSlot\":%u,\"fromSlot\":%u,\"toOther\":%s,\"time\":%u,"
+                       "\"seq\":%u,\"state\":\"%s\",\"subject\":",
+                  mid, nm, sk, e[0x3d], e[0x3c], polid_ok(b, lo, hi) && !is_me(b, lo, hi) ? "true" : "false",
+                  *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state);
+    o += json_text(out + o, cap - o - 16, subj);
+    lstrcpyA(out + o, ",\"text\":"); o += 8;
+    o += json_text(out + o, cap - o - 4, text);
+    out[o++] = '}';
+    out[o] = 0;
+    return o;
+}
+typedef struct { char *p; int n, cap; } gbuf;
+static int gb_add(gbuf *g, const char *s, int len)
+{
+    if (g->n + len + 1 > g->cap) {
+        int cap = g->cap ? g->cap * 2 : 0x10000;
+        char *q;
+        while (cap < g->n + len + 1) cap *= 2;
+        if (cap > STORE_JSON_MAX + 0x10000) cap = STORE_JSON_MAX + 0x10000;
+        if (cap < g->n + len + 1) return 0;
+        q = (char *)(g->p ? HeapReAlloc(GetProcessHeap(), 0, g->p, cap) : HeapAlloc(GetProcessHeap(), 0, cap));
+        if (!q) return 0;
+        g->p = q;
+        g->cap = cap;
+    }
+    memcpy(g->p + g->n, s, len);
+    g->n += len;
+    g->p[g->n] = 0;
+    return 1;
+}
+
+static void store_drop(void)
+{
+    char p[MAX_PATH + 64];
+    ipc_file(p, "store.json");
+    DeleteFileA(p);
+    ipc_file(p, "chatroom.json");   /* the chat room's lines, other people's words like the messages */
+    DeleteFileA(p);
+    ipc_file(p, "groupchat.json");
+    DeleteFileA(p);
+    /* and an enter, a create, a master's change or a group chat request that never got taken */
+    for (int i = 0; i < 12; i++) {
+        static const char *const ext[] = { "chatjoin", "chatcreate", "chatmaster", "groupchatjoin", "groupchatsend", "groupchatleave" };
+        ipc_file(p, ext[i / 2]);
+        lstrcatA(p, i % 2 ? ".taking" : "");
+        DeleteFileA(p);
+    }
+}
+/* FFXI deletes what it fetches from the server, so the store's the only copy of what was handled in game. Read
+   once, nothing on the wire */
+static void store_import(BYTE *b)
+{
+    static mailrec scratch;
+    static char body[STORE_BODY_MAX];
+    char path[MAX_PATH + 64], tmp[MAX_PATH + 80];
+    unsigned __int64 me = my_id(b);
+    storefile *all = NULL, *v, *g;
+    gbuf in = {0}, out = {0};
+    int homes[2], nh = 0, n = 0, cap = 0, k, i, j, h, s, got, nin = 0, nout = 0, left = 0;
+    DWORD wn;
+    HANDLE f;
+    store_drop();
+    if (!me || g_home < 0) return;
+    homes[nh++] = g_home;
+    if (g_home != LEGACY_HOME && legacy_home_there()) homes[nh++] = LEGACY_HOME;
+    for (h = 0; h < nh; h++)
+        for (s = 0; s < 4; s++) {   /* s\a before s\b, so a sent copy beats the outbox's */
+            k = store_list(b, homes[h], s, me, 1, &v);
+            for (i = 0; i < k; i++) {
+                for (j = 0; j < n; j++)
+                    if ((all[j].sub >= 2) == (s >= 2) && mail_same(all[j].hdr, v[i].hdr)) break;
+                if (j < n) {
+                    /* the same message twice: read if either copy is, sent if either went, the other's the spare */
+                    if (s < 2 && (s == 0 || (*(WORD *)(v[i].hdr + 0x42) & 0x100)))
+                        *(WORD *)(all[j].hdr + 0x42) |= 0x100;
+                    if (s == 2 && all[j].sub == 3) all[j] = v[i];
+                    else if (all[j].alt_home < 0) {
+                        all[j].alt_home = v[i].home;
+                        all[j].alt_sub = v[i].sub;
+                        lstrcpyA(all[j].alt, v[i].name);
+                    }
+                    continue;
+                }
+                if (n == cap) {
+                    cap = cap ? cap * 2 : 64;
+                    g = (storefile *)(all ? HeapReAlloc(GetProcessHeap(), 0, all, cap * sizeof *all)
+                                          : HeapAlloc(GetProcessHeap(), 0, cap * sizeof *all));
+                    if (!g) break;
+                    all = g;
+                }
+                all[n] = v[i];
+                if (s == 0) *(WORD *)(all[n].hdr + 0x42) |= 0x100;
+                n++;
+            }
+            if (v) HeapFree(GetProcessHeap(), 0, v);
+        }
+    if (n > 1) qsort(all, n, sizeof *all, store_newer);
+    for (i = 0; i < n; i++) {
+        int sent = all[i].sub >= 2, need, len;
+        char *json;
+        if ((got = store_body(&all[i], body, sizeof body)) <= 0) continue;
+        memset(&scratch, 0, sizeof scratch);
+        memcpy(scratch.hdr, all[i].hdr, 0x48);
+        mail_parse(&scratch, body, got);
+        need = 512 + 2 * (lstrlenA(scratch.subj) + lstrlenA(scratch.text));
+        if (!(json = (char *)HeapAlloc(GetProcessHeap(), 0, need))) continue;
+        if (sent) len = sent_json(b, json, need, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent", scratch.subj,
+                                  scratch.text);
+        else len = msg_json(b, json, need, all[i].hdr, 0, "local", (*(WORD *)(all[i].hdr + 0x42) >> 8) & 1,
+                            scratch.subj, scratch.text, scratch.has_att ? scratch.att : NULL);
+        /* newest first, so a store too big for the file loses its oldest lines */
+        if (in.n + out.n + len + 2 > STORE_JSON_MAX ||
+            !gb_add(sent ? &out : &in, (sent ? nout : nin) ? "," : "", (sent ? nout : nin) ? 1 : 0) ||
+            !gb_add(sent ? &out : &in, json, len)) {
+            left = n - i;
+            HeapFree(GetProcessHeap(), 0, json);
+            break;
+        }
+        HeapFree(GetProcessHeap(), 0, json);
+        if (sent) nout++; else nin++;
+    }
+    if (all) HeapFree(GetProcessHeap(), 0, all);
+    SecureZeroMemory(body, sizeof body);
+    SecureZeroMemory(&scratch, sizeof scratch);
+    if (nin || nout) {
+        ipc_file(path, "store.json");
+        lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
+        f = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            wr(f, "{\"messages\":[");
+            if (in.n) WriteFile(f, in.p, (DWORD)in.n, &wn, NULL);
+            wr(f, "],\"gameSent\":[");
+            if (out.n) WriteFile(f, out.p, (DWORD)out.n, &wn, NULL);
+            wr(f, "]}");
+            CloseHandle(f);
+            MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING);
+        }
+    }
+    if (in.p) { SecureZeroMemory(in.p, in.cap); HeapFree(GetProcessHeap(), 0, in.p); }
+    if (out.p) { SecureZeroMemory(out.p, out.cap); HeapFree(GetProcessHeap(), 0, out.p); }
+    lg("store: %d received and %d sent line(s) from the message store (home%02d%s)%s\r\n", nin, nout, g_home,
+       nh > 1 ? " and home84" : "", left ? ", the oldest left out (too big)" : "");
+}
+
+/* Provenance's own numbering (POL_HOME), from 10 so the viewer's 01-08 are never touched, and never 84 */
+static int home_slot_ok(int s) { return s >= 10 && s <= 99 && s != LEGACY_HOME; }
+static int home_from_env(void)
+{
+    char v[8];
+    int s;
+    DWORD n = GetEnvironmentVariableA("POL_HOME", v, sizeof v);
+    if (n == 0 || n >= sizeof v || !parse_num(v, 2, &s) || !home_slot_ok(s)) return -1;
+    return s;
+}
+/* 1 copied, 0 nothing to do (no source, already there, too big), -1 failed. Never over a file, never through a link */
+static int copy_plain(const char *src, const char *dst)
+{
+    static char buf[0x10000];
+    LARGE_INTEGER size;
+    DWORD got, put;
+    int ok = 1;
+    HANDLE in, out;
+    if (GetFileAttributesA(src) == INVALID_FILE_ATTRIBUTES) return 0;
+    if ((in = open_plain(src)) == INVALID_HANDLE_VALUE) return -1;
+    if (!GetFileSizeEx(in, &size) || size.QuadPart > 0x200000) { CloseHandle(in); return 0; }
+    out = CreateFileA(dst, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (out == INVALID_HANDLE_VALUE) {
+        DWORD e = GetLastError();
+        CloseHandle(in);
+        return e == ERROR_FILE_EXISTS ? 0 : -1;
+    }
+    while (ok && ReadFile(in, buf, sizeof buf, &got, NULL) && got)
+        ok = WriteFile(out, buf, got, &put, NULL) && put == got;
+    CloseHandle(in);
+    CloseHandle(out);
+    if (!ok) DeleteFileA(dst);
+    return ok ? 1 : -1;
+}
+/* home84's option.bin (FFXI's POL settings) and this account's own messages, never over what's there. The messages go
+   once, FFXI moves and deletes them here after */
+static void home_copy(BYTE *b, int slot, unsigned __int64 me)
+{
+    char src[MAX_PATH + 160], dst[MAX_PATH + 160], mark[MAX_PATH + 64], done[8] = "";
+    storefile *v;
+    int s, i, k, r, copied = 0, failed = 0, opt = 0, had_o, had_m;
+    DWORD got = 0, wn;
+    HANDLE f;
+    wsprintfA(dst, "%s\\pub\\home%02d", g_viewer, slot);
+    if (!plain_path(dst)) return;
+    /* 'o' option.bin, 'm' the messages */
+    wsprintfA(mark, "%s\\provenance-copied", dst);
+    if ((f = open_plain(mark)) != INVALID_HANDLE_VALUE) {
+        if (!ReadFile(f, done, sizeof done - 1, &got, NULL)) got = 0;
+        CloseHandle(f);
+        done[got] = 0;
+    }
+    had_o = strchr(done, 'o') != NULL;
+    had_m = strchr(done, 'm') != NULL;
+    if (had_o && had_m) return;
+    if (!had_o) {
+        lstrcatA(dst, "\\option.bin");
+        wsprintfA(src, "%s\\pub\\home%02d\\option.bin", g_viewer, LEGACY_HOME);
+        opt = copy_plain(src, dst);
+    }
+    for (s = 0; s < 4 && me && !had_m; s++) {
+        store_dir(dst, slot, s);
+        if (!plain_path(dst)) { failed++; continue; }
+        k = store_list(b, LEGACY_HOME, s, me, 0, &v);
+        for (i = 0; i < k; i++) {
+            store_dir(src, LEGACY_HOME, s);
+            store_dir(dst, slot, s);
+            lstrcatA(src, "\\"); lstrcatA(src, v[i].name);
+            lstrcatA(dst, "\\"); lstrcatA(dst, v[i].name);
+            r = copy_plain(src, dst);
+            copied += r > 0;
+            failed += r < 0;
+        }
+        if (v) HeapFree(GetProcessHeap(), 0, v);
+    }
+    wsprintfA(done, "%s%s", had_o || opt >= 0 ? "o" : "", had_m || me ? "m" : "");
+    if (done[0]) {
+        DeleteFileA(mark);   /* a link someone left there goes, it's never written through */
+        f = CreateFileA(mark, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            WriteFile(f, done, (DWORD)lstrlenA(done), &wn, NULL);
+            CloseHandle(f);
+        }
+    }
+    lg("home: copy from home%02d to home%02d - option.bin %s, %d message(s), %d not copied%s\r\n", LEGACY_HOME, slot,
+       had_o ? "done before" : opt > 0 ? "copied" : opt < 0 ? "failed, tried again next time" : "not needed", copied,
+       failed, had_m ? " (messages done before)" : !me ? " (messages next time, no POL ID yet)" : "");
+}
+/* the account's own slot, or home84 when Provenance didn't send one (it's run out of slots) */
+static void home_pick(BYTE *b)
+{
+    int slot = home_from_env();
+    if (!g_viewer[0] || slot < 0) {
+        lg("home: no user slot from Provenance - staying in home%02d\r\n", g_home);
+        return;
+    }
+    if (!home_set(b, slot)) return;
+    lg("home: user slot %d (pub\\home%02d)\r\n", slot, slot);
+    if (legacy_home_there()) home_copy(b, slot, SVC(0x558) ? my_id(b) : 0);
+}
