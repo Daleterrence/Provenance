@@ -195,7 +195,7 @@ public partial class MainViewModel : IMultiRunHost
 
     bool IMultiRunHost.IsInGame(string profileId) => PolSession.GameRunningFor(profileId);
 
-    async Task<AccountFailure?> IMultiRunHost.SignInAndPlayAsync(MultiRunAccount account, CancellationToken ct)
+    async Task<AccountFailure?> IMultiRunHost.LogInAndPlayAsync(MultiRunAccount account, CancellationToken ct)
     {
         try
         {
@@ -307,20 +307,20 @@ public partial class MainViewModel : IMultiRunHost
             finally { Kick(); }
         }
         _runSnapshot = null;
-        int signIn;
+        int logIn;
         try
         {
-            signIn = await _pol.ConnectAsync(pol, sea, otp, profile.Id, progress, AskHandleName, token,
+            logIn = await _pol.ConnectAsync(pol, sea, otp, profile.Id, progress, AskHandleName, token,
                                              new SessionOptions(Lean: true, ThirdPartyHookProfile: hookProfile,
                                                                 HomeSlot: EnsureHomeSlot(profile)));
         }
         catch (Exception) when (token.IsCancellationRequested) { return await Stopped(); }
-        if (signIn != 0)
+        if (logIn != 0)
         {
             await LetGoOfAccountAsync();
-            if (signIn == LoginCodes.Cancelled && token.IsCancellationRequested) return await Stopped();
-            var kind = AccountFailures.Classify(signIn, _pol.LastRefusalReason, profile.UseOtp);
-            return new(kind, lastFailure ?? $"The login didn't finish (code {signIn}).");
+            if (logIn == LoginCodes.Cancelled && token.IsCancellationRequested) return await Stopped();
+            var kind = AccountFailures.Classify(logIn, _pol.LastRefusalReason, profile.UseOtp);
+            return new(kind, lastFailure ?? $"The login didn't finish (code {logIn}).");
         }
         SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
 

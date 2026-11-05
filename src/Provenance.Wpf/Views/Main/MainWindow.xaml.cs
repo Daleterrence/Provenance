@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.Views.Social;
 using Provenance.Wpf.ViewModels.Social;
@@ -14,8 +15,8 @@ namespace Provenance.Wpf.Views.Main;
 
 public partial class MainWindow : Window
 {
-    internal Services.TrayIcon? _tray;
-    private bool _exiting, _askingToExit, _cancellingSignIn, _flashing;
+    internal TrayIcon? _tray;
+    private bool _exiting, _askingToExit, _cancellingLogIn, _flashing;
     private DateTime _worldsClosedAt;
     private int _newsShown = -1;
 
@@ -227,12 +228,12 @@ public partial class MainWindow : Window
         if (Vm is { LoggingIn: true } signing)
         {
             e.Cancel = true;
-            if (_cancellingSignIn) return;
-            _cancellingSignIn = true;
+            if (_cancellingLogIn) return;
+            _cancellingLogIn = true;
             Dispatcher.InvokeAsync(async () =>
             {
                 await signing.CancelLogInAsync();
-                _cancellingSignIn = false;
+                _cancellingLogIn = false;
                 Close();
             });
             return;
@@ -278,11 +279,11 @@ public partial class MainWindow : Window
         base.OnClosed(e);
     }
 
-    private void ToTray(MainViewModel vm, bool signedIn)
+    private void ToTray(MainViewModel vm, bool loggedIn)
     {
         if (_tray == null)
         {
-            _tray = new Services.TrayIcon(() => vm.FriendsWindowTitle);
+            _tray = new TrayIcon(() => vm.FriendsWindowTitle);
             _tray.OpenRequested += () => Dispatcher.Invoke(() => ShowFromTray());
             _tray.FriendsRequested += () =>
                 Dispatcher.Invoke(() => { ShowFromTray(); vm.OpenSocialCommand.Execute(null); });
@@ -290,7 +291,7 @@ public partial class MainWindow : Window
                 Dispatcher.Invoke(() => { vm.SignOutCommand.Execute(null); ShowFromTray(); });
             _tray.ExitRequested += () => Dispatcher.Invoke(ExitApp);
         }
-        _tray.SetSignedIn(signedIn);
+        _tray.SetLoggedIn(loggedIn);
         _tray.Visible = true;
         Hide();   // the friends windows are their own windows and stay as they are
     }

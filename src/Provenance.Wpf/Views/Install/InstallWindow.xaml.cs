@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.ViewModels.Install;
 using Provenance.Wpf.Views.Dialogs;
 
 namespace Provenance.Wpf.Views.Install;
@@ -35,7 +36,7 @@ public partial class InstallWindow : Window
     // closing mid-install asks, then stops the download and the installers so nothing keeps running with no window
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (DataContext is not ViewModels.Install.InstallViewModel { Running: true } vm) return;
+        if (DataContext is not InstallViewModel { Running: true } vm) return;
         if (_ownerClosing) { vm.CancelCommand.Execute(null); return; }   // the app's closing, so no question
         // the view model's "Cancelled" note, worded for a window that's closing
         var what = vm.CurrentStep switch

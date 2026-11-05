@@ -8,7 +8,7 @@ public interface IMultiRunHost
 {
     bool IsInGame(string profileId);
     // null means it's in the game and its session was released
-    Task<AccountFailure?> SignInAndPlayAsync(MultiRunAccount account, CancellationToken ct);
+    Task<AccountFailure?> LogInAndPlayAsync(MultiRunAccount account, CancellationToken ct);
 }
 
 public sealed record MultiRunResult(IReadOnlyList<(MultiRunAccount Account, AccountFailure Failure)> Failures,
@@ -29,7 +29,7 @@ public static class MultiAccountRunner
             if (host.IsInGame(account.ProfileId)) continue;
             status?.Report($"Logging in {account.Name} ({i + 1} of {list.Length})...");
             AccountFailure? failure;
-            try { failure = await host.SignInAndPlayAsync(account, ct).ConfigureAwait(false); }
+            try { failure = await host.LogInAndPlayAsync(account, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { stopped = true; break; }
             if (failure is null) continue;
             failures.Add((account, failure));

@@ -222,7 +222,7 @@ public partial class MainViewModel : ObservableObject
             // after a viewer update at sign-in the sign-in's own steps share what's left, so the bar only moves forward
             if (p.Patch is not null) _updatedFirst = true;
             double f = _updatedFirst && p.Patch is null
-                ? LaunchProgress.SignInUpdateEnd + (1 - LaunchProgress.SignInUpdateEnd) * p.Fraction : p.Fraction;
+                ? LaunchProgress.LogInUpdateEnd + (1 - LaunchProgress.LogInUpdateEnd) * p.Fraction : p.Fraction;
             if (f > ProgressFraction) ProgressFraction = Math.Min(f, 1.0);
         }
         TrackTimeLeft(p.Patch);

@@ -59,7 +59,7 @@ public sealed class PolSession : IDisposable
         : line.Contains("hold: Play refused:", StringComparison.Ordinal) ? PlayAnswer.Refused
         : PlayAnswer.None;
 
-    internal static (int Code, string Text) EndedBeforeSignIn(int? exitCode) => exitCode switch
+    internal static (int Code, string Text) EndedBeforeLogIn(int? exitCode) => exitCode switch
     {
         _ when DetailsUnreadable(exitCode: exitCode) => (LoginCodes.DetailsUnreadable, DetailsAgainText),
         4 => (LoginCodes.NoPolHandle, NoPolHandleText),
@@ -214,7 +214,7 @@ public sealed class PolSession : IDisposable
     private PolRegion Region => _settings.DetectedRegion ?? PolRegion.UnitedStates;
 
     // the key's opened before anything starts, so one that can't be read gets its own text
-    internal string? KeyForSignIn()
+    internal string? KeyForLogIn()
     {
         try
         {
@@ -306,12 +306,12 @@ public sealed class PolSession : IDisposable
         var (viewerDir, polExe, launcherExe) = FindLaunchFiles();
         if (polExe is null)
             return Fail("Some of the files needed to start PlayOnline are missing. Check FINAL FANTASY XI is installed, and if it is, reinstall Provenance.");
-        if (KeyForSignIn() is { } keyProblem) return Fail(keyProblem);
+        if (KeyForLogIn() is { } keyProblem) return Fail(keyProblem);
         // the viewer checks for its own update on every connect and always says yes
         try
         {
             UpdateViewer(viewerDir!, new InlineProgress<PatchProgress>(
-                p => progress?.Report(LaunchProgress.Updating("Starting", LaunchSteps.StartPol, p, 0.02, LaunchProgress.SignInUpdateEnd))),
+                p => progress?.Report(LaunchProgress.Updating("Starting", LaunchSteps.StartPol, p, 0.02, LaunchProgress.LogInUpdateEnd))),
                 FreeViewerFiles, ct);
         }
         catch (OperationCanceledException)
@@ -476,7 +476,7 @@ public sealed class PolSession : IDisposable
                 var rm = Regex.Match(line, @"reason=(-?\d+)");
                 LastRefusalReason = rm.Success && int.TryParse(rm.Groups[1].Value, out var reason) ? reason : null;
                 return Fail(LoginCodes.AuthFailed, LastRefusalReason is { } r
-                    ? PolAccountNotices.SignInRefused(r, Region)
+                    ? PolAccountNotices.LogInRefused(r, Region)
                     : RefusedText);
             }
             if (line.Contains("phase_c: ACCOUNT BLOCKED "))
@@ -523,7 +523,7 @@ public sealed class PolSession : IDisposable
                 try { if (_polProc is { HasExited: true } ended) exit = ended.ExitCode; } catch { }
                 PutScreenSaverBack();
                 LogEarlyExit(pid, exit, logPath);
-                var (endedCode, endedText) = EndedBeforeSignIn(exit);
+                var (endedCode, endedText) = EndedBeforeLogIn(exit);
                 return Fail(endedCode, endedText);
             }
             if (DateTime.UtcNow - lastActivity > StallLimit)

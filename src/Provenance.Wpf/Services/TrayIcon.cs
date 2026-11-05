@@ -55,11 +55,11 @@ public sealed class TrayIcon : IDisposable
         _icon.BalloonTipClicked += (_, _) => OpenRequested?.Invoke();
     }
 
-    public void SetSignedIn(bool signedIn)
+    public void SetLoggedIn(bool loggedIn)
     {
-        _friends.Visible = _signOut.Visible = signedIn;
-        _exit.Text = signedIn ? "Exit and log out" : "Exit";
-        _icon.Text = signedIn ? "Provenance (logged in to PlayOnline)" : "Provenance";
+        _friends.Visible = _signOut.Visible = loggedIn;
+        _exit.Text = loggedIn ? "Exit and log out" : "Exit";
+        _icon.Text = loggedIn ? "Provenance (logged in to PlayOnline)" : "Provenance";
     }
 
     public bool Visible

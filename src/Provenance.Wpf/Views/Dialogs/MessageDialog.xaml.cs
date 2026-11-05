@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Views.Dialogs;
 
@@ -69,7 +70,7 @@ public partial class MessageDialog : Window
         dlg.TitleText.Text = title;
         dlg.BodyText.Text = body;
         if (!offerLogs) dlg.LogsButton.Visibility = Visibility.Collapsed;
-        if (notice && Services.SvgIcons.Notice is { } art)
+        if (notice && SvgIcons.Notice is { } art)
         {
             dlg.NoticeArt.Source = art;
             dlg.NoticeArt.Visibility = Visibility.Visible;
@@ -94,7 +95,7 @@ public partial class MessageDialog : Window
     private void OnOpenLogs(object sender, RoutedEventArgs e)
     {
         var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "logs");
-        if (Directory.Exists(dir)) Services.Explorer.ShowFolder(dir);
+        if (Directory.Exists(dir)) Explorer.ShowFolder(dir);
     }
 
     private void OnDrag(object sender, MouseButtonEventArgs e)

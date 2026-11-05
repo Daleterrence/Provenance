@@ -6,7 +6,7 @@ namespace Provenance.Common.Login;
 public sealed record LaunchProgress(string Stage, string Detail, int Step = -1, double Fraction = -1, PatchProgress? Patch = null)
 {
     // a viewer update at sign-in gets the bar up to here, and the sign-in's own steps the rest
-    public const double SignInUpdateEnd = 0.5;
+    public const double LogInUpdateEnd = 0.5;
 
     public static LaunchProgress Updating(string stage, int step, PatchProgress p, double from, double to) =>
         new(stage, p.Text, step, Share(p, from, to), p);

@@ -80,7 +80,7 @@ public static class PolAccountNotices
             : n;
     }
 
-    public static string SignInRefused(int reason, PolRegion region = PolRegion.UnitedStates) => reason switch
+    public static string LogInRefused(int reason, PolRegion region = PolRegion.UnitedStates) => reason switch
     {
         -202 or -203 => "Incorrect PlayOnline ID and/or password.",
         -205 => "Your account login has been temporarily disabled due to three consecutive password errors. Please try again later.",
