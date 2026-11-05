@@ -5,6 +5,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Social;
@@ -350,7 +351,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private string DefaultNick()
     {
         var n = _social.AccountName.Trim();
-        return PolMessage.FitBytes(n, ChatRoomFiles.MaxNameBytes);
+        return ShiftJis.Fit(n, ChatRoomFiles.MaxNameBytes);
     }
 
     private bool CanExit => Current == Page.Room && !Entering;

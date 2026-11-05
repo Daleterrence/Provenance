@@ -61,7 +61,7 @@ public sealed class FfxiSettings
         s.Sound = 1;
         s.SoundEffects = 20;
         // what the tool fills in when the folder's empty
-        s.ScreenshotFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games", "FINAL FANTASY XI");
+        s.ScreenshotFolder = Path.Combine(AppPaths.Documents, "My Games", "FINAL FANTASY XI");
         return s;
     }
 

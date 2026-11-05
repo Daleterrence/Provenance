@@ -1,6 +1,7 @@
-using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
+using Provenance.Common.IO;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Security;
 
@@ -111,25 +112,24 @@ public sealed class FolderPins : IDisposable
         var full = Rebase(path);
         var parent = Path.GetDirectoryName(full);
         if (parent is null || !_held.TryGetValue(parent, out var ph) || !Intact(parent)) return false;
-        using var h = CreateFileW(full, Delete | ReadAttributes | WriteAttributes, ShareRead | ShareWrite | ShareDelete, IntPtr.Zero,
-                                  OpenExisting, BackupSemantics | OpenReparsePoint, IntPtr.Zero);
+        using var h = FileHandles.OpenLinkItself(full, FileHandles.Delete | FileHandles.ReadAttributes | FileHandles.WriteAttributes, FileHandles.ShareAll);
         if (h.IsInvalid) return false;
-        var where = FinalPath(h);
-        var folder = FinalPath(ph);
+        var where = FileHandles.FinalPath(h, allowUnc: true);
+        var folder = FileHandles.FinalPath(ph, allowUnc: true);
         if (where is null || folder is null || !string.Equals(Path.GetDirectoryName(where), folder, StringComparison.OrdinalIgnoreCase)) return false;
         uint flags = DispositionDelete | DispositionPosix | DispositionIgnoreReadOnly;
-        if (SetFileInformationByHandle(h, FileDispositionInfoEx, ref flags, 4)) return true;
+        if (Kernel32.SetFileInformationByHandle(h, FileDispositionInfoEx, ref flags, 4)) return true;
         // older Windows: a read-only file's flag is cleared on this handle, and only when this is its one name
-        if (!GetFileInformationByHandle(h, out var info)) return false;
-        if ((info.Attributes & (uint)FileAttributes.ReadOnly) != 0)
+        if (!FileHandles.TryInfo(h, out var info)) return false;
+        if ((info.FileAttributes & (uint)FileAttributes.ReadOnly) != 0)
         {
-            if (info.Links > 1) return false;
-            var basic = new BasicInfo { Attributes = info.Attributes & ~(uint)FileAttributes.ReadOnly };
+            if (info.NumberOfLinks > 1) return false;
+            var basic = new BasicInfo { Attributes = info.FileAttributes & ~(uint)FileAttributes.ReadOnly };
             if (basic.Attributes == 0) basic.Attributes = (uint)FileAttributes.Normal;
-            if (!SetFileInformationByHandle(h, FileBasicInfo, ref basic, 40)) return false;
+            if (!Kernel32.SetFileInformationByHandle(h, FileBasicInfo, ref basic, 40)) return false;
         }
         byte yes = 1;
-        return SetFileInformationByHandle(h, FileDispositionInfo, ref yes, 1);
+        return Kernel32.SetFileInformationByHandle(h, FileDispositionInfo, ref yes, 1);
     }
 
     // Pin's root test without holding anything: a folder that's a link, or is reached through one (a junctioned parent,
@@ -137,11 +137,10 @@ public sealed class FolderPins : IDisposable
     public static bool ThroughLink(string root)
     {
         var given = LongName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)));
-        using var h = CreateFileW(given, ReadAttributes, ShareRead | ShareWrite | ShareDelete, IntPtr.Zero, OpenExisting,
-                                  BackupSemantics | OpenReparsePoint, IntPtr.Zero);
+        using var h = FileHandles.OpenLinkItself(given, FileHandles.ReadAttributes, FileHandles.ShareAll);
         if (h.IsInvalid) return false;
-        if (GetFileInformationByHandleEx(h, AttributeTagInfo, out var tag, 8) && LinkCheck.IsRedirect(tag.Attributes, tag.ReparseTag)) return true;
-        return !string.Equals(FinalPath(h), given, StringComparison.OrdinalIgnoreCase);
+        if (Kernel32.GetFileInformationByHandleEx(h, AttributeTagInfo, out var tag, 8) && LinkCheck.IsRedirect(tag.Attributes, tag.ReparseTag)) return true;
+        return !string.Equals(FileHandles.FinalPath(h, allowUnc: true), given, StringComparison.OrdinalIgnoreCase);
     }
 
     // ThroughLink for a folder out of settings, where a path that won't even parse just isn't a link. A third-party
@@ -155,9 +154,8 @@ public sealed class FolderPins : IDisposable
     // where a folder really is, every link on the way (its own too) followed. Null if it won't open
     public static string? RealPath(string dir)
     {
-        using var h = CreateFileW(LinkCheck.LongPath(Path.GetFullPath(dir)), ReadAttributes, ShareRead | ShareWrite | ShareDelete, IntPtr.Zero, OpenExisting,
-                                  BackupSemantics, IntPtr.Zero);
-        return h.IsInvalid ? null : FinalPath(h);
+        using var h = FileHandles.Open(LinkCheck.LongPath(Path.GetFullPath(dir)), FileHandles.ReadAttributes, FileHandles.ShareAll, FileHandles.BackupSemantics);
+        return h.IsInvalid ? null : FileHandles.FinalPath(h, allowUnc: true);
     }
 
     // no reparse point at all between root and path, and the last part's a folder or file as asked (missing is fine).
@@ -193,8 +191,7 @@ public sealed class FolderPins : IDisposable
     private bool Add(string dir)
     {
         if (_held.ContainsKey(dir)) return Fine(dir);
-        var h = CreateFileW(LinkCheck.LongPath(dir), ListDirectory | ReadAttributes, ShareRead | ShareWrite, IntPtr.Zero, OpenExisting,
-                            BackupSemantics | OpenReparsePoint, IntPtr.Zero);
+        var h = FileHandles.OpenLinkItself(LinkCheck.LongPath(dir), FileHandles.ListDirectory | FileHandles.ReadAttributes, FileHandles.ShareReadWrite);
         if (h.IsInvalid)
         {
             h.Dispose();
@@ -212,28 +209,18 @@ public sealed class FolderPins : IDisposable
     private bool Fine(string dir)
     {
         var h = _held[dir];
-        if (!GetFileInformationByHandleEx(h, AttributeTagInfo, out var tag, 8) ||
+        if (!Kernel32.GetFileInformationByHandleEx(h, AttributeTagInfo, out var tag, 8) ||
             (tag.Attributes & (uint)FileAttributes.Directory) == 0 || LinkCheck.IsRedirect(tag.Attributes, tag.ReparseTag))
             return false;
         return !dir.Equals(_root, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(FinalPath(h), _root, StringComparison.OrdinalIgnoreCase);
-    }
-
-    internal static string? FinalPath(SafeFileHandle h)
-    {
-        var buf = new StringBuilder(1024);
-        uint n = GetFinalPathNameByHandleW(h, buf, (uint)buf.Capacity, 0);
-        if (n == 0 || n >= buf.Capacity) return null;
-        var s = buf.ToString(0, (int)n);
-        if (s.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return @"\\" + s[8..];
-        return s.StartsWith(@"\\?\", StringComparison.Ordinal) ? s[4..] : s;
+               string.Equals(FileHandles.FinalPath(h, allowUnc: true), _root, StringComparison.OrdinalIgnoreCase);
     }
 
     // 8.3 names expanded, so the root can be compared with where its handle really is
     private static string LongName(string path)
     {
         var buf = new StringBuilder(1024);
-        uint n = GetLongPathNameW(path, buf, (uint)buf.Capacity);
+        uint n = Kernel32.GetLongPathNameW(path, buf, (uint)buf.Capacity);
         return n == 0 || n >= buf.Capacity ? path : Path.TrimEndingDirectorySeparator(buf.ToString(0, (int)n));
     }
 
@@ -243,56 +230,6 @@ public sealed class FolderPins : IDisposable
         _held.Clear();
     }
 
-    private const uint ListDirectory = 0x1, ReadAttributes = 0x80, WriteAttributes = 0x100, Delete = 0x10000;
-    private const uint ShareRead = 1, ShareWrite = 2, ShareDelete = 4, OpenExisting = 3;
-    private const uint BackupSemantics = 0x02000000, OpenReparsePoint = 0x00200000;
     private const int AttributeTagInfo = 9, FileBasicInfo = 0, FileDispositionInfo = 4, FileDispositionInfoEx = 21;
     private const uint DispositionDelete = 0x1, DispositionPosix = 0x2, DispositionIgnoreReadOnly = 0x10;
-
-    private struct AttributeTag
-    {
-        public uint Attributes;
-        public uint ReparseTag;
-    }
-
-    [StructLayout(LayoutKind.Sequential, Size = 40)]
-    private struct BasicInfo
-    {
-        public long CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
-        public uint Attributes;
-    }
-
-    // FILETIMEs are two DWORDs, so 4-byte aligned
-    [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    private struct HandleInfo
-    {
-        public uint Attributes;
-        public long Created, Accessed, Written;
-        public uint Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint disposition,
-                                                     uint flags, IntPtr template);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetFileInformationByHandleEx(SafeFileHandle file, int infoClass, out AttributeTag info, uint size);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetFileInformationByHandle(SafeFileHandle file, out HandleInfo info);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetFileInformationByHandle(SafeFileHandle file, int infoClass, ref uint info, uint size);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetFileInformationByHandle(SafeFileHandle file, int infoClass, ref byte info, uint size);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetFileInformationByHandle(SafeFileHandle file, int infoClass, ref BasicInfo info, uint size);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, StringBuilder path, uint size, uint flags);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint GetLongPathNameW(string shortPath, StringBuilder longPath, uint size);
 }

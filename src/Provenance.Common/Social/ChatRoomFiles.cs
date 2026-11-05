@@ -73,7 +73,7 @@ public static class ChatRoomFiles
     public static string? NameProblem(string name) =>
         string.IsNullOrWhiteSpace(name) ? "Enter chat name."
         : name.Any(c => c < ' ' || c == '\t') ? "That chat name can't be used."
-        : PolMessage.TextBytes(name) > MaxNameBytes ? "Chat names can be up to 15 characters (Japanese characters count as two)."
+        : ShiftJis.ByteCount(name) > MaxNameBytes ? "Chat names can be up to 15 characters (Japanese characters count as two)."
         : null;
 
     public static string? RoomNameProblem(string name) =>

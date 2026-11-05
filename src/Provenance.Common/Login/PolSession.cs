@@ -14,6 +14,7 @@ using Provenance.Common.Progress;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Provenance.Common.Social;
+using Provenance.Common.Win32;
 using Serilog;
 
 namespace Provenance.Common.Login;
@@ -685,9 +686,9 @@ public sealed class PolSession : IDisposable
     }
 
     private static bool? ReadScreenSaver() =>
-        SystemParametersInfoW(SpiGetScreenSaveActive, 0, out int on, 0) ? on != 0 : null;
+        User32.SystemParametersInfoW(SpiGetScreenSaveActive, 0, out int on, 0) ? on != 0 : null;
 
-    private static void SetScreenSaver(bool on) => SetSystemParameter(SpiSetScreenSaveActive, on ? 1u : 0u, IntPtr.Zero, 0);
+    private static void SetScreenSaver(bool on) => User32.SystemParametersInfoW(SpiSetScreenSaveActive, on ? 1u : 0u, IntPtr.Zero, 0);
 
     // a record whose pol.exe and copy have both gone, so nothing saw that pol.exe end
     internal static bool PolEndedUnseen() => SessionFilePaths().Any(path =>
@@ -698,12 +699,6 @@ public sealed class PolSession : IDisposable
 
     private const uint SpiGetScreenSaveActive = 0x10;
     private const uint SpiSetScreenSaveActive = 0x11;
-
-    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SystemParametersInfoW(uint action, uint param, out int value, uint winIni);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
-    private static extern bool SetSystemParameter(uint action, uint param, IntPtr value, uint winIni);
 
     private void StartWatcher(int pid)
     {

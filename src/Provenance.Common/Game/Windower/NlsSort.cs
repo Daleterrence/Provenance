@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -10,11 +10,7 @@ internal static class NlsSort
 
     public static readonly IComparer<string> UserDefault = Comparer<string>.Create((a, b) =>
     {
-        int r = CompareStringEx(null, LinguisticCasing, a, a.Length, b, b.Length, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+        int r = Kernel32.CompareStringEx(null, LinguisticCasing, a, a.Length, b, b.Length, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
         return r == 0 ? string.CompareOrdinal(a, b) : r - 2;
     });
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern int CompareStringEx(string? locale, uint flags, string a, int aLength, string b, int bLength,
-                                              IntPtr version, IntPtr reserved, IntPtr param);
 }

@@ -182,7 +182,7 @@ public partial class SocialViewModel : ObservableObject
     }
 
     // the box counts in the bytes FFXI goes by, a Japanese character's two
-    public int ComposeBytes => PolMessage.TextBytes(Compose.Trim());
+    public int ComposeBytes => ShiftJis.ByteCount(Compose.Trim());
     public string ComposeCount => $"{ComposeBytes}/{PolMessage.MaxTextBytes}";
     public bool ComposeCountShown => ComposeBytes >= PolMessage.MaxTextBytes * 9 / 10;
     private bool ComposeHasWide => ComposeBytes > Compose.Trim().Replace("\r", "").Length;
@@ -201,7 +201,7 @@ public partial class SocialViewModel : ObservableObject
         _ when GameRunning => "While FINAL FANTASY XI is running, replies go through the game.",
         _ when HandleSwitching => SwitchingNote,
         { CanMessage: true } when ComposeCountShown && ComposeHasWide =>
-            PolMessage.HasDoubleByte(Compose) ? "Japanese characters count as two." : "Some characters count as two.",
+            ShiftJis.HasDoubleByte(Compose) ? "Japanese characters count as two." : "Some characters count as two.",
         { CanMessage: true, Online: true } => "This sends a PlayOnline message.",
         { CanMessage: true } f => $"{f.Name}'s offline, so they'll get this next time they log in.",
         { Pending: true } f => $"You can message {f.Name} once they accept your friend request.",

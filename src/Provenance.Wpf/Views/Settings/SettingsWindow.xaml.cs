@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -10,6 +9,7 @@ using Provenance.Wpf.Controls;
 using Provenance.Wpf.ViewModels.Settings;
 using Provenance.Wpf.ViewModels.Shared;
 using Provenance.Wpf.Views.Dialogs;
+using Provenance.Wpf.Win32;
 
 namespace Provenance.Wpf.Views.Settings;
 
@@ -161,12 +161,10 @@ public partial class SettingsWindow : Window
             long lp = msg.lParam.ToInt64();
             return WindowerKeyNames.DirectInputCode(vk, (int)(lp >> 16) & 0xFF, (lp & 0x1000000) != 0);
         }
-        uint sc = MapVirtualKeyW((uint)vk, MapVkToVscEx);
+        uint sc = User32.MapVirtualKeyW((uint)vk, MapVkToVscEx);
         return WindowerKeyNames.DirectInputCode(vk, (int)(sc & 0xFF), (sc & 0xFF00) is 0xE000 or 0xE100);
     }
 
     private const int WmKeyDown = 0x100, WmSysKeyDown = 0x104;
     private const uint MapVkToVscEx = 4;
-
-    [DllImport("user32.dll")] private static extern uint MapVirtualKeyW(uint code, uint mapType);
 }

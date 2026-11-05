@@ -25,9 +25,8 @@ public sealed class GroupChatLog
     {
         if (root is null)
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            if (string.IsNullOrEmpty(appData)) return;
-            root = Path.Combine(appData, "Provenance", "messages");
+            if (AppPaths.UserData is not { } userData) return;
+            root = Path.Combine(userData, "messages");
         }
         _path = Path.Combine(root, profileId + ".groups.dat");
         if (!File.Exists(_path)) return;

@@ -5,7 +5,9 @@ using System.Security.Principal;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32.SafeHandles;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game;
 
@@ -54,7 +56,7 @@ public static partial class GameSettingsBackup
     internal static Action? BeforeSettleForTest;
 
     public static string DefaultFolder =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "Backups");
+        Path.Combine(AppPaths.UserData ?? "Provenance", "Backups");
 
     // a part path would be taken from wherever this elevated process happens to be sat
     public static string FolderOrDefault(string? chosen) =>
@@ -68,11 +70,11 @@ public static partial class GameSettingsBackup
     {
         var install = Path.TrimEndingDirectorySeparator(Path.GetFullPath(ffxiFolder));
         var root = Path.GetPathRoot(install);
-        localAppData ??= Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        localAppData ??= AppPaths.LocalAppData;
         string? virtualStore = root is { Length: 3 } && root[1] == ':' && Path.IsPathFullyQualified(localAppData)
             ? Path.Combine(localAppData, VirtualStoreDir, install[root.Length..], UserDir) : null;
         var settings = string.IsNullOrWhiteSpace(settingsFolder)
-            ? Path.Combine(documents ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games", "FINAL FANTASY XI")
+            ? Path.Combine(documents ?? AppPaths.Documents, "My Games", "FINAL FANTASY XI")
             : settingsFolder.Trim();
         return new(Path.Combine(install, UserDir), virtualStore, Path.IsPathFullyQualified(settings) ? Path.Combine(settings, FfxiUserDir) : null);
     }
@@ -639,8 +641,8 @@ public static partial class GameSettingsBackup
     // shouldn't, so all three are refused on the open handle
     private static SafeFileHandle OpenChecked(string path, string folder, bool data, out Stat stat)
     {
-        var h = CreateFileW(LinkCheck.LongPath(Path.GetFullPath(path)), data ? GenericRead : ReadAttributes,
-                            ShareRead | ShareWrite | ShareDelete, IntPtr.Zero, OpenExisting, OpenReparsePoint, IntPtr.Zero);
+        var h = FileHandles.Open(LinkCheck.LongPath(Path.GetFullPath(path)), data ? FileHandles.GenericRead : FileHandles.ReadAttributes,
+                                 FileHandles.ShareAll, FileHandles.OpenReparsePoint);
         if (h.IsInvalid)
         {
             int err = Marshal.GetLastPInvokeError();
@@ -650,10 +652,10 @@ public static partial class GameSettingsBackup
         try
         {
             var info = Info(h);
-            if ((info.Attributes & ReparsePointAttribute) != 0) throw new IOException("it's a link");
-            if ((info.Attributes & DirectoryAttribute) != 0) throw new IOException("it's a folder");
-            if (info.Links != 1) throw new IOException("it has other names (a hard link)");
-            if (FolderPins.FinalPath(h) is not { } where || !string.Equals(Path.GetDirectoryName(where), Path.TrimEndingDirectorySeparator(folder), StringComparison.OrdinalIgnoreCase))
+            if ((info.FileAttributes & ReparsePointAttribute) != 0) throw new IOException("it's a link");
+            if ((info.FileAttributes & DirectoryAttribute) != 0) throw new IOException("it's a folder");
+            if (info.NumberOfLinks != 1) throw new IOException("it has other names (a hard link)");
+            if (FileHandles.FinalPath(h, allowUnc: true) is not { } where || !string.Equals(Path.GetDirectoryName(where), Path.TrimEndingDirectorySeparator(folder), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("it isn't in the folder it was found in");
             stat = StatOf(info);
             return h;
@@ -665,27 +667,10 @@ public static partial class GameSettingsBackup
         }
     }
 
-    private static Stat StatOf(HandleInfo info) => new(((long)info.SizeHigh << 32) | info.SizeLow, info.Written);
+    private static Stat StatOf(ByHandleFileInformation info) => new(((long)info.FileSizeHigh << 32) | info.FileSizeLow, info.LastWriteTime);
 
-    private static HandleInfo Info(SafeFileHandle h) =>
-        GetFileInformationByHandle(h, out var info) ? info : throw new IOException($"its details couldn't be read (error {Marshal.GetLastPInvokeError()})");
+    private static ByHandleFileInformation Info(SafeFileHandle h) =>
+        FileHandles.TryInfo(h, out var info) ? info : throw new IOException($"its details couldn't be read (error {Marshal.GetLastPInvokeError()})");
 
-    private const uint GenericRead = 0x80000000, ReadAttributes = 0x80;
-    private const uint ShareRead = 1, ShareWrite = 2, ShareDelete = 4, OpenExisting = 3, OpenReparsePoint = 0x00200000;
     private const uint ReparsePointAttribute = 0x400, DirectoryAttribute = 0x10;
-
-    // FILETIMEs are two DWORDs, so 4-byte aligned
-    [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    private struct HandleInfo
-    {
-        public uint Attributes;
-        public long Created, Accessed, Written;
-        public uint Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetFileInformationByHandle(SafeFileHandle file, out HandleInfo info);
 }

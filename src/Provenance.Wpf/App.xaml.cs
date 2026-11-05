@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Provenance.Common;
 using Provenance.Common.Credentials;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;
@@ -11,6 +12,7 @@ using Provenance.Common.Login;
 using Provenance.Common.Otp;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
+using Provenance.Wpf.Win32;
 using Serilog;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.Views.Dialogs;
@@ -33,8 +35,7 @@ public partial class App : Application
         base.OnStartup(e);
         // first thing: the update check (or a whole update) can outlast a held Shift
         bool shiftAtStart = ShiftDown();
-        var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                                  "Provenance", "logs");
+        var logDir = AppPaths.Logs;
         Directory.CreateDirectory(logDir);
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
@@ -178,11 +179,9 @@ public partial class App : Application
 
     // the async state as well, a thread that hasn't read any input yet can miss a key already held
     private static bool ShiftDown() =>
-        Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift) || (GetAsyncKeyState(VkShift) & 0x8000) != 0;
+        Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift) || (User32.GetAsyncKeyState(VkShift) & 0x8000) != 0;
 
     private const int VkShift = 0x10;
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
 
     internal static CredentialKeyUnavailableException? KeyUnavailable(Exception ex) => ex switch
     {

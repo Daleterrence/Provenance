@@ -1,12 +1,9 @@
-using System.Runtime.InteropServices;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Install;
 
 public static class MsiInstaller
 {
     // INSTALLSTATE_DEFAULT
-    public static bool IsInstalled(string productCode) => MsiQueryProductStateW(productCode) == 5;
-
-    [DllImport("msi.dll", CharSet = CharSet.Unicode)]
-    private static extern int MsiQueryProductStateW(string productCode);
+    public static bool IsInstalled(string productCode) => Msi.MsiQueryProductStateW(productCode) == 5;
 }

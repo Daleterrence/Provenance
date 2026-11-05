@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Credentials;
 
@@ -108,7 +109,7 @@ public sealed class WindowsCredentialStore
     public bool Delete(string key)
     {
         var target = FormatTarget(key);
-        if (CredDeleteW(target, CRED_TYPE_GENERIC, 0)) return true;
+        if (Advapi32.CredDeleteW(target, CRED_TYPE_GENERIC, 0)) return true;
         ThrowUnlessNotFound(Marshal.GetLastWin32Error(), $"CredDeleteW failed for '{target}'");
         return false;
     }
@@ -134,7 +135,7 @@ public sealed class WindowsCredentialStore
     {
         DateTime? cutoff = olderThan is { } age ? DateTime.UtcNow - age : null;
         if (string.IsNullOrWhiteSpace(keyPrefix)) throw new ArgumentException("prefix required", nameof(keyPrefix));
-        if (!CredEnumerateW(FormatTarget(keyPrefix) + "*", 0, out uint count, out IntPtr list))
+        if (!Advapi32.CredEnumerateW(FormatTarget(keyPrefix) + "*", 0, out uint count, out IntPtr list))
         {
             ThrowUnlessNotFound(Marshal.GetLastWin32Error(), "CredEnumerateW failed");
             return 0;
@@ -155,11 +156,11 @@ public sealed class WindowsCredentialStore
                 targets.Add(cred.TargetName);
             }
         }
-        finally { CredFree(list); }
+        finally { Advapi32.CredFree(list); }
 
         int removed = 0;
         foreach (var t in targets)
-            if (CredDeleteW(t, CRED_TYPE_GENERIC, 0)) removed++;
+            if (Advapi32.CredDeleteW(t, CRED_TYPE_GENERIC, 0)) removed++;
         return removed;
     }
 
@@ -173,13 +174,13 @@ public sealed class WindowsCredentialStore
 
     private static T WithEntry<T>(string target, T missing, Func<CREDENTIAL, T> use)
     {
-        if (!CredReadW(target, CRED_TYPE_GENERIC, 0, out var credPtr))
+        if (!Advapi32.CredReadW(target, CRED_TYPE_GENERIC, 0, out var credPtr))
         {
             ThrowUnlessNotFound(Marshal.GetLastWin32Error(), $"CredReadW failed for '{target}'");
             return missing;
         }
         try { return use(Marshal.PtrToStructure<CREDENTIAL>(credPtr)); }
-        finally { CredFree(credPtr); }
+        finally { Advapi32.CredFree(credPtr); }
     }
 
     // the caller reads the error first, before anything else can touch it
@@ -200,7 +201,7 @@ public sealed class WindowsCredentialStore
             Persist = persist,
             Comment = "Provenance stored credential",
         };
-        if (!CredWriteW(ref cred, 0))
+        if (!Advapi32.CredWriteW(ref cred, 0))
             throw new Win32Exception(Marshal.GetLastWin32Error(), $"CredWriteW failed for '{target}'");
     }
 
@@ -219,35 +220,6 @@ public sealed class WindowsCredentialStore
     private const uint CRED_PERSIST_LOCAL_MACHINE = 2;
     private const int  ERROR_NOT_FOUND            = 1168;
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct CREDENTIAL
-    {
-        public uint Flags, Type;
-        public string TargetName;
-        public string? Comment;
-        public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
-        public uint CredentialBlobSize;
-        public IntPtr CredentialBlob;
-        public uint Persist, AttributeCount;
-        public IntPtr Attributes;
-        public string? TargetAlias;
-        public string UserName;
-    }
-
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CredWriteW([In] ref CREDENTIAL credential, uint flags);
-
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CredReadW(string target, uint type, uint reservedFlag, out IntPtr credential);
-
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CredDeleteW(string target, uint type, uint reservedFlag);
-
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CredEnumerateW(string filter, uint flags, out uint count, out IntPtr credentials);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    private static extern void CredFree(IntPtr credential);
 }
 
 // prints *** for both, so a stray ToString or log line never leaks a login

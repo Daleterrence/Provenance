@@ -1,5 +1,5 @@
 using System.Globalization;
-using System.Runtime.InteropServices;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.PolFormat;
 
@@ -32,7 +32,7 @@ public static class PolLocale
         try
         {
             var name = new char[16];
-            int n = GetUserDefaultGeoName(name, name.Length);
+            int n = Kernel32.GetUserDefaultGeoName(name, name.Length);
             // an unset one comes back as a UN area code like "001", not a country
             return n == 3 && char.IsAsciiLetter(name[0]) && char.IsAsciiLetter(name[1]) ? new string(name, 0, 2) : null;
         }
@@ -48,7 +48,4 @@ public static class PolLocale
         }
         catch (ArgumentException) { return null; }
     }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetUserDefaultGeoName([Out] char[] geoName, int geoNameCount);
 }

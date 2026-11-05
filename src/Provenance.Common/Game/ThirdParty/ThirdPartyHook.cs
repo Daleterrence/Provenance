@@ -11,8 +11,7 @@ public static class ThirdPartyHook
     {
         if (!string.IsNullOrWhiteSpace(configured)) yield return configured!;
         yield return root;
-        foreach (var pf in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                                   Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) })
+        foreach (var pf in new[] { AppPaths.ProgramFilesX86, AppPaths.ProgramFiles })
             foreach (var n in names)
                 if (!string.IsNullOrEmpty(pf)) yield return Path.Combine(pf, n);
     }

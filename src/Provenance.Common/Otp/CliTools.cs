@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32.SafeHandles;
 using Provenance.Common.Security;
+using Provenance.Common.Win32;
 using Serilog;
 
 namespace Provenance.Common.Otp;
@@ -368,13 +369,13 @@ public static class CliTools
                 dwProvFlags = 0x10,          // WTD_REVOCATION_CHECK_NONE
             };
             var action = GenericVerifyV2;
-            int result = WinVerifyTrust(new IntPtr(-1), ref action, ref data);
+            int result = Wintrust.WinVerifyTrust(new IntPtr(-1), ref action, ref data);
             try
             {
-                var prov = WTHelperProvDataFromStateData(data.hWVTStateData);
-                var signer = prov == IntPtr.Zero ? IntPtr.Zero : WTHelperGetProvSignerFromChain(prov, 0, false, 0);
+                var prov = Wintrust.WTHelperProvDataFromStateData(data.hWVTStateData);
+                var signer = prov == IntPtr.Zero ? IntPtr.Zero : Wintrust.WTHelperGetProvSignerFromChain(prov, 0, false, 0);
                 ReadChain(signer, chain);
-                var stamp = signer == IntPtr.Zero ? IntPtr.Zero : WTHelperGetProvSignerFromChain(prov, 0, true, 0);
+                var stamp = signer == IntPtr.Zero ? IntPtr.Zero : Wintrust.WTHelperGetProvSignerFromChain(prov, 0, true, 0);
                 // CRYPT_PROVIDER_SGNR: a DWORD, then the FILETIME the timestamp gives. dwError comes after the chain
                 // pointer, dwSignerType and psSigner
                 int errorAt = (16 + IntPtr.Size + 4 + IntPtr.Size - 1) / IntPtr.Size * IntPtr.Size + IntPtr.Size;
@@ -388,7 +389,7 @@ public static class CliTools
             finally
             {
                 data.dwStateAction = 2;      // WTD_STATEACTION_CLOSE
-                WinVerifyTrust(new IntPtr(-1), ref action, ref data);
+                Wintrust.WinVerifyTrust(new IntPtr(-1), ref action, ref data);
             }
         }
         finally
@@ -405,7 +406,7 @@ public static class CliTools
         int count = sgnr == IntPtr.Zero ? 0 : Math.Min(Marshal.ReadInt32(sgnr, 12), 16);
         for (uint i = 0; i < count; i++)
         {
-            var cert = WTHelperGetProvCertFromChain(sgnr, i);
+            var cert = Wintrust.WTHelperGetProvCertFromChain(sgnr, i);
             var context = cert == IntPtr.Zero ? IntPtr.Zero : Marshal.ReadIntPtr(cert, IntPtr.Size);
             if (context == IntPtr.Zero) break;
             into.Add(new X509Certificate2(context));
@@ -718,43 +719,4 @@ public static class CliTools
                        TrustExplicitDistrust = 0x800B0111, CertRevoked = 0x800B010C;
 
     private static readonly Guid GenericVerifyV2 = new("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WinTrustFileInfo
-    {
-        public uint cbStruct;
-        [MarshalAs(UnmanagedType.LPWStr)] public string pcwszFilePath;
-        public IntPtr hFile;
-        public IntPtr pgKnownSubject;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WinTrustData
-    {
-        public uint cbStruct;
-        public IntPtr pPolicyCallbackData;
-        public IntPtr pSIPClientData;
-        public uint dwUIChoice;
-        public uint fdwRevocationChecks;
-        public uint dwUnionChoice;
-        public IntPtr pFile;
-        public uint dwStateAction;
-        public IntPtr hWVTStateData;
-        public IntPtr pwszURLReference;
-        public uint dwProvFlags;
-        public uint dwUIContext;
-        public IntPtr pSignatureSettings;
-    }
-
-    [DllImport("wintrust.dll", ExactSpelling = true)]
-    private static extern int WinVerifyTrust(IntPtr hwnd, ref Guid action, ref WinTrustData data);
-
-    [DllImport("wintrust.dll", ExactSpelling = true)]
-    private static extern IntPtr WTHelperProvDataFromStateData(IntPtr stateData);
-
-    [DllImport("wintrust.dll", ExactSpelling = true)]
-    private static extern IntPtr WTHelperGetProvSignerFromChain(IntPtr provData, uint signer, [MarshalAs(UnmanagedType.Bool)] bool counterSigner, uint counterSignerIndex);
-
-    [DllImport("wintrust.dll", ExactSpelling = true)]
-    private static extern IntPtr WTHelperGetProvCertFromChain(IntPtr signer, uint cert);
 }

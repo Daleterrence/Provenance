@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using MaterialDesignThemes.Wpf;
+using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Views.Dialogs;
@@ -204,16 +205,16 @@ public partial class SocialWindow : Window
     {
         if (sender is not TextBox box) return;
         var next = WithoutSelection(box).Insert(box.SelectionStart, e.Text);
-        if (PolMessage.TextBytes(next) > PolMessage.MaxTextBytes) e.Handled = true;
+        if (ShiftJis.ByteCount(next) > PolMessage.MaxTextBytes) e.Handled = true;
     }
 
     private void OnComposePaste(object sender, DataObjectPastingEventArgs e)
     {
         if (sender is not TextBox box || e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string text) return;
-        int room = PolMessage.MaxTextBytes - PolMessage.TextBytes(WithoutSelection(box));
-        if (PolMessage.TextBytes(text) <= room) return;
+        int room = PolMessage.MaxTextBytes - ShiftJis.ByteCount(WithoutSelection(box));
+        if (ShiftJis.ByteCount(text) <= room) return;
         e.CancelCommand();
-        box.SelectedText = PolMessage.FitBytes(text, Math.Max(0, room));
+        box.SelectedText = ShiftJis.Fit(text, Math.Max(0, room));
         box.CaretIndex = box.SelectionStart + box.SelectionLength;
     }
 

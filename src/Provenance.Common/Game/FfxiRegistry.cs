@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game;
 
@@ -139,24 +140,8 @@ public static class FfxiRegistry
     private static (int Width, int Height)? DisplayMode(int modeNum)
     {
         var dm = new DevMode { dmSize = (short)Marshal.SizeOf<DevMode>() };
-        return EnumDisplaySettingsW(null, modeNum, ref dm) ? (dm.dmPelsWidth, dm.dmPelsHeight) : null;
+        return User32.EnumDisplaySettingsW(null, modeNum, ref dm) ? (dm.dmPelsWidth, dm.dmPelsHeight) : null;
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct DevMode
-    {
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
-        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
-        public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
-        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
-        public short dmLogPixels;
-        public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
-        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
-    }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool EnumDisplaySettingsW(string? deviceName, int modeNum, ref DevMode devMode);
 
     public static int SaveTo(RegistryKey k, FfxiSettings s, FfxiSettings original)
     {

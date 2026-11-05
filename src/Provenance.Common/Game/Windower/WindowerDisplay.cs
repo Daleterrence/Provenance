@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -28,45 +29,15 @@ public static class WindowerDisplay
     public static (int Width, int Height) Primary()
     {
         var dev = new DisplayDevice { cb = Marshal.SizeOf<DisplayDevice>() };
-        for (int i = 0; EnumDisplayDevicesW(null, i, ref dev, 0); i++, dev = new DisplayDevice { cb = Marshal.SizeOf<DisplayDevice>() })
+        for (int i = 0; User32.EnumDisplayDevicesW(null, i, ref dev, 0); i++, dev = new DisplayDevice { cb = Marshal.SizeOf<DisplayDevice>() })
         {
             if ((dev.StateFlags & AttachedToDesktop) == 0 || (dev.StateFlags & MirroringDriver) != 0 || (dev.StateFlags & PrimaryDevice) == 0)
                 continue;
             var dm = new DevMode { dmSize = (short)Marshal.SizeOf<DevMode>() };
-            if (EnumDisplaySettingsW(dev.DeviceName, EnumRegistrySettings, ref dm) && dm.dmPelsWidth > 0 && dm.dmPelsHeight > 0)
+            if (User32.EnumDisplaySettingsW(dev.DeviceName, EnumRegistrySettings, ref dm) && dm.dmPelsWidth > 0 && dm.dmPelsHeight > 0)
                 return (dm.dmPelsWidth, dm.dmPelsHeight);
             break;
         }
         return FfxiRegistry.PrimaryDisplay();
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct DisplayDevice
-    {
-        public int cb;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
-        public int StateFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct DevMode
-    {
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
-        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
-        public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
-        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
-        public short dmLogPixels;
-        public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
-        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
-    }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool EnumDisplayDevicesW(string? device, int devNum, ref DisplayDevice displayDevice, int flags);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool EnumDisplaySettingsW(string? deviceName, int modeNum, ref DevMode devMode);
 }

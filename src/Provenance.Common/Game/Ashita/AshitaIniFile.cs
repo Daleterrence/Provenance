@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Unicode;
 using Provenance.Common.Security;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game.Ashita;
 
@@ -50,8 +51,6 @@ public sealed class AshitaIniFile
     private readonly bool looksUtf8;
     private bool utf8Bom;
 
-    static AshitaIniFile() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
     private AshitaIniFile(List<Line> lines, Encoding ansi, bool utf16, bool utf8Bom, bool looksUtf8)
     {
         this.lines = lines;
@@ -67,10 +66,7 @@ public sealed class AshitaIniFile
     public bool IsUtf16 { get; }
     public bool Changed { get; private set; }
 
-    [DllImport("kernel32.dll")]
-    private static extern int GetACP();
-
-    internal static Encoding Ansi(int codePage) => Encoding.GetEncoding(codePage == 0 ? GetACP() : codePage);
+    internal static Encoding Ansi(int codePage) => Encoding.GetEncoding(codePage == 0 ? Kernel32.GetACP() : codePage);
 
     private static bool Fits(Encoding ansi, string text) => ansi.GetString(ansi.GetBytes(text)) == text;
 

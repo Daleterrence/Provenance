@@ -2,11 +2,11 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.ExceptionServices;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Provenance.Common.Game;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Patcher;
 
@@ -474,7 +474,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
     // SE's writer, in the ANSI code page like startpol.exe's reader
     internal static bool Queue(string viewerDir, string target) =>
-        WritePrivateProfileStringA("Rename", target, target + ".tmp2", Path.Combine(viewerDir, "patch.ini"));
+        Kernel32.WritePrivateProfileStringA("Rename", target, target + ".tmp2", Path.Combine(viewerDir, "patch.ini"));
 
     // The viewer's next start, done here: startpol.exe /REPLACEPOLEXE moves queued .tmp2 files in (patch.ini ->
     // patch.bak), then pol.exe's boot step at 0x00410710 refreshes the DLLs. Throws if any are in use.
@@ -534,14 +534,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     private static IEnumerable<string> RenameSection(string ini)
     {
         var buf = new char[32767];
-        int n = GetPrivateProfileSectionW("Rename", buf, buf.Length, ini);
+        int n = Kernel32.GetPrivateProfileSectionW("Rename", buf, buf.Length, ini);
         return new string(buf, 0, n).Split('\0', StringSplitOptions.RemoveEmptyEntries);
     }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool WritePrivateProfileStringA(string section, string key, string value, string file);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetPrivateProfileSectionW(string section, char[] buffer, int size, string file);
 }

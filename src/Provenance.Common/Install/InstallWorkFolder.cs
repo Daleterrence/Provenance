@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 using Serilog;
+using static Provenance.Common.IO.FileHandles;
 using static Provenance.Common.Security.ProtectedFolders;
 
 namespace Provenance.Common.Install;
@@ -37,7 +38,7 @@ public static class InstallWorkFolder
         while (missing.TryPop(out var dir)) CreateLocked(dir, Intended(usersMayRead: true));
         // listing access so sharing applies, and read sharing only: a program that has it open to write or delete fails
         // this, and none can open it that way later
-        var held = CreateFile(full, ListDirectory | ReadControl | ReadAttributes | Synchronize, 0x1, IntPtr.Zero, 3, OpenLinkItself, IntPtr.Zero);
+        var held = OpenLinkItself(full, ListDirectory | ReadControl | ReadAttributes | Synchronize, ShareRead);
         if (held.IsInvalid)
         {
             int error = Marshal.GetLastPInvokeError();
@@ -75,16 +76,6 @@ public static class InstallWorkFolder
     }
 
     // where the handle really is, with every link on the way followed, in the form GetFullPath gives
-    private static string? RealPath(SafeFileHandle h)
-    {
-        var buf = new char[32_768];
-        int n = GetFinalPathNameByHandle(h, buf, buf.Length, 0);
-        if (n <= 0 || n >= buf.Length) return null;
-        var path = new string(buf, 0, n);
-        if (path.StartsWith(@"\\?\UNC\", StringComparison.Ordinal)) return null;
-        return Path.TrimEndingDirectorySeparator(path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path[4..] : path);
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "GetFinalPathNameByHandleW")]
-    private static extern int GetFinalPathNameByHandle(SafeFileHandle handle, char[] path, int length, int flags);
+    private static string? RealPath(SafeFileHandle h) =>
+        FinalPath(h, allowUnc: false) is { } path ? Path.TrimEndingDirectorySeparator(path) : null;
 }

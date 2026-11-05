@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
+using Provenance.Common.Win32;
+using static Provenance.Common.IO.FileHandles;
 
 namespace Provenance.Common.Install;
 
@@ -37,8 +39,7 @@ public sealed class UninstallFolder : IDisposable
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
         var parent = Path.GetDirectoryName(full) ?? throw new IOException($"{full} has no folder above it.");
-        var root = CreateFile(parent, ListDirectory | ReadAttributes | Synchronize, ShareReadWrite, IntPtr.Zero, 3 /* OPEN_EXISTING */,
-                              BackupSemantics, IntPtr.Zero);
+        var root = Open(parent, ListDirectory | ReadAttributes | Synchronize, ShareReadWrite, BackupSemantics);
         if (root.IsInvalid)
         {
             int error = Marshal.GetLastPInvokeError();
@@ -84,10 +85,10 @@ public sealed class UninstallFolder : IDisposable
     // the folder's exactly as Hold leaves it, and nobody else can change the record
     public static bool Protected(string folder, string record)
     {
-        using (var f = CreateFile(folder, ReadControl | ReadAttributes, ShareAll, IntPtr.Zero, 3, BackupSemantics | OpenReparsePoint, IntPtr.Zero))
+        using (var f = OpenLinkItself(folder, ReadControl | ReadAttributes, ShareAll))
             if (f.IsInvalid || !PlainFolder(f) || Security(f) is not { } sd || !IsLocked(sd)) return false;
-        using var r = CreateFile(record, ReadControl | ReadAttributes, ShareAll, IntPtr.Zero, 3, OpenReparsePoint, IntPtr.Zero);
-        if (r.IsInvalid || !GetFileInformationByHandle(r, out var info) || (info.FileAttributes & (0x10 | 0x400)) != 0) return false;
+        using var r = Open(record, ReadControl | ReadAttributes, ShareAll, OpenReparsePoint);
+        if (r.IsInvalid || !TryInfo(r, out var info) || (info.FileAttributes & (0x10 | 0x400)) != 0) return false;
         return Security(r) is { } rs && Trusted(rs.GetOwner(typeof(SecurityIdentifier))) && !Weak(rs);
     }
 
@@ -131,14 +132,14 @@ public sealed class UninstallFolder : IDisposable
     }
 
     private static bool PlainFolder(SafeFileHandle h) =>
-        GetFileInformationByHandle(h, out var info) && (info.FileAttributes & 0x10) != 0 && (info.FileAttributes & 0x400) == 0;
+        TryInfo(h, out var info) && (info.FileAttributes & 0x10) != 0 && (info.FileAttributes & 0x400) == 0;
 
     private static DirectorySecurity? Security(SafeFileHandle h)
     {
-        GetKernelObjectSecurity(h, 0x1 | 0x4 /* OWNER, DACL */, null, 0, out uint need);
+        Advapi32.GetKernelObjectSecurity(h, 0x1 | 0x4 /* OWNER, DACL */, null, 0, out uint need);
         if (need == 0) return null;
         var buf = new byte[need];
-        if (!GetKernelObjectSecurity(h, 0x1 | 0x4, buf, need, out _)) return null;
+        if (!Advapi32.GetKernelObjectSecurity(h, 0x1 | 0x4, buf, need, out _)) return null;
         var sec = new DirectorySecurity();
         sec.SetSecurityDescriptorBinaryForm(buf, AccessControlSections.Owner | AccessControlSections.Access);
         return sec;
@@ -156,8 +157,8 @@ public sealed class UninstallFolder : IDisposable
         var pinDacl = GCHandle.Alloc(dacl, GCHandleType.Pinned);
         try
         {
-            return SetSecurityInfo(h, 1 /* SE_FILE_OBJECT */, 0x1 | 0x4 | 0x80000000 /* OWNER, DACL, PROTECTED_DACL */,
-                                   pinOwner.AddrOfPinnedObject(), IntPtr.Zero, pinDacl.AddrOfPinnedObject(), IntPtr.Zero);
+            return Advapi32.SetSecurityInfo(h, 1 /* SE_FILE_OBJECT */, 0x1 | 0x4 | 0x80000000 /* OWNER, DACL, PROTECTED_DACL */,
+                                            pinOwner.AddrOfPinnedObject(), IntPtr.Zero, pinDacl.AddrOfPinnedObject(), IntPtr.Zero);
         }
         finally
         {
@@ -184,8 +185,8 @@ public sealed class UninstallFolder : IDisposable
                 Length = Marshal.SizeOf<ObjectAttributes>(), RootDirectory = parent.DangerousGetHandle(), ObjectName = us,
                 Attributes = 0x40 /* OBJ_CASE_INSENSITIVE */, SecurityDescriptor = pSd,
             };
-            uint status = NtCreateFile(out var h, access | Synchronize, ref oa, out _, IntPtr.Zero, 0, ShareReadWrite, disposition,
-                                       0x1 | 0x00200000 | 0x20 /* DIRECTORY_FILE, OPEN_REPARSE_POINT, SYNCHRONOUS_IO_NONALERT */, IntPtr.Zero, 0);
+            uint status = Ntdll.NtCreateFile(out var h, access | Synchronize, ref oa, out _, IntPtr.Zero, 0, ShareReadWrite, disposition,
+                                             0x1 | 0x00200000 | 0x20 /* DIRECTORY_FILE, OPEN_REPARSE_POINT, SYNCHRONOUS_IO_NONALERT */, IntPtr.Zero, 0);
             return (h, status);
         }
         finally
@@ -197,56 +198,5 @@ public sealed class UninstallFolder : IDisposable
         }
     }
 
-    private const uint ReadControl = 0x00020000, WriteDac = 0x00040000, WriteOwner = 0x00080000, Synchronize = 0x00100000;
-    private const uint ListDirectory = 0x1, ReadAttributes = 0x80;
     private const uint HoldAccess = ReadControl | WriteDac | WriteOwner | ReadAttributes | ListDirectory;
-    private const uint ShareReadWrite = 0x1 | 0x2, ShareAll = 0x1 | 0x2 | 0x4;   // no FILE_SHARE_DELETE: it can't be renamed while held
-    private const uint BackupSemantics = 0x02000000, OpenReparsePoint = 0x00200000;
-
-    // Pack = 4: a FILETIME is two DWORDs, so there's no padding before the first one
-    [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    private struct ByHandleFileInformation
-    {
-        public uint FileAttributes;
-        public long CreationTime, LastAccessTime, LastWriteTime;
-        public uint VolumeSerialNumber, FileSizeHigh, FileSizeLow, NumberOfLinks, FileIndexHigh, FileIndexLow;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct UnicodeString
-    {
-        public ushort Length, MaximumLength;
-        public IntPtr Buffer;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ObjectAttributes
-    {
-        public int Length;
-        public IntPtr RootDirectory, ObjectName;
-        public uint Attributes;
-        public IntPtr SecurityDescriptor, SecurityQualityOfService;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct IoStatusBlock
-    {
-        public IntPtr Status, Information;
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateFileW")]
-    private static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out ByHandleFileInformation info);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    private static extern bool GetKernelObjectSecurity(SafeFileHandle handle, uint info, byte[]? sd, uint length, out uint needed);
-
-    [DllImport("advapi32.dll")]
-    private static extern int SetSecurityInfo(SafeFileHandle handle, int type, uint info, IntPtr owner, IntPtr group, IntPtr dacl, IntPtr sacl);
-
-    [DllImport("ntdll.dll")]
-    private static extern uint NtCreateFile(out SafeFileHandle handle, uint access, ref ObjectAttributes attributes, out IoStatusBlock io,
-                                            IntPtr allocationSize, uint fileAttributes, uint share, uint disposition, uint options, IntPtr ea, uint eaLength);
 }

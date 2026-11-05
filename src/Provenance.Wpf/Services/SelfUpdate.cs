@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using Provenance.Common;
 using Provenance.Common.Game;
 using Provenance.Wpf.Views.Install;
 using Serilog;
@@ -215,7 +216,7 @@ public static class SelfUpdate
     }
 
     private static string FailedApplyFile =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "failed-update.txt");
+        Path.Combine(AppPaths.UserData ?? "Provenance", "failed-update.txt");
 
     // the package still waiting after the restart means Update.exe couldn't swap the files (something held one open).
     // Without a note every start would try again and fail the same way

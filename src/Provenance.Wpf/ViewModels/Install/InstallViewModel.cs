@@ -55,9 +55,9 @@ public partial class InstallViewModel : ObservableObject
         _releasePrestarts = releasePrestarts;
         _meter = new DownloadMeter(text => DownloadText = text, text => TimeLeftText = text);
         // the MSIs' own default INSTALLDIR for these 32-bit packages
-        InstallFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "PlayOnline");
+        InstallFolder = Path.Combine(AppPaths.ProgramFilesX86, "PlayOnline");
         // the installer files run as admin, so they live in an admin-only folder (LockWorkFolder), never %TEMP%
-        DownloadFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Provenance");
+        DownloadFolder = AppPaths.ProgramData;
         TotalGib = $"{GameInstaller.TotalBytes(_region) / 1024.0 / 1024 / 1024:0.0} GiB";
         UpdateSpace();
     }

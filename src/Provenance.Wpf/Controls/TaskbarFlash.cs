@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using Provenance.Wpf.Win32;
 
 namespace Provenance.Wpf.Controls;
 
@@ -23,11 +24,6 @@ internal static class TaskbarFlash
             hwnd = new WindowInteropHelper(w).Handle,
             dwFlags = flags,
         };
-        FlashWindowEx(ref fi);
+        User32.FlashWindowEx(ref fi);
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct FLASHWINFO { public uint cbSize; public IntPtr hwnd; public uint dwFlags; public uint uCount; public uint dwTimeout; }
-
-    [DllImport("user32.dll")] private static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
 }

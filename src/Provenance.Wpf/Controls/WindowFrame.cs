@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Provenance.Wpf.Services;
+using Provenance.Wpf.Win32;
 
 namespace Provenance.Wpf.Controls;
 
@@ -50,13 +51,13 @@ internal static class WindowFrame
     private static bool RoundCorners(IntPtr hwnd)
     {
         int round = DWMWCP_ROUND;
-        return DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int)) == 0;
+        return Dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int)) == 0;
     }
 
     private static void DwmEdge(Window w, IntPtr hwnd, Color edge)
     {
         int colour = w.WindowState == WindowState.Maximized ? DWMWA_COLOR_NONE : edge.R | edge.G << 8 | edge.B << 16;
-        DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref colour, sizeof(int));
+        Dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref colour, sizeof(int));
     }
 
     // whole device pixels, or at 150% the line and everything inside it sits on half pixels and goes soft
@@ -73,9 +74,9 @@ internal static class WindowFrame
     private static IntPtr Hook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (msg != WM_GETMINMAXINFO) return IntPtr.Zero;
-        var monitor = MonitorFromWindow(hwnd, MonitorDefaultToNearest);
+        var monitor = User32.MonitorFromWindow(hwnd, MonitorDefaultToNearest);
         var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
-        if (monitor == IntPtr.Zero || !GetMonitorInfo(monitor, ref mi)) return IntPtr.Zero;
+        if (monitor == IntPtr.Zero || !User32.GetMonitorInfo(monitor, ref mi)) return IntPtr.Zero;
         var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
         // the position's relative to the monitor
         mmi.ptMaxPosition.X = mi.rcWork.Left - mi.rcMonitor.Left;
@@ -108,7 +109,7 @@ internal static class WindowFrame
         for (int edge = AbeLeft; edge <= AbeBottom; edge++)
         {
             var bar = new APPBARDATA { cbSize = Marshal.SizeOf<APPBARDATA>(), uEdge = edge, rc = rc };
-            if (SHAppBarMessage(ABM_GETAUTOHIDEBAREX, ref bar) != IntPtr.Zero) bars |= 1 << edge;
+            if (Shell32.SHAppBarMessage(ABM_GETAUTOHIDEBAREX, ref bar) != IntPtr.Zero) bars |= 1 << edge;
         }
         _lastBars = (monitor, now, bars);
         return bars;
@@ -123,16 +124,6 @@ internal static class WindowFrame
     private const int AbeLeft = 0, AbeTop = 1, AbeRight = 2, AbeBottom = 3;
 
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
-    [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)]
     private struct MINMAXINFO { public POINT ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize; }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct APPBARDATA { public int cbSize; public IntPtr hWnd; public uint uCallbackMessage; public int uEdge; public RECT rc; public IntPtr lParam; }
-
-    [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
-    [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
-    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
-    [DllImport("shell32.dll")] private static extern IntPtr SHAppBarMessage(uint message, ref APPBARDATA data);
 }

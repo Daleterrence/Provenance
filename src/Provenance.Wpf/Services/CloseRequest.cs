@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
+using Provenance.Wpf.Win32;
 using Serilog;
 
 namespace Provenance.Wpf.Services;
@@ -30,13 +31,13 @@ public static class CloseRequest
             using var me = WindowsIdentity.GetCurrent();
             // this user may set it and wait on it, even from medium integrity. Nothing else
             var sddl = $"D:(A;;0x100002;;;{me.User!.Value})(A;;GA;;;SY)(A;;GA;;;BA)S:(ML;;NW;;;ME)";
-            if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out var sd, IntPtr.Zero))
+            if (!Advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out var sd, IntPtr.Zero))
                 throw new Win32Exception(Marshal.GetLastWin32Error());
             SafeWaitHandle handle;
             try
             {
                 var sa = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = sd };
-                handle = CreateEventW(ref sa, true, false, name);
+                handle = Kernel32.CreateEventW(ref sa, true, false, name);
                 int error = Marshal.GetLastWin32Error();
                 if (handle.IsInvalid) throw new Win32Exception(error);
                 if (error == AlreadyExists)
@@ -47,7 +48,7 @@ public static class CloseRequest
                     return;
                 }
             }
-            finally { LocalFree(sd); }
+            finally { Kernel32.LocalFree(sd); }
             _event = new Event(handle);
             ThreadPool.RegisterWaitForSingleObject(_event, (_, _) =>
             {
@@ -64,21 +65,4 @@ public static class CloseRequest
     }
 
     private const int AlreadyExists = 183;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct SecurityAttributes
-    {
-        public int Length;
-        public IntPtr Descriptor;
-        public int InheritHandle;
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern SafeWaitHandle CreateEventW(ref SecurityAttributes attributes, bool manualReset, bool initialState, string name);
-
-    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl, uint revision, out IntPtr descriptor, IntPtr size);
-
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr LocalFree(IntPtr memory);
 }

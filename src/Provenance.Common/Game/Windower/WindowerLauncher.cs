@@ -10,6 +10,7 @@ using Provenance.Common.Login;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
+using Provenance.Common.Win32;
 using Serilog;
 
 namespace Provenance.Common.Game.Windower;
@@ -272,7 +273,7 @@ public sealed class WindowerLauncher : IDisposable
     private void OpenHandover()
     {
         using var sa = HandoverSecurity.Create();
-        var mapping = CreateFileMappingW(new IntPtr(-1), sa.Attributes, PageReadWrite, 0, (uint)WindowerHookBlock.Size, WindowerHookBlock.MappingName);
+        var mapping = Kernel32.CreateFileMappingW(new IntPtr(-1), sa.Attributes, PageReadWrite, 0, (uint)WindowerHookBlock.Size, WindowerHookBlock.MappingName);
         int error = Marshal.GetLastPInvokeError();
         if (mapping.IsInvalid || error == ErrorAlreadyExists)
         {
@@ -281,12 +282,12 @@ public sealed class WindowerLauncher : IDisposable
             throw Shown.Mark(new IOException(BusyText));
         }
         _mapping = mapping;
-        var view = MapViewOfFile(mapping, FileMapWrite, 0, 0, (UIntPtr)WindowerHookBlock.Size);
+        var view = Kernel32.MapViewOfFile(mapping, FileMapWrite, 0, 0, (UIntPtr)WindowerHookBlock.Size);
         if (view == IntPtr.Zero) throw new IOException($"Windower's settings mapping couldn't be written (error {Marshal.GetLastPInvokeError()}).");
         try { Marshal.Copy(Block!.Bytes, 0, view, Block.Bytes.Length); }
-        finally { UnmapViewOfFile(view); }
+        finally { Kernel32.UnmapViewOfFile(view); }
 
-        var ready = CreateEventW(sa.Attributes, false, false, WindowerHookBlock.EventName);
+        var ready = Kernel32.CreateEventW(sa.Attributes, false, false, WindowerHookBlock.EventName);
         error = Marshal.GetLastPInvokeError();
         if (ready.IsInvalid || error == ErrorAlreadyExists && !OwnedByAdmins(ready))
         {
@@ -299,13 +300,13 @@ public sealed class WindowerLauncher : IDisposable
 
     private static bool OwnedByAdmins(SafeWaitHandle handle)
     {
-        if (GetSecurityInfo(handle, KernelObject, OwnerInformation, out var owner, out _, out _, out _, out var sd) != 0) return false;
+        if (Advapi32.GetSecurityInfo(handle, KernelObject, OwnerInformation, out var owner, out _, out _, out _, out var sd) != 0) return false;
         try
         {
             var sid = new SecurityIdentifier(owner);
             return sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid) || sid.IsWellKnown(WellKnownSidType.LocalSystemSid);
         }
-        finally { LocalFree(sd); }
+        finally { Kernel32.LocalFree(sd); }
     }
 
     public void ApplyTo(ProcessStartInfo psi, string launchId)
@@ -350,7 +351,7 @@ public sealed class WindowerLauncher : IDisposable
             using var me = WindowsIdentity.GetCurrent();
             bool elevated = new WindowsPrincipal(me).IsInRole(WindowsBuiltInRole.Administrator);
             var sddl = elevated ? "O:BAD:P(A;;GA;;;SY)(A;;GA;;;BA)S:(ML;;NWNRNX;;;HI)" : $"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{me.User})";
-            if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out var sd, IntPtr.Zero))
+            if (!Advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out var sd, IntPtr.Zero))
                 throw new InvalidOperationException($"Windower's handover security couldn't be made (error {Marshal.GetLastPInvokeError()}).");
             return new HandoverSecurity
             {
@@ -361,42 +362,11 @@ public sealed class WindowerLauncher : IDisposable
 
         public void Dispose()
         {
-            if (_descriptor != IntPtr.Zero) LocalFree(_descriptor);
+            if (_descriptor != IntPtr.Zero) Kernel32.LocalFree(_descriptor);
             _descriptor = IntPtr.Zero;
         }
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct SecurityAttributes
-    {
-        public int Length;
-        public IntPtr Descriptor;
-        public int Inherit;
-    }
-
     private const int ErrorAlreadyExists = 183, KernelObject = 6, OwnerInformation = 1;
     private const uint PageReadWrite = 0x04, FileMapWrite = 0x0002;
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern SafeMemoryMappedFileHandle CreateFileMappingW(IntPtr file, in SecurityAttributes sa, uint protect, uint sizeHigh,
-                                                                        uint sizeLow, string name);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr MapViewOfFile(SafeMemoryMappedFileHandle mapping, uint access, uint offsetHigh, uint offsetLow, UIntPtr size);
-
-    [DllImport("kernel32.dll")]
-    private static extern bool UnmapViewOfFile(IntPtr view);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern SafeWaitHandle CreateEventW(in SecurityAttributes sa, bool manualReset, bool initialState, string name);
-
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl, int revision, out IntPtr descriptor, IntPtr size);
-
-    [DllImport("advapi32.dll")]
-    private static extern int GetSecurityInfo(SafeHandle handle, int objectType, int info, out IntPtr owner, out IntPtr group,
-                                              out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);
-
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr LocalFree(IntPtr mem);
 }

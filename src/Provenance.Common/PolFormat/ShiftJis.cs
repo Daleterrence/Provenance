@@ -6,12 +6,32 @@ namespace Provenance.Common.PolFormat;
 // like out before the hook turns them into geta marks
 public static class ShiftJis
 {
-    private static readonly Encoding Cp932;
+    private static readonly Encoding Cp932 = Encoding.GetEncoding(932);
 
-    static ShiftJis()
+    // the hook turns what Shift-JIS hasn't got into '?', so 2 a char never lets one through. The fallback's per UTF-16
+    // unit, so an emoji counts 4 in case polcore stands in for each half
+    private static readonly Encoding Counting = Encoding.GetEncoding(932, new EncoderReplacementFallback("??"), DecoderFallback.ReplacementFallback);
+    private static readonly Encoding Strict = Encoding.GetEncoding(932, new EncoderReplacementFallback(""), DecoderFallback.ReplacementFallback);
+
+    public static int ByteCount(string text) => Counting.GetByteCount(text.Replace("\r", ""));
+
+    // a character Shift-JIS has as two bytes (Japanese, mostly), not one it hasn't got at all
+    public static bool HasDoubleByte(string text) =>
+        text.Any(c => !char.IsSurrogate(c) && Strict.GetByteCount(new[] { c }) == 2);
+
+    // never half a surrogate pair
+    public static string Fit(string text, int bytes)
     {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        Cp932 = Encoding.GetEncoding(932);
+        int used = 0, i = 0;
+        while (i < text.Length)
+        {
+            int len = char.IsSurrogatePair(text, i) ? 2 : 1;
+            int n = text[i] == '\r' ? 0 : Counting.GetByteCount(text.ToCharArray(i, len));
+            if (used + n > bytes) break;
+            used += n;
+            i += len;
+        }
+        return text[..i];
     }
 
     // a round trip, so best-fit swaps count as not fitting too

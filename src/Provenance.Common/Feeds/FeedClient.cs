@@ -107,8 +107,7 @@ public sealed class FeedClient
 
     private static string? CacheDir(string name)
     {
-        var root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return string.IsNullOrEmpty(root) ? null : Path.Combine(root, "Provenance", "cache", name);
+        return AppPaths.UserData is { } root ? Path.Combine(root, "cache", name) : null;
     }
 
     private static string Sha256Hex(string s) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(s)));

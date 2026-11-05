@@ -28,7 +28,7 @@ public sealed class SettingsService : ISettingsService
     public void RedetectRegion() => _region = null;
 
     public static string DefaultPath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "settings.json");
+        Path.Combine(AppPaths.UserData ?? "Provenance", "settings.json");
 
     public SettingsService() : this(DefaultPath) { }
 

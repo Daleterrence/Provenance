@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Provenance.Common.Social;
 
 // State is "read" (body downloaded), "pending", "failed", "realtime" or "local" (from the game's message store, not
@@ -31,37 +29,6 @@ public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, 
 
     // FFXI only prints a message's text when it's 300 bytes or less, in the Shift-JIS the hook sends
     public const int MaxTextBytes = 300;
-
-    private static readonly Encoding Sjis = MakeSjis("??"), SjisOnly = MakeSjis("");
-
-    // the hook turns what Shift-JIS hasn't got into '?', so 2 a char never lets one through. The fallback's per UTF-16
-    // unit, so an emoji counts 4 in case polcore stands in for each half
-    private static Encoding MakeSjis(string missing)
-    {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        return Encoding.GetEncoding(932, new EncoderReplacementFallback(missing), DecoderFallback.ReplacementFallback);
-    }
-
-    public static int TextBytes(string text) => Sjis.GetByteCount(text.Replace("\r", ""));
-
-    // a character Shift-JIS has as two bytes (Japanese, mostly), not one it hasn't got at all
-    public static bool HasDoubleByte(string text) =>
-        text.Any(c => !char.IsSurrogate(c) && SjisOnly.GetByteCount(new[] { c }) == 2);
-
-    // never half a surrogate pair
-    public static string FitBytes(string text, int bytes)
-    {
-        int used = 0, i = 0;
-        while (i < text.Length)
-        {
-            int len = char.IsSurrogatePair(text, i) ? 2 : 1;
-            int n = text[i] == '\r' ? 0 : Sjis.GetByteCount(text.ToCharArray(i, len));
-            if (used + n > bytes) break;
-            used += n;
-            i += len;
-        }
-        return text[..i];
-    }
 }
 
 public sealed record PolStoredLines(IReadOnlyList<PolMessage> Received, IReadOnlyList<PolSentLine> Sent);

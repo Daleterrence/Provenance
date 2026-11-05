@@ -25,9 +25,8 @@ public sealed class CharacterNames
     {
         if (path is null)
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            if (string.IsNullOrEmpty(appData)) return;
-            path = Path.Combine(appData, "Provenance", "characters.json");
+            if (AppPaths.UserData is not { } userData) return;
+            path = Path.Combine(userData, "characters.json");
         }
         _path = path;
         Refresh();

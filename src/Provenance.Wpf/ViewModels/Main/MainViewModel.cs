@@ -1602,7 +1602,7 @@ public partial class MainViewModel : ObservableObject
         // looked for in the app folder first) hands it to the user's own shell.
         try
         {
-            var psi = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")) { UseShellExecute = false };
+            var psi = new ProcessStartInfo(AppPaths.ExplorerExe) { UseShellExecute = false };
             psi.ArgumentList.Add(u.AbsoluteUri);
             Process.Start(psi);
         }

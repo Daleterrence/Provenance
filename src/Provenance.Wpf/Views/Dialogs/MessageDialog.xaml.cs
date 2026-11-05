@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using Provenance.Common;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Services;
 
@@ -94,7 +95,7 @@ public partial class MessageDialog : Window
 
     private void OnOpenLogs(object sender, RoutedEventArgs e)
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Provenance", "logs");
+        var dir = AppPaths.Logs;
         if (Directory.Exists(dir)) Explorer.ShowFolder(dir);
     }
 

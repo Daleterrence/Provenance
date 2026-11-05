@@ -1,6 +1,6 @@
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using Provenance.Common.Security;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game.Ashita;
 
@@ -293,18 +293,12 @@ public static class AshitaBootFiles
         string Get(string key)
         {
             var buf = new byte[4096];
-            return ansi.GetString(buf, 0, GetPrivateProfileStringA("ashita.boot", key, "", buf, buf.Length, path));
+            return ansi.GetString(buf, 0, Kernel32.GetPrivateProfileStringA("ashita.boot", key, "", buf, buf.Length, path));
         }
         var section = new byte[65536];
-        int n = GetPrivateProfileSectionA("ashita.polplugins", section, section.Length, path);
+        int n = Kernel32.GetPrivateProfileSectionA("ashita.polplugins", section, section.Length, path);
         bool takeover = ansi.GetString(section, 0, n).Split('\0').Select(e => e.Split('=', 2))
             .Any(kv => kv.Length == 2 && Takeovers.Contains(kv[0].Trim(), StringComparer.OrdinalIgnoreCase) && kv[1].Trim() == "1");
         return Get("file") == polExe && Get("command") == PlainCommand && !takeover;
     }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-    private static extern int GetPrivateProfileStringA(string section, string key, string fallback, byte[] buffer, int size, string path);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-    private static extern int GetPrivateProfileSectionA(string section, byte[] buffer, int size, string path);
 }

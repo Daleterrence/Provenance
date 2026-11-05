@@ -186,7 +186,7 @@ public static class OtpSources
     {
         try
         {
-            var psi = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")) { UseShellExecute = false };
+            var psi = new ProcessStartInfo(AppPaths.ExplorerExe) { UseShellExecute = false };
             psi.ArgumentList.Add(OnePasswordSettingsLink);
             using var p = Process.Start(psi);
             return true;
@@ -522,7 +522,7 @@ public static class OtpSources
     private static string? FindKeePassXcProxy()
     {
         // ProgramW6432, as this is a 32-bit app and ProgramFiles is the (x86) one
-        foreach (var root in new[] { Environment.GetEnvironmentVariable("ProgramW6432"), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) })
+        foreach (var root in new[] { Environment.GetEnvironmentVariable("ProgramW6432"), AppPaths.ProgramFiles })
             if (root is { Length: > 0 } && Path.Combine(root, "KeePassXC", "keepassxc-proxy.exe") is var p && File.Exists(p) && PathSafety.IsAdminOnly(p))
                 return p;
         return null;
@@ -563,7 +563,7 @@ public static class OtpSources
     // built from nothing: Windows' own folders on PATH, the profile in Provenance's locked home, nothing else the user's set
     internal static void ToolEnvironment(IDictionary<string, string?> env)
     {
-        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var windows = AppPaths.Windows;
         var system = Environment.SystemDirectory;
         var profile = CliTools.Home;
         env.Clear();
@@ -577,7 +577,7 @@ public static class OtpSources
         env["HOMEPATH"] = profile[(env["HOMEDRIVE"]!.Length)..];
         env["APPDATA"] = Path.Combine(profile, "AppData", "Roaming");
         env["LOCALAPPDATA"] = Path.Combine(profile, "AppData", "Local");
-        env["ProgramData"] = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        env["ProgramData"] = AppPaths.CommonAppData;
         env["TEMP"] = env["TMP"] = Path.Combine(profile, "Temp");
         env["USERNAME"] = Environment.UserName;
         env["USERDOMAIN"] = Environment.UserDomainName;

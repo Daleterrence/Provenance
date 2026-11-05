@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using Provenance.Common;
 
 namespace Provenance.Wpf.Services;
 
@@ -7,7 +8,7 @@ namespace Provenance.Wpf.Services;
 // quotes, explorer reads a comma in a bare one as another switch
 internal static class Explorer
 {
-    private static string Exe => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+    private static string Exe => AppPaths.ExplorerExe;
 
     public static void ShowFolder(string folder) => Start($"\"{folder.TrimEnd('\\')}\"");
 

@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Security;
 
@@ -15,9 +15,9 @@ public static class LinkCheck
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         if (Path.GetPathRoot(full) is { } root && Path.TrimEndingDirectorySeparator(root) == full) return false;
-        var handle = FindFirstFileW(LongPath(full), out var data);
+        var handle = Kernel32.FindFirstFileW(LongPath(full), out var data);
         if (handle == -1) return false;
-        FindClose(handle);
+        Kernel32.FindClose(handle);
         return IsRedirect(data.Attributes, data.ReparseTag);
     }
 
@@ -50,19 +50,4 @@ public static class LinkCheck
             return full;
         return full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full[2..] : @"\\?\" + full;
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct FindData
-    {
-        public uint Attributes, CreatedLow, CreatedHigh, AccessedLow, AccessedHigh, WrittenLow, WrittenHigh, SizeHigh, SizeLow;
-        public uint ReparseTag, Reserved;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Name;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string ShortName;
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr FindFirstFileW(string name, out FindData data);
-
-    [DllImport("kernel32.dll")]
-    private static extern bool FindClose(IntPtr handle);
 }

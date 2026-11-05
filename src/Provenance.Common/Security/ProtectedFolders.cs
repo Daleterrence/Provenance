@@ -5,7 +5,9 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
+using Provenance.Common.Win32;
 using Serilog;
+using static Provenance.Common.IO.FileHandles;
 
 namespace Provenance.Common.Security;
 
@@ -40,7 +42,7 @@ public static class ProtectedFolders
 
     internal static bool SetTokenOwner(SecurityIdentifier owner)
     {
-        if (!OpenProcessToken(new IntPtr(-1), 0x0080 | 0x0008 /* TOKEN_ADJUST_DEFAULT, TOKEN_QUERY */, out var token))
+        if (!Advapi32.OpenProcessToken(new IntPtr(-1), 0x0080 | 0x0008 /* TOKEN_ADJUST_DEFAULT, TOKEN_QUERY */, out var token))
         {
             Log.Warning("Could not open this process's token to set the owner of new files ({Error})", Marshal.GetLastPInvokeError());
             return false;
@@ -53,7 +55,7 @@ public static class ProtectedFolders
             try
             {
                 var tokenOwner = pin.AddrOfPinnedObject();   // TOKEN_OWNER is just the SID pointer
-                if (SetTokenInformation(token, 4 /* TokenOwner */, ref tokenOwner, IntPtr.Size)) return true;
+                if (Advapi32.SetTokenInformation(token, 4 /* TokenOwner */, ref tokenOwner, IntPtr.Size)) return true;
                 Log.Warning("New files couldn't be made {Owner}'s ({Error})", owner.Value, Marshal.GetLastPInvokeError());
                 return false;
             }
@@ -136,8 +138,7 @@ public static class ProtectedFolders
 
     private static string Ensure()
     {
-        var root = _rootForTest ??
-                   Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Provenance");
+        var root = _rootForTest ?? AppPaths.ProgramData;
         var bin = Path.Combine(root, BinName);
         // any user can make folders in ProgramData, so a "Provenance" some other program made gets moved aside first
         var (held, _) = Hold(root, usersMayRead: true, bin: null);
@@ -197,7 +198,7 @@ public static class ProtectedFolders
         for (int tries = 0; held is null; tries++)
         {
             if (tries == 4) throw new IOException($"Something else keeps making {path} before Provenance can.");
-            var h = CreateFile(path, HoldAccess, ShareReadWrite, IntPtr.Zero, 3 /* OPEN_EXISTING */, OpenLinkItself, IntPtr.Zero);
+            var h = OpenLinkItself(path, HoldAccess, ShareReadWrite);
             if (h.IsInvalid)
             {
                 int error = Marshal.GetLastPInvokeError();
@@ -237,11 +238,11 @@ public static class ProtectedFolders
     // the root goes beside itself in ProgramData, everything else into the bin
     private static void MoveAside(string path, string? bin)
     {
-        var h = CreateFile(path, Delete | ReadControl | ReadAttributes | Synchronize, ShareAll, IntPtr.Zero, 3, OpenLinkItself, IntPtr.Zero);
+        var h = OpenLinkItself(path, Delete | ReadControl | ReadAttributes | Synchronize, ShareAll);
         if (h.IsInvalid && Marshal.GetLastPInvokeError() == 5)
         {
             h.Dispose();
-            h = CreateFile(path, Delete | ReadAttributes | Synchronize, ShareAll, IntPtr.Zero, 3, OpenLinkItself, IntPtr.Zero);
+            h = OpenLinkItself(path, Delete | ReadAttributes | Synchronize, ShareAll);
         }
         using (h)
         {
@@ -259,7 +260,7 @@ public static class ProtectedFolders
             {
                 var name = Path.GetFileName(path) + ".untrusted-" + Guid.NewGuid().ToString("N")[..8];
                 to = Path.Combine(Path.GetDirectoryName(path)!, name);
-                using var parent = CreateFile(Path.GetDirectoryName(path)!, ListDirectory | Synchronize, ShareAll, IntPtr.Zero, 3, OpenLinkItself, IntPtr.Zero);
+                using var parent = OpenLinkItself(Path.GetDirectoryName(path)!, ListDirectory | Synchronize, ShareAll);
                 moveError = parent.IsInvalid ? Marshal.GetLastPInvokeError() : Rename(h, parent, name);
             }
             else
@@ -430,7 +431,7 @@ public static class ProtectedFolders
                 var (h, status) = OpenAt(held, name, Delete | ReadAttributes, 0);
                 using (h)
                 {
-                    if (status != 0 || !GetFileInformationByHandle(h, out var info)) continue;
+                    if (status != 0 || !TryInfo(h, out var info)) continue;
                     if ((info.FileAttributes & 0x10) != 0 && (info.FileAttributes & 0x400) == 0)
                     {
                         var (list, ls) = OpenAt(held, name, ListDirectory | ReadAttributes, DirectoryFile);
@@ -465,9 +466,9 @@ public static class ProtectedFolders
         try
         {
             Marshal.WriteInt32(buf, 0x1 | 0x2 | 0x10);   // DELETE, POSIX_SEMANTICS, IGNORE_READONLY_ATTRIBUTE
-            if (SetFileInformationByHandle(h, 21 /* FileDispositionInfoEx */, buf, 4)) return true;
+            if (Kernel32.SetFileInformationByHandle(h, 21 /* FileDispositionInfoEx */, buf, 4)) return true;
             Marshal.WriteInt32(buf, 1);
-            return SetFileInformationByHandle(h, 4 /* FileDispositionInfo */, buf, 4);
+            return Kernel32.SetFileInformationByHandle(h, 4 /* FileDispositionInfo */, buf, 4);
         }
         finally { Marshal.FreeHGlobal(buf); }
     }
@@ -500,13 +501,13 @@ public static class ProtectedFolders
 
     internal static Seen Look(SafeFileHandle h)
     {
-        if (!GetFileInformationByHandle(h, out var info)) return default;
+        if (!TryInfo(h, out var info)) return default;
         byte[]? raw = null;
-        GetKernelObjectSecurity(h, 0x1 | 0x4 /* OWNER, DACL */, null, 0, out uint need);
+        Advapi32.GetKernelObjectSecurity(h, 0x1 | 0x4 /* OWNER, DACL */, null, 0, out uint need);
         if (need > 0)
         {
             var buf = new byte[need];
-            if (GetKernelObjectSecurity(h, 0x1 | 0x4, buf, need, out _)) raw = buf;
+            if (Advapi32.GetKernelObjectSecurity(h, 0x1 | 0x4, buf, need, out _)) raw = buf;
         }
         DirectorySecurity? sec = null;
         if (raw is not null)
@@ -531,8 +532,8 @@ public static class ProtectedFolders
         var pinDacl = GCHandle.Alloc(dacl, GCHandleType.Pinned);
         try
         {
-            error = SetSecurityInfo(h, 1 /* SE_FILE_OBJECT */, 0x1 | 0x4 | 0x80000000 /* OWNER, DACL, PROTECTED_DACL */,
-                                    pinOwner.AddrOfPinnedObject(), IntPtr.Zero, pinDacl.AddrOfPinnedObject(), IntPtr.Zero);
+            error = Advapi32.SetSecurityInfo(h, 1 /* SE_FILE_OBJECT */, 0x1 | 0x4 | 0x80000000 /* OWNER, DACL, PROTECTED_DACL */,
+                                             pinOwner.AddrOfPinnedObject(), IntPtr.Zero, pinDacl.AddrOfPinnedObject(), IntPtr.Zero);
             return error == 0;
         }
         finally
@@ -546,7 +547,7 @@ public static class ProtectedFolders
     {
         var names = new List<string>();
         var buf = new byte[64 * 1024];
-        for (bool first = true; GetFileInformationByHandleEx(dir, first ? 15 : 14 /* FileFullDirectory(Restart)Info */, buf, buf.Length); first = false)
+        for (bool first = true; Kernel32.GetFileInformationByHandleEx(dir, first ? 15 : 14 /* FileFullDirectory(Restart)Info */, buf, buf.Length); first = false)
         {
             for (int off = 0; ;)
             {
@@ -580,8 +581,8 @@ public static class ProtectedFolders
                 Length = Marshal.SizeOf<ObjectAttributes>(), RootDirectory = parent.DangerousGetHandle(), ObjectName = us, Attributes = 0x40 /* OBJ_CASE_INSENSITIVE */,
                 SecurityDescriptor = pSd,
             };
-            uint status = NtCreateFile(out var h, access | Synchronize, ref oa, out _, IntPtr.Zero, 0, share, disposition,
-                                       options | 0x00200000 | 0x20 /* OPEN_REPARSE_POINT, SYNCHRONOUS_IO_NONALERT */, IntPtr.Zero, 0);
+            uint status = Ntdll.NtCreateFile(out var h, access | Synchronize, ref oa, out _, IntPtr.Zero, 0, share, disposition,
+                                             options | 0x00200000 | 0x20 /* OPEN_REPARSE_POINT, SYNCHRONOUS_IO_NONALERT */, IntPtr.Zero, 0);
             return (h, status);
         }
         finally
@@ -607,8 +608,8 @@ public static class ProtectedFolders
             Marshal.WriteIntPtr(buf, offRoot, dir.DangerousGetHandle());
             Marshal.WriteInt32(buf, offLength, name.Length * 2);
             Marshal.Copy(name.ToCharArray(), 0, buf + offName, name.Length);
-            uint status = NtSetInformationFile(h, out _, buf, size, 10 /* FileRenameInformation */);
-            return status == 0 ? 0 : RtlNtStatusToDosError(status);
+            uint status = Ntdll.NtSetInformationFile(h, out _, buf, size, 10 /* FileRenameInformation */);
+            return status == 0 ? 0 : Ntdll.RtlNtStatusToDosError(status);
         }
         finally
         {
@@ -627,8 +628,8 @@ public static class ProtectedFolders
         try
         {
             Marshal.Copy(sd, 0, pSd, sd.Length);
-            var sa = new SecurityAttributes { nLength = Marshal.SizeOf<SecurityAttributes>(), lpSecurityDescriptor = pSd };
-            if (CreateDirectory(path, ref sa)) return true;
+            var sa = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = pSd };
+            if (Kernel32.CreateDirectoryW(path, in sa)) return true;
             int error = Marshal.GetLastPInvokeError();
             if (error == 183) return false;   // ERROR_ALREADY_EXISTS
             throw new IOException($"Couldn't make {path}.", new Win32Exception(error));
@@ -636,91 +637,10 @@ public static class ProtectedFolders
         finally { Marshal.FreeHGlobal(pSd); }
     }
 
-    private const uint Delete = 0x00010000, WriteDac = 0x00040000, WriteOwner = 0x00080000;
-    internal const uint ReadControl = 0x00020000, Synchronize = 0x00100000;
-    internal const uint ListDirectory = 0x1, ReadAttributes = 0x80;
     private const uint DirectoryFile = 0x1;
     private const uint LookAccess = ReadControl | ReadAttributes;
     private const uint HoldAccess = ReadControl | WriteDac | WriteOwner | ReadAttributes | Synchronize;   // none of it is share-checked
-    private const uint ShareReadWrite = 0x1 | 0x2, ShareAll = 0x1 | 0x2 | 0x4;   // no FILE_SHARE_DELETE: it can't be renamed while held
-    internal const uint OpenLinkItself = 0x00200000 | 0x02000000;   // FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS
     private const uint StatusAccessDenied = 0xC0000022;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct SecurityAttributes
-    {
-        public int nLength;
-        public IntPtr lpSecurityDescriptor;
-        public int bInheritHandle;
-    }
-
-    // Pack = 4: a FILETIME is two DWORDs, so there's no padding before the first one
-    [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    private struct ByHandleFileInformation
-    {
-        public uint FileAttributes;
-        public long CreationTime, LastAccessTime, LastWriteTime;
-        public uint VolumeSerialNumber, FileSizeHigh, FileSizeLow, NumberOfLinks, FileIndexHigh, FileIndexLow;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct UnicodeString
-    {
-        public ushort Length, MaximumLength;
-        public IntPtr Buffer;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ObjectAttributes
-    {
-        public int Length;
-        public IntPtr RootDirectory, ObjectName;
-        public uint Attributes;
-        public IntPtr SecurityDescriptor, SecurityQualityOfService;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct IoStatusBlock
-    {
-        public IntPtr Status, Information;
-    }
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    private static extern bool OpenProcessToken(IntPtr process, uint access, out SafeAccessTokenHandle token);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    private static extern bool SetTokenInformation(SafeAccessTokenHandle token, int infoClass, ref IntPtr info, int length);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateDirectoryW")]
-    private static extern bool CreateDirectory(string path, ref SecurityAttributes security);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateFileW")]
-    internal static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out ByHandleFileInformation info);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int infoClass, byte[] buffer, int size);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetFileInformationByHandle(SafeFileHandle handle, int infoClass, IntPtr buffer, int size);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    private static extern bool GetKernelObjectSecurity(SafeFileHandle handle, uint info, byte[]? sd, uint length, out uint needed);
-
-    [DllImport("advapi32.dll")]
-    private static extern int SetSecurityInfo(SafeFileHandle handle, int type, uint info, IntPtr owner, IntPtr group, IntPtr dacl, IntPtr sacl);
-
-    [DllImport("ntdll.dll")]
-    private static extern uint NtSetInformationFile(SafeFileHandle handle, out IoStatusBlock io, IntPtr info, int length, int infoClass);
-
-    [DllImport("ntdll.dll")]
-    private static extern int RtlNtStatusToDosError(uint status);
-
-    [DllImport("ntdll.dll")]
-    private static extern uint NtCreateFile(out SafeFileHandle handle, uint access, ref ObjectAttributes attributes, out IoStatusBlock io,
-                                            IntPtr allocationSize, uint fileAttributes, uint share, uint disposition, uint options, IntPtr ea, uint eaLength);
 
     internal static DirectorySecurity Intended(bool usersMayRead)
     {

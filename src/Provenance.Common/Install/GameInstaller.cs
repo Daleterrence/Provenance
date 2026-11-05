@@ -278,7 +278,7 @@ public sealed class GameInstaller
         }
 
         // the FFXI package's own DISM step, Sysnative so a 32-bit host gets the 64-bit DISM
-        var dism = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+        var dism = Path.Combine(AppPaths.Windows,
             Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess ? "Sysnative" : "System32", "dism.exe");
         bool restartPending = false;
         if (File.Exists(dism))
@@ -314,7 +314,7 @@ public sealed class GameInstaller
     // would change nothing and just add minutes
     public static bool DirectXJun2010Present()
     {
-        var sys = Environment.GetFolderPath(Environment.SpecialFolder.SystemX86);
+        var sys = AppPaths.SystemX86;
         return new[] { "d3dx9_43.dll", "xinput1_3.dll", "D3DCompiler_43.dll", "d3dx11_43.dll", "XAudio2_7.dll", "X3DAudio1_7.dll" }
             .All(f => File.Exists(Path.Combine(sys, f)));
     }

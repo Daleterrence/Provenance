@@ -4,6 +4,7 @@ using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Install;
 
@@ -20,34 +21,34 @@ public sealed class MsiPackage : IDisposable
     public MsiPackage(string path)
     {
         _path = Path.GetFullPath(path);
-        if (MsiOpenDatabaseW(_path, IntPtr.Zero /* MSIDBOPEN_READONLY */, out _db) != 0)
+        if (Msi.MsiOpenDatabaseW(_path, IntPtr.Zero /* MSIDBOPEN_READONLY */, out _db) != 0)
             throw new InvalidDataException($"{Path.GetFileName(path)} is not a readable installer package.");
     }
 
-    public void Dispose() => MsiCloseHandle(_db);
+    public void Dispose() => Msi.MsiCloseHandle(_db);
 
     public List<string[]> Query(string sql)
     {
         var rows = new List<string[]>();
-        uint r = MsiDatabaseOpenViewW(_db, sql, out var view);
+        uint r = Msi.MsiDatabaseOpenViewW(_db, sql, out var view);
         if (r == 1615 /* ERROR_BAD_QUERY_SYNTAX: no such table in this package */) return rows;
         if (r != 0) throw Unreadable(r);
         try
         {
-            if ((r = MsiViewExecute(view, IntPtr.Zero)) != 0) throw Unreadable(r);
-            while ((r = MsiViewFetch(view, out var rec)) != 259 /* ERROR_NO_MORE_ITEMS */)
+            if ((r = Msi.MsiViewExecute(view, IntPtr.Zero)) != 0) throw Unreadable(r);
+            while ((r = Msi.MsiViewFetch(view, out var rec)) != 259 /* ERROR_NO_MORE_ITEMS */)
             {
                 if (r != 0) throw Unreadable(r);
                 try
                 {
-                    var row = new string[MsiRecordGetFieldCount(rec)];
+                    var row = new string[Msi.MsiRecordGetFieldCount(rec)];
                     for (int i = 0; i < row.Length; i++) row[i] = RecordString(rec, (uint)i + 1);
                     rows.Add(row);
                 }
-                finally { MsiCloseHandle(rec); }
+                finally { Msi.MsiCloseHandle(rec); }
             }
         }
-        finally { MsiCloseHandle(view); }
+        finally { Msi.MsiCloseHandle(view); }
         return rows;
     }
 
@@ -280,7 +281,7 @@ public sealed class MsiPackage : IDisposable
             var lib = files[comps[r[1]].KeyPath];
             if (sandbox != null) { if (!keepExisting) typeLibs++; continue; }   // a sandbox can't register one, or check it
             if (keepExisting && TypeLibIntact(lib.Path)) continue;
-            Marshal.ThrowExceptionForHR(LoadTypeLibEx(lib.Path, 1 /* REGKIND_REGISTER */, out var tl));
+            Marshal.ThrowExceptionForHR(Oleaut32.LoadTypeLibEx(lib.Path, 1 /* REGKIND_REGISTER */, out var tl));
             if (tl != null) Marshal.ReleaseComObject(tl);
             // REGKIND_REGISTER says S_OK even when the registry write was refused, so a repair looks for itself
             if (keepExisting && !TypeLibIntact(lib.Path))
@@ -339,7 +340,7 @@ public sealed class MsiPackage : IDisposable
     // registered, and at this file
     private static bool TypeLibIntact(string path)
     {
-        if (LoadTypeLibEx(path, 2 /* REGKIND_NONE */, out var tl) != 0 || tl is not ITypeLib typeLib) return false;
+        if (Oleaut32.LoadTypeLibEx(path, 2 /* REGKIND_NONE */, out var tl) != 0 || tl is not ITypeLib typeLib) return false;
         try
         {
             typeLib.GetLibAttr(out var pa);
@@ -440,7 +441,7 @@ public sealed class MsiPackage : IDisposable
         foreach (var r in Query("SELECT `LibID`,`Component_` FROM `TypeLib`"))
         {
             if (!on(r[1]) || !files.TryGetValue(comps[r[1]].KeyPath, out var lib)) continue;
-            if (LoadTypeLibEx(lib.Path, 2 /* REGKIND_NONE */, out var tl) == 0 && tl is ITypeLib typeLib)
+            if (Oleaut32.LoadTypeLibEx(lib.Path, 2 /* REGKIND_NONE */, out var tl) == 0 && tl is ITypeLib typeLib)
             {
                 typeLib.GetLibAttr(out var pa);
                 var a = Marshal.PtrToStructure<TYPELIBATTR>(pa);
@@ -487,7 +488,7 @@ public sealed class MsiPackage : IDisposable
                               Environment.SpecialFolder.CommonStartMenu, Environment.SpecialFolder.ProgramFilesX86,
                               Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.CommonProgramFilesX86,
                               Environment.SpecialFolder.Windows, Environment.SpecialFolder.SystemX86 }
-            .Select(f => Path.TrimEndingDirectorySeparator(Environment.GetFolderPath(f))).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Select(f => Path.TrimEndingDirectorySeparator(AppPaths.Special(f))).ToHashSet(StringComparer.OrdinalIgnoreCase);
         lines.AddRange(folders.Where(f => !special.Contains(f) && Path.GetPathRoot(f) != f + "\\" && !InTree(f))
                               .OrderByDescending(f => f.Length).Select(f => "D " + f));
         File.WriteAllText(list, string.Join("\r\n", lines) + "\r\n", Encoding.Unicode);
@@ -520,24 +521,24 @@ public sealed class MsiPackage : IDisposable
 
     private bool CopyStream(string sql, Stream dest)
     {
-        if (MsiDatabaseOpenViewW(_db, sql, out var view) != 0) return false;
+        if (Msi.MsiDatabaseOpenViewW(_db, sql, out var view) != 0) return false;
         try
         {
-            if (MsiViewExecute(view, IntPtr.Zero) != 0 || MsiViewFetch(view, out var rec) != 0) return false;
+            if (Msi.MsiViewExecute(view, IntPtr.Zero) != 0 || Msi.MsiViewFetch(view, out var rec) != 0) return false;
             try
             {
                 var buf = new byte[1 << 16];
                 while (true)
                 {
                     uint n = (uint)buf.Length;
-                    if (MsiRecordReadStream(rec, 1, buf, ref n) != 0) throw Shown.Mark(new IOException("Provenance couldn't read part of an installer package. Try again."));
+                    if (Msi.MsiRecordReadStream(rec, 1, buf, ref n) != 0) throw Shown.Mark(new IOException("Provenance couldn't read part of an installer package. Try again."));
                     if (n == 0) return true;
                     dest.Write(buf, 0, (int)n);
                 }
             }
-            finally { MsiCloseHandle(rec); }
+            finally { Msi.MsiCloseHandle(rec); }
         }
-        finally { MsiCloseHandle(view); }
+        finally { Msi.MsiCloseHandle(view); }
     }
 
     private static bool Condition(string condition, IReadOnlyDictionary<string, string> props)
@@ -558,7 +559,7 @@ public sealed class MsiPackage : IDisposable
     private Dictionary<string, string> ResolveDirectories(Dictionary<string, string> props, Sandbox? sandbox)
     {
         var rows = Query("SELECT `Directory`,`Directory_Parent`,`DefaultDir` FROM `Directory`").ToDictionary(r => r[0], r => r);
-        static string Sys(Environment.SpecialFolder f) => Environment.GetFolderPath(f).TrimEnd('\\') + "\\";
+        static string Sys(Environment.SpecialFolder f) => AppPaths.Special(f).TrimEnd('\\') + "\\";
         var known = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["ProgramFilesFolder"] = Sys(Environment.SpecialFolder.ProgramFilesX86),
@@ -696,28 +697,28 @@ public sealed class MsiPackage : IDisposable
         try
         {
             File.SetAttributes(tmp, File.GetAttributes(tmp) & ~FileAttributes.ReadOnly);
-            Check(MsiOpenDatabaseW(tmp, (IntPtr)1 /* MSIDBOPEN_TRANSACT */, out var db), "open");
+            Check(Msi.MsiOpenDatabaseW(tmp, (IntPtr)1 /* MSIDBOPEN_TRANSACT */, out var db), "open");
             try
             {
                 foreach (var name in embedded)
                 {
-                    Check(MsiDatabaseOpenViewW(db, "SELECT `Name`,`Data` FROM `_Streams` WHERE `Name`=?", out var view), "view");
-                    var arg = MsiCreateRecord(1);
+                    Check(Msi.MsiDatabaseOpenViewW(db, "SELECT `Name`,`Data` FROM `_Streams` WHERE `Name`=?", out var view), "view");
+                    var arg = Msi.MsiCreateRecord(1);
                     try
                     {
-                        Check(MsiRecordSetStringW(arg, 1, name), "name");
-                        Check(MsiViewExecute(view, arg), "query");
-                        uint r = MsiViewFetch(view, out var rec);
+                        Check(Msi.MsiRecordSetStringW(arg, 1, name), "name");
+                        Check(Msi.MsiViewExecute(view, arg), "query");
+                        uint r = Msi.MsiViewFetch(view, out var rec);
                         if (r == 259 /* ERROR_NO_MORE_ITEMS */) throw new InvalidDataException($"The package has no embedded cabinet {name}.");
                         Check(r, "fetch");
-                        try { Check(MsiViewModify(view, 6 /* MSIMODIFY_DELETE */, rec), "delete " + name); }
-                        finally { MsiCloseHandle(rec); }
+                        try { Check(Msi.MsiViewModify(view, 6 /* MSIMODIFY_DELETE */, rec), "delete " + name); }
+                        finally { Msi.MsiCloseHandle(rec); }
                     }
-                    finally { MsiCloseHandle(arg); MsiCloseHandle(view); }
+                    finally { Msi.MsiCloseHandle(arg); Msi.MsiCloseHandle(view); }
                 }
-                Check(MsiDatabaseCommit(db), "commit");
+                Check(Msi.MsiDatabaseCommit(db), "commit");
             }
-            finally { MsiCloseHandle(db); }
+            finally { Msi.MsiCloseHandle(db); }
             File.Move(tmp, target, overwrite: true);
         }
         catch
@@ -751,11 +752,11 @@ public sealed class MsiPackage : IDisposable
     {
         uint len = 0;
         var sb = new StringBuilder(1);
-        uint r = MsiRecordGetStringW(rec, field, sb, ref len);
+        uint r = Msi.MsiRecordGetStringW(rec, field, sb, ref len);
         if (r == 234 /* ERROR_MORE_DATA */)
         {
             sb = new StringBuilder((int)++len);
-            r = MsiRecordGetStringW(rec, field, sb, ref len);
+            r = Msi.MsiRecordGetStringW(rec, field, sb, ref len);
         }
         return r == 0 ? sb.ToString() : "";
     }
@@ -785,20 +786,4 @@ public sealed class MsiPackage : IDisposable
         void Resolve(IntPtr hwnd, uint flags);
         void SetPath([MarshalAs(UnmanagedType.LPWStr)] string file);
     }
-
-    [DllImport("oleaut32.dll", CharSet = CharSet.Unicode)]
-    private static extern int LoadTypeLibEx(string file, int regKind, [MarshalAs(UnmanagedType.Interface)] out object? typeLib);
-
-    [DllImport("msi.dll", CharSet = CharSet.Unicode)] private static extern uint MsiOpenDatabaseW(string path, IntPtr persist, out IntPtr db);
-    [DllImport("msi.dll", CharSet = CharSet.Unicode)] private static extern uint MsiDatabaseOpenViewW(IntPtr db, string query, out IntPtr view);
-    [DllImport("msi.dll")] private static extern uint MsiViewExecute(IntPtr view, IntPtr record);
-    [DllImport("msi.dll")] private static extern uint MsiViewFetch(IntPtr view, out IntPtr record);
-    [DllImport("msi.dll")] private static extern uint MsiRecordGetFieldCount(IntPtr record);
-    [DllImport("msi.dll", CharSet = CharSet.Unicode)] private static extern uint MsiRecordGetStringW(IntPtr record, uint field, StringBuilder value, ref uint len);
-    [DllImport("msi.dll")] private static extern uint MsiRecordReadStream(IntPtr record, uint field, byte[] buf, ref uint len);
-    [DllImport("msi.dll")] private static extern uint MsiCloseHandle(IntPtr handle);
-    [DllImport("msi.dll")] private static extern IntPtr MsiCreateRecord(uint fields);
-    [DllImport("msi.dll", CharSet = CharSet.Unicode)] private static extern uint MsiRecordSetStringW(IntPtr record, uint field, string value);
-    [DllImport("msi.dll")] private static extern uint MsiViewModify(IntPtr view, int mode, IntPtr record);
-    [DllImport("msi.dll")] private static extern uint MsiDatabaseCommit(IntPtr db);
 }

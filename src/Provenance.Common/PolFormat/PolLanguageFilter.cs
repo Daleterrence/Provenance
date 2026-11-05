@@ -256,7 +256,6 @@ public sealed class PolLanguageFilter
 
     private static readonly Lazy<Dictionary<char, ushort>> Sjis = new(() =>
     {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         // the default (best fit) decoder, which is the only way .NET gives the NEC row's copies of nine maths symbols.
         // Anything it hasn't got comes out as U+30FB, which is only real at 0x8145
         var cp932 = Encoding.GetEncoding(932);

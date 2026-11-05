@@ -29,9 +29,8 @@ public sealed class ChatStore
         if (root is null)
         {
             // no AppData at all would make this a relative path, so the log just isn't kept
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            if (string.IsNullOrEmpty(appData)) return;
-            root = Path.Combine(appData, "Provenance", "messages");
+            if (AppPaths.UserData is not { } userData) return;
+            root = Path.Combine(userData, "messages");
         }
         _path = Path.Combine(root, profileId + ".dat");
         LoadDeleted();

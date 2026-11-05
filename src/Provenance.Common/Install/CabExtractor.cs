@@ -1,5 +1,6 @@
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using Provenance.Common.Win32;
 
 namespace Provenance.Common.Install;
 
@@ -35,17 +36,17 @@ internal sealed class CabExtractor(string cabPath, Func<string, string?> targetF
         IntPtr hfdi = IntPtr.Zero;
         try
         {
-            hfdi = FDICreate(Alloc, Free, open, read, write, close, seek, -1 /* cpuUNKNOWN */, erf);
+            hfdi = Cabinet.FDICreate(Alloc, Free, open, read, write, close, seek, -1 /* cpuUNKNOWN */, erf);
             if (hfdi == IntPtr.Zero) throw Shown.Mark(new InvalidOperationException("Windows couldn't start unpacking the installer."));
             // the name's only a token since Open always opens cabPath, so paths outside the ANSI code page still work
-            bool ok = FDICopy(hfdi, "provenance.cab", "\\", 0, notify, IntPtr.Zero, IntPtr.Zero);
+            bool ok = Cabinet.FDICopy(hfdi, "provenance.cab", "\\", 0, notify, IntPtr.Zero, IntPtr.Zero);
             if (_error != null) ExceptionDispatchInfo.Capture(_error).Throw();
             ct.ThrowIfCancellationRequested();
             if (!ok) throw new InvalidDataException($"{Path.GetFileName(cabPath)} could not be extracted (cabinet error {Marshal.ReadInt32(erf)}).");
         }
         finally
         {
-            if (hfdi != IntPtr.Zero) FDIDestroy(hfdi);
+            if (hfdi != IntPtr.Zero) Cabinet.FDIDestroy(hfdi);
             GC.KeepAlive((open, read, write, close, seek, notify));   // FDI holds on to these until FDIDestroy
             Marshal.FreeHGlobal(erf);
             foreach (var s in _open.Values) s.Dispose();
@@ -159,33 +160,4 @@ internal sealed class CabExtractor(string cabPath, Func<string, string?> targetF
         }
         catch (ArgumentOutOfRangeException) { return null; }
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct FdiNotification
-    {
-        public int cb;
-        public IntPtr psz1, psz2, psz3, pv, hf;
-        public ushort date, time, attribs, setID, iCabinet, iFolder;
-        public int fdie;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr FnAlloc(int cb);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void FnFree(IntPtr pv);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Ansi)] private delegate IntPtr FnOpen(string file, int oflag, int pmode);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate uint FnRead(IntPtr hf, IntPtr pv, uint cb);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate uint FnWrite(IntPtr hf, IntPtr pv, uint cb);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int FnClose(IntPtr hf);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int FnSeek(IntPtr hf, int dist, int seektype);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr FnNotify(int fdint, IntPtr pfdin);
-
-    [DllImport("cabinet.dll", CallingConvention = CallingConvention.Cdecl)]
-    private static extern IntPtr FDICreate(FnAlloc alloc, FnFree free, FnOpen open, FnRead read, FnWrite write, FnClose close, FnSeek seek, int cpuType, IntPtr erf);
-
-    [DllImport("cabinet.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool FDICopy(IntPtr hfdi, string cabinet, string cabPath, int flags, FnNotify notify, IntPtr decrypt, IntPtr user);
-
-    [DllImport("cabinet.dll", CallingConvention = CallingConvention.Cdecl)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool FDIDestroy(IntPtr hfdi);
 }
