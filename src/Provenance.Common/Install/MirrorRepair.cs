@@ -1,8 +1,9 @@
-using Provenance.Common.Install;
+using Provenance.Common.Mirror;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Progress;
 
-namespace Provenance.Common.Mirror;
+namespace Provenance.Common.Install;
 
 public sealed record RepairPlan(IReadOnlyDictionary<string, IReadOnlyList<MirrorEntry>> Work, long Bytes,
                                 IReadOnlyDictionary<string, MirrorIndex> Indexes)

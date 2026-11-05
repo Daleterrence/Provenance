@@ -1,7 +1,7 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using Provenance.Common.Locks;
+using Provenance.Common.Security;
 using Serilog;
 
 namespace Provenance.Wpf.Services;

@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Provenance.Common.PolFormat;
-using Provenance.Common.Social;
 using Serilog;
 
 namespace Provenance.Wpf.Services;

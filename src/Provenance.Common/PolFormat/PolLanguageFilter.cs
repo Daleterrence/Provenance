@@ -1,8 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
-using Provenance.Common.Patcher;
 
-namespace Provenance.Common.Social;
+namespace Provenance.Common.PolFormat;
 
 // POL's chat language filter: the viewer's own word list (data\dic\vulgar2.dic) run the way polcore runs it (svc 0x5a8
 // builds it, svc 0x1660 masks). Matching is on the Shift-JIS bytes, a masked character shows as one '?'

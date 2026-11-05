@@ -5,6 +5,7 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using Provenance.Common.Game;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Patcher;

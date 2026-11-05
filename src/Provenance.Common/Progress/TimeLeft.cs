@@ -1,4 +1,4 @@
-namespace Provenance.Common.Install;
+namespace Provenance.Common.Progress;
 
 // "About 3 minutes left" under a progress bar. Blank until it's seen 10 s of steady progress, then a smoothed countdown
 public sealed class TimeLeft

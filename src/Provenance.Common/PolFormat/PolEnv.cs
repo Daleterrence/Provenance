@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using Provenance.Common.Patcher;
 
 namespace Provenance.Common.PolFormat;
 

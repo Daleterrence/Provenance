@@ -1,7 +1,8 @@
 using System.Security.Cryptography;
-using Provenance.Common.PolFormat;
+using Provenance.Common.Game;
+using Provenance.Common.Mirror;
 
-namespace Provenance.Common.Mirror;
+namespace Provenance.Common.Patcher;
 
 // runs as admin off a network index, so every write goes through SafePath and DecodeAsync checks each download first
 public static class MirrorSync

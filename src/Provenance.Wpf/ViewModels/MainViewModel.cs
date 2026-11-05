@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Progress;
 using Serilog;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;

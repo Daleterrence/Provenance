@@ -1,6 +1,7 @@
-using Provenance.Common.Patcher;
+using Provenance.Common.Mirror;
+using Provenance.Common.Progress;
 
-namespace Provenance.Common.Mirror;
+namespace Provenance.Common.Patcher;
 
 // OnMirror false means the mirror can't serve this version and nothing changed. Otherwise Failed holds what didn't
 // download (and patch.ver stays put).

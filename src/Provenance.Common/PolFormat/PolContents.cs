@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using Provenance.Common.Patcher;
 
 namespace Provenance.Common.PolFormat;
 

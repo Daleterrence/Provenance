@@ -1,6 +1,6 @@
 using System.Security.Principal;
 
-namespace Provenance.Common.Locks;
+namespace Provenance.Common.Security;
 
 // locks between copies of the app (and threads of one): a file opened with no sharing, in an admin-only folder. Any
 // program could squat a named mutex, so it isn't one

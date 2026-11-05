@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using Provenance.Common.Game;
-using Provenance.Common.Social;
+using Provenance.Common.Hook;
 using Serilog;
 
 namespace Provenance.Wpf.Services;

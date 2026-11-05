@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 
-namespace Provenance.Common.Patcher;
+namespace Provenance.Common.PolFormat;
 
 // POL's file cipher (polcore.dll 0x100081e0 decrypt, 0x100081a0 encrypt). 8-byte blocks plus a trailer (a value
 // and a plaintext checksum), each through a byte layer and a 64-bit layer.

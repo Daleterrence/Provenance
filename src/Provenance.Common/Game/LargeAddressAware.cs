@@ -1,7 +1,8 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using Provenance.Common.PolFormat;
 
-namespace Provenance.Common.PolFormat;
+namespace Provenance.Common.Game;
 
 // Windower's Large Address Aware tick box: bit 0x20 of pol.exe's COFF Characteristics, set on disk with no checksum fix,
 // so the file comes out the same as Windower's

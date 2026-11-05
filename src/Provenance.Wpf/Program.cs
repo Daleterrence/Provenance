@@ -1,4 +1,3 @@
-using Provenance.Common;
 using Provenance.Wpf.Services;
 using Velopack;
 

@@ -1,6 +1,6 @@
 using System.Net.Sockets;
 
-namespace Provenance.Common.Mirror;
+namespace Provenance.Common.Install;
 
 internal static class MirrorFailure
 {

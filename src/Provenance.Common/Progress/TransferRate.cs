@@ -1,6 +1,6 @@
 using static System.FormattableString;
 
-namespace Provenance.Common.Install;
+namespace Provenance.Common.Progress;
 
 // bytes per second over the last window. A sample below the last one (a failed attempt took bytes back) starts over.
 public sealed class TransferRate(TimeSpan window)

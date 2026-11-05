@@ -1,6 +1,6 @@
 using Provenance.Common.PolFormat;
 
-namespace Provenance.Common.Social;
+namespace Provenance.Common.Login;
 
 // the viewer's polerr.bin, the text it shows under a POL-nnnn code (svc 0xfb0). English, and the US and EU files only
 // differ at 5310

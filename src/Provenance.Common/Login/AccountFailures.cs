@@ -1,4 +1,4 @@
-namespace Provenance.Common.Multi;
+namespace Provenance.Common.Login;
 
 public enum AccountFailureKind { Account, Credential, AccountBlocked, Install }
 

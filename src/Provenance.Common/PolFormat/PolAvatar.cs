@@ -1,4 +1,4 @@
-namespace Provenance.Common.Social;
+namespace Provenance.Common.PolFormat;
 
 // profile pics live in obfuscated PNG sheets (data\icon\download\hnf<NNN>.png) of 4x2 cells at 64x96, so pic F is
 // sheet F/8, cell F%8

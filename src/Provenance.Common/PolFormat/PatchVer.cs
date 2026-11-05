@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using Microsoft.Win32;
 
-namespace Provenance.Common.Patcher;
+namespace Provenance.Common.PolFormat;
 
 // patch.ver (app.dll mode 400, polcore svc 0x1248/0x124c): 24 zero bytes and the version text in 0x100, encrypted to
 // 0x120 with trailer value 0x118

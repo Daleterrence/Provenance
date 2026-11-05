@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Login;
 using Provenance.Common.Social;
 
 namespace Provenance.Wpf.ViewModels;

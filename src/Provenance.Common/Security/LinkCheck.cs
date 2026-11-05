@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Provenance.Common.IO;
+namespace Provenance.Common.Security;
 
 // Provenance runs as admin, so a junction or symlink where a standard user can write would send its writes elsewhere.
 // OneDrive, Dev Drive and the like use reparse points too, but they don't redirect

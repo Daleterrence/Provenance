@@ -1,7 +1,6 @@
 using System.Text;
-using Provenance.Common.PolFormat;
 
-namespace Provenance.Common.Social;
+namespace Provenance.Common.PolFormat;
 
 // which profile pics a user can pick, by category, from their own install (proface0.txt categories, proface1.txt pics).
 // Both are XORed with their own file name as a repeating ASCII key (very sneaky, SE), then UTF-16LE

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Provenance.Common.Social;
+namespace Provenance.Common.PolFormat;
 
 // what POL's Shift-JIS can carry. SE's table is cp932 bar a few odd spots, which is near enough to keep emoji and the
 // like out before the hook turns them into geta marks

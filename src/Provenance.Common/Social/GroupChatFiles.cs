@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Provenance.Common.Hook;
 using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Social;

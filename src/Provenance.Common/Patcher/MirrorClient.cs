@@ -2,8 +2,9 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using Provenance.Common.Mirror;
 
-namespace Provenance.Common.Mirror;
+namespace Provenance.Common.Patcher;
 
 // The trust boundary: pointers and indexes only come back once their signature checks out, and a download only replaces
 // its target once its size and SHA-256 match the signed entry

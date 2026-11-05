@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
-namespace Provenance.Common.IO;
+namespace Provenance.Common.Security;
 
 // For folders other users can write to: each one from the root down is held without delete sharing, so none can be
 // swapped for a link mid-write

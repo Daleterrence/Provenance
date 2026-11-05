@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using System.Reflection;
-using Provenance.Common.IO;
+using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Windower;
 

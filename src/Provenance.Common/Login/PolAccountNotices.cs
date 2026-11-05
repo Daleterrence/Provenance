@@ -1,7 +1,8 @@
 using System.Globalization;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Social;
 
-namespace Provenance.Common.Social;
+namespace Provenance.Common.Login;
 
 // the viewer's own account checks (app.dll LM table at 0x104a6d68, Content ID check at 0x10199093), so the game gets
 // refused in the same cases with the same text

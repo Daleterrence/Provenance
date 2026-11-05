@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Provenance.Common.Social;
+namespace Provenance.Common.Hook;
 
 // files the app and pol_hook (inside pol.exe) swap. Dir is an admin-only folder handed to the hook as POL_IPC_DIR, so
 // nothing unelevated can read or plant them

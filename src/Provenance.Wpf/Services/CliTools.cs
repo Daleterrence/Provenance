@@ -8,7 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32.SafeHandles;
-using Provenance.Common.Locks;
+using Provenance.Common.Security;
 using Serilog;
 
 namespace Provenance.Wpf.Services;

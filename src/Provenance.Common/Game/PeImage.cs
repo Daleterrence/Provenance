@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 
-namespace Provenance.Common.Game.Windower;
+namespace Provenance.Common.Game;
 
 // reads a DLL's export names and version straight off the disk. Nothing gets loaded, not even as a datafile, so a
 // plugin's code never runs

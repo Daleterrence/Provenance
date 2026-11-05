@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Unicode;
-using Provenance.Common.IO;
+using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Ashita;
 

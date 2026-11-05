@@ -2,6 +2,7 @@ using System.IO;
 using System.Net.Http;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Install;
 using Serilog;
 using Provenance.Common.Mirror;
 using Provenance.Common.Patcher;

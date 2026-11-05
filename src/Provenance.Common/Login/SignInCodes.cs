@@ -1,4 +1,4 @@
-namespace Provenance.Common.Multi;
+namespace Provenance.Common.Login;
 
 // DetailsUnreadable is the hook failing to read the saved entries and Unfinished a login that stopped short, neither one
 // a POL refusal

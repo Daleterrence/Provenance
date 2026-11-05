@@ -1,4 +1,4 @@
-namespace Provenance.Common.Multi;
+namespace Provenance.Common.Login;
 
 public sealed record MultiRunAccount(string ProfileId, string Name);
 

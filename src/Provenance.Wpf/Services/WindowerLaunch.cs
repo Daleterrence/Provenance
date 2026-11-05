@@ -8,9 +8,9 @@ using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 using Provenance.Common;
 using Provenance.Common.Game.Windower;
-using Provenance.Common.IO;
+using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
-using Provenance.Common.Social;
+using Provenance.Common.Security;
 using Serilog;
 
 namespace Provenance.Wpf.Services;

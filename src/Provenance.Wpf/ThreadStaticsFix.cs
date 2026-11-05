@@ -1,4 +1,4 @@
-namespace Provenance.Common;
+namespace Provenance.Wpf;
 
 // .NET 10.0.14 on x86 dies on a thread static that fits its 48 byte TLS area till aligned (the tray menu hit it).
 // Filling it first leaves no gap, drop this once it's fixed

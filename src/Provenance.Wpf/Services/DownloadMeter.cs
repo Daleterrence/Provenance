@@ -1,5 +1,5 @@
 using System.Windows.Threading;
-using Provenance.Common.Install;
+using Provenance.Common.Progress;
 
 namespace Provenance.Wpf.Services;
 

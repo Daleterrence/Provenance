@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
-using Provenance.Common.IO;
+using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Windower;
 

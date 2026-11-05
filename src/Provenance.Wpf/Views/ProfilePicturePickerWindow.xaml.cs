@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Provenance.Common.Social;
+using Provenance.Common.PolFormat;
 using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Views;

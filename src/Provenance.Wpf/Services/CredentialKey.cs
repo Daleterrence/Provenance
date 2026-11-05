@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Security.Cryptography;
 using Provenance.Common;
-using Provenance.Common.Locks;
+using Provenance.Common.Security;
 using Serilog;
 
 namespace Provenance.Wpf.Services;
