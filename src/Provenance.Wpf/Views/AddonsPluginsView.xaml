@@ -34,7 +34,7 @@
             <Setter Property="materialDesign:TextFieldAssist.LeadingIcon" Value="Magnify" />
             <Setter Property="materialDesign:TextFieldAssist.HasClearButton" Value="True" />
         </Style>
-        <!-- Addons, Plugins and Ashita's PlayOnline Plugins across the top, one list each, sharing the width evenly -->
+        <!-- Addons, Plugins and Ashita's POL plugins across the top, one list each, sharing the width evenly -->
         <Style x:Key="SubTabs" TargetType="ListBox">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />

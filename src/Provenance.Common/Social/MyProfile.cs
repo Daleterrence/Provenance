@@ -25,8 +25,8 @@ public sealed record MyProfile(string Handle, int Level, IReadOnlyDictionary<str
 
     public static string PathForPid(int pid) => HookFiles.PathFor(pid, "myprofile.json");
 
-    // the hook keeps this file for debugging, so the e-mail address from the POL profile (z_mail) comes in
-    // masked, first letter, *** and the domain, never the real one
+    // the e-mail address from the POL profile (z_mail) comes in masked, first letter, *** and the domain, never the
+    // real one
     public static MyProfile? TryRead(int pid)
     {
         var path = PathForPid(pid);

@@ -175,6 +175,7 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
         foreach (var v in WindowerGameRegistry.Values(p, p.Width, p.Height))
         {
             int n = v.Value is int i ? i : 0;
+            // FFXI's own registry value names, mapped the same as FfxiConfig's
             switch (v.Name)
             {
                 case "0000": s.DrawDistanceMip = n; break;

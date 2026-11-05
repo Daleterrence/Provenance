@@ -48,9 +48,7 @@ public sealed class PolSessionService : IDisposable
     public const string UnsafeStartText = "Provenance couldn't start PlayOnline safely. Restart Provenance and try again.";
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
 
-    // pol_hook.c exits 11 on unreadable saved entries, 12 on a bad POL_IPC_DIR, 13 when its mutexes can't get secret
-    // names (never the stock ones, anything can create those first), 15 when FFXI's GameStart fails and 16 when
-    // POL_IPC_DIR, POL_CRED_KEYFILE or POL_HOLD isn't there
+    // pol_hook.c's exit codes. 13 never falls back to the stock mutex names, anything can create those first
     internal const int UnsafeStartExitCode = 13;
     internal const int GameStartExitCode = 15;
     internal const int MissingEnvExitCode = 16;
@@ -77,7 +75,6 @@ public sealed class PolSessionService : IDisposable
         : line.Contains("hold: Play refused:", StringComparison.Ordinal) ? PlayAnswer.Refused
         : PlayAnswer.None;
 
-    // 3 refused, 7 turned away, 10 a list didn't load
     internal static (int Code, string Text) EndedBeforeSignIn(int? exitCode) => exitCode switch
     {
         _ when DetailsUnreadable(exitCode: exitCode) => (ErrorDetailsUnreadable, DetailsAgainText),
@@ -665,8 +662,8 @@ public sealed class PolSessionService : IDisposable
         return pols.Length > 0;
     }
 
-    // Windows only has the real answer with no pol.exe about, so that one's kept for a start while one's still running.
-    // A settings.json that didn't load is left for the user's own next save to replace
+    // Windows only has the real answer with no pol.exe about, so that's kept for starts while one runs. A settings.json
+    // that didn't load is left for the user's next save
     internal static void NoteScreenSaver(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows,
                                          Func<bool>? endedUnseen = null, Action<bool>? set = null)
     {
@@ -822,7 +819,7 @@ public sealed class PolSessionService : IDisposable
             var m = PidLine.Match(run.Out);
             if (run.ExitCode != 0 || !m.Success) return null;
             var pid = int.Parse(m.Groups[1].Value);
-            // an older pol.exe with this pid left these, and its stop file would end this one before LOG IN
+            // an older pol.exe with this pid left these, and its stop file would end this one before it logs in
             foreach (var ext in new[] { "stop", "ended", "go" }) DeleteQuietly(HookFiles.PathFor(pid, ext));
             DateTime? started = null;
             try { using var p = Process.GetProcessById(pid); started = p.StartTime; } catch { }
@@ -863,8 +860,8 @@ public sealed class PolSessionService : IDisposable
             if (env.TryGetValue(k, out var v) && v != null) yield return $"{k}={v}";
     }
 
-    // Nothing's sent till the go file's written, so a cancel before that leaves it waiting, hidden, for the next login.
-    // Only a live one goes back, a dead one would stop the Prestart after the cancel making a fresh one
+    // nothing's sent till the go file's written, so a cancel before then leaves it waiting, hidden, for the next login.
+    // Only a live one goes back, a dead one would block a fresh Prestart
     internal int? TakePrestarted(ProcessStartInfo psi, CancellationToken ct)
     {
         if (TakePrestart(ct) is not { } pre) return null;
@@ -955,8 +952,8 @@ public sealed class PolSessionService : IDisposable
         EndWaitingPrestarts();
     }
 
-    // Other copies' waiting pre-starts hold the viewer's files too (that copy's next login just starts its own pol.exe).
-    // One that copy's already handing to a login has lost its record by the time this gets the lock
+    // other copies' waiting pre-starts hold the viewer's files too (their next login just starts another). One already
+    // being handed to a login has lost its record by the time this has the lock
     internal void EndWaitingPrestarts()
     {
         var ending = new List<(int Pid, long Ticks)>();
@@ -1032,8 +1029,8 @@ public sealed class PolSessionService : IDisposable
         catch { return false; }
     }
 
-    // The hook only appends, so a reused pid's log starts with an older pol.exe's lines. DllMain's first line opens
-    // each run, and the pid's only known once it's written, so the last one is this pol.exe's
+    // the hook only appends, so a reused pid's log starts with an older pol.exe's lines. DllMain's first line opens
+    // each run, so the last one's this pol.exe's
     private const string HookFirstLine = "pol_hook: highest user address";
 
     // Latin1 keeps one char per byte, so Start is a byte offset too
@@ -1170,7 +1167,7 @@ public sealed class PolSessionService : IDisposable
         catch { return false; }
     }
 
-    // No recorded start time means no proof, so it's never ours to kill (the user may run their own pol.exe on a
+    // no recorded start time means no proof, so it's never mine to kill (the user may run their own pol.exe on a
     // reused pid)
     private static bool IsSameProcess(Process p, DateTime? started, Func<Process, bool>? isPol = null)
     {
@@ -1272,8 +1269,8 @@ public sealed class PolSessionService : IDisposable
         catch { return false; }
     }
 
-    // a copy that ended before Play can leave its pol.exe logged in (an older hook stays held, a newer one may still be
-    // logging itself out), so it's ended here and the next login starts fresh
+    // a copy that ended before Play can leave its pol.exe logged in (or still logging itself out), so it's ended here
+    // and the next login starts fresh
     public void EndOrphans()
     {
         foreach (var path in SessionFilePaths())

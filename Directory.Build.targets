@@ -1,8 +1,6 @@
 <Project>
-  <!-- Release builds are self-contained: they carry the .NET runtime of the SDK that built them.
-       Refuse an SDK whose runtime is older than the last security fix that touches Provenance:
-       10.0.14 fixes the Brotli decoder (CVE-2026-111497) that reads patch-mirror packs.
-       Raise MinimumBundledRuntime when a later .NET security update matters. -->
+  <!-- release builds carry their SDK's .NET runtime, so one older than 10.0.14 (the Brotli fix for the mirror packs,
+       CVE-2026-111497) is refused. MinimumBundledRuntime goes up with the next fix that matters -->
   <PropertyGroup>
     <MinimumBundledRuntime>10.0.14</MinimumBundledRuntime>
   </PropertyGroup>

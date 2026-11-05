@@ -131,7 +131,7 @@ static int pe_mail_ok(BYTE *b, const char *sjis)
     return ((int (__cdecl *)(const char *, int))SVC(0x6e8))(sjis, lstrlenA(sjis)) == 0;
 }
 
-/* the handle rename: SetHandle, then the handle-list upload (KPutHandleList), like the viewer's HnEdit */
+/* the handle rename: SetHandle, then the handle-list upload (KPutHandleList), like the viewer's handle editor */
 typedef int (__cdecl *svca40_t)(char *dst, const WCHAR *src, int repl);   /* a NULL dst measures */
 
 #define HR_E_NAME    (-0x7f30)

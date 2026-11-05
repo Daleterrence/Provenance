@@ -105,9 +105,8 @@ public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string 
         }));
     }
 
-    // what the hook actually gets. Windower cuts it mid-command, which would run half of one, so this stops at the last
-    // whole one. It runs before any plugin loads, so a lua load in it gets LuaCore loaded first (Windower.exe echoes
-    // every load here, so this one's never been seen to work)
+    // what the hook gets: Windower cuts it mid-command, so this stops at the last whole one. It runs before plugins, so
+    // a lua load gets LuaCore first (never seen it work, Windower.exe echoes them)
     internal static string InitCommandAsSent(string? initCommand, List<string>? warnings = null)
     {
         var command = FilterInitCommand(initCommand);

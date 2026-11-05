@@ -2,7 +2,7 @@ using Provenance.Common;
 
 namespace Provenance.Wpf.Services;
 
-// what an error says on screen. Ours is written for the player, Windows' and .NET's own wording only goes in the log
+// what an error says on screen. Mine's written for the player, Windows' and .NET's own wording only goes in the log
 public static class ErrorText
 {
     public static string Of(Exception ex, string fallback) => Marked(ex)?.Message ?? fallback;

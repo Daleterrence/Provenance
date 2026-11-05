@@ -415,7 +415,7 @@ public partial class MainViewModel : IMultiRunHost
         new(BothIds(ids) ? AccountFailureKind.Credential : AccountFailureKind.Account, MissingDetailsText(ids));
 
     // the login only finishes once the hook's written a snapshot, so a missing one is the file being gone or unreadable
-    // since (the session ending, say), not anything PlayOnline did
+    // since (the session ending, say), not anything POL did
     internal static AccountFailure? PlayGateFailure(PolSocialSnapshot? snap)
     {
         if (snap is null)

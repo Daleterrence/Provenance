@@ -10,9 +10,8 @@ using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Views;
 
-// one of POL's status glyphs, following its button: selected under the mouse or keyboard focus, see-through for a beat
-// on a press, then active while it's held or while its window's up (IsOpen). On a button it sits on a disc in the
-// button's own colours, green while it's active. Flat skips all that and draws the single-colour file in Foreground
+// a POL status glyph following its button (selected on hover or focus, faded on a press, active while held or IsOpen)
+// on a disc in its colours. Flat draws the single-colour file
 public sealed class SvgIcon : Grid
 {
     public static readonly DependencyProperty GlyphProperty = DependencyProperty.Register(
@@ -168,8 +167,8 @@ public sealed class SvgIcon : Grid
         _disc.Visibility = _light.Visibility = _edge.Visibility = shown;
         _press.Visibility = _onButton && !Flat && State == IconState.Transition ? Visibility.Visible : Visibility.Collapsed;
         if (!_onButton || Flat) return;
-        // the button's own fills, so it's red on a red button and follows a theme switch. A bit of white on top keeps
-        // the disc lighter than the face it sits on. Active's green is light enough on its own
+        // the button's own fills, so it's red on a red button and follows the theme. A bit of white keeps the disc
+        // lighter than its face, active's green is light enough already
         _disc.SetResourceReference(Shape.FillProperty, State switch
         {
             IconState.Selected or IconState.Transition => "Btn.Fill.Hover",

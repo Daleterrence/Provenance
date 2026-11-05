@@ -203,8 +203,8 @@ static int delete_open(HANDLE h)
     return SetFileInformationByHandle(h, FileDispositionInfo, &yes, sizeof yes);
 }
 
-/* In use, so it goes at the next restart. Renamed out of the way first where it'll let me, or a reinstall before then
-   gets its fresh copy deleted too. Into where dir really is, a rename relative to its handle gets access denied */
+/* in use, so it goes at the next restart, renamed aside first or a reinstall meanwhile loses its fresh copy. Into
+   dir's real path, as a rename relative to its handle is denied */
 static void later(HANDLE dir, HANDLE h)
 {
     struct { FILE_RENAME_INFO i; wchar_t more[MAX_PATH * 2 + 64]; } r;

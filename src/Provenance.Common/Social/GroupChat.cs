@@ -168,7 +168,6 @@ public sealed class GroupChatLog
         return true;
     }
 
-
     public bool Clear(string group)
     {
         if (!_groups.Remove(group)) return false;

@@ -56,8 +56,8 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
 
     public IReadOnlyList<StagedProduct> Staged { get; private set; } = [];
 
-    // the game's file list when StageAsync found the mirror on the version POL says is current, so the first update's
-    // size after SE's parts needs nothing fetched again. Null whenever that update could come from POL instead
+    // the game's file list when StageAsync found the mirror on POL's current version, so sizing the first update after
+    // SE's parts fetches nothing again. Null when that update could come from POL
     public MirrorIndex? GameIndex { get; private set; }
 
     // null with SkipReason when the mirror can't serve it or an install's in the way, nothing under installRoot gets

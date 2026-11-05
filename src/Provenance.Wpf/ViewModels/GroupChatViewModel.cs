@@ -17,8 +17,8 @@ public sealed record GroupChatLineItem(string Id, string Name, string Text, bool
 
 public sealed record GroupChatMemberItem(string Name, bool Me, string Note);
 
-// a friend group's chat, one at a time like the viewer. It stays in with its window hidden (Close) and lines keep
-// coming in, till Exit, a handle switch, the game, logging out or the group going. Every line's kept on this PC
+// a friend group's chat, one at a time like the viewer. Close only hides it, it stays in till Exit, a handle switch,
+// the game, logging out or the group going
 public sealed partial class GroupChatViewModel : ObservableObject
 {
     public enum Phase { Out, Joining, In }
@@ -191,7 +191,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         if (!withdrawn) GroupChatFiles.Leave(pid, NewToken(), Current == Phase.Joining ? _token ?? "" : "");
     }
 
-    // the session's over (logged out, PlayOnline closed), nothing to send
+    // the session's over (logged out, POL closed), nothing to send
     public void CloseQuietly()
     {
         if (Open) End(null);

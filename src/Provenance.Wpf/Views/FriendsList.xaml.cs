@@ -51,8 +51,8 @@ public partial class FriendsList : UserControl
         if (List.IsKeyboardFocusWithin && List.SelectedItem is FriendItem f) FriendSelected?.Invoke(f);
     }
 
-    // the view model keeps its own selection across updates, so the list with its own has to do the same. Once the whole
-    // update's in, as a swapped row comes through the grouping as a remove and then an add
+    // the view model keeps its selection across updates, so this list does too once the whole update's in, as a swapped
+    // row comes through the grouping as a remove then an add
     private bool _reselecting;
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

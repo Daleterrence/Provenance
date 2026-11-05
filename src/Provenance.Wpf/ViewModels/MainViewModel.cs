@@ -20,7 +20,6 @@ using Provenance.Wpf.Views;
 
 namespace Provenance.Wpf.ViewModels;
 
-// pick an account, log in, play
 public partial class MainViewModel : ObservableObject
 {
     private readonly ICredentialService _credentials;
@@ -1269,7 +1268,7 @@ public partial class MainViewModel : ObservableObject
         return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SeaAccount(sea.Username.Trim(), sea.Password), null);
     }
 
-    // the US viewer asks once per PlayOnline ID, here it's once per install
+    // the US viewer asks once per POL ID, here it's once per install
     internal bool EnsureMemberAgreement(Window? owner)
     {
         if (_settings.Current.AcceptedMemberAgreement) return true;
@@ -1509,8 +1508,8 @@ public partial class MainViewModel : ObservableObject
         finally { EndCancellable(); }
     }
 
-    // Windows only hands focus to the last program used, which is the app at the Play click
-    // true once the game's window is up
+    // true once the game's window is up. Windows only hands focus to the last program used, which is the app at the
+    // Play click, so pol.exe gets leave to take it first
     private async Task<bool> BringGameForwardAsync()
     {
         if (_pol.Pid is not { } pid) return false;

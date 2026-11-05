@@ -562,8 +562,8 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     public static bool QueuedWorkPending(string viewerDir) =>
         File.Exists(Path.Combine(viewerDir, "patch.ini")) || BootCopies(viewerDir).Any();
 
-    // pol.exe's boot list (wide strings at 0x453134) and its test (0x004073d0). That only compares write times (of
-    // course it does), so a different time makes pol.exe copy on every start, and fail if a DLL is held.
+    // pol.exe's boot list (wide strings at 0x453134) and its test (0x004073d0), which only compares write times (of
+    // course). A different time means a copy every start, failing if a DLL's held
     private static IEnumerable<(string Staged, string Live)> BootCopies(string viewerDir) =>
         from name in new[] { "app.dll", "appEU.dll", "polcore.dll", "polcoreEU.dll" }
         let staged = Path.Combine(viewerDir, "patchfiles", "PlayOnlineViewer", "viewer", "com", name)

@@ -190,7 +190,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private int? Pid => _social.SessionPid;
 
-    // the zone list, the viewer's first search when chat opens and TRY AGAIN's. Nothing else starts one
+    // the zone list, the viewer's first search when chat opens and Try again's. Nothing else starts one
     [RelayCommand]
     public void Start()
     {
@@ -485,7 +485,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         SendCommand.NotifyCanExecuteChanged();
     }
 
-    // the game starting leaves the room straight away, the hook might never see the Play. TRY AGAIN once it's closed
+    // the game starting leaves the room straight away, the hook might never see the Play. Try again once it's closed
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(SocialViewModel.HandleSwitching) or nameof(SocialViewModel.GameRunning))

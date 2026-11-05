@@ -58,8 +58,8 @@ public static partial class SvgIcons
     public static ImageSource? Tinted(string glyph, Color colour) =>
         Cached($"status-{glyph}.svg#{colour}", () => Frame(Load($"status-{glyph}.svg", colour), GlyphFrame(glyph)));
 
-    // for a button, which draws its own disc in its own colours: POL's green or blue disc comes out and the outline
-    // goes back to the idle one. POL nudges its icons a pixel or so per state, so each one's centred on the disc instead
+    // for a button, which draws its own disc: POL's green or blue disc comes out and the outline goes back to idle. POL
+    // nudges its icons a pixel per state, so each gets centred instead
     public static ImageSource? ButtonGlyph(string glyph, IconState state) =>
         Cached(GlyphFile(glyph, state) + "#button", () =>
         {

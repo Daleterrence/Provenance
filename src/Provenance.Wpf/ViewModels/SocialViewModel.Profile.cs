@@ -82,7 +82,7 @@ public partial class SocialViewModel
             ProfileNote = GameRunningNote;
             return;
         }
-        // the same profile again within 5 mins shows the copy we've got, no second request for a page just read
+        // the same profile again within 5 mins shows the copy already here, no second request for a page just read
         if (f.Key.Length > 0 && _profileCache.TryGetValue(f.Key, out var hit) &&
             DateTime.UtcNow - hit.At < TimeSpan.FromMinutes(5))
         {
@@ -181,7 +181,7 @@ public partial class SocialViewModel
         "failed:pending" => "You can only view your friends' profiles.",
         "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.",
         NoCharacter => "Provenance couldn't find that character. Open the profile again from your friends list.",
-        // only a number is PlayOnline's own error, the rest never got as far as asking
+        // only a number is POL's own error, the rest never got as far as asking
         _ when int.TryParse(SocialSnapshot.FailReason(st), out _) => $"PlayOnline didn't send the profile ({SocialSnapshot.FailReason(st)}).",
         _ => $"Provenance couldn't ask PlayOnline for the profile ({SocialSnapshot.FailReason(st)}).",
     };

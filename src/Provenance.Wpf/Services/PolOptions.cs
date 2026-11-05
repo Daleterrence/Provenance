@@ -19,7 +19,7 @@ public static class PolOptions
     public static int AutoDisconnect(LauncherSettings s) => s.AutoDisconnectMinutes ?? -1;
 
     // there's no telling POL's defaults from someone's own choice, so an existing install's accounts are left alone
-    // till one's picked in Settings. Ours start with both off
+    // till one's picked in Settings. Mine start with both off
     public static void NewInstall(LauncherSettings s)
     {
         s.ChatLanguageFilter ??= false;

@@ -63,8 +63,8 @@ public static class MirrorUpdater
         return work;
     }
 
-    // the bytes UpdateAsync would download into folder to reach next, which has to be the version POL says is current
-    // (the mirror's newest can be behind it, and then the update comes from POL). Null when next is unusable
+    // the bytes UpdateAsync would download to reach next, which has to be POL's current version (the mirror's can lag,
+    // then POL updates it). Null when next is unusable
     public static async Task<long?> DownloadSizeAsync(MirrorClient client, string region, string product, string folder, string local,
         IReadOnlySet<string>? keep, MirrorIndex next, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
     {

@@ -213,7 +213,7 @@ internal sealed class WindowerUpdateMutex : IDisposable
             bool owned = false;
             try
             {
-                // an abandoned mutex is ours now, and gets released once like any other (Windower takes it twice and
+                // an abandoned mutex is mine now, and gets released once like any other (Windower takes it twice and
                 // keeps it till it exits)
                 int got;
                 try { got = WaitHandle.WaitAny([m, ct.WaitHandle], wait); }

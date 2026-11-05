@@ -1,7 +1,7 @@
 namespace Provenance.Common.Social;
 
-// the viewer won't open a group's chat under any handle but the one I joined it with (app.dll 0x1004ccf4). To is null
-// when that handle's gone (or its slot holds another one now), which the viewer never checks
+// the viewer only opens a group's chat under the handle I joined with (app.dll 0x1004ccf4). To is null when that
+// handle's gone or its slot's been reused, which the viewer never checks
 public sealed record GroupHandleCheck(PolHandle? To, string MemberHandle, string Question)
 {
     public const string Title = "Switch Handle";

@@ -41,7 +41,7 @@ public static class CloseRequest
                 if (handle.IsInvalid) throw new Win32Exception(error);
                 if (error == AlreadyExists)
                 {
-                    // made by something else first, so it isn't ours to trust
+                    // made by something else first, so it isn't mine to trust
                     handle.Dispose();
                     Log.Warning("{Name} already existed, so the uninstaller can't ask this copy to close", name);
                     return;

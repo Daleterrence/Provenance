@@ -9,8 +9,8 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// Ashita v4 starts pol.exe and injects its own DLL, then ThirdPartyHookLauncher loads pol_hook into it. Windower's
-// Hook.dll goes in through the watcher instead (WindowerLaunch). Nothing of ours goes in the viewer folder
+// Windower and Ashita's folders, profiles and boot configs, and where the watcher sits. Nothing of mine goes in the
+// viewer folder
 public sealed class ThirdPartyHookService
 {
     public const string None = "none", Ashita = "ashita", Windower = "windower";

@@ -210,8 +210,8 @@ public sealed class ChatStore
         return true;
     }
 
-    // a line I sent to another POL ID went from fromSlot with this header time and seq (kept across restarts). One to my
-    // own handles never counts, its copy coming in is that handle getting it for real
+    // a line I sent to another POL ID, from fromSlot with this header time and seq (kept across restarts). One to my
+    // own handles doesn't count, its copy coming in is real
     public bool SentAt(long time, long seq, int fromSlot) =>
         time > 0 && fromSlot >= 0 &&
         (_deleted.ContainsKey(SentKey(time, seq, fromSlot)) ||
@@ -316,7 +316,7 @@ public sealed class ChatStore
         return true;
     }
 
-    // that line came back, so it went to PlayOnline but never reached anyone
+    // that line came back, so it went to POL but never reached anyone
     public bool MarkReturned(long time, long seq, int fromSlot)
     {
         if (fromSlot < 0) return false;

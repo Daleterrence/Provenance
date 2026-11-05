@@ -36,8 +36,8 @@
         </Style>
     </Window.Resources>
 
-    <!-- POL's View Profile: pic, name, H-ID, mail, last update and privacy, then its rows in POL's order and the
-         away message. A handle with FFXI characters gets a tab for each, which swaps the page for that character's -->
+    <!-- POL's View Profile: pic, name, H-ID, mail, last update, privacy, its rows in POL's order and the away message.
+         Each FFXI character gets a tab that swaps in its page -->
     <Grid x:Name="Root" Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,Auto,*,Auto">
         <Grid Background="{DynamicResource Title.Bg}" TextElement.Foreground="{DynamicResource Text.1}">
             <Grid.Resources>

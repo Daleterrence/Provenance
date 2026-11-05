@@ -5,8 +5,8 @@ using Provenance.Wpf.ViewModels;
 
 namespace Provenance.Wpf.Views;
 
-// the viewer's Create Room form (CSICRoomCreate): name, zone, occupancy 2-20, password on or off, and the three
-// category groups with Not set first
+// the viewer's Create Room form: name, zone, occupancy 2-20, password on or off, and the three category groups with
+// Not set first
 public partial class CreateRoomDialog : Window
 {
     public sealed record Choice(int Code, string Name);
@@ -61,7 +61,7 @@ public partial class CreateRoomDialog : Window
     private int Code(System.Windows.Controls.ComboBox box) => (box.SelectedItem as Choice)?.Code ?? 0;
     private string Text(System.Windows.Controls.ComboBox box) => (box.SelectedItem as Choice)?.Name ?? "Not set";
 
-    // the viewer's own checks, in its order (app.dll FUN_1008d1c7)
+    // the viewer's own checks, in its order
     internal string? Problem()
     {
         bool on = PasswordOn.IsChecked == true;

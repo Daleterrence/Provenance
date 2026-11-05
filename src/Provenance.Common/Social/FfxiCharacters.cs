@@ -94,8 +94,8 @@ public sealed class CharacterNames
         _ => null,
     };
 
-    // a profile tab's read: whatever name it shows, so an old one never outlives a record that's gone private
-    // like FromAnswer, a shown record with no name in it isn't kept, nobody knows what that means yet
+    // a profile tab's read: whatever name it shows, so an old one never outlives a record gone private. A shown record
+    // with no name isn't kept (nobody knows what that means yet), like FromAnswer
     public static KnownCharacter? FromProfile(PolFfxiProfile r) =>
         r is { NameState: PolProfile.Shown, Name.Length: > 0 } ? new(r.Name)
         : r.NameState == PolProfile.Private ? new("", "private") : null;
@@ -156,8 +156,8 @@ public sealed class CharacterNames
     }
 }
 
-// one lookup out at a time, 3 secs apart like the hook, only for a character someone's just turned up on that the cache
-// hasn't got. A failed one goes again when that friend's presence next changes, never on a timer
+// one lookup at a time, 3 s apart like the hook, for an uncached character someone's just turned up on. A failed one
+// waits for that friend's next presence change, never a timer
 public sealed class CharacterLookups(CharacterNames names)
 {
     public static readonly TimeSpan Gap = TimeSpan.FromSeconds(3);

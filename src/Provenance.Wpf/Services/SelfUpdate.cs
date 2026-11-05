@@ -284,7 +284,7 @@ public static class SelfUpdate
     }
 }
 
-// Velopack's lines go to its own log too, these put them next to ours
+// Velopack's lines go to its own log too, these put them next to mine
 internal sealed class VelopackLog : IVelopackLogger
 {
     public void Log(VelopackLogLevel level, string? message, Exception? exception)

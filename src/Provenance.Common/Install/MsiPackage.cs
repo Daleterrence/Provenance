@@ -308,9 +308,8 @@ public sealed class MsiPackage : IDisposable
         return new Result(files.Count, total, values, classes, typeLibs, shortcuts, progIdsWritten, wroteUninstall);
     }
 
-    // the entry and both files it runs (an uninstall entry whose uninstaller's gone can't uninstall anything), and they're
-    // this build's uninstaller and record, in a folder only admins can change, so a repair swaps an older pair for the
-    // current one
+    // the entry, and both files it runs as this build's pair in an admin-only folder, so a repair replaces an older
+    // pair (an entry whose uninstaller's gone can't uninstall anything)
     private bool UninstallIntact(UninstallSetup setup, Sandbox? sandbox)
     {
         var code = Query("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'").FirstOrDefault()?[0];
@@ -393,6 +392,7 @@ public sealed class MsiPackage : IDisposable
         UninstallFolder.Own(exe);
 
         var root = Path.TrimEndingDirectorySeparator(props["INSTALLDIR"]);
+        // the record format's at the top of native\uninstall.c, so a letter changes on both sides or neither
         var lines = new List<string> { "N " + p.GetValueOrDefault("ProductName", ""), "A " + arpKey, "I " + root };
         // the product's folder, as its InstallFolder value names it. It goes whole, so nothing in it gets a line of its own
         string? tree = null;

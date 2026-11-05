@@ -100,9 +100,8 @@ public static class ProcessTree
     private static extern bool CloseHandle(IntPtr handle);
 }
 
-// Everything one launch started, found by parent pid with the start checked at every step: a real parent's never younger
-// than its child, and a reused pid always is. Members are held open so their pids can't be reused, which is what lets
-// a child still count once its parent's gone (a bootloader that hands over and quits, say)
+// everything one launch started, by parent pid, with start times checked since a reused pid is always younger than its
+// child. Members are held open, so a child still counts once its parent's gone
 public sealed class LaunchTree : IDisposable
 {
     // Hold's null for one that's there but can't be opened

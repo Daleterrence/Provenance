@@ -88,7 +88,7 @@ public sealed class WindowerHttp : IDisposable
     }
 
     // Windower/<major>.<minor> (Windows NT <os major>.<os minor>; WOW64). Windower.exe is always x86, so a 64-bit
-    // Windows always gets WOW64 whatever we're built as
+    // Windows always gets WOW64 whatever Provenance is built as
     public static string UserAgentFor(Version launcher)
     {
         var os = Environment.OSVersion.Version;

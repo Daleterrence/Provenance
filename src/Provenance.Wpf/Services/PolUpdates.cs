@@ -16,7 +16,7 @@ public static class PolUpdates
     private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
     private static readonly MirrorClient Mirror = new(MirrorHttp, MirrorKeys.Trusted);
 
-    // freeFiles ends our waiting pol.exe before any file changes
+    // freeFiles ends my waiting pol.exe before any file changes
     public static PatchResult UpdateViewer(string viewerDir, PolRegion region, IProgress<PatchProgress>? progress, Action freeFiles,
                                            CancellationToken ct) =>
         Locked(Job.ViewerUpdate, ct, progress, () =>

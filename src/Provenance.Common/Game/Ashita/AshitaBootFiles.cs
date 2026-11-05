@@ -181,8 +181,8 @@ public static class AshitaBootFiles
         return path;
     }
 
-    // a launcher name that's just the old file's name (Create sets it that way) follows it to the new one. The file's
-    // already there either way, so one that can't be read or written keeps the name it had
+    // a launcher name that's only the old file's name (as Create sets it) follows the rename. One that can't be read
+    // or written keeps its name, the file's moved either way
     private static void FollowName(string path, string oldFileName)
     {
         try

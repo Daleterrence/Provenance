@@ -8,7 +8,7 @@ using Provenance.Common.Locks;
 namespace Provenance.Common.Game.Windower;
 
 // Windower's own settings.xml, read the lenient way Windower.exe reads it and saved exactly the way it saves it, so
-// going back to Windower.exe never notices we were here
+// going back to Windower.exe never notices Provenance was there
 public sealed class WindowerSettingsFile
 {
     public const string FileName = "settings.xml";
@@ -172,7 +172,7 @@ public sealed class WindowerSettingsFile
         using (Lock()) Write(path, ToBytes());
     }
 
-    // re-reads under the lock, so another copy of Provenance saving in between doesn't lose its changes (or ours)
+    // re-reads under the lock, so another copy of Provenance saving in between doesn't lose its changes (or this one's)
     public static WindowerSettingsFile Update(string windowerDir, Action<WindowerSettingsFile> change) =>
         Update(windowerDir, new Dictionary<string, WindowerAddonList>(), (f, _) => change(f));
 
@@ -271,8 +271,8 @@ public sealed class WindowerSettingsFile
         }
     }
 
-    // Provenance used to launch through a "<name> (Provenance)" copy of each profile. They go on the first save, and a
-    // name that still points at one means its source
+    // a "<name> (Provenance)" profile is an old launch copy. They go on the first save, and a name that still points at
+    // one means its source
     public static bool IsOldCopy(string? name)
     {
         var n = (name ?? "").Trim();

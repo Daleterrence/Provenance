@@ -10,8 +10,8 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// C:\ProgramData\Provenance\ipc, only Administrators and SYSTEM can open it. Never %TEMP% or %APPDATA%, where a
-// program could swap a file for a link and get written through
+// the admin-only folders: C:\ProgramData\Provenance's and the installer's download folder. Never %TEMP% or
+// %APPDATA%, where a program could swap a file for a link and get written through
 public static class SecureFiles
 {
     // what isn't Provenance's is moved in here with one rename and cleared later, never deleted where it was
@@ -117,8 +117,8 @@ public static class SecureFiles
         }
     }
 
-    // DXSETUP and the MSIs run as admin from here, so after the check nothing goes by name: NTFS won't rename a folder
-    // that's held, or one above it. Null when every ffxi-download name there is someone else's
+    // DXSETUP and the MSIs run as admin from here, so after the check nothing goes by name, NTFS won't rename a held
+    // folder or one above it. Null when every ffxi-download there is someone else's
     public static WorkFolder? HoldWorkFolder(string chosen, IReadOnlyCollection<string> ownNames, Func<string, string?> problem)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(chosen));
@@ -168,7 +168,7 @@ public static class SecureFiles
         }
     }
 
-    // made through the held folder's handle with its permissions in one go, or opened there, and only kept when it's ours
+    // made through the held folder's handle with its permissions in one go, or opened there, and kept if it's mine
     private static SafeFileHandle? HoldOwn(SafeFileHandle parent, string path, string name, IReadOnlyCollection<string> ownNames)
     {
         var sec = Intended(usersMayRead: true);

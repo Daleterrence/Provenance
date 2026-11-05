@@ -42,8 +42,8 @@ public static class PolPaths
 
     public static PolRegion? TryAutoDetectRegion() => DetectRegion(r => TryGetInstallFolder(r, ViewerProduct));
 
-    // pol.exe goes by env.dat, not the registry, and a PC that's switched regions keeps the old one's keys. So a hive
-    // only counts when its viewer folder's env.dat agrees, and with none agreeing the first folder's env.dat wins
+    // pol.exe goes by env.dat, and a PC that's switched regions keeps the old keys, so a hive only counts when its
+    // viewer's env.dat agrees. With none agreeing, the first folder's env.dat wins
     internal static PolRegion? DetectRegion(Func<PolRegion, string?> viewerFolder)
     {
         var found = new List<(PolRegion Hive, string Dir)>();

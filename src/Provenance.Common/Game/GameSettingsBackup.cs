@@ -34,8 +34,8 @@ public sealed class NotABackupException() : IOException("That file isn't one of 
 
 public sealed class BackupBeforeRestoreException(Exception inner) : IOException("The current settings couldn't be backed up first.", inner);
 
-// Whole character folders rather than SE's list of patterns, it's only a few KB more and covers anything they add.
-// The game rewrites these in place with no locking, so every copy gets checked for a write landing mid-read
+// whole character folders rather than SE's patterns, a few KB more and it covers anything they add. The game rewrites
+// these in place unlocked, so each copy's checked for a write mid-read
 public static partial class GameSettingsBackup
 {
     public const int Kept = 5;
@@ -173,8 +173,8 @@ public static partial class GameSettingsBackup
         finally { try { File.Delete(tmp); } catch { } }
     }
 
-    // the folder comes from settings.json, so whatever's missing of it is made from the nearest folder that's there,
-    // each one held and checked first. Null if any of it is a link, before anything's made through one
+    // the folder's from settings.json, so what's missing is made from the nearest one there, each held and checked
+    // first. Null if any of it's a link, before anything goes through one
     public static FolderPins? HoldFolder(string folder)
     {
         folder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
@@ -196,7 +196,7 @@ public static partial class GameSettingsBackup
         return FolderPins.Hold(anchor, dir);
     }
 
-    // ours are the ones named like ours with a manifest that reads, newest first
+    // mine are the ones named like mine with a manifest that reads, newest first
     public static IReadOnlyList<BackupInfo> List(string folder)
     {
         if (!Directory.Exists(folder)) return [];
@@ -282,8 +282,8 @@ public static partial class GameSettingsBackup
         return me.User;
     }
 
-    // Provenance runs elevated, so whether the player could open or delete its files would be down to the folder. The
-    // file says so itself, set on the handle so nothing can swap it for a link first
+    // elevated, so whether the player can open or delete the file would be down to the folder. The file says so
+    // itself, set on its handle so it can't be swapped for a link first
     private static FileStream CreateForUser(string path)
     {
         var fs = new FileInfo(path).Create(FileMode.CreateNew, FileSystemRights.Read | FileSystemRights.Write | FileSystemRights.ReadPermissions
@@ -601,9 +601,8 @@ public static partial class GameSettingsBackup
         public void Dispose() => pins.Dispose();
     }
 
-    // made where it's missing, from the nearest folder that's there. Nothing at or below the place's own name can be a
-    // link (the same rule as a backup's reads). When the folder above it is missing too (0042 can be anything), the
-    // folder it's made from can't be reached through one either
+    // made from the nearest folder there, never through a link at or below the place. With its parent missing too
+    // (0042 can be anything), the folder it starts from can't be behind one either
     private static PinnedDir Pin(string root, string sub)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
@@ -620,8 +619,8 @@ public static partial class GameSettingsBackup
     private static IOException Linked(string dir) =>
         Shown.Mark(new IOException($"Nothing was restored, because {dir} goes through a link to somewhere else."));
 
-    // a new name every time and never opened over an existing one, so a link left in its place can't catch it. The
-    // last write time goes back too, or every restore would look like a change to the next backup
+    // a new name each time, never opened over one that's there, so a planted link can't catch it. Its write time goes
+    // back too, or the next backup would see every restore as a change
     private static void Put(string dir, string name, byte[] data, DateTime? written)
     {
         var tmp = Path.Combine(dir, $"{name}.{Guid.NewGuid():N}.tmp");
@@ -638,8 +637,8 @@ public static partial class GameSettingsBackup
         finally { try { File.Delete(tmp); } catch { } }
     }
 
-    // a link, a hard link to something else or a file that's moved out from under the folder it was found in would
-    // have an elevated copy read something it shouldn't, so all three are refused on the open handle itself
+    // a link, a hard link or a file moved out from under its folder would have an elevated copy read what it
+    // shouldn't, so all three are refused on the open handle
     private static SafeFileHandle OpenChecked(string path, string folder, bool data, out Stat stat)
     {
         var h = CreateFileW(LinkCheck.LongPath(Path.GetFullPath(path)), data ? GenericRead : ReadAttributes,

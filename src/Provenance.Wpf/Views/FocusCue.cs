@@ -36,8 +36,8 @@ public static class FocusCue
             SetShown(element, ShowFor(InputManager.Current.MostRecentInputDevice is KeyboardDevice, e.OldFocus as DependencyObject, element));
     }
 
-    // only focus the keyboard moved within a window. Coming back to the window (Alt+Tab ends on a key too) puts focus
-    // back where it was, and that mustn't light up the button that was last clicked
+    // only focus the keyboard moved within the window. Coming back to it (Alt+Tab ends on a key too) restores focus,
+    // which mustn't light up the last clicked button
     internal static bool ShowFor(bool lastInputWasKeyboard, DependencyObject? oldFocus, DependencyObject newFocus) =>
         lastInputWasKeyboard && oldFocus is not null && Window.GetWindow(oldFocus) is { } from && from == Window.GetWindow(newFocus);
 

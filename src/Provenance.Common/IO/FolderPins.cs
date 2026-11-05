@@ -152,8 +152,8 @@ public sealed class FolderPins : IDisposable
         return h.IsInvalid ? null : FinalPath(h);
     }
 
-    // nothing between root and path is a reparse point of any kind, and the last part is a folder or a file as asked
-    // (missing parts are fine). Stricter than LinkCheck on purpose, it's the hook's plain_path rule
+    // no reparse point at all between root and path, and the last part's a folder or file as asked (missing is fine).
+    // Stricter than LinkCheck on purpose, it's the hook's plain_path rule
     public static bool Plain(string root, string path, bool lastIsFolder)
     {
         var top = Path.GetFullPath(root).TrimEnd('\\');

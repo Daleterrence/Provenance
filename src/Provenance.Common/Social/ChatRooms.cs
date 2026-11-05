@@ -4,7 +4,7 @@ using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Social;
 
-// a zone in the chat room picker. Group is the zone group ("PlayOnline Lounge"), People is everyone in its rooms
+// a zone in the chat room picker. Group is the zone group it's listed under, People is everyone in its rooms
 public sealed record ChatZone(int Code, string Group, string Name, int Rooms, int People);
 
 // a room category from the room list's own table: Group is "Target Members", "Purpose" or "Main Language"
@@ -17,8 +17,8 @@ public sealed record ChatRoomEntry(string Irc, string Name, bool Locked, int Peo
 // Key only means something inside the one room, the hook never hands out ids
 public sealed record ChatMember(int Key, string Name, bool Me, bool Master, bool Away);
 
-// Kind is say, entered, left, away, back, master, kicked or whisper. From is the member key, 0 for my own lines.
-// Colour is the line's colour character as a number (-1 when it was 'z'), Emote its emoticon (0 for none)
+// Kind: say, entered, left, away, back, master, kicked or whisper. From's the member key (0 mine), Colour the colour
+// char as a number (-1 for 'z'), Emote 0 for none
 public sealed record ChatLine(long Seq, long Time, string Kind, int From, bool Me, string Name, string Text)
 {
     public DateTimeOffset When => DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime();
@@ -53,7 +53,7 @@ public static class ChatLook
     // the one a received line shows: the viewer only draws a face for 1 or more off its first sheet
     public static int Emote(int e) => e is >= 1 and <= Emotes ? e : 0;
 
-    // the room list's badge, from the room's language category (app.dll FUN_1008fc68, strings 0x4e90-0x4e93)
+    // the room list's badge, from the room's language category (the viewer's strings 0x4e90-0x4e93)
     public static string Language(IReadOnlyList<int> categories) => categories.Count > 2 ? categories[2] switch
     {
         300 => "JP",
@@ -109,14 +109,13 @@ public sealed record ChatRoomLines(string Room, IReadOnlyList<ChatLine> Lines);
 // the hook's chat room requests and its lines file. Requests are written whole like the others
 public static class ChatRoomFiles
 {
-    // the hook's own limits: 15 Shift-JIS bytes for a chat name, 23 characters of password, 400 characters of text (the
-    // viewer's box). A new room's from the viewer's form: 30 characters of name, 16 letters and numbers of password,
-    // 2-20 people
+    // the hook's limits: chat name 15 Shift-JIS bytes, password 23 chars, text 400 (the viewer's box). The viewer's new
+    // room form: name 30, password 16 letters and numbers, 2-20 people
     public const int MaxNameBytes = 15, MaxPasswordLength = 23, MaxTextLength = 400, PageSize = 100;
     public const int MaxRoomName = 30, MaxNewPassword = 16, MinOccupancy = 2, MaxOccupancy = 20, DefaultOccupancy = 10;
 
-    // the hook's cr_fits: polcore sends "PRIVMSG <room> :<frame>" with its checksum and line end in 0x200 bytes, and the
-    // frame's the 6 character face and colour header, the chat name, a tab and the language, then the text
+    // the hook's cr_fits: "PRIVMSG <room> :<frame>" plus checksum and line end in 0x200 bytes, the frame being a 6 char
+    // face and colour header, chat name, tab, language, then the text
     public static bool LineFits(string irc, string chatName, string text) =>
         8 + irc.Length + 2 + 6 + PolMessage.TextBytes(chatName) + 3 + PolMessage.TextBytes(text) + 2 + 8 <= 0x200;
 

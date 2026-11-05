@@ -13,7 +13,7 @@ public sealed record RepairPlan(IReadOnlyDictionary<string, IReadOnlyList<Mirror
     // products whose patch.ver doesn't hold the version the files were checked against, read the way POL reads it
     public IReadOnlyList<string> StaleVersions { get; init; } = [];
 
-    // the viewer's own update left half done (patch.ini and .tmp2 files), it'd overwrite good files at the next sign-in
+    // the viewer's own update left half done (patch.ini and .tmp2 files), it'd overwrite good files at the next launch
     public bool QueuePending { get; init; }
 
     public bool DirectXMissing { get; init; }
@@ -120,7 +120,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         });
         var (packages, installDirectX) = skipInstallData ? ([], false) : await PrepareAsync(plan, products, installRoot, dataProgress, ct);
 
-        // a stale queue (.tmp2) goes first, or it'd overwrite a repaired file at the next sign-in
+        // a stale queue (.tmp2) goes first, or it'd overwrite a repaired file at the next launch
         bool queued = ApplyViewerQueue(viewerDir);
         int other = queued ? 1 : 0;
 

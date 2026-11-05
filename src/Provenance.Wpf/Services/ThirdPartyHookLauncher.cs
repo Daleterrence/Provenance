@@ -177,9 +177,8 @@ public static class ThirdPartyHookLauncher
             new(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(90), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30));
     }
 
-    // Ashita first so it can't start another, then everything still running in its tree (pol.exe hooked or
-    // not, or whatever it handed over to). A pol.exe without the hook carries on into the viewer's own menu, the one
-    // thing nobody's meant to see
+    // Ashita first so it can't start another, then everything left in its tree. A pol.exe without the hook carries on
+    // into the viewer's own menu, the one thing nobody's meant to see
     internal static bool EndLaunch(Process hook, LaunchTree tree)
     {
         try

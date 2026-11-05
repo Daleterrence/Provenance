@@ -1,4 +1,4 @@
-/* the viewer's profile pic save (app.dll CProfileCli): load my record, UPDATE z_ficon + z_utime, then SetHandle
+/* the viewer's profile pic save: load my record, UPDATE z_ficon + z_utime, then SetHandle
    locally. Only built inside pol_hook.c, which defines SVC and FS_LOG first */
 #pragma pack(push, 1)
 
@@ -90,7 +90,7 @@ typedef int         (__cdecl *svc2b4_t)(unsigned slot, pol_handle *out);
 typedef int         (__cdecl *svc2b8_t)(unsigned slot, const pol_handle *in);
 typedef int         (__cdecl *svc16c4_t)(int id, WCHAR *out, int cap, int flags);
 
-/* polcore's own negative codes pass straight through, ours sit in a range it doesn't use */
+/* polcore's own negative codes pass straight through, mine sit in a range it doesn't use */
 #define FS_PENDING        0
 #define FS_DONE           1
 #define FS_E_ARGS     (-0x7f01)
@@ -339,8 +339,8 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
         r = ((svc4d8_t)SVC(0x4d8))(g_fs.job);
         if (r == 0) return FS_PENDING;
         g_fs.job = -1;
-        /* the viewer shits itself after 18000 polls and calls the save done anyway regardless (luv me playonline
-           innit), for us polcore's own fail at 100 s is an error */
+        /* the viewer shits itself after 18000 polls and calls the save done anyway regardless (luv me POL innit), for
+           me polcore's own fail at 100 s is an error */
         if (r < 0) return fs_fail(r, "profile update (svc 0x4d8)");
         r = fs_apply_local(b, g_fs.slot, g_fs.pic, g_fs.hid);
         if (r < 0) FS_LOG("pic: server updated, local handle apply failed %d\r\n", r);
@@ -352,7 +352,7 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
     return fs_fail(FS_E_ARGS, "bad state");
 }
 
-/* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for the next 10s (WHY THO?????),
+/* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for the next 10s (why tho?????),
    so it's only for shutdown or a real timeout */
 static void profile_pic_cancel(BYTE *b)
 {

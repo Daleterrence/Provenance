@@ -1,7 +1,7 @@
 namespace Provenance.Common.Multi;
 
-// PolSessionService.Error*. DetailsUnreadable is the hook failing to read the saved entries and Unfinished a login that
-// stopped short, neither one a POL refusal
+// DetailsUnreadable is the hook failing to read the saved entries and Unfinished a login that stopped short, neither one
+// a POL refusal
 public static class SignInCodes
 {
     public const int AuthFailed = -2, NoPolHandle = -3, LauncherFailed = -5, Stalled = -6,

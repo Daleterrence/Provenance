@@ -1,8 +1,7 @@
 <#
 .SYNOPSIS
     Builds the native files Provenance ships: the hook it loads into pol.exe (pol_hook.dll), Provenance Watcher.exe
-    (starts pol.exe and puts the hook in), and the uninstallers for the PlayOnline and FINAL FANTASY XI installs it
-    applies itself.
+    (starts pol.exe and puts the hook in), and the uninstallers for the POL and FFXI installs it applies itself.
 
 .DESCRIPTION
     Builds them from the sources next to this script into native\bin, or into -OutDir. Needs the x86 C++ compiler from

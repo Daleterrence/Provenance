@@ -14,8 +14,8 @@ static int g_lgcs_ready;
 
 static int getenv_set(const char *name) { return GetEnvironmentVariableA(name, NULL, 0) > 0; }
 
-/* pol.exe switches the screen saver off at start and only puts it back in its own cleanup, which end_pol skips. The
-   app's POL_SCREENSAVER is read before any pol.exe runs, by the time DllMain does one may have switched it off */
+/* pol.exe turns the screen saver off at start and only puts it back in its own cleanup, which end_pol skips. The app
+   reads POL_SCREENSAVER first, by DllMain it may already be off */
 static int g_saver = -1;
 static void saver_save(void)
 {
@@ -616,7 +616,7 @@ static void viewer_folder(char folder[MAX_PATH])
     RegCloseKey(hk);
 }
 
-#define LEGACY_HOME 84   /* shared by every account without a slot of its own, where older builds kept them all */
+#define LEGACY_HOME 84   /* shared by every account without a slot of its own */
 static char g_viewer[MAX_PATH];
 static int g_home = -1, g_home_made;
 
@@ -647,9 +647,8 @@ static int home_set(BYTE *b, int slot)
     return 1;
 }
 
-/* The viewer's init before it launches content (REGISTRY_LANG, FFXI_LANG, REGISTRY_KEY, INSTALL_FOLDER, FILE_INIT),
-   which the menu detour skips. Without it, game spits out FFXI-3322 at character creation (fun bonus of the error being
-   in Japanese), took me a whole night to nail it... solid work on my part. */
+/* the viewer's init before content (REGISTRY_LANG, FFXI_LANG, REGISTRY_KEY, INSTALL_FOLDER, FILE_INIT), which the menu
+   detour skips, or character creation throws FFXI-3322 in Japanese. Took me a whole night... solid work on my part */
 static void viewer_init(BYTE *b)
 {
     DWORD lang = viewer_lang();
@@ -767,7 +766,7 @@ static int owner_gone(void)
     return g_owner_gone;
 }
 
-/* presence only gets pushed once we're there with a handle, the viewer's last login step is (-2,-1,1,-2,0,1000).
+/* presence only gets pushed once I'm in with a handle, the viewer's last login step is (-2,-1,1,-2,0,1000).
    Handle -1 = signed off */
 static void status_start(BYTE *b, int handle, int status, int location)
 {
@@ -915,8 +914,8 @@ static int wait_handle_name(BYTE *b, char *name, int cap)
     lg("phase_c: no handle name within 10 minutes\r\n");
     return -3;
 }
-/* a new account has no handle, so FFXI's world login dies with a POL-0001 (I'm a damn moron and forgot about the
-   handle). Handles are permanent and public, so only the name the user typed gets used */
+/* a new account has no handle and FFXI's world login dies with POL-0001 (I'm a damn moron, forgot about the handle).
+   Handles are permanent and public, so only the typed name's used */
 static int handle_bootstrap(BYTE *b, int handles_loaded)
 {
     static const char *const why[] = { "creation cancelled", "no launcher target", "no answer within 10 minutes" };
@@ -978,7 +977,7 @@ static int handle_bootstrap(BYTE *b, int handles_loaded)
     return 0;
 }
 
-/* POL_PRESTART: pol.exe starts at app open with no credentials and waits here having sent nothing. Sign in writes
+/* POL_PRESTART: pol.exe starts at app open with no credentials and waits here having sent nothing. A login writes
    the go file (allow-listed KEY=VALUE lines). */
 static void prestart_wait(void)
 {
@@ -1089,7 +1088,7 @@ static void phase_c_seed(HMODULE pc)
     lg("phase_c: POLCON_OPEN(3) -> %d\r\n", r);
     ((int (__cdecl *)(void *, const char *))SVC(0xd60))(encpw, pw);   /* ENCODE_PASSWORD */
     SecureZeroMemory(pw, sizeof pw);
-    /* SET_PASSWORD (polcore.dll 0x10046df0) copies the bytes into polcore, so ours get cleared */
+    /* SET_PASSWORD (polcore.dll 0x10046df0) copies the bytes into polcore, so mine get cleared */
     ((int (__cdecl *)(void *, unsigned))SVC(0xd50))(encpw, 0);
     SecureZeroMemory(encpw, sizeof encpw);
     ((int (__cdecl *)(void *, const char *))SVC(0xd90))(hostbuf, "ci000.pol.com");   /* ENCODE_HOST */
@@ -1101,7 +1100,7 @@ static void phase_c_seed(HMODULE pc)
     *(unsigned *)(b + 0x9aa14) = 0xfffffbee;
     if (*(unsigned *)(b + 0x99408) == 0)
         *(unsigned *)(b + 0x99408) = 0x12;
-    /* no give-up of our own, polcore fails a stuck step itself and Provenance ends a login that goes quiet */
+    /* no give-up of my own, polcore fails a stuck step itself and Provenance ends a login that goes quiet */
     for (;;) {
         sm = *(unsigned *)(b + 0x99408);
         if (sm != (unsigned)last) {
@@ -1190,8 +1189,8 @@ static void prime_session(void)
         lg("viewer_init: user slot %d (pub\\home%02d)\r\n", g_home, g_home);
 }
 
-/* Gate 7 (FFXiMain.dll 0x04245cb0) decodes patch.ver from the current directory. Real POL boots content from the
-   FFXI folder, the hook would inherit POL's and bail silently. SILENTLY BEING THE KEY WORD MY LORD */
+/* gate 7 (FFXiMain.dll 0x04245cb0) decodes patch.ver from the current directory. Real POL boots content from the
+   FFXI folder, the hook would inherit POL's and bail silently. silently being the key word, my lord */
 static void set_cwd_ffxi(void)
 {
     HKEY k;
@@ -1289,7 +1288,7 @@ static int utf8_to_sjis(const char *src, char *out, int cap)
     return m > 0 ? m : 0;
 }
 
-/* Friend rows live in two polcore arrays (the ignore list is 100 rows of A's shape just before it, b+0xafc18):
+/* friend rows live in two polcore arrays (the ignore list is 100 rows of A's shape just before it, b+0xafc18):
      A  b+0xb40d8, stride 0xb0    +0x08 flags (bits 13-15 status, 0x800 online, 0x10000 a game slot's in use,
                                         bits 17-19 which slot, 0x10000000 pending request)
                                   +0x18 eight 16-byte game slots, +0x98 valid, +0xa0 handle name (SJIS)
@@ -1379,9 +1378,8 @@ static int take_request_ex(const char *ext, char *buf, int cap, char **grown, DW
         n = read_taken(taken, buf, cap, grown, most);
     } else {
         if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) return -1;
-        /* Rename first, so anything written after this is a new file for next turn, never one deleted unread. A file a
-           scanner still holds can't be renamed, so it waits.
-           i am vry gud with computer and this was easy to find, honest! :X */
+        /* rename first, so anything written after is next turn's file, never one deleted unread. One a scanner holds
+           waits (i am vry gud with computer and this was easy to find, honest! :X) */
         if (!MoveFileExA(path, taken, MOVEFILE_REPLACE_EXISTING)) return -1;
         n = read_taken(taken, buf, cap, grown, most);
     }
@@ -1406,7 +1404,7 @@ static int parse_num(const char *x, int maxDigits, int *out)
     return d > 0 && !*x;
 }
 
-/* Messages, list and reads on two lanes, delete on a third, polled once a turn:
+/* messages: list and reads on two lanes, delete on a third, polled once a turn:
      list  svc 0x524(out, max), poll 0x528 (1 = done) into a zeroed 8-aligned array, stride 0x50, valid entries
            have W(+0x3e) & 0x8000
      read  svc 0x518, poll 0x51c on a copy of the entry (first 0x48 bytes = the server key), body at +0x4c
@@ -1441,7 +1439,7 @@ static int g_mail_fails;
 static BYTE g_push_q[8][0x48];
 static volatile LONG g_push_n;
 
-/* Body "subject 0x07 text 0x00 [attachment]". Group invitations and their answers add a type-10 {u64 group id,
+/* body "subject 0x07 text 0x00 [attachment]". Group invitations and their answers add a type-10 {u64 group id,
    char[0x14] name} (svc 0x440 appends it raw). */
 static void mail_parse(mailrec *m, const char *body, int len)
 {
@@ -1596,8 +1594,8 @@ static int polid_ok(BYTE *b, DWORD lo, DWORD hi)
     fmt_polid(b, lo, hi, id);
     return lstrlenA(id) == 8;
 }
-/* one of mine coming back: a line this session sent to another POL ID (same time, seq and sending slot), or one from a
-   handle to itself. Anything else from my POL ID, another of my handles writing to this one say, is a real message */
+/* an echo of mine: a line this session sent to another POL ID (same time, seq and slot), or a handle writing to itself.
+   Anything else from my POL ID is a real message */
 static int mail_echo(BYTE *b, const BYTE *h)
 {
     DWORD lo = *(const DWORD *)(h + 8), hi = *(const DWORD *)(h + 0xc);
@@ -1839,7 +1837,7 @@ static void mail_ack_request(void)
     HeapFree(GetProcessHeap(), 0, buf);
 }
 
-/* Ids are masked per session and names change, so conversations are keyed on HMAC-SHA256("<my POL ID>/<peer POL
+/* ids are masked per session and names change, so conversations are keyed on HMAC-SHA256("<my POL ID>/<peer POL
    ID>/<slot>"), 8 bytes in hex. No POL ID ever leaves the hook. */
 static char g_my_polid[12];
 static BYTE g_peer_secret[32];
@@ -1860,8 +1858,8 @@ static int peer_secret_read(const WCHAR *path)
     CloseHandle(f);
     return g_peer_secret_ok;
 }
-/* a peerkey.bin left in %APPDATA%\Provenance is taken once so chat history keeps its keys. Anything of the user's can
-   plant links there, so only through a handle whose real path is that file, and it's deleted through that handle */
+/* an old %APPDATA%\Provenance\peerkey.bin is taken once so chat history keeps its keys. Links can be planted there, so
+   it's read and deleted through a handle that really is that file */
 static HANDLE peer_secret_old(void)
 {
     WCHAR dir[MAX_PATH], path[MAX_PATH + 32], want[MAX_PATH + 32], got[MAX_PATH + 32];
@@ -2887,8 +2885,8 @@ static pdb_item *pdb_get(BYTE *b, pdb_schema *s, const char *name, pdb_rec *rec)
     return ((svc49c_t)SVC(0x49c))(s, name, rec);
 }
 
-/* a search, a friend's profile, a character lookup, an FFXI profile, my own profile and a picture save all go to the
-   profile server, so they share the 3 s gap and go one at a time, never more than the viewer has going */
+/* searches, profiles (friends', FFXI and my own), character lookups and picture saves all go to the profile server, so
+   they share the 3 s gap and go one at a time like the viewer */
 static ULONGLONG g_db_last;
 static int g_srch_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
 static int g_prof_step, g_ch_step, g_fp_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
@@ -3042,7 +3040,7 @@ static void search_request(BYTE *b)
     if (k == 3) { search_done("failed:bad request"); return; }
     if (k == SK_HANDLE) {
         if (!ascii_name_ok(val)) { search_done("failed:bad name"); return; }
-        /* a name with a ' never goes out in a handle search (ascii_name_ok keeps 0x04 out) */
+        /* a name with a ' (or 0x04) never goes out in a handle search */
         if (strchr(val, '\'')) { search_done("failed:quote"); return; }
     } else if (k == SK_HID) {
         if (!hid_parse(val, &hid)) { search_done("failed:bad hid"); return; }
@@ -4689,7 +4687,7 @@ static void xi_pump(BYTE *b, int ctl)
     }
 }
 
-/* Handles and Content IDs, listed from memory (svc 0x2b4/0x2c4). A switch is the viewer's one ChangeMyStatus (app.dll
+/* handles and Content IDs, listed from memory (svc 0x2b4/0x2c4). A switch is the viewer's one ChangeMyStatus (app.dll
    0x10040c9e), a link or unlink a local 0x2dc/0x2e0 and then one PutChrList (0x1038) */
 #define CHR_LINKED 0x8000
 #define CHR_HANDLE(f) (((f) >> 16) & 0x3f)
@@ -4760,8 +4758,8 @@ static void handle_switch_start(BYTE *b)
     if (t < 0) { handle_done(failed(t)); return; }
     g_hjob = t;
 }
-/* polcore links into the first free one of a handle's 8, which needn't be where it was. Put back by hand in the
-   records (polcore.dll 0x10403080 Content IDs, 0x10405800 handles), all on this thread like polcore's own calls */
+/* polcore links into a handle's first free slot of 8, not where it was, so it's put back by hand in the records
+   (Content IDs at polcore.dll 0x10403080, handles 0x10405800) on this thread */
 static void handle_place(BYTE *b, int idx, int slot, int pos)
 {
     BYTE *hs = b + 0x405820 + slot * 0x28;
@@ -5377,7 +5375,7 @@ static int play_signalled(void)
     return 0;
 }
 /* the server's handle, else the first in use (app.dll 0x10028a76). Provenance's last one (POL_HANDLE) goes before
-   the first in use, since so far the server's never given our sessions one back */
+   the first in use, since so far the server's never given my sessions one back */
 static int login_handle(BYTE *b, const char **why)
 {
     BYTE rec[0x28];
@@ -5451,8 +5449,8 @@ static void drain_turn(BYTE *b, int mail)
     Sleep(16);
 }
 
-/* the viewer sets polcore's idle timeout from option.bin's GOPN1_AO at login and FFXI only ever switches the timer on,
-   so with session init's 0 it'd never fire in game. Off still till FFXI turns it on, same as the viewer leaves it */
+/* the viewer sets polcore's idle timeout from option.bin's GOPN1_AO at login, and FFXI only switches the timer on, so
+   session init's 0 would never fire. It stays off till FFXI turns it on */
 static int idle_timeout_for_game(BYTE *b)
 {
     BYTE *rec = NULL;
@@ -5557,9 +5555,8 @@ static void hold_sign_out(BYTE *b, const char *spath)
     end_pol(0);
 }
 
-/* read only: polcore stamps conn+0x39d4 whenever it sends anything on the link, and on a quiet hold that's only the
-   PONG to the server's PING (every ~125 s). It drops the session as -250 400 s after the last one, so these say when
-   the server went quiet. The login's own stamp is only noted, then one line every 10 minutes at most */
+/* read only: polcore stamps conn+0x39d4 on every send, on a quiet hold just the PONG to the ~125 s PING. The session
+   drops as -250 400 s on, so this logs the server going quiet */
 #define LINK_LOG_MS 600000
 static DWORD g_link_sent;
 static ULONGLONG g_link_sent_at, g_link_logged_at;
@@ -5706,8 +5703,8 @@ static void pol_hold(BYTE *b)
 
 #define GAME_START_EXIT 15
 
-/* add-ons and game plugins already unloaded inside FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins
-   and finish its log, so it gets a clean exit, anything else is just more places to crash on the way out */
+/* add-ons and game plugins already unloaded in FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins and
+   finish its log, so it gets a clean one, the rest just get more places to crash */
 static void game_over(UINT code)
 {
     if (GetModuleHandleW(L"Ashita.dll")) {
@@ -5766,7 +5763,7 @@ static int hook_game_end(BYTE *exe)
     return 1;
 }
 
-/* The menu session detour, thiscall (this in ecx) + 4 args, callee pops 16 bytes. Returning 1 takes pol.exe's
+/* the menu session detour, thiscall (this in ecx) + 4 args, callee pops 16 bytes. Returning 1 takes pol.exe's
    dispatch (0x0041406e) down its FFXI case: 0x00413140 CoCreates FFXiEntry {989D790D}, which boots FFXiMain. */
 static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned d)
 {
@@ -5797,7 +5794,7 @@ static void install(void)
         if (g_pOpenMutexW)   hook_slot(exe, 0x5c834, 0x15b39, (void *)my_OpenMutexW,   "OpenMutexW");
     }
     hook_slot(exe, 0x5c864, 0x15493, (void *)my_CreateDialogParamW, "CreateDialogParamW");
-    /* An E9 jmp over the menu session (pol.exe 0x00413710), only in the 1.18.15e pol.exe I wrote this against.
+    /* an E9 jmp over the menu session (pol.exe 0x00413710), only in the 1.18.15e pol.exe I wrote this against.
        Other builds (1.18.00n for one) have other code here. */
     BYTE *p = (BYTE *)exe + 0x13710;
     if (memcmp(p, MENU_PROLOGUE, sizeof MENU_PROLOGUE) != 0) {

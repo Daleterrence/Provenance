@@ -6,8 +6,8 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Provenance.Common.Install;
 
-// <root>\Uninstall holds what an elevated uninstall runs, and the root can be somewhere anyone can write to. So it gets
-// its own permissions, made or fixed through a handle that's never a link, and it's held while it's written to
+// <root>\Uninstall holds what an elevated uninstall runs, and the root may be anyone's to write. So it gets its own
+// permissions, set through a handle that's never a link, and is held while written
 public sealed class UninstallFolder : IDisposable
 {
     private static readonly SecurityIdentifier Admins = new(WellKnownSidType.BuiltinAdministratorsSid, null);

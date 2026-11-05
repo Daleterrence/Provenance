@@ -113,7 +113,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     partial void OnNoAddonsChanged(string? value) => _addonsHeading.Note = value;
     partial void OnNoPluginsChanged(string? value) => _pluginsHeading.Note = value;
 
-    // Ashita's PlayOnline Plugins tab goes with it, but not while a page is loading, so another boot config keeps it
+    // Ashita's POL plugins tab goes with it, but not while a page is loading, so another boot config keeps it
     // picked. Addons gets picked before it goes, or the strip would be left with nothing
     private void SyncTabs(Page page)
     {

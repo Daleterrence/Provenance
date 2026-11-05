@@ -418,7 +418,6 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- no ID or password fields here, the IDs stay off screen -->
                         <Grid Margin="28,22,28,14" RowDefinitions="*,Auto,Auto"
                               Visibility="{Binding ShowSignInCard, Converter={StaticResource BoolToVis}}">
                             <Image Source="{StaticResource BgLogo}" OpacityMask="{DynamicResource Logo.Mask}" MaxHeight="340" Margin="0,0,0,10"
@@ -526,7 +525,7 @@
                                     <Grid ColumnDefinitions="*,Auto,Auto">
                                         <Button x:Name="PlayButton" Command="{Binding PlayCommand}" IsEnabled="{Binding Social.CanPlay}" IsDefault="True"
                                                 Style="{StaticResource ActionSegment}" AutomationProperties.Name="Play">
-                                            <!-- an invisible copy of the line above PLAY keeps PLAY in the middle, nudged up a touch -->
+                                            <!-- an invisible copy of the line above Play keeps Play in the middle, nudged up a touch -->
                                             <StackPanel Margin="0,0,0,6">
                                                 <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0" Margin="0,0,0,-4"
                                                            HorizontalAlignment="Center" AutomationProperties.Name=""

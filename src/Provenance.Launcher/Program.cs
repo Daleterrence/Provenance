@@ -66,7 +66,7 @@ internal static class Program
                 var h = OpenEventW(EventModifyState | Synchronize, false, name);
                 if (h == IntPtr.Zero)
                 {
-                    // denied means ours but run as another account (an admin's password at the UAC prompt), so it
+                    // denied means mine but run as another account (an admin's password at the UAC prompt), so it
                     // can't be asked. Not found means another install's copy
                     if (Marshal.GetLastWin32Error() == ErrorAccessDenied) unreachable = true;
                     continue;

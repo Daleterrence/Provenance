@@ -517,7 +517,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private bool CanSave() => IsLoaded && !Busy && HasChanges && Problem.Length == 0;
 
-    // a save PlayOnline turned down, said out loud as well as in the footer
+    // a save POL turned down, said out loud as well as in the footer
     internal event Action<string>? SaveRefused;
 
     // asks before a rename (old name, new name), true to go ahead. Null skips the question

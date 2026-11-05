@@ -50,7 +50,7 @@ public partial class MessageDialog : Window
             dlg.CancelButton.IsDefault = true;
             dlg.Loaded += (_, _) => dlg.CancelButton.Focus();
         }
-        // one red button per dialog: the delete when there is one, otherwise cancel. A NO answering a question stays blue
+        // one red button per dialog: the delete when there is one, otherwise cancel. A No answering a question stays blue
         if (destructive) dlg.OkButton.SetResourceReference(StyleProperty, "RedButton");
         if (destructive || cancelLabel != null) dlg.CancelButton.SetResourceReference(StyleProperty, "PolButton");
         if (choiceA != null && choiceB != null)

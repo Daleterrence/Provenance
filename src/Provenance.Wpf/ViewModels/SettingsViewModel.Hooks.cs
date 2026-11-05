@@ -157,8 +157,8 @@ public partial class SettingsViewModel
 
     private static string PlatformName(int index) => index switch { 1 => "Ashita", 2 => "Windower", _ => "no Windower or Ashita" };
 
-    // after the first load, a switch between Windower and Ashita clears each account's stored profile. Logged in, the
-    // old one's already loaded, so it only switches with a restart and a no puts it back unsaved
+    // after the first load, switching between Windower and Ashita clears each account's stored profile. Logged in, the
+    // old one's loaded, so it takes a restart, and a no puts it back unsaved
     partial void OnThirdPartyHookIndexChanged(int oldValue, int newValue)
     {
         bool restart = !_loadingThirdPartyHook && _loggedIn?.Invoke() == true;
@@ -768,8 +768,8 @@ public static class WindowerKeyNames
         WindowerKeys.All.Where(WindowerKeys.Pickable).Select(WindowerKeys.Canonical).DistinctBy(k => k.ScanCode)
                     .Select(k => new ConsoleKeyChoice(k, Display(k))).ToList();
 
-    // DirectInput's number for a key, which is what Windower's are: the scan code, plus 0x80 for an extended one.
-    // Windows hands Pause and Num Lock over the wrong way round, and Print Screen only ever comes as a key up
+    // DirectInput's number for a key, as Windower uses: the scan code, plus 0x80 when extended. Windows swaps Pause and
+    // Num Lock, and Print Screen only ever comes as a key up
     public static int DirectInputCode(int virtualKey, int scanCode, bool extended) => virtualKey switch
     {
         0x13 => 197,

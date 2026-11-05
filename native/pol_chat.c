@@ -6,8 +6,8 @@
 #define CR_ZONES 32
 #define CR_ROOMS 100
 #define CR_REPLIES 8
-/* the viewer's give-ups (app.dll FUN_10095141, FUN_10097c61): an answer gets 18000 frames, 6 min at its 50 a second at
-   most. A try is one hold loop turn where polcore wouldn't take the command, because another one was waiting */
+/* the viewer's give-ups (app.dll 0x10095141, 0x10097c61): 18000 frames for an answer, 6 min at 50 a second. A try is a
+   hold loop turn polcore wouldn't take the command on, with another one out */
 #define CR_WAIT_MS 360000
 #define CR_TRIES_ENTER 3600   /* entering's AWAY and JOIN, and the PART, which the viewer never gives up on */
 #define CR_TRIES 5            /* any other command, and the typed line */
@@ -216,7 +216,7 @@ static cr_line *cr_add_line(int kind, int me, const cr_person *p, const WCHAR *n
     return l;
 }
 
-/* one character of a frame's colour, emoticon or colour-index field (app.dll FUN_1009664e): 0-9 and a-n either case,
+/* one character of a frame's colour, emoticon or colour-index field (app.dll 0x1009664e): 0-9 and a-n either case,
    a space is 0, 'z' is -1 and anything else 0 */
 static int cr_hex(WCHAR c)
 {
@@ -236,7 +236,7 @@ static int cr_tab(const WCHAR *w, int n, int from)
     for (int i = from; i < n; i++) if (w[i] == L'\t') return i;
     return -1;
 }
-/* one room line, already in UTF-16. The viewer's FUN_10099d8e, minus whispers, passwords and profile switches */
+/* one room line, already in UTF-16, read like app.dll 0x10099d8e does minus whispers, passwords and profile switches */
 static void cr_parse(BYTE *b, const WCHAR *w, DWORD lo, DWORD hi, int whisper)
 {
     WCHAR name[0x21], text[0x201];
@@ -387,8 +387,8 @@ static void cr_frame_hello(BYTE *b, int type, WCHAR *w)
     lstrcpynW(w + 104, g_cr_nick, CR_NAME_MAX + 1);
     (void)b;
 }
-/* a 0: type, emoticon page and face as %2x (space padded), the colour char, name, tab, language, text. A picked
-   colour is the char 5 on from its place in the viewer's list (app.dll 0x100984df), none is '0' */
+/* a 0: type, emoticon page and face as space-padded %2x, colour char, name, tab, language, text. A colour's char is 5
+   on from its place in the viewer's list (app.dll 0x100984df), '0' for none */
 static void cr_frame_say(BYTE *b, const WCHAR *text, WCHAR *w, int cap)
 {
     static const WCHAR cc[] = L"0123456789abcdefghijklmn";
@@ -666,8 +666,8 @@ static void cr_frame_tail(BYTE *b, int type, const WCHAR *tail)
     cr_msg_start(b, type);
 }
 
-/* the room master's kick, designate and password change (app.dll FUN_1009ba31 0x55-0x5f, 0x28-0x2f). Each step is
-   one command or one frame, and each waits for the last */
+/* the room master's kick, designate and password change (app.dll 0x1009ba31). Each step is one command or one frame,
+   and each waits for the last */
 static void cr_master_next(void)
 {
     if (!g_cr_mop) return;
@@ -923,7 +923,7 @@ static int cr_cate(const char *x, int base, int count, int *out)
     if (!parse_num(x, 3, out)) return 0;
     return *out == 0 || (*out >= base && *out < base + count);
 }
-/* a new room (app.dll FUN_100a188d 0x2a-0x39): <token>, <1 with a password in Credential Manager>, <zone>,
+/* a new room (app.dll 0x100a188d): <token>, <1 with a password in Credential Manager>, <zone>,
    <occupancy>, <the three categories>, <chat name>, <room name>. The JOIN makes it and makes me its master */
 static void cr_create_request(BYTE *b)
 {
@@ -1281,9 +1281,8 @@ static int cr_db_load(BYTE *b, int rooms)
         const pfb_tab *t = cr_tab_of(g_cr_cpfb, 0);
         int lang = SVC(0xf18) ? ((svc_v)SVC(0xf18))() : 0, row = 0;
         for (int i = 0; i < t->n && g_cr_zone_n < CR_ZONES; i++) {
-            /* the viewer's list has a row for a group's name (part 0) and one for the zone (part 2), and it leaves rows
-               5-8 out in any language but Japanese and 6-8 in Japanese (app.dll FUN_100a12bd, by svc 0xf18). By row,
-               not by name, the same as it does */
+            /* the viewer lists a group's name (part 0) and the zone (part 2), leaving out rows 5-8, or 6-8 in Japanese
+               (app.dll 0x100a12bd, by svc 0xf18). By row, not by name, same as it does */
             if (cr_part_there(t, i, 0)) row++;
             if (!cr_part_there(t, i, 2)) continue;
             if (row < (lang == 0 ? 6 : 5) || row > 8) g_cr_zone[g_cr_zone_n++].code = (WORD)t->e[i].code;

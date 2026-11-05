@@ -93,8 +93,8 @@ public sealed record PolGroupMember(int Index, string Name, string Key, int Prof
 {
     // 1 online, 2 away, 3 busy, 0 and 4 offline
     public bool Online => Status is 1 or 2 or 3;
-    // the member's handle: its slot on its own account (-1 when the hook didn't say) and its Handle ID, in the
-    // handles' key format. Mine is my POL ID's row, the one the viewer goes by
+    // the member's handle slot on its own account (-1 when the hook didn't say) and Handle ID, in the handles' key
+    // format. Mine is my POL ID's row, which the viewer goes by
     public int Slot { get; init; } = -1;
     public string Hid { get; init; } = "";
     public bool Mine { get; init; }
@@ -118,7 +118,7 @@ public sealed record PolBlocked(int Index, string Name, string Key, bool AllHand
 public sealed record PolHandle(int Slot, string Name, string Key, int ProfilePictureId, int Order, bool Active,
                                IReadOnlyList<int> ContentIds);
 
-// a Content ID record, type 1 is FFXI. Handle is the slot it's linked to or -1, and what Text holds isn't known yet
+// a Content ID record, type 1 is FFXI. Handle is the slot it's linked to or -1
 public sealed record PolContentId(int Index, int Type, string Name, string Text, int Order, int Handle, string Key);
 
 // State is "read" (body downloaded), "pending", "failed", "realtime" or "local" (from the game's message store, not
@@ -126,7 +126,6 @@ public sealed record PolContentId(int Index, int Type, string Name, string Text,
 public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, long Seq, string State,
                                 string Subject, string Text, int Mid = 0, string FromKey = "")
 {
-    // looks like Unix seconds, though that's a guess tbh
     public DateTimeOffset? When => Time > 0 ? DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime() : null;
 
     // the in-memory ids are session-masked, this one's stable
@@ -154,8 +153,8 @@ public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, 
 
     private static readonly Encoding Sjis = MakeSjis("??"), SjisOnly = MakeSjis("");
 
-    // the hook's conversion turns anything Shift-JIS hasn't got into a '?', so counting 2 a char never lets one through.
-    // The fallback runs per UTF-16 unit, so an emoji counts 4, in case polcore puts its stand-in in for each half
+    // the hook turns what Shift-JIS hasn't got into '?', so 2 a char never lets one through. The fallback's per UTF-16
+    // unit, so an emoji counts 4 in case polcore stands in for each half
     private static Encoding MakeSjis(string missing)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -241,7 +240,7 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public string SearchState { get; init; } = "";
     public IReadOnlyList<PolSearchHit> SearchResults { get; init; } = [];
     public FriendSearchKind SearchKind { get; init; }
-    // how many PlayOnline found, which can be more than came back
+    // how many POL found, which can be more than came back
     public int SearchTotal { get; init; }
     public bool SearchTooMany { get; init; }
     public string ProfileToken { get; init; } = "";

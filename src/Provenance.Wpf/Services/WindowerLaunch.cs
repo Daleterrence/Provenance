@@ -39,8 +39,8 @@ public sealed record WindowerGameValues(WindowerProfile Profile, WindowerRegion 
     public IReadOnlyList<string> Apply() => WindowerGameRegistry.Apply(Profile, Region, Profile.Width, Profile.Height, Root);
 }
 
-// Everything Windower.exe does before it starts pol.exe, then the watcher's --windower puts Hook.dll in and pol_hook
-// after it. The mapping and the event have fixed names, so launches take turns and hold both till the watcher is done
+// what Windower.exe does before starting pol.exe, then the watcher's --windower puts in Hook.dll and pol_hook. The
+// mapping and event have fixed names, so launches take turns till the watcher's done
 public sealed class WindowerLaunch : IDisposable
 {
     internal const string LockName = @"Local\ProvenanceWindowerLaunch";
@@ -150,7 +150,7 @@ public sealed class WindowerLaunch : IDisposable
         while (true)
         {
             try { if (_turn.WaitOne(250)) break; }
-            catch (AbandonedMutexException) { break; }   // a copy that died part way, the turn's ours now
+            catch (AbandonedMutexException) { break; }   // a copy that died part way, the turn's mine now
             ct.ThrowIfCancellationRequested();
             if (!said)
             {

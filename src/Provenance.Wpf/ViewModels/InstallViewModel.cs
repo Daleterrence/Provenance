@@ -527,8 +527,8 @@ public partial class InstallViewModel : ObservableObject
         "PlayOnline updates itself the first time you log in, and the game updates the first time you press Play" +
         (gameUpdateBytes is long b && b > 0 ? $" ({RepairViewModel.Size(b)} to download)." : ".");
 
-    // the way the first Play picks its files, reusing the game index from the mirror's try. Null when it could come
-    // from POL (the mirror's try never got POL's version, or the mirror hasn't got it) or the mirror can't be reached
+    // the way the first Play picks its files, reusing the mirror's game index. Null when that could come from POL (no
+    // version from POL, or the mirror hasn't got it) or the mirror's unreachable
     private async Task<long?> FirstUpdateSizeAsync(CancellationToken ct)
     {
         if (MirrorUpdater.RegionFor(_region, "ffxi") is not { } mirrorRegion || _mirror?.GameIndex is not { } index

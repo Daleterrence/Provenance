@@ -12,8 +12,8 @@ namespace Provenance.Common.Install;
 
 public sealed record GamePart(string FileName, Uri Url, long Size, string Md5);
 
-// Fraction is -1 while there's nothing to measure
-// Download marks bytes coming over the network, the only ones that get a rate
+// Fraction is -1 while there's nothing to measure. Download marks bytes coming over the network, the only ones that get
+// a rate
 public sealed record InstallProgress(string Stage, string Detail, double Fraction, long DoneBytes, long TotalBytes, bool Download = false);
 
 public sealed class DamagedPartException : IOException

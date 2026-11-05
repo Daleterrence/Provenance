@@ -1,5 +1,5 @@
-/* a friend group's chat. polcore runs the lot (its own channel, line format and pump, app.dll FUN_100487d7 asks it
-   the same way), the hook only asks for a join, a line or a leave and keeps the lines its callback hands back */
+/* a friend group's chat, which polcore runs itself (channel, line format, pump). The hook asks for a join, a line or a
+   leave like app.dll 0x100487d7 does, and keeps the lines */
 #define GC_LINES 256
 #define GC_TEXT_MAX 174       /* NOTICE #XXL<16 hex> :<base64> has to fit polcore's 0x200 byte line, past that it drops it */
 #define GC_GIVE_UP_MS 30000   /* the viewer's own, then svc 0x6c4 */
@@ -76,7 +76,7 @@ static int gc_joined(BYTE *b)
     return SVC(0x6cc) && ((int (__cdecl *)(char *))SVC(0x6cc))(ch) == 0;
 }
 static void gc_force_leave(BYTE *b) { if (SVC(0x6c4)) ((svc_v)SVC(0x6c4))(); }
-/* polcore's one waiting line (its base64 at DAT_100bdc30), cleared once FUN_1002b8a0's sent it or given up on it */
+/* polcore's one waiting line (its base64), cleared once polcore's sent it or given up on it */
 static int gc_line_held(BYTE *b) { return !IsBadReadPtr(b + 0xbdc30, 1) && b[0xbdc30] != 0; }
 
 /* my row in the group, -1 when polcore hasn't got one for me */
@@ -97,7 +97,7 @@ static int gc_still_in(BYTE *b)
     g_gc_my = gh.myIndex;
     cls = (gh.flags >> 1) & 7;
     row = gc_my_row(b, g_gc_lo, g_gc_hi, &m);
-    /* polcore's echo needs my id and the group's handle slot (FUN_10027df0) */
+    /* polcore's echo needs my id and the group's handle slot */
     g_gc_have_row = row >= 0 && ((m.hHi >> 13) & 0x3f) == ((gh.flags >> 4) & 0x3f);
     if (row >= 0 && ((m.flags >> 18) & 7) == 1) return -1;
     return cls >= 3 && cls <= 5;
@@ -262,10 +262,10 @@ static void gc_send_pump(BYTE *b)
         return;
     }
     if (g_gc_send != GS_QUEUED) return;
-    /* NOTICE never gets an answer, so my own copy coming back is the only sign it went. polcore echoes it as it
-       lets go of the line, so let go with no echo is not sent */
+    /* NOTICE never gets an answer, so my own copy coming back is the only sign it went. polcore echoes as it lets go
+       of the line, so gone with no echo means not sent */
     if (g_gc_echo) { g_gc_send = GS_NONE; gc_send_state("sent"); }
-    /* with no row for me in the group polcore can't echo (FUN_1002afb0 looks me up), so gone is all there is to go on,
+    /* with no row for me in the group polcore can't echo (it looks me up first), so gone is all there is to go on,
        and the app shows the line itself */
     else if (!gc_line_held(b)) { g_gc_send = GS_NONE; gc_send_state(g_gc_have_row ? "failed:not sent" : "sent:unechoed"); }
     else if (GetTickCount64() - g_gc_sent_at >= GC_SEND_MS) { g_gc_send = GS_NONE; gc_send_state("failed:timeout"); }

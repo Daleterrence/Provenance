@@ -1,7 +1,7 @@
 namespace Provenance.Common;
 
-// .NET 10.0.14 on x86 dies when a thread static fits its 48 byte direct TLS area but not once it's aligned (the tray
-// menu hit it). Filling the area a byte at a time first leaves no gap to fall into, drop it once a fixed runtime ships
+// .NET 10.0.14 on x86 dies on a thread static that fits its 48 byte TLS area till aligned (the tray menu hit it).
+// Filling it first leaves no gap, drop this once it's fixed
 public static class ThreadStaticsFix
 {
     private const int DirectAreaBytes = 48;

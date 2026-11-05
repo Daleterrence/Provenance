@@ -13,11 +13,11 @@ using RequestAnswer = Provenance.Common.Social.SocialSnapshot.RequestAnswer;
 
 namespace Provenance.Wpf.ViewModels;
 
-// a friend, or someone who wrote but isn't on the list (Row -1)
 // how a session ends for its lines in flight: Play and log out (or exit) let the hook finish them, a drop doesn't
 public enum SessionEnd { Play, LogOut, Dropped }
 
-// Playing is the FFXI line next to their name, PlayingShort the same without the world for when that doesn't fit
+// a friend, or someone who wrote but isn't on the list (Row -1). PlayingShort is the FFXI line without the world, for
+// when that doesn't fit
 public sealed record FriendItem(string Name, string Playing, string Comment, string StatusLabel,
                                 bool Online, int Row, ImageSource? Avatar, int Unread, string Section)
 {
@@ -89,7 +89,7 @@ public partial class SocialViewModel : ObservableObject
     public int MyProfilePictureId { get; private set; }
 
     public bool HasUnread => UnreadCount > 0;
-    // requests get a badge too (on FRIENDS), so one's never just an 8 sec banner
+    // requests get a badge too (on Friends), so one's never just an 8 sec banner
     public bool HasPendingAnswers => PendingAnswers > 0;
     public bool CanPlay => PlayBlockedReason is null;
     public string Summary => OnlineCount switch { 0 => "No friends online", 1 => "1 friend online", var n => $"{n} friends online" };
@@ -497,7 +497,7 @@ public partial class SocialViewModel : ObservableObject
         SnapshotApplied?.Invoke(snap);
     }
 
-    // new mail and send results into the log. POL's copy of a message only goes once ours is saved, like the viewer
+    // new mail and send results into the log. POL's copy of a message only goes once mine's saved, like the viewer
     private bool MergeChat(ChatStore chat, PolSocialSnapshot snap)
     {
         bool changed = false;
@@ -508,8 +508,8 @@ public partial class SocialViewModel : ObservableObject
                 changed |= chat.Adopt(f.Name, f.Key);   // lines saved while the hook had no key for them
         bool takeStore = snap.Stored != null && !_storeTaken;
         if (takeStore) changed |= MergeStored(chat, snap);
-        // the recent results too, an answer or invitation can take the send slot before we see a line's result. First,
-        // so a line of mine coming back in the same snapshot finds the time and seq it went with
+        // the recent results too, since an answer can take the send slot before a line's result lands. First, so an
+        // echo in the same snapshot finds its time and seq
         foreach (var (token, state, time, seq) in snap.SendResults.Append((snap.SendToken, snap.SendState, 0L, 0L)))
             if (token.Length > 0 && (state == "sent" || state.StartsWith("failed", StringComparison.Ordinal)))
             {
@@ -535,8 +535,8 @@ public partial class SocialViewModel : ObservableObject
                 GroupInviteReceived?.Invoke(m.From, m.Mid);
             if (m.HasBody && m.Kind == PolMessage.KindFriendRequest && m.Mid > 0 && _seenRequests.Add(m.Mid))
                 FriendRequestReceived?.Invoke(m.From, m.Mid);
-            // a line I sent to another POL ID coming back isn't something I received, and goes from the server like any
-            // read line. One of mine it can't match yet waits while a send of mine could still turn out to be it
+            // my line to another POL ID coming back wasn't received, so it goes from the server like any read line. An
+            // unmatched one waits while a send of mine could still be it
             if (Echo(snap, m, chat))
             {
                 changed |= chat.MarkReturned(m.Time, m.Seq, m.FromSlot);
@@ -579,8 +579,8 @@ public partial class SocialViewModel : ObservableObject
     private static bool Mine(PolSocialSnapshot snap, PolMessage m) =>
         m.IsMe || (snap.MyKey.Length > 0 && m.FromKey == snap.MyKey);
 
-    // only a certain echo of mine: the log has a line I sent to another POL ID with the same time, seq and sending slot, or
-    // it's from a handle to itself. Anything else from my POL ID is shown, never deleted unread
+    // only a certain echo: the log has my line to another POL ID with the same time, seq and slot, or it's a handle to
+    // itself. Anything else from my POL ID gets shown
     private static bool Echo(PolSocialSnapshot snap, PolMessage m, ChatStore chat) =>
         m.IsChat && Mine(snap, m) &&
         ((m.ToMe && m.ToKey.Length > 0 && m.ToKey == m.FromKey) || chat.SentAt(m.Time, m.Seq, m.FromSlot));

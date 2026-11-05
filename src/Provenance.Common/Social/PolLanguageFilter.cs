@@ -70,7 +70,7 @@ public sealed class PolLanguageFilter
         return any ? sb.Append(text, end, text.Length - end).ToString() : text;
     }
 
-    // FUN_1004e4d0 in the viewer's mode (4, mask)
+    // polcore 0x1004e4d0 in the viewer's mode (4, mask)
     private void MaskWords(byte[] s, int n)
     {
         int i = 0;
@@ -121,8 +121,8 @@ public sealed class PolLanguageFilter
         }
     }
 
-    // FUN_1004e760: < 0 for a word, m is the bytes after its first character. 1 for a two-byte character no word
-    // starts with
+    // polcore 0x1004e760: < 0 for a word, m is the bytes after its first character. 1 for a two-byte character no
+    // word starts with
     private int Match(Trie t, byte[] s, int p, int len, out int m)
     {
         m = 0;
@@ -145,7 +145,7 @@ public sealed class PolLanguageFilter
         return r == 0 ? (two ? 1 : 0) : r;
     }
 
-    // FUN_1004e8e0: type 1 nodes branch on one character, type 2 hold the rest of a word (bytes negated)
+    // polcore 0x1004e8e0: type 1 nodes branch on one character, type 2 hold the rest of a word (bytes negated)
     private int Walk(Trie t, byte[] s, int p, int len, int node, ref int m, int depth)
     {
         if (depth > 512) return 0;
@@ -200,7 +200,7 @@ public sealed class PolLanguageFilter
         return 0;
     }
 
-    // FUN_1004ec00, over keys stored negated, compared as unsigned 16-bit
+    // polcore 0x1004ec00, over keys stored negated, compared as unsigned 16-bit
     private int Find(ushort key, int keys, int hi)
     {
         int lo = 0;
@@ -213,14 +213,14 @@ public sealed class PolLanguageFilter
         return (ushort)-U16(keys + lo * 2) == key ? lo : -1;
     }
 
-    // FUN_1004e6e0: the bytes a separator (space, punctuation) takes up, 0 for a letter
+    // polcore 0x1004e6e0: the bytes a separator (space, punctuation) takes up, 0 for a letter
     private int Skip(byte[] s, int p)
     {
         if (Double(s, p)) return Bit(0x30, s[p + 1]) && Bit(0x10, s[p]) ? 2 : 0;
         return Bit(0x10, s[p]) ? 1 : 0;
     }
 
-    // FUN_1004e850: a single byte through +0x4930 (A-Z to a-z), a double one through +0x250 when the trie wants it
+    // polcore 0x1004e850: a single byte through +0x4930 (A-Z to a-z), a double one through +0x250 when the trie wants it
     private int Norm(byte[] s, int p, bool table)
     {
         if (!Double(s, p)) return _d[0x4930 + s[p]];
@@ -231,9 +231,8 @@ public sealed class PolLanguageFilter
     private bool Bit(int table, byte b) => ((_d[table + (b >> 3)] >> (b & 7)) & 1) != 0;
     private int U16(int at) => BinaryPrimitives.ReadUInt16LittleEndian(_d.AsSpan(at));
 
-    // polcore's own conversion (FUN_1004d4d0): ASCII as is, Shift-JIS rows 0x81-0x9f and 0xe0-0xea, SE's row 0x85 for
-    // Windows-1252's top half, '?' for the rest. Where a character's in two rows the later one wins, like polcore's
-    // search. at[i] is where text[i] starts, at[end] the length, and there's a zero pad on the end for the lookahead
+    // polcore's conversion (0x1004d4d0): ASCII as is, Shift-JIS rows 0x81-0x9f and 0xe0-0xea, SE's row 0x85 for
+    // Windows-1252's top half, '?' otherwise, later rows winning. at[i] is where text[i] starts, zero padded
     internal static (byte[] Bytes, int[] At) ToBytes(string text, int end)
     {
         var table = Sjis.Value;

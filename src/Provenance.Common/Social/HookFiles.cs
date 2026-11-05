@@ -33,9 +33,7 @@ public static class HookFiles
             if (!TryParse(f.Name, out int pid, out string ext)) continue;
             try
             {
-                // the profile file gets kept like a log for debugging, its mail address is masked
                 bool remove = ext.Equals("log", StringComparison.OrdinalIgnoreCase)
-                              || ext.Equals("myprofile.json", StringComparison.OrdinalIgnoreCase)
                     ? nowUtc - f.LastWriteTimeUtc > logAge
                     : nowUtc - f.LastWriteTimeUtc > OrphanAge && !isAlive(pid);
                 if (!remove) continue;
