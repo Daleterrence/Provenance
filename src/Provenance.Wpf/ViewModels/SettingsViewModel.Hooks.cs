@@ -64,23 +64,23 @@ public partial class SettingsViewModel
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
 
     // only the folder in the box, never one found somewhere else, since profiles get changed in it
-    internal string? WindowerDir => ThirdPartyHookService.IsWindowerFolder(WindowerPath) ? WindowerPath : null;
+    internal string? WindowerDir => WindowerInstall.IsWindowerFolder(WindowerPath) ? WindowerPath : null;
     // settings.xml's writer refuses one too, so nothing here offers to change it
     private bool WindowerLinked => WindowerDir is { } d && FolderPins.Linked(d);
-    internal string? AshitaDir => ThirdPartyHookService.IsAshitaFolder(AshitaPath) ? AshitaPath : null;
+    internal string? AshitaDir => AshitaInstall.IsAshitaFolder(AshitaPath) ? AshitaPath : null;
 
     private void LoadThirdPartyHook()
     {
         _loadingThirdPartyHook = true;
         var s = _settings.Current;
         if (HookProfiles.MapOldCopies(s)) _settings.Save(s);
-        ThirdPartyHookIndex = s.ThirdPartyHookPlatform switch { ThirdPartyHookService.Ashita => 1, ThirdPartyHookService.Windower => 2, _ => 0 };
-        AshitaPath = ThirdPartyHookService.DetectAshita(s.AshitaPath) ?? s.AshitaPath;
-        WindowerPath = ThirdPartyHookService.DetectWindower(s.WindowerPath) ?? s.WindowerPath;
+        ThirdPartyHookIndex = s.ThirdPartyHookPlatform switch { ThirdPartyHook.Ashita => 1, ThirdPartyHook.Windower => 2, _ => 0 };
+        AshitaPath = AshitaInstall.DetectAshita(s.AshitaPath) ?? s.AshitaPath;
+        WindowerPath = WindowerInstall.DetectWindower(s.WindowerPath) ?? s.WindowerPath;
         _loadingThirdPartyHook = false;
         // the boot config Ashita really ran with last (from its logs), so the game keeps its window and plugins
         RefreshThirdPartyHookLists(s.WindowerProfile,
-            AshitaBootFiles.List(AshitaDir).Contains(s.AshitaBootConfig) ? s.AshitaBootConfig : ThirdPartyHookService.LastUsedAshitaBootConfig(AshitaDir));
+            AshitaBootFiles.List(AshitaDir).Contains(s.AshitaBootConfig) ? s.AshitaBootConfig : AshitaInstall.LastUsedAshitaBootConfig(AshitaDir));
         UpdateThirdPartyHookStatus();
         LoadCards();
     }
@@ -104,7 +104,7 @@ public partial class SettingsViewModel
             AshitaBootConfigs.Clear();
             foreach (var (file, shown) in AshitaBootFiles.Names(AshitaDir)) AshitaBootConfigs.Add(new HookProfileItem(file, shown));
             WindowerProfiles.Clear();
-            var names = ThirdPartyHookService.WindowerProfiles(WindowerDir);
+            var names = WindowerInstall.WindowerProfiles(WindowerDir);
             foreach (var n in names) WindowerProfiles.Add(new HookProfileItem(n, WindowerDisplay(n, names)));
             AshitaBootConfig = Item(AshitaBootConfigs, ashitaKeep)
                                ?? AshitaBootConfigs.FirstOrDefault(c => c.Name.Equals("default.ini", StringComparison.OrdinalIgnoreCase))
@@ -123,7 +123,7 @@ public partial class SettingsViewModel
             1 when AshitaDir is null => ("Couldn't find Ashita v4 in that folder.", true),
             1 => ("The game starts through Ashita with the boot configuration picked at the top.", false),
             2 when WindowerDir is null => ("Couldn't find Windower 4 in that folder.", true),
-            2 when FolderPins.Linked(WindowerDir) => (ThirdPartyHookService.LinkedWindowerText, true),
+            2 when FolderPins.Linked(WindowerDir) => (WindowerInstall.LinkedWindowerText, true),
             2 => ("The game starts through Windower with the profile picked at the top.", false),
             _ => ("The game starts directly, without Windower or Ashita.", false),
         };
@@ -138,7 +138,7 @@ public partial class SettingsViewModel
     {
         if (_loadingThirdPartyHook) return;
         var s = _settings.Current;
-        s.ThirdPartyHookPlatform = ThirdPartyHookIndex switch { 1 => ThirdPartyHookService.Ashita, 2 => ThirdPartyHookService.Windower, _ => ThirdPartyHookService.None };
+        s.ThirdPartyHookPlatform = ThirdPartyHookIndex switch { 1 => ThirdPartyHook.Ashita, 2 => ThirdPartyHook.Windower, _ => ThirdPartyHook.None };
         s.AshitaPath = AshitaPath;
         s.WindowerPath = WindowerPath;
         // nothing shown (no folder yet) keeps what was picked before
@@ -218,8 +218,8 @@ public partial class SettingsViewModel
     public void PickGameProfile()
     {
         if (Game.Store.ProfileName is not { } name) return;
-        if (IsWindower && Game.Store.Platform == ThirdPartyHookService.Windower) WindowerProfile = Item(WindowerProfiles, name) ?? WindowerProfile;
-        else if (IsAshita && Game.Store.Platform == ThirdPartyHookService.Ashita) AshitaBootConfig = Item(AshitaBootConfigs, name) ?? AshitaBootConfig;
+        if (IsWindower && Game.Store.Platform == ThirdPartyHook.Windower) WindowerProfile = Item(WindowerProfiles, name) ?? WindowerProfile;
+        else if (IsAshita && Game.Store.Platform == ThirdPartyHook.Ashita) AshitaBootConfig = Item(AshitaBootConfigs, name) ?? AshitaBootConfig;
     }
 
     partial void OnAshitaPathChanged(string value)
@@ -426,7 +426,7 @@ public partial class SettingsViewModel
         if (IsWindower) RefreshThirdPartyHookLists(windowerKeep: ok ? pick : null);
         else RefreshThirdPartyHookLists(ashitaKeep: ok ? pick : null);
         // the Game page keeps a renamed profile's unsaved changes, a deleted one's go with it
-        if (ok && gameProfile is not null && gamePlatform == (IsWindower ? ThirdPartyHookService.Windower : ThirdPartyHookService.Ashita))
+        if (ok && gameProfile is not null && gamePlatform == (IsWindower ? ThirdPartyHook.Windower : ThirdPartyHook.Ashita))
         {
             if (renamedFrom is not null && gameProfile == renamedFrom) Game.Retarget(GameStoreForSelection());
             else if (!StillThere(gameProfile)) Game.UseStore(GameStoreForSelection());
@@ -711,7 +711,7 @@ public partial class SettingsViewModel
         if (_loadingCard || !SaveAshita(c => c.Name = value.Trim())) return;
         RefreshThirdPartyHookLists();
         LoadMulti();
-        if (Game.Store.Platform == ThirdPartyHookService.Ashita && Game.Store.ProfileName == AshitaBootConfig?.Name) Game.Retarget(GameStoreForSelection());
+        if (Game.Store.Platform == ThirdPartyHook.Ashita && Game.Store.ProfileName == AshitaBootConfig?.Name) Game.Retarget(GameStoreForSelection());
     }
 
     partial void OnAshitaScriptChanged(string? value) { if (!_loadingCard && value is not null) SaveAshita(c => c.Script = value == NoScript ? "" : value); }

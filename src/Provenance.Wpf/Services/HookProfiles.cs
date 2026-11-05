@@ -34,7 +34,7 @@ public static class HookProfiles
         WindowerSettingsFile.Update(dir, s.WindowerAddonLists, (f, l) => renamed = f.Rename(name, newName, l).Name);
         // a launch finds a profile by its name in any case, so these do too
         if (Same(s.WindowerProfile, name)) s.WindowerProfile = renamed;
-        if (On(s, ThirdPartyHookService.Windower))
+        if (On(s, ThirdPartyHook.Windower))
             foreach (var e in s.MultiAccounts.Where(e => Same(e.ThirdPartyHookProfile, name))) e.ThirdPartyHookProfile = renamed;
         settings.Save(s);
         return renamed;
@@ -46,7 +46,7 @@ public static class HookProfiles
         var s = settings.Current;
         WindowerSettingsFile.Update(dir, s.WindowerAddonLists, (f, l) => f.Delete(name, l));
         if (Same(s.WindowerProfile, name)) s.WindowerProfile = "";
-        if (On(s, ThirdPartyHookService.Windower))
+        if (On(s, ThirdPartyHook.Windower))
             foreach (var e in s.MultiAccounts.Where(e => Same(e.ThirdPartyHookProfile, name))) e.ThirdPartyHookProfile = null;
         settings.Save(s);
     }
@@ -78,7 +78,7 @@ public static class HookProfiles
         var renamed = Path.GetFileName(AshitaBootFiles.Rename(dir, name, AshitaFileName(newName)));
         var s = settings.Current;
         if (s.AshitaBootConfig.Equals(name, StringComparison.OrdinalIgnoreCase)) s.AshitaBootConfig = renamed;
-        if (On(s, ThirdPartyHookService.Ashita))
+        if (On(s, ThirdPartyHook.Ashita))
             foreach (var e in s.MultiAccounts.Where(e => name.Equals(e.ThirdPartyHookProfile, StringComparison.OrdinalIgnoreCase)))
                 e.ThirdPartyHookProfile = renamed;
         settings.Save(s);
@@ -90,7 +90,7 @@ public static class HookProfiles
         AshitaBootFiles.Delete(dir, name);
         var s = settings.Current;
         if (s.AshitaBootConfig.Equals(name, StringComparison.OrdinalIgnoreCase)) s.AshitaBootConfig = "";
-        if (On(s, ThirdPartyHookService.Ashita))
+        if (On(s, ThirdPartyHook.Ashita))
             foreach (var e in s.MultiAccounts.Where(e => name.Equals(e.ThirdPartyHookProfile, StringComparison.OrdinalIgnoreCase)))
                 e.ThirdPartyHookProfile = null;
         settings.Save(s);
@@ -105,7 +105,7 @@ public static class HookProfiles
             s.WindowerProfile = WindowerSettingsFile.OldCopySource(s.WindowerProfile);
             changed = true;
         }
-        if (!On(s, ThirdPartyHookService.Windower)) return changed;
+        if (!On(s, ThirdPartyHook.Windower)) return changed;
         foreach (var e in s.MultiAccounts.Where(e => WindowerSettingsFile.IsOldCopy(e.ThirdPartyHookProfile)))
         {
             e.ThirdPartyHookProfile = WindowerSettingsFile.OldCopySource(e.ThirdPartyHookProfile);

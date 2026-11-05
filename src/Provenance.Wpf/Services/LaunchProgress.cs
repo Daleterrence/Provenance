@@ -19,8 +19,3 @@ public sealed record LaunchProgress(string Stage, string Detail, int Step = -1, 
         _ => -1,
     };
 }
-
-public static class LaunchSteps
-{
-    public const int StartPol = 0, SignIn = 1, Profile = 2, StartGame = 3;
-}

@@ -17,16 +17,6 @@ public enum ToolInstall { Installed, DownloadFailed, CheckFailed, CantCheck, Too
 
 internal enum Verdict { Genuine, NotGenuine, CantCheck, TooOld }
 
-// Path is held open (no writes, no deletes) until this is disposed, so what runs is the file that was checked
-public sealed class ToolFind(string? path, bool cantCheck = false, SafeFileHandle? handle = null, bool tooOld = false) : IDisposable
-{
-    public string? Path { get; } = path;
-    public bool CantCheck { get; } = cantCheck;
-    public bool TooOld { get; } = tooOld;
-
-    public void Dispose() => handle?.Dispose();
-}
-
 // 1Password's op and Bitwarden's bw run as admin, so each one's signature, signer and CA get checked before every use
 public static class CliTools
 {
@@ -66,7 +56,7 @@ public static class CliTools
 
     // C:\ProgramData\Provenance\tools, only Administrators and SYSTEM can change it. Users may read, the 1Password app
     // checks op.exe's signature from the user's side
-    internal static string Dir => _dirForTest ?? SecureFiles.RootSubDir("tools", usersMayRead: true);
+    internal static string Dir => _dirForTest ?? ProtectedFolders.RootSubDir("tools", usersMayRead: true);
 
     // the tools' own profile, per Windows user and admin-only, so nothing they write or unpack to load is the user's
     internal static string Home
@@ -74,7 +64,7 @@ public static class CliTools
         get
         {
             using var me = System.Security.Principal.WindowsIdentity.GetCurrent();
-            var home = Path.Combine(HomeRootForTest ?? SecureFiles.RootSubDir("home"), me.User?.Value ?? "user");
+            var home = Path.Combine(HomeRootForTest ?? ProtectedFolders.RootSubDir("home"), me.User?.Value ?? "user");
             foreach (var sub in new[] { "", @"AppData\Roaming", @"AppData\Local", "Temp" }) Directory.CreateDirectory(Path.Combine(home, sub));
             return home;
         }
@@ -130,7 +120,7 @@ public static class CliTools
         return Verdict.TooOld;
     }
 
-    // only Provenance's own copy, the SecureFiles lock on its folder is what keeps it admin-only
+    // only Provenance's own copy, the ProtectedFolders lock on its folder is what keeps it admin-only
     internal static ToolFind Find(string tool, string? own, Func<SafeFileHandle, string, string, Verdict> check)
     {
         if (own is null || Open(own) is not { } ownFile) return new ToolFind(null);

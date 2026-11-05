@@ -12,7 +12,7 @@ namespace Provenance.Wpf.Services;
 
 // the admin-only folders: C:\ProgramData\Provenance's and the installer's download folder. Never %TEMP% or
 // %APPDATA%, where a program could swap a file for a link and get written through
-public static class SecureFiles
+public static class ProtectedFolders
 {
     // what isn't Provenance's is moved in here with one rename and cleared later, never deleted where it was
     private const string BinName = "quarantine";
@@ -31,7 +31,6 @@ public static class SecureFiles
     internal static Action<string>? AfterMoveForTest;
     internal static Action<string>? ListedForTest;
     internal static Action<string>? ClearingForTest;
-    internal static Action<string>? HeldForTest;
     internal static Task LastClear = Task.CompletedTask;
 
     private static SecurityIdentifier Owner => OwnerForTest ?? Admins;
@@ -103,73 +102,8 @@ public static class SecureFiles
         return dir;
     }
 
-    public sealed class FolderRefusedException(string message) : IOException(message);
-
-    // the installer's download folder and the ffxi-download in it, held with no delete sharing until it's disposed
-    public sealed class WorkFolder(string path, SafeFileHandle chosen, SafeFileHandle work) : IDisposable
-    {
-        public string Path { get; } = path;
-
-        public void Dispose()
-        {
-            work.Dispose();
-            chosen.Dispose();
-        }
-    }
-
-    // DXSETUP and the MSIs run as admin from here, so after the check nothing goes by name, NTFS won't rename a held
-    // folder or one above it. Null when every ffxi-download there is someone else's
-    public static WorkFolder? HoldWorkFolder(string chosen, IReadOnlyCollection<string> ownNames, Func<string, string?> problem)
-    {
-        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(chosen));
-        var missing = new Stack<string>();
-        var existing = full;
-        for (; !Directory.Exists(existing); existing = Path.GetDirectoryName(existing) ?? throw new FolderRefusedException($"{full} has no drive"))
-            missing.Push(existing);
-        // checked before anything's made, and what's made is locked, so it never inherits anyone's write access
-        if (problem(existing) is { } before) throw new FolderRefusedException(before);
-        while (missing.TryPop(out var dir)) CreateLocked(dir, Intended(usersMayRead: true));
-        // listing access so sharing applies, and read sharing only: a program that has it open to write or delete fails
-        // this, and none can open it that way later
-        var held = CreateFile(full, ListDirectory | ReadControl | ReadAttributes | Synchronize, 0x1, IntPtr.Zero, 3, OpenLinkItself, IntPtr.Zero);
-        if (held.IsInvalid)
-        {
-            int error = Marshal.GetLastPInvokeError();
-            held.Dispose();
-            if (error == 32)
-                throw Provenance.Common.Shown.Mark(new IOException($"Another program has {full} open. Close it, then press Try again."));
-            throw new FolderRefusedException($"{full} couldn't be opened ({error})");
-        }
-        bool keep = false;
-        try
-        {
-            HeldForTest?.Invoke(full);
-            var seen = Look(held);
-            if (!seen.Read || !seen.IsDir || seen.IsLink) throw new FolderRefusedException($"{full} is a link or not a folder");
-            if (RealPath(held) is not { } real || !string.Equals(real, full, StringComparison.OrdinalIgnoreCase))
-                throw new FolderRefusedException($"{full} is really {RealPath(held) ?? "somewhere it can't tell"}");
-            if (problem(full) is { } why) throw new FolderRefusedException(why);
-            foreach (var name in Enumerable.Range(1, 9).Select(i => i == 1 ? "ffxi-download" : $"ffxi-download-{i}"))
-            {
-                var path = Path.Combine(full, name);
-                if (HoldOwn(held, path, name, ownNames) is not { } work)
-                {
-                    Log.Warning("{Folder} was not made by Provenance; it is left alone", path);
-                    continue;
-                }
-                keep = true;
-                return new WorkFolder(path, held, work);
-            }
-            return null;
-        }
-        finally
-        {
-            if (!keep) held.Dispose();
-        }
-    }
-
     // made through the held folder's handle with its permissions in one go, or opened there, and kept if it's mine
-    private static SafeFileHandle? HoldOwn(SafeFileHandle parent, string path, string name, IReadOnlyCollection<string> ownNames)
+    internal static SafeFileHandle? HoldOwn(SafeFileHandle parent, string path, string name, IReadOnlyCollection<string> ownNames)
     {
         var sec = Intended(usersMayRead: true);
         var (h, status) = OpenAt(parent, name, HoldAccess | ListDirectory, DirectoryFile, 3 /* FILE_OPEN_IF */, sec, ShareReadWrite);
@@ -560,12 +494,12 @@ public static class SecureFiles
         return false;
     }
 
-    private record struct Seen(bool Read, bool IsDir, bool IsLink, int Links, (uint, uint, uint) Id, byte[]? Raw, DirectorySecurity? Security, SecurityIdentifier? Owner)
+    internal record struct Seen(bool Read, bool IsDir, bool IsLink, int Links, (uint, uint, uint) Id, byte[]? Raw, DirectorySecurity? Security, SecurityIdentifier? Owner)
     {
         public bool ReadSecurity => Raw is not null;
     }
 
-    private static Seen Look(SafeFileHandle h)
+    internal static Seen Look(SafeFileHandle h)
     {
         if (!GetFileInformationByHandle(h, out var info)) return default;
         byte[]? raw = null;
@@ -684,21 +618,10 @@ public static class SecureFiles
         }
     }
 
-    // where the handle really is, with every link on the way followed, in the form GetFullPath gives
-    private static string? RealPath(SafeFileHandle h)
-    {
-        var buf = new char[32_768];
-        int n = GetFinalPathNameByHandle(h, buf, buf.Length, 0);
-        if (n <= 0 || n >= buf.Length) return null;
-        var path = new string(buf, 0, n);
-        if (path.StartsWith(@"\\?\UNC\", StringComparison.Ordinal)) return null;
-        return Path.TrimEndingDirectorySeparator(path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path[4..] : path);
-    }
-
     private static bool Gone(uint status) => status is 0xC0000034 or 0xC000003A or 0xC0000056 or 0xC0000123;   // not found, path not found, delete pending, deleted
 
     // false when something else made it first, which is never taken as this one
-    private static bool CreateLocked(string path, DirectorySecurity sec)
+    internal static bool CreateLocked(string path, DirectorySecurity sec)
     {
         var sd = sec.GetSecurityDescriptorBinaryForm();
         var pSd = Marshal.AllocHGlobal(sd.Length);
@@ -714,12 +637,12 @@ public static class SecureFiles
         finally { Marshal.FreeHGlobal(pSd); }
     }
 
-    private const uint Delete = 0x00010000, ReadControl = 0x00020000, WriteDac = 0x00040000, WriteOwner = 0x00080000, Synchronize = 0x00100000;
-    private const uint ListDirectory = 0x1, ReadAttributes = 0x80, DirectoryFile = 0x1;
+    internal const uint Delete = 0x00010000, ReadControl = 0x00020000, WriteDac = 0x00040000, WriteOwner = 0x00080000, Synchronize = 0x00100000;
+    internal const uint ListDirectory = 0x1, ReadAttributes = 0x80, DirectoryFile = 0x1;
     private const uint LookAccess = ReadControl | ReadAttributes;
     private const uint HoldAccess = ReadControl | WriteDac | WriteOwner | ReadAttributes | Synchronize;   // none of it is share-checked
     private const uint ShareReadWrite = 0x1 | 0x2, ShareAll = 0x1 | 0x2 | 0x4;   // no FILE_SHARE_DELETE: it can't be renamed while held
-    private const uint OpenLinkItself = 0x00200000 | 0x02000000;   // FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS
+    internal const uint OpenLinkItself = 0x00200000 | 0x02000000;   // FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS
     private const uint StatusAccessDenied = 0xC0000022;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -771,13 +694,10 @@ public static class SecureFiles
     private static extern bool CreateDirectory(string path, ref SecurityAttributes security);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateFileW")]
-    private static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+    internal static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out ByHandleFileInformation info);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "GetFinalPathNameByHandleW")]
-    private static extern int GetFinalPathNameByHandle(SafeFileHandle handle, char[] path, int length, int flags);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int infoClass, byte[] buffer, int size);

@@ -208,7 +208,7 @@ public partial class InstallViewModel : ObservableObject
 
     // its files run as admin, so it's an admin-only ffxi-download folder in a folder only admins can change, both held
     // until the install ends. A stranger's folder with the same name gets skipped
-    private SecureFiles.WorkFolder LockWorkFolder(IEnumerable<string> ownNames)
+    private InstallWorkFolder.WorkFolder LockWorkFolder(IEnumerable<string> ownNames)
     {
         var chosen = Path.TrimEndingDirectorySeparator(Path.GetFullPath(DownloadFolder));
         if (!PathSafety.OnLocalFixedDrive(chosen))
@@ -220,10 +220,10 @@ public partial class InstallViewModel : ObservableObject
         }
         try
         {
-            return SecureFiles.HoldWorkFolder(chosen, ownNames.ToList(), PathSafety.AdminOnlyProblem)
+            return InstallWorkFolder.HoldWorkFolder(chosen, ownNames.ToList(), PathSafety.AdminOnlyProblem)
                    ?? throw Shown.Mark(new InvalidOperationException($"Provenance couldn't make its own folder in {chosen}. Choose another download folder."));
         }
-        catch (SecureFiles.FolderRefusedException e)
+        catch (InstallWorkFolder.FolderRefusedException e)
         {
             Log.Warning("Download folder {Folder} refused: {Why}", chosen, e.Message);
             throw Shown.Mark(new InvalidOperationException(
@@ -305,7 +305,7 @@ public partial class InstallViewModel : ObservableObject
         // the download takes hours on a slow line, and Windows mustn't sleep in the middle of it
         SetThreadExecutionState(EsContinuous | EsSystemRequired);
         bool held = false;
-        SecureFiles.WorkFolder? workFolder = null;
+        InstallWorkFolder.WorkFolder? workFolder = null;
         try
         {
             StageIndeterminate = true;

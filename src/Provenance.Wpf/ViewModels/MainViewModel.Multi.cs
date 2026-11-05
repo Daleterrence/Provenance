@@ -64,7 +64,7 @@ public partial class MainViewModel : IMultiRunHost
     }
 
     private bool MultiPlatformChosen() =>
-        _pol.Platform is ThirdPartyHookService.Windower or ThirdPartyHookService.Ashita;
+        _pol.Platform is ThirdPartyHook.Windower or ThirdPartyHook.Ashita;
 
     private bool CanStartOrStop() => MultiRunning ? !MultiStopping : !IsLaunching && !SocialConnected && _pol.Pid is null;
 
@@ -242,7 +242,7 @@ public partial class MainViewModel : IMultiRunHost
             return new(AccountFailureKind.Install, "You must use either Windower or Ashita with Provenance to use multi-account login.");
         // after a switch between Windower and Ashita mid-run a stored profile means nothing
         var hookProfile = _pol.Platform == _runPlatform ? _runHookProfiles.GetValueOrDefault(account.ProfileId) : null;
-        if (_pol.Platform == ThirdPartyHookService.Ashita && hookProfile is { Length: > 0 } boot
+        if (_pol.Platform == ThirdPartyHook.Ashita && hookProfile is { Length: > 0 } boot
             && !ThirdPartyHookLauncher.IsBootFileName(boot))
             return new(AccountFailureKind.Account, ThirdPartyHookLauncher.AccountBootFileProblem);
 

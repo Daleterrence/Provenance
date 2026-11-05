@@ -61,9 +61,9 @@ public partial class AddonsPluginsViewModel : ObservableObject
     // read, say) it's still the one that was picked
     internal static AddonsTarget TargetOf(SettingsViewModel tab, LauncherSettings saved) => tab.ThirdPartyHookIndex switch
     {
-        1 => new(ThirdPartyHookService.Ashita, tab.AshitaDir, tab.AshitaBootConfig?.Name ?? saved.AshitaBootConfig ?? ""),
-        2 => new(ThirdPartyHookService.Windower, tab.WindowerDir, tab.WindowerProfile?.Name ?? WindowerSettingsFile.OldCopySource(saved.WindowerProfile)),
-        _ => new(ThirdPartyHookService.None, null, ""),
+        1 => new(ThirdPartyHook.Ashita, tab.AshitaDir, tab.AshitaBootConfig?.Name ?? saved.AshitaBootConfig ?? ""),
+        2 => new(ThirdPartyHook.Windower, tab.WindowerDir, tab.WindowerProfile?.Name ?? WindowerSettingsFile.OldCopySource(saved.WindowerProfile)),
+        _ => new(ThirdPartyHook.None, null, ""),
     };
 
     public ObservableCollection<AddonRow> Addons { get; } = [];
@@ -166,7 +166,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
             Plugins.Clear();
             PolPlugins.Clear();
             Message = "Looking for addons and plugins...";
-            SameListForEveryProfile = target.Platform == ThirdPartyHookService.Windower
+            SameListForEveryProfile = target.Platform == ThirdPartyHook.Windower
                                       && _settings.Current.WindowerAddonLists?.GetValueOrDefault(target.Profile) is not { UseGlobal: false };
             Filter();
         }
@@ -207,8 +207,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
         Message = page.Message;
         Intro = page.Intro;
         Problem = page.Problem == Status ? null : page.Problem;
-        IsWindower = page.Message is null && page.Platform == ThirdPartyHookService.Windower;
-        IsAshita = page.Message is null && page.Platform == ThirdPartyHookService.Ashita;
+        IsWindower = page.Message is null && page.Platform == ThirdPartyHook.Windower;
+        IsAshita = page.Message is null && page.Platform == ThirdPartyHook.Ashita;
         SyncTabs(page);
         CardPlatform = page.Message is null ? page.Platform : null;
         SameListForEveryProfile = IsWindower && page.UseGlobal;
@@ -242,7 +242,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         NoAddons = Nothing(Addons, _page?.NoAddons);
         NoPlugins = Nothing(Plugins, _page?.NoPlugins);
         NoPolPlugins = Nothing(PolPlugins, _page?.NoPolPlugins);
-        _polHeading.Note = NoPolPlugins ?? (PolPlugins.Any(r => r.Visible && r.Incompatible) ? ThirdPartyHookService.IncompatibleNote : null);
+        _polHeading.Note = NoPolPlugins ?? (PolPlugins.Any(r => r.Visible && r.Incompatible) ? AshitaInstall.IncompatibleNote : null);
         _polHeading.Warning = PolPlugins.Any(r => Same(r.Key, "sandbox") && r.On) ? SandboxText : null;
         // hidden rows stay out of the list altogether, a collapsed one still costs the panel a container
         List<object> items = [this];
@@ -291,7 +291,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         set
         {
             if (value == _useGlobal) return;
-            if (_shown is { Platform: ThirdPartyHookService.Windower, Folder: { } dir } && _page is { } page)
+            if (_shown is { Platform: ThirdPartyHook.Windower, Folder: { } dir } && _page is { } page)
             {
                 ShowNote("");
                 try { SetUseGlobal(dir, page.Key, value); }
@@ -356,8 +356,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
         ShowNote("");
         try
         {
-            if (target.Platform == ThirdPartyHookService.Windower) SwitchWindower(dir, page.Key, row, on);
-            else if (target.Platform == ThirdPartyHookService.Ashita) SwitchAshita(dir, target.Profile, row, on);
+            if (target.Platform == ThirdPartyHook.Windower) SwitchWindower(dir, page.Key, row, on);
+            else if (target.Platform == ThirdPartyHook.Ashita) SwitchAshita(dir, target.Profile, row, on);
         }
         catch (Exception ex)
         {
@@ -486,7 +486,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     [RelayCommand]
     private async Task Install(AddonRow? row)
     {
-        if (row is null || _shown is not { Platform: ThirdPartyHookService.Windower, Folder: { } dir } || _page is not { } page) return;
+        if (row is null || _shown is not { Platform: ThirdPartyHook.Windower, Folder: { } dir } || _page is not { } page) return;
         row.Installing = true;
         ShowNote($"Installing {row.Name}...");
         try
@@ -540,22 +540,22 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     private static object? Scan(AddonsTarget target) => target switch
     {
-        { Platform: ThirdPartyHookService.Windower, Folder: { } dir } when !FolderPins.Linked(dir) =>
+        { Platform: ThirdPartyHook.Windower, Folder: { } dir } when !FolderPins.Linked(dir) =>
             new WindowerScan(WindowerPlugins.Scan(dir), WindowerAddons.Scan(dir), WindowerAddonTree.Load(WindowerAddonTree.CachePath(dir))),
-        { Platform: ThirdPartyHookService.Ashita, Folder: { } dir } when !string.IsNullOrWhiteSpace(target.Profile) && File.Exists(BootPath(dir, target.Profile)) =>
+        { Platform: ThirdPartyHook.Ashita, Folder: { } dir } when !string.IsNullOrWhiteSpace(target.Profile) && File.Exists(BootPath(dir, target.Profile)) =>
             new AshitaScan(AshitaAddons.Scan(dir), AshitaPlugins.Scan(dir)),
         _ => null,
     };
 
     private static Page Build(AddonsTarget target, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras, object? scan) => target switch
     {
-        { Platform: ThirdPartyHookService.Windower, Folder: null } =>
+        { Platform: ThirdPartyHook.Windower, Folder: null } =>
             Page.Empty("Provenance couldn't find Windower. Choose its folder under Windower/Ashita first."),
-        { Platform: ThirdPartyHookService.Windower, Folder: { } dir } when FolderPins.Linked(dir) => Page.Empty(ThirdPartyHookService.LinkedWindowerText),
-        { Platform: ThirdPartyHookService.Windower, Folder: { } dir } => BuildWindower(dir, target.Profile, lists, extras, scan as WindowerScan),
-        { Platform: ThirdPartyHookService.Ashita, Folder: null } =>
+        { Platform: ThirdPartyHook.Windower, Folder: { } dir } when FolderPins.Linked(dir) => Page.Empty(WindowerInstall.LinkedWindowerText),
+        { Platform: ThirdPartyHook.Windower, Folder: { } dir } => BuildWindower(dir, target.Profile, lists, extras, scan as WindowerScan),
+        { Platform: ThirdPartyHook.Ashita, Folder: null } =>
             Page.Empty("Provenance couldn't find Ashita. Choose its folder under Windower/Ashita first."),
-        { Platform: ThirdPartyHookService.Ashita, Folder: { } dir } => BuildAshita(dir, target.Profile, scan as AshitaScan),
+        { Platform: ThirdPartyHook.Ashita, Folder: { } dir } => BuildAshita(dir, target.Profile, scan as AshitaScan),
         _ => Page.Empty("Choose Windower or Ashita and its folder under Windower/Ashita first."),
     };
 
@@ -564,8 +564,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
     private static Page BuildWindower(string dir, string profileName, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras,
                                       WindowerScan? scan)
     {
-        scan ??= (WindowerScan)Scan(new AddonsTarget(ThirdPartyHookService.Windower, dir, profileName))!;
-        var page = new Page { Platform = ThirdPartyHookService.Windower };
+        scan ??= (WindowerScan)Scan(new AddonsTarget(ThirdPartyHook.Windower, dir, profileName))!;
+        var page = new Page { Platform = ThirdPartyHook.Windower };
         WindowerSettingsFile file;
         bool locked = false;
         try { file = WindowerSettingsFile.Load(dir); }
@@ -677,7 +677,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         scan ??= new AshitaScan(AshitaAddons.Scan(dir), AshitaPlugins.Scan(dir));
         var page = new Page
         {
-            Platform = ThirdPartyHookService.Ashita, Key = bootName, Display = AshitaBootFiles.ShownName(dir, bootName),
+            Platform = ThirdPartyHook.Ashita, Key = bootName, Display = AshitaBootFiles.ShownName(dir, bootName),
             Intro = "Turn addons and plugins on or off for this boot configuration. Changes save straight away.",
         };
         AshitaBootConfig boot;
@@ -744,7 +744,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         var polFound = scan.Plugins.Where(p => p.Kind == AshitaPluginKind.PolPlugin).ToList();
         // a switched-off one shows off whatever the boot configuration says, as it is when Provenance starts the game
         var polRows = polFound.Select(p => AshitaBootFiles.IsTakeover(p.LoadName)
-            ? new RowData(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, ThirdPartyHookService.IncompatibleReason(p.LoadName))
+            ? new RowData(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, AshitaInstall.IncompatibleReason(p.LoadName))
                 { CanChange = false, Incompatible = true, Badges = [Badges.Incompatible], Team = AshitaTeam(AddonKind.PolPlugin, p.LoadName), Location = p.Dll }
             : Row(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, p.Description, PolState(p.LoadName), true,
                   p.ForOtherAshita ? Badges.OtherAshita : null, p.Dll)).ToList();
@@ -775,7 +775,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         public string? Message;
         public string Intro = "";
         public string? Problem;
-        public string Platform = ThirdPartyHookService.None;
+        public string Platform = ThirdPartyHook.None;
         public bool UseGlobal = true, ListLocked;
         public string Key = "", Display = "";
         public string Branch = "stable";
@@ -802,7 +802,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
             "This addon was written for Windower or an older Ashita, so it won't run in Ashita v4.", Warn: true);
         public static readonly AddonBadge OtherAshita = new("Built for a different Ashita",
             "This plugin was built for a different version of Ashita, so Ashita won't load it.", Warn: true);
-        public static readonly AddonBadge Incompatible = new(ThirdPartyHookService.IncompatibleText,
+        public static readonly AddonBadge Incompatible = new(AshitaInstall.IncompatibleText,
             "Provenance keeps this off whenever it starts the game. Your Ashita settings aren't changed.", Warn: true);
         public static readonly AddonBadge BadName = new("Name Ashita can't load",
             "Ashita can't load a name like this one from a script or boot configuration. Rename it to plain letters and numbers to use it.", Warn: true);

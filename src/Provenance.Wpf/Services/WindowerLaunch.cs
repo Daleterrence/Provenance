@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Principal;
 using System.Text;
-using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 using Provenance.Common;
 using Provenance.Common.Game.Windower;
@@ -14,29 +13,6 @@ using Provenance.Common.Security;
 using Serilog;
 
 namespace Provenance.Wpf.Services;
-
-public sealed record WindowerLaunchSetup
-{
-    public required string WindowerDir { get; init; }
-    public required string ProfileName { get; init; }
-    public bool ProfileFromAccount { get; init; }
-    public required string PolExe { get; init; }
-    public required PolRegion Region { get; init; }
-    public string? FfxiDir { get; init; }
-    public IReadOnlyDictionary<string, WindowerAddonList>? Lists { get; init; }
-    public WindowerAddonList? SharedExtras { get; init; }
-    // a test's own key in place of HKLM, and its own update server
-    public RegistryKey? RegistryRoot { get; init; }
-    public Func<string, string, WindowerUpdater>? NewUpdater { get; init; }
-    public TimeSpan UpdateLimit { get; init; } = WindowerLaunch.UpdateLimit;
-}
-
-// what Windower writes into the registry for a profile. FFXI only reads it once Play's pressed, and another launch can
-// have written its own profile's by then
-public sealed record WindowerGameValues(WindowerProfile Profile, WindowerRegion Region, RegistryKey? Root)
-{
-    public IReadOnlyList<string> Apply() => WindowerGameRegistry.Apply(Profile, Region, Profile.Width, Profile.Height, Root);
-}
 
 // what Windower.exe does before starting pol.exe, then the watcher's --windower puts in Hook.dll and pol_hook. The
 // mapping and event have fixed names, so launches take turns till the watcher's done
@@ -88,9 +64,9 @@ public sealed class WindowerLaunch : IDisposable
                                               IReadOnlyDictionary<string, WindowerAddonList>? lists, WindowerAddonList? shared = null)
     {
         var s = settings.Current;
-        var dir = ThirdPartyHookService.DetectWindower(s.WindowerPath)
+        var dir = WindowerInstall.DetectWindower(s.WindowerPath)
                   ?? throw Shown.Mark(new DirectoryNotFoundException("Couldn't find Windower. Set its folder in Settings, under Windower/Ashita."));
-        var region = ThirdPartyHookService.RegionOfPol(polExe) ?? settings.DetectedRegion ?? PolRegion.UnitedStates;
+        var region = ThirdPartyHook.RegionOfPol(polExe) ?? settings.DetectedRegion ?? PolRegion.UnitedStates;
         return new WindowerLaunchSetup
         {
             WindowerDir = dir,
@@ -126,7 +102,7 @@ public sealed class WindowerLaunch : IDisposable
     private void Steps(IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         var dir = _setup.WindowerDir;
-        if (FolderPins.Linked(dir)) throw Shown.Mark(new IOException(ThirdPartyHookService.LinkedWindowerText));
+        if (FolderPins.Linked(dir)) throw Shown.Mark(new IOException(WindowerInstall.LinkedWindowerText));
         TakeTurn(progress, ct);
         var file = LoadSettings(dir);
         Profile = FindProfile(file);
@@ -238,7 +214,7 @@ public sealed class WindowerLaunch : IDisposable
     {
         try
         {
-            using var pins = FolderPins.Hold(dir, dir) ?? throw Shown.Mark(new IOException(ThirdPartyHookService.LinkedWindowerText));
+            using var pins = FolderPins.Hold(dir, dir) ?? throw Shown.Mark(new IOException(WindowerInstall.LinkedWindowerText));
             bool scripts = true;
             foreach (var sub in new[] { "screenshots", "videos", "scripts" })
                 if (!pins.Pin(Path.Combine(dir, sub)))
@@ -338,7 +314,7 @@ public sealed class WindowerLaunch : IDisposable
         psi.ArgumentList.Add("--windower");
         psi.ArgumentList.Add(HookDll);
         psi.ArgumentList.Add(_setup.PolExe);
-        psi.ArgumentList.Add(Path.Combine(ThirdPartyHookService.NativeDir, "pol_hook.dll"));
+        psi.ArgumentList.Add(Path.Combine(ThirdPartyHook.NativeDir, "pol_hook.dll"));
         // pol_hook leaves pol.exe's mutex names to Hook.dll when it sees this
         psi.Environment["PROVENANCE_LAUNCH_ID"] = _launchId = launchId;
     }
@@ -423,10 +399,4 @@ public sealed class WindowerLaunch : IDisposable
 
     [DllImport("kernel32.dll")]
     private static extern IntPtr LocalFree(IntPtr mem);
-}
-
-public static class WindowerUpdates
-{
-    public static WindowerUpdater NewUpdater(string dir, string branch) =>
-        new(dir, branch) { Log = line => Serilog.Log.Debug("Windower update: {Line}", line) };
 }

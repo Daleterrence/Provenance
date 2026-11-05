@@ -18,8 +18,8 @@ public static class OtpReuse
     private static Task<byte[]>? _key;
     private static readonly object KeyGate = new();
 
-    private static string StorePath => _storePath ?? SecureFiles.PathFor("otp-recent.txt");
-    private static string KeyPath => _keyPath ?? SecureFiles.PathFor("otp-recent.key");
+    private static string StorePath => _storePath ?? ProtectedFolders.PathFor("otp-recent.txt");
+    private static string KeyPath => _keyPath ?? ProtectedFolders.PathFor("otp-recent.key");
 
     // when otp-recent.key can't be opened. Codes still count as used within this run, just not across copies
     private static readonly Lazy<byte[]> FallbackKey = new(() => RandomNumberGenerator.GetBytes(32));

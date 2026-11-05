@@ -1609,8 +1609,8 @@ public partial class MainViewModel : ObservableObject
 
     public string? PlaySubtitle => _pol.Platform switch
     {
-        ThirdPartyHookService.Windower => "WINDOWER LOADED",
-        ThirdPartyHookService.Ashita => "ASHITA LOADED",
+        ThirdPartyHook.Windower => "WINDOWER LOADED",
+        ThirdPartyHook.Ashita => "ASHITA LOADED",
         _ => null,
     };
 
@@ -1623,27 +1623,27 @@ public partial class MainViewModel : ObservableObject
 
     public sealed record PlayChoice(string Name, string Display, bool Current);
 
-    public bool HasPlayChoices => _pol.Platform is ThirdPartyHookService.Windower or ThirdPartyHookService.Ashita;
+    public bool HasPlayChoices => _pol.Platform is ThirdPartyHook.Windower or ThirdPartyHook.Ashita;
 
-    public string PlayChoicesTitle => _pol.Platform == ThirdPartyHookService.Ashita ? "Boot configuration" : "Windower profile";
+    public string PlayChoicesTitle => _pol.Platform == ThirdPartyHook.Ashita ? "Boot configuration" : "Windower profile";
 
-    public string NoPlayChoicesText => _pol.Platform == ThirdPartyHookService.Ashita
+    public string NoPlayChoicesText => _pol.Platform == ThirdPartyHook.Ashita
         ? "No boot configurations found" : "No Windower profiles found";
 
     // the same pick Play uses: Ashita falls back to the last config Ashita ran with, Windower's "" is the unnamed one
     public IReadOnlyList<PlayChoice> PlayChoices()
     {
         var s = _settings.Current;
-        if (_pol.Platform == ThirdPartyHookService.Ashita)
+        if (_pol.Platform == ThirdPartyHook.Ashita)
         {
-            var dir = ThirdPartyHookService.DetectAshita(s.AshitaPath);
-            var current = string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? ThirdPartyHookService.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
+            var dir = AshitaInstall.DetectAshita(s.AshitaPath);
+            var current = string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
             return AshitaBootFiles.Names(dir)
                 .Select(n => new PlayChoice(n.File, n.Shown, n.File.Equals(current, StringComparison.OrdinalIgnoreCase))).ToList();
         }
-        if (_pol.Platform == ThirdPartyHookService.Windower)
+        if (_pol.Platform == ThirdPartyHook.Windower)
         {
-            var names = ThirdPartyHookService.WindowerProfiles(ThirdPartyHookService.DetectWindower(s.WindowerPath));
+            var names = WindowerInstall.WindowerProfiles(WindowerInstall.DetectWindower(s.WindowerPath));
             var current = WindowerSettingsFile.OldCopySource(s.WindowerProfile);
             return names.Select(n => new PlayChoice(n, SettingsViewModel.WindowerDisplay(n, names), n == current)).ToList();
         }
@@ -1653,8 +1653,8 @@ public partial class MainViewModel : ObservableObject
     public void PickPlayChoice(string name)
     {
         var s = _settings.Current;
-        if (_pol.Platform == ThirdPartyHookService.Ashita) s.AshitaBootConfig = name;
-        else if (_pol.Platform == ThirdPartyHookService.Windower) s.WindowerProfile = name;
+        if (_pol.Platform == ThirdPartyHook.Ashita) s.AshitaBootConfig = name;
+        else if (_pol.Platform == ThirdPartyHook.Windower) s.WindowerProfile = name;
         else return;
         _settings.Save(s);
     }

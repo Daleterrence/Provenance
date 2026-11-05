@@ -45,17 +45,17 @@ public static class ThirdPartyHookLauncher
             return null;
         }
         var s = settings.Current;
-        string? dir = ThirdPartyHookService.DetectAshita(s.AshitaPath);
+        string? dir = AshitaInstall.DetectAshita(s.AshitaPath);
         if (dir is null) return Fail("Couldn't find Ashita. Set its folder in Settings, under Windower/Ashita.");
 
         bool fromAccount = profile is { Length: > 0 };
         var boot = fromAccount ? profile
-                 : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? ThirdPartyHookService.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
+                 : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
         if (boot is { Length: > 0 } && !IsBootFileName(boot))
             return Fail(fromAccount ? AccountBootFileProblem
                 : "The Ashita boot configuration has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Windower/Ashita.");
         string bootFile;
-        try { bootFile = Path.GetFileName(ThirdPartyHookService.WriteAshitaBoot(dir, boot, polExe)); }
+        try { bootFile = Path.GetFileName(AshitaInstall.WriteAshitaBoot(dir, boot, polExe)); }
         catch (Exception ex)
         {
             Log.Error(ex, "Could not write the Ashita boot config");
@@ -223,14 +223,14 @@ public static class ThirdPartyHookLauncher
     private static string? AttachHook(int pid)
     {
         var started = DateTime.UtcNow;
-        var psi = new ProcessStartInfo(Path.Combine(ThirdPartyHookService.NativeDir, ThirdPartyHookService.WatcherExe))
+        var psi = new ProcessStartInfo(Path.Combine(ThirdPartyHook.NativeDir, ThirdPartyHook.WatcherExe))
         {
-            WorkingDirectory = ThirdPartyHookService.NativeDir, UseShellExecute = false, CreateNoWindow = true,
+            WorkingDirectory = ThirdPartyHook.NativeDir, UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,
         };
         psi.ArgumentList.Add("--attach");
         psi.ArgumentList.Add(pid.ToString());
-        psi.ArgumentList.Add(Path.Combine(ThirdPartyHookService.NativeDir, "pol_hook.dll"));
+        psi.ArgumentList.Add(Path.Combine(ThirdPartyHook.NativeDir, "pol_hook.dll"));
         try
         {
             using var p = Process.Start(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
@@ -241,7 +241,7 @@ public static class ThirdPartyHookLauncher
             var stderr = errTask.GetAwaiter().GetResult().Trim();
             if (p.ExitCode == 0 && stdout.Contains("attached to pol.exe", StringComparison.Ordinal)) return null;
             Log.Error("Provenance Watcher --attach {Pid} failed: {Error}", pid, stderr);
-            return CodeIntegrity.Refused(started, ThirdPartyHookService.WatcherExe, "pol_hook.dll") ? CodeIntegrity.RefusedText
+            return CodeIntegrity.Refused(started, ThirdPartyHook.WatcherExe, "pol_hook.dll") ? CodeIntegrity.RefusedText
                  : NotPickedUp;
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == CodeIntegrity.PolicyViolation)

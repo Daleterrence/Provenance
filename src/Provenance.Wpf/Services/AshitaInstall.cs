@@ -1,47 +1,18 @@
 using System.IO;
 using System.Text.RegularExpressions;
-using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
-using Provenance.Common.Game.Windower;
 using Provenance.Common.PolFormat;
-using Serilog;
+using static Provenance.Wpf.Services.ThirdPartyHook;
 
 namespace Provenance.Wpf.Services;
 
-// Windower and Ashita's folders, profiles and boot configs, and where the watcher sits. Nothing of mine goes in the
-// viewer folder
-public sealed class ThirdPartyHookService
+public static class AshitaInstall
 {
-    public const string None = "none", Ashita = "ashita", Windower = "windower";
-
-    public static string NativeDir => Path.Combine(AppContext.BaseDirectory, "native");
-    public const string WatcherExe = "Provenance Watcher.exe";
-
     public static bool IsAshitaFolder(string? dir) =>
         !string.IsNullOrWhiteSpace(dir) && File.Exists(Path.Combine(dir, "Ashita-cli.exe")) && File.Exists(Path.Combine(dir, "Ashita.dll"));
 
-    // Hook.dll is the one that matters now, but a folder with only Windower.exe can still fetch it
-    public static bool IsWindowerFolder(string? dir) =>
-        !string.IsNullOrWhiteSpace(dir) && (File.Exists(Path.Combine(dir, "Windower.exe")) || File.Exists(Path.Combine(dir, "Hook.dll")));
-
     public static string? DetectAshita(string? configured) =>
         Candidates(configured, @"C:\Ashita", "Ashita", "Ashita v4", "Ashita4").FirstOrDefault(IsAshitaFolder);
-
-    public static string? DetectWindower(string? configured) =>
-        Candidates(configured, @"C:\Windower", "Windower", "Windower4", "Windower 4").FirstOrDefault(IsWindowerFolder);
-
-    public const string LinkedWindowerText =
-        "Provenance can't use a Windower folder that's reached through a link. Choose the real folder the link points to in Settings, under Windower/Ashita.";
-
-    private static IEnumerable<string> Candidates(string? configured, string root, params string[] names)
-    {
-        if (!string.IsNullOrWhiteSpace(configured)) yield return configured!;
-        yield return root;
-        foreach (var pf in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                                   Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) })
-            foreach (var n in names)
-                if (!string.IsNullOrEmpty(pf)) yield return Path.Combine(pf, n);
-    }
 
     public const string IncompatibleText = "Incompatible with Provenance";
     public const string IncompatibleNote = "The ones marked incompatible stay off whenever Provenance starts the game. Your Ashita settings aren't changed.";
@@ -81,25 +52,6 @@ public sealed class ThirdPartyHookService
         catch { }
         return null;
     }
-
-    // the user's own profiles in file order, "" for the unnamed one
-    public static IReadOnlyList<string> WindowerProfiles(string? windowerDir)
-    {
-        if (windowerDir is null) return [];
-        try
-        {
-            var f = WindowerSettingsFile.Load(windowerDir);
-            return f.LoadError is null ? f.Profiles.Select(p => p.Name).Where(n => !WindowerSettingsFile.IsOldCopy(n)).ToList() : [];
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Log.Warning(ex, "Could not read Windower profiles");
-            return [];
-        }
-    }
-
-    internal static PolRegion? RegionOfPol(string polExe) =>
-        Path.GetDirectoryName(polExe) is { Length: > 0 } dir ? PolEnv.Region(dir) : null;
 
     // Ashita's [ashita.language] playonline: 1 Japanese, 2 English (North America), 3 European, for the region pol.exe's
     // env.dat says

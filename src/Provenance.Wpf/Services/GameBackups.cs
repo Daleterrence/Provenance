@@ -25,10 +25,10 @@ public static class GameBackups
     internal static string SettingsFolder(LauncherSettings s, RegistryGameStore registry, string? accountBoot)
     {
         var windows = registry.LoadWindows().ScreenshotFolder;
-        if ((s.ThirdPartyHookPlatform ?? "").Trim().ToLowerInvariant() != ThirdPartyHookService.Ashita) return windows;
-        var dir = ThirdPartyHookService.DetectAshita(s.AshitaPath);
+        if ((s.ThirdPartyHookPlatform ?? "").Trim().ToLowerInvariant() != ThirdPartyHook.Ashita) return windows;
+        var dir = AshitaInstall.DetectAshita(s.AshitaPath);
         var boot = accountBoot is { Length: > 0 } ? accountBoot
-                 : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? ThirdPartyHookService.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
+                 : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
         if (dir is null || boot is not { Length: > 0 } || !ThirdPartyHookLauncher.IsBootFileName(boot)) return windows;
         try { return new AshitaGameStore(dir, boot, registry).Load().ScreenshotFolder; }
         catch (Exception ex)

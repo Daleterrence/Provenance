@@ -40,8 +40,8 @@ public partial class GameSettingsViewModel : ObservableObject
     public bool HasProfile => _store.Platform is not null;
     public string ProfileKind => _store.Platform switch
     {
-        ThirdPartyHookService.Windower => "Windower profile",
-        ThirdPartyHookService.Ashita => "Ashita boot configuration",
+        ThirdPartyHook.Windower => "Windower profile",
+        ThirdPartyHook.Ashita => "Ashita boot configuration",
         _ => "",
     };
     public string ProfileHeading => HasProfile ? $"Game settings for the {ProfileKind}" : "";

@@ -156,7 +156,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
                 if (PolUpdates.ViewerRunning()) throw new RefusedException(ViewerRunningText);
 
                 // the installer data runs as admin (DXSETUP), so each run gets its own admin-only folder
-                var stagingRoot = SecureFiles.SubDir("repair");
+                var stagingRoot = ProtectedFolders.SubDir("repair");
                 RemoveStaging(Directory.GetDirectories(stagingRoot));
                 var staging = Path.Combine(stagingRoot, Guid.NewGuid().ToString("N"));
                 try

@@ -18,11 +18,6 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// Lean is POL_LEAN, a multi-account sign-in with no social side. HomeSlot is POL_HOME, the account's pub\homeNN.
-// HandleKey is POL_HANDLE, the Handle ID of the handle the account last had active
-public sealed record SessionOptions(bool Lean, string? ThirdPartyHookProfile, int HomeSlot = 0, IReadOnlyDictionary<string, WindowerAddonList>? WindowerLists = null,
-                                    WindowerAddonList? WindowerShared = null, string? HandleKey = null);
-
 internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? problem);
 
 public sealed class PolSessionService : IDisposable
@@ -123,7 +118,7 @@ public sealed class PolSessionService : IDisposable
     private static string? _sessionDir;
     private static string SessionDir
     {
-        get { lock (SessionDirGate) return _sessionDir ??= SecureFiles.SubDir("sessions"); }
+        get { lock (SessionDirGate) return _sessionDir ??= ProtectedFolders.SubDir("sessions"); }
     }
 
     internal static long _dnsWarmedAt;
@@ -209,7 +204,7 @@ public sealed class PolSessionService : IDisposable
     public int? LastRefusalReason { get; private set; }
 
     internal string Platform =>
-        (_settings.Current.ThirdPartyHookPlatform ?? ThirdPartyHookService.None).Trim().ToLowerInvariant();
+        (_settings.Current.ThirdPartyHookPlatform ?? ThirdPartyHook.None).Trim().ToLowerInvariant();
 
     internal int SweepRuns => Volatile.Read(ref _sweepRuns);
 
@@ -417,7 +412,7 @@ public sealed class PolSessionService : IDisposable
         int pid;
         var platform = Platform;
         Volatile.Write(ref _windowerPlay, null);
-        if (platform == ThirdPartyHookService.Ashita)
+        if (platform == ThirdPartyHook.Ashita)
         {
             var hookPid = ThirdPartyHookLauncher.StartViaAshita(
                 _settings, psi, polExe, _launchId!, options.ThirdPartyHookProfile, progress, ct,
@@ -425,7 +420,7 @@ public sealed class PolSessionService : IDisposable
             if (hookPid is null) return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
             pid = hookPid.Value;
         }
-        else if (platform == ThirdPartyHookService.Windower)
+        else if (platform == ThirdPartyHook.Windower)
         {
             if (StartThroughWindower(psi, polExe, options.ThirdPartyHookProfile, _launchId!, progress, ct, options.WindowerLists, options.WindowerShared) is not { } started)
                 return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
@@ -597,9 +592,9 @@ public sealed class PolSessionService : IDisposable
     {
         var viewerDir = PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct);
         var polExe = viewerDir is null ? null : Path.Combine(viewerDir, "pol.exe");
-        var launcherExe = Path.Combine(ThirdPartyHookService.NativeDir, ThirdPartyHookService.WatcherExe);
+        var launcherExe = Path.Combine(ThirdPartyHook.NativeDir, ThirdPartyHook.WatcherExe);
         bool found = polExe != null && File.Exists(polExe) && File.Exists(launcherExe)
-                     && File.Exists(Path.Combine(ThirdPartyHookService.NativeDir, "pol_hook.dll"));
+                     && File.Exists(Path.Combine(ThirdPartyHook.NativeDir, "pol_hook.dll"));
         return (viewerDir, found ? polExe : null, launcherExe);
     }
 
@@ -613,11 +608,11 @@ public sealed class PolSessionService : IDisposable
     {
         var psi = new ProcessStartInfo(launcherExe)
         {
-            WorkingDirectory = ThirdPartyHookService.NativeDir, UseShellExecute = false, CreateNoWindow = true,
+            WorkingDirectory = ThirdPartyHook.NativeDir, UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,
         };
         psi.ArgumentList.Add(polExe);
-        psi.ArgumentList.Add(Path.Combine(ThirdPartyHookService.NativeDir, "pol_hook.dll"));
+        psi.ArgumentList.Add(Path.Combine(ThirdPartyHook.NativeDir, "pol_hook.dll"));
         return psi;
     }
 
@@ -753,7 +748,7 @@ public sealed class PolSessionService : IDisposable
     // under _gate
     private bool MayPrestart() =>
         _prestart == null && Pid == null && _prestartHolds == 0
-        && Platform is not (ThirdPartyHookService.Ashita or ThirdPartyHookService.Windower)
+        && Platform is not (ThirdPartyHook.Ashita or ThirdPartyHook.Windower)
         && PolPaths.Supported(_settings.DetectedRegion);
 
     internal bool PrestartAllowed
@@ -1053,7 +1048,7 @@ public sealed class PolSessionService : IDisposable
                 progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
                 return null;
             }
-            bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, ThirdPartyHookService.WatcherExe, "pol_hook.dll");
+            bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, ThirdPartyHook.WatcherExe, "pol_hook.dll");
             if (refused && attempt <= RefusedRetryWaits.Length)
             {
                 var wait = RefusedRetryWaits[attempt - 1];
