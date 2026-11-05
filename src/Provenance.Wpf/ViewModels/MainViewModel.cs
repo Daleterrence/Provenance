@@ -16,6 +16,7 @@ using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
+using Provenance.Common.Login;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.Views;
 
@@ -686,14 +687,14 @@ public partial class MainViewModel : ObservableObject
 
     internal static string TitleFor(int code) => code switch
     {
-        PolSessionService.ErrorAuthFailed => "Login not accepted",
-        PolSessionService.ErrorUnfinished => "Login didn't finish",
-        PolSessionService.ErrorNoPolHandle => "PlayOnline handle needed",
-        PolSessionService.ErrorHandleRejected => "Handle not accepted",
-        PolSessionService.ErrorStalled => "PlayOnline stopped responding",
-        PolSessionService.ErrorAccountBlocked => "PlayOnline account notice",
-        PolSessionService.ErrorLauncherFailed => "PlayOnline didn't start",
-        PolSessionService.ErrorDetailsUnreadable => "Account details incomplete",
+        LoginCodes.AuthFailed => "Login not accepted",
+        LoginCodes.Unfinished => "Login didn't finish",
+        LoginCodes.NoPolHandle => "PlayOnline handle needed",
+        LoginCodes.HandleRejected => "Handle not accepted",
+        LoginCodes.Stalled => "PlayOnline stopped responding",
+        LoginCodes.AccountBlocked => "PlayOnline account notice",
+        LoginCodes.LauncherFailed => "PlayOnline didn't start",
+        LoginCodes.DetailsUnreadable => "Account details incomplete",
         _ => "Couldn't log in",
     };
 
@@ -1186,7 +1187,7 @@ public partial class MainViewModel : ObservableObject
                 });
                 var failure = LoginFailure(code, lastFailure, AutoLogin);
                 if (failure.AutoOff) AutoLogin = false;
-                if (code != PolSessionService.ErrorCancelled)
+                if (code != LoginCodes.Cancelled)
                     MessageDialog.ShowError(Application.Current?.MainWindow, failure.Title, failure.Text, offerLogs: failure.OfferLogs);
             }
         }
@@ -1211,15 +1212,15 @@ public partial class MainViewModel : ObservableObject
     // problem is the user's to fix, anything else might need the log
     internal static (string Title, string Text, bool AutoOff, bool OfferLogs) LoginFailure(int code, string? detail, bool autoLogin)
     {
-        bool autoOff = code is PolSessionService.ErrorAuthFailed or PolSessionService.ErrorAccountBlocked
-                           or PolSessionService.ErrorDetailsUnreadable && autoLogin;
+        bool autoOff = code is LoginCodes.AuthFailed or LoginCodes.AccountBlocked
+                           or LoginCodes.DetailsUnreadable && autoLogin;
         var why = detail ?? $"Provenance couldn't log in to PlayOnline (code {code}).";
-        if (code == PolSessionService.ErrorAuthFailed)
+        if (code == LoginCodes.AuthFailed)
             why += "\n\nIf your password has changed, press Edit account to update it, then log in again.";
         if (autoOff)
             why += "\n\nProvenance has turned off Log in automatically, so it won't try this account again by itself.";
         return (TitleFor(code), why, autoOff,
-                code is PolSessionService.ErrorStalled or PolSessionService.ErrorLauncherFailed or PolSessionService.ErrorUnfinished
+                code is LoginCodes.Stalled or LoginCodes.LauncherFailed or LoginCodes.Unfinished
                 || TitleFor(code) == "Couldn't log in");
     }
 

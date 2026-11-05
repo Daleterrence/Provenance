@@ -341,7 +341,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             return;
         }
         Start(Job.Load);
-        if (!SocialSnapshot.RequestMyProfile(pid, _token!)) Fail(WriteFailed);
+        if (!SocialRequests.RequestMyProfile(pid, _token!)) Fail(WriteFailed);
     }
 
     private void LoadXi(ProfileCard card)
@@ -359,7 +359,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _xiCard = card;
         LoadingText = $"Loading {card.Title}'s profile...";
         Start(Job.LoadXi);
-        if (!SocialSnapshot.RequestXiProfile(pid, _token!, _loadedKey, card.Key)) Fail(WriteFailed);
+        if (!SocialRequests.RequestXiProfile(pid, _token!, _loadedKey, card.Key)) Fail(WriteFailed);
     }
 
     private void Start(Job job, string note = "")
@@ -408,7 +408,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     // withdraws a request the hook hasn't taken yet, so it never runs later
     private void Abandon(string text)
     {
-        if (JobExt is { } ext && _pid != 0) SocialSnapshot.CancelRequest(_pid, ext);
+        if (JobExt is { } ext && _pid != 0) SocialRequests.CancelRequest(_pid, ext);
         Fail(text);
     }
 
@@ -549,14 +549,14 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         var noMail = fields.Any(f => f.Key == "z_mail" && f.Value == _noMail) ? _noMail : "";
         // level 0 keeps the profile's own, only a level that was picked gets sent
         int level = Level != _savedLevel ? (int)Level : 0;
-        if (!SocialSnapshot.SaveMyProfile(pid, _token!, level, fields, noMail)) Fail(WriteFailed);
+        if (!SocialRequests.SaveMyProfile(pid, _token!, level, fields, noMail)) Fail(WriteFailed);
     }
 
     private void StartRename(int pid)
     {
         _renameAfterSave = false;
         Start(Job.Rename, "Renaming your handle...");
-        if (!SocialSnapshot.RenameHandle(pid, _token!, HandleName.Trim(), _loadedKey)) Fail(WriteFailed);
+        if (!SocialRequests.RenameHandle(pid, _token!, HandleName.Trim(), _loadedKey)) Fail(WriteFailed);
     }
 
     private void OnSnapshot(PolSocialSnapshot snap)
@@ -671,7 +671,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     // general "not authorised", so it gets plain ones
     private static string Why(string state)
     {
-        var reason = SocialSnapshot.FailReason(state);
+        var reason = SocialRequests.FailReason(state);
         if (!int.TryParse(reason, out var n) || n >= 0) return $" ({reason}).";
         int code = -n;
         var text = code == 5440 ? "PlayOnline said this account isn't allowed to make that change." : PolErrors.Text(code);
@@ -684,6 +684,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _social.PropertyChanged -= OnSocialChanged;
         _timer.Stop();
         // closed mid-job: an untaken request is withdrawn, one the hook already took finishes there
-        if (JobExt is { } ext && _pid != 0) SocialSnapshot.CancelRequest(_pid, ext);
+        if (JobExt is { } ext && _pid != 0) SocialRequests.CancelRequest(_pid, ext);
     }
 }

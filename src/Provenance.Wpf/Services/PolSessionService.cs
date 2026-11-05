@@ -27,16 +27,6 @@ internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? pro
 
 public sealed class PolSessionService : IDisposable
 {
-    public const int ErrorAuthFailed = SignInCodes.AuthFailed;
-    public const int ErrorNoPolHandle = SignInCodes.NoPolHandle;
-    public const int ErrorLauncherFailed = SignInCodes.LauncherFailed;
-    public const int ErrorStalled = SignInCodes.Stalled;
-    public const int ErrorHandleRejected = SignInCodes.HandleRejected;
-    public const int ErrorCancelled = SignInCodes.Cancelled;
-    public const int ErrorAccountBlocked = SignInCodes.AccountBlocked;
-    public const int ErrorDetailsUnreadable = SignInCodes.DetailsUnreadable;
-    public const int ErrorUnfinished = SignInCodes.Unfinished;
-
     public const string DetailsAgainText = "Provenance needs this account's login details again. Press Edit account to add them.";
 
     // POL's password box stops at 16 and polcore has no room for more, a longer one gets refused before pol.exe sees it
@@ -76,15 +66,15 @@ public sealed class PolSessionService : IDisposable
 
     internal static (int Code, string Text) EndedBeforeSignIn(int? exitCode) => exitCode switch
     {
-        _ when DetailsUnreadable(exitCode: exitCode) => (ErrorDetailsUnreadable, DetailsAgainText),
-        4 => (ErrorNoPolHandle, NoPolHandleText),
-        12 => (ErrorLauncherFailed, PrivateFolderText),
-        UnsafeStartExitCode => (ErrorLauncherFailed, UnsafeStartText),
-        GameStartExitCode => (ErrorLauncherFailed, GameStartFailedText),
-        3 => (ErrorAuthFailed, RefusedText),
-        7 => (ErrorAccountBlocked, "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why."),
-        10 => (ErrorUnfinished, LoadFailedText("")),
-        _ => (ErrorUnfinished, "PlayOnline closed before the login finished."),
+        _ when DetailsUnreadable(exitCode: exitCode) => (LoginCodes.DetailsUnreadable, DetailsAgainText),
+        4 => (LoginCodes.NoPolHandle, NoPolHandleText),
+        12 => (LoginCodes.LauncherFailed, PrivateFolderText),
+        UnsafeStartExitCode => (LoginCodes.LauncherFailed, UnsafeStartText),
+        GameStartExitCode => (LoginCodes.LauncherFailed, GameStartFailedText),
+        3 => (LoginCodes.AuthFailed, RefusedText),
+        7 => (LoginCodes.AccountBlocked, "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why."),
+        10 => (LoginCodes.Unfinished, LoadFailedText("")),
+        _ => (LoginCodes.Unfinished, "PlayOnline closed before the login finished."),
     };
 
     internal static string SessionClosedText(int? exitCode) => exitCode switch
@@ -284,7 +274,7 @@ public sealed class PolSessionService : IDisposable
             throw Shown.Mark(new InvalidOperationException("Provenance is still finishing your last game. Close Provenance and open it again, then log in."));
         LastRefusalReason = null;
         var launch = ForLaunch(options);
-        int rc = ErrorLauncherFailed;
+        int rc = LoginCodes.LauncherFailed;
         try
         {
             rc = await Task.Run(() => ConnectCore(pol, sea, otp, rememberedProfileId, progress, askHandleName, launch, ct), ct);
@@ -305,7 +295,7 @@ public sealed class PolSessionService : IDisposable
                             IProgress<LaunchProgress>? progress, Func<string?>? askHandleName, SessionOptions options,
                             CancellationToken ct)
     {
-        int Fail(string text, int code = ErrorLauncherFailed)
+        int Fail(string text, int code = LoginCodes.LauncherFailed)
         {
             progress?.Report(new LaunchProgress("Failed", text));
             return code;
@@ -313,7 +303,7 @@ public sealed class PolSessionService : IDisposable
         _logOffset = 0;
         _pending.Clear();
         _played = false;
-        if (pol.Password.Length > MaxPolPasswordLength) return Fail(PolPasswordTooLongText, ErrorDetailsUnreadable);
+        if (pol.Password.Length > MaxPolPasswordLength) return Fail(PolPasswordTooLongText, LoginCodes.DetailsUnreadable);
         var region = _settings.DetectedRegion;
         if (!PolPaths.Supported(region))
             return Fail(region is null
@@ -332,7 +322,7 @@ public sealed class PolSessionService : IDisposable
         catch (OperationCanceledException)
         {
             progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
-            return ErrorCancelled;
+            return LoginCodes.Cancelled;
         }
         catch (Exception ex)
         {
@@ -377,11 +367,11 @@ public sealed class PolSessionService : IDisposable
         int Stopped(string text)
         {
             progress?.Report(new LaunchProgress("Stopped", text));
-            return ErrorCancelled;
+            return LoginCodes.Cancelled;
         }
         int Fail(int code, string detail)
         {
-            if (code == ErrorDetailsUnreadable) DropKey();
+            if (code == LoginCodes.DetailsUnreadable) DropKey();
             progress?.Report(new LaunchProgress("Failed", detail));
             return code;
         }
@@ -432,13 +422,13 @@ public sealed class PolSessionService : IDisposable
             var hookPid = ThirdPartyHookLauncher.StartViaAshita(
                 _settings, psi, polExe, _launchId!, options.ThirdPartyHookProfile, progress, ct,
                 hookStarted: TrackThirdPartyHook);
-            if (hookPid is null) return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
+            if (hookPid is null) return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
             pid = hookPid.Value;
         }
         else if (platform == ThirdPartyHookService.Windower)
         {
             if (StartThroughWindower(psi, polExe, options.ThirdPartyHookProfile, _launchId!, progress, ct, options.WindowerLists, options.WindowerShared) is not { } started)
-                return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
+                return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
             pid = started;
         }
         // never for a lean session, the go file can't carry POL_LEAN
@@ -451,7 +441,7 @@ public sealed class PolSessionService : IDisposable
             // a cancel while the pre-start was being taken leaves it waiting, so nothing starts in its place
             if (ct.IsCancellationRequested) return Stopped("The login was cancelled.");
             if (StartWithWatcher(psi, progress, ct, WatcherLimit, PolDidNotStart) is not { } started)
-                return ct.IsCancellationRequested ? ErrorCancelled : ErrorLauncherFailed;
+                return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
             pid = started;
         }
         lock (_gate)
@@ -467,8 +457,8 @@ public sealed class PolSessionService : IDisposable
         Log.Information("Hold session: pol.exe pid {Pid}", pid);
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.04));
         // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its sign-in from it
-        DeleteQuietly(SocialSnapshot.PathForPid(pid));
-        DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
+        DeleteQuietly(SocialRequests.PathForPid(pid));
+        DeleteQuietly(SocialRequests.StorePathForPid(pid));
         DropChatLeftovers(pid);
         DeleteQuietly(HookFiles.PathFor(pid, "stop"));
         DeleteQuietly(HookFiles.PathFor(pid, "ended"));
@@ -485,25 +475,25 @@ public sealed class PolSessionService : IDisposable
             // the language the hook gave polcore, the same one app.dll builds the jail page's address from
             if (Regex.Match(line, @"viewer_init: lang=(\d+)") is { Success: true } lm && int.TryParse(lm.Groups[1].Value, out var lang))
                 viewerLanguage = lang;
-            if (DetailsUnreadable(line)) return Fail(ErrorDetailsUnreadable, DetailsAgainText);
+            if (DetailsUnreadable(line)) return Fail(LoginCodes.DetailsUnreadable, DetailsAgainText);
             if (line.Contains("phase_c: AUTH FAILED"))
             {
                 var rm = Regex.Match(line, @"reason=(-?\d+)");
                 LastRefusalReason = rm.Success && int.TryParse(rm.Groups[1].Value, out var reason) ? reason : null;
-                return Fail(ErrorAuthFailed, LastRefusalReason is { } r
+                return Fail(LoginCodes.AuthFailed, LastRefusalReason is { } r
                     ? PolAccountNotices.SignInRefused(r, Region)
                     : RefusedText);
             }
             if (line.Contains("phase_c: ACCOUNT BLOCKED "))
-                return Fail(ErrorAccountBlocked,
+                return Fail(LoginCodes.AccountBlocked,
                             PolAccountNotices.Blocked(Regex.Match(line, @"ACCOUNT BLOCKED (\S+)").Groups[1].Value, Region, viewerLanguage));
             if (line.Contains("phase_c: LOAD FAILED "))
-                return Fail(ErrorUnfinished, LoadFailedText(Regex.Match(line, @"LOAD FAILED (\w+)").Groups[1].Value));
-            if (line.Contains("NO POL HANDLE")) return Fail(ErrorNoPolHandle, NoPolHandleText);
+                return Fail(LoginCodes.Unfinished, LoadFailedText(Regex.Match(line, @"LOAD FAILED (\w+)").Groups[1].Value));
+            if (line.Contains("NO POL HANDLE")) return Fail(LoginCodes.NoPolHandle, NoPolHandleText);
             if (line.Contains("handle name rejected") || line.Contains("handle claim failed")
                 || line.Contains("handle save failed"))
-                return Fail(ErrorHandleRejected, "PlayOnline didn't accept that handle name. Log in again to try a different one.");
-            if (LoginUnfinished(line)) return Fail(ErrorUnfinished, UnfinishedText);
+                return Fail(LoginCodes.HandleRejected, "PlayOnline didn't accept that handle name. Log in again to try a different one.");
+            if (LoginUnfinished(line)) return Fail(LoginCodes.Unfinished, UnfinishedText);
             return null;
         }
         while (!ct.IsCancellationRequested)
@@ -520,10 +510,10 @@ public sealed class PolSessionService : IDisposable
                 lastActivity = DateTime.UtcNow;
             }
             if (ct.IsCancellationRequested) break;   // a cancel that lands with the first snapshot still wins
-            if (SocialSnapshot.TryRead(pid) is { } snap)
+            if (SocialRequests.TryRead(pid) is { } snap)
             {
                 // the hook writes the store file before its first snapshot, so it's there now even if Play comes next
-                SnapshotUpdated?.Invoke(snap with { Stored = SocialSnapshot.TryReadStore(pid) });
+                SnapshotUpdated?.Invoke(snap with { Stored = SocialRequests.TryReadStore(pid) });
                 StartWatcher(pid);
                 SaveSession(rememberedProfileId);
                 progress?.Report(new LaunchProgress("Connected", "You're logged in.", LaunchSteps.StartGame, 1.0));
@@ -542,7 +532,7 @@ public sealed class PolSessionService : IDisposable
                 return Fail(endedCode, endedText);
             }
             if (DateTime.UtcNow - lastActivity > StallLimit)
-                return Fail(ErrorStalled, "PlayOnline stopped responding during the login. Try again in a moment.");
+                return Fail(LoginCodes.Stalled, "PlayOnline stopped responding during the login. Try again in a moment.");
             Thread.Sleep(250);
         }
         return Stopped("The login was cancelled, and PlayOnline has been closed.");
@@ -724,7 +714,7 @@ public sealed class PolSessionService : IDisposable
     {
         StopWatcher();
         _debounce = new Timer(_ => ReadSnapshot(), null, Timeout.Infinite, Timeout.Infinite);
-        var w = new FileSystemWatcher(HookFiles.Dir, Path.GetFileName(SocialSnapshot.PathForPid(pid)))
+        var w = new FileSystemWatcher(HookFiles.Dir, Path.GetFileName(SocialRequests.PathForPid(pid)))
         {
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
         };
@@ -1327,8 +1317,8 @@ public sealed class PolSessionService : IDisposable
     {
         if (Pid is not { } pid) return;
         // the store file only turns up once, at login, and goes once the app has it
-        if (SocialSnapshot.TryRead(pid) is { } snap)
-            SnapshotUpdated?.Invoke(snap with { Stored = SocialSnapshot.TryReadStore(pid) });
+        if (SocialRequests.TryRead(pid) is { } snap)
+            SnapshotUpdated?.Invoke(snap with { Stored = SocialRequests.TryReadStore(pid) });
     }
 
     public void Poll()
@@ -1347,8 +1337,8 @@ public sealed class PolSessionService : IDisposable
             try { if (_polProc is { HasExited: true } gone && gone.Id == pid) exit = gone.ExitCode; } catch { }
             Log.Warning("Held PlayOnline session (pid {Pid}) ended on its own (exit code {Exit})", pid, exit);
             PutScreenSaverBack();
-            DeleteQuietly(SocialSnapshot.PathForPid(pid));
-            DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
+            DeleteQuietly(SocialRequests.PathForPid(pid));
+            DeleteQuietly(SocialRequests.StorePathForPid(pid));
             DropChatLeftovers(pid);
             Pid = null;
             _pidStarted = null;
@@ -1471,8 +1461,8 @@ public sealed class PolSessionService : IDisposable
                 if (KillIfOurs(pid, p => IsSameProcess(p, started), (int)StopGrace.TotalMilliseconds, afterMs: 2000))
                     Log.Warning("pol.exe {Pid} hadn't logged out {Seconds} s after its stop file, so it was ended", pid,
                                 (int)StopGrace.TotalSeconds);
-                DeleteQuietly(SocialSnapshot.PathForPid(pid));
-                DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
+                DeleteQuietly(SocialRequests.PathForPid(pid));
+                DeleteQuietly(SocialRequests.StorePathForPid(pid));
                 DropChatLeftovers(pid);
                 Log.Information("Stopped held PlayOnline session (pid {Pid})", pid);
                 Pid = null;

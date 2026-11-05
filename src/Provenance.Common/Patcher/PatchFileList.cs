@@ -19,7 +19,7 @@ public sealed record PatchFile(string Name, BlockAttribute Attribute, IReadOnlyL
     public PatchLine Last => Lines[^1];
 }
 
-public static class PatchCfg
+public static class PatchFileList
 {
     private static readonly Regex LineRx = new(
         @"^(\S+) (-?\d+) (-?\d+) (-?\d+) (.+?\.slc) (\d+)(?: (.+?\.olc) (\d+))?\s*$", RegexOptions.CultureInvariant);

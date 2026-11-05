@@ -1,7 +1,7 @@
 namespace Provenance.Common.Patcher;
 
 // POL's version value (app.dll 0x1029c0ca) and its up-to-date test (0x1029c057)
-public static class Base37
+public static class PolVersion
 {
     public static long Value(string s)
     {

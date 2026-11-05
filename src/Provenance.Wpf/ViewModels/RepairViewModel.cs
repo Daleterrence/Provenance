@@ -28,7 +28,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
     private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
 
     private CancellationTokenSource? _cts;
-    private volatile bool _changing;   // MirrorRepair says so right before the first game file changes
+    private volatile bool _changing;   // GameRepair says so right before the first game file changes
     private volatile bool _fixed;      // and once the registry pass has put something right, or DXSETUP's started
     private volatile bool _fixing;     // as the registry pass or DXSETUP starts
     internal bool _started;
@@ -161,7 +161,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
                 var staging = Path.Combine(stagingRoot, Guid.NewGuid().ToString("N"));
                 try
                 {
-                    var repair = new MirrorRepair(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion)
+                    var repair = new GameRepair(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion)
                     {
                         StagingDir = staging,
                         Status = status.Report,

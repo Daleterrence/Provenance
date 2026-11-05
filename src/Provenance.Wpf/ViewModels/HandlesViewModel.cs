@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Provenance.Common.Social;
-using HandleChange = Provenance.Common.Social.SocialSnapshot.HandleChange;
 
 namespace Provenance.Wpf.ViewModels;
 
@@ -106,7 +105,7 @@ public partial class HandlesViewModel : ObservableObject
         {
             // once the hook's taken it, it's the hook's answer that ends it
             if (state == "working" || DateTime.UtcNow - _at < TimeSpan.FromSeconds(110)) return;
-            if (_pid() is { } pid) SocialSnapshot.CancelRequest(pid, "handle");
+            if (_pid() is { } pid) SocialRequests.CancelRequest(pid, "handle");
             state = "timeout";
         }
         _token = null;
@@ -245,7 +244,7 @@ public partial class HandlesViewModel : ObservableObject
     {
         _after = null;
         var token = Guid.NewGuid().ToString("N")[..12];
-        if (_pid() is not { } pid || !SocialSnapshot.ChangeHandle(pid, op, token, handle, content))
+        if (_pid() is not { } pid || !SocialRequests.ChangeHandle(pid, op, token, handle, content))
         {
             NoteIsError = true;
             Note = "Provenance couldn't pass the change to PlayOnline.";

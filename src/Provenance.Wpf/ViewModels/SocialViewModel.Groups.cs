@@ -3,7 +3,6 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Social;
-using GroupOp = Provenance.Common.Social.SocialSnapshot.GroupOp;
 
 namespace Provenance.Wpf.ViewModels;
 
@@ -101,7 +100,7 @@ public partial class SocialViewModel
         _groupBySend = op is GroupOp.Invite or GroupOp.AcceptInvite or GroupOp.DeclineInvite;   // these report as sends
         _groupLeaving = op is GroupOp.Leave or GroupOp.Disband ? groupId : null;
         _answerFor = invite;   // only now, a refused click must never mark it answered
-        if (SocialSnapshot.ChangeGroup(pid, op, token, groupId, a, b, c, key)) return;
+        if (SocialRequests.ChangeGroup(pid, op, token, groupId, a, b, c, key)) return;
         _groupToken = null;
         _answerFor = null;
         EditBusy = false;
@@ -237,7 +236,7 @@ public partial class SocialViewModel
             "failed:-5428" or "failed:-261" => "That group name can't be used.",
             "failed:stopped" => "PlayOnline didn't take your recent messages, so invitations can't be sent or answered until you log in again.",
             "failed:hourly limit" => "You've sent 600 messages in the last hour. Try again later.",
-            var s => $"PlayOnline didn't accept the change ({SocialSnapshot.FailReason(s)}).",
+            var s => $"PlayOnline didn't accept the change ({SocialRequests.FailReason(s)}).",
         };
         // the hook leaves the group's chat before the group, so a refused leave can still have closed it
         if (left != null && GroupChat.LeaveFailed(left, snap)) EditNote += " " + ChatClosedNote;

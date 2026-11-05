@@ -1,3 +1,4 @@
+using Provenance.Common.Social;
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
@@ -6,7 +7,6 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Provenance.Wpf.ViewModels;
-using RequestAnswer = Provenance.Common.Social.SocialSnapshot.RequestAnswer;
 
 namespace Provenance.Wpf.Views;
 

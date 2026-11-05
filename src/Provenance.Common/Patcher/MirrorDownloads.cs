@@ -5,7 +5,7 @@ using Provenance.Common.Mirror;
 namespace Provenance.Common.Patcher;
 
 // runs as admin off a network index, so every write goes through SafePath and DecodeAsync checks each download first
-public static class MirrorSync
+public static class MirrorDownloads
 {
     // a range holds lots of files, so a few streams are bound by bandwidth rather than round trips
     public const int DefaultParallel = 8;

@@ -12,7 +12,7 @@ namespace Provenance.Common.Patcher;
 
 public sealed record VersionCheck(string Local, string Server, IPEndPoint Endpoint)
 {
-    public bool UpToDate => Base37.UpToDate(Local, Server);
+    public bool UpToDate => PolVersion.UpToDate(Local, Server);
 }
 
 public enum PatchResult { UpToDate, Updated, UpdatedQueued }
@@ -84,7 +84,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         var workIdx = Enumerable.Range(0, manifest.Count)
             .Where(i => decisions[i].Kind is Kind.Direct or Kind.Indirect).ToList();
         var work = workIdx.Select(i => manifest[i]).ToList();
-        WriteText("patch2.cfg", PatchCfg.Write(work));
+        WriteText("patch2.cfg", PatchFileList.Write(work));
         if (work.Count == 0 && !decisions.Any(d => d.Kind == Kind.Current && d.FromTmp2))
         {
             WriteLocalVersion(server);
@@ -177,7 +177,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         File.Delete(tmp1);
         Replace(tmp2, Path.Combine(Dir, "patch.cfg"));
         DeleteFile(Path.Combine(Dir, "patch2.cfg"));
-        return PatchCfg.Parse(File.ReadAllText(Path.Combine(Dir, "patch.cfg"), Encoding.Latin1), product.TagFilter);
+        return PatchFileList.Parse(File.ReadAllText(Path.Combine(Dir, "patch.cfg"), Encoding.Latin1), product.TagFilter);
     }
 
     private enum Kind { Skip, Current, Direct, Indirect }
@@ -209,7 +209,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
     private Decision Decide(PatchFile f, bool manifestScan, string local, CancellationToken ct)
     {
-        if (manifestScan && local.Length > 0 && Base37.Value(f.Last.Stamp) <= Base37.Value(local))
+        if (manifestScan && local.Length > 0 && PolVersion.Value(f.Last.Stamp) <= PolVersion.Value(local))
             return new Decision(Kind.Skip, 0, 0, false);
         var target = Local(f.Name);
         var tmp2 = target + ".tmp2";
@@ -405,7 +405,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         var rst = new StringBuilder();
         foreach (var f in manifest)
         {
-            if (local.Length > 0 && Base37.Value(f.Last.Stamp) <= Base37.Value(local)) continue;
+            if (local.Length > 0 && PolVersion.Value(f.Last.Stamp) <= PolVersion.Value(local)) continue;
             var target = Local(f.Name);
             var tmp2 = target + ".tmp2";
             if (!File.Exists(tmp2)) continue;

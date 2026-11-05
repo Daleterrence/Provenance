@@ -9,8 +9,6 @@ using Provenance.Common.Login;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
-using FriendEdit = Provenance.Common.Social.SocialSnapshot.FriendEdit;
-using RequestAnswer = Provenance.Common.Social.SocialSnapshot.RequestAnswer;
 
 namespace Provenance.Wpf.ViewModels;
 
@@ -128,7 +126,7 @@ public partial class SocialViewModel : ObservableObject
     // a request the hook hasn't taken yet never runs for nobody
     private void Withdraw(string ext)
     {
-        if (_pol.Pid is { } pid) SocialSnapshot.CancelRequest(pid, ext);
+        if (_pol.Pid is { } pid) SocialRequests.CancelRequest(pid, ext);
     }
 
     // profile server reads go one at a time in the hook, so a clock only starts once the hook's taken that read
@@ -287,7 +285,7 @@ public partial class SocialViewModel : ObservableObject
     {
         if (_ackPending.Count == 0 || _pol.Pid is not { } pid) return;
         _ackPending.ExceptWith(_acked);
-        if (_ackPending.Count == 0 || !SocialSnapshot.Ack(pid, _ackPending.ToList())) return;
+        if (_ackPending.Count == 0 || !SocialRequests.Ack(pid, _ackPending.ToList())) return;
         _acked.UnionWith(_ackPending);
         _ackPending.Clear();
     }
@@ -565,10 +563,10 @@ public partial class SocialViewModel : ObservableObject
         bool kept = !chat.Dirty || chat.Save();
         if (takeStore && kept && _pol.Pid is { } storePid)
         {
-            SocialSnapshot.DeleteStore(storePid);
+            SocialRequests.DeleteStore(storePid);
             _storeTaken = true;
         }
-        if (!kept || (saved.Count > 0 && _pol.Pid is { } pid && !SocialSnapshot.Ack(pid, saved)))
+        if (!kept || (saved.Count > 0 && _pol.Pid is { } pid && !SocialRequests.Ack(pid, saved)))
             foreach (var mid in saved) _acked.Remove(mid);   // again next snapshot
         return changed;
     }
@@ -845,7 +843,7 @@ public partial class SocialViewModel : ObservableObject
     private void EditFriend(FriendEdit op, int row, string key, string arg = "")
     {
         if (BeginEdit(out var pid, out var token))
-            WriteOrFail(SocialSnapshot.EditFriend(pid, op, token, row, key, arg));
+            WriteOrFail(SocialRequests.EditFriend(pid, op, token, row, key, arg));
     }
 
     public void RenameFriend(FriendItem f, string name)
@@ -869,7 +867,7 @@ public partial class SocialViewModel : ObservableObject
 
     public void SetComment(string text)
     {
-        if (BeginEdit(out var pid, out var token)) WriteOrFail(SocialSnapshot.SetComment(pid, token, text.Trim()));
+        if (BeginEdit(out var pid, out var token)) WriteOrFail(SocialRequests.SetComment(pid, token, text.Trim()));
     }
 
     private void ApplyEditState(PolSocialSnapshot snap)
@@ -894,7 +892,7 @@ public partial class SocialViewModel : ObservableObject
         "failed:reloaded" => "PlayOnline had a newer friend list, so Provenance loaded it instead. Try again.",
         "failed:-7187" => "That person is already on your ignore list.",
         "failed:-7188" or "failed:-516" => "Your ignore list is full (100 people).",
-        _ => $"PlayOnline didn't accept the change ({SocialSnapshot.FailReason(state)}).",
+        _ => $"PlayOnline didn't accept the change ({SocialRequests.FailReason(state)}).",
     };
 
     internal string? _answerToken;
@@ -962,7 +960,7 @@ public partial class SocialViewModel : ObservableObject
             ? ViewerText(0x46d0, "Friend registration accepted")
             : ViewerText(0x46d1, "Friend registration declined");
         // ignoring from a request only ever covers this handle, same as the viewer
-        WriteOrFail(SocialSnapshot.AnswerRequest(pid, answer, token, f.RequestMid, subject, allHandles: false));
+        WriteOrFail(SocialRequests.AnswerRequest(pid, answer, token, f.RequestMid, subject, allHandles: false));
     }
 
     private void ApplyAnswerState(PolSocialSnapshot snap)
@@ -999,7 +997,7 @@ public partial class SocialViewModel : ObservableObject
             "failed:hourly limit" => "You've sent 600 messages in the last hour, so your answer wasn't sent. Try again later.",
             var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
                 "PlayOnline didn't save the friend list, so your answer wasn't sent. Try again.",
-            var s => $"PlayOnline didn't accept your answer ({SocialSnapshot.FailReason(s)}).",
+            var s => $"PlayOnline didn't accept your answer ({SocialRequests.FailReason(s)}).",
         };
     }
 
@@ -1103,7 +1101,7 @@ public partial class SocialViewModel : ObservableObject
         SearchHits.Clear();
         SearchBusy = true;
         SearchNote = "Searching PlayOnline...";
-        if (SocialSnapshot.Search(pid, _searchToken, kind, value)) return;
+        if (SocialRequests.Search(pid, _searchToken, kind, value)) return;
         _searchToken = null;
         SearchBusy = false;
         SearchFailed(RequestWriteFailed);
@@ -1141,7 +1139,7 @@ public partial class SocialViewModel : ObservableObject
         _requestCharacter = hit.IsCharacter;
         _requestAt = DateTime.UtcNow;
         SearchNote = $"Sending a friend request to {hit.Name}...";
-        if (SocialSnapshot.SendFriendRequest(pid, token, hit.Index, hit.Key, ViewerText(0x46c9, "Let's be friends!"),
+        if (SocialRequests.SendFriendRequest(pid, token, hit.Index, hit.Key, ViewerText(0x46c9, "Let's be friends!"),
                                              ViewerText(0x46e6, "Would you like to be friends?"))) return;
         _requestToken = null;
         EditBusy = false;
@@ -1193,7 +1191,7 @@ public partial class SocialViewModel : ObservableObject
                 "failed:no schema" when characters =>
                     "Provenance couldn't read the FINAL FANTASY XI profile layout from your PlayOnline install, so it can't search for characters.",
                 "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't search for handles.",
-                _ => $"PlayOnline couldn't run the search ({SocialSnapshot.FailReason(st)}).",
+                _ => $"PlayOnline couldn't run the search ({SocialRequests.FailReason(st)}).",
             });
         }
         if (_requestToken is null) return;
@@ -1215,7 +1213,7 @@ public partial class SocialViewModel : ObservableObject
                 "failed:hourly limit" => "You've sent 600 messages in the last hour, so the request wasn't sent. Try again later.",
                 var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
                     "PlayOnline didn't save the friend list, so your request wasn't sent. Try again.",
-                var s => $"PlayOnline didn't accept the request ({SocialSnapshot.FailReason(s)}).",
+                var s => $"PlayOnline didn't accept the request ({SocialRequests.FailReason(s)}).",
             });
             return;
         }
@@ -1244,7 +1242,7 @@ public partial class SocialViewModel : ObservableObject
         _picAt = DateTime.UtcNow;
         ProfilePictureSaving = true;
         EditNote = "";
-        if (SocialSnapshot.SetProfilePicture(pid, picId, _picToken)) return;
+        if (SocialRequests.SetProfilePicture(pid, picId, _picToken)) return;
         _picToken = null;
         ProfilePictureSaving = false;
         EditNote = RequestWriteFailed;
@@ -1265,7 +1263,7 @@ public partial class SocialViewModel : ObservableObject
         {
             "timeout" => "PlayOnline didn't answer the profile picture change.",
             "failed:handle changing" => "Not saved: your handle was changing. Try again.",
-            _ => $"PlayOnline didn't save the profile picture ({SocialSnapshot.FailReason(st)}).",
+            _ => $"PlayOnline didn't save the profile picture ({SocialRequests.FailReason(st)}).",
         };
     }
 
@@ -1358,19 +1356,19 @@ public partial class SocialViewModel : ObservableObject
             // never answered. Untaken it's withdrawn (only the newest can be), but once the hook has it, it might still
             // go, so it's not re-sent
             bool withdrawn = i == newest &&
-                             SocialSnapshot.WithdrawRequest(x.Pid, "send") == SocialSnapshot.Withdrawal.Withdrawn;
+                             SocialRequests.WithdrawRequest(x.Pid, "send") == Withdrawal.Withdrawn;
             if (!withdrawn && _chat?.SetSendState(x.Token, "unconfirmed") == true) RefreshConversation();
             _sendInFlight.RemoveAt(i);
         }
         while (!_sendsClosed && _sendInFlight.Count < SendsAtOnce && !GameRunning && !HandleSwitching && _sendQueue.Count > 0 &&
-               _pol.Pid is { } pid && !SocialSnapshot.SendPending(pid))
+               _pol.Pid is { } pid && !SocialRequests.SendPending(pid))
         {
             var (row, name, token, text) = _sendQueue.Dequeue();
             // one that waited long enough to show "not sent" stays that way, they might've sent it again already
             var line = _chat?.Entries.FirstOrDefault(e => e.Key == "out:" + token);
             if (line is not { State: "sending" or "queued" }) continue;
             // no subject, like the viewer's own chat window
-            if (SocialSnapshot.Send(pid, row, name, token, "", text))
+            if (SocialRequests.Send(pid, row, name, token, "", text))
                 _sendInFlight.Add(new(token, DateTime.UtcNow, pid));
             else _chat?.SetSendState(token, "failed:write");
         }
@@ -1388,11 +1386,11 @@ public partial class SocialViewModel : ObservableObject
         {
             var x = _sendInFlight[i];
             // only the newest can still be untaken, the next file's only written once the hook's taken the last
-            var w = i == newest ? SocialSnapshot.WithdrawRequest(x.Pid, "send") : SocialSnapshot.Withdrawal.Taken;
+            var w = i == newest ? SocialRequests.WithdrawRequest(x.Pid, "send") : Withdrawal.Taken;
             // held a second ago it could've started since, the snapshot that says so takes about 300 ms to get here
             bool held = x.HookState == "queued" && DateTime.UtcNow - x.HookSaid >= TimeSpan.FromSeconds(1);
-            bool went = w == SocialSnapshot.Withdrawal.Taken ? drained || !held
-                      : w == SocialSnapshot.Withdrawal.Unknown && drained;   // the hook might take it before the drain
+            bool went = w == Withdrawal.Taken ? drained || !held
+                      : w == Withdrawal.Unknown && drained;   // the hook might take it before the drain
             states.Add((x.Token, went ? "unconfirmed" : notSent));
         }
         foreach (var q in _sendQueue) states.Add((q.Token, notSent));
@@ -1414,7 +1412,7 @@ public partial class SocialViewModel : ObservableObject
         StatusNote = "";
         _settings.Current.PlayOnlineStatus = PolStatusText.Code(want);
         _settings.Save(_settings.Current);
-        if (_pol.Pid is { } pid) SocialSnapshot.SetStatus(pid, want);
+        if (_pol.Pid is { } pid) SocialRequests.SetStatus(pid, want);
     }
 
     public enum LayoutAction { Split, Merge, OpenMessages, ShowMessages }

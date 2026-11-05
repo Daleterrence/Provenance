@@ -360,7 +360,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     internal void MasterTick(DateTime now)
     {
         if (_masterToken is null || now - _masterSentAt < MasterGiveUp || Pid is not { } pid) return;
-        SocialSnapshot.WithdrawRequest(pid, "chatmaster");
+        SocialRequests.WithdrawRequest(pid, "chatmaster");
         if (_masterKind == MasterJob.Password) _dropPassword();
         _masterToken = null;
         MasterBusy = false;
@@ -420,11 +420,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         if (Pid is { } pid)
         {
-            SocialSnapshot.WithdrawRequest(pid, "chatsend");
+            SocialRequests.WithdrawRequest(pid, "chatsend");
             if (Current == Page.Room || Entering)
             {
-                bool withdrawn = Entering && ((SocialSnapshot.WithdrawRequest(pid, "chatjoin") == SocialSnapshot.Withdrawal.Withdrawn) |
-                                              (SocialSnapshot.WithdrawRequest(pid, "chatcreate") == SocialSnapshot.Withdrawal.Withdrawn));
+                bool withdrawn = Entering && ((SocialRequests.WithdrawRequest(pid, "chatjoin") == Withdrawal.Withdrawn) |
+                                              (SocialRequests.WithdrawRequest(pid, "chatcreate") == Withdrawal.Withdrawn));
                 if (Entering) _dropPassword();
                 if (!withdrawn && !_quiet) ChatRoomFiles.Leave(pid, NewToken(), Entering ? _joinToken ?? "" : "");
             }
@@ -556,7 +556,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (chat.RoomsState == "failed:no chat") { Unavailable = NotNow; return; }
         if (chat.RoomsState != "done")
         {
-            RoomsNote = $"The room list didn't load ({SocialSnapshot.FailReason(chat.RoomsState)}).";
+            RoomsNote = $"The room list didn't load ({SocialRequests.FailReason(chat.RoomsState)}).";
             return;
         }
         Offset = chat.Offset;

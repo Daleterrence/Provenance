@@ -37,7 +37,7 @@ public static class WindowerDisplay
                 return (dm.dmPelsWidth, dm.dmPelsHeight);
             break;
         }
-        return FfxiConfig.PrimaryDisplay();
+        return FfxiRegistry.PrimaryDisplay();
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

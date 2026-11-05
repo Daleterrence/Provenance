@@ -10,10 +10,10 @@ public static class AccountFailures
     // count as an Account failure
     public static AccountFailureKind Classify(int code, int? refusalReason, bool usesOtp)
     {
-        if (code == SignInCodes.AccountBlocked) return AccountFailureKind.AccountBlocked;
-        if (code == SignInCodes.DetailsUnreadable) return AccountFailureKind.Credential;   // off until the account's edited
-        if (code == SignInCodes.LauncherFailed) return AccountFailureKind.Install;
-        if (code != SignInCodes.AuthFailed) return AccountFailureKind.Account;
+        if (code == LoginCodes.AccountBlocked) return AccountFailureKind.AccountBlocked;
+        if (code == LoginCodes.DetailsUnreadable) return AccountFailureKind.Credential;   // off until the account's edited
+        if (code == LoginCodes.LauncherFailed) return AccountFailureKind.Install;
+        if (code != LoginCodes.AuthFailed) return AccountFailureKind.Account;
         return refusalReason switch
         {
             -202 or -203 or -205 => AccountFailureKind.Credential,

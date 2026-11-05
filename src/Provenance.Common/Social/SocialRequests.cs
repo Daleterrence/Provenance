@@ -6,7 +6,7 @@ using static Provenance.Common.JsonFields;
 namespace Provenance.Common.Social;
 
 // the hook's per-session files. Requests get written whole (temp file then move) so the hook never sees half of one
-public static class SocialSnapshot
+public static class SocialRequests
 {
     public static string PathForPid(int pid) => HookFiles.PathFor(pid, "social.json");
 
@@ -43,8 +43,6 @@ public static class SocialSnapshot
     public static bool SetProfilePicture(int pid, int picId, string token) =>
         WriteRequest(pid, "pic", $"{picId}\n{token.Replace("\n", "")}");
 
-    public enum FriendEdit { Rename, Delete, Ignore, Unignore }
-
     // row is the ignore-list index for Unignore. The key's there so a changed list gets refused
     public static bool EditFriend(int pid, FriendEdit op, string token, int row, string key, string arg = "")
     {
@@ -57,8 +55,6 @@ public static class SocialSnapshot
         };
         return WriteRequest(pid, "friend", $"{verb}\n{OneLine(token)}\n{row}\n{OneLine(key)}\n{OneLine(arg)}");
     }
-
-    public enum RequestAnswer { Accept, Decline, Ignore }
 
     public static bool AnswerRequest(int pid, RequestAnswer answer, string token, int mid, string subject, bool allHandles = false)
     {
@@ -75,18 +71,6 @@ public static class SocialSnapshot
 
     public static bool RequestProfile(int pid, string token, int friendRow, string friendKey) =>
         WriteRequest(pid, "profile", $"{token.Replace("\n", "")}\n{friendRow}\n{friendKey.Replace("\n", "")}");
-
-    public enum GroupOp
-    {
-        Create,          // a = name
-        Disband,
-        Leave,
-        SetClass,        // a = member index, b = class, key
-        Comment,         // a = text
-        Invite,          // a = friend row, b = subject, c = text, key
-        AcceptInvite,    // a = message id, b = reply subject
-        DeclineInvite,   // same as AcceptInvite
-    }
 
     public static bool ChangeGroup(int pid, GroupOp op, string token, string groupId, string a = "", string b = "", string c = "",
                                    string key = "")
@@ -137,8 +121,6 @@ public static class SocialSnapshot
     public static string FailReason(string state) =>
         state.StartsWith("failed:", StringComparison.Ordinal) ? state[7..] : state;
 
-    public enum HandleChange { Switch, Link, Unlink }
-
     // the unlinked ones go on the active handle in one save, the hook refuses the lot if they don't all fit
     public static bool LinkAll(int pid, string token, PolHandle active, IReadOnlyList<PolContentId> contents)
     {
@@ -163,8 +145,6 @@ public static class SocialSnapshot
 
     // an abandoned edit mustn't run later, so the .taking copy the hook would retry goes too
     public static void CancelRequest(int pid, string ext) => HookFiles.DeleteRequest(pid, ext);
-
-    public enum Withdrawal { Withdrawn, Taken, Unknown }
 
     // the hook takes a request by renaming it, so this rename and a take can't both happen. A file a scanner has open
     // gets a few more tries

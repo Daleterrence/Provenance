@@ -1,5 +1,5 @@
+using Provenance.Common.Social;
 using System.Diagnostics;
-using HandleChange = Provenance.Common.Social.SocialSnapshot.HandleChange;
 
 namespace Provenance.Common.Social;
 
@@ -45,7 +45,7 @@ public sealed class PreLaunchLink
     // the Handles page's own progress text while its change is going, there's only one handle request at a time
     public Func<string?> PageWaiting { get; init; } = () => null;
     public Func<int, bool> Alive { get; init; } = ProcessAlive;
-    public Func<int, PolSocialSnapshot?> Read { get; init; } = SocialSnapshot.TryRead;
+    public Func<int, PolSocialSnapshot?> Read { get; init; } = SocialRequests.TryRead;
     public Func<TimeSpan, Task> Delay { get; init; } = t => Task.Delay(t);
     public Func<DateTime> Now { get; init; } = () => DateTime.UtcNow;
 
@@ -98,7 +98,7 @@ public sealed class PreLaunchLink
     {
         if (!Alive(pid)) return (true, null);
         var token = Guid.NewGuid().ToString("N")[..12];
-        if (!SocialSnapshot.LinkAll(pid, token, plan.Active, plan.Fit)) return (false, "Provenance couldn't pass the change to PlayOnline.");
+        if (!SocialRequests.LinkAll(pid, token, plan.Active, plan.Fit)) return (false, "Provenance couldn't pass the change to PlayOnline.");
         Saying?.Invoke(SavingText);
         var at = Now();
         DateTime? taken = null;
@@ -117,7 +117,7 @@ public sealed class PreLaunchLink
             }
             else if (Now() - at >= Untaken)
             {
-                if (SocialSnapshot.WithdrawRequest(pid, "handle") == SocialSnapshot.Withdrawal.Withdrawn) return (false, Failure("timeout"));
+                if (SocialRequests.WithdrawRequest(pid, "handle") == Withdrawal.Withdrawn) return (false, Failure("timeout"));
                 taken = Now();
             }
         }

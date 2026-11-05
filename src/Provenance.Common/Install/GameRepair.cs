@@ -26,7 +26,7 @@ public sealed record RepairResult(int FilesReplaced, int OtherFixes);
 
 // repairs by size and SHA-256, not POL's signatures, and the caller holds the update lock. Nothing that's already
 // right gets written again, the registry included, and shortcuts are left alone
-public sealed class MirrorRepair(MirrorClient client, string region)
+public sealed class GameRepair(MirrorClient client, string region)
 {
     public const string DirectXFailed =
         "The DirectX runtime FINAL FANTASY XI needs couldn't be installed. Run the repair again.";
@@ -79,14 +79,14 @@ public sealed class MirrorRepair(MirrorClient client, string region)
             if (!VersionRight(product, index.Version)) stale.Add(slug);
         }
         foreach (var (_, product, index) in found)
-            if (MirrorSync.Unusable(product.Folder, index) is { } why) throw new MirrorUnusableException(why, []);
+            if (MirrorDownloads.Unusable(product.Folder, index) is { } why) throw new MirrorUnusableException(why, []);
 
         long total = found.Sum(f => f.Index.Files.Sum(e => e.Size)), before = 0;
         var work = new Dictionary<string, IReadOnlyList<MirrorEntry>>();
         foreach (var (slug, product, index) in found)
         {
             Status?.Invoke($"Checking the {product.Name} files...");
-            work[slug] = await MirrorSync.ScanAsync(product.Folder, index, Offset(progress, before, total), ct, keepLargeAddressAware: true);
+            work[slug] = await MirrorDownloads.ScanAsync(product.Folder, index, Offset(progress, before, total), ct, keepLargeAddressAware: true);
             before += index.Files.Sum(e => e.Size);
         }
         return new RepairPlan(work, work.Values.Sum(w => w.Sum(e => e.Size)), found.ToDictionary(f => f.Slug, f => f.Index))
@@ -107,7 +107,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         var viewer = products[0].Product;
 
         // the installer data and the replacement files are one bar, the data's size is only known once it starts
-        long downloadTotal = products.Sum(p => MirrorSync.DownloadSize(WorkOf(plan, p.Slug))), dataTotal = 0;
+        long downloadTotal = products.Sum(p => MirrorDownloads.DownloadSize(WorkOf(plan, p.Slug))), dataTotal = 0;
         var dataProgress = progress is null ? null : new InlineProgress<(long Done, long Total)>(p =>
         {
             dataTotal = p.Total;
@@ -126,7 +126,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         {
             var work = WorkOf(plan, slug);
             failed.AddRange(await DownloadAsync(slug, product, work, Offset(progress, before, dataTotal + downloadTotal), replaced, ct));
-            before += MirrorSync.DownloadSize(work);
+            before += MirrorDownloads.DownloadSize(work);
         }
         ThrowIfFailed(failed);
 
@@ -136,7 +136,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         if (queued)
         {
             Status?.Invoke("Checking the PlayOnline Viewer files again...");
-            var again = await MirrorSync.ScanAsync(viewer.Folder, plan.Indexes["viewer"], null, ct, keepLargeAddressAware: true);
+            var again = await MirrorDownloads.ScanAsync(viewer.Folder, plan.Indexes["viewer"], null, ct, keepLargeAddressAware: true);
             if (again.Count > 0) Log?.Invoke($"the Viewer's queued update files changed {again.Count} file(s); they are downloaded again");
             // no share of the bar for these, it'd have to start again from nothing
             ThrowIfFailed(await DownloadAsync("viewer", viewer, again, null, replaced, ct));
@@ -210,7 +210,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         if (File.Exists(version)) File.Delete(version);
         // one text for both products, so the time left carries on across them
         Status?.Invoke("Downloading replacement files...");
-        var failed = await MirrorSync.DownloadAllAsync(client, region, product.Folder, work, MirrorSync.DefaultParallel, progress, ct,
+        var failed = await MirrorDownloads.DownloadAllAsync(client, region, product.Folder, work, MirrorDownloads.DefaultParallel, progress, ct,
             (e, ex) => Log?.Invoke($"{slug} file {e.Path} failed: {ex.GetType().Name}: {ex.Message}"));
         var bad = new HashSet<string>(failed.Select(e => e.Path), StringComparer.OrdinalIgnoreCase);
         foreach (var e in work) if (!bad.Contains(e.Path)) replaced.Add($"{slug}/{e.Path}");
@@ -220,7 +220,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
     private static void ThrowIfFailed(List<string> failed)
     {
         if (failed.Count == 0) return;
-        var names = MirrorSync.NameList(failed);
+        var names = MirrorDownloads.NameList(failed);
         throw Shown.Mark(new IOException($"{failed.Count} {(failed.Count == 1 ? "file" : "files")} couldn't be repaired: {names}. Run the repair again."));
     }
 
@@ -231,9 +231,9 @@ public sealed class MirrorRepair(MirrorClient client, string region)
     private async Task<(List<Package> Packages, bool InstallDirectX)> PrepareAsync(RepairPlan plan, (string Slug, PatchProduct Product)[] products,
         string installRoot, IProgress<(long Done, long Total)>? progress, CancellationToken ct)
     {
-        if (StagingDir is null) throw new InvalidOperationException("MirrorRepair.StagingDir is not set.");
+        if (StagingDir is null) throw new InvalidOperationException("GameRepair.StagingDir is not set.");
         bool installDirectX = plan.DirectXMissing;
-        var install = new MirrorInstall(client, region, Log);
+        var install = new InstallFromMirror(client, region, Log);
         Status?.Invoke("Downloading the installer data...");
         // the download only, the look over anything already in the staging folder is local and counts other bytes
         var bytes = progress is null ? null : new InlineProgress<InstallProgress>(p => { if (p is { Download: true, Fraction: >= 0 }) progress.Report((p.DoneBytes, p.TotalBytes)); });
@@ -242,13 +242,13 @@ public sealed class MirrorRepair(MirrorClient client, string region)
                    ?? throw new MirrorUnusableException(install.SkipReason ?? "the mirror has no install data", []);
 
         var packages = new List<Package>();
-        foreach (var (slug, _, productCode, keyFile, name) in MirrorInstall.Products(Region))
+        foreach (var (slug, _, productCode, keyFile, name) in InstallFromMirror.Products(Region))
         {
             var product = products.Single(p => p.Slug == slug).Product;
             var msi = slug == "viewer" ? data.ViewerMsi : data.FfxiMsi;
-            if (MirrorInstall.ReadPackage(msi, installRoot, keyFile, name, out var folder, out var targets) is { } unusable)
+            if (InstallFromMirror.ReadPackage(msi, installRoot, keyFile, name, out var folder, out var targets) is { } unusable)
                 throw new MirrorUnusableException(unusable, []);
-            if (!MirrorInstall.Same(folder, product.Folder))
+            if (!InstallFromMirror.Same(folder, product.Folder))
             {
                 Log?.Invoke($"{name} is not checked: its package installs to {folder}, the install is in {product.Folder}");
                 continue;
@@ -258,10 +258,10 @@ public sealed class MirrorRepair(MirrorClient client, string region)
                 Log?.Invoke($"{name} is not checked: Windows Installer has product {productCode}");
                 continue;
             }
-            var coming = new HashSet<string>(WorkOf(plan, slug).Select(e => MirrorSync.SafePath(product.Folder, e.Path)), StringComparer.OrdinalIgnoreCase);
+            var coming = new HashSet<string>(WorkOf(plan, slug).Select(e => MirrorDownloads.SafePath(product.Folder, e.Path)), StringComparer.OrdinalIgnoreCase);
             if (targets.FirstOrDefault(t => !coming.Contains(Path.GetFullPath(t)) && !File.Exists(t)) is { } absent)
             {
-                var rel = MirrorInstall.Inside(product.Folder, absent) ? Path.GetRelativePath(product.Folder, absent).Replace('\\', '/') : absent;
+                var rel = InstallFromMirror.Inside(product.Folder, absent) ? Path.GetRelativePath(product.Folder, absent).Replace('\\', '/') : absent;
                 throw new MirrorUnusableException(
                     $"the {name} installer needs {rel}, which is missing, and the mirror's {slug} index {plan.Indexes[slug].Version} does not list it", [rel]);
             }

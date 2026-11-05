@@ -312,13 +312,13 @@ public partial class MainViewModel : IMultiRunHost
         if (signIn != 0)
         {
             await LetGoOfAccountAsync();
-            if (signIn == PolSessionService.ErrorCancelled && token.IsCancellationRequested) return await Stopped();
+            if (signIn == LoginCodes.Cancelled && token.IsCancellationRequested) return await Stopped();
             var kind = AccountFailures.Classify(signIn, _pol.LastRefusalReason, profile.UseOtp);
             return new(kind, lastFailure ?? $"The login didn't finish (code {signIn}).");
         }
         SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
 
-        var snap = _runSnapshot ?? (_pol.Pid is { } pid ? SocialSnapshot.TryRead(pid) : null);
+        var snap = _runSnapshot ?? (_pol.Pid is { } pid ? SocialRequests.TryRead(pid) : null);
         if (PlayGateFailure(snap) is { } gate) return await LetGo(gate.Kind, gate.Text);
         if (token.IsCancellationRequested) return await Stopped();
 

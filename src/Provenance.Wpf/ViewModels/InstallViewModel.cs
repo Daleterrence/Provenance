@@ -30,7 +30,7 @@ public partial class InstallViewModel : ObservableObject
 
     // the versions the installer offers, North American first, only ones Provenance can log in with
     private static readonly PolRegion[] RegionValues = new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan }
-        .Where(r => GameInstaller.Installs(r) && PolPaths.Supported(r) && (r != PolRegion.Japan || OfferJapanese)).ToArray();
+        .Where(r => GameInstaller.CanInstall(r) && PolPaths.Supported(r) && (r != PolRegion.Japan || OfferJapanese)).ToArray();
 
     internal static Func<PolRegion> LocaleRegion { get; set; } = PolLocale.FromWindows;
 
@@ -40,7 +40,7 @@ public partial class InstallViewModel : ObservableObject
     private readonly GameInstaller _installer = new();
     private readonly DownloadMeter _meter;
     private CancellationTokenSource? _cts;
-    private MirrorInstall? _mirror;
+    private InstallFromMirror? _mirror;
 
     public InstallViewModel(PolRegion? region, Action? holdPrestarts = null, Action? releasePrestarts = null)
     {
@@ -440,10 +440,10 @@ public partial class InstallViewModel : ObservableObject
         FromMirror = true;
         CurrentStep = 0;
         Stage = "Preparing";
-        Detail = MirrorInstall.PrepareText;
+        Detail = InstallFromMirror.PrepareText;
         Log.Information("Install source: trying the Provenance mirror");
         var staging = Path.Combine(work, MirrorFolder);
-        var mirror = _mirror = new MirrorInstall(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion,
+        var mirror = _mirror = new InstallFromMirror(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion,
                                                  m => Log.Warning("Mirror install: {Message}", m));
         var progress = new Progress<InstallProgress>(p =>
         {
@@ -595,9 +595,9 @@ public partial class InstallViewModel : ObservableObject
     {
         try
         {
-            if (!FfxiConfig.NeedsFirstStart(region)) return;
-            int n = FfxiConfig.WriteFirstStart(region);
-            var d = FfxiConfig.PrimaryDisplay();
+            if (!FfxiRegistry.NeedsFirstStart(region)) return;
+            int n = FfxiRegistry.WriteFirstStart(region);
+            var d = FfxiRegistry.PrimaryDisplay();
             Log.Information("FINAL FANTASY XI first-start settings: {Count} values written for a {W}x{H} display", n, d.Width, d.Height);
         }
         catch (Exception e) { Log.Warning(e, "Could not write the FINAL FANTASY XI first-start settings"); }

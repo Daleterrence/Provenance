@@ -34,7 +34,7 @@ public static class MirrorUpdater
         {
             beforeChange();
             progress?.Report(new PatchProgress(PatchPhase.Download, "Downloading updates...", 0));
-            failed = await MirrorSync.DownloadAllAsync(client, region, folder, work, MirrorSync.DefaultParallel,
+            failed = await MirrorDownloads.DownloadAllAsync(client, region, folder, work, MirrorDownloads.DefaultParallel,
                 Bytes(PatchPhase.Download, "Downloading updates...", progress), ct,
                 (e, ex) => log?.Invoke($"mirror file {e.Path} failed: {ex.GetType().Name}: {ex.Message}", false));
         }
@@ -48,14 +48,14 @@ public static class MirrorUpdater
         MirrorIndex next, string local, IReadOnlySet<string>? keep, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
     {
         if (keep is { Count: > 0 }) next = next with { Files = next.Files.Where(e => !keep.Contains(e.Path)).ToList() };
-        if (MirrorSync.Unusable(folder, next) is { } why) throw new InvalidDataException(why);
+        if (MirrorDownloads.Unusable(folder, next) is { } why) throw new InvalidDataException(why);
         var old = local.Length > 0 ? await client.GetIndexAsync(region, product, local, ct) : null;
         IReadOnlyList<MirrorEntry> work;
-        if (old is not null) work = MirrorSync.Diff(old, next);
+        if (old is not null) work = MirrorDownloads.Diff(old, next);
         else
         {
             scanned?.Report((0, next.Files.Sum(f => f.Size)));
-            work = await MirrorSync.ScanAsync(folder, next, scanned, ct, keepLargeAddressAware: true);
+            work = await MirrorDownloads.ScanAsync(folder, next, scanned, ct, keepLargeAddressAware: true);
         }
         return work;
     }
@@ -65,7 +65,7 @@ public static class MirrorUpdater
     public static async Task<long?> DownloadSizeAsync(MirrorClient client, string region, string product, string folder, string local,
         IReadOnlySet<string>? keep, MirrorIndex next, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
     {
-        try { return MirrorSync.DownloadSize(await WorkAsync(client, region, product, folder, next, local, keep, scanned, ct)); }
+        try { return MirrorDownloads.DownloadSize(await WorkAsync(client, region, product, folder, next, local, keep, scanned, ct)); }
         catch (InvalidDataException) { return null; }
     }
 

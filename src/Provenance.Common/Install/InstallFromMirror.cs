@@ -13,7 +13,7 @@ internal sealed record InstallData(MirrorPointer Pointer, string Version, string
 
 // installer data goes to a staging folder laid out like the unpacked installer, game files straight to where the
 // packages put them
-public sealed class MirrorInstall(MirrorClient client, string region, Action<string>? log = null)
+public sealed class InstallFromMirror(MirrorClient client, string region, Action<string>? log = null)
 {
     private const string InstallSlug = "install";
     private const string PrepareStage = "Preparing";
@@ -103,7 +103,7 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
                 if (server is not null) log?.Invoke($"the mirror does not have {name} {server} yet; installing {newest}, and the first update brings it current");
             }
             if (slug == "ffxi" && index.Version == server) GameIndex = index;
-            if (MirrorSync.Unusable(folders[i], index) is { } unsafePath) return Skip<string>(unsafePath);
+            if (MirrorDownloads.Unusable(folders[i], index) is { } unsafePath) return Skip<string>(unsafePath);
             // Apply needs every file its package installs, a missing one would only stop it after the whole download
             if (Unlisted(folders[i], targets[i], index) is { } unlisted)
             {
@@ -139,7 +139,7 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
             return Skip<InstallData>("the mirror pointer names no install data");
         var installIndex = await client.GetIndexAsync(region, InstallSlug, installVersion, ct);
         if (installIndex is null) return Skip<InstallData>($"the install index {installVersion} is missing or failed verification");
-        if (MirrorSync.Unusable(stagingDir, installIndex) is { } bad) return Skip<InstallData>(bad);
+        if (MirrorDownloads.Unusable(stagingDir, installIndex) is { } bad) return Skip<InstallData>(bad);
         if (include is not null) installIndex = installIndex with { Files = installIndex.Files.Where(include).ToList() };
 
         await FetchAsync([(stagingDir, installIndex, "installer", false)], progress, ct);
@@ -195,20 +195,20 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
         foreach (var (folder, index, _, _) in targets)
         {
             progress?.Report(new InstallProgress(PrepareStage, ScanText, -1, 0, 0));
-            work.Add(await MirrorSync.ScanAsync(folder, index, Bytes(progress, PrepareStage, ScanText, index.Files.Sum(f => f.Size)), ct,
+            work.Add(await MirrorDownloads.ScanAsync(folder, index, Bytes(progress, PrepareStage, ScanText, index.Files.Sum(f => f.Size)), ct,
                                                 keepLargeAddressAware: true));
         }
         for (int i = 0; i < targets.Count; i++)
         {
             var (folder, index, name, isProduct) = targets[i];
             var stage = isProduct ? $"Downloading {name}" : "Downloading the installer data";
-            long total = MirrorSync.DownloadSize(work[i]);
+            long total = MirrorDownloads.DownloadSize(work[i]);
             progress?.Report(new InstallProgress(stage, DownloadText, 0, 0, total, Download: true));
             // drop patch.ver before touching a folder, so a stopped run never claims a version
             var version = Path.Combine(folder, "patch.ver");
             if (isProduct && work[i].Count > 0 && File.Exists(version)) File.Delete(version);
             var reasons = new ConcurrentDictionary<string, Exception>(StringComparer.OrdinalIgnoreCase);
-            var failed = await MirrorSync.DownloadAllAsync(client, region, folder, work[i], MirrorSync.DefaultParallel,
+            var failed = await MirrorDownloads.DownloadAllAsync(client, region, folder, work[i], MirrorDownloads.DefaultParallel,
                 Bytes(progress, stage, DownloadText, total, download: true), ct,
                 (e, ex) =>
                 {
@@ -219,7 +219,7 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
             if (failed.Count > 0)
             {
                 var files = failed.Select(e => e.Path).ToList();
-                var names = MirrorSync.NameList(files);
+                var names = MirrorDownloads.NameList(files);
                 // a write that failed here (disk full, a locked file) is the PC's to fix, SE's parts would fail too
                 if (files.Any(f => reasons.TryGetValue(f, out var ex) && MirrorFailure.IsLocal(ex)))
                     throw Shown.Mark(new IOException($"{files.Count} {name} {(files.Count == 1 ? "file" : "files")} couldn't be written: {names}. Free up some space or close whatever's using them, then press Try again."));

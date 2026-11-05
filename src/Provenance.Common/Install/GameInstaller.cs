@@ -40,7 +40,7 @@ public sealed class GameInstaller
         (PolRegion.Japan, "{E58BCEA5-A722-4FCA-89D5-C89E18B4E3FE}", "{55DAC7CD-71AF-40DA-9BE0-AB5358EA0069}"),
     ];
 
-    public static bool Installs(PolRegion region) => ProductCodes.Any(p => p.Region == region);
+    public static bool CanInstall(PolRegion region) => ProductCodes.Any(p => p.Region == region);
 
     internal static (string Viewer, string Ffxi) ProductCodesFor(PolRegion region) =>
         ProductCodes.FirstOrDefault(p => p.Region == region) is { Viewer: not null } p
@@ -367,7 +367,7 @@ public sealed class GameInstaller
         if (!File.Exists(uninstaller)) throw Shown.Mark(new FileNotFoundException("Some of Provenance's own files are missing. Reinstall Provenance, then try again."));
         // the Japanese installs keep their settings under SQUARE, not SquareEnix
         var hive = PolPaths.Hive(region);
-        var settings = pol ? $@"{hive}\{(region == PolRegion.Japan ? "SQUARE" : "SquareEnix")}\PlayOnlineViewer" : FfxiConfig.KeyPath(region);
+        var settings = pol ? $@"{hive}\{(region == PolRegion.Japan ? "SQUARE" : "SquareEnix")}\PlayOnlineViewer" : FfxiRegistry.KeyPath(region);
         return (props, new MsiPackage.UninstallSetup(uninstaller, Path.Combine(installRoot, "Uninstall"), Path.GetDirectoryName(msi)! + "\\",
                                                      hive, pol ? PolPaths.ViewerProduct : PolPaths.FfxiProduct, settings));
     }

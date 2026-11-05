@@ -27,7 +27,7 @@ public partial class SocialViewModel
         lookups.Waiting(snap.CharacterToken, snap.ProfileServerBusy, DateTime.UtcNow);
         if (snap.FriendsLoaded) lookups.Seen(snap.Friends);
         if (GameRunning || _pol.Pid is not { } pid || lookups.Next(DateTime.UtcNow) is not { } game) return;
-        if (!SocialSnapshot.RequestCharacter(pid, lookups.Token, game.Ctsid, game.Ctid)) lookups.Failed();
+        if (!SocialRequests.RequestCharacter(pid, lookups.Token, game.Ctsid, game.Ctid)) lookups.Failed();
     }
 
     private (string Long, string Short) Playing(PolFriend f)

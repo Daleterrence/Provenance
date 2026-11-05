@@ -189,7 +189,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         if (_social.SessionPid is not { } pid) return;
         bool withdrawn = Current == Phase.Joining &&
-                         SocialSnapshot.WithdrawRequest(pid, "groupchatjoin") == SocialSnapshot.Withdrawal.Withdrawn;
+                         SocialRequests.WithdrawRequest(pid, "groupchatjoin") == Withdrawal.Withdrawn;
         if (!withdrawn) GroupChatFiles.Leave(pid, NewToken(), Current == Phase.Joining ? _token ?? "" : "");
     }
 

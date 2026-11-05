@@ -95,7 +95,7 @@ public partial class SocialViewModel
         _profileAt = DateTime.UtcNow;
         ProfileLoading = true;
         ProfileNote = "Loading the profile from PlayOnline...";
-        if (SocialSnapshot.RequestProfile(pid, _profileToken, f.Row, f.Key)) return;
+        if (SocialRequests.RequestProfile(pid, _profileToken, f.Row, f.Key)) return;
         _profileToken = null;
         ProfileLoading = false;
         ProfileNote = RequestWriteFailed;
@@ -183,8 +183,8 @@ public partial class SocialViewModel
         "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.",
         NoCharacter => "Provenance couldn't find that character. Open the profile again from your friends list.",
         // only a number is POL's own error, the rest never got as far as asking
-        _ when int.TryParse(SocialSnapshot.FailReason(st), out _) => $"PlayOnline didn't send the profile ({SocialSnapshot.FailReason(st)}).",
-        _ => $"Provenance couldn't ask PlayOnline for the profile ({SocialSnapshot.FailReason(st)}).",
+        _ when int.TryParse(SocialRequests.FailReason(st), out _) => $"PlayOnline didn't send the profile ({SocialRequests.FailReason(st)}).",
+        _ => $"Provenance couldn't ask PlayOnline for the profile ({SocialRequests.FailReason(st)}).",
     };
 
     private const string NoCharacter = "failed:no character";
@@ -253,7 +253,7 @@ public partial class SocialViewModel
         _ffxiFrom = from;
         ProfileLoading = true;
         ProfileNote = ViewerText(0x4a82, "Retrieving profile data...");
-        if (SocialSnapshot.RequestFfxiProfile(pid, _ffxiToken, _profileRow, _profileKey, tab.Slot)) return;
+        if (SocialRequests.RequestFfxiProfile(pid, _ffxiToken, _profileRow, _profileKey, tab.Slot)) return;
         _ffxiToken = null;
         ProfileLoading = false;
         ShowTabAgain(from);

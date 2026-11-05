@@ -102,7 +102,7 @@ public static class PolUpdates
         if (outcome.Failed.Count == 0) return outcome.Replaced > 0 ? PatchResult.Updated : PatchResult.UpToDate;
 
         var names = new HashSet<string>(outcome.Failed.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
-        var failedList = MirrorSync.NameList(outcome.Failed.Select(f => f.Path).ToList());
+        var failedList = MirrorDownloads.NameList(outcome.Failed.Select(f => f.Path).ToList());
         Log.Warning("Update {Product}: PlayOnline fallback for {Files}", product.Name, failedList);
         // the file list's in the log line above, so a failure goes up as it is, marked and with its HResult
         var r = new PolUpdater(product, n => names.Contains(n.Replace('\\', '/'))) { KeepLargeAddressAware = true }.Run(progress, ct, Once, check);

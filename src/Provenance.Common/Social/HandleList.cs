@@ -1,3 +1,4 @@
+using Provenance.Common.Social;
 namespace Provenance.Common.Social;
 
 // Orphan: linked to a slot with no handle in it, which polcore can neither unlink nor link again
@@ -55,15 +56,15 @@ public static class HandleList
 
     public static string UnlinkQuestion(HandleCharacter c, PolHandle from) => $"Unlink {c.Label} from the handle {from.Name}?";
 
-    public static string Done(SocialSnapshot.HandleChange op, string handle, string character) => op switch
+    public static string Done(HandleChange op, string handle, string character) => op switch
     {
-        SocialSnapshot.HandleChange.Switch => $"{handle} is now your active handle.",
-        SocialSnapshot.HandleChange.Link => $"{character} is now linked to the handle {handle}.",
+        HandleChange.Switch => $"{handle} is now your active handle.",
+        HandleChange.Link => $"{character} is now linked to the handle {handle}.",
         _ => $"{character} is no longer linked to the handle {handle}.",
     };
 
     // "timeout" is the app's own, the rest are the hook's. Codes are polcore's
-    public static string Failed(SocialSnapshot.HandleChange op, string state) => state switch
+    public static string Failed(HandleChange op, string state) => state switch
     {
         "failed:busy" => "PlayOnline is busy with something else. Try again in a moment.",
         "failed:already active" => "That handle is already active.",
@@ -77,10 +78,10 @@ public static class HandleList
         "failed:draining" or "failed:not in hold" =>
             "That couldn't be done while PlayOnline was closing or FINAL FANTASY XI was starting.",
         "failed:cancelled" => "FINAL FANTASY XI started before PlayOnline answered, so Provenance couldn't confirm the change.",
-        "timeout" => op == SocialSnapshot.HandleChange.Switch ? "PlayOnline didn't answer, so your active handle may not have changed."
+        "timeout" => op == HandleChange.Switch ? "PlayOnline didn't answer, so your active handle may not have changed."
                                                               : "PlayOnline didn't answer, so the change may not have been saved.",
-        var s => op == SocialSnapshot.HandleChange.Switch
-            ? $"Provenance couldn't confirm the switch ({SocialSnapshot.FailReason(s)})."
-            : $"Not saved: PlayOnline didn't accept the change ({SocialSnapshot.FailReason(s)}).",
+        var s => op == HandleChange.Switch
+            ? $"Provenance couldn't confirm the switch ({SocialRequests.FailReason(s)})."
+            : $"Not saved: PlayOnline didn't accept the change ({SocialRequests.FailReason(s)}).",
     };
 }

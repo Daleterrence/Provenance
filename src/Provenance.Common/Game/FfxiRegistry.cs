@@ -5,7 +5,7 @@ using Provenance.Common.PolFormat;
 namespace Provenance.Common.Game;
 
 // HKLM, so writes need admin. 0001/0002, 0003/0004 and 0037/0038 always go as pairs, 0028 is float bits
-public static class FfxiConfig
+public static class FfxiRegistry
 {
     public static string KeyPath(PolRegion region) => region switch
     {
