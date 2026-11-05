@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Serilog;
 using Provenance.Common.Install;
+using Provenance.Common.Mirror;
 using Provenance.Common.Multi;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
@@ -288,7 +289,7 @@ public partial class MainViewModel : IMultiRunHost
         }
 
         string? lastFailure = null;
-        var progress = new SyncProgress<LaunchProgress>(p =>
+        var progress = new InlineProgress<LaunchProgress>(p =>
         {
             Kick();
             Log.Information("progress: {Stage}: {Detail}", p.Stage, p.Detail);
@@ -325,7 +326,7 @@ public partial class MainViewModel : IMultiRunHost
         if (GameFolders() is { } dirs)
         {
             var left = new TimeLeft();   // UI thread only, like the status
-            var patch = new SyncProgress<PatchProgress>(p =>
+            var patch = new InlineProgress<PatchProgress>(p =>
             {
                 Kick();
                 if (string.IsNullOrWhiteSpace(p.Text)) return;

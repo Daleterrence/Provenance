@@ -531,7 +531,7 @@ public partial class InstallViewModel : ObservableObject
     // version from POL, or the mirror hasn't got it) or the mirror's unreachable
     private async Task<long?> FirstUpdateSizeAsync(CancellationToken ct)
     {
-        if (MirrorUpdater.RegionFor(_region, "ffxi") is not { } mirrorRegion || _mirror?.GameIndex is not { } index
+        if (MirrorLayout.UpdateFolder(_region, "ffxi") is not { } mirrorRegion || _mirror?.GameIndex is not { } index
             || PolPaths.TryGetInstallFolder(_region, PolPaths.FfxiProduct) is not { } ffxiDir
             || PolPaths.TryGetInstallFolder(_region, PolPaths.ViewerProduct) is not { } viewerDir)
             return null;

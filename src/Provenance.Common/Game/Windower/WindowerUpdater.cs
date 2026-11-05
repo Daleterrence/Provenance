@@ -94,13 +94,11 @@ public sealed class WindowerUpdater
         return other;
     }
 
-    public static Version LauncherVersionOf(string exe) => WindowerFiles.LauncherVersion(exe);
-
     public async Task<WindowerUpdateResult> UpdateAsync(CancellationToken ct = default)
     {
         var result = new WindowerUpdateResult(Branch);
         result.HookBefore = result.HookAfter = WindowerFiles.FileVersion(HookPath);
-        result.LauncherBefore = result.LauncherAfter = LauncherVersionOf(LauncherPath);
+        result.LauncherBefore = result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath);
         var (hold, timedOut) = await TakeMutexAsync(result.Problems, ct);
         using var held = hold;
         if (hold is null)
@@ -193,13 +191,13 @@ public sealed class WindowerUpdater
     public WindowerBranchInfo BranchInfo()
     {
         var m = WindowerManifest.LoadCached(Folder);
-        return new(Branch, WindowerFiles.FileVersion(HookPath), LauncherVersionOf(LauncherPath), m?.HookVersion, m?.LauncherVersion,
+        return new(Branch, WindowerFiles.FileVersion(HookPath), WindowerFiles.LauncherVersion(LauncherPath), m?.HookVersion, m?.LauncherVersion,
                    File.Exists(SwitchFlag));
     }
 
     private WindowerHttp NewHttp()
     {
-        var v = LauncherVersionOf(LauncherPath);
+        var v = WindowerFiles.LauncherVersion(LauncherPath);
         return new WindowerHttp { UserAgent = WindowerHttp.UserAgentFor(v.Major > 0 ? v : WindowerHttp.DefaultLauncher), Log = Log };
     }
 
@@ -372,7 +370,7 @@ public sealed class WindowerUpdater
         if (!skip && result.LauncherBefore != manifest.LauncherVersion &&
             await ReplaceAsync(job, $"{Branch}/Windower.exe", LauncherPath, "Windower's own launcher"))
         {
-            result.LauncherAfter = LauncherVersionOf(LauncherPath);
+            result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath);
             job.Http.UserAgent = WindowerHttp.UserAgentFor(result.LauncherAfter.Major > 0 ? result.LauncherAfter : WindowerHttp.DefaultLauncher);
         }
         // a missing Hook.dll can't be loaded by anything, so it comes down even while games run

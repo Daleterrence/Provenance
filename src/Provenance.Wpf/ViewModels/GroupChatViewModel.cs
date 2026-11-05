@@ -41,7 +41,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     private string? _token;
     private long _seenSeq;
     private DateTime _joinAt;
-    private string? _sentText, _sentLine;
+    private string? _sentLine;
     private string? _quietlyEnded, _goneQuietly;
     // a chat that's ended or been switched away from: its last lines can still land in the hook's file after that
     private string? _tailGroup;
@@ -238,7 +238,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         _log?.Flush();
         _token = null;
         _gate.Reset();
-        _sentText = _sentLine = null;
+        _sentLine = null;
         Current = Phase.Out;
         Compose = "";
         ComposeNote = "";
@@ -268,8 +268,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
             ComposeNote = SendFailedText;
             return;
         }
-        _gate.Sent(token, DateTime.UtcNow);
-        _sentText = Compose;
+        _gate.Sent(token, Compose, DateTime.UtcNow);
         _sentLine = text;
         Compose = "";
         ComposeNote = "";
@@ -289,7 +288,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         SendCommand.NotifyCanExecuteChanged();
         _log?.SaveIfDue(now);
-        if (_gate.Settle(null, null, now) is { } done) Settled(done);
+        if (_gate.Expire(now) is { } done) Settled(done.State, done.Text);
         if (Current != Phase.Joining || now - _joinAt < JoinGiveUp) return;
         CallOff();
         End(_social.ViewerText(0x3eb8, BusyText));
@@ -396,10 +395,10 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void ApplySend(GroupChatSnapshot gc)
     {
-        if (_gate.Settle(gc.SendToken, gc.SendState, DateTime.UtcNow) is { } done) Settled(done);
+        if (_gate.Settle(gc.SendToken, gc.SendState, DateTime.UtcNow) is { } done) Settled(done.State, done.Text);
     }
 
-    private void Settled(string done)
+    private void Settled(string done, string text)
     {
         // it went, but with no row of mine in the group polcore never hands my copy back, so it's shown from here
         if (done == "sent:unechoed" && _sentLine is { } line)
@@ -419,9 +418,9 @@ public sealed partial class GroupChatViewModel : ObservableObject
                 _ => _social.ViewerText(0x3eba, SendFailedText),
             };
             // the line goes back in the box, like the viewer keeps it till it's gone
-            if (_sentText is { } back && Compose.Length == 0) Compose = back;
+            if (Compose.Length == 0) Compose = text;
         }
-        _sentText = _sentLine = null;
+        _sentLine = null;
         SendCommand.NotifyCanExecuteChanged();
     }
 

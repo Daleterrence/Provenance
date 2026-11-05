@@ -2,7 +2,6 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32.SafeHandles;
@@ -655,7 +654,7 @@ public static partial class GameSettingsBackup
             if ((info.Attributes & ReparsePointAttribute) != 0) throw new IOException("it's a link");
             if ((info.Attributes & DirectoryAttribute) != 0) throw new IOException("it's a folder");
             if (info.Links != 1) throw new IOException("it has other names (a hard link)");
-            if (FinalPath(h) is not { } where || !string.Equals(Path.GetDirectoryName(where), Path.TrimEndingDirectorySeparator(folder), StringComparison.OrdinalIgnoreCase))
+            if (FolderPins.FinalPath(h) is not { } where || !string.Equals(Path.GetDirectoryName(where), Path.TrimEndingDirectorySeparator(folder), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("it isn't in the folder it was found in");
             stat = StatOf(info);
             return h;
@@ -671,16 +670,6 @@ public static partial class GameSettingsBackup
 
     private static HandleInfo Info(SafeFileHandle h) =>
         GetFileInformationByHandle(h, out var info) ? info : throw new IOException($"its details couldn't be read (error {Marshal.GetLastPInvokeError()})");
-
-    private static string? FinalPath(SafeFileHandle h)
-    {
-        var buf = new StringBuilder(1024);
-        uint n = GetFinalPathNameByHandleW(h, buf, (uint)buf.Capacity, 0);
-        if (n == 0 || n >= buf.Capacity) return null;
-        var s = buf.ToString(0, (int)n);
-        if (s.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return @"\\" + s[8..];
-        return s.StartsWith(@"\\?\", StringComparison.Ordinal) ? s[4..] : s;
-    }
 
     private const uint GenericRead = 0x80000000, ReadAttributes = 0x80;
     private const uint ShareRead = 1, ShareWrite = 2, ShareDelete = 4, OpenExisting = 3, OpenReparsePoint = 0x00200000;
@@ -700,7 +689,4 @@ public static partial class GameSettingsBackup
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetFileInformationByHandle(SafeFileHandle file, out HandleInfo info);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, StringBuilder path, uint size, uint flags);
 }

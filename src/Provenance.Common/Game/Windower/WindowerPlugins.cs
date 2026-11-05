@@ -62,8 +62,6 @@ public static class WindowerPlugins
 
     public static bool IsWindowerPlugin(string dllPath) => IsPlugin(PeImage.Read(dllPath));
 
-    public static Version? FileVersion(string path) => PeImage.ReadFileVersion(path);
-
     private static bool IsPlugin(PeImage? pe) =>
         pe is { Machine: PeImage.MachineI386 } && RequiredExports.All(x => pe.Exports.Contains(x, StringComparer.Ordinal));
 }

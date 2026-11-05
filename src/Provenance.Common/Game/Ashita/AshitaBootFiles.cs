@@ -96,9 +96,9 @@ public static class AshitaBootFiles
     {
         var config = Path.GetFullPath(Path.Combine(ashitaDir, "config"));
         var boot = Path.Combine(config, "boot");
-        AshitaIniFile.RefuseLinks(config, boot);
+        LinkCheck.Refuse(config, boot);
         Directory.CreateDirectory(boot);
-        AshitaIniFile.RefuseLinks(config, boot);
+        LinkCheck.Refuse(config, boot);
         return boot;
     }
 
@@ -107,7 +107,7 @@ public static class AshitaBootFiles
         if (NameProblem(name, ashitaDir) is { } problem) throw Shown.Mark(new ArgumentException(problem));
         var path = Path.Combine(BootFolder(ashitaDir), name);
         if (File.Exists(path)) throw Shown.Mark(new IOException($"There's already a boot configuration called {name}."));
-        AshitaIniFile.RefuseLinks(path, path + ".bak");
+        LinkCheck.Refuse(path, path + ".bak");
         return path;
     }
 
@@ -120,7 +120,7 @@ public static class AshitaBootFiles
         var config = Path.GetFullPath(Path.Combine(ashitaDir, "config"));
         var path = Path.Combine(config, "boot", name);
         if (!File.Exists(path)) throw Shown.Mark(new FileNotFoundException($"{name} isn't in Ashita's config\\boot folder any more.", path));
-        if (change) AshitaIniFile.RefuseLinks(config, Path.Combine(config, "boot"), path, path + ".bak");
+        if (change) LinkCheck.Refuse(config, Path.Combine(config, "boot"), path, path + ".bak");
         return path;
     }
 

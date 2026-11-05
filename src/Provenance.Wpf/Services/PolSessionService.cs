@@ -8,6 +8,7 @@ using Provenance.Common.Credentials;
 using Provenance.Common.Game;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Locks;
+using Provenance.Common.Mirror;
 using Provenance.Common.Multi;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
@@ -48,8 +49,8 @@ public sealed class PolSessionService : IDisposable
     public const string UnsafeStartText = "Provenance couldn't start PlayOnline safely. Restart Provenance and try again.";
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
 
-    // pol_hook.c's exit codes. 13 never falls back to the stock mutex names, anything can create those first
-    internal const int NoHandleExitCode = 4;
+    // pol_hook.c's exit codes, 4 is no handle. 13 never falls back to the stock mutex names, anything can create
+    // those first
     internal const int UnsafeStartExitCode = 13;
     internal const int GameStartExitCode = 15;
     public const string GameStartFailedText = "FINAL FANTASY XI couldn't start. Try again, and if it keeps happening, check the game's files with Repair.";
@@ -75,7 +76,7 @@ public sealed class PolSessionService : IDisposable
     internal static (int Code, string Text) EndedBeforeSignIn(int? exitCode) => exitCode switch
     {
         _ when DetailsUnreadable(exitCode: exitCode) => (ErrorDetailsUnreadable, DetailsAgainText),
-        NoHandleExitCode => (ErrorNoPolHandle, NoPolHandleText),
+        4 => (ErrorNoPolHandle, NoPolHandleText),
         12 => (ErrorLauncherFailed, PrivateFolderText),
         UnsafeStartExitCode => (ErrorLauncherFailed, UnsafeStartText),
         GameStartExitCode => (ErrorLauncherFailed, GameStartFailedText),
@@ -227,14 +228,14 @@ public sealed class PolSessionService : IDisposable
     private PolRegion Region => _settings.DetectedRegion ?? PolRegion.UnitedStates;
 
     // the key's opened before anything starts, so one that can't be read gets its own text
-    internal (int Code, string Text)? KeyForSignIn()
+    internal string? KeyForSignIn()
     {
         try
         {
             _ = Wrapped;
             return null;
         }
-        catch (CredentialKeyUnavailableException) { return (ErrorLauncherFailed, CredentialKey.UnavailableText); }
+        catch (CredentialKeyUnavailableException) { return CredentialKey.UnavailableText; }
     }
 
     internal void DropKey()
@@ -319,11 +320,11 @@ public sealed class PolSessionService : IDisposable
         var (viewerDir, polExe, launcherExe) = FindLaunchFiles();
         if (polExe is null)
             return Fail("Some of the files needed to start PlayOnline are missing. Check FINAL FANTASY XI is installed, and if it is, reinstall Provenance.");
-        if (KeyForSignIn() is { } keyProblem) return Fail(keyProblem.Text, keyProblem.Code);
+        if (KeyForSignIn() is { } keyProblem) return Fail(keyProblem);
         // the viewer checks for its own update on every connect and always says yes
         try
         {
-            UpdateViewer(viewerDir!, new SyncProgress<PatchProgress>(
+            UpdateViewer(viewerDir!, new InlineProgress<PatchProgress>(
                 p => progress?.Report(LaunchProgress.Updating("Starting", LaunchSteps.StartPol, p, 0.02, LaunchProgress.SignInUpdateEnd))),
                 FreeViewerFiles, ct);
         }

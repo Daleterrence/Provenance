@@ -133,8 +133,6 @@ public sealed class AshitaIniFile
         return ms.ToArray();
     }
 
-    internal static void RefuseLinks(params string[] paths) => LinkCheck.Refuse(paths);
-
     public void Save(string path, bool backup = true)
     {
         var full = Path.GetFullPath(path);
@@ -143,7 +141,7 @@ public sealed class AshitaIniFile
             throw Shown.Mark(new IOException($"{name} is one of Ashita's example files. Duplicate it and change the copy instead."));
         var dir = Path.GetDirectoryName(full)!;
         var bak = full + ".bak";
-        RefuseLinks(full, bak, dir, Path.GetDirectoryName(dir) ?? dir);
+        LinkCheck.Refuse(full, bak, dir, Path.GetDirectoryName(dir) ?? dir);
         using var pins = LinkCheck.Hold(Path.GetDirectoryName(dir) ?? dir, dir);
         full = pins.Real(full);
         bak = pins.Real(bak);

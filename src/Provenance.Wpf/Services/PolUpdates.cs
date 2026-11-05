@@ -62,7 +62,7 @@ public static class PolUpdates
     private static PatchResult Update(PatchProduct product, PolRegion installed, string slug, IProgress<PatchProgress>? progress,
                                       Action beforeChange, CancellationToken ct)
     {
-        var mirrorRegion = MirrorUpdater.RegionFor(installed, slug);
+        var mirrorRegion = MirrorLayout.UpdateFolder(installed, slug);
         var updater = new PolUpdater(product) { KeepLargeAddressAware = true };
         progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
         var check = updater.Check(ct);
@@ -217,9 +217,4 @@ public static class PolUpdates
             _gate.Dispose();
         }
     }
-}
-
-public sealed class SyncProgress<T>(Action<T> report) : IProgress<T>
-{
-    public void Report(T value) => report(value);
 }

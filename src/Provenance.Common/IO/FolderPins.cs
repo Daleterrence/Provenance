@@ -219,7 +219,7 @@ public sealed class FolderPins : IDisposable
                string.Equals(FinalPath(h), _root, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? FinalPath(SafeFileHandle h)
+    internal static string? FinalPath(SafeFileHandle h)
     {
         var buf = new StringBuilder(1024);
         uint n = GetFinalPathNameByHandleW(h, buf, (uint)buf.Capacity, 0);

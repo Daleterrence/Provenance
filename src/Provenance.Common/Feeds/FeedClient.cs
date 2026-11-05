@@ -28,7 +28,7 @@ public sealed class FeedClient
     private static string RegionToken(FeedRegion r) =>
         r switch { FeedRegion.EU => "ff11eu", FeedRegion.JP => "ff11", _ => "ff11us" };
 
-    public static string ServicePage(FeedRegion region) => PlayOnlineInfo.ServicePage(RegionToken(region));
+    public static string ServicePage(FeedRegion region) => $"https://www.playonline.com/{RegionToken(region)}/service/";
 
     public async Task<FeedResult> GetAsync(FeedRegion region, FeedKind kind, string? workerBaseUrl, CancellationToken ct = default)
     {

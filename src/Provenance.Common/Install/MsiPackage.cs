@@ -747,7 +747,7 @@ public sealed class MsiPackage : IDisposable
         finally { Marshal.ReleaseComObject(link); }
     }
 
-    internal static string RecordString(IntPtr rec, uint field)
+    private static string RecordString(IntPtr rec, uint field)
     {
         uint len = 0;
         var sb = new StringBuilder(1);

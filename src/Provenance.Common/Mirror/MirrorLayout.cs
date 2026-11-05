@@ -14,7 +14,7 @@ public static class MirrorLayout
     private static readonly HashSet<string> JpFfxiOwn = new(["mov/mov999.pmv"], StringComparer.OrdinalIgnoreCase);
 
     // JP has no copy of its own. Its FFXI file list is the US one byte for byte, so FFXI comes from us/ (bar
-    // mov999.pmv, which POL never patches), never its viewer
+    // mov999.pmv, which POL never patches) and its viewer from POL (null)
     public static string? UpdateFolder(PolRegion installed, string product) =>
         RegionFolder(installed) ?? (installed == PolRegion.Japan && product == "ffxi" ? "us" : null);
 

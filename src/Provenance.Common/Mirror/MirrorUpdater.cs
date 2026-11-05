@@ -1,5 +1,4 @@
 using Provenance.Common.Patcher;
-using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Mirror;
 
@@ -9,9 +8,6 @@ public sealed record MirrorOutcome(bool OnMirror, IReadOnlyList<MirrorEntry> Fai
 
 public static class MirrorUpdater
 {
-    // null updates from POL
-    public static string? RegionFor(PolRegion installed, string product) => MirrorLayout.UpdateFolder(installed, product);
-
     // patch.ver goes last and only when nothing failed, POL is the caller's fallback. keep is never written
     public static async Task<MirrorOutcome> UpdateAsync(MirrorClient client, string region, string product, string folder,
         PolUpdater updater, VersionCheck check, Action beforeChange, IProgress<PatchProgress>? progress, CancellationToken ct,

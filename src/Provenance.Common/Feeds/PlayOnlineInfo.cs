@@ -19,11 +19,9 @@ public sealed record WorldStatus(string Name, string Status)
     public bool IsUp => Status == "up";
 }
 
-// POL's service page, and the feed worker's category and badge keys
+// the feed worker's category and badge keys
 public static class PlayOnlineInfo
 {
-    public static string ServicePage(string regionToken) => $"https://www.playonline.com/{regionToken}/service/";
-
     public static InfoCategory CategoryFromKey(string? key) => key switch
     {
         "important" => InfoCategory.Important, "maintenance" => InfoCategory.Maintenance,

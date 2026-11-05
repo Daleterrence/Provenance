@@ -80,7 +80,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private string? _zonesToken, _roomsToken, _joinToken;
     private string _roomIrc = "", _roomTitle = "";
     private long _seenSeq, _lastSeq, _joinSeq;
-    private string? _lastNick, _sentText;
+    private string? _lastNick;
     private bool _restoringZone, _quiet, _disposed, _joinLocked;
     private readonly Dictionary<int, string> _categories = new();
     private readonly Func<int, ImageSource?>? _emote;
@@ -105,14 +105,15 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _social.PropertyChanged += OnSocialChanged;
         ZonesView = CollectionViewSource.GetDefaultView(Zones);
         ZonesView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ChatZoneItem.Group)));
-        _tick.Tick += (_, _) => SendTick();
+        _tick.Tick += (_, _) => SendTick(DateTime.UtcNow);
     }
 
     // Send's button only greys and ungreys when asked, so this keeps asking till a line can go again
-    internal void SendTick()
+    internal void SendTick(DateTime now)
     {
         SendCommand.NotifyCanExecuteChanged();
-        MasterTick(DateTime.UtcNow);
+        if (_gate.Expire(now) is { } done) Settled(done.State, done.Text);
+        MasterTick(now);
         if (_gate.CanSend && _masterToken is null) _tick.Stop();
     }
 
@@ -445,7 +446,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         BusyText = "";
         _joinToken = null;
         _gate.Reset();
-        _sentText = null;
         _tick.Stop();
         SendNote = "";
         _masterToken = null;
@@ -471,8 +471,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (text.Length == 0 || Pid is not { } pid) return;
         var token = NewToken();
         if (!ChatRoomFiles.Send(pid, token, text, Colour, Emoticon)) { SendNote = "Chat communication error."; return; }
-        _gate.Sent(token, DateTime.UtcNow);
-        _sentText = Compose;
+        _gate.Sent(token, Compose, DateTime.UtcNow);
         Compose = "";
         Colour = -1;
         Emoticon = 0;
@@ -762,8 +761,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void ApplySend(ChatRoomsSnapshot chat)
     {
-        var done = _gate.Settle(chat.SendToken, chat.SendState, DateTime.UtcNow);
-        if (done is null) return;
+        if (_gate.Settle(chat.SendToken, chat.SendState, DateTime.UtcNow) is { } done) Settled(done.State, done.Text);
+    }
+
+    private void Settled(string done, string text)
+    {
         if (done != "sent")
             SendNote = done switch
             {
@@ -773,8 +775,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 _ => "Chat communication error.",
             };
         // only the hook can tell whether it fits polcore's line, so one that doesn't goes back to be cut down
-        if (done == "failed:too long" && _sentText is { } back && Compose.Length == 0) Compose = back;
-        _sentText = null;
+        if (done == "failed:too long" && Compose.Length == 0) Compose = text;
         SendCommand.NotifyCanExecuteChanged();
     }
 
