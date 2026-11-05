@@ -2516,8 +2516,6 @@ static void pace_done(send_pace *p, ULONGLONG now, int r, ULONGLONG ms)
     ULONGLONG h;
     if (r == NO_SLOT) return;
     if (r == 1) p->fails = 0;
-    /* -0x153a suspended, -0x1540 not authorised: that's the account, not the line */
-    else if (r == -0x153a || r == -0x1540) p->stopped = 1;
     /* one already on the wire when the last failure landed is the same blip, not another strike */
     else if (!(p->fails && now - ms <= p->failed) && ++p->fails >= 3) p->stopped = 1;
     if (r != 1 && !p->stopped) {
@@ -2976,12 +2974,12 @@ static void search_done(const char *state)
 }
 /* polcore can still write into a cancelled read, so its buffer's never freed (the mail reads too). A small leak
    beats polcore going ham over freed memory */
-static void search_abandon(BYTE *b, const char *state)
+static void search_abandon(BYTE *b)
 {
     if (g_srch_job >= 0 && (g_srch_step == 2 || g_srch_step == 4))
         ((svc_i)SVC(0x4dc))(g_srch_job);
     g_srch_buf = NULL;
-    search_done(state);
+    search_done("cancelled");
 }
 static void search_start(BYTE *b)
 {
@@ -3336,11 +3334,11 @@ static void profile_done(const char *state)
     lg("profile: %s\r\n", state);
     g_snap_dirty = 1;
 }
-static void profile_abandon(BYTE *b, const char *state)
+static void profile_abandon(BYTE *b)
 {
     if (g_prof_step == 1 && g_prof_job >= 0) ((svc4dc_t)SVC(0x4dc))(g_prof_job);
     g_prof_rec = NULL;   /* a cancelled read can still write, so never freed */
-    profile_done(state);
+    profile_done("cancelled");
 }
 static void profile_build(BYTE *b)
 {
@@ -3553,11 +3551,11 @@ static void character_done(const char *state)
     lg("character: %s\r\n", state);
     g_snap_dirty = 1;
 }
-static void character_abandon(BYTE *b, const char *state)
+static void character_abandon(BYTE *b)
 {
     if (g_ch_step == 1 && g_ch_job >= 0) ((svc4dc_t)SVC(0x4dc))(g_ch_job);
     g_ch_rec = NULL;   /* a cancelled read can still write, so never freed */
-    character_done(state);
+    character_done("cancelled");
 }
 /* nameState 0 shown, 1 withheld, 2 empty. Like the viewer with a header field (and prof_pol's z_name), only the record
    level says whether the name's visible, z_name's own level just goes in the log */
@@ -3680,11 +3678,11 @@ static void ffxiprofile_done(const char *state)
     lg("ffxiprofile: %s\r\n", state);
     g_snap_dirty = 1;
 }
-static void ffxiprofile_abandon(BYTE *b, const char *state)
+static void ffxiprofile_abandon(BYTE *b)
 {
     if (g_fp_step == 1 && g_fp_job >= 0) ((svc4dc_t)SVC(0x4dc))(g_fp_job);
     g_fp_rec = NULL;   /* a cancelled read can still write, so never freed */
-    ffxiprofile_done(state);
+    ffxiprofile_done("cancelled");
 }
 /* states as the handle profile's, and prof_001 has no per-field levels so the record level decides them all. Type 3
    is a signed short */
@@ -4015,13 +4013,13 @@ static int me_write_json(BYTE *b)
     HeapFree(GetProcessHeap(), 0, out);
     return ok;
 }
-static void me_abandon(BYTE *b, const char *why)
+static void me_abandon(BYTE *b)
 {
     if (g_me_step == 2 && g_me_job >= 0) {
         ((svc4dc_t)SVC(0x4dc))(g_me_job);
         g_me_rec = NULL;                    /* a cancelled read can still write, so never freed */
     }
-    if (g_me_step == 1 || g_me_step == 2) me_done(why);
+    if (g_me_step == 1 || g_me_step == 2) me_done("cancelled");
 }
 static void me_load_start(BYTE *b)
 {
@@ -5418,10 +5416,10 @@ static void go_online(BYTE *b)
 
 static void db_reads_abandon(BYTE *b)
 {
-    if (g_prof_step != 0) profile_abandon(b, "cancelled");
-    if (g_ch_step != 0) character_abandon(b, "cancelled");
-    if (g_fp_step != 0) ffxiprofile_abandon(b, "cancelled");
-    if (g_srch_step != 0) search_abandon(b, "cancelled");
+    if (g_prof_step != 0) profile_abandon(b);
+    if (g_ch_step != 0) character_abandon(b);
+    if (g_fp_step != 0) ffxiprofile_abandon(b);
+    if (g_srch_step != 0) search_abandon(b);
 }
 
 static int writes_pending(void)
@@ -5519,7 +5517,7 @@ static void play_drain(BYTE *b, const char *spath, DWORD ms)
     g_draining = 1;
     if (!g_lean) mail_ack_request();
     db_reads_abandon(b);
-    me_abandon(b, "cancelled");
+    me_abandon(b);
     chat_end(b);
     gc_end(b, "left", 1);
     while (writes_pending() && GetTickCount64() < until)
@@ -5551,7 +5549,7 @@ static void hold_sign_out(BYTE *b, const char *spath)
     store_drop();
     g_draining = 1;
     if (!g_lean) mail_ack_request();
-    me_abandon(b, "cancelled");
+    me_abandon(b);
     while (writes_pending() && GetTickCount64() < until)
         drain_turn(b, !g_lean);
     viewer_sign_out(b);

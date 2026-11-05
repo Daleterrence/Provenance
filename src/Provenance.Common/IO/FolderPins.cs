@@ -22,14 +22,9 @@ public sealed class FolderPins : IDisposable
 
     public string Root => _root;
 
-    // null if any folder on the way is a link (or a file), they're all let go again then
-    public static FolderPins? Hold(string root, string dir)
-    {
-        var pins = new FolderPins(root);
-        if (pins.Pin(dir)) return pins;
-        pins.Dispose();
-        return null;
-    }
+    // null if a folder on the way is a link or the root's a file, and a file in the way below it throws. Either way
+    // whatever was held already is let go
+    public static FolderPins? Hold(string root, string dir) => Pinned(new FolderPins(root), dir);
 
     // Hold, but a link above top is followed (an install moved to another drive, say) and everything's held where it
     // really is. Real gives the path to write to
@@ -42,8 +37,20 @@ public sealed class FolderPins : IDisposable
             if (RealPath(parent) is not { } p) return null;
             real = Path.Join(p, Path.GetFileName(given));
         }
-        var pins = new FolderPins(given, real);
-        if (pins.Pin(dir)) return pins;
+        return Pinned(new FolderPins(given, real), dir);
+    }
+
+    private static FolderPins? Pinned(FolderPins pins, string dir)
+    {
+        try
+        {
+            if (pins.Pin(dir)) return pins;
+        }
+        catch
+        {
+            pins.Dispose();
+            throw;
+        }
         pins.Dispose();
         return null;
     }

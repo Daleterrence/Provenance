@@ -82,12 +82,14 @@ public sealed class CharacterNames
         foreach (var (key, c) in Read(_path)) _known.TryAdd(key, c);
     }
 
-    // what's worth keeping from the hook's answer, null for anything that might go differently next time. An error code
-    // or an empty name isn't kept, nobody's seen what those mean for an FFXI profile yet
+    // what's worth keeping from the hook's answer, null for anything that might go differently next time. Other error
+    // codes and an empty name aren't kept, nobody's seen what those mean for an FFXI profile yet
     public static KnownCharacter? FromAnswer(string state, PolCharacterLookup? r) => state switch
     {
         "done" when r is { NameState: PolProfile.Shown, Name.Length: > 0 } => new(r.Name),
         "done" when r is { NameState: PolProfile.Private } => new("", "private"),
+        // -0x14cc, the viewer's "Selected profile is hidden."
+        "failed:-5324" => new("", "private"),
         "failed:no profile" => new("", "not found"),
         _ => null,
     };

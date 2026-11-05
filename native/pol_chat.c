@@ -1165,12 +1165,12 @@ static void cr_db_done(int rooms, const char *state)
     g_snap_dirty = 1;
 }
 /* a cancelled read can still be written into, so its buffer's never freed */
-static void cr_db_abandon(BYTE *b, const char *state)
+static void cr_db_abandon(BYTE *b)
 {
     int rooms = g_cr_db >= 10;
     if (g_cr_job >= 0 && (g_cr_db % 10 == 2 || g_cr_db % 10 == 4)) ((svc4dc_t)SVC(0x4dc))(g_cr_job);
     g_cr_buf = NULL;
-    cr_db_done(rooms, state);
+    cr_db_done(rooms, "cancelled");
 }
 static void cr_db_start(BYTE *b)
 {
@@ -1442,7 +1442,7 @@ static void chat_end(BYTE *b)
 {
     int s = cr_session(b), r;
     ULONGLONG until = GetTickCount64() + 3000;
-    if (g_cr_db) cr_db_abandon(b, "cancelled");
+    if (g_cr_db) cr_db_abandon(b);
     if (g_cr_st == CR_OUT) return;
     if (s >= 0 && g_cr_wait != CRW_NONE) ((svc_i)SVC(0x248))(s);
     g_cr_wait = CRW_NONE;
