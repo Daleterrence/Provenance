@@ -212,6 +212,8 @@ public sealed class PolSessionService : IDisposable
     // quiet this long and the login's stuck. polcore fails a list load or a login step at 100 s by itself, apart from
     // state 23, which it sits in for 400 s
     internal TimeSpan StallLimit { get; init; } = TimeSpan.FromSeconds(260);
+    // the hook only looks for the stop file every 150 ms, then gives writes under way 5 s before it logs out
+    private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(6);
 
     public event Action<PolSocialSnapshot>? SnapshotUpdated;
 
@@ -1170,10 +1172,10 @@ public sealed class PolSessionService : IDisposable
 
     // No recorded start time means no proof, so it's never ours to kill (the user may run their own pol.exe on a
     // reused pid)
-    private static bool IsSameProcess(Process p, DateTime? started)
+    private static bool IsSameProcess(Process p, DateTime? started, Func<Process, bool>? isPol = null)
     {
         if (started is not { } s) return false;
-        try { return p.StartTime.ToUniversalTime() == s.ToUniversalTime() && PolProcess.IsViewerPol(p); }
+        try { return p.StartTime.ToUniversalTime() == s.ToUniversalTime() && (isPol ?? PolProcess.IsViewerPol)(p); }
         catch { return false; }
     }
 
@@ -1475,7 +1477,9 @@ public sealed class PolSessionService : IDisposable
             {
                 var started = _pidStarted;
                 try { File.WriteAllText(HookFiles.PathFor(pid, "stop"), "stop"); } catch { }
-                KillIfOurs(pid, p => IsSameProcess(p, started), graceMs: 4000, afterMs: 2000);
+                if (KillIfOurs(pid, p => IsSameProcess(p, started, IsViewerPol), (int)StopGrace.TotalMilliseconds, afterMs: 2000))
+                    Log.Warning("pol.exe {Pid} hadn't logged out {Seconds} s after its stop file, so it was ended", pid,
+                                (int)StopGrace.TotalSeconds);
                 DeleteQuietly(SocialSnapshot.PathForPid(pid));
                 DeleteQuietly(SocialSnapshot.StorePathForPid(pid));
                 DropChatLeftovers(pid);
@@ -1547,6 +1551,15 @@ public sealed class PolSessionService : IDisposable
                 game.WaitForExitAsync().ContinueWith(_ => { game.Dispose(); ScreenSaverBack(); }, TaskScheduler.Default);
             _polProc = null;
             lock (_hookGate) _hookPid = null;
+        }
+    }
+
+    internal void AdoptHeldForTest(int pid, DateTime started)
+    {
+        lock (_gate)
+        {
+            Pid = pid;
+            _pidStarted = started;
         }
     }
 
