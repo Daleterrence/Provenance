@@ -2,10 +2,11 @@ using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Game;
+using Provenance.Common.Patcher;
 using Serilog;
 using Provenance.Common.Mirror;
 using Provenance.Common.PolFormat;
-using Provenance.Wpf.Services;
 using Provenance.Wpf.Views;
 
 namespace Provenance.Wpf.ViewModels;

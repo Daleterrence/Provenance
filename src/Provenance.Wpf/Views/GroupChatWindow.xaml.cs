@@ -2,8 +2,8 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Provenance.Common.Settings;
 using Provenance.Common.Social;
-using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels;
 
 namespace Provenance.Wpf.Views;

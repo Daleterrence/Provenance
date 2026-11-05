@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Provenance.Wpf.Services;
+using Provenance.Common.Otp;
 
 namespace Provenance.Wpf.Views;
 

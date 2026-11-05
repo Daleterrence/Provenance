@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Security;
 using Serilog;
 using Provenance.Common;
 using Provenance.Common.Game;

@@ -3,10 +3,11 @@ using System.Diagnostics;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common;
+using Provenance.Common.Game.ThirdParty;
 using Serilog;
 using Provenance.Common.Game;
 using Provenance.Common.PolFormat;
-using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.ViewModels;
 

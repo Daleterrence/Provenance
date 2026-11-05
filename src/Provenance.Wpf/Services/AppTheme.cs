@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using MaterialDesignThemes.Wpf;
+using Provenance.Common.Settings;
 using Serilog;
 
 namespace Provenance.Wpf.Services;
