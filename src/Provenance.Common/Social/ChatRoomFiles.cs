@@ -4,19 +4,6 @@ using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Social;
 
-// a zone in the chat room picker. Group is the zone group it's listed under, People is everyone in its rooms
-public sealed record ChatZone(int Code, string Group, string Name, int Rooms, int People);
-
-// a room category from the room list's own table: Group is "Target Members", "Purpose" or "Main Language"
-public sealed record ChatCategory(int Code, string Group, string Name);
-
-// one row of the room list. Irc is the name the hook joins, Name what people see, Created is Unix seconds
-public sealed record ChatRoomEntry(string Irc, string Name, bool Locked, int People, int Capacity,
-                                   IReadOnlyList<int> Categories, long Created);
-
-// Key only means something inside the one room, the hook never hands out ids
-public sealed record ChatMember(int Key, string Name, bool Me, bool Master, bool Away);
-
 // Kind: say, entered, left, away, back, master, kicked or whisper. From's the member key (0 mine), Colour the colour
 // char as a number (-1 for 'z'), Emote 0 for none
 public sealed record ChatLine(long Seq, long Time, string Kind, int From, bool Me, string Name, string Text)
@@ -24,88 +11,6 @@ public sealed record ChatLine(long Seq, long Time, string Kind, int From, bool M
     public DateTimeOffset When => DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime();
     public int Colour { get; init; } = -1;
     public int Emote { get; init; }
-}
-
-// the viewer's text colours and emoticons. Its colour table (app.dll 0x10495828) is ARGB on a light window
-public static class ChatLook
-{
-    public const int Emotes = 23, Colours = 12;
-
-    private static readonly uint[] Table =
-    [
-        0xff101010, 0xff101010, 0xff101010, 0xffa02048, 0xff101010, 0xff101010, 0xff000079, 0xff103060, 0xff027aa3,
-        0xff2b6e1f, 0xff003800, 0xff4d0808, 0xff800080, 0xffb6427c, 0xff9d2a04, 0xff808000, 0xff474747,
-    ];
-
-    // the colour a line's char stands for. Past the table (17-23) or 'z' the viewer reads whatever's there, so it's
-    // the default here, which is null
-    public static uint? Argb(int colourChar) =>
-        colourChar is >= 0 and < 17 && Table[colourChar] != Table[0] ? Table[colourChar] : null;
-
-    // the picker's 12, each the char 5 on from its place (app.dll 0x100984df)
-    public static uint PickerArgb(int pick) => Table[pick + 5];
-
-    private static readonly string[] Names =
-        ["Black", "Navy", "Dark blue", "Blue", "Green", "Dark green", "Maroon", "Purple", "Pink", "Rust", "Olive", "Grey"];
-
-    public static string ColourName(int pick) => pick >= 0 && pick < Names.Length ? Names[pick] : "No colour";
-
-    // the one a received line shows: the viewer only draws a face for 1 or more off its first sheet
-    public static int Emote(int e) => e is >= 1 and <= Emotes ? e : 0;
-
-    // the room list's badge, from the room's language category (the viewer's strings 0x4e90-0x4e93)
-    public static string Language(IReadOnlyList<int> categories) => categories.Count > 2 ? categories[2] switch
-    {
-        300 => "JP",
-        301 => "EN",
-        302 => "FR",
-        303 => "GE",
-        _ => "",
-    } : "";
-
-    // the hook builds a room's IRC name as a #, its language in 2 hex, its use and kind letters, then its index. Kind U
-    // is a room a user made, any other is one of SE's
-    private const int KindAt = 4;
-    public static bool Official(string irc) => irc.Length > KindAt && irc[KindAt] != 'U';
-}
-
-// the snapshot's "chat", there once chat's been used this session. States run "searching" -> "done" or "failed:...",
-// and the room's "entering" -> "in" -> "left", or "failed:...", "kicked", "gone" (the room went without a kick) or "lost"
-public sealed record ChatRoomsSnapshot(long LineSeq,
-                                       string ZonesToken, string ZonesState, IReadOnlyList<ChatZone> Zones,
-                                       IReadOnlyList<ChatCategory> Categories,
-                                       string RoomsToken, string RoomsState, int Zone, int Offset, int Total,
-                                       IReadOnlyList<ChatRoomEntry> Rooms,
-                                       string RoomToken, string RoomState, string RoomIrc, int Limit, bool Locked,
-                                       IReadOnlyList<ChatMember> Members,
-                                       string SendToken, string SendState)
-{
-    public string MasterToken { get; init; } = "";
-    public string MasterState { get; init; } = "";
-
-    public static ChatRoomsSnapshot? Read(JsonElement c)
-    {
-        if (c.ValueKind != JsonValueKind.Object) return null;
-        var z = Obj(c, "zones");
-        var r = Obj(c, "rooms");
-        var room = Obj(c, "room");
-        var send = Obj(c, "send");
-        return new ChatRoomsSnapshot(Long(c, "lineSeq"),
-            Str(z, "token"), Str(z, "state"),
-            Arr(z, "list", x => new ChatZone(Int(x, "code", 0), Str(x, "group"), Str(x, "name"), Int(x, "rooms", 0), Int(x, "people", 0))),
-            Arr(c, "categories", x => new ChatCategory(Int(x, "code", 0), Str(x, "group"), Str(x, "name"))),
-            Str(r, "token"), Str(r, "state"), Int(r, "zone", 0), Int(r, "offset", 0), Int(r, "total", 0),
-            Arr(r, "list", x => new ChatRoomEntry(Str(x, "irc"), Str(x, "name"), Bool(x, "locked"),
-                Int(x, "people", 0), Int(x, "capacity", 0), Arr(x, "categories", n => n.TryGetInt32(out var v) ? v : 0),
-                Long(x, "created"))),
-            Str(room, "token"), Str(room, "state"), Str(room, "irc"), Int(room, "limit", 0), Bool(room, "locked"),
-            Arr(room, "members", m => new ChatMember(Int(m, "key", 0), Str(m, "name"), Bool(m, "me"), Bool(m, "master"), Bool(m, "away"))),
-            Str(send, "token"), Str(send, "state"))
-        {
-            MasterToken = Obj(c, "master") is { ValueKind: JsonValueKind.Object } m ? Str(m, "token") : "",
-            MasterState = Obj(c, "master") is { ValueKind: JsonValueKind.Object } m2 ? Str(m2, "state") : "",
-        };
-    }
 }
 
 // pol_hook.<pid>.chatroom.json, the open room's last 256 lines
@@ -225,49 +130,5 @@ public static class ChatRoomFiles
             return true;
         }
         catch { return false; }
-    }
-}
-
-// the app's half of the hook's send rule: one line in flight
-public sealed class ChatSendGate(TimeSpan giveUp)
-{
-    private DateTime? _sentAt;
-    private string _text = "";
-    public string? Token { get; private set; }
-
-    public bool CanSend => Token == null;
-
-    public void Sent(string token, string text, DateTime now)
-    {
-        Token = token;
-        _text = text;
-        _sentAt = now;
-    }
-
-    // the hook's state for my token with the line as it was typed, or null while it's still going
-    public (string State, string Text)? Settle(string? hookToken, string? hookState, DateTime now)
-    {
-        if (Token != null && hookToken == Token && hookState is { } s &&
-            (s == "sent" || s.StartsWith("sent:", StringComparison.Ordinal) || s.StartsWith("failed", StringComparison.Ordinal)))
-            return Done(s);
-        return Expire(now);
-    }
-
-    // a token the hook never took or never answered counts as gone after the give-up, snapshot or not
-    public (string State, string Text)? Expire(DateTime now) =>
-        Token == null || _sentAt is not { } at || now - at <= giveUp ? null : Done("failed:timeout");
-
-    private (string State, string Text) Done(string state)
-    {
-        var text = _text;
-        Reset();
-        return (state, text);
-    }
-
-    public void Reset()
-    {
-        Token = null;
-        _text = "";
-        _sentAt = null;
     }
 }

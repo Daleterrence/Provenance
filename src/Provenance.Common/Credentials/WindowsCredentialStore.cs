@@ -260,12 +260,6 @@ public readonly record struct StoredCredential(string UserName, string Secret)
     }
 }
 
-public static class CredentialKeys
-{
-    public const string Pol = "POL";
-    public const string Sea = "SEA";
-}
-
 // the message only names the target, never the user name, secret or key
 public sealed class CredentialUnreadableException(string target)
     : Exception($"Stored credential '{target}' cannot be read with the wrap key.");

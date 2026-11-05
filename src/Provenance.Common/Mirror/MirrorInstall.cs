@@ -10,19 +10,6 @@ public sealed record StagedProduct(string Slug, PatchProduct Product, string Ver
 
 internal sealed record InstallData(MirrorPointer Pointer, string Version, string ViewerMsi, string FfxiMsi);
 
-public sealed class MirrorUnusableException(string message, IReadOnlyList<string> files) : Exception(message)
-{
-    public IReadOnlyList<string> Files { get; } = files;
-}
-
-internal static class MirrorFailure
-{
-    public static bool IsLocal(Exception ex) =>
-        ex is UnauthorizedAccessException
-        || (ex is IOException && ex is not HttpIOException
-            && ex.InnerException is not (SocketException or HttpIOException));
-}
-
 // installer data goes to a staging folder laid out like the unpacked installer, game files straight to where the
 // packages put them
 public sealed class MirrorInstall(MirrorClient client, string region, Action<string>? log = null)
