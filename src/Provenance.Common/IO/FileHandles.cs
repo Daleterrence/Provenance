@@ -28,8 +28,14 @@ internal static class FileHandles
     // allowUnc is false, otherwise it comes back as \\server\share
     internal static string? FinalPath(SafeFileHandle h, bool allowUnc)
     {
-        var buf = new char[32_768];
+        var buf = new char[1024];
         int n = Kernel32.GetFinalPathNameByHandleW(h, buf, buf.Length, 0);
+        // too small: n is the size it wants, with the terminator
+        if (n >= buf.Length)
+        {
+            buf = new char[n];
+            n = Kernel32.GetFinalPathNameByHandleW(h, buf, buf.Length, 0);
+        }
         if (n <= 0 || n >= buf.Length) return null;
         var path = new string(buf, 0, n);
         if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return allowUnc ? @"\\" + path[8..] : null;

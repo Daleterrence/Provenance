@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Provenance.Common.Credentials;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Social;
 
@@ -96,7 +97,6 @@ public sealed class GroupChatLog
     public bool Save()
     {
         if (_path is null) return false;
-        string? tmp = null;
         try
         {
             var cipher = Dpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(_groups), Entropy);
@@ -106,9 +106,7 @@ public sealed class GroupChatLog
                 return false;
             }
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            tmp = $"{_path}.{Guid.NewGuid():N}.tmp";
-            File.WriteAllBytes(tmp, cipher);
-            File.Move(tmp, _path, overwrite: true);
+            AtomicFile.Write(_path, cipher);
             Dirty = false;
             _savedAt = DateTime.UtcNow;
             return true;
@@ -116,7 +114,6 @@ public sealed class GroupChatLog
         catch (Exception e)
         {
             Log?.Invoke($"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
-            if (tmp is not null) try { File.Delete(tmp); } catch { }
             return false;
         }
     }

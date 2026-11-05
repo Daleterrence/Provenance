@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Social;
 
@@ -92,16 +93,13 @@ public sealed class CharacterNames
     private void Save()
     {
         if (_path is null) return;
-        string? tmp = null;
         using var gate = Lock(_path + ".lock");
         try
         {
             var all = Read(_path);
             foreach (var (key, c) in _known) all[key] = c;
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            tmp = $"{_path}.{Guid.NewGuid():N}.tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(new Saved { Version = Version, Characters = all }));
-            File.Move(tmp, _path, overwrite: true);
+            AtomicFile.Write(_path, JsonSerializer.Serialize(new Saved { Version = Version, Characters = all }));
             foreach (var (key, c) in all) _known.TryAdd(key, c);
             var info = new FileInfo(_path);
             _fileWas = (info.LastWriteTimeUtc, info.Length);
@@ -109,7 +107,6 @@ public sealed class CharacterNames
         catch (Exception e)   // it just gets asked again next session
         {
             Log?.Invoke($"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
-            if (tmp is not null) try { File.Delete(tmp); } catch { }
         }
     }
 

@@ -264,7 +264,7 @@ public static partial class GameSettingsBackup
                     foreach (var e in group)
                     {
                         var data = ReadEntry(e) ?? throw new NotABackupException();
-                        Put(pins.Dir, e.Name, data, written.TryGetValue(e.FullName, out var at) ? at : null);
+                        Put(pins.Pins, pins.Dir, e.Name, data, written.TryGetValue(e.FullName, out var at) ? at : null);
                         restored++;
                     }
             }
@@ -597,6 +597,7 @@ public static partial class GameSettingsBackup
 
     private sealed class PinnedDir(FolderPins pins, string dir) : IDisposable
     {
+        public FolderPins Pins => pins;
         public string Dir { get; } = dir;
         public void Dispose() => pins.Dispose();
     }
@@ -621,20 +622,14 @@ public static partial class GameSettingsBackup
 
     // a new name each time, never opened over one that's there, so a planted link can't catch it. Its write time goes
     // back too, or the next backup would see every restore as a change
-    private static void Put(string dir, string name, byte[] data, DateTime? written)
+    private static void Put(FolderPins pins, string dir, string name, byte[] data, DateTime? written)
     {
-        var tmp = Path.Combine(dir, $"{name}.{Guid.NewGuid():N}.tmp");
-        try
+        SafeWrite.Replace(pins, dir, Path.Combine(dir, name), fs =>
         {
-            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                fs.Write(data);
-                fs.Flush();
-                if (written is { } at) File.SetLastWriteTimeUtc(fs.SafeFileHandle, at.ToUniversalTime());
-            }
-            File.Move(tmp, Path.Combine(dir, name), overwrite: true);
-        }
-        finally { try { File.Delete(tmp); } catch { } }
+            fs.Write(data);
+            fs.Flush();
+            if (written is { } at) File.SetLastWriteTimeUtc(fs.SafeFileHandle, at.ToUniversalTime());
+        });
     }
 
     // a link, a hard link or a file moved out from under its folder would have an elevated copy read what it

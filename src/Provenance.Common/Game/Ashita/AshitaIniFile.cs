@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Unicode;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
 using Provenance.Common.Win32;
 
@@ -136,31 +137,14 @@ public sealed class AshitaIniFile
         if (AshitaBootFiles.IsShippedExample(name))
             throw Shown.Mark(new IOException($"{name} is one of Ashita's example files. Duplicate it and change the copy instead."));
         var dir = Path.GetDirectoryName(full)!;
-        var bak = full + ".bak";
-        LinkCheck.Refuse(full, bak, dir, Path.GetDirectoryName(dir) ?? dir);
-        using var pins = LinkCheck.Hold(Path.GetDirectoryName(dir) ?? dir, dir);
-        full = pins.Real(full);
-        bak = pins.Real(bak);
-        // a backup from before a token was taken out would keep it on disk
-        bool dropBackup = File.Exists(full) && Parse(File.ReadAllBytes(full), ansi.CodePage).Secrets().Except(Secrets()).Any();
-        var tmp = $"{full}.{Guid.NewGuid():N}.tmp";
-        bool replacing = false;
-        try
+        var parent = Path.GetDirectoryName(dir) ?? dir;
+        SafeWrite.Replace(full, ToBytes(), parent, refuse: [dir, parent], backup: real =>
         {
-            File.WriteAllBytes(tmp, ToBytes());
-            LinkCheck.Recheck(pins, dir, full, bak);
-            replacing = File.Exists(full);
-            if (replacing) File.Replace(tmp, full, backup && !dropBackup ? bak : null);
-            else File.Move(tmp, full);
-        }
-        catch
-        {
-            // a Replace that failed halfway can leave the temp file as the only copy
-            if (!replacing || File.Exists(full))
-                try { File.Delete(tmp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-            throw;
-        }
-        if (dropBackup) File.Delete(bak);
+            // a backup from before a token was taken out would keep it on disk
+            if (File.Exists(real) && Parse(File.ReadAllBytes(real), ansi.CodePage).Secrets().Except(Secrets()).Any())
+                return SafeWrite.Backup.DropOld;
+            return backup ? SafeWrite.Backup.Keep : SafeWrite.Backup.None;
+        });
         Changed = false;
         utf8Bom = false;
     }

@@ -1,6 +1,6 @@
-using System.Text;
 using System.Text.Json;
 using Provenance.Common.Hook;
+using Provenance.Common.IO;
 using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Social;
@@ -78,8 +78,7 @@ public static class GroupChatFiles
         try
         {
             var path = HookFiles.PathFor(pid, ext);
-            File.WriteAllText(path + ".tmp", body, new UTF8Encoding(false));
-            File.Move(path + ".tmp", path, overwrite: true);
+            AtomicFile.Write(path, body);
             return true;
         }
         catch { return false; }

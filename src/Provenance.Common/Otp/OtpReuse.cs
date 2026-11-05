@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Provenance.Common.Credentials;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
 using Serilog;
 
@@ -156,8 +157,6 @@ public static class OtpReuse
 
     private static void WriteStore(IEnumerable<string> lines)
     {
-        var tmp = $"{StorePath}.{Environment.ProcessId}.tmp";
-        File.WriteAllLines(tmp, lines);
-        File.Move(tmp, StorePath, overwrite: true);
+        AtomicFile.Write(StorePath, string.Concat(lines.Select(l => l + Environment.NewLine)));
     }
 }

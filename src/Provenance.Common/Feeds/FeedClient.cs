@@ -3,6 +3,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Provenance.Common.IO;
 using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Feeds;
@@ -138,19 +139,13 @@ public sealed class FeedClient
 
     private static void WriteCache(string url, string body, string? etag, string? lastModified)
     {
-        string? tmp = null;
         try
         {
             if (CachePath(url) is not { } path) return;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            tmp = $"{path}.{Guid.NewGuid():N}.tmp";
-            File.WriteAllText(tmp, $"ETag: {etag}\nLast-Modified: {lastModified}\n\n{body}");
-            File.Move(tmp, path, overwrite: true);
+            AtomicFile.Write(path, $"ETag: {etag}\nLast-Modified: {lastModified}\n\n{body}");
         }
-        catch
-        {
-            try { if (tmp != null) File.Delete(tmp); } catch { }
-        }
+        catch { }
     }
 
     // https on POL's own site only. A feed doesn't get to make this PC fetch from anywhere else
@@ -214,9 +209,7 @@ public sealed class FeedClient
             var bytes = await GetImageBytesAsync(u, ct).ConfigureAwait(false);
             if (bytes is null || bytes.Length == 0 || bytes.Length > MaxImageBytes || !LooksLikeImage(bytes))
                 return null;
-            var tmp = $"{path}.{Guid.NewGuid():N}.tmp";
-            await File.WriteAllBytesAsync(tmp, bytes, ct).ConfigureAwait(false);
-            File.Move(tmp, path, overwrite: true);
+            await AtomicFile.WriteAsync(path, bytes, ct).ConfigureAwait(false);
             return path;
         }
         catch { return null; }

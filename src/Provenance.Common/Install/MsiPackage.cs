@@ -4,6 +4,7 @@ using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using Provenance.Common.IO;
 using Provenance.Common.Win32;
 
 namespace Provenance.Common.Install;
@@ -691,11 +692,14 @@ public sealed class MsiPackage : IDisposable
             embedded = src.Query("SELECT `Cabinet` FROM `Media`").Select(r => r[0]).Where(c => c.StartsWith('#')).Select(c => c[1..])
                           .Distinct(StringComparer.Ordinal).ToList();
         var target = Path.GetFullPath(targetMsi);
-        var tmp = target + ".tmp";
-        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-        File.Copy(sourceMsi, tmp, overwrite: true);
-        try
+        var folder = Path.GetDirectoryName(target)!;
+        Directory.CreateDirectory(folder);
+        // a copy left by a crash is a whole installer, so it goes
+        foreach (var old in Directory.EnumerateFiles(folder, Path.GetFileName(target) + ".*.tmp").Where(f => f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)))
+            try { File.Delete(old); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        AtomicFile.Build(target, tmp =>
         {
+            File.Copy(sourceMsi, tmp);
             File.SetAttributes(tmp, File.GetAttributes(tmp) & ~FileAttributes.ReadOnly);
             Check(Msi.MsiOpenDatabaseW(tmp, (IntPtr)1 /* MSIDBOPEN_TRANSACT */, out var db), "open");
             try
@@ -719,13 +723,7 @@ public sealed class MsiPackage : IDisposable
                 Check(Msi.MsiDatabaseCommit(db), "commit");
             }
             finally { Msi.MsiCloseHandle(db); }
-            File.Move(tmp, target, overwrite: true);
-        }
-        catch
-        {
-            try { File.Delete(tmp); } catch { }
-            throw;
-        }
+        });
 
         static void Check(uint r, string step)
         {

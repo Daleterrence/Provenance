@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32.SafeHandles;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
 using Provenance.Common.Win32;
 using Serilog;
@@ -665,9 +666,7 @@ public static class CliTools
     private static void WriteState(string dir, string tool, ToolState state)
     {
         var path = StatePath(dir, tool);
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(state));
-        File.Move(tmp, path, overwrite: true);
+        AtomicFile.Write(path, JsonSerializer.Serialize(state));
     }
 
     // Microsoft Identity Verification Root Certificate Authority 2020, SHA-256 5367F20C...2E1270

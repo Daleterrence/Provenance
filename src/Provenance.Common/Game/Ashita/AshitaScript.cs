@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Ashita;
@@ -74,35 +75,16 @@ public sealed partial class AshitaScript
     {
         var full = Path.GetFullPath(path);
         var dir = Path.GetDirectoryName(full)!;
-        var bak = full + ".bak";
-        var tmp = $"{full}.{Guid.NewGuid():N}.tmp";
-        LinkCheck.Refuse([.. FoldersTo(full), full, bak, tmp]);
-        FolderPins pins;
-        try { pins = LinkCheck.Hold(Top(dir), dir); }
-        catch (DirectoryNotFoundException e) { throw SaveFailed(full, e); }
-        using (pins)
+        try
         {
-            full = pins.Real(full);
-            bak = pins.Real(bak);
-            tmp = pins.Real(tmp);
-            bool replacing = false;
-            try
-            {
-                using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) fs.Write(ToBytes());
-                LinkCheck.Recheck(pins, dir, full, bak);
-                replacing = File.Exists(full);
-                // the first .bak is the script from before Provenance touched it, so it's never written over
-                if (replacing) File.Replace(tmp, full, File.Exists(bak) ? null : bak);
-                else File.Move(tmp, full);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                // a Replace that failed halfway can leave the temp file as the only copy
-                if (!replacing || File.Exists(full))
-                    try { File.Delete(tmp); } catch (Exception d) when (d is IOException or UnauthorizedAccessException) { }
-                if (Shown.Is(e)) throw;
-                throw SaveFailed(full, e);
-            }
+            // the first .bak is the script from before Provenance touched it, so it's never written over
+            SafeWrite.Replace(full, ToBytes(), Top(dir), refuse: FoldersTo(full),
+                              backup: real => File.Exists(real + ".bak") ? SafeWrite.Backup.None : SafeWrite.Backup.Keep);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (Shown.Is(e)) throw;
+            throw SaveFailed(full, e);
         }
         Changed = false;
     }
@@ -185,32 +167,7 @@ public sealed partial class AshitaScript
         try
         {
             Directory.CreateDirectory(dir);
-            LinkCheck.Refuse([dir]);
-            using var pins = LinkCheck.Hold(dir, dir);
-            for (int n = 1; n < 1000; n++)
-            {
-                var name = n == 1 ? stem + ".txt" : $"{stem}-{n}.txt";
-                var target = pins.Real(Path.Combine(dir, name));
-                var tmp = $"{target}.{Guid.NewGuid():N}.tmp";
-                LinkCheck.Refuse([target, tmp]);
-                if (Path.Exists(target)) continue;
-                try
-                {
-                    using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) fs.Write(bytes);
-                    LinkCheck.Recheck(pins, dir, target);
-                    try
-                    {
-                        File.Move(tmp, target, overwrite: false);
-                        return name;
-                    }
-                    catch (IOException) when (Path.Exists(target)) { }
-                }
-                finally
-                {
-                    try { File.Delete(tmp); }
-                    catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-                }
-            }
+            if (SafeWrite.CreateFree(dir, bytes, n => n == 1 ? stem + ".txt" : $"{stem}-{n}.txt") is { } made) return made;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException && !Shown.Is(e))
         {

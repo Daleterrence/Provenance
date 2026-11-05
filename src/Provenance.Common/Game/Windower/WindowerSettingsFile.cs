@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Windower;
@@ -244,30 +245,10 @@ public sealed class WindowerSettingsFile
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    // a new temp name every time and never opened over anything already there, so nothing planted can catch the write
     private static void Write(string path, byte[] bytes)
     {
-        var full = Path.GetFullPath(path);
-        var dir = Path.GetDirectoryName(full) ?? full;
-        var tmp = $"{full}.provenance.{Guid.NewGuid():N}.tmp";
-        LinkCheck.Refuse(dir, full, tmp);
-        using var pins = LinkCheck.Hold(dir, dir);
-        full = pins.Real(full);
-        tmp = pins.Real(tmp);
-        try
-        {
-            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                fs.Write(bytes);
-                fs.Flush(flushToDisk: true);
-            }
-            LinkCheck.Recheck(pins, dir, full);
-            File.Move(tmp, full, overwrite: true);
-        }
-        finally
-        {
-            try { if (File.Exists(tmp)) File.Delete(tmp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
+        var dir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? path;
+        SafeWrite.Replace(path, bytes, dir, refuse: [dir], flushToDisk: true);
     }
 
     // a "<name> (Provenance)" profile is an old launch copy. They go on the first save, and a name that still points at

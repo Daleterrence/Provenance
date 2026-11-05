@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
 using Serilog;
 using Provenance.Common.PolFormat;
@@ -106,20 +107,17 @@ public sealed class SettingsService : ISettingsService
     // temp file then a move, a truncated settings.json would load as defaults and lose every account
     private bool WriteFile(JsonObject settings)
     {
-        var tmp = $"{_path}.{Environment.ProcessId}.tmp";
         IDisposable? gate = null;
         try
         {
             gate = HoldLock();
-            File.WriteAllText(tmp, settings.ToJsonString(JsonOptions));
-            File.Move(tmp, _path, overwrite: true);
+            AtomicFile.Write(_path, settings.ToJsonString(JsonOptions));
             Log.Debug("Settings saved to {Path}", _path);
             return true;
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not save settings.json");
-            try { File.Delete(tmp); } catch { }
             if (!_saveFailedRaised)
             {
                 _saveFailedRaised = true;

@@ -1,5 +1,6 @@
 using System.Text;
 using Provenance.Common.Hook;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Social;
 
@@ -159,8 +160,7 @@ public static class SocialRequests
         }
     }
 
-    // not the .tmp, one a failed write left would hold every send up
-    public static bool SendPending(int pid) => HookFiles.RequestPaths(pid, "send", tmp: false).Any(File.Exists);
+    public static bool SendPending(int pid) => HookFiles.RequestPaths(pid, "send").Any(File.Exists);
 
     private static string OneLine(string s) => s.Replace("\r", "").Replace("\n", " ");
 
@@ -169,8 +169,7 @@ public static class SocialRequests
         try
         {
             var path = HookFiles.PathFor(pid, ext);
-            File.WriteAllText(path + ".tmp", body, new UTF8Encoding(false));
-            File.Move(path + ".tmp", path, overwrite: true);
+            AtomicFile.Write(path, body);
             return true;
         }
         catch { return false; }

@@ -8,6 +8,7 @@ using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Hook;
+using Provenance.Common.IO;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
@@ -855,8 +856,7 @@ public sealed class PolSession : IDisposable
                 if (handOver is null || File.Exists(HookFiles.PathFor(pid, "stop"))) { EndPrestarted(pre); return null; }
                 File.Delete(HookFiles.PathFor(pid, "prestart"));
                 var go = HookFiles.PathFor(pid, "go");
-                File.WriteAllText(go + ".tmp", string.Join("\n", GoFileEntries(psi.Environment)));
-                File.Move(go + ".tmp", go, overwrite: true);
+                AtomicFile.Write(go, string.Join("\n", GoFileEntries(psi.Environment)));
             }
             Log.Information("Using the pre-started pol.exe (pid {Pid})", pid);
             return pid;
@@ -1153,12 +1153,11 @@ public sealed class PolSession : IDisposable
     private static SessionFile? ReadRecord(string path) => JsonSerializer.Deserialize<SessionFile>(File.ReadAllText(path));
 
     // write then move, another copy may read it at any moment
-    private static void WriteRecord(string path, string tmp, int pid, long startTicks, string? profileId, bool played = false)
+    private static void WriteRecord(string path, int pid, long startTicks, string? profileId, bool played = false)
     {
         using var me = Process.GetCurrentProcess();
-        File.WriteAllText(tmp, JsonSerializer.Serialize(
+        AtomicFile.Write(path, JsonSerializer.Serialize(
             new SessionFile(pid, startTicks, profileId, me.Id, PolProcess.StartUtcTicks(me), played)));
-        File.Move(tmp, path, overwrite: true);
     }
 
     private static List<string> SessionFilePaths()
@@ -1176,7 +1175,7 @@ public sealed class PolSession : IDisposable
             _sessionProfile = profileId;
             Directory.CreateDirectory(SessionDir);
             var path = Path.Combine(SessionDir, $"{pid}.json");
-            WriteRecord(path, $"{path}.{Environment.ProcessId}.tmp", pid, st.ToUniversalTime().Ticks, profileId, played);
+            WriteRecord(path, pid, st.ToUniversalTime().Ticks, profileId, played);
             _sessionFile = path;
             ReleaseClaim();
         }
@@ -1200,7 +1199,7 @@ public sealed class PolSession : IDisposable
             }
             ReleaseClaim();
             var path = Path.Combine(SessionDir, $"claim-{Environment.ProcessId}.json");
-            WriteRecord(path, path + ".tmp", 0, 0, profileId);
+            WriteRecord(path, 0, 0, profileId);
             _claimFile = path;
             return true;
         }

@@ -19,12 +19,11 @@ public static class HookFiles
 
     public static string PathFor(int pid, string ext) => Path.Combine(Dir, $"pol_hook.{pid}.{ext}");
 
-    // a request, the .taking the hook renames it to while it reads it, and the .tmp the app writes it under first
-    public static string[] RequestPaths(int pid, string ext, bool tmp = true)
+    // a request and the .taking the hook renames it to while it reads it
+    public static string[] RequestPaths(int pid, string ext)
     {
         var path = PathFor(pid, ext);
-        string[] all = [path, path + ".taking", path + ".tmp"];
-        return tmp ? all : all[..2];
+        return [path, path + ".taking"];
     }
 
     public static void DeleteRequest(int pid, string ext)
