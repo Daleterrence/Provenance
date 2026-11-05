@@ -81,7 +81,7 @@ public partial class MainViewModel
         RefreshLargeAddressAware();
     }
 
-    private bool CanRepair() => RepairAvailable && !Repairing && !IsLaunching && !SocialConnected && RepairBlockedReason is null;
+    private bool CanRepair() => RepairAvailable && !Repairing && !IsLaunching && !LoggedIn && RepairBlockedReason is null;
 
     [RelayCommand(CanExecute = nameof(CanRepair))]
     private void RepairGameFiles()
@@ -117,7 +117,7 @@ public partial class MainViewModel
     public async Task ProbeRepairAsync()
     {
         // a multi-account run holds the update lock in this copy, which isn't "another copy"
-        if (_probing || Repairing || !_windowShown || !RepairAvailable || RepairNotYet is not null || SocialConnected || IsLaunching || MultiRunning) return;
+        if (_probing || Repairing || !_windowShown || !RepairAvailable || RepairNotYet is not null || LoggedIn || IsLaunching || MultiRunning) return;
         _probing = true;
         try { RepairBusyReason = await Task.Run(RepairBusy); }
         finally { _probing = false; }

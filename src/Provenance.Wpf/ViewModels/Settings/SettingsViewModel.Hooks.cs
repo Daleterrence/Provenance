@@ -93,7 +93,7 @@ public partial class SettingsViewModel
             foreach (var (file, shown) in AshitaBootFiles.Names(AshitaDir)) AshitaBootConfigs.Add(new HookProfileItem(file, shown));
             WindowerProfiles.Clear();
             var names = WindowerInstall.Profiles(WindowerDir);
-            foreach (var n in names) WindowerProfiles.Add(new HookProfileItem(n, WindowerProfileNames.WindowerDisplay(n, names)));
+            foreach (var n in names) WindowerProfiles.Add(new HookProfileItem(n, WindowerProfileNames.DisplayName(n, names)));
             AshitaBootConfig = Item(AshitaBootConfigs, ashitaKeep)
                                ?? AshitaBootConfigs.FirstOrDefault(c => c.Name.Equals("default.ini", StringComparison.OrdinalIgnoreCase))
                                ?? AshitaBootConfigs.FirstOrDefault();

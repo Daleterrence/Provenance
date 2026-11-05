@@ -24,7 +24,7 @@ public static class AccountRules
     internal static bool FillFailed(SideEdit polEdit, PolAccount? pol, SideEdit seaEdit, SquareEnixAccount? sea) =>
         (polEdit == SideEdit.Fill && pol is null) || (seaEdit == SideEdit.Fill && sea is null);
 
-    internal static bool ChangesSignIn(AccountDialogResult r, (string? PolId, string? SeaId) saved,
+    internal static bool ChangesLogIn(AccountDialogResult r, (string? PolId, string? SeaId) saved,
                                        bool useOtp, string otpSource, string otpItem, string otpAccount = "") =>
         (r.PolId.Length > 0 && !string.Equals(r.PolId, saved.PolId, StringComparison.OrdinalIgnoreCase))
         || (r.SeaId.Length > 0 && !string.Equals(r.SeaId, saved.SeaId, StringComparison.OrdinalIgnoreCase))
@@ -46,12 +46,12 @@ public static class AccountRules
         return null;
     }
 
-    internal sealed record SignInDetails(PolAccount? Pol, SquareEnixAccount? Sea, string? Problem)
+    internal sealed record LogInDetails(PolAccount? Pol, SquareEnixAccount? Sea, string? Problem)
     {
         public bool Missing => Pol is null && Problem is null;
     }
 
-    internal static SignInDetails PrepareSignIn(ICredentialService credentials, string profileId)
+    internal static LogInDetails PrepareLogIn(ICredentialService credentials, string profileId)
     {
         var pol = credentials.LoadPolAccount(profileId);
         var sea = credentials.LoadSquareEnixAccount(profileId);

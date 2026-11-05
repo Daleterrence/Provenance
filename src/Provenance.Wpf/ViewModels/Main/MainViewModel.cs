@@ -82,9 +82,9 @@ public partial class MainViewModel : ObservableObject
         _pol.SnapshotUpdated += OnSnapshot;
         _pol.SessionEnded += why => Application.Current?.Dispatcher.Invoke(() =>
         {
-            Log.Information("Session ended: {Why} (signed in here: {Connected})", why, SocialConnected);
+            Log.Information("Session ended: {Why} (signed in here: {Connected})", why, LoggedIn);
             StartAllAccountsCommand.NotifyCanExecuteChanged();
-            if (!SocialConnected) return;
+            if (!LoggedIn) return;
             EndSession(SessionEnd.Dropped);   // no question asked, the session's gone so the editor couldn't save anyway
             RequestShow?.Invoke();
             MessageDialog.ShowInfo(Application.Current.MainWindow, "PlayOnline session ended", why);
@@ -271,12 +271,12 @@ public partial class MainViewModel : ObservableObject
 
     public bool MinimizeGoesToTray => _settings.Current.MinimizeToTray && !_gameRunning;
 
-    public bool KeepInTrayOnClose => SocialConnected && _settings.Current.KeepSignedInInTray;
+    public bool KeepInTrayOnClose => LoggedIn && _settings.Current.KeepSignedInInTray;
 
-    public string CloseTooltip => !SocialConnected ? "Close"
+    public string CloseTooltip => !LoggedIn ? "Close"
         : KeepInTrayOnClose ? "Close to the tray (you'll stay logged in to PlayOnline)"
         : "Close and log out of PlayOnline";
-    partial void OnSocialConnectedChanged(bool value)
+    partial void OnLoggedInChanged(bool value)
     {
         OnPropertyChanged(nameof(CloseTooltip));
         if (value && (_settings.Current.KeepSignedInInTray || _settings.Current.MinimizeToTray)) TrayIcon.Warm();
@@ -489,10 +489,10 @@ public partial class MainViewModel : ObservableObject
     internal Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount sea, string otp,
                                            IProgress<LaunchProgress>? progress, CancellationToken token) =>
         _pol.ConnectAsync(pol, sea, otp, p.Id, progress, PromptHandleName, token,
-                          new SessionOptions(false, null, HomeSlotFor(p), HandleKey: p.HandleKey));
+                          new SessionOptions(false, null, EnsureHomeSlot(p), HandleKey: p.HandleKey));
 
     // a login always goes with the account's own home slot, so one without gets it now
-    internal int HomeSlotFor(Account p)
+    internal int EnsureHomeSlot(Account p)
     {
         if (!HomeSlots.Valid(p.HomeSlot) || Profiles.Any(o => o != p && o.HomeSlot == p.HomeSlot))
             PersistProfileList(slots: true);
@@ -574,7 +574,7 @@ public partial class MainViewModel : ObservableObject
             return EditAccount(requireAll: true, typed: AccountRules.WithoutPasswords(r));
         // read before anything's saved, so the typed details get compared with the saved ones
         var blocked = _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id && e.CredentialsRefused);
-        bool cures = blocked is not null && AccountRules.ChangesSignIn(r, _credentials.ReadIds(p.Id), p.UseOtp, p.OtpSource, p.OtpItem, p.OtpAccount);
+        bool cures = blocked is not null && AccountRules.ChangesLogIn(r, _credentials.ReadIds(p.Id), p.UseOtp, p.OtpSource, p.OtpItem, p.OtpAccount);
         if (polEdit != AccountRules.SideEdit.Keep)
             _credentials.SavePolAccount(p.Id, new PolAccount(r.PolId.Length > 0 ? r.PolId : pol!.PolId,
                                                              r.PolPassword.Length > 0 ? r.PolPassword : pol!.Password));
@@ -639,20 +639,20 @@ public partial class MainViewModel : ObservableObject
     partial void OnStartGameImmediatelyChanged(bool value) => SaveSetting(s => s.StartGameImmediately = value);
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(SignInCommand), nameof(StartAllAccountsCommand), nameof(RepairGameFilesCommand))]
-    [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowSignInCard), nameof(ShowFriendsCard))]
+    [NotifyCanExecuteChangedFor(nameof(LogInCommand), nameof(StartAllAccountsCommand), nameof(RepairGameFilesCommand))]
+    [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowLogInCard), nameof(ShowFriendsCard))]
     private bool _isLaunching;
 
     private bool CanLogin() => !IsLaunching && !MultiRunning;
 
     [RelayCommand(CanExecute = nameof(CanLogin))]
-    private Task SignInAsync() => _connectTask = ConnectSocialAsync();
+    private Task LogInAsync() => _connectTask = ConnectSocialAsync();
 
     private Task? _connectTask;
 
-    public bool SigningIn => _launchCts != null && !_gameRunning && _connectTask is { IsCompleted: false };
+    public bool LoggingIn => _launchCts != null && !_gameRunning && _connectTask is { IsCompleted: false };
 
-    public async Task CancelSignInAsync()
+    public async Task CancelLogInAsync()
     {
         _launchCts?.Cancel();
         if (_connectTask is { } t) await Task.WhenAny(t, Task.Delay(TimeSpan.FromSeconds(15)));
@@ -813,18 +813,18 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartAllAccountsCommand), nameof(RepairGameFilesCommand))]
-    [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowSignInCard), nameof(ShowFriendsCard))]
-    private bool _socialConnected;
+    [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowLogInCard), nameof(ShowFriendsCard))]
+    private bool _loggedIn;
 
     public SocialViewModel Social { get; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowSignInCard))]
+    [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowLogInCard))]
     private bool _gameInstalled = true;
 
-    public bool ShowInstallCard => !GameInstalled && !IsLaunching && !SocialConnected;
-    public bool ShowSignInCard => GameInstalled && !IsLaunching && !SocialConnected;
-    public bool ShowFriendsCard => SocialConnected && !IsLaunching;
+    public bool ShowInstallCard => !GameInstalled && !IsLaunching && !LoggedIn;
+    public bool ShowLogInCard => GameInstalled && !IsLaunching && !LoggedIn;
+    public bool ShowFriendsCard => LoggedIn && !IsLaunching;
 
     private static string? ViewerFolder(PolRegion? region) =>
         region is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null;
@@ -876,7 +876,7 @@ public partial class MainViewModel : ObservableObject
         _pol.Prestart();
         if (!AutoLogin || autoLoginSuppressed || !HasSavedCredentials) return;
         Log.Information("Auto sign-in for {Account}", SelectedProfile?.Id);
-        SignInCommand.Execute(null);
+        LogInCommand.Execute(null);
     }
 
     private void OnSnapshot(PolSocialSnapshot snap)
@@ -891,7 +891,7 @@ public partial class MainViewModel : ObservableObject
                 Social.AccountName = SelectedProfile?.DisplayName ?? "PlayOnline";
                 Social.Apply(snap);
                 LearnIdentity(snap);
-                if (!SocialConnected) { SocialConnected = true; _socialPoll.Start(); }
+                if (!LoggedIn) { LoggedIn = true; _socialPoll.Start(); }
             }
             catch (Exception ex)
             {
@@ -1076,8 +1076,8 @@ public partial class MainViewModel : ObservableObject
         _socialPoll.Stop();
         CloseSocialWindows();
         Social.GroupChat.CloseQuietly();
-        _sessionEnding = true;   // before SocialConnected, so the Repair button never shows enabled in between
-        SocialConnected = false;
+        _sessionEnding = true;   // before LoggedIn, so the Repair button never shows enabled in between
+        LoggedIn = false;
         Task.Run(() =>
         {
             try
@@ -1099,7 +1099,7 @@ public partial class MainViewModel : ObservableObject
         if (!HasSavedCredentials && !EditAccount(requireAll: true)) return;
         if (!EnsureMemberAgreement(owner)) return;
         // a one-time code counts as used once typed, so the details dialog has to come first
-        if (LoadForSignIn(owner, profile) is not { } details) return;
+        if (LoadForLogIn(owner, profile) is not { } details) return;
         var (pol, sea) = details;
         // claimed before the code's asked, so no other copy signs this account in meanwhile
         if (!_pol.TryClaimAccount(profile.Id, out var claimProblem))
@@ -1133,7 +1133,7 @@ public partial class MainViewModel : ObservableObject
             {
                 ProgressFraction = 1.0;
                 _elapsedTimer.Stop();
-                SocialConnected = true;
+                LoggedIn = true;
                 _socialPoll.Start();
                 startAfter = StartGameImmediately;
             }
@@ -1173,13 +1173,13 @@ public partial class MainViewModel : ObservableObject
         OtpDialog.Ask(owner, profile.OtpSource, profile.OtpItem, "sea:" + sea.Username.Trim().ToLowerInvariant(),
                       sea.Username, profile.OtpAccount);
 
-    private (PolAccount Pol, SquareEnixAccount Sea)? LoadForSignIn(Window? owner, Account profile)
+    private (PolAccount Pol, SquareEnixAccount Sea)? LoadForLogIn(Window? owner, Account profile)
     {
-        var details = AccountRules.PrepareSignIn(_credentials, profile.Id);
+        var details = AccountRules.PrepareLogIn(_credentials, profile.Id);
         if (details.Missing)
         {
             if (!EditAccount(requireAll: true)) return null;
-            details = AccountRules.PrepareSignIn(_credentials, profile.Id);
+            details = AccountRules.PrepareLogIn(_credentials, profile.Id);
             if (details.Missing)
             {
                 MessageDialog.ShowError(owner, "Account details incomplete", AccountRules.MissingDetailsText(_credentials.ReadIds(profile.Id)));
@@ -1290,7 +1290,7 @@ public partial class MainViewModel : ObservableObject
             _elapsedTimer.Stop();
             IsLaunching = false;
             CloseSocialWindows();
-            SocialConnected = false;
+            LoggedIn = false;
             RefreshStartAll();
             _pol.Prestart();
             MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI", failed);
@@ -1311,7 +1311,7 @@ public partial class MainViewModel : ObservableObject
         else if (_settings.Current.ExitAfterGameExits) { RequestExit?.Invoke(); return; }
         IsLaunching = false;
         CloseSocialWindows();
-        SocialConnected = false;
+        LoggedIn = false;
         RequestShow?.Invoke();
         _pol.Prestart();
         if (ended is not null) MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI", ended, offerLogs: true);
@@ -1477,7 +1477,7 @@ public partial class MainViewModel : ObservableObject
             };
             PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName is nameof(SocialConnected) or nameof(MultiRunning)) ShowHandles();
+                if (e.PropertyName is nameof(LoggedIn) or nameof(MultiRunning)) ShowHandles();
             };
             Social.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SocialViewModel.GameRunning)) ShowHandles(); };
             return _handles;
@@ -1487,7 +1487,7 @@ public partial class MainViewModel : ObservableObject
     // a multi-account run's lean sessions take no requests
     private void ShowHandles()
     {
-        bool on = SocialConnected && _pol.Pid is not null;
+        bool on = LoggedIn && _pol.Pid is not null;
         Handles.Update(on ? Social.Last : null, on,
                        Social.GameRunning ? HandleList.ReadOnlyText : MultiRunning ? HandleList.MultiRunText : null);
         Social.HandleSwitching = Handles.Switching;
@@ -1505,7 +1505,7 @@ public partial class MainViewModel : ObservableObject
                                        holdPrestarts: _pol.HoldPrestarts, releasePrestarts: _pol.ReleasePrestarts,
                                        largeAddressAwareBlocked: LargeAddressAwareBlocked,
                                        stopPrestart: () => Task.Run(_pol.StopPrestart),
-                                       loggedIn: () => IsLaunching || SocialConnected || _pol.Pid is not null,
+                                       loggedIn: () => IsLaunching || LoggedIn || _pol.Pid is not null,
                                        handles: handles);
         vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.ThirdPartyHookIndex)) PlatformChanged(); };
         var w = new SettingsWindow { DataContext = vm };
@@ -1526,7 +1526,7 @@ public partial class MainViewModel : ObservableObject
         }
         OnPropertyChanged(nameof(CloseTooltip));
         RefreshMultiAccounts();
-        if (_settings.Current.ThirdPartyHookPlatform != hookBefore && !SocialConnected && !IsLaunching)
+        if (_settings.Current.ThirdPartyHookPlatform != hookBefore && !LoggedIn && !IsLaunching)
             Task.Run(() => { _pol.StopPrestart(); _pol.Prestart(); });
     }
 
@@ -1568,7 +1568,7 @@ public partial class MainViewModel : ObservableObject
         {
             var names = WindowerInstall.Profiles(WindowerInstall.Detect(s.WindowerPath));
             var current = WindowerSettingsFile.OldCopySource(s.WindowerProfile);
-            return names.Select(n => new PlayChoice(n, WindowerProfileNames.WindowerDisplay(n, names), n == current)).ToList();
+            return names.Select(n => new PlayChoice(n, WindowerProfileNames.DisplayName(n, names), n == current)).ToList();
         }
         return [];
     }
@@ -1584,7 +1584,7 @@ public partial class MainViewModel : ObservableObject
 
     // the Repair button's own checks, in its order. The lock comes from the switch's copy of its probe
     private string? LargeAddressAwareBlocked() =>
-        IsLaunching || SocialConnected || _pol.Pid is not null || _sessionEnding ? LargeAddressAwareSwitch.LoggedInText
+        IsLaunching || LoggedIn || _pol.Pid is not null || _sessionEnding ? LargeAddressAwareSwitch.LoggedInText
         : MultiRunning ? LargeAddressAwareSwitch.MultiRunText
         : null;
 

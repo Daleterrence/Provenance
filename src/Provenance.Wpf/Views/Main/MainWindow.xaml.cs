@@ -203,7 +203,7 @@ public partial class MainWindow : Window
     {
         if (Vm is { MinimizeGoesToTray: true } vm)
         {
-            ToTray(vm, vm.SocialConnected);
+            ToTray(vm, vm.LoggedIn);
             return;
         }
         WindowState = WindowState.Minimized;
@@ -224,14 +224,14 @@ public partial class MainWindow : Window
             }
             return;
         }
-        if (Vm is { SigningIn: true } signing)
+        if (Vm is { LoggingIn: true } signing)
         {
             e.Cancel = true;
             if (_cancellingSignIn) return;
             _cancellingSignIn = true;
             Dispatcher.InvokeAsync(async () =>
             {
-                await signing.CancelSignInAsync();
+                await signing.CancelLogInAsync();
                 _cancellingSignIn = false;
                 Close();
             });

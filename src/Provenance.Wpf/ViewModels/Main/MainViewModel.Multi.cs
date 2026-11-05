@@ -32,7 +32,7 @@ public partial class MainViewModel : IMultiRunHost
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StartAllText), nameof(HasMultiAccounts))]
-    [NotifyCanExecuteChangedFor(nameof(StartAllAccountsCommand), nameof(SignInCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartAllAccountsCommand), nameof(LogInCommand))]
     private bool _multiRunning;
 
     partial void OnMultiRunningChanged(bool value)
@@ -72,7 +72,7 @@ public partial class MainViewModel : IMultiRunHost
     private bool MultiPlatformChosen() =>
         _pol.Platform is ThirdPartyHook.Windower or ThirdPartyHook.Ashita;
 
-    private bool CanStartOrStop() => MultiRunning ? !MultiStopping : !IsLaunching && !SocialConnected && _pol.Pid is null;
+    private bool CanStartOrStop() => MultiRunning ? !MultiStopping : !IsLaunching && !LoggedIn && _pol.Pid is null;
 
     // Pid has no change notice, so this gets called wherever it changes (any thread)
     private void RefreshStartAll() =>
@@ -87,7 +87,7 @@ public partial class MainViewModel : IMultiRunHost
     private async Task StartAllAccountsAsync()
     {
         if (MultiRunning) { StopAllAccounts(); return; }
-        if (IsLaunching || SocialConnected || _pol.Pid is not null) return;
+        if (IsLaunching || LoggedIn || _pol.Pid is not null) return;
         if (!MultiPlatformChosen())
         {
             Log.Warning("Multi-account mode: not started, Windower or Ashita is not chosen");
@@ -213,7 +213,7 @@ public partial class MainViewModel : IMultiRunHost
     private async Task<AccountFailure?> RunAccountAsync(MultiRunAccount account, CancellationToken ct)
     {
         AccountFailure? failure;
-        try { failure = await SignInAndPlayAsync(account, ct); }
+        try { failure = await RunOneAccountAsync(account, ct); }
         catch (Exception ex) when (ct.IsCancellationRequested)
         {
             if (ex is not OperationCanceledException) Log.Warning(ex, "Multi-account mode: {Account} ended during the stop", account.ProfileId);
@@ -237,7 +237,7 @@ public partial class MainViewModel : IMultiRunHost
     }
 
     // Null when the game started. Before Play a failure or stop signs the session out, after Play it's only released.
-    private async Task<AccountFailure?> SignInAndPlayAsync(MultiRunAccount account, CancellationToken ct)
+    private async Task<AccountFailure?> RunOneAccountAsync(MultiRunAccount account, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var owner = Application.Current.MainWindow;
@@ -254,7 +254,7 @@ public partial class MainViewModel : IMultiRunHost
 
         var profile = Profiles.FirstOrDefault(p => p.Id == account.ProfileId);
         if (profile is null) return AccountRules.MissingDetailsFailure(default);
-        var details = AccountRules.PrepareSignIn(_credentials, profile.Id);
+        var details = AccountRules.PrepareLogIn(_credentials, profile.Id);
         if (details.Missing) return AccountRules.MissingDetailsFailure(_credentials.ReadIds(profile.Id));
         if (details.Problem is { } problem) return new(AccountFailureKind.Account, problem);
         var (pol, sea) = (details.Pol!, details.Sea!);
@@ -312,7 +312,7 @@ public partial class MainViewModel : IMultiRunHost
         {
             signIn = await _pol.ConnectAsync(pol, sea, otp, profile.Id, progress, AskHandleName, token,
                                              new SessionOptions(Lean: true, ThirdPartyHookProfile: hookProfile,
-                                                                HomeSlot: HomeSlotFor(profile)));
+                                                                HomeSlot: EnsureHomeSlot(profile)));
         }
         catch (Exception) when (token.IsCancellationRequested) { return await Stopped(); }
         if (signIn != 0)

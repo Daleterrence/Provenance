@@ -155,7 +155,7 @@ public partial class App : Application
         SessionEnding += (_, _) =>
         {
             Log.Information("Windows session ending");
-            _ = mainVm.CancelSignInAsync();
+            _ = mainVm.CancelLogInAsync();
             mainWindow.ExitWithoutAsking();
         };
         mainWindow.DataContext = mainVm;
