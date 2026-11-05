@@ -55,7 +55,6 @@ public partial class HandlesViewModel : ObservableObject
     private bool _open, _noteSeen;
     [ObservableProperty] private bool _noteIsError;
     [ObservableProperty] private bool _hasUnlinked;
-    [ObservableProperty] private bool _noHandles;
 
     public bool ReadOnly => ReadOnlyText != null;
     public bool Editable => LoggedIn && !ReadOnly && !Busy;
@@ -63,7 +62,6 @@ public partial class HandlesViewModel : ObservableObject
     public string AutoSwitchText => HandleList.AutoSwitchText;
     public string LimitText => HandleList.LimitText;
     public string NoCharactersText => HandleList.NoCharactersText;
-    public string NoHandlesText => HandleList.NoHandlesText;
     public bool InChatRoom => _snap.Chat is { RoomState: "in" or "entering" };
     // mine, or one the hook's still running (it can take mine after the page has given up on it)
     public bool Switching => (Busy && _op == HandleChange.Switch) ||
@@ -132,7 +130,6 @@ public partial class HandlesViewModel : ObservableObject
                       $"{g.Handle.Slot}/{g.Handle.Name}/{g.Handle.Key}/{g.Handle.ProfilePictureId}/{g.Handle.Active}/{g.Full}/" +
                       string.Join(",", g.Characters.Select(c => c.Record.Key + ":" + c.Label)))) +
                   "|u:" + string.Join(",", unlinked.Select(c => c.Record.Key + ":" + c.Label + ":" + c.Orphan));
-        NoHandles = LoggedIn && groups.Count == 0;
         if (sig == _signature) return;
         _signature = sig;
         Rows.Clear();

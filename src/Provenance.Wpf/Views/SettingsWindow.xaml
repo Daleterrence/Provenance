@@ -638,9 +638,6 @@
                                        Foreground="{DynamicResource State.Warn}"
                                        Visibility="{Binding ReadOnly, Converter={StaticResource BoolToVis}}" />
                             <TextBlock Text="{Binding Note}" Tag="{Binding NoteIsError}" Style="{StaticResource ProfileStatusText}" />
-                            <TextBlock Text="{Binding NoHandlesText}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12"
-                                       Foreground="{DynamicResource Text.2}"
-                                       Visibility="{Binding NoHandles, Converter={StaticResource BoolToVis}}" />
                             <ItemsControl ItemsSource="{Binding Rows}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>

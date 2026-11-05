@@ -53,14 +53,10 @@ public sealed class PolSessionService : IDisposable
     internal const int UnsafeStartExitCode = 13;
     internal const int GameStartExitCode = 15;
     public const string GameStartFailedText = "FINAL FANTASY XI couldn't start. Try again, and if it keeps happening, check the game's files with Repair.";
-    public const string MissingEnvText = "Provenance couldn't pass PlayOnline what it needs to log in. Restart Provenance and try again.";
     public const string NoPolHandleText = "This PlayOnline account doesn't have a handle, and none was created.";
 
     internal static bool DetailsUnreadable(string? line = null, int? exitCode = null) =>
         (line?.Contains("phase_c: SAVED DETAILS UNREADABLE", StringComparison.Ordinal) ?? false) || exitCode == 11;
-
-    // exit 16 happens while pol.exe's still suspended, so the exit code's gone before anything reads it, the line isn't
-    internal static bool NotStartedByProvenance(string line) => line.Contains("so not started by Provenance", StringComparison.Ordinal);
 
     public const string UnfinishedText = "The PlayOnline login didn't finish. Try again.";
 
@@ -492,7 +488,6 @@ public sealed class PolSessionService : IDisposable
             if (Regex.Match(line, @"viewer_init: lang=(\d+)") is { Success: true } lm && int.TryParse(lm.Groups[1].Value, out var lang))
                 viewerLanguage = lang;
             if (DetailsUnreadable(line)) return Fail(ErrorDetailsUnreadable, DetailsAgainText);
-            if (NotStartedByProvenance(line)) return Fail(ErrorLauncherFailed, MissingEnvText);
             if (line.Contains("phase_c: AUTH FAILED"))
             {
                 var rm = Regex.Match(line, @"reason=(-?\d+)");

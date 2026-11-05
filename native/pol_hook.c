@@ -1990,7 +1990,7 @@ static int my_handle(BYTE *b, char *name16)
     if (slot < 0)
         for (int i = 0; i < 64; i++)
             if (get_handle(b, i, rec) == 0 && (rec[0] & 1)) { slot = i; break; }
-    if (slot >= 0 && get_handle(b, slot, rec) == 0) {
+    if (get_handle(b, slot, rec) == 0) {
         memcpy(name16, rec + 0x08, 15);
         name16[15] = 0;
     }
@@ -5488,7 +5488,7 @@ static void hold_turn(BYTE *b, int ctl)
     pic_pump(b, wctl);
     if (!g_lean && !handle_switching()) chat_pump(b, wctl);
     if (!g_lean && !handle_switching()) gc_pump(b, wctl);
-    if (wctl && g_status_job < 0 && take_request("status", sv, sizeof sv) >= 0) {
+    if (!g_lean && wctl && g_status_job < 0 && take_request("status", sv, sizeof sv) >= 0) {
         want = sv[0] - '0';
         /* the viewer's OK maps busy (2) to online and 3 to appear offline */
         if (want == 2) want = 0;
