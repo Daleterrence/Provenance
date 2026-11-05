@@ -23,7 +23,7 @@ public partial class AccountDialog : Window
     public AccountDialogResult? Result { get; private set; }
 
     internal AccountDialog(string? accountName, bool useOtp, bool edit, string otpSource, string otpItem, bool requireAll,
-                          string polId, string seaId, string otpAccount)
+                          string polId, string squareEnixId, string otpAccount)
     {
         InitializeComponent();
         WindowFrame.Attach(this);
@@ -41,7 +41,7 @@ public partial class AccountDialog : Window
         OtpItemBox.Text = otpItem;
         // IDs typed here the last time it was open, never a saved value and never a password
         PolIdBox.Text = polId;
-        SeaIdBox.Text = seaId;
+        SquareEnixIdBox.Text = squareEnixId;
         KeepHint.Visibility = edit && !requireAll ? Visibility.Visible : Visibility.Collapsed;
         AgainText.Visibility = requireAll ? Visibility.Visible : Visibility.Collapsed;
         Loaded += (_, _) => (polId.Length == 0 ? (Control)PolIdBox : PolPasswordBox).Focus();
@@ -49,9 +49,9 @@ public partial class AccountDialog : Window
 
     public static AccountDialogResult? Show(Window? owner, string? accountName, bool useOtp, bool edit,
                                             string otpSource = "", string otpItem = "", bool requireAll = false,
-                                            string polId = "", string seaId = "", string otpAccount = "")
+                                            string polId = "", string squareEnixId = "", string otpAccount = "")
     {
-        var dlg = new AccountDialog(accountName, useOtp, edit, otpSource, otpItem, requireAll, polId, seaId, otpAccount);
+        var dlg = new AccountDialog(accountName, useOtp, edit, otpSource, otpItem, requireAll, polId, squareEnixId, otpAccount);
         if (owner is { IsVisible: true }) dlg.Owner = owner;
         else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         return dlg.ShowDialog() == true ? dlg.Result : null;
@@ -60,9 +60,9 @@ public partial class AccountDialog : Window
     private void OnSave(object sender, RoutedEventArgs e)
     {
         var polId = PolIdBox.Text.Trim().ToUpperInvariant();
-        var seaId = SeaIdBox.Text.Trim();
+        var squareEnixId = SquareEnixIdBox.Text.Trim();
         var polPw = PolPasswordBox.Password;
-        var seaPw = SeaPasswordBox.Password;
+        var squareEnixPassword = SquareEnixPasswordBox.Password;
 
         (string Text, Control Field)? problem = null;
         if ((_required || polId.Length > 0) && (polId.Length != 8 || !polId.All(char.IsAsciiLetterOrDigit)))
@@ -71,11 +71,11 @@ public partial class AccountDialog : Window
         else if (polPw.Length > PolSession.MaxPolPasswordLength)
             problem = ("A PlayOnline password can't be longer than 16 characters.", PolPasswordBox);
         else if (AccountRules.PasswordProblem(polPw) is { } polPwProblem) problem = (polPwProblem, PolPasswordBox);
-        else if (_required && seaId.Length == 0) problem = ("Enter your Square Enix ID.", SeaIdBox);
-        else if (seaId.Contains('@')) problem = ("Use your Square Enix ID here, not your email address.", SeaIdBox);
-        else if (AccountRules.SeaIdProblem(seaId) is { } seaIdProblem) problem = (seaIdProblem, SeaIdBox);
-        else if (_required && seaPw.Length == 0) problem = ("Enter your Square Enix password.", SeaPasswordBox);
-        else if (AccountRules.PasswordProblem(seaPw) is { } seaPwProblem) problem = (seaPwProblem, SeaPasswordBox);
+        else if (_required && squareEnixId.Length == 0) problem = ("Enter your Square Enix ID.", SquareEnixIdBox);
+        else if (squareEnixId.Contains('@')) problem = ("Use your Square Enix ID here, not your email address.", SquareEnixIdBox);
+        else if (AccountRules.SquareEnixIdProblem(squareEnixId) is { } squareEnixIdProblem) problem = (squareEnixIdProblem, SquareEnixIdBox);
+        else if (_required && squareEnixPassword.Length == 0) problem = ("Enter your Square Enix password.", SquareEnixPasswordBox);
+        else if (AccountRules.PasswordProblem(squareEnixPassword) is { } squareEnixPasswordProblem) problem = (squareEnixPasswordProblem, SquareEnixPasswordBox);
         else if (OtpBox.IsChecked == true && OtpSource.Length > 0 && OtpItemBox.Text.Trim().Length == 0)
             problem = ("Enter the item that holds the authenticator, or choose to type the code in.", OtpItemBox);
         else if (OtpBox.IsChecked == true && CliTools.ForSource(OtpSource) is not null && OtpSources.StartsWithDash(OtpItemBox.Text))
@@ -89,10 +89,10 @@ public partial class AccountDialog : Window
             return;
         }
 
-        Result = new AccountDialogResult(polId, polPw, seaId, seaPw, OtpBox.IsChecked == true,
+        Result = new AccountDialogResult(polId, polPw, squareEnixId, squareEnixPassword, OtpBox.IsChecked == true,
                                          OtpSource, OtpSource.Length > 0 ? OtpItemBox.Text.Trim() : "", ChosenAccount());
         PolPasswordBox.Clear();
-        SeaPasswordBox.Clear();
+        SquareEnixPasswordBox.Clear();
         DialogResult = true;
     }
 
@@ -293,7 +293,7 @@ public partial class AccountDialog : Window
     private void OnCancel(object sender, RoutedEventArgs e)
     {
         PolPasswordBox.Clear();
-        SeaPasswordBox.Clear();
+        SquareEnixPasswordBox.Clear();
         DialogResult = false;
     }
 

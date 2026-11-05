@@ -225,14 +225,14 @@ public static class AshitaLauncher
     private static string? AttachHook(int pid)
     {
         var started = DateTime.UtcNow;
-        var psi = new ProcessStartInfo(Path.Combine(ThirdPartyHook.NativeDir, ThirdPartyHook.WatcherExe))
+        var psi = new ProcessStartInfo(Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe))
         {
-            WorkingDirectory = ThirdPartyHook.NativeDir, UseShellExecute = false, CreateNoWindow = true,
+            WorkingDirectory = HookFiles.NativeDir, UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,
         };
         psi.ArgumentList.Add("--attach");
         psi.ArgumentList.Add(pid.ToString());
-        psi.ArgumentList.Add(Path.Combine(ThirdPartyHook.NativeDir, "pol_hook.dll"));
+        psi.ArgumentList.Add(Path.Combine(HookFiles.NativeDir, "pol_hook.dll"));
         try
         {
             using var p = Process.Start(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
@@ -243,7 +243,7 @@ public static class AshitaLauncher
             var stderr = errTask.GetAwaiter().GetResult().Trim();
             if (p.ExitCode == 0 && stdout.Contains("attached to pol.exe", StringComparison.Ordinal)) return null;
             Log.Error("Provenance Watcher --attach {Pid} failed: {Error}", pid, stderr);
-            return CodeIntegrity.Refused(started, ThirdPartyHook.WatcherExe, "pol_hook.dll") ? CodeIntegrity.RefusedText
+            return CodeIntegrity.Refused(started, HookFiles.WatcherExe, "pol_hook.dll") ? CodeIntegrity.RefusedText
                  : NotPickedUp;
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == CodeIntegrity.PolicyViolation)

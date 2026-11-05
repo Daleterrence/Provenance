@@ -21,8 +21,8 @@ public static class AccountRules
     public static bool NeedsAllDetails(bool usable, string? multiProblem) =>
         !usable || multiProblem == PolSession.DetailsAgainText;
 
-    public static bool FillFailed(SideEdit polEdit, PolAccount? pol, SideEdit seaEdit, SquareEnixAccount? sea) =>
-        (polEdit == SideEdit.Fill && pol is null) || (seaEdit == SideEdit.Fill && sea is null);
+    public static bool FillFailed(SideEdit polEdit, PolAccount? pol, SideEdit squareEnixEdit, SquareEnixAccount? squareEnix) =>
+        (polEdit == SideEdit.Fill && pol is null) || (squareEnixEdit == SideEdit.Fill && squareEnix is null);
 
     public static bool ChangesLogIn(AccountDialogResult r, (string? PolId, string? SeaId) saved,
                                        bool useOtp, string otpSource, string otpItem, string otpAccount = "") =>
@@ -34,19 +34,19 @@ public static class AccountRules
     public static AccountDialogResult WithoutPasswords(AccountDialogResult typed) =>
         typed with { PolPassword = "", SeaPassword = "" };
 
-    private static string? ValidateDetails(string polId, string polPassword, string seaId, string seaPassword)
+    private static string? ValidateDetails(string polId, string polPassword, string squareEnixId, string squareEnixPassword)
     {
         if (string.IsNullOrWhiteSpace(polId)) return "Enter your PlayOnline ID.";
         if (polId.Trim().Length != 8 || !polId.Trim().All(char.IsAsciiLetterOrDigit))
             return "A PlayOnline ID is 8 letters and numbers.";
         if (string.IsNullOrEmpty(polPassword)) return "Enter your PlayOnline password.";
-        if (string.IsNullOrWhiteSpace(seaId)) return "Enter your Square Enix ID.";
-        if (seaId.Contains('@')) return "Use your Square Enix ID here, not your email address.";
-        if (string.IsNullOrEmpty(seaPassword)) return "Enter your Square Enix password.";
+        if (string.IsNullOrWhiteSpace(squareEnixId)) return "Enter your Square Enix ID.";
+        if (squareEnixId.Contains('@')) return "Use your Square Enix ID here, not your email address.";
+        if (string.IsNullOrEmpty(squareEnixPassword)) return "Enter your Square Enix password.";
         return null;
     }
 
-    public sealed record LogInDetails(PolAccount? Pol, SquareEnixAccount? Sea, string? Problem)
+    public sealed record LogInDetails(PolAccount? Pol, SquareEnixAccount? SquareEnix, string? Problem)
     {
         public bool Missing => Pol is null && Problem is null;
     }
@@ -54,11 +54,11 @@ public static class AccountRules
     public static LogInDetails PrepareLogIn(ICredentialService credentials, string profileId)
     {
         var pol = credentials.LoadPolAccount(profileId);
-        var sea = credentials.LoadSquareEnixAccount(profileId);
-        if (pol is null || sea is null) return new(null, null, null);
-        if (ValidateDetails(pol.PolId, pol.Password, sea.Username, sea.Password) is { } problem)
+        var squareEnix = credentials.LoadSquareEnixAccount(profileId);
+        if (pol is null || squareEnix is null) return new(null, null, null);
+        if (ValidateDetails(pol.PolId, pol.Password, squareEnix.Username, squareEnix.Password) is { } problem)
             return new(null, null, problem + " Press Edit account to fix it.");
-        return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SquareEnixAccount(sea.Username.Trim(), sea.Password), null);
+        return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SquareEnixAccount(squareEnix.Username.Trim(), squareEnix.Password), null);
     }
 
     // both IDs there means the entries exist but won't unwrap (a key that's gone, say)
@@ -118,8 +118,8 @@ public static class AccountRules
     public static string? PasswordProblem(string password) =>
         IsPrintableAscii(password) ? null : "Passwords can only use English letters, numbers and keyboard symbols.";
 
-    public static string? SeaIdProblem(string seaId) =>
-        IsPrintableAscii(seaId) ? null : "A Square Enix ID can only use English letters, numbers and keyboard symbols.";
+    public static string? SquareEnixIdProblem(string squareEnixId) =>
+        IsPrintableAscii(squareEnixId) ? null : "A Square Enix ID can only use English letters, numbers and keyboard symbols.";
 
     private static bool IsPrintableAscii(string s) => s.All(c => c is >= '!' and <= '~');   // 0x21 to 0x7E
 }

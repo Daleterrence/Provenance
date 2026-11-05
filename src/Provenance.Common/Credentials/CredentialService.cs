@@ -32,10 +32,10 @@ public sealed class CredentialService : ICredentialService
     });
 
     public PolAccount? LoadPolAccount(string profileId) =>
-        ReadOrNull(KeyFor(CredentialKeys.Pol, profileId)) is { } c ? new PolAccount(c.UserName, c.Secret) : null;
+        ReadOrNull(KeyFor(CredentialTargets.Pol, profileId)) is { } c ? new PolAccount(c.UserName, c.Secret) : null;
 
     public SquareEnixAccount? LoadSquareEnixAccount(string profileId) =>
-        ReadOrNull(KeyFor(CredentialKeys.Sea, profileId)) is { } c ? new SquareEnixAccount(c.UserName, c.Secret) : null;
+        ReadOrNull(KeyFor(CredentialTargets.Sea, profileId)) is { } c ? new SquareEnixAccount(c.UserName, c.Secret) : null;
 
     // an entry the wrap key can't read (a lost key) loads as null, and the user types the details in again
     private StoredCredential? ReadOrNull(string key)
@@ -45,29 +45,29 @@ public sealed class CredentialService : ICredentialService
     }
 
     public bool HasUsableDetails(string profileId) =>
-        _store.HasWrappedSecret(KeyFor(CredentialKeys.Pol, profileId)) &&
-        _store.HasWrappedSecret(KeyFor(CredentialKeys.Sea, profileId));
+        _store.HasWrappedSecret(KeyFor(CredentialTargets.Pol, profileId)) &&
+        _store.HasWrappedSecret(KeyFor(CredentialTargets.Sea, profileId));
 
     public (string? PolId, string? SeaId) ReadIds(string profileId) =>
-        (ReadPolId(profileId), _store.ReadUserName(KeyFor(CredentialKeys.Sea, profileId)));
+        (ReadPolId(profileId), _store.ReadUserName(KeyFor(CredentialTargets.Sea, profileId)));
 
-    public string? ReadPolId(string profileId) => _store.ReadUserName(KeyFor(CredentialKeys.Pol, profileId));
+    public string? ReadPolId(string profileId) => _store.ReadUserName(KeyFor(CredentialTargets.Pol, profileId));
 
     public void SavePolAccount(string profileId, PolAccount account)
     {
         ArgumentNullException.ThrowIfNull(account);
-        Wrapped.Save(KeyFor(CredentialKeys.Pol, profileId), account.PolId, account.Password);
+        Wrapped.Save(KeyFor(CredentialTargets.Pol, profileId), account.PolId, account.Password);
     }
 
     public void SaveSquareEnixAccount(string profileId, SquareEnixAccount account)
     {
         ArgumentNullException.ThrowIfNull(account);
-        Wrapped.Save(KeyFor(CredentialKeys.Sea, profileId), account.Username, account.Password);
+        Wrapped.Save(KeyFor(CredentialTargets.Sea, profileId), account.Username, account.Password);
     }
 
-    public void DeletePolAccount(string profileId) => Delete(KeyFor(CredentialKeys.Pol, profileId));
+    public void DeletePolAccount(string profileId) => Delete(KeyFor(CredentialTargets.Pol, profileId));
 
-    public void DeleteSquareEnixAccount(string profileId) => Delete(KeyFor(CredentialKeys.Sea, profileId));
+    public void DeleteSquareEnixAccount(string profileId) => Delete(KeyFor(CredentialTargets.Sea, profileId));
 
     internal Action<string>? BeforeDeleteForTest { get; set; }
 

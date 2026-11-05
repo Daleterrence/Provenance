@@ -257,7 +257,7 @@ public partial class MainViewModel : IMultiRunHost
         var details = AccountRules.PrepareLogIn(_credentials, profile.Id);
         if (details.Missing) return AccountRules.MissingDetailsFailure(_credentials.ReadIds(profile.Id));
         if (details.Problem is { } problem) return new(AccountFailureKind.Account, problem);
-        var (pol, sea) = (details.Pol!, details.Sea!);
+        var (pol, squareEnix) = (details.Pol!, details.SquareEnix!);
 
         if (!_pol.TryClaimAccount(profile.Id, out var claimProblem))
             return new(AccountFailureKind.Account, claimProblem ?? "This account is in use in another copy of Provenance.");
@@ -266,7 +266,7 @@ public partial class MainViewModel : IMultiRunHost
         string otp = "";
         if (profile.UseOtp)
         {
-            var code = AskOtp(owner, profile, sea);
+            var code = AskOtp(owner, profile, squareEnix);
             if (code is null || ct.IsCancellationRequested)
             {
                 _pol.ReleaseClaim();
@@ -310,7 +310,7 @@ public partial class MainViewModel : IMultiRunHost
         int logIn;
         try
         {
-            logIn = await _pol.ConnectAsync(pol, sea, otp, profile.Id, progress, AskHandleName, token,
+            logIn = await _pol.ConnectAsync(pol, squareEnix, otp, profile.Id, progress, AskHandleName, token,
                                              new SessionOptions(Lean: true, ThirdPartyHookProfile: hookProfile,
                                                                 HomeSlot: EnsureHomeSlot(profile)));
         }
@@ -324,7 +324,7 @@ public partial class MainViewModel : IMultiRunHost
         }
         SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
 
-        var snap = _runSnapshot ?? (_pol.Pid is { } pid ? SocialRequests.TryRead(pid) : null);
+        var snap = _runSnapshot ?? (_pol.Pid is { } pid ? SocialSnapshotFiles.TryRead(pid) : null);
         if (AccountRules.PlayGateFailure(snap) is { } gate) return await LetGo(gate.Kind, gate.Text);
         if (token.IsCancellationRequested) return await Stopped();
 

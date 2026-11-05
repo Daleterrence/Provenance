@@ -541,7 +541,7 @@ public partial class SocialViewModel : ObservableObject
         bool kept = !chat.Dirty || chat.Save();
         if (takeStore && kept && _pol.Pid is { } storePid)
         {
-            SocialRequests.DeleteStore(storePid);
+            SocialSnapshotFiles.DeleteStore(storePid);
             _storeTaken = true;
         }
         if (!kept || (saved.Count > 0 && _pol.Pid is { } pid && !SocialRequests.Ack(pid, saved)))

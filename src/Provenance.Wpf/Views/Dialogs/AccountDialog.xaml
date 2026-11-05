@@ -27,10 +27,10 @@
             <PasswordBox x:Name="PolPasswordBox" Margin="0,0,0,10"
                          materialDesign:HintAssist.Hint="PlayOnline password"
                          Style="{DynamicResource DialogRevealPasswordBox}" />
-            <TextBox x:Name="SeaIdBox" Margin="0,0,0,10"
+            <TextBox x:Name="SquareEnixIdBox" Margin="0,0,0,10"
                      materialDesign:HintAssist.Hint="Square Enix ID"
                      Style="{DynamicResource DialogTextBox}" />
-            <PasswordBox x:Name="SeaPasswordBox" Margin="0,0,0,8"
+            <PasswordBox x:Name="SquareEnixPasswordBox" Margin="0,0,0,8"
                          materialDesign:HintAssist.Hint="Square Enix password"
                          Style="{DynamicResource DialogRevealPasswordBox}" />
             <TextBlock x:Name="KeepHint" Visibility="Collapsed" Margin="0,0,0,8" FontSize="11"

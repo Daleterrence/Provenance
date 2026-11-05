@@ -260,7 +260,7 @@ public sealed class PolSession : IDisposable
         return id;
     }
 
-    public async Task<int> ConnectAsync(PolAccount pol, SquareEnixAccount sea, string otp, string? rememberedProfileId,
+    public async Task<int> ConnectAsync(PolAccount pol, SquareEnixAccount squareEnix, string otp, string? rememberedProfileId,
                                         IProgress<LaunchProgress>? progress, Func<string?>? askHandleName,
                                         CancellationToken ct = default, SessionOptions? options = null)
     {
@@ -272,7 +272,7 @@ public sealed class PolSession : IDisposable
         int rc = LoginCodes.LauncherFailed;
         try
         {
-            rc = await Task.Run(() => ConnectCore(pol, sea, otp, rememberedProfileId, progress, askHandleName, launch, ct), ct);
+            rc = await Task.Run(() => ConnectCore(pol, squareEnix, otp, rememberedProfileId, progress, askHandleName, launch, ct), ct);
             return rc;
         }
         finally { if (rc != 0) ReleaseClaim(); }
@@ -286,7 +286,7 @@ public sealed class PolSession : IDisposable
             WindowerShared = _settings.Current.WindowerSharedExtras?.Copy(),
         };
 
-    private int ConnectCore(PolAccount pol, SquareEnixAccount sea, string otp, string? rememberedProfileId,
+    private int ConnectCore(PolAccount pol, SquareEnixAccount squareEnix, string otp, string? rememberedProfileId,
                             IProgress<LaunchProgress>? progress, Func<string?>? askHandleName, SessionOptions options,
                             CancellationToken ct)
     {
@@ -338,7 +338,7 @@ public sealed class PolSession : IDisposable
         var keys = new List<string>();
         try
         {
-            return ConnectHeld(pol, sea, otp, rememberedProfileId, progress, askHandleName, polExe, launcherExe, keys,
+            return ConnectHeld(pol, squareEnix, otp, rememberedProfileId, progress, askHandleName, polExe, launcherExe, keys,
                                options, ct);
         }
         finally
@@ -347,7 +347,7 @@ public sealed class PolSession : IDisposable
         }
     }
 
-    private int ConnectHeld(PolAccount pol, SquareEnixAccount sea, string otp, string? rememberedProfileId,
+    private int ConnectHeld(PolAccount pol, SquareEnixAccount squareEnix, string otp, string? rememberedProfileId,
                             IProgress<LaunchProgress>? progress, Func<string?>? askHandleName, string polExe,
                             string launcherExe, List<string> keys, SessionOptions options, CancellationToken ct)
     {
@@ -371,19 +371,19 @@ public sealed class PolSession : IDisposable
             return code;
         }
 
-        string polTarget, seaTarget;
+        string polTarget, squareEnixTarget;
         var oneShot = new List<string> { "OTP" };
         var profile = string.IsNullOrWhiteSpace(rememberedProfileId) ? null : rememberedProfileId;
-        if (profile != null && _store.ReadUserName($"{CredentialKeys.Pol}:{profile}") == pol.PolId &&
-            _store.ReadUserName($"{CredentialKeys.Sea}:{profile}") == sea.Username)
+        if (profile != null && _store.ReadUserName($"{CredentialTargets.Pol}:{profile}") == pol.PolId &&
+            _store.ReadUserName($"{CredentialTargets.Sea}:{profile}") == squareEnix.Username)
         {
-            polTarget = Target($"{CredentialKeys.Pol}:{profile}");
-            seaTarget = Target($"{CredentialKeys.Sea}:{profile}");
+            polTarget = Target($"{CredentialTargets.Pol}:{profile}");
+            squareEnixTarget = Target($"{CredentialTargets.Sea}:{profile}");
         }
         else
         {
             polTarget = OneShot("POL", pol.PolId, pol.Password);
-            seaTarget = OneShot("SEA", sea.Username, sea.Password);
+            squareEnixTarget = OneShot("SEA", squareEnix.Username, squareEnix.Password);
             oneShot.InsertRange(0, ["POL", "SEA"]);
         }
         var otpTarget = string.IsNullOrWhiteSpace(otp) ? null : OneShot("OTP", "otp", otp.Trim());
@@ -395,7 +395,7 @@ public sealed class PolSession : IDisposable
         var status = _settings.Current.PlayOnlineStatus;
         env["POL_STATUS"] = status is 0 or 1 or 4 ? status.ToString() : "0";
         env["POL_CRED_POL"] = polTarget;
-        env["POL_CRED_SEA"] = seaTarget;
+        env["POL_CRED_SEA"] = squareEnixTarget;
         env["POL_CRED_ONESHOT"] = string.Join(",", oneShot);
         env["POL_CRED_HANDLE"] = Target(Key("HANDLE"));
         env["POL_CRED_PLAY"] = Target(Key("PLAY"));
@@ -452,8 +452,8 @@ public sealed class PolSession : IDisposable
         Log.Information("Hold session: pol.exe pid {Pid}", pid);
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.04));
         // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its sign-in from it
-        DeleteQuietly(SocialRequests.PathForPid(pid));
-        DeleteQuietly(SocialRequests.StorePathForPid(pid));
+        DeleteQuietly(SocialSnapshotFiles.PathForPid(pid));
+        DeleteQuietly(SocialSnapshotFiles.StorePathForPid(pid));
         DropChatLeftovers(pid);
         DeleteQuietly(HookFiles.PathFor(pid, "stop"));
         DeleteQuietly(HookFiles.PathFor(pid, "ended"));
@@ -505,10 +505,10 @@ public sealed class PolSession : IDisposable
                 lastActivity = DateTime.UtcNow;
             }
             if (ct.IsCancellationRequested) break;   // a cancel that lands with the first snapshot still wins
-            if (SocialRequests.TryRead(pid) is { } snap)
+            if (SocialSnapshotFiles.TryRead(pid) is { } snap)
             {
                 // the hook writes the store file before its first snapshot, so it's there now even if Play comes next
-                SnapshotUpdated?.Invoke(snap with { Stored = SocialRequests.TryReadStore(pid) });
+                SnapshotUpdated?.Invoke(snap with { Stored = SocialSnapshotFiles.TryReadStore(pid) });
                 StartWatcher(pid);
                 SaveSession(rememberedProfileId);
                 progress?.Report(new LaunchProgress("Connected", "You're logged in.", LaunchSteps.StartGame, 1.0));
@@ -592,9 +592,9 @@ public sealed class PolSession : IDisposable
     {
         var viewerDir = PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct);
         var polExe = viewerDir is null ? null : Path.Combine(viewerDir, "pol.exe");
-        var launcherExe = Path.Combine(ThirdPartyHook.NativeDir, ThirdPartyHook.WatcherExe);
+        var launcherExe = Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe);
         bool found = polExe != null && File.Exists(polExe) && File.Exists(launcherExe)
-                     && File.Exists(Path.Combine(ThirdPartyHook.NativeDir, "pol_hook.dll"));
+                     && File.Exists(Path.Combine(HookFiles.NativeDir, "pol_hook.dll"));
         return (viewerDir, found ? polExe : null, launcherExe);
     }
 
@@ -608,11 +608,11 @@ public sealed class PolSession : IDisposable
     {
         var psi = new ProcessStartInfo(launcherExe)
         {
-            WorkingDirectory = ThirdPartyHook.NativeDir, UseShellExecute = false, CreateNoWindow = true,
+            WorkingDirectory = HookFiles.NativeDir, UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,
         };
         psi.ArgumentList.Add(polExe);
-        psi.ArgumentList.Add(Path.Combine(ThirdPartyHook.NativeDir, "pol_hook.dll"));
+        psi.ArgumentList.Add(Path.Combine(HookFiles.NativeDir, "pol_hook.dll"));
         return psi;
     }
 
@@ -643,7 +643,7 @@ public sealed class PolSession : IDisposable
 
     // Windows only has the real answer with no pol.exe about, so that's kept for starts while one runs. A settings.json
     // that didn't load is left for the user's next save
-    public static void NoteScreenSaver(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows,
+    internal static void NoteScreenSaver(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows,
                                          Func<bool>? endedUnseen = null, Action<bool>? set = null)
     {
         bool? on;
@@ -709,7 +709,7 @@ public sealed class PolSession : IDisposable
     {
         StopWatcher();
         _debounce = new Timer(_ => ReadSnapshot(), null, Timeout.Infinite, Timeout.Infinite);
-        var w = new FileSystemWatcher(HookFiles.Dir, Path.GetFileName(SocialRequests.PathForPid(pid)))
+        var w = new FileSystemWatcher(HookFiles.Dir, Path.GetFileName(SocialSnapshotFiles.PathForPid(pid)))
         {
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
         };
@@ -1048,7 +1048,7 @@ public sealed class PolSession : IDisposable
                 progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
                 return null;
             }
-            bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, ThirdPartyHook.WatcherExe, "pol_hook.dll");
+            bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, HookFiles.WatcherExe, "pol_hook.dll");
             if (refused && attempt <= RefusedRetryWaits.Length)
             {
                 var wait = RefusedRetryWaits[attempt - 1];
@@ -1312,8 +1312,8 @@ public sealed class PolSession : IDisposable
     {
         if (Pid is not { } pid) return;
         // the store file only turns up once, at login, and goes once the app has it
-        if (SocialRequests.TryRead(pid) is { } snap)
-            SnapshotUpdated?.Invoke(snap with { Stored = SocialRequests.TryReadStore(pid) });
+        if (SocialSnapshotFiles.TryRead(pid) is { } snap)
+            SnapshotUpdated?.Invoke(snap with { Stored = SocialSnapshotFiles.TryReadStore(pid) });
     }
 
     public void Poll()
@@ -1332,8 +1332,8 @@ public sealed class PolSession : IDisposable
             try { if (_polProc is { HasExited: true } gone && gone.Id == pid) exit = gone.ExitCode; } catch { }
             Log.Warning("Held PlayOnline session (pid {Pid}) ended on its own (exit code {Exit})", pid, exit);
             PutScreenSaverBack();
-            DeleteQuietly(SocialRequests.PathForPid(pid));
-            DeleteQuietly(SocialRequests.StorePathForPid(pid));
+            DeleteQuietly(SocialSnapshotFiles.PathForPid(pid));
+            DeleteQuietly(SocialSnapshotFiles.StorePathForPid(pid));
             DropChatLeftovers(pid);
             Pid = null;
             _pidStarted = null;
@@ -1456,8 +1456,8 @@ public sealed class PolSession : IDisposable
                 if (KillIfOurs(pid, p => IsSameProcess(p, started), (int)StopGrace.TotalMilliseconds, afterMs: 2000))
                     Log.Warning("pol.exe {Pid} hadn't logged out {Seconds} s after its stop file, so it was ended", pid,
                                 (int)StopGrace.TotalSeconds);
-                DeleteQuietly(SocialRequests.PathForPid(pid));
-                DeleteQuietly(SocialRequests.StorePathForPid(pid));
+                DeleteQuietly(SocialSnapshotFiles.PathForPid(pid));
+                DeleteQuietly(SocialSnapshotFiles.StorePathForPid(pid));
                 DropChatLeftovers(pid);
                 Log.Information("Stopped held PlayOnline session (pid {Pid})", pid);
                 Pid = null;

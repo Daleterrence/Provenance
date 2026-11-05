@@ -8,6 +8,9 @@ public static class HookFiles
 {
     private static volatile string _dir = Path.GetTempPath();   // placeholder, start-up sets the admin-only one first
 
+    public static string NativeDir => Path.Combine(AppContext.BaseDirectory, "native");
+    public const string WatcherExe = "Provenance Watcher.exe";
+
     public static string Dir
     {
         get => _dir;

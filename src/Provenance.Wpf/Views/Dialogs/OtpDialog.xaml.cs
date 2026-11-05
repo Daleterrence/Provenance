@@ -11,7 +11,7 @@ public partial class OtpDialog : Window
 {
     private string? _code;
     private readonly TextBox[] _boxes = new TextBox[6];
-    private readonly string _source, _item, _account, _reuseKey, _seaId;
+    private readonly string _source, _item, _account, _reuseKey, _squareEnixId;
     private CancellationTokenSource? _fetch;
     private OtpFix _fix;
     private string? _installTool;
@@ -20,9 +20,9 @@ public partial class OtpDialog : Window
 
     internal static OtpDialog ForTest(string reuseKey) => new("", "", "", reuseKey, "");
 
-    private OtpDialog(string source, string item, string account, string reuseKey, string seaId)
+    private OtpDialog(string source, string item, string account, string reuseKey, string squareEnixId)
     {
-        _seaId = seaId;
+        _squareEnixId = squareEnixId;
         _source = source;
         _item = item;
         _account = account;
@@ -63,10 +63,10 @@ public partial class OtpDialog : Window
     }
 
     // reuseKey (the SE ID) names the authenticator, so one code never goes out twice
-    public static string? Ask(Window? owner, string source = "", string item = "", string reuseKey = "", string seaId = "",
+    public static string? Ask(Window? owner, string source = "", string item = "", string reuseKey = "", string squareEnixId = "",
                               string account = "")
     {
-        var dlg = new OtpDialog(source, item, account, reuseKey, seaId);
+        var dlg = new OtpDialog(source, item, account, reuseKey, squareEnixId);
         if (owner is { IsVisible: true }) dlg.Owner = owner;
         else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         return dlg.ShowDialog() == true ? dlg._code : null;
@@ -206,7 +206,7 @@ public partial class OtpDialog : Window
         SourceText.Text = _source == OtpSources.OnePassword ? OtpSources.OnePasswordWaitText : $"Getting the code from {name}...";
         _fetch?.Cancel();
         var mine = _fetch = new CancellationTokenSource();
-        var r = await OtpSources.FetchAsync(_source, _item, _account, _seaId, masterPassword, mine.Token);
+        var r = await OtpSources.FetchAsync(_source, _item, _account, _squareEnixId, masterPassword, mine.Token);
         // same code as the account before (one authenticator), so wait for the next one
         for (int tries = 0; r.Code is { } used && _reuseKey.Length > 0 && await OtpReuse.WasUsedAsync(_reuseKey, used) && tries < 3; tries++)
         {
@@ -214,7 +214,7 @@ public partial class OtpDialog : Window
             SourceText.Text = $"The code from {name} was just used for another account. Waiting for the next code...";
             try { await Task.Delay(TimeSpan.FromSeconds(OtpReuse.SecondsToNextCode()), mine.Token); }
             catch (OperationCanceledException) { return; }
-            r = await OtpSources.FetchAsync(_source, _item, _account, _seaId, null, mine.Token);
+            r = await OtpSources.FetchAsync(_source, _item, _account, _squareEnixId, null, mine.Token);
         }
         if (!IsVisible || _code != null) return;
         if (mine != _fetch || mine.IsCancellationRequested) return;   // a newer attempt owns the screen

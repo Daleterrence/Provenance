@@ -108,7 +108,7 @@ public partial class SettingsViewModel
             return;
         }
         var s = _settings.Current;
-        var sources = RestoreSourcesForTest is { } test ? test(s) : _settings.DetectedRegion is { } r ? GameBackups.SourcesFor(s, r, null) : null;
+        var sources = RestoreSourcesForTest is { } test ? test(s) : _settings.DetectedRegion is { } r ? GameBackupPolicy.SourcesFor(s, r, null) : null;
         if (sources is null)
         {
             ShowRestored?.Invoke(RestoreFailedTitle, "FINAL FANTASY XI isn't installed on this PC, so there's nowhere to restore the backup to.", true);
@@ -121,18 +121,18 @@ public partial class SettingsViewModel
         catch (Exception ex)
         {
             Log.Warning(ex, "Restore: {Zip} isn't a backup that can be restored", zip);
-            ShowRestored?.Invoke(RestoreFailedTitle, ex is NotABackupException ? GameBackups.NotOursText : "Windows couldn't open that file, so nothing was restored.", true);
+            ShowRestored?.Invoke(RestoreFailedTitle, ex is NotABackupException ? GameBackupPolicy.NotOursText : "Windows couldn't open that file, so nothing was restored.", true);
             return;
         }
         if (Confirm?.Invoke(RestoreTitle,
-                $"Restore the backup made on {GameBackups.When(info)}? Every character in it gets the settings and macros from it back, over the " +
+                $"Restore the backup made on {GameBackupPolicy.When(info)}? Every character in it gets the settings and macros from it back, over the " +
                 "ones they have now. Characters that aren't in it keep theirs. Provenance backs up your current settings first, so you can go back " +
                 "to them by restoring that backup.", "RESTORE", false) != true) return;
         RestoringBackup = true;
         SayBackup("Restoring your game settings...");
         try
         {
-            var (done, text) = await Task.Run(() => GameBackups.Restore(zip, info, sources, folder, RestoreBlocked));
+            var (done, text) = await Task.Run(() => GameBackupPolicy.Restore(zip, info, sources, folder, RestoreBlocked));
             SayBackup("");
             ShowRestored?.Invoke(done ? RestoreTitle : RestoreFailedTitle, text, !done);
         }

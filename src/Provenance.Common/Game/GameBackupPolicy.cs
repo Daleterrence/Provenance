@@ -10,7 +10,7 @@ namespace Provenance.Common.Game;
 
 // the automatic backup of the game's own settings (USER, its VirtualStore copy and the term filter lists), made right
 // before the game starts
-public static class GameBackups
+public static class GameBackupPolicy
 {
     internal static TimeSpan PlayWait = TimeSpan.FromSeconds(5);
     internal static TimeSpan RestoreWait = TimeSpan.FromSeconds(10);

@@ -60,7 +60,7 @@ public static class OtpSources
     };
 
     // never throws, a problem comes back as text
-    public static async Task<OtpFetchResult> FetchAsync(string source, string item, string account, string seaId, string? bitwardenPassword,
+    public static async Task<OtpFetchResult> FetchAsync(string source, string item, string account, string squareEnixId, string? bitwardenPassword,
                                                         CancellationToken ct)
     {
         OtpFetchResult r;
@@ -70,7 +70,7 @@ public static class OtpSources
             {
                 OnePassword => await FromOnePasswordAsync(item, account, ct),
                 Bitwarden => await FromBitwardenAsync(item, bitwardenPassword, ct),
-                KeePassXC => await FromKeePassXcAsync(item, seaId, ct),
+                KeePassXC => await FromKeePassXcAsync(item, squareEnixId, ct),
                 _ => Problem("no manager", "This account doesn't have a password manager chosen.", OtpFix.TypeInstead),
             };
         }
@@ -391,7 +391,7 @@ public static class OtpSources
 
     internal static void ResetAssociationStoreForTest() => AssociationStore.Reset();
 
-    private static async Task<OtpFetchResult> FromKeePassXcAsync(string url, string seaId, CancellationToken ct)
+    private static async Task<OtpFetchResult> FromKeePassXcAsync(string url, string squareEnixId, CancellationToken ct)
     {
         var proxy = FindKeePassXcProxy();
         if (proxy is null)
@@ -465,7 +465,7 @@ public static class OtpSources
                 await Timed0(t => client.WaitForUnlockAsync(t), TimeSpan.FromMinutes(2), "KeePassXC is still locked.");
                 entries = await Logins(false, 60);
             }
-            var (picked, pickProblem) = PickKeePassXcEntry(entries, seaId, url);
+            var (picked, pickProblem) = PickKeePassXcEntry(entries, squareEnixId, url);
             if (picked is null) return Problem(entries.Count == 0 ? "no entry with a code" : "several entries", pickProblem!, OtpFix.TypeInstead);
             // only ever the picked entry's code
             if (picked.Totp is { } own && SixDigits.IsMatch(own)) return new OtpFetchResult(own, null);
@@ -489,15 +489,15 @@ public static class OtpSources
 
     // entries with a code beat ones without (a login next to a separate authenticator entry). With several, the one
     // whose login is the SE ID, so never another account's code
-    internal static (KeePassXcEntry? Entry, string? Problem) PickKeePassXcEntry(IReadOnlyList<KeePassXcEntry> entries, string seaId, string url)
+    internal static (KeePassXcEntry? Entry, string? Problem) PickKeePassXcEntry(IReadOnlyList<KeePassXcEntry> entries, string squareEnixId, string url)
     {
         if (entries.Any(e => !string.IsNullOrEmpty(e.Totp)))
             entries = entries.Where(e => !string.IsNullOrEmpty(e.Totp)).ToList();
         if (entries.Count == 0) return (null, $"No KeePassXC entry for {url} has a one-time password.");
         if (entries.Count == 1) return (entries[0], null);
         // a blank SE ID matches nothing, not even a blank user name
-        var mine = string.IsNullOrWhiteSpace(seaId) ? null
-                 : entries.FirstOrDefault(e => string.Equals(e.Login, seaId, StringComparison.OrdinalIgnoreCase));
+        var mine = string.IsNullOrWhiteSpace(squareEnixId) ? null
+                 : entries.FirstOrDefault(e => string.Equals(e.Login, squareEnixId, StringComparison.OrdinalIgnoreCase));
         return mine is null
             ? (null, $"More than one KeePassXC entry for {url} has a one-time password. Set the username of the right one to your Square Enix ID.")
             : (mine, null);

@@ -486,9 +486,9 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
-    internal Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount sea, string otp,
+    internal Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount squareEnix, string otp,
                                            IProgress<LaunchProgress>? progress, CancellationToken token) =>
-        _pol.ConnectAsync(pol, sea, otp, p.Id, progress, PromptHandleName, token,
+        _pol.ConnectAsync(pol, squareEnix, otp, p.Id, progress, PromptHandleName, token,
                           new SessionOptions(false, null, EnsureHomeSlot(p), HandleKey: p.HandleKey));
 
     // a login always goes with the account's own home slot, so one without gets it now
@@ -558,7 +558,7 @@ public partial class MainViewModel : ObservableObject
                                       _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id)?.Problem);
         var r = AccountDialog.Show(Application.Current.MainWindow, p.DisplayName, typed?.UseOtp ?? p.UseOtp, edit: true,
                                    typed?.OtpSource ?? p.OtpSource, typed?.OtpItem ?? p.OtpItem, requireAll: requireAll,
-                                   polId: typed?.PolId ?? "", seaId: typed?.SeaId ?? "", otpAccount: typed?.OtpAccount ?? p.OtpAccount);
+                                   polId: typed?.PolId ?? "", squareEnixId: typed?.SeaId ?? "", otpAccount: typed?.OtpAccount ?? p.OtpAccount);
         if (r == null) return false;
         if (r.PolId.Length > 0 && ProfileWithPolId(r.PolId, except: p) is { } same)
         {
@@ -567,10 +567,10 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
         var polEdit = AccountRules.SideEditOf(r.PolId, r.PolPassword);
-        var seaEdit = AccountRules.SideEditOf(r.SeaId, r.SeaPassword);
+        var squareEnixEdit = AccountRules.SideEditOf(r.SeaId, r.SeaPassword);
         var pol = polEdit == AccountRules.SideEdit.Fill ? _credentials.LoadPolAccount(p.Id) : null;
-        var sea = seaEdit == AccountRules.SideEdit.Fill ? _credentials.LoadSquareEnixAccount(p.Id) : null;
-        if (AccountRules.FillFailed(polEdit, pol, seaEdit, sea))
+        var squareEnix = squareEnixEdit == AccountRules.SideEdit.Fill ? _credentials.LoadSquareEnixAccount(p.Id) : null;
+        if (AccountRules.FillFailed(polEdit, pol, squareEnixEdit, squareEnix))
             return EditAccount(requireAll: true, typed: AccountRules.WithoutPasswords(r));
         // read before anything's saved, so the typed details get compared with the saved ones
         var blocked = _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id && e.CredentialsRefused);
@@ -578,9 +578,9 @@ public partial class MainViewModel : ObservableObject
         if (polEdit != AccountRules.SideEdit.Keep)
             _credentials.SavePolAccount(p.Id, new PolAccount(r.PolId.Length > 0 ? r.PolId : pol!.PolId,
                                                              r.PolPassword.Length > 0 ? r.PolPassword : pol!.Password));
-        if (seaEdit != AccountRules.SideEdit.Keep)
-            _credentials.SaveSquareEnixAccount(p.Id, new SquareEnixAccount(r.SeaId.Length > 0 ? r.SeaId : sea!.Username,
-                                                             r.SeaPassword.Length > 0 ? r.SeaPassword : sea!.Password));
+        if (squareEnixEdit != AccountRules.SideEdit.Keep)
+            _credentials.SaveSquareEnixAccount(p.Id, new SquareEnixAccount(r.SeaId.Length > 0 ? r.SeaId : squareEnix!.Username,
+                                                             r.SeaPassword.Length > 0 ? r.SeaPassword : squareEnix!.Password));
         p.UseOtp = r.UseOtp;
         p.OtpSource = r.OtpSource;
         p.OtpItem = r.OtpItem;
@@ -1100,14 +1100,14 @@ public partial class MainViewModel : ObservableObject
         if (!EnsureMemberAgreement(owner)) return;
         // a one-time code counts as used once typed, so the details dialog has to come first
         if (LoadForLogIn(owner, profile) is not { } details) return;
-        var (pol, sea) = details;
+        var (pol, squareEnix) = details;
         // claimed before the code's asked, so no other copy signs this account in meanwhile
         if (!_pol.TryClaimAccount(profile.Id, out var claimProblem))
         {
             MessageDialog.ShowError(owner, "Account in use", claimProblem ?? "This account is in use in another copy of Provenance.");
             return;
         }
-        var otp = profile.UseOtp ? AskOtp(owner, profile, sea) : "";
+        var otp = profile.UseOtp ? AskOtp(owner, profile, squareEnix) : "";
         if (otp is null)
         {
             _pol.ReleaseClaim();
@@ -1127,7 +1127,7 @@ public partial class MainViewModel : ObservableObject
         });
         try
         {
-            int code = await ConnectProfileAsync(profile, pol, sea, otp, progress, token);
+            int code = await ConnectProfileAsync(profile, pol, squareEnix, otp, progress, token);
             await Application.Current!.Dispatcher.InvokeAsync(() => { });   // an empty hop so queued progress reports land first (yes, really)
             if (code == 0)
             {
@@ -1169,9 +1169,9 @@ public partial class MainViewModel : ObservableObject
     }
 
     // accounts on one SE ID share an authenticator
-    private static string? AskOtp(Window? owner, Account profile, SquareEnixAccount sea) =>
-        OtpDialog.Ask(owner, profile.OtpSource, profile.OtpItem, "sea:" + sea.Username.Trim().ToLowerInvariant(),
-                      sea.Username, profile.OtpAccount);
+    private static string? AskOtp(Window? owner, Account profile, SquareEnixAccount squareEnix) =>
+        OtpDialog.Ask(owner, profile.OtpSource, profile.OtpItem, "sea:" + squareEnix.Username.Trim().ToLowerInvariant(),
+                      squareEnix.Username, profile.OtpAccount);
 
     private (PolAccount Pol, SquareEnixAccount Sea)? LoadForLogIn(Window? owner, Account profile)
     {
@@ -1191,7 +1191,7 @@ public partial class MainViewModel : ObservableObject
             MessageDialog.ShowError(owner, "Account details incomplete", problem);
             return null;
         }
-        return (details.Pol!, details.Sea!);
+        return (details.Pol!, details.SquareEnix!);
     }
 
     // the US viewer asks once per POL ID, here it's once per install
@@ -1394,10 +1394,10 @@ public partial class MainViewModel : ObservableObject
     {
         var s = _settings.ReadSaved() ?? _settings.Current;
         if (!s.BackupGameSettings) return;
-        saying?.Invoke(GameBackups.WorkingText);
+        saying?.Invoke(GameBackupPolicy.WorkingText);
         var region = PlayRegion;
-        var sources = GameBackupSourcesForTest ?? ((settings, boot) => GameBackups.SourcesFor(settings, region, boot));
-        if (await Task.Run(() => GameBackups.BeforePlay(s, () => sources(s, accountBoot))) is { } problem)
+        var sources = GameBackupSourcesForTest ?? ((settings, boot) => GameBackupPolicy.SourcesFor(settings, region, boot));
+        if (await Task.Run(() => GameBackupPolicy.BeforePlay(s, () => sources(s, accountBoot))) is { } problem)
             ShowNotice(problem, "AlertCircleOutline", opens: false, stays: true);
     }
 

@@ -1,4 +1,3 @@
-using Provenance.Common.Social;
 using System.Diagnostics;
 
 namespace Provenance.Common.Social;
@@ -45,7 +44,7 @@ public sealed class PreLaunchLink
     // the Handles page's own progress text while its change is going, there's only one handle request at a time
     public Func<string?> PageWaiting { get; init; } = () => null;
     public Func<int, bool> Alive { get; init; } = ProcessAlive;
-    public Func<int, PolSocialSnapshot?> Read { get; init; } = SocialRequests.TryRead;
+    public Func<int, PolSocialSnapshot?> Read { get; init; } = SocialSnapshotFiles.TryRead;
     public Func<TimeSpan, Task> Delay { get; init; } = t => Task.Delay(t);
     public Func<DateTime> Now { get; init; } = () => DateTime.UtcNow;
 
