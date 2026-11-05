@@ -154,7 +154,8 @@ public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, 
 
     private static readonly Encoding Sjis = MakeSjis("??"), SjisOnly = MakeSjis("");
 
-    // the hook's conversion turns anything Shift-JIS hasn't got into a '?', so counting 2 a char never lets one through
+    // the hook's conversion turns anything Shift-JIS hasn't got into a '?', so counting 2 a char never lets one through.
+    // The fallback runs per UTF-16 unit, so an emoji counts 4, in case polcore puts its stand-in in for each half
     private static Encoding MakeSjis(string missing)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);

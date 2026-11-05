@@ -278,7 +278,7 @@ public partial class MainWindow : Window
     {
         if (_tray == null)
         {
-            _tray = new Services.TrayIcon();
+            _tray = new Services.TrayIcon(() => vm.FriendsWindowTitle);
             _tray.OpenRequested += () => Dispatcher.Invoke(() => ShowFromTray());
             _tray.FriendsRequested += () =>
                 Dispatcher.Invoke(() => { ShowFromTray(); vm.OpenSocialCommand.Execute(null); });

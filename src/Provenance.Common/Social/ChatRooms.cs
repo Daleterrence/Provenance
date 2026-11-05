@@ -109,10 +109,16 @@ public sealed record ChatRoomLines(string Room, IReadOnlyList<ChatLine> Lines);
 // the hook's chat room requests and its lines file. Requests are written whole like the others
 public static class ChatRoomFiles
 {
-    // the hook's own limits: 15 Shift-JIS bytes for a chat name, 23 characters of password, 300 bytes of text. A new
-    // room's from the viewer's form: 30 characters of name, 16 letters and numbers of password, 2-20 people
-    public const int MaxNameBytes = 15, MaxPasswordLength = 23, MaxTextBytes = 300, PageSize = 100;
+    // the hook's own limits: 15 Shift-JIS bytes for a chat name, 23 characters of password, 400 characters of text (the
+    // viewer's box). A new room's from the viewer's form: 30 characters of name, 16 letters and numbers of password,
+    // 2-20 people
+    public const int MaxNameBytes = 15, MaxPasswordLength = 23, MaxTextLength = 400, PageSize = 100;
     public const int MaxRoomName = 30, MaxNewPassword = 16, MinOccupancy = 2, MaxOccupancy = 20, DefaultOccupancy = 10;
+
+    // the hook's cr_fits: polcore sends "PRIVMSG <room> :<frame>" with its checksum and line end in 0x200 bytes, and the
+    // frame's the 6 character face and colour header, the chat name, a tab and the language, then the text
+    public static bool LineFits(string irc, string chatName, string text) =>
+        8 + irc.Length + 2 + 6 + PolMessage.TextBytes(chatName) + 3 + PolMessage.TextBytes(text) + 2 + 8 <= 0x200;
 
     public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, "chatroom.json");
 
@@ -227,8 +233,8 @@ public static class ChatRoomFiles
 // the app's half of the hook's send rule: one line in flight
 public sealed class ChatSendGate
 {
-    // the hook gives up on an ack after 120 s, a little past that the line counts as gone either way
-    public static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(125);
+    // the hook gives up on an ack after 6 minutes, a little past that the line counts as gone either way
+    public static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(365);
 
     private DateTime? _sentAt;
     public string? Token { get; private set; }

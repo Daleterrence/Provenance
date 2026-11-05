@@ -38,7 +38,6 @@ public sealed record ChatLineItem(long Seq, string Text, string Style, DateTimeO
     public bool HasEmote => Emote is not null;
 }
 
-// Name is empty till the member's own hello says it, the viewer lists them nameless till then
 public sealed record ChatMemberItem(string Name, bool Me, bool Master, bool Away, int Key = 0)
 {
     public string Note => Away ? "Away" : Me ? "You" : "";
@@ -185,6 +184,9 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     }
 
     private static string NewToken() => Guid.NewGuid().ToString("N")[..12];
+
+    // the IRC name's fifth character is the room's kind, U for one a user made
+    private static bool Official(string irc) => irc.Length > 4 && irc[4] != 'U';
 
     private int? Pid => _social.SessionPid;
 
@@ -352,8 +354,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     }
 
     private DateTime _masterSentAt;
-    // a little past the hook's own 120 s, for a job it never took or never answered
-    internal static readonly TimeSpan MasterGiveUp = TimeSpan.FromSeconds(130);
+    // a little past the hook's own 6 minutes, for a job it never took or never answered
+    internal static readonly TimeSpan MasterGiveUp = TimeSpan.FromSeconds(370);
 
     internal void MasterTick(DateTime now)
     {
@@ -467,7 +469,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         var text = Compose.Trim().Replace("\r", "").Replace('\n', ' ');
         if (text.Length == 0 || Pid is not { } pid) return;
-        if (PolMessage.TextBytes(text) > ChatRoomFiles.MaxTextBytes)
+        if (text.Length > ChatRoomFiles.MaxTextLength || !ChatRoomFiles.LineFits(_roomIrc, _lastNick ?? "", text))
         {
             SendNote = "That's too long for one line.";
             return;
@@ -596,14 +598,19 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                     SendCommand.NotifyCanExecuteChanged();
                 }
                 RoomName = title;
-                var now = chat.Members.OrderByDescending(x => x.Master).ThenByDescending(x => x.Me)
+                // like the viewer, only members whose hello's given a name are listed or counted
+                var now = chat.Members.Where(m => m.Me || m.Name.Length > 0)
+                    .OrderByDescending(x => x.Master).ThenByDescending(x => x.Me)
                     .Select(m => new ChatMemberItem(m.Me ? m.Name : _social.Filtered(m.Name), m.Me, m.Master, m.Away, m.Key)).ToList();
                 if (!Members.SequenceEqual(now))
                 {
                     Members.Clear();
                     foreach (var m in now) Members.Add(m);
                 }
-                RoomCount = chat.Limit > 0 ? $"{Members.Count}/{chat.Limit}" : $"{Members.Count}";
+                // an official room's master is the server's, never gives a name and has a place past the capacity
+                // (app.dll 0x10088ecc)
+                int limit = chat.Limit - (Official(chat.RoomIrc) ? 1 : 0);
+                RoomCount = limit > 0 ? $"{Members.Count}/{limit}" : $"{Members.Count}";
                 IsMaster = Members.Any(m => m.Me && m.Master);
                 RoomLocked = chat.Locked;
                 return;

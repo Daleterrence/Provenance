@@ -107,10 +107,10 @@ public partial class MainViewModel : ObservableObject
         _startGameImmediately = _settings.Current.StartGameImmediately;
         Social.MessageReceived += (from, text) => Alert(from, $"New message from {from}: {Preview(text, 60)}");
         Social.FriendRequestReceived += (who, mid) =>
-            Alert(null, $"{who} sent you a friend request. Open Friends and messages to answer it.", "AccountPlusOutline",
+            Alert(null, $"{who} sent you a friend request. Open {FriendsWindowTitle} to answer it.", "AccountPlusOutline",
                   stays: true, request: mid);
         Social.GroupInviteReceived += (who, mid) =>
-            Alert(who, $"{who} invited you to a friend group. Open Friends and messages to answer it.", "BellOutline",
+            Alert(who, $"{who} invited you to a friend group. Open {FriendsWindowTitle} to answer it.", "BellOutline",
                   request: mid);
         Social.NoticeReceived += (who, text) => Alert(who, text, "BellOutline");
         Social.GroupChatRequested += OpenGroupChat;
@@ -977,6 +977,9 @@ public partial class MainViewModel : ObservableObject
         if (w.ShowDialog() == true && w.Result is { } pic && pic != Social.MyProfilePictureId)
             Social.SaveProfilePicture(pic);
     }
+
+    // the window OpenSocial brings up, where requests and invitations are answered
+    internal string FriendsWindowTitle => SocialWindow.TitleFor(_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both);
 
     [RelayCommand]
     private void OpenSocial()

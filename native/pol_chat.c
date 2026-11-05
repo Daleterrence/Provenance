@@ -6,9 +6,13 @@
 #define CR_ZONES 32
 #define CR_ROOMS 100
 #define CR_REPLIES 8
-#define CR_WAIT_MS 120000
-#define CR_TRIES 3600         /* turns a command can't be queued (another one's waiting), about the viewer's minute */
-#define CR_TEXT_MAX 300       /* Shift-JIS bytes in a line, the app holds to the same */
+/* the viewer's give-ups (app.dll FUN_10095141, FUN_10097c61): an answer gets 18000 frames, 6 min at its 50 a second at
+   most. A try is one hold loop turn where polcore wouldn't take the command, because another one was waiting */
+#define CR_WAIT_MS 360000
+#define CR_TRIES_ENTER 3600   /* entering's AWAY and JOIN, and the PART, which the viewer never gives up on */
+#define CR_TRIES 5            /* any other command, and the typed line */
+#define CR_TRIES_FRAME 20     /* a queued frame: the hello, its replies and the master's */
+#define CR_TEXT_MAX 400       /* characters, the viewer's box. cr_fits is polcore's real limit */
 #define CR_NAME_MAX 15
 
 typedef struct { char text[0x200]; char chan[0x40]; DWORD lo, hi; int whisper; } cr_raw;
@@ -455,6 +459,11 @@ static void cr_go(int step)
     g_cr_st = step;
     g_cr_tries = 0;
 }
+/* a new room's AWAY and JOIN only get the 5 */
+static int cr_tries_for(int step)
+{
+    return step == CR_PART || (!g_cr_making && (step == CR_AWAY || step == CR_JOIN)) ? CR_TRIES_ENTER : CR_TRIES;
+}
 static void cr_master_end(const char *state)
 {
     /* the old password came off and the new one didn't go on, so the room's open now */
@@ -567,7 +576,7 @@ static void cr_msg_start(BYTE *b, int kind)
 {
     int r = cr_privmsg(b, g_cr_frame);
     if (r == 0) {
-        if (++g_cr_tries < CR_TRIES) { g_cr_msg_kind = kind; return; }
+        if (++g_cr_tries < (kind == CRM_SAY ? CR_TRIES : CR_TRIES_FRAME)) { g_cr_msg_kind = kind; return; }
         r = -1;
     }
     g_cr_tries = 0;
@@ -607,7 +616,6 @@ static void cr_send_request(BYTE *b)
 {
     char buf[0x800], *p, *tok, *text, *colour, *emote;
     static WCHAR w[0x220], t[0x220];
-    char sj[0x200];
     int n;
     if (take_request("chatsend", buf, sizeof buf) < 0) return;
     g_cr_used = 1;
@@ -622,9 +630,11 @@ static void cr_send_request(BYTE *b)
     lstrcpynA(g_cr_stok, tok, sizeof g_cr_stok);
     if (g_cr_st != CR_IN || !g_cr_open || g_cr_leave) { cr_send_state("failed:not in a room"); return; }
     if (!text[0]) { cr_send_state("failed:empty"); return; }
-    if ((n = MultiByteToWideChar(CP_UTF8, 0, text, -1, t, 0x200)) <= 1) { cr_send_state("failed:too long"); return; }
+    if ((n = MultiByteToWideChar(CP_UTF8, 0, text, -1, t, 0x200)) <= 1 || n - 1 > CR_TEXT_MAX) {
+        cr_send_state("failed:too long");
+        return;
+    }
     for (int i = 0; t[i]; i++) if (t[i] < 0x20) t[i] = L' ';
-    if ((n = cr_sjis(b, t, sj, sizeof sj)) < 0 || n > CR_TEXT_MAX) { cr_send_state("failed:too long"); return; }
     cr_frame_say(b, t, w, 0x220);
     if ((n = cr_sjis(b, w, g_cr_frame, sizeof g_cr_frame)) < 0 || !cr_fits(n)) { cr_send_state("failed:too long"); return; }
     cr_send_state("sending");
@@ -1078,7 +1088,7 @@ static void cr_room_pump(BYTE *b, int ctl)
     if (gc_busy()) return;
     r = cr_command(b, g_cr_st);
     if (r == 0) {
-        if (++g_cr_tries < CR_TRIES) return;
+        if (++g_cr_tries < cr_tries_for(g_cr_st)) return;
         r = -1;
     }
     if (r < 0) {

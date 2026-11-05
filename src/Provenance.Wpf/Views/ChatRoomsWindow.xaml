@@ -301,10 +301,10 @@
                         </Grid>
                     </Button>
                     <TextBox x:Name="ComposeBox" Grid.Column="2" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
-                             TextWrapping="Wrap" MaxLength="300" Style="{StaticResource OutlinedField}" Padding="10,8"
+                             TextWrapping="Wrap" MaxLength="400" Style="{StaticResource OutlinedField}" Padding="10,8"
                              materialDesign:HintAssist.Hint="Say something to the room (Enter sends)" materialDesign:HintAssist.IsFloating="False"
                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
-                             PreviewKeyDown="OnComposeKey" PreviewTextInput="OnComposeInput" DataObject.Pasting="OnComposePaste" />
+                             PreviewKeyDown="OnComposeKey" DataObject.Pasting="OnComposePaste" />
                     <Button Grid.Column="3" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom" Style="{StaticResource PolButton}"
                             Command="{Binding SendCommand}" Content="SEND" />
                     <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}"

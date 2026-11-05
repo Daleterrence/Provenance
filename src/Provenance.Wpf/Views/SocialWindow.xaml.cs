@@ -134,13 +134,13 @@ public partial class SocialWindow : Window
             SplitterColumn.Width = new GridLength(0);
             MessagesColumn.Width = HasMessages ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         }
-        (Title, TitleIcon.Glyph, MinWidth, Width) = Part switch
+        (TitleIcon.Glyph, MinWidth, Width) = Part switch
         {
-            SocialPart.Friends => ("Friends", "smiley", 300.0, 360.0),
-            SocialPart.Messages => ("Messages", "chat", 420.0, 640.0),
-            _ => ("Friends and messages", "smiley", 720.0, 900.0),
+            SocialPart.Friends => ("smiley", 300.0, 360.0),
+            SocialPart.Messages => ("chat", 420.0, 640.0),
+            _ => ("smiley", 720.0, 900.0),
         };
-        TitleText.Text = Title;
+        TitleText.Text = Title = TitleFor(Part);
         LayoutIcon.Kind = Part == SocialPart.Both ? PackIconKind.ArrowSplitVertical
                                                   : PackIconKind.ArrowCollapseHorizontal;
         var tip = Part == SocialPart.Both ? "Split into a Friends window and a Messages window"
@@ -148,6 +148,13 @@ public partial class SocialWindow : Window
         LayoutButton.ToolTip = tip;
         System.Windows.Automation.AutomationProperties.SetName(LayoutButton, tip);
     }
+
+    public static string TitleFor(SocialPart part) => part switch
+    {
+        SocialPart.Friends => "Friends",
+        SocialPart.Messages => "Messages",
+        _ => "Friends and messages",
+    };
 
     // so the Messages window's taskbar button says whose conversation it is
     private void ShowFriendInTitle()

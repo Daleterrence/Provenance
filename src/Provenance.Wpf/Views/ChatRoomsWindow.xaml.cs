@@ -90,22 +90,15 @@ public partial class ChatRoomsWindow : Window
         if (_vm.SendCommand.CanExecute(null)) _vm.SendCommand.Execute(null);
     }
 
-    // a line stops at 300 bytes of Shift-JIS, a paste gets cut to what fits
-    private static string WithoutSelection(TextBox box) => box.Text.Remove(box.SelectionStart, box.SelectionLength);
-
-    private void OnComposeInput(object sender, TextCompositionEventArgs e)
-    {
-        if (sender is TextBox box && PolMessage.TextBytes(WithoutSelection(box).Insert(box.SelectionStart, e.Text)) > ChatRoomFiles.MaxTextBytes)
-            e.Handled = true;
-    }
-
+    // MaxLength stops typing at the viewer's 400 characters, a paste gets cut to fit (never half a pair)
     private void OnComposePaste(object sender, DataObjectPastingEventArgs e)
     {
         if (sender is not TextBox box || e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string text) return;
         text = text.Replace("\r", "").Replace('\n', ' ');
-        int room = ChatRoomFiles.MaxTextBytes - PolMessage.TextBytes(WithoutSelection(box));
+        int room = Math.Clamp(ChatRoomFiles.MaxTextLength - (box.Text.Length - box.SelectionLength), 0, text.Length);
+        if (room > 0 && room < text.Length && char.IsHighSurrogate(text[room - 1])) room--;
         e.CancelCommand();
-        box.SelectedText = PolMessage.FitBytes(text, Math.Max(0, room));
+        box.SelectedText = text[..room];
         box.CaretIndex = box.SelectionStart + box.SelectionLength;
     }
 
