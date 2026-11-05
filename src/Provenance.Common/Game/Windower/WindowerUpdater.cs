@@ -68,7 +68,7 @@ public sealed class WindowerUpdater
         var result = new WindowerUpdateResult(Branch);
         result.HookBefore = result.HookAfter = WindowerFiles.FileVersion(HookPath);
         result.LauncherBefore = result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath);
-        var (hold, timedOut) = await TakeMutexAsync(result.Problems, ct);
+        var (hold, timedOut) = await TakeMutexAsync(result.Errors, ct);
         using var held = hold;
         if (hold is null)
         {
@@ -76,7 +76,7 @@ public sealed class WindowerUpdater
             result.HasManifest = WindowerManifest.LoadCached(Folder) is not null;
             return result;
         }
-        using var job = Open(result.Problems, ct);
+        using var job = Open(result.Errors, ct);
         if (job is null) return result;
         bool skip = OthersRunning();
         if (skip)
@@ -414,7 +414,7 @@ public sealed class WindowerUpdater
         foreach (var file in Directory.GetFiles(resDir))
         {
             if (wanted.Contains(Path.GetFileNameWithoutExtension(file))) continue;
-            if (job.Pins.DeleteEntry(file)) result.ResDeleted.Add(Path.GetFileName(file));
+            if (job.Pins.DeleteEntry(file)) result.ResRemoved.Add(Path.GetFileName(file));
             else job.Errors.Add($"{Path.GetFileName(file)} couldn't be removed from res.");
         }
 
@@ -444,7 +444,7 @@ public sealed class WindowerUpdater
             try
             {
                 job.Swap(t, target);
-                result.ResFetched.Add(name + ".lua");
+                result.ResUpdated.Add(name + ".lua");
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
@@ -474,7 +474,7 @@ public sealed class WindowerUpdater
             if (skip && !(p.Required && missing)) continue;
             if (WindowerFiles.FileVersion(dll) == p.Version) continue;
             var written = new List<string>();
-            if (await PluginAsync(job, p, dll, install: false, written) == WindowerFetchOutcome.Downloaded) result.Plugins.Add(p.Name);
+            if (await PluginAsync(job, p, dll, install: false, written) == WindowerFetchOutcome.Downloaded) result.PluginsUpdated.Add(p.Name);
         }
     }
 
@@ -642,7 +642,7 @@ public sealed class WindowerUpdater
                     int n = 0;
                     foreach (var f in addon.Files.Where(f => !libs.Contains(f.Path) && Changed(f)))
                         if (WriteAddonFile(job, zip, f)) n++;
-                    if (n > 0) result.Addons.Add(addon.Name);
+                    if (n > 0) result.AddonsUpdated.Add(addon.Name);
                 }
                 foreach (var f in tree.Libs.Where(Changed))
                     if (WriteAddonFile(job, zip, f)) result.LibFilesWritten++;

@@ -2,7 +2,7 @@ namespace Provenance.Common.Game.Windower;
 
 public sealed class WindowerUpdateResult
 {
-    internal readonly List<string> Plugins = [], Addons = [], ResFetched = [], ResDeleted = [], Problems = [];
+    internal readonly List<string> PluginsUpdated = [], AddonsUpdated = [], ResUpdated = [], ResRemoved = [], Errors = [];
 
     internal WindowerUpdateResult(string branch) => Branch = branch;
 
@@ -16,17 +16,12 @@ public sealed class WindowerUpdateResult
     public Version HookAfter { get; internal set; } = new();
     public Version LauncherBefore { get; internal set; } = new();
     public Version LauncherAfter { get; internal set; } = new();
-    public IReadOnlyList<string> PluginsUpdated => Plugins;
     public bool AddonTreeChanged { get; internal set; }
-    public IReadOnlyList<string> AddonsUpdated => Addons;
     public int LibFilesWritten { get; internal set; }
-    public IReadOnlyList<string> ResUpdated => ResFetched;
-    public IReadOnlyList<string> ResRemoved => ResDeleted;
-    public IReadOnlyList<string> Errors => Problems;
     public IReadOnlyList<string> UnreachableHosts { get; internal set; } = [];
 
     public bool HookChanged => HookBefore != HookAfter;
     public bool LauncherChanged => LauncherBefore != LauncherAfter;
-    public bool Changed => HookChanged || LauncherChanged || Plugins.Count > 0 || Addons.Count > 0 || LibFilesWritten > 0 ||
-                           ResFetched.Count > 0 || ResDeleted.Count > 0;
+    public bool Changed => HookChanged || LauncherChanged || PluginsUpdated.Count > 0 || AddonsUpdated.Count > 0 || LibFilesWritten > 0 ||
+                           ResUpdated.Count > 0 || ResRemoved.Count > 0;
 }

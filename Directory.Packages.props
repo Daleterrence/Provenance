@@ -16,6 +16,8 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="6.0.0" />
     <PackageVersion Include="SharpCompress" Version="0.50.7" />
     <PackageVersion Include="SharpVectors.Wpf" Version="1.8.6" />
+    <!-- the Windows Desktop runtime's own version, so the app keeps loading the copy it already has -->
+    <PackageVersion Include="System.Diagnostics.EventLog" Version="10.0.14" />
     <!-- same release as vpk, Update.exe comes from vpk and the update code from this. tools/pack-release.ps1 checks -->
     <PackageVersion Include="Velopack" Version="1.2.161" />
   </ItemGroup>

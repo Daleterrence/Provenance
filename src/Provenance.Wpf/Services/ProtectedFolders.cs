@@ -10,8 +10,8 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// the admin-only folders: C:\ProgramData\Provenance's and the installer's download folder. Never %TEMP% or
-// %APPDATA%, where a program could swap a file for a link and get written through
+// C:\ProgramData\Provenance's admin-only folders, and the locking the installer's download folder uses too. Never
+// %TEMP% or %APPDATA%, where a program could swap a file for a link and get written through
 public static class ProtectedFolders
 {
     // what isn't Provenance's is moved in here with one rename and cleared later, never deleted where it was
@@ -637,8 +637,10 @@ public static class ProtectedFolders
         finally { Marshal.FreeHGlobal(pSd); }
     }
 
-    internal const uint Delete = 0x00010000, ReadControl = 0x00020000, WriteDac = 0x00040000, WriteOwner = 0x00080000, Synchronize = 0x00100000;
-    internal const uint ListDirectory = 0x1, ReadAttributes = 0x80, DirectoryFile = 0x1;
+    private const uint Delete = 0x00010000, WriteDac = 0x00040000, WriteOwner = 0x00080000;
+    internal const uint ReadControl = 0x00020000, Synchronize = 0x00100000;
+    internal const uint ListDirectory = 0x1, ReadAttributes = 0x80;
+    private const uint DirectoryFile = 0x1;
     private const uint LookAccess = ReadControl | ReadAttributes;
     private const uint HoldAccess = ReadControl | WriteDac | WriteOwner | ReadAttributes | Synchronize;   // none of it is share-checked
     private const uint ShareReadWrite = 0x1 | 0x2, ShareAll = 0x1 | 0x2 | 0x4;   // no FILE_SHARE_DELETE: it can't be renamed while held

@@ -6,7 +6,6 @@ using System.Net.Http;
 using Provenance.Common.Game;
 using Provenance.Wpf.Views;
 using Serilog;
-using Serilog.Events;
 using Velopack;
 using Velopack.Locators;
 using Velopack.Logging;
@@ -281,23 +280,5 @@ public static class SelfUpdate
                 return new VelopackAssetFeed();
             }
         }
-    }
-}
-
-// Velopack's lines go to its own log too, these put them next to mine
-internal sealed class VelopackLog : IVelopackLogger
-{
-    public void Log(VelopackLogLevel level, string? message, Exception? exception)
-    {
-        var to = level switch
-        {
-            VelopackLogLevel.Trace => LogEventLevel.Verbose,
-            VelopackLogLevel.Debug => LogEventLevel.Debug,
-            VelopackLogLevel.Information => LogEventLevel.Information,
-            VelopackLogLevel.Warning => LogEventLevel.Warning,
-            VelopackLogLevel.Error => LogEventLevel.Error,
-            _ => LogEventLevel.Fatal,
-        };
-        Serilog.Log.Write(to, exception, "Velopack: {Message}", message);
     }
 }

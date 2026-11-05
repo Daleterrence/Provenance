@@ -6,11 +6,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Provenance" />
     <InternalsVisibleTo Include="provenance-cli" />
     <InternalsVisibleTo Include="provenance-app-tests" />
     <PackageReference Include="NaCl.Net" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="SharpCompress" />
+    <PackageReference Include="System.Diagnostics.EventLog" />
   </ItemGroup>
 
 </Project>
