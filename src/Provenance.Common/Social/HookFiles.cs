@@ -20,7 +20,8 @@ public static class HookFiles
     public static string[] RequestPaths(int pid, string ext, bool tmp = true)
     {
         var path = PathFor(pid, ext);
-        return tmp ? [path, path + ".taking", path + ".tmp"] : [path, path + ".taking"];
+        string[] all = [path, path + ".taking", path + ".tmp"];
+        return tmp ? all : all[..2];
     }
 
     public static void DeleteRequest(int pid, string ext)

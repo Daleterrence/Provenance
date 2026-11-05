@@ -8,7 +8,6 @@ using Provenance.Common.Credentials;
 using Provenance.Common.Game;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Locks;
-using Provenance.Common.Mirror;
 using Provenance.Common.Multi;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
