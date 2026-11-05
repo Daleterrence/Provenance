@@ -1,0 +1,498 @@
+<Window x:Class="Provenance.Wpf.Views.Social.SocialWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels"
+        xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+        xmlns:local="clr-namespace:Provenance.Wpf.Views.Social"
+        mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialViewModel}"
+        Title="Friends and messages" Icon="/Assets/provenance.ico"
+        Width="900" Height="640" MinWidth="720" MinHeight="480" WindowStyle="None" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Bg.Base}"
+        TextElement.Foreground="{DynamicResource Text.1}" FontFamily="{DynamicResource Font.Body}">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <!-- a button dressed as a link so Tab and Enter still reach it. No BasedOn keeps MaterialDesign's look off -->
+        <Style x:Key="LineLink" TargetType="Button">
+            <Setter Property="KeyboardNavigation.AcceptsReturn" Value="True" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock x:Name="Label" Background="Transparent"
+                                   Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Label" Property="TextDecorations" Value="Underline" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Label" Property="TextDecorations" Value="Underline" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Tag is true on the open tab, which gets an underline as well as the colour -->
+        <Style x:Key="Tab" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
+            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Primary}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- the tooltip and icon (Tag) follow the window's state -->
+        <Style x:Key="MaxButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="ToolTip" Value="Maximise" />
+            <Setter Property="Tag" Value="{x:Static materialDesign:PackIconKind.WindowMaximize}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}"
+                             Value="Maximized">
+                    <Setter Property="ToolTip" Value="Restore down" />
+                    <Setter Property="Tag" Value="{x:Static materialDesign:PackIconKind.WindowRestore}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate x:Key="ChatLine">
+            <StackPanel>
+                <TextBlock Text="{Binding DayBreak}" HorizontalAlignment="Center" Margin="0,12,0,2" FontSize="11"
+                           Foreground="{DynamicResource Text.3}"
+                           Visibility="{Binding DayBreak, Converter={StaticResource NullToVisibilityConverter}}" />
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <controls:ProfilePictureCircle x:Name="TheirProfilePicture" Diameter="30" Margin="0,6,8,0"
+                                                   VerticalAlignment="Top"
+                                                   Source="{Binding DataContext.SelectedFriend.Avatar, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                   InGame="{Binding DataContext.SelectedFriend.InGame, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                    <controls:ProfilePictureCircle x:Name="MyProfilePicture" Grid.Column="2" Diameter="30" Margin="8,6,0,0"
+                                                   VerticalAlignment="Top" Visibility="Collapsed"
+                                                   Source="{Binding DataContext.Avatar, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                    <StackPanel x:Name="Line" Grid.Column="1" Margin="0,4" HorizontalAlignment="Left">
+                        <Border x:Name="Bubble" MaxWidth="420" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}"
+                                Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
+                            <!-- read-only so it can be copied, no Tab stop so Tab goes on to the compose box -->
+                            <TextBox x:Name="Body" Style="{x:Null}" Text="{Binding Display, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
+                                     IsReadOnly="True" IsTabStop="False" BorderThickness="0" Background="Transparent" Padding="0"
+                                     Foreground="{DynamicResource Text.1}" CaretBrush="Transparent" Cursor="IBeam"
+                                     SelectionBrush="{DynamicResource Primary}" Tag="{Binding}" ContextMenuOpening="OnLineMenu">
+                                <TextBox.ContextMenu>
+                                    <ContextMenu />
+                                </TextBox.ContextMenu>
+                            </TextBox>
+                        </Border>
+                        <TextBlock x:Name="Meta" FontSize="10.5" Margin="6,2,6,0" Foreground="{DynamicResource Text.3}"
+                                   Text="{Binding TimeText}" ToolTip="{Binding WhenText}" />
+                        <StackPanel x:Name="SendState" Orientation="Horizontal" Margin="6,0" HorizontalAlignment="Right"
+                                    Visibility="Collapsed">
+                            <TextBlock x:Name="SendStateText" FontSize="10.5" Foreground="{DynamicResource Text.3}" Text="{Binding StateText}" />
+                            <Button x:Name="Retry" Style="{StaticResource LineLink}" Foreground="{DynamicResource Primary}"
+                                    Content="Send again" Visibility="Collapsed" Tag="{Binding}" Click="OnResend" />
+                            <Button x:Name="RemoveLine" Style="{StaticResource LineLink}" Foreground="{DynamicResource Text.3}"
+                                    Content="Remove" Visibility="Collapsed" Tag="{Binding}" Click="OnRemoveFailed" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Outgoing}" Value="True">
+                    <Setter TargetName="Line" Property="HorizontalAlignment" Value="Right" />
+                    <Setter TargetName="TheirProfilePicture" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="MyProfilePicture" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Bubble" Property="Background" Value="{DynamicResource Primary.Muted}" />
+                    <Setter TargetName="Meta" Property="HorizontalAlignment" Value="Right" />
+                    <Setter TargetName="SendState" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Failed}" Value="True">
+                    <Setter TargetName="SendStateText" Property="Foreground" Value="{DynamicResource State.Warn}" />
+                    <Setter TargetName="Retry" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="RemoveLine" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <!-- a POL notice or something I did: a quiet line in the middle -->
+                <DataTrigger Binding="{Binding State}" Value="notice">
+                    <Setter TargetName="Line" Property="HorizontalAlignment" Value="Center" />
+                    <Setter TargetName="TheirProfilePicture" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="MyProfilePicture" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Bubble" Property="Background" Value="Transparent" />
+                    <Setter TargetName="Bubble" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Center" />
+                    <Setter TargetName="Meta" Property="HorizontalAlignment" Value="Center" />
+                    <Setter TargetName="SendState" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Body" Property="FontStyle" Value="Italic" />
+                    <Setter TargetName="Body" Property="Foreground" Value="{DynamicResource Text.3}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid RowDefinitions="40,*">
+        <Grid Background="{DynamicResource Title.Bg}" TextElement.Foreground="{DynamicResource Text.1}">
+            <Grid.Resources>
+                <ResourceDictionary Source="/Provenance;component/Themes/TitleBar.xaml" />
+            </Grid.Resources>
+            <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
+                <controls:SvgIcon x:Name="TitleIcon" Glyph="smiley" Width="22" Height="22" />
+                <TextBlock x:Name="TitleText" Text="Friends and messages" FontSize="14" Margin="10,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="AddFriendButton" Height="28" Margin="0,0,8,0" Padding="6,0,10,0" Style="{StaticResource PolButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                        IsEnabled="{Binding CanEdit}" Click="OnAddFriend" ToolTip="Search PlayOnline and send a friend request" AutomationProperties.Name="Search PlayOnline and send a friend request">
+                    <StackPanel Orientation="Horizontal">
+                        <controls:SvgIcon Glyph="search" />
+                        <TextBlock Text="ADD A FRIEND" Margin="6,0,0,0" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="LayoutButton" Width="44" Height="40" Padding="0" Foreground="{DynamicResource Text.2}"
+                        Style="{StaticResource IconButton}"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnLayout">
+                    <materialDesign:PackIcon x:Name="LayoutIcon" Kind="ArrowSplitVertical" Width="18" Height="18" />
+                </Button>
+                <Button x:Name="MaximizeButton" Width="44" Height="40" Padding="0" Foreground="{DynamicResource Text.2}"
+                        Style="{StaticResource MaxButton}" Click="OnMaximize"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <materialDesign:PackIcon Width="18" Height="18" Kind="{Binding Tag, ElementName=MaximizeButton}" />
+                </Button>
+                <Button Width="44" Height="40" Padding="0"
+                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
+                    <controls:SvgIcon Glyph="close" Flat="True" Width="18" Height="18" />
+                </Button>
+            </StackPanel>
+            <Border Style="{StaticResource TitleEdge}" />
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="FriendsColumn" Width="320" MinWidth="260" />
+                <ColumnDefinition x:Name="SplitterColumn" Width="5" />
+                <ColumnDefinition x:Name="MessagesColumn" Width="*" MinWidth="360" />
+            </Grid.ColumnDefinitions>
+
+            <Grid x:Name="FriendsPart" Background="{DynamicResource Surface.1}" RowDefinitions="Auto,*,Auto">
+                <Expander Grid.Row="2" Background="{DynamicResource Surface.1}" BorderBrush="{DynamicResource Border.Pane}"
+                          BorderThickness="0,1,0,0" Padding="8,0,8,8"
+                          Visibility="{Binding HasBlocked, Converter={StaticResource BoolToVis}}">
+                    <Expander.Header>
+                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Text.3}"
+                                   ToolTip="You don't get messages from anyone on this list.">
+                            <Run Text="Ignored (" /><Run Text="{Binding Blocked.Count, Mode=OneWay}" /><Run Text=")" />
+                        </TextBlock>
+                    </Expander.Header>
+                    <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Blocked}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="6,2" ColumnDefinitions="*,Auto">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="all their handles" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource Text.3}"
+                                                       ToolTip="Every handle on this person's PlayOnline ID is ignored, not just this one."
+                                                       Visibility="{Binding AllHandles, Converter={StaticResource BoolToVis}}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Style="{StaticResource PolButton}" FontSize="11" Height="26"
+                                                Padding="8,0" Content="STOP IGNORING" Tag="{Binding}" Click="OnUnignore"
+                                                IsEnabled="{Binding DataContext.CanEdit, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Expander>
+
+                <StackPanel Margin="14,12,14,8">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Grid>
+                            <controls:ProfilePictureCircle Diameter="52" Source="{Binding Avatar}" Cursor="Hand"
+                                                           ToolTip="Change your profile picture"
+                                                           MouseLeftButtonUp="OnAvatarClick" />
+                            <ProgressBar Width="52" Height="52" IsIndeterminate="True" Value="0" IsHitTestVisible="False"
+                                         Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                         Visibility="{Binding ProfilePictureSaving, Converter={StaticResource BoolToVis}}" />
+                        </Grid>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock Text="{Binding AccountName}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                                <Button Grid.Column="1" HorizontalAlignment="Left" Margin="6,0,0,0" Width="28" Height="28" Padding="0"
+                                        Style="{StaticResource IconButton}"
+                                        ToolTip="Edit your PlayOnline profile" AutomationProperties.Name="Edit your PlayOnline profile" Click="OnEditProfile" IsEnabled="{Binding Connected}">
+                                    <controls:SvgIcon Glyph="card" />
+                                </Button>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                                <ComboBox Style="{StaticResource StatusPicker}" VerticalAlignment="Center"
+                                          IsEnabled="{Binding StatusEditable}"
+                                          ItemsSource="{Binding StatusLabels}" SelectedIndex="{Binding MyStatusIndex}" />
+                                <ProgressBar Width="12" Height="12" Margin="6,0,0,0" IsIndeterminate="True" Value="0"
+                                             Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                             ToolTip="Waiting for PlayOnline to confirm"
+                                             Visibility="{Binding StatusPending, Converter={StaticResource BoolToVis}}" />
+                                <TextBlock Text="{Binding Summary}" Margin="10,0,0,0" FontSize="12" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Text.3}" />
+                            </StackPanel>
+                            <!-- my comment, edited in place. The hover underline and idle pencil hint it's editable -->
+                            <Border Margin="0,1,0,0" BorderThickness="0,0,0,1" IsEnabled="{Binding CanEdit}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent" />
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource Text.3}" />
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="BorderBrush" Value="Transparent" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox x:Name="CommentBox" Padding="0,2" FontSize="12" FontStyle="Italic" MaxLength="49"
+                                             Style="{StaticResource PlainField}" BorderThickness="0"
+                                             Foreground="{DynamicResource Text.2}"
+                                             materialDesign:HintAssist.Hint="Add a comment" materialDesign:HintAssist.IsFloating="False"
+                                             materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
+                                             materialDesign:TextFieldAssist.DecorationVisibility="Collapsed"
+                                             Text="{Binding MyComment, Mode=OneWay}"
+                                             ToolTip="Your friends see this comment. Press Enter to save it, or press Esc or click away to cancel."
+                                             KeyDown="OnCommentKey" GotKeyboardFocus="OnCommentFocus" LostKeyboardFocus="OnCommentLostFocus" />
+                                    <controls:SvgIcon Grid.Column="1" Glyph="edit" Flat="True" Width="12" Height="12" Margin="4,0,2,0"
+                                                      VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" Cursor="Hand"
+                                                      Background="Transparent" ToolTip="Edit your comment" MouseLeftButtonUp="OnCommentPencil">
+                                        <controls:SvgIcon.Style>
+                                            <Style TargetType="controls:SvgIcon">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsKeyboardFocused, ElementName=CommentBox}" Value="True">
+                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                    </DataTrigger>
+                                                    <Trigger Property="IsEnabled" Value="False">
+                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </controls:SvgIcon.Style>
+                                    </controls:SvgIcon>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
+                               Text="{Binding StatusNote}"
+                               Visibility="{Binding StatusNote, Converter={StaticResource NullToVisibilityConverter}}" />
+                    <StackPanel Orientation="Horizontal" Margin="-6,8,0,0">
+                        <Button Style="{StaticResource Tab}" Tag="{Binding ShowFriends}" Content="FRIENDS"
+                                Command="{Binding ShowFriendsTabCommand}" FontSize="12" Padding="10,0" Height="28" />
+                        <Button Style="{StaticResource Tab}" Tag="{Binding ShowGroups}" Content="GROUPS"
+                                Command="{Binding ShowGroupsTabCommand}" FontSize="12" Padding="10,0" Height="28" />
+                    </StackPanel>
+                </StackPanel>
+
+                <local:FriendsList x:Name="FriendList" Grid.Row="1" Visibility="{Binding ShowFriends, Converter={StaticResource BoolToVis}}" />
+
+                <Grid Grid.Row="1" RowDefinitions="Auto,*"
+                      Visibility="{Binding ShowGroups, Converter={StaticResource BoolToVis}}">
+                    <Button HorizontalAlignment="Left" Margin="10,4,0,4" Padding="6,0,10,0" Style="{StaticResource PolButton}"
+                            FontSize="12" IsEnabled="{Binding CanEdit}" Click="OnCreateGroup" AutomationProperties.Name="Create group">
+                        <StackPanel Orientation="Horizontal">
+                            <controls:SvgIcon Glyph="groupchat2" />
+                            <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="CREATE GROUP" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock Grid.Row="1" Margin="16,8" FontSize="12" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
+                               Text="You're not in any friend groups yet. A group lets up to 64 friends see each other."
+                               Visibility="{Binding NoGroups, Converter={StaticResource BoolToVis}}" />
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Groups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,6">
+                                        <!-- the menu's filled as it opens, the dots button opens the same one -->
+                                        <Border Padding="12,6,8,6" Background="Transparent" Tag="{Binding}"
+                                                ContextMenuOpening="OnRowMenu" ToolTip="Right-click for group options">
+                                            <Border.ContextMenu>
+                                                <ContextMenu />
+                                            </Border.ContextMenu>
+                                            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
+                                                        <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding RoleText, Mode=OneWay}" FontSize="11" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="{DynamicResource Text.3}" />
+                                                </StackPanel>
+                                                <Border Grid.Column="1" MinWidth="20" Height="20" CornerRadius="10" Padding="6,0" Margin="8,0,0,0"
+                                                        Background="{DynamicResource Primary}" VerticalAlignment="Center"
+                                                        Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}" ToolTip="New group chat lines">
+                                                    <TextBlock Text="{Binding Unread}" FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource Text.OnPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <Button x:Name="GroupChatButton" Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Primary}"
+                                                        ToolTip="Display the group chat screen." AutomationProperties.Name="Group Chat"
+                                                        Command="{Binding DataContext.OpenGroupChatCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding DataContext.CanGroupChat, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        Visibility="{Binding CanChat, Converter={StaticResource BoolToVis}}">
+                                                    <materialDesign:PackIcon Kind="ForumOutline" Width="18" Height="18" />
+                                                </Button>
+                                                <Button Grid.Column="3" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
+                                                        ToolTip="Group actions" AutomationProperties.Name="Group actions" Click="OnRowMenuButton">
+                                                    <controls:SvgIcon Glyph="more" Width="18" Height="18" />
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                        <ItemsControl ItemsSource="{Binding Members}" Tag="{Binding}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="16,3,8,3" Background="Transparent" Tag="{Binding}"
+                                                          ColumnDefinitions="Auto,*,Auto"
+                                                          ContextMenuOpening="OnRowMenu">
+                                                        <Grid.ContextMenu>
+                                                            <ContextMenu />
+                                                        </Grid.ContextMenu>
+                                                        <controls:ProfilePictureCircle Diameter="30" Margin="0,0,10,0"
+                                                                                       Source="{Binding Avatar}" />
+                                                        <!-- no menu on my own row -->
+                                                        <Button Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                                Foreground="{DynamicResource Text.3}" ToolTip="Member actions" AutomationProperties.Name="Member actions" Click="OnRowMenuButton">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Me}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                            <controls:SvgIcon Glyph="more" Width="18" Height="18" />
+                                                        </Button>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                            <TextBlock FontSize="13" TextTrimming="CharacterEllipsis">
+                                                                <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding RoleText, Mode=OneWay}" FontSize="11" Foreground="{DynamicResource Text.3}" />
+                                                            </TextBlock>
+                                                            <DockPanel>
+                                                                <controls:StatusMark DockPanel.Dock="Left" Status="{Binding StatusLabel}" Margin="0,0,6,0" />
+                                                                <TextBlock FontSize="11" Foreground="{DynamicResource Text.3}" TextTrimming="CharacterEllipsis">
+                                                                    <Run Text="{Binding StatusLabel, Mode=OneWay}" /><Run Text="{Binding Comment, Mode=OneWay, StringFormat={}   {0}}" />
+                                                                </TextBlock>
+                                                            </DockPanel>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+
+            <GridSplitter x:Name="PartSplitter" Grid.Column="1" Style="{StaticResource PaneSplitter}" ToolTip="Drag to resize" />
+
+            <Grid x:Name="MessagesPart" Grid.Column="2" Background="{DynamicResource Bg.Base}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24"
+                            Visibility="{Binding NoSelection, Converter={StaticResource BoolToVis}}">
+                    <controls:SvgIcon Glyph="mail" Flat="True" Width="44" Height="44"
+                                      HorizontalAlignment="Center" Foreground="{DynamicResource Text.3}" />
+                    <TextBlock Margin="0,10,0,4" HorizontalAlignment="Center" FontSize="14"
+                               Text="{Binding NothingSelected}" />
+                    <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="{DynamicResource Text.3}"
+                               Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}">
+                        <Run Text="{Binding UnreadCount, Mode=OneWay}" /><Run Text=" unread" />
+                    </TextBlock>
+                    <TextBlock Margin="0,12,0,0" HorizontalAlignment="Center" FontSize="12" Foreground="{DynamicResource State.Warn}"
+                               Text="Provenance couldn't get your messages from PlayOnline."
+                               Visibility="{Binding MessagesUnavailable, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+
+                <Grid RowDefinitions="Auto,*,Auto"
+                      Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
+                    <Border Padding="16,10" BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
+                            Background="{DynamicResource Surface.1}">
+                        <Grid>
+                            <Button HorizontalAlignment="Right" VerticalAlignment="Center" Width="32" Height="32" Padding="0"
+                                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
+                                    ToolTip="Actions for this person" AutomationProperties.Name="Actions for this person" Click="OnConversationMenu">
+                                <controls:SvgIcon Glyph="more" Width="20" Height="20" />
+                            </Button>
+                            <Grid Margin="0,0,40,0" ColumnDefinitions="Auto,*">
+                                <controls:ProfilePictureCircle Diameter="40" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                               Source="{Binding SelectedFriend.Avatar}" InGame="{Binding SelectedFriend.InGame}" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SelectedFriend.Name}" FontSize="15" FontWeight="SemiBold" />
+                                    <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,Auto,*">
+                                        <controls:StatusMark Status="{Binding SelectedFriend.StatusLabel}" Margin="0,0,6,0" />
+                                        <TextBlock Grid.Column="1" Text="{Binding SelectedFriend.StatusLabel}" FontSize="12"
+                                                   Foreground="{DynamicResource Text.3}" VerticalAlignment="Center" />
+                                        <controls:FitText Grid.Column="2" Long="{Binding SelectedFriend.Playing}" Short="{Binding SelectedFriend.PlayingShort}"
+                                                          FontSize="12" Foreground="{DynamicResource Text.3}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                    <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
+                        <ItemsControl ItemsSource="{Binding Conversation}" ItemTemplate="{StaticResource ChatLine}" />
+                    </ScrollViewer>
+                    <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" FontSize="12"
+                               Foreground="{DynamicResource Text.3}" TextWrapping="Wrap" TextAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Conversation.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        <Run Text="No messages with " /><Run Text="{Binding SelectedFriend.Name, Mode=OneWay}" /><Run Text=" yet." />
+                    </TextBlock>
+                    <Border Grid.Row="2" Style="{StaticResource FooterBar}">
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
+                            <!-- MaxLength's only a backstop, the real limit's 300 bytes -->
+                            <TextBox x:Name="ComposeBox" MinHeight="40" MaxHeight="120" FontSize="13"
+                                     Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
+                                     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="300"
+                                     Style="{StaticResource OutlinedField}" Padding="10,8"
+                                     materialDesign:HintAssist.Hint="Write a message (Enter sends, Shift+Enter adds a line)"
+                                     materialDesign:HintAssist.IsFloating="False"
+                                     materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
+                                     IsEnabled="{Binding CanCompose}" PreviewKeyDown="OnComposeKey"
+                                     PreviewTextInput="OnComposeInput" DataObject.Pasting="OnComposePaste" />
+                            <Button Grid.Column="1" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom"
+                                    Style="{StaticResource PolButton}" Command="{Binding SendCommand}" Content="SEND" />
+                            <DockPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0">
+                                <!-- the "n/300" count only shows near the limit -->
+                                <TextBlock DockPanel.Dock="Right" Margin="10,0,0,0" FontSize="11" Foreground="{DynamicResource Text.3}"
+                                           Text="{Binding ComposeCount}"
+                                           Visibility="{Binding ComposeCountShown, Converter={StaticResource BoolToVis}}" />
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource Text.3}"
+                                           Text="{Binding ComposeNote}" />
+                            </DockPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

@@ -13,7 +13,7 @@ using Serilog;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
-using Provenance.Wpf.Views;
+using Provenance.Wpf.Views.Dialogs;
 
 namespace Provenance.Wpf.ViewModels;
 

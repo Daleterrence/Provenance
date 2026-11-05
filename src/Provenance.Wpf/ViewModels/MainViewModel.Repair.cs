@@ -7,7 +7,7 @@ using Provenance.Common.Patcher;
 using Serilog;
 using Provenance.Common.Mirror;
 using Provenance.Common.PolFormat;
-using Provenance.Wpf.Views;
+using Provenance.Wpf.Views.Install;
 
 namespace Provenance.Wpf.ViewModels;
 

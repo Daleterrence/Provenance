@@ -1,0 +1,283 @@
+<UserControl x:Class="Provenance.Wpf.Views.Settings.AddonsPluginsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels"
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+             TextElement.Foreground="{DynamicResource Text.1}">
+    <UserControl.Resources>
+        <Style x:Key="Section" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,4,0,10" />
+        </Style>
+        <Style x:Key="Help" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Surface.1}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border.Hair}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style x:Key="Switch" TargetType="ToggleButton" BasedOn="{StaticResource MaterialDesignSwitchToggleButton}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Search" TargetType="TextBox" BasedOn="{StaticResource OutlinedField}">
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
+            <Setter Property="materialDesign:TextFieldAssist.HasLeadingIcon" Value="True" />
+            <Setter Property="materialDesign:TextFieldAssist.LeadingIcon" Value="Magnify" />
+            <Setter Property="materialDesign:TextFieldAssist.HasClearButton" Value="True" />
+        </Style>
+        <!-- Addons, Plugins and Ashita's POL plugins across the top, one list each, sharing the width evenly -->
+        <Style x:Key="SubTabs" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="1" />
+                    </ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Cursor" Value="Hand" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Bd" Margin="3,0" Padding="16,8" CornerRadius="{StaticResource Radius.Panel}" Background="Transparent"
+                                            BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
+                                        <TextBlock x:Name="Label" Text="{Binding}" FontSize="13" Foreground="{DynamicResource Text.2}"
+                                                   HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.3}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Primary.Muted}" />
+                                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Text.1}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- the sub-tabs sit above the list but outside what scrolls, and beside the scroll bar rather than over it, so
+             they line up with the cards either way -->
+        <ControlTemplate x:Key="UnderSubTabs" TargetType="ScrollViewer">
+            <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,Auto">
+                <ListBox ItemsSource="{Binding Tabs}" SelectedIndex="{Binding Tab}" Style="{StaticResource SubTabs}" Margin="25,18,25,6"
+                         Visibility="{Binding HasLists, Converter={StaticResource BoolToVis}}" AutomationProperties.Name="Lists" />
+                <ScrollContentPresenter Grid.Row="1" CanContentScroll="{TemplateBinding CanContentScroll}" />
+                <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="{TemplateBinding ScrollableHeight}"
+                           ViewportSize="{TemplateBinding ViewportHeight}" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"
+                           Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}" />
+            </Grid>
+        </ControlTemplate>
+
+        <!-- "No addons found in ..." or no matches, gone when there's nothing to say -->
+        <Style x:Key="ListNote" TargetType="TextBlock" BasedOn="{StaticResource Help}">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Visibility" Value="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource NullToVisibilityConverter}}" />
+        </Style>
+
+        <DataTemplate x:Key="Badge">
+            <Border CornerRadius="4" Padding="6,1" Margin="0,1,6,1" VerticalAlignment="Center" ToolTip="{Binding Tip}">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{DynamicResource Badge.Neutral}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Warn}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Badge.Maintenance}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding Text}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Text.1}" />
+            </Border>
+        </DataTemplate>
+
+        <!-- the top of the page is the first item in the list, so it scrolls away like the other tabs' pages do. The
+             sub-tabs stay put above it -->
+        <DataTemplate DataType="{x:Type vm:AddonsPluginsViewModel}">
+            <StackPanel>
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Margin" Value="28,22,28,0" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasLists}" Value="True">
+                                <Setter Property="Margin" Value="28,12,28,0" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <TextBlock Text="{Binding PageTitle}" Style="{StaticResource Section}" />
+                <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
+                           Visibility="{Binding Message, Converter={StaticResource NullToVisibilityConverter}}" />
+                <StackPanel Visibility="{Binding HasLists, Converter={StaticResource BoolToVis}}">
+                    <Border Style="{StaticResource PlatformCard}" Tag="{Binding CardPlatform}" Margin="0,0,0,12">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <controls:SvgIcon Glyph="plugin" Flat="True" Width="22" Height="22" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                <TextBlock Text="{Binding CardHeading}" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding CardName}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <TextBlock Text="{Binding Intro}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,14" />
+                    <TextBlock Text="{Binding Problem}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource State.Warn}" Margin="0,0,0,14"
+                               Visibility="{Binding Problem, Converter={StaticResource NullToVisibilityConverter}}" />
+                    <Border Style="{StaticResource Card}" Padding="16,10" Margin="0,0,0,18"
+                            Visibility="{Binding IsWindower, Converter={StaticResource BoolToVis}}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Use the same addons/plugins for every profile" FontSize="13" TextWrapping="Wrap" />
+                                <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
+                                           Text="By default, Windower loads the same addons and plugins for every profile. Disable this to instead load different ones for each of your profiles." />
+                            </StackPanel>
+                            <ToggleButton Grid.Column="1" Margin="16,0,0,0" Style="{StaticResource Switch}" IsChecked="{Binding UseGlobal}" IsEnabled="{Binding CanChangeUseGlobal}"
+                                          AutomationProperties.Name="Use the same addons/plugins for every profile" />
+                        </Grid>
+                    </Border>
+                    <TextBox Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource Search}"
+                             materialDesign:HintAssist.Hint="Search by name, author or description"
+                             AutomationProperties.Name="Search addons and plugins" />
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:AddonsHeading}">
+            <StackPanel Margin="28,16,28,0">
+                <TextBlock Text="{Binding Help}" Style="{StaticResource Help}" FontSize="12" Margin="0,0,0,10"
+                           Visibility="{Binding Help, Converter={StaticResource NullToVisibilityConverter}}" />
+                <TextBlock Text="{Binding Warning}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12" Foreground="{DynamicResource State.Warn}"
+                           Visibility="{Binding Warning, Converter={StaticResource NullToVisibilityConverter}}" />
+                <TextBlock Text="{Binding Note}" Style="{StaticResource ListNote}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:AddonRow}">
+            <Border Margin="28,0,28,6" Padding="14,10">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Incompatible}" Value="True">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                    <StackPanel VerticalAlignment="Center">
+                        <WrapPanel>
+                            <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <controls:SvgIcon Glyph="verified" Flat="True" Width="15" Height="15" Margin="-4,0,8,0" VerticalAlignment="Center" Background="Transparent"
+                                              ToolTip="{Binding VerifiedTip}" AutomationProperties.Name="{Binding VerifiedTip}"
+                                              Visibility="{Binding VerifiedTip, Converter={StaticResource NullToVisibilityConverter}}">
+                                <controls:SvgIcon.Style>
+                                    <Style TargetType="controls:SvgIcon">
+                                        <Setter Property="Foreground" Value="{DynamicResource Primary}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Team}" Value="Windower">
+                                                <Setter Property="Foreground" Value="{DynamicResource Platform.Windower}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Team}" Value="Ashita">
+                                                <Setter Property="Foreground" Value="{DynamicResource Platform.Ashita}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </controls:SvgIcon.Style>
+                            </controls:SvgIcon>
+                            <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Visibility="{Binding Details, Converter={StaticResource NullToVisibilityConverter}}" />
+                            <ItemsControl ItemsSource="{Binding Badges}" ItemTemplate="{StaticResource Badge}" Focusable="False" VerticalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Description}" Style="{StaticResource Help}" Margin="0,3,0,0"
+                                   Visibility="{Binding Description, Converter={StaticResource NullToVisibilityConverter}}" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Margin="12,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                            Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                            Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}" ToolTip="Open folder" AutomationProperties.Name="Open folder"
+                            Visibility="{Binding Location, Converter={StaticResource NullToVisibilityConverter}}">
+                        <controls:SvgIcon Glyph="folder" Width="18" Height="18" />
+                    </Button>
+                    <Button Grid.Column="2" Margin="16,0,0,0" Height="30" Padding="12,0" FontSize="12" VerticalAlignment="Center"
+                            Command="{Binding DataContext.InstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name, StringFormat=Install {0}}"
+                            Visibility="{Binding CanInstall, Converter={StaticResource BoolToVis}}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PolButton}">
+                                <Setter Property="Content" Value="INSTALL" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Installing}" Value="True">
+                                        <Setter Property="Content" Value="INSTALLING..." />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <!-- hidden rather than gone, so the folder buttons line up down the list -->
+                    <ToggleButton Grid.Column="3" Margin="16,0,0,0" IsChecked="{Binding On}" IsEnabled="{Binding SwitchEnabled}"
+                                  AutomationProperties.Name="{Binding Name}">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton" BasedOn="{StaticResource Switch}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSwitch}" Value="False">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="*,Auto">
+        <!-- a full Windower install is a few hundred rows, so only the ones on screen get made -->
+        <ItemsControl x:Name="List" ItemsSource="{Binding Items}" Focusable="False"
+                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True">
+            <ItemsControl.Template>
+                <ControlTemplate TargetType="ItemsControl">
+                    <ScrollViewer Focusable="False" CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                                  Template="{StaticResource UnderSubTabs}">
+                        <ItemsPresenter />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </ItemsControl.Template>
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+
+        <!-- down here so a switch far down the list still shows what happened -->
+        <Border Grid.Row="1" Style="{StaticResource FooterBar}"
+                Visibility="{Binding Status, Converter={StaticResource NullToVisibilityConverter}}">
+            <TextBlock Text="{Binding Status}" Tag="{Binding StatusIsError}" Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12" />
+        </Border>
+    </Grid>
+</UserControl>

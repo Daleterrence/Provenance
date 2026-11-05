@@ -4,7 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using Provenance.Common.Game;
-using Provenance.Wpf.Views;
+using Provenance.Wpf.Views.Install;
 using Serilog;
 using Velopack;
 using Velopack.Locators;

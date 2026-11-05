@@ -23,7 +23,11 @@ using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Common.Login;
 using Provenance.Wpf.Services;
-using Provenance.Wpf.Views;
+using Provenance.Wpf.Views.Dialogs;
+using Provenance.Wpf.Views.Install;
+using Provenance.Wpf.Views.Chat;
+using Provenance.Wpf.Views.Social;
+using Provenance.Wpf.Views.Settings;
 
 namespace Provenance.Wpf.ViewModels;
 

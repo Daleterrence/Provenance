@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              xmlns:conv="clr-namespace:Provenance.Wpf.Converters"
-             xmlns:views="clr-namespace:Provenance.Wpf.Views">
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -73,8 +74,8 @@
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
                                 <!-- in the list only the status you're on keeps its fill, the box itself isn't in a ComboBoxItem -->
-                                <views:StatusMark Status="{Binding}" Margin="0,0,6,0"
-                                                  Filled="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ComboBoxItem}, FallbackValue=True}" />
+                                <controls:StatusMark Status="{Binding}" Margin="0,0,6,0"
+                                                     Filled="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ComboBoxItem}, FallbackValue=True}" />
                                 <TextBlock Text="{Binding}" VerticalAlignment="Center" />
                             </StackPanel>
                         </DataTemplate>
@@ -94,7 +95,7 @@
                 <Setter Property="Cursor" Value="Hand" />
                 <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                 <Setter Property="SnapsToDevicePixels" Value="True" />
-                <Setter Property="views:FocusCue.Track" Value="True" />
+                <Setter Property="behaviours:FocusCue.Track" Value="True" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ButtonBase">
@@ -109,7 +110,7 @@
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover.Fill}" />
                                 </Trigger>
-                                <Trigger Property="views:FocusCue.Shown" Value="True">
+                                <Trigger Property="behaviours:FocusCue.Shown" Value="True">
                                     <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover.Fill}" />
                                     <Setter TargetName="Ring" Property="Opacity" Value="1" />
                                 </Trigger>
