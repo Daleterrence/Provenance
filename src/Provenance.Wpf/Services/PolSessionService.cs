@@ -49,11 +49,12 @@ public sealed class PolSessionService : IDisposable
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
 
     // pol_hook.c's exit codes. 13 never falls back to the stock mutex names, anything can create those first
+    internal const int NoHandleExitCode = 4;
     internal const int UnsafeStartExitCode = 13;
     internal const int GameStartExitCode = 15;
-    internal const int MissingEnvExitCode = 16;
     public const string GameStartFailedText = "FINAL FANTASY XI couldn't start. Try again, and if it keeps happening, check the game's files with Repair.";
     public const string MissingEnvText = "Provenance couldn't pass PlayOnline what it needs to log in. Restart Provenance and try again.";
+    public const string NoPolHandleText = "This PlayOnline account doesn't have a handle, and none was created.";
 
     internal static bool DetailsUnreadable(string? line = null, int? exitCode = null) =>
         (line?.Contains("phase_c: SAVED DETAILS UNREADABLE", StringComparison.Ordinal) ?? false) || exitCode == 11;
@@ -78,10 +79,10 @@ public sealed class PolSessionService : IDisposable
     internal static (int Code, string Text) EndedBeforeSignIn(int? exitCode) => exitCode switch
     {
         _ when DetailsUnreadable(exitCode: exitCode) => (ErrorDetailsUnreadable, DetailsAgainText),
+        NoHandleExitCode => (ErrorNoPolHandle, NoPolHandleText),
         12 => (ErrorLauncherFailed, PrivateFolderText),
         UnsafeStartExitCode => (ErrorLauncherFailed, UnsafeStartText),
         GameStartExitCode => (ErrorLauncherFailed, GameStartFailedText),
-        MissingEnvExitCode => (ErrorLauncherFailed, MissingEnvText),
         3 => (ErrorAuthFailed, RefusedText),
         7 => (ErrorAccountBlocked, "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why."),
         10 => (ErrorUnfinished, LoadFailedText("")),
@@ -504,8 +505,7 @@ public sealed class PolSessionService : IDisposable
                             PolAccountNotices.Blocked(Regex.Match(line, @"ACCOUNT BLOCKED (\S+)").Groups[1].Value, Region, viewerLanguage));
             if (line.Contains("phase_c: LOAD FAILED "))
                 return Fail(ErrorUnfinished, LoadFailedText(Regex.Match(line, @"LOAD FAILED (\w+)").Groups[1].Value));
-            if (line.Contains("phase_c: NO POL HANDLE"))
-                return Fail(ErrorNoPolHandle, "This PlayOnline account doesn't have a handle, and none was created.");
+            if (line.Contains("NO POL HANDLE")) return Fail(ErrorNoPolHandle, NoPolHandleText);
             if (line.Contains("handle name rejected") || line.Contains("handle claim failed")
                 || line.Contains("handle save failed"))
                 return Fail(ErrorHandleRejected, "PlayOnline didn't accept that handle name. Log in again to try a different one.");

@@ -466,7 +466,6 @@ public partial class SocialViewModel : ObservableObject
             StatusNote = snap.Presence switch
             {
                 "starting" => "Going online...",
-                "no-handle" => "This account doesn't have a PlayOnline handle, so friends can't see you and won't show as online.",
                 var p when p.StartsWith("failed", StringComparison.Ordinal) =>
                     "PlayOnline didn't let you go online, so your friends show as offline. Log out and back in again.",
                 _ => StatusNote is "Going online..." ? "" : StatusNote,

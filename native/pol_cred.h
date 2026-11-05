@@ -12,7 +12,7 @@
 
 #define PC_OK            0
 #define PC_NOT_FOUND     1
-#define PC_NOT_WRAPPED   2   /* plain blob while require_wrap is set */
+#define PC_NOT_WRAPPED   2   /* a plain blob, never read */
 #define PC_UNWRAP_FAILED 3   /* key file missing or not 32 bytes, or DPAPI refused (wrong key, other target) */
 #define PC_TOO_LONG      4
 
@@ -63,16 +63,14 @@ static BYTE *pc_entropy(const BYTE key[PC_WRAP_KEY_LEN], const WCHAR *target, DW
     return e;
 }
 
-/* user and secret can be NULL, and require_wrap refuses a plain blob. Any error but PC_NOT_FOUND wipes both. */
-static int pc_cred_read(const WCHAR *target, const char *keyfile, int require_wrap,
-                        char *user, int ucap, char *secret, int scap)
+/* user and secret can be NULL. Any error but PC_NOT_FOUND wipes both. */
+static int pc_cred_read(const WCHAR *target, const char *keyfile, char *user, int ucap, char *secret, int scap)
 {
     PCREDENTIALW cred = NULL;
     BYTE key[PC_WRAP_KEY_LEN];
     DATA_BLOB in, ent = { 0, NULL }, out = { 0, NULL };
     const WCHAR *w = NULL;
     int wn = 0, rc = PC_OK;
-    int wrapped;
 
     if (user && ucap > 0) user[0] = 0;
     if (secret && scap > 0) secret[0] = 0;
@@ -81,30 +79,22 @@ static int pc_cred_read(const WCHAR *target, const char *keyfile, int require_wr
         return PC_NOT_FOUND;
 
     /* wrapped = "PVW1" + CryptProtectData of the UTF-16LE secret (the app's WindowsCredentialStore) */
-    wrapped = cred->CredentialBlobSize > 4 && cred->CredentialBlob &&
-              memcmp(cred->CredentialBlob, "PVW1", 4) == 0;
-
-    if (wrapped) {
-        if (!pc_read_key(keyfile, key)) { rc = PC_UNWRAP_FAILED; goto done; }
-        ent.pbData = pc_entropy(key, target, &ent.cbData);
-        if (!ent.pbData) { ent.cbData = 0; rc = PC_UNWRAP_FAILED; goto done; }
-        in.cbData = cred->CredentialBlobSize - 4;
-        in.pbData = cred->CredentialBlob + 4;
-        if (!CryptUnprotectData(&in, NULL, &ent, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &out) ||
-            !out.pbData) {
-            out.pbData = NULL; out.cbData = 0;
-            rc = PC_UNWRAP_FAILED;
-            goto done;
-        }
-        w = (const WCHAR *)out.pbData;
-        wn = (int)(out.cbData / sizeof(WCHAR));
-    } else if (require_wrap) {
+    if (cred->CredentialBlobSize <= 4 || !cred->CredentialBlob || memcmp(cred->CredentialBlob, "PVW1", 4) != 0) {
         rc = PC_NOT_WRAPPED;
         goto done;
-    } else {
-        w = (const WCHAR *)cred->CredentialBlob;
-        wn = (int)(cred->CredentialBlobSize / sizeof(WCHAR));
     }
+    if (!pc_read_key(keyfile, key)) { rc = PC_UNWRAP_FAILED; goto done; }
+    ent.pbData = pc_entropy(key, target, &ent.cbData);
+    if (!ent.pbData) { ent.cbData = 0; rc = PC_UNWRAP_FAILED; goto done; }
+    in.cbData = cred->CredentialBlobSize - 4;
+    in.pbData = cred->CredentialBlob + 4;
+    if (!CryptUnprotectData(&in, NULL, &ent, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &out) || !out.pbData) {
+        out.pbData = NULL; out.cbData = 0;
+        rc = PC_UNWRAP_FAILED;
+        goto done;
+    }
+    w = (const WCHAR *)out.pbData;
+    wn = (int)(out.cbData / sizeof(WCHAR));
 
     if (user && ucap > 0) {
         int un = cred->UserName ? lstrlenW(cred->UserName) : 0;

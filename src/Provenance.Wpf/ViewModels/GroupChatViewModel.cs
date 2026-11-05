@@ -30,12 +30,13 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public const string SendFailedText = "Unable to send chat message.";
     public const string FilteredNote = "Group chat can't send some of those characters, so they were left out.";
     public const string CharactersText = "Group chat can't send some of those characters.";
-    // a little past the hook's own 30 s, for a join it never answered
+    // a little past the hook's own 30 s, for a join or a line it never answered
     internal static readonly TimeSpan JoinGiveUp = TimeSpan.FromSeconds(35);
+    internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(35);
 
     private readonly SocialViewModel _social;
     private readonly Func<bool> _timesWanted;
-    private readonly ChatSendGate _gate = new();
+    private readonly ChatSendGate _gate = new(SendGiveUp);
     private GroupChatLog? _log;
     private string? _token;
     private long _seenSeq;
@@ -283,11 +284,12 @@ public sealed partial class GroupChatViewModel : ObservableObject
         return kept;
     }
 
-    // the window's half-second tick: Send's button, a join that never got an answer, and the log's save
+    // the window's half-second tick: Send's button, a join or a line that never got an answer, and the log's save
     public void Tick(DateTime now)
     {
         SendCommand.NotifyCanExecuteChanged();
         _log?.SaveIfDue(now);
+        if (_gate.Settle(null, null, now) is { } done) Settled(done);
         if (Current != Phase.Joining || now - _joinAt < JoinGiveUp) return;
         CallOff();
         End(_social.ViewerText(0x3eb8, BusyText));
@@ -394,8 +396,11 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void ApplySend(GroupChatSnapshot gc)
     {
-        var done = _gate.Settle(gc.SendToken, gc.SendState, DateTime.UtcNow);
-        if (done is null) return;
+        if (_gate.Settle(gc.SendToken, gc.SendState, DateTime.UtcNow) is { } done) Settled(done);
+    }
+
+    private void Settled(string done)
+    {
         // it went, but with no row of mine in the group polcore never hands my copy back, so it's shown from here
         if (done == "sent:unechoed" && _sentLine is { } line)
         {

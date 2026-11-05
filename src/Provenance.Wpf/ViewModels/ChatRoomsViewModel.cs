@@ -73,12 +73,14 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private readonly SocialViewModel _social;
     private readonly Func<string, string, bool> _savePassword;
     private readonly Action _dropPassword;
-    private readonly ChatSendGate _gate = new();
+    // a little past the hook's 6 minute wait for a line's answer
+    internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(365);
+    private readonly ChatSendGate _gate = new(SendGiveUp);
     private readonly System.Windows.Threading.DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private string? _zonesToken, _roomsToken, _joinToken;
     private string _roomIrc = "", _roomTitle = "";
     private long _seenSeq, _lastSeq, _joinSeq;
-    private string? _lastNick;
+    private string? _lastNick, _sentText;
     private bool _restoringZone, _quiet, _disposed, _joinLocked;
     private readonly Dictionary<int, string> _categories = new();
     private readonly Func<int, ImageSource?>? _emote;
@@ -446,6 +448,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         BusyText = "";
         _joinToken = null;
         _gate.Reset();
+        _sentText = null;
         _tick.Stop();
         SendNote = "";
         _masterToken = null;
@@ -469,14 +472,10 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         var text = Compose.Trim().Replace("\r", "").Replace('\n', ' ');
         if (text.Length == 0 || Pid is not { } pid) return;
-        if (text.Length > ChatRoomFiles.MaxTextLength || !ChatRoomFiles.LineFits(_roomIrc, _lastNick ?? "", text))
-        {
-            SendNote = "That's too long for one line.";
-            return;
-        }
         var token = NewToken();
         if (!ChatRoomFiles.Send(pid, token, text, Colour, Emoticon)) { SendNote = "Chat communication error."; return; }
         _gate.Sent(token, DateTime.UtcNow);
+        _sentText = Compose;
         Compose = "";
         Colour = -1;
         Emoticon = 0;
@@ -776,6 +775,9 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 "failed:handle changing" => "Not sent: your handle was changing.",
                 _ => "Chat communication error.",
             };
+        // only the hook can tell whether it fits polcore's line, so one that doesn't goes back to be cut down
+        if (done == "failed:too long" && _sentText is { } back && Compose.Length == 0) Compose = back;
+        _sentText = null;
         SendCommand.NotifyCanExecuteChanged();
     }
 

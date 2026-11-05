@@ -302,7 +302,7 @@ static const char *cred_keyfile(char *buf, DWORD n)
 static int cred_read(const WCHAR *target, char *user, int ucap, char *secret, int scap)
 {
     char kf[MAX_PATH + 64];
-    return pc_cred_read(target, cred_keyfile(kf, sizeof kf), 1, user, ucap, secret, scap);
+    return pc_cred_read(target, cred_keyfile(kf, sizeof kf), user, ucap, secret, scap);
 }
 static const char *cred_why(int rc)
 {
@@ -669,7 +669,7 @@ static void viewer_init(BYTE *b)
     set_messages(b, folder);
 }
 
-static int g_ffxi_service = -1;
+static int g_ffxi_service;
 static int g_friends_loaded;
 static int g_lean;
 static unsigned g_notice, g_notice_days;
@@ -679,7 +679,6 @@ static int g_my_slot = -1;
 static int g_draining;
 static int g_status_job = -1;
 static int g_status_want = -1, g_status_loc = -2;
-static char g_play_state[48] = "";
 static char g_presence[32] = "starting";
 static int g_answer_kind;
 static int g_me_step;
@@ -914,9 +913,10 @@ static int wait_handle_name(BYTE *b, char *name, int cap)
     lg("phase_c: no handle name within 10 minutes\r\n");
     return -3;
 }
+#define NO_HANDLE_EXIT 4
 /* a new account has no handle and FFXI's world login dies with POL-0001 (I'm a damn moron, forgot about the handle).
    Handles are permanent and public, so only the typed name's used */
-static int handle_bootstrap(BYTE *b, int handles_loaded)
+static int handle_bootstrap(BYTE *b)
 {
     static const char *const why[] = { "creation cancelled", "no launcher target", "no answer within 10 minutes" };
     struct pload fresh = { "handles (pre-claim)", 0x2ac, 0x2b0, 0, 0 };
@@ -925,10 +925,6 @@ static int handle_bootstrap(BYTE *b, int handles_loaded)
     WCHAR wname[32];
     BYTE id[16];
     int n, w, idx, ng;
-    if (!handles_loaded) {
-        lg("phase_c: handle list did not load - skipping handle check\r\n");
-        return 0;
-    }
     n = count_handles(b);
     lg("phase_c: POL handles on account: %d\r\n", n);
     if (n > 0) return 0;
@@ -936,7 +932,7 @@ static int handle_bootstrap(BYTE *b, int handles_loaded)
     if (w < 0) {
         lg("phase_c: NO POL HANDLE - this account needs a PlayOnline handle before FFXI "
            "can log in (%s)\r\n", w >= -3 ? why[-w - 1] : "unknown");
-        return 4;
+        return NO_HANDLE_EXIT;
     }
     if (!ascii_name_ok(name)) {
         lg("phase_c: handle name rejected locally (1-15 characters, not all spaces)\r\n");
@@ -1164,9 +1160,8 @@ static void phase_c_seed(HMODULE pc)
         g_bad_password = 1;
         lg("phase_c: bad password flag set (Viewer message 0x7007)\r\n");
     }
-    if (all[3].res == 1) ffxi_gate_read(b);
-    else lg("phase_c: content ids: unknown (characters load %d)\r\n", all[3].res);
-    rc = handle_bootstrap(b, all[2].res == 1);
+    ffxi_gate_read(b);
+    rc = handle_bootstrap(b);
     if (rc) {
         lg("phase_c: stopping before FFXI boots (exit %d) - signing out\r\n", rc);
         viewer_sign_out(b);
@@ -3893,9 +3888,8 @@ static int me_chars(BYTE *b, me_chr *out, const char **from)
         return n;
     }
     memset(&me, 0, sizeof me);
-    if (get_handle(b, g_my_slot, &me) < 0 || !(me.lo & 1) ||
-        ((((unsigned __int64)me.hi << 32 | me.lo) >> 1) & 0xfffffffffffULL) != g_me_hid)
-        return 0;
+    get_handle(b, g_my_slot, &me);
+    if (((((unsigned __int64)me.hi << 32 | me.lo) >> 1) & 0xfffffffffffULL) != g_me_hid) return 0;
     *from = "handle";
     for (i = 0; i < 8; i++) {
         if (!(me.chars[i] & 1) || !get_chr(b, (me.chars[i] >> 1) & 0x3f, c) || *(WORD *)(c + 2) != 1) continue;
@@ -4062,7 +4056,7 @@ static void me_request(BYTE *b)
         ipc_file(jp, "myprofile.json");
         DeleteFileA(jp);
         memset(&h, 0, sizeof h);
-        if (get_handle(b, g_my_slot, &h) < 0 || !(h.lo & 1)) { me_done("failed:no handle"); return; }
+        get_handle(b, g_my_slot, &h);
         g_me_hid = (((unsigned __int64)h.hi << 32 | h.lo) >> 1) & 0xfffffffffffULL;
         if (!g_me_rec) g_me_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_fs_pib->rec_size + 8);
         else memset(g_me_rec, 0, g_fs_pib->rec_size + 8);
@@ -4082,8 +4076,8 @@ static void me_request(BYTE *b)
         name = req_line(&p);
         key = req_line(&p);
         memset(&h, 0, sizeof h);
+        get_handle(b, g_my_slot, &h);
         /* the handle the editor loaded, so one left open across a switch can't rename the new one */
-        if (get_handle(b, g_my_slot, &h) < 0 || !(h.lo & 1)) { me_done("failed:no handle"); return; }
         wsprintfA(now, "%03x%08x", (h.hi >> 1) & 0xfff, h.lo >> 1 | h.hi << 31);
         if (lstrcmpA(key, now) != 0) { me_done("failed:not loaded"); return; }
         memset(g_me_name, 0, sizeof g_me_name);
@@ -4615,9 +4609,8 @@ static void xi_request(BYTE *b)
     lstrcpynA(g_xi_token, req_line(&p), sizeof g_xi_token);
     hk = req_line(&p);
     ck = req_line(&p);
-    if (g_my_slot < 0) { xi_done("failed:no handle"); return; }
     memset(&h, 0, sizeof h);
-    if (get_handle(b, g_my_slot, &h) < 0 || !(h.lo & 1)) { xi_done("failed:no handle"); return; }
+    get_handle(b, g_my_slot, &h);
     wsprintfA(now, "%03x%08x", (h.hi >> 1) & 0xfff, h.lo >> 1 | h.hi << 31);
     /* my profile has to be loaded, and for this handle, since the characters come from it */
     if (lstrcmpA(hk, now) != 0 || !g_me_rec || !g_me_rec->items ||
@@ -5138,7 +5131,7 @@ static void snapshot_social(BYTE *b)
     if (h == INVALID_HANDLE_VALUE) return;
     wsprintfA(line, "{\"ffxiService\":\"%s\",\"notice\":%u,\"noticeDays\":%u,\"presence\":\"%s\","
                     "\"friendsLoaded\":%s,\"mail\":\"%s\",\"statusBusy\":%s,\"badPassword\":%s",
-              g_ffxi_service == 1 ? "active" : g_ffxi_service == 0 ? "none" : "unknown", g_notice, g_notice_days,
+              g_ffxi_service ? "active" : "none", g_notice, g_notice_days,
               g_presence, g_friends_loaded ? "true" : "false",
               g_mail_state, (g_status_job >= 0 || g_status_want >= 0) ? "true" : "false",
               g_bad_password ? "true" : "false");
@@ -5253,7 +5246,7 @@ static void snapshot_social(BYTE *b)
         wr(h, "]");
     }
     /* GetMyComment (svc 0x688) and GetMyStatus (0x338) are local reads, fine every 2 s */
-    if (g_my_slot >= 0 && SVC(0x688)) {
+    if (SVC(0x688)) {
         memset(wc, 0, sizeof wc);
         ((int (__cdecl *)(int, WCHAR *))SVC(0x688))(-2, wc);
         wc[0x33] = 0;
@@ -5283,7 +5276,7 @@ static void snapshot_social(BYTE *b)
         int slot = ((svc_v)SVC(0x2f8))();
         BYTE rec[0x28] = {0};
         if (slot < 0) slot = g_my_slot;
-        if (slot >= 0 && get_handle(b, slot, rec) == 0) {
+        if (get_handle(b, slot, rec) == 0) {
             sjis_json(hn, sizeof hn, rec + 0x08, 0x0f);
             pic = *(unsigned *)(rec + 0x1c);
         }
@@ -5291,7 +5284,7 @@ static void snapshot_social(BYTE *b)
     wr(h, ",\"myHandle\":"); wr(h, hn);
     me = my_id(b);
     sk[0] = 0;
-    if (me && g_my_slot >= 0) peer_key(b, (unsigned)me, (unsigned)(me >> 32), (unsigned)g_my_slot, sk);
+    if (me) peer_key(b, (unsigned)me, (unsigned)(me >> 32), (unsigned)g_my_slot, sk);
     wr(h, ",\"myKey\":\""); wr(h, sk); wr(h, "\"");
     wsprintfA(line, ",\"myPic\":%u", pic);
     wr(h, line);
@@ -5394,21 +5387,25 @@ static int login_handle(BYTE *b, const char **why)
         if (get_handle(b, i, rec) == 0 && (rec[0] & 1)) return i;
     return -1;
 }
-static int g_online_started;
-static void go_online(BYTE *b)
+/* everything in the hold counts on g_my_slot being a handle in use. handle_bootstrap left the account one, so a
+   session with none by now gets signed out. A lean session never goes online */
+static void hold_handle(BYTE *b)
 {
     char sv[8];
     const char *why;
     int want = 0;
-    if (g_online_started) return;
+    g_my_slot = login_handle(b, &why);
+    if (g_my_slot < 0) {
+        lg("hold: NO POL HANDLE - signing out (exit %d)\r\n", NO_HANDLE_EXIT);
+        viewer_sign_out(b);
+        end_pol(NO_HANDLE_EXIT);
+    }
+    if (g_lean) return;
     if (GetEnvironmentVariableA("POL_STATUS", sv, sizeof sv) > 0 &&
         (sv[0] == '0' || sv[0] == '1' || sv[0] == '4'))
         want = sv[0] - '0';
-    g_my_slot = login_handle(b, &why);
-    if (g_my_slot < 0) return;
     lg("presence: going online on handle slot %d, %s (current handle %d)\r\n", g_my_slot, why,
        ((svc_v)SVC(0x2f8))());
-    g_online_started = 1;
     status_start(b, g_my_slot, want, 1000);
 }
 
@@ -5500,10 +5497,8 @@ static void hold_turn(BYTE *b, int ctl)
         /* the viewer's OK maps busy (2) to online and 3 to appear offline */
         if (want == 2) want = 0;
         if (want == 3) want = 4;
-        if (want == 0 || want == 1 || want == 4) {
-            /* a go-online still waiting for a slot keeps its location, -2 keeps the rest. Never handle -1 */
-            if (g_my_slot >= 0) status_start(b, g_my_slot, want, g_status_want >= 0 ? g_status_loc : -2);
-        }
+        /* a go-online still waiting for a slot keeps its location, -2 keeps the rest */
+        if (want == 0 || want == 1 || want == 4) status_start(b, g_my_slot, want, g_status_want >= 0 ? g_status_loc : -2);
     }
 }
 
@@ -5612,13 +5607,7 @@ static void pol_hold(BYTE *b)
         ((void (__cdecl *)(void **))SVC(0xd9c))(cb);
         lg("mail: push callbacks registered (svc 0xd9c)\r\n");
     }
-    if (!g_lean && !g_online_started) {
-        go_online(b);
-        if (!g_online_started) {
-            lg("presence: no PlayOnline handle - cannot go online\r\n");
-            lstrcpyA(g_presence, "no-handle");
-        }
-    }
+    hold_handle(b);
     if (!g_lean) store_import(b);
     g_in_hold = 1;
     snapshot_social(b);
@@ -5654,8 +5643,7 @@ static void pol_hold(BYTE *b)
             account_blocked(b, "jail");
         }
         status_pump(b);
-        if (g_status_job < 0 && g_status_want >= 0 && g_my_slot >= 0)
-            status_start(b, g_my_slot, g_status_want, g_status_loc);
+        if (g_status_job < 0 && g_status_want >= 0) status_start(b, g_my_slot, g_status_want, g_status_loc);
         /* the new-mail flag (svc 0x1460, set by a push), cleared with 0x1464(0) like the viewer (app.dll 0x1019fef3) */
         if (!g_lean && SVC(0x1460) && ((svc_v)SVC(0x1460))()) {
             ((void (__cdecl *)(int))SVC(0x1464))(0);
@@ -5666,11 +5654,10 @@ static void pol_hold(BYTE *b)
         if (!g_lean) mail_pump(b);
         hold_turn(b, ctl);
         if (ctl && play_signalled()) {
-            if (g_ffxi_service != 1) {
-                if (!g_play_state[0]) {
-                    lstrcpyA(g_play_state, "refused:no-content-id");
-                    lg("hold: Play %s\r\n", g_play_state);
-                }
+            if (!g_ffxi_service) {
+                static int said;
+                if (!said) lg("hold: Play refused:no-content-id\r\n");
+                said = 1;
             } else {
                 lg("hold: Play signalled - finishing PlayOnline writes, then booting FFXI\r\n");
                 play_drain(b, spath, 15000);
@@ -5702,6 +5689,7 @@ static void pol_hold(BYTE *b)
 }
 
 #define GAME_START_EXIT 15
+#define NOT_HOOKED_EXIT 17   /* no detour, so it'd only ever get as far as the viewer's own menu */
 
 /* add-ons and game plugins already unloaded in FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins and
    finish its log, so it gets a clean one, the rest just get more places to crash */
@@ -5778,6 +5766,13 @@ static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned
     return 1;
 }
 
+static void not_hooked(void)
+{
+    lg("pol_hook: menu session not detoured - ending pol.exe (exit %d)\r\n", NOT_HOOKED_EXIT);
+    end_pol(NOT_HOOKED_EXIT);
+    ExitProcess(NOT_HOOKED_EXIT);
+}
+
 static void install(void)
 {
     HMODULE exe = GetModuleHandleW(NULL);
@@ -5800,10 +5795,10 @@ static void install(void)
     if (memcmp(p, MENU_PROLOGUE, sizeof MENU_PROLOGUE) != 0) {
         lg("pol_hook: pol.exe is not the 1.18.15e build (menu session %02x %02x %02x) - not hooked\r\n",
            p[0], p[1], p[2]);
-        return;
+        not_hooked();
     }
     /* the game's end is only ever caught at the content launcher's return, so no detour without that hook */
-    if (!hook_game_end((BYTE *)exe) || !VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &old)) return;
+    if (!hook_game_end((BYTE *)exe) || !VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &old)) not_hooked();
     rel = (DWORD)((BYTE *)menu_stub - (p + 5));
     p[0] = 0xE9;
     *(DWORD *)(p + 1) = rel;

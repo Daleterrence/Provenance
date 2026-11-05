@@ -195,11 +195,11 @@ public sealed record PolSentLine(string To, string ToKey, int ToSlot, long Time,
     public bool ToOther { get; init; }
 }
 
-// pol_hook.<pid>.social.json, rewritten every couple of secs. FfxiService is the Content ID check ("active", "none",
-// "unknown"), Notice the account notice status (221..252 = LM-01..LM-32)
+// pol_hook.<pid>.social.json, rewritten every couple of secs. FfxiService is the Content ID check ("active" or
+// "none"), Notice the account notice status (221..252 = LM-01..LM-32)
 public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int MyProfilePictureId,
                                        IReadOnlyList<PolFriend> Friends, IReadOnlyList<PolMessage> Messages,
-                                       string FfxiService = "unknown", int Notice = 0,
+                                       string FfxiService = "active", int Notice = 0,
                                        string SendToken = "", string SendState = "", string Presence = "")
 {
     public bool FriendsLoaded { get; init; } = true;
@@ -515,10 +515,9 @@ public static class SocialSnapshot
             var (charToken, charState) = Job(root, "character");
             var (ffxiToken, ffxiState) = Job(root, "ffxiprofile");
             var (handleToken, handleState) = Job(root, "handleJob");
-            var ffxi = Str(root, "ffxiService");
             return new PolSocialSnapshot(PolStatusText.Parse(Str(root, "myStatus")),
                                          Str(root, "myHandle"), Int(root, "myPic", -1), friends, messages,
-                                         ffxi.Length > 0 ? ffxi : "unknown", (int)Long(root, "notice"),
+                                         Str(root, "ffxiService"), (int)Long(root, "notice"),
                                          sendToken, sendState, Str(root, "presence"))
             {
                 FriendsLoaded = Bool(root, "friendsLoaded"),

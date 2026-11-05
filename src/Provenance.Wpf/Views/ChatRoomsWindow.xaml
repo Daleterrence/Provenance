@@ -7,6 +7,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels"
+        xmlns:social="clr-namespace:Provenance.Common.Social;assembly=Provenance.Common"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:ChatRoomsViewModel}"
         Title="Chat rooms" Icon="/Assets/provenance.ico"
         Width="900" Height="620" MinWidth="720" MinHeight="460" WindowStyle="None" WindowStartupLocation="CenterScreen"
@@ -301,7 +302,7 @@
                         </Grid>
                     </Button>
                     <TextBox x:Name="ComposeBox" Grid.Column="2" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
-                             TextWrapping="Wrap" MaxLength="400" Style="{StaticResource OutlinedField}" Padding="10,8"
+                             TextWrapping="Wrap" MaxLength="{x:Static social:ChatRoomFiles.MaxTextLength}" Style="{StaticResource OutlinedField}" Padding="10,8"
                              materialDesign:HintAssist.Hint="Say something to the room (Enter sends)" materialDesign:HintAssist.IsFloating="False"
                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                              PreviewKeyDown="OnComposeKey" DataObject.Pasting="OnComposePaste" />

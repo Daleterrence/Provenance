@@ -114,11 +114,6 @@ public static class ChatRoomFiles
     public const int MaxNameBytes = 15, MaxPasswordLength = 23, MaxTextLength = 400, PageSize = 100;
     public const int MaxRoomName = 30, MaxNewPassword = 16, MinOccupancy = 2, MaxOccupancy = 20, DefaultOccupancy = 10;
 
-    // the hook's cr_fits: "PRIVMSG <room> :<frame>" plus checksum and line end in 0x200 bytes, the frame being a 6 char
-    // face and colour header, chat name, tab, language, then the text
-    public static bool LineFits(string irc, string chatName, string text) =>
-        8 + irc.Length + 2 + 6 + PolMessage.TextBytes(chatName) + 3 + PolMessage.TextBytes(text) + 2 + 8 <= 0x200;
-
     public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, "chatroom.json");
 
     public static void Delete(int pid)
@@ -229,12 +224,10 @@ public static class ChatRoomFiles
     }
 }
 
-// the app's half of the hook's send rule: one line in flight
-public sealed class ChatSendGate
+// the app's half of the hook's send rule: one line in flight. giveUp is a little past the hook's own wait for an
+// answer, by then the line counts as gone either way
+public sealed class ChatSendGate(TimeSpan giveUp)
 {
-    // the hook gives up on an ack after 6 minutes, a little past that the line counts as gone either way
-    public static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(365);
-
     private DateTime? _sentAt;
     public string? Token { get; private set; }
 
@@ -246,7 +239,7 @@ public sealed class ChatSendGate
         _sentAt = now;
     }
 
-    // the hook's state for my token, or null while it's still going. A token it never took counts after GiveUp
+    // the hook's state for my token, or null while it's still going. A token it never took counts after the give-up
     public string? Settle(string? hookToken, string? hookState, DateTime now)
     {
         if (Token == null) return null;
@@ -254,7 +247,7 @@ public sealed class ChatSendGate
         if (hookToken == Token && hookState is { } s &&
             (s == "sent" || s.StartsWith("sent:", StringComparison.Ordinal) || s.StartsWith("failed", StringComparison.Ordinal)))
             done = s;
-        else if (_sentAt is { } at && now - at > GiveUp) done = "failed:timeout";
+        else if (_sentAt is { } at && now - at > giveUp) done = "failed:timeout";
         if (done != null) Token = null;
         return done;
     }
