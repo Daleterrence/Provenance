@@ -34,8 +34,8 @@ public sealed class CredentialService : ICredentialService
     public PolAccount? LoadPolAccount(string profileId) =>
         ReadOrNull(KeyFor(CredentialKeys.Pol, profileId)) is { } c ? new PolAccount(c.UserName, c.Secret) : null;
 
-    public SeaAccount? LoadSeaAccount(string profileId) =>
-        ReadOrNull(KeyFor(CredentialKeys.Sea, profileId)) is { } c ? new SeaAccount(c.UserName, c.Secret) : null;
+    public SquareEnixAccount? LoadSquareEnixAccount(string profileId) =>
+        ReadOrNull(KeyFor(CredentialKeys.Sea, profileId)) is { } c ? new SquareEnixAccount(c.UserName, c.Secret) : null;
 
     // an entry the wrap key can't read (a lost key) loads as null, and the user types the details in again
     private StoredCredential? ReadOrNull(string key)
@@ -59,7 +59,7 @@ public sealed class CredentialService : ICredentialService
         Wrapped.Save(KeyFor(CredentialKeys.Pol, profileId), account.PolId, account.Password);
     }
 
-    public void SaveSeaAccount(string profileId, SeaAccount account)
+    public void SaveSquareEnixAccount(string profileId, SquareEnixAccount account)
     {
         ArgumentNullException.ThrowIfNull(account);
         Wrapped.Save(KeyFor(CredentialKeys.Sea, profileId), account.Username, account.Password);
@@ -67,7 +67,7 @@ public sealed class CredentialService : ICredentialService
 
     public void DeletePolAccount(string profileId) => Delete(KeyFor(CredentialKeys.Pol, profileId));
 
-    public void DeleteSeaAccount(string profileId) => Delete(KeyFor(CredentialKeys.Sea, profileId));
+    public void DeleteSquareEnixAccount(string profileId) => Delete(KeyFor(CredentialKeys.Sea, profileId));
 
     internal Action<string>? BeforeDeleteForTest { get; set; }
 
@@ -83,7 +83,7 @@ public sealed class CredentialService : ICredentialService
         Exception? first = null;
         try { DeletePolAccount(profileId); }
         catch (Exception ex) { first = ex; }
-        try { DeleteSeaAccount(profileId); }
+        try { DeleteSquareEnixAccount(profileId); }
         catch (Exception ex) { first ??= ex; }
         if (first != null) ExceptionDispatchInfo.Throw(first);
     }

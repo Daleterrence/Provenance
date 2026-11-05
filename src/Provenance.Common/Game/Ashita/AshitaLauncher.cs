@@ -8,7 +8,7 @@ using Serilog;
 
 namespace Provenance.Common.Game.Ashita;
 
-public static class ThirdPartyHookLauncher
+public static class AshitaLauncher
 {
     private const string PolExeName = "pol.exe";
 
@@ -47,17 +47,17 @@ public static class ThirdPartyHookLauncher
             return null;
         }
         var s = settings.Current;
-        string? dir = AshitaInstall.DetectAshita(s.AshitaPath);
+        string? dir = AshitaInstall.Detect(s.AshitaPath);
         if (dir is null) return Fail("Couldn't find Ashita. Set its folder in Settings, under Windower/Ashita.");
 
         bool fromAccount = profile is { Length: > 0 };
         var boot = fromAccount ? profile
-                 : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
+                 : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedBootConfig(dir) : s.AshitaBootConfig;
         if (boot is { Length: > 0 } && !IsBootFileName(boot))
             return Fail(fromAccount ? AccountBootFileProblem
                 : "The Ashita boot configuration has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Windower/Ashita.");
         string bootFile;
-        try { bootFile = Path.GetFileName(AshitaInstall.WriteAshitaBoot(dir, boot, polExe)); }
+        try { bootFile = Path.GetFileName(AshitaInstall.WriteBoot(dir, boot, polExe)); }
         catch (Exception ex)
         {
             Log.Error(ex, "Could not write the Ashita boot config");

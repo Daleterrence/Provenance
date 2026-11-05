@@ -4,7 +4,7 @@ namespace Provenance.Common.Settings;
 
 public sealed class LauncherSettings
 {
-    public List<Profile> Profiles { get; set; } = [new Profile { Id = "default", DisplayName = "Default" }];
+    public List<Account> Profiles { get; set; } = [new Account { Id = "default", DisplayName = "Default" }];
 
     public string ActiveProfileId { get; set; } = "default";
 

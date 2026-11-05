@@ -6,17 +6,17 @@ namespace Provenance.Common.Game.Windower;
 public static class WindowerInstall
 {
     // Hook.dll is the one that matters now, but a folder with only Windower.exe can still fetch it
-    public static bool IsWindowerFolder(string? dir) =>
+    public static bool IsFolder(string? dir) =>
         !string.IsNullOrWhiteSpace(dir) && (File.Exists(Path.Combine(dir, "Windower.exe")) || File.Exists(Path.Combine(dir, "Hook.dll")));
 
-    public static string? DetectWindower(string? configured) =>
-        Candidates(configured, @"C:\Windower", "Windower", "Windower4", "Windower 4").FirstOrDefault(IsWindowerFolder);
+    public static string? Detect(string? configured) =>
+        Candidates(configured, @"C:\Windower", "Windower", "Windower4", "Windower 4").FirstOrDefault(IsFolder);
 
-    public const string LinkedWindowerText =
+    public const string LinkedText =
         "Provenance can't use a Windower folder that's reached through a link. Choose the real folder the link points to in Settings, under Windower/Ashita.";
 
     // the user's own profiles in file order, "" for the unnamed one
-    public static IReadOnlyList<string> WindowerProfiles(string? windowerDir)
+    public static IReadOnlyList<string> Profiles(string? windowerDir)
     {
         if (windowerDir is null) return [];
         try

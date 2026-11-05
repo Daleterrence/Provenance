@@ -32,7 +32,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ICredentialService _credentials;
     private readonly ISettingsService _settings;
     private readonly FeedService _feeds;
-    private readonly PolSessionService _pol;
+    private readonly PolSession _pol;
     private readonly AvatarService _avatars;
     private readonly DispatcherTimer _slideTimer, _socialPoll, _worldsTimer, _elapsedTimer;
 
@@ -44,7 +44,7 @@ public partial class MainViewModel : ObservableObject
     public event Action<bool>? RequestAttention;
     public event Action? AttentionCleared;
 
-    public MainViewModel(ICredentialService credentials, ISettingsService settings, FeedService feeds, PolSessionService pol,
+    public MainViewModel(ICredentialService credentials, ISettingsService settings, FeedService feeds, PolSession pol,
                          AvatarService avatars)
     {
         _credentials = credentials;
@@ -85,7 +85,7 @@ public partial class MainViewModel : ObservableObject
         Social.ChangeProfilePictureRequested += OpenProfilePicturePicker;
         Social.LayoutRequested += OnSocialLayout;
 
-        Profiles = new ObservableCollection<Profile>(_settings.Current.Profiles);
+        Profiles = new ObservableCollection<Account>(_settings.Current.Profiles);
         int needDetails = Profiles.Count(p => !_credentials.HasUsableDetails(p.Id));
         if (needDetails > 0)
             Log.Information("{Count} account(s) need their sign-in details again", needDetails);
@@ -411,11 +411,11 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void DismissNotice() => Notice = null;
 
-    public ObservableCollection<Profile> Profiles { get; }
+    public ObservableCollection<Account> Profiles { get; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProfile), nameof(ProfileTitle), nameof(ProfilePicture))]
-    private Profile? _selectedProfile;
+    private Account? _selectedProfile;
 
     public bool HasProfile => SelectedProfile != null;
 
@@ -444,7 +444,7 @@ public partial class MainViewModel : ObservableObject
         else { var i = Profiles.IndexOf(prof); if (i >= 0) Profiles[i] = prof; }
     }
 
-    partial void OnSelectedProfileChanged(Profile? value)
+    partial void OnSelectedProfileChanged(Account? value)
     {
         if (value == null) return;
         SaveSetting(s => s.ActiveProfileId = value.Id);
@@ -460,7 +460,7 @@ public partial class MainViewModel : ObservableObject
 
     public bool HasSavedCredentials { get; private set; }
 
-    private void LoadCredentialsForProfile(Profile profile)
+    private void LoadCredentialsForProfile(Account profile)
     {
         UseOtp = profile.UseOtp;
         HasSavedCredentials = _credentials.HasUsableDetails(profile.Id);
@@ -477,13 +477,13 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
-    internal Task<int> ConnectProfileAsync(Profile p, PolAccount pol, SeaAccount sea, string otp,
+    internal Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount sea, string otp,
                                            IProgress<LaunchProgress>? progress, CancellationToken token) =>
         _pol.ConnectAsync(pol, sea, otp, p.Id, progress, PromptHandleName, token,
                           new SessionOptions(false, null, HomeSlotFor(p), HandleKey: p.HandleKey));
 
     // a login always goes with the account's own home slot, so one without gets it now
-    internal int HomeSlotFor(Profile p)
+    internal int HomeSlotFor(Account p)
     {
         if (!HomeSlots.Valid(p.HomeSlot) || Profiles.Any(o => o != p && o.HomeSlot == p.HomeSlot))
             PersistProfileList(slots: true);
@@ -491,7 +491,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     // only the POL entries' user names get read, no password's decoded
-    private Profile? ProfileWithPolId(string polId, Profile? except = null) =>
+    private Account? ProfileWithPolId(string polId, Account? except = null) =>
         Profiles.FirstOrDefault(p => p != except &&
                                      string.Equals(_credentials.ReadPolId(p.Id), polId, StringComparison.OrdinalIgnoreCase));
 
@@ -521,10 +521,10 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
         int n = Profiles.Count(p => p.DisplayName.StartsWith("New account", StringComparison.Ordinal));
-        var profile = new Profile { DisplayName = n == 0 ? "New account" : $"New account {n + 1}", UseOtp = r.UseOtp,
+        var profile = new Account { DisplayName = n == 0 ? "New account" : $"New account {n + 1}", UseOtp = r.UseOtp,
                                     OtpSource = r.OtpSource, OtpItem = r.OtpItem, OtpAccount = r.OtpAccount };
         _credentials.SavePolAccount(profile.Id, new PolAccount(r.PolId, r.PolPassword));
-        try { _credentials.SaveSeaAccount(profile.Id, new SeaAccount(r.SeaId, r.SeaPassword)); }
+        try { _credentials.SaveSquareEnixAccount(profile.Id, new SquareEnixAccount(r.SeaId, r.SeaPassword)); }
         catch
         {
             // the account isn't added, so its POL entry mustn't stay behind
@@ -560,7 +560,7 @@ public partial class MainViewModel : ObservableObject
         var polEdit = SideEditOf(r.PolId, r.PolPassword);
         var seaEdit = SideEditOf(r.SeaId, r.SeaPassword);
         var pol = polEdit == SideEdit.Fill ? _credentials.LoadPolAccount(p.Id) : null;
-        var sea = seaEdit == SideEdit.Fill ? _credentials.LoadSeaAccount(p.Id) : null;
+        var sea = seaEdit == SideEdit.Fill ? _credentials.LoadSquareEnixAccount(p.Id) : null;
         if (FillFailed(polEdit, pol, seaEdit, sea))
             return EditAccount(requireAll: true, typed: WithoutPasswords(r));
         // read before anything's saved, so the typed details get compared with the saved ones
@@ -570,7 +570,7 @@ public partial class MainViewModel : ObservableObject
             _credentials.SavePolAccount(p.Id, new PolAccount(r.PolId.Length > 0 ? r.PolId : pol!.PolId,
                                                              r.PolPassword.Length > 0 ? r.PolPassword : pol!.Password));
         if (seaEdit != SideEdit.Keep)
-            _credentials.SaveSeaAccount(p.Id, new SeaAccount(r.SeaId.Length > 0 ? r.SeaId : sea!.Username,
+            _credentials.SaveSquareEnixAccount(p.Id, new SquareEnixAccount(r.SeaId.Length > 0 ? r.SeaId : sea!.Username,
                                                              r.SeaPassword.Length > 0 ? r.SeaPassword : sea!.Password));
         p.UseOtp = r.UseOtp;
         p.OtpSource = r.OtpSource;
@@ -607,9 +607,9 @@ public partial class MainViewModel : ObservableObject
 
     // a key that's gone still passes the header test, so the run's details-again text is what tells
     internal static bool NeedsAllDetails(bool usable, string? multiProblem) =>
-        !usable || multiProblem == PolSessionService.DetailsAgainText;
+        !usable || multiProblem == PolSession.DetailsAgainText;
 
-    internal static bool FillFailed(SideEdit polEdit, PolAccount? pol, SideEdit seaEdit, SeaAccount? sea) =>
+    internal static bool FillFailed(SideEdit polEdit, PolAccount? pol, SideEdit seaEdit, SquareEnixAccount? sea) =>
         (polEdit == SideEdit.Fill && pol is null) || (seaEdit == SideEdit.Fill && sea is null);
 
     internal const string NothingChangedText =
@@ -628,7 +628,7 @@ public partial class MainViewModel : ObservableObject
     internal const string RemoveFailedText = "Provenance couldn't remove this account's saved details.";
 
     [RelayCommand]
-    private void RemoveAccount(Profile? profile)
+    private void RemoveAccount(Account? profile)
     {
         profile ??= SelectedProfile;
         if (profile == null) return;
@@ -1230,7 +1230,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     // accounts on one SE ID share an authenticator
-    private static string? AskOtp(Window? owner, Profile profile, SeaAccount sea) =>
+    private static string? AskOtp(Window? owner, Account profile, SquareEnixAccount sea) =>
         OtpDialog.Ask(owner, profile.OtpSource, profile.OtpItem, "sea:" + sea.Username.Trim().ToLowerInvariant(),
                       sea.Username, profile.OtpAccount);
 
@@ -1238,9 +1238,9 @@ public partial class MainViewModel : ObservableObject
     private static bool BothIds((string? PolId, string? SeaId) ids) => !string.IsNullOrEmpty(ids.PolId) && !string.IsNullOrEmpty(ids.SeaId);
 
     internal static string MissingDetailsText((string? PolId, string? SeaId) ids) =>
-        BothIds(ids) ? PolSessionService.DetailsAgainText : "This account's login details are missing. Press Edit account to add them.";
+        BothIds(ids) ? PolSession.DetailsAgainText : "This account's login details are missing. Press Edit account to add them.";
 
-    private (PolAccount Pol, SeaAccount Sea)? LoadForSignIn(Window? owner, Profile profile)
+    private (PolAccount Pol, SquareEnixAccount Sea)? LoadForSignIn(Window? owner, Account profile)
     {
         var details = PrepareSignIn(_credentials, profile.Id);
         if (details.Missing)
@@ -1261,7 +1261,7 @@ public partial class MainViewModel : ObservableObject
         return (details.Pol!, details.Sea!);
     }
 
-    internal sealed record SignInDetails(PolAccount? Pol, SeaAccount? Sea, string? Problem)
+    internal sealed record SignInDetails(PolAccount? Pol, SquareEnixAccount? Sea, string? Problem)
     {
         public bool Missing => Pol is null && Problem is null;
     }
@@ -1269,11 +1269,11 @@ public partial class MainViewModel : ObservableObject
     internal static SignInDetails PrepareSignIn(ICredentialService credentials, string profileId)
     {
         var pol = credentials.LoadPolAccount(profileId);
-        var sea = credentials.LoadSeaAccount(profileId);
+        var sea = credentials.LoadSquareEnixAccount(profileId);
         if (pol is null || sea is null) return new(null, null, null);
         if (ValidateDetails(pol.PolId, pol.Password, sea.Username, sea.Password) is { } problem)
             return new(null, null, problem + " Press Edit account to fix it.");
-        return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SeaAccount(sea.Username.Trim(), sea.Password), null);
+        return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SquareEnixAccount(sea.Username.Trim(), sea.Password), null);
     }
 
     // the US viewer asks once per POL ID, here it's once per install
@@ -1388,7 +1388,7 @@ public partial class MainViewModel : ObservableObject
         _gameRunning = false;
         Social.GameRunning = false;
         _pol.GameExited();
-        var ended = PolSessionService.GameEndedText(exit);
+        var ended = PolSession.GameEndedText(exit);
         if (ended is not null) Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);
         else if (_settings.Current.ExitAfterGameExits) { RequestExit?.Invoke(); return; }
         IsLaunching = false;
@@ -1521,15 +1521,15 @@ public partial class MainViewModel : ObservableObject
     private async Task<bool> BringGameForwardAsync()
     {
         if (_pol.Pid is not { } pid) return false;
-        ThirdPartyHookWindows.AllowForeground(pid);
+        GameWindow.AllowForeground(pid);
         var until = DateTime.UtcNow.AddSeconds(90);
         while (DateTime.UtcNow < until)
         {
             try { using var p = Process.GetProcessById(pid); if (p.HasExited) return false; }
             catch (ArgumentException) { return false; }
-            if (ThirdPartyHookWindows.GameWindow(pid) is var h && h != IntPtr.Zero)
+            if (GameWindow.Find(pid) is var h && h != IntPtr.Zero)
             {
-                bool front = ThirdPartyHookWindows.BringToFront(h);
+                bool front = GameWindow.BringToFront(h);
                 Log.Information("Game window is up (pol.exe {Pid}); brought to the front: {Front}", pid, front);
                 return true;
             }
@@ -1641,14 +1641,14 @@ public partial class MainViewModel : ObservableObject
         var s = _settings.Current;
         if (_pol.Platform == ThirdPartyHook.Ashita)
         {
-            var dir = AshitaInstall.DetectAshita(s.AshitaPath);
-            var current = string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedAshitaBootConfig(dir) : s.AshitaBootConfig;
+            var dir = AshitaInstall.Detect(s.AshitaPath);
+            var current = string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedBootConfig(dir) : s.AshitaBootConfig;
             return AshitaBootFiles.Names(dir)
                 .Select(n => new PlayChoice(n.File, n.Shown, n.File.Equals(current, StringComparison.OrdinalIgnoreCase))).ToList();
         }
         if (_pol.Platform == ThirdPartyHook.Windower)
         {
-            var names = WindowerInstall.WindowerProfiles(WindowerInstall.DetectWindower(s.WindowerPath));
+            var names = WindowerInstall.Profiles(WindowerInstall.Detect(s.WindowerPath));
             var current = WindowerSettingsFile.OldCopySource(s.WindowerProfile);
             return names.Select(n => new PlayChoice(n, SettingsViewModel.WindowerDisplay(n, names), n == current)).ToList();
         }

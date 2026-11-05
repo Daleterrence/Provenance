@@ -7,7 +7,7 @@ public interface ICredentialService
     // decrypts the password, so only for a sign-in or a save, never just to test it
     PolAccount? LoadPolAccount(string profileId);
 
-    SeaAccount? LoadSeaAccount(string profileId);
+    SquareEnixAccount? LoadSquareEnixAccount(string profileId);
 
     // header test only, so an entry wrapped with a lost key still counts (its load gives null at sign-in)
     bool HasUsableDetails(string profileId);
@@ -18,11 +18,11 @@ public interface ICredentialService
 
     void SavePolAccount(string profileId, PolAccount account);
 
-    void SaveSeaAccount(string profileId, SeaAccount account);
+    void SaveSquareEnixAccount(string profileId, SquareEnixAccount account);
 
     void DeletePolAccount(string profileId);
 
-    void DeleteSeaAccount(string profileId);
+    void DeleteSquareEnixAccount(string profileId);
 
     void DeleteProfile(string profileId);
 }
@@ -37,7 +37,7 @@ public sealed record PolAccount(string PolId, string Password)
     }
 }
 
-public sealed record SeaAccount(string Username, string Password)
+public sealed record SquareEnixAccount(string Username, string Password)
 {
     private bool PrintMembers(System.Text.StringBuilder builder)
     {

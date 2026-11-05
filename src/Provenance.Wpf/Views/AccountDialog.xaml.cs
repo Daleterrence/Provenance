@@ -81,7 +81,7 @@ public partial class AccountDialog : Window
         if ((_required || polId.Length > 0) && (polId.Length != 8 || !polId.All(char.IsAsciiLetterOrDigit)))
             problem = ("A PlayOnline ID is 8 letters and numbers.", PolIdBox);
         else if (_required && polPw.Length == 0) problem = ("Enter your PlayOnline password.", PolPasswordBox);
-        else if (polPw.Length > PolSessionService.MaxPolPasswordLength)
+        else if (polPw.Length > PolSession.MaxPolPasswordLength)
             problem = ("A PlayOnline password can't be longer than 16 characters.", PolPasswordBox);
         else if (PasswordProblem(polPw) is { } polPwProblem) problem = (polPwProblem, PolPasswordBox);
         else if (_required && seaId.Length == 0) problem = ("Enter your Square Enix ID.", SeaIdBox);

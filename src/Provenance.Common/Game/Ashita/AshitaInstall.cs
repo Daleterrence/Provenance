@@ -6,11 +6,11 @@ namespace Provenance.Common.Game.Ashita;
 
 public static class AshitaInstall
 {
-    public static bool IsAshitaFolder(string? dir) =>
+    public static bool IsFolder(string? dir) =>
         !string.IsNullOrWhiteSpace(dir) && File.Exists(Path.Combine(dir, "Ashita-cli.exe")) && File.Exists(Path.Combine(dir, "Ashita.dll"));
 
-    public static string? DetectAshita(string? configured) =>
-        Candidates(configured, @"C:\Ashita", "Ashita", "Ashita v4", "Ashita4").FirstOrDefault(IsAshitaFolder);
+    public static string? Detect(string? configured) =>
+        Candidates(configured, @"C:\Ashita", "Ashita", "Ashita v4", "Ashita4").FirstOrDefault(IsFolder);
 
     public const string IncompatibleText = "Incompatible with Provenance";
     public const string IncompatibleNote = "The ones marked incompatible stay off whenever Provenance starts the game. Your Ashita settings aren't changed.";
@@ -25,7 +25,7 @@ public static class AshitaInstall
 
     // Ashita writes the boot config into each log ("Ashita Config Script: \boot\config.ini"), so the newest log that
     // isn't from my own launch wins. Bit cheeky, but it works
-    public static string? LastUsedAshitaBootConfig(string? ashitaDir)
+    public static string? LastUsedBootConfig(string? ashitaDir)
     {
         try
         {
@@ -53,13 +53,13 @@ public static class AshitaInstall
 
     // Ashita's [ashita.language] playonline: 1 Japanese, 2 English (North America), 3 European, for the region pol.exe's
     // env.dat says
-    internal static int AshitaLanguage(string polExe) => RegionOfPol(polExe) switch
+    internal static int LanguageCodeFor(string polExe) => RegionOfPol(polExe) switch
     {
         PolRegion.Japan => 1,
         PolRegion.Europe => 3,
         _ => 2,
     };
 
-    public static string WriteAshitaBoot(string ashitaDir, string? sourceName, string polExe) =>
-        AshitaBootFiles.WriteLaunchCopy(ashitaDir, sourceName, polExe, AshitaLanguage(polExe));
+    public static string WriteBoot(string ashitaDir, string? sourceName, string polExe) =>
+        AshitaBootFiles.WriteLaunchCopy(ashitaDir, sourceName, polExe, LanguageCodeFor(polExe));
 }

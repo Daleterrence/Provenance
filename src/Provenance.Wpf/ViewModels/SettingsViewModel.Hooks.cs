@@ -66,23 +66,23 @@ public partial class SettingsViewModel
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
 
     // only the folder in the box, never one found somewhere else, since profiles get changed in it
-    internal string? WindowerDir => WindowerInstall.IsWindowerFolder(WindowerPath) ? WindowerPath : null;
+    internal string? WindowerDir => WindowerInstall.IsFolder(WindowerPath) ? WindowerPath : null;
     // settings.xml's writer refuses one too, so nothing here offers to change it
     private bool WindowerLinked => WindowerDir is { } d && FolderPins.Linked(d);
-    internal string? AshitaDir => AshitaInstall.IsAshitaFolder(AshitaPath) ? AshitaPath : null;
+    internal string? AshitaDir => AshitaInstall.IsFolder(AshitaPath) ? AshitaPath : null;
 
     private void LoadThirdPartyHook()
     {
         _loadingThirdPartyHook = true;
         var s = _settings.Current;
-        if (HookProfiles.MapOldCopies(s)) _settings.Save(s);
+        if (ThirdPartyProfiles.MapOldCopies(s)) _settings.Save(s);
         ThirdPartyHookIndex = s.ThirdPartyHookPlatform switch { ThirdPartyHook.Ashita => 1, ThirdPartyHook.Windower => 2, _ => 0 };
-        AshitaPath = AshitaInstall.DetectAshita(s.AshitaPath) ?? s.AshitaPath;
-        WindowerPath = WindowerInstall.DetectWindower(s.WindowerPath) ?? s.WindowerPath;
+        AshitaPath = AshitaInstall.Detect(s.AshitaPath) ?? s.AshitaPath;
+        WindowerPath = WindowerInstall.Detect(s.WindowerPath) ?? s.WindowerPath;
         _loadingThirdPartyHook = false;
         // the boot config Ashita really ran with last (from its logs), so the game keeps its window and plugins
         RefreshThirdPartyHookLists(s.WindowerProfile,
-            AshitaBootFiles.List(AshitaDir).Contains(s.AshitaBootConfig) ? s.AshitaBootConfig : AshitaInstall.LastUsedAshitaBootConfig(AshitaDir));
+            AshitaBootFiles.List(AshitaDir).Contains(s.AshitaBootConfig) ? s.AshitaBootConfig : AshitaInstall.LastUsedBootConfig(AshitaDir));
         UpdateThirdPartyHookStatus();
         LoadCards();
     }
@@ -106,7 +106,7 @@ public partial class SettingsViewModel
             AshitaBootConfigs.Clear();
             foreach (var (file, shown) in AshitaBootFiles.Names(AshitaDir)) AshitaBootConfigs.Add(new HookProfileItem(file, shown));
             WindowerProfiles.Clear();
-            var names = WindowerInstall.WindowerProfiles(WindowerDir);
+            var names = WindowerInstall.Profiles(WindowerDir);
             foreach (var n in names) WindowerProfiles.Add(new HookProfileItem(n, WindowerDisplay(n, names)));
             AshitaBootConfig = Item(AshitaBootConfigs, ashitaKeep)
                                ?? AshitaBootConfigs.FirstOrDefault(c => c.Name.Equals("default.ini", StringComparison.OrdinalIgnoreCase))
@@ -125,7 +125,7 @@ public partial class SettingsViewModel
             1 when AshitaDir is null => ("Couldn't find Ashita v4 in that folder.", true),
             1 => ("The game starts through Ashita with the boot configuration picked at the top.", false),
             2 when WindowerDir is null => ("Couldn't find Windower 4 in that folder.", true),
-            2 when FolderPins.Linked(WindowerDir) => (WindowerInstall.LinkedWindowerText, true),
+            2 when FolderPins.Linked(WindowerDir) => (WindowerInstall.LinkedText, true),
             2 => ("The game starts through Windower with the profile picked at the top.", false),
             _ => ("The game starts directly, without Windower or Ashita.", false),
         };
@@ -336,19 +336,19 @@ public partial class SettingsViewModel
         if (IsWindower && WindowerDir is { } w && ReadWindower(w) is { } file)
         {
             var name = AskName?.Invoke("Add a Windower profile", "What should the new profile be called?", file.NewProfileName(), n => file.NameProblem(n));
-            if (name is not null) ChangeProfiles(() => HookProfiles.AddWindower(_settings, w, name), "Provenance couldn't add the profile.");
+            if (name is not null) ChangeProfiles(() => ThirdPartyProfiles.AddWindower(_settings, w, name), "Provenance couldn't add the profile.");
         }
         else if (IsAshita && AshitaDir is { } a)
         {
-            var name = AskName?.Invoke("Add a boot configuration", "What should the new boot configuration be called?", NewAshitaName(a), n => HookProfiles.AshitaNameProblem(a, n));
-            if (name is not null) ChangeProfiles(() => HookProfiles.AddAshita(a, name, PlayOnlineLanguage), "Provenance couldn't add the boot configuration.");
+            var name = AskName?.Invoke("Add a boot configuration", "What should the new boot configuration be called?", NewAshitaName(a), n => ThirdPartyProfiles.AshitaNameProblem(a, n));
+            if (name is not null) ChangeProfiles(() => ThirdPartyProfiles.AddAshita(a, name, PlayOnlineLanguage), "Provenance couldn't add the boot configuration.");
         }
     }
 
     private static string NewAshitaName(string dir)
     {
         for (int i = 1; ; i++)
-            if (HookProfiles.AshitaNameProblem(dir, $"profile{i}.ini") is null) return $"profile{i}.ini";
+            if (ThirdPartyProfiles.AshitaNameProblem(dir, $"profile{i}.ini") is null) return $"profile{i}.ini";
     }
 
     [RelayCommand]
@@ -359,14 +359,14 @@ public partial class SettingsViewModel
         {
             var start = file.NameProblem($"{p.Display} copy") is null ? $"{p.Display} copy" : file.NewProfileName();
             var name = AskName?.Invoke("Duplicate a Windower profile", $"What should the copy of {p.Display} be called?", start, n => file.NameProblem(n));
-            if (name is not null) ChangeProfiles(() => HookProfiles.DuplicateWindower(_settings, w, p.Name, name), "Provenance couldn't copy the profile.");
+            if (name is not null) ChangeProfiles(() => ThirdPartyProfiles.DuplicateWindower(_settings, w, p.Name, name), "Provenance couldn't copy the profile.");
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
         {
             var stem = Path.GetFileNameWithoutExtension(b.Name);
-            var start = HookProfiles.AshitaNameProblem(a, $"{stem}-copy.ini") is null ? $"{stem}-copy.ini" : NewAshitaName(a);
-            var name = AskName?.Invoke("Duplicate a boot configuration", $"What should the copy of {b.Display} be called?", start, n => HookProfiles.AshitaNameProblem(a, n));
-            if (name is not null) ChangeProfiles(() => HookProfiles.DuplicateAshita(a, b.Name, name), "Provenance couldn't copy the boot configuration.");
+            var start = ThirdPartyProfiles.AshitaNameProblem(a, $"{stem}-copy.ini") is null ? $"{stem}-copy.ini" : NewAshitaName(a);
+            var name = AskName?.Invoke("Duplicate a boot configuration", $"What should the copy of {b.Display} be called?", start, n => ThirdPartyProfiles.AshitaNameProblem(a, n));
+            if (name is not null) ChangeProfiles(() => ThirdPartyProfiles.DuplicateAshita(a, b.Name, name), "Provenance couldn't copy the boot configuration.");
         }
     }
 
@@ -379,15 +379,15 @@ public partial class SettingsViewModel
             var same = file.Profiles.FirstOrDefault(x => x.Name == p.Name);
             var name = AskName?.Invoke("Rename a Windower profile", $"What should {p.Display} be called?", p.Name, n => file.NameProblem(n, same));
             if (name is null || name == p.Name) return;
-            ChangeProfiles(() => HookProfiles.RenameWindower(_settings, w, p.Name, name), "Provenance couldn't rename the profile.", renamedFrom: p.Name);
+            ChangeProfiles(() => ThirdPartyProfiles.RenameWindower(_settings, w, p.Name, name), "Provenance couldn't rename the profile.", renamedFrom: p.Name);
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
         {
             // it's the file that's renamed, a name of its own stays put
             var ask = b.Display == b.Name ? $"What should {b.Name} be called?" : $"What should the file for {b.Display} be called?";
-            var name = AskName?.Invoke("Rename a boot configuration", ask, b.Name, n => HookProfiles.AshitaNameProblem(a, n, renaming: b.Name));
-            if (name is null || HookProfiles.AshitaFileName(name) == b.Name) return;
-            ChangeProfiles(() => HookProfiles.RenameAshita(_settings, a, b.Name, name), "Provenance couldn't rename the boot configuration.", renamedFrom: b.Name);
+            var name = AskName?.Invoke("Rename a boot configuration", ask, b.Name, n => ThirdPartyProfiles.AshitaNameProblem(a, n, renaming: b.Name));
+            if (name is null || ThirdPartyProfiles.AshitaFileName(name) == b.Name) return;
+            ChangeProfiles(() => ThirdPartyProfiles.RenameAshita(_settings, a, b.Name, name), "Provenance couldn't rename the boot configuration.", renamedFrom: b.Name);
         }
     }
 
@@ -398,13 +398,13 @@ public partial class SettingsViewModel
         if (IsWindower && WindowerDir is { } w && WindowerProfile is { } p)
         {
             if (Confirm?.Invoke("Delete profile", $"Delete the Windower profile {p.Display}? Its settings are removed from Windower's settings.xml, and this can't be undone.", "DELETE", true) != true) return;
-            ChangeProfiles(() => { HookProfiles.DeleteWindower(_settings, w, p.Name); return ""; }, "Provenance couldn't delete the profile.");
+            ChangeProfiles(() => { ThirdPartyProfiles.DeleteWindower(_settings, w, p.Name); return ""; }, "Provenance couldn't delete the profile.");
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
         {
             var file = b.Display == b.Name ? "The file is" : $"Its file, {b.Name}, is";
             if (Confirm?.Invoke("Delete boot configuration", $"Delete the boot configuration {b.Display}? {file} removed from Ashita's config\\boot folder, and this can't be undone.", "DELETE", true) != true) return;
-            ChangeProfiles(() => { HookProfiles.DeleteAshita(_settings, a, b.Name); return null; }, "Provenance couldn't delete the boot configuration.");
+            ChangeProfiles(() => { ThirdPartyProfiles.DeleteAshita(_settings, a, b.Name); return null; }, "Provenance couldn't delete the boot configuration.");
         }
     }
 

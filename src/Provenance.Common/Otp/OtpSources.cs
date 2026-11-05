@@ -504,10 +504,10 @@ public static class OtpSources
     }
 
     // deletes need no wrap key, so the key file's never touched (and it never throws)
-    public static void ForgetKeePassXcIfUnused(IEnumerable<Profile> profiles) =>
+    public static void ForgetKeePassXcIfUnused(IEnumerable<Account> profiles) =>
         ForgetKeePassXcIfUnused(profiles, static () => new WindowsCredentialStore());
 
-    internal static void ForgetKeePassXcIfUnused(IEnumerable<Profile> profiles, Func<WindowsCredentialStore> keylessStore)
+    internal static void ForgetKeePassXcIfUnused(IEnumerable<Account> profiles, Func<WindowsCredentialStore> keylessStore)
     {
         try
         {

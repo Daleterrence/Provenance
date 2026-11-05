@@ -22,7 +22,7 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
     // a link is refused here rather than only when Save gets to it
     public FfxiSettings Load()
     {
-        if (FolderPins.Linked(windowerDir)) throw Shown.Mark(new IOException(WindowerInstall.LinkedWindowerText));
+        if (FolderPins.Linked(windowerDir)) throw Shown.Mark(new IOException(WindowerInstall.LinkedText));
         if (LinkCheck.IsRedirect(WindowerSettingsFile.PathIn(windowerDir)))
             throw Shown.Mark(new IOException("Windower's settings.xml is a link to somewhere else, so Provenance won't change it."));
         var windows = registry.Load();

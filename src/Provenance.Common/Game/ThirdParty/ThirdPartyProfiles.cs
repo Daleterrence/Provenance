@@ -4,7 +4,7 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Common.Game.ThirdParty;
 
-public static class HookProfiles
+public static class ThirdPartyProfiles
 {
     private static bool Same(string? a, string b) => a is not null && a.Trim().Equals(b.Trim(), StringComparison.OrdinalIgnoreCase);
 

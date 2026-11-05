@@ -15,7 +15,7 @@ public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryG
 
     private string PathOf()
     {
-        if (!ThirdPartyHookLauncher.IsBootFileName(bootName))
+        if (!AshitaLauncher.IsBootFileName(bootName))
             throw Shown.Mark(new InvalidOperationException("Choose an Ashita boot configuration under Windower/Ashita first."));
         var path = Path.Combine(AshitaBootFiles.Folder(ashitaDir), bootName);
         if (!File.Exists(path))

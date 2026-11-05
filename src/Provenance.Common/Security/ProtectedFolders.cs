@@ -61,7 +61,7 @@ public static class ProtectedFolders
         }
     }
 
-    public static string Dir
+    public static string IpcDir
     {
         get
         {
@@ -83,19 +83,19 @@ public static class ProtectedFolders
 
     internal static int PermissionWrites => Volatile.Read(ref _permissionWrites);
 
-    public static string PathFor(string name) => Path.Combine(Dir, name);
+    public static string PathFor(string name) => Path.Combine(IpcDir, name);
 
     public static string SubDir(string name)
     {
-        var dir = Path.Combine(Dir, name);
-        Lock(dir, usersMayRead: false, Path.Combine(Path.GetDirectoryName(Dir)!, BinName));
+        var dir = Path.Combine(IpcDir, name);
+        Lock(dir, usersMayRead: false, Path.Combine(Path.GetDirectoryName(IpcDir)!, BinName));
         return dir;
     }
 
     // beside ipc rather than in it, for files that are nothing to do with the hook
     public static string RootSubDir(string name, bool usersMayRead = false)
     {
-        var root = Path.GetDirectoryName(Dir)!;
+        var root = Path.GetDirectoryName(IpcDir)!;
         var dir = Path.Combine(root, name);
         Lock(dir, usersMayRead, Path.Combine(root, BinName));
         return dir;

@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Provenance.Common.Settings;
 
 // Id is the Credential Manager key so it can't change. DisplayName is the handle, the POL and SE IDs stay off screen
-public sealed class Profile
+public sealed class Account
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
     public string DisplayName { get; set; } = "New account";

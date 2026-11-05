@@ -3,9 +3,9 @@ using System.Text;
 
 namespace Provenance.Common.Game;
 
-public static class ThirdPartyHookWindows
+public static class GameWindow
 {
-    public static IntPtr GameWindow(int polPid) =>
+    public static IntPtr Find(int polPid) =>
         WindowsOf(polPid).FirstOrDefault(h => IsWindowVisible(h) && ClassOf(h) == "FFXiClass");
 
     // the app's holding the foreground from the Play click, so pol.exe needs leave to take it

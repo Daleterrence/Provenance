@@ -16,5 +16,5 @@ public sealed record WindowerLaunchSetup
     // a test's own key in place of HKLM, and its own update server
     public RegistryKey? RegistryRoot { get; init; }
     public Func<string, string, WindowerUpdater>? NewUpdater { get; init; }
-    public TimeSpan UpdateLimit { get; init; } = WindowerLaunch.UpdateLimit;
+    public TimeSpan UpdateLimit { get; init; } = WindowerLauncher.UpdateLimit;
 }

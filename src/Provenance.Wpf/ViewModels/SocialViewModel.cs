@@ -41,14 +41,14 @@ public sealed record FriendItem(string Name, string Playing, string Comment, str
 
 public partial class SocialViewModel : ObservableObject
 {
-    private readonly PolSessionService _pol;
+    private readonly PolSession _pol;
     private readonly AvatarService _avatars;
     private readonly ISettingsService _settings;
     private ChatStore? _chat;
     private PolSocialSnapshot _last = PolSocialSnapshot.Empty;
     private string _friendsSignature = "";
 
-    public SocialViewModel(PolSessionService pol, AvatarService avatars, ISettingsService settings)
+    public SocialViewModel(PolSession pol, AvatarService avatars, ISettingsService settings)
     {
         _pol = pol;
         _avatars = avatars;

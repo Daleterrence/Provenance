@@ -553,7 +553,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     {
         { Platform: ThirdPartyHook.Windower, Folder: null } =>
             Page.Empty("Provenance couldn't find Windower. Choose its folder under Windower/Ashita first."),
-        { Platform: ThirdPartyHook.Windower, Folder: { } dir } when FolderPins.Linked(dir) => Page.Empty(WindowerInstall.LinkedWindowerText),
+        { Platform: ThirdPartyHook.Windower, Folder: { } dir } when FolderPins.Linked(dir) => Page.Empty(WindowerInstall.LinkedText),
         { Platform: ThirdPartyHook.Windower, Folder: { } dir } => BuildWindower(dir, target.Profile, lists, extras, scan as WindowerScan),
         { Platform: ThirdPartyHook.Ashita, Folder: null } =>
             Page.Empty("Provenance couldn't find Ashita. Choose its folder under Windower/Ashita first."),

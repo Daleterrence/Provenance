@@ -96,7 +96,7 @@ public partial class App : Application
                 services.AddSingleton<ICredentialService>(_ => new CredentialService());
                 services.AddSingleton<ISettingsService, SettingsService>();
                 services.AddSingleton<FeedService>();
-                services.AddSingleton<PolSessionService>();
+                services.AddSingleton<PolSession>();
                 services.AddSingleton<AvatarService>();
                 services.AddSingleton<MainViewModel>();
                 services.AddSingleton<MainWindow>();
@@ -106,7 +106,7 @@ public partial class App : Application
 
         // every key's read on a worker now, so the first use on the UI thread finds it ready
         _ = (Services.GetRequiredService<ICredentialService>() as CredentialService)?.OpenKeyInBackground();
-        _ = Services.GetRequiredService<PolSessionService>().OpenKeyInBackground();
+        _ = Services.GetRequiredService<PolSession>().OpenKeyInBackground();
         _ = OtpSources.OpenKeyInBackground();
         _ = OtpReuse.OpenKeyInBackground();
 
@@ -148,7 +148,7 @@ public partial class App : Application
         var mainVm = Services.GetRequiredService<MainViewModel>();
         // after the view model's listening for a failed save, before its start-up clears the records of gone pol.exes or
         // pre-starts one
-        PolSessionService.NoteScreenSaver(Services.GetRequiredService<ISettingsService>());
+        PolSession.NoteScreenSaver(Services.GetRequiredService<ISettingsService>());
         // Windows logging off cancels a sign-in, and WPF would close the window ignoring its Cancel, so it closes the normal
         // way first: a held session's logged out and nothing goes to the tray
         SessionEnding += (_, _) =>

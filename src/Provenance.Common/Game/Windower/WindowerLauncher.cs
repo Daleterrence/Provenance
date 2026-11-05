@@ -16,7 +16,7 @@ namespace Provenance.Common.Game.Windower;
 
 // what Windower.exe does before starting pol.exe, then the watcher's --windower puts in Hook.dll and pol_hook. The
 // mapping and event have fixed names, so launches take turns till the watcher's done
-public sealed class WindowerLaunch : IDisposable
+public sealed class WindowerLauncher : IDisposable
 {
     internal const string LockName = @"Local\ProvenanceWindowerLaunch";
     public static readonly TimeSpan WatcherLimit = TimeSpan.FromSeconds(90);
@@ -41,7 +41,7 @@ public sealed class WindowerLaunch : IDisposable
     private SafeWaitHandle? _ready;
     private string? _launchId;
 
-    private WindowerLaunch(WindowerLaunchSetup setup) => _setup = setup;
+    private WindowerLauncher(WindowerLaunchSetup setup) => _setup = setup;
 
     public string HookDll => Path.Combine(_setup.WindowerDir, "Hook.dll");
     public WindowerProfile Profile { get; private set; } = new();
@@ -64,7 +64,7 @@ public sealed class WindowerLaunch : IDisposable
                                               IReadOnlyDictionary<string, WindowerAddonList>? lists, WindowerAddonList? shared = null)
     {
         var s = settings.Current;
-        var dir = WindowerInstall.DetectWindower(s.WindowerPath)
+        var dir = WindowerInstall.Detect(s.WindowerPath)
                   ?? throw Shown.Mark(new DirectoryNotFoundException("Couldn't find Windower. Set its folder in Settings, under Windower/Ashita."));
         var region = ThirdPartyHook.RegionOfPol(polExe) ?? settings.DetectedRegion ?? PolRegion.UnitedStates;
         return new WindowerLaunchSetup
@@ -81,9 +81,9 @@ public sealed class WindowerLaunch : IDisposable
     }
 
     // every step up to running the watcher. A throw has a message for the player when it's Shown
-    public static WindowerLaunch Prepare(WindowerLaunchSetup setup, IProgress<LaunchProgress>? progress, CancellationToken ct)
+    public static WindowerLauncher Prepare(WindowerLaunchSetup setup, IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
-        var launch = new WindowerLaunch(setup);
+        var launch = new WindowerLauncher(setup);
         try
         {
             launch.Steps(progress, ct);
@@ -102,7 +102,7 @@ public sealed class WindowerLaunch : IDisposable
     private void Steps(IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         var dir = _setup.WindowerDir;
-        if (FolderPins.Linked(dir)) throw Shown.Mark(new IOException(WindowerInstall.LinkedWindowerText));
+        if (FolderPins.Linked(dir)) throw Shown.Mark(new IOException(WindowerInstall.LinkedText));
         TakeTurn(progress, ct);
         var file = LoadSettings(dir);
         Profile = FindProfile(file);
@@ -214,7 +214,7 @@ public sealed class WindowerLaunch : IDisposable
     {
         try
         {
-            using var pins = FolderPins.Hold(dir, dir) ?? throw Shown.Mark(new IOException(WindowerInstall.LinkedWindowerText));
+            using var pins = FolderPins.Hold(dir, dir) ?? throw Shown.Mark(new IOException(WindowerInstall.LinkedText));
             bool scripts = true;
             foreach (var sub in new[] { "screenshots", "videos", "scripts" })
                 if (!pins.Pin(Path.Combine(dir, sub)))

@@ -191,7 +191,7 @@ public partial class MainViewModel : IMultiRunHost
         if (MultiRunning && !MultiStopping) MultiStatus = text;
     }
 
-    bool IMultiRunHost.IsInGame(string profileId) => PolSessionService.GameRunningFor(profileId);
+    bool IMultiRunHost.IsInGame(string profileId) => PolSession.GameRunningFor(profileId);
 
     async Task<AccountFailure?> IMultiRunHost.SignInAndPlayAsync(MultiRunAccount account, CancellationToken ct)
     {
@@ -247,8 +247,8 @@ public partial class MainViewModel : IMultiRunHost
         // after a switch between Windower and Ashita mid-run a stored profile means nothing
         var hookProfile = _pol.Platform == _runPlatform ? _runHookProfiles.GetValueOrDefault(account.ProfileId) : null;
         if (_pol.Platform == ThirdPartyHook.Ashita && hookProfile is { Length: > 0 } boot
-            && !ThirdPartyHookLauncher.IsBootFileName(boot))
-            return new(AccountFailureKind.Account, ThirdPartyHookLauncher.AccountBootFileProblem);
+            && !AshitaLauncher.IsBootFileName(boot))
+            return new(AccountFailureKind.Account, AshitaLauncher.AccountBootFileProblem);
 
         var profile = Profiles.FirstOrDefault(p => p.Id == account.ProfileId);
         if (profile is null) return MissingDetailsFailure(default);
@@ -400,7 +400,7 @@ public partial class MainViewModel : IMultiRunHost
         try
         {
             var code = await exited;
-            if (PolSessionService.GameEndedText(code) is not { } text) return;
+            if (PolSession.GameEndedText(code) is not { } text) return;
             Log.Error("Multi-account mode: FINAL FANTASY XI didn't start for {Account} (pol.exe exit code {Code})", account.ProfileId, code);
             var line = $"{account.Name}: {text}";
             if (MultiRunning) _lateGameFailures.Add(line);
@@ -429,7 +429,7 @@ public partial class MainViewModel : IMultiRunHost
 
     // an unread or unanswered Play wants a restart so the run stops, a refusal or a lost session is this account's problem
     internal static AccountFailureKind PlayFailureKind(string text) =>
-        text == PolSessionService.PlayUnreadableText ? AccountFailureKind.Install : AccountFailureKind.Account;
+        text == PolSession.PlayUnreadableText ? AccountFailureKind.Install : AccountFailureKind.Account;
 
     // never throws. StopHold leaves a session that got to the game alone, so that one's just forgotten.
     private async Task LetGoOfAccountAsync()

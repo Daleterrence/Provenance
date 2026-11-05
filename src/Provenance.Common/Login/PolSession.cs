@@ -20,7 +20,7 @@ namespace Provenance.Common.Login;
 
 internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? problem);
 
-public sealed class PolSessionService : IDisposable
+public sealed class PolSession : IDisposable
 {
     public const string DetailsAgainText = "Provenance needs this account's login details again. Press Edit account to add them.";
 
@@ -150,11 +150,11 @@ public sealed class PolSessionService : IDisposable
     private DateTime _hookStart;
     private WindowerGameValues? _windowerPlay;
 
-    public PolSessionService(ISettingsService settings)
+    public PolSession(ISettingsService settings)
         : this(settings, new WindowsCredentialStore(), () => new WindowsCredentialStore(wrapKey: CredentialKey.Open()),
                SweepInterval, CredentialKey.Reload) { }
 
-    internal PolSessionService(ISettingsService settings, WindowsCredentialStore store,
+    internal PolSession(ISettingsService settings, WindowsCredentialStore store,
                                Func<WindowsCredentialStore> openWrapped, TimeSpan sweepEvery,
                                Action? dropKey = null)
     {
@@ -165,7 +165,7 @@ public sealed class PolSessionService : IDisposable
         FindLaunchFiles = () => LaunchFiles(Region);
         GameIsInstalled = () => GameInstalled(Region);
         UpdateViewer = (dir, progress, freeFiles, ct) => PolUpdates.UpdateViewer(dir, Region, progress, freeFiles, ct);
-        WindowerSetup = (polExe, profile, lists, shared) => WindowerLaunch.SetupFor(_settings, polExe, profile, lists, shared);
+        WindowerSetup = (polExe, profile, lists, shared) => WindowerLauncher.SetupFor(_settings, polExe, profile, lists, shared);
         PrestartAlive = pre =>
         {
             try { using var p = Process.GetProcessById(pre.Pid); return !p.HasExited && IsSameProcess(p, pre.Started); }
@@ -260,7 +260,7 @@ public sealed class PolSessionService : IDisposable
         return id;
     }
 
-    public async Task<int> ConnectAsync(PolAccount pol, SeaAccount sea, string otp, string? rememberedProfileId,
+    public async Task<int> ConnectAsync(PolAccount pol, SquareEnixAccount sea, string otp, string? rememberedProfileId,
                                         IProgress<LaunchProgress>? progress, Func<string?>? askHandleName,
                                         CancellationToken ct = default, SessionOptions? options = null)
     {
@@ -282,11 +282,11 @@ public sealed class PolSessionService : IDisposable
     internal SessionOptions ForLaunch(SessionOptions? options) =>
         (options ?? new SessionOptions(false, null)) with
         {
-            WindowerLists = WindowerLaunch.Snapshot(_settings.Current.WindowerAddonLists),
+            WindowerLists = WindowerLauncher.Snapshot(_settings.Current.WindowerAddonLists),
             WindowerShared = _settings.Current.WindowerSharedExtras?.Copy(),
         };
 
-    private int ConnectCore(PolAccount pol, SeaAccount sea, string otp, string? rememberedProfileId,
+    private int ConnectCore(PolAccount pol, SquareEnixAccount sea, string otp, string? rememberedProfileId,
                             IProgress<LaunchProgress>? progress, Func<string?>? askHandleName, SessionOptions options,
                             CancellationToken ct)
     {
@@ -347,7 +347,7 @@ public sealed class PolSessionService : IDisposable
         }
     }
 
-    private int ConnectHeld(PolAccount pol, SeaAccount sea, string otp, string? rememberedProfileId,
+    private int ConnectHeld(PolAccount pol, SquareEnixAccount sea, string otp, string? rememberedProfileId,
                             IProgress<LaunchProgress>? progress, Func<string?>? askHandleName, string polExe,
                             string launcherExe, List<string> keys, SessionOptions options, CancellationToken ct)
     {
@@ -414,7 +414,7 @@ public sealed class PolSessionService : IDisposable
         Volatile.Write(ref _windowerPlay, null);
         if (platform == ThirdPartyHook.Ashita)
         {
-            var hookPid = ThirdPartyHookLauncher.StartViaAshita(
+            var hookPid = AshitaLauncher.StartViaAshita(
                 _settings, psi, polExe, _launchId!, options.ThirdPartyHookProfile, progress, ct,
                 hookStarted: TrackThirdPartyHook);
             if (hookPid is null) return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
@@ -538,8 +538,8 @@ public sealed class PolSessionService : IDisposable
                                        IProgress<LaunchProgress>? progress, CancellationToken ct,
                                        IReadOnlyDictionary<string, WindowerAddonList>? lists, WindowerAddonList? shared = null)
     {
-        WindowerLaunch windower;
-        try { windower = WindowerLaunch.Prepare(WindowerSetup(polExe, profile, lists, shared), progress, ct); }
+        WindowerLauncher windower;
+        try { windower = WindowerLauncher.Prepare(WindowerSetup(polExe, profile, lists, shared), progress, ct); }
         catch (OperationCanceledException)
         {
             progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
@@ -556,7 +556,7 @@ public sealed class PolSessionService : IDisposable
         {
             windower.ApplyTo(psi, launchId);
             progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline with Windower...", LaunchSteps.StartPol, 0.02));
-            var pid = StartWithWatcher(psi, progress, ct, WindowerLaunch.WatcherLimit, WindowerDidNotStart);
+            var pid = StartWithWatcher(psi, progress, ct, WindowerLauncher.WatcherLimit, WindowerDidNotStart);
             if (pid is not null) Volatile.Write(ref _windowerPlay, windower.GameValues);
             return pid;
         }

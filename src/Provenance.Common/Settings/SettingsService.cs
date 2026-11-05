@@ -142,7 +142,7 @@ public sealed class SettingsService : ISettingsService
             var before = was?[name];
             string? key = !lists ? null : name switch
             {
-                nameof(LauncherSettings.Profiles) => nameof(Profile.Id),
+                nameof(LauncherSettings.Profiles) => nameof(Account.Id),
                 nameof(LauncherSettings.MultiAccounts) => nameof(MultiAccountEntry.ProfileId),
                 nameof(LauncherSettings.WindowerAddonLists) => "",
                 _ => null,
