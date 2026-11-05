@@ -27,6 +27,9 @@ public static class LargeAddressAwareSwitch
     private static readonly TimeSpan LockWait = TimeSpan.FromMilliseconds(500);
     private static volatile bool _lastWriteDenied;
 
+    // the app hands in its hop onto the UI thread, with no app it just runs
+    internal static Action<Action> OnUiThread { get; set; } = run => run();
+
     internal static Target For(PolRegion? region, Func<string?>? blocked = null) =>
         new(region is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null,
             PolUpdates.ViewerRunning, blocked ?? (() => null), Busy);
@@ -189,7 +192,6 @@ public static class LargeAddressAwareSwitch
             s.LargeAddressAwareClearAtStart = false;
             settings.Save(s);
         }
-        if (System.Windows.Application.Current?.Dispatcher is { } ui && !ui.CheckAccess()) ui.InvokeAsync(Save);
-        else Save();
+        OnUiThread(Save);
     }
 }

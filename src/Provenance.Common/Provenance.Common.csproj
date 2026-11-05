@@ -9,6 +9,7 @@
     <InternalsVisibleTo Include="provenance-cli" />
     <InternalsVisibleTo Include="provenance-app-tests" />
     <PackageReference Include="NaCl.Net" />
+    <PackageReference Include="Serilog" />
     <PackageReference Include="SharpCompress" />
   </ItemGroup>
 

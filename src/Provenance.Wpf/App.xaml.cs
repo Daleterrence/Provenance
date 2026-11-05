@@ -77,6 +77,11 @@ public partial class App : Application
         int swept = HookFiles.Sweep(HookFiles.Dir, ProcessExists, TimeSpan.FromDays(7), DateTime.UtcNow);
         if (swept > 0) Log.Information("Removed {Count} old hook file(s)", swept);
 
+        LargeAddressAwareSwitch.OnUiThread = run =>
+        {
+            if (Current?.Dispatcher is { } ui && !ui.CheckAccess()) ui.InvokeAsync(run);
+            else run();
+        };
         _host = Host.CreateDefaultBuilder()
             .UseSerilog()
             .ConfigureServices((_, services) =>
