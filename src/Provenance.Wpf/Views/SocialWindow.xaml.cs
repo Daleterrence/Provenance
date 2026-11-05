@@ -13,6 +13,16 @@ namespace Provenance.Wpf.Views;
 
 public enum SocialPart { Both, Friends, Messages }
 
+public static class SocialParts
+{
+    public static string Title(this SocialPart part) => part switch
+    {
+        SocialPart.Friends => "Friends",
+        SocialPart.Messages => "Messages",
+        _ => "Friends and messages",
+    };
+}
+
 // split, it's two windows on one view model, neither owned by the main window so each lives its own life
 public partial class SocialWindow : Window
 {
@@ -140,7 +150,7 @@ public partial class SocialWindow : Window
             SocialPart.Messages => ("chat", 420.0, 640.0),
             _ => ("smiley", 720.0, 900.0),
         };
-        TitleText.Text = Title = TitleFor(Part);
+        TitleText.Text = Title = Part.Title();
         LayoutIcon.Kind = Part == SocialPart.Both ? PackIconKind.ArrowSplitVertical
                                                   : PackIconKind.ArrowCollapseHorizontal;
         var tip = Part == SocialPart.Both ? "Split into a Friends window and a Messages window"
@@ -148,13 +158,6 @@ public partial class SocialWindow : Window
         LayoutButton.ToolTip = tip;
         System.Windows.Automation.AutomationProperties.SetName(LayoutButton, tip);
     }
-
-    public static string TitleFor(SocialPart part) => part switch
-    {
-        SocialPart.Friends => "Friends",
-        SocialPart.Messages => "Messages",
-        _ => "Friends and messages",
-    };
 
     // so the Messages window's taskbar button says whose conversation it is
     private void ShowFriendInTitle()

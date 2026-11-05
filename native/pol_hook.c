@@ -294,7 +294,7 @@ static const char *cred_keyfile(char *buf, DWORD n)
     if (k > 0 && k < n) return buf;
     if (!warned) {
         warned = 1;
-        lg("phase_c: POL_CRED_KEYFILE unusable (unset, empty or too long) - no key file, no saved entry is read\r\n");
+        lg("phase_c: POL_CRED_KEYFILE too long - no key file, no saved entry is read\r\n");
     }
     return NULL;
 }
@@ -4153,11 +4153,7 @@ static void me_pump(BYTE *b, int ctl)
     case 2:
         r = ((svc4b8_t)SVC(0x4b8))(g_me_job);
         if (r == 0) {
-            if (g_draining) {
-                ((svc4dc_t)SVC(0x4dc))(g_me_job);
-                g_me_rec = NULL;   /* a cancelled read can still write, so never freed */
-                me_done("cancelled");
-            }
+            if (g_draining) me_abandon(b);
             return;
         }
         g_me_job = -1;
@@ -5761,7 +5757,7 @@ static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned
     /* pol.exe 0x00406a10 destroys the hidden splash on the thread that made it */
     ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x6a10))();
     pol_hold((BYTE *)polcore_module());
-    lg("pol_hook: menu call 1 -> content code 1 (FFXiEntry)\r\n");
+    lg("pol_hook: menu session -> content code 1 (FFXiEntry)\r\n");
     g_game_started = 1;   /* from here ffxi_returned ends pol.exe when the game does, so this only runs once */
     return 1;
 }

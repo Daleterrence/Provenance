@@ -44,7 +44,7 @@ public sealed class TrayIcon : IDisposable
         catch { }   // the tray still works with the default icon
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Open Provenance", null, (_, _) => OpenRequested?.Invoke());
-        _friends = menu.Items.Add(friendsTitle(), null, (_, _) => FriendsRequested?.Invoke());
+        _friends = menu.Items.Add("", null, (_, _) => FriendsRequested?.Invoke());
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         _signOut = menu.Items.Add("Log out of PlayOnline", null, (_, _) => SignOutRequested?.Invoke());
         _exit = menu.Items.Add("Exit and log out", null, (_, _) => ExitRequested?.Invoke());

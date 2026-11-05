@@ -353,12 +353,12 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
 }
 
 /* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for the next 10s (why tho?????),
-   so it's only for shutdown or a real timeout */
+   so it's only for shutdown */
 static void profile_pic_cancel(BYTE *b)
 {
     if (g_fs.job >= 0) {
         ((svc4dc_t)SVC(0x4dc))(g_fs.job);
-        if (g_fs.st == ST_LOAD_POLL) g_fs.rec = NULL;   /* same as the timeout, polcore can still write into it */
+        if (g_fs.st == ST_LOAD_POLL) g_fs.rec = NULL;   /* a cancelled read can still write into it, so never freed */
     }
     fs_reset();
 }

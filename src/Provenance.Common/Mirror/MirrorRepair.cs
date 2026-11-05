@@ -4,11 +4,10 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Mirror;
 
-public sealed record RepairPlan(IReadOnlyDictionary<string, IReadOnlyList<MirrorEntry>> Work, long Bytes, IReadOnlyDictionary<string, string> Versions)
+public sealed record RepairPlan(IReadOnlyDictionary<string, IReadOnlyList<MirrorEntry>> Work, long Bytes,
+                                IReadOnlyDictionary<string, MirrorIndex> Indexes)
 {
     public int Count => Work.Values.Sum(w => w.Count);
-
-    public IReadOnlyDictionary<string, MirrorIndex> Indexes { get; init; } = new Dictionary<string, MirrorIndex>();
 
     // products whose patch.ver doesn't hold the version the files were checked against, read the way POL reads it
     public IReadOnlyList<string> StaleVersions { get; init; } = [];
@@ -78,7 +77,8 @@ public sealed class MirrorRepair(MirrorClient client, string region)
             found.Add((slug, product, index));
             if (!VersionRight(product, index.Version)) stale.Add(slug);
         }
-        foreach (var (slug, product, index) in found) Validate(product.Folder, index.Files, $"{slug} index {index.Version}");
+        foreach (var (_, product, index) in found)
+            if (MirrorSync.Unusable(product.Folder, index) is { } why) throw new MirrorUnusableException(why, []);
 
         long total = found.Sum(f => f.Index.Files.Sum(e => e.Size)), before = 0;
         var work = new Dictionary<string, IReadOnlyList<MirrorEntry>>();
@@ -88,9 +88,8 @@ public sealed class MirrorRepair(MirrorClient client, string region)
             work[slug] = await MirrorSync.ScanAsync(product.Folder, index, Offset(progress, before, total), ct, keepLargeAddressAware: true);
             before += index.Files.Sum(e => e.Size);
         }
-        return new RepairPlan(work, work.Values.Sum(w => w.Sum(e => e.Size)), found.ToDictionary(f => f.Slug, f => f.Index.Version))
+        return new RepairPlan(work, work.Values.Sum(w => w.Sum(e => e.Size)), found.ToDictionary(f => f.Slug, f => f.Index))
         {
-            Indexes = found.ToDictionary(f => f.Slug, f => f.Index),
             StaleVersions = stale,
             QueuePending = PolUpdater.QueuedWorkPending(viewerDir),
             DirectXMissing = !DirectXPresent(),
@@ -104,11 +103,6 @@ public sealed class MirrorRepair(MirrorClient client, string region)
     {
         _changing = false;
         var products = ProductsOf(viewerDir, ffxiDir);
-        foreach (var (slug, _) in products)
-        {
-            if (!plan.Versions.ContainsKey(slug)) throw new ArgumentException($"The plan has no {slug} version.", nameof(plan));
-            if (!plan.Indexes.ContainsKey(slug)) throw new ArgumentException($"The plan has no {slug} index.", nameof(plan));
-        }
         var viewer = products[0].Product;
 
         // the installer data and the replacement files are one bar, the data's size is only known once it starts
@@ -197,9 +191,9 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         int written = 0;
         foreach (var (slug, product) in products)
         {
-            if (VersionRight(product, plan.Versions[slug])) continue;
+            if (VersionRight(product, plan.Indexes[slug].Version)) continue;
             ChangingNow();
-            new PolUpdater(product).WriteLocalVersion(plan.Versions[slug]);
+            new PolUpdater(product).WriteLocalVersion(plan.Indexes[slug].Version);
             written++;
         }
         return written;
@@ -268,7 +262,7 @@ public sealed class MirrorRepair(MirrorClient client, string region)
             {
                 var rel = MirrorInstall.Inside(product.Folder, absent) ? Path.GetRelativePath(product.Folder, absent).Replace('\\', '/') : absent;
                 throw new MirrorUnusableException(
-                    $"the {name} installer needs {rel}, which is missing, and the mirror's {slug} index {plan.Versions[slug]} does not list it", [rel]);
+                    $"the {name} installer needs {rel}, which is missing, and the mirror's {slug} index {plan.Indexes[slug].Version} does not list it", [rel]);
             }
             var (props, uninstall) = GameInstaller.DirectApplySetup(msi, installRoot, slug == "viewer" ? GameInstaller.PolShortcut : GameInstaller.FfxiShortcut, Region);
             packages.Add(new Package(name, msi, props, uninstall));
@@ -317,12 +311,6 @@ public sealed class MirrorRepair(MirrorClient client, string region)
         [("viewer", PatchProduct.Viewer(viewerDir, Region)), ("ffxi", PatchProduct.Ffxi(ffxiDir, viewerDir, Region))];
 
     private static IReadOnlyList<MirrorEntry> WorkOf(RepairPlan plan, string slug) => plan.Work.TryGetValue(slug, out var w) ? w : [];
-
-    private static void Validate(string folder, IEnumerable<MirrorEntry> entries, string what)
-    {
-        if (MirrorSync.FirstUnsafe(folder, entries) is { } why)
-            throw new MirrorUnusableException($"the {what} is unusable: {why}", []);
-    }
 
     private static IProgress<(long Done, long Total)>? Offset(IProgress<(long Done, long Total)>? progress, long before, long total) =>
         progress is null ? null : new InlineProgress<(long Done, long Total)>(p => progress.Report((before + p.Done, total)));

@@ -160,7 +160,4 @@ public sealed class Profile
 
     // the 1Password account that holds the item, "" lets op pick
     public string OtpAccount { get; set; } = "";
-
-    // a screen reader reads an account in the picker out as this
-    public override string ToString() => DisplayName;
 }

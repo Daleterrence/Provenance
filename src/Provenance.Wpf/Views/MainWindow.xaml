@@ -444,7 +444,13 @@
                                         <ComboBox Style="{StaticResource OutlinedCombo}" FontSize="16"
                                                   Padding="14,10,10,10" materialDesign:HintAssist.IsFloating="False"
                                                   ItemsSource="{Binding Profiles}" DisplayMemberPath="DisplayName"
-                                                  SelectedItem="{Binding SelectedProfile}" />
+                                                  SelectedItem="{Binding SelectedProfile}">
+                                            <ComboBox.ItemContainerStyle>
+                                                <Style TargetType="ComboBoxItem" BasedOn="{StaticResource MaterialDesignComboBoxItemStyle}">
+                                                    <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
+                                                </Style>
+                                            </ComboBox.ItemContainerStyle>
+                                        </ComboBox>
                                     </StackPanel>
                                 </Grid>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">

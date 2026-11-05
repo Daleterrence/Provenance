@@ -29,14 +29,15 @@ public static class MirrorSync
         return full;
     }
 
-    internal static string? FirstUnsafe(string folder, IEnumerable<MirrorEntry> entries)
+    // every path an index names, before anything of it's read, fetched or written. Null when they're all fine
+    internal static string? Unusable(string folder, MirrorIndex index)
     {
         try
         {
-            foreach (var e in entries) SafePath(folder, e.Path);
+            foreach (var e in index.Files) SafePath(folder, e.Path);
             return null;
         }
-        catch (InvalidDataException ex) { return ex.Message; }
+        catch (InvalidDataException ex) { return $"the {index.Product} index {index.Version} is unusable: {ex.Message}"; }
     }
 
     public static string NameList(IReadOnlyCollection<string> names, int max = 10) =>
@@ -49,8 +50,8 @@ public static class MirrorSync
         return to.Files.Where(e => !old.TryGetValue(e.Path, out var sha) || sha != e.Sha256).ToList();
     }
 
-    // progress always ends on Done == Total. keepLargeAddressAware is for the app's game folders only, anything else
-    // stays exact
+    // only for an index that's passed Unusable, it opens every path in it. Progress always ends on Done == Total, and
+    // keepLargeAddressAware is for the app's game folders only
     public static async Task<IReadOnlyList<MirrorEntry>> ScanAsync(string folder, MirrorIndex index,
         IProgress<(long Done, long Total)>? progress, CancellationToken ct, bool keepLargeAddressAware = false)
     {

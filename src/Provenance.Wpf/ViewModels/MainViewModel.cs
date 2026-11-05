@@ -658,7 +658,6 @@ public partial class MainViewModel : ObservableObject
 
     private bool CanLogin() => !IsLaunching && !MultiRunning;
 
-
     private static string? ValidateDetails(string polId, string polPassword, string seaId, string seaPassword)
     {
         if (string.IsNullOrWhiteSpace(polId)) return "Enter your PlayOnline ID.";
@@ -683,7 +682,6 @@ public partial class MainViewModel : ObservableObject
         _launchCts?.Cancel();
         if (_connectTask is { } t) await Task.WhenAny(t, Task.Delay(TimeSpan.FromSeconds(15)));
     }
-
 
     internal static string TitleFor(int code) => code switch
     {
@@ -978,7 +976,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     // the window OpenSocial brings up, where requests and invitations are answered
-    internal string FriendsWindowTitle => SocialWindow.TitleFor(_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both);
+    internal string FriendsWindowTitle => (_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both).Title();
 
     [RelayCommand]
     private void OpenSocial()

@@ -62,6 +62,11 @@ public static class ChatLook
         303 => "GE",
         _ => "",
     } : "";
+
+    // the hook builds a room's IRC name as a #, its language in 2 hex, its use and kind letters, then its index. Kind U
+    // is a room a user made, any other is one of SE's
+    private const int KindAt = 4;
+    public static bool Official(string irc) => irc.Length > KindAt && irc[KindAt] != 'U';
 }
 
 // the snapshot's "chat", there once chat's been used this session. States run "searching" -> "done" or "failed:...",

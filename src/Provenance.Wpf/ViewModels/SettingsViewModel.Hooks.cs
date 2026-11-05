@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.Windower;
+using Provenance.Common.IO;
 using Provenance.Common.PolFormat;
 using Provenance.Wpf.Services;
 using Serilog;
@@ -65,7 +66,7 @@ public partial class SettingsViewModel
     // only the folder in the box, never one found somewhere else, since profiles get changed in it
     internal string? WindowerDir => ThirdPartyHookService.IsWindowerFolder(WindowerPath) ? WindowerPath : null;
     // settings.xml's writer refuses one too, so nothing here offers to change it
-    private bool WindowerLinked => WindowerDir is { } d && ThirdPartyHookService.IsLinkedFolder(d);
+    private bool WindowerLinked => WindowerDir is { } d && FolderPins.Linked(d);
     internal string? AshitaDir => ThirdPartyHookService.IsAshitaFolder(AshitaPath) ? AshitaPath : null;
 
     private void LoadThirdPartyHook()
@@ -122,7 +123,7 @@ public partial class SettingsViewModel
             1 when AshitaDir is null => ("Couldn't find Ashita v4 in that folder.", true),
             1 => ("The game starts through Ashita with the boot configuration picked at the top.", false),
             2 when WindowerDir is null => ("Couldn't find Windower 4 in that folder.", true),
-            2 when ThirdPartyHookService.IsLinkedFolder(WindowerDir) => (ThirdPartyHookService.LinkedWindowerText, true),
+            2 when FolderPins.Linked(WindowerDir) => (ThirdPartyHookService.LinkedWindowerText, true),
             2 => ("The game starts through Windower with the profile picked at the top.", false),
             _ => ("The game starts directly, without Windower or Ashita.", false),
         };

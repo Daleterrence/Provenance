@@ -144,6 +144,14 @@ public sealed class FolderPins : IDisposable
         return !string.Equals(FinalPath(h), given, StringComparison.OrdinalIgnoreCase);
     }
 
+    // ThroughLink for a folder out of settings, where a path that won't even parse just isn't a link. A third-party
+    // reparse point (OneDrive's) is fine, the same as for the Windower updater
+    public static bool Linked(string dir)
+    {
+        try { return ThroughLink(dir); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; }
+    }
+
     // where a folder really is, every link on the way (its own too) followed. Null if it won't open
     public static string? RealPath(string dir)
     {

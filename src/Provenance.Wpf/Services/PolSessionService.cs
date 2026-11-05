@@ -183,6 +183,11 @@ public sealed class PolSessionService : IDisposable
         GameIsInstalled = () => GameInstalled(Region);
         UpdateViewer = (dir, progress, freeFiles, ct) => PolUpdates.UpdateViewer(dir, Region, progress, freeFiles, ct);
         WindowerSetup = (polExe, profile, lists, shared) => WindowerLaunch.SetupFor(_settings, polExe, profile, lists, shared);
+        PrestartAlive = pre =>
+        {
+            try { using var p = Process.GetProcessById(pre.Pid); return !p.HasExited && IsSameProcess(p, pre.Started); }
+            catch (ArgumentException) { return false; }
+        };
         DeleteLeftovers();
         _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
     }
@@ -200,11 +205,7 @@ public sealed class PolSessionService : IDisposable
     internal Func<bool?> WindowsScreenSaver { get; init; } = ReadScreenSaver;
     internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerAddonList?, WindowerLaunchSetup> WindowerSetup { get; init; }
     internal HoldViewerFiles HoldViewer { get; init; } = ViewerBuild.Hold;
-    internal Func<Prestarted, bool> PrestartAlive { get; init; } = pre =>
-    {
-        try { using var p = Process.GetProcessById(pre.Pid); return !p.HasExited && IsSameProcess(p, pre.Started); }
-        catch (ArgumentException) { return false; }
-    };
+    internal Func<Prestarted, bool> PrestartAlive { get; init; }
     internal Func<Process, bool> IsViewerPol { get; init; } = PolProcess.IsViewerPol;
     internal Action ScreenSaverBack { get; init; } = PutScreenSaverBack;
     // quiet this long and the login's stuck. polcore fails a list load or a login step at 100 s by itself, apart from
@@ -922,10 +923,10 @@ public sealed class PolSessionService : IDisposable
         EndWhenDone(task);
     }
 
-    private static void EndWhenDone(Task<Prestarted?> task) =>
+    private void EndWhenDone(Task<Prestarted?> task) =>
         task.ContinueWith(t => { if (t.Result is { } late) EndPrestarted(late); }, TaskContinuationOptions.OnlyOnRanToCompletion);
 
-    private static void EndPrestarted(Prestarted pre)
+    private void EndPrestarted(Prestarted pre)
     {
         try { File.WriteAllText(HookFiles.PathFor(pre.Pid, "stop"), "stop"); } catch { }
         DeleteQuietly(HookFiles.PathFor(pre.Pid, "prestart"));
@@ -1169,10 +1170,10 @@ public sealed class PolSessionService : IDisposable
 
     // no recorded start time means no proof, so it's never mine to kill (the user may run their own pol.exe on a
     // reused pid)
-    private static bool IsSameProcess(Process p, DateTime? started, Func<Process, bool>? isPol = null)
+    private bool IsSameProcess(Process p, DateTime? started)
     {
         if (started is not { } s) return false;
-        try { return p.StartTime.ToUniversalTime() == s.ToUniversalTime() && (isPol ?? PolProcess.IsViewerPol)(p); }
+        try { return p.StartTime.ToUniversalTime() == s.ToUniversalTime() && IsViewerPol(p); }
         catch { return false; }
     }
 
@@ -1474,7 +1475,7 @@ public sealed class PolSessionService : IDisposable
             {
                 var started = _pidStarted;
                 try { File.WriteAllText(HookFiles.PathFor(pid, "stop"), "stop"); } catch { }
-                if (KillIfOurs(pid, p => IsSameProcess(p, started, IsViewerPol), (int)StopGrace.TotalMilliseconds, afterMs: 2000))
+                if (KillIfOurs(pid, p => IsSameProcess(p, started), (int)StopGrace.TotalMilliseconds, afterMs: 2000))
                     Log.Warning("pol.exe {Pid} hadn't logged out {Seconds} s after its stop file, so it was ended", pid,
                                 (int)StopGrace.TotalSeconds);
                 DeleteQuietly(SocialSnapshot.PathForPid(pid));

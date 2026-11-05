@@ -174,7 +174,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
                     Log.Information("Repair plan: {Count} files, {Bytes:N0} bytes, out-of-date patch.ver: {Stale}, viewer queue: {Queue}, " +
                                     "DirectX missing: {DirectX} (Viewer {Viewer}: {ViewerCount}, FFXI {Ffxi}: {FfxiCount})",
                                     plan.Count, plan.Bytes, plan.StaleVersions, plan.QueuePending, plan.DirectXMissing,
-                                    plan.Versions["viewer"], plan.Work["viewer"].Count, plan.Versions["ffxi"], plan.Work["ffxi"].Count);
+                                    plan.Indexes["viewer"].Version, plan.Work["viewer"].Count, plan.Indexes["ffxi"].Version, plan.Work["ffxi"].Count);
                     // only replacing game files asks, the registry and DirectX never touch game data
                     bool ask = plan.Count > 0 || plan.QueuePending;
                     if (ask)

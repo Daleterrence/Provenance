@@ -29,7 +29,6 @@ public sealed record WindowerLaunchSetup
     public RegistryKey? RegistryRoot { get; init; }
     public Func<string, string, WindowerUpdater>? NewUpdater { get; init; }
     public TimeSpan UpdateLimit { get; init; } = WindowerLaunch.UpdateLimit;
-    public TimeSpan TurnWait { get; init; } = WindowerLaunch.TurnWait;
 }
 
 // what Windower writes into the registry for a profile. FFXI only reads it once Play's pressed, and another launch can
@@ -46,8 +45,8 @@ public sealed class WindowerLaunch : IDisposable
     internal const string LockName = @"Local\ProvenanceWindowerLaunch";
     public static readonly TimeSpan WatcherLimit = TimeSpan.FromSeconds(90);
     public static readonly TimeSpan UpdateLimit = TimeSpan.FromMinutes(2);
-    // past a whole turn, which can be UpdateLimit and then WatcherLimit
-    public static readonly TimeSpan TurnWait = TimeSpan.FromMinutes(4);
+    // a whole turn can be the update and then the watcher
+    public static readonly TimeSpan TurnWait = UpdateLimit + WatcherLimit + TimeSpan.FromSeconds(30);
 
     public const string UpdateNoticeText = "Windower couldn't be fully updated this time, so the game starts with the files it already has.";
 
@@ -127,7 +126,7 @@ public sealed class WindowerLaunch : IDisposable
     private void Steps(IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         var dir = _setup.WindowerDir;
-        if (ThirdPartyHookService.IsLinkedFolder(dir)) throw Shown.Mark(new IOException(ThirdPartyHookService.LinkedWindowerText));
+        if (FolderPins.Linked(dir)) throw Shown.Mark(new IOException(ThirdPartyHookService.LinkedWindowerText));
         TakeTurn(progress, ct);
         var file = LoadSettings(dir);
         Profile = FindProfile(file);
@@ -145,7 +144,7 @@ public sealed class WindowerLaunch : IDisposable
     private void TakeTurn(IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         _turn = new Mutex(false, LockName);
-        var until = DateTime.UtcNow + _setup.TurnWait;
+        var until = DateTime.UtcNow + TurnWait;
         bool said = false;
         while (true)
         {

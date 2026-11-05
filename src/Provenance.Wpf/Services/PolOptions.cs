@@ -47,9 +47,6 @@ public static class PolOptions
         return region == PolRegion.Europe && File.Exists(eu) ? eu : Path.Combine(viewerDir, "default", "pub", "home", "option.bin");
     }
 
-    // refused like a linked Windower folder, it'd be an elevated write through a link
-    public static bool Linked(string viewerDir) => ThirdPartyHookService.IsLinkedFolder(viewerDir);
-
     // the hook won't use a slot whose msg folders go through a link and stays in home84, so that's the one FFXI reads
     public static int SlotInUse(string viewerDir, int slot)
     {
@@ -63,8 +60,9 @@ public static class PolOptions
     public static void Apply(LauncherSettings s, string viewerDir, int slot, PolRegion region)
     {
         if (s.ChatLanguageFilter is null && s.AutoDisconnectMinutes is null) return;
-        // the viewer folder may be one users can write to, so nothing below it can be a link either
-        if (Linked(viewerDir))
+        // the viewer folder may be one users can write to, so nothing below it can be a link either, it'd be an elevated
+        // write through one
+        if (FolderPins.Linked(viewerDir))
         {
             Log.Warning("The viewer folder {Viewer} is reached through a link, POL settings not written for home{Slot:00}", viewerDir, slot);
             return;

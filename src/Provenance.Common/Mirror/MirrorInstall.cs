@@ -115,7 +115,7 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
                 if (server is not null) log?.Invoke($"the mirror does not have {name} {server} yet; installing {newest}, and the first update brings it current");
             }
             if (slug == "ffxi" && index.Version == server) GameIndex = index;
-            if (Unsafe(folders[i], index) is { } unsafePath) return Skip<string>(unsafePath);
+            if (MirrorSync.Unusable(folders[i], index) is { } unsafePath) return Skip<string>(unsafePath);
             // Apply needs every file its package installs, a missing one would only stop it after the whole download
             if (Unlisted(folders[i], targets[i], index) is { } unlisted)
             {
@@ -151,7 +151,7 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
             return Skip<InstallData>("the mirror pointer names no install data");
         var installIndex = await client.GetIndexAsync(region, InstallSlug, installVersion, ct);
         if (installIndex is null) return Skip<InstallData>($"the install index {installVersion} is missing or failed verification");
-        if (Unsafe(stagingDir, installIndex) is { } bad) return Skip<InstallData>(bad);
+        if (MirrorSync.Unusable(stagingDir, installIndex) is { } bad) return Skip<InstallData>(bad);
         if (include is not null) installIndex = installIndex with { Files = installIndex.Files.Where(include).ToList() };
 
         await FetchAsync([(stagingDir, installIndex, "installer", false)], progress, ct);
@@ -187,10 +187,6 @@ public sealed class MirrorInstall(MirrorClient client, string region, Action<str
         SkipReason = reason;
         return null;
     }
-
-    private static string? Unsafe(string folder, MirrorIndex index) =>
-        MirrorSync.FirstUnsafe(folder, index.Files) is { } why
-            ? $"the {index.Product} index {index.Version} is unusable: {why}" : null;
 
     private static string? Unlisted(string folder, IEnumerable<string> targets, MirrorIndex index)
     {

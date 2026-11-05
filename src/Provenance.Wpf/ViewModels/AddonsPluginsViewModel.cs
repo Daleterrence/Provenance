@@ -6,6 +6,7 @@ using Serilog;
 using Provenance.Common;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.Windower;
+using Provenance.Common.IO;
 using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.ViewModels;
@@ -539,7 +540,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     private static object? Scan(AddonsTarget target) => target switch
     {
-        { Platform: ThirdPartyHookService.Windower, Folder: { } dir } when !ThirdPartyHookService.IsLinkedFolder(dir) =>
+        { Platform: ThirdPartyHookService.Windower, Folder: { } dir } when !FolderPins.Linked(dir) =>
             new WindowerScan(WindowerPlugins.Scan(dir), WindowerAddons.Scan(dir), WindowerAddonTree.Load(WindowerAddonTree.CachePath(dir))),
         { Platform: ThirdPartyHookService.Ashita, Folder: { } dir } when !string.IsNullOrWhiteSpace(target.Profile) && File.Exists(BootPath(dir, target.Profile)) =>
             new AshitaScan(AshitaAddons.Scan(dir), AshitaPlugins.Scan(dir)),
@@ -550,7 +551,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     {
         { Platform: ThirdPartyHookService.Windower, Folder: null } =>
             Page.Empty("Provenance couldn't find Windower. Choose its folder under Windower/Ashita first."),
-        { Platform: ThirdPartyHookService.Windower, Folder: { } dir } when ThirdPartyHookService.IsLinkedFolder(dir) => Page.Empty(ThirdPartyHookService.LinkedWindowerText),
+        { Platform: ThirdPartyHookService.Windower, Folder: { } dir } when FolderPins.Linked(dir) => Page.Empty(ThirdPartyHookService.LinkedWindowerText),
         { Platform: ThirdPartyHookService.Windower, Folder: { } dir } => BuildWindower(dir, target.Profile, lists, extras, scan as WindowerScan),
         { Platform: ThirdPartyHookService.Ashita, Folder: null } =>
             Page.Empty("Provenance couldn't find Ashita. Choose its folder under Windower/Ashita first."),

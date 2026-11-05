@@ -187,9 +187,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private static string NewToken() => Guid.NewGuid().ToString("N")[..12];
 
-    // the IRC name's fifth character is the room's kind, U for one a user made
-    private static bool Official(string irc) => irc.Length > 4 && irc[4] != 'U';
-
     private int? Pid => _social.SessionPid;
 
     // the zone list, the viewer's first search when chat opens and Try again's. Nothing else starts one
@@ -608,7 +605,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 }
                 // an official room's master is the server's, never gives a name and has a place past the capacity
                 // (app.dll 0x10088ecc)
-                int limit = chat.Limit - (Official(chat.RoomIrc) ? 1 : 0);
+                int limit = chat.Limit - (ChatLook.Official(chat.RoomIrc) ? 1 : 0);
                 RoomCount = limit > 0 ? $"{Members.Count}/{limit}" : $"{Members.Count}";
                 IsMaster = Members.Any(m => m.Me && m.Master);
                 RoomLocked = chat.Locked;

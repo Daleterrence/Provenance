@@ -28,7 +28,7 @@ public static class MirrorUpdater
         }
         catch (InvalidDataException ex)
         {
-            log?.Invoke($"mirror index {product} {check.Server} is unusable: {ex.Message}", true);
+            log?.Invoke(ex.Message, true);
             return none;
         }
 
@@ -51,7 +51,7 @@ public static class MirrorUpdater
         MirrorIndex next, string local, IReadOnlySet<string>? keep, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
     {
         if (keep is { Count: > 0 }) next = next with { Files = next.Files.Where(e => !keep.Contains(e.Path)).ToList() };
-        foreach (var e in next.Files) MirrorSync.SafePath(folder, e.Path);
+        if (MirrorSync.Unusable(folder, next) is { } why) throw new InvalidDataException(why);
         var old = local.Length > 0 ? await client.GetIndexAsync(region, product, local, ct) : null;
         IReadOnlyList<MirrorEntry> work;
         if (old is not null) work = MirrorSync.Diff(old, next);

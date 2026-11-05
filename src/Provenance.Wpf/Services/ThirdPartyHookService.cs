@@ -3,7 +3,6 @@ using System.Text.RegularExpressions;
 using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.Windower;
-using Provenance.Common.IO;
 using Provenance.Common.PolFormat;
 using Serilog;
 
@@ -30,13 +29,6 @@ public sealed class ThirdPartyHookService
 
     public static string? DetectWindower(string? configured) =>
         Candidates(configured, @"C:\Windower", "Windower", "Windower4", "Windower 4").FirstOrDefault(IsWindowerFolder);
-
-    // the updater's own root test, so a folder it would refuse is flagged up front. OneDrive's reparse points are fine
-    public static bool IsLinkedFolder(string dir)
-    {
-        try { return FolderPins.ThroughLink(dir); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; }
-    }
 
     public const string LinkedWindowerText =
         "Provenance can't use a Windower folder that's reached through a link. Choose the real folder the link points to in Settings, under Windower/Ashita.";

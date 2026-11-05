@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using Serilog;
+using Provenance.Common.IO;
 using Provenance.Common.PolFormat;
 using Provenance.Wpf.Services;
 
@@ -49,7 +50,7 @@ public partial class SettingsViewModel : ObservableObject
         };
         string Folder(string product) => (region is { } r ? PolPaths.TryGetInstallFolder(r, product) : null) ?? "Not found";
         ViewerFolder = Folder(PolPaths.ViewerProduct);
-        PolOptionsStatus = region is { } r && PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) is { } viewer && PolOptions.Linked(viewer)
+        PolOptionsStatus = region is { } r && PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) is { } viewer && FolderPins.Linked(viewer)
             ? PolOptions.LinkedText : "";
         FfxiFolder = Folder(PolPaths.FfxiProduct);
         _exitAfterGameExits = settings.Current.ExitAfterGameExits;
