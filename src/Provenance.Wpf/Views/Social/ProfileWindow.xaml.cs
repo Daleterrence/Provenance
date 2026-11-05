@@ -1,7 +1,8 @@
 using System.Windows;
-using Provenance.Wpf.ViewModels;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Views.Dialogs;
+using Provenance.Wpf.ViewModels.Social;
+using Provenance.Wpf.ViewModels.Main;
 
 namespace Provenance.Wpf.Views.Social;
 

@@ -1,5 +1,5 @@
 using System.Windows.Controls;
-using Provenance.Wpf.ViewModels;
+using Provenance.Wpf.ViewModels.Settings;
 
 namespace Provenance.Wpf.Views.Settings;
 

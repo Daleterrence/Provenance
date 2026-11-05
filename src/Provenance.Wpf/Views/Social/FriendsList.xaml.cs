@@ -6,9 +6,9 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
-using Provenance.Wpf.ViewModels;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Views.Dialogs;
+using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
 

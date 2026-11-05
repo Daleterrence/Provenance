@@ -4,10 +4,11 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using Provenance.Wpf.ViewModels;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.Views.Social;
+using Provenance.Wpf.ViewModels.Social;
+using Provenance.Wpf.ViewModels.Main;
 
 namespace Provenance.Wpf.Views.Main;
 

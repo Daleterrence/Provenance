@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Input;
 using Provenance.Common.Social;
-using Provenance.Wpf.ViewModels;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.ViewModels.Chat;
 
 namespace Provenance.Wpf.Views.Chat;
 

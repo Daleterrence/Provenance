@@ -37,7 +37,7 @@ public partial class SettingsWindow : Window
 
     private void Wire()
     {
-        if (DataContext is not ViewModels.SettingsViewModel vm) return;
+        if (DataContext is not ViewModels.Settings.SettingsViewModel vm) return;
         vm.AskName = (title, prompt, start, check) =>
             InputDialog.Prompt(this, title, prompt, start, maxLength: WindowerNameLength, validate: check);
         vm.Confirm = (title, body, ok, destructive) => MessageDialog.Confirm(this, title, body, ok, destructive: destructive) == 0;
@@ -57,21 +57,21 @@ public partial class SettingsWindow : Window
 
     private void OnSwitchHandle(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: ViewModels.HandleRow row } && DataContext is ViewModels.SettingsViewModel vm)
+        if (sender is FrameworkElement { DataContext: ViewModels.Shared.HandleRow row } && DataContext is ViewModels.Settings.SettingsViewModel vm)
             vm.Handles.Switch(row);
     }
 
     private void OnUnlinkCharacter(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: ViewModels.HandleCharacterRow c } && DataContext is ViewModels.SettingsViewModel vm)
+        if (sender is FrameworkElement { DataContext: ViewModels.Shared.HandleCharacterRow c } && DataContext is ViewModels.Settings.SettingsViewModel vm)
             vm.Handles.Unlink(c);
     }
 
     // the other handles to pick from, a full one greyed out with the limit under its name
     private void OnLinkCharacter(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: ViewModels.HandleCharacterRow c } button ||
-            DataContext is not ViewModels.SettingsViewModel vm) return;
+        if (sender is not Button { DataContext: ViewModels.Shared.HandleCharacterRow c } button ||
+            DataContext is not ViewModels.Settings.SettingsViewModel vm) return;
         var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom };
         foreach (var to in vm.Handles.LinkTargets(c))
         {
@@ -94,7 +94,7 @@ public partial class SettingsWindow : Window
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_ownerClosing || DataContext is not ViewModels.SettingsViewModel { Game.HasUnsavedChanges: true } vm) return;
+        if (_ownerClosing || DataContext is not ViewModels.Settings.SettingsViewModel { Game.HasUnsavedChanges: true } vm) return;
         var pick = MessageDialog.Confirm(this, "Unsaved game settings",
             "You've changed some game settings but haven't saved them yet.", "CLOSE",
             "Save the changes, then close", "Close without saving");
@@ -108,7 +108,7 @@ public partial class SettingsWindow : Window
 
     private void ShowPanel(int index)
     {
-        if (DataContext is ViewModels.SettingsViewModel vm)
+        if (DataContext is ViewModels.Settings.SettingsViewModel vm)
         {
             vm.ShownTab = index;
             // a profile picked on another tab since the Game page was last shown
@@ -117,18 +117,18 @@ public partial class SettingsWindow : Window
         for (int i = 0; FindName($"Panel{i}") is UIElement panel; i++)
             panel.Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
         if (index == 0) ReadLargeAddressAware();
-        if (index == 1 && DataContext is ViewModels.SettingsViewModel hooks) hooks.ShowingHooks();
+        if (index == 1 && DataContext is ViewModels.Settings.SettingsViewModel hooks) hooks.ShowingHooks();
     }
 
     // Windower can change pol.exe while this window's open, so it's read again on every show and every switch back
     private void ReadLargeAddressAware()
     {
-        if (DataContext is ViewModels.SettingsViewModel vm) _ = vm.ReadLargeAddressAwareAsync();
+        if (DataContext is ViewModels.Settings.SettingsViewModel vm) _ = vm.ReadLargeAddressAwareAsync();
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
-    private void CancelConsoleKey() => (DataContext as ViewModels.SettingsViewModel)?.CancelConsoleKey();
+    private void CancelConsoleKey() => (DataContext as ViewModels.Settings.SettingsViewModel)?.CancelConsoleKey();
 
     private void OnConsoleKeyFocusLost(object sender, KeyboardFocusChangedEventArgs e) => CancelConsoleKey();
 
@@ -136,14 +136,14 @@ public partial class SettingsWindow : Window
     // repeats don't count
     private void OnConsoleKeyDown(object sender, KeyEventArgs e)
     {
-        if (DataContext is not ViewModels.SettingsViewModel { WaitingForConsoleKey: true } vm) return;
+        if (DataContext is not ViewModels.Settings.SettingsViewModel { WaitingForConsoleKey: true } vm) return;
         e.Handled = true;
         if (!e.IsRepeat) vm.PressConsoleKey(DirectInputCode(e.Key == Key.System ? e.SystemKey : e.Key));
     }
 
     private void OnConsoleKeyUp(object sender, KeyEventArgs e)
     {
-        if (DataContext is not ViewModels.SettingsViewModel { WaitingForConsoleKey: true } vm) return;
+        if (DataContext is not ViewModels.Settings.SettingsViewModel { WaitingForConsoleKey: true } vm) return;
         e.Handled = true;
         if ((e.Key == Key.System ? e.SystemKey : e.Key) == Key.Snapshot) vm.PressConsoleKey(DirectInputCode(Key.Snapshot));
     }

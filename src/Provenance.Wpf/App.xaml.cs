@@ -13,9 +13,9 @@ using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Wpf.Services;
-using Provenance.Wpf.ViewModels;
 using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.Views.Main;
+using Provenance.Wpf.ViewModels.Main;
 
 namespace Provenance.Wpf;
 

@@ -6,10 +6,10 @@ using System.Windows.Input;
 using System.Windows.Media;
 using MaterialDesignThemes.Wpf;
 using Provenance.Common.Social;
-using Provenance.Wpf.ViewModels;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Views.Dialogs;
-using Layout = Provenance.Wpf.ViewModels.SocialViewModel.LayoutAction;
+using Provenance.Wpf.ViewModels.Social;
+using Layout = Provenance.Wpf.ViewModels.Social.SocialViewModel.LayoutAction;
 
 namespace Provenance.Wpf.Views.Social;
 

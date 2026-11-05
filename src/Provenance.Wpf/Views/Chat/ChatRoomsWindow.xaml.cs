@@ -4,9 +4,10 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Provenance.Common.Social;
-using Provenance.Wpf.ViewModels;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Views.Dialogs;
+using Provenance.Wpf.ViewModels.Chat;
+using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Chat;
 

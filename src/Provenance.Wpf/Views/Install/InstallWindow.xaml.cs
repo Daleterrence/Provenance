@@ -35,7 +35,7 @@ public partial class InstallWindow : Window
     // closing mid-install asks, then stops the download and the installers so nothing keeps running with no window
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (DataContext is not ViewModels.InstallViewModel { Running: true } vm) return;
+        if (DataContext is not ViewModels.Install.InstallViewModel { Running: true } vm) return;
         if (_ownerClosing) { vm.CancelCommand.Execute(null); return; }   // the app's closing, so no question
         // the view model's "Cancelled" note, worded for a window that's closing
         var what = vm.CurrentStep switch
