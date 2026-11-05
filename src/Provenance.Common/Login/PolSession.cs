@@ -35,7 +35,7 @@ public sealed class PolSession : IDisposable
     public const string UnsafeStartText = "Provenance couldn't start PlayOnline safely. Restart Provenance and try again.";
     public const string RefusedText = "PlayOnline didn't accept your login details. Check your PlayOnline ID, passwords and one-time password.";
 
-    // pol_hook.c's exit codes, 4 is no handle. 13 never falls back to the stock mutex names, anything can create
+    // the hook's exit codes, 4 is no handle. 13 never falls back to the stock mutex names, anything can create
     // those first
     internal const int UnsafeStartExitCode = 13;
     internal const int GameStartExitCode = 15;
@@ -99,7 +99,7 @@ public sealed class PolSession : IDisposable
          "chatjoin", "chatsend", "chatleave", "chatcreate", "chatmaster", "handle", "groupchatjoin", "groupchatsend",
          "groupchatleave"];
 
-    // Has to match prestart_wait's allow-list in pol_hook.c, the hook drops any other key
+    // Has to match prestart_wait's allow-list in login.c, the hook drops any other key
     private static readonly string[] GoFileKeys =
         ["POL_CRED_POL", "POL_CRED_SEA", "POL_CRED_ONESHOT", "POL_CRED_OTP", "POL_CRED_HANDLE", "POL_CRED_PLAY", "POL_CRED_CHAT", "POL_STATUS",
          "POL_HOME", "POL_HANDLE"];
