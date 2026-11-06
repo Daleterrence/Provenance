@@ -19,6 +19,19 @@ public sealed record GamePart(string FileName, Uri Url, long Size, string Md5);
 public sealed record InstallProgress(string Stage, string Detail, double Fraction, long DoneBytes, long TotalBytes, bool Download = false,
                               GameProduct? Product = null);
 
+public sealed record PartStep(GamePart Part, int Index, int Count, long DoneBefore, long Total);
+
+// What the caller does at each step of DownloadAndExtractAsync. The progress ones are made fresh for every attempt
+public sealed class DownloadSteps
+{
+    public Action? Downloading { get; init; }
+    public Func<PartStep, IProgress<long>?>? Part { get; init; }
+    public Action? Unpacking { get; init; }
+    public Func<IProgress<ByteProgress>?>? UnpackProgress { get; init; }
+    public Func<IProgress<ByteProgress>?>? CheckProgress { get; init; }
+    public Action<DamagedPartException>? Damaged { get; init; }
+}
+
 public sealed class DamagedPartException : IOException
 {
     public DamagedPartException(string part)
@@ -157,12 +170,45 @@ public sealed class GameInstaller
         File.Move(partial, dest, overwrite: true);
     }
 
+    // a part that fails its check is deleted and fetched once more
+    public Task<string> DownloadAndExtractAsync(PolRegion region, string partsDir, string unpackedDir, DownloadSteps steps, CancellationToken ct) =>
+        DownloadAndExtractAsync(PartsFor(region), partsDir, unpackedDir, steps, ct);
+
+    internal async Task<string> DownloadAndExtractAsync(IReadOnlyList<GamePart> parts, string partsDir, string unpackedDir, DownloadSteps steps, CancellationToken ct)
+    {
+        long total = parts.Sum(p => p.Size);
+        for (int attempt = 1; ; attempt++)
+        {
+            steps.Downloading?.Invoke();
+            long doneBefore = 0;
+            for (int i = 0; i < parts.Count; i++)
+            {
+                var progress = steps.Part?.Invoke(new PartStep(parts[i], i, parts.Count, doneBefore, total));
+                await DownloadPartAsync(parts[i], partsDir, progress, ct);
+                doneBefore += parts[i].Size;
+            }
+            steps.Unpacking?.Invoke();
+            try
+            {
+                return await ExtractAsync(parts, partsDir, unpackedDir, steps.UnpackProgress?.Invoke(), ct, steps.CheckProgress?.Invoke());
+            }
+            catch (DamagedPartException e) when (attempt < 2)
+            {
+                steps.Damaged?.Invoke(e);
+            }
+        }
+    }
+
     // Each part stays open read-only from its MD5 check to the end, so the bytes checked are the bytes unpacked
     public Task<string> ExtractAsync(string downloadDir, string unpackedDir, PolRegion region,
                                      IProgress<ByteProgress>? progress, CancellationToken ct,
-                                     IProgress<ByteProgress>? checkProgress = null) => Task.Run(() =>
+                                     IProgress<ByteProgress>? checkProgress = null) =>
+        ExtractAsync(PartsFor(region), downloadDir, unpackedDir, progress, ct, checkProgress);
+
+    internal Task<string> ExtractAsync(IReadOnlyList<GamePart> parts, string downloadDir, string unpackedDir,
+                                       IProgress<ByteProgress>? progress, CancellationToken ct,
+                                       IProgress<ByteProgress>? checkProgress = null) => Task.Run(() =>
     {
-        var parts = PartsFor(region);
         var streams = new List<FileStream>();
         try
         {

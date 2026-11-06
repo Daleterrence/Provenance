@@ -77,6 +77,18 @@ public sealed class MsiPackage : IDisposable
         "TARGETDIR", "ProgramFilesFolder", "CommonFilesFolder", "ProgramMenuFolder", "StartMenuFolder", "DesktopFolder", "SystemFolder", "WindowsFolder",
     };
 
+    // the one folder a package puts its key file in, inside the root. Null when it does, else what's wrong
+    public static string? ProductFolder(IEnumerable<string> targets, string installRoot, string keyFile, out string folder)
+    {
+        folder = "";
+        var dirs = targets.Where(t => Path.GetFileName(t).Equals(keyFile, StringComparison.OrdinalIgnoreCase))
+            .Select(t => Path.GetDirectoryName(t)!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (dirs.Count != 1) return $"installs {dirs.Count} copies of {keyFile}";
+        if (!PathInside.IsUnder(installRoot, dirs[0])) return $"installs outside {installRoot}";
+        folder = dirs[0];
+        return null;
+    }
+
     public string? Supported()
     {
         foreach (var t in Query("SELECT `Name` FROM `_Tables`").Select(r => r[0]))

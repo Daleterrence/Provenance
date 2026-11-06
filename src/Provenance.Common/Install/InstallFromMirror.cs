@@ -163,12 +163,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
             targets = pkg.Targets(installRoot).Select(t => t.Path).ToList();
         }
         catch (InvalidDataException ex) { return $"the {name} package cannot be read: {ex.Message}"; }
-        var dirs = targets.Where(t => Path.GetFileName(t).Equals(keyFile, StringComparison.OrdinalIgnoreCase))
-            .Select(t => Path.GetDirectoryName(t)!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        if (dirs.Count != 1) return $"the {name} package installs {dirs.Count} copies of {keyFile}";
-        folder = dirs[0];
-        if (!PathInside.IsUnder(installRoot, folder)) return $"the {name} package installs outside {installRoot}";
-        return null;
+        return MsiPackage.ProductFolder(targets, installRoot, keyFile, out folder) is { } problem ? $"the {name} package {problem}" : null;
     }
 
     private T? Skip<T>(string reason) where T : class

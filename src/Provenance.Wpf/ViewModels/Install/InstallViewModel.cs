@@ -329,44 +329,36 @@ public partial class InstallViewModel : ObservableObject
             var work = workFolder.Path;
             if (await InstallFromMirrorAsync(work, ct)) return;
             var unpacked = Path.Combine(work, "unpacked");
-            string root;
-            for (int attempt = 1; ; attempt++)
+            var root = await _installer.DownloadAndExtractAsync(_region, work, unpacked, new DownloadSteps
             {
-                CurrentStep = 0;
-                Stage = "Downloading FINAL FANTASY XI";
-                StageIndeterminate = false;
-                long grandTotal = parts.Sum(p => p.Size);
-                long doneBefore = 0;
-                for (int i = 0; i < parts.Count; i++)
+                Downloading = () =>
                 {
-                    Detail = $"Part {i + 1} of {parts.Count}";
-                    var captured = doneBefore;
-                    var progress = new Progress<long>(b =>
+                    CurrentStep = 0;
+                    Stage = "Downloading FINAL FANTASY XI";
+                    StageIndeterminate = false;
+                },
+                Part = step =>
+                {
+                    Detail = $"Part {step.Index + 1} of {step.Count}";
+                    return new Progress<long>(b =>
                     {
-                        long overall = captured + b;
-                        ShowFraction("parts", (double)overall / grandTotal);
-                        _meter.Update(Held(overall, grandTotal), grandTotal);
+                        long overall = step.DoneBefore + b;
+                        ShowFraction("parts", (double)overall / step.Total);
+                        _meter.Update(Held(overall, step.Total), step.Total);
                     });
-                    await _installer.DownloadPartAsync(parts[i], work, progress, ct);
-                    doneBefore += parts[i].Size;
-                }
-
-                CurrentStep = 1;
-                Stage = "Unpacking";
-                Detail = "Checking the downloaded files...";
-                DownloadFraction = 0;
-                try
+                },
+                Unpacking = () =>
                 {
-                    root = await _installer.ExtractAsync(work, unpacked, _region, LocalProgress("Unpacking the installer..."), ct,
-                                                         LocalProgress());
-                    break;
-                }
-                catch (DamagedPartException e) when (attempt < 2)
-                {
-                    // the bad part's been deleted, so it downloads again (once)
-                    Log.Warning("{Part} failed its MD5 check before unpacking; downloading it again", e.Part);
-                }
-            }
+                    CurrentStep = 1;
+                    Stage = "Unpacking";
+                    Detail = "Checking the downloaded files...";
+                    DownloadFraction = 0;
+                },
+                UnpackProgress = () => LocalProgress("Unpacking the installer..."),
+                CheckProgress = () => LocalProgress(),
+                // the bad part's been deleted, so it downloads again (once)
+                Damaged = e => Log.Warning("{Part} failed its MD5 check before unpacking; downloading it again", e.Part),
+            }, ct);
 
             CurrentStep = 2;
             Stage = "Installing";
