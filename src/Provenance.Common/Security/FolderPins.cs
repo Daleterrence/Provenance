@@ -162,9 +162,9 @@ public sealed class FolderPins : IDisposable
     // Stricter than LinkCheck on purpose, it's the hook's plain_path rule
     public static bool Plain(string root, string path, bool lastIsFolder)
     {
+        if (!PathInside.IsUnder(root, path)) return false;
         var top = Path.GetFullPath(root).TrimEnd('\\');
         var full = Path.GetFullPath(path);
-        if (!full.StartsWith(top + "\\", StringComparison.OrdinalIgnoreCase)) return false;
         var parts = full[(top.Length + 1)..].Split('\\');
         var at = top;
         for (int i = 0; i < parts.Length; i++)

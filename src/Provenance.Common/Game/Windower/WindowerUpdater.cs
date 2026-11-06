@@ -543,7 +543,7 @@ public sealed class WindowerUpdater
         foreach (var e in zip.Entries)
         {
             if (e.Name.Length == 0 || skipThumbs && e.Name == "Thumbs.db") continue;
-            if (WindowerFiles.Inside(PluginsDir, e.FullName) is { } target) work.Add((e, target));
+            if (PathInside.Collapse(PluginsDir, e.FullName) is { } target) work.Add((e, target));
             else
             {
                 refused = true;
@@ -670,7 +670,7 @@ public sealed class WindowerUpdater
 
     private bool WriteAddonFile(Job job, ZipArchive zip, WindowerAddonFile f)
     {
-        var target = WindowerFiles.Inside(Folder, f.Path);
+        var target = PathInside.Collapse(Folder, f.Path);
         if (target is null || !target.StartsWith(AddonsDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
             job.Errors.Add($"The addon list has a file outside the addons folder ({f.Path}), so it was skipped.");

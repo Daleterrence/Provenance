@@ -4,6 +4,7 @@ using Provenance.Common.Mirror;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
+using Provenance.Common.Security;
 
 namespace Provenance.Common.Install;
 
@@ -70,7 +71,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, Action
             // RunInstallAsync keeps an earlier install, so the files have to go there and it has to be complete
             if (RegisteredFolder(code) is { } registered)
             {
-                if (!Same(registered, folder)) return Skip<string>($"{name} is already registered in {registered}");
+                if (!PathInside.Same(registered, folder)) return Skip<string>($"{name} is already registered in {registered}");
                 if (!File.Exists(Path.Combine(folder, keyFile)))
                     return Skip<string>($"{name} is registered in {registered}, but {keyFile} is missing there");
             }
@@ -166,7 +167,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, Action
             .Select(t => Path.GetDirectoryName(t)!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (dirs.Count != 1) return $"the {name} package installs {dirs.Count} copies of {keyFile}";
         folder = dirs[0];
-        if (!Inside(installRoot, folder)) return $"the {name} package installs outside {installRoot}";
+        if (!PathInside.IsUnder(installRoot, folder)) return $"the {name} package installs outside {installRoot}";
         return null;
     }
 
@@ -181,7 +182,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, Action
         var listed = new HashSet<string>(index.Files.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
         foreach (var t in targets)
         {
-            if (!Inside(folder, t)) return t;
+            if (!PathInside.IsUnder(folder, t)) return t;
             var rel = Path.GetRelativePath(folder, t).Replace('\\', '/');
             if (!listed.Contains(rel)) return rel;
         }
@@ -232,15 +233,4 @@ public sealed class InstallFromMirror(MirrorClient client, string region, Action
                                                              bool download = false) =>
         progress is null ? null : new InlineProgress<(long Done, long Total)>(p => progress.Report(new InstallProgress(stage, text,
             total > 0 ? (double)p.Done / total : 1, p.Done, total, download)));
-
-    private static string Full(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-
-    internal static bool Same(string a, string b) => string.Equals(Full(a), Full(b), StringComparison.OrdinalIgnoreCase);
-
-    internal static bool Inside(string root, string path)
-    {
-        var r = Full(root);
-        if (!r.EndsWith(Path.DirectorySeparatorChar)) r += Path.DirectorySeparatorChar;
-        return Full(path).StartsWith(r, StringComparison.OrdinalIgnoreCase);
-    }
 }

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using Provenance.Common.Security;
 using Provenance.Common;
 using Provenance.Common.Game;
 using Provenance.Wpf.Views.Install;
@@ -192,8 +193,7 @@ public static class SelfUpdate
     // viewer folder, the hook doesn't)
     private static string? FindRunning(string root, params string[] names)
     {
-        root = Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar;
-        bool Inside(string? path) => path is not null && path.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+        bool Inside(string? path) => path is not null && PathInside.IsUnder(root, path);
         foreach (var name in names)
         {
             foreach (var p in Process.GetProcessesByName(name))

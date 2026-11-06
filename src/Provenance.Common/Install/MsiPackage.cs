@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using Provenance.Common.IO;
+using Provenance.Common.Security;
 using Provenance.Common.Win32;
 
 namespace Provenance.Common.Install;
@@ -358,7 +359,7 @@ public sealed class MsiPackage : IDisposable
 
     private static bool SamePath(string a, string b)
     {
-        try { return string.Equals(Path.GetFullPath(a).TrimEnd('\\'), Path.GetFullPath(b).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); }
+        try { return PathInside.Same(a, b); }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
     }
 
@@ -405,8 +406,7 @@ public sealed class MsiPackage : IDisposable
                     && Path.TrimEndingDirectorySeparator(format(r[3])) is var t && Path.IsPathFullyQualified(t)
                     && t.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase))
                     tree = t;
-        bool InTree(string path) => tree != null && (path.Equals(tree, StringComparison.OrdinalIgnoreCase)
-                                                     || path.StartsWith(tree + "\\", StringComparison.OrdinalIgnoreCase));
+        bool InTree(string path) => tree != null && PathInside.Contains(tree, path);
         var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void Folder(string dir)
         {

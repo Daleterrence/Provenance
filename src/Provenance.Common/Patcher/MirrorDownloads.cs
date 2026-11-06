@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Provenance.Common.Game;
 using Provenance.Common.Mirror;
+using Provenance.Common.Security;
 
 namespace Provenance.Common.Patcher;
 
@@ -17,18 +18,8 @@ public static class MirrorDownloads
 
     public static TimeSpan RoundWait { get; set; } = TimeSpan.FromSeconds(2);
 
-    // stricter than PolUpdater's check, empty segments get refused too
-    public static string SafePath(string folder, string relative)
-    {
-        var rel = relative.Replace('/', '\\');
-        if (rel.Length == 0 || Path.IsPathRooted(rel) || rel.Contains(':') || rel.Split('\\').Any(seg => seg is "" or ".." or "."))
-            throw new InvalidDataException($"The mirror index names an unsafe path: {relative}");
-        var root = Path.GetFullPath(folder).TrimEnd('\\') + "\\";
-        var full = Path.GetFullPath(Path.Combine(root, rel));
-        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"The mirror index names a path outside its folder: {relative}");
-        return full;
-    }
+    public static string SafePath(string folder, string relative) =>
+        PathInside.Resolve(folder, relative) ?? throw new InvalidDataException($"The mirror index names an unsafe path: {relative}");
 
     // every path an index names, before anything of it's read, fetched or written. Null when they're all fine
     internal static string? Unusable(string folder, MirrorIndex index)

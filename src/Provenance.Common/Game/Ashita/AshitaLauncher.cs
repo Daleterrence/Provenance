@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Hook;
+using Provenance.Common.IO;
 using Provenance.Common.Login;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
@@ -17,7 +18,7 @@ public static class AshitaLauncher
 
     // a plain .ini name in config\boot, never a path that'd get read or written somewhere else as admin
     public static bool IsBootFileName(string boot) =>
-        boot == Path.GetFileName(boot) && boot.EndsWith(".ini", StringComparison.OrdinalIgnoreCase);
+        FileNames.IsPlainFileName(boot) && boot.EndsWith(".ini", StringComparison.OrdinalIgnoreCase);
 
     // nothing POL_ or PROVENANCE_ from the user's environment, every POL_ value of this sign-in, plus the launch marker
     // and id. Never PROVENANCE_HOOK, the watcher's --attach loads the hook
@@ -220,7 +221,7 @@ public static class AshitaLauncher
     }
 
     private static bool SamePath(string? a, string b) =>
-        a is not null && string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+        a is not null && PathInside.Same(a, b);
 
     private static string? AttachHook(int pid)
     {

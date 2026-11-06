@@ -93,12 +93,12 @@ public sealed partial class AshitaScript
         Shown.Mark(new IOException($"Provenance couldn't save the Ashita script {Path.GetFileName(full)}.", e));
 
     // the highest folder FoldersTo checks
-    private string Top(string dir) => scriptsDir is not null && Under(scriptsDir, dir) ? scriptsDir : Path.GetDirectoryName(dir) ?? dir;
+    private string Top(string dir) => scriptsDir is not null && PathInside.Contains(scriptsDir, dir) ? scriptsDir : Path.GetDirectoryName(dir) ?? dir;
 
     private List<string> FoldersTo(string full)
     {
         var dir = Path.GetDirectoryName(full)!;
-        if (scriptsDir is null || !Under(scriptsDir, dir)) return [dir, Path.GetDirectoryName(dir) ?? dir];
+        if (scriptsDir is null || !PathInside.Contains(scriptsDir, dir)) return [dir, Path.GetDirectoryName(dir) ?? dir];
         var folders = new List<string> { scriptsDir };
         var rest = Path.GetRelativePath(scriptsDir, dir);
         if (rest != ".")
@@ -109,12 +109,7 @@ public sealed partial class AshitaScript
         return folders;
     }
 
-    private static bool Under(string root, string path)
-    {
-        var rest = Path.GetRelativePath(root, path);
-        return !Path.IsPathRooted(rest) && rest != ".." && !rest.StartsWith(@"..\", StringComparison.Ordinal);
-    }
-
+    
     public IReadOnlyList<AshitaScriptLoad> Plugins => Listed(false);
     public IReadOnlyList<AshitaScriptLoad> Addons => Listed(true);
 
@@ -189,16 +184,7 @@ public sealed partial class AshitaScript
         return stem.Length == 0 ? "profile" : stem;
     }
 
-    private static string? Resolve(string scriptsDir, string script)
-    {
-        try
-        {
-            var root = Path.GetFullPath(scriptsDir).TrimEnd('\\') + "\\";
-            var full = Path.GetFullPath(root + FileName(script));
-            return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full : null;
-        }
-        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
-    }
+    private static string? Resolve(string scriptsDir, string script) => PathInside.Collapse(scriptsDir, FileName(script).TrimStart('\\'));
 
     private enum Verb { Other, Load, Unload, UnloadAll, Include, Exec, Wait }
 

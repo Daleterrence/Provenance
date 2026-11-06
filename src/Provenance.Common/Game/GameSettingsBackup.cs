@@ -338,10 +338,7 @@ public static partial class GameSettingsBackup
     [GeneratedRegex(@"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$")]
     private static partial Regex PlainName();
 
-    [GeneratedRegex(@"^(con|prn|aux|nul|com\d|lpt\d)(\.|$)", RegexOptions.IgnoreCase)]
-    private static partial Regex DeviceName();
-
-    private static bool IsFileName(string name) => PlainName().IsMatch(name) && !name.EndsWith('.') && !DeviceName().IsMatch(name);
+    private static bool IsFileName(string name) => FileNames.IsPlainFileName(name) && PlainName().IsMatch(name) && !FileNames.IsDeviceName(name);
 
     internal static bool IsEntry(string name)
     {

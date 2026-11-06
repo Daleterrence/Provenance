@@ -1,5 +1,5 @@
 using System.Buffers.Binary;
-using System.Security.Cryptography;
+using Provenance.Common.IO;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game;
@@ -14,8 +14,8 @@ public static class LargeAddressAware
     private const int SharingViolation = unchecked((int)0x80070020);
     private const int LockViolation = unchecked((int)0x80070021);
 
-    internal static readonly (string Off, string On)[] Known =
-        [(ViewerBuild.PolExeSha256, ViewerBuild.PolExeLaaSha256), (ViewerBuild.JpPolExeSha256, ViewerBuild.JpPolExeLaaSha256)];
+    // US and Europe share a pol.exe, so that pair is only in once
+    internal static readonly (string Off, string On)[] Known = ViewerBuild.Known.PolExes.Select(p => (p.Off, p.On)).Distinct().ToArray();
 
     // null when the file can't be read or isn't a PE file
     public static bool? Read(string path)
@@ -34,7 +34,7 @@ public static class LargeAddressAware
     internal static bool IsKnownBuild(string path, (string Off, string On) known)
     {
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        var sha = Sha256(fs);
+        var sha = FileHash.Sha256(fs);
         return sha == known.Off || sha == known.On;
     }
 
@@ -45,7 +45,7 @@ public static class LargeAddressAware
         try
         {
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            var sha = Sha256(fs);
+            var sha = FileHash.Sha256(fs);
             pair = Known.FirstOrDefault(k => sha == k.Off || sha == k.On, Known[0]);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
@@ -61,12 +61,12 @@ public static class LargeAddressAware
             if (BitAt(fs) is not { } at) return Result.NotPe;
             byte old = ByteAt(fs, at);
             bool was = (old & Flag) != 0;
-            if (Sha256(fs) != (was ? known.On : known.Off)) return Result.UnknownBuild;
+            if (FileHash.Sha256(fs) != (was ? known.On : known.Off)) return Result.UnknownBuild;
             if (was == on) return Result.Done;
             try
             {
                 Put(fs, at, (byte)(on ? old | Flag : old & ~Flag));
-                if (Sha256(fs) == (on ? known.On : known.Off)) return Result.Done;
+                if (FileHash.Sha256(fs) == (on ? known.On : known.Off)) return Result.Done;
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             // anything wrong once the byte's gone out puts the old one back, best effort
@@ -110,7 +110,7 @@ public static class LargeAddressAware
         try
         {
             var bytes = File.ReadAllBytes(path);
-            if (Convert.ToHexStringLower(SHA256.HashData(bytes)) != known.On) return null;
+            if (FileHash.Sha256(bytes) != known.On) return null;
             using var ms = new MemoryStream(bytes);
             if (BitAt(ms) is not { } at) return null;
             bytes[at] &= unchecked((byte)~Flag);
@@ -147,11 +147,5 @@ public static class LargeAddressAware
         fs.Position = at;
         fs.WriteByte(value);
         fs.Flush(flushToDisk: true);
-    }
-
-    private static string Sha256(Stream s)
-    {
-        s.Position = 0;
-        return Convert.ToHexStringLower(SHA256.HashData(s));
     }
 }

@@ -1,4 +1,5 @@
 using System.Security.Principal;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Security;
 
@@ -36,7 +37,7 @@ public static class AdminLock
 
     public static string PathFor(string name)
     {
-        if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains(".."))
+        if (!FileNames.IsPlainFileName(name) || name.Contains(".."))
             throw new ArgumentException("A plain lock name is needed.", nameof(name));
         var dir = _dir ?? throw new InvalidOperationException(
             "The folder of Provenance's locks is not set (AdminLock.Dir): a lock needs a folder only administrators can open.");

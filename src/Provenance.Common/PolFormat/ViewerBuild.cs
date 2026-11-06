@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.PolFormat;
 
@@ -60,7 +60,7 @@ public static class ViewerBuild
         var pol = Path.Combine(viewerDir, "pol.exe");
         var core = Path.Combine(viewerDir, PolcorePath(region));
         if (!File.Exists(pol) || !File.Exists(core)) return State.Missing;
-        if (Fits(known, region, Sha256(pol), () => Sha256(core))) return State.Supported;
+        if (Fits(known, region, FileHash.Sha256(pol), () => FileHash.Sha256(core))) return State.Supported;
         // viewer versions compare as text, "1.18.00n" < "1.18.15e"
         var v = Version(viewerDir);
         return v != null && string.CompareOrdinal(v, CurrentVersion) < 0 ? State.Outdated : State.Unknown;
@@ -91,7 +91,7 @@ public static class ViewerBuild
         {
             foreach (var rel in new[] { "pol.exe", PolcorePath(region) })
                 files.Add(new FileStream(Path.Combine(viewerDir, rel), FileMode.Open, FileAccess.Read, FileShare.Read));
-            if (Fits(known, region, Convert.ToHexStringLower(SHA256.HashData(files[0])), () => Convert.ToHexStringLower(SHA256.HashData(files[1]))))
+            if (Fits(known, region, FileHash.Sha256(files[0]), () => FileHash.Sha256(files[1])))
             {
                 problem = null;
                 return new Holder(files);
@@ -111,11 +111,5 @@ public static class ViewerBuild
     private sealed class Holder(List<FileStream> files) : IDisposable
     {
         public void Dispose() => files.ForEach(f => f.Dispose());
-    }
-
-    private static string Sha256(string path)
-    {
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        return Convert.ToHexStringLower(SHA256.HashData(fs));
     }
 }

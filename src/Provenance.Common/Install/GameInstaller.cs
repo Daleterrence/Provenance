@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using Microsoft.Win32;
 using Provenance.Common.Game;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Security;
 using SharpCompress.Archives.Rar;
 using SharpCompress.Readers;
 
@@ -226,7 +227,6 @@ public sealed class GameInstaller
         // emptied first so only what this run unpacked ever runs elevated
         if (Directory.Exists(unpackedDir)) Directory.Delete(unpackedDir, recursive: true);
         Directory.CreateDirectory(unpackedDir);
-        var root = Path.GetFullPath(unpackedDir).TrimEnd('\\') + "\\";
         var options = new ReaderOptions { LookForHeader = true, LeaveStreamOpen = true };
         using var archive = RarArchive.OpenArchive(volumes, options);
         var entries = archive.Entries.Where(e => !e.IsDirectory).ToList();
@@ -235,9 +235,7 @@ public sealed class GameInstaller
         foreach (var e in entries)
         {
             ct.ThrowIfCancellationRequested();
-            var dest = Path.GetFullPath(Path.Combine(unpackedDir, e.Key!.Replace('/', '\\')));
-            if (!dest.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"The installer archive holds an unsafe path: {e.Key}");
+            var dest = PathInside.Collapse(unpackedDir, e.Key!) ?? throw new InvalidDataException($"The installer archive holds an unsafe path: {e.Key}");
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             using (var src = e.OpenEntryStream())
             using (var dst = new FileStream(dest, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 20))
@@ -296,8 +294,7 @@ public sealed class GameInstaller
 
         if (PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct) is { } viewer &&
             Directory.GetParent(viewer.TrimEnd('\\'))?.Parent is { } polRoot &&
-            !string.Equals(Path.TrimEndingDirectorySeparator(polRoot.FullName), Path.TrimEndingDirectorySeparator(Path.GetFullPath(installRoot)),
-                           StringComparison.OrdinalIgnoreCase))
+            !PathInside.Same(polRoot.FullName, installRoot))
         {
             warnings.Add($"The PlayOnline Viewer was already installed in {polRoot.FullName}, so FINAL FANTASY XI was installed there too.");
             installRoot = polRoot.FullName;

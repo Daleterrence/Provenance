@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Provenance.Common.Game;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Security;
 using Provenance.Common.Win32;
 
 namespace Provenance.Common.Patcher;
@@ -33,17 +34,8 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     public bool KeepLargeAddressAware { get; init; }
 
     // the manifest's off the network and this runs as admin, so nothing gets to leave the product folder
-    private string Local(string name)
-    {
-        var rel = name.Replace('/', '\\');
-        if (rel.Length == 0 || Path.IsPathRooted(rel) || rel.Contains(':') || rel.Split('\\').Any(seg => seg is ".." or "."))
-            throw new InvalidDataException($"The {product.Name} file list names an unsafe path: {name}");
-        var root = Path.GetFullPath(Dir).TrimEnd('\\') + "\\";
-        var full = Path.GetFullPath(Path.Combine(root, rel));
-        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"The {product.Name} file list names a path outside its folder: {name}");
-        return full;
-    }
+    internal string Local(string name) =>
+        PathInside.Resolve(Dir, name) ?? throw new InvalidDataException($"The {product.Name} file list names an unsafe path: {name}");
 
     public bool NeedsUpdate(CancellationToken ct) => !Check(ct).UpToDate;
 
@@ -489,7 +481,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
                 int eq = line.IndexOf('=');
                 if (eq <= 0) continue;
                 string target = line[..eq].Trim(), staged = line[(eq + 1)..].Trim();
-                if (!IsInside(viewerDir, target) || !IsInside(viewerDir, staged))
+                if (!PathInside.IsUnder(viewerDir, target) || !PathInside.IsUnder(viewerDir, staged))
                     throw new InvalidDataException($"patch.ini names a file outside the PlayOnline Viewer folder: {target}");
                 if (File.Exists(staged)) queued.Add((target, staged));
             }
@@ -523,12 +515,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         where File.Exists(staged)
               && (!File.Exists(live) || File.GetLastWriteTimeUtc(staged) != File.GetLastWriteTimeUtc(live))
         select (staged, live);
-
-    private static bool IsInside(string dir, string path)
-    {
-        var root = Path.GetFullPath(dir).TrimEnd('\\') + "\\";
-        return Path.GetFullPath(path).StartsWith(root, StringComparison.OrdinalIgnoreCase);
-    }
 
     // Windows decodes it with the same code page that wrote it
     private static IEnumerable<string> RenameSection(string ini)

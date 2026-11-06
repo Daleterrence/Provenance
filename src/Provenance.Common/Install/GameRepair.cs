@@ -2,6 +2,7 @@ using Provenance.Common.Mirror;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
+using Provenance.Common.Security;
 
 namespace Provenance.Common.Install;
 
@@ -248,7 +249,7 @@ public sealed class GameRepair(MirrorClient client, string region)
             var msi = slug == "viewer" ? data.ViewerMsi : data.FfxiMsi;
             if (InstallFromMirror.ReadPackage(msi, installRoot, keyFile, name, out var folder, out var targets) is { } unusable)
                 throw new MirrorUnusableException(unusable, []);
-            if (!InstallFromMirror.Same(folder, product.Folder))
+            if (!PathInside.Same(folder, product.Folder))
             {
                 Log?.Invoke($"{name} is not checked: its package installs to {folder}, the install is in {product.Folder}");
                 continue;
@@ -261,7 +262,7 @@ public sealed class GameRepair(MirrorClient client, string region)
             var coming = new HashSet<string>(WorkOf(plan, slug).Select(e => MirrorDownloads.SafePath(product.Folder, e.Path)), StringComparer.OrdinalIgnoreCase);
             if (targets.FirstOrDefault(t => !coming.Contains(Path.GetFullPath(t)) && !File.Exists(t)) is { } absent)
             {
-                var rel = InstallFromMirror.Inside(product.Folder, absent) ? Path.GetRelativePath(product.Folder, absent).Replace('\\', '/') : absent;
+                var rel = PathInside.IsUnder(product.Folder, absent) ? Path.GetRelativePath(product.Folder, absent).Replace('\\', '/') : absent;
                 throw new MirrorUnusableException(
                     $"the {name} installer needs {rel}, which is missing, and the mirror's {slug} index {plan.Indexes[slug].Version} does not list it", [rel]);
             }

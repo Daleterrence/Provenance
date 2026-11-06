@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Reflection;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Windower;
@@ -93,20 +94,7 @@ internal static class WindowerFiles
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 
-    public static bool IsPlainName(string name) =>
-        name.Length > 0 && name.Trim() == name && name != "." && name != ".." && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
-
-    public static string? Inside(string root, string relative)
-    {
-        if (relative.Length == 0 || relative.Contains(':') || relative.Contains('\0') || Path.IsPathRooted(relative)) return null;
-        try
-        {
-            var full = Path.GetFullPath(Path.Combine(root, relative));
-            var top = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar;
-            return full.StartsWith(top, StringComparison.OrdinalIgnoreCase) && full.Length > top.Length ? full : null;
-        }
-        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
-    }
+    public static bool IsPlainName(string name) => FileNames.IsPlainFileName(name) && name.Trim() == name;
 
     // a OneDrive file has the reparse point attribute too, only a junction or symlink counts
     public static bool IsLinkOrFolder(string path)

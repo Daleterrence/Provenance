@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
 using Provenance.Common.Win32;
 
@@ -62,9 +62,7 @@ public static class AshitaBootFiles
     }
 
     private static bool IniFileName(string name) =>
-        name == Path.GetFileName(name) && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
-        && Path.GetExtension(name).Equals(".ini", StringComparison.OrdinalIgnoreCase)
-        && !Regex.IsMatch(name, @"^(con|prn|aux|nul|com\d|lpt\d)(\.|$)", RegexOptions.IgnoreCase);
+        FileNames.IsPlainFileName(name) && Path.GetExtension(name).Equals(".ini", StringComparison.OrdinalIgnoreCase) && !FileNames.IsDeviceName(name);
 
     // for a new name. One that's already there only has to be an .ini file, so a bad name can still be renamed
     public static string? NameProblem(string? fileName, string? ashitaDir = null)
@@ -244,7 +242,7 @@ public static class AshitaBootFiles
     // arguments gone
     public static string WriteLaunchCopy(string ashitaDir, string? source, string polExe, int playOnline)
     {
-        if (source is not null && source != Path.GetFileName(source))
+        if (source is { Length: > 0 } && !FileNames.IsPlainFileName(source))
             throw new ArgumentException("The boot configuration has to be a file in Ashita's config\\boot folder.", nameof(source));
         var viewer = Path.GetDirectoryName(polExe);
         if (!AshitaIniFile.FitsCodePage(polExe))
