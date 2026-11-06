@@ -27,7 +27,7 @@ public static class FfxiRegistry
             Textures = I("0018", d.Textures), Maps2D = I("0019", d.Maps2D), HardwareMouse = I("0021", d.HardwareMouse),
             OpeningMovie = I("0022", d.OpeningMovie), SimpleCharSelect = I("0023", d.SimpleCharSelect),
             Brightness = k.GetValue("0028") is int b ? BitConverter.Int32BitsToSingle(b) : d.Brightness,
-            SoundEffects = I("0029", d.SoundEffects), WindowMode = I("0034", d.WindowMode),
+            SoundEffects = I("0029", d.SoundEffects), WindowMode = FfxiSettings.KnownWindowMode(I("0034", d.WindowMode)),
             BackgroundSound = I("0035", d.BackgroundSound), Fonts = I("0036", d.Fonts), UiWidth = I("0037", d.UiWidth),
             UiHeight = I("0038", d.UiHeight), GraphicsFix = I("0040", d.GraphicsFix),
             ScreenshotFolder = k.GetValue("0042") as string ?? "",
@@ -146,7 +146,7 @@ public static class FfxiRegistry
         // a value from elsewhere between two tenths stays as it is till it's moved
         if (bright != MathF.Round(Math.Clamp(original.Brightness, -1f, 1f), 1)) Set("0028", BitConverter.SingleToInt32Bits(bright));
         D("0029", Math.Clamp(s.SoundEffects, 12, 20), original.SoundEffects);
-        D("0034", s.WindowMode is 0 or 1 or 3 ? s.WindowMode : 1, original.WindowMode);
+        D("0034", FfxiSettings.KnownWindowMode(s.WindowMode), FfxiSettings.KnownWindowMode(original.WindowMode));
         D("0035", s.BackgroundSound, original.BackgroundSound);
         D("0036", Math.Clamp(s.Fonts, 0, 2), original.Fonts);
         Pair("0037", "0038", s.UiWidth, s.UiHeight, original.UiWidth, original.UiHeight);

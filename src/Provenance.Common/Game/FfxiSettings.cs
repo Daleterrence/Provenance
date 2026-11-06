@@ -31,6 +31,9 @@ public sealed class FfxiSettings
     public int LegacySettings;         // 0045
     public int[] PadMode = new int[6]; // padmode000: enable, force feedback, slider, hat, background, XInput
 
+    // the config tool shows any other number as fullscreen and never writes one
+    public static int KnownWindowMode(int v) => v is 0 or 1 or 3 ? v : 0;
+
     public FfxiSettings Clone()
     {
         var c = (FfxiSettings)MemberwiseClone();

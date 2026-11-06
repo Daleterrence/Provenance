@@ -60,7 +60,7 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
         "0011" or "0018" or "0036" => Math.Clamp(v, 0, 2),
         "0019" => Math.Clamp(v, 0, 1),
         "0029" => Math.Clamp(v, 12, 20),
-        "0034" => Math.Clamp(v, 0, 3),
+        "0034" => FfxiSettings.KnownWindowMode(v),
         _ => v,
     };
 
@@ -140,7 +140,10 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
         // the float's bits as a signed int. They're never -1 (that's a NaN), so it can't read as unset
         Write("0028", BitConverter.SingleToInt32Bits(InRange(s.Brightness)));
         Write("0029", s.SoundEffects);
-        Write("0034", s.WindowMode);
+        // an odd number already in the file stays unless the window mode itself changed
+        var mode = FfxiSettings.KnownWindowMode(s.WindowMode);
+        if (Ini.Get(Registry, "0034") is not { } was || ToInt(was) == -1 || FfxiSettings.KnownWindowMode(ToInt(was)) != mode)
+            Write("0034", mode);
         Write("0035", s.BackgroundSound);
         Write("0036", s.Fonts);
         Write("0037", s.UiWidth);
