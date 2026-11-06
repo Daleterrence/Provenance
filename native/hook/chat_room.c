@@ -11,7 +11,7 @@ static void chat_room_raw_pump(BYTE *b)
     for (LONG i = 0; i < n; i++) {
         if (!g_s.cr_open || (!g_cr_raw[i].whisper && lstrcmpiA(g_cr_raw[i].chan, g_cr_room) != 0)) continue;
         chat_frame_wide(b, g_cr_raw[i].text, w, 0x220);
-        chat_frame_parse(b, w, g_cr_raw[i].lo, g_cr_raw[i].hi, g_cr_raw[i].whisper);
+        chat_frame_parse(w, g_cr_raw[i].lo, g_cr_raw[i].hi, g_cr_raw[i].whisper);
     }
     g_cr_raw_n = 0;
     if (g_cr_raw_lost) {
@@ -379,7 +379,7 @@ static void chat_room_master_step(BYTE *b)
     g_cr_sent_at = GetTickCount64();
 }
 /* 401 (no such nick): the member's already gone */
-static void chat_room_master_done(BYTE *b, int r)
+static void chat_room_master_done(int r)
 {
     g_s.cr_wait = CRW_NONE;
     if (r < 0) { chat_room_master_end(r == -0x1192 ? "failed:left" : requests_failed(r)); return; }
@@ -394,7 +394,7 @@ static void chat_room_master_refused(const char *state)
 }
 static int chat_room_password(const char *tok, char *key, int cap);
 /* <token>, <1 when there's a new password in Credential Manager>, kick|master|password, <member key> */
-static void chat_room_master_request(BYTE *b)
+static void chat_room_master_request(void)
 {
     char buf[256], *p, *tok, *haskey, *op, *key, nk[sizeof g_cr_newkey];
     cr_person *me = NULL, *who = NULL;
@@ -706,7 +706,7 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
             r = 1;
         }
         if (g_s.cr_wait == CRW_MSG) chat_room_msg_done(r, NULL);
-        else if (g_s.cr_st == CR_IN && g_cr_mop) chat_room_master_done(b, r);
+        else if (g_s.cr_st == CR_IN && g_cr_mop) chat_room_master_done(r);
         else chat_room_step_done(b, r);
         return;
     }
@@ -729,7 +729,7 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
         if (!chat_room_msg_ready()) return;
         if (g_s.cr_hello) { g_s.cr_hello = 0; chat_room_frame_out(b, CRM_HELLO); return; }
         if (g_cr_mop) { chat_room_master_step(b); return; }
-        if (ctl && requests_new(REQ_CHATMASTER)) { chat_room_master_request(b); return; }
+        if (ctl && requests_new(REQ_CHATMASTER)) { chat_room_master_request(); return; }
         if (ctl && requests_new(REQ_CHATSEND)) { chat_room_send_request(b); return; }
         if (g_s.cr_replies > 0) { g_s.cr_replies--; chat_room_frame_out(b, CRM_REPLY); }
         return;
@@ -770,7 +770,7 @@ static void chat_room_pump(BYTE *b, int ctl)
     if (g_s.draining) return;
     chat_room_in_room_pump(b, ctl);
     if (ctl && (g_s.cr_st != CR_IN || g_s.cr_leave) && requests_waiting(REQ_CHATSEND)) chat_room_send_request(b);
-    if (ctl && (g_s.cr_st != CR_IN || g_s.cr_leave) && requests_waiting(REQ_CHATMASTER)) chat_room_master_request(b);
+    if (ctl && (g_s.cr_st != CR_IN || g_s.cr_leave) && requests_waiting(REQ_CHATMASTER)) chat_room_master_request();
     if (g_s.cr_db) chat_list_db_pump(b);
     if (!ctl) return;
     /* waiting, not new: a .taking left by a read that failed is tried again first */

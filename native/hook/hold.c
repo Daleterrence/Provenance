@@ -115,7 +115,7 @@ static void hold_turn(BYTE *b, int ctl)
     int wctl, want, was = handles_switching();
     handles_pump(b, ctl);
     /* every turn, the one it finishes on too, so nothing written while it ran is taken after under the new handle */
-    if (was || handles_switching()) handles_writes_refuse(b);
+    if (was || handles_switching()) handles_writes_refuse();
     wctl = ctl && !handles_switching();
     mail_send_pump(b);
     friends_edit_pump(b, wctl);

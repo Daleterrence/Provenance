@@ -98,7 +98,7 @@ static void groups_request(BYTE *b)
     DWORD lo = 0, hi = 0;
     pol_friend_copy fr;
     BYTE att[0x20];
-    grp_hdr gh;
+    grp_hdr gh = { 0 };
     grp_mem m;
     int myClass = 0, haveGroup = 0, mid, slot, idx, cls, tcls, me, row, used = 0;
     /* a group job's -0x100 is a failure, so wait for a free polcore slot */

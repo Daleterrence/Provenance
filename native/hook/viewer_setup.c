@@ -83,7 +83,7 @@ static BYTE *viewer_string_table(const char *folder, const char *sub, DWORD *len
 {
     char path[MAX_PATH + 48];
     HANDLE f;
-    DWORD size, got, n, bit = 0, bits, pos = 0x1000;
+    DWORD size, got, n = 0, bit = 0, bits, pos = 0x1000;
     BYTE *d = NULL, *buf = NULL;
     int t, off, cnt, ok = 0;
     wsprintfA(path, "%s\\%s\\StringTable.bin", folder, sub);

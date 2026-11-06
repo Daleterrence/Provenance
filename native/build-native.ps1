@@ -38,14 +38,14 @@ if ($commit -match '^[0-9a-f]{7}$') { $product += "+$commit" }
 
 function Source([string]$name) { '"' + (Join-Path $PSScriptRoot $name) + '"' }
 
-$clHook = "cl /nologo /O2 /W3 /MT /I $(Source '.') $(Source 'hook\pol_hook.c') /LD /Fepol_hook.dll /link $HookLibs"
+$clHook = "cl /nologo /O2 /W4 /WX /MT /I $(Source '.') $(Source 'hook\pol_hook.c') /LD /Fepol_hook.dll /link $HookLibs"
 $clWatcher = "rc /nologo /i ""$OutDir"" /i ""$assets"" /fo watcher.res $(Source 'watcher.rc') && " +
-    "cl /nologo /O2 /W3 /MT $(Source 'watcher.c') watcher.res /Fe""Provenance Watcher.exe"" /link user32.lib advapi32.lib"
+    "cl /nologo /O2 /W4 /WX /MT $(Source 'watcher.c') watcher.res /Fe""Provenance Watcher.exe"" /link user32.lib advapi32.lib"
 # the uninstallers delete from Program Files and HKLM, so they always ask for admin. One build per product, so the
 # UAC prompt names the one it's removing
 function UninstallCl([string]$exe, [string]$tag, [string]$rcDefine, [string]$clDefine) {
     "rc /nologo $rcDefine /i ""$OutDir"" /i ""$assets"" /fo uninstall_$tag.res $(Source 'uninstall.rc') && " +
-    "cl /nologo /O2 /W3 /MT $clDefine $(Source 'uninstall.c') uninstall_$tag.res /Founinstall_$tag.obj /Fe""$exe""" +
+    "cl /nologo /O2 /W4 /WX /MT $clDefine $(Source 'uninstall.c') uninstall_$tag.res /Founinstall_$tag.obj /Fe""$exe""" +
     " /link $UninstallLibs /SUBSYSTEM:WINDOWS /MANIFEST:EMBED" +
     " /MANIFESTUAC:""level='requireAdministrator' uiAccess='false'"""
 }

@@ -214,7 +214,7 @@ static int chat_frame_tab(const WCHAR *w, int n, int from)
     return -1;
 }
 /* one room line, already in UTF-16, read like app.dll 0x10099d8e does minus whispers, passwords and profile switches */
-static void chat_frame_parse(BYTE *b, const WCHAR *w, DWORD lo, DWORD hi, int whisper)
+static void chat_frame_parse(const WCHAR *w, DWORD lo, DWORD hi, int whisper)
 {
     WCHAR name[0x21], text[0x201];
     int n = lstrlenW(w), tab;

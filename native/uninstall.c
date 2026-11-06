@@ -753,7 +753,7 @@ static void run(wchar_t *text, DWORD chars, wchar_t kind)
         case L'P':
             if ((tab = wcschr(arg, L'\t')) != NULL) {
                 wchar_t pattern[MAX_PATH * 2], file[MAX_PATH * 2];
-                WIN32_FIND_DATAW fd;
+                WIN32_FIND_DATAW fd = { 0 };
                 HANDLE h;
                 *tab = 0;
                 /* a line too long for these is skipped, a cut-off path could be some other file */

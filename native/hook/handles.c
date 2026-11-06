@@ -104,7 +104,7 @@ static void handles_switched(BYTE *b)
 /* while a switch runs, a write is taken and answered as not done, it'd go from the new handle otherwise. A chat
    enter waiting when the switch is taken is called off the same way */
 #define SWITCHING "failed:handle changing"
-static void handles_writes_refuse(BYTE *b)
+static void handles_writes_refuse(void)
 {
     static const char *const ext[] = { REQ_SEND, REQ_FRIEND, REQ_COMMENT, REQ_ANSWER, REQ_GROUP, REQ_PIC, REQ_STATUS, REQ_MYPROFILE,
                                        REQ_SAVEPROFILE, REQ_RENAME, REQ_CHATJOIN, REQ_CHATSEND, REQ_CHATCREATE, REQ_CHATMASTER,
@@ -227,7 +227,7 @@ static void handles_request(BYTE *b)
         if (chat_room_open()) chat_room_end(b);
         if (group_chat_open() || group_chat_joined(b)) group_chat_end(b, "left:handle", 0);
         handles_switch_start(b);
-        if (handles_switching()) handles_writes_refuse(b);
+        if (handles_switching()) handles_writes_refuse();
         return;
     }
     if (kind == HOP_LINKALL) { handles_linkall(b, slot, &h, ix, ck, p); return; }
