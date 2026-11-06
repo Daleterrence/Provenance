@@ -279,7 +279,7 @@ static void cr_send_request(BYTE *b)
     char buf[0x800], *p, *tok, *text, *colour, *emote;
     static WCHAR w[0x220], t[0x220];
     int n;
-    if (take_request("chatsend", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_CHATSEND, buf, sizeof buf) < 0) return;
     g_cr_used = 1;
     p = buf;
     tok = req_line(&p);
@@ -397,7 +397,7 @@ static void cr_master_request(BYTE *b)
     char buf[256], *p, *tok, *haskey, *op, *key, nk[sizeof g_cr_newkey];
     cr_person *me = NULL, *who = NULL;
     int k = -1, pw = 0;
-    if (take_request("chatmaster", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_CHATMASTER, buf, sizeof buf) < 0) return;
     p = buf;
     tok = req_line(&p); haskey = req_line(&p); op = req_line(&p); key = req_line(&p);
     nk[0] = 0;
@@ -486,7 +486,7 @@ static int cr_password(const char *tok, char *key, int cap)
     WCHAR tbuf[256];
     char user[64];
     int rc;
-    const WCHAR *t = cred_target("POL_CRED_CHAT", tbuf, 256);
+    const WCHAR *t = cred_target(ENV_CRED_CHAT, tbuf, 256);
     key[0] = 0;
     if (!t || !launch_target(t)) return 0;
     rc = cred_read(t, user, sizeof user, key, cap);
@@ -514,8 +514,8 @@ static void cr_enter(BYTE *b)
     /* a line the hook renamed but never read belongs to the last room, it never goes into this one */
     char path[MAX_PATH + 64];
     for (int i = 0; i < 2; i++) {
-        ipc_file(path, "chatsend");
-        lstrcatA(path, i ? ".taking" : "");
+        ipc_file(path, REQ_CHATSEND);
+        lstrcatA(path, i ? IPC_TAKING : "");
         DeleteFileA(path);
     }
     cr_room_clear();
@@ -531,7 +531,7 @@ static void cr_join_request(BYTE *b)
 {
     char buf[512], *p, *tok, *irc, *haskey, *nick;
     int pw = 0;
-    if (take_request("chatjoin", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_CHATJOIN, buf, sizeof buf) < 0) return;
     g_cr_used = 1;
     p = buf;
     tok = req_line(&p);
@@ -586,7 +586,7 @@ static void cr_create_request(BYTE *b)
     static WCHAR w[0x40];
     WORD v[6];
     int pw = 0, z, l, k0, k1, k2, n, any = 0, s, lang;
-    if (take_request("chatcreate", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_CHATCREATE, buf, sizeof buf) < 0) return;
     g_cr_used = 1;
     p = buf;
     tok = req_line(&p); haskey = req_line(&p); zone = req_line(&p); limit = req_line(&p);
@@ -641,7 +641,7 @@ static void cr_leave_request(BYTE *b)
     char buf[128];
     (void)b;
     char *p = buf, *join;
-    if (take_request("chatleave", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_CHATLEAVE, buf, sizeof buf) < 0) return;
     req_line(&p);
     join = req_line(&p);
     /* the app couldn't withdraw its enter, so it's called off here instead, even with a PART still going */
@@ -723,8 +723,8 @@ static void cr_room_pump(BYTE *b, int ctl)
         if (!cr_msg_ready()) return;
         if (g_cr_hello) { g_cr_hello = 0; cr_frame_out(b, CRM_HELLO); return; }
         if (g_cr_mop) { cr_master_step(b); return; }
-        if (ctl && request_new("chatmaster")) { cr_master_request(b); return; }
-        if (ctl && request_new("chatsend")) { cr_send_request(b); return; }
+        if (ctl && request_new(REQ_CHATMASTER)) { cr_master_request(b); return; }
+        if (ctl && request_new(REQ_CHATSEND)) { cr_send_request(b); return; }
         if (g_cr_replies > 0) { g_cr_replies--; cr_frame_out(b, CRM_REPLY); }
         return;
     }
@@ -763,17 +763,17 @@ static void chat_pump(BYTE *b, int ctl)
 {
     if (g_draining) return;
     cr_room_pump(b, ctl);
-    if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting("chatsend")) cr_send_request(b);
-    if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting("chatmaster")) cr_master_request(b);
+    if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting(REQ_CHATSEND)) cr_send_request(b);
+    if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting(REQ_CHATMASTER)) cr_master_request(b);
     if (g_cr_db) cr_db_pump(b);
     if (!ctl) return;
     /* waiting, not new: a .taking left by a read that failed is tried again first */
-    if (request_waiting("chatleave")) { cr_leave_request(b); return; }
-    if (g_cr_st == CR_OUT && request_waiting("chatjoin")) { cr_join_request(b); return; }   /* a PART goes first */
-    if (g_cr_st == CR_OUT && request_waiting("chatcreate")) { cr_create_request(b); return; }
+    if (request_waiting(REQ_CHATLEAVE)) { cr_leave_request(b); return; }
+    if (g_cr_st == CR_OUT && request_waiting(REQ_CHATJOIN)) { cr_join_request(b); return; }   /* a PART goes first */
+    if (g_cr_st == CR_OUT && request_waiting(REQ_CHATCREATE)) { cr_create_request(b); return; }
     if (g_cr_db || !db_free()) return;
-    if (request_waiting("chatzones")) { cr_zones_request(b); return; }
-    if (request_waiting("chatrooms")) cr_rooms_request(b);
+    if (request_waiting(REQ_CHATZONES)) { cr_zones_request(b); return; }
+    if (request_waiting(REQ_CHATROOMS)) cr_rooms_request(b);
 }
 
 static int chat_room_open(void) { return g_cr_st != CR_OUT; }
@@ -848,7 +848,7 @@ static void cr_write_lines(BYTE *b)
     g_cr_lines_dirty = 0;
     g_cr_written_seq = g_cr_seq;
     g_cr_written_at = GetTickCount64();
-    ipc_file(path, "chatroom.json");
+    ipc_file(path, IPC_CHATROOM);
     lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
     h = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) return;

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Provenance.Common.Hook;
 using Provenance.Common.Social;
 
 namespace Provenance.Wpf.ViewModels.Shared;
@@ -105,7 +106,7 @@ public partial class HandlesViewModel : ObservableObject
         {
             // once the hook's taken it, it's the hook's answer that ends it
             if (state == "working" || DateTime.UtcNow - _at < TimeSpan.FromSeconds(110)) return;
-            if (_pid() is { } pid) SocialRequests.CancelRequest(pid, "handle");
+            if (_pid() is { } pid) SocialRequests.CancelRequest(pid, HookContract.Requests.Handle);
             state = "timeout";
         }
         _token = null;

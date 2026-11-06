@@ -7,6 +7,7 @@
 #include <sddl.h>
 #include <tlhelp32.h>
 #include "pol_cred.h"
+#include "hook_contract.h"
 #include "base.c"
 #include "pol_exe.c"
 #include "credentials.c"
@@ -30,9 +31,6 @@
 #include "handles.c"
 #include "snapshot.c"
 #include "hold.c"
-
-#define GAME_START_EXIT 15
-#define NOT_HOOKED_EXIT 17   /* no detour, so it'd only ever get as far as the viewer's own menu */
 
 /* add-ons and game plugins already unloaded in FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins and
    finish its log, so it gets a clean one, the rest just get more places to crash */
@@ -121,7 +119,7 @@ static void install(void)
     DWORD old, rel;
     /* WinMain reaches CreateMutexW and OpenMutexW through pol.exe's MSLU slots, not the IAT. In a Windower or
        Ashita pol.exe they may already exist, and renaming would make later opens miss. */
-    if (getenv_set("PROVENANCE_LAUNCH_ID")) {
+    if (getenv_set(ENV_LAUNCH_ID)) {
         lg("pol_hook: attached to a third-party hook's pol.exe; mutex names left to it\r\n");
     } else {
         HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
@@ -173,16 +171,16 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, void *r)
     /* shows whether Large Address Aware took: 0xfffeffff with the bit on pol.exe, 0x7ffeffff without. Keep it the
        first line, the app reads a reused pid's log from the last one on */
     GetSystemInfo(&si);
-    lg("pol_hook: highest user address %08x\r\n", (unsigned)(ULONG_PTR)si.lpMaximumApplicationAddress);
+    lg(LOG_FIRST_LINE " %08x\r\n", (unsigned)(ULONG_PTR)si.lpMaximumApplicationAddress);
     env_check();
     owner_open();
     install();
-    idn = GetEnvironmentVariableA("PROVENANCE_LAUNCH_ID", id, sizeof id);
+    idn = GetEnvironmentVariableA(ENV_LAUNCH_ID, id, sizeof id);
     if (idn > 0 && !launch_id_ok(id, idn)) {
         lg("pol_hook: third-party hook launch id refused\r\n");
     } else if (idn > 0) {
         ipc_dir(path);
-        wsprintfA(path + lstrlenA(path), "provenance.%s.pid", id);
+        wsprintfA(path + lstrlenA(path), IPC_PID_FILE, id);
         f = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (f != INVALID_HANDLE_VALUE) {
             wsprintfA(num, "%u", GetCurrentProcessId());

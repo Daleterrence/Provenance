@@ -2,7 +2,6 @@ static FARPROC g_pCreateMutexW, g_pOpenMutexW;
 
 /* WinMain's single-instance gates are mutexes. Each name gets "_X" + 16 bytes of HMAC-SHA256(per-process secret,
    name) in hex, so nothing without admin can guess it and squat it first. */
-#define MUTEX_EXIT 13   /* no secret or HMAC: end pol.exe, never fall back to the stock names */
 #define MUTEX_NAME_KEEP 200
 #define MUTEX_SUFFIX_LEN 34
 static BYTE g_mutex_secret[32];
@@ -136,7 +135,7 @@ static LONG WINAPI veh_proc(EXCEPTION_POINTERS *ep)
         }
         /* just the file name, the full viewer path ate the whole buffer and hid which dll it was */
         if ((slash = strrchr(mod, '\\')) != NULL) name = slash + 1;
-        lg("CRASH %08x at %08x = %s+%05x\r\n", code, eip, name, eip - base);
+        lg(LOG_CRASH "%08x at %08x = %s+%05x\r\n", code, eip, name, eip - base);
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }

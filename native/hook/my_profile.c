@@ -631,7 +631,7 @@ static int me_write_json(BYTE *b)
     out[o++] = '}';
     o += me_chars_json(b, out + o, cap - o - 4);
     out[o++] = '}';
-    ipc_file(path, "myprofile.json");
+    ipc_file(path, IPC_MYPROFILE);
     lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
     HANDLE f = CreateFileA(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f != INVALID_HANDLE_VALUE) {
@@ -680,9 +680,9 @@ static void me_request(BYTE *b)
     int kind, level = 0, idx;
     pol_handle h;
     if (!db_free()) return;
-    kind = take_request("myprofile", buf, sizeof buf) >= 0 ? 1
-         : take_request("saveprofile", buf, sizeof buf) >= 0 ? 2
-         : take_request("rename", buf, sizeof buf) >= 0 ? 3 : 0;
+    kind = take_request(REQ_MYPROFILE, buf, sizeof buf) >= 0 ? 1
+         : take_request(REQ_SAVEPROFILE, buf, sizeof buf) >= 0 ? 2
+         : take_request(REQ_RENAME, buf, sizeof buf) >= 0 ? 3 : 0;
     if (!kind) return;
     g_db_last = GetTickCount64();
     p = buf;
@@ -691,7 +691,7 @@ static void me_request(BYTE *b)
     if (!fs_load_pib(b) || !pf_load(b)) { me_done("failed:no schema"); return; }
     g_me_t0 = GetTickCount64();
     if (kind == 1) {
-        ipc_file(jp, "myprofile.json");
+        ipc_file(jp, IPC_MYPROFILE);
         DeleteFileA(jp);
         memset(&h, 0, sizeof h);
         get_handle(b, g_my_slot, &h);
@@ -841,7 +841,7 @@ static void pic_pump(BYTE *b, int ctl)
         char buf[96], *p;
         int i, v = 0, d = 0;
         if (!ctl || g_draining || !db_free()) return;
-        if (take_request("pic", buf, sizeof buf) < 0) return;
+        if (take_request(REQ_PIC, buf, sizeof buf) < 0) return;
         g_db_last = GetTickCount64();
         for (i = 0; buf[i] >= '0' && buf[i] <= '9' && d < 5; i++, d++) v = v * 10 + (buf[i] - '0');
         p = buf + i;
@@ -916,7 +916,7 @@ static void xi_request(BYTE *b)
     me_chr c;
     pol_handle h;
     if (GetTickCount64() - g_xi_last < 3000 || !db_free()) return;
-    if (take_request("xiprofile", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_XIPROFILE, buf, sizeof buf) < 0) return;
     g_xi_last = g_db_last = GetTickCount64();
     p = buf;
     lstrcpynA(g_xi_token, req_line(&p), sizeof g_xi_token);

@@ -103,7 +103,7 @@ static void group_request(BYTE *b)
     int myClass = 0, haveGroup = 0, mid, slot, idx, cls, tcls, me, row, used = 0;
     /* a group job's -0x100 is a failure, so wait for a free polcore slot */
     if (g_sq_n || g_answer_kind || slots_free(b) < 1) return;
-    if (take_request("group", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_GROUP, buf, sizeof buf) < 0) return;
     p = buf;
     op = req_line(&p); tok = req_line(&p); gid = req_line(&p); a = req_line(&p); bb = req_line(&p); c = req_line(&p);
     d = req_line(&p);

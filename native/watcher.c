@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
+#include "hook/hook_contract.h"
 
 /* the app reads this output and the exit codes, so they don't change */
 static HANDLE g_child;   /* the suspended pol.exe, killed on any later failure */
@@ -59,7 +60,7 @@ static int attach(DWORD pid, const WCHAR *dll)
     CloseHandle(p);
     printf("watcher: attach, LoadLibraryW -> %08lx\n", code);
     if (!code) die("hook dll was refused or failed to load in target");
-    printf("watcher: attached to pol.exe (pid %lu)\n", pid);
+    printf("watcher: " LOG_WATCHER_ATTACHED " (pid %lu)\n", pid);
     return 0;
 }
 
@@ -94,7 +95,7 @@ static int hook_and_resume(PROCESS_INFORMATION *pi, const void *dll, DWORD size,
     }
     ResumeThread(pi->hThread);
     g_child = NULL;
-    printf("watcher: pol.exe running (pid %lu)\n", pi->dwProcessId);
+    printf("watcher: " LOG_WATCHER_RUNNING "%lu)\n", pi->dwProcessId);
     CloseHandle(pi->hThread);
     CloseHandle(pi->hProcess);
     return 0;

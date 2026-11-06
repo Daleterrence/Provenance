@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 
@@ -143,7 +144,7 @@ public partial class SocialViewModel
         // a "done" with no profile isn't an answer yet
         bool mine = snap.ProfileToken == _profileToken && (snap.ProfileState != "done" || snap.Profile != null);
         if (Settled(mine ? snap.ProfileState : null, "done", _profileAt, 130) is not { } st) return;
-        if (st == "timeout") Withdraw("profile");
+        if (st == "timeout") Withdraw(HookContract.Requests.Profile);
         _profileToken = null;
         ProfileLoading = false;
         if (st == "done")
@@ -273,7 +274,7 @@ public partial class SocialViewModel
         WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileToken, snap);
         bool mine = snap.FfxiProfileToken == _ffxiToken && (snap.FfxiProfileState != "done" || snap.FfxiProfile != null);
         if (Settled(mine ? snap.FfxiProfileState : null, "done", _ffxiAt, 130) is not { } st) return;
-        if (st == "timeout") Withdraw("ffxiprofile");
+        if (st == "timeout") Withdraw(HookContract.Requests.FfxiProfile);
         _ffxiToken = null;
         ProfileLoading = false;
         var tab = _ffxiFor!;

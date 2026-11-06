@@ -53,8 +53,8 @@ static void friend_edit_request(BYTE *b)
     int row, r;
     BYTE fr[0x140];
     if (g_answer_kind) return;
-    if (take_request("friend", buf, sizeof buf) < 0) {
-        if (take_request("comment", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_FRIEND, buf, sizeof buf) < 0) {
+        if (take_request(REQ_COMMENT, buf, sizeof buf) < 0) return;
         p = buf;
         tok = req_line(&p);
         lstrcpynA(g_edit_token, tok, sizeof g_edit_token);

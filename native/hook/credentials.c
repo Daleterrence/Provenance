@@ -30,7 +30,7 @@ static int launch_target(const WCHAR *t)
 static const char *cred_keyfile(char *buf, DWORD n)
 {
     static int warned;
-    DWORD k = GetEnvironmentVariableA("POL_CRED_KEYFILE", buf, n);
+    DWORD k = GetEnvironmentVariableA(ENV_CRED_KEYFILE, buf, n);
     if (k > 0 && k < n) return buf;
     if (!warned) {
         warned = 1;
@@ -52,7 +52,7 @@ static const char *cred_why(int rc)
 static void cred_consume(const WCHAR *target, const char *kind)
 {
     char kinds[64];
-    DWORD k = GetEnvironmentVariableA("POL_CRED_ONESHOT", kinds, sizeof kinds);
+    DWORD k = GetEnvironmentVariableA(ENV_CRED_ONESHOT, kinds, sizeof kinds);
     if (k == 0 || k >= sizeof kinds || !strstr(kinds, kind)) return;
     if (!launch_target(target)) {
         lg("phase_c: one-shot %s target is not a launch entry - left in place\r\n", kind);
@@ -79,8 +79,8 @@ static int read_details(const char *env, const char *kind, char *id, int idcap, 
         SecureZeroMemory(pw, pwcap);
         lg("phase_c: bad %s cred shape (id/pw empty) - pol.exe ends\r\n", kind);
     } else return 1;
-    lg("phase_c: SAVED DETAILS UNREADABLE (%s) - exiting, FFXI NOT started\r\n", kind);
-    end_pol(11);
+    lg(LOG_DETAILS_UNREADABLE " (%s) - exiting, FFXI NOT started\r\n", kind);
+    end_pol(DETAILS_UNREADABLE_EXIT);
     return 0;
 }
 /* account IDs in the log: first 2 chars + length only (the log stays on disk) */
@@ -99,7 +99,7 @@ static void sea_seed(BYTE *b)
     BYTE h1[20], secret[20], material[64];
     WCHAR obuf[256];
     int mode = 1, orc;
-    if (!read_details("POL_CRED_SEA", "SEA", seid, sizeof seid, sepw, sizeof sepw)) return;
+    if (!read_details(ENV_CRED_SEA, "SEA", seid, sizeof seid, sepw, sizeof sepw)) return;
     pc_sha1(b, sepw, lstrlenA(sepw), h1);
     for (int i = 0; i < 20; i++) wsprintfA(hex + i * 2, "%02x", h1[i]);
     lstrcpyA((char *)material, hex);
@@ -109,7 +109,7 @@ static void sea_seed(BYTE *b)
     SecureZeroMemory(material, sizeof material);
     SecureZeroMemory(h1, sizeof h1);
     SecureZeroMemory(hex, sizeof hex);
-    const WCHAR *totp = cred_target("POL_CRED_OTP", obuf, 256);
+    const WCHAR *totp = cred_target(ENV_CRED_OTP, obuf, 256);
     orc = totp ? cred_read(totp, NULL, 0, otp, sizeof otp) : PC_NOT_FOUND;
     if (orc != PC_NOT_FOUND) cred_consume(totp, "OTP");
     if (orc != PC_OK && orc != PC_NOT_FOUND)
@@ -137,7 +137,7 @@ static int play_signalled(void)
     static int resolved, warned;
     char user[64], go[64];
     if (!resolved) {
-        t = cred_target("POL_CRED_PLAY", tbuf, 256);
+        t = cred_target(ENV_CRED_PLAY, tbuf, 256);
         resolved = 1;
     }
     if (!t) return 0;
@@ -151,7 +151,7 @@ static int play_signalled(void)
         warned = 0;
     } else if (rc != PC_OK && !warned) {
         warned = 1;   /* once, Provenance takes this line as a failed start */
-        lg("hold: Play entry unreadable (%s) - ignored\r\n", cred_why(rc));
+        lg(LOG_PLAY_UNREADABLE " (%s) - ignored\r\n", cred_why(rc));
     }
     return 0;
 }

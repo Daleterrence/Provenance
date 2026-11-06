@@ -11,7 +11,7 @@ static int login_handle(BYTE *b, const char **why)
     BYTE rec[0x28];
     char want[24], k[17];
     int slot = ((svc_v)SVC(0x2f8))(), i;
-    DWORD n = GetEnvironmentVariableA("POL_HANDLE", want, sizeof want);
+    DWORD n = GetEnvironmentVariableA(ENV_HANDLE, want, sizeof want);
     *why = "the server's";
     if (slot >= 0) return slot;
     for (i = 0; n > 0 && n < sizeof want && i < 64; i++) {
@@ -33,12 +33,12 @@ static void hold_handle(BYTE *b)
     int want = 0;
     g_my_slot = login_handle(b, &why);
     if (g_my_slot < 0) {
-        lg("hold: NO POL HANDLE - signing out (exit %d)\r\n", NO_HANDLE_EXIT);
+        lg("hold: " LOG_NO_HANDLE " - signing out (exit %d)\r\n", NO_HANDLE_EXIT);
         viewer_sign_out(b);
         end_pol(NO_HANDLE_EXIT);
     }
     if (g_lean) return;
-    if (GetEnvironmentVariableA("POL_STATUS", sv, sizeof sv) > 0 &&
+    if (GetEnvironmentVariableA(ENV_STATUS, sv, sizeof sv) > 0 &&
         (sv[0] == '0' || sv[0] == '1' || sv[0] == '4'))
         want = sv[0] - '0';
     lg("presence: going online on handle slot %d, %s (current handle %d)\r\n", g_my_slot, why,
@@ -129,7 +129,7 @@ static void hold_turn(BYTE *b, int ctl)
     pic_pump(b, wctl);
     if (!g_lean && !handle_switching()) chat_pump(b, wctl);
     if (!g_lean && !handle_switching()) gc_pump(b, wctl);
-    if (!g_lean && wctl && g_status_job < 0 && take_request("status", sv, sizeof sv) >= 0) {
+    if (!g_lean && wctl && g_status_job < 0 && take_request(REQ_STATUS, sv, sizeof sv) >= 0) {
         want = sv[0] - '0';
         /* the viewer's OK maps busy (2) to online and 3 to appear offline */
         if (want == 2) want = 0;
@@ -228,16 +228,16 @@ static void pol_hold(BYTE *b)
     DWORD wn;
     if (!b) return;
     if (*(unsigned *)(b + 0x99408) != 30) {
-        lg("hold: no signed-in session (auth state %u) - exiting, FFXI NOT started\r\n", *(unsigned *)(b + 0x99408));
-        end_pol(3);
+        lg(LOG_NO_SESSION " (auth state %u) - exiting, FFXI NOT started\r\n", *(unsigned *)(b + 0x99408));
+        end_pol(AUTH_REFUSED_EXIT);
     }
-    ipc_file(spath, "social.json");
+    ipc_file(spath, IPC_SOCIAL);
     /* a login that finished after its Provenance went never gets held */
     if (owner_gone()) {
         lg("hold: Provenance ended during the login - signing out and exiting\r\n");
         hold_sign_out(b, spath);
     }
-    lg("hold: POL-only session held; waiting for Play (POL_CRED_PLAY)\r\n");
+    lg(LOG_HELD "; waiting for Play (POL_CRED_PLAY)\r\n");
     if (g_lean) lg("hold: lean session (no social)\r\n");
     if (!g_lean && SVC(0xd9c)) {
         void *cb[6];
@@ -265,7 +265,7 @@ static void pol_hold(BYTE *b)
             else lg("hold: SESSION LOST reason=%d - signed out\r\n", why);
             DeleteFileA(spath);
             store_drop();
-            ipc_file(path, "ended");
+            ipc_file(path, IPC_ENDED);
             ef = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
             if (ef != INVALID_HANDLE_VALUE) {
                 wsprintfA(num, "%d", why);
@@ -294,10 +294,10 @@ static void pol_hold(BYTE *b)
         if (ctl && play_signalled()) {
             if (!g_ffxi_service) {
                 static int said;
-                if (!said) lg("hold: Play refused:no-content-id\r\n");
+                if (!said) lg(LOG_PLAY_REFUSED "no-content-id\r\n");
                 said = 1;
             } else {
-                lg("hold: Play signalled - finishing PlayOnline writes, then booting FFXI\r\n");
+                lg(LOG_PLAY_STARTED " - finishing PlayOnline writes, then booting FFXI\r\n");
                 play_drain(b, spath, 15000);
                 /* the game keeps going whatever happens to Provenance */
                 if (g_owner) CloseHandle(g_owner);
@@ -307,7 +307,7 @@ static void pol_hold(BYTE *b)
             }
         }
         /* only an admin can write in Provenance's folder, so a stop file there really is Provenance asking */
-        ipc_file(path, "stop");
+        ipc_file(path, IPC_STOP);
         if (ctl && GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) {
             lg("hold: stop file seen - signing out and exiting\r\n");
             DeleteFileA(path);

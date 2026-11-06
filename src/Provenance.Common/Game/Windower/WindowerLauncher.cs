@@ -317,7 +317,7 @@ public sealed class WindowerLauncher : IDisposable
         psi.ArgumentList.Add(_setup.PolExe);
         psi.ArgumentList.Add(Path.Combine(HookFiles.NativeDir, "pol_hook.dll"));
         // pol_hook leaves pol.exe's mutex names to Hook.dll when it sees this
-        psi.Environment["PROVENANCE_LAUNCH_ID"] = _launchId = launchId;
+        psi.Environment[HookContract.Env.LaunchId] = _launchId = launchId;
     }
 
     // on the thread that took the turn, a mutex can't be let go from another

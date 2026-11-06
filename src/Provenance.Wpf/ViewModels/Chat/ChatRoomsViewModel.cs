@@ -5,6 +5,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
@@ -317,7 +318,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     internal void MasterTick(DateTime now)
     {
         if (_masterToken is null || now - _masterSentAt < MasterGiveUp || Pid is not { } pid) return;
-        SocialRequests.WithdrawRequest(pid, "chatmaster");
+        SocialRequests.WithdrawRequest(pid, HookContract.Requests.ChatMaster);
         if (_masterKind == MasterJob.Password) _dropPassword();
         _masterToken = null;
         MasterBusy = false;
@@ -377,11 +378,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         if (Pid is { } pid)
         {
-            SocialRequests.WithdrawRequest(pid, "chatsend");
+            SocialRequests.WithdrawRequest(pid, HookContract.Requests.ChatSend);
             if (Current == Page.Room || Entering)
             {
-                bool withdrawn = Entering && ((SocialRequests.WithdrawRequest(pid, "chatjoin") == Withdrawal.Withdrawn) |
-                                              (SocialRequests.WithdrawRequest(pid, "chatcreate") == Withdrawal.Withdrawn));
+                bool withdrawn = Entering && ((SocialRequests.WithdrawRequest(pid, HookContract.Requests.ChatJoin) == Withdrawal.Withdrawn) |
+                                              (SocialRequests.WithdrawRequest(pid, HookContract.Requests.ChatCreate) == Withdrawal.Withdrawn));
                 if (Entering) _dropPassword();
                 if (!withdrawn && !_quiet) ChatRoomFiles.Leave(pid, NewToken(), Entering ? _joinToken ?? "" : "");
             }

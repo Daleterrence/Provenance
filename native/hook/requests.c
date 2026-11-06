@@ -17,7 +17,7 @@ static void request_paths(const char *ext, char *path, char *taken)
 {
     ipc_file(path, ext);
     lstrcpyA(taken, path);
-    lstrcatA(taken, ".taking");
+    lstrcatA(taken, IPC_TAKING);
 }
 static BOOL request_waiting(const char *ext)
 {

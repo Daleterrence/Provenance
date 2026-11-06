@@ -153,7 +153,7 @@ static int peer_secret(void)
     DWORD n = 0;
     int r;
     if (g_peer_secret_ok) return 1;
-    n = GetEnvironmentVariableW(L"POL_IPC_DIR", path, MAX_PATH);
+    n = GetEnvironmentVariableW(L_(ENV_IPC_DIR), path, MAX_PATH);
     if (!n || n >= MAX_PATH || !peer_secret_name(name, 256)) return 0;
     if (path[n - 1] != L'\\' && path[n - 1] != L'/') lstrcatW(path, L"\\");
     lstrcatW(path, name);

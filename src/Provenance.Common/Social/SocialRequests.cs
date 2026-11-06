@@ -7,7 +7,7 @@ namespace Provenance.Common.Social;
 // the hook's per-session files. Requests get written whole (temp file then move) so the hook never sees half of one
 public static class SocialRequests
 {
-    public static void SetStatus(int pid, PolStatus status) => WriteRequest(pid, "status", PolStatusText.Code(status).ToString());
+    public static void SetStatus(int pid, PolStatus status) => WriteRequest(pid, HookContract.Requests.Status, PolStatusText.Code(status).ToString());
 
     // no control characters but line breaks, the viewer's rule. The hook checks again, and checks the name against the
     // friend row before it sends
@@ -16,7 +16,7 @@ public static class SocialRequests
         try
         {
             var body = new string(text.Replace("\r", "").Select(ch => ch < ' ' && ch != '\n' ? ' ' : ch).ToArray());
-            return WriteRequest(pid, "send", $"{friendRow}\n{OneLine(token)}\n{OneLine(friendName)}\n{OneLine(subject)}\n{body}");
+            return WriteRequest(pid, HookContract.Requests.Send, $"{friendRow}\n{OneLine(token)}\n{OneLine(friendName)}\n{OneLine(subject)}\n{body}");
         }
         catch { return false; }
     }
@@ -26,17 +26,17 @@ public static class SocialRequests
     {
         try
         {
-            var path = HookFiles.PathFor(pid, "ack");
+            var path = HookFiles.PathFor(pid, HookContract.Requests.Ack);
             var text = string.Join("\n", mids);
             // ids the hook hasn't read yet stay. If it takes the file between the check and the read, nothing's lost
             try { text = File.ReadAllText(path) + "\n" + text; } catch (FileNotFoundException) { }
-            return WriteRequest(pid, "ack", text);
+            return WriteRequest(pid, HookContract.Requests.Ack, text);
         }
         catch { return false; }
     }
 
     public static bool SetProfilePicture(int pid, int picId, string token) =>
-        WriteRequest(pid, "pic", $"{picId}\n{token.Replace("\n", "")}");
+        WriteRequest(pid, HookContract.Requests.Pic, $"{picId}\n{token.Replace("\n", "")}");
 
     // row is the ignore-list index for Unignore. The key's there so a changed list gets refused
     public static bool EditFriend(int pid, FriendEdit op, string token, int row, string key, string arg = "")
@@ -48,24 +48,24 @@ public static class SocialRequests
             FriendEdit.Ignore => "ignore",
             _ => "unignore",
         };
-        return WriteRequest(pid, "friend", $"{verb}\n{OneLine(token)}\n{row}\n{OneLine(key)}\n{OneLine(arg)}");
+        return WriteRequest(pid, HookContract.Requests.Friend, $"{verb}\n{OneLine(token)}\n{row}\n{OneLine(key)}\n{OneLine(arg)}");
     }
 
     public static bool AnswerRequest(int pid, RequestAnswer answer, string token, int mid, string subject, bool allHandles = false)
     {
         var verb = answer switch { RequestAnswer.Accept => "accept", RequestAnswer.Decline => "decline", _ => "ignore" };
-        return WriteRequest(pid, "answer", $"{verb}\n{OneLine(token)}\n{mid}\n{OneLine(subject)}\n{(allHandles ? "1" : "0")}");
+        return WriteRequest(pid, HookContract.Requests.Answer, $"{verb}\n{OneLine(token)}\n{mid}\n{OneLine(subject)}\n{(allHandles ? "1" : "0")}");
     }
 
     // the hook checks the value again and builds the query itself
     public static bool Search(int pid, string token, FriendSearchKind kind, string value) =>
-        WriteRequest(pid, "search", $"{token.Replace("\n", "")}\n{FriendSearch.Wire(kind)}\n{value.Replace("\r", "").Replace("\n", "")}");
+        WriteRequest(pid, HookContract.Requests.Search, $"{token.Replace("\n", "")}\n{FriendSearch.Wire(kind)}\n{value.Replace("\r", "").Replace("\n", "")}");
 
     public static bool SendFriendRequest(int pid, string token, int index, string hitKey, string subject, string text) =>
-        WriteRequest(pid, "answer", $"request\n{OneLine(token)}\n{index}\n{OneLine(subject)}\n{OneLine(text)}\n{OneLine(hitKey)}");
+        WriteRequest(pid, HookContract.Requests.Answer, $"request\n{OneLine(token)}\n{index}\n{OneLine(subject)}\n{OneLine(text)}\n{OneLine(hitKey)}");
 
     public static bool RequestProfile(int pid, string token, int friendRow, string friendKey) =>
-        WriteRequest(pid, "profile", $"{token.Replace("\n", "")}\n{friendRow}\n{friendKey.Replace("\n", "")}");
+        WriteRequest(pid, HookContract.Requests.Profile, $"{token.Replace("\n", "")}\n{friendRow}\n{friendKey.Replace("\n", "")}");
 
     public static bool ChangeGroup(int pid, GroupOp op, string token, string groupId, string a = "", string b = "", string c = "",
                                    string key = "")
@@ -76,27 +76,27 @@ public static class SocialRequests
             GroupOp.SetClass => "class", GroupOp.Comment => "comment", GroupOp.Invite => "invite",
             GroupOp.AcceptInvite => "accept", _ => "decline",
         };
-        return WriteRequest(pid, "group",
+        return WriteRequest(pid, HookContract.Requests.Group,
             $"{verb}\n{OneLine(token)}\n{OneLine(groupId)}\n{OneLine(a)}\n{OneLine(b)}\n{OneLine(c)}\n{OneLine(key)}");
     }
 
     public static bool SetComment(int pid, string token, string text) =>
-        WriteRequest(pid, "comment", $"{token.Replace("\n", "")}\n{text.Replace("\r", "").Replace("\n", " ")}");
+        WriteRequest(pid, HookContract.Requests.Comment, $"{token.Replace("\n", "")}\n{text.Replace("\r", "").Replace("\n", " ")}");
 
     // the hook only looks it up while a friend's on that character
     public static bool RequestCharacter(int pid, string token, uint ctsid, ulong ctid) =>
-        WriteRequest(pid, "character", $"{OneLine(token)}\n{ctsid}\n{(uint)ctid}\n{(uint)(ctid >> 32)}");
+        WriteRequest(pid, HookContract.Requests.Character, $"{OneLine(token)}\n{ctsid}\n{(uint)ctid}\n{(uint)(ctid >> 32)}");
 
     // which of the friend's game slots, the hook takes the character's ids from the slot itself
     public static bool RequestFfxiProfile(int pid, string token, int friendRow, string friendKey, int slot) =>
-        WriteRequest(pid, "ffxiprofile", $"{OneLine(token)}\n{friendRow}\n{OneLine(friendKey)}\n{slot}");
+        WriteRequest(pid, HookContract.Requests.FfxiProfile, $"{OneLine(token)}\n{friendRow}\n{OneLine(friendKey)}\n{slot}");
 
-    public static bool RequestMyProfile(int pid, string token) => WriteRequest(pid, "myprofile", OneLine(token));
+    public static bool RequestMyProfile(int pid, string token) => WriteRequest(pid, HookContract.Requests.MyProfile, OneLine(token));
 
     // one of the characters from the loaded profile, by its key there. handleKey is the profile's, so neither ever
     // lands on a handle that's become active since
     public static bool RequestXiProfile(int pid, string token, string handleKey, string characterKey) =>
-        WriteRequest(pid, "xiprofile", $"{OneLine(token)}\n{OneLine(handleKey)}\n{OneLine(characterKey)}");
+        WriteRequest(pid, HookContract.Requests.XiProfile, $"{OneLine(token)}\n{OneLine(handleKey)}\n{OneLine(characterKey)}");
 
     // load first, the save keeps each field's own level. level is 1 Private, 2 Friends only, 3 POL
     public static bool SaveMyProfile(int pid, string token, int level, IEnumerable<KeyValuePair<string, string>> fields,
@@ -106,12 +106,12 @@ public static class SocialRequests
         sb.Append(OneLine(token)).Append('\n').Append(level);
         if (noMailText.Length > 0) sb.Append("\nnomail=").Append(OneLine(noMailText));
         foreach (var (name, value) in fields) sb.Append('\n').Append(OneLine(name)).Append('=').Append(OneLine(value));
-        return WriteRequest(pid, "saveprofile", sb.ToString());
+        return WriteRequest(pid, HookContract.Requests.SaveProfile, sb.ToString());
     }
 
     // key is the loaded profile's, so a rename never lands on a handle that's become active since
     public static bool RenameHandle(int pid, string token, string name, string key) =>
-        WriteRequest(pid, "rename", $"{OneLine(token)}\n{OneLine(name)}\n{OneLine(key)}");
+        WriteRequest(pid, HookContract.Requests.Rename, $"{OneLine(token)}\n{OneLine(name)}\n{OneLine(key)}");
 
     public static string FailReason(string state) =>
         state.StartsWith("failed:", StringComparison.Ordinal) ? state[7..] : state;
@@ -122,7 +122,7 @@ public static class SocialRequests
         if (contents.Count is 0 or > HandleList.MaxContentIds) return false;
         var body = new StringBuilder($"linkall\n{OneLine(token)}\n{active.Slot}\n{OneLine(active.Key)}");
         foreach (var c in contents) body.Append($"\n{c.Index}\n{OneLine(c.Key)}");
-        return WriteRequest(pid, "handle", body.ToString());
+        return WriteRequest(pid, HookContract.Requests.Handle, body.ToString());
     }
 
     // the keys are the snapshot's, so the hook refuses one aimed at a record that's changed since
@@ -135,7 +135,7 @@ public static class SocialRequests
             if (content is null) return false;
             body += $"\n{content.Index}\n{OneLine(content.Key)}";
         }
-        return WriteRequest(pid, "handle", body);
+        return WriteRequest(pid, HookContract.Requests.Handle, body);
     }
 
     // an abandoned edit mustn't run later, so the .taking copy the hook would retry goes too
@@ -160,7 +160,7 @@ public static class SocialRequests
         }
     }
 
-    public static bool SendPending(int pid) => HookFiles.RequestPaths(pid, "send").Any(File.Exists);
+    public static bool SendPending(int pid) => HookFiles.RequestPaths(pid, HookContract.Requests.Send).Any(File.Exists);
 
     private static string OneLine(string s) => s.Replace("\r", "").Replace("\n", " ");
 

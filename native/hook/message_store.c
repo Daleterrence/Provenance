@@ -226,17 +226,17 @@ static int gb_add(gbuf *g, const char *s, int len)
 static void store_drop(void)
 {
     char p[MAX_PATH + 64];
-    ipc_file(p, "store.json");
+    ipc_file(p, IPC_STORE);
     DeleteFileA(p);
-    ipc_file(p, "chatroom.json");   /* the chat room's lines, other people's words like the messages */
+    ipc_file(p, IPC_CHATROOM);   /* the chat room's lines, other people's words like the messages */
     DeleteFileA(p);
-    ipc_file(p, "groupchat.json");
+    ipc_file(p, IPC_GROUPCHAT);
     DeleteFileA(p);
     /* and an enter, a create, a master's change or a group chat request that never got taken */
     for (int i = 0; i < 12; i++) {
-        static const char *const ext[] = { "chatjoin", "chatcreate", "chatmaster", "groupchatjoin", "groupchatsend", "groupchatleave" };
+        static const char *const ext[] = { REQ_CHATJOIN, REQ_CHATCREATE, REQ_CHATMASTER, REQ_GROUPCHATJOIN, REQ_GROUPCHATSEND, REQ_GROUPCHATLEAVE };
         ipc_file(p, ext[i / 2]);
-        lstrcatA(p, i % 2 ? ".taking" : "");
+        lstrcatA(p, i % 2 ? IPC_TAKING : "");
         DeleteFileA(p);
     }
 }
@@ -317,7 +317,7 @@ static void store_import(BYTE *b)
     SecureZeroMemory(body, sizeof body);
     SecureZeroMemory(&scratch, sizeof scratch);
     if (nin || nout) {
-        ipc_file(path, "store.json");
+        ipc_file(path, IPC_STORE);
         lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
         f = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (f != INVALID_HANDLE_VALUE) {

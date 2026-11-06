@@ -12,7 +12,7 @@ static void saver_save(void)
 {
     char v[4];
     BOOL on;
-    if (GetEnvironmentVariableA("POL_SCREENSAVER", v, sizeof v) == 1 && (v[0] == '0' || v[0] == '1'))
+    if (GetEnvironmentVariableA(ENV_SCREENSAVER, v, sizeof v) == 1 && (v[0] == '0' || v[0] == '1'))
         g_saver = v[0] - '0';
     else if (SystemParametersInfoW(SPI_GETSCREENSAVEACTIVE, 0, &on, 0))
         g_saver = on != 0;
@@ -56,23 +56,21 @@ static void end_pol_or_exit(UINT code)
     ExitProcess(code);
 }
 
-#define NO_ENV_EXIT 16   /* not started by Provenance, its environment isn't there */
-
 /* Provenance's admin-only POL_IPC_DIR. Missing, too long or not a folder ends pol.exe so nothing lands anywhere
    readable. No lg() here, it'd recurse */
 static void ipc_dir(char out[MAX_PATH])
 {
-    DWORD n = GetEnvironmentVariableA("POL_IPC_DIR", out, MAX_PATH), a;
+    DWORD n = GetEnvironmentVariableA(ENV_IPC_DIR, out, MAX_PATH), a;
     if (n == 0) end_pol_or_exit(NO_ENV_EXIT);
     a = n < MAX_PATH - 64 ? GetFileAttributesA(out) : INVALID_FILE_ATTRIBUTES;
-    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) end_pol_or_exit(12);
+    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) end_pol_or_exit(IPC_DIR_EXIT);
     if (out[n - 1] != '\\' && out[n - 1] != '/') { out[n] = '\\'; out[n + 1] = 0; }
 }
 
 static void ipc_file(char *out, const char *ext)
 {
     ipc_dir(out);
-    wsprintfA(out + lstrlenA(out), "pol_hook.%u.%s", GetCurrentProcessId(), ext);
+    wsprintfA(out + lstrlenA(out), IPC_NAME, GetCurrentProcessId(), ext);
 }
 
 static void lg(const char *fmt, ...)
@@ -87,7 +85,7 @@ static void lg(const char *fmt, ...)
     va_start(ap, fmt);
     wvsprintfA(buf + lstrlenA(buf), fmt, ap);
     va_end(ap);
-    ipc_file(path, "log");
+    ipc_file(path, IPC_LOG);
     HANDLE h = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                            NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h != INVALID_HANDLE_VALUE) {
@@ -100,7 +98,7 @@ static void lg(const char *fmt, ...)
 /* every Provenance start sets these (and POL_IPC_DIR, which ipc_dir checks) */
 static void env_check(void)
 {
-    if (getenv_set("POL_HOLD") && getenv_set("POL_CRED_KEYFILE")) return;
+    if (getenv_set(ENV_HOLD) && getenv_set(ENV_CRED_KEYFILE)) return;
     lg("pol_hook: no POL_HOLD or POL_CRED_KEYFILE, so not started by Provenance - ending pol.exe (exit %d)\r\n",
        NO_ENV_EXIT);
     end_pol_or_exit(NO_ENV_EXIT);
@@ -109,7 +107,7 @@ static void env_check(void)
 static int stop_requested(void)
 {
     char p[MAX_PATH + 64];
-    ipc_file(p, "stop");
+    ipc_file(p, IPC_STOP);
     return GetFileAttributesA(p) != INVALID_FILE_ATTRIBUTES;
 }
 
@@ -120,7 +118,7 @@ static ULONGLONG g_owner_checked;
 static void owner_open(void)
 {
     char v[16];
-    DWORD n = GetEnvironmentVariableA("POL_OWNER", v, sizeof v), pid, err;
+    DWORD n = GetEnvironmentVariableA(ENV_OWNER, v, sizeof v), pid, err;
     if (n == 0 || n >= sizeof v || (pid = (DWORD)atoi(v)) == 0) return;
     g_owner = OpenProcess(SYNCHRONIZE, FALSE, pid);
     if (g_owner) { lg("pol_hook: owned by Provenance pid %u\r\n", pid); return; }

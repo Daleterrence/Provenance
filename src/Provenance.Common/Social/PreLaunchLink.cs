@@ -1,4 +1,5 @@
 using Provenance.Common.Game;
+using Provenance.Common.Hook;
 
 namespace Provenance.Common.Social;
 
@@ -110,7 +111,7 @@ public sealed class PreLaunchLink
             }
             else if (Now() - at >= Untaken)
             {
-                if (SocialRequests.WithdrawRequest(pid, "handle") == Withdrawal.Withdrawn) return (false, Failure("timeout"));
+                if (SocialRequests.WithdrawRequest(pid, HookContract.Requests.Handle) == Withdrawal.Withdrawn) return (false, Failure("timeout"));
                 taken = Now();
             }
         }

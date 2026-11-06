@@ -274,8 +274,8 @@ static void mail_send_pump(BYTE *b)
     if (send_built()) { if (!again) mail_send_start(b); return; }
     /* an answer owns the send slots from its request to its message. A waiting answer or group request goes
        before the next line, they only start with nothing sending */
-    if (g_sq_n >= SEND_MAX || g_draining || g_answer_kind || handle_switching() || !request_waiting("send") ||
-        request_new("answer") || request_new("group"))
+    if (g_sq_n >= SEND_MAX || g_draining || g_answer_kind || handle_switching() || !request_waiting(REQ_SEND) ||
+        request_new(REQ_ANSWER) || request_new(REQ_GROUP))
         return;
     /* stopped or at the hourly cap, a request is still taken so the app hears it wasn't sent */
     why = pace_check(&g_pace, GetTickCount64());
@@ -288,7 +288,7 @@ static void mail_send_pump(BYTE *b)
     if (why == PACE_OK && !msg_slot_ok(b)) return;
     buf = (char *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x4000);
     if (!buf) return;
-    if (take_request("send", buf, 0x4000) >= 0) {
+    if (take_request(REQ_SEND, buf, 0x4000) >= 0) {
         said = 0;
         mail_send_parse(b, buf);
     }
@@ -336,7 +336,7 @@ static void answer_request(BYTE *b)
     BYTE row[0x140];
     const mailrec *m = NULL;
     const srchrec *h;
-    if (take_request("answer", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_ANSWER, buf, sizeof buf) < 0) return;
     p = buf;
     op = req_line(&p); tok = req_line(&p); mids = req_line(&p); subj = req_line(&p); arg = req_line(&p);
     hkey = req_line(&p);

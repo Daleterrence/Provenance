@@ -26,48 +26,36 @@ public static class ChatRoomFiles
     public const int MaxNameBytes = 15, MaxPasswordLength = 23, MaxTextLength = 400, PageSize = 100;
     public const int MaxRoomName = 30, MaxNewPassword = 16, MinOccupancy = 2, MaxOccupancy = 20, DefaultOccupancy = 10;
 
-    public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, "chatroom.json");
+    public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.ChatRoom);
 
-    public static void Delete(int pid)
-    {
-        try { File.Delete(LinesPathForPid(pid)); } catch { }
-    }
-
-    // the requests that carry a room, a chat name or a password entry's token, never left about once the session's gone
-    public static void DeleteRequests(int pid)
-    {
-        foreach (var ext in new[] { "chatjoin", "chatcreate", "chatmaster" })
-            HookFiles.DeleteRequest(pid, ext);
-    }
-
-    public static bool Zones(int pid, string token) => Write(pid, "chatzones", OneLine(token));
+    public static bool Zones(int pid, string token) => Write(pid, HookContract.Requests.ChatZones, OneLine(token));
 
     public static bool Rooms(int pid, string token, int zone, int offset) =>
-        Write(pid, "chatrooms", $"{OneLine(token)}\n{zone}\n{offset}");
+        Write(pid, HookContract.Requests.ChatRooms, $"{OneLine(token)}\n{zone}\n{offset}");
 
     // a locked room's password never goes in here, the app hands it over as a one-shot Credential Manager entry
     public static bool Join(int pid, string token, string irc, bool hasPassword, string chatName) =>
-        Write(pid, "chatjoin", $"{OneLine(token)}\n{OneLine(irc)}\n{(hasPassword ? "1" : "")}\n{OneLine(chatName)}");
+        Write(pid, HookContract.Requests.ChatJoin, $"{OneLine(token)}\n{OneLine(irc)}\n{(hasPassword ? "1" : "")}\n{OneLine(chatName)}");
 
     public static bool Send(int pid, string token, string text, int colour = -1, int emote = 0) =>
-        Write(pid, "chatsend", $"{OneLine(token)}\n{OneLine(text)}\n{colour}\n{emote}");
+        Write(pid, HookContract.Requests.ChatSend, $"{OneLine(token)}\n{OneLine(text)}\n{colour}\n{emote}");
 
     // a new room. The password goes the same way an enter's does, never in here
     public static bool Create(int pid, string token, bool hasPassword, int zone, int occupancy, int members, int purpose,
                               int language, string chatName, string roomName) =>
-        Write(pid, "chatcreate", $"{OneLine(token)}\n{(hasPassword ? "1" : "")}\n{zone}\n{occupancy}\n{members}\n{purpose}\n" +
+        Write(pid, HookContract.Requests.ChatCreate, $"{OneLine(token)}\n{(hasPassword ? "1" : "")}\n{zone}\n{occupancy}\n{members}\n{purpose}\n" +
                                  $"{language}\n{OneLine(chatName)}\n{OneLine(roomName)}");
 
     public enum MasterOp { Kick, Master, Password }
 
     // the room master's: kick or designate a member (by the room's key), or a new password (none turns it off)
     public static bool Master(int pid, string token, MasterOp op, int memberKey = 0, bool hasPassword = false) =>
-        Write(pid, "chatmaster", $"{OneLine(token)}\n{(hasPassword ? "1" : "")}\n" +
+        Write(pid, HookContract.Requests.ChatMaster, $"{OneLine(token)}\n{(hasPassword ? "1" : "")}\n" +
                                  $"{op switch { MasterOp.Kick => "kick", MasterOp.Master => "master", _ => "password" }}\n{memberKey}");
 
     // joinToken calls off an enter the app couldn't withdraw, should the hook take it after this
     public static bool Leave(int pid, string token, string joinToken = "") =>
-        Write(pid, "chatleave", joinToken.Length > 0 ? $"{OneLine(token)}\n{OneLine(joinToken)}" : OneLine(token));
+        Write(pid, HookContract.Requests.ChatLeave, joinToken.Length > 0 ? $"{OneLine(token)}\n{OneLine(joinToken)}" : OneLine(token));
 
     // what the hook would refuse anyway
     public static string? NameProblem(string name) =>

@@ -260,7 +260,7 @@ static void viewer_init(BYTE *b)
     char folder[MAX_PATH] = "C:\\Program Files (x86)\\PlayOnline\\SquareEnix\\PlayOnlineViewer";
     wsprintfA(key, "SOFTWARE\\%s", pol_hive());
     viewer_folder(folder);
-    lg("viewer_init: lang=%u key='%s' folder='%s'\r\n", lang, key, folder);
+    lg(LOG_VIEWER_LANG "%u key='%s' folder='%s'\r\n", lang, key, folder);
     region_init(b, lang);
     ((int (__cdecl *)(const char *))PSLOT(0x16F))(key);
     ((int (__cdecl *)(const char *))PSLOT(0x07D))(folder);

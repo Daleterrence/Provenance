@@ -30,21 +30,14 @@ public static class GroupChatFiles
     public const int MaxText = 174;
 
     public static bool Join(int pid, string token, string group, int slot, string hid) =>
-        Write(pid, "groupchatjoin", $"{OneLine(token)}\n{OneLine(group)}\n{slot}\n{OneLine(hid)}");
+        Write(pid, HookContract.Requests.GroupChatJoin, $"{OneLine(token)}\n{OneLine(group)}\n{slot}\n{OneLine(hid)}");
 
-    public static bool Send(int pid, string token, string text) => Write(pid, "groupchatsend", $"{OneLine(token)}\n{OneLine(text)}");
+    public static bool Send(int pid, string token, string text) => Write(pid, HookContract.Requests.GroupChatSend, $"{OneLine(token)}\n{OneLine(text)}");
 
     // join is an untaken join this calls off, when the app couldn't withdraw it
-    public static bool Leave(int pid, string token, string join = "") => Write(pid, "groupchatleave", $"{OneLine(token)}\n{OneLine(join)}");
+    public static bool Leave(int pid, string token, string join = "") => Write(pid, HookContract.Requests.GroupChatLeave, $"{OneLine(token)}\n{OneLine(join)}");
 
-    public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, "groupchat.json");
-
-    public static void Delete(int pid)
-    {
-        try { File.Delete(LinesPathForPid(pid)); } catch { }
-        foreach (var ext in new[] { "groupchatjoin", "groupchatsend", "groupchatleave" })
-            HookFiles.DeleteRequest(pid, ext);
-    }
+    public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.GroupChat);
 
     public static GroupChatLines? ParseLines(string json)
     {

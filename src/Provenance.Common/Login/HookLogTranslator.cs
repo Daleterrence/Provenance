@@ -1,12 +1,13 @@
 using System.Text.RegularExpressions;
+using Provenance.Common.Hook;
 
 namespace Provenance.Common.Login;
 
 public sealed class HookLogTranslator
 {
-    private static readonly Regex AuthState = new(@"auth SM: state=(\d+)", RegexOptions.Compiled);
-    private static readonly Regex ProfileDone = new(@"profile: (\w+) -> (-?\d+)", RegexOptions.Compiled);
-    private static readonly Regex ContentIds = new(@"content ids: (\d+) valid, (\d+) FFXI", RegexOptions.Compiled);
+    private static readonly Regex AuthState = new(Regex.Escape(HookContract.LogLines.AuthState) + @"(\d+)", RegexOptions.Compiled);
+    private static readonly Regex ProfileDone = new(Regex.Escape(HookContract.LogLines.Profile) + @"(\w+) -> (-?\d+)", RegexOptions.Compiled);
+    private static readonly Regex ContentIds = new(Regex.Escape(HookContract.LogLines.ContentIds) + @"(\d+) valid, (\d+) FFXI", RegexOptions.Compiled);
 
     private readonly HashSet<string> _seen = new();
     private bool _ready;
@@ -29,16 +30,16 @@ public sealed class HookLogTranslator
 
     public LaunchProgress? Translate(string line)
     {
-        if (line.Contains("viewer_init: lang="))
+        if (line.Contains(HookContract.LogLines.ViewerLang))
             return Once("vi", "Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.06);
-        if (line.Contains("phase_c: REAL auth"))
+        if (line.Contains(HookContract.LogLines.RealAuth))
             return Once("auth", "Signing in", "Connecting to PlayOnline...", LaunchSteps.SignIn, 0.08);
         if (AuthState.Match(line) is { Success: true } s && !_ready)
         {
             var (text, f) = AuthStateText(int.Parse(s.Groups[1].Value));
             return Once("st:" + text, "Signing in", text, LaunchSteps.SignIn, f);
         }
-        if (line.Contains("phase_c: AUTH OK"))
+        if (line.Contains(HookContract.LogLines.AuthOk))
             return Once("ok", "Signed in", "Loading your friends and profile...", LaunchSteps.Profile, 0.68);
         if (!_ready && ProfileDone.IsMatch(line))
         {
@@ -48,12 +49,12 @@ public sealed class HookLogTranslator
         }
         if (ContentIds.Match(line) is { Success: true } ci && ci.Groups[2].Value == "0")
             return Once("cids", "Signed in", "This account has no Content ID for FINAL FANTASY XI.", LaunchSteps.Profile, 0.9);
-        if (line.Contains("hold: POL-only session held"))
+        if (line.Contains(HookContract.LogLines.Held))
         {
             _ready = true;
             return Once("held", "Connected", "Going online...", LaunchSteps.StartGame, 0.95);
         }
-        if (line.Contains("phase_c: stop requested"))
+        if (line.Contains(HookContract.LogLines.StopRequested))
             return Once("stop", "Stopped", "The login was cancelled, and PlayOnline has been closed.");
         return null;
     }

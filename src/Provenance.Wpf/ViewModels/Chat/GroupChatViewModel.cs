@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.ViewModels.Social;
@@ -190,7 +191,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         if (_social.SessionPid is not { } pid) return;
         bool withdrawn = Current == Phase.Joining &&
-                         SocialRequests.WithdrawRequest(pid, "groupchatjoin") == Withdrawal.Withdrawn;
+                         SocialRequests.WithdrawRequest(pid, HookContract.Requests.GroupChatJoin) == Withdrawal.Withdrawn;
         if (!withdrawn) GroupChatFiles.Leave(pid, NewToken(), Current == Phase.Joining ? _token ?? "" : "");
     }
 

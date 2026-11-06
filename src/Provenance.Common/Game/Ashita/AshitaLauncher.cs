@@ -26,10 +26,10 @@ public static class AshitaLauncher
     {
         LaunchEnvironment.Reset(target);
         foreach (var kv in launchEnv)
-            if (kv.Key.StartsWith("POL_", StringComparison.OrdinalIgnoreCase) && kv.Value != null)
+            if (kv.Key.StartsWith(HookContract.Env.PolPrefix, StringComparison.OrdinalIgnoreCase) && kv.Value != null)
                 target[kv.Key] = kv.Value;
         target["PROVENANCE_LAUNCH"] = "1";
-        target["PROVENANCE_LAUNCH_ID"] = launchId;
+        target[HookContract.Env.LaunchId] = launchId;
     }
 
     // Ashita-cli starts pol.exe itself, then the watcher's --attach loads the hook into it. Credentials only travel as
@@ -236,7 +236,7 @@ public static class AshitaLauncher
             if (!p.WaitForExit(30_000)) { try { p.Kill(); } catch { } return "Provenance couldn't start logging in to PlayOnline in time. Try again."; }
             var stdout = outTask.GetAwaiter().GetResult();
             var stderr = errTask.GetAwaiter().GetResult().Trim();
-            if (p.ExitCode == 0 && stdout.Contains("attached to pol.exe", StringComparison.Ordinal)) return null;
+            if (p.ExitCode == 0 && stdout.Contains(HookContract.LogLines.WatcherAttached, StringComparison.Ordinal)) return null;
             Log.Error("Provenance Watcher --attach {Pid} failed: {Error}", pid, stderr);
             return CodeIntegrity.Refused(started, HookFiles.WatcherExe, "pol_hook.dll") ? CodeIntegrity.RefusedText
                  : NotPickedUp;

@@ -99,7 +99,7 @@ static void handle_switched(BYTE *b)
 {
     char jp[MAX_PATH + 64];
     g_my_slot = ((svc_v)SVC(0x2f8))();
-    ipc_file(jp, "myprofile.json");
+    ipc_file(jp, IPC_MYPROFILE);
     DeleteFileA(jp);
     if (!lstrcmpA(g_me_state, "ready")) g_me_state[0] = 0;
     lg("handles: active handle now slot %d\r\n", g_my_slot);
@@ -110,9 +110,9 @@ static void handle_switched(BYTE *b)
 #define SWITCHING "failed:handle changing"
 static void writes_refuse(BYTE *b)
 {
-    static const char *const ext[] = { "send", "friend", "comment", "answer", "group", "pic", "status", "myprofile",
-                                       "saveprofile", "rename", "chatjoin", "chatsend", "chatcreate", "chatmaster",
-                                       "groupchatjoin", "groupchatsend", "xiprofile" };
+    static const char *const ext[] = { REQ_SEND, REQ_FRIEND, REQ_COMMENT, REQ_ANSWER, REQ_GROUP, REQ_PIC, REQ_STATUS, REQ_MYPROFILE,
+                                       REQ_SAVEPROFILE, REQ_RENAME, REQ_CHATJOIN, REQ_CHATSEND, REQ_CHATCREATE, REQ_CHATMASTER,
+                                       REQ_GROUPCHATJOIN, REQ_GROUPCHATSEND, REQ_XIPROFILE };
     char buf[512], *p, *l1, *l2, *l3;
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) {
         if (take_request(ext[i], buf, sizeof buf) < 0) continue;
@@ -139,7 +139,7 @@ static void writes_refuse(BYTE *b)
 /* written by the app for the handle that's active now, but not taken yet */
 static int writes_asked(void)
 {
-    static const char *const ext[] = { "send", "friend", "comment", "answer", "group", "pic", "status" };
+    static const char *const ext[] = { REQ_SEND, REQ_FRIEND, REQ_COMMENT, REQ_ANSWER, REQ_GROUP, REQ_PIC, REQ_STATUS };
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (request_waiting(ext[i])) return 1;
     return 0;
 }
@@ -194,7 +194,7 @@ static void handle_request(BYTE *b)
     DWORD f;
     /* a background character lookup finishes first, rather than the switch being turned away as busy */
     if (g_ch_step) return;
-    if (take_request("handle", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_HANDLE, buf, sizeof buf) < 0) return;
     p = buf;
     op = req_line(&p); tok = req_line(&p); sl = req_line(&p); hk = req_line(&p); ix = req_line(&p); ck = req_line(&p);
     lstrcpynA(g_htoken, tok, sizeof g_htoken);

@@ -13,7 +13,7 @@ static void snapshot_social(BYTE *b)
     grp_mem m;
     if (!b) return;
     mail_recheck(b);
-    ipc_file(path, "social.json");
+    ipc_file(path, IPC_SOCIAL);
     lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
     HANDLE h = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) return;

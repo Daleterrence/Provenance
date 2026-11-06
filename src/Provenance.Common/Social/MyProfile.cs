@@ -24,7 +24,7 @@ public sealed record MyProfile(string Handle, int Level, IReadOnlyDictionary<str
     public string Key { get; init; } = "";
     public IReadOnlyList<MyProfileCharacter> Characters { get; init; } = [];
 
-    public static string PathForPid(int pid) => HookFiles.PathFor(pid, "myprofile.json");
+    public static string PathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.MyProfile);
 
     // the e-mail address from the POL profile (z_mail) comes in masked, first letter, *** and the domain, never the
     // real one

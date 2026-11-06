@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Hook;
 using Provenance.Common.Login;
 using Provenance.Common.Social;
 
@@ -283,10 +284,10 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private string? JobExt => _job switch
     {
-        Job.Load => "myprofile",
-        Job.Save => "saveprofile",
-        Job.Rename => "rename",
-        Job.LoadXi => "xiprofile",
+        Job.Load => HookContract.Requests.MyProfile,
+        Job.Save => HookContract.Requests.SaveProfile,
+        Job.Rename => HookContract.Requests.Rename,
+        Job.LoadXi => HookContract.Requests.XiProfile,
         _ => null,
     };
 

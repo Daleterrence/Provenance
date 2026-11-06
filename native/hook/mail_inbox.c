@@ -412,8 +412,8 @@ static void mail_ack_request(void)
 {
     char *buf;
     int got, v = -1;
-    if (!request_waiting("ack")) return;
-    if ((got = take_request_ex("ack", NULL, 0, &buf, ACK_MAX)) < 0) return;
+    if (!request_waiting(REQ_ACK)) return;
+    if ((got = take_request_ex(REQ_ACK, NULL, 0, &buf, ACK_MAX)) < 0) return;
     for (int i = 0; i <= got; i++) {
         char c = buf[i];
         if (c >= '0' && c <= '9') v = v > 9999999 ? v : (v < 0 ? 0 : v * 10) + (c - '0');

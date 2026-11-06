@@ -6,9 +6,9 @@ namespace Provenance.Common.Social;
 
 public static class SocialSnapshotFiles
 {
-    public static string PathForPid(int pid) => HookFiles.PathFor(pid, "social.json");
+    public static string PathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.Social);
 
-    public static string StorePathForPid(int pid) => HookFiles.PathFor(pid, "store.json");
+    public static string StorePathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.Store);
 
     public static PolSocialSnapshot Parse(string json)
     {

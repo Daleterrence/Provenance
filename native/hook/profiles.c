@@ -114,7 +114,7 @@ static void search_request(BYTE *b)
     unsigned __int64 hid = 0;
     int k = 0;
     if (!db_free()) return;
-    if (take_request("search", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_SEARCH, buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);
@@ -271,7 +271,7 @@ static void profile_done(const char *state)
     if (g_prof_rec) { HeapFree(GetProcessHeap(), 0, g_prof_rec); g_prof_rec = NULL; }
     g_prof_step = 0;
     g_prof_job = -1;
-    lg("profile: %s\r\n", state);
+    lg(LOG_PROFILE "%s\r\n", state);
     g_snap_dirty = 1;
 }
 static void profile_abandon(BYTE *b)
@@ -368,7 +368,7 @@ static void profile_build(BYTE *b)
                *(const DWORD *)(sl + 8), *(const DWORD *)(sl + 0xc), (cs >> 16) & 0xff);
         }
         PJ("]");
-        lg("profile: %d FFXI characters (from %s)\r\n", k, from);
+        lg(LOG_PROFILE "%d FFXI characters (from %s)\r\n", k, from);
     }
     /* svc 0x1200 is the viewer's away text (-0x14cc = none or no access). All z_aa_* at 0 means none, though 0x1200
        would happily invent "I am away from the keyboard". */
@@ -398,7 +398,7 @@ static void profile_start(BYTE *b)
 {
     int t = ((svc4b4_t)SVC(0x4b4))(g_fs_pib, &g_prof_cond, g_prof_rec);
     if (t == NO_SLOT) { g_prof_step = 2; return; }
-    lg("profile: load row %d -> %d\r\n", g_prof_row, t);
+    lg(LOG_PROFILE "load row %d -> %d\r\n", g_prof_row, t);
     if (t < 0) { profile_done(failed(t)); return; }
     g_prof_job = t;
     g_prof_step = 1;
@@ -410,7 +410,7 @@ static void profile_request(BYTE *b)
     int row;
     pdb_schema *s;
     if (!db_free()) return;
-    if (take_request("profile", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_PROFILE, buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);
@@ -529,7 +529,7 @@ static void character_request(BYTE *b)
     char buf[128], *p, *tok;
     unsigned __int64 ctid;
     if (!db_free() || user_db_waiting()) return;
-    if (take_request("character", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_CHARACTER, buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);
@@ -645,7 +645,7 @@ static void ffxiprofile_request(BYTE *b)
     int row, n;
     unsigned __int64 ctid;
     if (!db_free()) return;
-    if (take_request("ffxiprofile", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_FFXIPROFILE, buf, sizeof buf) < 0) return;
     g_db_last = GetTickCount64();
     p = buf;
     tok = req_line(&p);

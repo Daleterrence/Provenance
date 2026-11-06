@@ -224,7 +224,7 @@ static int cr_db_load(BYTE *b, int rooms)
 static void cr_zones_request(BYTE *b)
 {
     char buf[128], *p;
-    if (take_request("chatzones", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_CHATZONES, buf, sizeof buf) < 0) return;
     g_cr_used = 1;
     g_db_last = GetTickCount64();
     p = buf;
@@ -240,7 +240,7 @@ static void cr_rooms_request(BYTE *b)
 {
     char buf[128], *p;
     int zone, off;
-    if (take_request("chatrooms", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_CHATROOMS, buf, sizeof buf) < 0) return;
     g_cr_used = 1;
     g_db_last = GetTickCount64();
     p = buf;

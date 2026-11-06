@@ -224,7 +224,7 @@ static pfb_hdr *pf_load(BYTE *b)
     }
     CloseHandle(f);
     g_pfb = ((pfb_hdr *(__cdecl *)(void *))SVC(0x498))(buf);
-    if (g_pfb) lg("profile: prof_pol.pfb loaded, %u items, %u tables\r\n", g_pfb->nItems, g_pfb->nTabs);
+    if (g_pfb) lg(LOG_PROFILE "prof_pol.pfb loaded, %u items, %u tables\r\n", g_pfb->nItems, g_pfb->nTabs);
     return g_pfb;
 }
 static const pfb_item *pf_item(const pfb_hdr *p, int field)
@@ -324,8 +324,8 @@ static int pf_value(BYTE *b, pdb_schema *s, pfb_hdr *p, pdb_rec *rec, const char
 /* the app asks for the next lookup as soon as one's answered, so the user's own reads and saves go first */
 static int user_db_waiting(void)
 {
-    static const char *const ext[] = { "search", "profile", "ffxiprofile", "myprofile", "saveprofile", "rename", "pic",
-                                       "chatzones", "chatrooms", "handle", "xiprofile" };
+    static const char *const ext[] = { REQ_SEARCH, REQ_PROFILE, REQ_FFXIPROFILE, REQ_MYPROFILE, REQ_SAVEPROFILE, REQ_RENAME, REQ_PIC,
+                                       REQ_CHATZONES, REQ_CHATROOMS, REQ_HANDLE, REQ_XIPROFILE };
     for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (request_waiting(ext[i])) return 1;
     return 0;
 }

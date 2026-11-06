@@ -128,7 +128,7 @@ static void gc_join_request(BYTE *b)
     int slot, cls;
     grp_hdr gh;
     grp_mem m;
-    if (take_request("groupchatjoin", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_GROUPCHATJOIN, buf, sizeof buf) < 0) return;
     g_gc_used = 1;
     p = buf;
     tok = req_line(&p); gid = req_line(&p); sl = req_line(&p); hk = req_line(&p);
@@ -200,7 +200,7 @@ static void gc_leave(BYTE *b)
 static void gc_leave_request(BYTE *b)
 {
     char buf[128], *p, *join;
-    if (take_request("groupchatleave", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_GROUPCHATLEAVE, buf, sizeof buf) < 0) return;
     p = buf;
     req_line(&p);
     join = req_line(&p);
@@ -221,7 +221,7 @@ static void gc_send_request(BYTE *b)
     char buf[0x400], *p, *tok, *text, sj[0x200];
     static WCHAR w[0x200];
     int n;
-    if (take_request("groupchatsend", buf, sizeof buf) < 0) return;
+    if (take_request(REQ_GROUPCHATSEND, buf, sizeof buf) < 0) return;
     g_gc_used = 1;
     p = buf;
     tok = req_line(&p);
@@ -306,10 +306,10 @@ static void gc_pump(BYTE *b, int ctl)
         gc_send_pump(b);
     }
     if (!ctl) return;
-    if (request_waiting("groupchatleave")) { gc_leave_request(b); return; }
+    if (request_waiting(REQ_GROUPCHATLEAVE)) { gc_leave_request(b); return; }
     /* a join waits for the last one, or a leave, to settle rather than being turned away */
-    if (!gc_busy() && request_waiting("groupchatjoin")) { gc_join_request(b); return; }
-    if (request_waiting("groupchatsend")) gc_send_request(b);
+    if (!gc_busy() && request_waiting(REQ_GROUPCHATJOIN)) { gc_join_request(b); return; }
+    if (request_waiting(REQ_GROUPCHATSEND)) gc_send_request(b);
 }
 
 /* a handle switch, Play, or leaving the group: out now, through the one PART, before anything else touches the link.
@@ -377,7 +377,7 @@ static void gc_write_lines(void)
     g_gc_lines_dirty = 0;
     g_gc_written_seq = g_gc_seq;
     g_gc_written_at = GetTickCount64();
-    ipc_file(path, "groupchat.json");
+    ipc_file(path, IPC_GROUPCHAT);
     lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
     h = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) return;

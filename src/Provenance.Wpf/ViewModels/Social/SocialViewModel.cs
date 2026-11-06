@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Game;
+using Provenance.Common.Hook;
 using Provenance.Common.Login;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Settings;
@@ -1089,7 +1090,7 @@ public partial class SocialViewModel : ObservableObject
     public void CancelSearch()
     {
         if (_searchToken is null) return;
-        Withdraw("search");
+        Withdraw(HookContract.Requests.Search);
         _searchToken = null;
         SearchBusy = false;
         SearchNote = "";
@@ -1131,7 +1132,7 @@ public partial class SocialViewModel : ObservableObject
         if (_searchToken != null &&
             Settled(snap.SearchToken == _searchToken ? snap.SearchState : null, "done", _searchAt, 250) is { } st)
         {
-            if (st == "timeout") Withdraw("search");
+            if (st == "timeout") Withdraw(HookContract.Requests.Search);
             _searchToken = null;
             SearchBusy = false;
             var characters = _searchedKind == FriendSearchKind.Character;
@@ -1233,7 +1234,7 @@ public partial class SocialViewModel : ObservableObject
         // two jobs, each up to 100 secs in polcore
         if (Settled(snap.ProfilePictureToken == _picToken ? snap.ProfilePictureState : null, "saved", _picAt, 250)
             is not { } st) return;
-        if (st == "timeout") Withdraw("pic");
+        if (st == "timeout") Withdraw(HookContract.Requests.Pic);
         _picToken = null;
         ProfilePictureSaving = false;
         if (st == "saved") return;
@@ -1334,7 +1335,7 @@ public partial class SocialViewModel : ObservableObject
             // never answered. Untaken it's withdrawn (only the newest can be), but once the hook has it, it might still
             // go, so it's not re-sent
             bool withdrawn = i == newest &&
-                             SocialRequests.WithdrawRequest(x.Pid, "send") == Withdrawal.Withdrawn;
+                             SocialRequests.WithdrawRequest(x.Pid, HookContract.Requests.Send) == Withdrawal.Withdrawn;
             if (!withdrawn && _chat?.SetSendState(x.Token, "unconfirmed") == true) RefreshConversation();
             _sendInFlight.RemoveAt(i);
         }
@@ -1364,7 +1365,7 @@ public partial class SocialViewModel : ObservableObject
         {
             var x = _sendInFlight[i];
             // only the newest can still be untaken, the next file's only written once the hook's taken the last
-            var w = i == newest ? SocialRequests.WithdrawRequest(x.Pid, "send") : Withdrawal.Taken;
+            var w = i == newest ? SocialRequests.WithdrawRequest(x.Pid, HookContract.Requests.Send) : Withdrawal.Taken;
             // held a second ago it could've started since, the snapshot that says so takes about 300 ms to get here
             bool held = x.HookState == "queued" && DateTime.UtcNow - x.HookSaid >= TimeSpan.FromSeconds(1);
             bool went = w == Withdrawal.Taken ? drained || !held
