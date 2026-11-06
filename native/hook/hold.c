@@ -1,27 +1,27 @@
 static int db_free(void)
 {
-    return GetTickCount64() - g_db_last >= 3000 && !g_srch_step && !g_prof_step && !g_ch_step && !g_fp_step &&
-           !g_cr_db && !g_me_step && !g_xi_step && g_pic_want < 0;
+    return GetTickCount64() - g_s.db_last >= 3000 && !g_s.srch_step && !g_s.prof_step && !g_s.ch_step && !g_s.fp_step &&
+           !g_s.cr_db && !g_s.me_step && !g_s.xi_step && g_s.pic_want < 0;
 }
 
 /* the server's handle, else the first in use (app.dll 0x10028a76). Provenance's last one (POL_HANDLE) goes before
    the first in use, since so far the server's never given my sessions one back */
 static int login_handle(BYTE *b, const char **why)
 {
-    BYTE rec[0x28];
+    pol_handle rec;
     char want[24], k[17];
-    int slot = ((svc_v)SVC(0x2f8))(), i;
+    int slot = pc_current_handle(b), i;
     DWORD n = GetEnvironmentVariableA(ENV_HANDLE, want, sizeof want);
     *why = "the server's";
     if (slot >= 0) return slot;
     for (i = 0; n > 0 && n < sizeof want && i < 64; i++) {
-        if (get_handle(b, i, rec) != 0 || !(rec[0] & 1)) continue;
-        handle_key(rec, k);
+        if (!handle_get(b, i, &rec)) continue;
+        hid_key(handle_hid(&rec), k);
         if (!lstrcmpiA(k, want)) { *why = "the one last active in Provenance"; return i; }
     }
     *why = "the first in use";
     for (i = 0; i < 64; i++)
-        if (get_handle(b, i, rec) == 0 && (rec[0] & 1)) return i;
+        if (handle_get(b, i, &rec)) return i;
     return -1;
 }
 /* the hold counts on g_my_slot being a handle in use, and handle_bootstrap left the account one, so none by now
@@ -42,34 +42,33 @@ static void hold_handle(BYTE *b)
         (sv[0] == '0' || sv[0] == '1' || sv[0] == '4'))
         want = sv[0] - '0';
     lg("presence: going online on handle slot %d, %s (current handle %d)\r\n", g_my_slot, why,
-       ((svc_v)SVC(0x2f8))());
+       pc_current_handle(b));
     status_start(b, g_my_slot, want, 1000);
 }
 
 static void db_reads_abandon(BYTE *b)
 {
-    if (g_prof_step != 0) profile_abandon(b);
-    if (g_ch_step != 0) character_abandon(b);
-    if (g_fp_step != 0) ffxiprofile_abandon(b);
-    if (g_srch_step != 0) search_abandon(b);
+    if (g_s.prof_step != 0) profile_abandon(b);
+    if (g_s.ch_step != 0) character_abandon(b);
+    if (g_s.fp_step != 0) ffxiprofile_abandon(b);
+    if (g_s.srch_step != 0) search_abandon(b);
 }
 
 static int writes_pending(void)
 {
-    return g_sq_n || g_status_job >= 0 || g_edit_job >= 0 || g_edit_upload_want ||
-           g_comment_wanted || g_pic_want >= 0 || g_grp_job >= 0 || g_answer_kind || g_me_step >= 3 ||
-           g_hop;
+    return g_s.sq_n || g_s.status_job >= 0 || g_s.edit_job >= 0 || g_s.edit_upload_want ||
+           g_s.comment_wanted || g_s.pic_want >= 0 || g_s.grp_job >= 0 || g_s.answer_kind || g_s.me_step >= 3 ||
+           g_s.hop;
 }
 /* writes that are due but haven't got a job slot yet, or an answer's message still to come */
 static int writes_waiting(void)
 {
-    return send_built() || g_answer_kind || g_edit_upload_want || g_comment_wanted || g_me_step == 3 ||
-           g_hwant;
+    return send_built() || g_s.answer_kind || g_s.edit_upload_want || g_s.comment_wanted || g_s.me_step == 3 ||
+           g_s.hwant;
 }
 static void drain_turn(BYTE *b, int mail)
 {
-    POLCON_STEP(b);
-    POLCON_IDLE(b);
+    pump_once(b);
     status_pump(b);
     if (mail) mail_pump(b);
     mail_send_pump(b);
@@ -90,18 +89,20 @@ static int idle_timeout_for_game(BYTE *b)
     BYTE *rec = NULL;
     int r = 0, mins = -1;
     ULONGLONG until;
-    if (!SVC(0xe2c) || !SVC(0xe30) || !SVC(0xe3c) || !SVC(0xe40) || !SVC(0x11d4)) return -1;
-    ((int (__cdecl *)(void))SVC(0xe2c))();
+    if (!pc_has(b, SV_OPTION_LOAD_START) || !pc_has(b, SV_OPTION_LOAD_DONE) || !pc_has(b, SV_OPTION_LOAD_END) ||
+        !pc_has(b, SV_OPTION_RECORD) || !pc_has(b, SV_SET_IDLE_TIMEOUT))
+        return -1;
+    pc_option_load_start(b);
     until = GetTickCount64() + 5000;
-    while ((r = ((int (__cdecl *)(void))SVC(0xe30))()) == 0 && GetTickCount64() < until) Sleep(32);
-    if (r > 0) rec = ((BYTE *(__cdecl *)(const char *))SVC(0xe40))("GOPN1_AO");
+    while ((r = pc_option_load_done(b)) == 0 && GetTickCount64() < until) Sleep(32);
+    if (r > 0) rec = pc_option_record(b, "GOPN1_AO");
     if (rec) mins = *(int *)(rec + 0x18);
-    ((void (__cdecl *)(void))SVC(0xe3c))();
+    pc_option_load_end(b);
     if (mins < 1 || mins > 60) {
         lg("hold: auto-disconnect off in FFXI (%s)\r\n", r <= 0 ? "no option.bin" : rec ? "set off" : "not in option.bin");
         return -1;
     }
-    ((void (__cdecl *)(int))SVC(0x11d4))(mins * 60000);
+    pc_set_idle_timeout(b, mins * 60000);
     lg("hold: auto-disconnect after %d min in FFXI\r\n", mins);
     return mins;
 }
@@ -129,13 +130,13 @@ static void hold_turn(BYTE *b, int ctl)
     pic_pump(b, wctl);
     if (!g_lean && !handle_switching()) chat_pump(b, wctl);
     if (!g_lean && !handle_switching()) gc_pump(b, wctl);
-    if (!g_lean && wctl && g_status_job < 0 && take_request(REQ_STATUS, sv, sizeof sv) >= 0) {
+    if (!g_lean && wctl && g_s.status_job < 0 && take_request(REQ_STATUS, sv, sizeof sv) >= 0) {
         want = sv[0] - '0';
         /* the viewer's OK maps busy (2) to online and 3 to appear offline */
         if (want == 2) want = 0;
         if (want == 3) want = 4;
         /* a go-online still waiting for a slot keeps its location, -2 keeps the rest */
-        if (want == 0 || want == 1 || want == 4) status_start(b, g_my_slot, want, g_status_want >= 0 ? g_status_loc : -2);
+        if (want == 0 || want == 1 || want == 4) status_start(b, g_my_slot, want, g_s.status_want >= 0 ? g_s.status_loc : -2);
     }
 }
 
@@ -144,7 +145,7 @@ static void hold_turn(BYTE *b, int ctl)
 static void play_drain(BYTE *b, const char *spath, DWORD ms)
 {
     ULONGLONG until = GetTickCount64() + ms;
-    g_draining = 1;
+    g_s.draining = 1;
     if (!g_lean) mail_ack_request();
     db_reads_abandon(b);
     me_abandon(b);
@@ -152,20 +153,20 @@ static void play_drain(BYTE *b, const char *spath, DWORD ms)
     gc_end(b, "left", 1);
     while (writes_pending() && GetTickCount64() < until)
         drain_turn(b, !g_lean);
-    for (int i = 0; i < FETCH_LANES; i++) if (g_rd[i].job >= 0) CANCEL_JOB(g_rd[i].job);
-    if (g_del_job >= 0) CANCEL_JOB(g_del_job);
-    for (int i = 0; i < g_sq_n; i++) if (g_sq[i].job >= 0) CANCEL_JOB(g_sq[i].job);
-    if (g_status_job >= 0) CANCEL_JOB(g_status_job);
+    for (int i = 0; i < FETCH_LANES; i++) if (g_s.rd[i].job >= 0) pc_cancel_job(b, g_s.rd[i].job);
+    if (g_s.del_job >= 0) pc_cancel_job(b, g_s.del_job);
+    for (int i = 0; i < g_s.sq_n; i++) if (g_sq[i].job >= 0) pc_cancel_job(b, g_sq[i].job);
+    if (g_s.status_job >= 0) pc_cancel_job(b, g_s.status_job);
     handle_abandon(b);
     g_in_hold = 0;
-    if (g_edit_job >= 0) CANCEL_JOB(g_edit_job);
-    if (g_pic_want >= 0) profile_pic_cancel(b);
-    if (g_grp_job >= 0) CANCEL_JOB(g_grp_job);
+    if (g_s.edit_job >= 0) pc_cancel_job(b, g_s.edit_job);
+    if (g_s.pic_want >= 0) profile_pic_cancel(b);
+    if (g_s.grp_job >= 0) pc_cancel_job(b, g_s.grp_job);
     /* FFXI installs its own message handlers, so polcore gets its defaults back */
-    if (SVC(0xda0)) ((void (__cdecl *)(void))SVC(0xda0))();
+    if (pc_has(b, SV_RESET_PUSH_CALLBACKS)) pc_reset_push_callbacks(b);
     /* the viewer always has notices on when a game starts, without them FFXI only sees new messages at its next lobby
        login. A local flag, nothing goes on the wire */
-    if (g_lean && SVC(0x1020)) ((svc_i)SVC(0x1020))(1);
+    if (g_lean && pc_has(b, SV_MESSAGE_NOTICES)) pc_message_notices(b, 1);
     idle_timeout_for_game(b);
     DeleteFileA(spath);   /* the snapshot has friends' messages in it */
     store_drop();
@@ -178,7 +179,7 @@ static void hold_sign_out(BYTE *b, const char *spath)
     ULONGLONG until = GetTickCount64() + SIGN_OUT_DRAIN_MS;
     DeleteFileA(spath);
     store_drop();
-    g_draining = 1;
+    g_s.draining = 1;
     if (!g_lean) mail_ack_request();
     me_abandon(b);
     while (writes_pending() && GetTickCount64() < until)
@@ -196,12 +197,11 @@ static ULONGLONG g_link_sent_at, g_link_logged_at;
 static int g_link_sends;
 static void link_watch(BYTE *b)
 {
-    int s = *(int *)(b + 0x99250);
-    BYTE *at;
-    DWORD sent;
+    int s = *pc_link_index(b);
+    DWORD *at, sent;
     if (s < 0 || s > 15) return;
-    at = b + 0x3e58a0 + s * 0x3a00 + 0x39d4;
-    if (IsBadReadPtr(at, 4) || !(sent = *(DWORD *)at) || sent == g_link_sent) return;
+    at = pc_link_last_send(b, s);
+    if (IsBadReadPtr(at, 4) || !(sent = *at) || sent == g_link_sent) return;
     g_link_sent = sent;
     g_link_sent_at = GetTickCount64();
     if (!g_link_logged_at) {
@@ -227,8 +227,8 @@ static void pol_hold(BYTE *b)
     HANDLE ef;
     DWORD wn;
     if (!b) return;
-    if (*(unsigned *)(b + 0x99408) != 30) {
-        lg(LOG_NO_SESSION " (auth state %u) - exiting, FFXI NOT started\r\n", *(unsigned *)(b + 0x99408));
+    if (*pc_auth_state(b) != AUTH_IN) {
+        lg(LOG_NO_SESSION " (auth state %u) - exiting, FFXI NOT started\r\n", *pc_auth_state(b));
         end_pol(AUTH_REFUSED_EXIT);
     }
     ipc_file(spath, IPC_SOCIAL);
@@ -239,10 +239,10 @@ static void pol_hold(BYTE *b)
     }
     lg(LOG_HELD "; waiting for Play (POL_CRED_PLAY)\r\n");
     if (g_lean) lg("hold: lean session (no social)\r\n");
-    if (!g_lean && SVC(0xd9c)) {
+    if (!g_lean && pc_has(b, SV_SET_PUSH_CALLBACKS)) {
         void *cb[6];
         push_callbacks(b, cb);
-        ((void (__cdecl *)(void **))SVC(0xd9c))(cb);
+        pc_set_push_callbacks(b, cb);
         lg("mail: push callbacks registered (svc 0xd9c)\r\n");
     }
     hold_handle(b);
@@ -252,13 +252,12 @@ static void pol_hold(BYTE *b)
     for (;;) {
         ctl = GetTickCount64() - lastCtl >= 150;
         if (ctl) lastCtl = GetTickCount64();
-        POLCON_STEP(b);
         /* a dropped session (another login of this POL ID, KILL, a ban push, the server hanging up) ends the hold,
            so Play never boots FFXI on a dead one */
-        idle = POLCON_IDLE(b);
-        reason = *(int *)(b + 0x99254);
-        if (idle < 0 || reason < 0 || *(int *)(b + 0x9924c) == 0) {
-            why = idle < 0 ? idle : reason < 0 ? reason : *(int *)(b + 0x9aa14);
+        idle = pump_once(b);
+        reason = *pc_session_ready(b);
+        if (idle < 0 || reason < 0 || *pc_session_alive(b) == 0) {
+            why = idle < 0 ? idle : reason < 0 ? reason : (int)*pc_auth_error(b);
             if (g_link_sent_at)
                 lg("hold: SESSION LOST reason=%d - signed out (last answered the server %lu s before)\r\n", why,
                    (DWORD)((GetTickCount64() - g_link_sent_at) / 1000));
@@ -275,18 +274,18 @@ static void pol_hold(BYTE *b)
             end_pol(0);
         }
         if (ctl) link_watch(b);
-        if (ctl && SVC(0x13e4) && ((svc_v)SVC(0x13e4))()) {
+        if (ctl && pc_has(b, SV_JAILED) && pc_jailed(b)) {
             DeleteFileA(spath);
             store_drop();
             account_blocked(b, "jail");
         }
         status_pump(b);
-        if (g_status_job < 0 && g_status_want >= 0) status_start(b, g_my_slot, g_status_want, g_status_loc);
+        if (g_s.status_job < 0 && g_s.status_want >= 0) status_start(b, g_my_slot, g_s.status_want, g_s.status_loc);
         /* the new-mail flag (svc 0x1460, set by a push), cleared with 0x1464(0) like the viewer (app.dll 0x1019fef3) */
-        if (!g_lean && SVC(0x1460) && ((svc_v)SVC(0x1460))()) {
-            ((void (__cdecl *)(int))SVC(0x1464))(0);
+        if (!g_lean && pc_has(b, SV_NEW_MAIL_FLAG) && pc_new_mail_flag(b)) {
+            pc_set_new_mail_flag(b, 0);
             lg("mail: new-mail flag set - listing the inbox\r\n");
-            g_mail_refresh = 1;
+            g_s.mail_refresh = 1;
         }
         if (ctl && !g_lean) mail_ack_request();
         if (!g_lean) mail_pump(b);

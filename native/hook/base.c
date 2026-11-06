@@ -1,7 +1,7 @@
+#define NORETURN __declspec(noreturn)
 static CRITICAL_SECTION g_lgcs;
 static int g_lgcs_ready;
 
-static int g_draining;
 
 static int getenv_set(const char *name) { return GetEnvironmentVariableA(name, NULL, 0) > 0; }
 
@@ -44,16 +44,11 @@ static void saver_restore(void)
 
 /* not ExitProcess: Windower 4's Hook.dll fails fast (0xc0000409) in its detach code when the game never started, so
    it's TerminateProcess, the big hammer */
-static void end_pol(UINT code)
+NORETURN static void end_pol(UINT code)
 {
     saver_restore();
     TerminateProcess(GetCurrentProcess(), code);
-}
-/* a way out that must never carry on, even if TerminateProcess somehow comes back */
-static void end_pol_or_exit(UINT code)
-{
-    end_pol(code);
-    ExitProcess(code);
+    ExitProcess(code);   /* only if TerminateProcess somehow comes back */
 }
 
 /* Provenance's admin-only POL_IPC_DIR. Missing, too long or not a folder ends pol.exe so nothing lands anywhere
@@ -61,9 +56,9 @@ static void end_pol_or_exit(UINT code)
 static void ipc_dir(char out[MAX_PATH])
 {
     DWORD n = GetEnvironmentVariableA(ENV_IPC_DIR, out, MAX_PATH), a;
-    if (n == 0) end_pol_or_exit(NO_ENV_EXIT);
+    if (n == 0) end_pol(NO_ENV_EXIT);
     a = n < MAX_PATH - 64 ? GetFileAttributesA(out) : INVALID_FILE_ATTRIBUTES;
-    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) end_pol_or_exit(IPC_DIR_EXIT);
+    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) end_pol(IPC_DIR_EXIT);
     if (out[n - 1] != '\\' && out[n - 1] != '/') { out[n] = '\\'; out[n + 1] = 0; }
 }
 
@@ -101,7 +96,7 @@ static void env_check(void)
     if (getenv_set(ENV_HOLD) && getenv_set(ENV_CRED_KEYFILE)) return;
     lg("pol_hook: no POL_HOLD or POL_CRED_KEYFILE, so not started by Provenance - ending pol.exe (exit %d)\r\n",
        NO_ENV_EXIT);
-    end_pol_or_exit(NO_ENV_EXIT);
+    end_pol(NO_ENV_EXIT);
 }
 
 static int stop_requested(void)

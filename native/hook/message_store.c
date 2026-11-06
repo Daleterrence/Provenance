@@ -2,13 +2,13 @@ static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const c
                     const char *subj, const char *text, const BYTE *att)
 {
     char nm[64], sk[17], tk[17], grp[80] = "";
-    WORD f = *(const WORD *)(e + 0x3e);
+    WORD f = MAIL(e)->flags;
     unsigned kind = (f >> 7) & 0x1f;
-    DWORD tlo = *(const DWORD *)(e + 0x08), thi = *(const DWORD *)(e + 0x0c);
+    DWORD tlo = MAIL(e)->to_lo, thi = MAIL(e)->to_hi;
     int o, tome = polid_ok(b, tlo, thi) && is_me(b, tlo, thi);
-    sjis_json(nm, sizeof nm, e + 0x10, 0x0f);
-    peer_key(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04), e[0x3c], sk);
-    peer_key(b, tlo, thi, e[0x3d], tk);
+    sjis_json(nm, sizeof nm, (const BYTE *)MAIL(e)->name, 0x0f);
+    peer_key(b, MAIL(e)->from_lo, MAIL(e)->from_hi, MAIL(e)->from_slot, sk);
+    peer_key(b, tlo, thi, MAIL(e)->to_slot, tk);
     /* removed from a group (0x12) or it was disbanded (0x13): the name's in the type-10 attachment, the text's empty */
     if (att && (kind == 0x12 || kind == 0x13)) {
         lstrcpyA(grp, ",\"group\":");
@@ -16,10 +16,10 @@ static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const c
     }
     o = wsprintfA(out, "{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"toKey\":\"%s\","
                        "\"toMe\":%s,\"kind\":%u,\"time\":%u,\"seq\":%u,\"state\":\"%s\"%s%s,\"subject\":",
-                  mid, nm, sk, e[0x3c],
-                  is_me(b, *(const DWORD *)(e + 0x00), *(const DWORD *)(e + 0x04)) ? "true" : "false", tk,
+                  mid, nm, sk, MAIL(e)->from_slot,
+                  is_me(b, MAIL(e)->from_lo, MAIL(e)->from_hi) ? "true" : "false", tk,
                   tome ? "true" : "false",
-                  kind, *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state,
+                  kind, MAIL(e)->time, MAIL(e)->seq, state,
                   read < 0 ? "" : read ? ",\"read\":true" : ",\"read\":false", grp);
     o += json_text(out + o, cap - o - 16, subj);
     lstrcpyA(out + o, ",\"text\":"); o += 8;
@@ -36,7 +36,7 @@ static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const c
 #define STORE_BODY_MAX 0x1100
 #define STORE_JSON_MAX (3 * 1024 * 1024)
 static const char *const g_store_sub[4] = { "r\\a", "r\\b", "s\\a", "s\\b" };
-typedef struct { BYTE hdr[0x48]; char name[100]; int home, sub, alt_home, alt_sub; char alt[100]; } storefile;
+typedef struct { BYTE hdr[MAIL_KEY_SIZE]; char name[100]; int home, sub, alt_home, alt_sub; char alt[100]; } storefile;
 
 static int store_name_ok(const char *n)
 {
@@ -48,8 +48,8 @@ static int store_name_ok(const char *n)
 static int store_newer(const void *x, const void *y)
 {
     const BYTE *a = ((const storefile *)x)->hdr, *c = ((const storefile *)y)->hdr;
-    DWORD ta = *(const DWORD *)(a + 0x34), tc = *(const DWORD *)(c + 0x34);
-    DWORD sa = *(const DWORD *)(a + 0x30), sc = *(const DWORD *)(c + 0x30);
+    DWORD ta = MAIL(a)->time, tc = MAIL(c)->time;
+    DWORD sa = MAIL(a)->seq, sc = MAIL(c)->seq;
     if (ta != tc) return ta < tc ? 1 : -1;
     return sa == sc ? 0 : sa < sc ? 1 : -1;
 }
@@ -91,14 +91,13 @@ static HANDLE open_plain(const char *path)
 }
 static int store_owned(const BYTE *h, int sub, unsigned __int64 me)
 {
-    return memcmp(h + (sub >= 2 ? 0x00 : 0x08), &me, 8) == 0;
+    return memcmp(sub >= 2 ? &MAIL(h)->from_lo : &MAIL(h)->to_lo, &me, 8) == 0;
 }
 /* requests and invitations can't be answered from a copy, the server's is gone */
 static int store_wanted(const BYTE *h, int sub)
 {
-    WORD f = *(const WORD *)(h + 0x3e);
-    unsigned kd = (f >> 7) & 0x1f;
-    if (((f >> 12) & 3) == 1) return 0;
+    unsigned kd = mail_kind(h);
+    if (mail_receipt(h)) return 0;
     if (sub >= 2) return kd == 0;
     return kd == 0 || kd == 9 || kd == 10 || kd == 0xf || kd == 0x10 || kd == 0x12 || kd == 0x13;
 }
@@ -111,7 +110,7 @@ static int store_list(BYTE *b, int home, int sub, unsigned __int64 me, int wante
     int n = 0, looked = 0, cap = STORE_KEEP * 4;
     HANDLE h;
     *out = NULL;
-    if (!SVC(0x540) || !g_viewer[0]) return 0;
+    if (!pc_has(b, SV_MAIL_DECODE_HEADER) || !g_viewer[0]) return 0;
     store_dir(glob, home, sub);
     if (!plain_path(glob)) return 0;
     lstrcatA(glob, "\\*");
@@ -127,8 +126,8 @@ static int store_list(BYTE *b, int home, int sub, unsigned __int64 me, int wante
             break;
         }
         memset(&v[n], 0, sizeof v[n]);
-        if (((int (__cdecl *)(void *, const char *))SVC(0x540))(v[n].hdr, fd.cFileName) != 0) continue;
-        if (!(*(WORD *)(v[n].hdr + 0x3e) & 0x8000)) continue;   /* the viewer's loader skips those too */
+        if (pc_mail_decode_header(b, v[n].hdr, fd.cFileName) != 0) continue;
+        if (!(MAIL(v[n].hdr)->flags & MAIL_VALID)) continue;   /* the viewer's loader skips those too */
         if (!store_owned(v[n].hdr, sub, me) || (wanted && !store_wanted(v[n].hdr, sub))) continue;
         lstrcpyA(v[n].name, fd.cFileName);
         v[n].home = home;
@@ -158,7 +157,7 @@ static int store_read(const char *path, char *buf, int cap)
 static int store_body(const storefile *f, char *buf, int cap)
 {
     char path[MAX_PATH + 160];
-    DWORD len = *(const DWORD *)(f->hdr + 0x38);
+    DWORD len = MAIL(f->hdr)->len;
     int got;
     if (len == 0 || len > 0x101100) return -1;
     if (cap > (int)len) cap = (int)len;
@@ -187,15 +186,15 @@ static int sent_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const 
                      const char *text)
 {
     char nm[64] = "\"\"", sk[17];
-    BYTE fr[0x140];
-    DWORD lo = *(const DWORD *)(e + 0x08), hi = *(const DWORD *)(e + 0x0c);
-    int row = find_friend_row(b, lo, hi, e[0x3d]), o;
-    peer_key(b, lo, hi, e[0x3d], sk);
-    if (row >= 0 && get_friend(b, row, fr)) sjis_json(nm, sizeof nm, fr + 0xa0, 0x0f);
+    pol_friend_copy fr;
+    DWORD lo = MAIL(e)->to_lo, hi = MAIL(e)->to_hi;
+    int row = find_friend_row(b, lo, hi, MAIL(e)->to_slot), o;
+    peer_key(b, lo, hi, MAIL(e)->to_slot, sk);
+    if (row >= 0 && get_friend(b, row, &fr)) sjis_json(nm, sizeof nm, (const BYTE *)fr.f.name, 0x0f);
     o = wsprintfA(out, "{\"mid\":%d,\"to\":%s,\"toKey\":\"%s\",\"toSlot\":%u,\"fromSlot\":%u,\"toOther\":%s,\"time\":%u,"
                        "\"seq\":%u,\"state\":\"%s\",\"subject\":",
-                  mid, nm, sk, e[0x3d], e[0x3c], polid_ok(b, lo, hi) && !is_me(b, lo, hi) ? "true" : "false",
-                  *(const DWORD *)(e + 0x34), *(const DWORD *)(e + 0x30), state);
+                  mid, nm, sk, MAIL(e)->to_slot, MAIL(e)->from_slot, polid_ok(b, lo, hi) && !is_me(b, lo, hi) ? "true" : "false",
+                  MAIL(e)->time, MAIL(e)->seq, state);
     o += json_text(out + o, cap - o - 16, subj);
     lstrcpyA(out + o, ",\"text\":"); o += 8;
     o += json_text(out + o, cap - o - 4, text);
@@ -247,7 +246,7 @@ static void store_import(BYTE *b)
     static mailrec scratch;
     static char body[STORE_BODY_MAX];
     char path[MAX_PATH + 64], tmp[MAX_PATH + 80];
-    unsigned __int64 me = my_id(b);
+    unsigned __int64 me = pc_my_id(b);
     storefile *all = NULL, *v, *g;
     gbuf in = {0}, out = {0};
     int homes[2], nh = 0, n = 0, cap = 0, k, i, j, h, s, got, nin = 0, nout = 0, left = 0;
@@ -265,8 +264,8 @@ static void store_import(BYTE *b)
                     if ((all[j].sub >= 2) == (s >= 2) && mail_same(all[j].hdr, v[i].hdr)) break;
                 if (j < n) {
                     /* the same message twice: read if either copy is, sent if either went, the other's the spare */
-                    if (s < 2 && (s == 0 || (*(WORD *)(v[i].hdr + 0x42) & 0x100)))
-                        *(WORD *)(all[j].hdr + 0x42) |= 0x100;
+                    if (s < 2 && (s == 0 || (MAIL(v[i].hdr)->seen & 0x100)))
+                        MAIL(all[j].hdr)->seen |= 0x100;
                     if (s == 2 && all[j].sub == 3) all[j] = v[i];
                     else if (all[j].alt_home < 0) {
                         all[j].alt_home = v[i].home;
@@ -283,7 +282,7 @@ static void store_import(BYTE *b)
                     all = g;
                 }
                 all[n] = v[i];
-                if (s == 0) *(WORD *)(all[n].hdr + 0x42) |= 0x100;
+                if (s == 0) MAIL(all[n].hdr)->seen |= 0x100;
                 n++;
             }
             if (v) HeapFree(GetProcessHeap(), 0, v);
@@ -294,13 +293,13 @@ static void store_import(BYTE *b)
         char *json;
         if ((got = store_body(&all[i], body, sizeof body)) <= 0) continue;
         memset(&scratch, 0, sizeof scratch);
-        memcpy(scratch.hdr, all[i].hdr, 0x48);
+        memcpy(scratch.hdr, all[i].hdr, MAIL_KEY_SIZE);
         mail_parse(&scratch, body, got);
         need = 512 + 2 * (lstrlenA(scratch.subj) + lstrlenA(scratch.text));
         if (!(json = (char *)HeapAlloc(GetProcessHeap(), 0, need))) continue;
         if (sent) len = sent_json(b, json, need, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent", scratch.subj,
                                   scratch.text);
-        else len = msg_json(b, json, need, all[i].hdr, 0, "local", (*(WORD *)(all[i].hdr + 0x42) >> 8) & 1,
+        else len = msg_json(b, json, need, all[i].hdr, 0, "local", (MAIL(all[i].hdr)->seen >> 8) & 1,
                             scratch.subj, scratch.text, scratch.has_att ? scratch.att : NULL);
         /* newest first, so a store too big for the file loses its oldest lines */
         if (in.n + out.n + len + 2 > STORE_JSON_MAX ||

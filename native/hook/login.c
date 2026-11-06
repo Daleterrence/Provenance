@@ -4,8 +4,6 @@ static int g_lean;
 static unsigned g_notice, g_notice_days;
 static int g_bad_password;
 
-static int g_status_job = -1;
-static int g_status_want = -1, g_status_loc = -2;
 static char g_presence[32] = "starting";
 
 /* Provenance's own numbering (POL_HOME), from 10 so the viewer's 01-08 are never touched, and never 84 */
@@ -106,7 +104,7 @@ static void home_pick(BYTE *b)
     }
     if (!home_set(b, slot)) return;
     lg("home: user slot %d (pub\\home%02d)\r\n", slot, slot);
-    if (legacy_home_there()) home_copy(b, slot, SVC(0x558) ? my_id(b) : 0);
+    if (legacy_home_there()) home_copy(b, slot, pc_has(b, SV_MY_ID) ? pc_my_id(b) : 0);
 }
 
 /* notices whose viewer screen only offers log out or a fix-it page (closed, suspended, banned...). The JP, US and EU
@@ -123,11 +121,11 @@ static int notice_blocks(unsigned st)
    from now to the date in the login result, today included) */
 static void notice_read(BYTE *b)
 {
-    if (!SVC(0xd20)) return;
-    g_notice = ((unsigned char (__cdecl *)(void))SVC(0xd20))();
+    if (!pc_has(b, SV_NOTICE_STATUS)) return;
+    g_notice = pc_notice_status(b);
     lg("phase_c: account notice status %u (LM-%02u)\r\n", g_notice, g_notice > 220 && g_notice <= 252 ? g_notice - 220 : 0);
-    if (g_notice == 222 && SVC(0xd24)) {
-        g_notice_days = ((unsigned char (__cdecl *)(void))SVC(0xd24))();
+    if (g_notice == 222 && pc_has(b, SV_NOTICE_DAYS)) {
+        g_notice_days = pc_notice_days(b);
         lg("phase_c: LM-02 days left %u\r\n", g_notice_days);
     }
 }
@@ -135,12 +133,12 @@ static void notice_read(BYTE *b)
 /* the viewer's sign-out (app.dll 0x101983fb). 0xcc4 runs once, it returns 0, not 7, for the hook's connection type */
 static void viewer_sign_out(BYTE *b)
 {
-    if (SVC(0xcc0)) ((void (__cdecl *)(int))SVC(0xcc0))(1);
-    if (SVC(0xcc4)) ((svc_v)SVC(0xcc4))();
-    if (SVC(0x6c8)) ((void (__cdecl *)(void))SVC(0x6c8))();
+    if (pc_has(b, SV_SIGN_OUT_PREPARE)) pc_sign_out_prepare(b, 1);
+    if (pc_has(b, SV_SIGN_OUT)) pc_sign_out(b);
+    if (pc_has(b, SV_GCHAT_SIGN_OUT)) pc_gchat_sign_out(b);
     gc_signed_out();
 }
-static void account_blocked(BYTE *b, const char *what)
+NORETURN static void account_blocked(BYTE *b, const char *what)
 {
     lg(LOG_ACCOUNT_BLOCKED "%s - signed out, nothing started\r\n", what);
     viewer_sign_out(b);
@@ -152,37 +150,37 @@ static void account_blocked(BYTE *b, const char *what)
 static void status_start(BYTE *b, int handle, int status, int location)
 {
     int chr = location >= 0 ? -1 : -2;   /* a location clears the game, like the viewer's (app.dll 0x10041342) */
-    int t = ((int (__cdecl *)(int, int, int, int, int, int))SVC(0x30c))(handle, chr, 1, status, 0, location);
-    if (t == NO_SLOT) { g_status_want = status; g_status_loc = location; return; }
-    g_status_want = -1;
+    int t = pc_change_my_status(b, handle, chr, 1, status, 0, location);
+    if (t == NO_SLOT) { g_s.status_want = status; g_s.status_loc = location; return; }
+    g_s.status_want = -1;
     lg("presence: ChangeMyStatus(%d,%d,1,%d,0,%d) -> ticket %d\r\n", handle, chr, status, location, t);
-    if (t >= 0) g_status_job = t;
-    else wsprintfA(g_presence, "failed:%d", t);
+    if (t >= 0) g_s.status_job = t;
+    else lstrcpyA(g_presence, failed(t));
 }
 static void status_pump(BYTE *b)
 {
-    if (g_status_job < 0) return;
-    int r = ((svc_i)SVC(0x310))(g_status_job);
+    if (g_s.status_job < 0) return;
+    int r = pc_change_my_status_check(b, g_s.status_job);
     if (r == 0) return;
-    g_status_job = -1;
+    g_s.status_job = -1;
     lg("presence: ChangeMyStatus done -> %d (current handle %d, my status %d)\r\n", r,
-       ((svc_v)SVC(0x2f8))(), ((svc_v)SVC(0x338))());
-    if (r == 1) lstrcpyA(g_presence, "online"); else wsprintfA(g_presence, "failed:%d", r);
+       pc_current_handle(b), pc_my_status(b));
+    if (r == 1) lstrcpyA(g_presence, "online"); else lstrcpyA(g_presence, failed(r));
     g_snap_dirty = 1;
 }
 
-struct pload { const char *name; unsigned o_load, o_check; int ticket, res, write; };
+struct pload { const char *name; int (*load)(BYTE *); int (*check)(BYTE *, int); int ticket, res, write; };
 /* read only. LOAD_MY_STATUS's answer, via the pointer at polcore.dll 0x10404df8 + job * 0x338: +0 handle slot, +6
    status + 1, at 0 polcore drops the slot */
 static void status_reply_log(BYTE *b, int t)
 {
-    BYTE *r = t >= 0 && t <= 3 ? *(BYTE **)(b + 0x404df8 + t * 0x338) : NULL;
+    BYTE *r = t >= 0 && t <= 3 ? pc_status_answer(b, t) : NULL;
     if (!r || IsBadReadPtr(r, 8)) {
-        lg(LOG_PROFILE "my status from the server: unreadable (current handle %d)\r\n", ((svc_v)SVC(0x2f8))());
+        lg(LOG_PROFILE "my status from the server: unreadable (current handle %d)\r\n", pc_current_handle(b));
         return;
     }
     lg(LOG_PROFILE "my status from the server: handle %u, status byte %u (current handle %d, my status %d)\r\n", r[0],
-       r[6], ((svc_v)SVC(0x2f8))(), SVC(0x338) ? ((svc_v)SVC(0x338))() : -1);
+       r[6], pc_current_handle(b), pc_has(b, SV_MY_STATUS) ? pc_my_status(b) : -1);
 }
 #define LOADS_IN_FLIGHT 4   /* polcore's job slots, the viewer's own peak */
 static void run_loads(BYTE *b, struct pload *items, int n)
@@ -199,7 +197,7 @@ static void run_loads(BYTE *b, struct pload *items, int n)
             if (items[i].res != 0) continue;
             if (!started[i]) {
                 if (active >= LOADS_IN_FLIGHT) { pending++; continue; }
-                t = ((svc_v)SVC(items[i].o_load))();
+                t = items[i].load(b);
                 if (t >= 0) active++;
                 if (t == NO_SLOT) { pending++; continue; }
                 items[i].ticket = t;
@@ -210,11 +208,11 @@ static void run_loads(BYTE *b, struct pload *items, int n)
                     continue;
                 }
             }
-            items[i].res = ((svc_i)SVC(items[i].o_check))(items[i].ticket);
+            items[i].res = items[i].check(b, items[i].ticket);
             if (items[i].res == 0) { pending++; continue; }
             lg(LOG_PROFILE "%s -> %d after %u ms\r\n", items[i].name, items[i].res,
                (unsigned)(GetTickCount64() - started[i]));
-            if (items[i].o_load == 0x5d8 && items[i].res == 1) status_reply_log(b, items[i].ticket);
+            if (items[i].load == pc_status_load && items[i].res == 1) status_reply_log(b, items[i].ticket);
         }
         status_pump(b);
         if (!pending) break;
@@ -223,12 +221,11 @@ static void run_loads(BYTE *b, struct pload *items, int n)
         if (!writing && stop_requested()) {
             lg(LOG_STOP_REQUESTED " during profile load - signing out and exiting, FFXI NOT started\r\n");
             for (i = 0; i < n; i++)
-                if (items[i].res == 0 && started[i]) CANCEL_JOB(items[i].ticket);
+                if (items[i].res == 0 && started[i]) pc_cancel_job(b, items[i].ticket);
             viewer_sign_out(b);
             end_pol(STOPPED_EXIT);
         }
-        POLCON_STEP(b);
-        POLCON_IDLE(b);
+        pump_once(b);
         Sleep(1);
     }
     for (i = 0; i < n; i++)
@@ -238,10 +235,10 @@ static void run_loads(BYTE *b, struct pload *items, int n)
 
 static int count_handles(BYTE *b)
 {
-    BYTE rec[0x28];
+    pol_handle rec;
     int n = 0;
     for (int i = 0; i < 64; i++)
-        if (get_handle(b, i, rec) >= 0 && (rec[0] & 1)) n++;
+        if (handle_get(b, i, &rec)) n++;
     return n;
 }
 
@@ -280,8 +277,7 @@ static int wait_handle_name(BYTE *b, char *name, int cap)
             viewer_sign_out(b);
             end_pol(STOPPED_EXIT);
         }
-        POLCON_STEP(b);
-        POLCON_IDLE(b);
+        pump_once(b);
         Sleep(200);
     }
     lg("phase_c: no handle name within 10 minutes\r\n");
@@ -292,8 +288,8 @@ static int wait_handle_name(BYTE *b, char *name, int cap)
 static int handle_bootstrap(BYTE *b)
 {
     static const char *const why[] = { "creation cancelled", "no launcher target", "no answer within 10 minutes" };
-    struct pload fresh = { "handles (pre-claim)", 0x2ac, 0x2b0, 0, 0 };
-    struct pload put = { "handle save", 0x1030, 0x1034, 0, 0, 1 };
+    struct pload fresh = { "handles (pre-claim)", pc_handles_load, pc_handles_check, 0, 0 };
+    struct pload put = { "handle save", pc_handles_save, pc_handles_save_check, 0, 0, 1 };
     char name[32] = {0};
     WCHAR wname[32];
     BYTE id[16];
@@ -323,17 +319,17 @@ static int handle_bootstrap(BYTE *b)
     }
     /* the viewer's first-login steps: name -> id (0xa40), claim a free slot (0x314), select it (0x1434), save */
     ZeroMemory(id, sizeof id);
-    ((int (__cdecl *)(void *, const WCHAR *, int))SVC(0xa40))(id, wname, 0x81ac);
-    idx = ((int (__cdecl *)(int, int, const void *))SVC(0x314))(-1, 1, id);
+    pc_wide_to_sjis(b, (char *)id, wname, SJIS_GETA);
+    idx = pc_claim_handle(b, -1, 1, id);
     if (idx < 0) {
         lg("phase_c: " LOG_HANDLE_CLAIM_FAILED " %d (0x%08x)\r\n", idx, (unsigned)idx);
         return HANDLE_REFUSED_EXIT;
     }
-    ((void (__cdecl *)(int))SVC(0x1434))(idx);
+    pc_select_handle(b, idx);
     run_loads(b, &put, 1);
     if (put.res != 1) {
         lg("phase_c: " LOG_HANDLE_SAVE_FAILED " %d - releasing slot %d\r\n", put.res, idx);
-        ((svc_i)SVC(0x318))(idx);
+        pc_release_handle(b, idx);
         return HANDLE_REFUSED_EXIT;
     }
     /* the viewer goes on with polcore's own list here, the claimed slot's already in it */
@@ -387,13 +383,12 @@ static void prestart_wait(void)
 /* the viewer's FFXI gate (app.dll 0x10199093), a valid Content ID record for content 1 */
 static void ffxi_gate_read(BYTE *b)
 {
-    void *get = SVC(0x2c4);
-    BYTE rec[0x68];
+    pol_chr rec;
     int any = 0, ffxi = 0;
     for (int i = 0; i < 64; i++)
-        if (((int (__cdecl *)(unsigned, void *))get)((unsigned)i, rec) == 0 && (rec[0] & 1)) {
+        if (get_chr(b, i, &rec)) {
             any++;
-            if (*(WORD *)(rec + 2) == 1) ffxi++;
+            if (rec.title == 1) ffxi++;
         }
     g_ffxi_service = ffxi > 0;
     lg("phase_c: " LOG_CONTENT_IDS "%d valid, %d FFXI\r\n", any, ffxi);
@@ -408,7 +403,7 @@ static struct pload *login_set(struct pload *all, int *n)
 /* the viewer loads my status on its own and starts the lists from its OnSuccess (app.dll 0x10040822, 0x10040650) */
 static void login_loads(BYTE *b, struct pload *run, int n)
 {
-    if (run[0].o_load != 0x5d8) {
+    if (run[0].load != pc_status_load) {
         run_loads(b, run, n);
         return;
     }
@@ -423,11 +418,11 @@ static void phase_c_seed(HMODULE pc)
     struct { int kind; void *dialup[5]; } conn = { 1, { zero, zero, zero, zero, zero } };
     unsigned char encpw[0x12], hostbuf[0x42];
     struct pload all[5] = {
-        { "status",     0x5d8, 0x5dc, 0, 0 },
-        { "friends",    0x28c, 0x290, 0, 0 },
-        { "handles",    0x2ac, 0x2b0, 0, 0 },
-        { "characters", 0x2bc, 0x2c0, 0, 0 },
-        { "groups",     0x5fc, 0x600, 0, 0 }
+        { "status",     pc_status_load, pc_status_check, 0, 0 },
+        { "friends",    pc_friends_load, pc_friends_check, 0, 0 },
+        { "handles",    pc_handles_load, pc_handles_check, 0, 0 },
+        { "characters", pc_characters_load, pc_characters_check, 0, 0 },
+        { "groups",     pc_groups_load, pc_groups_check, 0, 0 }
     };
     struct pload *run;
     unsigned sm, flags;
@@ -440,40 +435,39 @@ static void phase_c_seed(HMODULE pc)
         SecureZeroMemory(pw, sizeof pw);
         lg("phase_c: POL password longer than 16 characters - exiting, FFXI NOT started\r\n");
         end_pol(DETAILS_UNREADABLE_EXIT);
-        return;
     }
     lg(LOG_REAL_AUTH ": POL ID='%s'\r\n", mask_id(id, m));
-    ((svc_v)(b + 0x44390))();   /* session init (svc+0xc90) */
+    pc_session_init(b);
     /* inet init (polcore.dll 0x1000fe20 sets the flag at 0x100a66d4, the connect helper returns -2071 without it).
        One piece of the POL-2071 hunt, which was a fucking nightmare honestly good lord */
-    r = ((svc_v)(b + 0xfe20))();
+    r = pc_inet_init(b);
     lg("phase_c: inet init -> %d\r\n", r);
     /* POLCON_OPEN (polcore.dll 0x100448a0) type 3 = network, kind 1 + five zeroed dial-up buffers. It overwrites
        the password and host, so both go in after it. */
-    r = ((int (__cdecl *)(int, void *))(b + 0x448a0))(3, &conn);
+    r = pc_con_open(b, 3, &conn);
     lg("phase_c: POLCON_OPEN(3) -> %d\r\n", r);
-    ((int (__cdecl *)(void *, const char *))SVC(0xd60))(encpw, pw);   /* ENCODE_PASSWORD */
+    pc_encode_password(b, encpw, pw);   /* ENCODE_PASSWORD */
     SecureZeroMemory(pw, sizeof pw);
     /* SET_PASSWORD (polcore.dll 0x10046df0) copies the bytes into polcore, so mine get cleared */
-    ((int (__cdecl *)(void *, unsigned))SVC(0xd50))(encpw, 0);
+    pc_set_password(b, encpw, 0);
     SecureZeroMemory(encpw, sizeof encpw);
-    ((int (__cdecl *)(void *, const char *))SVC(0xd90))(hostbuf, "ci000.pol.com");   /* ENCODE_HOST */
-    ((svc_p)SVC(0xd54))(hostbuf);   /* SET_POLCOM_HOST */
+    pc_encode_host(b, hostbuf, "ci000.pol.com");   /* ENCODE_HOST */
+    pc_set_polcom_host(b, hostbuf);   /* SET_POLCOM_HOST */
     /* ENCODE_POLID (polcore.dll 0x10046e70) scrambles the ID into polcore. It's reversible, so never logged. */
-    ((void (__cdecl *)(void *, const char *))(b + 0x46e70))(b + 0x99280, id);
+    pc_encode_polid(b, id);
     SecureZeroMemory(id, sizeof id);
     sea_seed(b);
-    *(unsigned *)(b + 0x9aa14) = 0xfffffbee;
-    if (*(unsigned *)(b + 0x99408) == 0)
-        *(unsigned *)(b + 0x99408) = 0x12;
+    *pc_auth_error(b) = AUTH_NO_ERROR;
+    if (*pc_auth_state(b) == 0)
+        *pc_auth_state(b) = AUTH_START;
     /* no give-up of my own, polcore fails a stuck step itself and Provenance ends a login that goes quiet */
     for (;;) {
-        sm = *(unsigned *)(b + 0x99408);
+        sm = *pc_auth_state(b);
         if (sm != (unsigned)last) {
             last = (int)sm;
-            lg(LOG_AUTH_STATE "%u res=%d err=%08x\r\n", sm, *(int *)(b + 0x996b4), *(unsigned *)(b + 0x9aa14));
+            lg(LOG_AUTH_STATE "%u res=%d err=%08x\r\n", sm, *pc_auth_result(b), *pc_auth_error(b));
         }
-        if (sm == 30 || sm == 32 || sm == 36 || sm == 39) break;
+        if (auth_settled(sm)) break;
         if (stop_requested()) {
             lg(LOG_STOP_REQUESTED " during sign-in - exiting, FFXI NOT started\r\n");
             end_pol(STOPPED_EXIT);
@@ -482,22 +476,20 @@ static void phase_c_seed(HMODULE pc)
             lg("phase_c: Provenance ended during sign-in - exiting, FFXI NOT started\r\n");
             end_pol(STOPPED_EXIT);
         }
-        POLCON_STEP(b);
-        POLCON_IDLE(b);
-        if (*(unsigned *)(b + 0x99408) == sm) Sleep(16);
+        pump_once(b);
+        if (*pc_auth_state(b) == sm) Sleep(16);
     }
-    sm = *(unsigned *)(b + 0x99408);
-    if (sm != 30) {
+    sm = *pc_auth_state(b);
+    if (sm != AUTH_IN) {
         lg(LOG_AUTH_FAILED " (state=%u res=%d err=%08x " LOG_REASON "%d) - exiting, FFXI NOT started\r\n",
-           sm, *(int *)(b + 0x996b4), *(unsigned *)(b + 0x9aa14), *(int *)(b + 0x9940c));
+           sm, *pc_auth_result(b), *pc_auth_error(b), *pc_auth_reason(b));
         end_pol(AUTH_REFUSED_EXIT);
-        return;
     }
     lg(LOG_AUTH_OK " (state 30) - session bound\r\n");
     notice_read(b);
     /* stricter than the viewer on purpose, a blocked account stops here */
-    flags = *(WORD *)(b + 0x993f4);
-    jail = SVC(0x13e4) ? ((svc_v)SVC(0x13e4))() : 0;
+    flags = *pc_login_flags(b);
+    jail = pc_has(b, SV_JAILED) ? pc_jailed(b) : 0;
     lg("phase_c: login result flags %04x notice %u jail %d\r\n", flags, g_notice, jail);
     if (flags & 1) account_blocked(b, "disconnect-bit");
     if (notice_blocks(g_notice)) {
@@ -508,15 +500,15 @@ static void phase_c_seed(HMODULE pc)
     home_pick(b);
     /* MESSAGE_NOTICES(1), or polcore marks every message as lost. Lean mode reads no messages, so asks for none. */
     if (!g_lean)
-        ((svc_i)SVC(0x1020))(1);
-    ((svc_v)SVC(0xd10))();   /* POLCON_CLEAR_ERROR */
+        pc_message_notices(b, 1);
+    pc_clear_error(b);   /* POLCON_CLEAR_ERROR */
     run = login_set(all, &nrun);
     login_loads(b, run, nrun);
     g_friends_loaded = all[1].res == 1;
     /* a load refused with an account status (-0x1450 and down: suspended, IP restricted, password changed...) turns
        the account away, any other failure signs out too, like the viewer */
     for (i = 0; i < nrun; i++)
-        if (run[i].res <= -0x1450 && run[i].res >= -0x154f) {
+        if (run[i].res <= ACCOUNT_REFUSED_TOP && run[i].res >= ACCOUNT_REFUSED_BOTTOM) {
             wsprintfA(what, "load:%s=%d", run[i].name, run[i].res);
             account_blocked(b, what);
         }
@@ -526,7 +518,7 @@ static void phase_c_seed(HMODULE pc)
             viewer_sign_out(b);
             end_pol(LIST_LOAD_EXIT);
         }
-    if (SVC(0x734) && (((svc_v)SVC(0x734))() & 0xff)) {
+    if (pc_has(b, SV_BAD_PASSWORD_FLAG) && (pc_bad_password_flag(b) & 0xff)) {
         g_bad_password = 1;
         lg("phase_c: bad password flag set (Viewer message 0x7007)\r\n");
     }
@@ -537,7 +529,7 @@ static void phase_c_seed(HMODULE pc)
         viewer_sign_out(b);
         end_pol((UINT)rc);
     }
-    *(unsigned *)(b + 0x99254) = 1;
+    *pc_session_ready(b) = 1;
     lg("phase_c: session shaped (notices+lists) - game can boot\r\n");
 }
 

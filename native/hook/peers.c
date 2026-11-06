@@ -1,32 +1,23 @@
-static int get_handle(BYTE *b, int slot, void *rec) { return ((svc_ip)SVC(0x2b4))(slot, rec); }
-
 static int g_my_slot = -1;
 
-static int get_chr(BYTE *b, int i, BYTE *rec)
+static int get_chr(BYTE *b, int i, pol_chr *rec)
 {
-    void *get = SVC(0x2c4);
-    memset(rec, 0, 0x68);
-    return get && ((int (__cdecl *)(unsigned, void *))get)((unsigned)i, rec) == 0 && (rec[0] & 1);
+    memset(rec, 0, sizeof *rec);
+    return pc_has(b, SV_GET_CONTENT_ID) && pc_get_content_id(b, (unsigned)i, rec) == 0 && chr_valid(rec);
 }
-static int handle_ok(BYTE *b, int slot, BYTE *rec)
+/* a Handle ID as the key the app knows it by */
+static void hid_key(unsigned __int64 hid, char k[17])
 {
-    memset(rec, 0, 0x28);
-    return slot >= 0 && slot < 64 && get_handle(b, slot, rec) == 0 && (rec[0] & 1);
+    wsprintfA(k, "%03x%08x", (unsigned)(hid >> 32), (unsigned)hid);
 }
-/* the Handle ID is bits 1-44, the same 44 bits as a friend row's H-ID */
-static void handle_key(const BYTE *rec, char k[17])
+static void chr_key(const pol_chr *c, char k[17])
 {
-    unsigned __int64 h = (*(const unsigned __int64 *)rec >> 1) & 0xfffffffffffULL;
-    wsprintfA(k, "%03x%08x", (unsigned)(h >> 32), (unsigned)h);
+    wsprintfA(k, "%08x%08x", c->ctsid, c->ctid_lo);
 }
-static void chr_key(const BYTE *rec, char k[17])
-{
-    wsprintfA(k, "%08x%08x", *(const DWORD *)(rec + 4), *(const DWORD *)(rec + 8));
-}
-static int handle_used(const BYTE *rec)
+static int handle_used(const pol_handle *h)
 {
     int n = 0;
-    for (int k = 0; k < 8; k++) n += rec[0x20 + k] & 1;
+    for (int k = 0; k < 8; k++) n += h->chars[k] & 1;
     return n;
 }
 
@@ -41,12 +32,7 @@ static int ascii_name_ok(const char *s)
     return n >= 1 && n <= 15 && visible;
 }
 
-/* friend rows live in two polcore arrays (the ignore list is 100 rows of A's shape just before it, b+0xafc18):
-     A  b+0xb40d8, stride 0xb0    +0x08 flags (bits 13-15 status, 0x800 online, 0x10000 a game slot's in use,
-                                        bits 17-19 which slot, 0x10000000 pending request)
-                                  +0x18 eight 16-byte game slots, +0x98 valid, +0xa0 handle name (SJIS)
-     B  b+0x3fc920, stride 0x84   +0x00 profile pic, +0x1c comment (UTF-16)
-   (flags >> 13) & 7 is status + 1 (1 online, 2 away, 3 busy), 0 offline. Online also needs 0x800. */
+/* a row's flags >> 13 & 7 is status + 1 (1 online, 2 away, 3 busy), 0 offline. Online also needs 0x800. */
 static int friend_online(unsigned fa)
 {
     unsigned s = (fa >> 13) & 7;
@@ -61,17 +47,17 @@ static const char *friend_status(unsigned fa)
         default: return "online";
     }
 }
-/* a game slot: u16 flags (bit 0 valid), u16 title (1 = FFXI), u32 ctsid, u64 ctid. FFXI's world id is the ctsid's
-   byte 2, FFXiMain checks it against your own world the same way */
-static int friend_ffxi(const BYTE *a, DWORD *ctsid, DWORD *ctLo, DWORD *ctHi)
+/* the game slot the row is in, when it's FFXI. FFXiMain checks the world id (the ctsid's byte 2) against your own the
+   same way */
+static int friend_ffxi(const pol_friend *f, DWORD *ctsid, DWORD *ctLo, DWORD *ctHi)
 {
-    unsigned fa = *(const unsigned *)(a + 0x08);
-    const BYTE *s = a + 0x18 + ((fa >> 17) & 7) * 0x10;
-    if (!(fa & 0x800) || !(fa & 0x10000) || (fa & 0x10000000) || !friend_online(fa)) return 0;
-    if (!(*(const WORD *)s & 1) || *(const WORD *)(s + 2) != 1) return 0;
-    *ctsid = *(const DWORD *)(s + 4);
-    *ctLo = *(const DWORD *)(s + 8);
-    *ctHi = *(const DWORD *)(s + 0xc);
+    unsigned fa = f->flags;
+    const pol_game *s = &f->games[(fa >> 17) & 7];
+    if (!(fa & 0x800) || !(fa & 0x10000) || (fa & FRIEND_PENDING) || !friend_online(fa)) return 0;
+    if (!(s->flags & 1) || s->title != 1) return 0;
+    *ctsid = s->ctsid;
+    *ctLo = s->ctid_lo;
+    *ctHi = s->ctid_hi;
     return 1;
 }
 
@@ -80,11 +66,10 @@ static int friend_ffxi(const BYTE *a, DWORD *ctsid, DWORD *ctLo, DWORD *ctHi)
 static char g_my_polid[12];
 static BYTE g_peer_secret[32];
 static int g_peer_secret_ok;
-static unsigned __int64 my_id(BYTE *b) { return ((unsigned __int64 (__cdecl *)(void))SVC(0x558))(); }
 static void fmt_polid(BYTE *b, unsigned lo, unsigned hi, char out[12])
 {
     memset(out, 0, 12);
-    ((void (__cdecl *)(unsigned, unsigned, char *))SVC(0x584))(lo, hi, out);
+    pc_format_polid(b, lo, hi, out);
     out[8] = 0;
 }
 static int peer_secret_read(const WCHAR *path)
@@ -180,9 +165,9 @@ static void peer_key(BYTE *b, unsigned lo, unsigned hi, unsigned slot, char out[
     char id[12], msg[40];
     BYTE mac[32];
     out[0] = 0;
-    if (!SVC(0x584) || !peer_secret()) return;
+    if (!pc_has(b, SV_FORMAT_POLID) || !peer_secret()) return;
     if (!g_my_polid[0]) {
-        unsigned __int64 me = my_id(b);
+        unsigned __int64 me = pc_my_id(b);
         if (!me) return;
         fmt_polid(b, (unsigned)me, (unsigned)(me >> 32), g_my_polid);
     }
@@ -199,52 +184,50 @@ static void peer_key(BYTE *b, unsigned lo, unsigned hi, unsigned slot, char out[
 static int is_me(BYTE *b, unsigned lo, unsigned hi)
 {
     char id[12], mine[12];
-    if (!SVC(0x584)) return 0;
-    unsigned __int64 me = my_id(b);
+    if (!pc_has(b, SV_FORMAT_POLID)) return 0;
+    unsigned __int64 me = pc_my_id(b);
     if (!me) return 0;
     fmt_polid(b, (unsigned)me, (unsigned)(me >> 32), mine);
     fmt_polid(b, lo, hi, id);
     return mine[0] && lstrcmpA(id, mine) == 0;
 }
-#define FR_SLOT(fr) ((*(DWORD *)((fr) + 0x9c) >> 13) & 0x3f)
-static int get_friend(BYTE *b, int row, BYTE *fr)
+static int get_friend(BYTE *b, int row, pol_friend_copy *fr)
 {
-    memset(fr, 0, 0x140);
-    return ((svc_ip)SVC(0x5cc))(row, fr) >= 0 && (*(DWORD *)(fr + 0x98) & 1);
+    memset(fr, 0, sizeof *fr);
+    return pc_friend_copy(b, row, fr) >= 0 && friend_valid(&fr->f);
 }
-static void friend_key(BYTE *b, const BYTE *fr, char k[17])
+static void friend_key(BYTE *b, const pol_friend *f, char k[17])
 {
-    peer_key(b, *(DWORD *)(fr + 0x00), *(DWORD *)(fr + 0x04), FR_SLOT(fr), k);
+    peer_key(b, f->id_lo, f->id_hi, (unsigned)friend_slot(f), k);
 }
 /* the same test as polcore.dll 0x100254d0 */
 static int find_friend_row(BYTE *b, DWORD lo, DWORD hi, int slot)
 {
-    BYTE r[0x140];
+    pol_friend_copy r;
     for (int i = 0; i < 200; i++)
-        if (get_friend(b, i, r) && *(DWORD *)r == lo && *(DWORD *)(r + 4) == hi && (int)FR_SLOT(r) == slot) return i;
+        if (get_friend(b, i, &r) && r.f.id_lo == lo && r.f.id_hi == hi && friend_slot(&r.f) == slot) return i;
     return -1;
 }
 
 static int my_handle(BYTE *b, char *name16)
 {
-    BYTE rec[0x28];
-    int slot = ((svc_v)SVC(0x2f8))();
+    pol_handle h;
+    int slot = pc_current_handle(b);
     name16[0] = 0;
     if (slot < 0)
         for (int i = 0; i < 64; i++)
-            if (get_handle(b, i, rec) == 0 && (rec[0] & 1)) { slot = i; break; }
-    if (get_handle(b, slot, rec) == 0) {
-        memcpy(name16, rec + 0x08, 15);
+            if (handle_get(b, i, &h)) { slot = i; break; }
+    if (pc_get_handle(b, (unsigned)slot, &h) == 0) {
+        memcpy(name16, h.name, 15);
         name16[15] = 0;
     }
     return slot;
 }
 static int slot_name(BYTE *b, int slot, char *name16)
 {
-    BYTE rec[0x28];
-    memset(rec, 0, sizeof rec);
-    if (get_handle(b, slot, rec) != 0 || !(rec[0] & 1)) return 0;
-    memcpy(name16, rec + 0x08, 15);
+    pol_handle h;
+    if (!handle_get(b, slot, &h)) return 0;
+    memcpy(name16, h.name, 15);
     name16[15] = 0;
     return 1;
 }

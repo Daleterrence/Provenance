@@ -25,7 +25,7 @@ static void mutex_name(LPCWSTR name, WCHAR *out)
                       (PUCHAR)name, (ULONG)n * sizeof(WCHAR), mac, sizeof mac) != 0) {
         lg("pol_hook: no safe mutex name (%s) - ending pol.exe (exit %d)\r\n",
            g_mutex_secret_ok ? "HMAC failed" : "BCryptGenRandom failed", MUTEX_EXIT);
-        end_pol_or_exit(MUTEX_EXIT);
+        end_pol(MUTEX_EXIT);
     }
     if (n > MUTEX_NAME_KEEP) n = MUTEX_NAME_KEEP;
     CopyMemory(out, name, n * sizeof(WCHAR));

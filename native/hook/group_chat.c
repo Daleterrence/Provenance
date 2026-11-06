@@ -18,9 +18,6 @@ static int g_gc_line_n, g_gc_line_next;
 static volatile LONG g_gc_echo;
 static WCHAR g_gc_out[GC_TEXT_MAX + 1];
 
-typedef int (__cdecl *gc_start_t)(DWORD, DWORD, const WCHAR *, const WCHAR *, const WCHAR *, void *, int, int, int, int,
-                                  int);
-
 static void gc_state(const char *s)
 {
     lstrcpynA(g_gc_state, s, sizeof g_gc_state);
@@ -69,15 +66,15 @@ static void __cdecl gc_cb(int member, const WCHAR *name, int nameLen, WCHAR *tex
     g_snap_dirty = 1;
 }
 
-static int gc_link(BYTE *b) { return SVC(0xcd0) && ((svc_v)SVC(0xcd0))() >= 0; }
+static int gc_link(BYTE *b) { return pc_has(b, SV_CHAT_SESSION) && pc_chat_session(b) >= 0; }
 static int gc_joined(BYTE *b)
 {
     char ch[0x20];
-    return SVC(0x6cc) && ((int (__cdecl *)(char *))SVC(0x6cc))(ch) == 0;
+    return pc_has(b, SV_GCHAT_CHANNEL) && pc_gchat_channel(b, ch) == 0;
 }
-static void gc_force_leave(BYTE *b) { if (SVC(0x6c4)) ((svc_v)SVC(0x6c4))(); }
+static void gc_force_leave(BYTE *b) { if (pc_has(b, SV_GCHAT_FORCE_LEAVE)) pc_gchat_force_leave(b); }
 /* polcore's one waiting line (its base64), cleared once polcore's sent it or given up on it */
-static int gc_line_held(BYTE *b) { return !IsBadReadPtr(b + 0xbdc30, 1) && b[0xbdc30] != 0; }
+static int gc_line_held(BYTE *b) { return !IsBadReadPtr(pc_gchat_line_held(b), 1) && *pc_gchat_line_held(b) != 0; }
 
 /* my row in the group, -1 when polcore hasn't got one for me */
 static int gc_my_row(BYTE *b, DWORD lo, DWORD hi, grp_mem *m)
@@ -105,7 +102,7 @@ static int gc_still_in(BYTE *b)
 
 static void gc_try_start(BYTE *b)
 {
-    int r = ((gc_start_t)SVC(0x6a8))(g_gc_lo, g_gc_hi, NULL, NULL, NULL, (void *)gc_cb, 3, -1, 4, 0, 0);
+    int r = pc_gchat_start(b, g_gc_lo, g_gc_hi, NULL, NULL, NULL, (void *)gc_cb, 3, -1, 4, 0, 0);
     (void)b;
     if (r == 0) return;   /* polcore's still leaving or joining something, the viewer tries again next frame */
     if (r < 0) { lg("groupchat: start refused %d\r\n", r); gc_out("failed:join"); return; }
@@ -143,15 +140,18 @@ static void gc_join_request(BYTE *b)
         gc_join_refused(tok, "failed:bad request");
         return;
     }
-    if (!SVC(0x6a8) || !SVC(0x6b0) || !gc_link(b)) { gc_join_refused(tok, "failed:no chat"); return; }
+    if (!pc_has(b, SV_GCHAT_START) || !pc_has(b, SV_GCHAT_JOINED_CHECK) || !gc_link(b)) {
+        gc_join_refused(tok, "failed:no chat");
+        return;
+    }
     if (!get_group(b, lo, hi, &gh)) { gc_join_refused(tok, "failed:no such group"); return; }
     cls = (gh.flags >> 1) & 7;
     if (cls < 3 || cls > 5) { gc_join_refused(tok, "failed:not a member"); return; }
     /* the viewer joins straight away when it can't find my row, and only asks about the handle when it can */
     if (gc_my_row(b, lo, hi, &m) >= 0) {
-        handle_key((const BYTE *)&m.hLo, k);
+        hid_key(hid_of(m.hLo, m.hHi), k);
         if ((int)((m.hHi >> 13) & 0x3f) != slot || lstrcmpA(k, hk)) { gc_join_refused(tok, "failed:list changed"); return; }
-        if (!SVC(0x2f8) || ((svc_v)SVC(0x2f8))() != slot) { gc_join_refused(tok, "failed:handle"); return; }
+        if (!pc_has(b, SV_CURRENT_HANDLE) || pc_current_handle(b) != slot) { gc_join_refused(tok, "failed:handle"); return; }
     }
     g_gc_leave_want = 0;
     if (g_gc_st == GC_IN && lo == g_gc_lo && hi == g_gc_hi) {
@@ -189,7 +189,7 @@ static void gc_leave(BYTE *b)
     if (g_gc_st == GC_JOINING) { gc_force_leave(b); gc_out("left"); return; }
     if (g_gc_st != GC_IN) return;
     if (cr_cmd_busy()) { g_gc_leave_want = 1; return; }
-    r = ((svc_v)SVC(0x6b4))();
+    r = pc_gchat_leave(b);
     if (r == 0) { g_gc_leave_want = 1; return; }
     if (r < 0) { gc_out("left"); return; }
     g_gc_st = GC_LEAVING;
@@ -245,7 +245,7 @@ static void gc_send_pump(BYTE *b)
 {
     int r;
     if (g_gc_send == GS_WAITING) {
-        r = ((int (__cdecl *)(const WCHAR *))SVC(0x6bc))(g_gc_out);
+        r = pc_gchat_send(b, g_gc_out);
         if (r == 0) {   /* the last line hasn't gone yet */
             if (GetTickCount64() - g_gc_sent_at >= GC_SEND_MS) { g_gc_send = GS_NONE; gc_send_state("failed:busy"); }
             return;
@@ -274,7 +274,7 @@ static void gc_send_pump(BYTE *b)
 /* every hold loop turn. Requests on control turns only */
 static void gc_pump(BYTE *b, int ctl)
 {
-    if (g_draining) return;
+    if (g_s.draining) return;
     if (g_gc_st == GC_STARTING) {
         if (GetTickCount64() - g_gc_t0 >= GC_GIVE_UP_MS) {
             if (gc_joined(b)) gc_force_leave(b);
@@ -283,12 +283,12 @@ static void gc_pump(BYTE *b, int ctl)
         }
         if (!cr_cmd_busy()) gc_try_start(b);
     } else if (g_gc_st == GC_JOINING) {
-        int r = ((svc_v)SVC(0x6b0))();
+        int r = pc_gchat_joined_check(b);
         if (r > 0) { g_gc_st = GC_IN; gc_state("in"); }
         else if (r < 0) gc_out("failed:join");
         else if (GetTickCount64() - g_gc_t0 >= GC_GIVE_UP_MS) { gc_force_leave(b); gc_out("failed:busy"); }
     } else if (g_gc_st == GC_LEAVING) {
-        if (((svc_v)SVC(0x6b8))() != 0) gc_out("left");
+        if (pc_gchat_left_check(b) != 0) gc_out("left");
         else if (GetTickCount64() - g_gc_t0 >= GC_GIVE_UP_MS) { gc_force_leave(b); gc_out("left"); }
     } else if (g_gc_st == GC_IN) {
         int still;
@@ -301,7 +301,7 @@ static void gc_pump(BYTE *b, int ctl)
         }
         if (!gc_joined(b)) { gc_out("lost"); return; }
         /* the viewer's once-a-second "in chat" refresh, which is local */
-        if (ctl && SVC(0x680) && ((svc_i)SVC(0x680))(0) > 0) g_snap_dirty = 1;
+        if (ctl && pc_has(b, SV_IN_CHAT_REFRESH) && pc_in_chat_refresh(b, 0) > 0) g_snap_dirty = 1;
         if (g_gc_leave_want && !cr_cmd_busy()) { gc_leave(b); return; }
         gc_send_pump(b);
     }
@@ -318,14 +318,13 @@ static void gc_end_by(BYTE *b, const char *state, int reset, ULONGLONG until)
 {
     int r = 0;
     if (g_gc_st == GC_OUT && !gc_joined(b)) {
-        if (reset && SVC(0x6c8)) ((svc_v)SVC(0x6c8))();
+        if (reset && pc_has(b, SV_GCHAT_SIGN_OUT)) pc_gchat_sign_out(b);
         return;
     }
-    if (g_gc_st == GC_IN && SVC(0x6b4) && ((svc_v)SVC(0x6b4))() > 0) {
+    if (g_gc_st == GC_IN && pc_has(b, SV_GCHAT_LEAVE) && pc_gchat_leave(b) > 0) {
         lg("groupchat: leaving\r\n");
-        while (GetTickCount64() < until && (r = ((svc_v)SVC(0x6b8))()) == 0) {
-            POLCON_STEP(b);
-            POLCON_IDLE(b);
+        while (GetTickCount64() < until && (r = pc_gchat_left_check(b)) == 0) {
+            pump_once(b);
             Sleep(16);
         }
         lg("groupchat: PART answered %d\r\n", r);
@@ -333,13 +332,12 @@ static void gc_end_by(BYTE *b, const char *state, int reset, ULONGLONG until)
     if (gc_joined(b) || g_gc_st == GC_JOINING) {
         gc_force_leave(b);
         while (GetTickCount64() < until && gc_joined(b)) {
-            POLCON_STEP(b);
-            POLCON_IDLE(b);
+            pump_once(b);
             Sleep(16);
         }
     }
     /* polcore keeps a pointer to gc_cb till the PART goes or this, and FFXI's about to own the link */
-    if (reset && SVC(0x6c8)) ((svc_v)SVC(0x6c8))();
+    if (reset && pc_has(b, SV_GCHAT_SIGN_OUT)) pc_gchat_sign_out(b);
     gc_out(state);
 }
 static void gc_end(BYTE *b, const char *state, int reset) { gc_end_by(b, state, reset, GetTickCount64() + 3000); }
@@ -352,8 +350,7 @@ static void gc_group_going(BYTE *b, DWORD lo, DWORD hi)
     /* a room command's answer comes first, or the room would read the PART's. The room's pump returns once it's read
        one, so it can't start another in here */
     while (cr_cmd_busy() && GetTickCount64() < until) {
-        POLCON_STEP(b);
-        POLCON_IDLE(b);
+        pump_once(b);
         cr_room_pump(b, 0);
         Sleep(16);
     }

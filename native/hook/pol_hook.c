@@ -8,6 +8,8 @@
 #include <tlhelp32.h>
 #include "pol_cred.h"
 #include "hook_contract.h"
+#include "polcore.h"
+#include "session.h"
 #include "base.c"
 #include "pol_exe.c"
 #include "credentials.c"
@@ -34,7 +36,7 @@
 
 /* add-ons and game plugins already unloaded in FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins and
    finish its log, so it gets a clean one, the rest just get more places to crash */
-static void game_over(UINT code)
+NORETURN static void game_over(UINT code)
 {
     if (GetModuleHandleW(L"Ashita.dll")) {
         saver_restore();
@@ -107,10 +109,10 @@ static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned
     return 1;
 }
 
-static void not_hooked(void)
+NORETURN static void not_hooked(void)
 {
     lg("pol_hook: menu session not detoured - ending pol.exe (exit %d)\r\n", NOT_HOOKED_EXIT);
-    end_pol_or_exit(NOT_HOOKED_EXIT);
+    end_pol(NOT_HOOKED_EXIT);
 }
 
 static void install(void)

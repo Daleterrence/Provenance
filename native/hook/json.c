@@ -96,7 +96,7 @@ static void pol_json(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
     if (sj && sj[0]) {
         lstrcpynA(tmp, sj, sizeof tmp);                 /* svc 0xa38 has no bound, so the input gets capped */
         memset(w, 0, sizeof w);
-        ((int (__cdecl *)(WCHAR *, const char *, int))SVC(0xa38))(w, tmp, 0x3013);
+        pc_sjis_to_wide(b, w, tmp, WIDE_GETA);
         w[0x41f] = 0;
         if (WideCharToMultiByte(CP_UTF8, 0, w, -1, u8, u8cap - 1, NULL, NULL) <= 0) u8[0] = 0;
         u8[u8cap - 1] = 0;

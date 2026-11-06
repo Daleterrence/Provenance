@@ -1,14 +1,3 @@
-#define SVC(off) (*(void **)(b + 0x6fbe8 + (off)))   /* polcore's service table, byte offset off */
-#define PSLOT(n) SVC((n) * 4)
-typedef int (__cdecl *svc_v)(void);
-typedef int (__cdecl *svc_i)(int);
-typedef int (__cdecl *svc_p)(void *);
-typedef int (__cdecl *svc_ip)(int, void *);
-#define CANCEL_JOB(j) ((svc_i)SVC(0x520))(j)
-#define NO_SLOT (-0x100)   /* polcore has no free job slot, try next turn */
-#define POLCON_STEP(b) ((svc_v)((b) + 0x44a50))()
-#define POLCON_IDLE(b) ((svc_v)((b) + 0x45480))()
-
 /* each region as its app.dll sets polcore up. svc 0x17dc(1) swaps in the JP half of polcore's conversion table, and
    svc 0x690's language is what FFXI reads back through 0x694 as its area code */
 static const struct pol_region {
@@ -70,10 +59,10 @@ static DWORD viewer_lang(void)
 static void region_init(BYTE *b, DWORD lang)
 {
     const struct pol_region *r = region();
-    ((int (__cdecl *)(int))PSLOT(0x3C5))(r->selector);
-    if (r->jp_table) ((int (__cdecl *)(int))PSLOT(0x5F7))(1);
-    ((int (__cdecl *)(int))PSLOT(0x1A4))((int)lang);
-    if (r->jp_table) ((int (__cdecl *)(int))PSLOT(0x5F8))((int)lang);
+    pc_set_region(b, r->selector);
+    if (r->jp_table) pc_set_jp_table(b, 1);
+    pc_set_language(b, (int)lang);
+    if (r->jp_table) pc_set_jp_language(b, (int)lang);
     lg("viewer_init: region %s, selector %d, conversion table %d\r\n", r->name, r->selector, r->jp_table);
 }
 
@@ -150,11 +139,9 @@ static int table_text(const BYTE *raw, DWORD n, int id, WCHAR *out, int cap, int
     return 0;
 }
 
-typedef int (__cdecl *to_sjis)(char *, const WCHAR *, int);
-
 /* message #i (0-9 titles, 10-19 texts) as app.dll (0x10057900) makes it: the table's string, CRs dropped from the
-   texts, through conv (svc 0xa40). english falls back to the US table's bytes. Its length, or -1 */
-static int message_bytes(const BYTE *raw, DWORD n, int i, int english, to_sjis conv, char out[0x100])
+   texts, through svc 0xa40. english falls back to the US table's bytes. Its length, or -1 */
+static int message_bytes(BYTE *b, const BYTE *raw, DWORD n, int i, int english, char out[0x100])
 {
     static const WORD ids[20] = { 0x46c9, 0x46d0, 0x46d1, 0x46d2, 0x46d3, 0x46d4, 0x46d6, 0x46d8, 0x46dc, 0x46da,
                                   0x46e6, 0x46ea, 0x46ec, 0x4ab8, 0x3bad, 0x46d7, 0x46d9, 0x46dd, 0x46db, 0x46d5 };
@@ -170,8 +157,8 @@ static int message_bytes(const BYTE *raw, DWORD n, int i, int english, to_sjis c
         "Would you like to join the group \"%s\"?" };
     WCHAR w[0x200];
     int cap = i < 10 ? 0x80 : 0x100;
-    if (raw && table_text(raw, n, ids[i], w, 0x200, i >= 10) && conv(NULL, w, 0x81ac) < cap)
-        return conv(out, w, 0x81ac);
+    if (raw && table_text(raw, n, ids[i], w, 0x200, i >= 10) && pc_wide_to_sjis(b, NULL, w, SJIS_GETA) < cap)
+        return pc_wide_to_sjis(b, out, w, SJIS_GETA);
     if (!english) return -1;
     lstrcpyA(out, en[i]);
     return lstrlenA(out);
@@ -188,9 +175,9 @@ static void set_messages(BYTE *b, const char *folder)
     int i, set = 0;
     for (i = 0; i < 20; i++) {
         /* JP keeps polcore's own Japanese for anything its table hasn't got */
-        if (message_bytes(raw, n, i, !r->jp_table, (to_sjis)PSLOT(0x290), s) < 0) continue;
-        if (i < 10) ((int (__cdecl *)(int, const char *))PSLOT(0x430))(i, s);
-        else ((int (__cdecl *)(int, const char *))PSLOT(0x516))(i - 10, s);
+        if (message_bytes(b, raw, n, i, !r->jp_table, s) < 0) continue;
+        if (i < 10) pc_set_message_title(b, i, s);
+        else pc_set_message_text(b, i - 10, s);
         set++;
     }
     lg("viewer_init: %d message texts set, %s, FILE_INIT done\r\n", set,
@@ -239,7 +226,7 @@ static int home_set(BYTE *b, int slot)
             return 0;
         }
     }
-    ((int (__cdecl *)(int))PSLOT(0x366))(slot);
+    pc_set_user_slot(b, slot);
     g_home = slot;
     g_home_made = 1;
     for (i = 0; i < 4; i++) {
@@ -262,12 +249,12 @@ static void viewer_init(BYTE *b)
     viewer_folder(folder);
     lg(LOG_VIEWER_LANG "%u key='%s' folder='%s'\r\n", lang, key, folder);
     region_init(b, lang);
-    ((int (__cdecl *)(const char *))PSLOT(0x16F))(key);
-    ((int (__cdecl *)(const char *))PSLOT(0x07D))(folder);
-    ((int (__cdecl *)(void))PSLOT(0x3A4))();
+    pc_set_registry_key(b, key);
+    pc_set_install_folder(b, folder);
+    pc_file_init(b);
     lstrcpynA(g_viewer, folder, sizeof g_viewer);
     /* home84 till home_pick moves the account to its own after the login, then the folders get made */
-    ((int (__cdecl *)(int))PSLOT(0x366))(LEGACY_HOME);
+    pc_set_user_slot(b, LEGACY_HOME);
     g_home = LEGACY_HOME;
     lg("viewer_init: user slot %d for now\r\n", LEGACY_HOME);
     set_messages(b, folder);

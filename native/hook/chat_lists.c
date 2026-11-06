@@ -20,7 +20,6 @@ static pdb_cond *g_cr_where;
 static cr_sort g_cr_sortby[2];
 static DWORD g_cr_vzone, g_cr_vcapa;
 
-static int g_cr_db;   /* chat's zone and room lists, 0 idle, the steps are cr_db_pump's */
 
 /* an IRC channel name as the room list builds it, nothing that'd change the JOIN line */
 static int cr_irc_ok(const char *s)
@@ -40,7 +39,7 @@ static pfb_hdr *cr_pfb(BYTE *b, const WCHAR *file)
     BYTE *buf;
     pfb_hdr *p;
     memset(path, 0, sizeof path);
-    if (((svc16c4_t)SVC(0x16c4))(0x14, path, 0x200, 0) <= 0) return NULL;
+    if (pc_data_path(b, 0x14, path, 0x200, 0) <= 0) return NULL;
     path[0x200 - 1] = 0;
     lstrcatW(path, file);
     f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -53,7 +52,7 @@ static pfb_hdr *cr_pfb(BYTE *b, const WCHAR *file)
         return NULL;
     }
     CloseHandle(f);
-    p = ((pfb_hdr *(__cdecl *)(void *))SVC(0x498))(buf);
+    p = pc_pfb_load(b, buf);
     if (!p) { HeapFree(GetProcessHeap(), 0, buf); return NULL; }
     lg("chat: %ls loaded, %u items, %u tables\r\n", file, p->nItems, p->nTabs);
     return p;
@@ -62,7 +61,7 @@ static int cr_check_field(BYTE *b, pdb_schema *s, const char *n, BYTE type, WORD
 {
     int idx;
     const pdb_field *f = fs_field(s, n, &idx);
-    return f && f->type == type && f->size == size && ((svc4bc_t)SVC(0x4bc))(s, n) == idx;
+    return f && f->type == type && f->size == size && pc_pdb_field_index(b, s, n) == idx;
 }
 static int cr_check_count(BYTE *b, pdb_schema *s)
 {
@@ -97,7 +96,7 @@ static void cr_db_done(int rooms, const char *state)
 {
     lstrcpynA(rooms ? g_cr_rstate : g_cr_zstate, state, 32);
     if (g_cr_buf) { HeapFree(GetProcessHeap(), 0, g_cr_buf); g_cr_buf = NULL; }
-    g_cr_db = 0;
+    g_s.cr_db = 0;
     g_cr_job = -1;
     lg("chat: %s %s\r\n", rooms ? "room list" : "zone list", state);
     g_snap_dirty = 1;
@@ -105,31 +104,31 @@ static void cr_db_done(int rooms, const char *state)
 /* a cancelled read can still be written into, so its buffer's never freed */
 static void cr_db_abandon(BYTE *b)
 {
-    int rooms = g_cr_db >= 10;
-    if (g_cr_job >= 0 && (g_cr_db % 10 == 2 || g_cr_db % 10 == 4)) ((svc4dc_t)SVC(0x4dc))(g_cr_job);
+    int rooms = g_s.cr_db >= 10;
+    if (g_cr_job >= 0 && (g_s.cr_db % 10 == 2 || g_s.cr_db % 10 == 4)) pc_free_job(b, g_cr_job);
     g_cr_buf = NULL;
     cr_db_done(rooms, "cancelled");
 }
 static void cr_db_start(BYTE *b)
 {
-    int rooms = g_cr_db >= 10;
-    int t = rooms ? ((int (__cdecl *)(void *, void *, void *))SVC(0x4c0))(g_cr_rpib, g_cr_where, g_cr_sortby)
-                  : ((int (__cdecl *)(void *, void *, void *))SVC(0x4c0))(g_cr_cpib, NULL, NULL);
-    if (t == NO_SLOT) { g_cr_db = rooms ? 11 : 1; return; }
+    int rooms = g_s.cr_db >= 10;
+    int t = rooms ? pc_pdb_search_start(b, g_cr_rpib, g_cr_where, g_cr_sortby)
+                  : pc_pdb_search_start(b, g_cr_cpib, NULL, NULL);
+    if (t == NO_SLOT) { g_s.cr_db = rooms ? 11 : 1; return; }
     if (t < 0) { cr_db_done(rooms, failed(t)); return; }
     g_cr_job = t;
-    g_cr_db = rooms ? 12 : 2;
+    g_s.cr_db = rooms ? 12 : 2;
 }
 static void cr_db_fetch(BYTE *b)
 {
-    int rooms = g_cr_db >= 10, r;
-    if (rooms) r = ((int (__cdecl *)(int, void *, int, int, void *))SVC(0x4c8))(g_cr_set, g_cr_rpib, g_cr_roff,
+    int rooms = g_s.cr_db >= 10, r;
+    if (rooms) r = pc_pdb_search_fetch(b, g_cr_set, g_cr_rpib, g_cr_roff,
                                                                                g_cr_roff + 100, g_cr_buf);
-    else r = ((int (__cdecl *)(int, void *, int, int, void *))SVC(0x4c8))(g_cr_set, g_cr_cpib, 0, g_cr_count, g_cr_buf);
-    if (r == NO_SLOT) { g_cr_db = rooms ? 13 : 3; return; }
+    else r = pc_pdb_search_fetch(b, g_cr_set, g_cr_cpib, 0, g_cr_count, g_cr_buf);
+    if (r == NO_SLOT) { g_s.cr_db = rooms ? 13 : 3; return; }
     if (r < 0) { cr_db_done(rooms, failed(r)); return; }
     g_cr_job = r;
-    g_cr_db = rooms ? 14 : 4;
+    g_s.cr_db = rooms ? 14 : 4;
 }
 static DWORD cr_u(BYTE *b, pdb_schema *s, const char *n, pdb_rec *rec, int bytes)
 {
@@ -207,7 +206,7 @@ static int cr_db_load(BYTE *b, int rooms)
     if (!g_cr_rpfb) g_cr_rpfb = cr_pfb(b, L"c_chan.pfb");
     if (!g_cr_zone_n) {
         const pfb_tab *t = cr_tab_of(g_cr_cpfb, 0);
-        int lang = SVC(0xf18) ? ((svc_v)SVC(0xf18))() : 0, row = 0;
+        int lang = pc_has(b, SV_VIEWER_LANGUAGE) ? pc_viewer_language(b) : 0, row = 0;
         for (int i = 0; i < t->n && g_cr_zone_n < CR_ZONES; i++) {
             /* the viewer lists a group's name (part 0) and the zone (part 2), leaving out rows 5-8, or 6-8 in Japanese
                (app.dll 0x100a12bd, by svc 0xf18). By row, not by name, same as it does */
@@ -226,14 +225,14 @@ static void cr_zones_request(BYTE *b)
     char buf[128], *p;
     if (take_request(REQ_CHATZONES, buf, sizeof buf) < 0) return;
     g_cr_used = 1;
-    g_db_last = GetTickCount64();
+    g_s.db_last = GetTickCount64();
     p = buf;
     lstrcpynA(g_cr_ztok, req_line(&p), sizeof g_cr_ztok);
     if (cr_session(b) < 0) { cr_db_done(0, "failed:no chat"); return; }
     if (!cr_db_load(b, 0)) { cr_db_done(0, "failed:no schema"); return; }
     lstrcpyA(g_cr_zstate, "searching");
     g_snap_dirty = 1;
-    g_cr_db = 1;
+    g_s.cr_db = 1;
     cr_db_start(b);
 }
 static void cr_rooms_request(BYTE *b)
@@ -242,7 +241,7 @@ static void cr_rooms_request(BYTE *b)
     int zone, off;
     if (take_request(REQ_CHATROOMS, buf, sizeof buf) < 0) return;
     g_cr_used = 1;
-    g_db_last = GetTickCount64();
+    g_s.db_last = GetTickCount64();
     p = buf;
     lstrcpynA(g_cr_rtok, req_line(&p), sizeof g_cr_rtok);
     g_cr_rooms_n = g_cr_rtotal = 0;
@@ -259,37 +258,37 @@ static void cr_rooms_request(BYTE *b)
     memset(g_cr_cond, 0, sizeof g_cr_cond);
     g_cr_vzone = (DWORD)zone;
     g_cr_vcapa = 1;
-    ((svc4a0_t)SVC(0x4a0))(g_cr_rpib, &g_cr_cond[0].item, "z_zone", &g_cr_vzone, 1);
-    ((void (__cdecl *)(pdb_cond *, int, const char *))SVC(0x4a4))(&g_cr_cond[0], 1, NULL);
-    ((svc4a0_t)SVC(0x4a0))(g_cr_rpib, &g_cr_cond[1].item, "z_capa", &g_cr_vcapa, 1);
-    ((void (__cdecl *)(pdb_cond *, int, const char *))SVC(0x4a4))(&g_cr_cond[1], 3, NULL);
+    pc_pdb_item_set(b, g_cr_rpib, &g_cr_cond[0].item, "z_zone", &g_cr_vzone, 1);
+    pc_pdb_cond_text(b, &g_cr_cond[0], 1, NULL);
+    pc_pdb_item_set(b, g_cr_rpib, &g_cr_cond[1].item, "z_capa", &g_cr_vcapa, 1);
+    pc_pdb_cond_text(b, &g_cr_cond[1], 3, NULL);
     if (!(g_cr_cond[0].item.flags & 1) || !(g_cr_cond[1].item.flags & 1)) { cr_db_done(1, "failed:schema"); return; }
-    g_cr_where = ((svc4ac_t)SVC(0x4ac))(8, &g_cr_cond[0], &g_cr_cond[1], NULL, NULL, NULL, NULL, NULL, NULL);
+    g_cr_where = pc_pdb_where(b, 8, &g_cr_cond[0], &g_cr_cond[1], NULL, NULL, NULL, NULL, NULL, NULL);
     if (!g_cr_where) { cr_db_done(1, "failed:schema"); return; }
     g_cr_sortby[0].order = 1;
-    g_cr_sortby[0].field = (BYTE)((svc4bc_t)SVC(0x4bc))(g_cr_rpib, "z_kind");
+    g_cr_sortby[0].field = (BYTE)pc_pdb_field_index(b, g_cr_rpib, "z_kind");
     g_cr_sortby[0].next = &g_cr_sortby[1];
     g_cr_sortby[1].order = 1;
-    g_cr_sortby[1].field = (BYTE)((svc4bc_t)SVC(0x4bc))(g_cr_rpib, "z_topic");
+    g_cr_sortby[1].field = (BYTE)pc_pdb_field_index(b, g_cr_rpib, "z_topic");
     g_cr_sortby[1].next = NULL;
     lg("chat: room list for zone %d from %d\r\n", zone, off);
     lstrcpyA(g_cr_rstate, "searching");
     g_snap_dirty = 1;
-    g_cr_db = 11;
+    g_s.cr_db = 11;
     cr_db_start(b);
 }
 static void cr_db_pump(BYTE *b)
 {
-    int rooms = g_cr_db >= 10, step = g_cr_db % 10, r;
+    int rooms = g_s.cr_db >= 10, step = g_s.cr_db % 10, r;
     pdb_schema *s = rooms ? g_cr_rpib : g_cr_cpib;
-    if (step == 1) { if (!g_draining) cr_db_start(b); else cr_db_done(rooms, "cancelled"); return; }
-    if (step == 3) { if (!g_draining) cr_db_fetch(b); else cr_db_done(rooms, "cancelled"); return; }
+    if (step == 1) { if (!g_s.draining) cr_db_start(b); else cr_db_done(rooms, "cancelled"); return; }
+    if (step == 3) { if (!g_s.draining) cr_db_fetch(b); else cr_db_done(rooms, "cancelled"); return; }
     if (step == 2) {
         int set = -1, count = 0;
-        r = ((int (__cdecl *)(int, int *, int *))SVC(0x4c4))(g_cr_job, &set, &count);
+        r = pc_pdb_search_count(b, g_cr_job, &set, &count);
         if (r == 0) return;
         g_cr_job = -1;
-        if (r == -0x14cc || (r > 0 && (set < 0 || count < 1))) {
+        if (r == NOTHING_FOUND || (r > 0 && (set < 0 || count < 1))) {
             if (rooms) g_cr_rtotal = 0;
             else cr_parse_zones(b);
             cr_db_done(rooms, "done");
@@ -306,11 +305,11 @@ static void cr_db_pump(BYTE *b)
         if (!rooms && count > CR_ZONES) g_cr_count = count = CR_ZONES;
         g_cr_buf = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)s->rec_size * (count > 100 ? 100 : count) + 64);
         if (!g_cr_buf) { cr_db_done(rooms, "failed:alloc"); return; }
-        g_cr_db = rooms ? 13 : 3;
+        g_s.cr_db = rooms ? 13 : 3;
         cr_db_fetch(b);
         return;
     }
-    r = ((svc_i)SVC(0x4cc))(g_cr_job);
+    r = pc_pdb_search_fetch_check(b, g_cr_job);
     if (r == 0) return;
     g_cr_job = -1;
     if (r < 0) { cr_db_done(rooms, failed(r)); return; }

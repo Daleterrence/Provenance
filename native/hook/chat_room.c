@@ -9,7 +9,7 @@ static void cr_raw_pump(BYTE *b)
     static WCHAR w[0x220];
     LONG n = g_cr_raw_n;
     for (LONG i = 0; i < n; i++) {
-        if (!g_cr_open || (!g_cr_raw[i].whisper && lstrcmpiA(g_cr_raw[i].chan, g_cr_room) != 0)) continue;
+        if (!g_s.cr_open || (!g_cr_raw[i].whisper && lstrcmpiA(g_cr_raw[i].chan, g_cr_room) != 0)) continue;
         cr_wide(b, g_cr_raw[i].text, w, 0x220);
         cr_parse(b, w, g_cr_raw[i].lo, g_cr_raw[i].hi, g_cr_raw[i].whisper);
     }
@@ -24,10 +24,10 @@ static void cr_raw_pump(BYTE *b)
 static int cr_members(BYTE *b)
 {
     int s = cr_session(b), seen[CR_PEOPLE] = {0};
-    if (s < 0 || !SVC(0x280)) return 0;
+    if (s < 0 || !pc_has(b, SV_CHAT_MEMBERS)) return 0;
     memset(g_cr_slot, 0, sizeof g_cr_slot);
     memset(g_cr_mem, 0, sizeof g_cr_mem);
-    if (!((int (__cdecl *)(int, const char *, BYTE *, BYTE *))SVC(0x280))(s, g_cr_room, g_cr_slot, g_cr_mem)) return 0;
+    if (!pc_chat_members(b, s, g_cr_room, g_cr_slot, g_cr_mem)) return 0;
     for (int i = 0; i < 0x40; i++) {
         BYTE *m = g_cr_mem + i * 16;
         cr_person *p;
@@ -48,7 +48,7 @@ static int cr_members(BYTE *b)
 
 static void cr_room_clear(void)
 {
-    g_cr_open = g_cr_hello = g_cr_replies = g_cr_reread = g_cr_skip_topic = g_cr_kicked_me = 0;
+    g_s.cr_open = g_s.cr_hello = g_s.cr_replies = g_cr_reread = g_cr_skip_topic = g_cr_kicked_me = 0;
     g_cr_people_n = g_cr_next_key = 0;
     g_cr_raw_n = 0;
     memset(g_cr_slot, 0, sizeof g_cr_slot);
@@ -67,14 +67,14 @@ static void cr_send_state(const char *state)
 
 #define CR_NOTHING_TO_LEAVE (-0x7e01)
 /* the only place a PART goes from. The window's leave and Play's both come through here, and the PART that goes
-   clears g_cr_joined, so whichever's second finds nothing to leave */
+   clears g_s.cr_joined, so whichever's second finds nothing to leave */
 static int cr_part(BYTE *b)
 {
     int s = cr_session(b), r;
-    if (!g_cr_joined) return CR_NOTHING_TO_LEAVE;
-    if (s < 0) return -0x41f;
-    r = ((int (__cdecl *)(int, const char *))SVC(0x260))(s, g_cr_room);
-    if (r > 0) g_cr_joined = g_cr_open = 0;
+    if (!g_s.cr_joined) return CR_NOTHING_TO_LEAVE;
+    if (s < 0) return NO_CHAT_LINK;
+    r = pc_chat_part(b, s, g_cr_room);
+    if (r > 0) g_s.cr_joined = g_s.cr_open = 0;
     return r;
 }
 /* MODE: 0xb 'n', 8 'k' (arg the password), 9 'l' (arg the limit as text), 4 'b' and 0xc 'o' on a member (lo, hi).
@@ -82,24 +82,24 @@ static int cr_part(BYTE *b)
 static int cr_mode(BYTE *b, int mode, DWORD lo, DWORD hi, const char *arg, int on)
 {
     int s = cr_session(b);
-    if (s < 0) return -0x41f;
-    return ((int (__cdecl *)(int, int, const char *, DWORD, DWORD, const char *, int))SVC(0x258))(s, mode, g_cr_room, lo,
+    if (s < 0) return NO_CHAT_LINK;
+    return pc_chat_mode(b, s, mode, g_cr_room, lo,
                                                                                                   hi, arg, on);
 }
 static int cr_command(BYTE *b, int step)
 {
     int s = cr_session(b), r = 0;
-    if (s < 0) return -0x41f;
+    if (s < 0) return NO_CHAT_LINK;
     switch (step) {
-    case CR_AWAY: r = ((svc_i)SVC(0x234))(s); break;
+    case CR_AWAY: r = pc_chat_away(b, s); break;
     case CR_JOIN:
-        r = ((int (__cdecl *)(int, const char *, const char *))SVC(0x240))(s, g_cr_room, g_cr_key);
-        if (r > 0) g_cr_joined = 1;
+        r = pc_chat_join(b, s, g_cr_room, g_cr_key);
+        if (r > 0) g_s.cr_joined = 1;
         break;
-    case CR_WHO: r = ((int (__cdecl *)(int, const char *))SVC(0x228))(s, g_cr_room); break;
-    case CR_TOPIC: r = ((int (__cdecl *)(int, const char *, const char *))SVC(0x254))(s, g_cr_room, NULL); break;
+    case CR_WHO: r = pc_chat_who(b, s, g_cr_room); break;
+    case CR_TOPIC: r = pc_chat_topic(b, s, g_cr_room, NULL); break;
     case CR_PART: r = cr_part(b); break;
-    case CR_SETTOPIC: r = ((int (__cdecl *)(int, const char *, const char *))SVC(0x254))(s, g_cr_room, g_cr_new_topic); break;
+    case CR_SETTOPIC: r = pc_chat_topic(b, s, g_cr_room, g_cr_new_topic); break;
     case CR_MODE_N: r = cr_mode(b, 0xb, 0, 0, NULL, 1); break;
     case CR_MODE_K: r = cr_mode(b, 8, 0, 0, g_cr_key, 1); break;
     case CR_MODE_L: r = cr_mode(b, 9, 0, 0, g_cr_new_limit, 1); break;
@@ -118,8 +118,8 @@ static const char *cr_join_failed(int r)
 }
 static void cr_go(int step)
 {
-    g_cr_st = step;
-    g_cr_tries = 0;
+    g_s.cr_st = step;
+    g_s.cr_tries = 0;
 }
 /* a new room's AWAY and JOIN only get the 5 */
 static int cr_tries_for(int step)
@@ -146,14 +146,14 @@ static void cr_left(const char *state)
 {
     if (lstrcmpA(g_cr_sstate, "sending") == 0) cr_send_state("failed:left");
     g_cr_msg_kind = -1;
-    g_cr_wait = CRW_NONE;
-    g_cr_joined = 0;
+    g_s.cr_wait = CRW_NONE;
+    g_s.cr_joined = 0;
     g_cr_making = 0;
     if (g_cr_mop) cr_master_end("failed:left room");
     cr_room_clear();
     SecureZeroMemory(g_cr_key, sizeof g_cr_key);
     SecureZeroMemory(g_cr_newkey, sizeof g_cr_newkey);
-    g_cr_leave = 0;
+    g_s.cr_leave = 0;
     cr_go(CR_OUT);
     cr_room_state(state);
     g_cr_part_state[0] = 0;
@@ -161,19 +161,19 @@ static void cr_left(const char *state)
 /* a step's answer: >0 done, <0 the server's error (or the link's), from svc 0x244 */
 static void cr_step_done(BYTE *b, int r)
 {
-    int st = g_cr_st;
-    g_cr_wait = CRW_NONE;
+    int st = g_s.cr_st;
+    g_s.cr_wait = CRW_NONE;
     if (st == CR_PART) { cr_left(g_cr_part_state[0] ? g_cr_part_state : "left"); return; }
     if (st == CR_AWAY) {
         if (r < 0) lg("chat: AWAY answered %d, entering anyway\r\n", r);
-        if (g_cr_leave) { cr_left("left"); return; }
+        if (g_s.cr_leave) { cr_left("left"); return; }
         cr_go(CR_JOIN);
         return;
     }
     if (st == CR_JOIN) {
         if (r < 0) { cr_left(cr_join_failed(r)); return; }
-        g_cr_open = 1;
-        cr_go(g_cr_leave ? CR_PART : CR_WHO);
+        g_s.cr_open = 1;
+        cr_go(g_s.cr_leave ? CR_PART : CR_WHO);
         return;
     }
     if (st >= CR_SETTOPIC) {
@@ -182,13 +182,13 @@ static void cr_step_done(BYTE *b, int r)
             lg("chat: new room step %d answered %d, leaving it\r\n", st, r);
             wsprintfA(g_cr_part_state, "failed:create %d", r);
             cr_room_state(g_cr_part_state);
-            g_cr_leave = 1;
+            g_s.cr_leave = 1;
             cr_go(CR_PART);
             return;
         }
-        cr_go(g_cr_leave ? CR_PART : st == CR_SETTOPIC ? CR_MODE_N : st == CR_MODE_N && g_cr_key[0] ? CR_MODE_K
+        cr_go(g_s.cr_leave ? CR_PART : st == CR_SETTOPIC ? CR_MODE_N : st == CR_MODE_N && g_cr_key[0] ? CR_MODE_K
               : st == CR_MODE_L ? CR_IN : CR_MODE_L);
-        if (g_cr_st == CR_IN) cr_room_state("in");
+        if (g_s.cr_st == CR_IN) cr_room_state("in");
         return;
     }
     if (st == CR_WHO) {
@@ -196,8 +196,8 @@ static void cr_step_done(BYTE *b, int r)
         cr_members(b);
         if (g_cr_making) {
             /* the viewer's hello goes before the new room's settings (0x31, then 0x32 on) */
-            g_cr_hello = !g_cr_leave;
-            cr_go(g_cr_leave ? CR_PART : CR_SETTOPIC);
+            g_s.cr_hello = !g_s.cr_leave;
+            cr_go(g_s.cr_leave ? CR_PART : CR_SETTOPIC);
             return;
         }
         /* alone and room master: a room nobody else is in, so the viewer skips the TOPIC query */
@@ -210,13 +210,13 @@ static void cr_step_done(BYTE *b, int r)
                 }
             g_cr_skip_topic = n < 2 && master;
         }
-        cr_go(g_cr_leave ? CR_PART : g_cr_skip_topic ? CR_IN : CR_TOPIC);
+        cr_go(g_s.cr_leave ? CR_PART : g_cr_skip_topic ? CR_IN : CR_TOPIC);
     } else if (st == CR_TOPIC) {
         if (r < 0) lg("chat: TOPIC answered %d\r\n", r);
-        cr_go(g_cr_leave ? CR_PART : CR_IN);
+        cr_go(g_s.cr_leave ? CR_PART : CR_IN);
     }
-    if (g_cr_st == CR_IN) {
-        g_cr_hello = 1;
+    if (g_s.cr_st == CR_IN) {
+        g_s.cr_hello = 1;
         cr_room_state("in");
     }
 }
@@ -225,23 +225,23 @@ static void cr_master_next(void);
 static int cr_privmsg(BYTE *b, const char *frame)
 {
     int s = cr_session(b);
-    if (s < 0) return -0x41f;
-    return ((int (__cdecl *)(int, DWORD, DWORD, const char *, const char *))SVC(0x22c))(s, 0, 0, g_cr_room, frame);
+    if (s < 0) return NO_CHAT_LINK;
+    return pc_chat_privmsg(b, s, 0, 0, g_cr_room, frame);
 }
 
 /* one PRIVMSG in flight */
 static int cr_msg_ready(void)
 {
-    return (g_cr_st == CR_IN || g_cr_st == CR_SETTOPIC) && g_cr_wait == CRW_NONE && !g_cr_leave;
+    return (g_s.cr_st == CR_IN || g_s.cr_st == CR_SETTOPIC) && g_s.cr_wait == CRW_NONE && !g_s.cr_leave;
 }
 static void cr_msg_start(BYTE *b, int kind)
 {
     int r = cr_privmsg(b, g_cr_frame);
     if (r == 0) {
-        if (++g_cr_tries < (kind == CRM_SAY ? CR_TRIES : CR_TRIES_FRAME)) { g_cr_msg_kind = kind; return; }
+        if (++g_s.cr_tries < (kind == CRM_SAY ? CR_TRIES : CR_TRIES_FRAME)) { g_cr_msg_kind = kind; return; }
         r = -1;
     }
-    g_cr_tries = 0;
+    g_s.cr_tries = 0;
     if (r < 0) {
         g_cr_msg_kind = -1;
         lg("chat: PRIVMSG (%d) refused %d\r\n", kind, r);
@@ -250,7 +250,7 @@ static void cr_msg_start(BYTE *b, int kind)
         return;
     }
     g_cr_msg_kind = kind;
-    g_cr_wait = CRW_MSG;
+    g_s.cr_wait = CRW_MSG;
     g_cr_sent_at = GetTickCount64();
     if (kind == CRM_SAY) {
         static WCHAR w[0x220];
@@ -266,7 +266,7 @@ static void cr_msg_start(BYTE *b, int kind)
 static void cr_msg_done(int r, const char *why)
 {
     int kind = g_cr_msg_kind;
-    g_cr_wait = CRW_NONE;
+    g_s.cr_wait = CRW_NONE;
     g_cr_msg_kind = -1;
     if (kind == CRM_SAY) cr_send_state(why ? why : r > 0 ? "sent" : failed(r));
     else if (why || r < 0) lg("chat: frame %d answered %d\r\n", kind, r);
@@ -290,7 +290,7 @@ static void cr_send_request(BYTE *b)
     g_cr_colour = parse_num(colour, 2, &n) && n < 12 ? n : -1;
     g_cr_emote = parse_num(emote, 2, &n) && n < 24 ? n : 0;
     lstrcpynA(g_cr_stok, tok, sizeof g_cr_stok);
-    if (g_cr_st != CR_IN || !g_cr_open || g_cr_leave) { cr_send_state("failed:not in a room"); return; }
+    if (g_s.cr_st != CR_IN || !g_s.cr_open || g_s.cr_leave) { cr_send_state("failed:not in a room"); return; }
     if (!text[0]) { cr_send_state("failed:empty"); return; }
     if ((n = MultiByteToWideChar(CP_UTF8, 0, text, -1, t, 0x200)) <= 1 || n - 1 > CR_TEXT_MAX) {
         cr_send_state("failed:too long");
@@ -300,7 +300,7 @@ static void cr_send_request(BYTE *b)
     cr_frame_say(b, t, w, 0x220);
     if ((n = cr_sjis(b, w, g_cr_frame, sizeof g_cr_frame)) < 0 || !cr_fits(n)) { cr_send_state("failed:too long"); return; }
     cr_send_state("sending");
-    g_cr_tries = 0;
+    g_s.cr_tries = 0;
     cr_msg_start(b, CRM_SAY);
 }
 static void cr_frame_out(BYTE *b, int type)
@@ -308,7 +308,7 @@ static void cr_frame_out(BYTE *b, int type)
     static WCHAR w[0x100];
     cr_frame_hello(b, type, w);
     if (cr_sjis(b, w, g_cr_frame, sizeof g_cr_frame) < 0) { lg("chat: frame %d doesn't convert\r\n", type); return; }
-    g_cr_tries = 0;
+    g_s.cr_tries = 0;
     cr_msg_start(b, type);
 }
 
@@ -316,7 +316,7 @@ static void cr_frame_out(BYTE *b, int type)
 static void cr_frame_tail(BYTE *b, int type, const WCHAR *tail)
 {
     static WCHAR w[0x80];
-    int lang = SVC(0xf18) ? ((svc_v)SVC(0xf18))() : 0;
+    int lang = pc_has(b, SV_VIEWER_LANGUAGE) ? pc_viewer_language(b) : 0;
     wsprintfW(w, L"%x00000%02x", type, lang & 0xff);
     lstrcpynW(w + 8, tail, 0x40);
     if (cr_sjis(b, w, g_cr_frame, sizeof g_cr_frame) < 0) {
@@ -324,7 +324,7 @@ static void cr_frame_tail(BYTE *b, int type, const WCHAR *tail)
         cr_master_next();
         return;
     }
-    g_cr_tries = 0;
+    g_s.cr_tries = 0;
     cr_msg_start(b, type);
 }
 
@@ -346,7 +346,7 @@ static void cr_master_step(BYTE *b)
     case MS_BAN: r = cr_mode(b, 4, g_cr_mlo, g_cr_mhi, NULL, 1); break;
     case MS_KICK: {
         int s = cr_session(b);
-        r = s < 0 ? -0x41f : ((int (__cdecl *)(int, const char *, DWORD, DWORD))SVC(0x238))(s, g_cr_room, g_cr_mlo, g_cr_mhi);
+        r = s < 0 ? NO_CHAT_LINK : pc_chat_kick(b, s, g_cr_room, g_cr_mlo, g_cr_mhi);
         break;
     }
     case MS_OP: r = cr_mode(b, 0xc, g_cr_mlo, g_cr_mhi, NULL, 1); break;
@@ -368,18 +368,18 @@ static void cr_master_step(BYTE *b)
         return;
     }
     if (r == 0) {
-        if (++g_cr_tries < CR_TRIES) return;
+        if (++g_s.cr_tries < CR_TRIES) return;
         r = -1;
     }
-    g_cr_tries = 0;
+    g_s.cr_tries = 0;
     if (r < 0) { cr_master_end(failed(r)); return; }
-    g_cr_wait = CRW_CMD;
+    g_s.cr_wait = CRW_CMD;
     g_cr_sent_at = GetTickCount64();
 }
 /* 401 (no such nick): the member's already gone */
 static void cr_master_done(BYTE *b, int r)
 {
-    g_cr_wait = CRW_NONE;
+    g_s.cr_wait = CRW_NONE;
     if (r < 0) { cr_master_end(r == -0x1192 ? "failed:left" : failed(r)); return; }
     cr_master_next();
 }
@@ -410,7 +410,7 @@ static void cr_master_request(BYTE *b)
     lstrcpynA(g_cr_mtok, tok, sizeof g_cr_mtok);
     lstrcpynA(g_cr_newkey, nk, sizeof g_cr_newkey);
     SecureZeroMemory(nk, sizeof nk);
-    if (g_cr_st != CR_IN || g_cr_leave) { cr_master_refused("failed:not in a room"); return; }
+    if (g_s.cr_st != CR_IN || g_s.cr_leave) { cr_master_refused("failed:not in a room"); return; }
     for (int i = 0; i < g_cr_people_n; i++) {
         cr_person *q = &g_cr_people[i];
         if (!q->member) continue;
@@ -450,7 +450,7 @@ static void cr_master_request(BYTE *b)
         cr_master_refused("failed:bad request");
         return;
     }
-    g_cr_tries = 0;
+    g_s.cr_tries = 0;
     lstrcpyA(g_cr_mstate, "working");
     lg("chat: master job %d, %d step(s)\r\n", g_cr_mop, g_cr_mn);
     g_snap_dirty = 1;
@@ -521,8 +521,8 @@ static void cr_enter(BYTE *b)
     cr_room_clear();
     g_cr_line_n = g_cr_line_next = 0;
     g_cr_lines_dirty = 1;
-    g_cr_leave = 0;
-    g_cr_me = SVC(0x270) ? ((unsigned __int64 (__cdecl *)(int))SVC(0x270))(cr_session(b)) : 0;
+    g_s.cr_leave = 0;
+    g_cr_me = pc_has(b, SV_CHAT_MY_ID) ? pc_chat_my_id(b, cr_session(b)) : 0;
     lg("chat: %s %s%s\r\n", g_cr_making ? "creating" : "entering", g_cr_room, g_cr_key[0] ? " (password)" : "");
     cr_room_state("entering");
     cr_go(CR_AWAY);
@@ -540,7 +540,7 @@ static void cr_join_request(BYTE *b)
     nick = req_line(&p);
     /* the password entry's read, and so deleted, before anything can turn the enter down */
     if (haskey[0]) pw = cr_password(tok, g_cr_key, sizeof g_cr_key);
-    if (g_cr_st != CR_OUT) {
+    if (g_s.cr_st != CR_OUT) {
         lg("chat: enter ignored, already in or entering a room\r\n");
         cr_join_refused(NULL);
         return;
@@ -592,7 +592,7 @@ static void cr_create_request(BYTE *b)
     tok = req_line(&p); haskey = req_line(&p); zone = req_line(&p); limit = req_line(&p);
     c0 = req_line(&p); c1 = req_line(&p); c2 = req_line(&p); nick = req_line(&p); name = req_line(&p);
     if (haskey[0]) pw = cr_password(tok, g_cr_key, sizeof g_cr_key);
-    if (g_cr_st != CR_OUT) {
+    if (g_s.cr_st != CR_OUT) {
         lg("chat: create ignored, already in or entering a room\r\n");
         cr_join_refused(NULL);
         return;
@@ -621,16 +621,16 @@ static void cr_create_request(BYTE *b)
     if (!haskey[0]) g_cr_key[0] = 0;
     /* '#', the viewer's language, "CU" and svc 0x224's text, which is unique to now and this login */
     memset(id, 0, sizeof id);
-    ((void (__cdecl *)(int, char *))SVC(0x224))(s, id);
+    pc_chat_unique_text(b, s, id);
     id[0x34] = 0;
-    lang = SVC(0xf18) ? ((svc_v)SVC(0xf18))() : 0;
+    lang = pc_has(b, SV_VIEWER_LANGUAGE) ? pc_viewer_language(b) : 0;
     wsprintfA(g_cr_room, "#%02xCU%s", lang & 0xff, id);
     if (!cr_irc_ok(g_cr_room)) { cr_join_refused("failed:bad request"); return; }
     /* svc 0x360 turns the zone and categories into 12 characters with no end, and reads a byte past them */
     memset(v, 0, sizeof v);
     v[0] = (WORD)z; v[1] = (WORD)k0; v[2] = (WORD)k1; v[3] = (WORD)k2;
     memset(g_cr_new_topic, 0, sizeof g_cr_new_topic);
-    ((void (__cdecl *)(const void *, char *, int, int))SVC(0x360))(v, g_cr_new_topic, 8, 0);
+    pc_chat_zone_text(b, v, g_cr_new_topic, 8, 0);
     lstrcpynA(g_cr_new_topic + 12, sj, sizeof g_cr_new_topic - 12);
     wsprintfA(g_cr_new_limit, "%d", l);
     g_cr_making = 1;
@@ -646,9 +646,9 @@ static void cr_leave_request(BYTE *b)
     join = req_line(&p);
     /* the app couldn't withdraw its enter, so it's called off here instead, even with a PART still going */
     if (join[0] && lstrcmpA(join, g_cr_tok)) lstrcpynA(g_cr_cancel_tok, join, sizeof g_cr_cancel_tok);
-    if (g_cr_st == CR_OUT || g_cr_leave) return;
+    if (g_s.cr_st == CR_OUT || g_s.cr_leave) return;
     lg("chat: leaving %s\r\n", g_cr_room);
-    g_cr_leave = 1;
+    g_s.cr_leave = 1;
 }
 
 /* the in-room side, every turn: callbacks' lines, the member list when polcore says something came in, then the one
@@ -657,59 +657,59 @@ static void cr_room_pump(BYTE *b, int ctl)
 {
     int s, r;
     cr_raw_pump(b);
-    if (g_cr_st == CR_OUT) return;
+    if (g_s.cr_st == CR_OUT) return;
     s = cr_session(b);
     if (s < 0) {
-        if (g_cr_wait != CRW_NONE && g_cr_msg_kind == CRM_SAY) cr_send_state("failed:link");
-        g_cr_wait = CRW_NONE;
-        cr_left(g_cr_st == CR_IN || g_cr_st == CR_PART ? "lost" : "failed:link");
+        if (g_s.cr_wait != CRW_NONE && g_cr_msg_kind == CRM_SAY) cr_send_state("failed:link");
+        g_s.cr_wait = CRW_NONE;
+        cr_left(g_s.cr_st == CR_IN || g_s.cr_st == CR_PART ? "lost" : "failed:link");
         return;
     }
-    if (g_cr_wait == CRW_CMD || g_cr_wait == CRW_MSG) {
+    if (g_s.cr_wait == CRW_CMD || g_s.cr_wait == CRW_MSG) {
         int out[1 + 0x14] = {0};
-        r = g_cr_wait == CRW_MSG ? ((int (__cdecl *)(int, int *))SVC(0x24c))(s, out) : ((svc_i)SVC(0x244))(s);
+        r = g_s.cr_wait == CRW_MSG ? pc_chat_message_check(b, s, out) : pc_chat_command_check(b, s);
         if (r == 0 && GetTickCount64() - g_cr_sent_at < CR_WAIT_MS) return;
         if (r == 0) {
-            ((svc_i)SVC(0x248))(s);   /* forget it, the viewer's own timeout. Never sent again without a new click */
-            lg("chat: no answer in %u s (step %d)\r\n", CR_WAIT_MS / 1000, g_cr_st);
-            if (g_cr_wait == CRW_MSG) { cr_msg_done(0, "failed:timeout"); return; }
+            pc_chat_command_forget(b, s);   /* forget it, the viewer's own timeout. Never sent again without a new click */
+            lg("chat: no answer in %u s (step %d)\r\n", CR_WAIT_MS / 1000, g_s.cr_st);
+            if (g_s.cr_wait == CRW_MSG) { cr_msg_done(0, "failed:timeout"); return; }
             /* a JOIN that timed out but got there anyway counts */
-            if (g_cr_st == CR_JOIN && cr_members(b)) { cr_step_done(b, 1); return; }
-            if (g_cr_st == CR_AWAY) { cr_left("failed:timeout"); return; }
-            if (g_cr_st == CR_JOIN) {
+            if (g_s.cr_st == CR_JOIN && cr_members(b)) { cr_step_done(b, 1); return; }
+            if (g_s.cr_st == CR_AWAY) { cr_left("failed:timeout"); return; }
+            if (g_s.cr_st == CR_JOIN) {
                 /* it could still get there, so its PART goes now and waits like any step. The window's back in the
                    lobby already */
-                g_cr_wait = CRW_NONE;
+                g_s.cr_wait = CRW_NONE;
                 lstrcpyA(g_cr_part_state, "failed:timeout");
                 cr_room_state(g_cr_part_state);
-                g_cr_leave = 1;
+                g_s.cr_leave = 1;
                 cr_go(CR_PART);
                 return;
             }
-            if (g_cr_st == CR_IN && g_cr_mop) {
-                g_cr_wait = CRW_NONE;
+            if (g_s.cr_st == CR_IN && g_cr_mop) {
+                g_s.cr_wait = CRW_NONE;
                 cr_master_end("failed:timeout");
                 return;
             }
             /* a new room's setting with no answer might not be there, so it's left like a refusal */
-            if (g_cr_st >= CR_SETTOPIC) {
-                g_cr_wait = CRW_NONE;
+            if (g_s.cr_st >= CR_SETTOPIC) {
+                g_s.cr_wait = CRW_NONE;
                 cr_step_done(b, -1);
                 return;
             }
             r = 1;
         }
-        if (g_cr_wait == CRW_MSG) cr_msg_done(r, NULL);
-        else if (g_cr_st == CR_IN && g_cr_mop) cr_master_done(b, r);
+        if (g_s.cr_wait == CRW_MSG) cr_msg_done(r, NULL);
+        else if (g_s.cr_st == CR_IN && g_cr_mop) cr_master_done(b, r);
         else cr_step_done(b, r);
         return;
     }
-    if (g_cr_leave) {
-        if (g_cr_st == CR_AWAY || g_cr_st == CR_JOIN) { cr_left("left"); return; }
-        if (g_cr_st != CR_PART) cr_go(CR_PART);
+    if (g_s.cr_leave) {
+        if (g_s.cr_st == CR_AWAY || g_s.cr_st == CR_JOIN) { cr_left("left"); return; }
+        if (g_s.cr_st != CR_PART) cr_go(CR_PART);
     }
-    if (g_cr_st == CR_IN) {
-        if (SVC(0x146c) && ((svc_i)SVC(0x146c))(s)) g_cr_reread = 1;
+    if (g_s.cr_st == CR_IN) {
+        if (pc_has(b, SV_CHAT_CHANGED) && pc_chat_changed(b, s)) g_cr_reread = 1;
         if (g_cr_reread) {
             g_cr_reread = 0;
             if (!cr_members(b)) { cr_left(g_cr_kicked_me ? "kicked" : "gone"); return; }
@@ -721,64 +721,64 @@ static void cr_room_pump(BYTE *b, int ctl)
             return;
         }
         if (!cr_msg_ready()) return;
-        if (g_cr_hello) { g_cr_hello = 0; cr_frame_out(b, CRM_HELLO); return; }
+        if (g_s.cr_hello) { g_s.cr_hello = 0; cr_frame_out(b, CRM_HELLO); return; }
         if (g_cr_mop) { cr_master_step(b); return; }
         if (ctl && request_new(REQ_CHATMASTER)) { cr_master_request(b); return; }
         if (ctl && request_new(REQ_CHATSEND)) { cr_send_request(b); return; }
-        if (g_cr_replies > 0) { g_cr_replies--; cr_frame_out(b, CRM_REPLY); }
+        if (g_s.cr_replies > 0) { g_s.cr_replies--; cr_frame_out(b, CRM_REPLY); }
         return;
     }
-    if (g_cr_st == CR_SETTOPIC && (g_cr_hello || g_cr_msg_kind >= 0)) {
+    if (g_s.cr_st == CR_SETTOPIC && (g_s.cr_hello || g_cr_msg_kind >= 0)) {
         if (gc_busy()) return;
         if (g_cr_msg_kind >= 0) {
             cr_msg_start(b, g_cr_msg_kind);
             return;
         }
         if (!cr_msg_ready()) return;
-        g_cr_hello = 0;
+        g_s.cr_hello = 0;
         cr_frame_out(b, CRM_HELLO);
         return;
     }
     /* polcore's group chat reads the same one command answer for its JOIN and PART, so they never overlap */
     if (gc_busy()) return;
-    r = cr_command(b, g_cr_st);
+    r = cr_command(b, g_s.cr_st);
     if (r == 0) {
-        if (++g_cr_tries < cr_tries_for(g_cr_st)) return;
+        if (++g_s.cr_tries < cr_tries_for(g_s.cr_st)) return;
         r = -1;
     }
     if (r < 0) {
-        if (r != CR_NOTHING_TO_LEAVE) lg("chat: step %d couldn't be sent (%d)\r\n", g_cr_st, r);
-        if (g_cr_st == CR_PART) { cr_left(g_cr_part_state[0] ? g_cr_part_state : "left"); return; }
-        if (g_cr_st == CR_AWAY) { cr_go(CR_JOIN); return; }
-        if (g_cr_st == CR_JOIN) { cr_left(failed(r)); return; }
+        if (r != CR_NOTHING_TO_LEAVE) lg("chat: step %d couldn't be sent (%d)\r\n", g_s.cr_st, r);
+        if (g_s.cr_st == CR_PART) { cr_left(g_cr_part_state[0] ? g_cr_part_state : "left"); return; }
+        if (g_s.cr_st == CR_AWAY) { cr_go(CR_JOIN); return; }
+        if (g_s.cr_st == CR_JOIN) { cr_left(failed(r)); return; }
         cr_step_done(b, r);
         return;
     }
-    g_cr_wait = CRW_CMD;
+    g_s.cr_wait = CRW_CMD;
     g_cr_sent_at = GetTickCount64();
 }
 
 /* every hold loop turn, requests only on control turns */
 static void chat_pump(BYTE *b, int ctl)
 {
-    if (g_draining) return;
+    if (g_s.draining) return;
     cr_room_pump(b, ctl);
-    if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting(REQ_CHATSEND)) cr_send_request(b);
-    if (ctl && (g_cr_st != CR_IN || g_cr_leave) && request_waiting(REQ_CHATMASTER)) cr_master_request(b);
-    if (g_cr_db) cr_db_pump(b);
+    if (ctl && (g_s.cr_st != CR_IN || g_s.cr_leave) && request_waiting(REQ_CHATSEND)) cr_send_request(b);
+    if (ctl && (g_s.cr_st != CR_IN || g_s.cr_leave) && request_waiting(REQ_CHATMASTER)) cr_master_request(b);
+    if (g_s.cr_db) cr_db_pump(b);
     if (!ctl) return;
     /* waiting, not new: a .taking left by a read that failed is tried again first */
     if (request_waiting(REQ_CHATLEAVE)) { cr_leave_request(b); return; }
-    if (g_cr_st == CR_OUT && request_waiting(REQ_CHATJOIN)) { cr_join_request(b); return; }   /* a PART goes first */
-    if (g_cr_st == CR_OUT && request_waiting(REQ_CHATCREATE)) { cr_create_request(b); return; }
-    if (g_cr_db || !db_free()) return;
+    if (g_s.cr_st == CR_OUT && request_waiting(REQ_CHATJOIN)) { cr_join_request(b); return; }   /* a PART goes first */
+    if (g_s.cr_st == CR_OUT && request_waiting(REQ_CHATCREATE)) { cr_create_request(b); return; }
+    if (g_s.cr_db || !db_free()) return;
     if (request_waiting(REQ_CHATZONES)) { cr_zones_request(b); return; }
     if (request_waiting(REQ_CHATROOMS)) cr_rooms_request(b);
 }
 
-static int chat_room_open(void) { return g_cr_st != CR_OUT; }
+static int chat_room_open(void) { return g_s.cr_st != CR_OUT; }
 /* a command or a PRIVMSG waiting on its answer. One that hasn't gone yet holds nothing, it waits for the group chat */
-static int cr_cmd_busy(void) { return g_cr_wait != CRW_NONE; }
+static int cr_cmd_busy(void) { return g_s.cr_wait != CRW_NONE; }
 
 /* an enter or a line asked for while the handle's changing, answered as not done */
 static void chat_join_refused(const char *tok, const char *haskey)
@@ -788,7 +788,7 @@ static void chat_join_refused(const char *tok, const char *haskey)
     k[0] = 0;
     if (haskey[0]) cr_password(tok, k, sizeof k);   /* only to delete it */
     SecureZeroMemory(k, sizeof k);
-    if (g_cr_st != CR_OUT) return;   /* a room that's there keeps its own token and password */
+    if (g_s.cr_st != CR_OUT) return;   /* a room that's there keeps its own token and password */
     lstrcpynA(g_cr_tok, tok, sizeof g_cr_tok);
     cr_join_refused("failed:handle changing");
 }
@@ -819,21 +819,19 @@ static void chat_end(BYTE *b)
 {
     int s = cr_session(b), r;
     ULONGLONG until = GetTickCount64() + 3000;
-    if (g_cr_db) cr_db_abandon(b);
-    if (g_cr_st == CR_OUT) return;
-    if (s >= 0 && g_cr_wait != CRW_NONE) ((svc_i)SVC(0x248))(s);
-    g_cr_wait = CRW_NONE;
+    if (g_s.cr_db) cr_db_abandon(b);
+    if (g_s.cr_st == CR_OUT) return;
+    if (s >= 0 && g_s.cr_wait != CRW_NONE) pc_chat_command_forget(b, s);
+    g_s.cr_wait = CRW_NONE;
     /* a JOIN with no answer yet still gets there, so it's PARTed like a room. The group chat can have the link's one
        command out, so the PART's tried again till it goes */
     while ((r = cr_part(b)) == 0 && GetTickCount64() < until) {
-        POLCON_STEP(b);
-        POLCON_IDLE(b);
+        pump_once(b);
         Sleep(16);
     }
     if (r > 0) {
-        while (GetTickCount64() < until && ((svc_i)SVC(0x244))(s) == 0) {
-            POLCON_STEP(b);
-            POLCON_IDLE(b);
+        while (GetTickCount64() < until && pc_chat_command_check(b, s) == 0) {
+            pump_once(b);
             Sleep(16);
         }
     }
@@ -922,12 +920,12 @@ static void chat_snapshot(BYTE *b, HANDLE h)
         wr(h, line);
     }
     json_str(tk, sizeof tk, g_cr_tok);
-    json_str(js, sizeof js, g_cr_st == CR_OUT ? "" : g_cr_room);
+    json_str(js, sizeof js, g_s.cr_st == CR_OUT ? "" : g_cr_room);
     wsprintfA(line, "]},\"room\":{\"token\":%s,\"state\":\"%s\",\"irc\":%s,\"limit\":%lu,\"locked\":%s,\"members\":[", tk,
-              g_cr_state, js, g_cr_st == CR_IN ? *(DWORD *)(g_cr_slot + 0x94) : 0,
-              g_cr_st == CR_IN && (*(DWORD *)(g_cr_slot + 0x8c) & (1u << 8)) ? "true" : "false");
+              g_cr_state, js, g_s.cr_st == CR_IN ? *(DWORD *)(g_cr_slot + 0x94) : 0,
+              g_s.cr_st == CR_IN && (*(DWORD *)(g_cr_slot + 0x8c) & (1u << 8)) ? "true" : "false");
     wr(h, line);
-    for (i = 0, first = 1; g_cr_st == CR_IN && i < g_cr_people_n; i++) {
+    for (i = 0, first = 1; g_s.cr_st == CR_IN && i < g_cr_people_n; i++) {
         const cr_person *p = &g_cr_people[i];
         char u8[0x80];
         int me = cr_is_me(p->lo, p->hi);

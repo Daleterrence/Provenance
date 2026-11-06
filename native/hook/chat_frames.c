@@ -37,9 +37,7 @@ static cr_raw g_cr_raw[CR_RAW];
 static volatile LONG g_cr_raw_n;
 static int g_cr_raw_lost;
 
-static int g_cr_st = CR_OUT, g_cr_wait, g_cr_tries, g_cr_open, g_cr_leave, g_cr_hello, g_cr_replies;
 static int g_cr_msg_kind = -1, g_cr_skip_topic, g_cr_reread, g_cr_kicked_me;
-static int g_cr_joined;   /* a JOIN's gone and no PART since: the server might have me in the room */
 static char g_cr_cancel_tok[48];
 static DWORD g_cr_written_seq;
 static ULONGLONG g_cr_written_at;
@@ -65,7 +63,7 @@ static DWORD g_cr_mlo, g_cr_mhi;
 static WCHAR g_cr_mname[0x21];
 static char g_cr_mtok[48], g_cr_mstate[32] = "", g_cr_newkey[32];
 
-static int cr_session(BYTE *b) { return SVC(0xcd0) ? ((svc_v)SVC(0xcd0))() : -0x41f; }
+static int cr_session(BYTE *b) { return pc_has(b, SV_CHAT_SESSION) ? pc_chat_session(b) : NO_CHAT_LINK; }
 
 static DWORD cr_now(void)
 {
@@ -79,7 +77,7 @@ static DWORD cr_now(void)
 static void cr_take(const char *text, const char *chan, DWORD lo, DWORD hi, int whisper)
 {
     LONG n = g_cr_raw_n;
-    if (!g_cr_open || !text || !chan || IsBadStringPtrA(text, 0x200) || IsBadStringPtrA(chan, 0x40)) return;
+    if (!g_s.cr_open || !text || !chan || IsBadStringPtrA(text, 0x200) || IsBadStringPtrA(chan, 0x40)) return;
     if (n >= CR_RAW) { g_cr_raw_lost++; return; }
     lstrcpynA(g_cr_raw[n].text, text, sizeof g_cr_raw[n].text);
     lstrcpynA(g_cr_raw[n].chan, chan, sizeof g_cr_raw[n].chan);
@@ -105,9 +103,9 @@ static int __cdecl chat_notice(const char *text, const char *chan, DWORD lo, DWO
 /* the svc 0xd9c array, registered once at the start of the hold */
 static void push_callbacks(BYTE *b, void *cb[6])
 {
-    g_cr_644 = SVC(0x644);
+    g_cr_644 = pc_slot(b, SV_ROOM_NOTICE);
     cb[0] = (void *)chat_private;
-    cb[1] = SVC(0x538);
+    cb[1] = pc_slot(b, SV_PUSH_DEFAULT);
     cb[2] = (void *)chat_line;
     cb[3] = g_cr_644 ? (void *)chat_notice : NULL;
     cb[4] = (void *)mail_raw;
@@ -121,15 +119,15 @@ static void cr_wide(BYTE *b, const char *sj, WCHAR *w, int cap)
     lstrcpynA(tmp, sj, sizeof tmp);
     memset(w, 0, cap * sizeof(WCHAR));
     if (!tmp[0] || cap < 0x202) return;
-    ((int (__cdecl *)(WCHAR *, const char *, int))SVC(0xa38))(w, tmp, 0x3013);
+    pc_sjis_to_wide(b, w, tmp, WIDE_GETA);
     w[cap - 1] = 0;
 }
 static int cr_sjis(BYTE *b, const WCHAR *w, char *out, int cap)
 {
-    int n = ((int (__cdecl *)(char *, const WCHAR *, int))SVC(0xa40))(NULL, w, 0x81ac);
+    int n = pc_wide_to_sjis(b, NULL, w, SJIS_GETA);
     out[0] = 0;
     if (n < 0 || n >= cap) return -1;
-    ((int (__cdecl *)(char *, const WCHAR *, int))SVC(0xa40))(out, w, 0x81ac);
+    pc_wide_to_sjis(b, out, w, SJIS_GETA);
     out[n] = 0;
     return n;
 }
@@ -261,9 +259,9 @@ static void cr_parse(BYTE *b, const WCHAR *w, DWORD lo, DWORD hi, int whisper)
         if (w[0] == L'3') return;
         cr_add_line(CRK_ENTERED, 0, p, name, NULL);
         /* everyone in the room answers an arrival with a 3, once per arrival here, never per frame */
-        if (p && !p->answered && g_cr_open) {
+        if (p && !p->answered && g_s.cr_open) {
             p->answered = 1;
-            if (g_cr_replies < CR_REPLIES) g_cr_replies++;
+            if (g_s.cr_replies < CR_REPLIES) g_s.cr_replies++;
         }
         return;
     case L'9':
@@ -308,7 +306,7 @@ static void cr_frame_hello(BYTE *b, int type, WCHAR *w)
 static void cr_frame_say(BYTE *b, const WCHAR *text, WCHAR *w, int cap)
 {
     static const WCHAR cc[] = L"0123456789abcdefghijklmn";
-    int lang = SVC(0xf18) ? ((svc_v)SVC(0xf18))() : 0, n;
+    int lang = pc_has(b, SV_VIEWER_LANGUAGE) ? pc_viewer_language(b) : 0, n;
     wsprintfW(w, L"%x%2x%2x%c", 0, 0, g_cr_emote, g_cr_colour < 0 ? L'0' : cc[g_cr_colour + 5]);
     lstrcatW(w, g_cr_nick);
     n = lstrlenW(w);

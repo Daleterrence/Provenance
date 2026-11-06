@@ -2,9 +2,9 @@
 static void pc_sha1(BYTE *b, const void *data, unsigned len, BYTE out[20])
 {
     BYTE ctx[0x80];
-    ((void (__cdecl *)(void *))(b + 0x2d6a0))(ctx);
-    ((void (__cdecl *)(void *, const void *, unsigned))(b + 0x2d6d0))(ctx, data, len);
-    ((void (__cdecl *)(void *, void *))(b + 0x2dac0))(out, ctx);
+    pc_sha1_init(b, ctx);
+    pc_sha1_update(b, ctx, data, len);
+    pc_sha1_final(b, out, ctx);
 }
 
 /* NULL when it's missing, too long or won't convert */
@@ -81,7 +81,6 @@ static int read_details(const char *env, const char *kind, char *id, int idcap, 
     } else return 1;
     lg(LOG_DETAILS_UNREADABLE " (%s) - exiting, FFXI NOT started\r\n", kind);
     end_pol(DETAILS_UNREADABLE_EXIT);
-    return 0;
 }
 /* account IDs in the log: first 2 chars + length only (the log stays on disk) */
 static const char *mask_id(const char *id, char *out)
@@ -121,8 +120,7 @@ static void sea_seed(BYTE *b)
         if (ok) mode = 2;
         else { lg("phase_c: POL-OTP malformed (need 6 digits) - ignoring\r\n"); otp[0] = 0; }
     }
-    ((int (__cdecl *)(int, const char *, const void *, const void *))(b + 0x1e4b0))(
-        mode, seid, secret, mode == 2 ? otp : NULL);
+    pc_set_sea_secret(b, mode, seid, secret, mode == 2 ? otp : NULL);
     SecureZeroMemory(otp, sizeof otp);
     SecureZeroMemory(secret, sizeof secret);
     lg("phase_c: SEA seeded mode %d (%s), SE ID='%s'\r\n", mode, mode == 2 ? "OTP" : "no-OTP", mask_id(seid, m));
