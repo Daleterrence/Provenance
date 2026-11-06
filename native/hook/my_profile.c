@@ -927,6 +927,17 @@ static void my_profile_xi_request(BYTE *b)
     g_s.xi_t0 = GetTickCount64();
     my_profile_xi_load_start(b);
 }
+/* the answer's members, name and wn already quoted */
+static void my_profile_xi_build(const char *nm, const char *wn)
+{
+    jw w = {0};
+    jw_lit(&w, "key", g_s.xi_key);
+    jw_uint(&w, "level", g_xi_rec->level);
+    jw_raw(&w, "name", nm);
+    jw_raw(&w, "worldName", wn);
+    jw_fit(&w, g_s.xi_json, sizeof g_s.xi_json, "FFXI profile edit");
+    jw_free(&w);
+}
 static void my_profile_xi_pump(BYTE *b, int ctl)
 {
     pdb_item *a, *c;
@@ -961,15 +972,7 @@ static void my_profile_xi_pump(BYTE *b, int ctl)
         }
         profiles_character_text(b, g_xi_rec, "z_name", nm, sizeof nm, NULL);
         profiles_character_text(b, g_xi_rec, "z_worldname", wn, sizeof wn, NULL);
-        {
-            jw w = {0};
-            jw_lit(&w, "key", g_s.xi_key);
-            jw_uint(&w, "level", g_xi_rec->level);
-            jw_raw(&w, "name", nm);
-            jw_raw(&w, "worldName", wn);
-            lstrcpynA(g_s.xi_json, w.p ? w.p : "", sizeof g_s.xi_json);
-            jw_free(&w);
-        }
+        my_profile_xi_build(nm, wn);
         base_log("ffxi profile edit: record level %u\r\n", g_xi_rec->level);
         my_profile_xi_done("ready");
         return;

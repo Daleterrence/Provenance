@@ -252,6 +252,18 @@ static void jw_pol(jw *w, const char *key, BYTE *b, const char *sj, int u8cap, i
     json_pol(b, sj, u8cap, o, cap);
     w->n += lstrlenA(o);
 }
+/* the finished build copied into a fixed buffer. One that failed or doesn't fit leaves the buffer empty and says so in the
+   log, so a cut-off member can't get spliced into the snapshot */
+static int jw_fit(const jw *w, char *dst, int cap, const char *what)
+{
+    dst[0] = 0;
+    if (w->fail || w->n >= cap) {
+        base_log("json: %s is %d bytes and has room for %d, left out\r\n", what, w->n, cap - 1);
+        return 0;
+    }
+    if (w->n) memcpy(dst, w->p, (size_t)w->n + 1);
+    return 1;
+}
 /* {"token":...,"state":"..."} left open for whatever else the job has to say */
 static void jw_job(jw *w, const char *key, const char *token, const char *state)
 {

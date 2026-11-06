@@ -381,7 +381,7 @@ static void profiles_profile_build(BYTE *b)
         }
     }
     if (!g_prof_json) g_prof_json = (char *)HeapAlloc(GetProcessHeap(), 0, 0x8000);
-    if (g_prof_json) lstrcpynA(g_prof_json, w.p ? w.p : "", 0x8000);
+    if (g_prof_json) jw_fit(&w, g_prof_json, 0x8000, "profile");
     jw_free(&w);
 }
 static void profiles_profile_start(BYTE *b)
@@ -496,7 +496,7 @@ static void profiles_character_build(BYTE *b)
     jw_int(&w, "nameState", st);
     jw_uint(&w, "level", g_ch_rec->level);
     jw_raw(&w, "worldName", wn);
-    lstrcpynA(g_ch_json, w.p ? w.p : "", sizeof g_ch_json);
+    jw_fit(&w, g_ch_json, sizeof g_ch_json, "character");
     jw_free(&w);
     base_log("character: record level %u, name level %u, state %d\r\n", g_ch_rec->level, lv, st);
 }
@@ -634,7 +634,7 @@ static void profiles_ffxiprofile_build(BYTE *b)
         wsprintfA(kn, "%sState", g_fp_nums[i][1]);
         jw_int(&w, kn, st);
     }
-    lstrcpynA(g_fp_json, w.p ? w.p : "", sizeof g_fp_json);
+    jw_fit(&w, g_fp_json, sizeof g_fp_json, "FFXI profile");
     jw_free(&w);
     base_log("ffxiprofile: slot %d, record level %u\r\n", g_fp_slot, g_fp_rec->level);
 }
