@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Provenance.Common.IO;
+using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game;
@@ -86,7 +87,7 @@ public static class LargeAddressAware
         catch (UnauthorizedAccessException)
         {
             var attributes = File.GetAttributes(path);
-            if (!attributes.HasFlag(FileAttributes.ReadOnly) || !Path.GetFileName(path).Equals("pol.exe", StringComparison.OrdinalIgnoreCase) ||
+            if (!attributes.HasFlag(FileAttributes.ReadOnly) || !Path.GetFileName(path).Equals(GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase) ||
                 !IsKnownBuild(path, known))
                 throw;
             File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
@@ -99,14 +100,14 @@ public static class LargeAddressAware
         Known.Any(pair => Matches(relativePath, listedSha256, actualSha256, pair));
 
     internal static bool Matches(string relativePath, string listedSha256, string actualSha256, (string Off, string On) known) =>
-        relativePath.Equals("pol.exe", StringComparison.OrdinalIgnoreCase) && listedSha256 == known.Off && actualSha256 == known.On;
+        relativePath.Equals(GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase) && listedSha256 == known.Off && actualSha256 == known.On;
 
     // SE's bytes back, when path is pol.exe with only the bit set. POL's patcher compares those against its file list
     public static byte[]? Unpatched(string path) => Known.Select(pair => Unpatched(path, pair)).FirstOrDefault(b => b is not null);
 
     internal static byte[]? Unpatched(string path, (string Off, string On) known)
     {
-        if (!Path.GetFileName(path).Equals("pol.exe", StringComparison.OrdinalIgnoreCase)) return null;
+        if (!Path.GetFileName(path).Equals(GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase)) return null;
         try
         {
             var bytes = File.ReadAllBytes(path);

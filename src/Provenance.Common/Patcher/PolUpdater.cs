@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Provenance.Common.Game;
 using Provenance.Common.IO;
+using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
 using Provenance.Common.Win32;
@@ -207,7 +208,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             {
                 if (fromTmp2) { DeleteFile(tmp2); continue; }   // POL's "illegal tmp2 file rollback"
                 // Windower's Large Address Aware pol.exe is SE's file with one bit set. A newer pol.exe replaces it whole
-                if (KeepLargeAddressAware && f.Name.Equals("pol.exe", StringComparison.OrdinalIgnoreCase) &&
+                if (KeepLargeAddressAware && f.Name.Equals(GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase) &&
                     LargeAddressAware.Unpatched(target) is { } se && FileSig.Of(new MemoryStream(se), ct) == f.Last.Sig)
                     return new Decision(Kind.Current, 0, 0, false);
                 return DirectOf(f);
@@ -408,7 +409,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     // wrong stream, so nothing goes in
     internal void CheckStagedEnv(List<PatchFile> manifest)
     {
-        if (product.Id != 1000) return;
+        if (product.Game != GameProduct.Viewer) return;
         foreach (var rel in new[] { Path.Combine("EU", "env.dat"), Path.Combine("data", "utf", "env.dat") })
         {
             var staged = Path.Combine(Dir, rel) + ".tmp2";

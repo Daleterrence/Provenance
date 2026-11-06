@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Provenance.Common.Game;
+using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
 using Serilog;
 
@@ -28,10 +29,10 @@ public static class PolUpdates
             }
             // a stale queue (.tmp2) mustn't overwrite what the mirror writes below
             ApplyQueued();
-            var r = GameUpdate.Run(PatchProduct.Viewer(viewerDir, region), region, "viewer", progress, BeforeChange, ct);
+            var r = GameUpdate.Run(PatchProduct.Viewer(viewerDir, region), region, progress, BeforeChange, ct);
             // up to date or not, an earlier run might've died between the update and these steps
             ApplyQueued();
-            Log.Information("PlayOnline Viewer update check: {Result}", r);
+            Log.Information("{Product} update check: {Result}", GameProduct.Viewer.Name, r);
             return r;
         });
 
@@ -39,13 +40,13 @@ public static class PolUpdates
                                          CancellationToken ct) =>
         GameFilesLock.Locked(GameFilesLock.Job.GameUpdate, ct, progress, () =>
         {
-            var r = GameUpdate.Run(PatchProduct.Ffxi(ffxiDir, viewerDir, region), region, "ffxi", progress, () =>
+            var r = GameUpdate.Run(PatchProduct.Ffxi(ffxiDir, viewerDir, region), region, progress, () =>
             {
                 if (GameRunning())
                     throw Shown.Mark(new InvalidOperationException(
                         "FINAL FANTASY XI needs an update, but the game is running. Close every FINAL FANTASY XI window, then press Play again."));
             }, ct);
-            Log.Information("FINAL FANTASY XI update check: {Result}", r);
+            Log.Information("{Product} update check: {Result}", GameProduct.Game.Name, r);
             return r;
         });
 
@@ -64,7 +65,7 @@ public static class PolUpdates
     public static bool GameRunning() => AnyPol(p =>
     {
         if (ProcessStamp.Of(p.Id) is not { } stamp || !IsViewerPol(stamp)) return false;
-        try { return p.Modules.Cast<ProcessModule>().Any(m => m.ModuleName.Equals("FFXiMain.dll", StringComparison.OrdinalIgnoreCase)); }
+        try { return p.Modules.Cast<ProcessModule>().Any(m => m.ModuleName.Equals(GameProduct.Game.KeyFile, StringComparison.OrdinalIgnoreCase)); }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
         {
             return true;   // can't tell, so treat it as the game

@@ -11,9 +11,10 @@ public static class GameUpdate
 
     // One POL version check, then the patch mirror. POL serves whatever the mirror can't, and beforeChange runs once
     // at most.
-    internal static PatchResult Run(PatchProduct product, PolRegion installed, string slug, IProgress<PatchProgress>? progress,
+    internal static PatchResult Run(PatchProduct product, PolRegion installed, IProgress<PatchProgress>? progress,
                                     Action beforeChange, CancellationToken ct)
     {
+        var slug = product.Game.Slug;
         var mirrorRegion = MirrorLayout.UpdateFolder(installed, slug);
         var updater = new PolUpdater(product) { KeepLargeAddressAware = true };
         progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));

@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game;
@@ -20,7 +21,7 @@ public sealed class RegistryGameStore(PolRegion? region, Func<bool, RegistryKey?
     {
         using var k = Open(false);
         if (k is null)
-            throw Shown.Mark(new InvalidOperationException(region is { } r && PolPaths.TryGetInstallFolder(r, PolPaths.FfxiProduct) != null
+            throw Shown.Mark(new InvalidOperationException(region is { } r && PolPaths.TryGetInstallFolder(r, GameProduct.Game) != null
                 ? "FINAL FANTASY XI is installed, but it has no saved settings yet. Open the FINAL FANTASY XI Config Tool once as an administrator so it saves them, then open these settings again."
                 : "FINAL FANTASY XI isn't installed on this PC, so there are no game settings to change."));
         return FfxiRegistry.LoadFrom(k);

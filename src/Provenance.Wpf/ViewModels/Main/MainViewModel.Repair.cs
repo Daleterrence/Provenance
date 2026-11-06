@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Game;
+using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Serilog;
 using Provenance.Common.Mirror;
@@ -58,10 +59,10 @@ public partial class MainViewModel
 
     // A broken install can have lost FFXiMain.dll, so it only needs both folders registered. A region the mirror has no
     // copy of is shown but off
-    internal static (bool Available, string? NotYet) RepairState(PolRegion? region, Func<PolRegion, string, string?> folder)
+    internal static (bool Available, string? NotYet) RepairState(PolRegion? region, Func<PolRegion, GameProduct, string?> folder)
     {
         var r = region ?? PolRegion.UnitedStates;
-        bool available = folder(r, PolPaths.ViewerProduct) is not null && folder(r, PolPaths.FfxiProduct) is not null;
+        bool available = folder(r, GameProduct.Viewer) is not null && folder(r, GameProduct.Game) is not null;
         return (available, MirrorLayout.RegionFolder(r) is null ? RepairNotYetText(r) : null);
     }
 

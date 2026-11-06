@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Provenance.Common.IO;
+using Provenance.Common.PolFormat;
 using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Feeds;
@@ -26,20 +27,22 @@ public sealed class FeedClient
             _http.DefaultRequestHeaders.Add("User-Agent", "Provenance/1.0");
     }
 
-    private static string RegionToken(FeedRegion r) =>
-        r switch { FeedRegion.EU => "ff11eu", FeedRegion.JP => "ff11", _ => "ff11us" };
+    internal static string Code(PolRegion r) => r switch { PolRegion.Europe => "eu", PolRegion.Japan => "jp", _ => "na" };
 
-    public static string ServicePage(FeedRegion region) => $"https://www.playonline.com/{RegionToken(region)}/service/";
+    private static string RegionToken(PolRegion r) =>
+        r switch { PolRegion.Europe => "ff11eu", PolRegion.Japan => "ff11", _ => "ff11us" };
 
-    public async Task<FeedResult> GetAsync(FeedRegion region, FeedKind kind, string? workerBaseUrl, CancellationToken ct = default)
+    public static string ServicePage(PolRegion region) => $"https://www.playonline.com/{RegionToken(region)}/service/";
+
+    public async Task<FeedResult> GetAsync(PolRegion region, FeedKind kind, string? workerBaseUrl, CancellationToken ct = default)
     {
-        var path = $"feeds/{region.ToString().ToLowerInvariant()}/{(kind == FeedKind.News ? "news" : "status")}.json";
+        var path = $"feeds/{Code(region)}/{(kind == FeedKind.News ? "news" : "status")}.json";
         return new FeedResult(region, kind, await FromWorkerAsync(workerBaseUrl, path, ParseWorker, ct).ConfigureAwait(false));
     }
 
     // the worker 502s when it finds no worlds
-    public Task<IReadOnlyList<WorldStatus>> GetWorldsAsync(FeedRegion region, string? workerBaseUrl, CancellationToken ct = default) =>
-        FromWorkerAsync(workerBaseUrl, $"worlds/{region.ToString().ToLowerInvariant()}.json", ParseWorkerWorlds, ct);
+    public Task<IReadOnlyList<WorldStatus>> GetWorldsAsync(PolRegion region, string? workerBaseUrl, CancellationToken ct = default) =>
+        FromWorkerAsync(workerBaseUrl, $"worlds/{Code(region)}.json", ParseWorkerWorlds, ct);
 
     private async Task<IReadOnlyList<T>> FromWorkerAsync<T>(string? workerBaseUrl, string path,
                                                             Func<string, IReadOnlyList<T>> parse, CancellationToken ct)

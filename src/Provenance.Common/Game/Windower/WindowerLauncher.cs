@@ -6,6 +6,7 @@ using System.Text;
 using Microsoft.Win32.SafeHandles;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Hook;
+using Provenance.Common.Install;
 using Provenance.Common.Login;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
@@ -52,14 +53,7 @@ public sealed class WindowerLauncher : IDisposable
     public string? UpdateNotice { get; private set; }
     public IReadOnlyList<string> RegistryWritten { get; private set; } = [];
     public bool HandoverOpen => _mapping is not null && _ready is not null;
-    public WindowerGameValues GameValues => new(Profile.Clone(), Region, _setup.RegistryRoot);
-
-    private WindowerRegion Region => _setup.Region switch
-    {
-        PolRegion.Japan => WindowerRegion.JP,
-        PolRegion.Europe => WindowerRegion.EU,
-        _ => WindowerRegion.US,
-    };
+    public WindowerGameValues GameValues => new(Profile.Clone(), _setup.Region, _setup.RegistryRoot);
 
     public static WindowerLaunchSetup SetupFor(ISettingsService settings, string polExe, string? accountProfile,
                                               IReadOnlyDictionary<string, WindowerAddonList>? lists, WindowerAddonList? shared = null)
@@ -75,7 +69,7 @@ public sealed class WindowerLauncher : IDisposable
             ProfileFromAccount = accountProfile is not null,
             PolExe = polExe,
             Region = region,
-            FfxiDir = PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct),
+            FfxiDir = PolPaths.TryGetInstallFolder(region, GameProduct.Game),
             Lists = lists,
             SharedExtras = shared,
         };
@@ -200,14 +194,14 @@ public sealed class WindowerLauncher : IDisposable
 
     private void ApplyRegistry()
     {
-        var region = Region;
+        var region = _setup.Region;
         try { RegistryWritten = GameValues.Apply(); }
         catch (Exception e) when (e is UnauthorizedAccessException or SecurityException or IOException)
         {
             Log.Error(e, "Could not write Windower's FFXI settings");
             throw Shown.Mark(new InvalidOperationException("Provenance couldn't set the FINAL FANTASY XI settings for this Windower profile."));
         }
-        if (RegistryWritten.Count == 0) Log.Warning("No FFXI settings key for {Region}, the profile's game settings weren't applied", region);
+        if (RegistryWritten.Count == 0) Log.Warning("No FFXI settings key for {Region}, the profile's game settings weren't applied", WindowerProfile.RegionName(region));
     }
 
     // the same folders Windower.exe makes, but never through a link, this runs as admin in a folder users can write to
@@ -249,7 +243,7 @@ public sealed class WindowerLauncher : IDisposable
         Block = WindowerHookBlock.Build(new WindowerHookInput
         {
             Profile = sent,
-            Region = Region,
+            Region = _setup.Region,
             PlayOnlinePath = Path.GetDirectoryName(Path.GetFullPath(_setup.PolExe))!,
             FfxiPath = ffxi,
             WindowerPath = dir,

@@ -1,9 +1,11 @@
+using Provenance.Common.PolFormat;
+
 namespace Provenance.Common.Game.Windower;
 
 public sealed record WindowerHookInput
 {
     public required WindowerProfile Profile { get; init; }
-    public required WindowerRegion Region { get; init; }
+    public required PolRegion? Region { get; init; }
     public required string PlayOnlinePath { get; init; }
     public required string FfxiPath { get; init; }
     public required string WindowerPath { get; init; }

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Win32;
 
@@ -29,8 +30,8 @@ public readonly record struct ProcessStamp(int Pid, long StartUtcTicks)
         try
         {
             return new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan }.Any(region =>
-                PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct) is { } dir &&
-                string.Equals(Path.GetFullPath(Path.Combine(dir, "pol.exe")), Path.GetFullPath(image), StringComparison.OrdinalIgnoreCase));
+                PolPaths.TryGetInstallFolder(region, GameProduct.Viewer) is { } dir &&
+                string.Equals(Path.GetFullPath(Path.Combine(dir, GameProduct.Viewer.KeyFile)), Path.GetFullPath(image), StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException or System.Security.SecurityException)
         {

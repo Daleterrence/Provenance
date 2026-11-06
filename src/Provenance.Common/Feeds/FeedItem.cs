@@ -1,6 +1,6 @@
-namespace Provenance.Common.Feeds;
+using Provenance.Common.PolFormat;
 
-public enum FeedRegion { NA, EU, JP }
+namespace Provenance.Common.Feeds;
 
 // News is the Topics feed (lots of images), Status the text-only Information feed
 public enum FeedKind { News, Status }
@@ -30,4 +30,4 @@ public sealed record FeedItem(string Title, string Url, DateTimeOffset? Date, st
     };
 }
 
-public sealed record FeedResult(FeedRegion Region, FeedKind Kind, IReadOnlyList<FeedItem> Items);
+public sealed record FeedResult(PolRegion Region, FeedKind Kind, IReadOnlyList<FeedItem> Items);

@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -9,14 +10,6 @@ public sealed record WindowerRegistryValue(string Name, RegistryValueKind Kind, 
 public static class WindowerGameRegistry
 {
     private const string DefaultPadMode = "0,0,0,0,0,0";
-
-    public static string RegionKeyPath(WindowerRegion region) => region switch
-    {
-        WindowerRegion.JP => @"SOFTWARE\PlayOnline\Square",
-        WindowerRegion.US => @"SOFTWARE\PlayOnlineUS\SquareEnix",
-        WindowerRegion.EU => @"SOFTWARE\PlayOnlineEU\SquareEnix",
-        _ => throw new ArgumentException("The registry needs a real region, not Auto.", nameof(region)),
-    };
 
     public static IReadOnlyList<WindowerRegistryValue> Values(WindowerProfile profile, int width, int height, object? padMode = null)
     {
@@ -61,9 +54,9 @@ public static class WindowerGameRegistry
 
     // FinalFantasyXI, then FinalFantasyXITestClient if that's there too. Nothing at all when the main key's missing,
     // same as Windower
-    public static IReadOnlyList<string> Apply(WindowerProfile profile, WindowerRegion region, int width, int height, RegistryKey? root = null)
+    public static IReadOnlyList<string> Apply(WindowerProfile profile, PolRegion region, int width, int height, RegistryKey? root = null)
     {
-        var path = RegionKeyPath(region);
+        var path = PolPaths.SettingsKey(region);
         var written = new List<string>();
         var hklm = root is null ? RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32) : null;
         try

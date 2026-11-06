@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Settings;
 using Serilog;
@@ -21,7 +22,7 @@ public sealed class AvatarService(ISettingsService settings)
         get
         {
             if (_viewerDir is not null) return _viewerDir;
-            var dir = settings.DetectedRegion is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null;
+            var dir = settings.DetectedRegion is { } r ? PolPaths.TryGetInstallFolder(r, GameProduct.Viewer) : null;
             if (dir is not null && Interlocked.CompareExchange(ref _viewerDir, dir, null) is null)
                 Log.Information("Profile pictures: PlayOnline Viewer folder {Dir}", dir);
             return _viewerDir;

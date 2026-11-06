@@ -13,16 +13,6 @@ public static class ProfilePictureCatalog
 
     public sealed record Catalog(IReadOnlyList<Category> Categories, IReadOnlyList<ProfilePicture> ProfilePictures);
 
-    // viewer region index (app.dll 0x105c7b44): 0 Japan, 1 North America, 2 Europe
-    public const int RegionUs = 1, RegionEu = 2;
-
-    public static int RegionIndex(PolRegion region) => region switch
-    {
-        PolRegion.Japan => 0,
-        PolRegion.Europe => RegionEu,
-        _ => RegionUs,
-    };
-
     public static string Decode(byte[] data, string fileName)
     {
         var key = Encoding.ASCII.GetBytes(fileName);
@@ -35,7 +25,7 @@ public static class ProfilePictureCatalog
     // the install's own region by default, from its env.dat like pol.exe
     public static Catalog? Load(string viewerDir, int? region = null)
     {
-        region ??= RegionIndex(ViewerBuild.RegionOf(viewerDir));
+        region ??= PolEnv.AreaIndex(ViewerBuild.RegionOf(viewerDir));
         // the US install has them under viewer\data\common, the EU one keeps per-language copies
         var dir = new[] { Path.Combine(viewerDir, "viewer", "data", "common"), Path.Combine(viewerDir, "data", "common") }
                   .FirstOrDefault(d => File.Exists(Path.Combine(d, "proface0.txt"))) ?? "";

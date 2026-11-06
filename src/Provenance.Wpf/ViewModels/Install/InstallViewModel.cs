@@ -252,7 +252,7 @@ public partial class InstallViewModel : ObservableObject
         Detail = p.Detail;
         StageIndeterminate = p.Fraction < 0;
         if (p.Fraction >= 0)
-            ShowFraction(p.Detail.Contains("FINAL FANTASY XI") ? "ffxi" : p.Detail.Contains("PlayOnline") ? "viewer" : p.Detail, p.Fraction);
+            ShowFraction(p.Product?.Slug ?? p.Detail, p.Fraction);
         if (p.TotalBytes > 0) _meter.Update(p.DoneBytes, p.TotalBytes, download: false, amount: false);
         else _meter.Clear();
     });
@@ -518,9 +518,9 @@ public partial class InstallViewModel : ObservableObject
     // version from POL, or the mirror hasn't got it) or the mirror's unreachable
     private async Task<long?> FirstUpdateSizeAsync(CancellationToken ct)
     {
-        if (MirrorLayout.UpdateFolder(_region, "ffxi") is not { } mirrorRegion || _mirror?.GameIndex is not { } index
-            || PolPaths.TryGetInstallFolder(_region, PolPaths.FfxiProduct) is not { } ffxiDir
-            || PolPaths.TryGetInstallFolder(_region, PolPaths.ViewerProduct) is not { } viewerDir)
+        if (MirrorLayout.UpdateFolder(_region, GameProduct.Game.Slug) is not { } mirrorRegion || _mirror?.GameIndex is not { } index
+            || PolPaths.TryGetInstallFolder(_region, GameProduct.Game) is not { } ffxiDir
+            || PolPaths.TryGetInstallFolder(_region, GameProduct.Viewer) is not { } viewerDir)
             return null;
         Detail = "Checking how big the game's first update is...";
         var step = new object();
@@ -533,8 +533,8 @@ public partial class InstallViewModel : ObservableObject
         try
         {
             var local = PatchVer.Read(PatchProduct.Ffxi(ffxiDir, viewerDir, _region));
-            var bytes = await Task.Run(() => MirrorUpdater.DownloadSizeAsync(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion, "ffxi",
-                ffxiDir, local, MirrorLayout.OwnFiles(_region, "ffxi"), index, scanned, ct), ct);
+            var bytes = await Task.Run(() => MirrorUpdater.DownloadSizeAsync(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion, GameProduct.Game.Slug,
+                ffxiDir, local, MirrorLayout.OwnFiles(_region, GameProduct.Game.Slug), index, scanned, ct), ct);
             Log.Information("First game update size: {Size}", bytes is { } n ? $"{n:N0} bytes from the Provenance mirror" : "the mirror has no usable copy");
             return bytes;
         }

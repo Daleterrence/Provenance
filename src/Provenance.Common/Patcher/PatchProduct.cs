@@ -1,11 +1,14 @@
+using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Patcher;
 
-public sealed record PatchProduct(string Name, int Id, string Host, string TagWire, string TagFilter,
+public sealed record PatchProduct(GameProduct Game, string Host, string TagWire, string TagFilter,
                                   string Folder, string ViewerFolder, string RegistryHive)
 {
-    public string ProductId => Id.ToString("0000");
+    public string Name => Game.Name;
+    public int Id => Game.PatchId;
+    public string ProductId => Game.InstallValue;
     public int Port => 53000 + Id;
 
     // null reads the Interface value from the registry like POL. It's the same on every PC, so the publisher pins it
@@ -13,14 +16,17 @@ public sealed record PatchProduct(string Name, int Id, string Host, string TagWi
 
     public PolRegion Region { get; init; } = PolRegion.UnitedStates;
 
+    public static PatchProduct For(GameProduct game, string dir, string viewerDir, PolRegion region) =>
+        game == GameProduct.Viewer ? Viewer(dir, region) : Ffxi(dir, viewerDir, region);
+
     // pt004 and pt008 are one server: the viewer's wire tag (sqpolcts.bin) is what gets JP its own stream. FFXI's is
     // W20 everywhere, so every region gets the same FFXI
     public static PatchProduct Viewer(string viewerDir, PolRegion region = PolRegion.UnitedStates) =>
-        new("PlayOnline Viewer", 1000, ViewerHost(viewerDir, region), Streams(region).Tag, Streams(region).Tag, viewerDir, viewerDir, PolPaths.Hive(region))
+        new(GameProduct.Viewer, ViewerHost(viewerDir, region), Streams(region).Tag, Streams(region).Tag, viewerDir, viewerDir, PolPaths.Hive(region))
         { Region = region };
 
     public static PatchProduct Ffxi(string ffxiDir, string viewerDir, PolRegion region = PolRegion.UnitedStates) =>
-        new("FINAL FANTASY XI", 1, $"pc001{Streams(region).Tag}.pol.com", "W20", Streams(region).Tag, ffxiDir, viewerDir, PolPaths.Hive(region))
+        new(GameProduct.Game, $"pc001{Streams(region).Tag}.pol.com", "W20", Streams(region).Tag, ffxiDir, viewerDir, PolPaths.Hive(region))
         { Region = region };
 
     // US and EU share their streams, JP has its own

@@ -64,10 +64,11 @@ public sealed class GameRepair(MirrorClient client, string region)
     public async Task<RepairPlan?> PlanAsync(string viewerDir, string ffxiDir, IProgress<ByteProgress>? progress, CancellationToken ct)
     {
         MissingVersion = null;
-        var found = new List<(string Slug, PatchProduct Product, MirrorIndex Index)>();
+        var found = new List<(PatchProduct Product, MirrorIndex Index)>();
         var stale = new List<string>();
-        foreach (var (slug, product) in ProductsOf(viewerDir, ffxiDir))
+        foreach (var product in ProductsOf(viewerDir, ffxiDir))
         {
+            var slug = product.Game.Slug;
             Status?.Invoke($"Checking the {product.Name} version...");
             var local = LocalVersion(product);
             var server = await Task.Run(() => ServerVersion(product, local, ct), ct);
@@ -78,21 +79,22 @@ public sealed class GameRepair(MirrorClient client, string region)
                 Say($"the mirror has no {slug} index {server} (missing or failed verification)");
                 return null;
             }
-            found.Add((slug, product, index));
+            found.Add((product, index));
             if (!VersionRight(product, index.Version)) stale.Add(slug);
         }
-        foreach (var (_, product, index) in found)
+        foreach (var (product, index) in found)
             if (MirrorDownloads.Unusable(product.Folder, index) is { } why) throw new MirrorUnusableException(why, []);
 
         long total = found.Sum(f => f.Index.Files.Sum(e => e.Size)), before = 0;
         var work = new Dictionary<string, IReadOnlyList<MirrorEntry>>();
-        foreach (var (slug, product, index) in found)
+        foreach (var (product, index) in found)
         {
+            var slug = product.Game.Slug;
             Status?.Invoke($"Checking the {product.Name} files...");
             work[slug] = await MirrorDownloads.ScanAsync(product.Folder, index, Offset(progress, before, total), ct, keepLargeAddressAware: true);
             before += index.Files.Sum(e => e.Size);
         }
-        return new RepairPlan(work, work.Values.Sum(w => w.Sum(e => e.Size)), found.ToDictionary(f => f.Slug, f => f.Index))
+        return new RepairPlan(work, work.Values.Sum(w => w.Sum(e => e.Size)), found.ToDictionary(f => f.Product.Game.Slug, f => f.Index))
         {
             StaleVersions = stale,
             QueuePending = PolUpdater.QueuedWorkPending(viewerDir),
@@ -107,10 +109,10 @@ public sealed class GameRepair(MirrorClient client, string region)
     {
         _changing = false;
         var products = ProductsOf(viewerDir, ffxiDir);
-        var viewer = products[0].Product;
+        var viewer = products[0];
 
         // the installer data and the replacement files are one bar, the data's size is only known once it starts
-        long downloadTotal = products.Sum(p => MirrorDownloads.DownloadSize(WorkOf(plan, p.Slug))), dataTotal = 0;
+        long downloadTotal = products.Sum(p => MirrorDownloads.DownloadSize(WorkOf(plan, p.Game.Slug))), dataTotal = 0;
         var dataProgress = progress is null ? null : new InlineProgress<ByteProgress>(p =>
         {
             dataTotal = p.Total;
@@ -125,8 +127,9 @@ public sealed class GameRepair(MirrorClient client, string region)
         var replaced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var failed = new List<string>();
         long before = dataTotal;
-        foreach (var (slug, product) in products)
+        foreach (var product in products)
         {
+            var slug = product.Game.Slug;
             var work = WorkOf(plan, slug);
             failed.AddRange(await DownloadAsync(slug, product, work, Offset(progress, before, dataTotal + downloadTotal), replaced, ct));
             before += MirrorDownloads.DownloadSize(work);
@@ -138,11 +141,11 @@ public sealed class GameRepair(MirrorClient client, string region)
         queued |= ApplyViewerQueue(viewerDir);
         if (queued)
         {
-            Status?.Invoke("Checking the PlayOnline Viewer files again...");
-            var again = await MirrorDownloads.ScanAsync(viewer.Folder, plan.Indexes["viewer"], null, ct, keepLargeAddressAware: true);
+            Status?.Invoke($"Checking the {GameProduct.Viewer.Name} files again...");
+            var again = await MirrorDownloads.ScanAsync(viewer.Folder, plan.Indexes[GameProduct.Viewer.Slug], null, ct, keepLargeAddressAware: true);
             if (again.Count > 0) Say($"the Viewer's queued update files changed {again.Count} file(s); they are downloaded again");
             // no share of the bar for these, it'd have to start again from nothing
-            ThrowIfFailed(await DownloadAsync("viewer", viewer, again, null, replaced, ct));
+            ThrowIfFailed(await DownloadAsync(GameProduct.Viewer.Slug, viewer, again, null, replaced, ct));
         }
 
         // only what's missing or wrong goes back, the game's own settings stay as they are
@@ -190,11 +193,12 @@ public sealed class GameRepair(MirrorClient client, string region)
     }
 
     // only where it isn't already right, DownloadAsync dropped it for a product it touched
-    private int WriteVersions(RepairPlan plan, (string Slug, PatchProduct Product)[] products)
+    private int WriteVersions(RepairPlan plan, PatchProduct[] products)
     {
         int written = 0;
-        foreach (var (slug, product) in products)
+        foreach (var product in products)
         {
+            var slug = product.Game.Slug;
             if (VersionRight(product, plan.Indexes[slug].Version)) continue;
             ChangingNow();
             PatchVer.Write(product, plan.Indexes[slug].Version);
@@ -230,7 +234,7 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     // the two package databases (a few MB), and the DirectX redist only when the runtime's missing. Writes only to the
     // staging folder
-    private async Task<(List<Package> Packages, bool InstallDirectX)> PrepareAsync(RepairPlan plan, (string Slug, PatchProduct Product)[] products,
+    private async Task<(List<Package> Packages, bool InstallDirectX)> PrepareAsync(RepairPlan plan, PatchProduct[] products,
         string installRoot, IProgress<ByteProgress>? progress, CancellationToken ct)
     {
         if (StagingDir is null) throw new InvalidOperationException("GameRepair.StagingDir is not set.");
@@ -244,11 +248,12 @@ public sealed class GameRepair(MirrorClient client, string region)
                    ?? throw new MirrorUnusableException(install.SkipReason ?? "the mirror has no install data", []);
 
         var packages = new List<Package>();
-        foreach (var (slug, _, productCode, keyFile, name) in InstallFromMirror.Products(Region))
+        foreach (var game in GameProduct.All)
         {
-            var product = products.Single(p => p.Slug == slug).Product;
-            var msi = slug == "viewer" ? data.ViewerMsi : data.FfxiMsi;
-            if (InstallFromMirror.ReadPackage(msi, installRoot, keyFile, name, out var folder, out var targets) is { } unusable)
+            var (slug, name, productCode) = (game.Slug, game.Name, game.ProductCode(Region));
+            var product = products.Single(p => p.Game == game);
+            var msi = data.MsiFor(game);
+            if (InstallFromMirror.ReadPackage(msi, installRoot, game, out var folder, out var targets) is { } unusable)
                 throw new MirrorUnusableException(unusable, []);
             if (!PathInside.Same(folder, product.Folder))
             {
@@ -267,7 +272,7 @@ public sealed class GameRepair(MirrorClient client, string region)
                 throw new MirrorUnusableException(
                     $"the {name} installer needs {rel}, which is missing, and the mirror's {slug} index {plan.Indexes[slug].Version} does not list it", [rel]);
             }
-            var (props, uninstall) = GameInstaller.DirectApplySetup(msi, installRoot, slug == "viewer" ? GameInstaller.PolShortcut : GameInstaller.FfxiShortcut, Region);
+            var (props, uninstall) = GameInstaller.DirectApplySetup(msi, installRoot, game, Region);
             packages.Add(new Package(name, msi, props, uninstall));
         }
         return (packages, installDirectX);
@@ -277,9 +282,9 @@ public sealed class GameRepair(MirrorClient client, string region)
     {
         if (!PolUpdater.QueuedWorkPending(viewerDir)) return false;
         ChangingNow();
-        Status?.Invoke("Finishing the last PlayOnline Viewer update...");
+        Status?.Invoke($"Finishing the last {GameProduct.Viewer.Name} update...");
         PolUpdater.ApplyQueued(viewerDir);
-        Say("applied the PlayOnline Viewer's queued update files");
+        Say($"applied the {GameProduct.Viewer.Name}'s queued update files");
         return true;
     }
 
@@ -310,8 +315,8 @@ public sealed class GameRepair(MirrorClient client, string region)
     private PolRegion Region => MirrorLayout.RegionOf(region);
 
     // the region's hive, POL keys patch.ver with its Interface value
-    private (string Slug, PatchProduct Product)[] ProductsOf(string viewerDir, string ffxiDir) =>
-        [("viewer", PatchProduct.Viewer(viewerDir, Region)), ("ffxi", PatchProduct.Ffxi(ffxiDir, viewerDir, Region))];
+    private PatchProduct[] ProductsOf(string viewerDir, string ffxiDir) =>
+        [PatchProduct.For(GameProduct.Viewer, viewerDir, viewerDir, Region), PatchProduct.For(GameProduct.Game, ffxiDir, viewerDir, Region)];
 
     private static IReadOnlyList<MirrorEntry> WorkOf(RepairPlan plan, string slug) => plan.Work.TryGetValue(slug, out var w) ? w : [];
 

@@ -16,7 +16,8 @@ public sealed record GamePart(string FileName, Uri Url, long Size, string Md5);
 
 // Fraction is -1 while there's nothing to measure. Download marks bytes coming over the network, the only ones that get
 // a rate
-public sealed record InstallProgress(string Stage, string Detail, double Fraction, long DoneBytes, long TotalBytes, bool Download = false);
+public sealed record InstallProgress(string Stage, string Detail, double Fraction, long DoneBytes, long TotalBytes, bool Download = false,
+                              GameProduct? Product = null);
 
 public sealed class DamagedPartException : IOException
 {
@@ -34,30 +35,10 @@ public sealed class GameInstaller
 {
     public const long RequiredFreeBytes = 25L * 1024 * 1024 * 1024;
 
-    // each region's two MSIs, by ProductCode
-    private static readonly (PolRegion Region, string Viewer, string Ffxi)[] ProductCodes =
-    [
-        (PolRegion.UnitedStates, "{81784E3A-1BDA-4743-B5F8-04E59DC7E031}", "{07EB4C8B-3869-49B4-8CF8-D6D9FB8C8026}"),
-        (PolRegion.Europe, "{F65CC5FB-3089-483C-8504-14EA5F58DD1D}", "{549BFF68-9B3D-46BE-88E3-BD4F7C6DEB36}"),
-        (PolRegion.Japan, "{E58BCEA5-A722-4FCA-89D5-C89E18B4E3FE}", "{55DAC7CD-71AF-40DA-9BE0-AB5358EA0069}"),
-    ];
+    public static bool CanInstall(PolRegion region) => GameProduct.Installs(region);
 
-    public static bool CanInstall(PolRegion region) => ProductCodes.Any(p => p.Region == region);
-
-    internal static (string Viewer, string Ffxi) ProductCodesFor(PolRegion region) =>
-        ProductCodes.FirstOrDefault(p => p.Region == region) is { Viewer: not null } p
-            ? (p.Viewer, p.Ffxi)
-            : throw new ArgumentOutOfRangeException(nameof(region), region, "Provenance doesn't install this region.");
-
-    internal const string PolShortcut = "MAKEPOLSHORTCUT", FfxiShortcut = "MAKEFFXISHORTCUT";
-    internal const string PolUninstaller = "Provenance - PlayOnline Uninstall.exe",
-                          FfxiUninstaller = "Provenance - FINAL FANTASY XI Uninstall.exe";
     private const string NeedsAdmin =
         "Windows didn't let Provenance save where the game is installed.";
-
-    private const string ViewerPackage = @"PlayOnline\PlayOnlineViewer.msi", FfxiPackage = @"FINAL_FANTASY_XI\FINAL_FANTASY_XI.msi";
-    private const string NoViewerPackage = "The unpacked installer doesn't have a PlayOnline Viewer package in it.";
-    private const string NoFfxiPackage = "The unpacked installer doesn't have a FINAL FANTASY XI package in it.";
 
     private static readonly (long Size, string Md5)[] UsParts =
     [
@@ -262,7 +243,6 @@ public sealed class GameInstaller
                                                              IProgress<InstallProgress>? progress, CancellationToken ct,
                                                              bool payloadInPlace = false)
     {
-        var (viewerCode, ffxiCode) = ProductCodesFor(region);
         var warnings = new List<string>();
         Directory.CreateDirectory(installRoot);
         Directory.CreateDirectory(logDir);
@@ -289,21 +269,21 @@ public sealed class GameInstaller
             else if (dp != 0) throw Shown.Mark(new InvalidOperationException($"Windows couldn't turn on DirectPlay, which FINAL FANTASY XI needs (DISM code {dp})."));
         }
 
-        var polMsi = Package(unpackedDir, ViewerPackage) ?? throw Shown.Mark(new FileNotFoundException(NoViewerPackage));
-        await InstallPackageAsync(polMsi, viewerCode, region, PolPaths.ViewerProduct, "pol.exe", installRoot, PolShortcut,
-                                  "PlayOnline Viewer", Path.Combine(logDir, "playonline.log"), progress, warnings, ct, payloadInPlace);
+        var polMsi = Package(unpackedDir, GameProduct.Viewer);
+        await InstallPackageAsync(polMsi, GameProduct.Viewer, region, installRoot, Path.Combine(logDir, GameProduct.Viewer.LogFile),
+                                  progress, warnings, ct, payloadInPlace);
 
-        if (PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct) is { } viewer &&
+        if (PolPaths.TryGetInstallFolder(region, GameProduct.Viewer) is { } viewer &&
             Directory.GetParent(viewer.TrimEnd('\\'))?.Parent is { } polRoot &&
             !PathInside.Same(polRoot.FullName, installRoot))
         {
-            warnings.Add($"The PlayOnline Viewer was already installed in {polRoot.FullName}, so FINAL FANTASY XI was installed there too.");
+            warnings.Add($"The {GameProduct.Viewer.Name} was already installed in {polRoot.FullName}, so {GameProduct.Game.Name} was installed there too.");
             installRoot = polRoot.FullName;
         }
 
-        var ffxiMsi = Package(unpackedDir, FfxiPackage) ?? throw Shown.Mark(new FileNotFoundException(NoFfxiPackage));
-        await InstallPackageAsync(ffxiMsi, ffxiCode, region, PolPaths.FfxiProduct, "FFXiMain.dll", installRoot, FfxiShortcut,
-                                  "FINAL FANTASY XI", Path.Combine(logDir, "ffxi.log"), progress, warnings, ct, payloadInPlace);
+        var ffxiMsi = Package(unpackedDir, GameProduct.Game);
+        await InstallPackageAsync(ffxiMsi, GameProduct.Game, region, installRoot, Path.Combine(logDir, GameProduct.Game.LogFile),
+                                  progress, warnings, ct, payloadInPlace);
         if (restartPending) warnings.Add("Restart Windows before you play, because DirectPlay (which the game needs) only turns on after a restart.");
         return warnings;
     }
@@ -323,33 +303,33 @@ public sealed class GameInstaller
         if (code != 0) warnings.Add($"The DirectX runtime installer stopped with code {code}. Game controllers in XInput mode might need it.");
     }
 
-    private static void Say(IProgress<InstallProgress>? progress, string text, double fraction = -1) =>
-        progress?.Report(new InstallProgress("Installing", text, fraction, 0, 0));
+    private static void Say(IProgress<InstallProgress>? progress, string text, double fraction = -1, GameProduct? product = null) =>
+        progress?.Report(new InstallProgress("Installing", text, fraction, 0, 0, Product: product));
 
-    private static async Task InstallPackageAsync(string msi, string productCode, PolRegion region, string registryValue, string keyFile,
-                                                  string installRoot, string shortcutProperty, string name, string logPath,
+    private static async Task InstallPackageAsync(string msi, GameProduct product, PolRegion region, string installRoot, string logPath,
                                                   IProgress<InstallProgress>? progress, List<string> warnings, CancellationToken ct,
                                                   bool payloadInPlace)
     {
+        var name = product.Name;
         // The main file alone never counts, the mirror might have only just put it there. The InstallFolder value is
         // what marks a product installed, Apply writes it last.
-        if (MsiInstaller.IsInstalled(productCode) ||
-            (PolPaths.TryGetInstallFolder(region, registryValue) is { } dir && File.Exists(Path.Combine(dir, keyFile))))
+        if (MsiInstaller.IsInstalled(product.ProductCode(region)) ||
+            (PolPaths.TryGetInstallFolder(region, product) is { } dir && File.Exists(Path.Combine(dir, product.KeyFile))))
         {
-            Say(progress, $"{name} is already installed.", 1);
+            Say(progress, $"{name} is already installed.", 1, product);
             warnings.Add($"{name} was already installed, so it's been left as it is.");
             return;
         }
-        Say(progress, $"Preparing {name}...");
+        Say(progress, $"Preparing {name}...", product: product);
         var report = new Progress<ByteProgress>(p => progress?.Report(new InstallProgress("Installing",
             $"Installing {name}: {p.Done / 1073741824.0:0.00} of {p.Total / 1073741824.0:0.00} GiB",
-            p.Total > 0 ? (double)p.Done / p.Total : -1, p.Done, p.Total)));
-        var (props, uninstall) = DirectApplySetup(msi, installRoot, shortcutProperty, region);
+            p.Total > 0 ? (double)p.Done / p.Total : -1, p.Done, p.Total, Product: product)));
+        var (props, uninstall) = DirectApplySetup(msi, installRoot, product, region);
         var result = await Task.Run(() =>
         {
             using var pkg = new MsiPackage(msi);
             return pkg.Apply(installRoot, props, report, ct, uninstall: uninstall,
-                             status: text => Say(progress, $"{name}: {text}"), payloadInPlace: payloadInPlace);
+                             status: text => Say(progress, $"{name}: {text}", product: product), payloadInPlace: payloadInPlace);
         }, ct);
         File.WriteAllText(logPath, $"{name} applied directly: {result.Files:N0} files ({result.Bytes:N0} bytes), " +
                                    $"{result.RegistryValues} registry values, {result.Classes} COM classes, {result.TypeLibs} type libraries, " +
@@ -357,25 +337,20 @@ public sealed class GameInstaller
     }
 
     internal static (Dictionary<string, string> Properties, MsiPackage.UninstallSetup Uninstall) DirectApplySetup(
-        string msi, string installRoot, string shortcutProperty, PolRegion region)
+        string msi, string installRoot, GameProduct product, PolRegion region)
     {
-        var props = new Dictionary<string, string> { ["ALLUSERS"] = "1", [shortcutProperty] = "1" };
-        bool pol = shortcutProperty == PolShortcut;
-        var uninstaller = Path.Combine(AppContext.BaseDirectory, "native", pol ? PolUninstaller : FfxiUninstaller);
+        var props = new Dictionary<string, string> { ["ALLUSERS"] = "1", [product.ShortcutProperty] = "1" };
+        var uninstaller = Path.Combine(AppContext.BaseDirectory, "native", product.Uninstaller);
         if (!File.Exists(uninstaller)) throw Shown.Mark(new FileNotFoundException("Some of Provenance's own files are missing. Reinstall Provenance, then try again."));
-        // the Japanese installs keep their settings under SQUARE, not SquareEnix
-        var hive = PolPaths.Hive(region);
-        var settings = pol ? $@"{hive}\{(region == PolRegion.Japan ? "SQUARE" : "SquareEnix")}\PlayOnlineViewer" : FfxiRegistry.KeyPath(region);
         return (props, new MsiPackage.UninstallSetup(uninstaller, Path.Combine(installRoot, "Uninstall"), Path.GetDirectoryName(msi)! + "\\",
-                                                     hive, pol ? PolPaths.ViewerProduct : PolPaths.FfxiProduct, settings));
+                                                     PolPaths.Hive(region), product.InstallValue, product.SettingsKey(region)));
     }
 
     public static (string Viewer, string Ffxi) FindPackages(string unpackedDir) =>
-        (Package(unpackedDir, ViewerPackage) ?? throw Shown.Mark(new FileNotFoundException(NoViewerPackage)),
-         Package(unpackedDir, FfxiPackage) ?? throw Shown.Mark(new FileNotFoundException(NoFfxiPackage)));
+        (Package(unpackedDir, GameProduct.Viewer), Package(unpackedDir, GameProduct.Game));
 
-    private static string? Package(string root, string relative) =>
-        File.Exists(Path.Combine(root, relative)) ? Path.Combine(root, relative) : null;
+    private static string Package(string root, GameProduct product) =>
+        File.Exists(product.PackageIn(root)) ? product.PackageIn(root) : throw Shown.Mark(new FileNotFoundException(product.NoPackageText));
 
     // a stop waits for it to finish, DXSETUP or DISM killed part way can leave the DirectX runtime half installed
     internal static async Task<int> RunAsync(string exe, string args, CancellationToken ct, Action? stopping = null)
@@ -394,17 +369,17 @@ public sealed class GameInstaller
     {
         try
         {
-            var ffxi = FindGameFolder(folder, "FFXiMain.dll");
-            var viewer = FindGameFolder(folder, "pol.exe");
+            var ffxi = FindGameFolder(folder, GameProduct.Game.KeyFile);
+            var viewer = FindGameFolder(folder, GameProduct.Viewer.KeyFile);
             if (ffxi == null && viewer == null)
-                return "Couldn't find FINAL FANTASY XI in that folder.";
+                return $"Couldn't find {GameProduct.Game.Name} in that folder.";
             // the viewer's own env.dat says which region's keys its pol.exe reads
             if (viewer != null && PolEnv.Region(viewer) is { } own) region = own;
             using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
             using var key = baseKey.CreateSubKey(PolPaths.Hive(region) + @"\InstallFolder", writable: true)
                             ?? throw Shown.Mark(new InvalidOperationException(NeedsAdmin));
-            if (viewer != null) key.SetValue(PolPaths.ViewerProduct, viewer.TrimEnd('\\') + "\\", RegistryValueKind.String);
-            if (ffxi != null) key.SetValue(PolPaths.FfxiProduct, ffxi.TrimEnd('\\') + "\\", RegistryValueKind.String);
+            if (viewer != null) key.SetValue(GameProduct.Viewer.InstallValue, viewer.TrimEnd('\\') + "\\", RegistryValueKind.String);
+            if (ffxi != null) key.SetValue(GameProduct.Game.InstallValue, ffxi.TrimEnd('\\') + "\\", RegistryValueKind.String);
             return null;
         }
         catch (UnauthorizedAccessException)

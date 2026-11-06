@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Install;
 using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Common.PolFormat;
@@ -18,7 +19,7 @@ public static class GameBackupPolicy
     public const string WorkingText = "Backing up your game settings...";
 
     public static BackupSources? SourcesFor(LauncherSettings s, PolRegion region, string? accountBoot) =>
-        PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct) is { } ffxi
+        PolPaths.TryGetInstallFolder(region, GameProduct.Game) is { } ffxi
             ? GameSettingsBackup.Sources(ffxi, SettingsFolder(s, new RegistryGameStore(region), accountBoot))
             : null;
 

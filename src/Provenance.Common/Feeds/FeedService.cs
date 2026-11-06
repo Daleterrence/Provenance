@@ -10,31 +10,26 @@ public sealed class FeedService(ISettingsService settings)
     public const string Worker = "https://news.provenancexi.app";
 
     private readonly FeedClient _client = new();
-    private FeedRegion? _loadedRegion;
+    private PolRegion? _loadedRegion;
 
     public event EventHandler? RegionChanged;
 
-    public FeedRegion Region => Resolve(settings.Current.FeedRegion, settings.DetectedRegion);
+    public PolRegion Region => Resolve(settings.Current.FeedRegion, settings.DetectedRegion);
 
-    public static FeedRegion Resolve(string? choice, PolRegion? installed) =>
+    public static PolRegion Resolve(string? choice, PolRegion? installed) =>
         (choice ?? "auto").Trim().ToLowerInvariant() switch
         {
-            "na" => FeedRegion.NA,
-            "eu" => FeedRegion.EU,
-            "jp" => FeedRegion.JP,
-            _ => installed switch
-            {
-                PolRegion.Europe => FeedRegion.EU,
-                PolRegion.Japan => FeedRegion.JP,
-                _ => FeedRegion.NA,
-            },
+            "na" => PolRegion.UnitedStates,
+            "eu" => PolRegion.Europe,
+            "jp" => PolRegion.Japan,
+            _ => installed ?? PolRegion.UnitedStates,
         };
 
     public void NotifyRegionSettingChanged()
     {
         var region = Region;
         if (_loadedRegion == region) return;
-        Log.Information("Feed region changed to {Region}", region);
+        Log.Information("Feed region changed to {Region}", FeedClient.Code(region).ToUpperInvariant());
         RegionChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -42,7 +37,7 @@ public sealed class FeedService(ISettingsService settings)
     {
         var region = Region;
         _loadedRegion = region;
-        Log.Information("Loading feeds for {Region} from {Source}", region, Worker);
+        Log.Information("Loading feeds for {Region} from {Source}", FeedClient.Code(region).ToUpperInvariant(), Worker);
         var news = _client.GetAsync(region, FeedKind.News, Worker, ct);
         var status = _client.GetAsync(region, FeedKind.Status, Worker, ct);
         await Task.WhenAll(news, status);

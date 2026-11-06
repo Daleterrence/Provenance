@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common;
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Install;
 using Serilog;
 using Provenance.Common.Game;
 using Provenance.Common.Hook;
@@ -361,7 +362,7 @@ public partial class GameSettingsViewModel : ObservableObject
     [RelayCommand]
     private void OpenPadConfig()
     {
-        var ffxi = _region is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.FfxiProduct) : null;
+        var ffxi = _region is { } r ? PolPaths.TryGetInstallFolder(r, GameProduct.Game) : null;
         var tools = _region switch { PolRegion.Europe => "ToolsEU", PolRegion.Japan => "Tools", _ => "ToolsUS" };
         var exe = ffxi is null ? null : Path.Combine(ffxi, tools, "FFXiPadConfig.exe");
         if (exe is null || !File.Exists(exe)) { Status = "Provenance couldn't find the FINAL FANTASY XI gamepad tool in the game's folder."; StatusIsError = true; return; }

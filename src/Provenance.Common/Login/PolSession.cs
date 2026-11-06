@@ -9,6 +9,7 @@ using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Hook;
 using Provenance.Common.IO;
+using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
@@ -559,8 +560,8 @@ public sealed class PolSession : IDisposable
 
     private static (string? ViewerDir, string? PolExe, string LauncherExe) LaunchFiles(PolRegion region)
     {
-        var viewerDir = PolPaths.TryGetInstallFolder(region, PolPaths.ViewerProduct);
-        var polExe = viewerDir is null ? null : Path.Combine(viewerDir, "pol.exe");
+        var viewerDir = PolPaths.TryGetInstallFolder(region, GameProduct.Viewer);
+        var polExe = viewerDir is null ? null : Path.Combine(viewerDir, GameProduct.Viewer.KeyFile);
         var launcherExe = Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe);
         bool found = polExe != null && File.Exists(polExe) && File.Exists(launcherExe)
                      && File.Exists(Path.Combine(HookFiles.NativeDir, "pol_hook.dll"));
@@ -774,7 +775,7 @@ public sealed class PolSession : IDisposable
     }
 
     private static bool GameInstalled(PolRegion region) =>
-        PolPaths.TryGetInstallFolder(region, PolPaths.FfxiProduct) is { } ffxi && File.Exists(Path.Combine(ffxi, "FFXiMain.dll"));
+        PolPaths.TryGetInstallFolder(region, GameProduct.Game) is { } ffxi && File.Exists(Path.Combine(ffxi, GameProduct.Game.KeyFile));
 
     // POL_IPC_DIR, POL_CRED_KEYFILE and POL_OWNER have to go in here, the go file never carries them
     internal static void SetPrestartEnvironment(IDictionary<string, string?> env)
@@ -1047,7 +1048,7 @@ public sealed class PolSession : IDisposable
     private static void EndNewPol(int pid, ProcessStamp launcher)
     {
         bool NewPol(ProcessStamp pol) => pol.StartUtcTicks >= launcher.StartUtcTicks
-            && string.Equals(Path.GetFileName(ProcessTree.ImagePath(pol.Pid)), "pol.exe", StringComparison.OrdinalIgnoreCase);
+            && string.Equals(Path.GetFileName(ProcessTree.ImagePath(pol.Pid)), GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase);
         if (ProcessStamp.Of(pid) is { } found && End(found, 0, 2000, NewPol))
             Log.Information("Ended pol.exe (pid {Pid}): the sign-in was cancelled", pid);
     }

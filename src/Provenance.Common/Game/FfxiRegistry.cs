@@ -6,17 +6,10 @@ namespace Provenance.Common.Game;
 // HKLM, so writes need admin. 0001/0002, 0003/0004 and 0037/0038 always go as pairs, 0028 is float bits
 public static class FfxiRegistry
 {
-    public static string KeyPath(PolRegion region) => region switch
-    {
-        PolRegion.Japan => @"SOFTWARE\PlayOnline\SQUARE\FinalFantasyXI",
-        PolRegion.Europe => @"SOFTWARE\PlayOnlineEU\SquareEnix\FinalFantasyXI",
-        _ => @"SOFTWARE\PlayOnlineUS\SquareEnix\FinalFantasyXI",
-    };
-
     public static RegistryKey? Open(PolRegion region, bool write)
     {
         using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
-        return write ? hklm.CreateSubKey(KeyPath(region), writable: true) : hklm.OpenSubKey(KeyPath(region));
+        return write ? hklm.CreateSubKey(PolPaths.FfxiKey(region), writable: true) : hklm.OpenSubKey(PolPaths.FfxiKey(region));
     }
 
     private static RegistryKey OpenForWrite(PolRegion region) =>

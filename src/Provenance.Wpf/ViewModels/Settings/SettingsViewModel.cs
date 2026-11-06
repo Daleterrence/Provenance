@@ -6,6 +6,7 @@ using Microsoft.Win32;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Install;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Serilog;
@@ -53,11 +54,11 @@ public partial class SettingsViewModel : ObservableObject
             PolRegion.Japan => "Japan",
             _ => "No PlayOnline install found",
         };
-        string Folder(string product) => (region is { } r ? PolPaths.TryGetInstallFolder(r, product) : null) ?? "Not found";
-        ViewerFolder = Folder(PolPaths.ViewerProduct);
-        PolOptionsStatus = region is { } r && PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) is { } viewer && FolderPins.Linked(viewer)
+        string Folder(GameProduct product) => (region is { } r ? PolPaths.TryGetInstallFolder(r, product) : null) ?? "Not found";
+        ViewerFolder = Folder(GameProduct.Viewer);
+        PolOptionsStatus = region is { } r && PolPaths.TryGetInstallFolder(r, GameProduct.Viewer) is { } viewer && FolderPins.Linked(viewer)
             ? PolOptions.LinkedText : "";
-        FfxiFolder = Folder(PolPaths.FfxiProduct);
+        FfxiFolder = Folder(GameProduct.Game);
         _exitAfterGameExits = settings.Current.ExitAfterGameExits;
         _keepSignedInInTray = settings.Current.KeepSignedInInTray;
         _minimizeToTray = settings.Current.MinimizeToTray;

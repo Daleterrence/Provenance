@@ -1,3 +1,4 @@
+using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Provenance.Common.Settings;
 using Serilog;
@@ -32,7 +33,7 @@ public static class LargeAddressAwareSwitch
     public static Action<Action> OnUiThread { get; set; } = run => run();
 
     public static Target For(PolRegion? region, Func<string?>? blocked = null) =>
-        new(region is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null,
+        new(region is { } r ? PolPaths.TryGetInstallFolder(r, GameProduct.Viewer) : null,
             PolUpdates.ViewerRunning, blocked ?? (() => null), Busy);
 
     private static string? Busy()
@@ -50,8 +51,8 @@ public static class LargeAddressAwareSwitch
 
     private static string? Note(string? viewerDir, bool on, bool clearAtStart)
     {
-        if (viewerDir is null || !File.Exists(Path.Combine(viewerDir, "pol.exe"))) return null;
-        var polExe = Path.Combine(viewerDir, "pol.exe");
+        if (viewerDir is null || !File.Exists(Path.Combine(viewerDir, GameProduct.Viewer.KeyFile))) return null;
+        var polExe = Path.Combine(viewerDir, GameProduct.Viewer.KeyFile);
         try
         {
             if (!LargeAddressAware.IsKnownBuild(polExe))
@@ -69,8 +70,8 @@ public static class LargeAddressAwareSwitch
 
     public static Outcome Change(Target t, bool on, Action? holdPrestarts, Action? releasePrestarts)
     {
-        if (t.ViewerDir is not { } dir || !File.Exists(Path.Combine(dir, "pol.exe"))) return Outcome.Done;
-        var polExe = Path.Combine(dir, "pol.exe");
+        if (t.ViewerDir is not { } dir || !File.Exists(Path.Combine(dir, GameProduct.Viewer.KeyFile))) return Outcome.Done;
+        var polExe = Path.Combine(dir, GameProduct.Viewer.KeyFile);
         try
         {
             if (LargeAddressAware.Read(polExe) == on) return Outcome.Done;
@@ -115,7 +116,7 @@ public static class LargeAddressAwareSwitch
             var s = settings.ReadSaved() ?? settings.Current;
             bool on = s.LargeAddressAware;
             if ((!on && !s.LargeAddressAwareClearAtStart) || t.ViewerDir is not { } dir) return;
-            var polExe = Path.Combine(dir, "pol.exe");
+            var polExe = Path.Combine(dir, GameProduct.Viewer.KeyFile);
             if (LargeAddressAware.Read(polExe) == on)
             {
                 if (!on) ClearDone(settings);
@@ -171,7 +172,7 @@ public static class LargeAddressAwareSwitch
                 hold();
                 for (int i = 0; i < 10 && t.PolRunning(); i++) Thread.Sleep(300);
             }
-            return t.PolRunning() ? null : write(Path.Combine(t.ViewerDir!, "pol.exe"));
+            return t.PolRunning() ? null : write(Path.Combine(t.ViewerDir!, GameProduct.Viewer.KeyFile));
         }
         finally
         {

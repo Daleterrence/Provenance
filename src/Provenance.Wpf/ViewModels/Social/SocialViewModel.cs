@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Game;
 using Provenance.Common.Hook;
+using Provenance.Common.Install;
 using Provenance.Common.Login;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Settings;
@@ -114,7 +115,7 @@ public partial class SocialViewModel : ObservableObject
     }
 
     private string? ViewerFolder() =>
-        _settings.DetectedRegion is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null;
+        _settings.DetectedRegion is { } r ? PolPaths.TryGetInstallFolder(r, GameProduct.Viewer) : null;
 
     // the viewer's status menu has these three, only the viewer itself ever sets Busy
     private static readonly PolStatus[] StatusChoices = [PolStatus.Online, PolStatus.Away, PolStatus.AppearOffline];

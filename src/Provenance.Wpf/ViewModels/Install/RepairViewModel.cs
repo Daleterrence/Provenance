@@ -107,8 +107,8 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
                 End("Repair isn't available", MainViewModel.RepairNotYetText(installed), failed: false);
                 return;
             }
-            var viewerDir = PolPaths.TryGetInstallFolder(installed, PolPaths.ViewerProduct);
-            var ffxiDir = PolPaths.TryGetInstallFolder(installed, PolPaths.FfxiProduct);
+            var viewerDir = PolPaths.TryGetInstallFolder(installed, GameProduct.Viewer);
+            var ffxiDir = PolPaths.TryGetInstallFolder(installed, GameProduct.Game);
             if (viewerDir is null || ffxiDir is null)
             {
                 End("Nothing to repair", "Provenance couldn't find both the PlayOnline Viewer and FINAL FANTASY XI on this PC. Install the game first.", failed: true);
@@ -178,7 +178,8 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
                     Log.Information("Repair plan: {Count} files, {Bytes:N0} bytes, out-of-date patch.ver: {Stale}, viewer queue: {Queue}, " +
                                     "DirectX missing: {DirectX} (Viewer {Viewer}: {ViewerCount}, FFXI {Ffxi}: {FfxiCount})",
                                     plan.Count, plan.Bytes, plan.StaleVersions, plan.QueuePending, plan.DirectXMissing,
-                                    plan.Indexes["viewer"].Version, plan.Work["viewer"].Count, plan.Indexes["ffxi"].Version, plan.Work["ffxi"].Count);
+                                    plan.Indexes[GameProduct.Viewer.Slug].Version, plan.Work[GameProduct.Viewer.Slug].Count,
+                                    plan.Indexes[GameProduct.Game.Slug].Version, plan.Work[GameProduct.Game.Slug].Count);
                     // only replacing game files asks, the registry and DirectX never touch game data
                     bool ask = plan.Count > 0 || plan.QueuePending;
                     if (ask)

@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
+using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -27,7 +28,7 @@ public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string 
     public static WindowerHookBlock Build(WindowerHookInput input)
     {
         var p = input.Profile ?? throw new ArgumentNullException(nameof(input));
-        if (input.Region is not (WindowerRegion.JP or WindowerRegion.US or WindowerRegion.EU))
+        if (input.Region is not { } region)
             throw new ArgumentException("The hook needs a real region, not Auto.", nameof(input));
         var warnings = new List<string>();
         var sizes = WindowerSizes.For(p.UIScale, input.Width, input.Height);
@@ -45,7 +46,7 @@ public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string 
         Text(b, FfxiPathField, FormatDir(input.FfxiPath), "the FFXI folder", warnings);
         Text(b, WindowerPathField, FormatDir(input.WindowerPath), "the Windower folder", warnings);
         Text(b, ConsoleKeyField, p.ConsoleKey.InternalName, "the console key", warnings);
-        BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(RegionAt), (uint)input.Region);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(RegionAt), (uint)PolEnv.AreaIndex(region));
         BinaryPrimitives.WriteInt32LittleEndian(b.AsSpan(WidthAt), sizes.Width);
         BinaryPrimitives.WriteInt32LittleEndian(b.AsSpan(HeightAt), sizes.Height);
         BinaryPrimitives.WriteInt32LittleEndian(b.AsSpan(UIWidthAt), sizes.UIWidth);

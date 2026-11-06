@@ -1,20 +1,24 @@
 using Microsoft.Win32;
+using Provenance.Common.Install;
 
 namespace Provenance.Common.PolFormat;
 
 public enum PolRegion { Japan, UnitedStates, Europe }
 
-// the InstallFolder keys (32-bit view) name values by product code: "1000" is the viewer folder (where pol.exe
-// lives), "0001" the FFXI one
+// the InstallFolder keys (32-bit view) name values by product id, the viewer's folder is where pol.exe lives
 public static class PolPaths
 {
-    public const string ViewerProduct = "1000";
-    public const string FfxiProduct = "0001";
-
     private static readonly PolRegion[] Order = [PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan];
 
     // the regions Provenance logs in and plays on
     public static bool Supported(PolRegion? region) => region is PolRegion.UnitedStates or PolRegion.Europe or PolRegion.Japan;
+
+    // Japan keeps its settings under SQUARE, the others under SquareEnix
+    public static string SettingsKey(PolRegion region) => Hive(region) + @"\" + (region == PolRegion.Japan ? "SQUARE" : "SquareEnix");
+
+    public static string ViewerKey(PolRegion region) => SettingsKey(region) + @"\PlayOnlineViewer";
+
+    public static string FfxiKey(PolRegion region) => SettingsKey(region) + @"\FinalFantasyXI";
 
     public static string Hive(PolRegion region) => region switch
     {
@@ -40,7 +44,7 @@ public static class PolPaths
         _ => "North America",
     };
 
-    public static PolRegion? TryAutoDetectRegion() => DetectRegion(r => TryGetInstallFolder(r, ViewerProduct));
+    public static PolRegion? TryAutoDetectRegion() => DetectRegion(r => TryGetInstallFolder(r, GameProduct.Viewer));
 
     // pol.exe goes by env.dat, and a PC that's switched regions keeps the old keys, so a hive only counts when its
     // viewer's env.dat agrees. With none agreeing, the first folder's env.dat wins
@@ -55,13 +59,13 @@ public static class PolPaths
         return found.Count == 0 ? null : PolEnv.Region(found[0].Dir) ?? found[0].Hive;
     }
 
-    public static string? TryGetInstallFolder(PolRegion region, string productCode)
+    public static string? TryGetInstallFolder(PolRegion region, GameProduct product)
     {
         try
         {
             using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
             using var key = hklm.OpenSubKey(Hive(region) + @"\InstallFolder");
-            var value = key?.GetValue(productCode) as string;
+            var value = key?.GetValue(product.InstallValue) as string;
             return string.IsNullOrWhiteSpace(value) ? null : value.TrimEnd('\\');
         }
         catch { return null; }

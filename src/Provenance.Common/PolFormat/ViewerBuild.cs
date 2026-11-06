@@ -1,4 +1,5 @@
 using Provenance.Common.IO;
+using Provenance.Common.Install;
 
 namespace Provenance.Common.PolFormat;
 
@@ -57,7 +58,7 @@ public static class ViewerBuild
 
     internal static State Check(string viewerDir, PolRegion region, Builds known)
     {
-        var pol = Path.Combine(viewerDir, "pol.exe");
+        var pol = Path.Combine(viewerDir, GameProduct.Viewer.KeyFile);
         var core = Path.Combine(viewerDir, PolcorePath(region));
         if (!File.Exists(pol) || !File.Exists(core)) return State.Missing;
         if (Fits(known, region, FileHash.Sha256(pol), () => FileHash.Sha256(core))) return State.Supported;
@@ -89,7 +90,7 @@ public static class ViewerBuild
         var files = new List<FileStream>();
         try
         {
-            foreach (var rel in new[] { "pol.exe", PolcorePath(region) })
+            foreach (var rel in new[] { GameProduct.Viewer.KeyFile, PolcorePath(region) })
                 files.Add(new FileStream(Path.Combine(viewerDir, rel), FileMode.Open, FileAccess.Read, FileShare.Read));
             if (Fits(known, region, FileHash.Sha256(files[0]), () => FileHash.Sha256(files[1])))
             {

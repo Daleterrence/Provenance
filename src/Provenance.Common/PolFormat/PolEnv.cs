@@ -42,9 +42,13 @@ public static class PolEnv
 
     public static string? ValueIn(string viewerDir, string name) => FileIn(viewerDir) is { } path ? Value(path, name) : null;
 
+    // POL_UCS_AREA_KBN and the viewer's own region index (app.dll 0x105c7b44) share one numbering
+    private static readonly PolRegion[] ByArea = [PolRegion.Japan, PolRegion.UnitedStates, PolRegion.Europe];
+
+    public static int AreaIndex(PolRegion region) => Array.IndexOf(ByArea, region);
+
     // pol.exe's own answer, POL_UCS_AREA_KBN. A bad EU file is no answer
     public static PolRegion? Region(string viewerDir) =>
         int.TryParse(ValueIn(viewerDir, "POL_UCS_AREA_KBN"), NumberStyles.None, CultureInfo.InvariantCulture, out var area)
-            ? area switch { 0 => PolRegion.Japan, 1 => PolRegion.UnitedStates, 2 => PolRegion.Europe, _ => null }
-            : null;
+            && area < ByArea.Length ? ByArea[area] : null;
 }

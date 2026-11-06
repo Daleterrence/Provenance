@@ -827,14 +827,14 @@ public partial class MainViewModel : ObservableObject
     public bool ShowFriendsCard => LoggedIn && !IsLaunching;
 
     private static string? ViewerFolder(PolRegion? region) =>
-        region is { } r ? PolPaths.TryGetInstallFolder(r, PolPaths.ViewerProduct) : null;
+        region is { } r ? PolPaths.TryGetInstallFolder(r, GameProduct.Viewer) : null;
 
     private void RefreshInstallState()
     {
         var region = _settings.DetectedRegion;
         GameInstalled = region is { } r &&
-                        PolPaths.TryGetInstallFolder(r, PolPaths.FfxiProduct) is { } f &&
-                        File.Exists(Path.Combine(f, "FFXiMain.dll"));
+                        PolPaths.TryGetInstallFolder(r, GameProduct.Game) is { } f &&
+                        File.Exists(Path.Combine(f, GameProduct.Game.KeyFile));
         RefreshRepairAvailable(region);
     }
 
@@ -1359,7 +1359,7 @@ public partial class MainViewModel : ObservableObject
     // the game reads these from the account's option.bin when it starts, so they go in before every start
     private void WritePolOptions(string? profileId)
     {
-        if (PolPaths.TryGetInstallFolder(PlayRegion, PolPaths.ViewerProduct) is { } viewer) WritePolOptions(profileId, viewer);
+        if (PolPaths.TryGetInstallFolder(PlayRegion, GameProduct.Viewer) is { } viewer) WritePolOptions(profileId, viewer);
     }
 
     internal void WritePolOptions(string? profileId, string viewer)
@@ -1402,8 +1402,8 @@ public partial class MainViewModel : ObservableObject
     }
 
     private (string Ffxi, string Viewer, PolRegion Region)? GameFolders() =>
-        PolPaths.TryGetInstallFolder(PlayRegion, PolPaths.FfxiProduct) is { } ffxi
-        && PolPaths.TryGetInstallFolder(PlayRegion, PolPaths.ViewerProduct) is { } viewer
+        PolPaths.TryGetInstallFolder(PlayRegion, GameProduct.Game) is { } ffxi
+        && PolPaths.TryGetInstallFolder(PlayRegion, GameProduct.Viewer) is { } viewer
             ? (ffxi, viewer, PlayRegion) : null;
 
     internal async Task<bool> UpdateGameAsync()

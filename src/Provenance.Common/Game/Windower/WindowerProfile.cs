@@ -1,9 +1,8 @@
 using System.Globalization;
 using System.Xml.Linq;
+using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game.Windower;
-
-public enum WindowerRegion { Auto = -1, JP = 0, US = 1, EU = 2 }
 
 public enum WindowerWindowMode { BorderlessWindow, Window, Fullscreen }
 
@@ -12,7 +11,7 @@ public sealed class WindowerProfile
     public const string DefaultExecutable = "pol.exe";
 
     public string Name { get; internal set; } = "";
-    public WindowerRegion Region { get; set; } = WindowerRegion.Auto;
+    public PolRegion? Region { get; set; }
     public WindowerKey ConsoleKey { get; set => field = WindowerKeys.Canonical(value ?? WindowerKeys.Insert); } = WindowerKeys.Insert;
     public string? InitCommand { get; set; }
     public WindowerWindowMode WindowMode { get; set; } = WindowerWindowMode.BorderlessWindow;
@@ -46,6 +45,15 @@ public sealed class WindowerProfile
         return c;
     }
 
+    // the names settings.xml uses, anything else (Auto included) is no region
+    private static readonly (PolRegion Region, string Name)[] RegionNames =
+        [(PolRegion.Japan, "JP"), (PolRegion.UnitedStates, "US"), (PolRegion.Europe, "EU")];
+
+    public static string RegionName(PolRegion region) => RegionNames.First(r => r.Region == region).Name;
+
+    private static PolRegion? RegionFrom(string? name) =>
+        RegionNames.FirstOrDefault(r => r.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { Name: not null } r ? r.Region : null;
+
     private static readonly HashSet<string> Known =
     [
         "region", "consolekey", "initcommand", "windowmode", "width", "height", "mipmaplevel", "gamma", "uiscale",
@@ -59,7 +67,7 @@ public sealed class WindowerProfile
         var p = new WindowerProfile
         {
             Name = ((string?)e.Attribute("name") ?? "").Trim(),
-            Region = Parse.Enum(S("region"), WindowerRegion.Auto),
+            Region = RegionFrom(S("region")),
             ConsoleKey = WindowerKeys.Find(S("consolekey")) ?? WindowerKeys.Insert,
             InitCommand = S("initcommand"),
             WindowMode = Parse.Enum(S("windowmode"), WindowerWindowMode.BorderlessWindow),
@@ -93,7 +101,7 @@ public sealed class WindowerProfile
     {
         var e = new XElement("profile", new XAttribute("name", Name));
         void Add(bool when, string name, string value) { if (when) e.Add(new XElement(name, value)); }
-        Add(Region != WindowerRegion.Auto, "region", Region.ToString());
+        if (Region is { } region) e.Add(new XElement("region", RegionName(region)));
         Add(true, "consolekey", ConsoleKey.Name);
         Add(InitCommand is not null, "initcommand", InitCommand!);
         Add(WindowMode != WindowerWindowMode.BorderlessWindow, "windowmode", WindowMode.ToString());
