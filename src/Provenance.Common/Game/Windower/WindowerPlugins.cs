@@ -32,22 +32,22 @@ public static class WindowerPlugins
                         .GroupBy(f => System.IO.Path.GetFileNameWithoutExtension(f), StringComparer.OrdinalIgnoreCase)
                         .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var list = new List<WindowerPluginInfo>();
-        var manifest = PluginManifest.Load(windowerDir);
+        var manifest = WindowerManifest.LoadCached(windowerDir);
         foreach (var m in manifest?.Plugins ?? [])
         {
             if (list.Any(p => p.Name.Equals(m.Name, StringComparison.OrdinalIgnoreCase))) continue;
             dlls.Remove(m.Name, out var path);
-            var pe = path is null ? null : PeImage.Read(path);
+            var pe = path is null ? null : PeFile.Load(path);
             list.Add(new WindowerPluginInfo
             {
                 Name = m.Name, Installed = path is not null, IsWindowerPlugin = path is null || IsPlugin(pe), InManifest = true,
                 ManifestVersion = m.Version, FileVersion = pe?.FileVersion, Description = m.Description,
-                Required = m.Required, Hidden = m.Hidden, HasResources = m.HasResources, Path = path,
+                Required = m.Required, Hidden = m.Hidden, HasResources = m.Resources, Path = path,
             });
         }
         foreach (var (name, path) in dlls.OrderBy(d => d.Key, StringComparer.OrdinalIgnoreCase))
         {
-            var pe = PeImage.Read(path);
+            var pe = PeFile.Load(path);
             list.Add(new WindowerPluginInfo
             {
                 Name = name, Installed = true, IsWindowerPlugin = IsPlugin(pe), FileVersion = pe?.FileVersion, Path = path,
@@ -56,8 +56,8 @@ public static class WindowerPlugins
         return list;
     }
 
-    public static bool IsWindowerPlugin(string dllPath) => IsPlugin(PeImage.Read(dllPath));
+    public static bool IsWindowerPlugin(string dllPath) => IsPlugin(PeFile.Load(dllPath));
 
-    private static bool IsPlugin(PeImage? pe) =>
-        pe is { Machine: PeImage.MachineI386 } && RequiredExports.All(x => pe.Exports.Contains(x, StringComparer.Ordinal));
+    private static bool IsPlugin(PeFile? pe) =>
+        pe is { Machine: PeFile.MachineI386 } && RequiredExports.All(x => pe.Exports.ContainsKey(x));
 }

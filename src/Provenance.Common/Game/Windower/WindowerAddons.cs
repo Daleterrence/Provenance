@@ -1,7 +1,4 @@
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml;
-using System.Xml.Linq;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -43,7 +40,7 @@ public static partial class WindowerAddons
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
             if (main is null) continue;
-            var h = ReadHeader(ReadStart(main));
+            var h = ReadHeader(TextFiles.ReadHead(main, MaxRead) ?? "");
             listed.TryGetValue(name, out var x);
             list.Add(new WindowerAddonInfo
             {
@@ -52,18 +49,6 @@ public static partial class WindowerAddons
             });
         }
         return list.OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
-    }
-
-    private static string ReadStart(string path)
-    {
-        try
-        {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            var buf = new byte[(int)Math.Min(fs.Length, MaxRead)];
-            fs.ReadExactly(buf);
-            return new UTF8Encoding(false).GetString(buf.AsSpan().StartsWith((byte[])[0xEF, 0xBB, 0xBF]) ? buf[3..] : buf);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return ""; }
     }
 
     internal sealed record Header(string? Name, string? Author, string? Version);
@@ -122,24 +107,14 @@ public static partial class WindowerAddons
     private static Dictionary<string, Listed> ReadAddonsXml(string windowerDir)
     {
         var map = new Dictionary<string, Listed>(StringComparer.OrdinalIgnoreCase);
-        var path = Path.Combine(windowerDir, "updates", "addons.xml");
-        try
+        if (TextFiles.LoadXml(Path.Combine(windowerDir, "updates", "addons.xml")) is not { } doc) return map;
+        foreach (var a in doc.Root?.Elements("addon") ?? [])
         {
-            if (!File.Exists(path)) return map;
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var r = XmlReader.Create(fs, new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore, XmlResolver = null });
-            foreach (var a in XDocument.Load(r).Root?.Elements("addon") ?? [])
-            {
-                var name = ((string?)a.Element("name"))?.Trim();
-                if (string.IsNullOrEmpty(name) || map.ContainsKey(name)) continue;
-                var desc = (string?)a.Element("description");
-                map[name] = new Listed(((string?)a.Element("author"))?.Trim() ?? "", desc is null ? null : Spaces().Replace(desc, " ").Trim());
-            }
+            var name = ((string?)a.Element("name"))?.Trim();
+            if (string.IsNullOrEmpty(name) || map.ContainsKey(name)) continue;
+            var desc = (string?)a.Element("description");
+            map[name] = new Listed(((string?)a.Element("author"))?.Trim() ?? "", desc is null ? null : TextFiles.Spaces(desc));
         }
-        catch (Exception e) when (e is XmlException or IOException or UnauthorizedAccessException) { }
         return map;
     }
-
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex Spaces();
 }

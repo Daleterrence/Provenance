@@ -41,8 +41,8 @@ public static class AshitaPlugins
     {
         try
         {
-            var core = PluginImage.Load(Path.Combine(ashitaDir, "Ashita.dll"), MaxDll);
-            if (core is not null && core.Exports().TryGetValue("GetInterfaceVersion", out var rva) && core.ExportedDouble(rva) is { } v) return v;
+            var core = AshitaPluginMetadata.Load(Path.Combine(ashitaDir, "Ashita.dll"), MaxDll);
+            if (core is not null && core.Exports.TryGetValue("GetInterfaceVersion", out var rva) && core.ExportedDouble(rva) is { } v) return v;
         }
         catch (Exception) { }
         return ExpectedInterfaceVersion;
@@ -67,14 +67,14 @@ public static class AshitaPlugins
         return list;
     }
 
-    private static AshitaPlugin? Read(string dll, string loadName, double core) => Read(PluginImage.Load(dll, MaxDll), dll, loadName, core);
+    private static AshitaPlugin? Read(string dll, string loadName, double core) => Read(AshitaPluginMetadata.Load(dll, MaxDll), dll, loadName, core);
 
-    internal static AshitaPlugin? Read(byte[] bytes, string dll, string loadName, double core) => Read(PluginImage.Parse(bytes), dll, loadName, core);
+    internal static AshitaPlugin? Read(byte[] bytes, string dll, string loadName, double core) => Read(AshitaPluginMetadata.Parse(bytes), dll, loadName, core);
 
-    private static AshitaPlugin? Read(PluginImage? pe, string dll, string loadName, double core)
+    private static AshitaPlugin? Read(AshitaPluginMetadata? pe, string dll, string loadName, double core)
     {
         if (pe is null) return null;
-        var exports = pe.Exports();
+        var exports = pe.Exports;
         AshitaPluginKind kind;
         if (exports.ContainsKey("expCreatePolPlugin")) kind = AshitaPluginKind.PolPlugin;
         else if (exports.ContainsKey("expCreatePlugin")) kind = AshitaPluginKind.Plugin;

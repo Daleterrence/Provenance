@@ -73,8 +73,7 @@ public sealed class WindowerAddonTree
         catch (Exception e) when (e is JsonException or InvalidOperationException) { return null; }
     }
 
-    public WindowerAddon? Find(string name) =>
-        Addons.FirstOrDefault(a => a.Name == name) ?? Addons.FirstOrDefault(a => a.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    public WindowerAddon? Find(string name) => TextFiles.FindByName(Addons, a => a.Name, name);
 
     public static bool IsInstalled(WindowerAddon addon, string windowerDir) => File.Exists(Path.Combine(windowerDir, addon.MainPath));
 

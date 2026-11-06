@@ -136,10 +136,10 @@ public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string 
 
     // Windower.exe's own version when it's there (that's its assembly version too), otherwise the cached manifest's
     public static string LauncherVersion(string windowerDir) =>
-        PeImage.ReadFileVersion(Path.Combine(windowerDir, "Windower.exe"))?.ToString()
-        ?? PluginManifest.Load(windowerDir)?.LauncherVersion?.ToString()
+        PeFile.ReadFileVersion(Path.Combine(windowerDir, "Windower.exe"))?.ToString()
+        ?? (WindowerManifest.LoadCached(windowerDir)?.LauncherVersion is { } v && v != new Version() ? v.ToString() : null)
         ?? "0.0.0.0";
 
     public static string HookVersion(string windowerDir) =>
-        PeImage.ReadFileVersion(Path.Combine(windowerDir, "Hook.dll"))?.ToString() ?? "0.0.0.0";
+        PeFile.ReadFileVersion(Path.Combine(windowerDir, "Hook.dll"))?.ToString() ?? "0.0.0.0";
 }

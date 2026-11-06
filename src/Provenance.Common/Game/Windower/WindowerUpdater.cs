@@ -308,7 +308,7 @@ public sealed class WindowerUpdater
                 var since = switched ? WindowerHttp.NoFile : WindowerHttp.Modified(cache);
                 var f = await job.Http.DownloadAsync(Servers.Files, $"{Branch}/manifest.xml", temp, since, job.Ct);
                 if (!f.Ok) Note(job.Errors, "Windower's manifest", f);
-                else if (WindowerManifest.ReadXml(temp) is not { } doc) job.Errors.Add("Windower's manifest from the server wasn't readable.");
+                else if (TextFiles.LoadXml(temp) is not { } doc) job.Errors.Add("Windower's manifest from the server wasn't readable.");
                 else
                 {
                     fresh = WindowerManifest.Parse(doc);
@@ -394,7 +394,7 @@ public sealed class WindowerUpdater
             Note(job.Errors, "The resource list", f);
             return;
         }
-        if (WindowerManifest.ReadXml(temp) is not { } doc)
+        if (TextFiles.LoadXml(temp) is not { } doc)
         {
             job.Delete(temp);
             job.Errors.Add("The resource list from the server wasn't readable.");

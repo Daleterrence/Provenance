@@ -11,22 +11,8 @@ internal static class ScriptLoads
         var addons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         // just what the hook gets: load and exec are echoes by then, and a cut-off tail never runs
         Scan(WindowerHookBlock.InitCommandAsSent(initCommand), InitCommand, plugins, addons);
-        Scan(ReadInit(Path.Combine(windowerDir, "scripts", "init.txt")), "your init.txt", plugins, addons);
+        Scan(TextFiles.ReadHead(Path.Combine(windowerDir, "scripts", "init.txt"), MaxRead) ?? "", "your init.txt", plugins, addons);
         return (plugins, addons);
-    }
-
-    private static string ReadInit(string path)
-    {
-        try
-        {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            var buf = new byte[(int)Math.Min(fs.Length, MaxRead)];
-            fs.ReadExactly(buf);
-            // Notepad's BOM would stick to the first word otherwise
-            var bom = buf.AsSpan().StartsWith((byte[])[0xEF, 0xBB, 0xBF]) ? 3 : 0;
-            return System.Text.Encoding.UTF8.GetString(buf, bom, buf.Length - bom);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return ""; }
     }
 
     public static bool LoadsAddon(string script)

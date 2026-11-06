@@ -27,15 +27,7 @@ public static partial class AshitaAddons
 
     private static AshitaAddon? Read(string dir, string name)
     {
-        string text;
-        try
-        {
-            using var fs = new FileStream(Path.Combine(dir, name + ".lua"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            var buffer = new byte[(int)Math.Min(fs.Length, MaxMainFile)];
-            buffer = buffer[..fs.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false)];
-            text = new UTF8Encoding(false).GetString(buffer).TrimStart((char)0xFEFF);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+        if (TextFiles.ReadHead(Path.Combine(dir, name + ".lua"), MaxMainFile) is not { } text) return null;
 
         var fields = new Dictionary<string, string>(StringComparer.Ordinal);
         Dictionary<string, string>? locals = null;
