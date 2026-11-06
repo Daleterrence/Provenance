@@ -144,8 +144,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (value != null && Available && !_restoringZone) RequestRooms(0);
     }
 
-    private static string NewToken() => Guid.NewGuid().ToString("N")[..12];
-
     private int? Pid => _social.SessionPid;
 
     // the zone list, the viewer's first search when chat opens and Try again's. Nothing else starts one
@@ -155,7 +153,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (_social.GameRunning) { Unavailable = GameRunningText; return; }
         if (Pid is not { } pid) { Unavailable = NotNow; return; }
         Unavailable = null;
-        _zonesToken = NewToken();
+        _zonesToken = HookFiles.NewToken();
         ZonesNote = "Searching zones...";
         if (!ChatRoomFiles.Zones(pid, _zonesToken)) { _zonesToken = null; Unavailable = NotNow; }
     }
@@ -163,7 +161,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private void RequestRooms(int offset)
     {
         if (SelectedZone is not { } z || Pid is not { } pid) return;
-        _roomsToken = NewToken();
+        _roomsToken = HookFiles.NewToken();
         Searching = true;
         RoomsNote = "Searching chat rooms...";
         Rooms.Clear();
@@ -193,7 +191,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (SelectedRoom is not { } room || Pid is not { } pid) return;
         var nick = AskChatName?.Invoke(_lastNick ?? DefaultNick());
         if (nick is null) return;
-        var token = NewToken();
+        var token = HookFiles.NewToken();
         if (room.Locked)
         {
             if (AskPassword?.Invoke() is not { } pw) return;
@@ -230,7 +228,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (AskCreate?.Invoke(Zones.Select(z => z.Zone).ToList(), SelectedZone?.Zone.Code ?? 0, cats) is not { } form) return;
         var nick = AskChatName?.Invoke(_lastNick ?? DefaultNick());
         if (nick is null) return;
-        var token = NewToken();
+        var token = HookFiles.NewToken();
         bool locked = form.Password is { Length: > 0 };
         if (locked && !_savePassword(token, form.Password!))
         {
@@ -291,7 +289,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private void SendMaster(ChatRoomFiles.MasterOp op, MasterJob kind, int key, string name, string? password)
     {
         if (Pid is not { } pid) return;
-        var token = NewToken();
+        var token = HookFiles.NewToken();
         if (password is { Length: > 0 } && !_savePassword(token, password))
         {
             ShowError?.Invoke("Chat communication error.");
@@ -318,7 +316,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     internal void MasterTick(DateTime now)
     {
         if (_masterToken is null || now - _masterSentAt < MasterGiveUp || Pid is not { } pid) return;
-        SocialRequests.WithdrawRequest(pid, HookContract.Requests.ChatMaster);
+        HookFiles.Withdraw(pid, HookContract.Requests.ChatMaster);
         if (_masterKind == MasterJob.Password) _dropPassword();
         _masterToken = null;
         MasterBusy = false;
@@ -378,13 +376,13 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         if (Pid is { } pid)
         {
-            SocialRequests.WithdrawRequest(pid, HookContract.Requests.ChatSend);
+            HookFiles.Withdraw(pid, HookContract.Requests.ChatSend);
             if (Current == Page.Room || Entering)
             {
-                bool withdrawn = Entering && ((SocialRequests.WithdrawRequest(pid, HookContract.Requests.ChatJoin) == Withdrawal.Withdrawn) |
-                                              (SocialRequests.WithdrawRequest(pid, HookContract.Requests.ChatCreate) == Withdrawal.Withdrawn));
+                bool withdrawn = Entering && ((HookFiles.Withdraw(pid, HookContract.Requests.ChatJoin) == Withdrawal.Withdrawn) |
+                                              (HookFiles.Withdraw(pid, HookContract.Requests.ChatCreate) == Withdrawal.Withdrawn));
                 if (Entering) _dropPassword();
-                if (!withdrawn && !_quiet) ChatRoomFiles.Leave(pid, NewToken(), Entering ? _joinToken ?? "" : "");
+                if (!withdrawn && !_quiet) ChatRoomFiles.Leave(pid, HookFiles.NewToken(), Entering ? _joinToken ?? "" : "");
             }
         }
         BackToLobby();
@@ -427,7 +425,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         var text = Compose.Trim().Replace("\r", "").Replace('\n', ' ');
         if (text.Length == 0 || Pid is not { } pid) return;
-        var token = NewToken();
+        var token = HookFiles.NewToken();
         if (!ChatRoomFiles.Send(pid, token, text, Colour, Emoticon)) { SendNote = "Chat communication error."; return; }
         _gate.Sent(token, Compose, DateTime.UtcNow);
         Compose = "";

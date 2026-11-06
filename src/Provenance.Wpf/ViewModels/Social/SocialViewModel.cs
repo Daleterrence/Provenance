@@ -95,17 +95,15 @@ public partial class SocialViewModel : ObservableObject
         else if (!ProfilePictureSaving) ChangeProfilePictureRequested?.Invoke();
     }
 
-    private static string NewToken() => Guid.NewGuid().ToString("N")[..12];
-
     // a job's last word (ok or "failed:..."), "timeout" once it's run past secs, or null while it's still going
     private static string? Settled(string? state, string ok, DateTime since, int secs) =>
         state == ok || state?.StartsWith("failed", StringComparison.Ordinal) == true ? state
         : DateTime.UtcNow - since > TimeSpan.FromSeconds(secs) ? "timeout" : null;
 
     // a request the hook hasn't taken yet never runs for nobody
-    private void Withdraw(string ext)
+    private void DiscardRequest(string ext)
     {
-        if (_pol.Pid is { } pid) SocialRequests.CancelRequest(pid, ext);
+        if (_pol.Pid is { } pid) HookFiles.Discard(pid, ext);
     }
 
     // profile server reads go one at a time in the hook, so a clock only starts once the hook's taken that read
@@ -809,7 +807,7 @@ public partial class SocialViewModel : ObservableObject
 
     private bool BeginEdit(out int pid, out string token)
     {
-        token = NewToken();
+        token = HookFiles.NewToken();
         pid = _pol.Pid ?? 0;
         if (!CanEdit || pid == 0) return false;
         _editToken = token;
@@ -1073,7 +1071,7 @@ public partial class SocialViewModel : ObservableObject
             SearchFailed(QuoteInName);
             return;
         }
-        _searchToken = NewToken();
+        _searchToken = HookFiles.NewToken();
         _searchAt = DateTime.UtcNow;
         _searchedKind = kind;
         _searchedValue = value;
@@ -1090,7 +1088,7 @@ public partial class SocialViewModel : ObservableObject
     public void CancelSearch()
     {
         if (_searchToken is null) return;
-        Withdraw(HookContract.Requests.Search);
+        DiscardRequest(HookContract.Requests.Search);
         _searchToken = null;
         SearchBusy = false;
         SearchNote = "";
@@ -1132,7 +1130,7 @@ public partial class SocialViewModel : ObservableObject
         if (_searchToken != null &&
             Settled(snap.SearchToken == _searchToken ? snap.SearchState : null, "done", _searchAt, 250) is { } st)
         {
-            if (st == "timeout") Withdraw(HookContract.Requests.Search);
+            if (st == "timeout") DiscardRequest(HookContract.Requests.Search);
             _searchToken = null;
             SearchBusy = false;
             var characters = _searchedKind == FriendSearchKind.Character;
@@ -1217,7 +1215,7 @@ public partial class SocialViewModel : ObservableObject
             EditNote = GameRunning ? GameRunningNote : SwitchingNote;
             return;
         }
-        _picToken = NewToken();
+        _picToken = HookFiles.NewToken();
         _picAt = DateTime.UtcNow;
         ProfilePictureSaving = true;
         EditNote = "";
@@ -1234,7 +1232,7 @@ public partial class SocialViewModel : ObservableObject
         // two jobs, each up to 100 secs in polcore
         if (Settled(snap.ProfilePictureToken == _picToken ? snap.ProfilePictureState : null, "saved", _picAt, 250)
             is not { } st) return;
-        if (st == "timeout") Withdraw(HookContract.Requests.Pic);
+        if (st == "timeout") DiscardRequest(HookContract.Requests.Pic);
         _picToken = null;
         ProfilePictureSaving = false;
         if (st == "saved") return;
@@ -1319,7 +1317,7 @@ public partial class SocialViewModel : ObservableObject
 
     private void Queue(FriendItem f, string text)
     {
-        var token = NewToken();
+        var token = HookFiles.NewToken();
         _chat!.AddOutgoing(f.Name, f.Key, text, token);
         _sendQueue.Enqueue((f.Row, f.Name, token, text));
         PumpSends();
@@ -1335,7 +1333,7 @@ public partial class SocialViewModel : ObservableObject
             // never answered. Untaken it's withdrawn (only the newest can be), but once the hook has it, it might still
             // go, so it's not re-sent
             bool withdrawn = i == newest &&
-                             SocialRequests.WithdrawRequest(x.Pid, HookContract.Requests.Send) == Withdrawal.Withdrawn;
+                             HookFiles.Withdraw(x.Pid, HookContract.Requests.Send) == Withdrawal.Withdrawn;
             if (!withdrawn && _chat?.SetSendState(x.Token, "unconfirmed") == true) RefreshConversation();
             _sendInFlight.RemoveAt(i);
         }
@@ -1365,7 +1363,7 @@ public partial class SocialViewModel : ObservableObject
         {
             var x = _sendInFlight[i];
             // only the newest can still be untaken, the next file's only written once the hook's taken the last
-            var w = i == newest ? SocialRequests.WithdrawRequest(x.Pid, HookContract.Requests.Send) : Withdrawal.Taken;
+            var w = i == newest ? HookFiles.Withdraw(x.Pid, HookContract.Requests.Send) : Withdrawal.Taken;
             // held a second ago it could've started since, the snapshot that says so takes about 300 ms to get here
             bool held = x.HookState == "queued" && DateTime.UtcNow - x.HookSaid >= TimeSpan.FromSeconds(1);
             bool went = w == Withdrawal.Taken ? drained || !held

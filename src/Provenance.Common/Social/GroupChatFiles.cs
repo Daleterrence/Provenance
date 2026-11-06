@@ -1,13 +1,15 @@
 using System.Text.Json;
 using Provenance.Common.Hook;
-using Provenance.Common.IO;
 using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Social;
 
 public sealed record GroupChatLine(long Seq, long Time, int From, bool Me, string Name, string Text);
 
-public sealed record GroupChatLines(string Group, IReadOnlyList<GroupChatLine> Lines);
+public sealed record GroupChatLines(string Group, IReadOnlyList<GroupChatLine> Lines)
+{
+    public List<GroupChatLine> After(long seq) => Lines.Where(l => l.Seq > seq).OrderBy(l => l.Seq).ToList();
+}
 
 // the snapshot's "groupChat". States run "joining" -> "in" -> "leaving" -> "left", or "failed:...", "left:handle" (a
 // handle switch took it out), "gone" (the group went), "removed" (I was taken out of it) or "lost"
@@ -30,12 +32,14 @@ public static class GroupChatFiles
     public const int MaxText = 174;
 
     public static bool Join(int pid, string token, string group, int slot, string hid) =>
-        Write(pid, HookContract.Requests.GroupChatJoin, $"{OneLine(token)}\n{OneLine(group)}\n{slot}\n{OneLine(hid)}");
+        HookFiles.WriteRequest(pid, HookContract.Requests.GroupChatJoin, token, group, slot, hid);
 
-    public static bool Send(int pid, string token, string text) => Write(pid, HookContract.Requests.GroupChatSend, $"{OneLine(token)}\n{OneLine(text)}");
+    public static bool Send(int pid, string token, string text) =>
+        HookFiles.WriteRequest(pid, HookContract.Requests.GroupChatSend, token, text);
 
     // join is an untaken join this calls off, when the app couldn't withdraw it
-    public static bool Leave(int pid, string token, string join = "") => Write(pid, HookContract.Requests.GroupChatLeave, $"{OneLine(token)}\n{OneLine(join)}");
+    public static bool Leave(int pid, string token, string join = "") =>
+        HookFiles.WriteRequest(pid, HookContract.Requests.GroupChatLeave, token, join);
 
     public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.GroupChat);
 
@@ -51,29 +55,6 @@ public static class GroupChatFiles
         catch { return null; }
     }
 
-    public static GroupChatLines? TryReadLines(int pid)
-    {
-        var path = LinesPathForPid(pid);
-        try
-        {
-            if (!File.Exists(path) || new FileInfo(path).Length > 4 * 1024 * 1024) return null;
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var sr = new StreamReader(fs);
-            return ParseLines(sr.ReadToEnd());
-        }
-        catch { return null; }
-    }
-
-    private static string OneLine(string s) => new(s.Replace("\r", "").Select(c => c < ' ' ? ' ' : c).ToArray());
-
-    private static bool Write(int pid, string ext, string body)
-    {
-        try
-        {
-            var path = HookFiles.PathFor(pid, ext);
-            AtomicFile.Write(path, body);
-            return true;
-        }
-        catch { return false; }
-    }
+    public static GroupChatLines? TryReadLines(int pid) =>
+        HookFiles.ReadJson(pid, HookContract.Files.GroupChat, HookFiles.MaxBytes.GroupChat, ParseLines);
 }

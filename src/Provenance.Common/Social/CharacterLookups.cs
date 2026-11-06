@@ -1,3 +1,5 @@
+using Provenance.Common.Hook;
+
 namespace Provenance.Common.Social;
 
 // one lookup at a time, 3 s apart like the hook, for an uncached character someone's just turned up on. A failed one
@@ -52,7 +54,7 @@ public sealed class CharacterLookups(CharacterNames names)
         if (_queue.Count == 0) return null;
         Asking = _queue[0];
         _queue.RemoveAt(0);
-        Token = Guid.NewGuid().ToString("N")[..12];
+        Token = HookFiles.NewToken();
         _askedAt = _last = now;
         return Asking;
     }

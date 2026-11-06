@@ -251,7 +251,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private void Start(Job job, string note = "")
     {
         _job = job;
-        _token = Guid.NewGuid().ToString("N")[..12];
+        _token = HookFiles.NewToken();
         _pid = _social.SessionPid ?? 0;
         _at = DateTime.UtcNow;
         if (job == Job.Load) LoadingText = "Loading your profile...";
@@ -294,7 +294,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     // withdraws a request the hook hasn't taken yet, so it never runs later
     private void Abandon(string text)
     {
-        if (JobExt is { } ext && _pid != 0) SocialRequests.CancelRequest(_pid, ext);
+        if (JobExt is { } ext && _pid != 0) HookFiles.Discard(_pid, ext);
         Fail(text);
     }
 
@@ -570,6 +570,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _social.PropertyChanged -= OnSocialChanged;
         _timer.Stop();
         // closed mid-job: an untaken request is withdrawn, one the hook already took finishes there
-        if (JobExt is { } ext && _pid != 0) SocialRequests.CancelRequest(_pid, ext);
+        if (JobExt is { } ext && _pid != 0) HookFiles.Discard(_pid, ext);
     }
 }

@@ -178,36 +178,14 @@ public static class SocialSnapshotFiles
     }
 
     // read once and taken (deleted) once it's in the chat log. The hook caps it at 3 MB
-    public static PolStoredLines? TryReadStore(int pid)
-    {
-        var path = StorePathForPid(pid);
-        if (!File.Exists(path)) return null;
-        try
-        {
-            if (new FileInfo(path).Length > 8 * 1024 * 1024) return null;
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var sr = new StreamReader(fs);
-            return ParseStore(sr.ReadToEnd());
-        }
-        catch { return null; }
-    }
+    public static PolStoredLines? TryReadStore(int pid) =>
+        HookFiles.ReadJson(pid, HookContract.Files.Store, HookFiles.MaxBytes.Store, ParseStore);
 
     public static void DeleteStore(int pid)
     {
         try { File.Delete(StorePathForPid(pid)); } catch { }
     }
 
-    public static PolSocialSnapshot? TryRead(int pid)
-    {
-        var path = PathForPid(pid);
-        if (!File.Exists(path)) return null;
-        try
-        {
-            if (new FileInfo(path).Length > 4 * 1024 * 1024) return null;   // never sit there reading a huge file
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var sr = new StreamReader(fs);
-            return Parse(sr.ReadToEnd());
-        }
-        catch { return null; }
-    }
+    public static PolSocialSnapshot? TryRead(int pid) =>
+        HookFiles.ReadJson(pid, HookContract.Files.Social, HookFiles.MaxBytes.Social, Parse);
 }

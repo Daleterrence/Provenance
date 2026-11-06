@@ -80,7 +80,7 @@ public partial class SocialViewModel
             HandleProfileArrived(hit.Profile);
             return;
         }
-        _profileToken = NewToken();
+        _profileToken = HookFiles.NewToken();
         _profileAt = DateTime.UtcNow;
         ProfileLoading = true;
         ProfileNote = "Loading the profile from PlayOnline...";
@@ -144,7 +144,7 @@ public partial class SocialViewModel
         // a "done" with no profile isn't an answer yet
         bool mine = snap.ProfileToken == _profileToken && (snap.ProfileState != "done" || snap.Profile != null);
         if (Settled(mine ? snap.ProfileState : null, "done", _profileAt, 130) is not { } st) return;
-        if (st == "timeout") Withdraw(HookContract.Requests.Profile);
+        if (st == "timeout") DiscardRequest(HookContract.Requests.Profile);
         _profileToken = null;
         ProfileLoading = false;
         if (st == "done")
@@ -236,7 +236,7 @@ public partial class SocialViewModel
         var from = ProfileTabs.FirstOrDefault(t => t.IsSelected && !t.Failed) ?? _ffxiFrom;
         SelectTab(tab);
         ShowCharacterPage(null);
-        _ffxiToken = NewToken();
+        _ffxiToken = HookFiles.NewToken();
         _ffxiAt = DateTime.UtcNow;
         _ffxiFor = tab;
         _ffxiFrom = from;
@@ -274,7 +274,7 @@ public partial class SocialViewModel
         WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileToken, snap);
         bool mine = snap.FfxiProfileToken == _ffxiToken && (snap.FfxiProfileState != "done" || snap.FfxiProfile != null);
         if (Settled(mine ? snap.FfxiProfileState : null, "done", _ffxiAt, 130) is not { } st) return;
-        if (st == "timeout") Withdraw(HookContract.Requests.FfxiProfile);
+        if (st == "timeout") DiscardRequest(HookContract.Requests.FfxiProfile);
         _ffxiToken = null;
         ProfileLoading = false;
         var tab = _ffxiFor!;

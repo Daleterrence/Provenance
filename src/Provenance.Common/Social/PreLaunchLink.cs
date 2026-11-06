@@ -91,7 +91,7 @@ public sealed class PreLaunchLink
     private async Task<(bool Gone, string? Failed)> SaveAsync(int pid, Plan plan)
     {
         if (!Alive(pid)) return (true, null);
-        var token = Guid.NewGuid().ToString("N")[..12];
+        var token = HookFiles.NewToken();
         if (!SocialRequests.LinkAll(pid, token, plan.Active, plan.Fit)) return (false, "Provenance couldn't pass the change to PlayOnline.");
         Saying?.Invoke(SavingText);
         var at = Now();
@@ -111,7 +111,7 @@ public sealed class PreLaunchLink
             }
             else if (Now() - at >= Untaken)
             {
-                if (SocialRequests.WithdrawRequest(pid, HookContract.Requests.Handle) == Withdrawal.Withdrawn) return (false, Failure("timeout"));
+                if (HookFiles.Withdraw(pid, HookContract.Requests.Handle) == Withdrawal.Withdrawn) return (false, Failure("timeout"));
                 taken = Now();
             }
         }

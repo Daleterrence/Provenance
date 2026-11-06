@@ -106,7 +106,7 @@ public partial class HandlesViewModel : ObservableObject
         {
             // once the hook's taken it, it's the hook's answer that ends it
             if (state == "working" || DateTime.UtcNow - _at < TimeSpan.FromSeconds(110)) return;
-            if (_pid() is { } pid) SocialRequests.CancelRequest(pid, HookContract.Requests.Handle);
+            if (_pid() is { } pid) HookFiles.Discard(pid, HookContract.Requests.Handle);
             state = "timeout";
         }
         _token = null;
@@ -175,7 +175,8 @@ public partial class HandlesViewModel : ObservableObject
             return;
         }
         if (Confirm?.Invoke("Switch Handle", HandleList.SwitchQuestion(row.Handle, InChatRoom), "SWITCH") != true) return;
-        Send(HandleChange.Switch, row.Handle, null, HandleList.Done(HandleChange.Switch, row.Name, ""));
+        Send(HandleChange.Switch, (pid, token) => SocialRequests.SwitchHandle(pid, token, row.Handle),
+             HandleList.Done(HandleChange.Switch, row.Name, ""));
     }
 
     partial void OnNoteChanged(string value) => _noteSeen = _open;
@@ -215,7 +216,8 @@ public partial class HandlesViewModel : ObservableObject
             return;
         }
         if (!ask(check.Question)) return;
-        Send(HandleChange.Switch, check.To!, null, HandleList.Done(HandleChange.Switch, check.To!.Name, ""));
+        Send(HandleChange.Switch, (pid, token) => SocialRequests.SwitchHandle(pid, token, check.To!),
+             HandleList.Done(HandleChange.Switch, check.To!.Name, ""));
         if (_token is null) tell(Note);
         else _after = failed => { if (failed is null) open(); else tell(failed); };
     }
@@ -231,21 +233,23 @@ public partial class HandlesViewModel : ObservableObject
         }
         var question = HandleList.LinkQuestion(c.Character, to.Handle, _snap.Handles);
         if (Confirm?.Invoke("Link", question, "LINK") != true) return;
-        Send(HandleChange.Link, to.Handle, c.Character.Record, HandleList.Done(HandleChange.Link, to.Name, c.Label));
+        Send(HandleChange.Link, (pid, token) => SocialRequests.LinkCharacter(pid, token, to.Handle, c.Character.Record),
+             HandleList.Done(HandleChange.Link, to.Name, c.Label));
     }
 
     public void Unlink(HandleCharacterRow c)
     {
         if (!Editable || c.Handle is not { } from) return;
         if (Confirm?.Invoke("Unlink", HandleList.UnlinkQuestion(c.Character, from), "UNLINK") != true) return;
-        Send(HandleChange.Unlink, from, c.Character.Record, HandleList.Done(HandleChange.Unlink, from.Name, c.Label));
+        Send(HandleChange.Unlink, (pid, token) => SocialRequests.UnlinkCharacter(pid, token, from, c.Character.Record),
+             HandleList.Done(HandleChange.Unlink, from.Name, c.Label));
     }
 
-    private void Send(HandleChange op, PolHandle handle, PolContentId? content, string done)
+    private void Send(HandleChange op, Func<int, string, bool> write, string done)
     {
         _after = null;
-        var token = Guid.NewGuid().ToString("N")[..12];
-        if (_pid() is not { } pid || !SocialRequests.ChangeHandle(pid, op, token, handle, content))
+        var token = HookFiles.NewToken();
+        if (_pid() is not { } pid || !write(pid, token))
         {
             NoteIsError = true;
             Note = "Provenance couldn't pass the change to PlayOnline.";

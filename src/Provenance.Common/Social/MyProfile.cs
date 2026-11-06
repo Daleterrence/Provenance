@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Provenance.Common.Hook;
 
@@ -28,13 +27,14 @@ public sealed record MyProfile(string Handle, int Level, IReadOnlyDictionary<str
 
     // the e-mail address from the POL profile (z_mail) comes in masked, first letter, *** and the domain, never the
     // real one
-    public static MyProfile? TryRead(int pid)
+    public static MyProfile? TryRead(int pid) =>
+        HookFiles.ReadJson(pid, HookContract.Files.MyProfile, HookFiles.MaxBytes.MyProfile, Parse);
+
+    public static MyProfile? Parse(string json)
     {
-        var path = PathForPid(pid);
         try
         {
-            if (!File.Exists(path)) return null;
-            using var doc = JsonDocument.Parse(File.ReadAllText(path, Encoding.UTF8));
+            using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             var fields = new Dictionary<string, MyProfileField>();
             if (root.TryGetProperty("fields", out var fs))

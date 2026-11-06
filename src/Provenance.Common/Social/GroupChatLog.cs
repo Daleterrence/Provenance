@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Provenance.Common.Credentials;
+using Provenance.Common.Hook;
 using Provenance.Common.IO;
 using Serilog;
 
@@ -9,6 +10,13 @@ namespace Provenance.Common.Social;
 public sealed record GroupChatEntry(string Id, long Time, string Name, string Text, bool Me)
 {
     public DateTimeOffset When => DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime();
+
+    public static GroupChatEntry Mine(string name, string text) =>
+        new(HookFiles.NewToken(), DateTimeOffset.UtcNow.ToUnixTimeSeconds(), name, text, true);
+
+    // a line without a time of its own gets now
+    public static GroupChatEntry From(GroupChatLine l) =>
+        new(HookFiles.NewToken(), l.Time > 0 ? l.Time : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), l.Name, l.Text, l.Me);
 }
 
 // every group's chat lines kept on this PC, so a chat opened again (or after a restart) shows what came before. It's

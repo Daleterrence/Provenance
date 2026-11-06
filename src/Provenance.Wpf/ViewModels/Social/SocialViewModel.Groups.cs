@@ -89,18 +89,19 @@ public partial class SocialViewModel
         HasGroups = Groups.Count > 0;
     }
 
-    private void BeginGroup(GroupOp op, string groupId, string doneText, string a = "", string b = "", string c = "",
-                            string key = "", FriendItem? invite = null)
+    // bySend: an invitation or its answer, which report back as sends. leaving: the group this takes me out of
+    private void BeginGroup(Func<int, string, bool> write, string doneText, bool bySend = false, string? leaving = null,
+                            FriendItem? invite = null)
     {
         if (!BeginEdit(out var pid, out var token)) return;
         _editToken = null;
         _groupToken = token;
         _groupDone = doneText;
         _groupAt = DateTime.UtcNow;
-        _groupBySend = op is GroupOp.Invite or GroupOp.AcceptInvite or GroupOp.DeclineInvite;   // these report as sends
-        _groupLeaving = op is GroupOp.Leave or GroupOp.Disband ? groupId : null;
+        _groupBySend = bySend;
+        _groupLeaving = leaving;
         _answerFor = invite;   // only now, a refused click must never mark it answered
-        if (SocialRequests.ChangeGroup(pid, op, token, groupId, a, b, c, key)) return;
+        if (write(pid, token)) return;
         _groupToken = null;
         _answerFor = null;
         EditBusy = false;
@@ -116,19 +117,21 @@ public partial class SocialViewModel
             EditNote = "You can only be in 4 friend groups.";
             return;
         }
-        BeginGroup(GroupOp.Create, "", $"Group \"{name.Trim()}\" created.", name.Trim());
+        BeginGroup((pid, token) => SocialRequests.CreateGroup(pid, token, name.Trim()), $"Group \"{name.Trim()}\" created.");
     }
 
     public void DisbandGroup(GroupItem g)
     {
-        if (g.MyClass == 5) BeginGroup(GroupOp.Disband, g.Id, $"Group \"{g.Name}\" disbanded.");
+        if (g.MyClass == 5)
+            BeginGroup((pid, token) => SocialRequests.DisbandGroup(pid, token, g.Id), $"Group \"{g.Name}\" disbanded.", leaving: g.Id);
     }
 
     // a member or sub-master, an invitation gets answered instead
     public void LeaveGroup(GroupItem g)
     {
         if (g.MyClass is not (< 3 or 5))
-            BeginGroup(GroupOp.Leave, g.Id, ViewerText(0x3eab, "You have left the group \"%s.\"").Replace("%s", g.Name));
+            BeginGroup((pid, token) => SocialRequests.LeaveGroup(pid, token, g.Id),
+                       ViewerText(0x3eab, "You have left the group \"%s.\"").Replace("%s", g.Name), leaving: g.Id);
     }
 
     // masters and sub-masters remove (1) non-masters and relieve (3) sub-masters, only the master promotes to
@@ -145,14 +148,14 @@ public partial class SocialViewModel
     public void SetMemberClass(GroupItem g, GroupMemberItem m, int cls)
     {
         if (CanSetClass(g, m, cls))
-            BeginGroup(GroupOp.SetClass, g.Id,
-                       cls == 1 ? $"{m.Name} was removed from the group." : "The group was changed.",
-                       m.Index.ToString(), cls.ToString(), "", m.Key);
+            BeginGroup((pid, token) => SocialRequests.SetMemberClass(pid, token, g.Id, m.Index, cls, m.Key),
+                       cls == 1 ? $"{m.Name} was removed from the group." : "The group was changed.");
     }
 
     public void SetGroupComment(GroupItem g, string text)
     {
-        if (g.MyClass >= 3) BeginGroup(GroupOp.Comment, g.Id, "Your group comment was saved.", text.Trim());
+        if (g.MyClass >= 3)
+            BeginGroup((pid, token) => SocialRequests.SetGroupComment(pid, token, g.Id, text.Trim()), "Your group comment was saved.");
     }
 
     public void InviteToGroup(GroupItem g, FriendItem f)
@@ -169,20 +172,20 @@ public partial class SocialViewModel
             return;
         }
         var text = ViewerText(0x46d5, "Would you like to join the group \"%s\"?").Replace("%s", g.Name);
-        BeginGroup(GroupOp.Invite, g.Id, $"Invitation to \"{g.Name}\" sent to {f.Name}.", f.Row.ToString(),
-                   ViewerText(0x46d4, "Would you like to join a friend group?"), text, f.Key);
+        var subject = ViewerText(0x46d4, "Would you like to join a friend group?");
+        BeginGroup((pid, token) => SocialRequests.InviteToGroup(pid, token, g.Id, f.Row, subject, text, f.Key),
+                   $"Invitation to \"{g.Name}\" sent to {f.Name}.", bySend: true);
     }
 
     // an invitation (kind 0xe) gets a kind 0xf or 0x10 message back
     public void AnswerGroupInvite(FriendItem invite, bool accept)
     {
         if (!invite.IsGroupInvite || !CanEdit) return;   // refused before the viewer's string table gets read
-        BeginGroup(accept ? GroupOp.AcceptInvite : GroupOp.DeclineInvite, "",
+        var subject = accept ? ViewerText(0x46d6, "Group registration accepted")
+                             : ViewerText(0x46d1, "Friend registration declined");
+        BeginGroup((pid, token) => SocialRequests.AnswerGroupInvite(pid, token, accept, invite.RequestMid, subject),
                    accept ? "You accepted the group invitation." : "You declined the group invitation.",
-                   invite.RequestMid.ToString(),
-                   accept ? ViewerText(0x46d6, "Group registration accepted")
-                          : ViewerText(0x46d1, "Friend registration declined"),
-                   invite: invite);
+                   bySend: true, invite: invite);
     }
 
     internal const string ChatClosedNote = "The group chat was closed, but you're still in the group.";

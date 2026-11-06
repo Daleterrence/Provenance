@@ -107,8 +107,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
         UnreadChanged?.Invoke();
     }
 
-    private static string NewToken() => Guid.NewGuid().ToString("N")[..12];
-
     // the handle question's already been asked by the time this runs (HandlesViewModel.OpenGroup). One still joining
     // just has its window shown again, like the viewer
     public bool Join(PolGroup group)
@@ -116,7 +114,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         if (_social.SessionPid is not { } pid) return false;
         if (Joining || (Open && SameGroup(group.Id))) return true;
         var mine = group.Members.FirstOrDefault(m => m.Mine);
-        var token = NewToken();
+        var token = HookFiles.NewToken();
         if (!GroupChatFiles.Join(pid, token, group.Id, mine?.Slot is >= 0 and var s ? s : 0, mine?.Hid ?? "")) return false;
         if (Open) KeepTail();
         ReadTail();
@@ -179,11 +177,10 @@ public sealed partial class GroupChatViewModel : ObservableObject
             return;
         }
         if (GroupChatFiles.TryReadLines(pid) is not { } file || !string.Equals(file.Group, group, StringComparison.OrdinalIgnoreCase)) return;
-        var fresh = file.Lines.Where(l => l.Seq > _tailSeen).OrderBy(l => l.Seq).ToList();
+        var fresh = file.After(_tailSeen);
         if (fresh.Count == 0) return;
         _tailSeen = fresh[^1].Seq;
-        _log?.Add(group, fresh.Select(l => new GroupChatEntry(Guid.NewGuid().ToString("N")[..12],
-                                                              l.Time > 0 ? l.Time : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), l.Name, l.Text, l.Me)));
+        _log?.Add(group, fresh.Select(GroupChatEntry.From));
         _log?.Flush();
     }
 
@@ -191,8 +188,8 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         if (_social.SessionPid is not { } pid) return;
         bool withdrawn = Current == Phase.Joining &&
-                         SocialRequests.WithdrawRequest(pid, HookContract.Requests.GroupChatJoin) == Withdrawal.Withdrawn;
-        if (!withdrawn) GroupChatFiles.Leave(pid, NewToken(), Current == Phase.Joining ? _token ?? "" : "");
+                         HookFiles.Withdraw(pid, HookContract.Requests.GroupChatJoin) == Withdrawal.Withdrawn;
+        if (!withdrawn) GroupChatFiles.Leave(pid, HookFiles.NewToken(), Current == Phase.Joining ? _token ?? "" : "");
     }
 
     // the session's over (logged out, POL closed), nothing to send
@@ -265,7 +262,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         var text = ShiftJis.Filter(Compose.Trim().Replace("\r", "").Replace('\n', ' '), out _);
         if (text.Length == 0 || _social.SessionPid is not { } pid) return;
         if (text.Length > GroupChatFiles.MaxText) text = text[..GroupChatFiles.MaxText];
-        var token = NewToken();
+        var token = HookFiles.NewToken();
         if (!GroupChatFiles.Send(pid, token, text))
         {
             ComposeNote = SendFailedText;
@@ -380,12 +377,10 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         if (gc.LineSeq <= _seenSeq || _social.SessionPid is not { } pid) return;
         if (GroupChatFiles.TryReadLines(pid) is not { } file || !SameGroup(file.Group)) return;
-        var fresh = file.Lines.Where(l => l.Seq > _seenSeq).OrderBy(l => l.Seq).ToList();
+        var fresh = file.After(_seenSeq);
         if (fresh.Count == 0) return;
         _seenSeq = fresh[^1].Seq;
-        var entries = fresh.Select(l => new GroupChatEntry(Guid.NewGuid().ToString("N")[..12],
-                                                           l.Time > 0 ? l.Time : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), l.Name, l.Text, l.Me))
-                           .ToList();
+        var entries = fresh.Select(GroupChatEntry.From).ToList();
         _log?.Add(GroupId, entries);
         var shown = entries.Select(Item).ToList();
         foreach (var e in shown) Lines.Add(e);
@@ -406,7 +401,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         // it went, but with no row of mine in the group polcore never hands my copy back, so it's shown from here
         if (done == "sent:unechoed" && _sentLine is { } line)
         {
-            var e = new GroupChatEntry(Guid.NewGuid().ToString("N")[..12], DateTimeOffset.UtcNow.ToUnixTimeSeconds(), MyHandle, line, true);
+            var e = GroupChatEntry.Mine(MyHandle, line);
             _log?.Add(GroupId, [e]);
             Lines.Add(Item(e));
         }

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Provenance.Common.Hook;
-using Provenance.Common.IO;
 using Provenance.Common.PolFormat;
 using static Provenance.Common.JsonFields;
 
@@ -28,34 +27,35 @@ public static class ChatRoomFiles
 
     public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.ChatRoom);
 
-    public static bool Zones(int pid, string token) => Write(pid, HookContract.Requests.ChatZones, OneLine(token));
+    public static bool Zones(int pid, string token) => HookFiles.WriteRequest(pid, HookContract.Requests.ChatZones, token);
 
     public static bool Rooms(int pid, string token, int zone, int offset) =>
-        Write(pid, HookContract.Requests.ChatRooms, $"{OneLine(token)}\n{zone}\n{offset}");
+        HookFiles.WriteRequest(pid, HookContract.Requests.ChatRooms, token, zone, offset);
 
     // a locked room's password never goes in here, the app hands it over as a one-shot Credential Manager entry
     public static bool Join(int pid, string token, string irc, bool hasPassword, string chatName) =>
-        Write(pid, HookContract.Requests.ChatJoin, $"{OneLine(token)}\n{OneLine(irc)}\n{(hasPassword ? "1" : "")}\n{OneLine(chatName)}");
+        HookFiles.WriteRequest(pid, HookContract.Requests.ChatJoin, token, irc, hasPassword ? "1" : "", chatName);
 
     public static bool Send(int pid, string token, string text, int colour = -1, int emote = 0) =>
-        Write(pid, HookContract.Requests.ChatSend, $"{OneLine(token)}\n{OneLine(text)}\n{colour}\n{emote}");
+        HookFiles.WriteRequest(pid, HookContract.Requests.ChatSend, token, text, colour, emote);
 
     // a new room. The password goes the same way an enter's does, never in here
     public static bool Create(int pid, string token, bool hasPassword, int zone, int occupancy, int members, int purpose,
                               int language, string chatName, string roomName) =>
-        Write(pid, HookContract.Requests.ChatCreate, $"{OneLine(token)}\n{(hasPassword ? "1" : "")}\n{zone}\n{occupancy}\n{members}\n{purpose}\n" +
-                                 $"{language}\n{OneLine(chatName)}\n{OneLine(roomName)}");
+        HookFiles.WriteRequest(pid, HookContract.Requests.ChatCreate, token, hasPassword ? "1" : "", zone, occupancy, members,
+                               purpose, language, chatName, roomName);
 
     public enum MasterOp { Kick, Master, Password }
 
     // the room master's: kick or designate a member (by the room's key), or a new password (none turns it off)
     public static bool Master(int pid, string token, MasterOp op, int memberKey = 0, bool hasPassword = false) =>
-        Write(pid, HookContract.Requests.ChatMaster, $"{OneLine(token)}\n{(hasPassword ? "1" : "")}\n" +
-                                 $"{op switch { MasterOp.Kick => "kick", MasterOp.Master => "master", _ => "password" }}\n{memberKey}");
+        HookFiles.WriteRequest(pid, HookContract.Requests.ChatMaster, token, hasPassword ? "1" : "",
+                               op switch { MasterOp.Kick => "kick", MasterOp.Master => "master", _ => "password" }, memberKey);
 
     // joinToken calls off an enter the app couldn't withdraw, should the hook take it after this
     public static bool Leave(int pid, string token, string joinToken = "") =>
-        Write(pid, HookContract.Requests.ChatLeave, joinToken.Length > 0 ? $"{OneLine(token)}\n{OneLine(joinToken)}" : OneLine(token));
+        joinToken.Length > 0 ? HookFiles.WriteRequest(pid, HookContract.Requests.ChatLeave, token, joinToken)
+                             : HookFiles.WriteRequest(pid, HookContract.Requests.ChatLeave, token);
 
     // what the hook would refuse anyway
     public static string? NameProblem(string name) =>
@@ -95,29 +95,6 @@ public static class ChatRoomFiles
         catch { return null; }
     }
 
-    public static ChatRoomLines? TryReadLines(int pid)
-    {
-        var path = LinesPathForPid(pid);
-        try
-        {
-            if (!File.Exists(path) || new FileInfo(path).Length > 4 * 1024 * 1024) return null;
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var sr = new StreamReader(fs);
-            return ParseLines(sr.ReadToEnd());
-        }
-        catch { return null; }
-    }
-
-    private static string OneLine(string s) => new(s.Replace("\r", "").Select(c => c < ' ' ? ' ' : c).ToArray());
-
-    private static bool Write(int pid, string ext, string body)
-    {
-        try
-        {
-            var path = HookFiles.PathFor(pid, ext);
-            AtomicFile.Write(path, body);
-            return true;
-        }
-        catch { return false; }
-    }
+    public static ChatRoomLines? TryReadLines(int pid) =>
+        HookFiles.ReadJson(pid, HookContract.Files.ChatRoom, HookFiles.MaxBytes.ChatRoom, ParseLines);
 }
