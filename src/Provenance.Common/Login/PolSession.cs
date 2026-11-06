@@ -1,9 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using Provenance.Common.Credentials;
 using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
@@ -42,22 +40,7 @@ public sealed class PolSession : IDisposable
     public const string GameStartFailedText = "FINAL FANTASY XI couldn't start. Try again, and if it keeps happening, check the game's files with Repair.";
     public const string NoPolHandleText = "This PlayOnline account doesn't have a handle, and none was created.";
 
-    internal static bool DetailsUnreadable(string? line = null, int? exitCode = null) =>
-        (line?.Contains(HookContract.LogLines.DetailsUnreadable, StringComparison.Ordinal) ?? false) || exitCode == (int)HookExit.DetailsUnreadable;
-
     public const string UnfinishedText = "The PlayOnline login didn't finish. Try again.";
-
-    // the hook gave up with no session to hold, nothing got refused
-    internal static bool LoginUnfinished(string line) => line.Contains(HookContract.LogLines.NoSession, StringComparison.Ordinal);
-
-    internal enum PlayAnswer { None, Started, Unreadable, Refused }
-
-    internal static PlayAnswer PlayAnswerOf(string? line) =>
-        line is null ? PlayAnswer.None
-        : line.Contains(HookContract.LogLines.PlayStarted, StringComparison.Ordinal) ? PlayAnswer.Started
-        : line.Contains(HookContract.LogLines.PlayUnreadable, StringComparison.Ordinal) ? PlayAnswer.Unreadable
-        : line.Contains(HookContract.LogLines.PlayRefused, StringComparison.Ordinal) ? PlayAnswer.Refused
-        : PlayAnswer.None;
 
     internal static (int Code, string Text) EndedBeforeLogIn(int? exitCode) => (HookExit?)exitCode switch
     {
@@ -87,7 +70,6 @@ public sealed class PolSession : IDisposable
     internal static string ChatTarget(string launchId) => $"{WindowsCredentialStore.DefaultPrefix}:{ChatKey(launchId)}";
     private const string SessionClaimLock = "session-claim";
     private const string PrestartLock = "prestart";
-    private static readonly Regex PidLine = new(Regex.Escape(HookContract.LogLines.WatcherRunning) + @"(\d+)\)", RegexOptions.Compiled);
     private static readonly TimeSpan[] RefusedRetryWaits = [TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(60)];
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan LeftoverAge = TimeSpan.FromMinutes(10);
@@ -123,11 +105,10 @@ public sealed class PolSession : IDisposable
     private readonly HashSet<string> _usedLaunchIds = [];
     private readonly object _gate = new();
     private readonly object _hookGate = new();
-    private readonly StringBuilder _pending = new();
     private volatile bool _disposed;
     private int _sweepRuns;
     internal string? _launchId;
-    private long _logOffset;
+    private HookLog? _hookLog;
     internal bool _played;   // the held pol.exe is the game now, never kill it
     private ProcessStamp? _polStamp;
     internal Process? _polProc;
@@ -283,8 +264,7 @@ public sealed class PolSession : IDisposable
             progress?.Report(new LaunchProgress("Failed", text));
             return code;
         }
-        _logOffset = 0;
-        _pending.Clear();
+        _hookLog = null;
         _played = false;
         if (pol.Password.Length > MaxPolPasswordLength) return Fail(PolPasswordTooLongText, LoginCodes.DetailsUnreadable);
         var region = _settings.DetectedRegion;
@@ -446,45 +426,48 @@ public sealed class PolSession : IDisposable
         HookFiles.Delete(pid, HookContract.Files.Ended);
 
         var logPath = HookFiles.PathFor(pid, HookContract.Files.Log);
-        try { if (File.Exists(logPath)) _logOffset = ThisRun(logPath).Start; }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        var translator = new HookLogTranslator();
+        var hookLog = _hookLog = HookLog.OfThisRun(logPath);
+        var progressOf = new HookProgress();
         var lastActivity = DateTime.UtcNow;
         int? viewerLanguage = null;
-        int? Ending(string line)
+        int? Ending(HookEvent? e)
         {
-            // the language the hook gave polcore, the same one app.dll builds the jail page's address from
-            if (Regex.Match(line, Regex.Escape(HookContract.LogLines.ViewerLang) + @"(\d+)") is { Success: true } lm && int.TryParse(lm.Groups[1].Value, out var lang))
-                viewerLanguage = lang;
-            if (DetailsUnreadable(line)) return Fail(LoginCodes.DetailsUnreadable, DetailsAgainText);
-            if (line.Contains(HookContract.LogLines.AuthFailed))
+            switch (e)
             {
-                var rm = Regex.Match(line, Regex.Escape(HookContract.LogLines.Reason) + @"(-?\d+)");
-                LastRefusalReason = rm.Success && int.TryParse(rm.Groups[1].Value, out var reason) ? reason : null;
-                return Fail(LoginCodes.AuthFailed, LastRefusalReason is { } r
-                    ? PolAccountNotices.LogInRefused(r, Region)
-                    : RefusedText);
+                case ViewerStarted { Language: { } lang }:
+                    // the language the hook gave polcore, the same one app.dll builds the jail page's address from
+                    viewerLanguage = lang;
+                    return null;
+                case DetailsUnreadable:
+                    return Fail(LoginCodes.DetailsUnreadable, DetailsAgainText);
+                case AuthRefused refused:
+                    LastRefusalReason = refused.Reason;
+                    return Fail(LoginCodes.AuthFailed, LastRefusalReason is { } r
+                        ? PolAccountNotices.LogInRefused(r, Region)
+                        : RefusedText);
+                case AccountBlocked blocked:
+                    return Fail(LoginCodes.AccountBlocked, PolAccountNotices.Blocked(blocked.Notice, Region, viewerLanguage));
+                case ListLoadFailed failed:
+                    return Fail(LoginCodes.Unfinished, LoadFailedText(failed.List));
+                case NoHandle:
+                    return Fail(LoginCodes.NoPolHandle, NoPolHandleText);
+                case HandleRefused:
+                    return Fail(LoginCodes.HandleRejected, "PlayOnline didn't accept that handle name. Log in again to try a different one.");
+                case NoSession:
+                    return Fail(LoginCodes.Unfinished, UnfinishedText);
+                default:
+                    return null;
             }
-            if (line.Contains(HookContract.LogLines.AccountBlocked))
-                return Fail(LoginCodes.AccountBlocked,
-                            PolAccountNotices.Blocked(Regex.Match(line, Regex.Escape(HookContract.LogLines.AccountBlocked) + @"(\S+)").Groups[1].Value, Region, viewerLanguage));
-            if (line.Contains(HookContract.LogLines.LoadFailed))
-                return Fail(LoginCodes.Unfinished, LoadFailedText(Regex.Match(line, Regex.Escape(HookContract.LogLines.LoadFailed) + @"(\w+)").Groups[1].Value));
-            if (line.Contains(HookContract.LogLines.NoHandle)) return Fail(LoginCodes.NoPolHandle, NoPolHandleText);
-            if (line.Contains(HookContract.LogLines.HandleRejected) || line.Contains(HookContract.LogLines.HandleClaimFailed)
-                || line.Contains(HookContract.LogLines.HandleSaveFailed))
-                return Fail(LoginCodes.HandleRejected, "PlayOnline didn't accept that handle name. Log in again to try a different one.");
-            if (LoginUnfinished(line)) return Fail(LoginCodes.Unfinished, UnfinishedText);
-            return null;
         }
         while (!ct.IsCancellationRequested)
         {
-            foreach (var line in ReadNewLines(logPath))
+            foreach (var line in hookLog.ReadNewLines())
             {
                 lastActivity = DateTime.UtcNow;
-                if (translator.Translate(line) is { } step) progress?.Report(step);
-                if (Ending(line) is { } result) return result;
-                if (!line.Contains(HookContract.LogLines.HandleWanted)) continue;
+                var e = HookLog.Parse(line);
+                if (progressOf.Step(e) is { } step) progress?.Report(step);
+                if (Ending(e) is { } result) return result;
+                if (e is not HandleWanted) continue;
                 progress?.Report(new LaunchProgress("PlayOnline handle", "This account needs a PlayOnline handle."));
                 var name = askHandleName?.Invoke();
                 Wrapped.Save(Key("HANDLE"), "handle", string.IsNullOrWhiteSpace(name) ? "" : name!.Trim(), sessionOnly: true);
@@ -503,8 +486,8 @@ public sealed class PolSession : IDisposable
             if (!ProcessStamp.PidRunning(pid))
             {
                 // it can log its refusal and exit between two reads
-                foreach (var line in ReadRemainingLines(logPath))
-                    if (Ending(line) is { } result) return result;
+                foreach (var line in hookLog.ReadRemainingLines())
+                    if (Ending(HookLog.Parse(line)) is { } result) return result;
                 int? exit = null;
                 try { if (_polProc is { HasExited: true } ended) exit = ended.ExitCode; }
                 catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
@@ -566,8 +549,8 @@ public sealed class PolSession : IDisposable
         Log.Warning("pol.exe {Pid} ended before the login finished, exit code {Exit}", pid, exit is { } e ? $"0x{e:X8}" : "unknown");
         try
         {
-            var crashes = ThisRun(hookLog).Text.Split('\n').Where(l => l.Contains(HookContract.LogLines.Crash, StringComparison.Ordinal));
-            foreach (var line in crashes.TakeLast(3)) Log.Warning("pol_hook: {Line}", line.Trim());
+            var crashes = HookLog.EventsOfThisRun(hookLog).OfType<Crashed>();
+            foreach (var crash in crashes.TakeLast(3)) Log.Warning("pol_hook: {Line}", crash.Line.Trim());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
@@ -773,9 +756,7 @@ public sealed class PolSession : IDisposable
             SetPrestartEnvironment(psi.Environment);
             using var launcher = StartProcess(psi);
             if (launcher is null || RunLauncher(launcher, WatcherLimit) is not { } run) return null;
-            var m = PidLine.Match(run.Out);
-            if (run.ExitCode != 0 || !m.Success) return null;
-            var pid = int.Parse(m.Groups[1].Value);
+            if (run.ExitCode != 0 || HookLog.StartedPid(run.Out) is not { } pid) return null;
             // an older pol.exe with this pid left these, and its stop file would end this one before it logs in
             foreach (var name in new[] { HookContract.Files.Stop, HookContract.Files.Ended, HookContract.Files.Go }) HookFiles.Delete(pid, name);
             var stamp = ProcessStamp.Of(pid);
@@ -828,9 +809,9 @@ public sealed class PolSession : IDisposable
             if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
             var log = HookFiles.PathFor(pid, HookContract.Files.Log);
             var until = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (DateTime.UtcNow < until && !LogHas(log, HookContract.LogLines.PrestartReady) && !ct.IsCancellationRequested) Thread.Sleep(100);
+            while (DateTime.UtcNow < until && !PrestartIsReady(log) && !ct.IsCancellationRequested) Thread.Sleep(100);
             if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
-            if (!LogHas(log, HookContract.LogLines.PrestartReady)) { EndPrestarted(pre); return null; }
+            if (!PrestartIsReady(log)) { EndPrestarted(pre); return null; }
             // under the lock another copy ends waiting pre-starts with, so it's either been stopped or it's mine to use
             using (var handOver = AdminLock.TryAcquire(PrestartLock, TimeSpan.FromSeconds(5)))
             {
@@ -972,22 +953,10 @@ public sealed class PolSession : IDisposable
         }
     }
 
-    private static bool LogHas(string path, string text)
+    private static bool PrestartIsReady(string logPath)
     {
-        try { return ThisRun(path).Text.Contains(text, StringComparison.Ordinal); }
+        try { return HookLog.PrestartReadyInThisRun(logPath); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
-    }
-
-    // the hook only appends, so a reused pid's log starts with an older pol.exe's lines. DllMain's first line opens
-    // each run, so the last one's this pol.exe's. Latin1 keeps one char per byte, so Start is a byte offset too
-    private static (string Text, long Start) ThisRun(string path)
-    {
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var sr = new StreamReader(fs, Encoding.Latin1, detectEncodingFromByteOrderMarks: false);
-        var text = sr.ReadToEnd();
-        int at = text.LastIndexOf(HookContract.LogLines.FirstLine, StringComparison.Ordinal);
-        int start = at <= 0 ? 0 : text.LastIndexOf('\n', at - 1) + 1;
-        return (text[start..], start);
     }
 
     internal static readonly TimeSpan WatcherLimit = TimeSpan.FromSeconds(60);
@@ -1046,19 +1015,19 @@ public sealed class PolSession : IDisposable
                 return ct.IsCancellationRequested
                     ? (LaunchOutcome.Cancelled, 0, "")
                     : (LaunchOutcome.Failed, 0, failText);
-            var m = PidLine.Match(run.Out);
+            var startedPid = HookLog.StartedPid(run.Out);
             if (ct.IsCancellationRequested)
             {
-                if (m.Success && launcherStamp is { } started) EndNewPol(int.Parse(m.Groups[1].Value), started);
+                if (startedPid is { } stray && launcherStamp is { } started) EndNewPol(stray, started);
                 return (LaunchOutcome.Cancelled, 0, "");
             }
             var stderr = run.Err.Trim();
-            if (run.ExitCode != 0 || !m.Success)
+            if (run.ExitCode != 0 || startedPid is not { } pid)
             {
                 Log.Error("Provenance Watcher exited {Code}: {Error}", run.ExitCode, stderr.Length > 0 ? stderr : "no message");
                 return (LaunchOutcome.Failed, 0, failText);
             }
-            return (LaunchOutcome.Started, int.Parse(m.Groups[1].Value), "");
+            return (LaunchOutcome.Started, pid, "");
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == CodeIntegrity.PolicyViolation)
         {
@@ -1319,7 +1288,7 @@ public sealed class PolSession : IDisposable
         if (_launchId is null) return;
         // skip the log so far, only the answer to this Play counts and not an unreadable entry planted earlier
         if (Pid is { } pid)
-            try { ReadNewLines(HookFiles.PathFor(pid, HookContract.Files.Log)); } catch (Exception ex) { Log.Warning(ex, "Could not read the hook log before Play"); }
+            try { LogOf(pid).ReadNewLines(); } catch (Exception ex) { Log.Warning(ex, "Could not read the hook log before Play"); }
         PutWindowerValuesBack();
         // saved first, so a throw leaves the session held
         Wrapped.Save($"{LaunchKeyPrefix}{_launchId}:PLAY", "play", "go", sessionOnly: true);
@@ -1473,24 +1442,24 @@ public sealed class PolSession : IDisposable
             EndUnstartedPlay();
             return PlaySessionClosedText;
         }
-        var logPath = HookFiles.PathFor(pid, HookContract.Files.Log);
+        var hookLog = LogOf(pid);
         var until = DateTime.UtcNow + timeout;
         while (true)
         {
             bool alive = ProcessStamp.PidRunning(pid);
             // it can log its answer and end between two reads, so read what's left once it's gone
-            foreach (var line in alive ? ReadNewLines(logPath) : ReadRemainingLines(logPath))
+            foreach (var line in alive ? hookLog.ReadNewLines() : hookLog.ReadRemainingLines())
             {
-                switch (PlayAnswerOf(line))
+                switch (HookLog.Parse(line))
                 {
-                    case PlayAnswer.Started:
+                    case PlayStarted:
                         return null;
-                    case PlayAnswer.Unreadable:
+                    case PlayUnreadable:
                         Log.Error("The hook could not read the Play entry (pol.exe {Pid}): the game did not start; ending the session", pid);
                         DropKey();
                         EndUnstartedPlay();
                         return PlayUnreadableText;
-                    case PlayAnswer.Refused:
+                    case PlayRefused:
                         Log.Warning("The hook refused Play (pol.exe {Pid}): {Line}; the game did not start, ending the session", pid, line.Trim());
                         EndUnstartedPlay();
                         return PlayRefusedText;
@@ -1560,36 +1529,9 @@ public sealed class PolSession : IDisposable
         keys.Clear();
     }
 
-    // poor man's tail -f
-    private List<string> ReadNewLines(string path)
+    private HookLog LogOf(int pid)
     {
-        var lines = new List<string>();
-        if (!File.Exists(path)) return lines;
-        try
-        {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            if (fs.Length < _logOffset) _logOffset = 0;
-            fs.Seek(_logOffset, SeekOrigin.Begin);
-            var buf = new byte[fs.Length - _logOffset];
-            int read = fs.Read(buf, 0, buf.Length);
-            _logOffset += read;
-            _pending.Append(Encoding.ASCII.GetString(buf, 0, read));
-        }
-        catch (IOException) { return lines; }
-        var text = _pending.ToString();
-        int last = text.LastIndexOf('\n');
-        if (last < 0) return lines;
-        lines.AddRange(text[..last].Split('\n').Select(l => l.TrimEnd('\r')));
-        _pending.Clear();
-        _pending.Append(text[(last + 1)..]);
-        return lines;
-    }
-
-    private List<string> ReadRemainingLines(string path)
-    {
-        var lines = ReadNewLines(path);
-        if (_pending.Length > 0) lines.Add(_pending.ToString().TrimEnd('\r'));
-        _pending.Clear();
-        return lines;
+        var path = HookFiles.PathFor(pid, HookContract.Files.Log);
+        return _hookLog is { } log && log.Path == path ? log : _hookLog = new HookLog(path);
     }
 }

@@ -236,7 +236,7 @@ public static class AshitaLauncher
             if (!p.WaitForExit(30_000)) { try { p.Kill(); } catch { } return "Provenance couldn't start logging in to PlayOnline in time. Try again."; }
             var stdout = outTask.GetAwaiter().GetResult();
             var stderr = errTask.GetAwaiter().GetResult().Trim();
-            if (p.ExitCode == 0 && stdout.Contains(HookContract.LogLines.WatcherAttached, StringComparison.Ordinal)) return null;
+            if (p.ExitCode == 0 && HookLog.Attached(stdout)) return null;
             Log.Error("Provenance Watcher --attach {Pid} failed: {Error}", pid, stderr);
             return CodeIntegrity.Refused(started, HookFiles.WatcherExe, "pol_hook.dll") ? CodeIntegrity.RefusedText
                  : NotPickedUp;
