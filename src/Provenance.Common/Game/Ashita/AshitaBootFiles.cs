@@ -58,8 +58,11 @@ public static class AshitaBootFiles
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { return null; }
     }
 
-    private static bool IniFileName(string name) =>
-        FileNames.IsPlainFileName(name) && Path.GetExtension(name).Equals(".ini", StringComparison.OrdinalIgnoreCase) && !FileNames.IsDeviceName(name);
+    // a plain .ini name in config\boot, never a path that'd get read or written somewhere else as admin
+    public static bool IsBootFileName(string boot) =>
+        FileNames.IsPlainFileName(boot) && boot.EndsWith(".ini", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsIniFileName(string name) => IsBootFileName(name) && !FileNames.IsDeviceName(name);
 
     // for a new name. One that's already there only has to be an .ini file, so a bad name can still be renamed
     public static string? NameProblem(string? fileName, string? ashitaDir = null)
@@ -72,7 +75,7 @@ public static class AshitaBootFiles
         if (fileName.StartsWith('.')) return "A boot configuration's name can't start with a dot.";
         if (!Path.GetExtension(fileName).Equals(".ini", StringComparison.OrdinalIgnoreCase))
             return "A boot configuration's name has to end in .ini.";
-        if (!IniFileName(fileName)) return "Windows doesn't allow that name.";
+        if (!IsIniFileName(fileName)) return "Windows doesn't allow that name.";
         var stem = Path.GetFileNameWithoutExtension(fileName).Trim();
         if (stem.Length >= 2 && stem[0] == '\'' && stem[^1] == '\'') return "A boot configuration's name can't start and end with a quote.";
         // Ashita-cli gets it on its command line as ANSI
@@ -86,6 +89,8 @@ public static class AshitaBootFiles
             return "That name is too long for Ashita in this folder.";
         return null;
     }
+
+
 
     private static string BootFolder(string ashitaDir)
     {
@@ -108,7 +113,7 @@ public static class AshitaBootFiles
 
     private static string Existing(string ashitaDir, string name, bool change)
     {
-        if (string.IsNullOrWhiteSpace(name) || !IniFileName(name) || IsLaunchCopy(name))
+        if (string.IsNullOrWhiteSpace(name) || !IsIniFileName(name) || IsLaunchCopy(name))
             throw Shown.Mark(new ArgumentException($"{name} isn't a boot configuration Provenance can change."));
         if (change && IsShippedExample(name))
             throw Shown.Mark(new ArgumentException($"{name} is one of Ashita's example files. Duplicate it and change the copy instead."));

@@ -249,7 +249,7 @@ public partial class MainViewModel : IMultiRunHost
         // after a switch between Windower and Ashita mid-run a stored profile means nothing
         var hookProfile = _pol.Platform == _runPlatform ? _runHookProfiles.GetValueOrDefault(account.ProfileId) : null;
         if (_pol.Platform == ThirdPartyHook.Ashita && hookProfile is { Length: > 0 } boot
-            && !AshitaLauncher.IsBootFileName(boot))
+            && !AshitaBootFiles.IsBootFileName(boot))
             return new(AccountFailureKind.Account, AshitaLauncher.AccountBootFileProblem);
 
         var profile = Profiles.FirstOrDefault(p => p.Id == account.ProfileId);

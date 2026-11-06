@@ -16,10 +16,6 @@ public static class AshitaLauncher
     public const string AccountBootFileProblem =
         "The Ashita boot configuration chosen for this account has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Multi-account.";
 
-    // a plain .ini name in config\boot, never a path that'd get read or written somewhere else as admin
-    public static bool IsBootFileName(string boot) =>
-        FileNames.IsPlainFileName(boot) && boot.EndsWith(".ini", StringComparison.OrdinalIgnoreCase);
-
     // nothing POL_ or PROVENANCE_ from the user's environment, every POL_ value of this sign-in, plus the launch marker
     // and id. Never PROVENANCE_HOOK, the watcher's --attach loads the hook
     internal static void ApplyContract(IDictionary<string, string?> target, IDictionary<string, string?> launchEnv, string launchId)
@@ -54,7 +50,7 @@ public static class AshitaLauncher
         bool fromAccount = profile is { Length: > 0 };
         var boot = fromAccount ? profile
                  : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedBootConfig(dir) : s.AshitaBootConfig;
-        if (boot is { Length: > 0 } && !IsBootFileName(boot))
+        if (boot is { Length: > 0 } && !AshitaBootFiles.IsBootFileName(boot))
             return Fail(fromAccount ? AccountBootFileProblem
                 : "The Ashita boot configuration has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Windower/Ashita.");
         string bootFile;

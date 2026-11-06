@@ -31,7 +31,7 @@ public static class GameBackupPolicy
         var dir = AshitaInstall.Detect(s.AshitaPath);
         var boot = accountBoot is { Length: > 0 } ? accountBoot
                  : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedBootConfig(dir) : s.AshitaBootConfig;
-        if (dir is null || boot is not { Length: > 0 } || !AshitaLauncher.IsBootFileName(boot)) return windows;
+        if (dir is null || boot is not { Length: > 0 } || !AshitaBootFiles.IsBootFileName(boot)) return windows;
         try { return new AshitaGameStore(dir, boot, registry).Load().ScreenshotFolder; }
         catch (Exception ex)
         {

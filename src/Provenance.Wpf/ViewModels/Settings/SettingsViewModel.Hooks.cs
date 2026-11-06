@@ -331,20 +331,22 @@ public partial class SettingsViewModel
         if (!CanManageProfiles) return;
         if (IsWindower && WindowerDir is { } w && ReadWindower(w) is { } file)
         {
-            var name = AskName?.Invoke("Add a Windower profile", "What should the new profile be called?", file.NewProfileName(), n => file.NameProblem(n));
-            if (name is not null) ChangeProfiles(() => ThirdPartyProfiles.AddWindower(_settings, w, name), "Provenance couldn't add the profile.");
+            var profiles = new WindowerProfiles(_settings, w, file);
+            var name = AskName?.Invoke("Add a Windower profile", "What should the new profile be called?", file.NewProfileName(), n => profiles.NameProblem(n));
+            if (name is not null) ChangeProfiles(() => profiles.Add(name), "Provenance couldn't add the profile.");
         }
         else if (IsAshita && AshitaDir is { } a)
         {
-            var name = AskName?.Invoke("Add a boot configuration", "What should the new boot configuration be called?", NewAshitaName(a), n => ThirdPartyProfiles.AshitaNameProblem(a, n));
-            if (name is not null) ChangeProfiles(() => ThirdPartyProfiles.AddAshita(a, name, PlayOnlineLanguage), "Provenance couldn't add the boot configuration.");
+            var profiles = new AshitaProfiles(_settings, a, PlayOnlineLanguage);
+            var name = AskName?.Invoke("Add a boot configuration", "What should the new boot configuration be called?", NewAshitaName(profiles), n => profiles.NameProblem(n));
+            if (name is not null) ChangeProfiles(() => profiles.Add(name), "Provenance couldn't add the boot configuration.");
         }
     }
 
-    private static string NewAshitaName(string dir)
+    private static string NewAshitaName(AshitaProfiles profiles)
     {
         for (int i = 1; ; i++)
-            if (ThirdPartyProfiles.AshitaNameProblem(dir, $"profile{i}.ini") is null) return $"profile{i}.ini";
+            if (profiles.NameProblem($"profile{i}.ini") is null) return $"profile{i}.ini";
     }
 
     [RelayCommand]
@@ -353,16 +355,18 @@ public partial class SettingsViewModel
         if (!CanCopyProfile) return;
         if (IsWindower && WindowerDir is { } w && WindowerProfile is { } p && ReadWindower(w) is { } file)
         {
-            var start = file.NameProblem($"{p.Display} copy") is null ? $"{p.Display} copy" : file.NewProfileName();
-            var name = AskName?.Invoke("Duplicate a Windower profile", $"What should the copy of {p.Display} be called?", start, n => file.NameProblem(n));
-            if (name is not null) ChangeProfiles(() => ThirdPartyProfiles.DuplicateWindower(_settings, w, p.Name, name), "Provenance couldn't copy the profile.");
+            var profiles = new WindowerProfiles(_settings, w, file);
+            var start = profiles.NameProblem($"{p.Display} copy") is null ? $"{p.Display} copy" : file.NewProfileName();
+            var name = AskName?.Invoke("Duplicate a Windower profile", $"What should the copy of {p.Display} be called?", start, n => profiles.NameProblem(n));
+            if (name is not null) ChangeProfiles(() => profiles.Duplicate(p.Name, name), "Provenance couldn't copy the profile.");
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
         {
+            var profiles = new AshitaProfiles(_settings, a, PlayOnlineLanguage);
             var stem = Path.GetFileNameWithoutExtension(b.Name);
-            var start = ThirdPartyProfiles.AshitaNameProblem(a, $"{stem}-copy.ini") is null ? $"{stem}-copy.ini" : NewAshitaName(a);
-            var name = AskName?.Invoke("Duplicate a boot configuration", $"What should the copy of {b.Display} be called?", start, n => ThirdPartyProfiles.AshitaNameProblem(a, n));
-            if (name is not null) ChangeProfiles(() => ThirdPartyProfiles.DuplicateAshita(a, b.Name, name), "Provenance couldn't copy the boot configuration.");
+            var start = profiles.NameProblem($"{stem}-copy.ini") is null ? $"{stem}-copy.ini" : NewAshitaName(profiles);
+            var name = AskName?.Invoke("Duplicate a boot configuration", $"What should the copy of {b.Display} be called?", start, n => profiles.NameProblem(n));
+            if (name is not null) ChangeProfiles(() => profiles.Duplicate(b.Name, name), "Provenance couldn't copy the boot configuration.");
         }
     }
 
@@ -372,18 +376,19 @@ public partial class SettingsViewModel
         if (!CanChangeProfile) return;
         if (IsWindower && WindowerDir is { } w && WindowerProfile is { } p && ReadWindower(w) is { } file)
         {
-            var same = file.Profiles.FirstOrDefault(x => x.Name == p.Name);
-            var name = AskName?.Invoke("Rename a Windower profile", $"What should {p.Display} be called?", p.Name, n => file.NameProblem(n, same));
+            var profiles = new WindowerProfiles(_settings, w, file);
+            var name = AskName?.Invoke("Rename a Windower profile", $"What should {p.Display} be called?", p.Name, n => profiles.NameProblem(n, renaming: p.Name));
             if (name is null || name == p.Name) return;
-            ChangeProfiles(() => ThirdPartyProfiles.RenameWindower(_settings, w, p.Name, name), "Provenance couldn't rename the profile.", renamedFrom: p.Name);
+            ChangeProfiles(() => profiles.Rename(p.Name, name), "Provenance couldn't rename the profile.", renamedFrom: p.Name);
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
         {
             // it's the file that's renamed, a name of its own stays put
+            var profiles = new AshitaProfiles(_settings, a, PlayOnlineLanguage);
             var ask = b.Display == b.Name ? $"What should {b.Name} be called?" : $"What should the file for {b.Display} be called?";
-            var name = AskName?.Invoke("Rename a boot configuration", ask, b.Name, n => ThirdPartyProfiles.AshitaNameProblem(a, n, renaming: b.Name));
-            if (name is null || ThirdPartyProfiles.AshitaFileName(name) == b.Name) return;
-            ChangeProfiles(() => ThirdPartyProfiles.RenameAshita(_settings, a, b.Name, name), "Provenance couldn't rename the boot configuration.", renamedFrom: b.Name);
+            var name = AskName?.Invoke("Rename a boot configuration", ask, b.Name, n => profiles.NameProblem(n, renaming: b.Name));
+            if (name is null || AshitaProfiles.FileName(name) == b.Name) return;
+            ChangeProfiles(() => profiles.Rename(b.Name, name), "Provenance couldn't rename the boot configuration.", renamedFrom: b.Name);
         }
     }
 
@@ -394,13 +399,13 @@ public partial class SettingsViewModel
         if (IsWindower && WindowerDir is { } w && WindowerProfile is { } p)
         {
             if (Confirm?.Invoke("Delete profile", $"Delete the Windower profile {p.Display}? Its settings are removed from Windower's settings.xml, and this can't be undone.", "DELETE", true) != true) return;
-            ChangeProfiles(() => { ThirdPartyProfiles.DeleteWindower(_settings, w, p.Name); return ""; }, "Provenance couldn't delete the profile.");
+            ChangeProfiles(() => { new WindowerProfiles(_settings, w).Delete(p.Name); return ""; }, "Provenance couldn't delete the profile.");
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
         {
             var file = b.Display == b.Name ? "The file is" : $"Its file, {b.Name}, is";
             if (Confirm?.Invoke("Delete boot configuration", $"Delete the boot configuration {b.Display}? {file} removed from Ashita's config\\boot folder, and this can't be undone.", "DELETE", true) != true) return;
-            ChangeProfiles(() => { ThirdPartyProfiles.DeleteAshita(_settings, a, b.Name); return null; }, "Provenance couldn't delete the boot configuration.");
+            ChangeProfiles(() => { new AshitaProfiles(_settings, a, PlayOnlineLanguage).Delete(b.Name); return null; }, "Provenance couldn't delete the boot configuration.");
         }
     }
 
