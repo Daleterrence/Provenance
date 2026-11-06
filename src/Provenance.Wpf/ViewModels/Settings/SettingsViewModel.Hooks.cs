@@ -8,6 +8,7 @@ using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
+using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
 using Serilog;
@@ -684,7 +685,7 @@ public partial class SettingsViewModel
             AshitaScriptArgs = cfg.ScriptArgs ?? "";
             bool example = AshitaBootFiles.IsShippedExample(AshitaBootConfig!.Name);
             AshitaCardEnabled = !example;
-            if (example) AshitaCardNote = "This is one of Ashita's example files, which Provenance doesn't change. Duplicate it to make one of your own.";
+            if (example) AshitaCardNote = HookFailures.AshitaExampleCard;
         }
         finally { _loadingCard = false; }
         OnProfilesChanged();

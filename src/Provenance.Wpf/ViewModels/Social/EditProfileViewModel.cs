@@ -180,7 +180,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         if (name.Any(c => c < 0x20 || c > 0x7e)) return "A handle name can only use English letters, numbers and symbols.";
         var age = AgeText.Trim();
         if (age.Length > 0 && !(age.All(char.IsAsciiDigit) && age.Length <= 3)) return "Age is a number from 1 to 999.";
-        if (Mail.Trim().Length > 319) return "The mail address is too long.";
+        if (Mail.Trim().Length > 319) return HookFailures.ProfileEditor.MailTooLong;
         // it loads masked, so an edited copy of the mask would save as the new address
         if (Mail.Trim() != _savedMail && Mail.Contains("***")) return "Type your whole mail address to change it.";
         var langs = new[] { Lang0, Lang1, Lang2 }.Where(x => x != 0).ToList();
@@ -259,8 +259,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _timer.Start();
     }
 
-    private const string WriteFailed = "Provenance couldn't send the request to PlayOnline. Try again.";
-    private const string SaveUnconfirmed = "PlayOnline didn't confirm the save. Open your profile again to see what it kept.";
+    private const string WriteFailed = HookFailures.RequestWriteFailed;
+    private const string SaveUnconfirmed = HookFailures.ProfileEditor.SaveUnconfirmed;
 
     private void EndJob()
     {
@@ -306,11 +306,11 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         }
         if (_social.SessionPid != _pid)
         {
-            Abandon("Your PlayOnline session ended, so the request stopped.");
+            Abandon(HookFailures.ProfileEditor.SessionEnded);
             return;
         }
         if (DateTime.UtcNow - _at > TimeSpan.FromSeconds(_job == Job.Rename ? 260 : 250))
-            Abandon(_job is Job.Load or Job.LoadXi ? "PlayOnline didn't answer." : SaveUnconfirmed);
+            Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.NoAnswer : SaveUnconfirmed);
     }
 
     private void Fill(MyProfile p)
@@ -521,32 +521,31 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private static string FailText(Job job, string state) => state switch
     {
-        "cancelled" => "Logging out or starting FINAL FANTASY XI stopped the request.",
-        "failed:handle changing" => job == Job.Load ? "Your handle was changing. Open the profile again."
-                                                  : "Not saved: your handle was changing. Open the profile again.",
-        "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install.",
-        "failed:no profile" => "PlayOnline doesn't have a profile for this handle.",
-        "failed:not loaded" => "Open the profile again before saving.",
-        "failed:nothing to save" => "You haven't changed anything, so there's nothing to save.",
-        "failed:bad mail" => "PlayOnline doesn't accept that mail address.",
-        "failed:mail too long" => "The mail address is too long.",
-        "failed:bad name" => "PlayOnline doesn't accept that handle name. Use English letters, numbers and symbols.",
-        "failed:word" => "That handle name has a word in it that PlayOnline doesn't allow. Choose a different name.",
-        "failed:-261" or "failed:-5429" => "The entered name could not be registered. Please register with a different name.",
-        "failed:reloaded" => "PlayOnline didn't keep the new handle name. Try again later.",
-        "failed:busy" => "PlayOnline was busy with other requests. Try again.",
-        "failed:mismatch" => job == Job.LoadXi
-            ? "PlayOnline sent a profile that isn't this character's, so nothing was changed."
-            : "PlayOnline sent a profile that isn't this handle's, so nothing was changed.",
-        "failed:no character" => "That character isn't on your profile any more. Open the profile again.",
-        "failed:write" => "Provenance couldn't keep the profile PlayOnline sent. Try again.",
-        "failed:timeout" => job is Job.Load or Job.LoadXi ? "PlayOnline didn't answer." : SaveUnconfirmed,
+        "cancelled" => HookFailures.ProfileEditor.Cancelled,
+        "failed:handle changing" => job == Job.Load ? HookFailures.ProfileEditor.LoadHandleChanging
+                                                  : HookFailures.ProfileEditor.SaveHandleChanging,
+        "failed:no schema" => HookFailures.ProfileEditor.NoSchema,
+        "failed:no profile" => HookFailures.ProfileEditor.NoProfile,
+        "failed:not loaded" => HookFailures.ProfileEditor.NotLoaded,
+        "failed:nothing to save" => HookFailures.ProfileEditor.NothingToSave,
+        "failed:bad mail" => HookFailures.ProfileEditor.BadMail,
+        "failed:mail too long" => HookFailures.ProfileEditor.MailTooLong,
+        "failed:bad name" => HookFailures.ProfileEditor.BadName,
+        "failed:word" => HookFailures.ProfileEditor.BadWord,
+        "failed:-261" or "failed:-5429" => HookFailures.ProfileEditor.NameRejected,
+        "failed:reloaded" => HookFailures.ProfileEditor.NameNotKept,
+        "failed:busy" => HookFailures.ProfileEditor.Busy,
+        "failed:mismatch" => job == Job.LoadXi ? HookFailures.ProfileEditor.MismatchCharacter
+                                              : HookFailures.ProfileEditor.MismatchHandle,
+        "failed:no character" => HookFailures.ProfileEditor.CharacterGone,
+        "failed:write" => HookFailures.ProfileEditor.WriteFailed,
+        "failed:timeout" => job is Job.Load or Job.LoadXi ? HookFailures.NoAnswer : SaveUnconfirmed,
         _ => job switch
         {
-            Job.Load => $"PlayOnline didn't send your profile{Why(state)}",
-            Job.LoadXi => $"PlayOnline didn't send the character's profile{Why(state)}",
-            Job.Rename => $"PlayOnline didn't rename the handle{Why(state)}",
-            _ => $"PlayOnline didn't save your profile{Why(state)}",
+            Job.Load => HookFailures.ProfileEditor.LoadFailed(Why(state)),
+            Job.LoadXi => HookFailures.ProfileEditor.LoadCharacterFailed(Why(state)),
+            Job.Rename => HookFailures.ProfileEditor.RenameFailed(Why(state)),
+            _ => HookFailures.ProfileEditor.SaveFailed(Why(state)),
         },
     };
 
@@ -557,7 +556,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         var reason = SocialRequests.FailReason(state);
         if (!int.TryParse(reason, out var n) || n >= 0) return $" ({reason}).";
         int code = -n;
-        var text = code == 5440 ? "PlayOnline said this account isn't allowed to make that change." : PolErrors.Text(code);
+        var text = code == 5440 ? HookFailures.ProfileEditor.NotAllowed : PolErrors.Text(code);
         return text is null || text.Contains("%d") ? $" (POL-{code:0000})." : $" (POL-{code:0000}). {text}";
     }
 

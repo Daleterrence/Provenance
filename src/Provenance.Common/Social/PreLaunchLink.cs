@@ -15,7 +15,6 @@ public sealed class PreLaunchLink
     public const string ShowListText = "Display Handle List\nand link Content ID?";
     public const string SavingText = "Updating Content ID list...";
     public const string PageGaveUpText = "Your last handle change hasn't finished, so your characters couldn't be linked. Try again in a moment.";
-    public const string AlreadyLinkedText = "Not saved: one of the characters is already linked to a handle.";
 
     // Fit is as many as the active handle has room for, in index order like the viewer's scan
     public sealed record Plan(PolHandle Active, IReadOnlyList<PolContentId> Unlinked, IReadOnlyList<PolContentId> Fit, bool Ask);
@@ -85,7 +84,7 @@ public sealed class PreLaunchLink
     }
 
     private static string Failure(string state) =>
-        state == "failed:-7168" ? AlreadyLinkedText : HandleList.Failed(HandleChange.Link, state);
+        state == "failed:-7168" ? HookFailures.Handles.PreLaunchAlreadyLinked : HandleList.Failed(HandleChange.Link, state);
 
     // Failed is null once it's saved. Once the hook has it, only its answer (or its 150 secs) ends the wait
     private async Task<(bool Gone, string? Failed)> SaveAsync(int pid, Plan plan)

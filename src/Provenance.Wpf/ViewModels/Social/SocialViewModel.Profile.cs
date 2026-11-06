@@ -64,7 +64,7 @@ public partial class SocialViewModel
         // a request with no answer yet has no profile to show (the viewer greys it out)
         if (!f.IsFriend || f.Pending || _pol.Pid is not { } pid)
         {
-            ProfileNote = "You can only view your friends' profiles.";
+            ProfileNote = HookFailures.Profile.FriendsOnly;
             return;
         }
         if (GameRunning)
@@ -156,7 +156,7 @@ public partial class SocialViewModel
         }
         ProfileNote = st switch
         {
-            "failed:no profile" => "This person doesn't have a PlayOnline profile to show.",
+            "failed:no profile" => HookFailures.Profile.None,
             // -0x14cc, which the viewer calls a hidden profile
             "failed:-5324" => ViewerText(0x4ab4, "Profile of %s's handle is hidden.").Replace("%s", Filtered(_profileFor)),
             _ => ProfileFailText(st),
@@ -166,14 +166,14 @@ public partial class SocialViewModel
 
     private static string ProfileFailText(string st) => st switch
     {
-        "timeout" => "PlayOnline didn't answer.",
-        "failed:no such friend" or "failed:friend list changed" => "Your friend list changed. Try again.",
-        "failed:pending" => "You can only view your friends' profiles.",
-        "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.",
-        NoCharacter => "Provenance couldn't find that character. Open the profile again from your friends list.",
+        "timeout" => HookFailures.NoAnswer,
+        "failed:no such friend" or "failed:friend list changed" => HookFailures.FriendListChanged,
+        "failed:pending" => HookFailures.Profile.FriendsOnly,
+        "failed:no schema" => HookFailures.Profile.NoSchema,
+        NoCharacter => HookFailures.Profile.NoCharacter,
         // only a number is POL's own error, the rest never got as far as asking
-        _ when int.TryParse(SocialRequests.FailReason(st), out _) => $"PlayOnline didn't send the profile ({SocialRequests.FailReason(st)}).",
-        _ => $"Provenance couldn't ask PlayOnline for the profile ({SocialRequests.FailReason(st)}).",
+        _ when int.TryParse(SocialRequests.FailReason(st), out _) => HookFailures.Profile.NotSent(SocialRequests.FailReason(st)),
+        _ => HookFailures.Profile.NotAsked(SocialRequests.FailReason(st)),
     };
 
     private const string NoCharacter = "failed:no character";
@@ -228,7 +228,7 @@ public partial class SocialViewModel
         {
             if (_last.Friends.FirstOrDefault(x => x.Key == _profileKey && x.Row >= 0) is not { Pending: false } now)
             {
-                ProfileNote = "You can only view your friends' profiles.";
+                ProfileNote = HookFailures.Profile.FriendsOnly;
                 return;
             }
             _profileRow = now.Row;

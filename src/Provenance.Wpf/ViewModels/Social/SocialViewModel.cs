@@ -431,7 +431,7 @@ public partial class SocialViewModel : ObservableObject
             else if (DateTime.UtcNow - _requestedAt > TimeSpan.FromSeconds(110))
             {
                 _requestedStatus = null;   // polcore gives up after 100 secs
-                StatusNote = "PlayOnline didn't answer the status change.";
+                StatusNote = HookFailures.Friends.StatusNoAnswer;
             }
         }
         StatusPending = _requestedStatus != null || snap.StatusBusy;
@@ -771,7 +771,7 @@ public partial class SocialViewModel : ObservableObject
     private bool _noteIsSuccess;
     private string? _editToken;
     private DateTime _editAt;
-    private const string RequestWriteFailed = "Provenance couldn't send the request to PlayOnline. Try again.";
+    private const string RequestWriteFailed = HookFailures.RequestWriteFailed;
 
     partial void OnEditNoteChanged(string value)
     {
@@ -857,17 +857,17 @@ public partial class SocialViewModel : ObservableObject
 
     private static string EditFailureText(string state) => state switch
     {
-        "timeout" => "PlayOnline didn't answer the change.",
-        "failed:pending" => "That person hasn't accepted your friend request yet, so you can only delete it.",
-        "failed:self" => "You can't ignore yourself.",
-        "failed:friend list changed" or "failed:no such friend" => "Your friend list changed. Try again.",
-        "failed:list changed" or "failed:no such entry" => "Your ignore list changed. Try again.",
-        "failed:bad name" => "Use 1 to 15 English letters, numbers or symbols.",
-        "failed:handle changing" => "Not changed: your handle was changing. Try again.",
-        "failed:reloaded" => "PlayOnline had a newer friend list, so Provenance loaded it instead. Try again.",
-        "failed:-7187" => "That person is already on your ignore list.",
-        "failed:-7188" or "failed:-516" => "Your ignore list is full (100 people).",
-        _ => $"PlayOnline didn't accept the change ({SocialRequests.FailReason(state)}).",
+        "timeout" => HookFailures.Friends.EditNoAnswer,
+        "failed:pending" => HookFailures.Friends.DeleteOnly,
+        "failed:self" => HookFailures.Friends.IgnoreSelf,
+        "failed:friend list changed" or "failed:no such friend" => HookFailures.FriendListChanged,
+        "failed:list changed" or "failed:no such entry" => HookFailures.Friends.IgnoreListChanged,
+        "failed:bad name" => HookFailures.Friends.BadName,
+        "failed:handle changing" => HookFailures.Friends.EditHandleChanging,
+        "failed:reloaded" => HookFailures.Friends.EditReloaded,
+        "failed:-7187" => HookFailures.IgnoredAlready,
+        "failed:-7188" or "failed:-516" => HookFailures.Friends.IgnoreListFull,
+        _ => HookFailures.ChangeRejected(SocialRequests.FailReason(state)),
     };
 
     internal string? _answerToken;
@@ -912,12 +912,12 @@ public partial class SocialViewModel : ObservableObject
         if (!f.IsRequest) return;
         if (f.IsMe && answer != RequestAnswer.Decline)
         {
-            EditNote = "That request is from one of your own handles. You can only decline it.";
+            EditNote = HookFailures.Friends.OwnRequest;
             return;
         }
         if (answer == RequestAnswer.Accept && Friends.Count(x => x.IsFriend) >= 200)
         {
-            EditNote = "Your friend list is full (200 friends).";
+            EditNote = HookFailures.FriendListFull;
             return;
         }
         if (answer == RequestAnswer.Ignore && f.Key.Length > 0 && Blocked.Any(x => x.Key == f.Key))
@@ -961,18 +961,18 @@ public partial class SocialViewModel : ObservableObject
         if (st == "timeout") Answered(f.RequestMid, ack: false);
         EditNote = st switch
         {
-            "timeout" => "PlayOnline didn't reply, so it's not certain your answer got through. If the request's still open, it'll show again next time you log in.",
-            "failed:handle changing" => "Not sent: your handle was changing. Try again.",
-            "failed:no such request" => "That friend request isn't there any more.",
-            "failed:self" => "That request is from one of your own handles. You can only decline it.",
-            "failed:already ignored" => "That person is already on your ignore list.",
-            "failed:-7188" => "Your friend list is full (200 friends).",
-            "failed:no such friend" => "That person isn't on your friend list any more, so nothing was sent.",
-            "failed:stopped" => "PlayOnline didn't take your recent messages, so answers can't be sent until you log in again.",
-            "failed:hourly limit" => "You've sent 600 messages in the last hour, so your answer wasn't sent. Try again later.",
+            "timeout" => HookFailures.Friends.AnswerNoReply,
+            "failed:handle changing" => HookFailures.Friends.AnswerHandleChanging,
+            "failed:no such request" => HookFailures.Friends.NoSuchRequest,
+            "failed:self" => HookFailures.Friends.OwnRequest,
+            "failed:already ignored" => HookFailures.IgnoredAlready,
+            "failed:-7188" => HookFailures.FriendListFull,
+            "failed:no such friend" => HookFailures.Friends.AnswerFriendGone,
+            "failed:stopped" => HookFailures.Friends.AnswerStopped,
+            "failed:hourly limit" => HookFailures.Friends.AnswerHourlyLimit,
             var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
-                "PlayOnline didn't save the friend list, so your answer wasn't sent. Try again.",
-            var s => $"PlayOnline didn't accept your answer ({SocialRequests.FailReason(s)}).",
+                HookFailures.Friends.AnswerListNotSaved,
+            var s => HookFailures.Friends.AnswerRejected(SocialRequests.FailReason(s)),
         };
     }
 
@@ -1031,10 +1031,10 @@ public partial class SocialViewModel : ObservableObject
     private string _requestKey = "";
     private bool _requestCharacter;
     private DateTime _requestAt;
-    private const string BadHandleName = "Type a handle name of up to 15 English letters, numbers or symbols.";
-    private const string QuoteInName = "Provenance can't search for handle names with an apostrophe (') in them.";
-    private const string BadHid = "Type an H-ID in numbers, like 00-1234567.";
-    private const string BadCharacterName = "Type a character name of up to 15 English letters, with no spaces, numbers or symbols.";
+    private const string BadHandleName = HookFailures.Friends.BadHandleName;
+    private const string QuoteInName = HookFailures.Friends.QuoteInName;
+    private const string BadHid = HookFailures.Friends.BadHid;
+    private const string BadCharacterName = HookFailures.Friends.BadCharacterName;
     private const int SearchPage = 100;   // the hook fetches the first 100, like the viewer
     private const string TooManyResults = "Too many results. Please narrow your search.";
 
@@ -1103,7 +1103,7 @@ public partial class SocialViewModel : ObservableObject
     {
         if (hit.IsMe)
         {
-            SearchFailed("You can't add yourself as a friend.");
+            SearchFailed(HookFailures.Friends.RequestSelf);
             return;
         }
         if (hit.IsFriend || hit.RequestSent || _requestToken != null || !BeginEdit(out var pid, out var token)) return;
@@ -1149,24 +1149,24 @@ public partial class SocialViewModel : ObservableObject
                 var total = snap.SearchTotal > SearchPage ? snap.SearchTotal : SearchHits.Count;
                 SearchNote = SearchHits.Count == 0 ? _searchedKind switch
                              {
-                                 FriendSearchKind.Hid => "PlayOnline didn't find a handle with that H-ID.",
-                                 FriendSearchKind.Character => "PlayOnline didn't find a FINAL FANTASY XI character with that name.",
-                                 _ => "PlayOnline didn't find a handle with that name.",
+                                 FriendSearchKind.Hid => HookFailures.Friends.NoHidHit,
+                                 FriendSearchKind.Character => HookFailures.Friends.NoCharacterHit,
+                                 _ => HookFailures.Friends.NoHandleHit,
                              }
                            : total > SearchHits.Count ? $"Found {total} {what}s. Showing {SearchHits.Count} of them."
                            : SearchHits.Count == 1 ? $"Found 1 {what}." : $"Found {SearchHits.Count} {what}s.";
             }
             else SearchFailed(st switch
             {
-                "timeout" => "PlayOnline didn't answer the search.",
+                "timeout" => HookFailures.Friends.SearchNoAnswer,
                 "failed:bad name" => BadHandleName,
                 "failed:quote" => QuoteInName,
                 "failed:bad hid" => BadHid,
                 "failed:bad character" => BadCharacterName,
                 "failed:no schema" when characters =>
-                    "Provenance couldn't read the FINAL FANTASY XI profile layout from your PlayOnline install, so it can't search for characters.",
-                "failed:no schema" => "Provenance couldn't read the profile layout from your PlayOnline install, so it can't search for handles.",
-                _ => $"PlayOnline couldn't run the search ({SocialRequests.FailReason(st)}).",
+                    HookFailures.Friends.NoSchemaCharacters,
+                "failed:no schema" => HookFailures.Friends.NoSchemaHandles,
+                _ => HookFailures.Friends.SearchRejected(SocialRequests.FailReason(st)),
             });
         }
         if (_requestToken is null) return;
@@ -1177,18 +1177,18 @@ public partial class SocialViewModel : ObservableObject
         {
             SearchFailed(rst switch
             {
-                "timeout" => "PlayOnline didn't answer the friend request.",
-                "failed:already a friend" => $"{_requestName} is already on your friend list.",
-                "failed:self" => "You can't add yourself as a friend.",
-                "failed:-7181" => $"{_requestName} is on your ignore list. Stop ignoring them first.",
-                "failed:-7188" or "failed:-516" => "Your friend list is full (200 friends).",
-                "failed:no such result" => "Search again, then send the request.",
-                "failed:no such friend" => $"Your friend list changed before the request to {_requestName} went, so it wasn't sent. Try again.",
-                "failed:stopped" => "PlayOnline didn't take your recent messages, so friend requests can't be sent until you log in again.",
-                "failed:hourly limit" => "You've sent 600 messages in the last hour, so the request wasn't sent. Try again later.",
+                "timeout" => HookFailures.Friends.RequestNoAnswer,
+                "failed:already a friend" => HookFailures.Friends.AlreadyFriend(_requestName),
+                "failed:self" => HookFailures.Friends.RequestSelf,
+                "failed:-7181" => HookFailures.Friends.IgnoredFirst(_requestName),
+                "failed:-7188" or "failed:-516" => HookFailures.FriendListFull,
+                "failed:no such result" => HookFailures.Friends.NoSuchResult,
+                "failed:no such friend" => HookFailures.Friends.FriendListChangedFor(_requestName),
+                "failed:stopped" => HookFailures.Friends.RequestStopped,
+                "failed:hourly limit" => HookFailures.Friends.RequestHourlyLimit,
                 var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
-                    "PlayOnline didn't save the friend list, so your request wasn't sent. Try again.",
-                var s => $"PlayOnline didn't accept the request ({SocialRequests.FailReason(s)}).",
+                    HookFailures.Friends.RequestListNotSaved,
+                var s => HookFailures.Friends.RequestRejected(SocialRequests.FailReason(s)),
             });
             return;
         }
@@ -1236,9 +1236,9 @@ public partial class SocialViewModel : ObservableObject
         if (st == "saved") return;
         EditNote = st switch
         {
-            "timeout" => "PlayOnline didn't answer the profile picture change.",
-            "failed:handle changing" => "Not saved: your handle was changing. Try again.",
-            _ => $"PlayOnline didn't save the profile picture ({SocialRequests.FailReason(st)}).",
+            "timeout" => HookFailures.Friends.PictureNoAnswer,
+            "failed:handle changing" => HookFailures.Friends.PictureHandleChanging,
+            _ => HookFailures.Friends.PictureRejected(SocialRequests.FailReason(st)),
         };
     }
 

@@ -27,12 +27,9 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public enum Phase { Out, Joining, In }
 
     public const string ExitQuestion = "Exit Group Chat?";
-    public const string BusyText = "Unable to join Group Chat. The server is busy.";
-    public const string JoinFailedText = "Unable to join Group Chat.";
-    public const string NotMemberText = "You are not a member of the selected group.";
-    public const string SendFailedText = "Unable to send chat message.";
+    public const string JoinFailedText = HookFailures.GroupChat.JoinFailed;
     public const string FilteredNote = "Group chat can't send some of those characters, so they were left out.";
-    public const string CharactersText = "Group chat can't send some of those characters.";
+    public const string CharactersText = HookFailures.GroupChat.Characters;
     // a little past the hook's own 30 s, for a join or a line it never answered
     internal static readonly TimeSpan JoinGiveUp = TimeSpan.FromSeconds(35);
     internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(35);
@@ -265,7 +262,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         var token = HookFiles.NewToken();
         if (!GroupChatFiles.Send(pid, token, text))
         {
-            ComposeNote = SendFailedText;
+            ComposeNote = HookFailures.GroupChat.SendFailed;
             return;
         }
         _gate.Sent(token, Compose, DateTime.UtcNow);
@@ -291,7 +288,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         if (_gate.Expire(now) is { } done) Settled(done.State, done.Text);
         if (Current != Phase.Joining || now - _joinAt < JoinGiveUp) return;
         CallOff();
-        End(_social.ViewerText(0x3eb8, BusyText));
+        End(_social.ViewerText(0x3eb8, HookFailures.GroupChat.Busy));
     }
 
     public bool DeleteLine(GroupChatLineItem line)
@@ -360,10 +357,10 @@ public sealed partial class GroupChatViewModel : ObservableObject
                 if (!gc.State.StartsWith("failed", StringComparison.Ordinal)) break;
                 End(gc.State switch
                 {
-                    "failed:busy" => _social.ViewerText(0x3eb8, BusyText),
-                    "failed:not a member" or "failed:no such group" => _social.ViewerText(0x3eb7, NotMemberText),
-                    "failed:handle changing" => "Your handle was changing, so the group chat wasn't joined.",
-                    "failed:handle" or "failed:list changed" => "Your handles changed, so the group chat wasn't joined. Try again.",
+                    "failed:busy" => _social.ViewerText(0x3eb8, HookFailures.GroupChat.Busy),
+                    "failed:not a member" or "failed:no such group" => _social.ViewerText(0x3eb7, HookFailures.GroupChat.NotMember),
+                    "failed:handle changing" => HookFailures.GroupChat.JoinHandleChanging,
+                    "failed:handle" or "failed:list changed" => HookFailures.GroupChat.HandlesChanged,
                     _ => _social.ViewerText(0x3eb9, JoinFailedText),
                 });
                 return;
@@ -409,11 +406,11 @@ public sealed partial class GroupChatViewModel : ObservableObject
         {
             ComposeNote = done switch
             {
-                "failed:too long" => "That's too long for one line.",
+                "failed:too long" => HookFailures.TooLongForLine,
                 "failed:characters" => CharactersText,
-                "failed:handle changing" => "Not sent: your handle was changing.",
-                "failed:timeout" => "PlayOnline didn't answer, so that line may not have gone.",
-                _ => _social.ViewerText(0x3eba, SendFailedText),
+                "failed:handle changing" => HookFailures.NotSentHandleChanging,
+                "failed:timeout" => HookFailures.LineMayNotHaveGone,
+                _ => _social.ViewerText(0x3eba, HookFailures.GroupChat.SendFailed),
             };
             // the line goes back in the box, like the viewer keeps it till it's gone
             if (Compose.Length == 0) Compose = text;

@@ -9,6 +9,7 @@ using Serilog;
 using Provenance.Common;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.Windower;
+using Provenance.Common.Hook;
 using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.ViewModels.Settings;
@@ -691,7 +692,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
         bool readOnly = AshitaBootFiles.IsShippedExample(bootName);
         if (readOnly)
-            page.Problem = $"{page.Display} is one of Ashita's example files, so Provenance won't change it. Duplicate it under Windower/Ashita and change the copy instead.";
+            page.Problem = HookFailures.AshitaExampleFile(page.Display);
         AshitaScript script;
         try
         {

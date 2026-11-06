@@ -1,3 +1,5 @@
+using Provenance.Common.Hook;
+
 namespace Provenance.Common.Social;
 
 // Orphan: linked to a slot with no handle in it, which polcore can neither unlink nor link again
@@ -17,7 +19,7 @@ public static class HandleList
 {
     public const int MaxContentIds = 8;
 
-    public const string LimitText = "Content ID limit reached. Cannot link any more Content IDs.";
+    public const string LimitText = HookFailures.Handles.LimitText;
     public const string LoggedOutText = "You're not logged in. Log in to see your handles and the characters linked to them.";
     public const string ReadOnlyText = "Handles can't be changed while FINAL FANTASY XI is starting or running.";
     public const string MultiRunText = "Handles can't be changed while Provenance is starting your accounts.";
@@ -64,22 +66,22 @@ public static class HandleList
     // "timeout" is the app's own, the rest are the hook's. Codes are polcore's
     public static string Failed(HandleChange op, string state) => state switch
     {
-        "failed:busy" => "PlayOnline is busy with something else. Try again in a moment.",
-        "failed:already active" => "That handle is already active.",
+        "failed:busy" => HookFailures.Handles.Busy,
+        "failed:already active" => HookFailures.Handles.AlreadyActive,
         "failed:handle full" or "failed:-7169" => LimitText,
         "failed:list changed" or "failed:not linked" or "failed:already linked" or "failed:not active" or "failed:-7172"
-            or "failed:-7173" or "failed:-7174" => "Your handles or characters changed, so nothing was saved. Try again.",
-        "failed:-7168" => "Not saved: that character is already linked to a handle.",
-        "failed:reloaded" => "Not saved: PlayOnline had a newer Content ID list, so Provenance loaded that instead. Try again.",
-        "failed:not saved" => "Not saved: PlayOnline didn't keep the change. Try again.",
-        "failed:orphan" => "That character is linked to a handle this account doesn't have any more, so it can't be changed.",
+            or "failed:-7173" or "failed:-7174" => HookFailures.Handles.ListChanged,
+        "failed:-7168" => HookFailures.Handles.AlreadyLinked,
+        "failed:reloaded" => HookFailures.Handles.Reloaded,
+        "failed:not saved" => HookFailures.Handles.NotSaved,
+        "failed:orphan" => HookFailures.Handles.Orphan,
         "failed:draining" or "failed:not in hold" =>
-            "That couldn't be done while PlayOnline was closing or FINAL FANTASY XI was starting.",
-        "failed:cancelled" => "FINAL FANTASY XI started before PlayOnline answered, so Provenance couldn't confirm the change.",
-        "timeout" => op == HandleChange.Switch ? "PlayOnline didn't answer, so your active handle may not have changed."
-                                                              : "PlayOnline didn't answer, so the change may not have been saved.",
+            HookFailures.Handles.Closing,
+        "failed:cancelled" => HookFailures.Handles.Cancelled,
+        "timeout" => op == HandleChange.Switch ? HookFailures.Handles.SwitchNoAnswer
+                                                              : HookFailures.Handles.ChangeNoAnswer,
         var s => op == HandleChange.Switch
-            ? $"Provenance couldn't confirm the switch ({SocialRequests.FailReason(s)})."
-            : $"Not saved: PlayOnline didn't accept the change ({SocialRequests.FailReason(s)}).",
+            ? HookFailures.Handles.SwitchRejected(SocialRequests.FailReason(s))
+            : HookFailures.Handles.ChangeRejected(SocialRequests.FailReason(s)),
     };
 }

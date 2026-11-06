@@ -67,7 +67,7 @@ public static class ChatRoomFiles
     public static string? RoomNameProblem(string name) =>
         string.IsNullOrWhiteSpace(name) ? "Room name is not set. Cannot create room."
         : name.Length > MaxRoomName ? "Room names can be up to 30 characters."
-        : name.Any(c => c < ' ') || !ShiftJis.Fits(name) ? "The entered room name cannot be used. Please enter a different name."
+        : name.Any(c => c < ' ') || !ShiftJis.Fits(name) ? HookFailures.ChatRooms.BadName
         : null;
 
     // the viewer's new password box takes letters and numbers, 16 at most

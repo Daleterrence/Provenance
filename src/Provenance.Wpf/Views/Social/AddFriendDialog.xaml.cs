@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Provenance.Common.Hook;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Views.Dialogs;
@@ -87,7 +88,7 @@ public partial class AddFriendDialog : Window
         {
             null => Vm.SearchKind == FriendSearchKind.Character ? "Choose a character from the list first." : "Choose a handle from the list first.",
             { IsMe: true } => "That's one of your own handles. You can't add yourself as a friend.",
-            { IsFriend: true } => $"{hit.Name} is already on your friend list.",
+            { IsFriend: true } => HookFailures.Friends.AlreadyFriend(hit.Name),
             { RequestSent: true } => $"You've already sent {hit.Name} a friend request.",
             _ => Vm.FriendRequestBlocked,
         };

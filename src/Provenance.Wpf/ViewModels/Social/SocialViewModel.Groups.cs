@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Hook;
 using Provenance.Common.Social;
 
 namespace Provenance.Wpf.ViewModels.Social;
@@ -113,7 +114,7 @@ public partial class SocialViewModel
     {
         if (Groups.Count(x => !x.IsInvited) >= 4)
         {
-            EditNote = "You can only be in 4 friend groups.";
+            EditNote = HookFailures.Groups.TooManyGroups;
             return;
         }
         BeginGroup((pid, token) => SocialRequests.CreateGroup(pid, token, name.Trim()), $"Group \"{name.Trim()}\" created.");
@@ -167,7 +168,7 @@ public partial class SocialViewModel
         }
         if (g.Members.Count >= 64)
         {
-            EditNote = "This group is full (64 members).";
+            EditNote = HookFailures.Groups.Full;
             return;
         }
         var text = ViewerText(0x46d5, "Would you like to join the group \"%s\"?").Replace("%s", g.Name);
@@ -219,26 +220,26 @@ public partial class SocialViewModel
         }
         EditNote = st switch
         {
-            "timeout" => "PlayOnline didn't answer.",
-            "failed:not master" => "Only the group master can disband the group.",
-            "failed:handle changing" => "Not done: your handle was changing. Try again.",
-            "failed:not allowed" => "Only the group master (or a sub-master) can do that.",
-            "failed:self" => "You can't invite yourself to a group.",
-            "failed:not a member" => "You've only been invited to that group. Accept the invitation first.",
-            "failed:already in group" => "That person is already in this group, or already invited.",
-            "failed:group full" => "This group is full (64 members).",
-            "failed:-7206" or "failed:-5315" => "You can only be in 4 friend groups.",
-            "failed:master cannot leave" => "The group master can't leave the group. Make someone else master first, or disband it.",
-            "failed:bad name" => "Type a group name.",
-            "failed:name too long" => "That group name is too long (20 English letters, or 10 Japanese characters).",
-            "failed:already a member" => "You're already in this group with another handle.",
-            "failed:no such group" or "failed:no such member" or "failed:no such invitation" or "failed:no handle" => "The group changed. Try again.",
-            "failed:no such friend" => "Your friend list changed, so the invitation wasn't sent. Try again.",
-            "failed:-5316" => "That group name is already in use.",
-            "failed:-5428" or "failed:-261" => "That group name can't be used.",
-            "failed:stopped" => "PlayOnline didn't take your recent messages, so invitations can't be sent or answered until you log in again.",
-            "failed:hourly limit" => "You've sent 600 messages in the last hour. Try again later.",
-            var s => $"PlayOnline didn't accept the change ({SocialRequests.FailReason(s)}).",
+            "timeout" => HookFailures.NoAnswer,
+            "failed:not master" => HookFailures.Groups.DisbandMasterOnly,
+            "failed:handle changing" => HookFailures.Groups.HandleChanging,
+            "failed:not allowed" => HookFailures.Groups.NotAllowed,
+            "failed:self" => HookFailures.Groups.InviteSelf,
+            "failed:not a member" => HookFailures.Groups.OnlyInvited,
+            "failed:already in group" => HookFailures.Groups.AlreadyIn,
+            "failed:group full" => HookFailures.Groups.Full,
+            "failed:-7206" or "failed:-5315" => HookFailures.Groups.TooManyGroups,
+            "failed:master cannot leave" => HookFailures.Groups.MasterCannotLeave,
+            "failed:bad name" => HookFailures.Groups.NeedName,
+            "failed:name too long" => HookFailures.Groups.NameTooLong,
+            "failed:already a member" => HookFailures.Groups.AlreadyMember,
+            "failed:no such group" or "failed:no such member" or "failed:no such invitation" or "failed:no handle" => HookFailures.Groups.Changed,
+            "failed:no such friend" => HookFailures.Groups.FriendGone,
+            "failed:-5316" => HookFailures.Groups.NameInUse,
+            "failed:-5428" or "failed:-261" => HookFailures.Groups.NameRejected,
+            "failed:stopped" => HookFailures.Groups.Stopped,
+            "failed:hourly limit" => HookFailures.Groups.HourlyLimit,
+            var s => HookFailures.ChangeRejected(SocialRequests.FailReason(s)),
         };
         // the hook leaves the group's chat before the group, so a refused leave can still have closed it
         if (left != null && GroupChat.LeaveFailed(left, snap)) EditNote += " " + ChatClosedNote;

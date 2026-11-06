@@ -7,6 +7,7 @@ using Provenance.Common;
 using Provenance.Common.Game.ThirdParty;
 using Serilog;
 using Provenance.Common.Game;
+using Provenance.Common.Hook;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 
@@ -37,7 +38,7 @@ public partial class GameSettingsViewModel : ObservableObject
     public bool Editable => Available && !_store.ReadOnly;
 
     public string ReadOnlyNote => _store.ReadOnly
-        ? $"{ProfileShown} is one of Ashita's example files, so Provenance won't change it. Duplicate it under Windower/Ashita and change the copy instead."
+        ? HookFailures.AshitaExampleFile(ProfileShown)
         : "";
 
     public IGameSettingsStore Store => _store;

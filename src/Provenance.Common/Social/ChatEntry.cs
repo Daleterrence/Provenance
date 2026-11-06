@@ -1,4 +1,5 @@
 using System.Globalization;
+using Provenance.Common.Hook;
 using System.Text.Json.Serialization;
 
 namespace Provenance.Common.Social;
@@ -47,23 +48,23 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
     {
         "sending" or "queued" => "Sending...",
         "sent" => "Delivered to PlayOnline",
-        "failed:timeout" => "Not sent: PlayOnline didn't answer.",
+        "failed:timeout" => HookFailures.Messages.NoAnswer,
         // handed over with no answer, so it might still arrive and isn't offered again
-        "unconfirmed" => "Not confirmed: Provenance didn't hear back from PlayOnline. It might still have been sent.",
+        "unconfirmed" => HookFailures.Messages.Unconfirmed,
         // still in the game's outbox, so no send again or remove for it here
-        "unsent" => "Not sent: FINAL FANTASY XI didn't finish sending it.",
-        "failed:no such friend" or "failed:friend list changed" => "Not sent: the friend list changed.",
-        "failed:pending" => "Not sent: this person hasn't accepted your friend request yet.",
-        "failed:self" => "Not sent: you can't send a message to your own handle.",
-        "failed:too long" => "Not sent: messages can't be longer than 300 characters, and some characters count as two.",
-        "failed:write" => "Not sent: Provenance couldn't send it to PlayOnline.",
-        "failed:stopped" => "Not sent: PlayOnline didn't take your recent messages, so sending is off until you log in again.",
-        "failed:hourly limit" => "Not sent: you've sent 600 messages in the last hour. Try again later.",
-        "failed:session" => "Not sent: the PlayOnline session ended before it went.",
-        "failed:game" => "Not sent: FINAL FANTASY XI started before it went.",
-        "failed:handle changing" => "Not sent: your handle was changing.",
-        "failed:returned" => "Not delivered: PlayOnline sent it back.",
-        var s when s.StartsWith("failed", StringComparison.Ordinal) => "Not sent: PlayOnline didn't accept it.",
+        "unsent" => HookFailures.Messages.Unsent,
+        "failed:no such friend" or "failed:friend list changed" => HookFailures.Messages.FriendListChanged,
+        "failed:pending" => HookFailures.Messages.NotAccepted,
+        "failed:self" => HookFailures.Messages.ToSelf,
+        "failed:too long" => HookFailures.Messages.TooLong,
+        "failed:write" => HookFailures.Messages.WriteFailed,
+        "failed:stopped" => HookFailures.Messages.Stopped,
+        "failed:hourly limit" => HookFailures.Messages.HourlyLimit,
+        "failed:session" => HookFailures.Messages.SessionEnded,
+        "failed:game" => HookFailures.Messages.GameStarted,
+        "failed:handle changing" => HookFailures.NotSentHandleChanging,
+        "failed:returned" => HookFailures.Messages.Returned,
+        var s when s.StartsWith("failed", StringComparison.Ordinal) => HookFailures.Messages.Rejected,
         _ => "",
     };
 

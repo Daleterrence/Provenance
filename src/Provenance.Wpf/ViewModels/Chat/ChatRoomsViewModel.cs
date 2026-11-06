@@ -20,13 +20,13 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public enum Page { Lobby, Room }
 
     public const string CouldNotGetName = "Could not retrieve chat name.";
-    public const string NotNow = "Chat rooms aren't available right now.";
+    public const string NotNow = HookFailures.ChatRooms.NotNow;
     public const string GameRunningText = "Chat rooms have to wait till FINAL FANTASY XI is closed.";
     public const string LeaveQuestion = "Leave chat room?";
     public const string LeaveAsMaster =
         "Another member will be automatically designated room master if you leave the chat room now. Leave the room?";
-    public const string MasterOnly = "This command is for the room master only.";
-    public const string UnlockedText = "The old password was removed, but the new one couldn't be set. The room has no password now.";
+    public const string MasterOnly = HookFailures.ChatRooms.MasterOnly;
+    public const string UnlockedText = HookFailures.ChatRooms.Unlocked;
 
     private readonly SocialViewModel _social;
     private readonly Func<string, string, bool> _savePassword;
@@ -197,7 +197,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             if (AskPassword?.Invoke() is not { } pw) return;
             if (!_savePassword(token, pw))
             {
-                ShowError?.Invoke("Chat communication error.");
+                ShowError?.Invoke(HookFailures.ChatCommError);
                 return;
             }
         }
@@ -213,7 +213,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         {
             if (room.Locked) _dropPassword();
             BackToLobby();
-            ShowError?.Invoke("Chat communication error.");
+            ShowError?.Invoke(HookFailures.ChatCommError);
         }
     }
 
@@ -232,7 +232,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         bool locked = form.Password is { Length: > 0 };
         if (locked && !_savePassword(token, form.Password!))
         {
-            ShowError?.Invoke("Chat communication error.");
+            ShowError?.Invoke(HookFailures.ChatCommError);
             return;
         }
         _lastNick = nick;
@@ -248,7 +248,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         {
             if (locked) _dropPassword();
             BackToLobby();
-            ShowError?.Invoke("Chat communication error.");
+            ShowError?.Invoke(HookFailures.ChatCommError);
         }
     }
 
@@ -292,13 +292,13 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         var token = HookFiles.NewToken();
         if (password is { Length: > 0 } && !_savePassword(token, password))
         {
-            ShowError?.Invoke("Chat communication error.");
+            ShowError?.Invoke(HookFailures.ChatCommError);
             return;
         }
         if (!ChatRoomFiles.Master(pid, token, op, key, password is { Length: > 0 }))
         {
             if (password is { Length: > 0 }) _dropPassword();
-            ShowError?.Invoke("Chat communication error.");
+            ShowError?.Invoke(HookFailures.ChatCommError);
             return;
         }
         _masterToken = token;
@@ -320,7 +320,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (_masterKind == MasterJob.Password) _dropPassword();
         _masterToken = null;
         MasterBusy = false;
-        ShowError?.Invoke("Chat communication error.");
+        ShowError?.Invoke(HookFailures.ChatCommError);
     }
 
     private void ApplyMaster(ChatRoomsSnapshot chat)
@@ -338,11 +338,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (_masterKind == MasterJob.Password) _dropPassword();
         ShowError?.Invoke(chat.MasterState switch
         {
-            "failed:left" => $"{name} has already left.",
+            "failed:left" => HookFailures.ChatRooms.AlreadyLeft(name),
             "failed:not master" => MasterOnly,
             "failed:unlocked" => UnlockedText,
-            "failed:handle changing" => "Your handle was changing, so nothing was changed.",
-            _ => "Chat communication error.",
+            "failed:handle changing" => HookFailures.ChatRooms.MasterHandleChanging,
+            _ => HookFailures.ChatCommError,
         });
     }
 
@@ -426,7 +426,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         var text = Compose.Trim().Replace("\r", "").Replace('\n', ' ');
         if (text.Length == 0 || Pid is not { } pid) return;
         var token = HookFiles.NewToken();
-        if (!ChatRoomFiles.Send(pid, token, text, Colour, Emoticon)) { SendNote = "Chat communication error."; return; }
+        if (!ChatRoomFiles.Send(pid, token, text, Colour, Emoticon)) { SendNote = HookFailures.ChatCommError; return; }
         _gate.Sent(token, Compose, DateTime.UtcNow);
         Compose = "";
         Colour = -1;
@@ -512,7 +512,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (chat.RoomsState == "failed:no chat") { Unavailable = NotNow; return; }
         if (chat.RoomsState != "done")
         {
-            RoomsNote = $"The room list didn't load ({SocialRequests.FailReason(chat.RoomsState)}).";
+            RoomsNote = HookFailures.ChatRooms.RoomListFailed(SocialRequests.FailReason(chat.RoomsState));
             return;
         }
         Offset = chat.Offset;
@@ -588,14 +588,14 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (_joinLocked) _dropPassword();
         var why = chat.RoomState switch
         {
-            "failed:refused" => "Room entry refused.",
-            "failed:password" => "Wrong password.",
-            "failed:full" => "Selected chat room is currently full and cannot be entered.",
-            "failed:closed" => "This room is already closed and cannot be entered.",
+            "failed:refused" => HookFailures.ChatRooms.Refused,
+            "failed:password" => HookFailures.ChatRooms.WrongPassword,
+            "failed:full" => HookFailures.ChatRooms.Full,
+            "failed:closed" => HookFailures.ChatRooms.Closed,
             "failed:no chat" => NotNow,
-            "failed:handle changing" => "Your handle was changing, so the room wasn't entered.",
-            "failed:bad name" => "The entered room name cannot be used. Please enter a different name.",
-            _ => "Chat communication error.",
+            "failed:handle changing" => HookFailures.ChatRooms.JoinHandleChanging,
+            "failed:bad name" => HookFailures.ChatRooms.BadName,
+            _ => HookFailures.ChatCommError,
         };
         BackToLobby();
         if (chat.RoomState == "failed:no chat") Unavailable = NotNow;
@@ -725,10 +725,10 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (done != "sent")
             SendNote = done switch
             {
-                "failed:too long" => "That's too long for one line.",
-                "failed:timeout" => "PlayOnline didn't answer, so that line may not have gone.",
-                "failed:handle changing" => "Not sent: your handle was changing.",
-                _ => "Chat communication error.",
+                "failed:too long" => HookFailures.TooLongForLine,
+                "failed:timeout" => HookFailures.LineMayNotHaveGone,
+                "failed:handle changing" => HookFailures.NotSentHandleChanging,
+                _ => HookFailures.ChatCommError,
             };
         // only the hook can tell whether it fits polcore's line, so one that doesn't goes back to be cut down
         if (done == "failed:too long" && Compose.Length == 0) Compose = text;

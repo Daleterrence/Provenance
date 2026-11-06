@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using MaterialDesignThemes.Wpf;
+using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
@@ -307,7 +308,7 @@ public partial class SocialWindow : Window
         if (Vm is not { } vm || !vm.CanEdit) return;
         if (vm.Groups.Count(g => !g.IsInvited) >= 4)
         {
-            MessageDialog.ShowInfo(this, "Friend groups", "You can only be in 4 friend groups.");
+            MessageDialog.ShowInfo(this, "Friend groups", HookFailures.Groups.TooManyGroups);
             return;
         }
         string? name = null;
