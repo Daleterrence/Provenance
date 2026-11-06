@@ -30,7 +30,7 @@ static int json_text(char *out, int cap, const char *s)
     out[o] = 0;
     return o;
 }
-static void sjis_json(char *out, int cap, const BYTE *src, int srcMax)
+static void json_sjis(char *out, int cap, const BYTE *src, int srcMax)
 {
     WCHAR w[64];
     char u[192], tmp[64];
@@ -42,7 +42,7 @@ static void sjis_json(char *out, int cap, const BYTE *src, int srcMax)
     WideCharToMultiByte(CP_UTF8, 0, w, -1, u, sizeof u - 1, NULL, NULL);
     json_str(out, cap, u);
 }
-static void sjis_to_utf8(const char *src, int srcLen, char *out, int cap)
+static void json_sjis_to_utf8(const char *src, int srcLen, char *out, int cap)
 {
     out[0] = 0;
     if (srcLen <= 0) return;
@@ -55,7 +55,7 @@ static void sjis_to_utf8(const char *src, int srcLen, char *out, int cap)
     }
     HeapFree(GetProcessHeap(), 0, w);
 }
-static int utf8_to_sjis(const char *src, char *out, int cap)
+static int json_utf8_to_sjis(const char *src, char *out, int cap)
 {
     int n = MultiByteToWideChar(CP_UTF8, 0, src, -1, NULL, 0), k, m = 0;
     out[0] = 0;
@@ -73,7 +73,7 @@ static int utf8_to_sjis(const char *src, char *out, int cap)
 }
 
 /* cut at whole SJIS characters, never between a lead byte and its trail */
-static void sjis_copy(char *out, const char *src, int cap)
+static void json_sjis_copy(char *out, const char *src, int cap)
 {
     int i = 0, n;
     while (src[i]) {
@@ -87,7 +87,7 @@ static void sjis_copy(char *out, const char *src, int cap)
 }
 
 /* POL's Shift-JIS (with the Latin extension the EU tables use) -> UTF-8 through svc 0xa38, cut at u8cap -> JSON */
-static void pol_json(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
+static void json_pol(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
 {
     static WCHAR w[0x420];
     static char u8[0x600];
@@ -104,15 +104,15 @@ static void pol_json(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
     json_text(js, jscap, u8);
 }
 
-static void wr(HANDLE h, const char *s)
+static void json_write(HANDLE h, const char *s)
 {
     DWORD n;
     WriteFile(h, s, lstrlenA(s), &n, NULL);
 }
-static void wr_job(HANDLE h, const char *fmt, const char *token, const char *state)
+static void json_write_job(HANDLE h, const char *fmt, const char *token, const char *state)
 {
     char tk[100], line[400];
     json_str(tk, sizeof tk, token);
     wsprintfA(line, fmt, tk, state);
-    wr(h, line);
+    json_write(h, line);
 }

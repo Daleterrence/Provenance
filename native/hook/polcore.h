@@ -92,12 +92,12 @@ typedef struct pol_handle {
 
 #pragma pack(pop)
 
-typedef char fs_chk_field[sizeof(pdb_field) == 0x18 ? 1 : -1];
-typedef char fs_chk_item[sizeof(pdb_item) == 0x10 ? 1 : -1];
-typedef char fs_chk_cond[sizeof(pdb_cond) == 0x18 ? 1 : -1];
-typedef char fs_chk_rec[sizeof(pdb_rec) == 0x10 ? 1 : -1];
-typedef char fs_chk_hnd[sizeof(pol_handle) == 0x28 ? 1 : -1];
-typedef char fs_chk_hdr[sizeof(pdb_schema) == 0x30 ? 1 : -1];
+typedef char size_check_field[sizeof(pdb_field) == 0x18 ? 1 : -1];
+typedef char size_check_item[sizeof(pdb_item) == 0x10 ? 1 : -1];
+typedef char size_check_cond[sizeof(pdb_cond) == 0x18 ? 1 : -1];
+typedef char size_check_rec[sizeof(pdb_rec) == 0x10 ? 1 : -1];
+typedef char size_check_hnd[sizeof(pol_handle) == 0x28 ? 1 : -1];
+typedef char size_check_hdr[sizeof(pdb_schema) == 0x30 ? 1 : -1];
 
 #pragma pack(push, 1)
 typedef struct pfb_ent  { DWORD code; char *text; } pfb_ent;

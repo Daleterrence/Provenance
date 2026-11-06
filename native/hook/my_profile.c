@@ -30,7 +30,7 @@ static struct {
 
 
 /* SetHandle only marks the slot dirty and copies the pic into my group entries, nothing goes out */
-static int fs_apply_local(BYTE *b, int slot, unsigned pic, unsigned __int64 hid)
+static int my_profile_pic_apply_local(BYTE *b, int slot, unsigned pic, unsigned __int64 hid)
 {
     pol_handle h;
     int r;
@@ -40,7 +40,7 @@ static int fs_apply_local(BYTE *b, int slot, unsigned pic, unsigned __int64 hid)
     return r < 0 ? r : FS_DONE;
 }
 
-static void fs_reset(void)
+static void my_profile_pic_reset(void)
 {
     if (g_fs.rec) HeapFree(GetProcessHeap(), 0, g_fs.rec);
     g_fs.rec = NULL;
@@ -49,10 +49,10 @@ static void fs_reset(void)
     g_fs.slot = -1;
 }
 
-static int fs_fail(int code, const char *what)
+static int my_profile_pic_fail(int code, const char *what)
 {
-    FS_LOG("pic: %s -> %d (0x%x)\r\n", what, code, (unsigned)code);
-    fs_reset();
+    DB_LOG("pic: %s -> %d (0x%x)\r\n", what, code, (unsigned)code);
+    my_profile_pic_reset();
     return code;
 }
 
@@ -60,7 +60,7 @@ static int fs_fail(int code, const char *what)
 
 /* once per loop turn, same args, until it's non-zero (1 done, < 0 error). no_write lets a running job finish but
    starts no write */
-static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* pic = sheet*8 + cell */
+static int my_profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* pic = sheet*8 + cell */
 {
     pdb_schema *s;
     int r;
@@ -71,7 +71,7 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
     case ST_IDLE: {
         pol_handle h;
         if (slot < 0 || slot > 63) return FS_E_ARGS;
-        if (!(s = fs_load_pib(b))) return FS_E_PIB;
+        if (!(s = profile_db_load_pib(b))) return FS_E_PIB;
         /* the viewer keeps its slot in bits 13-18 too and uses it as the GetHandle index, so both have to agree */
         if (!handle_get(b, slot, &h) || (int)((h.hi >> 13) & 0x3f) != slot) return FS_E_HANDLE;
         g_fs.hid = handle_hid(&h);
@@ -84,40 +84,40 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
     case ST_LOAD_START: {
         static pdb_cond c;
         pdb_cond *where;
-        s = g_fs_pib;
+        s = g_profile_db_pib;
         memset(&c, 0, sizeof c);
         pc_pdb_item_set(b, s, &c.item, "z_hid", &g_fs.hid, 1);
-        if (!(c.item.flags & 1)) return fs_fail(FS_E_ITEM, "z_hid condition");
+        if (!(c.item.flags & 1)) return my_profile_pic_fail(FS_E_ITEM, "z_hid condition");
         pc_pdb_cond_op(b, &c, 1);
         where = pc_pdb_where(b, 1, &c);
         r = pc_pdb_load_start(b, s, where, g_fs.rec);
         if (r == NO_SLOT) return FS_PENDING;              /* all 4 job slots busy, try again next turn */
-        if (r < 0) return fs_fail(r, "profile load start (svc 0x4b4)");
+        if (r < 0) return my_profile_pic_fail(r, "profile load start (svc 0x4b4)");
         g_fs.job = r;
         g_fs.st = ST_LOAD_POLL;
-        FS_LOG("pic: loading profile of slot %d (hid 0x%08x%08x), job %d\r\n", slot,
+        DB_LOG("pic: loading profile of slot %d (hid 0x%08x%08x), job %d\r\n", slot,
                (unsigned)(g_fs.hid >> 32), (unsigned)g_fs.hid, r);
         return FS_PENDING;
     }
     case ST_LOAD_POLL: {
         pdb_item *it;
-        s = g_fs_pib;
+        s = g_profile_db_pib;
         r = pc_pdb_load_check(b, g_fs.job);
         if (r == 0) return FS_PENDING;
         g_fs.job = -1;
-        if (r < 0) return fs_fail(r, "profile load (svc 0x4b8)");
-        if (!g_fs.rec->items) return fs_fail(FS_E_NOREC, "no profile record on the server");
+        if (r < 0) return my_profile_pic_fail(r, "profile load (svc 0x4b8)");
+        if (!g_fs.rec->items) return my_profile_pic_fail(FS_E_NOREC, "no profile record on the server");
         /* the record has to be this handle's. The viewer doesn't check */
         it = pc_pdb_find(b, s, "z_hid", g_fs.rec);
-        if (!it || it->v.u64 != g_fs.hid) return fs_fail(FS_E_MISMATCH, "record z_hid differs");
+        if (!it || it->v.u64 != g_fs.hid) return my_profile_pic_fail(FS_E_MISMATCH, "record z_hid differs");
         it = pc_pdb_find(b, s, "z_pnum", g_fs.rec);
         if (FS_STRICT_PNUM && it && (it->flags & 1) && it->v.bytes.p &&
             *(BYTE *)it->v.bytes.p != (BYTE)g_fs.slot)
-            return fs_fail(FS_E_MISMATCH, "record z_pnum differs from slot");
+            return my_profile_pic_fail(FS_E_MISMATCH, "record z_pnum differs from slot");
         if (!pc_pdb_find(b, s, "z_ficon", g_fs.rec) ||
             !pc_pdb_find(b, s, "z_utime", g_fs.rec))
-            return fs_fail(FS_E_NOREC, "record lacks z_ficon / z_utime");
-        FS_LOG("pic: profile loaded, record level %u\r\n", g_fs.rec->level);
+            return my_profile_pic_fail(FS_E_NOREC, "record lacks z_ficon / z_utime");
+        DB_LOG("pic: profile loaded, record level %u\r\n", g_fs.rec->level);
         g_fs.st = ST_UPD_START;
     }   /* fall through */
     case ST_UPD_START: {
@@ -128,18 +128,18 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
         pdb_cond *where;
         DWORD fval = g_fs.pic, now = 0;
         BYTE pnum = (BYTE)g_fs.slot;
-        s = g_fs_pib;
-        if (no_write) return fs_fail(FS_E_CANCELLED, "shutting down before the update");
+        s = g_profile_db_pib;
+        if (no_write) return my_profile_pic_fail(FS_E_CANCELLED, "shutting down before the update");
         rf = pc_pdb_find(b, s, "z_ficon", g_fs.rec);
         ru = pc_pdb_find(b, s, "z_utime", g_fs.rec);
-        if (!rf || !ru) return fs_fail(FS_E_NOREC, "record lacks z_ficon / z_utime");
+        if (!rf || !ru) return my_profile_pic_fail(FS_E_NOREC, "record lacks z_ficon / z_utime");
         pc_pdb_item_set(b, s, &it[0], "z_ficon", &fval, rf->level);
         pc_server_time(b, &now);          /* server-synced seconds */
         pc_pdb_item_set(b, s, &it[1], "z_utime", &now, ru->level);
         /* svc 0x4d4 writes every SET item but only sizes the flagged ones, so an unflagged one corrupts the body */
-        if (!(it[0].flags & 1) || !(it[1].flags & 1)) return fs_fail(FS_E_ITEM, "SET items");
+        if (!(it[0].flags & 1) || !(it[1].flags & 1)) return my_profile_pic_fail(FS_E_ITEM, "SET items");
         pc_pdb_item_set(b, s, &k.item, "z_pnum", &pnum, 1);
-        if (!(k.item.flags & 1)) return fs_fail(FS_E_ITEM, "z_pnum condition");
+        if (!(k.item.flags & 1)) return my_profile_pic_fail(FS_E_ITEM, "z_pnum condition");
         pc_pdb_cond_op(b, &k, 1);
         where = pc_pdb_where(b, 1, &k);
         /* 64 item slots, NULLs skipped, same as the viewer */
@@ -151,10 +151,10 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
         /* the body's built into polcore's job buffer right here, so the items, cond and set can go out of scope */
         r = pc_pdb_update_start(b, s, where, &set);
         if (r == NO_SLOT) return FS_PENDING;
-        if (r < 0) return fs_fail(r, "profile update start (svc 0x4d4)");
+        if (r < 0) return my_profile_pic_fail(r, "profile update start (svc 0x4d4)");
         g_fs.job = r;
         g_fs.st = ST_UPD_POLL;
-        FS_LOG("pic: update z_ficon=%u z_utime=%u level %u/%u/%u where z_pnum=%u, job %d\r\n",
+        DB_LOG("pic: update z_ficon=%u z_utime=%u level %u/%u/%u where z_pnum=%u, job %d\r\n",
                fval, now, g_fs.rec->level, rf->level, ru->level, pnum, r);
         return FS_PENDING;
     }
@@ -164,26 +164,26 @@ static int profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* 
         g_fs.job = -1;
         /* the viewer shits itself after 18000 polls and calls the save done anyway regardless (luv me POL innit), for
            me polcore's own fail at 100 s is an error */
-        if (r < 0) return fs_fail(r, "profile update (svc 0x4d8)");
-        r = fs_apply_local(b, g_fs.slot, g_fs.pic, g_fs.hid);
-        if (r < 0) FS_LOG("pic: server updated, local handle apply failed %d\r\n", r);
-        else FS_LOG("pic: slot %d pic %u saved\r\n", g_fs.slot, g_fs.pic);
-        fs_reset();
+        if (r < 0) return my_profile_pic_fail(r, "profile update (svc 0x4d8)");
+        r = my_profile_pic_apply_local(b, g_fs.slot, g_fs.pic, g_fs.hid);
+        if (r < 0) DB_LOG("pic: server updated, local handle apply failed %d\r\n", r);
+        else DB_LOG("pic: slot %d pic %u saved\r\n", g_fs.slot, g_fs.pic);
+        my_profile_pic_reset();
         return FS_DONE;
     }
     }
-    return fs_fail(FS_E_ARGS, "bad state");
+    return my_profile_pic_fail(FS_E_ARGS, "bad state");
 }
 
 /* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for the next 10s (why tho?????),
    so it's only for shutdown */
-static void profile_pic_cancel(BYTE *b)
+static void my_profile_pic_cancel(BYTE *b)
 {
     if (g_fs.job >= 0) {
         pc_free_job(b, g_fs.job);
         if (g_fs.st == ST_LOAD_POLL) g_fs.rec = NULL;   /* a cancelled read can still write into it, so never freed */
     }
-    fs_reset();
+    my_profile_pic_reset();
 }
 
 /* my own profile save and the handle rename, the viewer's way. The save is the pic save's UPDATE with N items
@@ -211,7 +211,7 @@ static const char *const pe_order[] = {
 };
 #define PE_NORDER ((int)(sizeof pe_order / sizeof pe_order[0]))
 
-static const pe_field *pe_find(const pe_req *q, const char *name)
+static const pe_field *my_profile_edit_find(const pe_req *q, const char *name)
 {
     int i;
     for (i = 0; i < q->n; i++) if (strcmp(q->f[i].name, name) == 0) return &q->f[i];
@@ -224,7 +224,7 @@ static const pe_field *pe_find(const pe_req *q, const char *name)
 
 /* starts the UPDATE on a record loaded the same way as the profile pic save's. The job (poll it with svc 0x4d8),
    -0x100 when there's no free job slot, or < 0 */
-static int pe_update_start(BYTE *b, pdb_schema *s, pdb_rec *rec, int slot, const pe_req *q)
+static int my_profile_edit_update_start(BYTE *b, pdb_schema *s, pdb_rec *rec, int slot, const pe_req *q)
 {
     pdb_item it[64] = {0};
     void    *sl[64] = {0};
@@ -244,12 +244,12 @@ static int pe_update_start(BYTE *b, pdb_schema *s, pdb_rec *rec, int slot, const
     }
     for (i = 0; i < PE_NORDER; i++) {
         const char *nm = pe_order[i];
-        const pe_field *f = pe_find(q, nm);
+        const pe_field *f = my_profile_edit_find(q, nm);
         const pdb_field *sf;
         pdb_item *ri;
         /* only what was edited. The viewer can flag z_lang1/2 with z_lang0, but never does (app.dll 0x10227221) */
         if (!f) continue;
-        sf = fs_field(s, nm, &idx);
+        sf = profile_db_field(s, nm, &idx);
         ri = pc_pdb_find(b, s, nm, rec);
         if (!sf || !ri || !(sf->flags & 0x42)) return PE_E_FIELD;
         lvl = ri->level;
@@ -260,7 +260,7 @@ static int pe_update_start(BYTE *b, pdb_schema *s, pdb_rec *rec, int slot, const
             int j;
             if (n + 4 > 64) return PE_E_COUNT;
             for (j = 0; j < 4; j++) {
-                const pdb_field *lf = fs_field(s, loc[j], NULL);
+                const pdb_field *lf = profile_db_field(s, loc[j], NULL);
                 if (!lf || lf->type != 2 || lf->size != 1) return PE_E_FIELD;
                 b8[n] = (BYTE)(v >> (24 - 8 * j));
                 pc_pdb_item_set(b, s, &it[n], loc[j], &b8[n], lvl);
@@ -314,7 +314,7 @@ static int pe_update_start(BYTE *b, pdb_schema *s, pdb_rec *rec, int slot, const
     return pc_pdb_update_start(b, s, where, &set);
 }
 
-static int pe_mail_ok(BYTE *b, const char *sjis)
+static int my_profile_edit_mail_ok(BYTE *b, const char *sjis)
 {
     return pc_mail_address_ok(b, sjis, lstrlenA(sjis)) == 0;
 }
@@ -326,7 +326,7 @@ static int pe_mail_ok(BYTE *b, const char *sjis)
 #define HR_E_REVERT  (-0x7f33)
 
 static void *g_hr_dic;
-static int hr_ngword(BYTE *b, const WCHAR *name)   /* 1 = NG, 0 = ok, < 0 = no dictionary */
+static int my_profile_handle_ngword(BYTE *b, const WCHAR *name)   /* 1 = NG, 0 = ok, < 0 = no dictionary */
 {
     if (!g_hr_dic) {
         WCHAR p[0x200];
@@ -357,7 +357,7 @@ static struct { int st, slot, job, err; char want[16], old[16]; } g_hr = { HR_ID
 
 /* the server kept the old name, so put it back here too, or the next handle-list upload (the slot stays dirty) sends
    the rename anyway */
-static void hr_restore(BYTE *b)
+static void my_profile_handle_restore(BYTE *b)
 {
     pol_handle h;
     if (!handle_get(b, g_hr.slot, &h)) return;
@@ -366,7 +366,7 @@ static void hr_restore(BYTE *b)
 }
 
 /* call once per pump turn with the same arguments until it's non-zero: 1 done, < 0 error */
-static int handle_rename(BYTE *b, int slot, const WCHAR *newName)
+static int my_profile_handle_rename(BYTE *b, int slot, const WCHAR *newName)
 {
     pol_handle h;
     int r;
@@ -379,8 +379,8 @@ static int handle_rename(BYTE *b, int slot, const WCHAR *newName)
         if (len < 1 || len > 15) return HR_E_NAME;
         memset(sj, 0, sizeof sj);
         pc_wide_to_sjis(b, sj, newName, SJIS_GETA);
-        if (!ascii_name_ok(sj)) return HR_E_NAME;
-        r = hr_ngword(b, newName);
+        if (!peers_ascii_name_ok(sj)) return HR_E_NAME;
+        r = my_profile_handle_ngword(b, newName);
         if (r < 0) return r;
         if (r) return HR_E_NGWORD;
         if (!handle_get(b, slot, &h) || (int)((h.hi >> 13) & 0x3f) != slot) return FS_E_HANDLE;
@@ -395,7 +395,7 @@ static int handle_rename(BYTE *b, int slot, const WCHAR *newName)
     case HR_UP_START:
         r = pc_handles_save(b);                                       /* KPutHandleList */
         if (r == NO_SLOT) return FS_PENDING;
-        if (r < 0) { g_hr.st = HR_IDLE; hr_restore(b); return r; }
+        if (r < 0) { g_hr.st = HR_IDLE; my_profile_handle_restore(b); return r; }
         g_hr.job = r; g_hr.st = HR_UP_POLL;
         return FS_PENDING;
     case HR_UP_POLL:
@@ -405,7 +405,7 @@ static int handle_rename(BYTE *b, int slot, const WCHAR *newName)
         /* -0x105: reload the handle list like the viewer does, then report it */
         if (r == HANDLE_LIST_STALE) { g_hr.err = r; g_hr.st = HR_RL_START; return FS_PENDING; }
         g_hr.st = HR_IDLE;
-        if (r < 0) { hr_restore(b); return r; }
+        if (r < 0) { my_profile_handle_restore(b); return r; }
         handle_get(b, g_hr.slot, &h);
         h.name[15] = 0;                 /* bytes after the NUL can be left over from the old name */
         return strcmp(h.name, g_hr.want) == 0 ? FS_DONE : HR_E_REVERT;
@@ -435,18 +435,18 @@ static WCHAR g_me_name[32];
 static ULONGLONG g_me_t0;
 static unsigned __int64 g_me_hid;
 
-static void me_done(const char *state)
+static void my_profile_done(const char *state)
 {
     lstrcpynA(g_s.me_state, state, sizeof g_s.me_state);
     g_s.me_step = 0;
     g_me_job = -1;
-    lg("profile edit: %s\r\n", state);
+    base_log("profile edit: %s\r\n", state);
     g_snap_dirty = 1;
 }
 static const char *const g_me_fields[] = { "z_mail", "z_age", "z_age_f", "z_sex", "z_job", "z_area",
                                            "z_lang0", "z_lang1", "z_lang2", "z_fav0", "z_fav1", "z_fav2", "z_ficon" };
 #define ME_EDITABLE ((int)(sizeof g_me_fields / sizeof g_me_fields[0]) - 1)
-static int me_table(BYTE *b, char *out, int cap, const pfb_item *pi, int parts)
+static int my_profile_table(BYTE *b, char *out, int cap, const pfb_item *pi, int parts)
 {
     static char part[0x80], js[0x400];
     int o = 0;
@@ -455,9 +455,9 @@ static int me_table(BYTE *b, char *out, int cap, const pfb_item *pi, int parts)
     for (int i = 0; i < pi->tab->n && o < cap - 0x1000; i++) {
         o += wsprintfA(out + o, "%s[%lu", i ? "," : "", pi->tab->e[i].code);
         for (int k = 0; k < (parts > 0 ? parts : 1); k++) {
-            if (parts > 0) pf_part(pi->tab, i, k, part, sizeof part);
-            else pf_last(pi->tab->e[i].text, part, sizeof part);
-            pol_json(b, part, 0x180, js, sizeof js);
+            if (parts > 0) profile_db_pfb_part(pi->tab, i, k, part, sizeof part);
+            else profile_db_pfb_last(pi->tab->e[i].text, part, sizeof part);
+            json_pol(b, part, 0x180, js, sizeof js);
             o += wsprintfA(out + o, ",%s", js);
         }
         out[o++] = ']';
@@ -468,7 +468,7 @@ static int me_table(BYTE *b, char *out, int cap, const pfb_item *pi, int parts)
 }
 /* the e-mail address from my POL profile goes in masked (first letter, ***, then the domain). No @ means it's
    the viewer's "No Mail address" text, left alone */
-static void mask_mail(const char *in, char *out, int cap)
+static void my_profile_mask_mail(const char *in, char *out, int cap)
 {
     const char *at = strchr(in, '@');
     int lead;
@@ -483,9 +483,11 @@ static void mask_mail(const char *in, char *out, int cap)
 /* my FFXI characters, the viewer's edit page tabs (app.dll 0x10224e5c): my record's z_phead slots when it's this
    handle's, else the Content IDs linked to the handle. Only title 1 gets one here */
 typedef struct me_chr { int slot; DWORD ctsid, lo, hi; } me_chr;
-static int me_chars(BYTE *b, me_chr *out, const char **from)
+static int my_profile_chars(BYTE *b, me_chr *out, const char **from)
 {
-    pdb_item *ph = g_me_rec && g_me_rec->items && g_fs_pib ? pdb_get(b, g_fs_pib, "z_phead", g_me_rec) : NULL;
+    pdb_item *ph = g_me_rec && g_me_rec->items && g_profile_db_pib
+        ? profile_db_get(b, g_profile_db_pib, "z_phead", g_me_rec)
+        : NULL;
     const pol_friend *h = ph && (ph->flags & 1) ? (const pol_friend *)ph->v.bytes.p : NULL;
     pol_chr c;
     pol_handle me;
@@ -509,7 +511,7 @@ static int me_chars(BYTE *b, me_chr *out, const char **from)
     if (handle_hid(&me) != g_me_hid) return 0;
     *from = "handle";
     for (i = 0; i < 8; i++) {
-        if (!(me.chars[i] & 1) || !get_chr(b, (me.chars[i] >> 1) & 0x3f, &c) || c.title != 1) continue;
+        if (!(me.chars[i] & 1) || !peers_get_chr(b, (me.chars[i] >> 1) & 0x3f, &c) || c.title != 1) continue;
         out[n].slot = (me.chars[i] >> 1) & 0x3f;
         out[n].ctsid = c.ctsid;
         out[n].lo = c.ctid_lo;
@@ -518,41 +520,41 @@ static int me_chars(BYTE *b, me_chr *out, const char **from)
     }
     return n;
 }
-static void me_chr_key(const me_chr *c, char k[25])
+static void my_profile_chr_key(const me_chr *c, char k[25])
 {
     wsprintfA(k, "%08x%08x%08x", c->ctsid, c->lo, c->hi);
 }
 /* the name's the Content ID list's, z_phead doesn't have one */
-static int me_chars_json(BYTE *b, char *out, int cap)
+static int my_profile_chars_json(BYTE *b, char *out, int cap)
 {
     me_chr ch[8];
     pol_chr c;
     char k[25], nm[64];
     const char *from;
-    int n = me_chars(b, ch, &from), o, i, j;
+    int n = my_profile_chars(b, ch, &from), o, i, j;
     o = wsprintfA(out, ",\"characters\":[");
     for (i = 0; i < n && o < cap - 200; i++) {
         lstrcpyA(nm, "\"\"");
         for (j = 0; j < 64; j++)
-            if (get_chr(b, j, &c) && c.ctsid == ch[i].ctsid && c.ctid_lo == ch[i].lo && c.ctid_hi == ch[i].hi) {
-                sjis_json(nm, sizeof nm, (const BYTE *)c.name, 0x0f);
+            if (peers_get_chr(b, j, &c) && c.ctsid == ch[i].ctsid && c.ctid_lo == ch[i].lo && c.ctid_hi == ch[i].hi) {
+                json_sjis(nm, sizeof nm, (const BYTE *)c.name, 0x0f);
                 break;
             }
-        me_chr_key(&ch[i], k);
+        my_profile_chr_key(&ch[i], k);
         o += wsprintfA(out + o, "%s{\"slot\":%d,\"key\":\"%s\",\"world\":%u,\"name\":%s}", i ? "," : "", ch[i].slot, k,
                        (ch[i].ctsid >> 16) & 0xff, nm);
     }
     out[o++] = ']';
     out[o] = 0;
-    lg("profile edit: %d FFXI characters (from %s)\r\n", n, from);
+    base_log("profile edit: %d FFXI characters (from %s)\r\n", n, from);
     return o;
 }
-static int me_write_json(BYTE *b)
+static int my_profile_write_json(BYTE *b)
 {
     static const struct { const char *name; int parts; } tabs[] = {
         { "z_sex", 0 }, { "z_job", 0 }, { "z_area", 3 }, { "z_lang0", 0 }, { "z_fav0", 2 } };
     static char js[0xc00];
-    pdb_schema *s = g_fs_pib;
+    pdb_schema *s = g_profile_db_pib;
     pfb_hdr *p = g_pfb;
     const int cap = 0x40000;
     char *out = (char *)HeapAlloc(GetProcessHeap(), 0, cap), path[MAX_PATH + 64], tmp[MAX_PATH + 80], tk[128];
@@ -563,28 +565,29 @@ static int me_write_json(BYTE *b)
     memset(&h, 0, sizeof h);
     pc_get_handle(b, (unsigned)g_my_slot, &h);
     h.name[15] = 0;
-    pol_json(b, h.name, 0x400, js, sizeof js);
+    json_pol(b, h.name, 0x400, js, sizeof js);
     json_str(tk, sizeof tk, g_s.me_token);
     o += wsprintfA(out + o, "{\"token\":%s,\"handle\":%s,\"slot\":%d,\"key\":\"%03x%08x\",\"level\":%u,\"fields\":{",
                    tk, js, g_my_slot, (unsigned)(g_me_hid >> 32), (unsigned)g_me_hid, g_me_rec->level);
     for (i = 0; i < (int)(sizeof g_me_fields / sizeof g_me_fields[0]); i++) {
-        pdb_item *it = pdb_get(b, s, g_me_fields[i], g_me_rec);
+        pdb_item *it = profile_db_get(b, s, g_me_fields[i], g_me_rec);
         int idx = pc_pdb_field_index(b, s, g_me_fields[i]);
-        const pfb_item *pi = idx >= 0 ? pf_item(p, idx) : NULL;
+        const pfb_item *pi = idx >= 0 ? profile_db_pfb_item(p, idx) : NULL;
         DWORD v = 0;
         if (!it || idx < 0) continue;
-        if (pi) pol_json(b, pi->label, 0x100, js, sizeof js);
+        if (pi) json_pol(b, pi->label, 0x100, js, sizeof js);
         else lstrcpyA(js, "\"\"");
         o += wsprintfA(out + o, "%s\"%s\":{\"label\":%s,\"level\":%u", i ? "," : "", g_me_fields[i], js, it->level);
         if (!strcmp(g_me_fields[i], "z_mail")) {
             char masked[0x150];
-            mask_mail(it->v.str && !IsBadStringPtrA(it->v.str, 0x140) ? it->v.str : "", masked, sizeof masked);
-            pol_json(b, masked, 0x400, js, sizeof js);
+            my_profile_mask_mail(it->v.str && !IsBadStringPtrA(it->v.str, 0x140) ? it->v.str : "",
+                masked, sizeof masked);
+            json_pol(b, masked, 0x400, js, sizeof js);
             memcpy(out + o, ",\"s\":", 5); o += 5;
             lstrcpyA(out + o, js); o += lstrlenA(js);
         } else if (!strcmp(g_me_fields[i], "z_area")) {
-            pdb_item *c = pdb_get(b, s, "z_cntry", g_me_rec), *w = pdb_get(b, s, "z_wide", g_me_rec),
-                     *l = pdb_get(b, s, "z_local", g_me_rec);
+            pdb_item *c = profile_db_get(b, s, "z_cntry", g_me_rec), *w = profile_db_get(b, s, "z_wide", g_me_rec),
+                     *l = profile_db_get(b, s, "z_local", g_me_rec);
             v = (it->v.bytes.p ? (DWORD)*(BYTE *)it->v.bytes.p << 24 : 0) |
                 (c && c->v.bytes.p ? (DWORD)*(BYTE *)c->v.bytes.p << 16 : 0) |
                 (w && w->v.bytes.p ? (DWORD)*(BYTE *)w->v.bytes.p << 8 : 0) |
@@ -604,12 +607,12 @@ static int me_write_json(BYTE *b)
     for (i = 0; i < 5; i++) {
         int idx = pc_pdb_field_index(b, s, tabs[i].name);
         o += wsprintfA(out + o, "%s\"%s\":", i ? "," : "", tabs[i].name);
-        o += me_table(b, out + o, cap - o - 16, idx >= 0 ? pf_item(p, idx) : NULL, tabs[i].parts);
+        o += my_profile_table(b, out + o, cap - o - 16, idx >= 0 ? profile_db_pfb_item(p, idx) : NULL, tabs[i].parts);
     }
     out[o++] = '}';
-    o += me_chars_json(b, out + o, cap - o - 4);
+    o += my_profile_chars_json(b, out + o, cap - o - 4);
     out[o++] = '}';
-    ipc_file(path, IPC_MYPROFILE);
+    base_ipc_file(path, IPC_MYPROFILE);
     lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
     HANDLE f = CreateFileA(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f != INVALID_HANDLE_VALUE) {
@@ -621,84 +624,85 @@ static int me_write_json(BYTE *b)
     HeapFree(GetProcessHeap(), 0, out);
     return ok;
 }
-static void me_abandon(BYTE *b)
+static void my_profile_abandon(BYTE *b)
 {
     if (g_s.me_step == 2 && g_me_job >= 0) {
         pc_free_job(b, g_me_job);
         g_me_rec = NULL;                    /* a cancelled read can still write, so never freed */
     }
-    if (g_s.me_step == 1 || g_s.me_step == 2) me_done("cancelled");
+    if (g_s.me_step == 1 || g_s.me_step == 2) my_profile_done("cancelled");
 }
-static void me_load_start(BYTE *b)
+static void my_profile_load_start(BYTE *b)
 {
-    int t = pc_pdb_load_start(b, g_fs_pib, &g_me_cond, g_me_rec);
+    int t = pc_pdb_load_start(b, g_profile_db_pib, &g_me_cond, g_me_rec);
     if (t == NO_SLOT) { g_s.me_step = 1; return; }
-    lg("profile edit: load -> %d\r\n", t);
-    if (t < 0) { me_done(failed(t)); return; }
+    base_log("profile edit: load -> %d\r\n", t);
+    if (t < 0) { my_profile_done(requests_failed(t)); return; }
     g_me_job = t;
     g_s.me_step = 2;
 }
-static void me_save_start(BYTE *b)
+static void my_profile_save_start(BYTE *b)
 {
-    int t = pe_update_start(b, g_fs_pib, g_me_rec, g_my_slot, &g_me_req);
+    int t = my_profile_edit_update_start(b, g_profile_db_pib, g_me_rec, g_my_slot, &g_me_req);
     if (t == NO_SLOT) { g_s.me_step = 3; return; }
-    lg("profile edit: save %d field(s), level %d -> %d\r\n", g_me_req.n, g_me_req.level, t);
-    if (t < 0) { me_done(failed(t)); return; }
+    base_log("profile edit: save %d field(s), level %d -> %d\r\n", g_me_req.n, g_me_req.level, t);
+    if (t < 0) { my_profile_done(requests_failed(t)); return; }
     g_me_job = t;
     g_s.me_step = 4;
 }
-static int me_field_ok(const char *n)
+static int my_profile_field_ok(const char *n)
 {
     for (int i = 0; i < ME_EDITABLE; i++) if (!strcmp(g_me_fields[i], n)) return i + 1;
     return 0;
 }
-static void me_request(BYTE *b)
+static void my_profile_request(BYTE *b)
 {
     char buf[2048], *p, *tok, *lvl, *line, *name, nomail[0x80], jp[MAX_PATH + 64];
     int kind, level = 0, idx;
     pol_handle h;
-    if (!db_free()) return;
-    kind = take_request(REQ_MYPROFILE, buf, sizeof buf) >= 0 ? 1
-         : take_request(REQ_SAVEPROFILE, buf, sizeof buf) >= 0 ? 2
-         : take_request(REQ_RENAME, buf, sizeof buf) >= 0 ? 3 : 0;
+    if (!hold_db_free()) return;
+    kind = requests_take(REQ_MYPROFILE, buf, sizeof buf) >= 0 ? 1
+         : requests_take(REQ_SAVEPROFILE, buf, sizeof buf) >= 0 ? 2
+         : requests_take(REQ_RENAME, buf, sizeof buf) >= 0 ? 3 : 0;
     if (!kind) return;
     g_s.db_last = GetTickCount64();
     p = buf;
-    tok = req_line(&p);
+    tok = requests_line(&p);
     lstrcpynA(g_s.me_token, tok, sizeof g_s.me_token);
-    if (!fs_load_pib(b) || !pf_load(b)) { me_done("failed:no schema"); return; }
+    if (!profile_db_load_pib(b) || !profile_db_pfb_load(b)) { my_profile_done("failed:no schema"); return; }
     g_me_t0 = GetTickCount64();
     if (kind == 1) {
-        ipc_file(jp, IPC_MYPROFILE);
+        base_ipc_file(jp, IPC_MYPROFILE);
         DeleteFileA(jp);
         memset(&h, 0, sizeof h);
         pc_get_handle(b, (unsigned)g_my_slot, &h);
         g_me_hid = handle_hid(&h);
-        if (!g_me_rec) g_me_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_fs_pib->rec_size + 8);
-        else memset(g_me_rec, 0, g_fs_pib->rec_size + 8);
-        if (!g_me_rec) { me_done("failed:alloc"); return; }
+        if (!g_me_rec)
+            g_me_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_profile_db_pib->rec_size + 8);
+        else memset(g_me_rec, 0, g_profile_db_pib->rec_size + 8);
+        if (!g_me_rec) { my_profile_done("failed:alloc"); return; }
         memset(&g_me_cond, 0, sizeof g_me_cond);
-        pc_pdb_item_set(b, g_fs_pib, &g_me_cond.item, "z_hid", &g_me_hid, 1);
-        if (!(g_me_cond.item.flags & 1)) { me_done("failed:schema"); return; }
+        pc_pdb_item_set(b, g_profile_db_pib, &g_me_cond.item, "z_hid", &g_me_hid, 1);
+        if (!(g_me_cond.item.flags & 1)) { my_profile_done("failed:schema"); return; }
         pc_pdb_cond_op(b, &g_me_cond, 1);
         pc_pdb_where(b, 1, &g_me_cond);
         lstrcpyA(g_s.me_state, "loading");
         g_snap_dirty = 1;
-        me_load_start(b);
+        my_profile_load_start(b);
         return;
     }
     if (kind == 3) {
         char *key, now[17];
-        name = req_line(&p);
-        key = req_line(&p);
+        name = requests_line(&p);
+        key = requests_line(&p);
         memset(&h, 0, sizeof h);
         pc_get_handle(b, (unsigned)g_my_slot, &h);
         /* the handle the editor loaded, so one left open across a switch can't rename the new one */
-        hid_key(handle_hid(&h), now);
-        if (lstrcmpA(key, now) != 0) { me_done("failed:not loaded"); return; }
+        peers_hid_key(handle_hid(&h), now);
+        if (lstrcmpA(key, now) != 0) { my_profile_done("failed:not loaded"); return; }
         memset(g_me_name, 0, sizeof g_me_name);
         if (!name[0] || MultiByteToWideChar(CP_UTF8, 0, name, -1, g_me_name, 31) <= 0) {
-            me_done("failed:bad name");
+            my_profile_done("failed:bad name");
             return;
         }
         lstrcpyA(g_s.me_state, "saving");
@@ -707,33 +711,36 @@ static void me_request(BYTE *b)
         g_snap_dirty = 1;
         return;
     }
-    lvl = req_line(&p);
+    lvl = requests_line(&p);
     nomail[0] = 0;
     memset(&h, 0, sizeof h);
     pc_get_handle(b, (unsigned)g_my_slot, &h);
     /* one loaded under another handle (before a switch) isn't this one's */
     if (!g_me_rec || !g_me_rec->items || handle_hid(&h) != g_me_hid) {
-        me_done("failed:not loaded");
+        my_profile_done("failed:not loaded");
         return;
     }
     if (lvl[0] >= '0' && lvl[0] <= '3' && !lvl[1]) level = lvl[0] - '0';
-    else { me_done("failed:bad request"); return; }
+    else { my_profile_done("failed:bad request"); return; }
     memset(&g_me_req, 0, sizeof g_me_req);
     g_me_req.level = level;
     g_me_req.utime = 1;
-    while (*(line = req_line(&p))) {
+    while (*(line = requests_line(&p))) {
         char *eq = strchr(line, '=');
-        if (!eq) { me_done("failed:bad request"); return; }
+        if (!eq) { my_profile_done("failed:bad request"); return; }
         *eq++ = 0;
-        if (!strcmp(line, "nomail")) { utf8_to_sjis(eq, nomail, sizeof nomail); continue; }
-        if (!(idx = me_field_ok(line)) || g_me_req.n >= PE_MAXF) { me_done("failed:bad field"); return; }
+        if (!strcmp(line, "nomail")) { json_utf8_to_sjis(eq, nomail, sizeof nomail); continue; }
+        if (!(idx = my_profile_field_ok(line)) || g_me_req.n >= PE_MAXF) {
+            my_profile_done("failed:bad field"); return;
+        }
         g_me_req.f[g_me_req.n].name = g_me_fields[idx - 1];   /* static, buf's gone by the time the save runs */
         if (idx == 1) {
-            utf8_to_sjis(eq, g_me_mail, sizeof g_me_mail);
-            if (lstrlenA(g_me_mail) > 0x13f) { me_done("failed:mail too long"); return; }
+            json_utf8_to_sjis(eq, g_me_mail, sizeof g_me_mail);
+            if (lstrlenA(g_me_mail) > 0x13f) { my_profile_done("failed:mail too long"); return; }
             /* the viewer checks an address with svc 0x6e8, and its own "No Mail address" text isn't one */
-            if (!(nomail[0] && !lstrcmpA(g_me_mail, nomail)) && (!g_me_mail[0] || !pe_mail_ok(b, g_me_mail))) {
-                me_done("failed:bad mail");
+            if (!(nomail[0] && !lstrcmpA(g_me_mail, nomail)) &&
+                (!g_me_mail[0] || !my_profile_edit_mail_ok(b, g_me_mail))) {
+                my_profile_done("failed:bad mail");
                 return;
             }
             g_me_req.f[g_me_req.n].str = g_me_mail;
@@ -741,82 +748,84 @@ static void me_request(BYTE *b)
             DWORD v = 0;
             int d = 0;
             for (; *eq >= '0' && *eq <= '9' && d < 10; eq++, d++) v = v * 10 + (DWORD)(*eq - '0');
-            if (!d || *eq) { me_done("failed:bad value"); return; }
-            if (idx == 2 && v > 999) { me_done("failed:bad value"); return; }
-            if (idx == 3 && v > 1) { me_done("failed:bad value"); return; }
+            if (!d || *eq) { my_profile_done("failed:bad value"); return; }
+            if (idx == 2 && v > 999) { my_profile_done("failed:bad value"); return; }
+            if (idx == 3 && v > 1) { my_profile_done("failed:bad value"); return; }
             g_me_req.f[g_me_req.n].v = v;
         }
         g_me_req.n++;
     }
-    if (g_me_req.n == 0 && level == 0) { me_done("failed:nothing to save"); return; }
+    if (g_me_req.n == 0 && level == 0) { my_profile_done("failed:nothing to save"); return; }
     lstrcpyA(g_s.me_state, "saving");
     g_snap_dirty = 1;
-    me_save_start(b);
+    my_profile_save_start(b);
 }
-static void me_pump(BYTE *b, int ctl)
+static void my_profile_pump(BYTE *b, int ctl)
 {
     pdb_item *it;
     int r;
     switch (g_s.me_step) {   /* 1 load waits for a slot, 2 load job, 3 save waits, 4 save job, 5 rename */
     case 0:
-        if (ctl && !g_s.draining) me_request(b);
+        if (ctl && !g_s.draining) my_profile_request(b);
         return;
     case 1:
-        if (g_s.draining) me_done("cancelled");
-        else if (GetTickCount64() - g_me_t0 >= JOB_TIMEOUT_MS) me_done("failed:busy");
-        else me_load_start(b);
+        if (g_s.draining) my_profile_done("cancelled");
+        else if (GetTickCount64() - g_me_t0 >= JOB_TIMEOUT_MS) my_profile_done("failed:busy");
+        else my_profile_load_start(b);
         return;
     case 2:
         r = pc_pdb_load_check(b, g_me_job);
         if (r == 0) {
-            if (g_s.draining) me_abandon(b);
+            if (g_s.draining) my_profile_abandon(b);
             return;
         }
         g_me_job = -1;
-        if (r < 0) { me_done(failed(r)); return; }
-        if (!g_me_rec->items) { me_done("failed:no profile"); return; }
+        if (r < 0) { my_profile_done(requests_failed(r)); return; }
+        if (!g_me_rec->items) { my_profile_done("failed:no profile"); return; }
         /* as in the profile pic save, the record must be this handle's (the viewer doesn't check) */
-        it = pdb_get(b, g_fs_pib, "z_hid", g_me_rec);
-        if (!it || it->v.u64 != g_me_hid) { me_done("failed:mismatch"); return; }
-        it = pdb_get(b, g_fs_pib, "z_pnum", g_me_rec);
+        it = profile_db_get(b, g_profile_db_pib, "z_hid", g_me_rec);
+        if (!it || it->v.u64 != g_me_hid) { my_profile_done("failed:mismatch"); return; }
+        it = profile_db_get(b, g_profile_db_pib, "z_pnum", g_me_rec);
         if (FS_STRICT_PNUM && it && (it->flags & 1) && it->v.bytes.p && *(BYTE *)it->v.bytes.p != (BYTE)g_my_slot) {
-            me_done("failed:mismatch");
+            my_profile_done("failed:mismatch");
             return;
         }
-        me_done(me_write_json(b) ? "ready" : "failed:write");
+        my_profile_done(my_profile_write_json(b) ? "ready" : "failed:write");
         return;
     case 3:
-        if (GetTickCount64() - g_me_t0 >= JOB_TIMEOUT_MS) me_done("failed:busy");
-        else me_save_start(b);   /* a write, so it still runs during a drain */
+        if (GetTickCount64() - g_me_t0 >= JOB_TIMEOUT_MS) my_profile_done("failed:busy");
+        else my_profile_save_start(b);   /* a write, so it still runs during a drain */
         return;
     case 4:
         r = pc_pdb_update_check(b, g_me_job);
         if (r == 0) return;
         g_me_job = -1;
-        me_done(r == 1 ? "saved" : failed(r));
+        my_profile_done(r == 1 ? "saved" : requests_failed(r));
         return;
     case 5:
-        r = handle_rename(b, g_my_slot, g_me_name);
+        r = my_profile_handle_rename(b, g_my_slot, g_me_name);
         if (r == 0) {
-            if (GetTickCount64() - g_me_t0 >= 2 * JOB_TIMEOUT_MS) { g_hr.st = HR_IDLE; me_done("failed:timeout"); }
+            if (GetTickCount64() - g_me_t0 >= 2 * JOB_TIMEOUT_MS) {
+                g_hr.st = HR_IDLE; my_profile_done("failed:timeout");
+            }
             return;
         }
-        if (r == 1) me_done("saved");
-        else me_done(r == HR_E_REVERT ? "failed:reloaded" : r == HR_E_NAME ? "failed:bad name"
-                     : r == HR_E_NGWORD ? "failed:word" : failed(r));
+        if (r == 1) my_profile_done("saved");
+        else my_profile_done(r == HR_E_REVERT ? "failed:reloaded" : r == HR_E_NAME ? "failed:bad name"
+                     : r == HR_E_NGWORD ? "failed:word" : requests_failed(r));
         return;
     }
 }
 
-#define pic_fail(why) refuse(g_s.pic_state, sizeof g_s.pic_state, "pic: request refused - %s\r\n", why)
-static void pic_pump(BYTE *b, int ctl)
+#define pic_fail(why) requests_refuse(g_s.pic_state, sizeof g_s.pic_state, "pic: request refused - %s\r\n", why)
+static void my_profile_pic_pump(BYTE *b, int ctl)
 {
     int r;
     if (g_s.pic_want < 0) {
         char buf[96], *p;
         int i, v = 0, d = 0;
-        if (!ctl || g_s.draining || !db_free()) return;
-        if (take_request(REQ_PIC, buf, sizeof buf) < 0) return;
+        if (!ctl || g_s.draining || !hold_db_free()) return;
+        if (requests_take(REQ_PIC, buf, sizeof buf) < 0) return;
         g_s.db_last = GetTickCount64();
         for (i = 0; buf[i] >= '0' && buf[i] <= '9' && d < 5; i++, d++) v = v * 10 + (buf[i] - '0');
         p = buf + i;
@@ -827,19 +836,19 @@ static void pic_pump(BYTE *b, int ctl)
         if (!d || v > 9999 || (buf[i] && buf[i] != '\r' && buf[i] != '\n')) { pic_fail("failed:bad request"); return; }
         g_s.pic_want = v;
         lstrcpyA(g_s.pic_state, "saving");
-        lg("pic: save pic %d on slot %d\r\n", v, g_my_slot);
+        base_log("pic: save pic %d on slot %d\r\n", v, g_my_slot);
         g_snap_dirty = 1;
     }
     if (g_s.draining && g_fs.st != ST_LOAD_POLL && g_fs.st != ST_UPD_POLL) {
-        fs_reset();
+        my_profile_pic_reset();
         g_s.pic_want = -1;
         lstrcpyA(g_s.pic_state, "failed:cancelled");
         return;
     }
-    r = profile_pic_save(b, g_my_slot, (unsigned)g_s.pic_want, g_s.draining);
+    r = my_profile_pic_save(b, g_my_slot, (unsigned)g_s.pic_want, g_s.draining);
     if (r == 0) return;
     if (r == 1) lstrcpyA(g_s.pic_state, "saved");
-    else lstrcpyA(g_s.pic_state, failed(r));
+    else lstrcpyA(g_s.pic_state, requests_failed(r));
     g_s.pic_want = -1;
     g_snap_dirty = 1;
 }
@@ -851,63 +860,63 @@ static pdb_rec *g_xi_rec;
 static unsigned __int64 g_xi_ctid;
 static DWORD g_xi_ctsid;
 
-static void xi_done(const char *state)
+static void my_profile_xi_done(const char *state)
 {
     lstrcpynA(g_s.xi_state, state, sizeof g_s.xi_state);
     g_s.xi_step = 0;
     g_s.xi_job = -1;
-    lg("ffxi profile edit: %s\r\n", state);
+    base_log("ffxi profile edit: %s\r\n", state);
     g_snap_dirty = 1;
 }
-static void xi_load_start(BYTE *b)
+static void my_profile_xi_load_start(BYTE *b)
 {
     int t = pc_pdb_load_start(b, g_ch_pib, g_xi_where, g_xi_rec);
     if (t == NO_SLOT) { g_s.xi_step = 1; return; }
-    lg("ffxi profile edit: load -> %d\r\n", t);
-    if (t < 0) { xi_done(failed(t)); return; }
+    base_log("ffxi profile edit: load -> %d\r\n", t);
+    if (t < 0) { my_profile_xi_done(requests_failed(t)); return; }
     g_s.xi_job = t;
     g_s.xi_step = 2;
     g_s.xi_t0 = GetTickCount64();
 }
 /* only a character from the loaded profile's own list, the ids are never the app's */
-static int xi_find(BYTE *b, const char *key, me_chr *out)
+static int my_profile_xi_find(BYTE *b, const char *key, me_chr *out)
 {
     me_chr ch[8];
     char k[25];
     const char *from;
-    int n = me_chars(b, ch, &from);
+    int n = my_profile_chars(b, ch, &from);
     for (int i = 0; i < n; i++) {
-        me_chr_key(&ch[i], k);
+        my_profile_chr_key(&ch[i], k);
         if (!lstrcmpA(k, key)) { *out = ch[i]; return 1; }
     }
     return 0;
 }
-static void xi_request(BYTE *b)
+static void my_profile_xi_request(BYTE *b)
 {
     char buf[256], *p, *hk, *ck, now[17];
     me_chr c;
     pol_handle h;
-    if (GetTickCount64() - g_s.xi_last < 3000 || !db_free()) return;
-    if (take_request(REQ_XIPROFILE, buf, sizeof buf) < 0) return;
+    if (GetTickCount64() - g_s.xi_last < 3000 || !hold_db_free()) return;
+    if (requests_take(REQ_XIPROFILE, buf, sizeof buf) < 0) return;
     g_s.xi_last = g_s.db_last = GetTickCount64();
     p = buf;
-    lstrcpynA(g_s.xi_token, req_line(&p), sizeof g_s.xi_token);
-    hk = req_line(&p);
-    ck = req_line(&p);
+    lstrcpynA(g_s.xi_token, requests_line(&p), sizeof g_s.xi_token);
+    hk = requests_line(&p);
+    ck = requests_line(&p);
     memset(&h, 0, sizeof h);
     pc_get_handle(b, (unsigned)g_my_slot, &h);
-    hid_key(handle_hid(&h), now);
+    peers_hid_key(handle_hid(&h), now);
     /* my profile has to be loaded, and for this handle, since the characters come from it */
     if (lstrcmpA(hk, now) != 0 || !g_me_rec || !g_me_rec->items ||
         handle_hid(&h) != g_me_hid) {
-        xi_done("failed:not loaded");
+        my_profile_xi_done("failed:not loaded");
         return;
     }
-    if (!xi_find(b, ck, &c)) { xi_done("failed:no character"); return; }
-    if (!ch_load_pib(b)) { xi_done("failed:no schema"); return; }
+    if (!my_profile_xi_find(b, ck, &c)) { my_profile_xi_done("failed:no character"); return; }
+    if (!profiles_character_load_pib(b)) { my_profile_xi_done("failed:no schema"); return; }
     if (!g_xi_rec) g_xi_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
     else memset(g_xi_rec, 0, g_ch_pib->rec_size + 8);
-    if (!g_xi_rec) { xi_done("failed:alloc"); return; }
+    if (!g_xi_rec) { my_profile_xi_done("failed:alloc"); return; }
     g_s.xi_json[0] = 0;
     lstrcpyA(g_s.xi_key, ck);
     g_xi_ctsid = c.ctsid;
@@ -915,30 +924,32 @@ static void xi_request(BYTE *b)
     memset(g_xi_cond, 0, sizeof g_xi_cond);
     pc_pdb_item_set(b, g_ch_pib, &g_xi_cond[0].item, "z_ctsid", &g_xi_ctsid, 1);
     pc_pdb_item_set(b, g_ch_pib, &g_xi_cond[1].item, "z_ctid", &g_xi_ctid, 1);
-    if (!(g_xi_cond[0].item.flags & 1) || !(g_xi_cond[1].item.flags & 1)) { xi_done("failed:schema"); return; }
+    if (!(g_xi_cond[0].item.flags & 1) || !(g_xi_cond[1].item.flags & 1)) {
+        my_profile_xi_done("failed:schema"); return;
+    }
     pc_pdb_cond_op(b, &g_xi_cond[0], 1);
     pc_pdb_cond_op(b, &g_xi_cond[1], 1);
     g_xi_where = pc_pdb_where(b, 2, &g_xi_cond[0], &g_xi_cond[1]);
-    if (!g_xi_where) { xi_done("failed:schema"); return; }
-    lg("ffxi profile edit: slot %d\r\n", c.slot);
+    if (!g_xi_where) { my_profile_xi_done("failed:schema"); return; }
+    base_log("ffxi profile edit: slot %d\r\n", c.slot);
     lstrcpyA(g_s.xi_state, "loading");
     g_snap_dirty = 1;
     g_s.xi_t0 = GetTickCount64();
-    xi_load_start(b);
+    my_profile_xi_load_start(b);
 }
-static void xi_pump(BYTE *b, int ctl)
+static void my_profile_xi_pump(BYTE *b, int ctl)
 {
     pdb_item *a, *c;
     char nm[0x100], wn[0x100];
     int r;
     switch (g_s.xi_step) {
     case 0:
-        if (ctl && !g_s.draining) xi_request(b);
+        if (ctl && !g_s.draining) my_profile_xi_request(b);
         return;
     case 1:
-        if (g_s.draining) xi_done("cancelled");
-        else if (GetTickCount64() - g_s.xi_t0 >= JOB_TIMEOUT_MS) xi_done("failed:busy");
-        else xi_load_start(b);
+        if (g_s.draining) my_profile_xi_done("cancelled");
+        else if (GetTickCount64() - g_s.xi_t0 >= JOB_TIMEOUT_MS) my_profile_xi_done("failed:busy");
+        else my_profile_xi_load_start(b);
         return;
     case 2:
         r = pc_pdb_load_check(b, g_s.xi_job);
@@ -946,21 +957,23 @@ static void xi_pump(BYTE *b, int ctl)
             if (GetTickCount64() - g_s.xi_t0 >= JOB_TIMEOUT_MS || g_s.draining) {
                 pc_free_job(b, g_s.xi_job);
                 g_xi_rec = NULL;   /* a cancelled read can still write, so never freed */
-                xi_done(g_s.draining ? "cancelled" : "failed:timeout");
+                my_profile_xi_done(g_s.draining ? "cancelled" : "failed:timeout");
             }
             return;
         }
         g_s.xi_job = -1;
-        if (r < 0) { xi_done(failed(r)); return; }
-        if (!g_xi_rec->items) { xi_done("failed:no profile"); return; }
-        a = pdb_get(b, g_ch_pib, "z_ctsid", g_xi_rec);
-        c = pdb_get(b, g_ch_pib, "z_ctid", g_xi_rec);
-        if (!a || !c || a->v.u32 != g_xi_ctsid || c->v.u64 != g_xi_ctid) { xi_done("failed:mismatch"); return; }
-        ch_text(b, g_xi_rec, "z_name", nm, sizeof nm, NULL);
-        ch_text(b, g_xi_rec, "z_worldname", wn, sizeof wn, NULL);
+        if (r < 0) { my_profile_xi_done(requests_failed(r)); return; }
+        if (!g_xi_rec->items) { my_profile_xi_done("failed:no profile"); return; }
+        a = profile_db_get(b, g_ch_pib, "z_ctsid", g_xi_rec);
+        c = profile_db_get(b, g_ch_pib, "z_ctid", g_xi_rec);
+        if (!a || !c || a->v.u32 != g_xi_ctsid || c->v.u64 != g_xi_ctid) {
+            my_profile_xi_done("failed:mismatch"); return;
+        }
+        profiles_character_text(b, g_xi_rec, "z_name", nm, sizeof nm, NULL);
+        profiles_character_text(b, g_xi_rec, "z_worldname", wn, sizeof wn, NULL);
         wsprintfA(g_s.xi_json, "\"key\":\"%s\",\"level\":%u,\"name\":%s,\"worldName\":%s", g_s.xi_key, g_xi_rec->level, nm, wn);
-        lg("ffxi profile edit: record level %u\r\n", g_xi_rec->level);
-        xi_done("ready");
+        base_log("ffxi profile edit: record level %u\r\n", g_xi_rec->level);
+        my_profile_xi_done("ready");
         return;
     }
 }

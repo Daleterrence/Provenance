@@ -1,8 +1,8 @@
-#define FS_LOG lg
+#define DB_LOG base_log
 
-static pdb_schema *g_fs_pib;    /* never freed, polcore's job slots point into it */
+static pdb_schema *g_profile_db_pib;    /* never freed, polcore's job slots point into it */
 
-static const pdb_field *fs_field(const pdb_schema *s, const char *name, int *idx)
+static const pdb_field *profile_db_field(const pdb_schema *s, const char *name, int *idx)
 {
     int i;
     for (i = 0; i < s->nfields; i++)
@@ -13,7 +13,7 @@ static const pdb_field *fs_field(const pdb_schema *s, const char *name, int *idx
     return NULL;
 }
 
-static int fs_check_schema(BYTE *b, pdb_schema *s)
+static int profile_db_check_schema(BYTE *b, pdb_schema *s)
 {
     static const struct { const char *n; BYTE type; WORD size; DWORD need; } want[] = {
         { "z_hid",   8, 8, 0    },
@@ -24,7 +24,7 @@ static int fs_check_schema(BYTE *b, pdb_schema *s)
     int i, idx;
     if (s->table_id != 1000) return 0;
     for (i = 0; i < (int)(sizeof want / sizeof want[0]); i++) {
-        const pdb_field *f = fs_field(s, want[i].n, &idx);
+        const pdb_field *f = profile_db_field(s, want[i].n, &idx);
         if (!f || f->type != want[i].type || f->size != want[i].size) return 0;
         if (want[i].need && !(f->flags & want[i].need)) return 0;
         if (pc_pdb_field_index(b, s, want[i].n) != idx) return 0;
@@ -35,7 +35,7 @@ static int fs_check_schema(BYTE *b, pdb_schema *s)
 }
 
 /* data\db\<file>, relocated by polcore. check gets the relocated schema, NULL when either says no */
-static pdb_schema *pib_load(BYTE *b, const WCHAR *file, const char *tag, int (*check)(BYTE *, pdb_schema *))
+static pdb_schema *profile_db_load_file(BYTE *b, const WCHAR *file, const char *tag, int (*check)(BYTE *, pdb_schema *))
 {
     WCHAR path[0x200 + 32];
     HANDLE f;
@@ -47,7 +47,7 @@ static pdb_schema *pib_load(BYTE *b, const WCHAR *file, const char *tag, int (*c
     path[0x200 - 1] = 0;
     lstrcatW(path, file);
     f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) { FS_LOG("db: cannot open %ls (%u)\r\n", path, GetLastError()); return NULL; }
+    if (f == INVALID_HANDLE_VALUE) { DB_LOG("db: cannot open %ls (%u)\r\n", path, GetLastError()); return NULL; }
     sz = GetFileSize(f, NULL);
     if (sz < 0x3c || sz > 0x10000) { CloseHandle(f); return NULL; }
     buf = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sz);
@@ -65,21 +65,22 @@ static pdb_schema *pib_load(BYTE *b, const WCHAR *file, const char *tag, int (*c
     }
     s = pc_pib_load(b, buf);
     if (s != (pdb_schema *)buf || !check(b, s)) {
-        FS_LOG("db: %ls is not the expected schema\r\n", path);
+        DB_LOG("db: %ls is not the expected schema\r\n", path);
         HeapFree(GetProcessHeap(), 0, buf);    /* no job's seen it yet */
         return NULL;
     }
-    FS_LOG("db: %ls loaded, %u fields, record buffer %u bytes\r\n", path, s->nfields, s->rec_size);
+    DB_LOG("db: %ls loaded, %u fields, record buffer %u bytes\r\n", path, s->nfields, s->rec_size);
     return s;
 }
 
-static pdb_schema *fs_load_pib(BYTE *b)
+static pdb_schema *profile_db_load_pib(BYTE *b)
 {
-    if (!g_fs_pib) g_fs_pib = pib_load(b, L"prof_pol.pib", "prof_pol", fs_check_schema);
-    return g_fs_pib;
+    if (!g_profile_db_pib)
+        g_profile_db_pib = profile_db_load_file(b, L"prof_pol.pib", "prof_pol", profile_db_check_schema);
+    return g_profile_db_pib;
 }
 
-static pdb_item *pdb_get(BYTE *b, pdb_schema *s, const char *name, pdb_rec *rec)
+static pdb_item *profile_db_get(BYTE *b, pdb_schema *s, const char *name, pdb_rec *rec)
 {
     return pc_pdb_find(b, s, name, rec);
 }
@@ -87,11 +88,11 @@ static pdb_item *pdb_get(BYTE *b, pdb_schema *s, const char *name, pdb_rec *rec)
 /* searches, profiles (friends', FFXI and my own), character lookups and picture saves all go to the profile server, so
    they share the 3 s gap and go one at a time like the viewer */
 
-static int db_free(void);
+static int hold_db_free(void);
 
 
 static pfb_hdr *g_pfb;
-static pfb_hdr *pf_load(BYTE *b)
+static pfb_hdr *profile_db_pfb_load(BYTE *b)
 {
     WCHAR path[0x200 + 32];
     DWORD sz, got = 0;
@@ -113,22 +114,22 @@ static pfb_hdr *pf_load(BYTE *b)
     }
     CloseHandle(f);
     g_pfb = pc_pfb_load(b, buf);
-    if (g_pfb) lg(LOG_PROFILE "prof_pol.pfb loaded, %u items, %u tables\r\n", g_pfb->nItems, g_pfb->nTabs);
+    if (g_pfb) base_log(LOG_PROFILE "prof_pol.pfb loaded, %u items, %u tables\r\n", g_pfb->nItems, g_pfb->nTabs);
     return g_pfb;
 }
-static const pfb_item *pf_item(const pfb_hdr *p, int field)
+static const pfb_item *profile_db_pfb_item(const pfb_hdr *p, int field)
 {
     for (int i = 0; i < p->nItems; i++) if (p->items[i].field == field) return &p->items[i];
     return NULL;
 }
-static int pf_find(const pfb_tab *t, DWORD v)
+static int profile_db_pfb_find(const pfb_tab *t, DWORD v)
 {
     if (!t) return -1;
     for (int i = 0; i < t->n; i++) if (t->e[i].code == v) return i;
     return -1;
 }
 /* level k (0..2) of entry i, an empty level taken from the nearest entry before it (app.dll 0x102264a9) */
-static void pf_part(const pfb_tab *t, int i, int k, char *out, int cap)
+static void profile_db_pfb_part(const pfb_tab *t, int i, int k, char *out, int cap)
 {
     out[0] = 0;
     for (; i >= 0; i--) {
@@ -142,7 +143,7 @@ static void pf_part(const pfb_tab *t, int i, int k, char *out, int cap)
         return;
     }
 }
-static void pf_last(const char *x, char *out, int cap)
+static void profile_db_pfb_last(const char *x, char *out, int cap)
 {
     const char *best = x, *q;
     int j;
@@ -153,41 +154,41 @@ static void pf_last(const char *x, char *out, int cap)
     out[j] = 0;
 }
 enum { PV_OK, PV_PRIVATE, PV_NOTSET, PV_UNDER10 };
-static int pf_value(BYTE *b, pdb_schema *s, pfb_hdr *p, pdb_rec *rec, const char *name, int V,
+static int profile_db_pfb_value(BYTE *b, pdb_schema *s, pfb_hdr *p, pdb_rec *rec, const char *name, int V,
                     char out[3][0x80], int *lines)
 {
     int idx = pc_pdb_field_index(b, s, name), e;
     DWORD v = 0;
-    pdb_item *it = pdb_get(b, s, name, rec);
+    pdb_item *it = profile_db_get(b, s, name, rec);
     int header = !strcmp(name, "z_name") || !strcmp(name, "z_mail");
     *lines = 1;
     out[0][0] = out[1][0] = out[2][0] = 0;
     if (idx < 0 || idx >= s->nfields || !it || rec->level < V) return PV_PRIVATE;
     if (!header && (it->level == 0 || ((s->fields[idx].flags & 0x40) && it->level < V))) return PV_PRIVATE;
-    const pfb_item *pi = pf_item(p, idx);
+    const pfb_item *pi = profile_db_pfb_item(p, idx);
     if (!strcmp(name, "z_area")) {
-        pdb_item *c = pdb_get(b, s, "z_cntry", rec), *w = pdb_get(b, s, "z_wide", rec);
-        pdb_item *l = pdb_get(b, s, "z_local", rec);
+        pdb_item *c = profile_db_get(b, s, "z_cntry", rec), *w = profile_db_get(b, s, "z_wide", rec);
+        pdb_item *l = profile_db_get(b, s, "z_local", rec);
         BYTE a = it->v.bytes.p ? *(BYTE *)it->v.bytes.p : 0;
         if (!a || !c || !w || !l || !c->v.bytes.p || !w->v.bytes.p || !l->v.bytes.p) return PV_NOTSET;
         v = (DWORD)a << 24 | (DWORD)*(BYTE *)c->v.bytes.p << 16 | (DWORD)*(BYTE *)w->v.bytes.p << 8 |
             *(BYTE *)l->v.bytes.p;
-        if (!pi || (e = pf_find(pi->tab, v)) < 0) return PV_NOTSET;
-        pf_part(pi->tab, e, 0, out[0], 0x80);
-        pf_part(pi->tab, e, 1, out[1], 0x80);
-        pf_part(pi->tab, e, 2, out[2], 0x80);
+        if (!pi || (e = profile_db_pfb_find(pi->tab, v)) < 0) return PV_NOTSET;
+        profile_db_pfb_part(pi->tab, e, 0, out[0], 0x80);
+        profile_db_pfb_part(pi->tab, e, 1, out[1], 0x80);
+        profile_db_pfb_part(pi->tab, e, 2, out[2], 0x80);
         *lines = 3;
         return PV_OK;
     }
     if (!strncmp(name, "z_fav", 5)) {
-        if (!(v = it->v.u16) || !pi || (e = pf_find(pi->tab, v)) < 0) return PV_NOTSET;
-        pf_part(pi->tab, e, 0, out[0], 0x80);
-        pf_part(pi->tab, e, 1, out[1], 0x80);
+        if (!(v = it->v.u16) || !pi || (e = profile_db_pfb_find(pi->tab, v)) < 0) return PV_NOTSET;
+        profile_db_pfb_part(pi->tab, e, 0, out[0], 0x80);
+        profile_db_pfb_part(pi->tab, e, 1, out[1], 0x80);
         *lines = 2;
         return PV_OK;
     }
     if (!strcmp(name, "z_age")) {
-        pdb_item *f = pdb_get(b, s, "z_age_f", rec);
+        pdb_item *f = profile_db_get(b, s, "z_age_f", rec);
         v = it->v.u32;
         if (v < 1 || v > 999) return PV_NOTSET;
         if (!f || !f->v.bytes.p || !*(BYTE *)f->v.bytes.p) wsprintfA(out[0], "%u", v);
@@ -203,18 +204,18 @@ static int pf_value(BYTE *b, pdb_schema *s, pfb_hdr *p, pdb_rec *rec, const char
     }
     if (s->fields[idx].type != 1) {
         if (pi && (pi->ui == 5 || pi->ui == 6)) {
-            if ((e = pf_find(pi->tab, v)) < 0) return PV_NOTSET;
-            pf_last(pi->tab->e[e].text, out[0], 0x80);
+            if ((e = profile_db_pfb_find(pi->tab, v)) < 0) return PV_NOTSET;
+            profile_db_pfb_last(pi->tab->e[e].text, out[0], 0x80);
         } else wsprintfA(out[0], "%lu", v);
     }
     return out[0][0] ? PV_OK : PV_NOTSET;
 }
 
 /* the app asks for the next lookup as soon as one's answered, so the user's own reads and saves go first */
-static int user_db_waiting(void)
+static int profile_db_user_waiting(void)
 {
     static const char *const ext[] = { REQ_SEARCH, REQ_PROFILE, REQ_FFXIPROFILE, REQ_MYPROFILE, REQ_SAVEPROFILE, REQ_RENAME, REQ_PIC,
                                        REQ_CHATZONES, REQ_CHATROOMS, REQ_HANDLE, REQ_XIPROFILE };
-    for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (request_waiting(ext[i])) return 1;
+    for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (requests_waiting(ext[i])) return 1;
     return 0;
 }

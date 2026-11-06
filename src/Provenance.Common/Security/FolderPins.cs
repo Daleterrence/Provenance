@@ -177,7 +177,7 @@ public sealed class FolderPins : IDisposable
     }
 
     // no reparse point at all between root and path, and the last part's a folder or file as asked (missing is fine).
-    // Stricter than IsRedirect on purpose, it's the hook's plain_path rule
+    // Stricter than IsRedirect on purpose, it's the hook's message_store_plain_path rule
     public static bool Plain(string root, string path, bool lastIsFolder)
     {
         if (!PathInside.IsUnder(root, path)) return false;

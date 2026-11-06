@@ -8,24 +8,24 @@ static BYTE g_mutex_secret[32];
 static int g_mutex_secret_ok;
 static INIT_ONCE g_mutex_secret_once = INIT_ONCE_STATIC_INIT;
 /* pol.exe's first mutex call runs this, so never under the loader lock */
-static BOOL CALLBACK mutex_secret_init(PINIT_ONCE once, PVOID param, PVOID *ctx)
+static BOOL CALLBACK pol_exe_mutex_secret_init(PINIT_ONCE once, PVOID param, PVOID *ctx)
 {
     (void)once; (void)param; (void)ctx;
     g_mutex_secret_ok =
         BCryptGenRandom(NULL, g_mutex_secret, sizeof g_mutex_secret, BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
     return TRUE;
 }
-static void mutex_name(LPCWSTR name, WCHAR *out)
+static void pol_exe_mutex_name(LPCWSTR name, WCHAR *out)
 {
     BYTE mac[32];
     int i, n = lstrlenW(name);
-    InitOnceExecuteOnce(&g_mutex_secret_once, mutex_secret_init, NULL, NULL);
+    InitOnceExecuteOnce(&g_mutex_secret_once, pol_exe_mutex_secret_init, NULL, NULL);
     if (!g_mutex_secret_ok
         || BCryptHash(BCRYPT_HMAC_SHA256_ALG_HANDLE, g_mutex_secret, sizeof g_mutex_secret,
                       (PUCHAR)name, (ULONG)n * sizeof(WCHAR), mac, sizeof mac) != 0) {
-        lg("pol_hook: no safe mutex name (%s) - ending pol.exe (exit %d)\r\n",
+        base_log("pol_hook: no safe mutex name (%s) - ending pol.exe (exit %d)\r\n",
            g_mutex_secret_ok ? "HMAC failed" : "BCryptGenRandom failed", MUTEX_EXIT);
-        end_pol(MUTEX_EXIT);
+        base_end_pol(MUTEX_EXIT);
     }
     if (n > MUTEX_NAME_KEEP) n = MUTEX_NAME_KEEP;
     CopyMemory(out, name, n * sizeof(WCHAR));
@@ -38,24 +38,24 @@ static void mutex_name(LPCWSTR name, WCHAR *out)
     out[n] = 0;
     SecureZeroMemory(mac, sizeof mac);
 }
-static HANDLE WINAPI my_CreateMutexW(void *sa, BOOL own, LPCWSTR name)
+static HANDLE WINAPI pol_exe_my_CreateMutexW(void *sa, BOOL own, LPCWSTR name)
 {
     WCHAR buf[MUTEX_NAME_KEEP + MUTEX_SUFFIX_LEN + 1];
     if (!name || !name[0])
         return ((HANDLE(WINAPI *)(void *, BOOL, LPCWSTR))g_pCreateMutexW)(sa, own, name);
-    mutex_name(name, buf);
+    pol_exe_mutex_name(name, buf);
     return ((HANDLE(WINAPI *)(void *, BOOL, LPCWSTR))g_pCreateMutexW)(sa, own, buf);
 }
-static HANDLE WINAPI my_OpenMutexW(DWORD acc, BOOL inh, LPCWSTR name)
+static HANDLE WINAPI pol_exe_my_OpenMutexW(DWORD acc, BOOL inh, LPCWSTR name)
 {
     WCHAR buf[MUTEX_NAME_KEEP + MUTEX_SUFFIX_LEN + 1];
     if (!name || !name[0])
         return ((HANDLE(WINAPI *)(DWORD, BOOL, LPCWSTR))g_pOpenMutexW)(acc, inh, name);
-    mutex_name(name, buf);
+    pol_exe_mutex_name(name, buf);
     return ((HANDLE(WINAPI *)(DWORD, BOOL, LPCWSTR))g_pOpenMutexW)(acc, inh, buf);
 }
 
-static FARPROC user32_proc(const char *name)
+static FARPROC pol_exe_user32_proc(const char *name)
 {
     HMODULE u = GetModuleHandleW(L"user32.dll");
     if (!u) u = LoadLibraryW(L"user32.dll");
@@ -65,9 +65,9 @@ static FARPROC user32_proc(const char *name)
    fair few attempts to scrap it */
 typedef HWND (WINAPI *cdip_t)(HINSTANCE, LPCDLGTEMPLATEW, HWND, DLGPROC, LPARAM);
 static DWORD g_splash_tmpl[64];   /* DWORDs keep the DLGTEMPLATE copy aligned */
-static HWND hidden_splash(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
+static HWND pol_exe_hidden_splash(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
 {
-    cdip_t cdip = (cdip_t)user32_proc("CreateDialogIndirectParamW");
+    cdip_t cdip = (cdip_t)pol_exe_user32_proc("CreateDialogIndirectParamW");
     HRSRC rs = FindResourceW(hInst, tmpl, (LPCWSTR)RT_DIALOG);
     HGLOBAL hg = rs ? LoadResource(hInst, rs) : NULL;
     const BYTE *src = hg ? (const BYTE *)LockResource(hg) : NULL;
@@ -85,42 +85,42 @@ static HWND hidden_splash(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC pr
 }
 
 static HWND (WINAPI *g_realCreateDialogParamW)(HINSTANCE, LPCWSTR, HWND, DLGPROC, LPARAM);
-static HWND WINAPI my_CreateDialogParamW(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
+static HWND WINAPI pol_exe_my_CreateDialogParamW(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
 {
     BYTE *exe = (BYTE *)GetModuleHandleW(NULL);
     if (tmpl == (LPCWSTR)(ULONG_PTR)0x67 && (void *)proc == (void *)(exe + 0x6800)) {
-        HWND h = hidden_splash(hInst, tmpl, parent, proc, init);
-        lg("pol_hook: startup splash created hidden hwnd=%08x%s\r\n",
+        HWND h = pol_exe_hidden_splash(hInst, tmpl, parent, proc, init);
+        base_log("pol_hook: startup splash created hidden hwnd=%08x%s\r\n",
            (unsigned)(ULONG_PTR)h, h ? "" : " (NULL fallback)");
         return h;   /* NULL is pol.exe's own no-splash path, never the real call (it'd flash) */
     }
     if (!g_realCreateDialogParamW)
         g_realCreateDialogParamW = (HWND (WINAPI *)(HINSTANCE, LPCWSTR, HWND, DLGPROC, LPARAM))
-            user32_proc("CreateDialogParamW");
+            pol_exe_user32_proc("CreateDialogParamW");
     return g_realCreateDialogParamW ? g_realCreateDialogParamW(hInst, tmpl, parent, proc, init) : NULL;
 }
 
 /* the real target comes from GetProcAddress, never *slot (the thunk would overwrite the hook) */
-static int hook_slot(HMODULE exe, DWORD rva, DWORD thunk_rva, void *hook, const char *what)
+static int pol_exe_hook_slot(HMODULE exe, DWORD rva, DWORD thunk_rva, void *hook, const char *what)
 {
     void **slot = (void **)((BYTE *)exe + rva);
     DWORD o;
     if (*slot != (void *)((BYTE *)exe + thunk_rva)) {
-        lg("pol_hook: %s slot +%05x = %08x, expected thunk +%05x - skipped\r\n",
+        base_log("pol_hook: %s slot +%05x = %08x, expected thunk +%05x - skipped\r\n",
            what, (unsigned)rva, (unsigned)(ULONG_PTR)*slot, (unsigned)thunk_rva);
         return 0;
     }
     if (!VirtualProtect(slot, sizeof(void *), PAGE_READWRITE, &o)) {
-        lg("pol_hook: %s slot protect failed\r\n", what);
+        base_log("pol_hook: %s slot protect failed\r\n", what);
         return 0;
     }
     *slot = hook;
     VirtualProtect(slot, sizeof(void *), o, &o);
-    lg("pol_hook: %s slot +%05x hooked\r\n", what, (unsigned)rva);
+    base_log("pol_hook: %s slot +%05x hooked\r\n", what, (unsigned)rva);
     return 1;
 }
 
-static LONG WINAPI veh_proc(EXCEPTION_POINTERS *ep)
+static LONG WINAPI crash_filter(EXCEPTION_POINTERS *ep)
 {
     unsigned eip = (unsigned)(ULONG_PTR)ep->ExceptionRecord->ExceptionAddress;
     unsigned code = ep->ExceptionRecord->ExceptionCode;
@@ -135,7 +135,7 @@ static LONG WINAPI veh_proc(EXCEPTION_POINTERS *ep)
         }
         /* just the file name, the full viewer path ate the whole buffer and hid which dll it was */
         if ((slash = strrchr(mod, '\\')) != NULL) name = slash + 1;
-        lg(LOG_CRASH "%08x at %08x = %s+%05x\r\n", code, eip, name, eip - base);
+        base_log(LOG_CRASH "%08x at %08x = %s+%05x\r\n", code, eip, name, eip - base);
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }

@@ -1,4 +1,4 @@
-static int db_free(void)
+static int hold_db_free(void)
 {
     return GetTickCount64() - g_s.db_last >= 3000 && !g_s.srch_step && !g_s.prof_step && !g_s.ch_step && !g_s.fp_step &&
            !g_s.cr_db && !g_s.me_step && !g_s.xi_step && g_s.pic_want < 0;
@@ -6,7 +6,7 @@ static int db_free(void)
 
 /* the server's handle, else the first in use (app.dll 0x10028a76). Provenance's last one (POL_HANDLE) goes before
    the first in use, since so far the server's never given my sessions one back */
-static int login_handle(BYTE *b, const char **why)
+static int hold_login_handle(BYTE *b, const char **why)
 {
     pol_handle rec;
     char want[24], k[17];
@@ -16,7 +16,7 @@ static int login_handle(BYTE *b, const char **why)
     if (slot >= 0) return slot;
     for (i = 0; n > 0 && n < sizeof want && i < 64; i++) {
         if (!handle_get(b, i, &rec)) continue;
-        hid_key(handle_hid(&rec), k);
+        peers_hid_key(handle_hid(&rec), k);
         if (!lstrcmpiA(k, want)) { *why = "the one last active in Provenance"; return i; }
     }
     *why = "the first in use";
@@ -24,67 +24,67 @@ static int login_handle(BYTE *b, const char **why)
         if (handle_get(b, i, &rec)) return i;
     return -1;
 }
-/* the hold counts on g_my_slot being a handle in use, and handle_bootstrap left the account one, so none by now
+/* the hold counts on g_my_slot being a handle in use, and login_handle_bootstrap left the account one, so none by now
    signs out */
 static void hold_handle(BYTE *b)
 {
     char sv[8];
     const char *why;
     int want = 0;
-    g_my_slot = login_handle(b, &why);
+    g_my_slot = hold_login_handle(b, &why);
     if (g_my_slot < 0) {
-        lg("hold: " LOG_NO_HANDLE " - signing out (exit %d)\r\n", NO_HANDLE_EXIT);
-        viewer_sign_out(b);
-        end_pol(NO_HANDLE_EXIT);
+        base_log("hold: " LOG_NO_HANDLE " - signing out (exit %d)\r\n", NO_HANDLE_EXIT);
+        login_viewer_sign_out(b);
+        base_end_pol(NO_HANDLE_EXIT);
     }
     if (g_lean) return;
     if (GetEnvironmentVariableA(ENV_STATUS, sv, sizeof sv) > 0 &&
         (sv[0] == '0' || sv[0] == '1' || sv[0] == '4'))
         want = sv[0] - '0';
-    lg("presence: going online on handle slot %d, %s (current handle %d)\r\n", g_my_slot, why,
+    base_log("presence: going online on handle slot %d, %s (current handle %d)\r\n", g_my_slot, why,
        pc_current_handle(b));
-    status_start(b, g_my_slot, want, 1000);
+    login_status_start(b, g_my_slot, want, 1000);
 }
 
-static void db_reads_abandon(BYTE *b)
+static void hold_db_reads_abandon(BYTE *b)
 {
-    if (g_s.prof_step != 0) profile_abandon(b);
-    if (g_s.ch_step != 0) character_abandon(b);
-    if (g_s.fp_step != 0) ffxiprofile_abandon(b);
-    if (g_s.srch_step != 0) search_abandon(b);
+    if (g_s.prof_step != 0) profiles_profile_abandon(b);
+    if (g_s.ch_step != 0) profiles_character_abandon(b);
+    if (g_s.fp_step != 0) profiles_ffxiprofile_abandon(b);
+    if (g_s.srch_step != 0) profiles_search_abandon(b);
 }
 
-static int writes_pending(void)
+static int hold_writes_pending(void)
 {
     return g_s.sq_n || g_s.status_job >= 0 || g_s.edit_job >= 0 || g_s.edit_upload_want ||
            g_s.comment_wanted || g_s.pic_want >= 0 || g_s.grp_job >= 0 || g_s.answer_kind || g_s.me_step >= 3 ||
            g_s.hop;
 }
 /* writes that are due but haven't got a job slot yet, or an answer's message still to come */
-static int writes_waiting(void)
+static int hold_writes_waiting(void)
 {
-    return send_built() || g_s.answer_kind || g_s.edit_upload_want || g_s.comment_wanted || g_s.me_step == 3 ||
+    return mail_send_built() || g_s.answer_kind || g_s.edit_upload_want || g_s.comment_wanted || g_s.me_step == 3 ||
            g_s.hwant;
 }
-static void drain_turn(BYTE *b, int mail)
+static void hold_drain_turn(BYTE *b, int mail)
 {
     pump_once(b);
-    status_pump(b);
-    if (mail) mail_pump(b);
+    login_status_pump(b);
+    if (mail) mail_inbox_pump(b);
     mail_send_pump(b);
-    friend_edit_pump(b, 0);
-    pic_pump(b, 0);
-    group_pump(b, 0);
-    answer_pump(b, 0);
-    me_pump(b, 0);
-    xi_pump(b, 0);
-    handle_pump(b, 0);
+    friends_edit_pump(b, 0);
+    my_profile_pic_pump(b, 0);
+    groups_pump(b, 0);
+    mail_send_answer_pump(b, 0);
+    my_profile_pump(b, 0);
+    my_profile_xi_pump(b, 0);
+    handles_pump(b, 0);
     Sleep(16);
 }
 
 /* the viewer sets polcore's idle timeout from option.bin's GOPN1_AO at login, and FFXI only switches the timer on, so
    session init's 0 would never fire. It stays off till FFXI turns it on */
-static int idle_timeout_for_game(BYTE *b)
+static int hold_idle_timeout_for_game(BYTE *b)
 {
     BYTE *rec = NULL;
     int r = 0, mins = -1;
@@ -99,11 +99,11 @@ static int idle_timeout_for_game(BYTE *b)
     if (rec) mins = *(int *)(rec + 0x18);
     pc_option_load_end(b);
     if (mins < 1 || mins > 60) {
-        lg("hold: auto-disconnect off in FFXI (%s)\r\n", r <= 0 ? "no option.bin" : rec ? "set off" : "not in option.bin");
+        base_log("hold: auto-disconnect off in FFXI (%s)\r\n", r <= 0 ? "no option.bin" : rec ? "set off" : "not in option.bin");
         return -1;
     }
     pc_set_idle_timeout(b, mins * 60000);
-    lg("hold: auto-disconnect after %d min in FFXI\r\n", mins);
+    base_log("hold: auto-disconnect after %d min in FFXI\r\n", mins);
     return mins;
 }
 
@@ -112,64 +112,64 @@ static int idle_timeout_for_game(BYTE *b)
 static void hold_turn(BYTE *b, int ctl)
 {
     char sv[8];
-    int wctl, want, was = handle_switching();
-    handle_pump(b, ctl);
+    int wctl, want, was = handles_switching();
+    handles_pump(b, ctl);
     /* every turn, the one it finishes on too, so nothing written while it ran is taken after under the new handle */
-    if (was || handle_switching()) writes_refuse(b);
-    wctl = ctl && !handle_switching();
+    if (was || handles_switching()) handles_writes_refuse(b);
+    wctl = ctl && !handles_switching();
     mail_send_pump(b);
-    friend_edit_pump(b, wctl);
-    search_pump(b, wctl);
-    profile_pump(b, wctl);
-    character_pump(b, wctl);
-    ffxiprofile_pump(b, wctl);
-    group_pump(b, wctl);
-    me_pump(b, wctl);
-    xi_pump(b, wctl);
-    answer_pump(b, wctl);
-    pic_pump(b, wctl);
-    if (!g_lean && !handle_switching()) chat_pump(b, wctl);
-    if (!g_lean && !handle_switching()) gc_pump(b, wctl);
-    if (!g_lean && wctl && g_s.status_job < 0 && take_request(REQ_STATUS, sv, sizeof sv) >= 0) {
+    friends_edit_pump(b, wctl);
+    profiles_search_pump(b, wctl);
+    profiles_profile_pump(b, wctl);
+    profiles_character_pump(b, wctl);
+    profiles_ffxiprofile_pump(b, wctl);
+    groups_pump(b, wctl);
+    my_profile_pump(b, wctl);
+    my_profile_xi_pump(b, wctl);
+    mail_send_answer_pump(b, wctl);
+    my_profile_pic_pump(b, wctl);
+    if (!g_lean && !handles_switching()) chat_room_pump(b, wctl);
+    if (!g_lean && !handles_switching()) group_chat_pump(b, wctl);
+    if (!g_lean && wctl && g_s.status_job < 0 && requests_take(REQ_STATUS, sv, sizeof sv) >= 0) {
         want = sv[0] - '0';
         /* the viewer's OK maps busy (2) to online and 3 to appear offline */
         if (want == 2) want = 0;
         if (want == 3) want = 4;
         /* a go-online still waiting for a slot keeps its location, -2 keeps the rest */
-        if (want == 0 || want == 1 || want == 4) status_start(b, g_my_slot, want, g_s.status_want >= 0 ? g_s.status_loc : -2);
+        if (want == 0 || want == 1 || want == 4) login_status_start(b, g_my_slot, want, g_s.status_want >= 0 ? g_s.status_loc : -2);
     }
 }
 
 /* Play: only writes hold it, ms at most. An inbox read or delete is cancelled after the wait: a cancel stalls job polls
    10 s, which FFXI's start-up sits out */
-static void play_drain(BYTE *b, const char *spath, DWORD ms)
+static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
 {
     ULONGLONG until = GetTickCount64() + ms;
     g_s.draining = 1;
-    if (!g_lean) mail_ack_request();
-    db_reads_abandon(b);
-    me_abandon(b);
-    chat_end(b);
-    gc_end(b, "left", 1);
-    while (writes_pending() && GetTickCount64() < until)
-        drain_turn(b, !g_lean);
+    if (!g_lean) mail_inbox_ack_request();
+    hold_db_reads_abandon(b);
+    my_profile_abandon(b);
+    chat_room_end(b);
+    group_chat_end(b, "left", 1);
+    while (hold_writes_pending() && GetTickCount64() < until)
+        hold_drain_turn(b, !g_lean);
     for (int i = 0; i < FETCH_LANES; i++) if (g_s.rd[i].job >= 0) pc_cancel_job(b, g_s.rd[i].job);
     if (g_s.del_job >= 0) pc_cancel_job(b, g_s.del_job);
     for (int i = 0; i < g_s.sq_n; i++) if (g_sq[i].job >= 0) pc_cancel_job(b, g_sq[i].job);
     if (g_s.status_job >= 0) pc_cancel_job(b, g_s.status_job);
-    handle_abandon(b);
+    handles_abandon(b);
     g_in_hold = 0;
     if (g_s.edit_job >= 0) pc_cancel_job(b, g_s.edit_job);
-    if (g_s.pic_want >= 0) profile_pic_cancel(b);
+    if (g_s.pic_want >= 0) my_profile_pic_cancel(b);
     if (g_s.grp_job >= 0) pc_cancel_job(b, g_s.grp_job);
     /* FFXI installs its own message handlers, so polcore gets its defaults back */
     if (pc_has(b, SV_RESET_PUSH_CALLBACKS)) pc_reset_push_callbacks(b);
     /* the viewer always has notices on when a game starts, without them FFXI only sees new messages at its next lobby
        login. A local flag, nothing goes on the wire */
     if (g_lean && pc_has(b, SV_MESSAGE_NOTICES)) pc_message_notices(b, 1);
-    idle_timeout_for_game(b);
+    hold_idle_timeout_for_game(b);
     DeleteFileA(spath);   /* the snapshot has friends' messages in it */
-    store_drop();
+    message_store_drop();
 }
 
 /* writes under way get 5 s to finish, then the viewer's sign-out */
@@ -178,15 +178,15 @@ static void hold_sign_out(BYTE *b, const char *spath)
 {
     ULONGLONG until = GetTickCount64() + SIGN_OUT_DRAIN_MS;
     DeleteFileA(spath);
-    store_drop();
+    message_store_drop();
     g_s.draining = 1;
-    if (!g_lean) mail_ack_request();
-    me_abandon(b);
-    while (writes_pending() && GetTickCount64() < until)
-        drain_turn(b, !g_lean);
-    viewer_sign_out(b);
-    lg("hold: signed out\r\n");
-    end_pol(0);
+    if (!g_lean) mail_inbox_ack_request();
+    my_profile_abandon(b);
+    while (hold_writes_pending() && GetTickCount64() < until)
+        hold_drain_turn(b, !g_lean);
+    login_viewer_sign_out(b);
+    base_log("hold: signed out\r\n");
+    base_end_pol(0);
 }
 
 /* read only: polcore stamps conn+0x39d4 on every send, on a quiet hold just the PONG to the ~125 s PING. The session
@@ -195,7 +195,7 @@ static void hold_sign_out(BYTE *b, const char *spath)
 static DWORD g_link_sent;
 static ULONGLONG g_link_sent_at, g_link_logged_at;
 static int g_link_sends;
-static void link_watch(BYTE *b)
+static void hold_link_watch(BYTE *b)
 {
     int s = *pc_link_index(b);
     DWORD *at, sent;
@@ -210,7 +210,7 @@ static void link_watch(BYTE *b)
     }
     g_link_sends++;
     if (g_link_sent_at - g_link_logged_at < LINK_LOG_MS) return;
-    lg("link: polcore sent something %d time(s) since the last of these lines (on a quiet hold that's the PONG)\r\n",
+    base_log("link: polcore sent something %d time(s) since the last of these lines (on a quiet hold that's the PONG)\r\n",
        g_link_sends);
     g_link_logged_at = g_link_sent_at;
     g_link_sends = 0;
@@ -218,7 +218,7 @@ static void link_watch(BYTE *b)
 
 /* held until Play, a stop, Provenance ending or pol.exe ending. It's an IRC link so it never stops pumping, and never
    sends more than the viewer would. */
-static void pol_hold(BYTE *b)
+static void hold_run(BYTE *b)
 {
     static ULONGLONG lastCtl;
     ULONGLONG lastSnap = 0;
@@ -228,25 +228,25 @@ static void pol_hold(BYTE *b)
     DWORD wn;
     if (!b) return;
     if (*pc_auth_state(b) != AUTH_IN) {
-        lg(LOG_NO_SESSION " (auth state %u) - exiting, FFXI NOT started\r\n", *pc_auth_state(b));
-        end_pol(AUTH_REFUSED_EXIT);
+        base_log(LOG_NO_SESSION " (auth state %u) - exiting, FFXI NOT started\r\n", *pc_auth_state(b));
+        base_end_pol(AUTH_REFUSED_EXIT);
     }
-    ipc_file(spath, IPC_SOCIAL);
+    base_ipc_file(spath, IPC_SOCIAL);
     /* a login that finished after its Provenance went never gets held */
-    if (owner_gone()) {
-        lg("hold: Provenance ended during the login - signing out and exiting\r\n");
+    if (base_owner_gone()) {
+        base_log("hold: Provenance ended during the login - signing out and exiting\r\n");
         hold_sign_out(b, spath);
     }
-    lg(LOG_HELD "; waiting for Play (POL_CRED_PLAY)\r\n");
-    if (g_lean) lg("hold: lean session (no social)\r\n");
+    base_log(LOG_HELD "; waiting for Play (POL_CRED_PLAY)\r\n");
+    if (g_lean) base_log("hold: lean session (no social)\r\n");
     if (!g_lean && pc_has(b, SV_SET_PUSH_CALLBACKS)) {
         void *cb[6];
-        push_callbacks(b, cb);
+        chat_frame_push_callbacks(b, cb);
         pc_set_push_callbacks(b, cb);
-        lg("mail: push callbacks registered (svc 0xd9c)\r\n");
+        base_log("mail: push callbacks registered (svc 0xd9c)\r\n");
     }
     hold_handle(b);
-    if (!g_lean) store_import(b);
+    if (!g_lean) message_store_import(b);
     g_in_hold = 1;
     snapshot_social(b);
     for (;;) {
@@ -259,61 +259,62 @@ static void pol_hold(BYTE *b)
         if (idle < 0 || reason < 0 || *pc_session_alive(b) == 0) {
             why = idle < 0 ? idle : reason < 0 ? reason : (int)*pc_auth_error(b);
             if (g_link_sent_at)
-                lg("hold: SESSION LOST reason=%d - signed out (last answered the server %lu s before)\r\n", why,
+                base_log("hold: SESSION LOST reason=%d - signed out (last answered the server %lu s before)\r\n", why,
                    (DWORD)((GetTickCount64() - g_link_sent_at) / 1000));
-            else lg("hold: SESSION LOST reason=%d - signed out\r\n", why);
+            else base_log("hold: SESSION LOST reason=%d - signed out\r\n", why);
             DeleteFileA(spath);
-            store_drop();
-            ipc_file(path, IPC_ENDED);
+            message_store_drop();
+            base_ipc_file(path, IPC_ENDED);
             ef = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
             if (ef != INVALID_HANDLE_VALUE) {
                 wsprintfA(num, "%d", why);
                 WriteFile(ef, num, (DWORD)lstrlenA(num), &wn, NULL);
                 CloseHandle(ef);
             }
-            end_pol(0);
+            base_end_pol(0);
         }
-        if (ctl) link_watch(b);
+        if (ctl) hold_link_watch(b);
         if (ctl && pc_has(b, SV_JAILED) && pc_jailed(b)) {
             DeleteFileA(spath);
-            store_drop();
-            account_blocked(b, "jail");
+            message_store_drop();
+            login_account_blocked(b, "jail");
         }
-        status_pump(b);
-        if (g_s.status_job < 0 && g_s.status_want >= 0) status_start(b, g_my_slot, g_s.status_want, g_s.status_loc);
+        login_status_pump(b);
+        if (g_s.status_job < 0 && g_s.status_want >= 0)
+            login_status_start(b, g_my_slot, g_s.status_want, g_s.status_loc);
         /* the new-mail flag (svc 0x1460, set by a push), cleared with 0x1464(0) like the viewer (app.dll 0x1019fef3) */
         if (!g_lean && pc_has(b, SV_NEW_MAIL_FLAG) && pc_new_mail_flag(b)) {
             pc_set_new_mail_flag(b, 0);
-            lg("mail: new-mail flag set - listing the inbox\r\n");
+            base_log("mail: new-mail flag set - listing the inbox\r\n");
             g_s.mail_refresh = 1;
         }
-        if (ctl && !g_lean) mail_ack_request();
-        if (!g_lean) mail_pump(b);
+        if (ctl && !g_lean) mail_inbox_ack_request();
+        if (!g_lean) mail_inbox_pump(b);
         hold_turn(b, ctl);
-        if (ctl && play_signalled()) {
+        if (ctl && cred_play_signalled()) {
             if (!g_ffxi_service) {
                 static int said;
-                if (!said) lg(LOG_PLAY_REFUSED "no-content-id\r\n");
+                if (!said) base_log(LOG_PLAY_REFUSED "no-content-id\r\n");
                 said = 1;
             } else {
-                lg(LOG_PLAY_STARTED " - finishing PlayOnline writes, then booting FFXI\r\n");
-                play_drain(b, spath, 15000);
+                base_log(LOG_PLAY_STARTED " - finishing PlayOnline writes, then booting FFXI\r\n");
+                hold_play_drain(b, spath, 15000);
                 /* the game keeps going whatever happens to Provenance */
                 if (g_owner) CloseHandle(g_owner);
                 g_owner = NULL;
-                lg("hold: booting FFXI\r\n");
+                base_log("hold: booting FFXI\r\n");
                 return;
             }
         }
         /* only an admin can write in Provenance's folder, so a stop file there really is Provenance asking */
-        ipc_file(path, IPC_STOP);
+        base_ipc_file(path, IPC_STOP);
         if (ctl && GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) {
-            lg("hold: stop file seen - signing out and exiting\r\n");
+            base_log("hold: stop file seen - signing out and exiting\r\n");
             DeleteFileA(path);
             hold_sign_out(b, spath);
         }
-        if (ctl && owner_gone()) {
-            lg("hold: Provenance ended - signing out and exiting\r\n");
+        if (ctl && base_owner_gone()) {
+            base_log("hold: Provenance ended - signing out and exiting\r\n");
             hold_sign_out(b, spath);
         }
         if ((g_snap_dirty && GetTickCount64() - lastSnap >= 250) || GetTickCount64() - lastSnap > 2000) {

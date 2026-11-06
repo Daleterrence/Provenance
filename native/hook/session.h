@@ -28,7 +28,7 @@ typedef struct hook_session {
     int cr_hello;
     int cr_replies;
     int cr_joined;   /* a JOIN's gone and no PART since: the server might have me in the room */
-    int cr_db;   /* chat's zone and room lists, 0 idle, the steps are cr_db_pump's */
+    int cr_db;   /* chat's zone and room lists, 0 idle, the steps are chat_list_db_pump's */
     /* friend edits, answers and my comment */
     int answer_kind;
     char edit_token[48];

@@ -1,23 +1,23 @@
-static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, int read,
+static int message_store_msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, int read,
                     const char *subj, const char *text, const BYTE *att)
 {
     char nm[64], sk[17], tk[17], grp[80] = "";
     WORD f = MAIL(e)->flags;
     unsigned kind = (f >> 7) & 0x1f;
     DWORD tlo = MAIL(e)->to_lo, thi = MAIL(e)->to_hi;
-    int o, tome = polid_ok(b, tlo, thi) && is_me(b, tlo, thi);
-    sjis_json(nm, sizeof nm, (const BYTE *)MAIL(e)->name, 0x0f);
-    peer_key(b, MAIL(e)->from_lo, MAIL(e)->from_hi, MAIL(e)->from_slot, sk);
-    peer_key(b, tlo, thi, MAIL(e)->to_slot, tk);
+    int o, tome = mail_inbox_polid_ok(b, tlo, thi) && peers_is_me(b, tlo, thi);
+    json_sjis(nm, sizeof nm, (const BYTE *)MAIL(e)->name, 0x0f);
+    peers_key(b, MAIL(e)->from_lo, MAIL(e)->from_hi, MAIL(e)->from_slot, sk);
+    peers_key(b, tlo, thi, MAIL(e)->to_slot, tk);
     /* removed from a group (0x12) or it was disbanded (0x13): the name's in the type-10 attachment, the text's empty */
     if (att && (kind == 0x12 || kind == 0x13)) {
         lstrcpyA(grp, ",\"group\":");
-        sjis_json(grp + 9, sizeof grp - 9, att + 8, 0x14);
+        json_sjis(grp + 9, sizeof grp - 9, att + 8, 0x14);
     }
     o = wsprintfA(out, "{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"toKey\":\"%s\","
                        "\"toMe\":%s,\"kind\":%u,\"time\":%u,\"seq\":%u,\"state\":\"%s\"%s%s,\"subject\":",
                   mid, nm, sk, MAIL(e)->from_slot,
-                  is_me(b, MAIL(e)->from_lo, MAIL(e)->from_hi) ? "true" : "false", tk,
+                  peers_is_me(b, MAIL(e)->from_lo, MAIL(e)->from_hi) ? "true" : "false", tk,
                   tome ? "true" : "false",
                   kind, MAIL(e)->time, MAIL(e)->seq, state,
                   read < 0 ? "" : read ? ",\"read\":true" : ",\"read\":false", grp);
@@ -38,14 +38,14 @@ static int msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const c
 static const char *const g_store_sub[4] = { "r\\a", "r\\b", "s\\a", "s\\b" };
 typedef struct { BYTE hdr[MAIL_KEY_SIZE]; char name[100]; int home, sub, alt_home, alt_sub; char alt[100]; } storefile;
 
-static int store_name_ok(const char *n)
+static int message_store_name_ok(const char *n)
 {
     static const char abc[] = "TSG8IncW3HFKokOg79qzeCmZs2yBYEQVAUxR5rbwi4P@jMDLtpvad0f_J1hlN6uX";
     int i;
     for (i = 0; n[i]; i++) if (i >= 96 || !strchr(abc, n[i])) return 0;
     return i == 96;
 }
-static int store_newer(const void *x, const void *y)
+static int message_store_newer(const void *x, const void *y)
 {
     const BYTE *a = ((const storefile *)x)->hdr, *c = ((const storefile *)y)->hdr;
     DWORD ta = MAIL(a)->time, tc = MAIL(c)->time;
@@ -53,12 +53,12 @@ static int store_newer(const void *x, const void *y)
     if (ta != tc) return ta < tc ? 1 : -1;
     return sa == sc ? 0 : sa < sc ? 1 : -1;
 }
-static void store_dir(char *out, int home, int sub)
+static void message_store_dir(char *out, int home, int sub)
 {
     wsprintfA(out, "%s\\pub\\home%02d\\msg\\%s", g_viewer, home, g_store_sub[sub]);
 }
 /* pol.exe runs elevated, so it never goes through a junction or link someone else put in the viewer folder */
-static int plain_path(const char *path)
+static int message_store_plain_path(const char *path)
 {
     char p[MAX_PATH + 160];
     int base = lstrlenA(g_viewer);
@@ -76,7 +76,7 @@ static int plain_path(const char *path)
         *c = was;
     }
 }
-static HANDLE open_plain(const char *path)
+static HANDLE message_store_open_plain(const char *path)
 {
     BY_HANDLE_FILE_INFORMATION fi;
     HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
@@ -89,12 +89,12 @@ static HANDLE open_plain(const char *path)
     }
     return h;
 }
-static int store_owned(const BYTE *h, int sub, unsigned __int64 me)
+static int message_store_owned(const BYTE *h, int sub, unsigned __int64 me)
 {
     return memcmp(sub >= 2 ? &MAIL(h)->from_lo : &MAIL(h)->to_lo, &me, 8) == 0;
 }
 /* requests and invitations can't be answered from a copy, the server's is gone */
-static int store_wanted(const BYTE *h, int sub)
+static int message_store_wanted(const BYTE *h, int sub)
 {
     unsigned kd = mail_kind(h);
     if (mail_receipt(h)) return 0;
@@ -102,7 +102,7 @@ static int store_wanted(const BYTE *h, int sub)
     return kd == 0 || kd == 9 || kd == 10 || kd == 0xf || kd == 0x10 || kd == 0x12 || kd == 0x13;
 }
 /* my newest STORE_KEEP in one folder, headers decoded by polcore (svc 0x540) so the ids are in this session's form */
-static int store_list(BYTE *b, int home, int sub, unsigned __int64 me, int wanted, storefile **out)
+static int message_store_list(BYTE *b, int home, int sub, unsigned __int64 me, int wanted, storefile **out)
 {
     char glob[MAX_PATH + 64];
     WIN32_FIND_DATAA fd;
@@ -111,89 +111,89 @@ static int store_list(BYTE *b, int home, int sub, unsigned __int64 me, int wante
     HANDLE h;
     *out = NULL;
     if (!pc_has(b, SV_MAIL_DECODE_HEADER) || !g_viewer[0]) return 0;
-    store_dir(glob, home, sub);
-    if (!plain_path(glob)) return 0;
+    message_store_dir(glob, home, sub);
+    if (!message_store_plain_path(glob)) return 0;
     lstrcatA(glob, "\\*");
     if ((h = FindFirstFileA(glob, &fd)) == INVALID_HANDLE_VALUE) return 0;
     if (!(v = (storefile *)HeapAlloc(GetProcessHeap(), 0, (cap + 1) * sizeof *v))) { FindClose(h); return 0; }
     do {
         if ((fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
-            !store_name_ok(fd.cFileName))
+            !message_store_name_ok(fd.cFileName))
             continue;
         if (++looked > STORE_SCAN_MAX) {
-            lg("store: over %d files in home%02d\\msg\\%s, the rest aren't read\r\n", STORE_SCAN_MAX, home,
+            base_log("store: over %d files in home%02d\\msg\\%s, the rest aren't read\r\n", STORE_SCAN_MAX, home,
                g_store_sub[sub]);
             break;
         }
         memset(&v[n], 0, sizeof v[n]);
         if (pc_mail_decode_header(b, v[n].hdr, fd.cFileName) != 0) continue;
         if (!(MAIL(v[n].hdr)->flags & MAIL_VALID)) continue;   /* the viewer's loader skips those too */
-        if (!store_owned(v[n].hdr, sub, me) || (wanted && !store_wanted(v[n].hdr, sub))) continue;
+        if (!message_store_owned(v[n].hdr, sub, me) || (wanted && !message_store_wanted(v[n].hdr, sub))) continue;
         lstrcpyA(v[n].name, fd.cFileName);
         v[n].home = home;
         v[n].sub = sub;
         v[n].alt_home = -1;
         if (++n == cap) {
-            qsort(v, n, sizeof *v, store_newer);
+            qsort(v, n, sizeof *v, message_store_newer);
             n = STORE_KEEP;
         }
     } while (FindNextFileA(h, &fd));
     FindClose(h);
-    if (n > 1) qsort(v, n, sizeof *v, store_newer);
+    if (n > 1) qsort(v, n, sizeof *v, message_store_newer);
     *out = v;
     return n > STORE_KEEP ? STORE_KEEP : n;
 }
-static int store_read(const char *path, char *buf, int cap)
+static int message_store_read(const char *path, char *buf, int cap)
 {
     DWORD got = 0;
     BOOL ok;
-    HANDLE h = open_plain(path);
+    HANDLE h = message_store_open_plain(path);
     if (h == INVALID_HANDLE_VALUE) return -1;
     ok = ReadFile(h, buf, (DWORD)cap, &got, NULL);
     CloseHandle(h);
     return ok ? (int)got : -1;
 }
 /* the other home's copy of the same message if this one won't read */
-static int store_body(const storefile *f, char *buf, int cap)
+static int message_store_body(const storefile *f, char *buf, int cap)
 {
     char path[MAX_PATH + 160];
     DWORD len = MAIL(f->hdr)->len;
     int got;
     if (len == 0 || len > 0x101100) return -1;
     if (cap > (int)len) cap = (int)len;
-    store_dir(path, f->home, f->sub);
+    message_store_dir(path, f->home, f->sub);
     lstrcatA(path, "\\");
     lstrcatA(path, f->name);
-    if ((got = store_read(path, buf, cap)) > 0 || f->alt_home < 0) return got;
-    store_dir(path, f->alt_home, f->alt_sub);
+    if ((got = message_store_read(path, buf, cap)) > 0 || f->alt_home < 0) return got;
+    message_store_dir(path, f->alt_home, f->alt_sub);
     lstrcatA(path, "\\");
     lstrcatA(path, f->alt);
-    return store_read(path, buf, cap);
+    return message_store_read(path, buf, cap);
 }
-static int dir_exists(const char *p)
+static int message_store_dir_exists(const char *p)
 {
     DWORD a = GetFileAttributesA(p);
     return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
 }
-static int legacy_home_there(void)
+static int message_store_legacy_home_there(void)
 {
     char p[MAX_PATH + 32];
     wsprintfA(p, "%s\\pub\\home%02d", g_viewer, LEGACY_HOME);
-    return g_viewer[0] && dir_exists(p) && plain_path(p);
+    return g_viewer[0] && message_store_dir_exists(p) && message_store_plain_path(p);
 }
 
-static int sent_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, const char *subj,
-                     const char *text)
+static int message_store_sent_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state,
+                     const char *subj, const char *text)
 {
     char nm[64] = "\"\"", sk[17];
     pol_friend_copy fr;
     DWORD lo = MAIL(e)->to_lo, hi = MAIL(e)->to_hi;
-    int row = find_friend_row(b, lo, hi, MAIL(e)->to_slot), o;
-    peer_key(b, lo, hi, MAIL(e)->to_slot, sk);
-    if (row >= 0 && get_friend(b, row, &fr)) sjis_json(nm, sizeof nm, (const BYTE *)fr.f.name, 0x0f);
+    int row = peers_find_friend_row(b, lo, hi, MAIL(e)->to_slot), o;
+    peers_key(b, lo, hi, MAIL(e)->to_slot, sk);
+    if (row >= 0 && peers_get_friend(b, row, &fr)) json_sjis(nm, sizeof nm, (const BYTE *)fr.f.name, 0x0f);
     o = wsprintfA(out, "{\"mid\":%d,\"to\":%s,\"toKey\":\"%s\",\"toSlot\":%u,\"fromSlot\":%u,\"toOther\":%s,\"time\":%u,"
                        "\"seq\":%u,\"state\":\"%s\",\"subject\":",
-                  mid, nm, sk, MAIL(e)->to_slot, MAIL(e)->from_slot, polid_ok(b, lo, hi) && !is_me(b, lo, hi) ? "true" : "false",
+                  mid, nm, sk, MAIL(e)->to_slot, MAIL(e)->from_slot, mail_inbox_polid_ok(b, lo, hi) && !peers_is_me(b, lo, hi) ? "true" : "false",
                   MAIL(e)->time, MAIL(e)->seq, state);
     o += json_text(out + o, cap - o - 16, subj);
     lstrcpyA(out + o, ",\"text\":"); o += 8;
@@ -203,7 +203,7 @@ static int sent_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const 
     return o;
 }
 typedef struct { char *p; int n, cap; } gbuf;
-static int gb_add(gbuf *g, const char *s, int len)
+static int message_store_gb_add(gbuf *g, const char *s, int len)
 {
     if (g->n + len + 1 > g->cap) {
         int cap = g->cap ? g->cap * 2 : 0x10000;
@@ -222,26 +222,26 @@ static int gb_add(gbuf *g, const char *s, int len)
     return 1;
 }
 
-static void store_drop(void)
+static void message_store_drop(void)
 {
     char p[MAX_PATH + 64];
-    ipc_file(p, IPC_STORE);
+    base_ipc_file(p, IPC_STORE);
     DeleteFileA(p);
-    ipc_file(p, IPC_CHATROOM);   /* the chat room's lines, other people's words like the messages */
+    base_ipc_file(p, IPC_CHATROOM);   /* the chat room's lines, other people's words like the messages */
     DeleteFileA(p);
-    ipc_file(p, IPC_GROUPCHAT);
+    base_ipc_file(p, IPC_GROUPCHAT);
     DeleteFileA(p);
     /* and an enter, a create, a master's change or a group chat request that never got taken */
     for (int i = 0; i < 12; i++) {
         static const char *const ext[] = { REQ_CHATJOIN, REQ_CHATCREATE, REQ_CHATMASTER, REQ_GROUPCHATJOIN, REQ_GROUPCHATSEND, REQ_GROUPCHATLEAVE };
-        ipc_file(p, ext[i / 2]);
+        base_ipc_file(p, ext[i / 2]);
         lstrcatA(p, i % 2 ? IPC_TAKING : "");
         DeleteFileA(p);
     }
 }
 /* FFXI deletes what it fetches from the server, so the store's the only copy of what was handled in game. Read
    once, nothing on the wire */
-static void store_import(BYTE *b)
+static void message_store_import(BYTE *b)
 {
     static mailrec scratch;
     static char body[STORE_BODY_MAX];
@@ -252,16 +252,16 @@ static void store_import(BYTE *b)
     int homes[2], nh = 0, n = 0, cap = 0, k, i, j, h, s, got, nin = 0, nout = 0, left = 0;
     DWORD wn;
     HANDLE f;
-    store_drop();
+    message_store_drop();
     if (!me || g_home < 0) return;
     homes[nh++] = g_home;
-    if (g_home != LEGACY_HOME && legacy_home_there()) homes[nh++] = LEGACY_HOME;
+    if (g_home != LEGACY_HOME && message_store_legacy_home_there()) homes[nh++] = LEGACY_HOME;
     for (h = 0; h < nh; h++)
         for (s = 0; s < 4; s++) {   /* s\a before s\b, so a sent copy beats the outbox's */
-            k = store_list(b, homes[h], s, me, 1, &v);
+            k = message_store_list(b, homes[h], s, me, 1, &v);
             for (i = 0; i < k; i++) {
                 for (j = 0; j < n; j++)
-                    if ((all[j].sub >= 2) == (s >= 2) && mail_same(all[j].hdr, v[i].hdr)) break;
+                    if ((all[j].sub >= 2) == (s >= 2) && mail_inbox_same(all[j].hdr, v[i].hdr)) break;
                 if (j < n) {
                     /* the same message twice: read if either copy is, sent if either went, the other's the spare */
                     if (s < 2 && (s == 0 || (MAIL(v[i].hdr)->seen & 0x100)))
@@ -287,24 +287,24 @@ static void store_import(BYTE *b)
             }
             if (v) HeapFree(GetProcessHeap(), 0, v);
         }
-    if (n > 1) qsort(all, n, sizeof *all, store_newer);
+    if (n > 1) qsort(all, n, sizeof *all, message_store_newer);
     for (i = 0; i < n; i++) {
         int sent = all[i].sub >= 2, need, len;
         char *json;
-        if ((got = store_body(&all[i], body, sizeof body)) <= 0) continue;
+        if ((got = message_store_body(&all[i], body, sizeof body)) <= 0) continue;
         memset(&scratch, 0, sizeof scratch);
         memcpy(scratch.hdr, all[i].hdr, MAIL_KEY_SIZE);
-        mail_parse(&scratch, body, got);
+        mail_inbox_parse(&scratch, body, got);
         need = 512 + 2 * (lstrlenA(scratch.subj) + lstrlenA(scratch.text));
         if (!(json = (char *)HeapAlloc(GetProcessHeap(), 0, need))) continue;
-        if (sent) len = sent_json(b, json, need, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent", scratch.subj,
-                                  scratch.text);
-        else len = msg_json(b, json, need, all[i].hdr, 0, "local", (MAIL(all[i].hdr)->seen >> 8) & 1,
+        if (sent) len = message_store_sent_json(b, json, need, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent",
+                                  scratch.subj, scratch.text);
+        else len = message_store_msg_json(b, json, need, all[i].hdr, 0, "local", (MAIL(all[i].hdr)->seen >> 8) & 1,
                             scratch.subj, scratch.text, scratch.has_att ? scratch.att : NULL);
         /* newest first, so a store too big for the file loses its oldest lines */
         if (in.n + out.n + len + 2 > STORE_JSON_MAX ||
-            !gb_add(sent ? &out : &in, (sent ? nout : nin) ? "," : "", (sent ? nout : nin) ? 1 : 0) ||
-            !gb_add(sent ? &out : &in, json, len)) {
+            !message_store_gb_add(sent ? &out : &in, (sent ? nout : nin) ? "," : "", (sent ? nout : nin) ? 1 : 0) ||
+            !message_store_gb_add(sent ? &out : &in, json, len)) {
             left = n - i;
             HeapFree(GetProcessHeap(), 0, json);
             break;
@@ -316,21 +316,21 @@ static void store_import(BYTE *b)
     SecureZeroMemory(body, sizeof body);
     SecureZeroMemory(&scratch, sizeof scratch);
     if (nin || nout) {
-        ipc_file(path, IPC_STORE);
+        base_ipc_file(path, IPC_STORE);
         lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
         f = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (f != INVALID_HANDLE_VALUE) {
-            wr(f, "{\"messages\":[");
+            json_write(f, "{\"messages\":[");
             if (in.n) WriteFile(f, in.p, (DWORD)in.n, &wn, NULL);
-            wr(f, "],\"gameSent\":[");
+            json_write(f, "],\"gameSent\":[");
             if (out.n) WriteFile(f, out.p, (DWORD)out.n, &wn, NULL);
-            wr(f, "]}");
+            json_write(f, "]}");
             CloseHandle(f);
             MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING);
         }
     }
     if (in.p) { SecureZeroMemory(in.p, in.cap); HeapFree(GetProcessHeap(), 0, in.p); }
     if (out.p) { SecureZeroMemory(out.p, out.cap); HeapFree(GetProcessHeap(), 0, out.p); }
-    lg("store: %d received and %d sent line(s) from the message store (home%02d%s)%s\r\n", nin, nout, g_home,
+    base_log("store: %d received and %d sent line(s) from the message store (home%02d%s)%s\r\n", nin, nout, g_home,
        nh > 1 ? " and home84" : "", left ? ", the oldest left out (too big)" : "");
 }

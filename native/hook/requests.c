@@ -1,38 +1,38 @@
 static volatile int g_snap_dirty;
 
-static char *failed(int r)
+static char *requests_failed(int r)
 {
     static char why[24];
     wsprintfA(why, "failed:%d", r);
     return why;
 }
-static void refuse(char *state, int cap, const char *fmt, const char *why)
+static void requests_refuse(char *state, int cap, const char *fmt, const char *why)
 {
     lstrcpynA(state, why, cap);
-    lg(fmt, why);
+    base_log(fmt, why);
     g_snap_dirty = 1;
 }
 
-static void request_paths(const char *ext, char *path, char *taken)
+static void requests_paths(const char *ext, char *path, char *taken)
 {
-    ipc_file(path, ext);
+    base_ipc_file(path, ext);
     lstrcpyA(taken, path);
     lstrcatA(taken, IPC_TAKING);
 }
-static BOOL request_waiting(const char *ext)
+static BOOL requests_waiting(const char *ext)
 {
     char path[MAX_PATH + 64], taken[MAX_PATH + 80];
-    request_paths(ext, path, taken);
+    requests_paths(ext, path, taken);
     return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES || GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES;
 }
-static BOOL request_new(const char *ext)
+static BOOL requests_new(const char *ext)
 {
     char path[MAX_PATH + 64], taken[MAX_PATH + 80];
-    request_paths(ext, path, taken);
+    requests_paths(ext, path, taken);
     return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
 }
 /* delete-on-close, so it's only acted on once the delete's certain. -1 = not now, it stays .taking, never runs twice */
-static int read_taken(const char *taken, char *buf, int cap, char **grown, DWORD most)
+static int requests_read_taken(const char *taken, char *buf, int cap, char **grown, DWORD most)
 {
     FILE_DISPOSITION_INFO del = { TRUE };
     LARGE_INTEGER size;
@@ -58,28 +58,28 @@ static int read_taken(const char *taken, char *buf, int cap, char **grown, DWORD
     buf[got] = 0;
     return (int)got;
 }
-static int take_request_ex(const char *ext, char *buf, int cap, char **grown, DWORD most)
+static int requests_take_ex(const char *ext, char *buf, int cap, char **grown, DWORD most)
 {
     char path[MAX_PATH + 64], taken[MAX_PATH + 80];
     int n;
     if (grown) *grown = NULL;
-    request_paths(ext, path, taken);
+    requests_paths(ext, path, taken);
     /* a .taking left by a failed read goes first, so requests keep their order (Away, then back) */
     if (GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES) {
-        n = read_taken(taken, buf, cap, grown, most);
+        n = requests_read_taken(taken, buf, cap, grown, most);
     } else {
         if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) return -1;
         /* rename first, so anything written after is next turn's file, never one deleted unread. One a scanner holds
            waits (i am vry gud with computer and this was easy to find, honest! :X) */
         if (!MoveFileExA(path, taken, MOVEFILE_REPLACE_EXISTING)) return -1;
-        n = read_taken(taken, buf, cap, grown, most);
+        n = requests_read_taken(taken, buf, cap, grown, most);
     }
     if (n > 0) return n;
     if (grown && *grown) { HeapFree(GetProcessHeap(), 0, *grown); *grown = NULL; }
     return -1;
 }
-static int take_request(const char *ext, char *buf, int cap) { return take_request_ex(ext, buf, cap, NULL, 0); }
-static char *req_line(char **p)
+static int requests_take(const char *ext, char *buf, int cap) { return requests_take_ex(ext, buf, cap, NULL, 0); }
+static char *requests_line(char **p)
 {
     char *s = *p, *e = s;
     while (*e && *e != '\n') e++;
@@ -87,7 +87,7 @@ static char *req_line(char **p)
     if (e > s && e[-1] == '\r') e[-1] = 0;
     return s;
 }
-static int parse_num(const char *x, int maxDigits, int *out)
+static int requests_parse_num(const char *x, int maxDigits, int *out)
 {
     int v = 0, d = 0;
     while (*x >= '0' && *x <= '9' && d < maxDigits) { v = v * 10 + (*x++ - '0'); d++; }
@@ -95,7 +95,7 @@ static int parse_num(const char *x, int maxDigits, int *out)
     return d > 0 && !*x;
 }
 
-static int parse_u32(const char *x, DWORD *out)
+static int requests_parse_u32(const char *x, DWORD *out)
 {
     unsigned __int64 v = 0;
     int d = 0;

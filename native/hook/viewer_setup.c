@@ -12,23 +12,23 @@ static const struct pol_region {
 static const struct pol_region *g_region;
 
 /* pol.exe's index (0 JP, 1 US, 2 EU), or the loaded polcore when it isn't one */
-static const struct pol_region *region_of(int idx)
+static const struct pol_region *viewer_region_of(int idx)
 {
     if (idx >= 0 && idx <= 2) return &g_regions[idx];
     return !GetModuleHandleA("polcore.dll") && GetModuleHandleA("polcoreEU.dll") ? &g_regions[2] : &g_regions[1];
 }
 
 /* pol.exe's region index (0x0045cd90), set from env.dat before it loads a polcore */
-static const struct pol_region *region(void)
+static const struct pol_region *viewer_region(void)
 {
-    if (!g_region) g_region = region_of(*(int *)((BYTE *)GetModuleHandleW(NULL) + 0x5cd90));
+    if (!g_region) g_region = viewer_region_of(*(int *)((BYTE *)GetModuleHandleW(NULL) + 0x5cd90));
     return g_region;
 }
-static HMODULE polcore_module(void) { return GetModuleHandleA(region()->polcore); }
-static const char *pol_hive(void) { return region()->hive; }
+static HMODULE viewer_polcore_module(void) { return GetModuleHandleA(viewer_region()->polcore); }
+static const char *viewer_pol_hive(void) { return viewer_region()->hive; }
 
 /* app.dll 0x102afa80's EU answer when Settings has no Language: German 4, French 3, anything else 2 */
-static DWORD eu_lang(LANGID id)
+static DWORD viewer_eu_lang(LANGID id)
 {
     switch (id) {
     case 0x407: case 0x807: case 0xc07: case 0x1007: case 0x1407: return 4;
@@ -39,12 +39,12 @@ static DWORD eu_lang(LANGID id)
 
 static DWORD viewer_lang(void)
 {
-    const struct pol_region *r = region();
+    const struct pol_region *r = viewer_region();
     HKEY hk;
     char sub[96];
     DWORD fallback, lang, sz = sizeof lang;
     if (r->lang >= 0) return (DWORD)r->lang;
-    fallback = r->lang == -2 ? eu_lang(GetUserDefaultLangID()) : 1;
+    fallback = r->lang == -2 ? viewer_eu_lang(GetUserDefaultLangID()) : 1;
     lang = fallback;
     wsprintfA(sub, "SOFTWARE\\%s\\%s\\PlayOnlineViewer\\Settings", r->hive, r->maker);
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, sub, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hk) == ERROR_SUCCESS) {
@@ -56,18 +56,18 @@ static DWORD viewer_lang(void)
 }
 
 /* svc 0xf14 and 0x690 in app.dll's order, with JP's 0x17dc in between and its 0x17e0 after */
-static void region_init(BYTE *b, DWORD lang)
+static void viewer_region_init(BYTE *b, DWORD lang)
 {
-    const struct pol_region *r = region();
+    const struct pol_region *r = viewer_region();
     pc_set_region(b, r->selector);
     if (r->jp_table) pc_set_jp_table(b, 1);
     pc_set_language(b, (int)lang);
     if (r->jp_table) pc_set_jp_language(b, (int)lang);
-    lg("viewer_init: region %s, selector %d, conversion table %d\r\n", r->name, r->selector, r->jp_table);
+    base_log("viewer_init: region %s, selector %d, conversion table %d\r\n", r->name, r->selector, r->jp_table);
 }
 
 /* StringTable.bin's bits, LSB first from +0x10. -1 when it runs out */
-static int pex_bits(const BYTE *d, DWORD bits, DWORD *bit, int k)
+static int viewer_pex_bits(const BYTE *d, DWORD bits, DWORD *bit, int k)
 {
     int v = 0, i;
     for (i = 0; i < k; i++, (*bit)++) {
@@ -79,7 +79,7 @@ static int pex_bits(const BYTE *d, DWORD bits, DWORD *bit, int k)
 
 /* <folder>\<sub>\StringTable.bin unpacked: "PEX\0", the plain size at +4, then LZ77 bits over a zeroed 0x1000 window
    (0 literal, 1 a 12-bit offset and a 4-bit length + 2) */
-static BYTE *string_table(const char *folder, const char *sub, DWORD *len)
+static BYTE *viewer_string_table(const char *folder, const char *sub, DWORD *len)
 {
     char path[MAX_PATH + 48];
     HANDLE f;
@@ -97,11 +97,12 @@ static BYTE *string_table(const char *folder, const char *sub, DWORD *len)
         bits = (size - 0x10) * 8;
         ok = 1;
         while (ok && pos < 0x1000 + n) {
-            if ((t = pex_bits(d, bits, &bit, 1)) < 0) ok = 0;
+            if ((t = viewer_pex_bits(d, bits, &bit, 1)) < 0) ok = 0;
             else if (t == 0) {
-                if ((t = pex_bits(d, bits, &bit, 8)) < 0) ok = 0;
+                if ((t = viewer_pex_bits(d, bits, &bit, 8)) < 0) ok = 0;
                 else buf[pos++] = (BYTE)t;
-            } else if ((off = pex_bits(d, bits, &bit, 12)) < 0 || (cnt = pex_bits(d, bits, &bit, 4)) < 0) ok = 0;
+            } else if ((off = viewer_pex_bits(d, bits, &bit, 12)) < 0 ||
+                (cnt = viewer_pex_bits(d, bits, &bit, 4)) < 0) ok = 0;
             else
                 for (cnt += 2; cnt > 0 && pos < 0x1000 + n; cnt--, pos++) buf[pos] = buf[pos - 0x1000 + off];
         }
@@ -118,7 +119,7 @@ static BYTE *string_table(const char *folder, const char *sub, DWORD *len)
 }
 
 /* records from +0x10: u16 size, u16 id, NUL-ended UTF-16. Copied out, at most cap - 1 characters */
-static int table_text(const BYTE *raw, DWORD n, int id, WCHAR *out, int cap, int drop_cr)
+static int viewer_table_text(const BYTE *raw, DWORD n, int id, WCHAR *out, int cap, int drop_cr)
 {
     DWORD o = 0x10, i;
     int k = 0;
@@ -141,7 +142,7 @@ static int table_text(const BYTE *raw, DWORD n, int id, WCHAR *out, int cap, int
 
 /* message #i (0-9 titles, 10-19 texts) as app.dll (0x10057900) makes it: the table's string, CRs dropped from the
    texts, through svc 0xa40. english falls back to the US table's bytes. Its length, or -1 */
-static int message_bytes(BYTE *b, const BYTE *raw, DWORD n, int i, int english, char out[0x100])
+static int viewer_message_bytes(BYTE *b, const BYTE *raw, DWORD n, int i, int english, char out[0x100])
 {
     static const WORD ids[20] = { 0x46c9, 0x46d0, 0x46d1, 0x46d2, 0x46d3, 0x46d4, 0x46d6, 0x46d8, 0x46dc, 0x46da,
                                   0x46e6, 0x46ea, 0x46ec, 0x4ab8, 0x3bad, 0x46d7, 0x46d9, 0x46dd, 0x46db, 0x46d5 };
@@ -157,7 +158,7 @@ static int message_bytes(BYTE *b, const BYTE *raw, DWORD n, int i, int english, 
         "Would you like to join the group \"%s\"?" };
     WCHAR w[0x200];
     int cap = i < 10 ? 0x80 : 0x100;
-    if (raw && table_text(raw, n, ids[i], w, 0x200, i >= 10) && pc_wide_to_sjis(b, NULL, w, SJIS_GETA) < cap)
+    if (raw && viewer_table_text(raw, n, ids[i], w, 0x200, i >= 10) && pc_wide_to_sjis(b, NULL, w, SJIS_GETA) < cap)
         return pc_wide_to_sjis(b, out, w, SJIS_GETA);
     if (!english) return -1;
     lstrcpyA(out, en[i]);
@@ -166,27 +167,27 @@ static int message_bytes(BYTE *b, const BYTE *raw, DWORD n, int i, int english, 
 
 /* SET_MESSAGE_TITLE/TEXT from the region's own StringTable like its viewer (EU's English one), so a friend gets the
    same bytes. Text #4 is the name dialog FFXI-3322 needs */
-static void set_messages(BYTE *b, const char *folder)
+static void viewer_set_messages(BYTE *b, const char *folder)
 {
-    const struct pol_region *r = region();
+    const struct pol_region *r = viewer_region();
     DWORD n = 0;
-    BYTE *raw = string_table(folder, r->strings, &n);
+    BYTE *raw = viewer_string_table(folder, r->strings, &n);
     char s[0x100];
     int i, set = 0;
     for (i = 0; i < 20; i++) {
         /* JP keeps polcore's own Japanese for anything its table hasn't got */
-        if (message_bytes(b, raw, n, i, !r->jp_table, s) < 0) continue;
+        if (viewer_message_bytes(b, raw, n, i, !r->jp_table, s) < 0) continue;
         if (i < 10) pc_set_message_title(b, i, s);
         else pc_set_message_text(b, i - 10, s);
         set++;
     }
-    lg("viewer_init: %d message texts set, %s, FILE_INIT done\r\n", set,
+    base_log("viewer_init: %d message texts set, %s, FILE_INIT done\r\n", set,
        raw ? "from StringTable.bin" : r->jp_table ? "StringTable.bin unreadable, polcore's own kept" : "StringTable.bin unreadable, English");
     if (raw) HeapFree(GetProcessHeap(), 0, raw);
 }
 
 /* drops trailing backslashes (Locate existing install writes one) but never a drive's own */
-static void trim_slash(char *s)
+static void viewer_trim_slash(char *s)
 {
     int n = lstrlenA(s);
     while (n > 3 && s[n - 1] == '\\') s[--n] = 0;
@@ -198,10 +199,10 @@ static void viewer_folder(char folder[MAX_PATH])
     HKEY hk;
     char sub[48], got[MAX_PATH];
     DWORD sz = sizeof got;
-    wsprintfA(sub, "SOFTWARE\\%s\\InstallFolder", pol_hive());
+    wsprintfA(sub, "SOFTWARE\\%s\\InstallFolder", viewer_pol_hive());
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, sub, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hk) != ERROR_SUCCESS) return;
     if (RegGetValueA(hk, NULL, "1000", RRF_RT_REG_SZ, NULL, got, &sz) == ERROR_SUCCESS) {
-        trim_slash(got);
+        viewer_trim_slash(got);
         if (got[0]) lstrcpyA(folder, got);
     }
     RegCloseKey(hk);
@@ -211,18 +212,18 @@ static void viewer_folder(char folder[MAX_PATH])
 static char g_viewer[MAX_PATH];
 static int g_home = -1, g_home_made;
 
-static int plain_path(const char *path);
+static int message_store_plain_path(const char *path);
 /* SET_USER_SLOT, then pub\homeNN\msg\{s/a,s/b,r/a,r/b}, folders polcore can't make itself. Never a slot that goes
    through a link, FFXI writes there as admin */
-static int home_set(BYTE *b, int slot)
+static int viewer_home_set(BYTE *b, int slot)
 {
     static const char *const sub[4] = { "s\\a", "s\\b", "r\\a", "r\\b" };
     char full[MAX_PATH + 48], *p;
     int i;
     for (i = 0; i < 4; i++) {
         wsprintfA(full, "%s\\pub\\home%02d\\msg\\%s", g_viewer, slot, sub[i]);
-        if (!plain_path(full)) {
-            lg("home: pub\\home%02d goes through a link - not used\r\n", slot);
+        if (!message_store_plain_path(full)) {
+            base_log("home: pub\\home%02d goes through a link - not used\r\n", slot);
             return 0;
         }
     }
@@ -245,17 +246,17 @@ static void viewer_init(BYTE *b)
     DWORD lang = viewer_lang();
     char key[32];
     char folder[MAX_PATH] = "C:\\Program Files (x86)\\PlayOnline\\SquareEnix\\PlayOnlineViewer";
-    wsprintfA(key, "SOFTWARE\\%s", pol_hive());
+    wsprintfA(key, "SOFTWARE\\%s", viewer_pol_hive());
     viewer_folder(folder);
-    lg(LOG_VIEWER_LANG "%u key='%s' folder='%s'\r\n", lang, key, folder);
-    region_init(b, lang);
+    base_log(LOG_VIEWER_LANG "%u key='%s' folder='%s'\r\n", lang, key, folder);
+    viewer_region_init(b, lang);
     pc_set_registry_key(b, key);
     pc_set_install_folder(b, folder);
     pc_file_init(b);
     lstrcpynA(g_viewer, folder, sizeof g_viewer);
-    /* home84 till home_pick moves the account to its own after the login, then the folders get made */
+    /* home84 till login_home_pick moves the account to its own after the login, then the folders get made */
     pc_set_user_slot(b, LEGACY_HOME);
     g_home = LEGACY_HOME;
-    lg("viewer_init: user slot %d for now\r\n", LEGACY_HOME);
-    set_messages(b, folder);
+    base_log("viewer_init: user slot %d for now\r\n", LEGACY_HOME);
+    viewer_set_messages(b, folder);
 }
