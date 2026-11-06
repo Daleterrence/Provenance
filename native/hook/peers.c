@@ -30,6 +30,7 @@ static int handle_used(const BYTE *rec)
     return n;
 }
 
+/* one rule for every handle name: 1-15 printable ASCII bytes (0x7f is out) and not all blanks */
 static int ascii_name_ok(const char *s)
 {
     int n = 0, visible = 0;

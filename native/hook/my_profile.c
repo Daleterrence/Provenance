@@ -329,18 +329,6 @@ typedef int (__cdecl *svca40_t)(char *dst, const WCHAR *src, int repl);   /* a N
 #define HR_E_DIC     (-0x7f32)
 #define HR_E_REVERT  (-0x7f33)
 
-/* CreateHandle's rule (polcore.dll 0x100259b0): no byte >= 0x80 and not all blanks. Control characters are out
-   on top */
-static int hr_name_rule(const char *s)
-{
-    int any = 0;
-    for (; *s; s++) {
-        if ((BYTE)*s >= 0x80 || (BYTE)*s < 0x20) return 0;
-        if ((BYTE)*s > 0x20) any = 1;
-    }
-    return any;
-}
-
 typedef int   (__cdecl *svc16c8_t)(int id, WCHAR *out, int cap, int flags);
 typedef void *(__cdecl *svc1154_t)(void *dic, int size);
 typedef int   (__cdecl *svc1674_t)(void *dic, const WCHAR *name, int len);
@@ -399,7 +387,7 @@ static int handle_rename(BYTE *b, int slot, const WCHAR *newName)
         if (len < 1 || len > 15) return HR_E_NAME;
         memset(sj, 0, sizeof sj);
         ((svca40_t)SVC(0xa40))(sj, newName, 0x81ac);
-        if (!hr_name_rule(sj)) return HR_E_NAME;
+        if (!ascii_name_ok(sj)) return HR_E_NAME;
         r = hr_ngword(b, newName);
         if (r < 0) return r;
         if (r) return HR_E_NGWORD;
