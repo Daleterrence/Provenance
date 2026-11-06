@@ -45,7 +45,7 @@ public static class MirrorUpdater
     // the change from the installed version's index when the mirror has it, otherwise whatever doesn't match on disk.
     // Every path in next is checked before anything's read or asked for
     private static async Task<IReadOnlyList<MirrorEntry>> WorkAsync(MirrorClient client, string region, string product, string folder,
-        MirrorIndex next, string local, IReadOnlySet<string>? keep, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
+        MirrorIndex next, string local, IReadOnlySet<string>? keep, IProgress<ByteProgress>? scanned, CancellationToken ct)
     {
         if (keep is { Count: > 0 }) next = next with { Files = next.Files.Where(e => !keep.Contains(e.Path)).ToList() };
         if (MirrorDownloads.Unusable(folder, next) is { } why) throw new InvalidDataException(why);
@@ -54,7 +54,7 @@ public static class MirrorUpdater
         if (old is not null) work = MirrorDownloads.Diff(old, next);
         else
         {
-            scanned?.Report((0, next.Files.Sum(f => f.Size)));
+            scanned?.Report(new ByteProgress(0, next.Files.Sum(f => f.Size)));
             work = await MirrorDownloads.ScanAsync(folder, next, scanned, ct, keepLargeAddressAware: true);
         }
         return work;
@@ -63,12 +63,12 @@ public static class MirrorUpdater
     // the bytes UpdateAsync would download to reach next, which has to be POL's current version (the mirror's can lag,
     // then POL updates it). Null when next is unusable
     public static async Task<long?> DownloadSizeAsync(MirrorClient client, string region, string product, string folder, string local,
-        IReadOnlySet<string>? keep, MirrorIndex next, IProgress<(long Done, long Total)>? scanned, CancellationToken ct)
+        IReadOnlySet<string>? keep, MirrorIndex next, IProgress<ByteProgress>? scanned, CancellationToken ct)
     {
         try { return MirrorDownloads.DownloadSize(await WorkAsync(client, region, product, folder, next, local, keep, scanned, ct)); }
         catch (InvalidDataException) { return null; }
     }
 
-    private static IProgress<(long Done, long Total)>? Bytes(PatchPhase phase, string text, IProgress<PatchProgress>? progress) =>
-        progress is null ? null : new InlineProgress<(long Done, long Total)>(p => progress.Report(new PatchProgress(phase, text, p.Total > 0 ? (double)p.Done / p.Total : 1)));
+    private static IProgress<ByteProgress>? Bytes(PatchPhase phase, string text, IProgress<PatchProgress>? progress) =>
+        progress is null ? null : new InlineProgress<ByteProgress>(p => progress.Report(new PatchProgress(phase, text, p.Total > 0 ? (double)p.Done / p.Total : 1)));
 }

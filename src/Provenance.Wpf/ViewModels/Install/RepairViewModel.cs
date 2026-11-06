@@ -9,6 +9,7 @@ using Serilog;
 using Provenance.Common.Mirror;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Progress;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Main;
 using static System.FormattableString;
@@ -127,7 +128,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
                 Meter.Clear();
             });
             long checkTotal = 0;
-            var bytes = new Progress<(long Done, long Total)>(p =>
+            var bytes = new Progress<ByteProgress>(p =>
             {
                 long done = p.Done, total = p.Total;
                 if (!downloading) checkTotal = total;
@@ -143,7 +144,7 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
             // Normal, so the progress reports already queued land first and can't paint over what comes next
             var dispatcher = System.Windows.Application.Current.Dispatcher;
             void OnUi(Action a) => dispatcher.Invoke(a, System.Windows.Threading.DispatcherPriority.Normal);
-            var outcome = await Task.Run(() => PolUpdates.Locked(PolUpdates.Job.Repair, ct, waiting, () =>
+            var outcome = await Task.Run(() => GameFilesLock.Locked(GameFilesLock.Job.Repair, ct, waiting, () =>
             {
                 OnUi(() => Status = CheckingText);
                 // again under the lock, another copy may have started the game while this one waited

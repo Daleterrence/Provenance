@@ -234,8 +234,8 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
         }
     }
 
-    private static IProgress<(long Done, long Total)>? Bytes(IProgress<InstallProgress>? progress, string stage, string text, long total,
+    private static IProgress<ByteProgress>? Bytes(IProgress<InstallProgress>? progress, string stage, string text, long total,
                                                              bool download = false) =>
-        progress is null ? null : new InlineProgress<(long Done, long Total)>(p => progress.Report(new InstallProgress(stage, text,
+        progress is null ? null : new InlineProgress<ByteProgress>(p => progress.Report(new InstallProgress(stage, text,
             total > 0 ? (double)p.Done / total : 1, p.Done, total, download)));
 }

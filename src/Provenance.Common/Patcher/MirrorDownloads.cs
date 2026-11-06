@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Provenance.Common.Game;
 using Provenance.Common.Mirror;
+using Provenance.Common.Progress;
 using Provenance.Common.Security;
 
 namespace Provenance.Common.Patcher;
@@ -45,7 +46,7 @@ public static class MirrorDownloads
     // only for an index that's passed Unusable, it opens every path in it. Progress always ends on Done == Total, and
     // keepLargeAddressAware is for the app's game folders only
     public static async Task<IReadOnlyList<MirrorEntry>> ScanAsync(string folder, MirrorIndex index,
-        IProgress<(long Done, long Total)>? progress, CancellationToken ct, bool keepLargeAddressAware = false)
+        IProgress<ByteProgress>? progress, CancellationToken ct, bool keepLargeAddressAware = false)
     {
         long total = index.Files.Sum(f => f.Size), done = 0;
         var damaged = new bool[index.Files.Count];
@@ -54,7 +55,7 @@ public static class MirrorDownloads
         {
             var entry = index.Files[i];
             long counted = 0, pending = 0;
-            void Flush() { if (pending > 0) { var n = pending; pending = 0; progress?.Report((Interlocked.Add(ref done, n), total)); } }
+            void Flush() { if (pending > 0) { var n = pending; pending = 0; progress?.Report(new ByteProgress(Interlocked.Add(ref done, n), total)); } }
             damaged[i] = !await MatchesAsync(folder, entry, keepLargeAddressAware, n => { counted += n; pending += n; if (pending >= ReportStep) Flush(); }, token);
             if (counted < entry.Size) pending += entry.Size - counted;
             Flush();
@@ -90,7 +91,7 @@ public static class MirrorDownloads
 
     // a bad entry fails only itself, a network error or idle timeout its whole range
     public static async Task<IReadOnlyList<MirrorEntry>> DownloadAllAsync(MirrorClient client, string region, string folder,
-        IReadOnlyList<MirrorEntry> work, int parallel, IProgress<(long Done, long Total)>? progress, CancellationToken ct,
+        IReadOnlyList<MirrorEntry> work, int parallel, IProgress<ByteProgress>? progress, CancellationToken ct,
         Action<MirrorEntry, Exception>? onFailure = null, TimeSpan? idleTimeout = null, Action<MirrorEntry, int, Exception>? onRetry = null)
     {
         var paths = work.Select(e => SafePath(folder, e.Path)).ToArray();
@@ -107,7 +108,7 @@ public static class MirrorDownloads
         long total = at.Values.Sum(l => l.Entry.CompressedSize), done = 0;
         var opts = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, parallel), CancellationToken = ct };
         using var stopReports = new CancellationTokenSource();
-        var reporter = progress is null ? Task.CompletedTask : ReportEveryAsync(progress, () => (Interlocked.Read(ref done), total), stopReports.Token);
+        var reporter = progress is null ? Task.CompletedTask : ReportEveryAsync(progress, () => new ByteProgress(Interlocked.Read(ref done), total), stopReports.Token);
         try
         {
             var pending = at.Values.ToList();
@@ -132,7 +133,7 @@ public static class MirrorDownloads
         }
         for (var i = 0; i < work.Count; i++)
             if (locOf[i].Last is { } why) onFailure?.Invoke(work[i], why);
-        progress?.Report((Interlocked.Read(ref done), total));
+        progress?.Report(new ByteProgress(Interlocked.Read(ref done), total));
         return work.Where((_, i) => locOf[i].Last is not null).ToList();
     }
 
@@ -198,7 +199,7 @@ public static class MirrorDownloads
         public Exception? Last { get; set; }
     }
 
-    private static async Task ReportEveryAsync(IProgress<(long Done, long Total)> progress, Func<(long, long)> read, CancellationToken stop)
+    private static async Task ReportEveryAsync(IProgress<ByteProgress> progress, Func<ByteProgress> read, CancellationToken stop)
     {
         using var timer = new PeriodicTimer(ReportInterval);
         try { while (await timer.WaitForNextTickAsync(stop)) progress.Report(read()); }

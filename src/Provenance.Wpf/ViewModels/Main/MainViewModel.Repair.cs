@@ -17,8 +17,8 @@ namespace Provenance.Wpf.ViewModels.Main;
 public partial class MainViewModel
 {
     private const string RepairHint = "Checks every game file and replaces any that are damaged. It'll ask you before it replaces anything.";
-    internal static string RepairLockedText(PolUpdates.Job? holder) =>
-        $"Another copy of Provenance is {PolUpdates.Doing(holder)}. Repair can start once it's finished.";
+    internal static string RepairLockedText(GameFilesLock.Job? holder) =>
+        $"Another copy of Provenance is {GameFilesLock.Doing(holder)}. Repair can start once it's finished.";
     internal const string RepairGameRunningText = "FINAL FANTASY XI is running. Close it to repair the game files.";
 
     internal static string RepairNotYetText(PolRegion region) =>
@@ -128,7 +128,7 @@ public partial class MainViewModel
     {
         try
         {
-            if (!PolUpdates.LockFree()) return RepairLockedText(PolUpdates.Holder());
+            if (!GameFilesLock.LockFree()) return RepairLockedText(GameFilesLock.Holder());
             if (PolUpdates.GameRunning()) return RepairGameRunningText;
         }
         catch (Exception e) { Log.Debug(e, "Could not check whether a repair could start"); }

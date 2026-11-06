@@ -61,7 +61,7 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     private bool _changing;
 
-    public async Task<RepairPlan?> PlanAsync(string viewerDir, string ffxiDir, IProgress<(long Done, long Total)>? progress, CancellationToken ct)
+    public async Task<RepairPlan?> PlanAsync(string viewerDir, string ffxiDir, IProgress<ByteProgress>? progress, CancellationToken ct)
     {
         MissingVersion = null;
         var found = new List<(string Slug, PatchProduct Product, MirrorIndex Index)>();
@@ -103,7 +103,7 @@ public sealed class GameRepair(MirrorClient client, string region)
     // installer data first, so a mirror that can't serve it changes no game file. The registry and DirectX get checked
     // every time, whatever the files said
     public async Task<RepairResult> ApplyAsync(RepairPlan plan, string viewerDir, string ffxiDir, string installRoot,
-                                               IProgress<(long Done, long Total)>? progress, CancellationToken ct, bool skipInstallData = false)
+                                               IProgress<ByteProgress>? progress, CancellationToken ct, bool skipInstallData = false)
     {
         _changing = false;
         var products = ProductsOf(viewerDir, ffxiDir);
@@ -111,10 +111,10 @@ public sealed class GameRepair(MirrorClient client, string region)
 
         // the installer data and the replacement files are one bar, the data's size is only known once it starts
         long downloadTotal = products.Sum(p => MirrorDownloads.DownloadSize(WorkOf(plan, p.Slug))), dataTotal = 0;
-        var dataProgress = progress is null ? null : new InlineProgress<(long Done, long Total)>(p =>
+        var dataProgress = progress is null ? null : new InlineProgress<ByteProgress>(p =>
         {
             dataTotal = p.Total;
-            progress.Report((p.Done, p.Total + downloadTotal));
+            progress.Report(new ByteProgress(p.Done, p.Total + downloadTotal));
         });
         var (packages, installDirectX) = skipInstallData ? ([], false) : await PrepareAsync(plan, products, installRoot, dataProgress, ct);
 
@@ -205,7 +205,7 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     // drops patch.ver first so a stopped repair never claims a version
     private async Task<List<string>> DownloadAsync(string slug, PatchProduct product, IReadOnlyList<MirrorEntry> work,
-                                                   IProgress<(long Done, long Total)>? progress, HashSet<string> replaced, CancellationToken ct)
+                                                   IProgress<ByteProgress>? progress, HashSet<string> replaced, CancellationToken ct)
     {
         if (work.Count == 0) return [];
         ChangingNow();
@@ -232,14 +232,14 @@ public sealed class GameRepair(MirrorClient client, string region)
     // the two package databases (a few MB), and the DirectX redist only when the runtime's missing. Writes only to the
     // staging folder
     private async Task<(List<Package> Packages, bool InstallDirectX)> PrepareAsync(RepairPlan plan, (string Slug, PatchProduct Product)[] products,
-        string installRoot, IProgress<(long Done, long Total)>? progress, CancellationToken ct)
+        string installRoot, IProgress<ByteProgress>? progress, CancellationToken ct)
     {
         if (StagingDir is null) throw new InvalidOperationException("GameRepair.StagingDir is not set.");
         bool installDirectX = plan.DirectXMissing;
         var install = new InstallFromMirror(client, region, "Repair", LogEventLevel.Information);
         Status?.Invoke("Downloading the installer data...");
         // the download only, the look over anything already in the staging folder is local and counts other bytes
-        var bytes = progress is null ? null : new InlineProgress<InstallProgress>(p => { if (p is { Download: true, Fraction: >= 0 }) progress.Report((p.DoneBytes, p.TotalBytes)); });
+        var bytes = progress is null ? null : new InlineProgress<InstallProgress>(p => { if (p is { Download: true, Fraction: >= 0 }) progress.Report(new ByteProgress(p.DoneBytes, p.TotalBytes)); });
         var data = await install.FetchInstallDataAsync(StagingDir,
                        installDirectX ? null : e => !e.Path.StartsWith("redist/", StringComparison.OrdinalIgnoreCase), bytes, ct)
                    ?? throw new MirrorUnusableException(install.SkipReason ?? "the mirror has no install data", []);
@@ -316,6 +316,6 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     private static IReadOnlyList<MirrorEntry> WorkOf(RepairPlan plan, string slug) => plan.Work.TryGetValue(slug, out var w) ? w : [];
 
-    private static IProgress<(long Done, long Total)>? Offset(IProgress<(long Done, long Total)>? progress, long before, long total) =>
-        progress is null ? null : new InlineProgress<(long Done, long Total)>(p => progress.Report((before + p.Done, total)));
+    private static IProgress<ByteProgress>? Offset(IProgress<ByteProgress>? progress, long before, long total) =>
+        progress is null ? null : new InlineProgress<ByteProgress>(p => progress.Report(new ByteProgress(before + p.Done, total)));
 }

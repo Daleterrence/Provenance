@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using Microsoft.Win32;
 using Provenance.Common.Game;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Progress;
 using Provenance.Common.Security;
 using SharpCompress.Archives.Rar;
 using SharpCompress.Readers;
@@ -177,8 +178,8 @@ public sealed class GameInstaller
 
     // Each part stays open read-only from its MD5 check to the end, so the bytes checked are the bytes unpacked
     public Task<string> ExtractAsync(string downloadDir, string unpackedDir, PolRegion region,
-                                     IProgress<(long done, long total)>? progress, CancellationToken ct,
-                                     IProgress<(long done, long total)>? checkProgress = null) => Task.Run(() =>
+                                     IProgress<ByteProgress>? progress, CancellationToken ct,
+                                     IProgress<ByteProgress>? checkProgress = null) => Task.Run(() =>
     {
         var parts = PartsFor(region);
         var streams = new List<FileStream>();
@@ -201,7 +202,7 @@ public sealed class GameInstaller
                     ct.ThrowIfCancellationRequested();
                     md5.AppendData(hashBuf, 0, n);
                     checkDone += n;
-                    checkProgress?.Report((checkDone, checkTotal));
+                    checkProgress?.Report(new ByteProgress(checkDone, checkTotal));
                 }
                 if (streams[i].Length != parts[i].Size ||
                     !Convert.ToHexString(md5.GetHashAndReset()).Equals(parts[i].Md5, StringComparison.OrdinalIgnoreCase))
@@ -222,7 +223,7 @@ public sealed class GameInstaller
         }
     }, ct);
 
-    private static string Unpack(List<FileStream> volumes, string unpackedDir, IProgress<(long done, long total)>? progress, CancellationToken ct)
+    private static string Unpack(List<FileStream> volumes, string unpackedDir, IProgress<ByteProgress>? progress, CancellationToken ct)
     {
         // emptied first so only what this run unpacked ever runs elevated
         if (Directory.Exists(unpackedDir)) Directory.Delete(unpackedDir, recursive: true);
@@ -246,7 +247,7 @@ public sealed class GameInstaller
                     ct.ThrowIfCancellationRequested();
                     dst.Write(buf, 0, n);
                     done += n;
-                    progress?.Report((done, total));
+                    progress?.Report(new ByteProgress(done, total));
                 }
             }
             if (new FileInfo(dest).Length != e.Size)
@@ -340,9 +341,9 @@ public sealed class GameInstaller
             return;
         }
         Say(progress, $"Preparing {name}...");
-        var report = new Progress<(long done, long total)>(p => progress?.Report(new InstallProgress("Installing",
-            $"Installing {name}: {p.done / 1073741824.0:0.00} of {p.total / 1073741824.0:0.00} GiB",
-            p.total > 0 ? (double)p.done / p.total : -1, p.done, p.total)));
+        var report = new Progress<ByteProgress>(p => progress?.Report(new InstallProgress("Installing",
+            $"Installing {name}: {p.Done / 1073741824.0:0.00} of {p.Total / 1073741824.0:0.00} GiB",
+            p.Total > 0 ? (double)p.Done / p.Total : -1, p.Done, p.Total)));
         var (props, uninstall) = DirectApplySetup(msi, installRoot, shortcutProperty, region);
         var result = await Task.Run(() =>
         {

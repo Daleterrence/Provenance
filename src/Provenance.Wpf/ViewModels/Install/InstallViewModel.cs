@@ -11,6 +11,7 @@ using Provenance.Common.Install;
 using Provenance.Common.Mirror;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Progress;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Settings;
 
@@ -256,7 +257,7 @@ public partial class InstallViewModel : ObservableObject
         else _meter.Clear();
     });
 
-    private Progress<(long Done, long Total)> LocalProgress(string? detail = null)
+    private Progress<ByteProgress> LocalProgress(string? detail = null)
     {
         var step = new object();
         return new(p =>
@@ -523,7 +524,7 @@ public partial class InstallViewModel : ObservableObject
             return null;
         Detail = "Checking how big the game's first update is...";
         var step = new object();
-        var scanned = new Progress<(long Done, long Total)>(p =>
+        var scanned = new Progress<ByteProgress>(p =>
         {
             StageIndeterminate = false;
             ShowFraction(step, p.Total > 0 ? (double)p.Done / p.Total : 1);
@@ -553,7 +554,7 @@ public partial class InstallViewModel : ObservableObject
             StageIndeterminate = true;
             Detail = p.Text;
         });
-        return await Task.Run(() => PolUpdates.Lock(PolUpdates.Job.Install, ct, waiting), ct);
+        return await Task.Run(() => GameFilesLock.Lock(GameFilesLock.Job.Install, ct, waiting), ct);
     }
 
     [RelayCommand]

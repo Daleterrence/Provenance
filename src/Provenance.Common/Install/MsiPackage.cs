@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using Provenance.Common.IO;
+using Provenance.Common.Progress;
 using Provenance.Common.Security;
 using Provenance.Common.Win32;
 
@@ -125,7 +126,7 @@ public sealed class MsiPackage : IDisposable
     // files first so a stopped run never leaves values pointing at missing files, InstallFolder goes last. keepExisting
     // (a repair) only rewrites what's missing or wrong, and the counts are what it wrote
     public Result Apply(string installDir, IReadOnlyDictionary<string, string> properties,
-                        IProgress<(long done, long total)>? progress, CancellationToken ct, int parallel = 4, Sandbox? sandbox = null,
+                        IProgress<ByteProgress>? progress, CancellationToken ct, int parallel = 4, Sandbox? sandbox = null,
                         UninstallSetup? uninstall = null, Action<string>? status = null, bool payloadInPlace = false,
                         bool keepExisting = false)
     {
@@ -158,7 +159,7 @@ public sealed class MsiPackage : IDisposable
                 done += n;
                 if (done < total && Environment.TickCount64 - lastReport < 200) return;
                 lastReport = Environment.TickCount64;
-                progress?.Report((done, total));
+                progress?.Report(new ByteProgress(done, total));
             }
         }
         var cabs = payloadInPlace ? [] : Query("SELECT `Cabinet` FROM `Media`").Select(r => r[0]).Where(c => c.Length > 0).ToList();
