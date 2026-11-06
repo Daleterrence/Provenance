@@ -370,11 +370,8 @@ static void prestart_wait(void)
             if (got == 0) { Sleep(16); continue; }
             DeleteFileA(gp);
             buf[got] = 0;
-            for (line = buf; line && *line; line = p) {
-                p = line;
-                while (*p && *p != '\n') p++;
-                if (*p) *p++ = 0;
-                if (p > line && p[-1] == '\r') p[-1] = 0;
+            for (p = buf; *p; ) {
+                line = req_line(&p);
                 if (!(eq = strchr(line, '='))) continue;
                 *eq = 0;
                 for (int k = 0; k < (int)(sizeof allowed / sizeof allowed[0]); k++)
