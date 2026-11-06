@@ -49,18 +49,25 @@ public static class PolUpdates
             return r;
         });
 
-    public static bool ViewerRunning() => Process.GetProcessesByName("pol").Any(p =>
-    {
-        using (p) return PolProcess.IsViewerPol(p);
-    });
+    // swapped in tests, a stand-in can't be at the installed viewer's path
+    internal static Func<ProcessStamp, bool> IsViewerPol { get; set; } = stamp => stamp.IsViewerPol();
 
-    public static bool GameRunning() => Process.GetProcessesByName("pol").Any(p =>
+    private static bool AnyPol(Func<Process, bool> match)
     {
-        using (p)
+        var pols = Process.GetProcessesByName("pol");
+        try { return pols.Any(match); }
+        finally { foreach (var p in pols) p.Dispose(); }
+    }
+
+    public static bool ViewerRunning() => AnyPol(p => ProcessStamp.Of(p.Id) is { } stamp && IsViewerPol(stamp));
+
+    public static bool GameRunning() => AnyPol(p =>
+    {
+        if (ProcessStamp.Of(p.Id) is not { } stamp || !IsViewerPol(stamp)) return false;
+        try { return p.Modules.Cast<ProcessModule>().Any(m => m.ModuleName.Equals("FFXiMain.dll", StringComparison.OrdinalIgnoreCase)); }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
         {
-            if (!PolProcess.IsViewerPol(p)) return false;
-            try { return p.Modules.Cast<ProcessModule>().Any(m => m.ModuleName.Equals("FFXiMain.dll", StringComparison.OrdinalIgnoreCase)); }
-            catch { return true; }   // can't tell, so treat it as the game
+            return true;   // can't tell, so treat it as the game
         }
     });
 }

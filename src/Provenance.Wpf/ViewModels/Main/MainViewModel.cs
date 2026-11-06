@@ -1339,7 +1339,7 @@ public partial class MainViewModel : ObservableObject
             }, text),
             Saying = text => ProgressText = text,
             PageWaiting = () => Handles.Busy ? Handles.Note : null,
-            Alive = SessionAliveForTest ?? PreLaunchLink.ProcessAlive,
+            Alive = SessionAliveForTest ?? ProcessStamp.PidRunning,
             Read = _ => Social.Last,
         }.RunAsync();
     }
@@ -1443,8 +1443,7 @@ public partial class MainViewModel : ObservableObject
         var until = DateTime.UtcNow.AddSeconds(90);
         while (DateTime.UtcNow < until)
         {
-            try { using var p = Process.GetProcessById(pid); if (p.HasExited) return false; }
-            catch (ArgumentException) { return false; }
+            if (!ProcessStamp.PidRunning(pid)) return false;
             if (GameWindow.Find(pid) is var h && h != IntPtr.Zero)
             {
                 bool front = GameWindow.BringToFront(h);

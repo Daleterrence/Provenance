@@ -71,7 +71,7 @@ public partial class App : Application
             return;
         }
         // a snapshot holds friends' messages, so it goes once its pol.exe has
-        int swept = HookFiles.Sweep(HookFiles.RequiredDir, ProcessExists, TimeSpan.FromDays(7), DateTime.UtcNow);
+        int swept = HookFiles.Sweep(HookFiles.RequiredDir, ProcessStamp.PidRunning, TimeSpan.FromDays(7), DateTime.UtcNow);
         if (swept > 0) Log.Information("Removed {Count} old hook file(s)", swept);
 
         LargeAddressAwareSwitch.OnUiThread = run =>
@@ -178,19 +178,6 @@ public partial class App : Application
         AggregateException { InnerExceptions: [CredentialKeyUnavailableException key] } => key,
         _ => null,
     };
-
-    // one that runs but can't be read counts as running, so its files stay
-    private static bool ProcessExists(int pid)
-    {
-        try
-        {
-            using var p = System.Diagnostics.Process.GetProcessById(pid);
-            try { return !p.HasExited; }
-            catch { return true; }
-        }
-        catch (ArgumentException) { return false; }
-        catch { return true; }
-    }
 
     // No await here: WPF kills the dispatcher when OnExit returns, so a held session would never get signed out. Every
     // wait is time-limited on the pool.

@@ -37,7 +37,7 @@ public static class AshitaLauncher
     internal static int? StartViaAshita(ISettingsService settings, ProcessStartInfo launchPsi,
                                         string polExe, string launchId, string? profile,
                                         IProgress<LaunchProgress>? progress, CancellationToken ct,
-                                        Action<int, DateTime>? hookStarted = null, Action? polStarted = null,
+                                        Action<ProcessStamp>? hookStarted = null, Action? polStarted = null,
                                         LaunchLimits? limits = null)
     {
         const string name = "Ashita";
@@ -72,14 +72,14 @@ public static class AshitaLauncher
         var pidFile = HookFiles.PidFile(launchId);
         try { File.Delete(pidFile); } catch { }
         Process? hookProc = null;
-        DateTime hookStart;
+        ProcessStamp hook;
         progress?.Report(new LaunchProgress("Starting", $"Starting {name}...", LaunchSteps.StartPol));
         Log.Information("Launching through {Platform} at {Dir}", name, dir);
         try
         {
             hookProc = Process.Start(psi) ?? throw new InvalidOperationException($"{name} did not start");
-            hookStart = hookProc.StartTime;
-            hookStarted?.Invoke(hookProc.Id, hookStart);
+            hook = ProcessStamp.Of(hookProc.Id) ?? throw new InvalidOperationException($"{name}'s start time couldn't be read");
+            hookStarted?.Invoke(hook);
         }
         catch (Exception ex)
         {
@@ -91,8 +91,7 @@ public static class AshitaLauncher
         // really is its child
         using var hookHandle = hookProc;
         int hookPid = hookProc.Id;
-        var hookStartUtc = ProcessTree.StartTime(hookPid) ?? hookStart.ToUniversalTime();
-        using var tree = new LaunchTree(hookPid, hookStartUtc);
+        using var tree = new LaunchTree(hookPid, hook.StartUtc);
 
         // Till a pol.exe turns up there's only the long limit, a cold start can keep Ashita-cli busy for a while. Then
         // the hook gets limit.Report to say it's in
@@ -201,20 +200,15 @@ public static class AshitaLauncher
             again = false;
             tree.Update();
             // the tree holds every member open, so each pid's still the process it checked
-            foreach (var (pid, _) in tree.Alive())
+            foreach (var (pid, start) in tree.Alive())
             {
-                try
-                {
-                    using var p = Process.GetProcessById(pid);
-                    bool isViewer = PolProcess.IsViewerPol(p);
-                    var exe = p.ProcessName;
-                    p.Kill();
-                    p.WaitForExit(3000);
-                    viewer |= isViewer;
-                    again = true;
-                    Log.Information("Ended {Exe} (pid {Pid}): the login through the third-party hook was stopped", exe, pid);
-                }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+                var stamp = new ProcessStamp(pid, start.Ticks);
+                bool isViewer = stamp.IsViewerPol();
+                var exe = Path.GetFileNameWithoutExtension(ProcessTree.ImagePath(pid)) ?? "a process";
+                if (stamp.EndIfStill(afterMs: 3000) != ProcessStamp.Ending.Ended) continue;
+                viewer |= isViewer;
+                again = true;
+                Log.Information("Ended {Exe} (pid {Pid}): the login through the third-party hook was stopped", exe, pid);
             }
         }
         return viewer;

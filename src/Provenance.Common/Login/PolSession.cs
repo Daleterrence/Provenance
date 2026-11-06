@@ -1,6 +1,8 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Provenance.Common.Credentials;
 using Provenance.Common.Game;
@@ -108,11 +110,15 @@ public sealed class PolSession : IDisposable
 
     private enum LaunchOutcome { Started, Failed, Refused, Cancelled }
 
-    internal sealed record Prestarted(int Pid, DateTime? Started);
+    internal sealed record Prestarted(int Pid, ProcessStamp? Stamp);
 
-    // Pid 0 is a claim, start times are UTC ticks
+    // Pid 0 is a claim, start times are UTC ticks. The property names are the file's format, older copies read it too
     private sealed record SessionFile(int Pid, long StartTicks, string? ProfileId, int OwnerPid = 0, long OwnerStartTicks = 0,
-                                      bool Played = false);
+                                      bool Played = false)
+    {
+        [JsonIgnore] public ProcessStamp Game => new(Pid, StartTicks);
+        [JsonIgnore] public ProcessStamp Owner => new(OwnerPid, OwnerStartTicks);
+    }
 
     // admin-only, so nothing running as the user can plant a record that makes the app end a process. Only a good
     // answer's kept, a failed check gets tried again next time
@@ -139,7 +145,7 @@ public sealed class PolSession : IDisposable
     internal string? _launchId;
     private long _logOffset;
     internal bool _played;   // the held pol.exe is the game now, never kill it
-    private DateTime? _pidStarted;
+    private ProcessStamp? _polStamp;
     internal Process? _polProc;
     private FileSystemWatcher? _watcher;
     private Timer? _debounce;
@@ -148,8 +154,7 @@ public sealed class PolSession : IDisposable
     private string? _sessionFile;
     private string? _sessionProfile;
     private string? _claimFile;
-    private int? _hookPid;
-    private DateTime _hookStart;
+    private ProcessStamp? _hook;
     private WindowerGameValues? _windowerPlay;
 
     public PolSession(ISettingsService settings)
@@ -168,11 +173,8 @@ public sealed class PolSession : IDisposable
         GameIsInstalled = () => GameInstalled(Region);
         UpdateViewer = (dir, progress, freeFiles, ct) => PolUpdates.UpdateViewer(dir, Region, progress, freeFiles, ct);
         WindowerSetup = (polExe, profile, lists, shared) => WindowerLauncher.SetupFor(_settings, polExe, profile, lists, shared);
-        PrestartAlive = pre =>
-        {
-            try { using var p = Process.GetProcessById(pre.Pid); return !p.HasExited && IsSameProcess(p, pre.Started); }
-            catch (ArgumentException) { return false; }
-        };
+        // no recorded start time means no proof, so it's never mine (the user may run their own pol.exe on a reused pid)
+        PrestartAlive = pre => pre.Stamp is { } stamp && Ours(stamp);
         DeleteLeftovers();
         _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
     }
@@ -191,7 +193,7 @@ public sealed class PolSession : IDisposable
     internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerAddonList?, WindowerLaunchSetup> WindowerSetup { get; init; }
     internal HoldViewerFiles HoldViewer { get; init; } = ViewerBuild.Hold;
     internal Func<Prestarted, bool> PrestartAlive { get; init; }
-    internal Func<Process, bool> IsViewerPol { get; init; } = PolProcess.IsViewerPol;
+    internal Func<ProcessStamp, bool> IsViewerPol { get; init; } = stamp => stamp.IsViewerPol();
     internal Action ScreenSaverBack { get; init; } = PutScreenSaverBack;
     // quiet this long and the login's stuck. polcore fails a list load or a login step at 100 s by itself, apart from
     // state 23, which it sits in for 400 s
@@ -446,8 +448,8 @@ public sealed class PolSession : IDisposable
             Pid = pid;
             // kept so the exit code still says why if it dies mid sign-in
             _polProc?.Dispose();
-            try { _polProc = Process.GetProcessById(pid); _ = _polProc.Handle; _pidStarted = _polProc.StartTime; }
-            catch { _polProc = null; _pidStarted = null; }
+            try { _polProc = Process.GetProcessById(pid); _ = _polProc.Handle; _polStamp = ProcessStamp.Of(pid); }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException or Win32Exception) { _polProc = null; _polStamp = null; }
         }
         // saved now, if this copy dies mid sign-in the next start ends this pol.exe
         SaveSession(rememberedProfileId);
@@ -516,13 +518,14 @@ public sealed class PolSession : IDisposable
                 progress?.Report(new LaunchProgress("Connected", "You're logged in.", LaunchSteps.StartGame, 1.0));
                 return 0;
             }
-            if (!IsAlive(pid))
+            if (!ProcessStamp.PidRunning(pid))
             {
                 // it can log its refusal and exit between two reads
                 foreach (var line in ReadRemainingLines(logPath))
                     if (Ending(line) is { } result) return result;
                 int? exit = null;
-                try { if (_polProc is { HasExited: true } ended) exit = ended.ExitCode; } catch { }
+                try { if (_polProc is { HasExited: true } ended) exit = ended.ExitCode; }
+                catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
                 PutScreenSaverBack();
                 LogEarlyExit(pid, exit, logPath);
                 var (endedCode, endedText) = EndedBeforeLogIn(exit);
@@ -693,10 +696,7 @@ public sealed class PolSession : IDisposable
 
     // a record whose pol.exe and copy have both gone, so nothing saw that pol.exe end
     internal static bool PolEndedUnseen() => SessionFilePaths().Any(path =>
-    {
-        try { return ReadRecord(path) is { Pid: > 0 } f && !IsAlive(f.Pid, f.StartTicks) && !IsAlive(f.OwnerPid, f.OwnerStartTicks); }
-        catch { return false; }
-    });
+        TryReadRecord(path) is { Pid: > 0 } f && !f.Game.IsRunning() && !f.Owner.MightBeRunning());
 
     private const uint SpiGetScreenSaveActive = 0x10;
     private const uint SpiSetScreenSaveActive = 0x11;
@@ -766,7 +766,7 @@ public sealed class PolSession : IDisposable
         _ = Task.Run(async () =>
         {
             try { await System.Net.Dns.GetHostAddressesAsync("ci000.pol.com").ConfigureAwait(false); }
-            catch { }
+            catch (System.Net.Sockets.SocketException) { }
         });
     }
 
@@ -796,14 +796,13 @@ public sealed class PolSession : IDisposable
             var pid = int.Parse(m.Groups[1].Value);
             // an older pol.exe with this pid left these, and its stop file would end this one before it logs in
             foreach (var ext in new[] { "stop", "ended", "go" }) DeleteQuietly(HookFiles.PathFor(pid, ext));
-            DateTime? started = null;
-            try { using var p = Process.GetProcessById(pid); started = p.StartTime; } catch { }
+            var stamp = ProcessStamp.Of(pid);
             // so another copy that's about to change the viewer's files can end it while it's only waiting
-            if (started is { } at)
-                try { File.WriteAllText(HookFiles.PathFor(pid, "prestart"), at.ToUniversalTime().Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+            if (stamp is { } at)
+                try { File.WriteAllText(HookFiles.PathFor(pid, "prestart"), at.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the pre-started pol.exe for other copies"); }
             Log.Information("Pre-started pol.exe (pid {Pid}), waiting for LOG IN", pid);
-            return new Prestarted(pid, started);
+            return new Prestarted(pid, stamp);
         }
         catch (Exception ex)
         {
@@ -861,7 +860,7 @@ public sealed class PolSession : IDisposable
             Log.Information("Using the pre-started pol.exe (pid {Pid})", pid);
             return pid;
         }
-        catch { EndPrestarted(pre); return null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException) { EndPrestarted(pre); return null; }
     }
 
     private Prestarted? TakePrestart(CancellationToken ct = default)
@@ -901,15 +900,16 @@ public sealed class PolSession : IDisposable
 
     private void EndPrestarted(Prestarted pre)
     {
-        try { File.WriteAllText(HookFiles.PathFor(pre.Pid, "stop"), "stop"); } catch { }
+        try { File.WriteAllText(HookFiles.PathFor(pre.Pid, "stop"), "stop"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         DeleteQuietly(HookFiles.PathFor(pre.Pid, "prestart"));
-        KillIfOurs(pre.Pid, p => IsSameProcess(p, pre.Started), graceMs: 3000);
+        if (pre.Stamp is { } stamp) EndOurs(stamp, graceMs: 3000);
     }
 
     public void StopPrestart()
     {
         try { if (TakePrestart() is { } pre) EndPrestarted(pre); }
-        catch { }
+        catch (AggregateException) { }
     }
 
     // a repair, an install or a Large Address Aware write changes viewer files, so nothing pre-starts pol.exe until
@@ -930,12 +930,7 @@ public sealed class PolSession : IDisposable
     // being handed to a login has lost its record by the time this has the lock
     internal void EndWaitingPrestarts()
     {
-        var ending = new List<(int Pid, long Ticks)>();
-        bool Waiting(Process p, long ticks)
-        {
-            try { return !p.HasExited && PolProcess.StartUtcTicks(p) == ticks && IsViewerPol(p); }
-            catch { return false; }
-        }
+        var ending = new List<ProcessStamp>();
         try
         {
             using var handOver = AdminLock.TryAcquire(PrestartLock, TimeSpan.FromSeconds(5));
@@ -951,13 +946,11 @@ public sealed class PolSession : IDisposable
                     var parts = Path.GetFileName(record).Split('.');
                     if (parts.Length != 3 || !int.TryParse(parts[1], out var pid)
                         || !long.TryParse(File.ReadAllText(record).Trim(), out var ticks)) continue;
-                    bool waiting;
-                    try { using var p = Process.GetProcessById(pid); waiting = Waiting(p, ticks); }
-                    catch (ArgumentException) { waiting = false; }
-                    if (waiting)
+                    var stamp = new ProcessStamp(pid, ticks);
+                    if (Ours(stamp))
                     {
                         File.WriteAllText(HookFiles.PathFor(pid, "stop"), "stop");
-                        ending.Add((pid, ticks));
+                        ending.Add(stamp);
                     }
                     File.Delete(record);
                 }
@@ -971,10 +964,10 @@ public sealed class PolSession : IDisposable
         {
             Log.Warning(e, "Could not end other copies' pre-started pol.exe");
         }
-        foreach (var (pid, ticks) in ending)
+        foreach (var stamp in ending)
         {
-            Log.Information("Ending another copy's pre-started pol.exe (pid {Pid}): the viewer's files are about to change", pid);
-            KillIfOurs(pid, p => Waiting(p, ticks), graceMs: 3000);
+            Log.Information("Ending another copy's pre-started pol.exe (pid {Pid}): the viewer's files are about to change", stamp.Pid);
+            EndOurs(stamp, graceMs: 3000);
         }
     }
 
@@ -1000,7 +993,7 @@ public sealed class PolSession : IDisposable
     private static bool LogHas(string path, string text)
     {
         try { return ThisRun(path).Text.Contains(text, StringComparison.Ordinal); }
-        catch { return false; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 
     // the hook only appends, so a reused pid's log starts with an older pol.exe's lines. DllMain's first line opens
@@ -1069,7 +1062,7 @@ public sealed class PolSession : IDisposable
         try
         {
             using var launcher = StartProcess(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
-            var launcherStarted = launcher.StartTime;   // read now, it can throw once the process exits
+            var launcherStamp = ProcessStamp.Of(launcher.Id);
             if (RunLauncher(launcher, limit) is not { } run)
                 return ct.IsCancellationRequested
                     ? (LaunchOutcome.Cancelled, 0, "")
@@ -1077,7 +1070,7 @@ public sealed class PolSession : IDisposable
             var m = PidLine.Match(run.Out);
             if (ct.IsCancellationRequested)
             {
-                if (m.Success) EndNewPol(int.Parse(m.Groups[1].Value), launcherStarted);
+                if (m.Success && launcherStamp is { } started) EndNewPol(int.Parse(m.Groups[1].Value), started);
                 return (LaunchOutcome.Cancelled, 0, "");
             }
             var stderr = run.Err.Trim();
@@ -1103,67 +1096,57 @@ public sealed class PolSession : IDisposable
     private const string PolDidNotStart = "PlayOnline didn't start. Try again in a moment.";
     private const string WindowerDidNotStart = "PlayOnline didn't start with Windower. Try again in a moment.";
 
-    private static void EndNewPol(int pid, DateTime launcherStarted)
+    // a pol.exe the watcher started since the launcher did
+    private static void EndNewPol(int pid, ProcessStamp launcher)
     {
-        bool NewPol(Process p) =>
-            p.ProcessName.Equals("pol", StringComparison.OrdinalIgnoreCase) && p.StartTime >= launcherStarted;
-        if (KillIfOurs(pid, NewPol, afterMs: 2000))
+        bool NewPol(ProcessStamp pol) => pol.StartUtcTicks >= launcher.StartUtcTicks
+            && string.Equals(Path.GetFileName(ProcessTree.ImagePath(pol.Pid)), "pol.exe", StringComparison.OrdinalIgnoreCase);
+        if (ProcessStamp.Of(pid) is { } found && End(found, 0, 2000, NewPol))
             Log.Information("Ended pol.exe (pid {Pid}): the sign-in was cancelled", pid);
     }
 
     private static void EndStuckLauncher(Process launcher, TimeSpan limit)
     {
         int id = launcher.Id;
-        DateTime started;
-        try { started = launcher.StartTime; } catch { started = DateTime.MinValue; }
-        try { launcher.Kill(); } catch { }
-        foreach (var child in ProcessTree.ChildrenOf(id))
-            if (started != DateTime.MinValue) EndNewPol(child, started);
+        var stamp = ProcessStamp.Of(id);
+        try { launcher.Kill(); }
+        catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
+        if (stamp is { } started)
+            foreach (var child in ProcessTree.ChildrenOf(id)) EndNewPol(child, started);
         Log.Warning("Provenance Watcher (pid {Pid}) did not exit in {Limit} and was ended", id, limit);
     }
 
-    private static bool KillIfOurs(int pid, Func<Process, bool> ours, int graceMs = 0, int afterMs = 0)
+    // still that pol.exe, and a viewer's
+    private bool Ours(ProcessStamp stamp) => stamp.IsRunning() && IsViewerPol(stamp);
+
+    private bool EndOurs(ProcessStamp stamp, int graceMs = 0, int afterMs = 0) => End(stamp, graceMs, afterMs, IsViewerPol);
+
+    private static bool End(ProcessStamp stamp, int graceMs, int afterMs, Func<ProcessStamp, bool> alsoIf)
     {
-        try
-        {
-            using var p = Process.GetProcessById(pid);
-            if (!ours(p)) return false;
-            if (graceMs > 0 && p.WaitForExit(graceMs))
-            {
-                PutScreenSaverBack();
-                return false;
-            }
-            p.Kill();
-            p.WaitForExit(Math.Max(afterMs, 1000));
-            PutScreenSaverBack();
-            return true;
-        }
-        catch { return false; }
+        var result = stamp.EndIfStill(graceMs, afterMs, alsoIf);
+        if (result != ProcessStamp.Ending.NotThat) PutScreenSaverBack();
+        return result == ProcessStamp.Ending.Ended;
     }
 
-    // no recorded start time means no proof, so it's never mine to kill (the user may run their own pol.exe on a
-    // reused pid)
-    private bool IsSameProcess(Process p, DateTime? started)
+    private static SessionFile? TryReadRecord(string path)
     {
-        if (started is not { } s) return false;
-        try { return p.StartTime.ToUniversalTime() == s.ToUniversalTime() && IsViewerPol(p); }
-        catch { return false; }
+        try { return JsonSerializer.Deserialize<SessionFile>(File.ReadAllText(path)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { return null; }
     }
-
-    private static SessionFile? ReadRecord(string path) => JsonSerializer.Deserialize<SessionFile>(File.ReadAllText(path));
 
     // write then move, another copy may read it at any moment
-    private static void WriteRecord(string path, int pid, long startTicks, string? profileId, bool played = false)
+    private static void WriteRecord(string path, ProcessStamp game, string? profileId, bool played = false)
     {
-        using var me = Process.GetCurrentProcess();
+        var me = ProcessStamp.Of(Environment.ProcessId) ?? new ProcessStamp(Environment.ProcessId, 0);
         AtomicFile.Write(path, JsonSerializer.Serialize(
-            new SessionFile(pid, startTicks, profileId, me.Id, PolProcess.StartUtcTicks(me), played)));
+            new SessionFile(game.Pid, game.StartUtcTicks, profileId, me.Pid, me.StartUtcTicks, played)));
     }
 
     private static List<string> SessionFilePaths()
     {
         var files = new List<string>();
-        try { if (Directory.Exists(SessionDir)) files.AddRange(Directory.GetFiles(SessionDir, "*.json")); } catch { }
+        try { if (Directory.Exists(SessionDir)) files.AddRange(Directory.GetFiles(SessionDir, "*.json")); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         return files;
     }
 
@@ -1171,15 +1154,18 @@ public sealed class PolSession : IDisposable
     {
         try
         {
-            if (Pid is not { } pid || _pidStarted is not { } st) return;
+            if (Pid is not { } pid || _polStamp is not { } stamp) return;
             _sessionProfile = profileId;
             Directory.CreateDirectory(SessionDir);
             var path = Path.Combine(SessionDir, $"{pid}.json");
-            WriteRecord(path, pid, st.ToUniversalTime().Ticks, profileId, played);
+            WriteRecord(path, stamp, profileId, played);
             _sessionFile = path;
             ReleaseClaim();
         }
-        catch { }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(e, "Could not save the session record, another copy may not see this login");
+        }
     }
 
     public bool TryClaimAccount(string profileId, out string? problem)
@@ -1199,7 +1185,7 @@ public sealed class PolSession : IDisposable
             }
             ReleaseClaim();
             var path = Path.Combine(SessionDir, $"claim-{Environment.ProcessId}.json");
-            WriteRecord(path, 0, 0, profileId);
+            WriteRecord(path, default, profileId);
             _claimFile = path;
             return true;
         }
@@ -1226,20 +1212,8 @@ public sealed class PolSession : IDisposable
 
     private static void DeleteQuietly(string path)
     {
-        try { File.Delete(path); } catch { }
-    }
-
-    private static bool IsAlive(int pid, long startUtcTicks)
-    {
-        if (pid <= 0) return false;
-        try { using var p = Process.GetProcessById(pid); return !p.HasExited && PolProcess.StartUtcTicks(p) == startUtcTicks; }
-        catch { return false; }
-    }
-
-    private static bool IsAlive(int pid)
-    {
-        try { using var p = Process.GetProcessById(pid); return !p.HasExited; }
-        catch { return false; }
+        try { File.Delete(path); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     // a copy that ended before Play can leave its pol.exe logged in (or still logging itself out), so it's ended here
@@ -1248,19 +1222,17 @@ public sealed class PolSession : IDisposable
     {
         foreach (var path in SessionFilePaths())
         {
-            SessionFile? s;
-            try { s = ReadRecord(path); }
-            catch { continue; }   // maybe another copy's mid-replace, never delete it
-            if (s is null) continue;
-            bool ownerAlive = IsAlive(s.OwnerPid, s.OwnerStartTicks);
+            // one that won't read may be another copy's mid-replace, so it's never deleted
+            if (TryReadRecord(path) is not { } s) continue;
+            bool ownerAlive = s.Owner.MightBeRunning();
             if (ownerAlive && s.OwnerPid != Environment.ProcessId) continue;
-            if (!IsAlive(s.Pid, s.StartTicks) || !IsPol(s.Pid))
+            if (!Ours(s.Game))
             {
                 DeleteQuietly(path);
                 continue;
             }
             if (s.Played || ownerAlive) continue;
-            EndOrphan(s.Pid, s.StartTicks);
+            EndOrphan(s.Game);
             DeleteQuietly(path);
         }
     }
@@ -1269,37 +1241,21 @@ public sealed class PolSession : IDisposable
     {
         foreach (var path in SessionFilePaths())
         {
-            try
-            {
-                if (ReadRecord(path) is not { } f || f.ProfileId != profileId) continue;
-                if (f.Pid != 0 && !IsAlive(f.Pid, f.StartTicks)) continue;
-                if (f.Played) return true;
-                if (f.OwnerPid != Environment.ProcessId && IsAlive(f.OwnerPid, f.OwnerStartTicks)) return true;
-            }
-            catch { }
+            if (TryReadRecord(path) is not { } f || f.ProfileId != profileId) continue;
+            if (f.Pid != 0 && !f.Game.IsRunning()) continue;
+            if (f.Played) return true;
+            if (f.OwnerPid != Environment.ProcessId && f.Owner.MightBeRunning()) return true;
         }
         return false;
     }
 
     public static bool GameRunningFor(string profileId) => SessionFilePaths().Any(path =>
-    {
-        try
-        {
-            return ReadRecord(path) is { Played: true } f && f.ProfileId == profileId && IsAlive(f.Pid, f.StartTicks);
-        }
-        catch { return false; }
-    });
+        TryReadRecord(path) is { Played: true } f && f.ProfileId == profileId && f.Game.IsRunning());
 
-    private bool IsPol(int pid)
+    private void EndOrphan(ProcessStamp pol)
     {
-        try { using var p = Process.GetProcessById(pid); return IsViewerPol(p); }
-        catch { return false; }
-    }
-
-    private void EndOrphan(int pid, long startUtcTicks)
-    {
-        if (KillIfOurs(pid, p => PolProcess.StartUtcTicks(p) == startUtcTicks && IsViewerPol(p), 0, 3000))
-            Log.Warning("Ended pol.exe {Pid}: its copy of Provenance ended before the game started", pid);
+        if (EndOurs(pol, afterMs: 3000))
+            Log.Warning("Ended pol.exe {Pid}: its copy of Provenance ended before the game started", pol.Pid);
     }
 
     private void ReadSnapshot()
@@ -1313,7 +1269,7 @@ public sealed class PolSession : IDisposable
     public void Poll()
     {
         if (Pid is not { } pid) return;
-        if (_played || IsAlive(pid))
+        if (_played || ProcessStamp.PidRunning(pid))
         {
             if (_watcher == null) ThreadPool.QueueUserWorkItem(_ => ReadSnapshot());
             return;
@@ -1323,14 +1279,15 @@ public sealed class PolSession : IDisposable
         try
         {
             if (Pid != pid) return;
-            try { if (_polProc is { HasExited: true } gone && gone.Id == pid) exit = gone.ExitCode; } catch { }
+            try { if (_polProc is { HasExited: true } gone && gone.Id == pid) exit = gone.ExitCode; }
+            catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
             Log.Warning("Held PlayOnline session (pid {Pid}) ended on its own (exit code {Exit})", pid, exit);
             PutScreenSaverBack();
             DeleteQuietly(SocialSnapshotFiles.PathForPid(pid));
             DeleteQuietly(SocialSnapshotFiles.StorePathForPid(pid));
             DropChatLeftovers(pid);
             Pid = null;
-            _pidStarted = null;
+            _polStamp = null;
         }
         finally { Monitor.Exit(_gate); }
         StopWatcher();
@@ -1352,7 +1309,7 @@ public sealed class PolSession : IDisposable
                 why = PolAccountNotices.SessionLost(reason, Region);
             File.Delete(ended);
         }
-        catch { }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         return why;
     }
 
@@ -1376,7 +1333,7 @@ public sealed class PolSession : IDisposable
     public void DropChatPassword()
     {
         if (_launchId is { } id)
-            try { _store.Delete(ChatKey(id)); } catch { }
+            try { _store.Delete(ChatKey(id)); } catch (Win32Exception) { }
     }
 
     // the room's lines, an enter never taken and its password, whatever way the session ended
@@ -1403,36 +1360,28 @@ public sealed class PolSession : IDisposable
         SaveSession(_sessionProfile, played: true);
     }
 
-    private void TrackThirdPartyHook(int pid, DateTime start)
+    private void TrackThirdPartyHook(ProcessStamp hook)
     {
-        lock (_hookGate)
-        {
-            _hookPid = pid;
-            _hookStart = start;
-        }
+        lock (_hookGate) _hook = hook;
     }
 
-    private (int Pid, DateTime Start)? TakeThirdPartyHook()
+    private ProcessStamp? TakeThirdPartyHook()
     {
         lock (_hookGate)
         {
-            (int, DateTime)? taken = _hookPid is { } pid ? (pid, _hookStart) : null;
-            _hookPid = null;
+            var taken = _hook;
+            _hook = null;
             return taken;
         }
     }
 
     // Ashita-cli closes by itself once the game's up, so it only gets a couple of secs before it's ended
-    private static void EndThirdPartyHook((int Pid, DateTime Start)? hook)
+    private static void EndThirdPartyHook(ProcessStamp? hook)
     {
-        if (hook is not { } a) return;
-        try
-        {
-            using var p = Process.GetProcessById(a.Pid);
-            if (p.StartTime != a.Start || p.HasExited) return;
-            if (!p.WaitForExit(2000)) { p.Kill(); Log.Information("Ended {Name} (pid {Pid}): the game was not started", p.ProcessName, a.Pid); }
-        }
-        catch { /* already gone */ }
+        if (hook is not { } stamp) return;
+        var name = Path.GetFileNameWithoutExtension(ProcessTree.ImagePath(stamp.Pid)) ?? "the third-party hook";
+        if (stamp.EndIfStill(graceMs: 2000) == ProcessStamp.Ending.Ended)
+            Log.Information("Ended {Name} (pid {Pid}): the game was not started", name, stamp.Pid);
     }
 
     public void StopHold()
@@ -1445,9 +1394,10 @@ public sealed class PolSession : IDisposable
             ClearSession();
             if (Pid is { } pid)
             {
-                var started = _pidStarted;
-                try { File.WriteAllText(HookFiles.PathFor(pid, "stop"), "stop"); } catch { }
-                if (KillIfOurs(pid, p => IsSameProcess(p, started), (int)StopGrace.TotalMilliseconds, afterMs: 2000))
+                var stamp = _polStamp;
+                try { File.WriteAllText(HookFiles.PathFor(pid, "stop"), "stop"); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                if (stamp is { } game && EndOurs(game, (int)StopGrace.TotalMilliseconds, afterMs: 2000))
                     Log.Warning("pol.exe {Pid} hadn't logged out {Seconds} s after its stop file, so it was ended", pid,
                                 (int)StopGrace.TotalSeconds);
                 DeleteQuietly(SocialSnapshotFiles.PathForPid(pid));
@@ -1455,7 +1405,7 @@ public sealed class PolSession : IDisposable
                 DropChatLeftovers(pid);
                 Log.Information("Stopped held PlayOnline session (pid {Pid})", pid);
                 Pid = null;
-                _pidStarted = null;
+                _polStamp = null;
             }
             EndThirdPartyHook(TakeThirdPartyHook());
         }
@@ -1495,7 +1445,7 @@ public sealed class PolSession : IDisposable
         {
             if (!_played) return;
             Pid = null;
-            _pidStarted = null;
+            _polStamp = null;
             _played = false;
         }
         ClearSession();
@@ -1511,7 +1461,7 @@ public sealed class PolSession : IDisposable
             StopWatcher();
             Log.Information("Let go of the played session (pid {Pid}); the game keeps running", Pid);
             Pid = null;
-            _pidStarted = null;
+            _polStamp = null;
             _launchId = null;
             _played = false;
             _sessionFile = null;
@@ -1520,7 +1470,7 @@ public sealed class PolSession : IDisposable
             if (_polProc is { } game)
                 game.WaitForExitAsync().ContinueWith(_ => { game.Dispose(); ScreenSaverBack(); }, TaskScheduler.Default);
             _polProc = null;
-            lock (_hookGate) _hookPid = null;
+            lock (_hookGate) _hook = null;
         }
     }
 
@@ -1529,7 +1479,7 @@ public sealed class PolSession : IDisposable
         lock (_gate)
         {
             Pid = pid;
-            _pidStarted = started;
+            _polStamp = new ProcessStamp(pid, started.ToUniversalTime().Ticks);
         }
     }
 
@@ -1539,16 +1489,11 @@ public sealed class PolSession : IDisposable
         lock (_gate)
         {
             Pid = pid;
-            _pidStarted = started;
+            _polStamp = new ProcessStamp(pid, started.ToUniversalTime().Ticks);
             _launchId = launchId;
             _played = true;
         }
-        if (hook is { } h)
-            lock (_hookGate)
-            {
-                _hookPid = h.Pid;
-                _hookStart = h.Start;
-            }
+        if (hook is { } h) TrackThirdPartyHook(new ProcessStamp(h.Pid, h.Start.ToUniversalTime().Ticks));
         SaveSession(profileId, played: true);
         return launchId;
     }
@@ -1564,7 +1509,7 @@ public sealed class PolSession : IDisposable
         var until = DateTime.UtcNow + timeout;
         while (true)
         {
-            bool alive = IsAlive(pid);
+            bool alive = ProcessStamp.PidRunning(pid);
             // it can log its answer and end between two reads, so read what's left once it's gone
             foreach (var line in alive ? ReadNewLines(logPath) : ReadRemainingLines(logPath))
             {
@@ -1642,7 +1587,7 @@ public sealed class PolSession : IDisposable
     {
         foreach (var k in keys)
         {
-            try { _store.Delete(k); } catch { }
+            try { _store.Delete(k); } catch (Win32Exception) { }
         }
         keys.Clear();
     }

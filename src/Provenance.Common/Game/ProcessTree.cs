@@ -29,15 +29,6 @@ public static class ProcessTree
     public static List<int> ChildrenOf(int parentPid) =>
         Snapshot().Where(e => e.ParentPid == parentPid).Select(e => e.Pid).ToList();
 
-    // UTC, straight from the kernel. Null once it's gone or can't be opened
-    public static DateTime? StartTime(int pid)
-    {
-        var h = Kernel32.OpenProcess(QueryLimitedInformation, false, (uint)pid);
-        if (h == IntPtr.Zero) return null;
-        try { return Kernel32.GetProcessTimes(h, out var created, out _, out _, out _) ? DateTime.FromFileTimeUtc(created) : null; }
-        finally { Kernel32.CloseHandle(h); }
-    }
-
     // held open, so the pid stays this process's for as long as the handle's kept, then its start (null if unreadable)
     internal static LaunchTree.Opened? Open(int pid)
     {

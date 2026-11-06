@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using Provenance.Common.Game;
 
 namespace Provenance.Common.Social;
 
@@ -31,19 +31,13 @@ public sealed class PreLaunchLink
     // the game can't use a character that isn't linked to a handle, so a link that didn't work stops it starting
     public static string FailedText(string failure) => $"{failure}\n\nFINAL FANTASY XI wasn't started.";
 
-    public static bool ProcessAlive(int pid)
-    {
-        try { using var p = Process.GetProcessById(pid); return !p.HasExited; }
-        catch { return false; }
-    }
-
     public required Func<int?> Pid { get; init; }
     public required Func<string, bool> Ask { get; init; }
     public required Action<string> Failed { get; init; }
     public Action<string>? Saying { get; init; }
     // the Handles page's own progress text while its change is going, there's only one handle request at a time
     public Func<string?> PageWaiting { get; init; } = () => null;
-    public Func<int, bool> Alive { get; init; } = ProcessAlive;
+    public required Func<int, bool> Alive { get; init; }
     public Func<int, PolSocialSnapshot?> Read { get; init; } = SocialSnapshotFiles.TryRead;
     public Func<TimeSpan, Task> Delay { get; init; } = t => Task.Delay(t);
     public Func<DateTime> Now { get; init; } = () => DateTime.UtcNow;

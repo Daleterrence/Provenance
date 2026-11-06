@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using Provenance.Common.Game;
 using Provenance.Common.Security;
 using Serilog;
 
@@ -64,11 +64,9 @@ public static class GameFilesLock
             var parts = text.Split(' ');
             if (parts.Length != 3 || !int.TryParse(parts[0], out var pid) || !long.TryParse(parts[1], out var started)
                 || !Enum.TryParse<Job>(parts[2], out var job) || !Enum.IsDefined(job)) return null;
-            using var p = Process.GetProcessById(pid);
-            return p.StartTime.ToUniversalTime().Ticks == started ? job : null;
+            return new ProcessStamp(pid, started).IsRunning() ? job : null;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException
-                                       or System.ComponentModel.Win32Exception) { return null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
     private sealed class Holding : IDisposable
@@ -83,8 +81,8 @@ public static class GameFilesLock
             try
             {
                 _record = RecordPath();
-                using var me = Process.GetCurrentProcess();
-                File.WriteAllText(_record, $"{Environment.ProcessId} {me.StartTime.ToUniversalTime().Ticks} {job}");
+                var me = ProcessStamp.Of(Environment.ProcessId) ?? throw new InvalidOperationException("Provenance can't read its own start time");
+                File.WriteAllText(_record, $"{me.Pid} {me.StartUtcTicks} {job}");
             }
             catch (Exception e) { Log.Debug(e, "Could not note what the update lock is held for"); }
         }

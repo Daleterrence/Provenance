@@ -102,8 +102,14 @@ internal static partial class Kernel32
     [DllImport("kernel32.dll")]
     internal static extern uint SetThreadExecutionState(uint flags);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
     [DllImport("kernel32.dll")]
     internal static extern bool UnmapViewOfFile(IntPtr view);
+
+    [DllImport("kernel32.dll")]
+    internal static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
