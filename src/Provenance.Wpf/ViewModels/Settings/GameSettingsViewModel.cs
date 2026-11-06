@@ -407,7 +407,7 @@ public partial class GameSettingsViewModel : ObservableObject
     private static IEnumerable<string> DisplayModes()
     {
         var seen = new HashSet<(int, int)>();
-        foreach (var (w, h) in FfxiRegistry.PrimaryDisplayModes())
+        foreach (var (w, h) in Display.Modes())
             if (w >= 800 && h >= 600 && w <= 3840)
                 seen.Add((w, h));
         return seen.OrderByDescending(m => m.Item1 * m.Item2).Select(m => Fmt(m.Item1, m.Item2));

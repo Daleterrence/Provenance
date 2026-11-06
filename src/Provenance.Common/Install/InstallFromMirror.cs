@@ -131,7 +131,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
     // last of all, so a stopped install never has a patch.ver claiming a version
     public void WriteVersions()
     {
-        foreach (var s in Staged) new PolUpdater(s.Product).WriteLocalVersion(s.Version);
+        foreach (var s in Staged) PatchVer.Write(s.Product, s.Version);
     }
 
     internal async Task<InstallData?> FetchInstallDataAsync(string stagingDir, Func<MirrorEntry, bool>? include,
@@ -211,8 +211,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
             long total = MirrorDownloads.DownloadSize(work[i]);
             progress?.Report(new InstallProgress(stage, DownloadText, 0, 0, total, Download: true));
             // drop patch.ver before touching a folder, so a stopped run never claims a version
-            var version = Path.Combine(folder, "patch.ver");
-            if (isProduct && work[i].Count > 0 && File.Exists(version)) File.Delete(version);
+            if (isProduct && work[i].Count > 0) PatchVer.Drop(folder);
             var reasons = new ConcurrentDictionary<string, Exception>(StringComparer.OrdinalIgnoreCase);
             var failed = await MirrorDownloads.DownloadAllAsync(client, region, folder, work[i], MirrorDownloads.DefaultParallel,
                 Bytes(progress, stage, DownloadText, total, download: true), ct,

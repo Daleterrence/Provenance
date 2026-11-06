@@ -197,7 +197,7 @@ public sealed class GameRepair(MirrorClient client, string region)
         {
             if (VersionRight(product, plan.Indexes[slug].Version)) continue;
             ChangingNow();
-            new PolUpdater(product).WriteLocalVersion(plan.Indexes[slug].Version);
+            PatchVer.Write(product, plan.Indexes[slug].Version);
             written++;
         }
         return written;
@@ -209,8 +209,7 @@ public sealed class GameRepair(MirrorClient client, string region)
     {
         if (work.Count == 0) return [];
         ChangingNow();
-        var version = Path.Combine(product.Folder, "patch.ver");
-        if (File.Exists(version)) File.Delete(version);
+        PatchVer.Drop(product.Folder);
         // one text for both products, so the time left carries on across them
         Status?.Invoke("Downloading replacement files...");
         var failed = await MirrorDownloads.DownloadAllAsync(client, region, product.Folder, work, MirrorDownloads.DefaultParallel, progress, ct,
@@ -293,7 +292,7 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     private string LocalVersion(PatchProduct product)
     {
-        try { return new PolUpdater(product).LocalVersion(); }
+        try { return PatchVer.Read(product); }
         catch (InvalidDataException ex)
         {
             Say($"the {product.Name} patch.ver cannot be read ({ex.Message}); the version check sends none");
@@ -304,7 +303,7 @@ public sealed class GameRepair(MirrorClient client, string region)
     // POL tries the product id alone when the Interface-seeded key doesn't open it, so either one counts
     private static bool VersionRight(PatchProduct product, string version)
     {
-        try { return new PolUpdater(product).LocalVersion() == version; }
+        try { return PatchVer.Read(product) == version; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException) { return false; }
     }
 

@@ -72,7 +72,7 @@ public sealed class FfxiSettings
         {
             if (!FfxiRegistry.NeedsFirstStart(region)) return;
             int n = FfxiRegistry.WriteFirstStart(region);
-            var d = FfxiRegistry.PrimaryDisplay();
+            var d = Display.Primary();
             Log.Information("FINAL FANTASY XI first-start settings: {Count} values written for a {W}x{H} display", n, d.Width, d.Height);
         }
         catch (Exception e) { Log.Warning(e, "Could not write the FINAL FANTASY XI first-start settings"); }

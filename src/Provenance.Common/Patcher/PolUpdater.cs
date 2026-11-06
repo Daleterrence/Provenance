@@ -5,6 +5,7 @@ using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Provenance.Common.Game;
+using Provenance.Common.IO;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
 using Provenance.Common.Win32;
@@ -26,6 +27,8 @@ public sealed record PatchProgress(PatchPhase Phase, string Text, double Fractio
 // downloads get a few connections since one took over an hour on a fresh install
 public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = null, int connections = PolUpdater.DefaultConnections)
 {
+    public PatchProduct Product => product;
+
     public const int DefaultConnections = 4;   // SE rate-limits when there are too many
     private const long KeepAliveMs = 60_000;
     private string Dir => product.Folder;
@@ -39,7 +42,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
     public bool NeedsUpdate(CancellationToken ct) => !Check(ct).UpToDate;
 
-    public VersionCheck Check(CancellationToken ct) => Check(LocalVersion(), ct);
+    public VersionCheck Check(CancellationToken ct) => Check(PatchVer.Read(product), ct);
 
     public VersionCheck Check(string local, CancellationToken ct)
     {
@@ -79,7 +82,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         WriteText("patch2.cfg", PatchFileList.Write(work));
         if (work.Count == 0 && !decisions.Any(d => d.Kind == Kind.Current && d.FromTmp2))
         {
-            WriteLocalVersion(server);
+            PatchVer.Write(product, server);
             return PatchResult.UpToDate;
         }
 
@@ -97,21 +100,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         progress?.Report(new PatchProgress(PatchPhase.Apply, $"Updating {product.Name}...", -1));
         return Apply(manifest, local, server);
     }
-
-    public string LocalVersion()
-    {
-        var path = Path.Combine(Dir, "patch.ver");
-        if (!File.Exists(path)) return "";
-        var blob = File.ReadAllBytes(path);
-        return PatchVer.Decode(blob, PatchVer.Key(product.Id, InterfaceValue()))
-               ?? PatchVer.Decode(blob, PatchVer.Key(product.Id, null))
-               ?? throw new InvalidDataException($"The {product.Name} version file (patch.ver) could not be read.");
-    }
-
-    public void WriteLocalVersion(string version) =>
-        WriteBytes("patch.ver", PatchVer.Encode(version, PatchVer.Key(product.Id, InterfaceValue())));
-
-    private string? InterfaceValue() => product.PatchVerInterface ?? PatchVer.InterfaceValue(product.RegistryHive, product.Id);
 
     private IPEndPoint Resolve(CancellationToken ct)
     {
@@ -411,7 +399,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             }
             else Replace(tmp2, target);
         }
-        WriteLocalVersion(server);
+        PatchVer.Write(product, server);
         WriteText("patch.rst", rst.ToString());
         return queued ? PatchResult.UpdatedQueued : PatchResult.Updated;
     }
@@ -439,20 +427,14 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
     private static void Replace(string staged, string target)
     {
-        Writable(target);
+        AtomicFile.MakeWritable(target);
         File.Move(staged, target, overwrite: true);
     }
 
     private static void DeleteFile(string path)
     {
-        Writable(path);
+        AtomicFile.MakeWritable(path);
         File.Delete(path);
-    }
-
-    private static void Writable(string path)
-    {
-        if (File.Exists(path) && File.GetAttributes(path).HasFlag(FileAttributes.ReadOnly))
-            File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
     }
 
     private void WriteText(string name, string text) => WriteBytes(name, Encoding.Latin1.GetBytes(text));
@@ -488,17 +470,17 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             // every copy before any delete, so a file in use leaves the whole queue to run again
             foreach (var (target, staged) in queued)
             {
-                Writable(target);
+                AtomicFile.MakeWritable(target);
                 File.Copy(staged, target, overwrite: true);
             }
             foreach (var (_, staged) in queued) DeleteFile(staged);
-            Writable(Path.Combine(viewerDir, "patch.bak"));
+            AtomicFile.MakeWritable(Path.Combine(viewerDir, "patch.bak"));
             File.Copy(ini, Path.Combine(viewerDir, "patch.bak"), overwrite: true);
             DeleteFile(ini);
         }
         foreach (var (staged, live) in BootCopies(viewerDir))
         {
-            Writable(live);
+            AtomicFile.MakeWritable(live);
             File.Copy(staged, live, overwrite: true);
         }
     }

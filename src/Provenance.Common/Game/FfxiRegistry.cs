@@ -1,7 +1,5 @@
-using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using Provenance.Common.PolFormat;
-using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game;
 
@@ -62,7 +60,7 @@ public static class FfxiRegistry
     // only what's missing, like the official tool does when it opens
     public static int WriteFirstStart(PolRegion region)
     {
-        var (w, h) = PrimaryDisplay();
+        var (w, h) = Display.Primary();
         using var k = OpenForWrite(region);
         return FillMissing(k, FfxiSettings.FirstStart(w, h));
     }
@@ -123,24 +121,6 @@ public static class FfxiRegistry
         D("0045", s.LegacySettings);
         if (Missing("padmode000")) Set("padmode000", string.Join(",", s.PadMode), RegistryValueKind.String);
         return n;
-    }
-
-    // real pixels, not scaled by Windows' text size
-    public static (int Width, int Height) PrimaryDisplay()
-    {
-        const int ENUM_CURRENT_SETTINGS = -1;
-        return DisplayMode(ENUM_CURRENT_SETTINGS) is { Width: > 0, Height: > 0 } m ? m : (1920, 1080);
-    }
-
-    public static IEnumerable<(int Width, int Height)> PrimaryDisplayModes()
-    {
-        for (int i = 0; DisplayMode(i) is { } m; i++) yield return m;
-    }
-
-    private static (int Width, int Height)? DisplayMode(int modeNum)
-    {
-        var dm = new DevMode { dmSize = (short)Marshal.SizeOf<DevMode>() };
-        return User32.EnumDisplaySettingsW(null, modeNum, ref dm) ? (dm.dmPelsWidth, dm.dmPelsHeight) : null;
     }
 
     public static int SaveTo(RegistryKey k, FfxiSettings s, FfxiSettings original)

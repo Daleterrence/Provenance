@@ -44,6 +44,13 @@ public static class AtomicFile
         }
     }
 
+    // a read-only target would make the move over it fail
+    public static void MakeWritable(string path)
+    {
+        if (File.Exists(path) && File.GetAttributes(path).HasFlag(FileAttributes.ReadOnly))
+            File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+    }
+
     // never opened over anything that's already there
     internal static void WriteNew(string tmp, byte[] bytes, bool flushToDisk = false)
     {

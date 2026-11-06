@@ -1,4 +1,5 @@
 using Provenance.Common.Mirror;
+using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
 
 namespace Provenance.Common.Patcher;
@@ -38,7 +39,7 @@ public static class MirrorUpdater
                 Bytes(PatchPhase.Download, "Downloading updates...", progress), ct,
                 (e, ex) => log?.Invoke($"mirror file {e.Path} failed: {ex.GetType().Name}: {ex.Message}", false));
         }
-        if (failed.Count == 0) updater.WriteLocalVersion(check.Server);
+        if (failed.Count == 0) PatchVer.Write(updater.Product, check.Server);
         return new MirrorOutcome(true, failed, work.Count - failed.Count);
     }
 

@@ -1,6 +1,8 @@
 using System.Buffers.Binary;
 using System.Text;
 using Microsoft.Win32;
+using Provenance.Common.IO;
+using Provenance.Common.Patcher;
 
 namespace Provenance.Common.PolFormat;
 
@@ -42,4 +44,42 @@ public static class PatchVer
         text.CopyTo(plain, TextOffset);
         return new PolFileCipher(key8).Encrypt(plain, PlainSize);
     }
+
+    // "" with no patch.ver. POL tries the product id alone when the Interface-seeded key doesn't open it, so we do too
+    public static string Read(PatchProduct product)
+    {
+        var path = FileIn(product.Folder);
+        if (!File.Exists(path)) return "";
+        var blob = File.ReadAllBytes(path);
+        return Decode(blob, SeededKey(product))
+               ?? Decode(blob, Key(product.Id, null))
+               ?? throw new InvalidDataException($"The {product.Name} version file (patch.ver) could not be read.");
+    }
+
+    // only the Interface-seeded key, null when it doesn't open the file (or there isn't one)
+    public static string? ReadSeeded(PatchProduct product)
+    {
+        var path = FileIn(product.Folder);
+        return File.Exists(path) ? Decode(File.ReadAllBytes(path), SeededKey(product)) : null;
+    }
+
+    public static void Write(PatchProduct product, string version)
+    {
+        var path = FileIn(product.Folder);
+        var bytes = Encode(version, SeededKey(product));
+        AtomicFile.MakeWritable(path);
+        AtomicFile.Write(path, bytes);
+    }
+
+    // a stopped update then never leaves a patch.ver claiming a version
+    public static void Drop(string folder)
+    {
+        var path = FileIn(folder);
+        if (File.Exists(path)) File.Delete(path);
+    }
+
+    private static string FileIn(string folder) => System.IO.Path.Combine(folder, "patch.ver");
+
+    private static byte[] SeededKey(PatchProduct product) =>
+        Key(product.Id, product.PatchVerInterface ?? InterfaceValue(product.RegistryHive, product.Id));
 }

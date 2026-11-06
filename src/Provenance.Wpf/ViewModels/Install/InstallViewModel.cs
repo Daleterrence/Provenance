@@ -532,7 +532,7 @@ public partial class InstallViewModel : ObservableObject
         });
         try
         {
-            var local = new PolUpdater(PatchProduct.Ffxi(ffxiDir, viewerDir, _region)).LocalVersion();
+            var local = PatchVer.Read(PatchProduct.Ffxi(ffxiDir, viewerDir, _region));
             var bytes = await Task.Run(() => MirrorUpdater.DownloadSizeAsync(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion, "ffxi",
                 ffxiDir, local, MirrorLayout.OwnFiles(_region, "ffxi"), index, scanned, ct), ct);
             Log.Information("First game update size: {Size}", bytes is { } n ? $"{n:N0} bytes from the Provenance mirror" : "the mirror has no usable copy");
