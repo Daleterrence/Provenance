@@ -11,18 +11,11 @@ public sealed record PolFriend(string Name, string Comment, PolStatus Status,
     public PolFriendGame? Game { get; init; }
 }
 
-// the FFXI character a friend's on, from their presence: World is the game's world id, Ctsid and Ctid pick out the
-// character (the FFXI profile's z_ctsid and z_ctid)
-public sealed record PolFriendGame(int World, uint Ctsid, ulong Ctid)
-{
-    public string CharacterKey => $"{Ctsid}:{Ctid}";
-}
+// the FFXI character a friend's on, from their presence: World is the game's world id
+public sealed record PolFriendGame(int World, CharacterId Character);
 
 // the hook's answer for one character's FFXI profile. NameState is PolProfile's Shown, Private or NotSet
-public sealed record PolCharacterLookup(uint Ctsid, ulong Ctid, string Name, int NameState, int Level, string WorldName)
-{
-    public string CharacterKey => $"{Ctsid}:{Ctid}";
-}
+public sealed record PolCharacterLookup(CharacterId Character, string Name, int NameState, int Level, string WorldName);
 
 // Name is the character's for a character search, Handle is always the handle's
 public sealed record PolSearchHit(int Index, string Name, int ProfilePictureId, string Key, bool IsFriend)

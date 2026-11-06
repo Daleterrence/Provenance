@@ -30,10 +30,10 @@ public sealed class CharacterLookups(CharacterNames names)
         {
             var id = f.Key.Length > 0 ? f.Key : "n:" + f.Name;
             var game = f.Online && !f.Pending ? f.Game : null;
-            var key = game?.CharacterKey ?? "";
+            var key = game?.Character.Key ?? "";
             now[id] = key;
             if (game is null || (_seen.TryGetValue(id, out var was) && was == key)) continue;
-            if (names.Get(key) is not null || Asking?.CharacterKey == key || _queue.Exists(q => q.CharacterKey == key)) continue;
+            if (names.Get(key) is not null || Asking?.Character.Key == key || _queue.Exists(q => q.Character.Key == key)) continue;
             _queue.Add(game);
         }
         _seen = now;
@@ -50,7 +50,7 @@ public sealed class CharacterLookups(CharacterNames names)
         }
         if (Asking is not null || now - _last < Gap) return null;
         names.Refresh();
-        _queue.RemoveAll(q => names.Get(q.CharacterKey) is not null || !_seen.ContainsValue(q.CharacterKey));
+        _queue.RemoveAll(q => names.Get(q.Character.Key) is not null || !_seen.ContainsValue(q.Character.Key));
         if (_queue.Count == 0) return null;
         Asking = _queue[0];
         _queue.RemoveAt(0);
@@ -68,8 +68,8 @@ public sealed class CharacterLookups(CharacterNames names)
         int late = current ? -1 : _late.FindIndex(x => x.Token == token);
         if (!current && late < 0) return false;
         var asked = current ? Asking! : _late[late].Game;
-        if (CharacterNames.FromAnswer(state, r) is { } known && r?.CharacterKey == asked.CharacterKey)
-            names.Remember(asked.CharacterKey, known);
+        if (CharacterNames.FromAnswer(state, r) is { } known && r?.Character.Key == asked.Character.Key)
+            names.Remember(asked.Character.Key, known);
         if (current) Asking = null;
         else _late.RemoveAt(late);
         return true;

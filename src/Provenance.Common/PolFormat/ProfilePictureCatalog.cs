@@ -8,7 +8,7 @@ public static class ProfilePictureCatalog
 {
     public sealed record Category(string Name, string Key, int RegionMask);
 
-    // Id = sheet * 8 + cell, the id stored on the handle
+    // Id is the sheet and cell (ProfilePictureSheets.IdOf), the id stored on the handle
     public sealed record ProfilePicture(int Id, string Name, string Artist, string CategoryKey);
 
     public sealed record Catalog(IReadOnlyList<Category> Categories, IReadOnlyList<ProfilePicture> ProfilePictures);
@@ -43,7 +43,7 @@ public static class ProfilePictureCatalog
         var p1 = Path.Combine(dir, "proface1.txt");
         if (!File.Exists(p0) || !File.Exists(p1)) return null;
         return Parse(Decode(File.ReadAllBytes(p0), "proface0.txt"), Decode(File.ReadAllBytes(p1), "proface1.txt"),
-                     region.Value, sheet => PolAvatar.SheetPath(viewerDir, sheet * 8) != null);
+                     region.Value, sheet => ProfilePictureSheets.SheetPath(viewerDir, sheet) != null);
     }
 
     public static Catalog Parse(string categoriesText, string picsText, int region, Func<int, bool> sheetOnDisk)
@@ -67,9 +67,9 @@ public static class ProfilePictureCatalog
                 catKey = f[1].Trim();
             }
             else cell++;
-            if (sheet < 0 || cell > 7) continue;
+            if (sheet < 0 || cell >= ProfilePictureSheets.PerSheet) continue;
             if (f[0].Trim() == "1" && allowed.Contains(catKey) && sheetOnDisk(sheet))
-                pics.Add(new ProfilePicture(sheet * 8 + cell, f[4].Trim(), f.Length > 5 ? f[5].Trim() : "", catKey));
+                pics.Add(new ProfilePicture(ProfilePictureSheets.IdOf(sheet, cell), f[4].Trim(), f.Length > 5 ? f[5].Trim() : "", catKey));
         }
         var used = pics.Select(x => x.CategoryKey).ToHashSet(StringComparer.Ordinal);
         return new Catalog(cats.Where(c => used.Contains(c.Key)).ToList(), pics);

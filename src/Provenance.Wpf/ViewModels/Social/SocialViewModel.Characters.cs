@@ -27,13 +27,13 @@ public partial class SocialViewModel
         lookups.Waiting(snap.CharacterToken, snap.ProfileServerBusy, DateTime.UtcNow);
         if (snap.FriendsLoaded) lookups.Seen(snap.Friends);
         if (GameRunning || _pol.Pid is not { } pid || lookups.Next(DateTime.UtcNow) is not { } game) return;
-        if (!SocialRequests.RequestCharacter(pid, lookups.Token, game.Ctsid, game.Ctid)) lookups.Failed();
+        if (!SocialRequests.RequestCharacter(pid, lookups.Token, game.Character)) lookups.Failed();
     }
 
     private (string Long, string Short) Playing(PolFriend f)
     {
         if (!f.Online || f.Pending || f.Game is not { } game) return ("", "");
-        var name = CharacterNames.Get(game.CharacterKey)?.Name ?? "";
+        var name = CharacterNames.Get(game.Character.Key)?.Name ?? "";
         return PlayingText.For(name.Length > 0 ? Filtered(name) : "", FfxiWorlds.Name(game.World));
     }
 }

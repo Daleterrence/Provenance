@@ -195,7 +195,7 @@ public partial class SocialViewModel
         if (p.Characters.Count > 0)
         {
             ProfileTabs.Add(new ProfileTab(-1, "", ViewerText(0x4abe, "Handle Profile")) { IsSelected = true });
-            foreach (var c in p.Characters) ProfileTabs.Add(new ProfileTab(c.Slot, c.CharacterKey, TabLabel(c.CharacterKey)));
+            foreach (var c in p.Characters) ProfileTabs.Add(new ProfileTab(c.Slot, c.Character.Key, TabLabel(c.Character.Key)));
         }
         HasProfileTabs = ProfileTabs.Count > 0;
         ShowProfile(p);
@@ -279,7 +279,7 @@ public partial class SocialViewModel
         ProfileLoading = false;
         var tab = _ffxiFor!;
         // the hook read whatever's in that slot now, which has to be the character the tab's for
-        if (st == "done" && snap.FfxiProfile!.CharacterKey != tab.CharacterKey) st = NoCharacter;
+        if (st == "done" && snap.FfxiProfile!.Character.Key != tab.CharacterKey) st = NoCharacter;
         if (st == "done")
         {
             var r = snap.FfxiProfile!;

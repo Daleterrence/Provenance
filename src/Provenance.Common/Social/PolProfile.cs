@@ -15,10 +15,7 @@ public sealed record PolProfile(string Name, string Mail, int MailState, string 
 }
 
 // one of the handle's game slots with an FFXI character in it. World is the game's world id
-public sealed record PolFfxiCharacter(int Slot, uint Ctsid, ulong Ctid, int World)
-{
-    public string CharacterKey => $"{Ctsid}:{Ctid}";
-}
+public sealed record PolFfxiCharacter(int Slot, CharacterId Character, int World);
 
 // a character's FFXI profile as the hook reads it, raw numbers with PolProfile's Shown, Private or NotSet each
 public sealed record PolFfxiProfile(int Slot, int Level, string Name, int NameState, string WorldName, int WorldNameState)
@@ -29,7 +26,5 @@ public sealed record PolFfxiProfile(int Slot, int Level, string Name, int NameSt
     public (int Value, int State) JobLevel { get; init; }
     public (int Value, int State) Race { get; init; }
     // the character the hook read, from the friend's slot
-    public uint Ctsid { get; init; }
-    public ulong Ctid { get; init; }
-    public string CharacterKey => $"{Ctsid}:{Ctid}";
+    public CharacterId Character { get; init; }
 }

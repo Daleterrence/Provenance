@@ -90,8 +90,8 @@ public static class SocialRequests
         HookFiles.WriteRequest(pid, HookContract.Requests.Comment, token, text);
 
     // the hook only looks it up while a friend's on that character
-    public static bool RequestCharacter(int pid, string token, uint ctsid, ulong ctid) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Character, token, ctsid, (uint)ctid, (uint)(ctid >> 32));
+    public static bool RequestCharacter(int pid, string token, CharacterId id) =>
+        HookFiles.WriteRequest(pid, HookContract.Requests.Character, token, id.Ctsid, (uint)id.Ctid, (uint)(id.Ctid >> 32));
 
     // which of the friend's game slots, the hook takes the character's ids from the slot itself
     public static bool RequestFfxiProfile(int pid, string token, int friendRow, string friendKey, int slot) =>

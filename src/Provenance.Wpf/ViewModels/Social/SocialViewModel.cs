@@ -485,13 +485,14 @@ public partial class SocialViewModel : ObservableObject
         if (takeStore) changed |= MergeStored(chat, snap);
         // the recent results too, since an answer can take the send slot before a line's result lands. First, so an
         // echo in the same snapshot finds its time and seq
-        foreach (var (token, state, time, seq) in snap.SendResults.Append((snap.SendToken, snap.SendState, 0L, 0L)))
+        foreach (var (token, state, time, seq, _, _) in snap.AllSends)
             if (token.Length > 0 && (state == "sent" || state.StartsWith("failed", StringComparison.Ordinal)))
             {
                 changed |= chat.SetSendState(token, state, time, seq);
                 _sendInFlight.RemoveAll(x => x.Token == token);
             }
-        foreach (var (token, fromSlot, toOther) in snap.SentFrom) changed |= chat.SetSentFrom(token, fromSlot, toOther);
+        foreach (var (token, _, _, _, fromSlot, toOther) in snap.SendResults.Where(x => x.FromSlot >= 0))
+            changed |= chat.SetSentFrom(token, fromSlot, toOther);
         foreach (var m in snap.Messages)
         {
             var who = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == m.FromKey)?.Name ?? m.From;

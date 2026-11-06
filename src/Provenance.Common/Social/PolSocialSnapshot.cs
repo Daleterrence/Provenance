@@ -2,6 +2,16 @@ namespace Provenance.Common.Social;
 
 // pol_hook.<pid>.social.json, rewritten every couple of secs. FfxiService is the Content ID check ("active" or
 // "none"), Notice the account notice status (221..252 = LM-01..LM-32)
+// Time and Seq are the sent message's header ones, 0 when nothing went. FromSlot is the handle slot a line that went
+// came from (-1 for none) and ToOther whether it went to another POL ID
+public sealed record PolSendResult(string Token, string State, long Time = 0, long Seq = 0, int FromSlot = -1,
+                                   bool ToOther = false);
+
+public sealed record PolQueuedSend(string Token, string State);
+
+// Time and Seq are the header ones of the line that came back
+public sealed record PolReturnedSend(long Time, long Seq, int FromSlot);
+
 public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int MyProfilePictureId,
                                        IReadOnlyList<PolFriend> Friends, IReadOnlyList<PolMessage> Messages,
                                        string FfxiService = "active", int Notice = 0,
@@ -14,23 +24,20 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public int NoticeDays { get; init; }
     // viewer message 0x7007
     public bool BadPassword { get; init; }
-    // chat lines, answers and group invites share the send slots, so a result can get bumped between snapshots. Time and
-    // Seq are the sent message's header ones, 0 when nothing went
-    public IReadOnlyList<(string Token, string State, long Time, long Seq)> SendResults { get; init; } = [];
-    // for the lines that went: the handle slot they went from and whether they went to another POL ID
-    public IReadOnlyList<(string Token, int FromSlot, bool ToOther)> SentFrom { get; init; } = [];
+    // chat lines, answers and group invites share the send slots, so a result can get bumped between snapshots
+    public IReadOnlyList<PolSendResult> SendResults { get; init; } = [];
+    // the results plus the one the send slot holds right now
+    public IEnumerable<PolSendResult> AllSends => SendResults.Append(new PolSendResult(SendToken, SendState));
     // the lines the hook has, "sending" once its PUT's started, "queued" before
-    public IReadOnlyList<(string Token, string State)> SendQueue { get; init; } = [];
-    // the header time and seq of chat lines from my own POL ID the hook got back, which never reached anyone
-    public IReadOnlyList<(long Time, long Seq, int FromSlot)> Returned { get; init; } = [];
+    public IReadOnlyList<PolQueuedSend> SendQueue { get; init; } = [];
+    // chat lines from my own POL ID the hook got back, which never reached anyone
+    public IReadOnlyList<PolReturnedSend> Returned { get; init; } = [];
 
     public string? SendStateFor(string? token)
     {
         if (string.IsNullOrEmpty(token)) return null;
         if (SendToken == token) return SendState;
-        for (int i = SendResults.Count - 1; i >= 0; i--)
-            if (SendResults[i].Token == token) return SendResults[i].State;
-        return null;
+        return SendResults.LastOrDefault(r => r.Token == token)?.State;
     }
 
     // job states run "saving"/"searching"/"loading" -> "saved"/"done"/"ready", or "failed:..."

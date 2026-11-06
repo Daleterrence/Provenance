@@ -44,11 +44,10 @@ public static class SocialSnapshotFiles
                 StatusBusy = Bool(root, "statusBusy"),
                 NoticeDays = Int(root, "noticeDays", 0),
                 BadPassword = Bool(root, "badPassword"),
-                SendResults = Arr(root, "sends", s => (Str(s, "token"), Str(s, "state"), Long(s, "time"), Long(s, "seq"))),
-                SentFrom = Arr(root, "sends", s => (Str(s, "token"), Int(s, "fromSlot", -1), Bool(s, "toOther")))
-                           .Where(x => x.Item2 >= 0).ToList(),
-                SendQueue = Arr(root, "queue", q => (Str(q, "token"), Str(q, "state"))),
-                Returned = Arr(root, "returned", r => (Long(r, "time"), Long(r, "seq"), Int(r, "fromSlot", -1))),
+                SendResults = Arr(root, "sends", s => new PolSendResult(Str(s, "token"), Str(s, "state"), Long(s, "time"),
+                    Long(s, "seq"), Int(s, "fromSlot", -1), Bool(s, "toOther"))),
+                SendQueue = Arr(root, "queue", q => new PolQueuedSend(Str(q, "token"), Str(q, "state"))),
+                Returned = Arr(root, "returned", r => new PolReturnedSend(Long(r, "time"), Long(r, "seq"), Int(r, "fromSlot", -1))),
                 EditToken = editToken,
                 EditState = editState,
                 MyComment = Str(root, "myComment").Trim(),
@@ -118,8 +117,7 @@ public static class SocialSnapshotFiles
             Str(p, "away").TrimEnd(), Str(p, "awayFrom"))
         {
             NameState = (int)Long(p, "nameState"),
-            Characters = Arr(p, "characters", c => new PolFfxiCharacter((int)Long(c, "slot"), UInt(c, "ctsid"),
-                                                                        (ulong)UInt(c, "ctidHigh") << 32 | UInt(c, "ctidLow"),
+            Characters = Arr(p, "characters", c => new PolFfxiCharacter((int)Long(c, "slot"), ReadCharacterId(c),
                                                                         (int)Long(c, "world"))),
         };
 
@@ -137,8 +135,7 @@ public static class SocialSnapshotFiles
             Job = Num("jobId"),
             JobLevel = Num("jobLevel"),
             Race = Num("raceId"),
-            Ctsid = UInt(p, "ctsid"),
-            Ctid = (ulong)UInt(p, "ctidHigh") << 32 | UInt(p, "ctidLow"),
+            Character = ReadCharacterId(p),
         };
     }
 
@@ -149,14 +146,17 @@ public static class SocialSnapshotFiles
                 Bool(m, "ignored"), Str(m, "text"), Str(m, "comment"))
                 { Slot = Int(m, "slot", -1), Hid = Str(m, "hid"), Mine = Bool(m, "mine"), InChat = Bool(m, "inChat") }));
 
+    private static CharacterId ReadCharacterId(JsonElement e) =>
+        new(UInt(e, "ctsid"), (ulong)UInt(e, "ctidHigh") << 32 | UInt(e, "ctidLow"));
+
     private static PolFriendGame? ReadGame(JsonElement g) =>
         g.ValueKind == JsonValueKind.Object
-            ? new PolFriendGame((int)Long(g, "world"), UInt(g, "ctsid"), (ulong)UInt(g, "ctidHigh") << 32 | UInt(g, "ctidLow"))
+            ? new PolFriendGame((int)Long(g, "world"), ReadCharacterId(g))
             : null;
 
     private static PolCharacterLookup? ReadCharacter(JsonElement c) =>
         c.ValueKind == JsonValueKind.Object
-            ? new PolCharacterLookup(UInt(c, "ctsid"), (ulong)UInt(c, "ctidHigh") << 32 | UInt(c, "ctidLow"), Str(c, "name").Trim(),
+            ? new PolCharacterLookup(ReadCharacterId(c), Str(c, "name").Trim(),
                                      Int(c, "nameState", PolProfile.Private), (int)Long(c, "level"), Str(c, "worldName"))
             : null;
 

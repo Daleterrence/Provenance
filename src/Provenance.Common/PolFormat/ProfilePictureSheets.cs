@@ -2,9 +2,9 @@ namespace Provenance.Common.PolFormat;
 
 // profile pics live in obfuscated PNG sheets (data\icon\download\hnf<NNN>.png) of 4x2 cells at 64x96, so pic F is
 // sheet F/8, cell F%8
-public static class PolAvatar
+public static class ProfilePictureSheets
 {
-    public const int CellWidth = 64, CellHeight = 96, Columns = 4, Rows = 2;
+    public const int CellWidth = 64, CellHeight = 96, Columns = 4, Rows = 2, PerSheet = Columns * Rows;
     private const uint Mult = 0x19660d;
     private static readonly byte[] PngSig = [0x89, 0x50, 0x4e, 0x47];
 
@@ -34,16 +34,20 @@ public static class PolAvatar
         return d;
     }
 
-    public static string? SheetPath(string viewerDir, int picId)
+    public static int SheetOf(int picId) => picId / PerSheet;
+
+    public static int IdOf(int sheet, int cell) => sheet * PerSheet + cell;
+
+    public static string? SheetPath(string viewerDir, int sheet)
     {
-        if (picId < 0) return null;
-        var path = Path.Combine(viewerDir, "data", "icon", "download", $"hnf{picId / (Columns * Rows):D3}.png");
+        if (sheet < 0) return null;
+        var path = Path.Combine(viewerDir, "data", "icon", "download", $"hnf{sheet:D3}.png");
         return File.Exists(path) ? path : null;
     }
 
-    public static (int x, int y, int w, int h) CellRect(int picId)
+    public static (int X, int Y, int Width, int Height) Cell(int picId)
     {
-        int c = picId % (Columns * Rows);
+        int c = picId % PerSheet;
         return ((c % Columns) * CellWidth, ((c / Columns) % Rows) * CellHeight, CellWidth, CellHeight);
     }
 }

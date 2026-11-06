@@ -11,7 +11,6 @@ namespace Provenance.Wpf.Services;
 // the viewer folder's looked for until it exists, the app can start before POL's installed
 public sealed class AvatarService(ISettingsService settings)
 {
-    private const int PicsPerSheet = PolAvatar.Columns * PolAvatar.Rows;
     internal string? _viewerDir;
     private readonly object _lock = new();
     internal readonly Dictionary<int, ImageSource?> _cache = new();
@@ -39,7 +38,7 @@ public sealed class AvatarService(ISettingsService settings)
         try
         {
             if (ViewerDir is null || picIds is null) return;
-            var sheets = picIds.Where(id => id >= 0).Select(id => id / PicsPerSheet).Distinct().ToArray();
+            var sheets = picIds.Where(id => id >= 0).Select(id => ProfilePictureSheets.SheetOf(id)).Distinct().ToArray();
             if (sheets.Length == 0) return;
             _ = Task.Run(() =>
             {
@@ -60,8 +59,8 @@ public sealed class AvatarService(ISettingsService settings)
         ImageSource? img = null;
         try
         {
-            var (x, y, w, h) = PolAvatar.CellRect(picId);
-            var sheet = LoadSheet(picId / PicsPerSheet);
+            var (x, y, w, h) = ProfilePictureSheets.Cell(picId);
+            var sheet = LoadSheet(ProfilePictureSheets.SheetOf(picId));
             if (sheet != null && x + w <= sheet.PixelWidth && y + h <= sheet.PixelHeight)
             {
                 var crop = new CroppedBitmap(sheet, new Int32Rect(x, y, w, h));
@@ -82,7 +81,7 @@ public sealed class AvatarService(ISettingsService settings)
         BitmapSource? img = null;
         try
         {
-            if (PolAvatar.SheetPath(dir, sheetIndex * PicsPerSheet) is { } sheetPath) img = DecodeSheet(sheetPath);
+            if (ProfilePictureSheets.SheetPath(dir, sheetIndex) is { } sheetPath) img = DecodeSheet(sheetPath);
         }
         catch { }
         lock (_lock)
@@ -98,7 +97,7 @@ public sealed class AvatarService(ISettingsService settings)
     {
         var sheet = new BitmapImage();
         sheet.BeginInit();
-        sheet.StreamSource = new MemoryStream(PolAvatar.Decode(File.ReadAllBytes(path)));
+        sheet.StreamSource = new MemoryStream(ProfilePictureSheets.Decode(File.ReadAllBytes(path)));
         sheet.CacheOption = BitmapCacheOption.OnLoad;
         sheet.EndInit();
         sheet.Freeze();
