@@ -10,6 +10,7 @@
     <InternalsVisibleTo Include="provenance-app-tests" />
     <PackageReference Include="NaCl.Net" />
     <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="SharpCompress" />
     <PackageReference Include="System.Diagnostics.EventLog" />
   </ItemGroup>

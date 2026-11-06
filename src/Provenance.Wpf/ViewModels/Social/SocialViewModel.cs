@@ -312,8 +312,8 @@ public partial class SocialViewModel : ObservableObject
     public void Start(string profileId, string? storeRoot = null)
     {
         _last = PolSocialSnapshot.Empty;
-        _chat = new ChatStore(profileId, storeRoot) { Log = line => Serilog.Log.Warning("Chat log: {Line}", line) };
-        GroupChat.SetLog(new GroupChatLog(profileId, storeRoot) { Log = line => Serilog.Log.Warning("Group chat log: {Line}", line) });
+        _chat = new ChatStore(profileId, storeRoot);
+        GroupChat.SetLog(new GroupChatLog(profileId, storeRoot));
         _chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
         _friendsSignature = "";
         _acked.Clear();

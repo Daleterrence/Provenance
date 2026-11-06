@@ -168,7 +168,6 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
                     {
                         StagingDir = staging,
                         Status = status.Report,
-                        Log = m => Log.Information("Repair: {Message}", m),
                         Changing = () => _changing = true,
                         Fixed = () => _fixed = true,
                         Fixing = () => _fixing = true,

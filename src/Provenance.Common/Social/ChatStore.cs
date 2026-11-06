@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Provenance.Common.Credentials;
 using Provenance.Common.IO;
+using Serilog;
 
 namespace Provenance.Common.Social;
 
@@ -222,14 +223,14 @@ public sealed class ChatStore
             var cipher = Dpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(_deleted), DeletedEntropy);
             if (cipher is null)
             {
-                Log?.Invoke($"{Path.GetFileName(p)} couldn't be encrypted, so it wasn't saved");
+                Log.Warning("Chat log: {Line}", $"{Path.GetFileName(p)} couldn't be encrypted, so it wasn't saved");
                 return;
             }
             Directory.CreateDirectory(Path.GetDirectoryName(p)!);
             AtomicFile.Write(p, cipher);
             _deletedDirty = false;
         }
-        catch (Exception e) { Log?.Invoke($"{Path.GetFileName(p)} couldn't be saved ({e.GetType().Name}: {e.Message})"); }
+        catch (Exception e) { Log.Warning("Chat log: {Line}", $"{Path.GetFileName(p)} couldn't be saved ({e.GetType().Name}: {e.Message})"); }
     }
 
     public bool SetSentFrom(string token, int fromSlot, bool toOther)
@@ -423,8 +424,6 @@ public sealed class ChatStore
         Save();
     }
 
-    public Action<string>? Log { get; init; }
-
     public bool Save()
     {
         if (_path is null) return false;
@@ -434,7 +433,7 @@ public sealed class ChatStore
             var cipher = Dpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(_entries), Entropy);
             if (cipher is null)
             {
-                Log?.Invoke($"{Path.GetFileName(_path)} couldn't be encrypted, so it wasn't saved");
+                Log.Warning("Chat log: {Line}", $"{Path.GetFileName(_path)} couldn't be encrypted, so it wasn't saved");
                 return false;
             }
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
@@ -444,7 +443,7 @@ public sealed class ChatStore
         }
         catch (Exception e)   // history's a convenience, never worth breaking the session over
         {
-            Log?.Invoke($"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
+            Log.Warning("Chat log: {Line}", $"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
             return false;
         }
     }

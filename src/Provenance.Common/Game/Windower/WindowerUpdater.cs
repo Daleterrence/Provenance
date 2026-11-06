@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using Provenance.Common.Security;
+using Serilog;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -38,7 +39,6 @@ public sealed class WindowerUpdater
     public string Branch { get; }
     public WindowerServers Servers { get; init; } = WindowerServers.Default;
     public Func<bool> OthersRunning { get; init; } = AnyRunning;
-    public Action<string>? Log { get; init; }
 
     // Windower waits forever, which is no good before a launch
     public TimeSpan MutexWait { get; init; } = TimeSpan.FromSeconds(30);
@@ -167,7 +167,7 @@ public sealed class WindowerUpdater
     private WindowerHttp NewHttp()
     {
         var v = WindowerFiles.LauncherVersion(LauncherPath);
-        return new WindowerHttp { UserAgent = WindowerHttp.UserAgentFor(v.Major > 0 ? v : WindowerHttp.DefaultLauncher), Log = Log };
+        return new WindowerHttp { UserAgent = WindowerHttp.UserAgentFor(v.Major > 0 ? v : WindowerHttp.DefaultLauncher) };
     }
 
     private async Task<(WindowerUpdateMutex? Hold, bool TimedOut)> TakeMutexAsync(List<string> errors, CancellationToken ct)
@@ -196,7 +196,7 @@ public sealed class WindowerUpdater
     private string Reason(Exception e, string ours)
     {
         if (Shown.Is(e)) return e.Message;
-        Log?.Invoke($"{ours} ({e.GetType().Name}: {e.Message})");
+        Log.Debug("Windower update: {Line}", $"{ours} ({e.GetType().Name}: {e.Message})");
         return ours;
     }
 

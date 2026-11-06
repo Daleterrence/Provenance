@@ -35,20 +35,9 @@ public partial class App : Application
         base.OnStartup(e);
         // first thing: the update check (or a whole update) can outlast a held Shift
         bool shiftAtStart = ShiftDown();
-        var logDir = AppPaths.Logs;
-        Directory.CreateDirectory(logDir);
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .WriteTo.File(Path.Combine(logDir, "launcher-.log"), rollingInterval: RollingInterval.Day,
-                          retainedFileCountLimit: 14,
-                          outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
-
         Log.Information("Provenance starting");
         // before anything's written to ProgramData, so Provenance's own files never look planted to the folder check
         if (!ProtectedFolders.OwnNewFilesAsAdministrators()) Log.Warning("New files won't be Administrators' if this PC's policy says otherwise");
-        if (Program.VelopackStartError is { } velopackError)
-            Log.Warning(velopackError, "Velopack start-up failed");
         // before the first window, the update one included, so nothing opens in the other theme first
         AppTheme.Apply(AppTheme.FromSettingsFile(SettingsService.DefaultPath));
 

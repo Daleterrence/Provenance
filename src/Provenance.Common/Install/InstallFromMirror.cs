@@ -5,6 +5,8 @@ using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
 using Provenance.Common.Security;
+using Serilog;
+using Serilog.Events;
 
 namespace Provenance.Common.Install;
 
@@ -14,8 +16,11 @@ internal sealed record InstallData(MirrorPointer Pointer, string Version, string
 
 // installer data goes to a staging folder laid out like the unpacked installer, game files straight to where the
 // packages put them
-public sealed class InstallFromMirror(MirrorClient client, string region, Action<string>? log = null)
+public sealed class InstallFromMirror(MirrorClient client, string region, string logName = "Mirror install",
+                                      LogEventLevel logLevel = LogEventLevel.Warning)
 {
+    private void Say(string line) => Log.Write(logLevel, "{Source}: {Message}", logName, line);
+
     private const string InstallSlug = "install";
     private const string PrepareStage = "Preparing";
     public const string PrepareText = "Getting the download ready...";
@@ -92,7 +97,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, Action
             try { server = await Task.Run(() => ServerVersion(product, ct), ct); }
             catch (Exception ex) when (ex is IOException or SocketException or InvalidDataException)
             {
-                log?.Invoke($"the {name} version check failed ({ex.Message}); installing the mirror's newest version");
+                Say($"the {name} version check failed ({ex.Message}); installing the mirror's newest version");
             }
             var index = server is null ? null : await client.GetIndexAsync(region, slug, server, ct);
             if (index is null)
@@ -101,7 +106,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, Action
                     return Skip<string>($"the mirror pointer names no {slug} version");
                 index = await client.GetIndexAsync(region, slug, newest, ct);
                 if (index is null) return Skip<string>($"the {slug} index {newest} is missing or failed verification");
-                if (server is not null) log?.Invoke($"the mirror does not have {name} {server} yet; installing {newest}, and the first update brings it current");
+                if (server is not null) Say($"the mirror does not have {name} {server} yet; installing {newest}, and the first update brings it current");
             }
             if (slug == "ffxi" && index.Version == server) GameIndex = index;
             if (MirrorDownloads.Unusable(folders[i], index) is { } unsafePath) return Skip<string>(unsafePath);
@@ -109,7 +114,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, Action
             if (Unlisted(folders[i], targets[i], index) is { } unlisted)
             {
                 var reason = $"the {slug} index {index.Version} does not list {unlisted}, which the {name} package installs";
-                log?.Invoke(reason);
+                Say(reason);
                 return Skip<string>(reason);
             }
             plans.Add((new StagedProduct(slug, product, index.Version, index.Version == server), index, name));
@@ -214,9 +219,9 @@ public sealed class InstallFromMirror(MirrorClient client, string region, Action
                 (e, ex) =>
                 {
                     reasons[e.Path] = ex;
-                    log?.Invoke($"{index.Product} file {e.Path} failed: {ex.GetType().Name}: {ex.Message}");
+                    Say($"{index.Product} file {e.Path} failed: {ex.GetType().Name}: {ex.Message}");
                 },
-                onRetry: (e, attempt, ex) => log?.Invoke($"{index.Product} file {e.Path} attempt {attempt} failed, trying again: {ex.GetType().Name}: {ex.Message}"));
+                onRetry: (e, attempt, ex) => Say($"{index.Product} file {e.Path} attempt {attempt} failed, trying again: {ex.GetType().Name}: {ex.Message}"));
             if (failed.Count > 0)
             {
                 var files = failed.Select(e => e.Path).ToList();

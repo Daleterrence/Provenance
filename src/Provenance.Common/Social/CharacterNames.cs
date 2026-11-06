@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Provenance.Common.IO;
+using Serilog;
 
 namespace Provenance.Common.Social;
 
@@ -32,8 +33,6 @@ public sealed class CharacterNames
         _path = path;
         Refresh();
     }
-
-    public Action<string>? Log { get; init; }
 
     public int Count => _known.Count;
 
@@ -106,7 +105,7 @@ public sealed class CharacterNames
         }
         catch (Exception e)   // it just gets asked again next session
         {
-            Log?.Invoke($"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
+            Log.Warning("Character names: {Line}", $"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
         }
     }
 

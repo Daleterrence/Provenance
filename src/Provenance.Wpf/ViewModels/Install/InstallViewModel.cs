@@ -430,8 +430,7 @@ public partial class InstallViewModel : ObservableObject
         Detail = InstallFromMirror.PrepareText;
         Log.Information("Install source: trying the Provenance mirror");
         var staging = Path.Combine(work, MirrorFolder);
-        var mirror = _mirror = new InstallFromMirror(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion,
-                                                 m => Log.Warning("Mirror install: {Message}", m));
+        var mirror = _mirror = new InstallFromMirror(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion);
         var progress = new Progress<InstallProgress>(p =>
         {
             Stage = p.Stage;

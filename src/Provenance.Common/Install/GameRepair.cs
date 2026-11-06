@@ -3,6 +3,8 @@ using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
 using Provenance.Common.Security;
+using Serilog;
+using Serilog.Events;
 
 namespace Provenance.Common.Install;
 
@@ -36,6 +38,8 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     public Func<string, bool> InstalledByWindowsInstaller { get; init; } = MsiInstaller.IsInstalled;
 
+    private static void Say(string line) => Log.Information("Repair: {Message}", line);
+
     public Func<bool> DirectXPresent { get; init; } = GameInstaller.DirectXJun2010Present;
 
     // admin-only, DXSETUP runs from it as admin. Only skipInstallData gets away without one.
@@ -43,8 +47,6 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     // runs on worker threads
     public Action<string>? Status { get; init; }
-
-    public Action<string>? Log { get; init; }
 
     // once, right before the first game file changes
     public Action? Changing { get; init; }
@@ -73,7 +75,7 @@ public sealed class GameRepair(MirrorClient client, string region)
             if (index is null)
             {
                 MissingVersion = server;
-                Log?.Invoke($"the mirror has no {slug} index {server} (missing or failed verification)");
+                Say($"the mirror has no {slug} index {server} (missing or failed verification)");
                 return null;
             }
             found.Add((slug, product, index));
@@ -138,7 +140,7 @@ public sealed class GameRepair(MirrorClient client, string region)
         {
             Status?.Invoke("Checking the PlayOnline Viewer files again...");
             var again = await MirrorDownloads.ScanAsync(viewer.Folder, plan.Indexes["viewer"], null, ct, keepLargeAddressAware: true);
-            if (again.Count > 0) Log?.Invoke($"the Viewer's queued update files changed {again.Count} file(s); they are downloaded again");
+            if (again.Count > 0) Say($"the Viewer's queued update files changed {again.Count} file(s); they are downloaded again");
             // no share of the bar for these, it'd have to start again from nothing
             ThrowIfFailed(await DownloadAsync("viewer", viewer, again, null, replaced, ct));
         }
@@ -153,7 +155,7 @@ public sealed class GameRepair(MirrorClient client, string region)
                 using var pkg = new MsiPackage(p.Msi);
                 return pkg.Apply(installRoot, p.Properties, null, ct, uninstall: p.Uninstall, payloadInPlace: true, keepExisting: true);
             }, ct);
-            Log?.Invoke($"{p.Name} put back what was missing or wrong: {r.RegistryValues} registry values, {r.Classes} COM classes, " +
+            Say($"{p.Name} put back what was missing or wrong: {r.RegistryValues} registry values, {r.Classes} COM classes, " +
                         $"{r.ProgIds} ProgIDs, {r.TypeLibs} type libraries, uninstall entry: {r.Uninstall}");
             if (r.Written > 0) Fixed?.Invoke();
             other += r.Written;
@@ -167,7 +169,7 @@ public sealed class GameRepair(MirrorClient client, string region)
             var dxsetup = Path.Combine(StagingDir!, "redist", "Directx_Jun2010", "DXSETUP.exe");
             if (!File.Exists(dxsetup))
             {
-                Log?.Invoke("the DirectX runtime is missing, and the install data has no DirectX installer");
+                Say("the DirectX runtime is missing, and the install data has no DirectX installer");
                 throw Shown.Mark(new InvalidOperationException(DirectXFailed));
             }
             Status?.Invoke("Installing the DirectX runtime...");
@@ -176,10 +178,10 @@ public sealed class GameRepair(MirrorClient client, string region)
             Fixed?.Invoke();
             var warnings = new List<string>();
             await GameInstaller.RunDirectXAsync(dxsetup, warnings, ct);
-            foreach (var w in warnings) Log?.Invoke(w);
+            foreach (var w in warnings) Say(w);
             if (!DirectXPresent())
             {
-                Log?.Invoke("the DirectX runtime is still missing after DXSETUP");
+                Say("the DirectX runtime is still missing after DXSETUP");
                 throw Shown.Mark(new InvalidOperationException(DirectXFailed));
             }
             other++;
@@ -212,7 +214,7 @@ public sealed class GameRepair(MirrorClient client, string region)
         // one text for both products, so the time left carries on across them
         Status?.Invoke("Downloading replacement files...");
         var failed = await MirrorDownloads.DownloadAllAsync(client, region, product.Folder, work, MirrorDownloads.DefaultParallel, progress, ct,
-            (e, ex) => Log?.Invoke($"{slug} file {e.Path} failed: {ex.GetType().Name}: {ex.Message}"));
+            (e, ex) => Say($"{slug} file {e.Path} failed: {ex.GetType().Name}: {ex.Message}"));
         var bad = new HashSet<string>(failed.Select(e => e.Path), StringComparer.OrdinalIgnoreCase);
         foreach (var e in work) if (!bad.Contains(e.Path)) replaced.Add($"{slug}/{e.Path}");
         return failed.Select(e => e.Path).ToList();
@@ -234,7 +236,7 @@ public sealed class GameRepair(MirrorClient client, string region)
     {
         if (StagingDir is null) throw new InvalidOperationException("GameRepair.StagingDir is not set.");
         bool installDirectX = plan.DirectXMissing;
-        var install = new InstallFromMirror(client, region, Log);
+        var install = new InstallFromMirror(client, region, "Repair", LogEventLevel.Information);
         Status?.Invoke("Downloading the installer data...");
         // the download only, the look over anything already in the staging folder is local and counts other bytes
         var bytes = progress is null ? null : new InlineProgress<InstallProgress>(p => { if (p is { Download: true, Fraction: >= 0 }) progress.Report((p.DoneBytes, p.TotalBytes)); });
@@ -251,12 +253,12 @@ public sealed class GameRepair(MirrorClient client, string region)
                 throw new MirrorUnusableException(unusable, []);
             if (!PathInside.Same(folder, product.Folder))
             {
-                Log?.Invoke($"{name} is not checked: its package installs to {folder}, the install is in {product.Folder}");
+                Say($"{name} is not checked: its package installs to {folder}, the install is in {product.Folder}");
                 continue;
             }
             if (InstalledByWindowsInstaller(productCode))
             {
-                Log?.Invoke($"{name} is not checked: Windows Installer has product {productCode}");
+                Say($"{name} is not checked: Windows Installer has product {productCode}");
                 continue;
             }
             var coming = new HashSet<string>(WorkOf(plan, slug).Select(e => MirrorDownloads.SafePath(product.Folder, e.Path)), StringComparer.OrdinalIgnoreCase);
@@ -278,7 +280,7 @@ public sealed class GameRepair(MirrorClient client, string region)
         ChangingNow();
         Status?.Invoke("Finishing the last PlayOnline Viewer update...");
         PolUpdater.ApplyQueued(viewerDir);
-        Log?.Invoke("applied the PlayOnline Viewer's queued update files");
+        Say("applied the PlayOnline Viewer's queued update files");
         return true;
     }
 
@@ -294,7 +296,7 @@ public sealed class GameRepair(MirrorClient client, string region)
         try { return new PolUpdater(product).LocalVersion(); }
         catch (InvalidDataException ex)
         {
-            Log?.Invoke($"the {product.Name} patch.ver cannot be read ({ex.Message}); the version check sends none");
+            Say($"the {product.Name} patch.ver cannot be read ({ex.Message}); the version check sends none");
             return "";
         }
     }

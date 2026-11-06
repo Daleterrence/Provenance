@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Provenance.Common.Credentials;
 using Provenance.Common.IO;
+using Serilog;
 
 namespace Provenance.Common.Social;
 
@@ -92,8 +93,6 @@ public sealed class GroupChatLog
         return true;
     }
 
-    public Action<string>? Log { get; init; }
-
     public bool Save()
     {
         if (_path is null) return false;
@@ -102,7 +101,7 @@ public sealed class GroupChatLog
             var cipher = Dpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(_groups), Entropy);
             if (cipher is null)
             {
-                Log?.Invoke($"{Path.GetFileName(_path)} couldn't be encrypted, so it wasn't saved");
+                Log.Warning("Group chat log: {Line}", $"{Path.GetFileName(_path)} couldn't be encrypted, so it wasn't saved");
                 return false;
             }
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
@@ -113,7 +112,7 @@ public sealed class GroupChatLog
         }
         catch (Exception e)
         {
-            Log?.Invoke($"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
+            Log.Warning("Group chat log: {Line}", $"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
             return false;
         }
     }

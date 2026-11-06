@@ -536,7 +536,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     private static Task<WindowerInstallResult> InstallFromWindower(string dir, string branch, AddonKind kind, string name)
     {
-        var updater = WindowerUpdates.NewUpdater(dir, branch);
+        var updater = new WindowerUpdater(dir, branch);
         return kind == AddonKind.Plugin ? updater.InstallPluginAsync(name) : updater.InstallAddonAsync(name);
     }
 

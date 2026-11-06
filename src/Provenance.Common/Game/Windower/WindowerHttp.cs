@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Authentication;
+using Serilog;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -47,8 +48,6 @@ public sealed class WindowerHttp : IDisposable
     }
 
     public string UserAgent { get; set; } = UserAgentFor(DefaultLauncher);
-
-    public Action<string>? Log { get; set; }
 
     // hosts that didn't answer at all, by the site asked rather than where a redirect went. The archive's site is
     // github.com here, Windower switches off api.github.com for it
@@ -141,7 +140,7 @@ public sealed class WindowerHttp : IDisposable
         var host = site.Host;
         var uri = new Uri(site, url);
         var since = modified is { } d ? $" (If-Modified-Since: {HttpDate(d.Kind == DateTimeKind.Local ? d.ToUniversalTime() : d)})" : "";
-        void Say(string what) => Log?.Invoke($"GET {uri}{since} -> {what}");
+        void Say(string what) => Log.Debug("Windower update: {Line}", $"GET {uri}{since} -> {what}");
         if (_offline.Contains(host))
         {
             Say($"not sent, {host} didn't answer earlier");

@@ -9,7 +9,7 @@ public partial class SocialViewModel
 
     internal CharacterNames CharacterNames
     {
-        get => _characterNames ??= new CharacterNames { Log = line => Serilog.Log.Warning("Character names: {Line}", line) };
+        get => _characterNames ??= new CharacterNames();
         set
         {
             _characterNames = value;

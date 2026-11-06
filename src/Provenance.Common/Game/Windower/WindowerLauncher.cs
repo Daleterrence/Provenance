@@ -170,7 +170,7 @@ public sealed class WindowerLauncher : IDisposable
     private void UpdateWindower(string branch, IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         progress?.Report(new LaunchProgress("Starting", "Checking for Windower updates...", LaunchSteps.StartPol));
-        var updater = (_setup.NewUpdater ?? WindowerUpdates.NewUpdater)(_setup.WindowerDir, branch);
+        var updater = (_setup.NewUpdater ?? ((d, b) => new WindowerUpdater(d, b)))(_setup.WindowerDir, branch);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(_setup.UpdateLimit);
         bool failed = false;

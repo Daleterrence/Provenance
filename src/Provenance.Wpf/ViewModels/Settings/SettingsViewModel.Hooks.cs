@@ -52,7 +52,7 @@ public partial class SettingsViewModel
     public bool ShowProfileSwitcher => ShownTab is 1 or 2 or 3 && (IsWindower || IsAshita) && !(ShownTab == 3 && Addons is { SameListForEveryProfile: true });
     public bool ShowProfileTools => ShownTab == 1;
     public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita boot configuration:" : "Editing Windower profile:";
-    internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = WindowerUpdates.NewUpdater;
+    internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = (dir, branch) => new WindowerUpdater(dir, branch);
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
 
     // only the folder in the box, never one found somewhere else, since profiles get changed in it
