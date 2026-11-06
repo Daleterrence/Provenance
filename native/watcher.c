@@ -9,9 +9,13 @@
 
 /* the app reads this output and the exit codes, so they don't change */
 static HANDLE g_child;   /* the suspended pol.exe, killed on any later failure */
+static HANDLE g_buf_process;   /* a buffer in a process that stays running, freed on a failure that leaves it unused */
+static void *g_buf;
 static void die(const char *m)
 {
-    fprintf(stderr, "watcher: %s (err=%lu)\n", m, GetLastError());
+    DWORD err = GetLastError();
+    if (g_buf) VirtualFreeEx(g_buf_process, g_buf, 0, MEM_RELEASE);
+    fprintf(stderr, "watcher: %s (err=%lu)\n", m, err);
     if (g_child) TerminateProcess(g_child, 1);
     exit(1);
 }
@@ -35,7 +39,11 @@ static DWORD remote_run(HANDLE p, FARPROC fn, void *arg, DWORD wait_ms, const ch
     DWORD code = 0;
     HANDLE th = CreateRemoteThread(p, NULL, 0, (LPTHREAD_START_ROUTINE)fn, arg, 0, NULL);
     if (!th) die(create_msg);
-    if (WaitForSingleObject(th, wait_ms) != WAIT_OBJECT_0) { CloseHandle(th); die(timeout_msg); }
+    if (WaitForSingleObject(th, wait_ms) != WAIT_OBJECT_0) {
+        g_buf = NULL;   /* the thread may still be reading it */
+        CloseHandle(th);
+        die(timeout_msg);
+    }
     GetExitCodeThread(th, &code);
     CloseHandle(th);
     return code;
@@ -52,8 +60,11 @@ static DWORD remote_load(HANDLE process, FARPROC loader, const void *data, DWORD
     DWORD code;
     void *remote = VirtualAllocEx(process, NULL, size, MEM_COMMIT, PAGE_READWRITE);
     if (!remote) die("VirtualAllocEx");
+    g_buf_process = process;
+    g_buf = remote;
     if (!WriteProcessMemory(process, remote, data, size, NULL)) die("WriteProcessMemory");
     code = remote_run(process, loader, remote, wait_ms, "CreateRemoteThread", timeout_msg);
+    g_buf = NULL;
     VirtualFreeEx(process, remote, 0, MEM_RELEASE);
     return code;
 }
