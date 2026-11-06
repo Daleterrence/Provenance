@@ -1555,19 +1555,15 @@ public partial class MainViewModel : ObservableObject
     // the same pick Play uses: Ashita falls back to the last config Ashita ran with, Windower's "" is the unnamed one
     public IReadOnlyList<PlayChoice> PlayChoices()
     {
-        var s = _settings.Current;
-        if (_pol.Platform == ThirdPartyHook.Ashita)
+        var target = PlayTarget.For(_settings.Current, null);
+        if (target.Platform == ThirdPartyHook.Ashita)
+            return AshitaBootFiles.Names(target.Dir)
+                .Select(n => new PlayChoice(n.File, n.Shown, target.Is(n.File))).ToList();
+        if (target.Platform == ThirdPartyHook.Windower)
         {
-            var dir = AshitaInstall.Detect(s.AshitaPath);
-            var current = string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedBootConfig(dir) : s.AshitaBootConfig;
-            return AshitaBootFiles.Names(dir)
-                .Select(n => new PlayChoice(n.File, n.Shown, n.File.Equals(current, StringComparison.OrdinalIgnoreCase))).ToList();
-        }
-        if (_pol.Platform == ThirdPartyHook.Windower)
-        {
-            var names = WindowerInstall.Profiles(WindowerInstall.Detect(s.WindowerPath));
-            var current = WindowerSettingsFile.OldCopySource(s.WindowerProfile);
-            return names.Select(n => new PlayChoice(n, WindowerInstall.DisplayName(n, names), n == current)).ToList();
+            var names = WindowerInstall.Profiles(target.Dir);
+            var picked = target.Picked(names);
+            return names.Select(n => new PlayChoice(n, WindowerInstall.DisplayName(n, names), n == picked)).ToList();
         }
         return [];
     }

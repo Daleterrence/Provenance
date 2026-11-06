@@ -59,14 +59,15 @@ public sealed class WindowerLauncher : IDisposable
                                               IReadOnlyDictionary<string, WindowerAddonList>? lists, WindowerAddonList? shared = null)
     {
         var s = settings.Current;
-        var dir = WindowerInstall.Detect(s.WindowerPath)
+        var target = PlayTarget.For(s, accountProfile, ThirdPartyHook.Windower);
+        var dir = target.Dir
                   ?? throw Shown.Mark(new DirectoryNotFoundException("Couldn't find Windower. Set its folder in Settings, under Windower/Ashita."));
         var region = ThirdPartyHooks.RegionOfPol(polExe) ?? settings.DetectedRegion ?? PolRegion.UnitedStates;
         return new WindowerLaunchSetup
         {
             WindowerDir = dir,
-            ProfileName = WindowerSettingsFile.OldCopySource(accountProfile ?? s.WindowerProfile),
-            ProfileFromAccount = accountProfile is not null,
+            ProfileName = target.Profile,
+            ProfileFromAccount = target.FromAccount,
             PolExe = polExe,
             Region = region,
             FfxiDir = PolPaths.TryGetInstallFolder(region, GameProduct.Game),

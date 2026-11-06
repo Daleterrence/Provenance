@@ -70,14 +70,19 @@ public partial class SettingsViewModel
     {
         _loadingThirdPartyHook = true;
         var s = _settings.Current;
-        if (ThirdPartyProfiles.MapOldCopies(s)) _settings.Save(s);
         Hook = s.ThirdPartyHookPlatform;
         AshitaPath = AshitaInstall.Detect(s.AshitaPath) ?? s.AshitaPath;
         WindowerPath = WindowerInstall.Detect(s.WindowerPath) ?? s.WindowerPath;
         _loadingThirdPartyHook = false;
         // the boot config Ashita really ran with last (from its logs), so the game keeps its window and plugins
-        RefreshThirdPartyHookLists(s.WindowerProfile,
-            AshitaBootFiles.List(AshitaDir).Contains(s.AshitaBootConfig) ? s.AshitaBootConfig : AshitaInstall.LastUsedBootConfig(AshitaDir));
+        var windower = PlayTarget.For(s, null, ThirdPartyHook.Windower);
+        var ashita = PlayTarget.For(s, null, ThirdPartyHook.Ashita);
+        RefreshThirdPartyHookLists(windower.Profile, ashita.Profile);
+        // a pick that's gone from its folder isn't swapped for another here, Play would fail on it too
+        _loadingThirdPartyHook = true;
+        if (ashita.Profile.Length > 0 && AshitaBootConfig is not null && !ashita.Is(AshitaBootConfig.Name)) AshitaBootConfig = null;
+        if (windower.Profile.Length > 0 && WindowerProfile is not null && !windower.Is(WindowerProfile.Name)) WindowerProfile = null;
+        _loadingThirdPartyHook = false;
         UpdateThirdPartyHookStatus();
         LoadCards();
     }
@@ -261,8 +266,8 @@ public partial class SettingsViewModel
         var s = _settings.Current;
         if (IsWindower && WindowerDir is { } w)
             return WindowerProfile is { } p ? new WindowerGameStore(w, p.Name, registry, p.Display)
-                 : new WindowerGameStore(w, WindowerSettingsFile.OldCopySource(s.WindowerProfile), registry);
-        if (IsAshita && AshitaDir is { } a && (AshitaBootConfig?.Name ?? s.AshitaBootConfig) is { Length: > 0 } boot)
+                 : new WindowerGameStore(w, PlayTarget.For(s, null, ThirdPartyHook.Windower).Profile, registry);
+        if (IsAshita && AshitaDir is { } a && (AshitaBootConfig?.Name ?? PlayTarget.For(s, null, ThirdPartyHook.Ashita).Profile) is { Length: > 0 } boot)
             return new AshitaGameStore(a, boot, registry, AshitaBootConfig?.Display);
         return registry;
     }

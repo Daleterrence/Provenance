@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.IO;
 using Provenance.Common.Security;
 using Serilog;
@@ -39,6 +40,7 @@ public sealed class SettingsService : ISettingsService
         _path = path;
         Current = Load();
         _known = Node(Current);
+        if (ThirdPartyProfiles.MapOldCopies(Current)) Write(Current);
     }
 
     private LauncherSettings Load()

@@ -28,10 +28,9 @@ public static class GameBackupPolicy
     {
         var windows = registry.LoadWindows().ScreenshotFolder;
         if (s.ThirdPartyHookPlatform != ThirdPartyHook.Ashita) return windows;
-        var dir = AshitaInstall.Detect(s.AshitaPath);
-        var boot = accountBoot is { Length: > 0 } ? accountBoot
-                 : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedBootConfig(dir) : s.AshitaBootConfig;
-        if (dir is null || boot is not { Length: > 0 } || !AshitaBootFiles.IsBootFileName(boot)) return windows;
+        var play = PlayTarget.For(s, accountBoot, ThirdPartyHook.Ashita);
+        var (dir, boot) = (play.Dir, play.Profile);
+        if (dir is null || boot.Length == 0 || !AshitaBootFiles.IsBootFileName(boot)) return windows;
         try { return new AshitaGameStore(dir, boot, registry).Load().ScreenshotFolder; }
         catch (Exception ex)
         {

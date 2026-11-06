@@ -65,7 +65,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     internal static AddonsTarget TargetOf(SettingsViewModel tab, LauncherSettings saved) => tab.Hook switch
     {
         ThirdPartyHook.Ashita => new(ThirdPartyHook.Ashita, tab.AshitaDir, tab.AshitaBootConfig?.Name ?? saved.AshitaBootConfig ?? ""),
-        ThirdPartyHook.Windower => new(ThirdPartyHook.Windower, tab.WindowerDir, tab.WindowerProfile?.Name ?? WindowerSettingsFile.OldCopySource(saved.WindowerProfile)),
+        ThirdPartyHook.Windower => new(ThirdPartyHook.Windower, tab.WindowerDir, tab.WindowerProfile?.Name ?? PlayTarget.For(saved, null, ThirdPartyHook.Windower).Profile),
         _ => new(ThirdPartyHook.None, null, ""),
     };
 

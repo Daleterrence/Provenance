@@ -44,14 +44,13 @@ public static class AshitaLauncher
             return null;
         }
         var s = settings.Current;
-        string? dir = AshitaInstall.Detect(s.AshitaPath);
+        var target = PlayTarget.For(s, profile, ThirdPartyHook.Ashita);
+        string? dir = target.Dir;
         if (dir is null) return Fail("Couldn't find Ashita. Set its folder in Settings, under Windower/Ashita.");
 
-        bool fromAccount = profile is { Length: > 0 };
-        var boot = fromAccount ? profile
-                 : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedBootConfig(dir) : s.AshitaBootConfig;
-        if (boot is { Length: > 0 } && !AshitaBootFiles.IsBootFileName(boot))
-            return Fail(fromAccount ? AccountBootFileProblem
+        string? boot = target.Profile.Length > 0 ? target.Profile : null;
+        if (boot is not null && !AshitaBootFiles.IsBootFileName(boot))
+            return Fail(target.FromAccount ? AccountBootFileProblem
                 : "The Ashita boot configuration has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Windower/Ashita.");
         string bootFile;
         try { bootFile = Path.GetFileName(AshitaInstall.WriteBoot(dir, boot, polExe)); }
