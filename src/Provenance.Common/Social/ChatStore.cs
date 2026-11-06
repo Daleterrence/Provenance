@@ -1,15 +1,11 @@
 using System.Text;
-using System.Text.Json;
-using Provenance.Common.Credentials;
 using Provenance.Common.IO;
-using Serilog;
 
 namespace Provenance.Common.Social;
 
 // like the viewer's own pub\homeNN\msg. The server keeps no read flag or sent copy, so those live here
 public sealed class ChatStore
 {
-    private readonly string? _path;
     private readonly List<ChatEntry> _entries = new();
     private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
     // lines deleted here. The game's message store's read again at every login and a line can still be on the server
@@ -24,6 +20,10 @@ public sealed class ChatStore
 
     // format constant, never change it or every old log stops opening
     private static readonly byte[] Entropy = Encoding.ASCII.GetBytes("Provenance PlayOnline chat log v1");
+    private static readonly byte[] DeletedEntropy = Encoding.ASCII.GetBytes("Provenance PlayOnline deleted lines v1");
+
+    private readonly EncryptedJsonFile<List<ChatEntry>>? _file;
+    private readonly EncryptedJsonFile<Dictionary<string, long>>? _deletedFile;
 
     // DPAPI-encrypted, it's friends' messages in there
     public ChatStore(string profileId, string? root = null)
@@ -34,25 +34,16 @@ public sealed class ChatStore
             if (AppPaths.UserData is not { } userData) return;
             root = Path.Combine(userData, "messages");
         }
-        _path = Path.Combine(root, profileId + ".dat");
-        LoadDeleted();
-        if (!File.Exists(_path)) return;
-        try
-        {
-            var plain = Dpapi.Unprotect(File.ReadAllBytes(_path), Entropy);
-            if (plain != null && JsonSerializer.Deserialize<List<ChatEntry>>(plain) is { } loaded)
-            {
-                // a delete whose log save never landed is still a delete
-                var kept = loaded.Where(e => !_deleted.ContainsKey(e.Key)).ToList();
-                _entries.AddRange(kept);
-                foreach (var e in kept) _keys.Add(e.Key);
-                return;
-            }
-        }
-        catch { }
-        // unreadable here (another Windows account, a damaged file), so set it aside rather than let the next save
-        // overwrite it with an empty log
-        try { File.Move(_path, _path + "." + DateTime.Now.ToString("yyyyMMddHHmmss") + ".unreadable"); } catch { }
+        var path = Path.Combine(root, profileId + ".dat");
+        _file = new(path, Entropy, "Chat log");
+        _deletedFile = new(path[..^4] + ".deleted.dat", DeletedEntropy, "Chat log", setAsideUnreadable: false);
+        if (_deletedFile.Load() is { } keys)
+            foreach (var (k, t) in keys) _deleted[k] = t;
+        if (_file.Load() is not { } loaded) return;
+        // a delete whose log save never landed is still a delete
+        var kept = loaded.Where(e => !_deleted.ContainsKey(e.Key)).ToList();
+        _entries.AddRange(kept);
+        foreach (var e in kept) _keys.Add(e.Key);
     }
 
     public IReadOnlyList<ChatEntry> Entries => _entries;
@@ -73,7 +64,6 @@ public sealed class ChatStore
         Add(new ChatEntry(m.Key, m.From, false, subject, text,
                           m.Time > 0 ? m.Time : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), read, state)
             { PeerKey = m.FromKey, Seq = m.Seq });
-        Dirty = true;
         return true;
     }
 
@@ -88,7 +78,6 @@ public sealed class ChatStore
                           s.Time > 0 ? s.Time : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), true,
                           s.State == "sent" ? "sent" : "unsent")
             { PeerKey = s.ToKey, Seq = s.Seq, FromSlot = s.FromSlot, ToOther = s.FromSlot >= 0 ? s.ToOther : null });
-        Dirty = true;
         return true;
     }
 
@@ -118,7 +107,7 @@ public sealed class ChatStore
         {
             int i = _entries.FindIndex(e => e.Key == "out:" + token);
             if (i < 0 || _entries[i].State == state) continue;
-            _entries[i] = _entries[i] with { State = state };
+            Edit(i, e => e with { State = state });
             changed = true;
         }
         if (changed) Changed();
@@ -131,11 +120,10 @@ public sealed class ChatStore
         var key = "out:" + token;
         int i = _keys.Contains(key) ? _entries.FindLastIndex(e => e.Key == key) : -1;
         if (i < 0) return false;
-        var e = _entries[i];
-        bool stamp = state == "sent" && time > 0 && (e.Time != time || e.Seq != seq);
-        if (e.State == state && !stamp) return false;
-        _entries[i] = stamp ? e with { State = state, Time = time, Seq = seq } : e with { State = state };
-        _version++;
+        var cur = _entries[i];
+        bool stamp = state == "sent" && time > 0 && (cur.Time != time || cur.Seq != seq);
+        if (cur.State == state && !stamp) return false;
+        Edit(i, e => stamp ? e with { State = state, Time = time, Seq = seq } : e with { State = state });
         Changed();
         return true;
     }
@@ -199,38 +187,10 @@ public sealed class ChatStore
         return gone.Count;
     }
 
-    private string? DeletedPath => _path is null ? null : _path[..^4] + ".deleted.dat";
-    private static readonly byte[] DeletedEntropy = Encoding.ASCII.GetBytes("Provenance PlayOnline deleted lines v1");
-
-    private void LoadDeleted()
-    {
-        if (DeletedPath is not { } p || !File.Exists(p)) return;
-        try
-        {
-            var plain = Dpapi.Unprotect(File.ReadAllBytes(p), DeletedEntropy);
-            if (plain != null && JsonSerializer.Deserialize<Dictionary<string, long>>(plain) is { } keys)
-                foreach (var (k, t) in keys) _deleted[k] = t;
-        }
-        catch { }
-    }
-
     // tried again with every save of the log till it lands
     private void SaveDeleted()
     {
-        if (DeletedPath is not { } p) return;
-        try
-        {
-            var cipher = Dpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(_deleted), DeletedEntropy);
-            if (cipher is null)
-            {
-                Log.Warning("Chat log: {Line}", $"{Path.GetFileName(p)} couldn't be encrypted, so it wasn't saved");
-                return;
-            }
-            Directory.CreateDirectory(Path.GetDirectoryName(p)!);
-            AtomicFile.Write(p, cipher);
-            _deletedDirty = false;
-        }
-        catch (Exception e) { Log.Warning("Chat log: {Line}", $"{Path.GetFileName(p)} couldn't be saved ({e.GetType().Name}: {e.Message})"); }
+        if (_deletedFile?.Save(_deleted) == true) _deletedDirty = false;
     }
 
     public bool SetSentFrom(string token, int fromSlot, bool toOther)
@@ -238,9 +198,7 @@ public sealed class ChatStore
         var key = "out:" + token;
         int i = _keys.Contains(key) ? _entries.FindLastIndex(e => e.Key == key) : -1;
         if (i < 0 || (_entries[i].FromSlot == fromSlot && _entries[i].ToOther == toOther)) return false;
-        _entries[i] = _entries[i] with { FromSlot = fromSlot, ToOther = toOther };
-        _version++;
-        Dirty = true;
+        Edit(i, e => e with { FromSlot = fromSlot, ToOther = toOther });
         return true;
     }
 
@@ -251,9 +209,7 @@ public sealed class ChatStore
         int i = _entries.FindLastIndex(e => e.Outgoing && e.State == "sent" && e.Time == time && e.Seq == seq &&
                                             e.FromSlot == fromSlot && e.ToOther == true);
         if (i < 0) return false;
-        _entries[i] = _entries[i] with { State = "failed:returned" };
-        _version++;
-        Dirty = true;
+        Edit(i, e => e with { State = "failed:returned" });
         return true;
     }
 
@@ -277,9 +233,9 @@ public sealed class ChatStore
     {
         if (Stat().Waiting == 0) return false;
         long cutoff = DateTimeOffset.UtcNow.Add(-maxAge).ToUnixTimeSeconds();
-        bool changed = Update(e => e.Outgoing && e.State is "sending" or "queued" && e.Time < cutoff &&
-                                   keep?.Contains(e.Key) != true,
-                              e => e with { State = "failed:timeout" });
+        bool changed = EditWhere(e => e.Outgoing && e.State is "sending" or "queued" && e.Time < cutoff &&
+                                      keep?.Contains(e.Key) != true,
+                                 e => e with { State = "failed:timeout" });
         if (changed) Changed();
         return changed;
     }
@@ -292,11 +248,8 @@ public sealed class ChatStore
         if (_entries.Any(e => e.PeerKey.Length > 0 && e.PeerKey != key &&
                               string.Equals(e.Peer, name, StringComparison.OrdinalIgnoreCase)))
             return false;
-        bool changed = Update(e => e.PeerKey.Length == 0 &&
-                                   string.Equals(e.Peer, name, StringComparison.OrdinalIgnoreCase),
-                              e => e with { PeerKey = key });
-        Dirty |= changed;
-        return changed;
+        return EditWhere(e => e.PeerKey.Length == 0 && string.Equals(e.Peer, name, StringComparison.OrdinalIgnoreCase),
+                         e => e with { PeerKey = key });
     }
 
     // lines still going, and mine typed after one, sit at the bottom in typing order (a later one can finish first).
@@ -337,7 +290,7 @@ public sealed class ChatStore
 
     public void MarkRead(string peer, string key = "")
     {
-        if (Update(e => !e.Outgoing && !e.Read && e.IsWith(peer, key), e => e with { Read = true })) Changed();
+        if (EditWhere(e => !e.Outgoing && !e.Read && e.IsWith(peer, key), e => e with { Read = true })) Changed();
     }
 
     private void Add(ChatEntry e)
@@ -345,19 +298,18 @@ public sealed class ChatStore
         _entries.Add(e);
         _keys.Add(e.Key);
         _version++;
+        Dirty = true;
     }
 
-    private bool Replace(string key, Func<ChatEntry, ChatEntry> change)
+    // every change to a line goes through Edit or EditWhere, so the counts are never stale and the log's marked dirty
+    private void Edit(int i, Func<ChatEntry, ChatEntry> change)
     {
-        int i = _entries.FindLastIndex(e => e.Key == key);
-        if (i < 0) return false;
         _entries[i] = change(_entries[i]);
         _version++;
         Dirty = true;
-        return true;
     }
 
-    private bool Update(Func<ChatEntry, bool> match, Func<ChatEntry, ChatEntry> change)
+    private bool EditWhere(Func<ChatEntry, bool> match, Func<ChatEntry, ChatEntry> change)
     {
         bool changed = false;
         for (int i = 0; i < _entries.Count; i++)
@@ -366,8 +318,20 @@ public sealed class ChatStore
                 _entries[i] = change(_entries[i]);
                 changed = true;
             }
-        if (changed) _version++;
+        if (changed)
+        {
+            _version++;
+            Dirty = true;
+        }
         return changed;
+    }
+
+    private bool Replace(string key, Func<ChatEntry, ChatEntry> change)
+    {
+        int i = _entries.FindLastIndex(e => e.Key == key);
+        if (i < 0) return false;
+        Edit(i, change);
+        return true;
     }
 
     private sealed class Stats
@@ -426,25 +390,11 @@ public sealed class ChatStore
 
     public bool Save()
     {
-        if (_path is null) return false;
+        if (_file is null) return false;
         if (_deletedDirty) SaveDeleted();
-        try
-        {
-            var cipher = Dpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(_entries), Entropy);
-            if (cipher is null)
-            {
-                Log.Warning("Chat log: {Line}", $"{Path.GetFileName(_path)} couldn't be encrypted, so it wasn't saved");
-                return false;
-            }
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            AtomicFile.Write(_path, cipher);
-            Dirty = false;
-            return true;
-        }
-        catch (Exception e)   // history's a convenience, never worth breaking the session over
-        {
-            Log.Warning("Chat log: {Line}", $"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
-            return false;
-        }
+        // history's a convenience, never worth breaking the session over
+        if (!_file.Save(_entries)) return false;
+        Dirty = false;
+        return true;
     }
 }

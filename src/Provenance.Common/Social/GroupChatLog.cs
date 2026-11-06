@@ -1,9 +1,6 @@
 using System.Text;
-using System.Text.Json;
-using Provenance.Common.Credentials;
 using Provenance.Common.Hook;
 using Provenance.Common.IO;
-using Serilog;
 
 namespace Provenance.Common.Social;
 
@@ -25,7 +22,7 @@ public sealed class GroupChatLog
 {
     public const int KeepPerGroup = 1000;
 
-    private readonly string? _path;
+    private readonly EncryptedJsonFile<Dictionary<string, List<GroupChatEntry>>>? _file;
     private readonly Dictionary<string, List<GroupChatEntry>> _groups = new(StringComparer.OrdinalIgnoreCase);
 
     // format constant, the same deal as the message log's
@@ -38,19 +35,9 @@ public sealed class GroupChatLog
             if (AppPaths.UserData is not { } userData) return;
             root = Path.Combine(userData, "messages");
         }
-        _path = Path.Combine(root, profileId + ".groups.dat");
-        if (!File.Exists(_path)) return;
-        try
-        {
-            var plain = Dpapi.Unprotect(File.ReadAllBytes(_path), Entropy);
-            if (plain != null && JsonSerializer.Deserialize<Dictionary<string, List<GroupChatEntry>>>(plain) is { } loaded)
-            {
-                foreach (var (k, v) in loaded) _groups[k] = v;
-                return;
-            }
-        }
-        catch { }
-        try { File.Move(_path, _path + "." + DateTime.Now.ToString("yyyyMMddHHmmss") + ".unreadable"); } catch { }
+        _file = new(Path.Combine(root, profileId + ".groups.dat"), Entropy, "Group chat log");
+        if (_file.Load() is { } loaded)
+            foreach (var (k, v) in loaded) _groups[k] = v;
     }
 
     public IReadOnlyList<GroupChatEntry> Lines(string group) =>
@@ -103,25 +90,9 @@ public sealed class GroupChatLog
 
     public bool Save()
     {
-        if (_path is null) return false;
-        try
-        {
-            var cipher = Dpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(_groups), Entropy);
-            if (cipher is null)
-            {
-                Log.Warning("Group chat log: {Line}", $"{Path.GetFileName(_path)} couldn't be encrypted, so it wasn't saved");
-                return false;
-            }
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            AtomicFile.Write(_path, cipher);
-            Dirty = false;
-            _savedAt = DateTime.UtcNow;
-            return true;
-        }
-        catch (Exception e)
-        {
-            Log.Warning("Group chat log: {Line}", $"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
-            return false;
-        }
+        if (_file is null || !_file.Save(_groups)) return false;
+        Dirty = false;
+        _savedAt = DateTime.UtcNow;
+        return true;
     }
 }
