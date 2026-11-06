@@ -30,6 +30,7 @@ public partial class SocialViewModel : ObservableObject
         _pol = pol;
         _avatars = avatars;
         _settings = settings;
+        _sync = new(_sends);
         FriendsView = CollectionViewSource.GetDefaultView(Friends);
         FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
         GroupChat = new GroupChatViewModel(this, () => _settings.Current.GroupChatTimes);
@@ -209,11 +210,11 @@ public partial class SocialViewModel : ObservableObject
         var f => $"PlayOnline messages only go to friends. Add {f.Name} as a friend to reply.",
     };
 
-    private readonly HashSet<int> _acked = new();
+    private readonly MailSendQueue _sends = new();
+    private readonly ChatSync _sync;
     // answered requests the hook may delete now, kept until the ack file's written so they can't come back as pending
     private readonly HashSet<int> _ackPending = new();
     private readonly HashSet<int> _answered = new();
-    private readonly HashSet<int> _seenRequests = new();
     private readonly HashSet<int> _shownRequests = new();
     private bool _friendsListVisible, _mainWindowActive;
     private HashSet<string> _onlineFriends = new();
@@ -261,9 +262,9 @@ public partial class SocialViewModel : ObservableObject
     private void FlushAcks()
     {
         if (_ackPending.Count == 0 || _pol.Pid is not { } pid) return;
-        _ackPending.ExceptWith(_acked);
+        _ackPending.RemoveWhere(_sync.IsAcked);
         if (_ackPending.Count == 0 || !SocialRequests.Ack(pid, _ackPending.ToList())) return;
-        _acked.UnionWith(_ackPending);
+        _sync.MarkAcked(_ackPending);
         _ackPending.Clear();
     }
 
@@ -289,9 +290,6 @@ public partial class SocialViewModel : ObservableObject
         _ => null,
     };
 
-    // SE's group lines already say what happened, so they don't get the sender's name in front
-    private static bool SaysWho(int kind) => kind is not (PolMessage.KindGroupRemoved or PolMessage.KindGroupDisbanded);
-
     private static string OneLine(string s) => s.Replace("\r\n", " ").Replace('\n', ' ');
 
     private void NoticeComingOnline(PolSocialSnapshot snap)
@@ -315,7 +313,7 @@ public partial class SocialViewModel : ObservableObject
         GroupChat.SetLog(new GroupChatLog(profileId, storeRoot));
         _chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
         _friendsSignature = "";
-        _acked.Clear();
+        _sync.Reset();
         _ackPending.Clear();
         _drafts.Clear();
         _requestedStatus = null;
@@ -325,7 +323,6 @@ public partial class SocialViewModel : ObservableObject
         _draftPerson = null;
         Compose = "";
         _answered.Clear();
-        _seenRequests.Clear();
         _shownRequests.Clear();
         _onlineFriends.Clear();
         _presenceQuietUntil = null;
@@ -335,10 +332,7 @@ public partial class SocialViewModel : ObservableObject
         ProfileLoading = false;
         _profileCache.Clear();   // a new hook has none of the slots the cached profiles' tabs read
         _answerFor = null;
-        _sendQueue.Clear();   // unsent lines stay in the log and expire as "not sent"
-        _sendInFlight.Clear();
-        _sendsClosed = false;
-        _storeTaken = false;
+        _sends.Reset();
         GameRunning = false;
         _groupsSignature = "";
         Groups.Clear();
@@ -472,137 +466,33 @@ public partial class SocialViewModel : ObservableObject
         SnapshotApplied?.Invoke(snap);
     }
 
-    // new mail and send results into the log. POL's copy of a message only goes once mine's saved, like the viewer
     private bool MergeChat(ChatStore chat, PolSocialSnapshot snap)
     {
-        bool changed = false;
-        var saved = new List<int>();
-        foreach (var f in snap.Friends)
-            if (f.Key.Length > 0 &&
-                snap.Friends.Count(x => string.Equals(x.Name, f.Name, StringComparison.OrdinalIgnoreCase)) == 1)
-                changed |= chat.Adopt(f.Name, f.Key);   // lines saved while the hook had no key for them
-        bool takeStore = snap.Stored != null && !_storeTaken;
-        if (takeStore) changed |= MergeStored(chat, snap);
-        // the recent results too, since an answer can take the send slot before a line's result lands. First, so an
-        // echo in the same snapshot finds its time and seq
-        foreach (var (token, state, time, seq, _, _) in snap.AllSends)
-            if (token.Length > 0 && (state == "sent" || state.StartsWith("failed", StringComparison.Ordinal)))
+        (string, string)? open = ConversationVisible && SelectedFriend is { } f ? (f.Name, f.Key) : null;
+        var r = _sync.Merge(chat, snap, _pol.Pid, GameRunning || HandleSwitching, open, NoticeText, Filtered);
+        if (r.SendsChanged) RefreshConversation();
+        foreach (var n in r.News)
+            switch (n.Kind)
             {
-                changed |= chat.SetSendState(token, state, time, seq);
-                _sendInFlight.RemoveAll(x => x.Token == token);
+                case ChatNewsKind.Notice: NoticeReceived?.Invoke(n.From, n.Text); break;
+                case ChatNewsKind.GroupInvite: GroupInviteReceived?.Invoke(n.From, n.Mid); break;
+                case ChatNewsKind.FriendRequest: FriendRequestReceived?.Invoke(n.From, n.Mid); break;
+                default: MessageReceived?.Invoke(n.From, n.Text); break;
             }
-        foreach (var (token, _, _, _, fromSlot, toOther) in snap.SendResults.Where(x => x.FromSlot >= 0))
-            changed |= chat.SetSentFrom(token, fromSlot, toOther);
-        foreach (var m in snap.Messages)
-        {
-            var who = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == m.FromKey)?.Name ?? m.From;
-            if (m.HasBody && NoticeText(m) is { } line)
-            {
-                // one about my own action (say I disbanded the group) isn't news, but it still goes from the server
-                if (!Mine(snap, m) && chat.MergeNotice(m, line))
-                {
-                    changed = true;
-                    NoticeReceived?.Invoke(who, SaysWho(m.Kind) ? $"{who} {char.ToLowerInvariant(line[0])}{line[1..]}" : line);
-                }
-                if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
-                continue;
-            }
-            if (m.HasBody && m.Kind == PolMessage.KindGroupInvite && m.Mid > 0 && _seenRequests.Add(m.Mid))
-                GroupInviteReceived?.Invoke(m.From, m.Mid);
-            if (m.HasBody && m.Kind == PolMessage.KindFriendRequest && m.Mid > 0 && _seenRequests.Add(m.Mid))
-                FriendRequestReceived?.Invoke(m.From, m.Mid);
-            // my line to another POL ID coming back wasn't received, so it goes from the server like any read line. An
-            // unmatched one waits while a send of mine could still be it
-            if (Echo(snap, m, chat))
-            {
-                changed |= chat.MarkReturned(m.Time, m.Seq, m.FromSlot);
-                if (m.HasBody && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
-                continue;
-            }
-            if (m.IsChat && Mine(snap, m) && SendsGoing) continue;
-            if (chat.MergeIncoming(m))
-            {
-                changed = true;
-                MessageReceived?.Invoke(who, Filtered(m.Text.Length > 0 ? m.Text : m.Subject));
-            }
-            // chat only, a request stays on the server for the viewer and is never deleted unseen
-            if (m.HasBody && m.IsChat && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
-        }
-        foreach (var (time, seq, fromSlot) in snap.Returned) changed |= chat.MarkReturned(time, seq, fromSlot);
-        foreach (var (token, state) in snap.SendQueue)
-            if (_sendInFlight.FindIndex(x => x.Token == token) is var i and >= 0)
-                _sendInFlight[i] = _sendInFlight[i] with { HookState = state, HookSaid = DateTime.UtcNow };
-        PumpSends();
-        // a stored send finishes well inside 2 mins, so nothing says "Sending..." for ever
-        changed |= chat.ExpireSending(ChatStore.SendExpiry(_sendQueue.Count), SendsStillPending());
-        if (changed && ConversationVisible && SelectedFriend is { } open && chat.UnreadFrom(open.Name, open.Key) > 0)
-            chat.MarkRead(open.Name, open.Key);
-        // Dirty rather than changed, a log whose last save failed isn't on disk either
-        bool kept = !chat.Dirty || chat.Save();
-        if (takeStore && kept && _pol.Pid is { } storePid)
-        {
-            SocialSnapshotFiles.DeleteStore(storePid);
-            _storeTaken = true;
-        }
-        if (!kept || (saved.Count > 0 && _pol.Pid is { } pid && !SocialRequests.Ack(pid, saved)))
-            foreach (var mid in saved) _acked.Remove(mid);   // again next snapshot
-        return changed;
+        if (!r.Kept || (r.ToAck.Count > 0 && _pol.Pid is { } pid && !SocialRequests.Ack(pid, r.ToAck.ToList())))
+            _sync.Unack(r.ToAck);
+        return r.Changed;
     }
-
-    private bool _storeTaken;
-
-    // sent by this handle, or another handle on my own POL ID
-    private static bool Mine(PolSocialSnapshot snap, PolMessage m) =>
-        m.IsMe || (snap.MyKey.Length > 0 && m.FromKey == snap.MyKey);
-
-    // only a certain echo: the log has my line to another POL ID with the same time, seq and slot, or it's a handle to
-    // itself. Anything else from my POL ID gets shown
-    private static bool Echo(PolSocialSnapshot snap, PolMessage m, ChatStore chat) =>
-        m.IsChat && Mine(snap, m) &&
-        ((m.ToMe && m.ToKey.Length > 0 && m.ToKey == m.FromKey) || chat.SentAt(m.Time, m.Seq, m.FromSlot));
-
-    // one of mine still on its way to the hook or the server, so a line of mine coming in could be its echo
-    private bool SendsGoing => _sendQueue.Count > 0 || _sendInFlight.Count > 0;
 
     // what's still on its way under the active handle. A switch waits for it, it'd go from the new one otherwise
     internal string? PendingWrite() =>
-        _sendQueue.Count > 0 || _sendInFlight.Count > 0 ? "Wait for your messages to finish sending first."
+        _sends.Going ? "Wait for your messages to finish sending first."
         : _editToken != null ? "Wait for your friend list change to finish first."
         : _answerToken != null || _requestToken != null ? "Wait for your friend request to finish first."
         : _groupToken != null ? "Wait for your friend group change to finish first."
         : _picToken != null ? "Wait for your profile picture to finish saving first."
         : StatusPending ? "Wait for your status change to finish first."
         : null;
-
-    // the game's message store, read by the hook at login: it's history, so no notices, and nothing to ack since none of
-    // it's on the server any more
-    private bool MergeStored(ChatStore chat, PolSocialSnapshot snap)
-    {
-        bool changed = false;
-        foreach (var s in snap.Stored!.Sent)
-        {
-            var to = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == s.ToKey)?.Name ??
-                     (s.To.Length > 0 ? s.To : chat.NameFor(s.ToKey));
-            if (to.Length > 0 || s.ToKey.Length > 0) changed |= chat.AddGameSent(to, s);
-        }
-        foreach (var m in snap.Stored.Received)
-        {
-            if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey)) continue;
-            if (Echo(snap, m, chat))
-            {
-                changed |= chat.MarkReturned(m.Time, m.Seq, m.FromSlot);
-                continue;
-            }
-            if (NoticeText(m) is { } line)
-            {
-                if (!Mine(snap, m)) changed |= chat.MergeNotice(m, line);
-            }
-            else changed |= chat.MergeIncoming(m);
-        }
-        var times = snap.Stored.Sent.Select(s => s.Time).Concat(snap.Stored.Received.Select(m => m.Time)).Where(t => t > 0).ToList();
-        if (times.Count > 0) chat.PruneDeleted(times.Min());
-        return changed;
-    }
 
     private void RebuildFriends(PolSocialSnapshot snap)
     {
@@ -1292,87 +1182,16 @@ public partial class SocialViewModel : ObservableObject
         RefreshConversation();
     }
 
-    // the hook runs 2 sends at once but reads one request file at a time, and a new file replaces an untaken one, so
-    // lines queue here
-    private const int SendsAtOnce = 2;
-    private readonly Queue<(int Row, string Name, string Token, string Text)> _sendQueue = new();
-    // the pol.exe each went to, and what the hook last said about it and when ("sending" once its PUT's started)
-    internal readonly record struct SendOut(string Token, DateTime At, int Pid, string HookState = "",
-                                           DateTime HookSaid = default);
-    internal readonly List<SendOut> _sendInFlight = new();
-    private bool _sendsClosed;   // the session's ending, nothing more goes to its hook
-
-    // lines that mustn't expire yet. With nothing in flight, queued lines age from when they were typed
-    private HashSet<string> SendsStillPending()
-    {
-        var keep = new HashSet<string>();
-        var live = _sendInFlight.Where(x => DateTime.UtcNow - x.At < TimeSpan.FromMinutes(3)).ToList();
-        if (live.Count == 0) return keep;
-        foreach (var x in live) keep.Add("out:" + x.Token);
-        foreach (var q in _sendQueue) keep.Add("out:" + q.Token);
-        return keep;
-    }
-
     private void Queue(FriendItem f, string text)
     {
-        var token = HookFiles.NewToken();
-        _chat!.AddOutgoing(f.Name, f.Key, text, token);
-        _sendQueue.Enqueue((f.Row, f.Name, token, text));
-        PumpSends();
+        if (_sends.Add(_chat!, f.Row, f.Name, f.Key, text, _pol.Pid, GameRunning || HandleSwitching))
+            RefreshConversation();
     }
 
-    private void PumpSends()
-    {
-        int newest = _sendInFlight.Count - 1;
-        for (int i = newest; i >= 0; i--)
-        {
-            var x = _sendInFlight[i];
-            if (DateTime.UtcNow - x.At <= TimeSpan.FromMinutes(3)) continue;
-            // never answered. Untaken it's withdrawn (only the newest can be), but once the hook has it, it might still
-            // go, so it's not re-sent
-            bool withdrawn = i == newest &&
-                             HookFiles.Withdraw(x.Pid, HookContract.Requests.Send) == Withdrawal.Withdrawn;
-            if (!withdrawn && _chat?.SetSendState(x.Token, "unconfirmed") == true) RefreshConversation();
-            _sendInFlight.RemoveAt(i);
-        }
-        while (!_sendsClosed && _sendInFlight.Count < SendsAtOnce && !GameRunning && !HandleSwitching && _sendQueue.Count > 0 &&
-               _pol.Pid is { } pid && !SocialRequests.SendPending(pid))
-        {
-            var (row, name, token, text) = _sendQueue.Dequeue();
-            // one that waited long enough to show "not sent" stays that way, they might've sent it again already
-            var line = _chat?.Entries.FirstOrDefault(e => e.Key == "out:" + token);
-            if (line is not { State: "sending" or "queued" }) continue;
-            // no subject, like the viewer's own chat window
-            if (SocialRequests.Send(pid, row, name, token, "", text))
-                _sendInFlight.Add(new(token, DateTime.UtcNow, pid));
-            else _chat?.SetSendState(token, "failed:write");
-        }
-    }
-
-    // the session's ending and its results won't get here. One the hook started, or will in a drain, is unconfirmed,
-    // the rest are not sent
+    // the session's ending and its results won't get here
     public void SettleSends(SessionEnd end)
     {
-        bool drained = end != SessionEnd.Dropped;
-        string notSent = end == SessionEnd.Play ? "failed:game" : "failed:session";
-        var states = new List<(string, string)>();
-        int newest = _sendInFlight.Count - 1;
-        for (int i = newest; i >= 0; i--)
-        {
-            var x = _sendInFlight[i];
-            // only the newest can still be untaken, the next file's only written once the hook's taken the last
-            var w = i == newest ? HookFiles.Withdraw(x.Pid, HookContract.Requests.Send) : Withdrawal.Taken;
-            // held a second ago it could've started since, the snapshot that says so takes about 300 ms to get here
-            bool held = x.HookState == "queued" && DateTime.UtcNow - x.HookSaid >= TimeSpan.FromSeconds(1);
-            bool went = w == Withdrawal.Taken ? drained || !held
-                      : w == Withdrawal.Unknown && drained;   // the hook might take it before the drain
-            states.Add((x.Token, went ? "unconfirmed" : notSent));
-        }
-        foreach (var q in _sendQueue) states.Add((q.Token, notSent));
-        _chat?.SetSendStates(states);
-        _sendInFlight.Clear();
-        _sendQueue.Clear();
-        _sendsClosed = true;
+        _sends.Settle(_chat, end != SessionEnd.Dropped, end == SessionEnd.Play ? "failed:game" : "failed:session");
         RefreshConversation();
     }
 
