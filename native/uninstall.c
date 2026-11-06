@@ -38,9 +38,14 @@
 #include <wchar.h>
 #include <wctype.h>
 #include <stdlib.h>
+#include "pol_regions.h"
+
+#define WIDE_(s) L##s
+#define WIDE(s) WIDE_(s)
 
 #ifdef FFXI_UNINSTALL
 #define TITLE L"Provenance - FINAL FANTASY XI Uninstall"
+#define PRODUCT_NAME L"FINAL FANTASY XI"
 #define PRODUCT L"0001"
 #define FOLDER L"FINAL FANTASY XI folder"
 #define KEEP_DIR L"USER"
@@ -53,6 +58,7 @@
 #define OTHER_KEPT L" The PlayOnline logins and settings you kept when you removed PlayOnline are still in %s, and in Windows."
 #else
 #define TITLE L"Provenance - PlayOnline Uninstall"
+#define PRODUCT_NAME L"PlayOnline Viewer"
 #define PRODUCT L"1000"
 #define FOLDER L"PlayOnline Viewer folder"
 #define KEEP_DIR L"usr"
@@ -73,7 +79,8 @@
 static const wchar_t *const g_programs[] = { L"Provenance - PlayOnline Uninstall.exe",
                                              L"Provenance - FINAL FANTASY XI Uninstall.exe" };
 
-static const wchar_t *const g_regions[] = { L"SOFTWARE\\PlayOnline", L"SOFTWARE\\PlayOnlineUS", L"SOFTWARE\\PlayOnlineEU" };
+static const wchar_t *const g_regions[] = { L"SOFTWARE\\" WIDE(POL_HIVE_JP), L"SOFTWARE\\" WIDE(POL_HIVE_US),
+                                            L"SOFTWARE\\" WIDE(POL_HIVE_EU) };
 
 static HWND g_label;
 static const wchar_t *g_product = PRODUCT, *g_keep_dir = KEEP_DIR, *g_other_key = OTHER_KEY, *g_other_dir = OTHER_DIR;
@@ -82,7 +89,7 @@ static int g_keep = 1, g_depth, g_skipped;
 static wchar_t g_settings[600];   /* the K line's key, which keeping leaves alone */
 static wchar_t g_region[64], g_folder[MAX_PATH * 2];   /* only set once HKLM agrees with the record */
 static int g_unconfirmed, g_unprotected;
-static wchar_t g_name[256] = L"FINAL FANTASY XI";
+static wchar_t g_name[256] = PRODUCT_NAME;
 static wchar_t g_root[MAX_PATH * 2];
 static wchar_t g_tree[MAX_PATH * 2], g_kept[MAX_PATH * 2];
 static wchar_t g_path[32768];   /* what remove_entry's on, for the restart list */
@@ -339,14 +346,21 @@ static void remove_tree(const wchar_t *target)
 
 static int keep_settings(HKEY k);
 
-static void clear_but(HKEY k, const wchar_t *only)
+static void delete_values(HKEY k)
 {
     wchar_t name[256];
-    DWORD n, i;
+    DWORD n;
     for (;;) {
         n = _countof(name);
         if (RegEnumValueW(k, 0, name, &n, NULL, NULL, NULL, NULL) != ERROR_SUCCESS || RegDeleteValueW(k, name) != ERROR_SUCCESS) break;
     }
+}
+
+static void clear_but(HKEY k, const wchar_t *only)
+{
+    wchar_t name[256];
+    DWORD n, i;
+    delete_values(k);
     for (i = 0;; ) {
         n = _countof(name);
         if (RegEnumKeyExW(k, i, name, &n, NULL, NULL, NULL, NULL) != ERROR_SUCCESS) break;
@@ -382,10 +396,7 @@ static void clear_except_settings(HKEY k, const wchar_t *only)
 {
     wchar_t name[256];
     DWORD n, i;
-    for (;;) {
-        n = _countof(name);
-        if (RegEnumValueW(k, 0, name, &n, NULL, NULL, NULL, NULL) != ERROR_SUCCESS || RegDeleteValueW(k, name) != ERROR_SUCCESS) break;
-    }
+    delete_values(k);
     for (i = 0;; ) {
         HKEY sub;
         int left = 1;
@@ -452,21 +463,44 @@ static int full_path(const wchar_t *in, wchar_t *out, DWORD size)
     return local_path(out);
 }
 
-static int first(const wchar_t *text, DWORD chars, wchar_t kind, wchar_t *out, size_t size)
+typedef struct { wchar_t *p, *end; } cursor;
+
+/* skips the byte-order mark */
+static cursor lines_of(wchar_t *text, DWORD chars)
 {
-    const wchar_t *p = text + (chars > 0 && text[0] == 0xFEFF), *end = text + chars;
-    while (p < end) {
-        const wchar_t *eol = p;
-        while (eol < end && *eol != L'\n' && *eol != L'\r') eol++;
-        if (eol - p >= 2 && p[0] == kind && p[1] == L' ') {
-            size_t n = eol - p - 2;
-            if (n >= size) return 0;
-            wmemcpy(out, p + 2, n);
-            out[n] = 0;
+    cursor c = { text + (chars > 0 && text[0] == 0xFEFF), text + chars };
+    return c;
+}
+
+/* the next "<kind> <argument>" line, the argument running up to *eol */
+static int next_line(cursor *c, wchar_t *kind, wchar_t **arg, wchar_t **eol)
+{
+    while (c->p < c->end) {
+        wchar_t *p = c->p, *e = p;
+        while (e < c->end && *e != L'\n' && *e != L'\r') e++;
+        c->p = e;
+        while (c->p < c->end && (*c->p == L'\n' || *c->p == L'\r')) c->p++;
+        if (e - p >= 2 && p[1] == L' ') {
+            *kind = p[0];
+            *arg = p + 2;
+            *eol = e;
             return 1;
         }
-        p = eol;
-        while (p < end && (*p == L'\n' || *p == L'\r')) p++;
+    }
+    return 0;
+}
+
+static int first(wchar_t *text, DWORD chars, wchar_t kind, wchar_t *out, size_t size)
+{
+    cursor c = lines_of(text, chars);
+    wchar_t k, *arg, *eol;
+    while (next_line(&c, &k, &arg, &eol)) {
+        size_t n = eol - arg;
+        if (k != kind) continue;
+        if (n >= size) return 0;
+        wmemcpy(out, arg, n);
+        out[n] = 0;
+        return 1;
     }
     return 0;
 }
@@ -520,7 +554,7 @@ static int unprotected(const wchar_t *record)
 }
 
 /* runs before anything's removed, the V lines take the InstallFolder value this checks against */
-static void confirm(const wchar_t *text, DWORD chars)
+static void confirm(wchar_t *text, DWORD chars)
 {
     wchar_t region[64], line[MAX_PATH * 2], tree[MAX_PATH * 2], value[MAX_PATH * 2], folder[MAX_PATH * 2], *slash;
     DWORD size = sizeof value;
@@ -532,7 +566,7 @@ static void confirm(const wchar_t *text, DWORD chars)
     if (!first(text, chars, L'R', line, _countof(line)) && !first(text, chars, L'K', line, _countof(line)) &&
         !first(text, chars, L'L', line, _countof(line))) return;
     if (first(text, chars, L'L', region, _countof(region)))
-        for (i = 0; i < 3; i++) ok |= !_wcsicmp(region, g_regions[i]);
+        for (i = 0; i < (int)_countof(g_regions); i++) ok |=!_wcsicmp(region, g_regions[i]);
     if (ok && _snwprintf_s(line, _countof(line), _TRUNCATE, L"%s\\InstallFolder", region) > 0 &&
         RegOpenKeyExW(HKEY_LOCAL_MACHINE, line, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &k) == ERROR_SUCCESS) {
         ok = RegGetValueW(k, NULL, g_product, RRF_RT_REG_SZ, NULL, value, &size) == ERROR_SUCCESS;
@@ -581,95 +615,90 @@ static wchar_t *load(const wchar_t *path, DWORD *chars)
 
 static void run(wchar_t *text, DWORD chars, wchar_t kind)
 {
-    wchar_t *p = text + (chars > 0 && text[0] == 0xFEFF), *end = text + chars;   /* skip the byte-order mark */
-    while (p < end) {
-        wchar_t *eol = p, *arg, *tab;
-        while (eol < end && *eol != L'\n' && *eol != L'\r') eol++;
-        if (eol - p >= 2 && p[0] == kind && p[1] == L' ') {
-            wchar_t save = *eol;
-            *eol = 0;
-            arg = p + 2;
-            switch (kind) {
-            case L'S':
-                delete_file(arg);
-                break;
-            case L'F':
-                delete_file(arg);
-                counted();
-                break;
-            case L'A': case L'C':
-                delete_key(arg);
-                break;
-            case L'K': {
-                size_t n = wcslen(g_region);
-                if (!g_keep && n && !_wcsnicmp(arg, g_region, n) && arg[n] == L'\\' && !shared_root(arg)) delete_key(arg);
-                break;
-            }
-            case L'L':
-                if (g_region[0] && !_wcsicmp(arg, g_region)) remove_region(arg);
-                break;
-            case L'T': {
-                wchar_t libid[64];
-                int major = 0, minor = 0, lcid = 0;
-                GUID g;
-                if (swscanf_s(arg, L"%63s %d %d %d", libid, (unsigned)_countof(libid), &major, &minor, &lcid) == 4 &&
-                    SUCCEEDED(CLSIDFromString(libid, &g)))
-                    UnRegisterTypeLib(&g, (WORD)major, (WORD)minor, (LCID)lcid, SYS_WIN32);
-                break;
-            }
-            case L'V':
-                if (arg[0] && arg[1] == L' ' && (tab = wcschr(arg + 2, L'\t')) != NULL) {
-                    HKEY root = arg[0] == L'U' ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE, k;
-                    size_t n = wcslen(g_settings);
-                    *tab = 0;
-                    if (g_keep && n && root == HKEY_LOCAL_MACHINE && !_wcsnicmp(arg + 2, g_settings, n) && (!arg[2 + n] || arg[2 + n] == L'\\')) {
-                        *tab = L'\t';
-                        break;
-                    }
-                    if (wcscmp(tab + 1, L"+") != 0 &&
-                        RegOpenKeyExW(root, arg + 2, 0, KEY_SET_VALUE | KEY_WOW64_32KEY, &k) == ERROR_SUCCESS) {
-                        RegDeleteValueW(k, tab[1] ? tab + 1 : NULL);
-                        RegCloseKey(k);
-                    }
-                    prune(root, arg + 2);
-                }
-                break;
-            case L'P':
-                if ((tab = wcschr(arg, L'\t')) != NULL) {
-                    wchar_t pattern[MAX_PATH * 2], file[MAX_PATH * 2];
-                    WIN32_FIND_DATAW fd;
-                    HANDLE h;
-                    *tab = 0;
-                    /* a line too long for these is skipped, a cut-off path could be some other file */
-                    h = _snwprintf_s(pattern, _countof(pattern), _TRUNCATE, L"%s\\%s", arg, tab + 1) < 0
-                        ? INVALID_HANDLE_VALUE : FindFirstFileW(pattern, &fd);
-                    if (h != INVALID_HANDLE_VALUE) {
-                        do {
-                            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-                            if (_snwprintf_s(file, _countof(file), _TRUNCATE, L"%s\\%s", arg, fd.cFileName) >= 0)
-                                delete_file(file);
-                        } while (FindNextFileW(h, &fd));
-                        FindClose(h);
-                    }
-                }
-                break;
-            case L'I':
-                if (!full_path(arg, g_root, _countof(g_root))) g_root[0] = 0;
-                break;
-            case L'R':
-                remove_tree(arg);
-                break;
-            case L'D':
-                RemoveDirectoryW(arg);
-                break;
-            case L'N':
-                lstrcpynW(g_name, arg, 256);
-                break;
-            }
-            *eol = save;
+    cursor c = lines_of(text, chars);
+    wchar_t got, *arg, *eol, *tab, save;
+    while (next_line(&c, &got, &arg, &eol)) {
+        if (got != kind) continue;
+        save = *eol;
+        *eol = 0;
+        switch (kind) {
+        case L'S':
+            delete_file(arg);
+            break;
+        case L'F':
+            delete_file(arg);
+            counted();
+            break;
+        case L'A': case L'C':
+            delete_key(arg);
+            break;
+        case L'K': {
+            size_t n = wcslen(g_region);
+            if (!g_keep && n && !_wcsnicmp(arg, g_region, n) && arg[n] == L'\\' && !shared_root(arg)) delete_key(arg);
+            break;
         }
-        p = eol;
-        while (p < end && (*p == L'\n' || *p == L'\r')) p++;
+        case L'L':
+            if (g_region[0] && !_wcsicmp(arg, g_region)) remove_region(arg);
+            break;
+        case L'T': {
+            wchar_t libid[64];
+            int major = 0, minor = 0, lcid = 0;
+            GUID g;
+            if (swscanf_s(arg, L"%63s %d %d %d", libid, (unsigned)_countof(libid), &major, &minor, &lcid) == 4 &&
+                SUCCEEDED(CLSIDFromString(libid, &g)))
+                UnRegisterTypeLib(&g, (WORD)major, (WORD)minor, (LCID)lcid, SYS_WIN32);
+            break;
+        }
+        case L'V':
+            if (arg[0] && arg[1] == L' ' && (tab = wcschr(arg + 2, L'\t')) != NULL) {
+                HKEY root = arg[0] == L'U' ? HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE, k;
+                size_t n = wcslen(g_settings);
+                *tab = 0;
+                if (g_keep && n && root == HKEY_LOCAL_MACHINE && !_wcsnicmp(arg + 2, g_settings, n) && (!arg[2 + n] || arg[2 + n] == L'\\')) {
+                    *tab = L'\t';
+                    break;
+                }
+                if (wcscmp(tab + 1, L"+") != 0 &&
+                    RegOpenKeyExW(root, arg + 2, 0, KEY_SET_VALUE | KEY_WOW64_32KEY, &k) == ERROR_SUCCESS) {
+                    RegDeleteValueW(k, tab[1] ? tab + 1 : NULL);
+                    RegCloseKey(k);
+                }
+                prune(root, arg + 2);
+            }
+            break;
+        case L'P':
+            if ((tab = wcschr(arg, L'\t')) != NULL) {
+                wchar_t pattern[MAX_PATH * 2], file[MAX_PATH * 2];
+                WIN32_FIND_DATAW fd;
+                HANDLE h;
+                *tab = 0;
+                /* a line too long for these is skipped, a cut-off path could be some other file */
+                h = _snwprintf_s(pattern, _countof(pattern), _TRUNCATE, L"%s\\%s", arg, tab + 1) < 0
+                    ? INVALID_HANDLE_VALUE : FindFirstFileW(pattern, &fd);
+                if (h != INVALID_HANDLE_VALUE) {
+                    do {
+                        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                        if (_snwprintf_s(file, _countof(file), _TRUNCATE, L"%s\\%s", arg, fd.cFileName) >= 0)
+                            delete_file(file);
+                    } while (FindNextFileW(h, &fd));
+                    FindClose(h);
+                }
+            }
+            break;
+        case L'I':
+            if (!full_path(arg, g_root, _countof(g_root))) g_root[0] = 0;
+            break;
+        case L'R':
+            remove_tree(arg);
+            break;
+        case L'D':
+            RemoveDirectoryW(arg);
+            break;
+        case L'N':
+            lstrcpynW(g_name, arg, 256);
+            break;
+        }
+        *eol = save;
     }
 }
 

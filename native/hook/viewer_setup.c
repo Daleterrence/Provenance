@@ -4,9 +4,9 @@ static const struct pol_region {
     const char *name, *polcore, *hive, *maker, *strings;
     int selector, jp_table, lang;   /* lang: JP 0 always, -1 Settings\Language or 1, -2 it or the UI language */
 } g_regions[3] = {
-    { "JP", "polcore.dll",   "PlayOnline",   "Square",     "viewer\\data\\common", 0, 1, 0 },
-    { "US", "polcore.dll",   "PlayOnlineUS", "SquareEnix", "viewer\\data\\common", 1, 0, -1 },
-    { "EU", "polcoreEU.dll", "PlayOnlineEU", "SquareEnix", "EU\\EN",               1, 0, -2 },
+    { POL_REGION_JP, "polcore.dll",   POL_HIVE_JP, "Square",     "viewer\\data\\common", 0, 1, 0 },
+    { POL_REGION_US, "polcore.dll",   POL_HIVE_US, "SquareEnix", "viewer\\data\\common", 1, 0, -1 },
+    { POL_REGION_EU, "polcoreEU.dll", POL_HIVE_EU, "SquareEnix", "EU\\EN",               1, 0, -2 },
 };
 
 static const struct pol_region *g_region;

@@ -7,6 +7,7 @@
 #include <sddl.h>
 #include <tlhelp32.h>
 #include "pol_cred.h"
+#include "pol_regions.h"
 #include "hook_contract.h"
 #include "polcore.h"
 #include "session.h"
