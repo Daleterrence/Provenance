@@ -95,7 +95,7 @@ public static class PolOptions
             Log.Warning("option.bin for home{Slot:00} has no usable chat filter or auto-disconnect entry", slot);
             return;
         }
-        using var pins = FolderPins.Hold(viewerDir, dir);
+        using var pins = FolderPins.HoldExact(viewerDir, dir);
         if (pins is null)
         {
             Log.Warning("pub\\home{Slot:00} couldn't be held for the write, its POL settings are left alone", slot);

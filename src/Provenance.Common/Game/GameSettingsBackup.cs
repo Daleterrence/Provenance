@@ -193,7 +193,7 @@ public static partial class GameSettingsBackup
             anchor = Path.Join(anchor, dir[anchor.Length..].TrimStart('\\').Split('\\')[0]);
             Directory.CreateDirectory(anchor);
         }
-        return FolderPins.Hold(anchor, dir);
+        return FolderPins.HoldExact(anchor, dir);
     }
 
     // mine are the ones named like mine with a manifest that reads, newest first
@@ -633,7 +633,7 @@ public static partial class GameSettingsBackup
     // shouldn't, so all three are refused on the open handle
     private static SafeFileHandle OpenChecked(string path, string folder, bool data, out Stat stat)
     {
-        var h = FileHandles.Open(LinkCheck.LongPath(Path.GetFullPath(path)), data ? FileHandles.GenericRead : FileHandles.ReadAttributes,
+        var h = FileHandles.Open(FileHandles.LongPath(Path.GetFullPath(path)), data ? FileHandles.GenericRead : FileHandles.ReadAttributes,
                                  FileHandles.ShareAll, FileHandles.OpenReparsePoint);
         if (h.IsInvalid)
         {

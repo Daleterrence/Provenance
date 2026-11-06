@@ -208,7 +208,7 @@ public sealed class WindowerUpdater
     private Job? Open(List<string> errors, CancellationToken ct)
     {
         FolderPins? pins = null;
-        try { pins = FolderPins.Hold(Folder, TempDir); }
+        try { pins = FolderPins.HoldExact(Folder, TempDir); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         if (pins is not null) return new Job(this, pins, errors, ct);
         errors.Add("The Windower folder, updates or updates\\temp is a link (or can't be opened), so nothing was changed.");

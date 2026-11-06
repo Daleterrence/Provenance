@@ -215,7 +215,7 @@ public sealed class WindowerLauncher : IDisposable
     {
         try
         {
-            using var pins = FolderPins.Hold(dir, dir) ?? throw Shown.Mark(new IOException(WindowerInstall.LinkedText));
+            using var pins = FolderPins.HoldExactOrThrow(dir, dir, WindowerInstall.LinkedText);
             bool scripts = true;
             foreach (var sub in new[] { "screenshots", "videos", "scripts" })
                 if (!pins.Pin(Path.Combine(dir, sub)))

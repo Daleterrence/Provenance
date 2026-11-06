@@ -1,3 +1,4 @@
+using Provenance.Common.IO;
 using Provenance.Common.Win32;
 
 namespace Provenance.Common.Security;
@@ -15,7 +16,7 @@ public static class LinkCheck
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         if (Path.GetPathRoot(full) is { } root && Path.TrimEndingDirectorySeparator(root) == full) return false;
-        var handle = Kernel32.FindFirstFileW(LongPath(full), out var data);
+        var handle = Kernel32.FindFirstFileW(FileHandles.LongPath(full), out var data);
         if (handle == -1) return false;
         Kernel32.FindClose(handle);
         return IsRedirect(data.Attributes, data.ReparseTag);
@@ -24,30 +25,6 @@ public static class LinkCheck
     public static void Refuse(params IEnumerable<string> paths)
     {
         foreach (var p in paths)
-            if (IsRedirect(p)) throw Linked(p);
-    }
-
-    // top and every folder down to dir stay held until it's disposed, so none can be swapped for a link mid-write
-    public static FolderPins Hold(string top, string dir)
-    {
-        if (!Directory.Exists(dir)) throw new DirectoryNotFoundException($"{dir} isn't there.");
-        return FolderPins.HoldBelow(top, dir) ?? throw Linked(dir);
-    }
-
-    // right before the move or replace, an emptied folder can still be made a link while it's held
-    public static void Recheck(FolderPins pins, string dir, params IEnumerable<string> files)
-    {
-        if (!pins.Intact(dir)) throw Linked(dir);
-        Refuse(files);
-    }
-
-    private static IOException Linked(string p) => Shown.Mark(new IOException($"Provenance won't write to {p}, it's a link to somewhere else."));
-
-    // FindFirstFileW stops at 260 characters without \\?\, and a link it can't see must not read as no link
-    internal static string LongPath(string full)
-    {
-        if (full.Length < 248 || full.StartsWith(@"\\?\", StringComparison.Ordinal) || full.StartsWith(@"\\.\", StringComparison.Ordinal))
-            return full;
-        return full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full[2..] : @"\\?\" + full;
+            if (IsRedirect(p)) throw FolderPins.LinkError(p);
     }
 }

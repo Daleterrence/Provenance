@@ -21,7 +21,7 @@ public static class SafeWrite
         if (backup is not null) check.Add(bak);
         check.Add(tmp);
         LinkCheck.Refuse(check);
-        using var pins = LinkCheck.Hold(top, dir);
+        using var pins = FolderPins.HoldFollowingLinksAboveOrThrow(top, dir);
         full = pins.Real(full);
         bak = pins.Real(bak);
         tmp = pins.Real(tmp);
@@ -32,12 +32,12 @@ public static class SafeWrite
             AtomicFile.WriteNew(tmp, bytes, flushToDisk);
             if (backup is null)
             {
-                LinkCheck.Recheck(pins, dir, full);
+                pins.Recheck(dir, full);
                 File.Move(tmp, full, overwrite: true);
             }
             else
             {
-                LinkCheck.Recheck(pins, dir, full, bak);
+                pins.Recheck(dir, full, bak);
                 replacing = File.Exists(full);
                 if (replacing) File.Replace(tmp, full, plan == Backup.Keep ? bak : null);
                 else File.Move(tmp, full);
@@ -59,7 +59,7 @@ public static class SafeWrite
         try
         {
             using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) write(fs);
-            LinkCheck.Recheck(pins, dir);
+            pins.Recheck(dir);
             File.Move(tmp, path, overwrite: true);
         }
         catch
@@ -74,7 +74,7 @@ public static class SafeWrite
     public static string? CreateFree(string dir, byte[] bytes, Func<int, string> nameFor)
     {
         LinkCheck.Refuse(dir);
-        using var pins = LinkCheck.Hold(dir, dir);
+        using var pins = FolderPins.HoldFollowingLinksAboveOrThrow(dir, dir);
         for (int n = 1; n < 1000; n++)
         {
             var name = nameFor(n);
@@ -85,7 +85,7 @@ public static class SafeWrite
             try
             {
                 AtomicFile.WriteNew(tmp, bytes);
-                LinkCheck.Recheck(pins, dir, target);
+                pins.Recheck(dir, target);
                 try
                 {
                     File.Move(tmp, target, overwrite: false);

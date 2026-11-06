@@ -19,6 +19,14 @@ internal static class FileHandles
     internal static SafeFileHandle Open(string path, uint access, uint share, uint flags) =>
         Kernel32.CreateFileW(path, access, share, IntPtr.Zero, OpenExisting, flags, IntPtr.Zero);
 
+    // FindFirstFileW stops at 260 characters without \\?\, and a link it can't see must not read as no link
+    internal static string LongPath(string full)
+    {
+        if (full.Length < 248 || full.StartsWith(@"\\?\", StringComparison.Ordinal) || full.StartsWith(@"\\.\", StringComparison.Ordinal))
+            return full;
+        return full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full[2..] : @"\\?\" + full;
+    }
+
     // a link is opened as itself, not followed
     internal static SafeFileHandle OpenLinkItself(string path, uint access, uint share) => Open(path, access, share, LinkItself);
 

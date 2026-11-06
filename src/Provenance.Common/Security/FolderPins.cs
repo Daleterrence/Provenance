@@ -23,13 +23,17 @@ public sealed class FolderPins : IDisposable
 
     public string Root => _root;
 
-    // null if a folder on the way is a link or the root's a file, and a file in the way below it throws. Either way
-    // whatever was held already is let go
-    public static FolderPins? Hold(string root, string dir) => Pinned(new FolderPins(root), dir);
+    // null if root or a folder on the way is a link or the root's a file, and a file in the way below it throws. Either
+    // way whatever was held already is let go
+    public static FolderPins? HoldExact(string root, string dir) => Pinned(new FolderPins(root), dir);
 
-    // Hold, but a link above top is followed (an install moved to another drive, say) and everything's held where it
-    // really is. Real gives the path to write to
-    public static FolderPins? HoldBelow(string top, string dir)
+    // HoldExact that throws message instead
+    public static FolderPins HoldExactOrThrow(string root, string dir, string message) =>
+        HoldExact(root, dir) ?? throw Shown.Mark(new IOException(message));
+
+    // HoldExact, but a link above top is followed (an install moved to another drive, say) and everything's held where
+    // it really is. Real gives the path to write to
+    private static FolderPins? HoldFollowingLinksAbove(string top, string dir)
     {
         var given = Path.TrimEndingDirectorySeparator(Path.GetFullPath(top));
         var real = given;
@@ -39,6 +43,13 @@ public sealed class FolderPins : IDisposable
             real = Path.Join(p, Path.GetFileName(given));
         }
         return Pinned(new FolderPins(given, real), dir);
+    }
+
+    // throws if dir isn't there, or something on the way is a link
+    public static FolderPins HoldFollowingLinksAboveOrThrow(string top, string dir)
+    {
+        if (!Directory.Exists(dir)) throw new DirectoryNotFoundException($"{dir} isn't there.");
+        return HoldFollowingLinksAbove(top, dir) ?? throw LinkError(dir);
     }
 
     private static FolderPins? Pinned(FolderPins pins, string dir)
@@ -99,6 +110,13 @@ public sealed class FolderPins : IDisposable
         return true;
     }
 
+    // right before the move or replace, an emptied folder can still be made a link while it's held
+    public void Recheck(string dir, params IEnumerable<string> files)
+    {
+        if (!Intact(dir)) throw LinkError(dir);
+        LinkCheck.Refuse(files);
+    }
+
     // so the folder itself can be deleted
     public void Release(string dir)
     {
@@ -154,12 +172,12 @@ public sealed class FolderPins : IDisposable
     // where a folder really is, every link on the way (its own too) followed. Null if it won't open
     public static string? RealPath(string dir)
     {
-        using var h = FileHandles.Open(LinkCheck.LongPath(Path.GetFullPath(dir)), FileHandles.ReadAttributes, FileHandles.ShareAll, FileHandles.BackupSemantics);
+        using var h = FileHandles.Open(FileHandles.LongPath(Path.GetFullPath(dir)), FileHandles.ReadAttributes, FileHandles.ShareAll, FileHandles.BackupSemantics);
         return h.IsInvalid ? null : FileHandles.FinalPath(h, allowUnc: true);
     }
 
     // no reparse point at all between root and path, and the last part's a folder or file as asked (missing is fine).
-    // Stricter than LinkCheck on purpose, it's the hook's plain_path rule
+    // Stricter than IsRedirect on purpose, it's the hook's plain_path rule
     public static bool Plain(string root, string path, bool lastIsFolder)
     {
         if (!PathInside.IsUnder(root, path)) return false;
@@ -179,6 +197,8 @@ public sealed class FolderPins : IDisposable
         return true;
     }
 
+    internal static IOException LinkError(string p) => Shown.Mark(new IOException($"Provenance won't write to {p}, it's a link to somewhere else."));
+
     private string Rebase(string path)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
@@ -191,7 +211,7 @@ public sealed class FolderPins : IDisposable
     private bool Add(string dir)
     {
         if (_held.ContainsKey(dir)) return Fine(dir);
-        var h = FileHandles.OpenLinkItself(LinkCheck.LongPath(dir), FileHandles.ListDirectory | FileHandles.ReadAttributes, FileHandles.ShareReadWrite);
+        var h = FileHandles.OpenLinkItself(FileHandles.LongPath(dir), FileHandles.ListDirectory | FileHandles.ReadAttributes, FileHandles.ShareReadWrite);
         if (h.IsInvalid)
         {
             h.Dispose();

@@ -211,9 +211,9 @@ public sealed class WindowerSettingsFile
                 var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
                 var moved = $"{path}.bad-{stamp}";
                 for (int n = 2; File.Exists(moved); n++) moved = $"{path}.bad-{stamp}-{n}";
-                using (var pins = LinkCheck.Hold(windowerDir, windowerDir))
+                using (var pins = FolderPins.HoldFollowingLinksAboveOrThrow(windowerDir, windowerDir))
                 {
-                    LinkCheck.Recheck(pins, windowerDir, pins.Real(path), pins.Real(moved));
+                    pins.Recheck(windowerDir, pins.Real(path), pins.Real(moved));
                     File.Move(pins.Real(path), pins.Real(moved));
                 }
                 Recovered();

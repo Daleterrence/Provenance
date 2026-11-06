@@ -622,7 +622,7 @@ public sealed class PolSession : IDisposable
     internal static void SetBaseEnvironment(IDictionary<string, string?> env)
     {
         LaunchEnvironment.Reset(env);
-        env["POL_IPC_DIR"] = HookFiles.Dir;
+        env["POL_IPC_DIR"] = HookFiles.RequiredDir;
         env["POL_CRED_KEYFILE"] = CredentialKey.FilePath;
         env["POL_HOLD"] = "1";
         env["POL_OWNER"] = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -705,7 +705,7 @@ public sealed class PolSession : IDisposable
     {
         StopWatcher();
         _debounce = new Timer(_ => ReadSnapshot(), null, Timeout.Infinite, Timeout.Infinite);
-        var w = new FileSystemWatcher(HookFiles.Dir, Path.GetFileName(SocialSnapshotFiles.PathForPid(pid)))
+        var w = new FileSystemWatcher(HookFiles.RequiredDir, Path.GetFileName(SocialSnapshotFiles.PathForPid(pid)))
         {
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
         };
@@ -944,7 +944,7 @@ public sealed class PolSession : IDisposable
                 Log.Warning("Other copies' pre-started pol.exe were left running: the hand-over lock stayed busy");
                 return;
             }
-            foreach (var record in Directory.GetFiles(HookFiles.Dir, "pol_hook.*.prestart"))
+            foreach (var record in Directory.GetFiles(HookFiles.RequiredDir, "pol_hook.*.prestart"))
             {
                 try
                 {

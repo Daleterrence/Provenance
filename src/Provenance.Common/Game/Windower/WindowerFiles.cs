@@ -152,7 +152,7 @@ internal static class WindowerFiles
     // points at. Each folder's held while it's emptied
     public static void DeleteTree(FolderPins parent, string dir)
     {
-        using (var pins = FolderPins.Hold(dir, dir))
+        using (var pins = FolderPins.HoldExact(dir, dir))
         {
             if (pins is not null)
             {

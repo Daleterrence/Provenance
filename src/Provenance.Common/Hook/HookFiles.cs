@@ -6,18 +6,24 @@ namespace Provenance.Common.Hook;
 // nothing unelevated can read or plant them
 public static class HookFiles
 {
-    private static volatile string _dir = Path.GetTempPath();   // placeholder, start-up sets the admin-only one first
+    private static volatile string? _dir;
 
     public static string NativeDir => Path.Combine(AppContext.BaseDirectory, "native");
     public const string WatcherExe = "Provenance Watcher.exe";
 
-    public static string Dir
+    // set at start-up, and there's no fallback: a file path asked for before that throws
+    public static string? Dir
     {
         get => _dir;
-        set => _dir = string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("A folder is needed.", nameof(value)) : value;
+        set => _dir = value is not null && string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("A folder is needed.", nameof(value))
+            : value;
     }
 
-    public static string PathFor(int pid, string ext) => Path.Combine(Dir, $"pol_hook.{pid}.{ext}");
+    public static string RequiredDir => _dir ?? throw new InvalidOperationException(
+        "The folder of the hook's files is not set (HookFiles.Dir): they need a folder only administrators can open.");
+
+    public static string PathFor(int pid, string ext) => Path.Combine(RequiredDir, $"pol_hook.{pid}.{ext}");
 
     // a request and the .taking the hook renames it to while it reads it
     public static string[] RequestPaths(int pid, string ext)
@@ -33,7 +39,7 @@ public static class HookFiles
     }
 
     // the hook inside a third-party hook's pol.exe writes its pid here
-    public static string PidFile(string launchId) => Path.Combine(Dir, $"provenance.{launchId}.pid");
+    public static string PidFile(string launchId) => Path.Combine(RequiredDir, $"provenance.{launchId}.pid");
 
     // the owning copy may still read its .ended file, and a new process can reuse the pid
     public static readonly TimeSpan OrphanAge = TimeSpan.FromMinutes(10);

@@ -126,7 +126,7 @@ public static class AshitaBootFiles
     private static FolderPins Hold(string ashitaDir)
     {
         var config = Path.GetFullPath(Path.Combine(ashitaDir, "config"));
-        return LinkCheck.Hold(config, Path.Combine(config, "boot"));
+        return FolderPins.HoldFollowingLinksAboveOrThrow(config, Path.Combine(config, "boot"));
     }
 
     // a copy of the install's own example with the game settings left to Windows, or a short one of mine. Either way

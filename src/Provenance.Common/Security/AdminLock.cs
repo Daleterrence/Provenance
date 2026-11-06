@@ -63,7 +63,7 @@ public static class AdminLock
 
     // held while the file's open, so a crash can't leave it held (never deleting the file avoids a race).
     // Re-entrant only when both takes ask: nested, same thread, no await
-    private static IDisposable? TryAcquireFile(string lockPath, TimeSpan timeout, CancellationToken ct = default, bool reentrant = false)
+    public static IDisposable? TryAcquireFile(string lockPath, TimeSpan timeout, CancellationToken ct = default, bool reentrant = false)
     {
         var full = Path.GetFullPath(lockPath);
         int me = Environment.CurrentManagedThreadId;

@@ -71,7 +71,7 @@ public partial class App : Application
             return;
         }
         // a snapshot holds friends' messages, so it goes once its pol.exe has
-        int swept = HookFiles.Sweep(HookFiles.Dir, ProcessExists, TimeSpan.FromDays(7), DateTime.UtcNow);
+        int swept = HookFiles.Sweep(HookFiles.RequiredDir, ProcessExists, TimeSpan.FromDays(7), DateTime.UtcNow);
         if (swept > 0) Log.Information("Removed {Count} old hook file(s)", swept);
 
         LargeAddressAwareSwitch.OnUiThread = run =>

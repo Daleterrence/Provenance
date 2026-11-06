@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Provenance.Common.IO;
+using Provenance.Common.Security;
 using Serilog;
 
 namespace Provenance.Common.Social;
@@ -110,17 +111,13 @@ public sealed class CharacterNames
     }
 
     // null after 2 secs of trying, a save stuck that long behind another one goes ahead anyway
-    private static FileStream? Lock(string path)
+    private static IDisposable? Lock(string path)
     {
-        for (int i = 0; i < 40; i++)
+        try
         {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Thread.Sleep(50); }
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            return AdminLock.TryAcquireFile(path, TimeSpan.FromSeconds(2));
         }
-        return null;
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 }
