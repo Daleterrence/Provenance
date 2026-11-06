@@ -34,26 +34,41 @@ static int profile_db_check_schema(BYTE *b, pdb_schema *s)
     return 1;
 }
 
-/* data\db\<file>, relocated by polcore. check gets the relocated schema, NULL when either says no */
-static pdb_schema *profile_db_load_file(BYTE *b, const WCHAR *file, const char *tag, int (*check)(BYTE *, pdb_schema *))
+/* data\db\<file> read into a zeroed heap block with slack spare bytes, path getting where it came from. NULL when it's not
+   there or its size is outside min..max, the caller owns the block */
+static BYTE *profile_db_file_read(BYTE *b, const WCHAR *file, WCHAR path[0x200 + 32], DWORD min, DWORD max, DWORD slack,
+                                  int log_open, DWORD *size)
 {
-    WCHAR path[0x200 + 32];
     HANDLE f;
     DWORD sz, got = 0;
     BYTE *buf;
-    pdb_schema *s;
-    memset(path, 0, sizeof path);
+    memset(path, 0, (0x200 + 32) * sizeof(WCHAR));
     if (pc_data_path(b, 0x14, path, 0x200, 0) <= 0) return NULL;  /* "<root>\data\db\" */
     path[0x200 - 1] = 0;
     lstrcatW(path, file);
     f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) { DB_LOG("db: cannot open %ls (%u)\r\n", path, GetLastError()); return NULL; }
+    if (f == INVALID_HANDLE_VALUE) {
+        if (log_open) DB_LOG("db: cannot open %ls (%u)\r\n", path, GetLastError());
+        return NULL;
+    }
     sz = GetFileSize(f, NULL);
-    if (sz < 0x3c || sz > 0x10000) { CloseHandle(f); return NULL; }
-    buf = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sz);
+    if (sz < min || sz > max) { CloseHandle(f); return NULL; }
+    buf = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sz + slack);
     if (!buf) { CloseHandle(f); return NULL; }
     if (!ReadFile(f, buf, sz, &got, NULL) || got != sz) { CloseHandle(f); HeapFree(GetProcessHeap(), 0, buf); return NULL; }
     CloseHandle(f);
+    *size = sz;
+    return buf;
+}
+
+/* a .pib by its file name, relocated by polcore. check gets the relocated schema, NULL when either says no */
+static pdb_schema *profile_db_load_file(BYTE *b, const WCHAR *file, const char *tag, int (*check)(BYTE *, pdb_schema *))
+{
+    WCHAR path[0x200 + 32];
+    DWORD sz;
+    BYTE *buf = profile_db_file_read(b, file, path, 0x3c, 0x10000, 0, 1, &sz);
+    pdb_schema *s;
+    if (!buf) return NULL;
     /* check the raw file before polcore relocates it, in 64 bits so a huge offset can't wrap past the check */
     s = (pdb_schema *)buf;
     if (memcmp(s->name, tag, lstrlenA(tag) + 1) != 0 || s->relocated != 0 || s->nfields == 0 ||
@@ -92,29 +107,22 @@ static int hold_db_free(void);
 
 
 static pfb_hdr *g_pfb;
-static pfb_hdr *profile_db_pfb_load(BYTE *b)
+/* a .pfb by its file name, relocated by polcore, tag starting the log line */
+static pfb_hdr *profile_db_pfb_load(BYTE *b, const WCHAR *file, const char *tag)
 {
     WCHAR path[0x200 + 32];
-    DWORD sz, got = 0;
-    if (g_pfb) return g_pfb;
-    memset(path, 0, sizeof path);
-    if (pc_data_path(b, 0x14, path, 0x200, 0) <= 0) return NULL;   /* "<root>\data\db\" */
-    path[0x200 - 1] = 0;
-    lstrcatW(path, L"prof_pol.pfb");
-    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) return NULL;
-    sz = GetFileSize(f, NULL);
-    if (sz < 0x20 || sz > 0x100000) { CloseHandle(f); return NULL; }
-    BYTE *buf = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sz + 16);
-    if (!buf) { CloseHandle(f); return NULL; }
-    if (!ReadFile(f, buf, sz, &got, NULL) || got != sz || buf[3] != 0) {
-        CloseHandle(f);
-        HeapFree(GetProcessHeap(), 0, buf);
-        return NULL;
-    }
-    CloseHandle(f);
-    g_pfb = pc_pfb_load(b, buf);
-    if (g_pfb) base_log(LOG_PROFILE "prof_pol.pfb loaded, %u items, %u tables\r\n", g_pfb->nItems, g_pfb->nTabs);
+    DWORD sz;
+    BYTE *buf = profile_db_file_read(b, file, path, 0x20, 0x100000, 16, 0, &sz);
+    pfb_hdr *p;
+    if (!buf) return NULL;
+    p = buf[3] == 0 ? pc_pfb_load(b, buf) : NULL;
+    if (!p) { HeapFree(GetProcessHeap(), 0, buf); return NULL; }
+    base_log("%s%ls loaded, %u items, %u tables\r\n", tag, file, p->nItems, p->nTabs);
+    return p;
+}
+static pfb_hdr *profile_db_load_pfb(BYTE *b)
+{
+    if (!g_pfb) g_pfb = profile_db_pfb_load(b, L"prof_pol.pfb", LOG_PROFILE);
     return g_pfb;
 }
 static const pfb_item *profile_db_pfb_item(const pfb_hdr *p, int field)

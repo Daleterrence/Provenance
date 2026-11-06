@@ -304,43 +304,52 @@ static void handles_abandon(BYTE *b)
     if (g_s.hop != HOP_SWITCH) handles_undo(b);
     handles_done("failed:cancelled");
 }
-static void handles_json(BYTE *b, HANDLE out)
+enum { HANDLES_NAME_CAP = 64, HANDLES_TEXT_CAP = 200 };
+static void handles_json(BYTE *b, jw *w)
 {
-    char line[900], nm[64], tx[200], k[17], ids[48];
+    char k[17];
     pol_handle hd;
     pol_chr rec;
-    int cur = pc_has(b, SV_CURRENT_HANDLE) ? pc_current_handle(b) : -1, first = 1, i, j, o;
+    int cur = pc_has(b, SV_CURRENT_HANDLE) ? pc_current_handle(b) : -1, i, j;
     DWORD f;
-    json_write_job(out, ",\"handleJob\":{\"token\":%s,\"state\":\"%s\"", g_s.htoken, g_s.hstate);
-    json_write(out, g_s.hop == HOP_SWITCH ? ",\"op\":\"switch\"}" : g_s.hop == HOP_LINK ? ",\"op\":\"link\"}"
-                                : g_s.hop == HOP_UNLINK ? ",\"op\":\"unlink\"}" : g_s.hop == HOP_LINKALL ? ",\"op\":\"linkall\"}"
-                                : "}");
-    json_write(out, ",\"handles\":[");
+    jw_job(w, "handleJob", g_s.htoken, g_s.hstate);
+    if (g_s.hop == HOP_SWITCH) jw_lit(w, "op", "switch");
+    else if (g_s.hop == HOP_LINK) jw_lit(w, "op", "link");
+    else if (g_s.hop == HOP_UNLINK) jw_lit(w, "op", "unlink");
+    else if (g_s.hop == HOP_LINKALL) jw_lit(w, "op", "linkall");
+    jw_end(w);
+    jw_arr(w, "handles");
     for (i = 0; i < 64; i++) {
         if (!handle_get(b, i, &hd)) continue;
-        json_sjis(nm, sizeof nm, (const BYTE *)hd.name, 0x0f);
         peers_hid_key(handle_hid(&hd), k);
-        for (o = 0, j = 0; j < 8; j++)
-            if (hd.chars[j] & 1) o += wsprintfA(ids + o, "%s%u", o ? "," : "", (hd.chars[j] >> 1) & 0x3f);
-        ids[o] = 0;
-        wsprintfA(line, "%s{\"slot\":%d,\"name\":%s,\"key\":\"%s\",\"pic\":%u,\"order\":%u,\"active\":%s,"
-                        "\"contentIds\":[%s]}",
-                  first ? "" : ",", i, nm, k, hd.pic, (hd.flags >> 2) & 0x3f,
-                  i == cur ? "true" : "false", ids);
-        json_write(out, line);
-        first = 0;
+        jw_obj(w, NULL);
+        jw_int(w, "slot", i);
+        jw_sjis(w, "name", (const BYTE *)hd.name, 0x0f, HANDLES_NAME_CAP);
+        jw_lit(w, "key", k);
+        jw_uint(w, "pic", hd.pic);
+        jw_uint(w, "order", (hd.flags >> 2) & 0x3f);
+        jw_bool(w, "active", i == cur);
+        jw_arr(w, "contentIds");
+        for (j = 0; j < 8; j++)
+            if (hd.chars[j] & 1) jw_uint(w, NULL, (hd.chars[j] >> 1) & 0x3f);
+        jw_end(w);
+        jw_end(w);
     }
-    json_write(out, "],\"contentIds\":[");
-    for (i = 0, first = 1; i < 64; i++) {
+    jw_end(w);
+    jw_arr(w, "contentIds");
+    for (i = 0; i < 64; i++) {
         if (!peers_get_chr(b, i, &rec)) continue;
         f = rec.link;
-        json_sjis(nm, sizeof nm, (const BYTE *)rec.name, 0x0f);
-        json_sjis(tx, sizeof tx, (const BYTE *)rec.text, 0x3f);
         peers_chr_key(&rec, k);
-        wsprintfA(line, "%s{\"index\":%d,\"type\":%u,\"name\":%s,\"text\":%s,\"order\":%u,\"handle\":%d,\"key\":\"%s\"}",
-                  first ? "" : ",", i, rec.title, nm, tx, f & 0xff, (f & CHR_LINKED) ? (int)CHR_HANDLE(f) : -1, k);
-        json_write(out, line);
-        first = 0;
+        jw_obj(w, NULL);
+        jw_int(w, "index", i);
+        jw_uint(w, "type", rec.title);
+        jw_sjis(w, "name", (const BYTE *)rec.name, 0x0f, HANDLES_NAME_CAP);
+        jw_sjis(w, "text", (const BYTE *)rec.text, 0x3f, HANDLES_TEXT_CAP);
+        jw_uint(w, "order", f & 0xff);
+        jw_int(w, "handle", (f & CHR_LINKED) ? (int)CHR_HANDLE(f) : -1);
+        jw_lit(w, "key", k);
+        jw_end(w);
     }
-    json_write(out, "]");
+    jw_end(w);
 }

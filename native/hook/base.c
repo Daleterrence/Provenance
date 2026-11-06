@@ -68,6 +68,30 @@ static void base_ipc_file(char *out, const char *ext)
     wsprintfA(out + lstrlenA(out), IPC_NAME, GetCurrentProcessId(), ext);
 }
 
+/* a file the app reads, written as <name>.tmp and renamed over the real one so it never sees half of it */
+typedef struct { HANDLE h; char path[MAX_PATH + 64], tmp[MAX_PATH + 80]; } ipc_json;
+static int base_ipc_json_open(const char *ext, ipc_json *f)
+{
+    base_ipc_file(f->path, ext);
+    lstrcpyA(f->tmp, f->path);
+    lstrcatA(f->tmp, ".tmp");
+    f->h = CreateFileA(f->tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    return f->h != INVALID_HANDLE_VALUE;
+}
+static int base_ipc_json_write(ipc_json *f, const char *p, int n)
+{
+    DWORD wn = 0;
+    return WriteFile(f->h, p, (DWORD)n, &wn, NULL) && wn == (DWORD)n;
+}
+/* ok = everything went in, 1 when the file's in place now. Anything else leaves the old file and no .tmp behind */
+static int base_ipc_json_commit(ipc_json *f, int ok)
+{
+    CloseHandle(f->h);
+    ok = ok && MoveFileExA(f->tmp, f->path, MOVEFILE_REPLACE_EXISTING);
+    if (!ok) DeleteFileA(f->tmp);
+    return ok;
+}
+
 static void base_log(const char *fmt, ...)
 {
     char buf[1100], path[MAX_PATH + 64];

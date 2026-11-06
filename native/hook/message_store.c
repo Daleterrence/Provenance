@@ -1,32 +1,31 @@
-static int message_store_msg_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state, int read,
+static void message_store_msg_json(BYTE *b, jw *w, const BYTE *e, int mid, const char *state, int read,
                     const char *subj, const char *text, const BYTE *att)
 {
-    char nm[64], sk[17], tk[17], grp[80] = "";
+    char sk[17], tk[17];
     WORD f = MAIL(e)->flags;
     unsigned kind = (f >> 7) & 0x1f;
     DWORD tlo = MAIL(e)->to_lo, thi = MAIL(e)->to_hi;
-    int o, tome = mail_inbox_polid_ok(b, tlo, thi) && peers_is_me(b, tlo, thi);
-    json_sjis(nm, sizeof nm, (const BYTE *)MAIL(e)->name, 0x0f);
+    int tome = mail_inbox_polid_ok(b, tlo, thi) && peers_is_me(b, tlo, thi);
     peers_key(b, MAIL(e)->from_lo, MAIL(e)->from_hi, MAIL(e)->from_slot, sk);
     peers_key(b, tlo, thi, MAIL(e)->to_slot, tk);
+    jw_obj(w, NULL);
+    jw_int(w, "mid", mid);
+    jw_sjis(w, "from", (const BYTE *)MAIL(e)->name, 0x0f, 64);
+    jw_lit(w, "fromKey", sk);
+    jw_uint(w, "fromSlot", MAIL(e)->from_slot);
+    jw_bool(w, "me", peers_is_me(b, MAIL(e)->from_lo, MAIL(e)->from_hi));
+    jw_lit(w, "toKey", tk);
+    jw_bool(w, "toMe", tome);
+    jw_uint(w, "kind", kind);
+    jw_uint(w, "time", MAIL(e)->time);
+    jw_uint(w, "seq", MAIL(e)->seq);
+    jw_lit(w, "state", state);
+    if (read >= 0) jw_bool(w, "read", read);
     /* removed from a group (0x12) or it was disbanded (0x13): the name's in the type-10 attachment, the text's empty */
-    if (att && (kind == 0x12 || kind == 0x13)) {
-        lstrcpyA(grp, ",\"group\":");
-        json_sjis(grp + 9, sizeof grp - 9, att + 8, 0x14);
-    }
-    o = wsprintfA(out, "{\"mid\":%d,\"from\":%s,\"fromKey\":\"%s\",\"fromSlot\":%u,\"me\":%s,\"toKey\":\"%s\","
-                       "\"toMe\":%s,\"kind\":%u,\"time\":%u,\"seq\":%u,\"state\":\"%s\"%s%s,\"subject\":",
-                  mid, nm, sk, MAIL(e)->from_slot,
-                  peers_is_me(b, MAIL(e)->from_lo, MAIL(e)->from_hi) ? "true" : "false", tk,
-                  tome ? "true" : "false",
-                  kind, MAIL(e)->time, MAIL(e)->seq, state,
-                  read < 0 ? "" : read ? ",\"read\":true" : ",\"read\":false", grp);
-    o += json_text(out + o, cap - o - 16, subj);
-    lstrcpyA(out + o, ",\"text\":"); o += 8;
-    o += json_text(out + o, cap - o - 4, text);
-    out[o++] = '}';
-    out[o] = 0;
-    return o;
+    if (att && (kind == 0x12 || kind == 0x13)) jw_sjis(w, "group", att + 8, 0x14, 71);
+    jw_text(w, "subject", subj);
+    jw_text(w, "text", text);
+    jw_end(w);
 }
 
 /* pub\homeNN\msg: r\b unread, r\a read (FFXI moves them there), s\b the game's outbox, s\a sent. A file's name is
@@ -182,44 +181,28 @@ static int message_store_legacy_home_there(void)
     return g_viewer[0] && message_store_dir_exists(p) && message_store_plain_path(p);
 }
 
-static int message_store_sent_json(BYTE *b, char *out, int cap, const BYTE *e, int mid, const char *state,
-                     const char *subj, const char *text)
+static void message_store_sent_json(BYTE *b, jw *w, const BYTE *e, int mid, const char *state, const char *subj,
+                     const char *text)
 {
-    char nm[64] = "\"\"", sk[17];
+    char sk[17];
     pol_friend_copy fr;
     DWORD lo = MAIL(e)->to_lo, hi = MAIL(e)->to_hi;
-    int row = peers_find_friend_row(b, lo, hi, MAIL(e)->to_slot), o;
+    int row = peers_find_friend_row(b, lo, hi, MAIL(e)->to_slot);
     peers_key(b, lo, hi, MAIL(e)->to_slot, sk);
-    if (row >= 0 && peers_get_friend(b, row, &fr)) json_sjis(nm, sizeof nm, (const BYTE *)fr.f.name, 0x0f);
-    o = wsprintfA(out, "{\"mid\":%d,\"to\":%s,\"toKey\":\"%s\",\"toSlot\":%u,\"fromSlot\":%u,\"toOther\":%s,\"time\":%u,"
-                       "\"seq\":%u,\"state\":\"%s\",\"subject\":",
-                  mid, nm, sk, MAIL(e)->to_slot, MAIL(e)->from_slot, mail_inbox_polid_ok(b, lo, hi) && !peers_is_me(b, lo, hi) ? "true" : "false",
-                  MAIL(e)->time, MAIL(e)->seq, state);
-    o += json_text(out + o, cap - o - 16, subj);
-    lstrcpyA(out + o, ",\"text\":"); o += 8;
-    o += json_text(out + o, cap - o - 4, text);
-    out[o++] = '}';
-    out[o] = 0;
-    return o;
-}
-typedef struct { char *p; int n, cap; } gbuf;
-static int message_store_gb_add(gbuf *g, const char *s, int len)
-{
-    if (g->n + len + 1 > g->cap) {
-        int cap = g->cap ? g->cap * 2 : 0x10000;
-        char *q;
-        while (cap < g->n + len + 1) cap *= 2;
-        if (cap > STORE_JSON_MAX + 0x10000) cap = STORE_JSON_MAX + 0x10000;
-        if (cap < g->n + len + 1) return 0;
-        q = (char *)(g->p ? HeapReAlloc(GetProcessHeap(), 0, g->p, cap) : HeapAlloc(GetProcessHeap(), 0, cap));
-        if (!q) return 0;
-        g->p = q;
-        g->cap = cap;
-    }
-    memcpy(g->p + g->n, s, len);
-    g->n += len;
-    g->p[g->n] = 0;
-    return 1;
+    jw_obj(w, NULL);
+    jw_int(w, "mid", mid);
+    if (row >= 0 && peers_get_friend(b, row, &fr)) jw_sjis(w, "to", (const BYTE *)fr.f.name, 0x0f, 64);
+    else jw_raw(w, "to", "\"\"");
+    jw_lit(w, "toKey", sk);
+    jw_uint(w, "toSlot", MAIL(e)->to_slot);
+    jw_uint(w, "fromSlot", MAIL(e)->from_slot);
+    jw_bool(w, "toOther", mail_inbox_polid_ok(b, lo, hi) && !peers_is_me(b, lo, hi));
+    jw_uint(w, "time", MAIL(e)->time);
+    jw_uint(w, "seq", MAIL(e)->seq);
+    jw_lit(w, "state", state);
+    jw_text(w, "subject", subj);
+    jw_text(w, "text", text);
+    jw_end(w);
 }
 
 static void message_store_drop(void)
@@ -245,13 +228,11 @@ static void message_store_import(BYTE *b)
 {
     static mailrec scratch;
     static char body[STORE_BODY_MAX];
-    char path[MAX_PATH + 64], tmp[MAX_PATH + 80];
+    ipc_json file;
     unsigned __int64 me = pc_my_id(b);
     storefile *all = NULL, *v, *g;
-    gbuf in = {0}, out = {0};
+    jw in = {0}, out = {0};
     int homes[2], nh = 0, n = 0, cap = 0, k, i, j, h, s, got, nin = 0, nout = 0, left = 0;
-    DWORD wn;
-    HANDLE f;
     message_store_drop();
     if (!me || g_home < 0) return;
     homes[nh++] = g_home;
@@ -289,48 +270,44 @@ static void message_store_import(BYTE *b)
         }
     if (n > 1) qsort(all, n, sizeof *all, message_store_newer);
     for (i = 0; i < n; i++) {
-        int sent = all[i].sub >= 2, need, len;
-        char *json;
+        int sent = all[i].sub >= 2;
+        jw one = {0}, *dst = sent ? &out : &in;
         if ((got = message_store_body(&all[i], body, sizeof body)) <= 0) continue;
         memset(&scratch, 0, sizeof scratch);
         memcpy(scratch.hdr, all[i].hdr, MAIL_KEY_SIZE);
         mail_inbox_parse(&scratch, body, got);
-        need = 512 + 2 * (lstrlenA(scratch.subj) + lstrlenA(scratch.text));
-        if (!(json = (char *)HeapAlloc(GetProcessHeap(), 0, need))) continue;
-        if (sent) len = message_store_sent_json(b, json, need, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent",
+        if (sent) message_store_sent_json(b, &one, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent",
                                   scratch.subj, scratch.text);
-        else len = message_store_msg_json(b, json, need, all[i].hdr, 0, "local", (MAIL(all[i].hdr)->seen >> 8) & 1,
+        else message_store_msg_json(b, &one, all[i].hdr, 0, "local", (MAIL(all[i].hdr)->seen >> 8) & 1,
                             scratch.subj, scratch.text, scratch.has_att ? scratch.att : NULL);
+        if (one.fail) { jw_free(&one); continue; }
         /* newest first, so a store too big for the file loses its oldest lines */
-        if (in.n + out.n + len + 2 > STORE_JSON_MAX ||
-            !message_store_gb_add(sent ? &out : &in, (sent ? nout : nin) ? "," : "", (sent ? nout : nin) ? 1 : 0) ||
-            !message_store_gb_add(sent ? &out : &in, json, len)) {
+        if (in.n + out.n + one.n + 2 > STORE_JSON_MAX || (jw_splice(dst, one.p, one.n), dst->fail)) {
             left = n - i;
-            HeapFree(GetProcessHeap(), 0, json);
+            jw_free(&one);
             break;
         }
-        HeapFree(GetProcessHeap(), 0, json);
+        jw_free(&one);
         if (sent) nout++; else nin++;
     }
     if (all) HeapFree(GetProcessHeap(), 0, all);
     SecureZeroMemory(body, sizeof body);
     SecureZeroMemory(&scratch, sizeof scratch);
-    if (nin || nout) {
-        base_ipc_file(path, IPC_STORE);
-        lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
-        f = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (f != INVALID_HANDLE_VALUE) {
-            json_write(f, "{\"messages\":[");
-            if (in.n) WriteFile(f, in.p, (DWORD)in.n, &wn, NULL);
-            json_write(f, "],\"gameSent\":[");
-            if (out.n) WriteFile(f, out.p, (DWORD)out.n, &wn, NULL);
-            json_write(f, "]}");
-            CloseHandle(f);
-            MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING);
-        }
+    if ((nin || nout) && base_ipc_json_open(IPC_STORE, &file)) {
+        jw doc = {0};
+        jw_obj(&doc, NULL);
+        jw_arr(&doc, "messages");
+        jw_splice(&doc, in.p, in.n);
+        jw_end(&doc);
+        jw_arr(&doc, "gameSent");
+        jw_splice(&doc, out.p, out.n);
+        jw_end(&doc);
+        jw_end(&doc);
+        base_ipc_json_commit(&file, !doc.fail && base_ipc_json_write(&file, doc.p, doc.n));
+        jw_free(&doc);
     }
-    if (in.p) { SecureZeroMemory(in.p, in.cap); HeapFree(GetProcessHeap(), 0, in.p); }
-    if (out.p) { SecureZeroMemory(out.p, out.cap); HeapFree(GetProcessHeap(), 0, out.p); }
+    jw_free(&in);
+    jw_free(&out);
     base_log("store: %d received and %d sent line(s) from the message store (home%02d%s)%s\r\n", nin, nout, g_home,
        nh > 1 ? " and home84" : "", left ? ", the oldest left out (too big)" : "");
 }

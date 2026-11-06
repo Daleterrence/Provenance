@@ -847,107 +847,131 @@ static void chat_room_end(BYTE *b)
 
 static void chat_room_write_lines(BYTE *b)
 {
-    char path[MAX_PATH + 64], tmp[MAX_PATH + 80], line[0x400], nm[0x100], tx[0xd00], u8[0x620];
-    HANDLE h;
+    char u8[0x620];
+    ipc_json file;
+    jw w = {0};
     (void)b;
     g_cr_lines_dirty = 0;
     g_cr_written_seq = g_cr_seq;
     g_cr_written_at = GetTickCount64();
-    base_ipc_file(path, IPC_CHATROOM);
-    lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
-    h = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h == INVALID_HANDLE_VALUE) return;
-    json_str(nm, sizeof nm, g_cr_room);
-    json_write(h, "{\"room\":"); json_write(h, nm); json_write(h, ",\"lines\":[");
+    if (!base_ipc_json_open(IPC_CHATROOM, &file)) return;
+    jw_obj(&w, NULL);
+    jw_str(&w, "room", g_cr_room, 0x100);
+    jw_arr(&w, "lines");
     for (int i = 0; i < g_cr_line_n; i++) {
         const cr_line *l = &g_cr_line[(g_cr_line_next - g_cr_line_n + i + CR_LINES) % CR_LINES];
+        jw_obj(&w, NULL);
+        jw_uint(&w, "seq", l->seq);
+        jw_uint(&w, "time", l->time);
+        jw_lit(&w, "kind", g_cr_kind[l->kind]);
+        jw_int(&w, "from", l->from);
+        jw_bool(&w, "me", l->me);
+        jw_int(&w, "colour", l->colour);
+        jw_int(&w, "emote", l->emote);
         chat_frame_u8(l->name, u8, sizeof u8);
-        json_str(nm, sizeof nm, u8);
+        jw_str(&w, "name", u8, 0x100);
         chat_frame_u8(l->text, u8, sizeof u8);
-        json_text(tx, sizeof tx, u8);
-        wsprintfA(line, "%s{\"seq\":%lu,\"time\":%lu,\"kind\":\"%s\",\"from\":%d,\"me\":%s,\"colour\":%d,\"emote\":%d,"
-                        "\"name\":%s,\"text\":", i ? "," : "", l->seq, l->time, g_cr_kind[l->kind], l->from,
-                  l->me ? "true" : "false", l->colour, l->emote, nm);
-        json_write(h, line);
-        json_write(h, tx);
-        json_write(h, "}");
+        jw_text(&w, "text", u8);
+        jw_end(&w);
     }
-    json_write(h, "]}");
-    CloseHandle(h);
-    MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING);
+    jw_end(&w);
+    jw_end(&w);
+    base_ipc_json_commit(&file, !w.fail && base_ipc_json_write(&file, w.p, w.n));
+    jw_free(&w);
 }
 /* the snapshot's "chat", only once chat's been used so the rest of the snapshot stays as it was */
-static void chat_room_snapshot(BYTE *b, HANDLE h)
+static void chat_room_snapshot(BYTE *b, jw *w)
 {
-    char line[0x600], tk[100], js[0x300], g1[0x100], g2[0x100], part[0x80];
+    char part[0x80];
     const pfb_tab *zt, *ct;
-    int i, first;
+    int i;
     if (!g_cr_used) return;
     if (g_cr_lines_dirty && GetTickCount64() - g_cr_written_at >= 1000) chat_room_write_lines(b);
-    wsprintfA(line, ",\"chat\":{\"lineSeq\":%lu", g_cr_written_seq);
-    json_write(h, line);
-    json_str(tk, sizeof tk, g_cr_ztok);
-    wsprintfA(line, ",\"zones\":{\"token\":%s,\"state\":\"%s\",\"list\":[", tk, g_cr_zstate);
-    json_write(h, line);
+    jw_obj(w, "chat");
+    jw_uint(w, "lineSeq", g_cr_written_seq);
+    jw_obj(w, "zones");
+    jw_str(w, "token", g_cr_ztok, 100);
+    jw_lit(w, "state", g_cr_zstate);
+    jw_arr(w, "list");
     zt = chat_list_tab_of(g_cr_cpfb, 0);
-    for (i = 0, first = 1; zt && i < g_cr_zone_n; i++) {
+    for (i = 0; zt && i < g_cr_zone_n; i++) {
         int e = profile_db_pfb_find(zt, g_cr_zone[i].code);
         if (e < 0) continue;
+        jw_obj(w, NULL);
+        jw_uint(w, "code", g_cr_zone[i].code);
         profile_db_pfb_part(zt, e, 0, part, sizeof part);
-        json_pol(b, part, 0x100, g1, sizeof g1);
+        jw_pol(w, "group", b, part, 0x100, 0x100);
         profile_db_pfb_part(zt, e, 2, part, sizeof part);
-        json_pol(b, part, 0x100, g2, sizeof g2);
-        wsprintfA(line, "%s{\"code\":%u,\"group\":%s,\"name\":%s,\"rooms\":%lu,\"people\":%lu}", first ? "" : ",",
-                  g_cr_zone[i].code, g1, g2, g_cr_zone[i].rooms, g_cr_zone[i].people);
-        json_write(h, line);
-        first = 0;
+        jw_pol(w, "name", b, part, 0x100, 0x100);
+        jw_uint(w, "rooms", g_cr_zone[i].rooms);
+        jw_uint(w, "people", g_cr_zone[i].people);
+        jw_end(w);
     }
-    json_write(h, "]},\"categories\":[");
+    jw_end(w);
+    jw_end(w);
+    jw_arr(w, "categories");
     ct = chat_list_tab_of(g_cr_rpfb, 7);
     for (i = 0; ct && i < ct->n; i++) {
+        jw_obj(w, NULL);
+        jw_uint(w, "code", ct->e[i].code);
         profile_db_pfb_part(ct, i, 1, part, sizeof part);
-        json_pol(b, part, 0x100, g1, sizeof g1);
+        jw_pol(w, "group", b, part, 0x100, 0x100);
         profile_db_pfb_part(ct, i, 2, part, sizeof part);
-        json_pol(b, part, 0x100, g2, sizeof g2);
-        wsprintfA(line, "%s{\"code\":%lu,\"group\":%s,\"name\":%s}", i ? "," : "", ct->e[i].code, g1, g2);
-        json_write(h, line);
+        jw_pol(w, "name", b, part, 0x100, 0x100);
+        jw_end(w);
     }
-    json_str(tk, sizeof tk, g_cr_rtok);
-    wsprintfA(line, "],\"rooms\":{\"token\":%s,\"state\":\"%s\",\"zone\":%d,\"offset\":%d,\"total\":%d,\"list\":[", tk,
-              g_cr_rstate, g_cr_rzone, g_cr_roff, g_cr_rtotal);
-    json_write(h, line);
+    jw_end(w);
+    jw_obj(w, "rooms");
+    jw_str(w, "token", g_cr_rtok, 100);
+    jw_lit(w, "state", g_cr_rstate);
+    jw_int(w, "zone", g_cr_rzone);
+    jw_int(w, "offset", g_cr_roff);
+    jw_int(w, "total", g_cr_rtotal);
+    jw_arr(w, "list");
     for (i = 0; i < g_cr_rooms_n; i++) {
         const cr_room *r = &g_cr_rooms[i];
-        json_str(tk, sizeof tk, r->irc);
-        json_pol(b, r->topic, 0x100, js, sizeof js);
-        wsprintfA(line, "%s{\"irc\":%s,\"name\":%s,\"locked\":%s,\"people\":%lu,\"capacity\":%lu,"
-                        "\"categories\":[%u,%u,%u],\"created\":%lu}",
-                  i ? "," : "", tk, js, r->locked ? "true" : "false", r->people, r->capa,
-                  r->cate[0], r->cate[1], r->cate[2], r->ctime);
-        json_write(h, line);
+        jw_obj(w, NULL);
+        jw_str(w, "irc", r->irc, 100);
+        jw_pol(w, "name", b, r->topic, 0x100, 0x300);
+        jw_bool(w, "locked", r->locked);
+        jw_uint(w, "people", r->people);
+        jw_uint(w, "capacity", r->capa);
+        jw_arr(w, "categories");
+        jw_uint(w, NULL, r->cate[0]);
+        jw_uint(w, NULL, r->cate[1]);
+        jw_uint(w, NULL, r->cate[2]);
+        jw_end(w);
+        jw_uint(w, "created", r->ctime);
+        jw_end(w);
     }
-    json_str(tk, sizeof tk, g_cr_tok);
-    json_str(js, sizeof js, g_s.cr_st == CR_OUT ? "" : g_cr_room);
-    wsprintfA(line, "]},\"room\":{\"token\":%s,\"state\":\"%s\",\"irc\":%s,\"limit\":%lu,\"locked\":%s,\"members\":[", tk,
-              g_cr_state, js, g_s.cr_st == CR_IN ? *(DWORD *)(g_cr_slot + 0x94) : 0,
-              g_s.cr_st == CR_IN && (*(DWORD *)(g_cr_slot + 0x8c) & (1u << 8)) ? "true" : "false");
-    json_write(h, line);
-    for (i = 0, first = 1; g_s.cr_st == CR_IN && i < g_cr_people_n; i++) {
+    jw_end(w);
+    jw_end(w);
+    jw_obj(w, "room");
+    jw_str(w, "token", g_cr_tok, 100);
+    jw_lit(w, "state", g_cr_state);
+    jw_str(w, "irc", g_s.cr_st == CR_OUT ? "" : g_cr_room, 0x300);
+    jw_uint(w, "limit", g_s.cr_st == CR_IN ? *(DWORD *)(g_cr_slot + 0x94) : 0);
+    jw_bool(w, "locked", g_s.cr_st == CR_IN && (*(DWORD *)(g_cr_slot + 0x8c) & (1u << 8)));
+    jw_arr(w, "members");
+    for (i = 0; g_s.cr_st == CR_IN && i < g_cr_people_n; i++) {
         const cr_person *p = &g_cr_people[i];
         char u8[0x80];
         int me = chat_frame_is_me(p->lo, p->hi);
         if (!p->member) continue;
         chat_frame_u8(me ? g_cr_nick : p->name, u8, sizeof u8);
-        json_str(g1, sizeof g1, u8);
-        wsprintfA(line, "%s{\"key\":%d,\"name\":%s,\"me\":%s,\"master\":%s,\"away\":%s}", first ? "" : ",", p->key, g1,
-                  me ? "true" : "false", p->master ? "true" : "false", !me && p->away ? "true" : "false");
-        json_write(h, line);
-        first = 0;
+        jw_obj(w, NULL);
+        jw_int(w, "key", p->key);
+        jw_str(w, "name", u8, 0x100);
+        jw_bool(w, "me", me);
+        jw_bool(w, "master", p->master);
+        jw_bool(w, "away", !me && p->away);
+        jw_end(w);
     }
-    json_str(tk, sizeof tk, g_cr_stok);
-    wsprintfA(line, "]},\"send\":{\"token\":%s,\"state\":\"%s\"}", tk, g_cr_sstate);
-    json_write(h, line);
-    json_str(tk, sizeof tk, g_cr_mtok);
-    wsprintfA(line, ",\"master\":{\"token\":%s,\"state\":\"%s\"}}", tk, g_cr_mstate);
-    json_write(h, line);
+    jw_end(w);
+    jw_end(w);
+    jw_job(w, "send", g_cr_stok, g_cr_sstate);
+    jw_end(w);
+    jw_job(w, "master", g_cr_mtok, g_cr_mstate);
+    jw_end(w);
+    jw_end(w);
 }

@@ -30,33 +30,6 @@ static int chat_list_irc_ok(const char *s)
     return 1;
 }
 
-/* data\db\<name>.pfb, relocated by polcore, the same way profile_db_pfb_load reads prof_pol's */
-static pfb_hdr *chat_list_pfb(BYTE *b, const WCHAR *file)
-{
-    WCHAR path[0x200 + 32];
-    DWORD sz, got = 0;
-    HANDLE f;
-    BYTE *buf;
-    pfb_hdr *p;
-    memset(path, 0, sizeof path);
-    if (pc_data_path(b, 0x14, path, 0x200, 0) <= 0) return NULL;
-    path[0x200 - 1] = 0;
-    lstrcatW(path, file);
-    f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) return NULL;
-    sz = GetFileSize(f, NULL);
-    buf = sz >= 0x20 && sz <= 0x100000 ? (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sz + 16) : NULL;
-    if (!buf || !ReadFile(f, buf, sz, &got, NULL) || got != sz || buf[3] != 0) {
-        CloseHandle(f);
-        if (buf) HeapFree(GetProcessHeap(), 0, buf);
-        return NULL;
-    }
-    CloseHandle(f);
-    p = pc_pfb_load(b, buf);
-    if (!p) { HeapFree(GetProcessHeap(), 0, buf); return NULL; }
-    base_log("chat: %ls loaded, %u items, %u tables\r\n", file, p->nItems, p->nTabs);
-    return p;
-}
 static int chat_list_check_field(BYTE *b, pdb_schema *s, const char *n, BYTE type, WORD size)
 {
     int idx;
@@ -202,10 +175,10 @@ static int chat_list_part_there(const pfb_tab *t, int i, int k)
 static int chat_list_db_load(BYTE *b, int rooms)
 {
     if (!g_cr_cpib) g_cr_cpib = profile_db_load_file(b, L"ch_count.pib", "ch_count", chat_list_check_count);
-    if (!g_cr_cpfb) g_cr_cpfb = chat_list_pfb(b, L"ch_count.pfb");
+    if (!g_cr_cpfb) g_cr_cpfb = profile_db_pfb_load(b, L"ch_count.pfb", "chat: ");
     if (!g_cr_cpib || !chat_list_tab_of(g_cr_cpfb, 0)) return 0;
     /* the room categories ride along with the zones, Create Room needs them before any room list */
-    if (!g_cr_rpfb) g_cr_rpfb = chat_list_pfb(b, L"c_chan.pfb");
+    if (!g_cr_rpfb) g_cr_rpfb = profile_db_pfb_load(b, L"c_chan.pfb", "chat: ");
     if (!g_cr_zone_n) {
         const pfb_tab *t = chat_list_tab_of(g_cr_cpfb, 0);
         int lang = pc_has(b, SV_VIEWER_LANGUAGE) ? pc_viewer_language(b) : 0, row = 0;

@@ -382,44 +382,46 @@ static void group_chat_signed_out(void)
 
 static void group_chat_write_lines(void)
 {
-    char path[MAX_PATH + 64], tmp[MAX_PATH + 80], line[0x200], nm[0x100], tx[0x400], u8[0x300];
-    HANDLE h;
+    char id[17], u8[0x300];
+    ipc_json file;
+    jw w = {0};
     g_gc_lines_dirty = 0;
     g_gc_written_seq = g_gc_seq;
     g_gc_written_at = GetTickCount64();
-    base_ipc_file(path, IPC_GROUPCHAT);
-    lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
-    h = CreateFileA(tmp, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h == INVALID_HANDLE_VALUE) return;
-    wsprintfA(line, "{\"group\":\"%08x%08x\",\"lines\":[", g_gc_hi, g_gc_lo);
-    json_write(h, line);
+    if (!base_ipc_json_open(IPC_GROUPCHAT, &file)) return;
+    wsprintfA(id, "%08x%08x", g_gc_hi, g_gc_lo);
+    jw_obj(&w, NULL);
+    jw_lit(&w, "group", id);
+    jw_arr(&w, "lines");
     for (int i = 0; i < g_gc_line_n; i++) {
         const gc_line *l = &g_gc_line[(g_gc_line_next - g_gc_line_n + i + GC_LINES) % GC_LINES];
+        jw_obj(&w, NULL);
+        jw_uint(&w, "seq", l->seq);
+        jw_uint(&w, "time", l->time);
+        jw_int(&w, "from", l->from);
+        jw_bool(&w, "me", l->me);
         chat_frame_u8(l->name, u8, sizeof u8);
-        json_str(nm, sizeof nm, u8);
+        jw_str(&w, "name", u8, 0x100);
         chat_frame_u8(l->text, u8, sizeof u8);
-        json_text(tx, sizeof tx, u8);
-        wsprintfA(line, "%s{\"seq\":%lu,\"time\":%lu,\"from\":%d,\"me\":%s,\"name\":%s,\"text\":", i ? "," : "", l->seq,
-                  l->time, l->from, l->me ? "true" : "false", nm);
-        json_write(h, line);
-        json_write(h, tx);
-        json_write(h, "}");
+        jw_text(&w, "text", u8);
+        jw_end(&w);
     }
-    json_write(h, "]}");
-    CloseHandle(h);
-    MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING);
+    jw_end(&w);
+    jw_end(&w);
+    base_ipc_json_commit(&file, !w.fail && base_ipc_json_write(&file, w.p, w.n));
+    jw_free(&w);
 }
-static void group_chat_snapshot(BYTE *b, HANDLE h)
+static void group_chat_snapshot(BYTE *b, jw *w)
 {
-    char line[0x200], tk[100], st[100];
+    char id[17];
     (void)b;
     if (!g_gc_used) return;
     if (g_gc_lines_dirty && GetTickCount64() - g_gc_written_at >= 1000) group_chat_write_lines();
-    json_str(tk, sizeof tk, g_gc_tok);
-    wsprintfA(line, ",\"groupChat\":{\"token\":%s,\"state\":\"%s\",\"group\":\"%08x%08x\",\"lineSeq\":%lu", tk, g_gc_state,
-              g_gc_hi, g_gc_lo, g_gc_written_seq);
-    json_write(h, line);
-    json_str(st, sizeof st, g_gc_stok);
-    wsprintfA(line, ",\"send\":{\"token\":%s,\"state\":\"%s\"}}", st, g_gc_sstate);
-    json_write(h, line);
+    wsprintfA(id, "%08x%08x", g_gc_hi, g_gc_lo);
+    jw_job(w, "groupChat", g_gc_tok, g_gc_state);
+    jw_lit(w, "group", id);
+    jw_uint(w, "lineSeq", g_gc_written_seq);
+    jw_job(w, "send", g_gc_stok, g_gc_sstate);
+    jw_end(w);
+    jw_end(w);
 }

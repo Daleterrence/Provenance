@@ -275,25 +275,19 @@ static void profiles_profile_abandon(BYTE *b)
 static void profiles_profile_build(BYTE *b)
 {
     static const char *aa[] = { "z_aa_mt", "z_aa_dt", "z_aa_t", "z_aa_m", "z_aa_c", "z_aa_w", "z_aa_d", "z_aa_e" };
-    static char lines[3][0x80], js[0xc00], t[0x400], f[0x400];
+    static char lines[3][0x80], t[0x400], f[0x400];
     pdb_schema *s = g_profile_db_pib;
     pfb_hdr *p = g_pfb;
     char hid[0x24], *q;
-    int o = 0, i, k, first = 1, n, st, set = 0, r;
-    const int cap = 0x8000;
+    int i, k, n, st, set = 0, r;
     pdb_item *it;
-    if (!g_prof_json) g_prof_json = (char *)HeapAlloc(GetProcessHeap(), 0, cap);
-    if (!g_prof_json) return;
-#define PJ(...) do { if (o < cap - 0x1000) o += wsprintfA(g_prof_json + o, __VA_ARGS__); } while (0)
-/* wsprintfA stops at 1024 chars, so long strings (the away text) get appended as they are */
-#define PS(str) \
-    do { int _l = lstrlenA(str); if (o + _l < cap - 16) { memcpy(g_prof_json + o, (str), _l); o += _l; } } while (0)
+    jw w = {0};
     st = profile_db_pfb_value(b, s, p, g_prof_rec, "z_name", 1, lines, &n);
-    json_pol(b, lines[0], 0x600, js, sizeof js);
-    PJ("\"name\":%s,\"nameState\":%d", js, st);
+    jw_pol(&w, "name", b, lines[0], 0x600, 0xc00);
+    jw_int(&w, "nameState", st);
     st = profile_db_pfb_value(b, s, p, g_prof_rec, "z_mail", 1, lines, &n);
-    json_pol(b, lines[0], 0x600, js, sizeof js);
-    PJ(",\"mail\":%s,\"mailState\":%d", js, st);
+    jw_pol(&w, "mail", b, lines[0], 0x600, 0xc00);
+    jw_int(&w, "mailState", st);
     it = profile_db_get(b, s, "z_hid", g_prof_rec);
     memset(hid, 0, sizeof hid);
     /* the viewer prints the record's low 32 bits, or the H-ID it asked for when that's 0 (a hidden one) */
@@ -303,11 +297,11 @@ static void profiles_profile_build(BYTE *b)
         pc_format_hid(b, hid, lo, hi);
     }
     hid[0x20] = 0;
-    json_str(js, sizeof js, hid);
-    PJ(",\"hid\":%s", js);
+    jw_str(&w, "hid", hid, 0xc00);
     it = profile_db_get(b, s, "z_utime", g_prof_rec);
-    PJ(",\"updated\":%u,\"level\":%u", it ? it->v.u32 : 0, g_prof_rec->level);
-    PJ(",\"rows\":[");
+    jw_uint(&w, "updated", it ? it->v.u32 : 0);
+    jw_uint(&w, "level", g_prof_rec->level);
+    jw_arr(&w, "rows");
     for (i = 0; p && i < p->nItems; i++) {
         const pfb_item *pi = &p->items[i];
         const char *fname;
@@ -315,27 +309,28 @@ static void profiles_profile_build(BYTE *b)
         fname = s->fields[pi->field].name;
         if (!strcmp(fname, "z_age_f") || !strcmp(fname, "z_name") || !strcmp(fname, "z_hid") ||
             !strcmp(fname, "z_mail") || !strcmp(fname, "z_utime")) continue;
-        json_pol(b, pi->label, 0x100, js, sizeof js);
+        jw_obj(&w, NULL);
+        jw_pol(&w, "label", b, pi->label, 0x100, 0xc00);
         if (!strcmp(fname, "z_ficon")) {
             pdb_item *fi = profile_db_get(b, s, "z_ficon", g_prof_rec);
             st = (!fi || g_prof_rec->level < 1 || fi->level == 0 ||
                   ((s->fields[pi->field].flags & 0x40) && fi->level < 1)) ? PV_PRIVATE
                : (int)fi->v.u32 <= 0 ? PV_NOTSET : PV_OK;
-            PJ("%s{\"label\":%s,\"field\":\"z_ficon\",\"state\":%d,\"pic\":%d}", first ? "" : ",", js, st,
-               st == PV_OK ? (int)fi->v.u32 : 0);
-            first = 0;
+            jw_lit(&w, "field", "z_ficon");
+            jw_int(&w, "state", st);
+            jw_int(&w, "pic", st == PV_OK ? (int)fi->v.u32 : 0);
+            jw_end(&w);
             continue;
         }
         st = profile_db_pfb_value(b, s, p, g_prof_rec, fname, 1, lines, &n);
-        PJ("%s{\"label\":%s,\"field\":\"%s\",\"state\":%d,\"lines\":[", first ? "" : ",", js, fname, st);
-        for (k = 0; k < n; k++) {
-            json_pol(b, lines[k], 0x600, js, sizeof js);
-            PJ("%s%s", k ? "," : "", js);
-        }
-        PJ("]}");
-        first = 0;
+        jw_lit(&w, "field", fname);
+        jw_int(&w, "state", st);
+        jw_arr(&w, "lines");
+        for (k = 0; k < n; k++) jw_pol(&w, NULL, b, lines[k], 0x600, 0xc00);
+        jw_end(&w);
+        jw_end(&w);
     }
-    PJ("]");
+    jw_end(&w);
     /* the FFXI tabs: z_phead's slots like the viewer (readable whatever the level), else the friend row's. Only title
        1, other games' profiles never get a tab here */
     {
@@ -352,15 +347,21 @@ static void profiles_profile_build(BYTE *b)
             from = "the friend row";
         }
         profiles_slots_keep(g_prof_hid, src);
-        PJ(",\"characters\":[");
+        jw_arr(&w, "characters");
         for (i = 0, k = 0; src && i < 8; i++) {
             const pol_game *sl = &src[i];
             DWORD cs = sl->ctsid;
             if (!(sl->flags & 1) || sl->title != 1) continue;
-            PJ("%s{\"slot\":%d,\"ctsid\":%u,\"ctidLow\":%u,\"ctidHigh\":%u,\"world\":%u}", k++ ? "," : "", i, cs,
-               sl->ctid_lo, sl->ctid_hi, (cs >> 16) & 0xff);
+            jw_obj(&w, NULL);
+            jw_int(&w, "slot", i);
+            jw_uint(&w, "ctsid", cs);
+            jw_uint(&w, "ctidLow", sl->ctid_lo);
+            jw_uint(&w, "ctidHigh", sl->ctid_hi);
+            jw_uint(&w, "world", (cs >> 16) & 0xff);
+            jw_end(&w);
+            k++;
         }
-        PJ("]");
+        jw_end(&w);
         base_log(LOG_PROFILE "%d FFXI characters (from %s)\r\n", k, from);
     }
     /* svc 0x1200 is the viewer's away text (-0x14cc = none or no access). All z_aa_* at 0 means none, though 0x1200
@@ -375,16 +376,13 @@ static void profiles_profile_build(BYTE *b)
         r = pc_away_text(b, s, p, g_prof_rec, g_prof_row, t, sizeof t, f, sizeof f);
         if (r >= 0) {
             for (q = t; *q; q++) if (*q == 7) *q = '\n';
-            json_pol(b, t, 0x600, js, sizeof js);
-            PS(",\"away\":");
-            PS(js);
-            json_pol(b, f, 0x600, js, sizeof js);
-            PJ(",\"awayFrom\":%s", js);
+            jw_pol(&w, "away", b, t, 0x600, 0xc00);
+            jw_pol(&w, "awayFrom", b, f, 0x600, 0xc00);
         }
     }
-#undef PJ
-#undef PS
-    g_prof_json[o] = 0;
+    if (!g_prof_json) g_prof_json = (char *)HeapAlloc(GetProcessHeap(), 0, 0x8000);
+    if (g_prof_json) lstrcpynA(g_prof_json, w.p ? w.p : "", 0x8000);
+    jw_free(&w);
 }
 static void profiles_profile_start(BYTE *b)
 {
@@ -416,7 +414,7 @@ static void profiles_profile_request(BYTE *b)
     if (lstrcmpA(k, key) != 0) { profiles_profile_done("failed:friend list changed"); return; }
     /* a row still waiting for an answer has no handle id yet, so no query that could find someone else */
     if (fr.f.flags & FRIEND_PENDING) { profiles_profile_done("failed:pending"); return; }
-    if (!(s = profile_db_load_pib(b)) || !profile_db_pfb_load(b)) { profiles_profile_done("failed:no schema"); return; }
+    if (!(s = profile_db_load_pib(b)) || !profile_db_load_pfb(b)) { profiles_profile_done("failed:no schema"); return; }
     unsigned __int64 hid = friend_hid(&fr.f);
     g_prof_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, s->rec_size + 8);
     if (!g_prof_rec) { profiles_profile_done("failed:alloc"); return; }
@@ -493,8 +491,13 @@ static void profiles_character_build(BYTE *b)
     profiles_character_text(b, g_ch_rec, "z_name", nm, sizeof nm, &lv);
     st = g_ch_rec->level < 1 ? 1 : strcmp(nm, "\"\"") == 0 ? 2 : 0;
     profiles_character_text(b, g_ch_rec, "z_worldname", wn, sizeof wn, NULL);
-    wsprintfA(g_ch_json, "\"name\":%s,\"nameState\":%d,\"level\":%u,\"worldName\":%s", st == 1 ? "\"\"" : nm, st,
-              g_ch_rec->level, wn);
+    jw w = {0};
+    jw_raw(&w, "name", st == 1 ? "\"\"" : nm);
+    jw_int(&w, "nameState", st);
+    jw_uint(&w, "level", g_ch_rec->level);
+    jw_raw(&w, "worldName", wn);
+    lstrcpynA(g_ch_json, w.p ? w.p : "", sizeof g_ch_json);
+    jw_free(&w);
     base_log("character: record level %u, name level %u, state %d\r\n", g_ch_rec->level, lv, st);
 }
 static void profiles_character_start(BYTE *b)
@@ -614,18 +617,25 @@ static void profiles_ffxiprofile_abandon(BYTE *b)
 static void profiles_ffxiprofile_build(BYTE *b)
 {
     char nm[0x100], wn[0x100];
-    int priv = g_fp_rec->level < 1, i, o, st;
+    int priv = g_fp_rec->level < 1, i, st;
+    char kn[40];
+    jw w = {0};
     profiles_character_text(b, g_fp_rec, "z_name", nm, sizeof nm, NULL);
     profiles_character_text(b, g_fp_rec, "z_worldname", wn, sizeof wn, NULL);
-    o = wsprintfA(g_fp_json, "\"level\":%u,\"name\":%s,\"nameState\":%d,\"worldName\":%s,\"worldNameState\":%d",
-                  g_fp_rec->level, priv ? "\"\"" : nm, priv ? PV_PRIVATE : strcmp(nm, "\"\"") ? PV_OK : PV_NOTSET,
-                  priv ? "\"\"" : wn, priv ? PV_PRIVATE : strcmp(wn, "\"\"") ? PV_OK : PV_NOTSET);
+    jw_uint(&w, "level", g_fp_rec->level);
+    jw_raw(&w, "name", priv ? "\"\"" : nm);
+    jw_int(&w, "nameState", priv ? PV_PRIVATE : strcmp(nm, "\"\"") ? PV_OK : PV_NOTSET);
+    jw_raw(&w, "worldName", priv ? "\"\"" : wn);
+    jw_int(&w, "worldNameState", priv ? PV_PRIVATE : strcmp(wn, "\"\"") ? PV_OK : PV_NOTSET);
     for (i = 0; i < (int)(sizeof g_fp_nums / sizeof g_fp_nums[0]); i++) {
         pdb_item *it = profile_db_get(b, g_ch_pib, g_fp_nums[i][0], g_fp_rec);
         st = priv ? PV_PRIVATE : it && (it->flags & 1) ? PV_OK : PV_NOTSET;
-        o += wsprintfA(g_fp_json + o, ",\"%s\":%d,\"%sState\":%d", g_fp_nums[i][1],
-                       st == PV_OK ? (int)(short)it->v.u16 : 0, g_fp_nums[i][1], st);
+        jw_int(&w, g_fp_nums[i][1], st == PV_OK ? (int)(short)it->v.u16 : 0);
+        wsprintfA(kn, "%sState", g_fp_nums[i][1]);
+        jw_int(&w, kn, st);
     }
+    lstrcpynA(g_fp_json, w.p ? w.p : "", sizeof g_fp_json);
+    jw_free(&w);
     base_log("ffxiprofile: slot %d, record level %u\r\n", g_fp_slot, g_fp_rec->level);
 }
 static void profiles_ffxiprofile_start(BYTE *b)

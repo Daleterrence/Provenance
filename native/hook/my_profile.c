@@ -446,25 +446,21 @@ static void my_profile_done(const char *state)
 static const char *const g_me_fields[] = { "z_mail", "z_age", "z_age_f", "z_sex", "z_job", "z_area",
                                            "z_lang0", "z_lang1", "z_lang2", "z_fav0", "z_fav1", "z_fav2", "z_ficon" };
 #define ME_EDITABLE ((int)(sizeof g_me_fields / sizeof g_me_fields[0]) - 1)
-static int my_profile_table(BYTE *b, char *out, int cap, const pfb_item *pi, int parts)
+static void my_profile_table(BYTE *b, jw *w, const char *key, const pfb_item *pi, int parts)
 {
-    static char part[0x80], js[0x400];
-    int o = 0;
-    if (!pi || !pi->tab) { lstrcpynA(out, "[]", cap); return 2; }
-    out[o++] = '[';
-    for (int i = 0; i < pi->tab->n && o < cap - 0x1000; i++) {
-        o += wsprintfA(out + o, "%s[%lu", i ? "," : "", pi->tab->e[i].code);
+    static char part[0x80];
+    jw_arr(w, key);
+    for (int i = 0; pi && pi->tab && i < pi->tab->n; i++) {
+        jw_arr(w, NULL);
+        jw_uint(w, NULL, pi->tab->e[i].code);
         for (int k = 0; k < (parts > 0 ? parts : 1); k++) {
             if (parts > 0) profile_db_pfb_part(pi->tab, i, k, part, sizeof part);
             else profile_db_pfb_last(pi->tab->e[i].text, part, sizeof part);
-            json_pol(b, part, 0x180, js, sizeof js);
-            o += wsprintfA(out + o, ",%s", js);
+            jw_pol(w, NULL, b, part, 0x180, 0x400);
         }
-        out[o++] = ']';
+        jw_end(w);
     }
-    out[o++] = ']';
-    out[o] = 0;
-    return o;
+    jw_end(w);
 }
 /* the e-mail address from my POL profile goes in masked (first letter, ***, then the domain). No @ means it's
    the viewer's "No Mail address" text, left alone */
@@ -525,103 +521,97 @@ static void my_profile_chr_key(const me_chr *c, char k[25])
     wsprintfA(k, "%08x%08x%08x", c->ctsid, c->lo, c->hi);
 }
 /* the name's the Content ID list's, z_phead doesn't have one */
-static int my_profile_chars_json(BYTE *b, char *out, int cap)
+static void my_profile_chars_json(BYTE *b, jw *w)
 {
     me_chr ch[8];
     pol_chr c;
-    char k[25], nm[64];
+    char k[25];
     const char *from;
-    int n = my_profile_chars(b, ch, &from), o, i, j;
-    o = wsprintfA(out, ",\"characters\":[");
-    for (i = 0; i < n && o < cap - 200; i++) {
-        lstrcpyA(nm, "\"\"");
-        for (j = 0; j < 64; j++)
-            if (peers_get_chr(b, j, &c) && c.ctsid == ch[i].ctsid && c.ctid_lo == ch[i].lo && c.ctid_hi == ch[i].hi) {
-                json_sjis(nm, sizeof nm, (const BYTE *)c.name, 0x0f);
-                break;
-            }
+    int n = my_profile_chars(b, ch, &from), i, j;
+    jw_arr(w, "characters");
+    for (i = 0; i < n; i++) {
+        int named = 0;
+        for (j = 0; j < 64 && !named; j++)
+            named = peers_get_chr(b, j, &c) && c.ctsid == ch[i].ctsid && c.ctid_lo == ch[i].lo && c.ctid_hi == ch[i].hi;
         my_profile_chr_key(&ch[i], k);
-        o += wsprintfA(out + o, "%s{\"slot\":%d,\"key\":\"%s\",\"world\":%u,\"name\":%s}", i ? "," : "", ch[i].slot, k,
-                       (ch[i].ctsid >> 16) & 0xff, nm);
+        jw_obj(w, NULL);
+        jw_int(w, "slot", ch[i].slot);
+        jw_lit(w, "key", k);
+        jw_uint(w, "world", (ch[i].ctsid >> 16) & 0xff);
+        if (named) jw_sjis(w, "name", (const BYTE *)c.name, 0x0f, 64);
+        else jw_raw(w, "name", "\"\"");
+        jw_end(w);
     }
-    out[o++] = ']';
-    out[o] = 0;
+    jw_end(w);
     base_log("profile edit: %d FFXI characters (from %s)\r\n", n, from);
-    return o;
 }
 static int my_profile_write_json(BYTE *b)
 {
     static const struct { const char *name; int parts; } tabs[] = {
         { "z_sex", 0 }, { "z_job", 0 }, { "z_area", 3 }, { "z_lang0", 0 }, { "z_fav0", 2 } };
-    static char js[0xc00];
     pdb_schema *s = g_profile_db_pib;
     pfb_hdr *p = g_pfb;
-    const int cap = 0x40000;
-    char *out = (char *)HeapAlloc(GetProcessHeap(), 0, cap), path[MAX_PATH + 64], tmp[MAX_PATH + 80], tk[128];
-    int o = 0, i, ok = 0;
-    DWORD n;
+    char key[16];
+    int i, ok = 0;
+    ipc_json file;
+    jw w = {0};
     pol_handle h;
-    if (!out) return 0;
     memset(&h, 0, sizeof h);
     pc_get_handle(b, (unsigned)g_my_slot, &h);
     h.name[15] = 0;
-    json_pol(b, h.name, 0x400, js, sizeof js);
-    json_str(tk, sizeof tk, g_s.me_token);
-    o += wsprintfA(out + o, "{\"token\":%s,\"handle\":%s,\"slot\":%d,\"key\":\"%03x%08x\",\"level\":%u,\"fields\":{",
-                   tk, js, g_my_slot, (unsigned)(g_me_hid >> 32), (unsigned)g_me_hid, g_me_rec->level);
+    jw_obj(&w, NULL);
+    jw_str(&w, "token", g_s.me_token, 128);
+    jw_pol(&w, "handle", b, h.name, 0x400, 0xc00);
+    jw_int(&w, "slot", g_my_slot);
+    wsprintfA(key, "%03x%08x", (unsigned)(g_me_hid >> 32), (unsigned)g_me_hid);
+    jw_lit(&w, "key", key);
+    jw_uint(&w, "level", g_me_rec->level);
+    jw_obj(&w, "fields");
     for (i = 0; i < (int)(sizeof g_me_fields / sizeof g_me_fields[0]); i++) {
         pdb_item *it = profile_db_get(b, s, g_me_fields[i], g_me_rec);
         int idx = pc_pdb_field_index(b, s, g_me_fields[i]);
         const pfb_item *pi = idx >= 0 ? profile_db_pfb_item(p, idx) : NULL;
         DWORD v = 0;
         if (!it || idx < 0) continue;
-        if (pi) json_pol(b, pi->label, 0x100, js, sizeof js);
-        else lstrcpyA(js, "\"\"");
-        o += wsprintfA(out + o, "%s\"%s\":{\"label\":%s,\"level\":%u", i ? "," : "", g_me_fields[i], js, it->level);
+        jw_obj(&w, g_me_fields[i]);
+        if (pi) jw_pol(&w, "label", b, pi->label, 0x100, 0xc00);
+        else jw_raw(&w, "label", "\"\"");
+        jw_uint(&w, "level", it->level);
         if (!strcmp(g_me_fields[i], "z_mail")) {
             char masked[0x150];
             my_profile_mask_mail(it->v.str && !IsBadStringPtrA(it->v.str, 0x140) ? it->v.str : "",
                 masked, sizeof masked);
-            json_pol(b, masked, 0x400, js, sizeof js);
-            memcpy(out + o, ",\"s\":", 5); o += 5;
-            lstrcpyA(out + o, js); o += lstrlenA(js);
+            jw_pol(&w, "s", b, masked, 0x400, 0xc00);
         } else if (!strcmp(g_me_fields[i], "z_area")) {
-            pdb_item *c = profile_db_get(b, s, "z_cntry", g_me_rec), *w = profile_db_get(b, s, "z_wide", g_me_rec),
+            pdb_item *c = profile_db_get(b, s, "z_cntry", g_me_rec), *a = profile_db_get(b, s, "z_wide", g_me_rec),
                      *l = profile_db_get(b, s, "z_local", g_me_rec);
             v = (it->v.bytes.p ? (DWORD)*(BYTE *)it->v.bytes.p << 24 : 0) |
                 (c && c->v.bytes.p ? (DWORD)*(BYTE *)c->v.bytes.p << 16 : 0) |
-                (w && w->v.bytes.p ? (DWORD)*(BYTE *)w->v.bytes.p << 8 : 0) |
+                (a && a->v.bytes.p ? (DWORD)*(BYTE *)a->v.bytes.p << 8 : 0) |
                 (l && l->v.bytes.p ? (DWORD)*(BYTE *)l->v.bytes.p : 0);
-            o += wsprintfA(out + o, ",\"v\":%lu", v);
+            jw_uint(&w, "v", v);
         } else {
             switch (s->fields[idx].type) {
             case 2: v = it->v.bytes.p ? *(BYTE *)it->v.bytes.p : 0; break;
             case 3: case 4: v = it->v.u16; break;
             default: v = it->v.u32; break;
             }
-            o += wsprintfA(out + o, ",\"v\":%lu", v);
+            jw_uint(&w, "v", v);
         }
-        out[o++] = '}';
+        jw_end(&w);
     }
-    lstrcpyA(out + o, "},\"tables\":{"); o += lstrlenA(out + o);
+    jw_end(&w);
+    jw_obj(&w, "tables");
     for (i = 0; i < 5; i++) {
         int idx = pc_pdb_field_index(b, s, tabs[i].name);
-        o += wsprintfA(out + o, "%s\"%s\":", i ? "," : "", tabs[i].name);
-        o += my_profile_table(b, out + o, cap - o - 16, idx >= 0 ? profile_db_pfb_item(p, idx) : NULL, tabs[i].parts);
+        my_profile_table(b, &w, tabs[i].name, idx >= 0 ? profile_db_pfb_item(p, idx) : NULL, tabs[i].parts);
     }
-    out[o++] = '}';
-    o += my_profile_chars_json(b, out + o, cap - o - 4);
-    out[o++] = '}';
-    base_ipc_file(path, IPC_MYPROFILE);
-    lstrcpyA(tmp, path); lstrcatA(tmp, ".tmp");
-    HANDLE f = CreateFileA(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (f != INVALID_HANDLE_VALUE) {
-        ok = WriteFile(f, out, (DWORD)o, &n, NULL) && n == (DWORD)o;
-        CloseHandle(f);
-        ok = ok && MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING);
-        if (!ok) DeleteFileA(tmp);
-    }
-    HeapFree(GetProcessHeap(), 0, out);
+    jw_end(&w);
+    my_profile_chars_json(b, &w);
+    jw_end(&w);
+    if (!w.fail && base_ipc_json_open(IPC_MYPROFILE, &file))
+        ok = base_ipc_json_commit(&file, base_ipc_json_write(&file, w.p, w.n));
+    jw_free(&w);
     return ok;
 }
 static void my_profile_abandon(BYTE *b)
@@ -669,7 +659,7 @@ static void my_profile_request(BYTE *b)
     p = buf;
     tok = requests_line(&p);
     lstrcpynA(g_s.me_token, tok, sizeof g_s.me_token);
-    if (!profile_db_load_pib(b) || !profile_db_pfb_load(b)) { my_profile_done("failed:no schema"); return; }
+    if (!profile_db_load_pib(b) || !profile_db_load_pfb(b)) { my_profile_done("failed:no schema"); return; }
     g_me_t0 = GetTickCount64();
     if (kind == 1) {
         base_ipc_file(jp, IPC_MYPROFILE);
@@ -971,7 +961,15 @@ static void my_profile_xi_pump(BYTE *b, int ctl)
         }
         profiles_character_text(b, g_xi_rec, "z_name", nm, sizeof nm, NULL);
         profiles_character_text(b, g_xi_rec, "z_worldname", wn, sizeof wn, NULL);
-        wsprintfA(g_s.xi_json, "\"key\":\"%s\",\"level\":%u,\"name\":%s,\"worldName\":%s", g_s.xi_key, g_xi_rec->level, nm, wn);
+        {
+            jw w = {0};
+            jw_lit(&w, "key", g_s.xi_key);
+            jw_uint(&w, "level", g_xi_rec->level);
+            jw_raw(&w, "name", nm);
+            jw_raw(&w, "worldName", wn);
+            lstrcpynA(g_s.xi_json, w.p ? w.p : "", sizeof g_s.xi_json);
+            jw_free(&w);
+        }
         base_log("ffxi profile edit: record level %u\r\n", g_xi_rec->level);
         my_profile_xi_done("ready");
         return;

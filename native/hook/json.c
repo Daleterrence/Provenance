@@ -104,15 +104,158 @@ static void json_pol(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
     json_text(js, jscap, u8);
 }
 
-static void json_write(HANDLE h, const char *s)
+/* a JSON writer over a growing buffer, compact, commas and quotes handled. A level never opened with jw_obj or jw_arr is
+   a bare list of members, which is how the pieces spliced into a bigger object get built */
+#define JW_DEPTH 12
+#define JW_MAX 0x4000000
+typedef struct {
+    char *p;
+    int n, cap, depth, fail;
+    BYTE seen[JW_DEPTH];     /* this level's had something written to it */
+    char close[JW_DEPTH];
+} jw;
+
+/* the bytes are wiped, some of what goes through here is people's messages */
+static void jw_free(jw *w)
 {
-    DWORD n;
-    WriteFile(h, s, lstrlenA(s), &n, NULL);
+    if (w->p) {
+        SecureZeroMemory(w->p, w->cap);
+        HeapFree(GetProcessHeap(), 0, w->p);
+    }
+    memset(w, 0, sizeof *w);
 }
-static void json_write_job(HANDLE h, const char *fmt, const char *token, const char *state)
+/* where the next need bytes (and the NUL) go, NULL when it's out of memory. After that nothing more gets written */
+static char *jw_room(jw *w, int need)
 {
-    char tk[100], line[400];
-    json_str(tk, sizeof tk, token);
-    wsprintfA(line, fmt, tk, state);
-    json_write(h, line);
+    if (w->fail) return NULL;
+    if (w->n + need + 1 > w->cap) {
+        int cap = w->cap ? w->cap : 0x1000;
+        char *q;
+        while (cap < w->n + need + 1 && cap <= JW_MAX) cap *= 2;
+        q = cap <= JW_MAX ? (char *)HeapAlloc(GetProcessHeap(), 0, cap) : NULL;
+        if (!q) { w->fail = 1; return NULL; }
+        if (w->p) {
+            memcpy(q, w->p, (size_t)w->n);
+            SecureZeroMemory(w->p, w->cap);
+            HeapFree(GetProcessHeap(), 0, w->p);
+        }
+        w->p = q;
+        w->cap = cap;
+    }
+    return w->p + w->n;
+}
+static void jw_put(jw *w, const char *s, int n)
+{
+    char *o = jw_room(w, n);
+    if (!o) return;
+    memcpy(o, s, (size_t)n);
+    w->n += n;
+    w->p[w->n] = 0;
+}
+static void jw_key(jw *w, const char *key)
+{
+    if (w->seen[w->depth]) jw_put(w, ",", 1);
+    w->seen[w->depth] = 1;
+    if (key) {
+        jw_put(w, "\"", 1);
+        jw_put(w, key, lstrlenA(key));
+        jw_put(w, "\":", 2);
+    }
+}
+static void jw_open(jw *w, const char *key, char open, char close)
+{
+    jw_key(w, key);
+    jw_put(w, &open, 1);
+    if (w->depth + 1 >= JW_DEPTH) { w->fail = 1; return; }
+    w->depth++;
+    w->seen[w->depth] = 0;
+    w->close[w->depth] = close;
+}
+static void jw_obj(jw *w, const char *key) { jw_open(w, key, '{', '}'); }
+static void jw_arr(jw *w, const char *key) { jw_open(w, key, '[', ']'); }
+static void jw_end(jw *w)
+{
+    if (w->depth <= 0) return;
+    jw_put(w, &w->close[w->depth], 1);
+    w->depth--;
+}
+static void jw_int(jw *w, const char *key, int v)
+{
+    char t[16];
+    jw_key(w, key);
+    jw_put(w, t, wsprintfA(t, "%d", v));
+}
+static void jw_uint(jw *w, const char *key, DWORD v)
+{
+    char t[16];
+    jw_key(w, key);
+    jw_put(w, t, wsprintfA(t, "%u", v));
+}
+static void jw_bool(jw *w, const char *key, int v)
+{
+    jw_key(w, key);
+    jw_put(w, v ? "true" : "false", v ? 4 : 5);
+}
+/* s between quotes as it is, for the hook's own words and hex keys that can't need escaping */
+static void jw_lit(jw *w, const char *key, const char *s)
+{
+    jw_key(w, key);
+    jw_put(w, "\"", 1);
+    jw_put(w, s, lstrlenA(s));
+    jw_put(w, "\"", 1);
+}
+/* s is JSON already (a value someone else quoted) */
+static void jw_raw(jw *w, const char *key, const char *s)
+{
+    jw_key(w, key);
+    jw_put(w, s, lstrlenA(s));
+}
+/* members or elements somebody else built, no-op when empty. The comma's mine */
+static void jw_splice(jw *w, const char *s, int n)
+{
+    if (n <= 0) return;
+    jw_key(w, NULL);
+    jw_put(w, s, n);
+}
+/* cap is the most the string form can take up, 0 for all of it. Keys are never escaped */
+static void jw_str(jw *w, const char *key, const char *s, int cap)
+{
+    char *o;
+    if (cap <= 0) cap = 2 * (s ? lstrlenA(s) : 0) + 3;
+    jw_key(w, key);
+    if (!(o = jw_room(w, cap))) return;
+    json_str(o, cap, s);
+    w->n += lstrlenA(o);
+}
+/* like jw_str with newlines kept, as long as the string needs */
+static void jw_text(jw *w, const char *key, const char *s)
+{
+    int cap = 2 * lstrlenA(s) + 3;
+    char *o;
+    jw_key(w, key);
+    if (!(o = jw_room(w, cap))) return;
+    w->n += json_text(o, cap, s);
+}
+static void jw_sjis(jw *w, const char *key, const BYTE *src, int srcMax, int cap)
+{
+    char *o;
+    jw_key(w, key);
+    if (!(o = jw_room(w, cap))) return;
+    json_sjis(o, cap, src, srcMax);
+    w->n += lstrlenA(o);
+}
+static void jw_pol(jw *w, const char *key, BYTE *b, const char *sj, int u8cap, int cap)
+{
+    char *o;
+    jw_key(w, key);
+    if (!(o = jw_room(w, cap))) return;
+    json_pol(b, sj, u8cap, o, cap);
+    w->n += lstrlenA(o);
+}
+/* {"token":...,"state":"..."} left open for whatever else the job has to say */
+static void jw_job(jw *w, const char *key, const char *token, const char *state)
+{
+    jw_obj(w, key);
+    jw_str(w, "token", token, 100);
+    jw_lit(w, "state", state);
 }
