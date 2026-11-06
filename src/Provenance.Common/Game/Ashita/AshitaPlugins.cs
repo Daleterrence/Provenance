@@ -1,15 +1,11 @@
 using System.Globalization;
+using Provenance.Common.Game.ThirdParty;
 
 namespace Provenance.Common.Game.Ashita;
 
 public enum AshitaPluginKind { Plugin, PolPlugin }
 
-public sealed record AshitaPlugin(string LoadName, string Dll, AshitaPluginKind Kind, string Name, string? Author, string? Description,
-                                  double? Version, double? InterfaceVersion, bool ForOtherAshita)
-{
-    // the getters hand back float constants widened to double (4.0999...), Ashita prints them with %.2f
-    public string? VersionText => Version?.ToString("0.00", CultureInfo.InvariantCulture);
-}
+public sealed record AshitaPlugin(AddonListing Listing, AshitaPluginKind Kind, double? Version, double? InterfaceVersion, bool ForOtherAshita);
 
 public static class AshitaPlugins
 {
@@ -33,7 +29,7 @@ public static class AshitaPlugins
                 catch (Exception) { }
             }
         }
-        return list.OrderBy(p => p.Kind).ThenBy(p => p.LoadName, StringComparer.OrdinalIgnoreCase).ToList();
+        return list.OrderBy(p => p.Kind).ThenBy(p => p.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     // Ashita refuses any plugin whose expGetInterfaceVersion isn't exactly its own
@@ -81,7 +77,9 @@ public static class AshitaPlugins
         else return null;
         double? iface = exports.TryGetValue("expGetInterfaceVersion", out var rva) ? pe.ExportedDouble(rva) : null;
         var meta = pe.Vtable();
-        return new AshitaPlugin(loadName, dll, kind, AshitaAddons.Clean(meta?.Name) ?? loadName, AshitaAddons.Clean(meta?.Author),
-                                AshitaAddons.Clean(meta?.Description), meta?.Version, iface, iface is { } i && i != core);
+        // the getters hand back float constants widened to double (4.0999...), Ashita prints them with %.2f
+        var listing = new AddonListing(loadName, AddonListing.Clean(meta?.Name) ?? loadName, meta?.Version.ToString("0.00", CultureInfo.InvariantCulture),
+                                       AddonListing.Clean(meta?.Author), AddonListing.Clean(meta?.Description), dll);
+        return new AshitaPlugin(listing, kind, meta?.Version, iface, iface is { } i && i != core);
     }
 }

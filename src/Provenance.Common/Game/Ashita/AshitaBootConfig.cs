@@ -8,14 +8,12 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
 {
     private const string Launcher = "ashita.launcher", Boot = "ashita.boot", PolPluginSection = "ashita.polplugins", Registry = "ffxi.registry";
 
-    // 0044 and 0045 aren't among the values Ashita fakes, so keep aspect and legacy settings stay registry only
     internal static readonly IReadOnlyList<string> GameValues =
-    [
-        "0000", "0001", "0002", "0003", "0004", "0007", "0011", "0017", "0018", "0019", "0021", "0022", "0023", "0028",
-        "0029", "0034", "0035", "0036", "0037", "0038", "0040", "0042", "0043", "padmode000",
-    ];
+        [.. FfxiValues.All.Where(v => v.Ashita && v is not OpaqueValue).Select(v => v.Name)];
 
-    private static readonly string[] TextValues = ["0042", "padexsin000", "padguid000", "padmode000", "padsin000"];
+    // the ones that come out blank in a file that doesn't set them
+    private static readonly IReadOnlyList<string> TextValues =
+        [.. FfxiValues.All.Where(v => v.Ashita && v is TextValue or PadValue or OpaqueValue).Select(v => v.Name)];
 
     public AshitaIniFile Ini { get; } = ini;
 
@@ -54,58 +52,31 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
         Ini.Set(PolPluginSection, name, on ? "1" : "0");
     }
 
-    private static int InRange(string name, int v) => name switch
-    {
-        "0000" => Math.Clamp(v, 0, 6),
-        "0011" or "0018" or "0036" => Math.Clamp(v, 0, 2),
-        "0019" => Math.Clamp(v, 0, 1),
-        "0029" => Math.Clamp(v, 12, 20),
-        "0034" => FfxiSettings.KnownWindowMode(v),
-        _ => v,
-    };
-
     private static float InRange(float brightness) => float.IsFinite(brightness) ? Math.Clamp(brightness, -1f, 1f) : 0f;
 
     public FfxiSettings ReadGame(FfxiSettings windows)
     {
         var s = windows.Clone();
-        void ReadInt(string name, Action<int> apply)
+        foreach (var v in FfxiValues.All.Where(v => v.Ashita))
         {
-            var v = Ini.Get(Registry, name);
-            if (v is not null && ToInt(v) != -1) apply(InRange(name, ToInt(v)));
+            var text = Ini.Get(Registry, v.Name);
+            switch (v)
+            {
+                case BrightnessValue b when text is not null && ToInt(text) != -1:
+                    b.Set(s, BitConverter.SingleToInt32Bits(InRange(BitConverter.Int32BitsToSingle(ToInt(text)))));
+                    break;
+                case IntValue i when text is not null && ToInt(text) != -1:
+                    i.Set(s, i.AshitaClamp(ToInt(text)));
+                    break;
+                // the registry's when it starts -1, but "-1,..." is a pad value like any other. An empty one shows the
+                // registry's too, Warnings flags it
+                case TextValue or PadValue when !string.IsNullOrEmpty(text)
+                    && (!text.StartsWith("-1", StringComparison.Ordinal) || text.StartsWith("-1,", StringComparison.Ordinal)):
+                    if (v is TextValue t) t.Set(s, text);
+                    else s.PadMode = Pad(text, windows.PadMode);
+                    break;
+            }
         }
-        // the registry's when it starts -1, but "-1,..." is a pad value like any other. An empty one shows the registry's
-        // too, Warnings flags it
-        void ReadText(string name, Action<string> apply)
-        {
-            var v = Ini.Get(Registry, name);
-            if (!string.IsNullOrEmpty(v) && (!v.StartsWith("-1", StringComparison.Ordinal) || v.StartsWith("-1,", StringComparison.Ordinal))) apply(v);
-        }
-        // a mip level 0-6 here, not FfxiSettings' on/off
-        ReadInt("0000", v => s.DrawDistanceMip = v);
-        ReadInt("0001", v => s.Width = v);
-        ReadInt("0002", v => s.Height = v);
-        ReadInt("0003", v => s.BgWidth = v);
-        ReadInt("0004", v => s.BgHeight = v);
-        ReadInt("0007", v => s.Sound = v);
-        ReadInt("0011", v => s.Vegetation = v);
-        ReadInt("0017", v => s.EnhancedShading = v);
-        ReadInt("0018", v => s.Textures = v);
-        ReadInt("0019", v => s.Maps2D = v);
-        ReadInt("0021", v => s.HardwareMouse = v);
-        ReadInt("0022", v => s.OpeningMovie = v);
-        ReadInt("0023", v => s.SimpleCharSelect = v);
-        ReadInt("0028", v => s.Brightness = InRange(BitConverter.Int32BitsToSingle(v)));
-        ReadInt("0029", v => s.SoundEffects = v);
-        ReadInt("0034", v => s.WindowMode = v);
-        ReadInt("0035", v => s.BackgroundSound = v);
-        ReadInt("0036", v => s.Fonts = v);
-        ReadInt("0037", v => s.UiWidth = v);
-        ReadInt("0038", v => s.UiHeight = v);
-        ReadInt("0040", v => s.GraphicsFix = v);
-        ReadInt("0043", v => s.FullResScreenshots = v);
-        ReadText("0042", v => s.ScreenshotFolder = v);
-        ReadText("padmode000", v => s.PadMode = Pad(v, windows.PadMode));
         return s;
     }
 
@@ -123,37 +94,29 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
     {
         var shots = string.IsNullOrEmpty(s.ScreenshotFolder) ? "-1" : s.ScreenshotFolder;
         if (Ini.ValueProblem(Registry, "0042", shots) is { } problem) throw Shown.Mark(new ArgumentException(problem));
-        void Write(string name, int v) => SetInt(Registry, name, InRange(name, v));
-        Write("0000", s.DrawDistanceMip);
-        Write("0001", s.Width);
-        Write("0002", s.Height);
-        Write("0003", s.BgWidth);
-        Write("0004", s.BgHeight);
-        Write("0007", s.Sound);
-        Write("0011", s.Vegetation);
-        Write("0017", s.EnhancedShading);
-        Write("0018", s.Textures);
-        Write("0019", s.Maps2D);
-        Write("0021", s.HardwareMouse);
-        Write("0022", s.OpeningMovie);
-        Write("0023", s.SimpleCharSelect);
-        // the float's bits as a signed int. They're never -1 (that's a NaN), so it can't read as unset
-        Write("0028", BitConverter.SingleToInt32Bits(InRange(s.Brightness)));
-        Write("0029", s.SoundEffects);
-        // an odd number already in the file stays unless the window mode itself changed
-        var mode = FfxiSettings.KnownWindowMode(s.WindowMode);
-        if (Ini.Get(Registry, "0034") is not { } was || ToInt(was) == -1 || FfxiSettings.KnownWindowMode(ToInt(was)) != mode)
-            Write("0034", mode);
-        Write("0035", s.BackgroundSound);
-        Write("0036", s.Fonts);
-        Write("0037", s.UiWidth);
-        Write("0038", s.UiHeight);
-        Write("0040", s.GraphicsFix);
-        SetText(Registry, "0042", shots);
-        Write("0043", s.FullResScreenshots);
-        foreach (var n in TextValues.Skip(1))
-            if (n == "padmode000") SetText(Registry, n, s.PadMode is { Length: > 0 } pad ? string.Join(",", pad) : "-1");
-            else if (string.IsNullOrEmpty(Ini.Get(Registry, n))) SetText(Registry, n, "-1");
+        foreach (var v in FfxiValues.All.Where(v => v.Ashita))
+            switch (v)
+            {
+                // the float's bits as a signed int. They're never -1 (that's a NaN), so it can't read as unset
+                case BrightnessValue:
+                    SetInt(Registry, v.Name, BitConverter.SingleToInt32Bits(InRange(s.Brightness)));
+                    break;
+                case IntValue i:
+                    // an odd number already in the file stays unless the value itself changed
+                    int now = i.AshitaClamp(i.Get(s));
+                    if (i.KeepsStored && Ini.Get(Registry, i.Name) is { } was && ToInt(was) != -1 && i.Range(ToInt(was)) == now) break;
+                    SetInt(Registry, i.Name, now);
+                    break;
+                case TextValue:
+                    SetText(Registry, v.Name, shots);
+                    break;
+                case PadValue:
+                    SetText(Registry, v.Name, s.PadMode is { Length: > 0 } pad ? string.Join(",", pad) : "-1");
+                    break;
+                case OpaqueValue when string.IsNullOrEmpty(Ini.Get(Registry, v.Name)):
+                    SetText(Registry, v.Name, "-1");
+                    break;
+            }
     }
 
     private void SetText(string section, string key, string? value)

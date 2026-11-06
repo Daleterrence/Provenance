@@ -60,24 +60,24 @@ public sealed class WindowerAddonList
     {
         plugins ??= WindowerPlugins.Scan(windowerDir);
         var skipped = new List<string>();
-        var required = plugins.Where(p => p.InManifest && p.Required).Select(p => p.Name).ToList();
+        var required = plugins.Where(p => p.InManifest && p.Required).Select(p => p.Listing.Key).ToList();
         var wantedPlugins = Clean(effective.Plugins).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var wantedAddons = Clean(effective.Addons).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         var sendPlugins = new List<string>();
         foreach (var n in wantedPlugins)
         {
-            var p = plugins.FirstOrDefault(x => x.Name.Equals(n, StringComparison.OrdinalIgnoreCase));
+            var p = plugins.FirstOrDefault(x => x.Listing.Key.Equals(n, StringComparison.OrdinalIgnoreCase));
             if (p is { Required: true }) continue;
-            if (p is { Installed: true, IsWindowerPlugin: true }) sendPlugins.Add(p.Name);
+            if (p is { Installed: true, IsWindowerPlugin: true }) sendPlugins.Add(p.Listing.Key);
             else skipped.Add(p is { Installed: true } ? $"{n} (not a Windower plugin)" : $"{n} (not installed)");
         }
-        sendPlugins = plugins.Select(p => p.Name).Where(sendPlugins.Contains).ToList();
+        sendPlugins = plugins.Select(p => p.Listing.Key).Where(sendPlugins.Contains).ToList();
 
         addons ??= WindowerAddons.Scan(windowerDir);
         var sendAddons = new List<string>();
         foreach (var n in wantedAddons)
-            if (addons.FirstOrDefault(a => a.Name.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Name);
+            if (addons.FirstOrDefault(a => a.Listing.Key.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Listing.Key);
             else skipped.Add($"{n} (addon not installed)");
 
         // required plugins always go, the addons need LuaCore before init.txt runs. Nothing shows init's own load
@@ -89,7 +89,7 @@ public sealed class WindowerAddonList
             if (Already(n, loads.Plugins) is { } why) { sendPlugins.Remove(n); skipped.Add(why); }
         foreach (var n in sendAddons.ToList())
             if (Already(n, loads.Addons) is { } why) { sendAddons.Remove(n); skipped.Add(why); }
-        var fromInit = addons.Where(a => loads.Addons.GetValueOrDefault(a.Name) == ScriptLoads.InitCommand).Select(a => a.Name).ToList();
+        var fromInit = addons.Where(a => loads.Addons.GetValueOrDefault(a.Listing.Key) == ScriptLoads.InitCommand).Select(a => a.Listing.Key).ToList();
         sendAddons.AddRange(fromInit.Where(n => !sendAddons.Contains(n, StringComparer.OrdinalIgnoreCase)));
         return new WindowerLaunchLists(required, sendPlugins, sendAddons, skipped) { InitCommandAddons = fromInit };
     }

@@ -1,6 +1,8 @@
 using Provenance.Common.IO;
+using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
 using Provenance.Common.Win32;
+using static Provenance.Common.Game.ThirdParty.ThirdPartyHooks;
 
 namespace Provenance.Common.Game.Ashita;
 
@@ -11,9 +13,6 @@ public static class AshitaBootFiles
 
     // tracked in Ashita's git, so changing them makes the user's next git pull fight them
     private static readonly string[] Examples = ["example-retail.ini", "example.ini", "example-privateserver.ini"];
-
-    // polplugins that would fight Provenance over the login or the accounts, so they're always off in the launch copy
-    private static readonly string[] Takeovers = ["autopol", "quicky", "extraslots"];
 
     public static string Folder(string ashitaDir) => Path.Combine(ashitaDir, "config", "boot");
 
@@ -26,8 +25,6 @@ public static class AshitaBootFiles
         || fileName.StartsWith(CopyPrefix + ".", StringComparison.OrdinalIgnoreCase);
 
     public static bool IsShippedExample(string fileName) => Examples.Contains(fileName, StringComparer.OrdinalIgnoreCase);
-
-    public static bool IsTakeover(string polPlugin) => Takeovers.Contains(polPlugin, StringComparer.OrdinalIgnoreCase);
 
     public static string? ExampleFor(string ashitaDir) =>
         Examples.Take(2).FirstOrDefault(e => File.Exists(Path.Combine(Folder(ashitaDir), e)));
@@ -209,6 +206,15 @@ public static class AshitaBootFiles
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
+    // Ashita's [ashita.language] playonline: 1 Japanese, 2 English (North America), 3 European, for the region pol.exe's
+    // env.dat says
+    internal static int LanguageCodeFor(string polExe) => RegionOfPol(polExe) switch
+    {
+        PolRegion.Japan => 1,
+        PolRegion.Europe => 3,
+        _ => 2,
+    };
+
     public static string Template(string name, int playOnline) =>
         $"""
         [ashita.launcher]
@@ -267,7 +273,7 @@ public static class AshitaBootFiles
         // commented-out ones too, Ashita.dll writes a # line into its logs like any other key
         ini.Scrub(null, "command");
         ini.Set("ashita.boot", "command", PlainCommand);
-        foreach (var plugin in Takeovers)
+        foreach (var plugin in AshitaPolPlugins.TakeoverNames)
         {
             ini.Set("ashita.polplugins", plugin, "0");
             ini.Scrub("ashita.polplugins.args", plugin);
@@ -296,7 +302,7 @@ public static class AshitaBootFiles
         var section = new byte[65536];
         int n = Kernel32.GetPrivateProfileSectionA("ashita.polplugins", section, section.Length, path);
         bool takeover = ansi.GetString(section, 0, n).Split('\0').Select(e => e.Split('=', 2))
-            .Any(kv => kv.Length == 2 && Takeovers.Contains(kv[0].Trim(), StringComparer.OrdinalIgnoreCase) && kv[1].Trim() == "1");
+            .Any(kv => kv.Length == 2 && AshitaPolPlugins.IsTakeover(kv[0].Trim()) && kv[1].Trim() == "1");
         return Get("file") == polExe && Get("command") == PlainCommand && !takeover;
     }
 }

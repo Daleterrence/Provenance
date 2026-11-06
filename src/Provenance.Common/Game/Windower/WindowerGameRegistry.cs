@@ -11,27 +11,35 @@ public static class WindowerGameRegistry
 {
     private const string DefaultPadMode = "0,0,0,0,0,0";
 
+    // the rows FfxiValues flags as Windower's, in its order, each one from the profile
     public static IReadOnlyList<WindowerRegistryValue> Values(WindowerProfile profile, int width, int height, object? padMode = null)
     {
         var s = WindowerSizes.For(profile.UIScale, width, height);
         var list = new List<WindowerRegistryValue>();
-        void D(string name, int v) => list.Add(new(name, RegistryValueKind.DWord, v));
-        D("0000", profile.MipMapLevel);
-        D("0001", s.Width);
-        D("0002", s.Height);
-        D("0003", Scaled(s.Width, profile.SuperSampling));
-        D("0004", Scaled(s.Height, profile.SuperSampling));
-        D("0007", profile.Sound ? 1 : 0);
-        D("0017", profile.BumpMapping ? 1 : 0);
-        D("0021", profile.HardwareMouse ? 1 : 0);
-        D("0028", BitConverter.SingleToInt32Bits(profile.Gamma));
-        D("0034", profile.WindowMode switch { WindowerWindowMode.Window => 1, WindowerWindowMode.Fullscreen => 0, _ => 3 });
-        D("0035", profile.AlwaysPlaySound ? 1 : 0);
-        D("0037", s.UIScale != 1f ? s.UIWidth : 0);
-        D("0038", s.UIScale != 1f ? s.UIHeight : 0);
-        list.Add(new("padmode000", RegistryValueKind.String, PadMode(padMode as string, profile.AlwaysEnableGamepad)));
+        foreach (var row in FfxiValues.All.Where(v => v.Windower))
+            list.Add(row is PadValue
+                ? new(row.Name, RegistryValueKind.String, PadMode(padMode as string, profile.AlwaysEnableGamepad))
+                : new(row.Name, RegistryValueKind.DWord, FromProfile(row.Name, profile, s)));
         return list;
     }
+
+    private static int FromProfile(string name, WindowerProfile profile, WindowerSizes s) => name switch
+    {
+        "0000" => profile.MipMapLevel,
+        "0001" => s.Width,
+        "0002" => s.Height,
+        "0003" => Scaled(s.Width, profile.SuperSampling),
+        "0004" => Scaled(s.Height, profile.SuperSampling),
+        "0007" => profile.Sound ? 1 : 0,
+        "0017" => profile.BumpMapping ? 1 : 0,
+        "0021" => profile.HardwareMouse ? 1 : 0,
+        "0028" => BitConverter.SingleToInt32Bits(profile.Gamma),
+        "0034" => profile.WindowMode switch { WindowerWindowMode.Window => 1, WindowerWindowMode.Fullscreen => 0, _ => 3 },
+        "0035" => profile.AlwaysPlaySound ? 1 : 0,
+        "0037" => s.UIScale != 1f ? s.UIWidth : 0,
+        "0038" => s.UIScale != 1f ? s.UIHeight : 0,
+        _ => throw new InvalidOperationException($"Windower has no profile value for {name}."),
+    };
 
     // Windower crashes on a padmode000 that isn't a string, here it just counts as the default
     public static string PadMode(string? current, bool alwaysEnableGamepad)

@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using Provenance.Common.PolFormat;
 using static Provenance.Common.Game.ThirdParty.ThirdPartyHooks;
 
 namespace Provenance.Common.Game.Ashita;
@@ -14,14 +13,6 @@ public static class AshitaInstall
 
     public const string IncompatibleText = "Incompatible with Provenance";
     public const string IncompatibleNote = "The ones marked incompatible stay off whenever Provenance starts the game. Your Ashita settings aren't changed.";
-
-    public static string IncompatibleReason(string polPlugin) => polPlugin.ToLowerInvariant() switch
-    {
-        "autopol" => "Provenance logs you in itself.",
-        "quicky" => "Provenance takes you into the game itself.",
-        "extraslots" => "Provenance manages your accounts itself.",
-        _ => "Provenance does this itself.",
-    };
 
     // Ashita writes the boot config into each log ("Ashita Config Script: \boot\config.ini"), so the newest log that
     // isn't from my own launch wins. Bit cheeky, but it works
@@ -51,15 +42,6 @@ public static class AshitaInstall
         return null;
     }
 
-    // Ashita's [ashita.language] playonline: 1 Japanese, 2 English (North America), 3 European, for the region pol.exe's
-    // env.dat says
-    internal static int LanguageCodeFor(string polExe) => RegionOfPol(polExe) switch
-    {
-        PolRegion.Japan => 1,
-        PolRegion.Europe => 3,
-        _ => 2,
-    };
-
     public static string WriteBoot(string ashitaDir, string? sourceName, string polExe) =>
-        AshitaBootFiles.WriteLaunchCopy(ashitaDir, sourceName, polExe, LanguageCodeFor(polExe));
+        AshitaBootFiles.WriteLaunchCopy(ashitaDir, sourceName, polExe, AshitaBootFiles.LanguageCodeFor(polExe));
 }

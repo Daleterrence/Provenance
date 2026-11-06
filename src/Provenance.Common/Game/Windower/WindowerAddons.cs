@@ -1,16 +1,9 @@
 using System.Text.RegularExpressions;
+using Provenance.Common.Game.ThirdParty;
 
 namespace Provenance.Common.Game.Windower;
 
-public sealed record WindowerAddonInfo
-{
-    public required string Name { get; init; }
-    public required string DisplayName { get; init; }
-    public string? Author { get; init; }
-    public string? Version { get; init; }
-    public string? Description { get; init; }
-    public required string MainFile { get; init; }
-}
+public sealed record WindowerAddonInfo(AddonListing Listing, string MainFile);
 
 public static partial class WindowerAddons
 {
@@ -18,37 +11,19 @@ public static partial class WindowerAddons
     private const int MaxRead = 64 * 1024;
     private const int RegexMs = 500;
 
-    // addons\<name>\<name>.lua, the name matching its folder in any case. libs is Windower's shared code, never an
-    // addon. A folder that can't be read (a dangling junction, no access) is just skipped
     public static IReadOnlyList<WindowerAddonInfo> Scan(string windowerDir)
     {
-        var dir = Path.Combine(windowerDir, "addons");
-        List<string> folders;
-        try { folders = Directory.Exists(dir) ? Directory.EnumerateDirectories(dir).ToList() : []; }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return []; }
+        var addonsDir = Path.Combine(windowerDir, "addons");
+        if (!Directory.Exists(addonsDir)) return [];
         var listed = ReadAddonsXml(windowerDir);
         var list = new List<WindowerAddonInfo>();
-        foreach (var folder in folders)
+        foreach (var (name, folder, main) in LuaAddonFolders.Walk(addonsDir, skipDotted: false))
         {
-            var name = Path.GetFileName(folder);
-            if (name.Equals("libs", StringComparison.OrdinalIgnoreCase)) continue;
-            string? main;
-            try
-            {
-                main = Directory.EnumerateFiles(folder, "*.lua")
-                    .FirstOrDefault(f => Path.GetFileName(f).Equals(name + ".lua", StringComparison.OrdinalIgnoreCase));
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
-            if (main is null) continue;
             var h = ReadHeader(TextFiles.ReadHead(main, MaxRead) ?? "");
             listed.TryGetValue(name, out var x);
-            list.Add(new WindowerAddonInfo
-            {
-                Name = name, DisplayName = h.Name ?? name, Author = h.Author ?? Blank(x?.Author), Version = h.Version,
-                Description = x?.Description, MainFile = main,
-            });
+            list.Add(new WindowerAddonInfo(new AddonListing(name, h.Name ?? name, h.Version, h.Author ?? AddonListing.Clean(x?.Author), AddonListing.Clean(x?.Description), folder), main));
         }
-        return list.OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        return list.OrderBy(a => a.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     internal sealed record Header(string? Name, string? Author, string? Version);
@@ -74,10 +49,8 @@ public static partial class WindowerAddons
             }
         }
         catch (RegexMatchTimeoutException) { }
-        return new Header(Blank(name), Blank(author), Blank(version));
+        return new Header(AddonListing.Clean(name), AddonListing.Clean(author), AddonListing.Clean(version));
     }
-
-    private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     private static bool Commented(string lua, int at)
     {

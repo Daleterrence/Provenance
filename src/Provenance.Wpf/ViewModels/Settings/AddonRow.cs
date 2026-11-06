@@ -11,7 +11,7 @@ public sealed partial class AddonRow : ObservableObject
     {
         _owner = owner;
         Kind = d.Kind;
-        Key = d.Key;
+        Key = d.Listing.Key;
         Update(d);
     }
 
@@ -49,10 +49,11 @@ public sealed partial class AddonRow : ObservableObject
 
     internal AddonRow Update(RowData d)
     {
-        Name = d.Name;
-        _author = d.Author;
-        Details = d.Version is { } v ? d.Author is { } a ? $"{v} by {a}" : v : d.Author is { } by ? "by " + by : null;
-        Description = d.Description;
+        var l = d.Listing;
+        Name = l.Name;
+        _author = l.Author;
+        Details = l.Version is { } v ? l.Author is { } a ? $"{v} by {a}" : v : l.Author is { } by ? "by " + by : null;
+        Description = l.Description;
         if (!d.Badges.SequenceEqual(Badges)) Badges = d.Badges;
         HasSwitch = d.HasSwitch;
         CanChange = d.CanChange;
@@ -60,7 +61,7 @@ public sealed partial class AddonRow : ObservableObject
         Incompatible = d.Incompatible;
         Team = d.Team;
         VerifiedTip = d.Team is { } team ? $"This {(Kind == AddonKind.Addon ? "addon" : "plugin")} is provided and maintained by the {team} development team." : null;
-        Location = d.Location;
+        Location = l.Location;
         if (_on != d.On)
         {
             _on = d.On;

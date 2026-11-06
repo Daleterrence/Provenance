@@ -232,7 +232,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     {
         var old = new Dictionary<string, AddonRow>(StringComparer.OrdinalIgnoreCase);
         foreach (var r in rows) old.TryAdd(r.Key, r);
-        var next = data.Select(d => old.TryGetValue(d.Key, out var r) ? r.Update(d) : new AddonRow(this, d)).ToList();
+        var next = data.Select(d => old.TryGetValue(d.Listing.Key, out var r) ? r.Update(d) : new AddonRow(this, d)).ToList();
         if (next.SequenceEqual(rows)) return;
         rows.Clear();
         foreach (var r in next) rows.Add(r);
@@ -396,7 +396,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     // stays in Provenance's own settings
     private string? OfferedByWindower(AddonRow row) => _scan is not WindowerScan scan ? null
         : row.Kind == AddonKind.Addon ? scan.Tree?.Addons.FirstOrDefault(a => Same(a.Name, row.Key))?.Name
-        : scan.Plugins.FirstOrDefault(p => p.InManifest && Same(p.Name, row.Key))?.Name;
+        : scan.Plugins.FirstOrDefault(p => p.InManifest && Same(p.Listing.Key, row.Key))?.Listing.Key;
 
     private static bool Has(List<string> names, string name) => names.Any(n => Same(n, name));
 
@@ -596,20 +596,20 @@ public partial class AddonsPluginsViewModel : ObservableObject
         bool frozen = locked && effective.UseGlobal;
 
         bool Listed(List<string> names, string name) => names.Contains(name, StringComparer.OrdinalIgnoreCase);
-        var plugins = scan.Plugins.Where(p => !p.Required && (!p.Hidden || p.Installed || Listed(effective.Plugins, p.Name))).ToList();
-        var missingPlugins = Missing(effective.Plugins, scan.Plugins.Select(p => p.Name));
-        var pluginNames = plugins.Select(p => p.Name).Concat(missingPlugins).ToList();
-        var installed = scan.Addons.Select(a => a.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var plugins = scan.Plugins.Where(p => !p.Required && (!p.Hidden || p.Installed || Listed(effective.Plugins, p.Listing.Key))).ToList();
+        var missingPlugins = Missing(effective.Plugins, scan.Plugins.Select(p => p.Listing.Key));
+        var pluginNames = plugins.Select(p => p.Listing.Key).Concat(missingPlugins).ToList();
+        var installed = scan.Addons.Select(a => a.Listing.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var notInstalled = (scan.Tree?.Addons ?? []).Where(t => !installed.Contains(t.Name)).ToList();
-        var missingAddons = Missing(effective.Addons, scan.Addons.Select(a => a.Name).Concat(notInstalled.Select(t => t.Name)));
-        var addonNames = scan.Addons.Select(a => a.Name).Concat(notInstalled.Select(t => t.Name)).Concat(missingAddons).ToList();
+        var missingAddons = Missing(effective.Addons, scan.Addons.Select(a => a.Listing.Key).Concat(notInstalled.Select(t => t.Name)));
+        var addonNames = scan.Addons.Select(a => a.Listing.Key).Concat(notInstalled.Select(t => t.Name)).Concat(missingAddons).ToList();
 
         var loadedPlugins = Reasons(dir, profile, scan, pluginNames, []);
         var loadedAddons = Reasons(dir, profile, scan, [], addonNames);
 
-        RowData Row(AddonKind kind, string key, string name, string? version, string? author, string? description, bool isInstalled, bool installable,
-                    bool windowerPlugin = true, bool official = false, string? location = null)
+        RowData Row(AddonKind kind, AddonListing listing, bool isInstalled, bool installable, bool windowerPlugin = true, bool official = false)
         {
+            var key = listing.Key;
             var on = Listed(kind == AddonKind.Addon ? effective.Addons : effective.Plugins, key);
             var badges = new List<AddonBadge>();
             bool canTurnOn = true, hasSwitch = true;
@@ -625,23 +625,21 @@ public partial class AddonsPluginsViewModel : ObservableObject
                 badges.Add(why.EndsWith("init.txt", StringComparison.Ordinal) ? Badges.InitTxt : Badges.InitCommand);
                 hasSwitch = false;
             }
-            return new RowData(kind, key, name, version, author, description)
+            return new RowData(kind, listing)
             {
                 On = on, HasSwitch = hasSwitch, CanChange = !frozen && (canTurnOn || on), CanInstall = !isInstalled && installable, Badges = badges,
-                Team = official ? "Windower" : null, Location = isInstalled ? location : null,
+                Team = official ? "Windower" : null,
             };
         }
 
         var repo = (scan.Tree?.Addons ?? []).Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        page.Plugins = plugins.Select(p => Row(AddonKind.Plugin, p.Name, p.Name, (p.FileVersion ?? p.ManifestVersion)?.ToString(), null,
-                                               Blank(p.Description), p.Installed, p.InManifest, p.IsWindowerPlugin, official: p.InManifest, location: p.Path))
-            .Concat(missingPlugins.Select(n => Row(AddonKind.Plugin, n, n, null, null, null, false, false)))
-            .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        page.Addons = scan.Addons.Select(a => Row(AddonKind.Addon, a.Name, a.DisplayName, a.Version, a.Author, a.Description, true, false,
-                                                  official: repo.Contains(a.Name), location: Path.GetDirectoryName(a.MainFile)))
-            .Concat(notInstalled.Select(t => Row(AddonKind.Addon, t.Name, t.Name, null, null, null, false, true, official: true)))
-            .Concat(missingAddons.Select(n => Row(AddonKind.Addon, n, n, null, null, null, false, false)))
-            .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        page.Plugins = plugins.Select(p => Row(AddonKind.Plugin, p.Listing, p.Installed, p.InManifest, p.IsWindowerPlugin, official: p.InManifest))
+            .Concat(missingPlugins.Select(n => Row(AddonKind.Plugin, AddonListing.Named(n), false, false)))
+            .OrderBy(r => r.Listing.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        page.Addons = scan.Addons.Select(a => Row(AddonKind.Addon, a.Listing, true, false, official: repo.Contains(a.Listing.Key)))
+            .Concat(notInstalled.Select(t => Row(AddonKind.Addon, AddonListing.Named(t.Name), false, true, official: true)))
+            .Concat(missingAddons.Select(n => Row(AddonKind.Addon, AddonListing.Named(n), false, false)))
+            .OrderBy(r => r.Listing.Name, StringComparer.OrdinalIgnoreCase).ToList();
         page.NoAddons = $"No addons found in {Path.Combine(dir, "addons")}.";
         page.NoPlugins = $"No plugins found in {Path.Combine(dir, "plugins")}.";
         return page;
@@ -708,53 +706,51 @@ public partial class AddonsPluginsViewModel : ObservableObject
             page.Problem = ErrorText.Of(e, $"Provenance couldn't read the script {boot.Script}.");
         }
 
-        RowData Row(AddonKind kind, string key, string name, string? version, string? author, string? description, AshitaLoad state,
-                    bool installed, AddonBadge? problem = null, string? location = null)
+        RowData Row(AddonKind kind, AddonListing listing, AshitaLoad state, bool installed, AddonBadge? problem = null)
         {
+            var key = listing.Key;
             var badges = new List<AddonBadge>();
             if (!installed) badges.Add(Badges.NotInAshita);
             if (problem is not null) badges.Add(problem);
             else if (installed && !Loadable(kind, key)) badges.Add(problem = Badges.BadName);
             if (state == AshitaLoad.ByScript) badges.Add(Badges.ByScript);
             bool on = state == AshitaLoad.On, canTurnOn = installed && problem is null;
-            return new RowData(kind, key, name, version, author, description)
+            return new RowData(kind, listing)
             {
                 On = on, HasSwitch = state != AshitaLoad.ByScript, CanChange = !readOnly && (canTurnOn || on), Badges = badges,
-                Team = AshitaTeam(kind, key), Location = installed ? location : null,
+                Team = AshitaTeam(kind, key),
             };
         }
 
-        List<RowData> Rows(AddonKind kind,
-                           IEnumerable<(string Key, string Name, string? Version, string? Author, string? Description, AddonBadge? Problem, string Location)> found,
-                           IEnumerable<string> loaded, Func<string, AshitaLoad> state)
+        List<RowData> Rows(AddonKind kind, IEnumerable<(AddonListing Listing, AddonBadge? Problem)> found, IEnumerable<string> loaded,
+                           Func<string, AshitaLoad> state)
         {
             var list = found.ToList();
-            return list.Select(f => Row(kind, f.Key, f.Name, f.Version, f.Author, f.Description, state(f.Key), true, f.Problem, f.Location))
-                .Concat(Missing(loaded, list.Select(f => f.Key)).Select(n => Row(kind, n, n, null, null, null, state(n), false)))
-                .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            return list.Select(f => Row(kind, f.Listing, state(f.Listing.Key), true, f.Problem))
+                .Concat(Missing(loaded, list.Select(f => f.Listing.Key)).Select(n => Row(kind, AddonListing.Named(n), state(n), false)))
+                .OrderBy(r => r.Listing.Name, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
         page.Addons = Rows(AddonKind.Addon,
-            scan.Addons.Select(a => (a.LoadName, a.Name, a.Version, a.Author, a.Description, a.NotForAshitaV4 ? Badges.NotForV4 : null, a.Folder)),
+            scan.Addons.Select(a => (a.Listing, a.NotForAshitaV4 ? Badges.NotForV4 : (AddonBadge?)null)),
             script.Addons.Select(a => a.Name), script.Addon);
         page.Plugins = Rows(AddonKind.Plugin,
             scan.Plugins.Where(p => p.Kind == AshitaPluginKind.Plugin)
-                .Select(p => (p.LoadName, p.Name, p.VersionText, p.Author, p.Description, p.ForOtherAshita ? Badges.OtherAshita : null, p.Dll)),
+                .Select(p => (p.Listing, p.ForOtherAshita ? Badges.OtherAshita : (AddonBadge?)null)),
             script.Plugins.Select(p => p.Name), script.Plugin);
 
         var pol = boot.PolPlugins;
         AshitaLoad PolState(string n) => pol.Any(p => Same(p.Name, n) && p.On) ? AshitaLoad.On : AshitaLoad.Off;
         var polFound = scan.Plugins.Where(p => p.Kind == AshitaPluginKind.PolPlugin).ToList();
         // a switched-off one shows off whatever the boot configuration says, as it is when Provenance starts the game
-        var polRows = polFound.Select(p => AshitaBootFiles.IsTakeover(p.LoadName)
-            ? new RowData(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, AshitaInstall.IncompatibleReason(p.LoadName))
-                { CanChange = false, Incompatible = true, Badges = [Badges.Incompatible], Team = AshitaTeam(AddonKind.PolPlugin, p.LoadName), Location = p.Dll }
-            : Row(AddonKind.PolPlugin, p.LoadName, p.Name, p.VersionText, p.Author, p.Description, PolState(p.LoadName), true,
-                  p.ForOtherAshita ? Badges.OtherAshita : null, p.Dll)).ToList();
-        var turnedOn = pol.Where(p => p.On && !AshitaBootFiles.IsTakeover(p.Name)).Select(p => p.Name);
-        polRows.AddRange(Missing(turnedOn, polFound.Select(p => p.LoadName))
-            .Select(n => Row(AddonKind.PolPlugin, n, n, null, null, null, AshitaLoad.On, false)));
-        page.PolPlugins = polRows.OrderBy(r => r.Incompatible).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        var polRows = polFound.Select(p => AshitaPolPlugins.IsTakeover(p.Listing.Key)
+            ? new RowData(AddonKind.PolPlugin, p.Listing with { Description = AshitaPolPlugins.IncompatibleReason(p.Listing.Key) })
+                { CanChange = false, Incompatible = true, Badges = [Badges.Incompatible], Team = AshitaTeam(AddonKind.PolPlugin, p.Listing.Key) }
+            : Row(AddonKind.PolPlugin, p.Listing, PolState(p.Listing.Key), true, p.ForOtherAshita ? Badges.OtherAshita : null)).ToList();
+        var turnedOn = pol.Where(p => p.On && !AshitaPolPlugins.IsTakeover(p.Name)).Select(p => p.Name);
+        polRows.AddRange(Missing(turnedOn, polFound.Select(p => p.Listing.Key))
+            .Select(n => Row(AddonKind.PolPlugin, AddonListing.Named(n), AshitaLoad.On, false)));
+        page.PolPlugins = polRows.OrderBy(r => r.Incompatible).ThenBy(r => r.Listing.Name, StringComparer.OrdinalIgnoreCase).ToList();
 
         page.NoAddons = $"No addons found in {Path.Combine(dir, "addons")}.";
         page.NoPlugins = $"No plugins found in {Path.Combine(dir, "plugins")}.";
@@ -770,8 +766,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
     } ? "Ashita" : null;
 
     private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-
-    private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
 
     private sealed class Page
     {

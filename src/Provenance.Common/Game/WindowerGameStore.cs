@@ -37,26 +37,8 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
     {
         var s = windows.Clone();
         foreach (var v in WindowerGameRegistry.Values(p, p.Width, p.Height))
-        {
-            int n = v.Value is int i ? i : 0;
-            // FFXI's own registry value names, mapped the same as FfxiRegistry's
-            switch (v.Name)
-            {
-                case "0000": s.DrawDistanceMip = n; break;
-                case "0001": s.Width = n; break;
-                case "0002": s.Height = n; break;
-                case "0003": s.BgWidth = n; break;
-                case "0004": s.BgHeight = n; break;
-                case "0007": s.Sound = n; break;
-                case "0017": s.EnhancedShading = n; break;
-                case "0021": s.HardwareMouse = n; break;
-                case "0028": s.Brightness = BitConverter.Int32BitsToSingle(n); break;
-                case "0034": s.WindowMode = n; break;
-                case "0035": s.BackgroundSound = n; break;
-                case "0037": s.UiWidth = n; break;
-                case "0038": s.UiHeight = n; break;
-            }
-        }
+            if (FfxiValues.Find(v.Name) is IntValue row)
+                row.Set(s, v.Value is int i ? i : 0);
         s.PadMode = s.PadMode.Length >= 6 ? (int[])s.PadMode.Clone() : [.. s.PadMode, .. new int[6 - s.PadMode.Length]];
         s.PadMode[4] = p.AlwaysEnableGamepad ? 1 : 0;
         return s;
