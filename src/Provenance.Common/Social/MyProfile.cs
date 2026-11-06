@@ -3,7 +3,7 @@ using Provenance.Common.Hook;
 
 namespace Provenance.Common.Social;
 
-public sealed record MyProfileField(string Label, int Level, long Value, string Text);
+public sealed record MyProfileField(string Label, PrivacyLevel Level, long Value, string Text);
 
 public sealed record MyProfileChoice(long Code, IReadOnlyList<string> Parts);
 
@@ -14,8 +14,8 @@ public sealed record MyProfileCharacter(int Slot, string Key, int World, string 
     public string? WorldName => FfxiWorlds.Name(World);
 }
 
-// Level is 1 Private, 2 Friends only, 3 POL. Tables are the viewer's value tables (prof_pol.pfb)
-public sealed record MyProfile(string Handle, int Level, IReadOnlyDictionary<string, MyProfileField> Fields,
+// Tables are the viewer's value tables (prof_pol.pfb)
+public sealed record MyProfile(string Handle, PrivacyLevel Level, IReadOnlyDictionary<string, MyProfileField> Fields,
                                IReadOnlyDictionary<string, IReadOnlyList<MyProfileChoice>> Tables)
 {
     public string Token { get; init; } = "";
@@ -40,7 +40,7 @@ public sealed record MyProfile(string Handle, int Level, IReadOnlyDictionary<str
             if (root.TryGetProperty("fields", out var fs))
                 foreach (var f in fs.EnumerateObject())
                     fields[f.Name] = new MyProfileField(Text(f.Value, "label"),
-                        f.Value.TryGetProperty("level", out var lv) ? lv.GetInt32() : 0,
+                        f.Value.TryGetProperty("level", out var lv) ? (PrivacyLevel)lv.GetInt32() : PrivacyLevel.Keep,
                         f.Value.TryGetProperty("v", out var v) ? v.GetInt64() : 0, Text(f.Value, "s"));
             var tables = new Dictionary<string, IReadOnlyList<MyProfileChoice>>();
             if (root.TryGetProperty("tables", out var ts))
@@ -60,7 +60,7 @@ public sealed record MyProfile(string Handle, int Level, IReadOnlyDictionary<str
                         characters.Add(new MyProfileCharacter(c.TryGetProperty("slot", out var sl) ? sl.GetInt32() : -1, key,
                                                               c.TryGetProperty("world", out var w) ? w.GetInt32() : 0,
                                                               Text(c, "name").Trim()));
-            int level = root.TryGetProperty("level", out var lev) ? lev.GetInt32() : 0;
+            var level = root.TryGetProperty("level", out var lev) ? (PrivacyLevel)lev.GetInt32() : PrivacyLevel.Keep;
             return new MyProfile(Text(root, "handle"), level, fields, tables)
             {
                 Token = Text(root, "token"),

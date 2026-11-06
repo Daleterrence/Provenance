@@ -17,7 +17,7 @@ public static class MultiAccountRules
     public static List<MultiAccountEntry> WithoutProfile(IEnumerable<MultiAccountEntry> runEntries) =>
         runEntries.Where(e => string.IsNullOrWhiteSpace(e.ThirdPartyHookProfile)).ToList();
 
-    public static string NoProfileText(string? platform, IReadOnlyList<string> names)
+    public static string NoProfileText(ThirdPartyHook platform, IReadOnlyList<string> names)
     {
         var kind = platform == ThirdPartyHook.Ashita ? "an Ashita boot configuration" : "a Windower profile";
         return names.Count == 1

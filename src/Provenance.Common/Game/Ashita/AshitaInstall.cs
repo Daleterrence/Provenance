@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 using Provenance.Common.PolFormat;
-using static Provenance.Common.Game.ThirdParty.ThirdPartyHook;
+using static Provenance.Common.Game.ThirdParty.ThirdPartyHooks;
 
 namespace Provenance.Common.Game.Ashita;
 

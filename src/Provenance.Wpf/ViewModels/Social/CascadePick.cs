@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Provenance.Common.Social;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
@@ -25,12 +26,12 @@ public sealed partial class CascadePick : ObservableObject
 
     public IReadOnlyList<string> Tops { get; }
     public ObservableCollection<string> Mids { get; } = new();
-    public ObservableCollection<ProfileChoice> Leaves { get; } = new();
+    public ObservableCollection<Choice<long>> Leaves { get; } = new();
     public bool HasMid => _levels >= 3;
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(IsSet))] private string? _top;
     [ObservableProperty] private string? _mid;
-    [ObservableProperty] private ProfileChoice? _leaf;
+    [ObservableProperty] private Choice<long>? _leaf;
 
     public bool IsSet => Top is { } t && t != _notSet;
 
@@ -76,11 +77,11 @@ public sealed partial class CascadePick : ObservableObject
         Touch();
     }
 
-    partial void OnLeafChanged(ProfileChoice? value) => Touch();
+    partial void OnLeafChanged(Choice<long>? value) => Touch();
 
     private void FillLeaves(IEnumerable<MyProfileChoice> rows, int part)
     {
-        foreach (var r in rows) Leaves.Add(new ProfileChoice(r.Code, Part(r, part)));
+        foreach (var r in rows) Leaves.Add(new Choice<long>(r.Code, Part(r, part)));
         if (Leaves.Count == 1 && !_setting) Leaf = Leaves[0];   // nothing to choose between
     }
 

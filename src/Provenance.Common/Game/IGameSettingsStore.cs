@@ -1,3 +1,5 @@
+using Provenance.Common.Game.ThirdParty;
+
 namespace Provenance.Common.Game;
 
 public readonly record struct GameSaveResult(int Changed, bool Wrote);
@@ -6,7 +8,7 @@ public interface IGameSettingsStore
 {
     // the same Key means the same place to save, so a switch back doesn't reload for nothing
     string Key { get; }
-    string? Platform { get; }
+    ThirdPartyHook? Platform { get; }
     string? ProfileName { get; }
     string? ProfileDisplay { get; }
     bool SameShapeRenderSizes { get; }

@@ -31,7 +31,7 @@ public partial class SocialViewModel : ObservableObject
         _avatars = avatars;
         _settings = settings;
         FriendsView = CollectionViewSource.GetDefaultView(Friends);
-        FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.Section)));
+        FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
         GroupChat = new GroupChatViewModel(this, () => _settings.Current.GroupChatTimes);
         GroupChat.UnreadChanged += () =>
         {
@@ -604,9 +604,6 @@ public partial class SocialViewModel : ObservableObject
         return changed;
     }
 
-    private static readonly string[] Sections =
-        ["FRIEND REQUESTS", "GROUP INVITATIONS", "ONLINE", "OFFLINE", "REQUESTS SENT", "OTHERS"];
-
     private void RebuildFriends(PolSocialSnapshot snap)
     {
         var items = snap.Friends.Select(f =>
@@ -616,18 +613,18 @@ public partial class SocialViewModel : ObservableObject
                 f.Name, playing, f.Pending ? "" : Filtered(f.Comment),
                 f.Pending ? "Friend request sent" : f.Online ? f.StatusLabel : "Offline", f.Online && !f.Pending, f.Row,
                 _avatars.ProfilePicture(f.ProfilePictureId), _chat?.UnreadFrom(f.Name, f.Key) ?? 0,
-                f.Pending ? "REQUESTS SENT" : f.Online ? "ONLINE" : "OFFLINE")
+                f.Pending ? FriendSection.RequestsSent : f.Online ? FriendSection.Online : FriendSection.Offline)
             { Key = f.Key, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, InGame = f.Online && !f.Pending && f.Game is not null };
         }).ToList();
         // invitations (kind 0xe) and requests (kind 1) stay on the server until they're answered
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_answered.Contains(m.Mid)))
             if (m.Kind == PolMessage.KindGroupInvite)
                 items.Add(new FriendItem(m.From, "", m.Text.Length > 0 ? Filtered(m.Text) : "Group invitation", "", false, -1,
-                                         _avatars.NoProfilePicture, 0, "GROUP INVITATIONS")
+                                         _avatars.NoProfilePicture, 0, FriendSection.GroupInvitations)
                           { Key = m.FromKey, RequestMid = m.Mid, IsGroupInvite = true });
             else if (m.Kind == PolMessage.KindFriendRequest)
                 items.Add(new FriendItem(m.From, "", "Wants to be your friend", "", false, -1,
-                                         _avatars.NoProfilePicture, 0, "FRIEND REQUESTS")
+                                         _avatars.NoProfilePicture, 0, FriendSection.FriendRequests)
                           { Key = m.FromKey, RequestMid = m.Mid, IsMe = m.IsMe });
         if (_chat != null)
         {
@@ -641,10 +638,10 @@ public partial class SocialViewModel : ObservableObject
                 if (listed) continue;
                 items.Add(new FriendItem(last.Peer, "", "Not on your friend list", "", false, -1,
                                          _avatars.NoProfilePicture, _chat.UnreadFrom(last.Peer, last.PeerKey),
-                                         "OTHERS") { Key = last.PeerKey });
+                                         FriendSection.Others) { Key = last.PeerKey });
             }
         }
-        items = items.OrderBy(i => Array.IndexOf(Sections, i.Section))
+        items = items.OrderBy(i => i.Section)
                      .ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         // counted, so an empty list never matches the "" that forces a rebuild and leaves the old rows up
         var sig = items.Count + ":" + string.Join("|", items.Select(i => $"{i.Name}/{i.Key}/{i.StatusLabel}/{i.Playing}/{i.PlayingShort}/{i.Comment}/" +
@@ -679,7 +676,7 @@ public partial class SocialViewModel : ObservableObject
     // online and offline count as one section (a presence change just moves the row), a request and a friend row don't
     private static bool SameRow(FriendItem a, FriendItem b) =>
         a.Is(b) && (a.Section == b.Section ||
-                    (a.Section is "ONLINE" or "OFFLINE" && b.Section is "ONLINE" or "OFFLINE"));
+                    (a.Section is FriendSection.Online or FriendSection.Offline && b.Section is FriendSection.Online or FriendSection.Offline));
 
     private bool _conversationVisible;
     private DateTime _conversationDay;   // the day the "Today" headings were made on

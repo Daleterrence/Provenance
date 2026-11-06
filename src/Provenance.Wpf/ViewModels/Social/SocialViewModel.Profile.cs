@@ -115,10 +115,10 @@ public partial class SocialViewModel
         ProfileNoteIsError = false;
     }
 
-    private string StateText(int state) => state switch
+    private string StateText(ProfileFieldState state) => state switch
     {
-        PolProfile.Private => ViewerText(0x4a73, "Private"),
-        PolProfile.UnderTen => ViewerText(0x4a75, "Under age ten"),
+        ProfileFieldState.Private => ViewerText(0x4a73, "Private"),
+        ProfileFieldState.UnderTen => ViewerText(0x4a75, "Under age ten"),
         _ => ViewerText(0x4a81, "Not set"),
     };
 
@@ -178,11 +178,11 @@ public partial class SocialViewModel
 
     private const string NoCharacter = "failed:no character";
 
-    private string PrivacyText(int level) => level switch
+    private string PrivacyText(PrivacyLevel level) => level switch
     {
-        1 => ViewerText(0x4a7d, "Private"),
-        2 => ViewerText(0x4a7e, "Show to friends"),
-        3 => ViewerText(0x4a7c, "Show to all"),
+        PrivacyLevel.Private => ViewerText(0x4a7d, "Private"),
+        PrivacyLevel.FriendsOnly => ViewerText(0x4a7e, "Show to friends"),
+        PrivacyLevel.Everyone => ViewerText(0x4a7c, "Show to all"),
         _ => "",
     };
 
@@ -318,9 +318,9 @@ public partial class SocialViewModel
             ProfileGameLine = FfxiProfileText.Title;
             return;
         }
-        ProfileName = r.NameState == PolProfile.Private ? StateText(PolProfile.Private) : Filtered(r.Name);
+        ProfileName = r.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : Filtered(r.Name);
         ProfileGameLine = FfxiProfileText.Line(PrivacyText(r.Level));
-        foreach (var (label, value) in FfxiProfileText.Rows(r, StateText(PolProfile.Private), StateText(PolProfile.NotSet), Filtered))
+        foreach (var (label, value) in FfxiProfileText.Rows(r, StateText(ProfileFieldState.Private), StateText(ProfileFieldState.NotSet), Filtered))
             ProfileRows.Add(new ProfileRowItem(label, value, null));
     }
 
@@ -328,10 +328,10 @@ public partial class SocialViewModel
     {
         ProfileShowsPicture = true;
         ProfileGameLine = "";
-        ProfileName = p.NameState == PolProfile.Private ? StateText(PolProfile.Private) : Filtered(p.Name);
+        ProfileName = p.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : Filtered(p.Name);
         ProfilePicture = _avatars.NoProfilePicture;
         ProfileHid = p.Hid.Length > 0 ? "H-ID " + p.Hid : "";
-        ProfileMail = p.MailState != PolProfile.Shown || p.Mail.Length == 0 ||
+        ProfileMail = p.MailState != ProfileFieldState.Shown || p.Mail.Length == 0 ||
                       p.Mail == ViewerText(0x4a7f, "No Mail address") ? "" : Filtered(p.Mail);
         ProfileUpdated = p.Updated is > 0 and < 253402300800   // FromUnixTimeSeconds throws past the year 9999
             ? "Updated " + DateTimeOffset.FromUnixTimeSeconds(p.Updated).ToLocalTime().ToString("d MMM yyyy") : "";
@@ -339,7 +339,7 @@ public partial class SocialViewModel
         ProfileRows.Clear();
         foreach (var r in p.Rows)
         {
-            bool shown = r.State == PolProfile.Shown;
+            bool shown = r.State == ProfileFieldState.Shown;
             if (r.Field == "z_ficon")
             {
                 if (shown) ProfilePicture = _avatars.ProfilePicture(r.ProfilePictureId);
@@ -350,7 +350,7 @@ public partial class SocialViewModel
             }
             var lines = r.Lines.Where(l => l.Length > 0).Select(Filtered).ToList();
             ProfileRows.Add(new ProfileRowItem(r.Label, shown && lines.Count > 0
-                ? string.Join("\n", lines) : StateText(shown ? PolProfile.NotSet : r.State), null));
+                ? string.Join("\n", lines) : StateText(shown ? ProfileFieldState.NotSet : r.State), null));
         }
         ProfileAway = string.Join("\n", p.Away.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0));
         ProfileAwayFrom = p.AwayFrom;

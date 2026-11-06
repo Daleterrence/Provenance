@@ -71,9 +71,9 @@ public static class SocialRequests
     public static bool LeaveGroup(int pid, string token, string groupId) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "leave", token, groupId, "", "", "", "");
 
-    // class is the viewer's number for it, memberKey the member's, so a changed list gets refused
-    public static bool SetMemberClass(int pid, string token, string groupId, int memberIndex, int memberClass, string memberKey) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Group, "class", token, groupId, memberIndex, memberClass, "", memberKey);
+    // memberKey is the member's, so a changed list gets refused
+    public static bool SetMemberRole(int pid, string token, string groupId, int memberIndex, GroupRole role, string memberKey) =>
+        HookFiles.WriteRequest(pid, HookContract.Requests.Group, "class", token, groupId, memberIndex, (int)role, "", memberKey);
 
     public static bool SetGroupComment(int pid, string token, string groupId, string text) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "comment", token, groupId, text, "", "", "");
@@ -104,11 +104,11 @@ public static class SocialRequests
     public static bool RequestXiProfile(int pid, string token, string handleKey, string characterKey) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.XiProfile, token, handleKey, characterKey);
 
-    // load first, the save keeps each field's own level. level is 1 Private, 2 Friends only, 3 POL
-    public static bool SaveMyProfile(int pid, string token, int level, IEnumerable<KeyValuePair<string, string>> fields,
+    // load first, the save keeps each field's own level
+    public static bool SaveMyProfile(int pid, string token, PrivacyLevel level, IEnumerable<KeyValuePair<string, string>> fields,
                                      string noMailText = "")
     {
-        var lines = new List<object> { token, level };
+        var lines = new List<object> { token, (int)level };
         if (noMailText.Length > 0) lines.Add("nomail=" + noMailText);
         lines.AddRange(fields.Select(f => $"{f.Key}={f.Value}"));
         return HookFiles.WriteRequest(pid, HookContract.Requests.SaveProfile, [.. lines]);

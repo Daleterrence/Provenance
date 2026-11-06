@@ -1,7 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
-                    xmlns:conv="clr-namespace:Provenance.Wpf.Converters">
+                    xmlns:conv="clr-namespace:Provenance.Wpf.Converters"
+                    xmlns:hook="clr-namespace:Provenance.Common.Game.ThirdParty;assembly=Provenance.Common">
     <!-- Settings' profile cards, white text on these in both themes -->
     <SolidColorBrush x:Key="Platform.Windower" Color="#339933" />
     <SolidColorBrush x:Key="Platform.Ashita"   Color="#D45447" />
@@ -200,10 +201,10 @@
         <Setter Property="Background" Value="{DynamicResource Surface.1}" />
         <Setter Property="TextElement.Foreground" Value="White" />
         <Style.Triggers>
-            <Trigger Property="Tag" Value="windower">
+            <Trigger Property="Tag" Value="{x:Static hook:ThirdPartyHook.Windower}">
                 <Setter Property="Background" Value="{DynamicResource Platform.Windower}" />
             </Trigger>
-            <Trigger Property="Tag" Value="ashita">
+            <Trigger Property="Tag" Value="{x:Static hook:ThirdPartyHook.Ashita}">
                 <Setter Property="Background" Value="{DynamicResource Platform.Ashita}" />
             </Trigger>
         </Style.Triggers>

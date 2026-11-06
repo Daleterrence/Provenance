@@ -8,10 +8,11 @@ public static class FfxiProfileText
     public static IReadOnlyList<(string Label, string Value)> Rows(PolFfxiProfile p, string privateText, string notSet,
                                                                     Func<string, string> filter)
     {
-        string Of((int Value, int State) v, Func<int, string?> name) =>
-            v.State == PolProfile.Private ? privateText : v.State == PolProfile.Shown && name(v.Value) is { } n ? n : notSet;
-        string world = p.WorldNameState == PolProfile.Private ? privateText
-                     : p.WorldNameState == PolProfile.Shown && p.WorldName.Length > 0 ? filter(p.WorldName) : notSet;
+        string Of((int Value, ProfileFieldState State) v, Func<int, string?> name) =>
+            v.State == ProfileFieldState.Private ? privateText
+            : v.State == ProfileFieldState.Shown && name(v.Value) is { } n ? n : notSet;
+        string world = p.WorldNameState == ProfileFieldState.Private ? privateText
+                     : p.WorldNameState == ProfileFieldState.Shown && p.WorldName.Length > 0 ? filter(p.WorldName) : notSet;
         return
         [
             ("World Name", world),

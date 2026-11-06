@@ -67,7 +67,7 @@ public sealed class WindowerLauncher : IDisposable
         var s = settings.Current;
         var dir = WindowerInstall.Detect(s.WindowerPath)
                   ?? throw Shown.Mark(new DirectoryNotFoundException("Couldn't find Windower. Set its folder in Settings, under Windower/Ashita."));
-        var region = ThirdPartyHook.RegionOfPol(polExe) ?? settings.DetectedRegion ?? PolRegion.UnitedStates;
+        var region = ThirdPartyHooks.RegionOfPol(polExe) ?? settings.DetectedRegion ?? PolRegion.UnitedStates;
         return new WindowerLaunchSetup
         {
             WindowerDir = dir,

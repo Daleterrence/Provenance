@@ -8,18 +8,17 @@ namespace Provenance.Wpf.ViewModels.Social;
 
 public partial class SocialViewModel
 {
-    public sealed record GroupMemberItem(int Index, string Name, string Key, ImageSource? Avatar, int Class,
+    public sealed record GroupMemberItem(int Index, string Name, string Key, ImageSource? Avatar, GroupRole Role,
                                          string RoleText, string StatusLabel, bool Online, bool Me, string Comment);
 
-    // classes: 5 master, 4 sub-master, 3 member, 2 invited
-    public sealed record GroupItem(string Id, string Name, int MyClass, string RoleText, int OnlineCount,
+    public sealed record GroupItem(string Id, string Name, GroupRole MyRole, string RoleText, int OnlineCount,
                                    IReadOnlyList<GroupMemberItem> Members)
     {
-        public bool IsMaster => MyClass == 5;
-        public bool CanInvite => MyClass is 4 or 5;
-        public bool IsInvited => MyClass == 2;
+        public bool IsMaster => MyRole == GroupRole.Master;
+        public bool CanInvite => MyRole is GroupRole.SubMaster or GroupRole.Master;
+        public bool IsInvited => MyRole == GroupRole.Invited;
         // the viewer's picker only offers groups I'm a member, sub-master or master of
-        public bool CanChat => MyClass is 3 or 4 or 5;
+        public bool CanChat => MyRole is GroupRole.Member or GroupRole.SubMaster or GroupRole.Master;
         public string Summary => $"{Members.Count} {(Members.Count == 1 ? "member" : "members")}, {OnlineCount} online";
         // group chat lines that came in with its window hidden or behind
         public int Unread { get; init; }
@@ -46,29 +45,29 @@ public partial class SocialViewModel
     private DateTime _groupAt;
     private bool _groupBySend;
 
-    private static string RoleText(int cls) => cls switch
+    private static string RoleText(GroupRole role) => role switch
     {
-        5 => "Group master",
-        4 => "Group sub-master",
-        2 => "Invited",
+        GroupRole.Master => "Group master",
+        GroupRole.SubMaster => "Group sub-master",
+        GroupRole.Invited => "Invited",
         _ => "Member",
     };
 
-    private static string MemberStatus(PolGroupMember m) => m switch
+    private static string StatusText(PolGroupMember m) => m switch
     {
         { Me: true } => "You",
-        { Class: 2 } => "Invited",
+        { Role: GroupRole.Invited } => "Invited",
         { Online: false } => "Offline",
-        { Status: 2 } => "Away",
-        { Status: 3 } => "Busy",
+        { Status: MemberStatus.Away } => "Away",
+        { Status: MemberStatus.Busy } => "Busy",
         _ => "Online",
     };
 
     private void RebuildGroups(PolSocialSnapshot snap)
     {
         static string MemberSig(PolGroupMember m) =>
-            $"{m.Index}:{m.Name}:{m.Class}:{m.Status}:{m.ProfilePictureId}:{m.Comment}";
-        var sig = snap.GroupList.Count + ":" + string.Join("|", snap.GroupList.Select(g => g.Id + "/" + g.Name + "/" + g.MyClass + "/" + GroupChat.UnreadFor(g.Id) + "/" +
+            $"{m.Index}:{m.Name}:{(int)m.Role}:{(int)m.Status}:{m.ProfilePictureId}:{m.Comment}";
+        var sig = snap.GroupList.Count + ":" + string.Join("|", snap.GroupList.Select(g => g.Id + "/" + g.Name + "/" + (int)g.MyRole + "/" + GroupChat.UnreadFor(g.Id) + "/" +
                                                               string.Join(",", g.Members.Select(MemberSig))));
         if (sig == _groupsSignature) return;
         _groupsSignature = sig;
@@ -76,14 +75,14 @@ public partial class SocialViewModel
         foreach (var g in snap.GroupList)
         {
             var members = g.Members
-                .OrderByDescending(m => m.Class).ThenByDescending(m => m.Online)
+                .OrderByDescending(m => m.Role).ThenByDescending(m => m.Online)
                 .ThenBy(m => m.Name, StringComparer.CurrentCultureIgnoreCase)
                 .Select(m => new GroupMemberItem(m.Index, m.Name, m.Key, _avatars.ProfilePicture(m.ProfilePictureId),
-                                                 m.Class, RoleText(m.Class), MemberStatus(m), m.Online, m.Me,
+                                                 m.Role, RoleText(m.Role), StatusText(m), m.Online, m.Me,
                                                  m.Me ? m.Comment : Filtered(m.Comment)))   // mine fills its edit box
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
-            Groups.Add(new GroupItem(g.Id, g.Name, g.MyClass, RoleText(g.MyClass), online, members)
+            Groups.Add(new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members)
                        { Unread = GroupChat.UnreadFor(g.Id) });
         }
         HasGroups = Groups.Count > 0;
@@ -122,39 +121,39 @@ public partial class SocialViewModel
 
     public void DisbandGroup(GroupItem g)
     {
-        if (g.MyClass == 5)
+        if (g.IsMaster)
             BeginGroup((pid, token) => SocialRequests.DisbandGroup(pid, token, g.Id), $"Group \"{g.Name}\" disbanded.", leaving: g.Id);
     }
 
     // a member or sub-master, an invitation gets answered instead
     public void LeaveGroup(GroupItem g)
     {
-        if (g.MyClass is not (< 3 or 5))
+        if (g.MyRole is not (< GroupRole.Member or GroupRole.Master))
             BeginGroup((pid, token) => SocialRequests.LeaveGroup(pid, token, g.Id),
                        ViewerText(0x3eab, "You have left the group \"%s.\"").Replace("%s", g.Name), leaving: g.Id);
     }
 
-    // masters and sub-masters remove (1) non-masters and relieve (3) sub-masters, only the master promotes to
-    // sub-master (4) or master (5), and never on my own row
-    public static bool CanSetClass(GroupItem g, GroupMemberItem m, int cls) => !m.Me && cls switch
+    // masters and sub-masters remove non-masters and relieve sub-masters (back to Member), only the master promotes to
+    // sub-master or master, and never on my own row
+    public static bool CanSetRole(GroupItem g, GroupMemberItem m, GroupRole role) => !m.Me && role switch
     {
-        1 => g.MyClass is 4 or 5 && m.Class != 5,
-        3 => g.MyClass is 4 or 5 && m.Class == 4,
-        4 => g.MyClass == 5 && m.Class == 3,
-        5 => g.MyClass == 5 && m.Class is 3 or 4,
+        GroupRole.Remove => g.CanInvite && m.Role != GroupRole.Master,
+        GroupRole.Member => g.CanInvite && m.Role == GroupRole.SubMaster,
+        GroupRole.SubMaster => g.IsMaster && m.Role == GroupRole.Member,
+        GroupRole.Master => g.IsMaster && m.Role is GroupRole.Member or GroupRole.SubMaster,
         _ => false,
     };
 
-    public void SetMemberClass(GroupItem g, GroupMemberItem m, int cls)
+    public void SetMemberRole(GroupItem g, GroupMemberItem m, GroupRole role)
     {
-        if (CanSetClass(g, m, cls))
-            BeginGroup((pid, token) => SocialRequests.SetMemberClass(pid, token, g.Id, m.Index, cls, m.Key),
-                       cls == 1 ? $"{m.Name} was removed from the group." : "The group was changed.");
+        if (CanSetRole(g, m, role))
+            BeginGroup((pid, token) => SocialRequests.SetMemberRole(pid, token, g.Id, m.Index, role, m.Key),
+                       role == GroupRole.Remove ? $"{m.Name} was removed from the group." : "The group was changed.");
     }
 
     public void SetGroupComment(GroupItem g, string text)
     {
-        if (g.MyClass >= 3)
+        if (g.MyRole >= GroupRole.Member)
             BeginGroup((pid, token) => SocialRequests.SetGroupComment(pid, token, g.Id, text.Trim()), "Your group comment was saved.");
     }
 

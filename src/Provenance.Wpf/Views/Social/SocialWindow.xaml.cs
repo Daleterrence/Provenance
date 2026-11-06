@@ -454,19 +454,20 @@ public partial class SocialWindow : Window
     private void FillMemberMenu(SocialViewModel vm, ContextMenu menu, SocialViewModel.GroupItem g,
                                 SocialViewModel.GroupMemberItem m)
     {
-        bool Can(int cls) => vm.CanEdit && !g.IsInvited && SocialViewModel.CanSetClass(g, m, cls);
+        bool Can(GroupRole role) => vm.CanEdit && !g.IsInvited && SocialViewModel.CanSetRole(g, m, role);
         var friend = m.Key.Length > 0 ? vm.Friends.FirstOrDefault(f => f.IsFriend && f.Key == m.Key) : null;
         menu.Items.Add(Item("Send message", friend is { CanMessage: true }, () => vm.SelectedFriend = friend));
         menu.Items.Add(Item("View profile", friend is { IsFriend: true, Pending: false },
                             () => ProfileWindow.ShowFor(vm, friend!, this)));
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Make group master...", Can(5), Confirmed("Make group master",
+        menu.Items.Add(Item("Make group master...", Can(GroupRole.Master), Confirmed("Make group master",
             $"Make {m.Name} the master of \"{g.Name}\"? You'll become an ordinary member.", "MAKE MASTER",
-            () => vm.SetMemberClass(g, m, 5))));
-        if (m.Class == 4) menu.Items.Add(Item("Relieve sub-master", Can(3), () => vm.SetMemberClass(g, m, 3)));
-        else menu.Items.Add(Item("Make sub-master", Can(4), () => vm.SetMemberClass(g, m, 4)));
-        menu.Items.Add(Item("Remove from group...", Can(1), Confirmed("Remove from group",
-            $"Remove {m.Name} from \"{g.Name}\"?", "REMOVE", () => vm.SetMemberClass(g, m, 1))));
+            () => vm.SetMemberRole(g, m, GroupRole.Master))));
+        if (m.Role == GroupRole.SubMaster)
+            menu.Items.Add(Item("Relieve sub-master", Can(GroupRole.Member), () => vm.SetMemberRole(g, m, GroupRole.Member)));
+        else menu.Items.Add(Item("Make sub-master", Can(GroupRole.SubMaster), () => vm.SetMemberRole(g, m, GroupRole.SubMaster)));
+        menu.Items.Add(Item("Remove from group...", Can(GroupRole.Remove), Confirmed("Remove from group",
+            $"Remove {m.Name} from \"{g.Name}\"?", "REMOVE", () => vm.SetMemberRole(g, m, GroupRole.Remove))));
     }
 
     private void OnAddFriend(object sender, RoutedEventArgs e)

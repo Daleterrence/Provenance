@@ -5,13 +5,9 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.Login;
 using Provenance.Common.Social;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
-
-public sealed record ProfileChoice(long Code, string Text)
-{
-    public override string ToString() => Text;
-}
 
 // only changed fields get sent, and a rename goes after the save
 public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
@@ -28,7 +24,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private string _savedHandle = "";
     private string _loadedKey = "";
     private string _savedMail = "";
-    private int _savedLevel;
+    private PrivacyLevel _savedLevel;
     private readonly Dictionary<string, long> _saved = new();
     private bool _renameAfterSave;
     private bool _loadingValues;
@@ -87,12 +83,13 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     }
 
     public string NotSet { get; }
-    public IReadOnlyList<ProfileChoice> VisibilityChoices { get; } =
-        [new(3, "Everyone on PlayOnline"), new(2, "Friends only"), new(1, "Nobody (private)")];
+    public IReadOnlyList<Choice<PrivacyLevel>> VisibilityChoices { get; } =
+        [new(PrivacyLevel.Everyone, "Everyone on PlayOnline"), new(PrivacyLevel.FriendsOnly, "Friends only"),
+         new(PrivacyLevel.Private, "Nobody (private)")];
 
-    [ObservableProperty] private IReadOnlyList<ProfileChoice> _sexChoices = [];
-    [ObservableProperty] private IReadOnlyList<ProfileChoice> _jobChoices = [];
-    [ObservableProperty] private IReadOnlyList<ProfileChoice> _languageChoices = [];
+    [ObservableProperty] private IReadOnlyList<Choice<long>> _sexChoices = [];
+    [ObservableProperty] private IReadOnlyList<Choice<long>> _jobChoices = [];
+    [ObservableProperty] private IReadOnlyList<Choice<long>> _languageChoices = [];
     [ObservableProperty] private CascadePick? _location;
     [ObservableProperty] private CascadePick? _interest1;
     [ObservableProperty] private CascadePick? _interest2;
@@ -124,16 +121,16 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     }
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(VisibilityHelp))]
-    private long _level;   // 1 private, 2 friends, 3 everyone, 0 if it loaded as none of them
+    private PrivacyLevel _level;   // Keep if it loaded as none of the others
 
     // the viewer's own help for each choice, the same window sets a character's
     public string VisibilityHelp => HelpFor(Level);
 
-    private string HelpFor(long level) => level switch
+    private string HelpFor(PrivacyLevel level) => level switch
     {
-        3 => _social.ViewerText(0x2c5f, "Show profile to all PlayOnline members."),
-        2 => _social.ViewerText(0x2c60, "Show profile to friends and group friends only."),
-        1 => _social.ViewerText(0x2c61, "Hide profile from all PlayOnline members."),
+        PrivacyLevel.Everyone => _social.ViewerText(0x2c5f, "Show profile to all PlayOnline members."),
+        PrivacyLevel.FriendsOnly => _social.ViewerText(0x2c60, "Show profile to friends and group friends only."),
+        PrivacyLevel.Private => _social.ViewerText(0x2c61, "Hide profile from all PlayOnline members."),
         _ => "",
     };
     [ObservableProperty] private string _handleName = "";
@@ -146,7 +143,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     [ObservableProperty] private long _lang1;
     [ObservableProperty] private long _lang2;
 
-    partial void OnLevelChanged(long value) => Dirty();
+    partial void OnLevelChanged(PrivacyLevel value) => Dirty();
     partial void OnHandleNameChanged(string value) => Dirty();
     partial void OnMailChanged(string value) => Dirty();
     partial void OnAgeTextChanged(string value) => Dirty();
@@ -324,8 +321,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         {
             _noMail = _social.ViewerText(0x4a7f, "No Mail address");
             IReadOnlyList<MyProfileChoice> T(string n) => p.Tables.TryGetValue(n, out var t) ? t : [];
-            List<ProfileChoice> One(string n) =>
-                [new(0, NotSet), .. T(n).Select(r => new ProfileChoice(r.Code, r.Parts.LastOrDefault()?.Trim() ?? ""))];
+            List<Choice<long>> One(string n) =>
+                [new(0, NotSet), .. T(n).Select(r => new Choice<long>(r.Code, r.Parts.LastOrDefault()?.Trim() ?? ""))];
             SexChoices = One("z_sex");
             JobChoices = One("z_job");
             LanguageChoices = One("z_lang0");
@@ -339,9 +336,9 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             foreach (var (name, f) in p.Fields) if (name != "z_mail") _saved[name] = f.Value;
             long V(string n) => _saved.TryGetValue(n, out var v) ? v : 0;
             // a code this install doesn't know shows "Not set" like the viewer, and it's kept so a save can't clear it
-            long Keep(IReadOnlyList<ProfileChoice> list, long v, Action<IReadOnlyList<ProfileChoice>> set)
+            long Keep(IReadOnlyList<Choice<long>> list, long v, Action<IReadOnlyList<Choice<long>>> set)
             {
-                if (v != 0 && list.All(c => c.Code != v)) set(list.Append(new ProfileChoice(v, NotSet)).ToList());
+                if (v != 0 && list.All(c => c.Code != v)) set(list.Append(new Choice<long>(v, NotSet)).ToList());
                 return v;
             }
             Sex = Keep(SexChoices, V("z_sex"), l => SexChoices = l);
@@ -359,7 +356,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             _savedMail = mail == _noMail ? "" : mail;
             Mail = _savedMail;
             // an unknown level shows no choice and is kept (the hook's level 0) unless one's picked
-            _savedLevel = p.Level is >= 1 and <= 3 ? p.Level : 0;
+            _savedLevel = p.Level is >= PrivacyLevel.Private and <= PrivacyLevel.Everyone ? p.Level : PrivacyLevel.Keep;
             Level = _savedLevel;
             _savedHandle = p.Handle.Trim();
             HandleName = _savedHandle;
@@ -434,7 +431,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Start(Job.Save, "Saving your profile...");
         var noMail = fields.Any(f => f.Key == "z_mail" && f.Value == _noMail) ? _noMail : "";
         // level 0 keeps the profile's own, only a level that was picked gets sent
-        int level = Level != _savedLevel ? (int)Level : 0;
+        var level = Level != _savedLevel ? Level : PrivacyLevel.Keep;
         if (!SocialRequests.SaveMyProfile(pid, _token!, level, fields, noMail)) Fail(WriteFailed);
     }
 
@@ -478,7 +475,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                 foreach (var (name, value) in ChangedFields())
                     if (name == "z_mail") _savedMail = Mail.Trim();
                     else if (long.TryParse(value, out var v)) _saved[name] = v;
-                _savedLevel = (int)Level;
+                _savedLevel = Level;
                 if (_renameAfterSave && _social.GameRunning)
                 {
                     // Play was pressed while it saved, so the handle stays changed for later
@@ -507,7 +504,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                 EndJob();
                 Note = "";
                 card.Loaded = true;
-                card.Level = snap.XiLevel is >= 1 and <= 3 ? snap.XiLevel : 0;
+                card.Level = snap.XiLevel is >= PrivacyLevel.Private and <= PrivacyLevel.Everyone ? snap.XiLevel : PrivacyLevel.Keep;
                 if (card.Character is { Name.Length: 0 } && snap.XiName.Trim().Length > 0) card.Title = snap.XiName.Trim();
                 break;
         }

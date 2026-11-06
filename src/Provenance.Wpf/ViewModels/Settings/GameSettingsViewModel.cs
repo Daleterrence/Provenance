@@ -50,7 +50,7 @@ public partial class GameSettingsViewModel : ObservableObject
     };
     public string ProfileHeading => HasProfile ? $"Game settings for the {ProfileKind}" : "";
     public string ProfileShown => _store.ProfileDisplay ?? "";
-    public string? Platform => _store.Platform;
+    public ThirdPartyHook? Platform => _store.Platform;
 
     // the game never reads 0044, it only picks which sizes the official tool lists, so a profile has no use for it
     public bool KeepAspectShown => !HasProfile;

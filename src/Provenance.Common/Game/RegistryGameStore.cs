@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game;
@@ -6,7 +7,7 @@ namespace Provenance.Common.Game;
 public sealed class RegistryGameStore(PolRegion? region, Func<bool, RegistryKey?>? openKey = null) : IGameSettingsStore
 {
     public string Key => $"registry|{region}";
-    public string? Platform => null;
+    public ThirdPartyHook? Platform => null;
     public string? ProfileName => null;
     public string? ProfileDisplay => null;
     public bool SameShapeRenderSizes => false;

@@ -23,7 +23,7 @@ public sealed class PreLaunchLink
     public static Plan? For(PolSocialSnapshot snap)
     {
         if (snap.Handles.FirstOrDefault(h => h.Active) is not { } active) return null;
-        var unlinked = snap.ContentIds.Where(c => c.Type == HandleList.Ffxi && c.Handle < 0).OrderBy(c => c.Index).ToList();
+        var unlinked = snap.ContentIds.Where(c => c.Type == ContentIdType.Ffxi && c.Handle < 0).OrderBy(c => c.Index).ToList();
         if (unlinked.Count == 0) return null;
         int room = Math.Max(0, HandleList.MaxContentIds - active.ContentIds.Count);
         return new Plan(active, unlinked, unlinked.Take(room).ToList(), snap.Handles.Count > 1);

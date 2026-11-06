@@ -172,8 +172,7 @@ public sealed class PolSession : IDisposable
 
     public int? LastRefusalReason { get; private set; }
 
-    public string Platform =>
-        (_settings.Current.ThirdPartyHookPlatform ?? ThirdPartyHook.None).Trim().ToLowerInvariant();
+    public ThirdPartyHook Platform => _settings.Current.ThirdPartyHookPlatform;
 
     internal int SweepRuns => Volatile.Read(ref _sweepRuns);
 

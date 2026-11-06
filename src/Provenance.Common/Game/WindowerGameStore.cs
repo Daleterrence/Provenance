@@ -9,7 +9,7 @@ namespace Provenance.Common.Game;
 public sealed class WindowerGameStore(string windowerDir, string profileName, RegistryGameStore registry, string? display = null) : IGameSettingsStore
 {
     public string Key => $"windower|{Path.GetFullPath(windowerDir)}|{profileName}|{registry.Key}";
-    public string? Platform => ThirdPartyHook.Windower;
+    public ThirdPartyHook? Platform => ThirdPartyHook.Windower;
     public string? ProfileName => profileName;
     public string? ProfileDisplay => display ?? (profileName.Length == 0 ? "Default" : profileName);
     public bool SameShapeRenderSizes => true;

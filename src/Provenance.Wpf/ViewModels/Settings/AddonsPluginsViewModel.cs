@@ -16,7 +16,7 @@ namespace Provenance.Wpf.ViewModels.Settings;
 public enum AddonKind { Addon, Plugin, PolPlugin }
 
 // Folder is null when it can't be found. Profile is the Windower profile ("" is the unnamed one) or the boot config
-public sealed record AddonsTarget(string Platform, string? Folder, string Profile);
+public sealed record AddonsTarget(ThirdPartyHook Platform, string? Folder, string Profile);
 
 public delegate Task<WindowerInstallResult> WindowerInstaller(string windowerDir, string branch, AddonKind kind, string name);
 
@@ -33,7 +33,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     private static readonly string[] Watched =
     [
-        nameof(SettingsViewModel.ThirdPartyHookIndex), nameof(SettingsViewModel.WindowerPath), nameof(SettingsViewModel.AshitaPath),
+        nameof(SettingsViewModel.Hook), nameof(SettingsViewModel.WindowerPath), nameof(SettingsViewModel.AshitaPath),
         nameof(SettingsViewModel.WindowerProfile), nameof(SettingsViewModel.AshitaBootConfig),
     ];
 
@@ -61,10 +61,10 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     // the same folder and profile the Windower/Ashita tab is changing. With nothing in its list (settings.xml won't
     // read, say) it's still the one that was picked
-    internal static AddonsTarget TargetOf(SettingsViewModel tab, LauncherSettings saved) => tab.ThirdPartyHookIndex switch
+    internal static AddonsTarget TargetOf(SettingsViewModel tab, LauncherSettings saved) => tab.Hook switch
     {
-        1 => new(ThirdPartyHook.Ashita, tab.AshitaDir, tab.AshitaBootConfig?.Name ?? saved.AshitaBootConfig ?? ""),
-        2 => new(ThirdPartyHook.Windower, tab.WindowerDir, tab.WindowerProfile?.Name ?? WindowerSettingsFile.OldCopySource(saved.WindowerProfile)),
+        ThirdPartyHook.Ashita => new(ThirdPartyHook.Ashita, tab.AshitaDir, tab.AshitaBootConfig?.Name ?? saved.AshitaBootConfig ?? ""),
+        ThirdPartyHook.Windower => new(ThirdPartyHook.Windower, tab.WindowerDir, tab.WindowerProfile?.Name ?? WindowerSettingsFile.OldCopySource(saved.WindowerProfile)),
         _ => new(ThirdPartyHook.None, null, ""),
     };
 
@@ -100,7 +100,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     [ObservableProperty] private bool _statusIsError;
     [ObservableProperty] private bool _isWindower;
     [ObservableProperty] private bool _isAshita;
-    [ObservableProperty] private string? _cardPlatform;
+    [ObservableProperty] private ThirdPartyHook? _cardPlatform;
     [ObservableProperty] private string _cardHeading = "";
     [ObservableProperty] private string _cardName = "";
     [ObservableProperty] private bool _canChangeUseGlobal = true;
@@ -777,7 +777,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         public string? Message;
         public string Intro = "";
         public string? Problem;
-        public string Platform = ThirdPartyHook.None;
+        public ThirdPartyHook Platform = ThirdPartyHook.None;
         public bool UseGlobal = true, ListLocked;
         public string Key = "", Display = "";
         public string Branch = "stable";

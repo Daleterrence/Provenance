@@ -7,7 +7,7 @@ namespace Provenance.Common.Game;
 public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryGameStore registry, string? display = null) : IGameSettingsStore
 {
     public string Key => $"ashita|{Path.GetFullPath(ashitaDir)}|{bootName}|{registry.Key}";
-    public string? Platform => ThirdPartyHook.Ashita;
+    public ThirdPartyHook? Platform => ThirdPartyHook.Ashita;
     public string? ProfileName => bootName;
     public string? ProfileDisplay => display ?? bootName;
     public bool SameShapeRenderSizes => false;

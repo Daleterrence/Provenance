@@ -8,8 +8,7 @@ public static class ThirdPartyProfiles
 {
     private static bool Same(string? a, string b) => a is not null && a.Trim().Equals(b.Trim(), StringComparison.OrdinalIgnoreCase);
 
-    private static bool On(LauncherSettings s, string platform) =>
-        (s.ThirdPartyHookPlatform ?? "").Trim().Equals(platform, StringComparison.OrdinalIgnoreCase);
+    private static bool On(LauncherSettings s, ThirdPartyHook platform) => s.ThirdPartyHookPlatform == platform;
 
     public static string AddWindower(ISettingsService settings, string dir, string name)
     {

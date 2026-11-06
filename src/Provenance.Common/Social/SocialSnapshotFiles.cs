@@ -75,7 +75,7 @@ public static class SocialSnapshotFiles
                 XiToken = xiToken,
                 XiState = xiState,
                 XiKey = xi.ValueKind == JsonValueKind.Object ? Str(xi, "key") : "",
-                XiLevel = xi.ValueKind == JsonValueKind.Object ? Int(xi, "level", 0) : 0,
+                XiLevel = xi.ValueKind == JsonValueKind.Object ? (PrivacyLevel)Int(xi, "level", 0) : PrivacyLevel.Keep,
                 XiName = xi.ValueKind == JsonValueKind.Object ? Str(xi, "name") : "",
                 XiWorldName = xi.ValueKind == JsonValueKind.Object ? Str(xi, "worldName") : "",
                 CharacterToken = charToken,
@@ -87,7 +87,7 @@ public static class SocialSnapshotFiles
                 Handles = Arr(root, "handles", h => new PolHandle(Int(h, "slot", -1), Str(h, "name"), Str(h, "key"),
                     Int(h, "pic", -1), (int)Long(h, "order"), Bool(h, "active"),
                     Arr(h, "contentIds", i => i.TryGetInt32(out var n) ? n : -1))),
-                ContentIds = Arr(root, "contentIds", c => new PolContentId(Int(c, "index", -1), (int)Long(c, "type"),
+                ContentIds = Arr(root, "contentIds", c => new PolContentId(Int(c, "index", -1), (ContentIdType)Long(c, "type"),
                     Str(c, "name"), Str(c, "text"), (int)Long(c, "order"), Int(c, "handle", -1), Str(c, "key"))),
                 HandleToken = handleToken,
                 HandleState = handleState,
@@ -110,13 +110,13 @@ public static class SocialSnapshotFiles
         };
 
     private static PolProfile ReadProfile(JsonElement p) =>
-        new(Str(p, "name"), Str(p, "mail"), (int)Long(p, "mailState"), Str(p, "hid"), Long(p, "updated"),
-            (int)Long(p, "level"),
-            Arr(p, "rows", r => new PolProfileRow(Str(r, "label"), Str(r, "field"), (int)Long(r, "state"),
+        new(Str(p, "name"), Str(p, "mail"), (ProfileFieldState)Long(p, "mailState"), Str(p, "hid"), Long(p, "updated"),
+            (PrivacyLevel)Long(p, "level"),
+            Arr(p, "rows", r => new PolProfileRow(Str(r, "label"), Str(r, "field"), (ProfileFieldState)Long(r, "state"),
                                                   Arr(r, "lines", l => l.GetString() ?? ""), (int)Long(r, "pic"))),
             Str(p, "away").TrimEnd(), Str(p, "awayFrom"))
         {
-            NameState = (int)Long(p, "nameState"),
+            NameState = (ProfileFieldState)Long(p, "nameState"),
             Characters = Arr(p, "characters", c => new PolFfxiCharacter((int)Long(c, "slot"), ReadCharacterId(c),
                                                                         (int)Long(c, "world"))),
         };
@@ -125,10 +125,9 @@ public static class SocialSnapshotFiles
     private static PolFfxiProfile? ReadFfxiProfile(JsonElement p)
     {
         if (p.ValueKind != JsonValueKind.Object) return null;
-        (int, int) Num(string n) => ((int)Long(p, n), Int(p, n + "State", PolProfile.Private));
-        return new PolFfxiProfile(Int(p, "slot", -1), (int)Long(p, "level"), Str(p, "name").Trim(),
-                                  Int(p, "nameState", PolProfile.Private), Str(p, "worldName").Trim(),
-                                  Int(p, "worldNameState", PolProfile.Private))
+        (int, ProfileFieldState) Num(string n) => ((int)Long(p, n), FieldState(p, n + "State"));
+        return new PolFfxiProfile(Int(p, "slot", -1), (PrivacyLevel)Long(p, "level"), Str(p, "name").Trim(),
+                                  FieldState(p, "nameState"), Str(p, "worldName").Trim(), FieldState(p, "worldNameState"))
         {
             Nation = Num("countryId"),
             Area = Num("zoneId"),
@@ -140,11 +139,14 @@ public static class SocialSnapshotFiles
     }
 
     private static PolGroup ReadGroup(JsonElement g) =>
-        new(Str(g, "id"), Str(g, "name"), (int)Long(g, "myClass"), (int)Long(g, "myStatus"),
+        new(Str(g, "id"), Str(g, "name"), (GroupRole)Long(g, "myClass"), (MemberStatus)Long(g, "myStatus"),
             Arr(g, "members", m => new PolGroupMember((int)Long(m, "index"), Str(m, "name"), Str(m, "key"),
-                (int)Long(m, "pic"), (int)Long(m, "class"), (int)Long(m, "status"), Bool(m, "me"),
+                (int)Long(m, "pic"), (GroupRole)Long(m, "class"), (MemberStatus)Long(m, "status"), Bool(m, "me"),
                 Bool(m, "ignored"), Str(m, "text"), Str(m, "comment"))
                 { Slot = Int(m, "slot", -1), Hid = Str(m, "hid"), Mine = Bool(m, "mine"), InChat = Bool(m, "inChat") }));
+
+    private static ProfileFieldState FieldState(JsonElement e, string n) =>
+        (ProfileFieldState)Int(e, n, (int)ProfileFieldState.Private);
 
     private static CharacterId ReadCharacterId(JsonElement e) =>
         new(UInt(e, "ctsid"), (ulong)UInt(e, "ctidHigh") << 32 | UInt(e, "ctidLow"));
@@ -157,7 +159,7 @@ public static class SocialSnapshotFiles
     private static PolCharacterLookup? ReadCharacter(JsonElement c) =>
         c.ValueKind == JsonValueKind.Object
             ? new PolCharacterLookup(ReadCharacterId(c), Str(c, "name").Trim(),
-                                     Int(c, "nameState", PolProfile.Private), (int)Long(c, "level"), Str(c, "worldName"))
+                                     FieldState(c, "nameState"), (PrivacyLevel)Long(c, "level"), Str(c, "worldName"))
             : null;
 
     private static (string Token, string State) Job(JsonElement e, string n) =>

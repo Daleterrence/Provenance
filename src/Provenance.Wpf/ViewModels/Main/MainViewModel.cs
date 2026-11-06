@@ -1259,7 +1259,7 @@ public partial class MainViewModel : ObservableObject
             _elapsedTimer.Stop();
             IsLaunching = false;
             _socialPoll.Start();
-            if (linked == PreLaunchResult.ShowHandles) OpenSettingsAt(SettingsWindow.HandlesTab);
+            if (linked == PreLaunchResult.ShowHandles) OpenSettingsAt(SettingsTab.Handles);
             return;
         }
         // SE's installer only writes 3 of the game settings
@@ -1493,9 +1493,9 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenSettings() => OpenSettingsAt(0);
+    private void OpenSettings() => OpenSettingsAt(SettingsTab.General);
 
-    private void OpenSettingsAt(int tab)
+    private void OpenSettingsAt(SettingsTab tab)
     {
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
         var handles = Handles;
@@ -1506,9 +1506,9 @@ public partial class MainViewModel : ObservableObject
                                        stopPrestart: () => Task.Run(_pol.StopPrestart),
                                        loggedIn: () => IsLaunching || LoggedIn || _pol.Pid is not null,
                                        handles: handles);
-        vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.ThirdPartyHookIndex)) PlatformChanged(); };
+        vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.Hook)) PlatformChanged(); };
         var w = new SettingsWindow { DataContext = vm };
-        w.Tabs.SelectedIndex = tab;
+        w.Tabs.SelectedIndex = (int)tab;
         if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
         _openSettings = vm;
         handles.Opened();

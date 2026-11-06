@@ -1,5 +1,5 @@
 using Serilog;
-using static Provenance.Common.Game.ThirdParty.ThirdPartyHook;
+using static Provenance.Common.Game.ThirdParty.ThirdPartyHooks;
 
 namespace Provenance.Common.Game.Windower;
 

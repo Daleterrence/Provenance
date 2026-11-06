@@ -1,7 +1,5 @@
 namespace Provenance.Common.Social;
 
-// pol_hook.<pid>.social.json, rewritten every couple of secs. FfxiService is the Content ID check ("active" or
-// "none"), Notice the account notice status (221..252 = LM-01..LM-32)
 // Time and Seq are the sent message's header ones, 0 when nothing went. FromSlot is the handle slot a line that went
 // came from (-1 for none) and ToOther whether it went to another POL ID
 public sealed record PolSendResult(string Token, string State, long Time = 0, long Seq = 0, int FromSlot = -1,
@@ -12,6 +10,8 @@ public sealed record PolQueuedSend(string Token, string State);
 // Time and Seq are the header ones of the line that came back
 public sealed record PolReturnedSend(long Time, long Seq, int FromSlot);
 
+// pol_hook.<pid>.social.json, rewritten every couple of secs. FfxiService is the Content ID check ("active" or
+// "none"), Notice the account notice status (221..252 = LM-01..LM-32)
 public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int MyProfilePictureId,
                                        IReadOnlyList<PolFriend> Friends, IReadOnlyList<PolMessage> Messages,
                                        string FfxiService = "active", int Notice = 0,
@@ -63,11 +63,11 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public string GroupState { get; init; } = "";
     public string MeToken { get; init; } = "";
     public string MeState { get; init; } = "";
-    // one of my FFXI characters on the profile editor. Key is the character's, Level 0 till one's read or saved
+    // one of my FFXI characters on the profile editor. Key is the character's
     public string XiToken { get; init; } = "";
     public string XiState { get; init; } = "";
     public string XiKey { get; init; } = "";
-    public int XiLevel { get; init; }
+    public PrivacyLevel XiLevel { get; init; }
     public string XiName { get; init; } = "";
     public string XiWorldName { get; init; } = "";
     public string CharacterToken { get; init; } = "";

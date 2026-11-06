@@ -26,7 +26,7 @@ public static class GameBackupPolicy
     internal static string SettingsFolder(LauncherSettings s, RegistryGameStore registry, string? accountBoot)
     {
         var windows = registry.LoadWindows().ScreenshotFolder;
-        if ((s.ThirdPartyHookPlatform ?? "").Trim().ToLowerInvariant() != ThirdPartyHook.Ashita) return windows;
+        if (s.ThirdPartyHookPlatform != ThirdPartyHook.Ashita) return windows;
         var dir = AshitaInstall.Detect(s.AshitaPath);
         var boot = accountBoot is { Length: > 0 } ? accountBoot
                  : string.IsNullOrWhiteSpace(s.AshitaBootConfig) ? AshitaInstall.LastUsedBootConfig(dir) : s.AshitaBootConfig;

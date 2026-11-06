@@ -400,7 +400,7 @@
                                    Text="Start the game through Windower 4 or Ashita v4, so everything you've set up in them loads as usual. Provenance still logs you in." />
                         <TextBlock Text="Platform" Style="{StaticResource Label}" />
                         <ComboBox Width="260" HorizontalAlignment="Left" AutomationProperties.Name="Platform"
-                                  ItemsSource="{Binding ThirdPartyHookChoices}" SelectedIndex="{Binding ThirdPartyHookIndex}" />
+                                  ItemsSource="{Binding ThirdPartyHookChoices}" SelectedValuePath="Code" SelectedValue="{Binding Hook}" />
                         <TextBlock Text="{Binding ThirdPartyHookStatus}" Tag="{Binding ThirdPartyHookStatusIsError}"
                                    Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12"
                                    Margin="0,10,0,16" />

@@ -1,3 +1,4 @@
+using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
 
 namespace Provenance.Common.Settings;
@@ -41,7 +42,7 @@ public sealed class LauncherSettings
     // 0 online, 1 away, 2 busy, 4 appear offline
     public int PlayOnlineStatus { get; set; }
 
-    public string ThirdPartyHookPlatform { get; set; } = "none";
+    public ThirdPartyHook ThirdPartyHookPlatform { get; set; } = ThirdPartyHook.None;
     public string AshitaPath { get; set; } = "";
     public string AshitaBootConfig { get; set; } = "";
     public string WindowerPath { get; set; } = "";

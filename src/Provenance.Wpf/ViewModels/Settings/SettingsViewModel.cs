@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;
+using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Serilog;
@@ -249,11 +250,11 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     // Multi-account page. The first profile choice is none, which an account that's turned on can't start with
-    public string ProfileDefaultChoice => ThirdPartyHookIndex == 1 ? "Select Ashita boot configuration..." : "Select Windower profile...";
+    public string ProfileDefaultChoice => IsAshita ? "Select Ashita boot configuration..." : "Select Windower profile...";
     public ObservableCollection<MultiAccountRow> MultiAccountRows { get; } = new();
     public ObservableCollection<string> MultiProfileChoices { get; } = new();
-    public bool MultiHasThirdPartyHook => ThirdPartyHookIndex != 0;
-    public string MultiProfileLabel => ThirdPartyHookIndex == 1 ? "Ashita boot configuration" : "Windower profile";
+    public bool MultiHasThirdPartyHook => Hook != ThirdPartyHook.None;
+    public string MultiProfileLabel => IsAshita ? "Ashita boot configuration" : "Windower profile";
 
     // read-only while a run goes, it saves refused and blocked accounts as they happen and a save from here
     // mustn't undo that
@@ -315,7 +316,7 @@ public partial class SettingsViewModel : ObservableObject
         RefreshMultiChoices();
     }
 
-    private ObservableCollection<HookProfileItem>? ChoiceItems => ThirdPartyHookIndex switch { 1 => AshitaBootConfigs, 2 => WindowerProfiles, _ => null };
+    private ObservableCollection<HookProfileItem>? ChoiceItems => Hook switch { ThirdPartyHook.Ashita => AshitaBootConfigs, ThirdPartyHook.Windower => WindowerProfiles, _ => null };
 
     private string ToChoice(string? stored) =>
         stored is null ? ProfileDefaultChoice
@@ -333,7 +334,7 @@ public partial class SettingsViewModel : ObservableObject
         var keep = MultiAccountRows.Select(r => r.ThirdPartyHookProfile).ToList();
         MultiProfileChoices.Clear();
         MultiProfileChoices.Add(ProfileDefaultChoice);
-        foreach (var c in ThirdPartyHookIndex == 1 ? AshitaBootConfigs : ThirdPartyHookIndex == 2 ? WindowerProfiles : Enumerable.Empty<HookProfileItem>())
+        foreach (var c in ChoiceItems ?? Enumerable.Empty<HookProfileItem>())
             MultiProfileChoices.Add(c.Display);
         for (int i = 0; i < MultiAccountRows.Count; i++)
             MultiAccountRows[i].ThirdPartyHookProfile = !platformChanged && MultiProfileChoices.Contains(keep[i]) ? keep[i] : ProfileDefaultChoice;

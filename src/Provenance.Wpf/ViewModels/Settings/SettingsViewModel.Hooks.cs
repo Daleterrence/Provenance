@@ -12,6 +12,7 @@ using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
 using Serilog;
 using BootConfig = Provenance.Common.Game.Ashita.AshitaBootConfig;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
@@ -19,9 +20,10 @@ namespace Provenance.Wpf.ViewModels.Settings;
 // every change saves straight away
 public partial class SettingsViewModel
 {
-    public string[] ThirdPartyHookChoices { get; } = { "None", "Ashita v4", "Windower 4" };
+    public IReadOnlyList<Choice<ThirdPartyHook>> ThirdPartyHookChoices { get; } =
+        [new(ThirdPartyHook.None, "None"), new(ThirdPartyHook.Ashita, "Ashita v4"), new(ThirdPartyHook.Windower, "Windower 4")];
 
-    [ObservableProperty] private int _thirdPartyHookIndex;
+    [ObservableProperty] private ThirdPartyHook _hook;
     [ObservableProperty] private string _ashitaPath = string.Empty;
     [ObservableProperty] private string _windowerPath = string.Empty;
     [ObservableProperty] private HookProfileItem? _ashitaBootConfig;
@@ -32,8 +34,8 @@ public partial class SettingsViewModel
     [ObservableProperty] private bool _profileStatusIsError;
     public ObservableCollection<HookProfileItem> AshitaBootConfigs { get; } = new();
     public ObservableCollection<HookProfileItem> WindowerProfiles { get; } = new();
-    public bool IsAshita => ThirdPartyHookIndex == 1;
-    public bool IsWindower => ThirdPartyHookIndex == 2;
+    public bool IsAshita => Hook == ThirdPartyHook.Ashita;
+    public bool IsWindower => Hook == ThirdPartyHook.Windower;
 
     // the window fills these in, a test answers them itself
     internal Func<string, string, string, Func<string, string?>, string?>? AskName { get; set; }
@@ -45,12 +47,14 @@ public partial class SettingsViewModel
     internal Action<Action> Later { get; set; } = a => a();
 
     // the Settings tab that's showing, which the window keeps up to date
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private int _shownTab;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private SettingsTab _shownTab;
 
     // Windower/Ashita, Game and Addons and plugins are the tabs that change a profile, though there's nothing to pick
     // on Addons and plugins while every profile gets the same list
-    public bool ShowProfileSwitcher => ShownTab is 1 or 2 or 3 && (IsWindower || IsAshita) && !(ShownTab == 3 && Addons is { SameListForEveryProfile: true });
-    public bool ShowProfileTools => ShownTab == 1;
+    public bool ShowProfileSwitcher =>
+        ShownTab is SettingsTab.WindowerAshita or SettingsTab.Game or SettingsTab.AddonsPlugins && (IsWindower || IsAshita)
+        && !(ShownTab == SettingsTab.AddonsPlugins && Addons is { SameListForEveryProfile: true });
+    public bool ShowProfileTools => ShownTab == SettingsTab.WindowerAshita;
     public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita boot configuration:" : "Editing Windower profile:";
     internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = (dir, branch) => new WindowerUpdater(dir, branch);
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
@@ -66,7 +70,7 @@ public partial class SettingsViewModel
         _loadingThirdPartyHook = true;
         var s = _settings.Current;
         if (ThirdPartyProfiles.MapOldCopies(s)) _settings.Save(s);
-        ThirdPartyHookIndex = s.ThirdPartyHookPlatform switch { ThirdPartyHook.Ashita => 1, ThirdPartyHook.Windower => 2, _ => 0 };
+        Hook = s.ThirdPartyHookPlatform;
         AshitaPath = AshitaInstall.Detect(s.AshitaPath) ?? s.AshitaPath;
         WindowerPath = WindowerInstall.Detect(s.WindowerPath) ?? s.WindowerPath;
         _loadingThirdPartyHook = false;
@@ -106,13 +110,13 @@ public partial class SettingsViewModel
 
     private void UpdateThirdPartyHookStatus()
     {
-        (ThirdPartyHookStatus, ThirdPartyHookStatusIsError) = ThirdPartyHookIndex switch
+        (ThirdPartyHookStatus, ThirdPartyHookStatusIsError) = Hook switch
         {
-            1 when AshitaDir is null => ("Couldn't find Ashita v4 in that folder.", true),
-            1 => ("The game starts through Ashita with the boot configuration picked at the top.", false),
-            2 when WindowerDir is null => ("Couldn't find Windower 4 in that folder.", true),
-            2 when FolderPins.Linked(WindowerDir) => (WindowerInstall.LinkedText, true),
-            2 => ("The game starts through Windower with the profile picked at the top.", false),
+            ThirdPartyHook.Ashita when AshitaDir is null => ("Couldn't find Ashita v4 in that folder.", true),
+            ThirdPartyHook.Ashita => ("The game starts through Ashita with the boot configuration picked at the top.", false),
+            ThirdPartyHook.Windower when WindowerDir is null => ("Couldn't find Windower 4 in that folder.", true),
+            ThirdPartyHook.Windower when FolderPins.Linked(WindowerDir) => (WindowerInstall.LinkedText, true),
+            ThirdPartyHook.Windower => ("The game starts through Windower with the profile picked at the top.", false),
             _ => ("The game starts directly, without Windower or Ashita.", false),
         };
         OnPropertyChanged(nameof(IsAshita));
@@ -126,7 +130,7 @@ public partial class SettingsViewModel
     {
         if (_loadingThirdPartyHook) return;
         var s = _settings.Current;
-        s.ThirdPartyHookPlatform = ThirdPartyHookIndex switch { 1 => ThirdPartyHook.Ashita, 2 => ThirdPartyHook.Windower, _ => ThirdPartyHook.None };
+        s.ThirdPartyHookPlatform = Hook;
         s.AshitaPath = AshitaPath;
         s.WindowerPath = WindowerPath;
         // nothing shown (no folder yet) keeps what was picked before
@@ -140,15 +144,20 @@ public partial class SettingsViewModel
     // set once the player's agreed to a restart for a platform change, the window closes and the app restarts after
     public bool RestartWanted { get; private set; }
 
-    public static string RestartText(int from, int to) =>
-        (from is 1 or 2 ? $"You're already logged in, so {PlatformName(from)} is still loaded." : "You're already logged in without Windower or Ashita.")
-        + (to is 1 or 2 ? $" Provenance needs to restart to switch to {PlatformName(to)}." : $" Provenance needs to restart to stop using {PlatformName(from)}.");
+    public static string RestartText(ThirdPartyHook from, ThirdPartyHook to) =>
+        (from != ThirdPartyHook.None ? $"You're already logged in, so {PlatformName(from)} is still loaded." : "You're already logged in without Windower or Ashita.")
+        + (to != ThirdPartyHook.None ? $" Provenance needs to restart to switch to {PlatformName(to)}." : $" Provenance needs to restart to stop using {PlatformName(from)}.");
 
-    private static string PlatformName(int index) => index switch { 1 => "Ashita", 2 => "Windower", _ => "no Windower or Ashita" };
+    private static string PlatformName(ThirdPartyHook hook) => hook switch
+    {
+        ThirdPartyHook.Ashita => "Ashita",
+        ThirdPartyHook.Windower => "Windower",
+        _ => "no Windower or Ashita",
+    };
 
     // after the first load, switching between Windower and Ashita clears each account's stored profile. Logged in, the
     // old one's loaded, so it takes a restart, and a no puts it back unsaved
-    partial void OnThirdPartyHookIndexChanged(int oldValue, int newValue)
+    partial void OnHookChanged(ThirdPartyHook oldValue, ThirdPartyHook newValue)
     {
         bool restart = !_loadingThirdPartyHook && _loggedIn?.Invoke() == true;
         if (restart && AskRestart?.Invoke(RestartText(oldValue, newValue)) != true)
@@ -160,17 +169,17 @@ public partial class SettingsViewModel
         RefreshMultiChoices(platformChanged: !_loadingThirdPartyHook);
         if (_loadingThirdPartyHook) return;
         // a pol.exe pre-started for a plain login would hold off Windower's updates, and it's no use to either of them
-        if (newValue is 1 or 2) _stopPrestart?.Invoke();
+        if (newValue != ThirdPartyHook.None) _stopPrestart?.Invoke();
         LoadCards();
         if (!restart) return;
         RestartWanted = true;
         Restart?.Invoke();
     }
 
-    private void PutPlatformBack(int index)
+    private void PutPlatformBack(ThirdPartyHook hook)
     {
         _loadingThirdPartyHook = true;
-        try { ThirdPartyHookIndex = index; }
+        try { Hook = hook; }
         finally { _loadingThirdPartyHook = false; }
     }
 
@@ -200,7 +209,7 @@ public partial class SettingsViewModel
 
     // on the Game tab the page moves with the pick, so changes it hasn't saved get asked about first. False when the
     // player backs out, and the pick goes back
-    private bool GameFollows() => ShownTab != 2 || ShowingGame(AskSaveGame);
+    private bool GameFollows() => ShownTab != SettingsTab.Game || ShowingGame(AskSaveGame);
 
     // backing out of that on the way into the Game tab leaves the page on its own profile, so the pick follows it there
     public void PickGameProfile()

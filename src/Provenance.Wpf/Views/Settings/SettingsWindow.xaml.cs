@@ -18,15 +18,14 @@ namespace Provenance.Wpf.Views.Settings;
 public partial class SettingsWindow : Window
 {
     private bool _ownerClosing;   // tray Exit: no question that could leave a window up with the tray gone
-    public const int HandlesTab = 5;
 
     public SettingsWindow()
     {
         InitializeComponent();
         WindowFrame.Attach(this);
-        Tabs.SelectionChanged += (_, _) => ShowPanel(Tabs.SelectedIndex);
-        Loaded += (_, _) => ShowPanel(Tabs.SelectedIndex);
-        Activated += (_, _) => { if (IsLoaded && Tabs.SelectedIndex == 0) ReadLargeAddressAware(); };
+        Tabs.SelectionChanged += (_, _) => ShowPanel((SettingsTab)Tabs.SelectedIndex);
+        Loaded += (_, _) => ShowPanel((SettingsTab)Tabs.SelectedIndex);
+        Activated += (_, _) => { if (IsLoaded && (SettingsTab)Tabs.SelectedIndex == SettingsTab.General) ReadLargeAddressAware(); };
         Deactivated += (_, _) => CancelConsoleKey();
         PreviewMouseDown += (_, _) => { if (!ConsoleKeyButton.IsMouseOver) CancelConsoleKey(); };
         Closing += OnClosing;
@@ -108,18 +107,18 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void ShowPanel(int index)
+    private void ShowPanel(SettingsTab tab)
     {
         if (DataContext is SettingsViewModel vm)
         {
-            vm.ShownTab = index;
+            vm.ShownTab = tab;
             // a profile picked on another tab since the Game page was last shown
-            if (index == 2 && !vm.ShowingGame(vm.AskSaveGame)) vm.PickGameProfile();
+            if (tab == SettingsTab.Game && !vm.ShowingGame(vm.AskSaveGame)) vm.PickGameProfile();
         }
         for (int i = 0; FindName($"Panel{i}") is UIElement panel; i++)
-            panel.Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
-        if (index == 0) ReadLargeAddressAware();
-        if (index == 1 && DataContext is SettingsViewModel hooks) hooks.ShowingHooks();
+            panel.Visibility = i == (int)tab ? Visibility.Visible : Visibility.Collapsed;
+        if (tab == SettingsTab.General) ReadLargeAddressAware();
+        if (tab == SettingsTab.WindowerAshita && DataContext is SettingsViewModel hooks) hooks.ShowingHooks();
     }
 
     // Windower can change pol.exe while this window's open, so it's read again on every show and every switch back

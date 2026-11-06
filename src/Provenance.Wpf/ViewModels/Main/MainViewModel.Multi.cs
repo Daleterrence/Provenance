@@ -54,7 +54,7 @@ public partial class MainViewModel : IMultiRunHost
 
     private IReadOnlyList<MultiRunAccount> _runAccounts = [];
     private Dictionary<string, string?> _runHookProfiles = new();
-    private string _runPlatform = "";
+    private ThirdPartyHook _runPlatform;
 
     private PolSocialSnapshot? _runSnapshot;
     private readonly List<string> _lateGameFailures = [];
@@ -139,7 +139,7 @@ public partial class MainViewModel : IMultiRunHost
             _runSnapshot = null;
             _runAccounts = [];
             _runHookProfiles = new();
-            _runPlatform = "";
+            _runPlatform = ThirdPartyHook.None;
             _openSettings?.MultiRunChanged();
         }
         var failures = result?.Failures ?? [];

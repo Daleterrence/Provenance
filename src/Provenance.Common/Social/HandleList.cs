@@ -16,7 +16,6 @@ public sealed record HandleGroup(PolHandle Handle, IReadOnlyList<HandleCharacter
 public static class HandleList
 {
     public const int MaxContentIds = 8;
-    public const int Ffxi = 1;
 
     public const string LimitText = "Content ID limit reached. Cannot link any more Content IDs.";
     public const string LoggedOutText = "You're not logged in. Log in to see your handles and the characters linked to them.";
@@ -35,7 +34,7 @@ public static class HandleList
 
     public static (IReadOnlyList<HandleGroup> Handles, IReadOnlyList<HandleCharacter> Unlinked) Build(PolSocialSnapshot snap)
     {
-        var ffxi = snap.ContentIds.Where(c => c.Type == Ffxi).OrderBy(c => c.Order).ThenBy(c => c.Index).ToList();
+        var ffxi = snap.ContentIds.Where(c => c.Type == ContentIdType.Ffxi).OrderBy(c => c.Order).ThenBy(c => c.Index).ToList();
         var handles = snap.Handles.OrderBy(h => h.Order).ThenBy(h => h.Slot).ToList();
         var slots = handles.Select(h => h.Slot).ToHashSet();
         var groups = handles.Select(h => new HandleGroup(h,

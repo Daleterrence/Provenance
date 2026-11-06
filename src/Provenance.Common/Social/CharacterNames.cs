@@ -60,8 +60,8 @@ public sealed class CharacterNames
     // codes and an empty name aren't kept, nobody's seen what those mean for an FFXI profile yet
     public static KnownCharacter? FromAnswer(string state, PolCharacterLookup? r) => state switch
     {
-        "done" when r is { NameState: PolProfile.Shown, Name.Length: > 0 } => new(r.Name),
-        "done" when r is { NameState: PolProfile.Private } => new("", "private"),
+        "done" when r is { NameState: ProfileFieldState.Shown, Name.Length: > 0 } => new(r.Name),
+        "done" when r is { NameState: ProfileFieldState.Private } => new("", "private"),
         // -0x14cc, the viewer's "Selected profile is hidden."
         "failed:-5324" => new("", "private"),
         "failed:no profile" => new("", "not found"),
@@ -71,8 +71,8 @@ public sealed class CharacterNames
     // a profile tab's read: whatever name it shows, so an old one never outlives a record gone private. A shown record
     // with no name isn't kept (nobody knows what that means yet), like FromAnswer
     public static KnownCharacter? FromProfile(PolFfxiProfile r) =>
-        r is { NameState: PolProfile.Shown, Name.Length: > 0 } ? new(r.Name)
-        : r.NameState == PolProfile.Private ? new("", "private") : null;
+        r is { NameState: ProfileFieldState.Shown, Name.Length: > 0 } ? new(r.Name)
+        : r.NameState == ProfileFieldState.Private ? new("", "private") : null;
 
     private static Dictionary<string, KnownCharacter> Read(string path)
     {

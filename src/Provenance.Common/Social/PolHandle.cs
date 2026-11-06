@@ -4,5 +4,5 @@ namespace Provenance.Common.Social;
 public sealed record PolHandle(int Slot, string Name, string Key, int ProfilePictureId, int Order, bool Active,
                                IReadOnlyList<int> ContentIds);
 
-// a Content ID record, type 1 is FFXI. Handle is the slot it's linked to or -1
-public sealed record PolContentId(int Index, int Type, string Name, string Text, int Order, int Handle, string Key);
+// a Content ID record. Handle is the slot it's linked to or -1
+public sealed record PolContentId(int Index, ContentIdType Type, string Name, string Text, int Order, int Handle, string Key);
