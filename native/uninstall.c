@@ -25,8 +25,6 @@
                                         folder goes too once it's empty. Removing everything still leaves the other
                                         product's settings when they were kept at its own uninstall: its record's gone,
                                         and its settings key and its usr or USER folder are both still there
-   An S, C, T or V line that the record of another region's install (found through that region's InstallFolder) has too
-   is left alone, since two regions side by side register some of the same shortcuts and COM classes.
    The .txt can sit somewhere anyone can write to, so I, R, K and L only count when this product's own InstallFolder
    value under the L key (HKLM, admins only) names the R folder exactly. And nothing runs at all unless only
    Administrators and SYSTEM own or can change the .txt and its folder */
@@ -96,10 +94,6 @@ static wchar_t g_root[MAX_PATH * 2];
 static wchar_t g_tree[MAX_PATH * 2], g_kept[MAX_PATH * 2];
 static wchar_t g_path[32768];   /* what remove_entry's on, for the restart list */
 static int g_count, g_later, g_pending;
-#define MAX_NEIGHBOURS 16   /* every product of every region, with room to spare */
-static wchar_t *g_neighbour_text[MAX_NEIGHBOURS];   /* records of the other regions' installs, for what they share */
-static DWORD g_neighbour_chars[MAX_NEIGHBOURS];
-static int g_neighbours;
 
 static void status(const wchar_t *text)
 {
@@ -619,80 +613,6 @@ static wchar_t *load(const wchar_t *path, DWORD *chars)
     return buf;
 }
 
-/* the records of installs in the other regions, found through their InstallFolder values. Two regions installed side by
-   side register some of the same COM classes, shortcuts and values, so those stay while the other region has them */
-static void load_neighbours(wchar_t *text, DWORD chars, const wchar_t *record)
-{
-    wchar_t own[64], mine[MAX_PATH * 2], key[600], seen[8][MAX_PATH * 2];
-    int i, nseen = 0;
-    if (!first(text, chars, L'L', own, _countof(own))) own[0] = 0;
-    if (!GetFullPathNameW(record, _countof(mine), mine, NULL)) mine[0] = 0;
-    for (i = 0; i < (int)_countof(g_regions); i++) {
-        HKEY k;
-        DWORD v;
-        if (!_wcsicmp(g_regions[i], own)) continue;
-        _snwprintf_s(key, _countof(key), _TRUNCATE, L"%s\\InstallFolder", g_regions[i]);
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, key, 0, KEY_READ | KEY_WOW64_32KEY, &k) != ERROR_SUCCESS) continue;
-        for (v = 0;; v++) {
-            wchar_t name[64], value[MAX_PATH * 2] = L"", folder[MAX_PATH * 2], pattern[MAX_PATH * 2 + 16], *slash;
-            DWORD nlen = _countof(name), size = sizeof value - sizeof(wchar_t), type;
-            WIN32_FIND_DATAW fd;
-            HANDLE h;
-            int up;
-            LSTATUS r = RegEnumValueW(k, v, name, &nlen, NULL, &type, (BYTE *)value, &size);
-            if (r != ERROR_SUCCESS && r != ERROR_MORE_DATA) break;
-            /* <root>\SquareEnix\<product> is the folder, and the records are in <root>\Uninstall */
-            if (r != ERROR_SUCCESS || type != REG_SZ || !full_path(value, folder, _countof(folder))) continue;
-            for (up = 0; up < 2 && (slash = wcsrchr(folder, L'\\')) != NULL; up++) *slash = 0;
-            if (up < 2 || !local_path(folder) ||
-                _snwprintf_s(pattern, _countof(pattern), _TRUNCATE, L"%s\\Uninstall\\*.txt", folder) < 0)
-                continue;
-            /* both products of a region point at the same folder, it only needs reading once */
-            for (up = 0; up < nseen && _wcsicmp(seen[up], folder); up++) ;
-            if (up < nseen) continue;
-            if (nseen < (int)_countof(seen)) lstrcpynW(seen[nseen++], folder, _countof(seen[0]));
-            h = FindFirstFileW(pattern, &fd);
-            if (h == INVALID_HANDLE_VALUE) continue;
-            do {
-                wchar_t path[MAX_PATH * 2], full[MAX_PATH * 2], region[64], *loaded;
-                DWORD n;
-                /* the same check as the record being run, one anyone can change counts as no record */
-                if (_snwprintf_s(path, _countof(path), _TRUNCATE, L"%s\\Uninstall\\%s", folder, fd.cFileName) < 0 ||
-                    !GetFullPathNameW(path, _countof(full), full, NULL) || !_wcsicmp(full, mine) ||
-                    g_neighbours == MAX_NEIGHBOURS || unprotected(path) || !(loaded = load(path, &n)))
-                    continue;
-                /* a record of this region is this product's own or its other product's, not a neighbour */
-                if (own[0] && first(loaded, n, L'L', region, _countof(region)) && !_wcsicmp(region, own)) {
-                    free(loaded);
-                    continue;
-                }
-                g_neighbour_text[g_neighbours] = loaded;
-                g_neighbour_chars[g_neighbours++] = n;
-            } while (FindNextFileW(h, &fd));
-            FindClose(h);
-        }
-        RegCloseKey(k);
-    }
-}
-
-static void free_neighbours(void)
-{
-    while (g_neighbours > 0) free(g_neighbour_text[--g_neighbours]);
-}
-
-static int neighbour_has(wchar_t kind, const wchar_t *arg)
-{
-    size_t len = wcslen(arg);
-    int i;
-    for (i = 0; i < g_neighbours; i++) {
-        cursor c = lines_of(g_neighbour_text[i], g_neighbour_chars[i]);
-        wchar_t got, *a, *eol;
-        while (next_line(&c, &got, &a, &eol))
-            if (got == kind && (size_t)(eol - a) == len && !_wcsnicmp(a, arg, len)) return 1;
-    }
-    return 0;
-}
-
 static void run(wchar_t *text, DWORD chars, wchar_t kind)
 {
     cursor c = lines_of(text, chars);
@@ -701,10 +621,6 @@ static void run(wchar_t *text, DWORD chars, wchar_t kind)
         if (got != kind) continue;
         save = *eol;
         *eol = 0;
-        if ((kind == L'S' || kind == L'C' || kind == L'T' || kind == L'V') && neighbour_has(kind, arg)) {
-            *eol = save;
-            continue;
-        }
         switch (kind) {
         case L'S':
             delete_file(arg);
@@ -800,7 +716,6 @@ static void remove_all(wchar_t *text, DWORD chars, const wchar_t *record, const 
     run(text, chars, L'I');
     confirm(text, chars);
     status(L"Removing shortcuts and registry entries");
-    load_neighbours(text, chars, record);
     run(text, chars, L'S');
     run(text, chars, L'C');
     run(text, chars, L'K');
@@ -811,7 +726,6 @@ static void remove_all(wchar_t *text, DWORD chars, const wchar_t *record, const 
     run(text, chars, L'V');
     run(text, chars, L'D');
     run(text, chars, L'A');
-    free_neighbours();
     DeleteFileW(record);
     /* the last product gone: the region's settings, both programs and their folder go */
     _snwprintf_s(pattern, _countof(pattern), _TRUNCATE, L"%s\\*.txt", dir);
