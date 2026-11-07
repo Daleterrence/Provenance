@@ -7,19 +7,18 @@ using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Views.Dialogs;
 
-public partial class MessageDialog : Window
+public partial class MessageDialog : AppWindow
 {
     public MessageDialog()
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
     }
 
     public static void ShowError(Window? owner, string title, string body, bool offerLogs = false) =>
-        ForNotice(title, body, offerLogs).ShowOver(owner);
+        ForNotice(title, body, offerLogs).ShowDialogOver(owner);
 
     public static void ShowInfo(Window? owner, string title, string body) =>
-        ForNotice(title, body).ShowOver(owner);
+        ForNotice(title, body).ShowDialogOver(owner);
 
     // an error or a notice, set up but not shown yet
     internal static MessageDialog ForNotice(string title, string body, bool offerLogs = false) => Create(title, body, notice: true, offerLogs);
@@ -31,7 +30,7 @@ public partial class MessageDialog : Window
                                string? cancelLabel = null)
     {
         var dlg = ForConfirm(title, body, okLabel, choiceA, choiceB, destructive, safeKeys, cancelLabel);
-        if (dlg.ShowOver(owner) != true) return null;
+        if (dlg.ShowDialogOver(owner) != true) return null;
         return dlg.ChoiceB.IsChecked == true && dlg.Choices.Visibility == Visibility.Visible ? 1 : 0;
     }
 
@@ -81,13 +80,6 @@ public partial class MessageDialog : Window
     }
 
     internal bool ShowsNotice => NoticeArt.Visibility == Visibility.Visible;
-
-    private bool? ShowOver(Window? owner)
-    {
-        if (owner is { IsVisible: true }) Owner = owner;
-        else WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        return ShowDialog();
-    }
 
     private void OnOk(object sender, RoutedEventArgs e) => DialogResult = true;
 

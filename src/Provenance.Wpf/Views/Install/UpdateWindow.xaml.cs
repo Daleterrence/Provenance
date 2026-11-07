@@ -4,14 +4,13 @@ using Provenance.Wpf.Controls;
 
 namespace Provenance.Wpf.Views.Install;
 
-public partial class UpdateWindow : Window
+public partial class UpdateWindow : AppWindow
 {
     public event EventHandler? SkipClicked;
 
     public UpdateWindow()
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
     }
 
     public void ShowDownload(string version)

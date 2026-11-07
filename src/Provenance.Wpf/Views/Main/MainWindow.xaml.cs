@@ -13,7 +13,7 @@ using Provenance.Wpf.ViewModels.Main;
 
 namespace Provenance.Wpf.Views.Main;
 
-public partial class MainWindow : Window
+public partial class MainWindow : AppWindow
 {
     internal TrayIcon? _tray;
     private bool _exiting, _askingToExit, _cancellingLogIn, _flashing;
@@ -23,7 +23,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         DataContextChanged += OnDataContextChanged;
         IsVisibleChanged += (_, _) => ReportShown();
         StateChanged += (_, _) => ReportShown();
@@ -197,8 +196,6 @@ public partial class MainWindow : Window
     });
 
     private void OnRequestExit() => Dispatcher.InvokeAsync(ExitWithoutAsking);
-
-    private void OnClose(object sender, RoutedEventArgs e) => Close();
 
     internal void OnMinimize(object sender, RoutedEventArgs e)
     {

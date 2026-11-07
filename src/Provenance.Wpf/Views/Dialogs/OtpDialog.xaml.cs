@@ -7,7 +7,7 @@ using Provenance.Wpf.Controls;
 namespace Provenance.Wpf.Views.Dialogs;
 
 // Asked after sign in is clicked. The code only ever lives in memory for that one launch
-public partial class OtpDialog : Window
+public partial class OtpDialog : AppWindow
 {
     private string? _code;
     private readonly TextBox[] _boxes = new TextBox[6];
@@ -28,7 +28,6 @@ public partial class OtpDialog : Window
         _account = account;
         _reuseKey = reuseKey;
         InitializeComponent();
-        WindowFrame.Attach(this);
         for (int i = 0; i < _boxes.Length; i++)
         {
             var box = new TextBox
@@ -67,9 +66,7 @@ public partial class OtpDialog : Window
                               string account = "")
     {
         var dlg = new OtpDialog(source, item, account, reuseKey, squareEnixId);
-        if (owner is { IsVisible: true }) dlg.Owner = owner;
-        else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        return dlg.ShowDialog() == true ? dlg._code : null;
+        return dlg.ShowDialogOver(owner) == true ? dlg._code : null;
     }
 
     private string Code => string.Concat(_boxes.Select(b => b.Text));

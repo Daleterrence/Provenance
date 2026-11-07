@@ -1,12 +1,13 @@
-<Window x:Class="Provenance.Wpf.Views.Chat.CreateRoomDialog"
+<controls:AppWindow x:Class="Provenance.Wpf.Views.Chat.CreateRoomDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         Title="Create Room" Icon="/Assets/provenance.ico" Width="480" SizeToContent="Height"
-        WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        TextElement.Foreground="{DynamicResource Text.1}" FontFamily="{DynamicResource Font.Body}"
-        MouseLeftButtonDown="OnDrag">
+        MouseLeftButtonDown="OnDrag"
+        CloseOnEscape="False"
+        Style="{StaticResource DialogCard}">
 
     <Window.Resources>
         <Style x:Key="Field" TargetType="FrameworkElement">
@@ -14,62 +15,56 @@
         </Style>
     </Window.Resources>
 
-    <Border Margin="14" CornerRadius="{StaticResource Radius.Dialog}" Background="{DynamicResource Surface.2}"
-            BorderBrush="{DynamicResource Border.Window}" BorderThickness="1">
-        <Border.Effect>
-            <DynamicResource ResourceKey="Shadow.Dialog" />
-        </Border.Effect>
-        <StackPanel Margin="22,20,22,16">
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                <materialDesign:PackIcon Kind="ForumPlusOutline" Width="22" Height="22"
-                                         Foreground="{DynamicResource Primary}" VerticalAlignment="Center" />
-                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Text="Create Room" />
-            </StackPanel>
-
-            <Grid ColumnDefinitions="Auto,*">
-                <Grid.RowDefinitions>
-                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
-                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
-                </Grid.RowDefinitions>
-                <TextBlock Style="{StaticResource FormLabel}" Text="Room name" />
-                <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,5" MaxLength="30" FontSize="13" Padding="10,6"
-                         Style="{StaticResource OutlinedField}" materialDesign:HintAssist.IsFloating="False"
-                         materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" TextChanged="OnChanged" />
-
-                <TextBlock Grid.Row="1" Style="{StaticResource FormLabel}" Text="Zone" />
-                <ComboBox x:Name="ZoneBox" Grid.Row="1" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name"
-                          SelectionChanged="OnChanged" />
-
-                <TextBlock Grid.Row="2" Style="{StaticResource FormLabel}" Text="Occupancy" />
-                <ComboBox x:Name="OccupancyBox" Grid.Row="2" Grid.Column="1" Margin="0,5" FontSize="13" />
-
-                <TextBlock Grid.Row="3" Style="{StaticResource FormLabel}" Text="Password" />
-                <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,5" Orientation="Horizontal">
-                    <RadioButton x:Name="PasswordOn" Content="On" Margin="0,0,18,0" Checked="OnPasswordSwitch" />
-                    <RadioButton x:Name="PasswordOff" Content="Off" IsChecked="True" Checked="OnPasswordSwitch" />
-                </StackPanel>
-                <PasswordBox x:Name="PasswordBox" Grid.Row="4" Grid.Column="1" Margin="0,5" MaxLength="16" FontSize="13" Padding="10,6"
-                             Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Enter room password"
-                             materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
-                <PasswordBox x:Name="ConfirmBox" Grid.Row="5" Grid.Column="1" Margin="0,5" MaxLength="16" FontSize="13" Padding="10,6"
-                             Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Confirm password"
-                             materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
-
-                <TextBlock Grid.Row="6" Style="{StaticResource FormLabel}" Text="Members" />
-                <ComboBox x:Name="MembersBox" Grid.Row="6" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
-                <TextBlock Grid.Row="7" Style="{StaticResource FormLabel}" Text="Purpose" />
-                <ComboBox x:Name="PurposeBox" Grid.Row="7" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
-                <TextBlock Grid.Row="8" Style="{StaticResource FormLabel}" Text="Language" />
-                <ComboBox x:Name="LanguageBox" Grid.Row="8" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
-            </Grid>
-
-            <TextBlock x:Name="ErrorText" Margin="0,8,0,0" FontSize="12" Foreground="{DynamicResource State.Down}"
-                       TextWrapping="Wrap" Visibility="Collapsed" />
-
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                <Button Style="{StaticResource RedButton}" Content="CANCEL" Margin="0,0,8,0" Click="OnCancel" IsCancel="True" />
-                <Button Content="CREATE" MinWidth="72" IsDefault="True" Click="OnCreate" Style="{StaticResource PolButton}" />
-            </StackPanel>
+    <StackPanel Margin="22,20,22,16">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+            <materialDesign:PackIcon Kind="ForumPlusOutline" Width="22" Height="22"
+                                     Foreground="{DynamicResource Primary}" VerticalAlignment="Center" />
+            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Text="Create Room" />
         </StackPanel>
-    </Border>
-</Window>
+
+        <Grid ColumnDefinitions="Auto,*">
+            <Grid.RowDefinitions>
+                <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+            </Grid.RowDefinitions>
+            <TextBlock Style="{StaticResource FormLabel}" Text="Room name" />
+            <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,5" MaxLength="30" FontSize="13" Padding="10,6"
+                     Style="{StaticResource OutlinedField}" materialDesign:HintAssist.IsFloating="False"
+                     materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" TextChanged="OnChanged" />
+
+            <TextBlock Grid.Row="1" Style="{StaticResource FormLabel}" Text="Zone" />
+            <ComboBox x:Name="ZoneBox" Grid.Row="1" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name"
+                      SelectionChanged="OnChanged" />
+
+            <TextBlock Grid.Row="2" Style="{StaticResource FormLabel}" Text="Occupancy" />
+            <ComboBox x:Name="OccupancyBox" Grid.Row="2" Grid.Column="1" Margin="0,5" FontSize="13" />
+
+            <TextBlock Grid.Row="3" Style="{StaticResource FormLabel}" Text="Password" />
+            <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,5" Orientation="Horizontal">
+                <RadioButton x:Name="PasswordOn" Content="On" Margin="0,0,18,0" Checked="OnPasswordSwitch" />
+                <RadioButton x:Name="PasswordOff" Content="Off" IsChecked="True" Checked="OnPasswordSwitch" />
+            </StackPanel>
+            <PasswordBox x:Name="PasswordBox" Grid.Row="4" Grid.Column="1" Margin="0,5" MaxLength="16" FontSize="13" Padding="10,6"
+                         Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Enter room password"
+                         materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
+            <PasswordBox x:Name="ConfirmBox" Grid.Row="5" Grid.Column="1" Margin="0,5" MaxLength="16" FontSize="13" Padding="10,6"
+                         Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Confirm password"
+                         materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
+
+            <TextBlock Grid.Row="6" Style="{StaticResource FormLabel}" Text="Members" />
+            <ComboBox x:Name="MembersBox" Grid.Row="6" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
+            <TextBlock Grid.Row="7" Style="{StaticResource FormLabel}" Text="Purpose" />
+            <ComboBox x:Name="PurposeBox" Grid.Row="7" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
+            <TextBlock Grid.Row="8" Style="{StaticResource FormLabel}" Text="Language" />
+            <ComboBox x:Name="LanguageBox" Grid.Row="8" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
+        </Grid>
+
+        <TextBlock x:Name="ErrorText" Margin="0,8,0,0" FontSize="12" Foreground="{DynamicResource State.Down}"
+                   TextWrapping="Wrap" Visibility="Collapsed" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Style="{StaticResource RedButton}" Content="CANCEL" Margin="0,0,8,0" Click="OnCancel" IsCancel="True" />
+            <Button Content="CREATE" MinWidth="72" IsDefault="True" Click="OnCreate" Style="{StaticResource PolButton}" />
+        </StackPanel>
+    </StackPanel>
+</controls:AppWindow>

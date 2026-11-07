@@ -19,33 +19,26 @@ internal static class WindowFrame
     // older builds get the square frame instead
     internal static bool Rounded { get; set; } = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100);
 
-    public static void Attach(Window w)
+    public static void Apply(Window w)
     {
         // the layered ones draw their own corners, border and shadow round a see-through margin, so DWM stays out
-        if (w.AllowsTransparency)
+        if (w.AllowsTransparency) return;
+        var hwnd = new WindowInteropHelper(w).Handle;
+        HwndSource.FromHwnd(hwnd)?.AddHook(Hook);
+        if (Rounded && RoundCorners(hwnd))
         {
-            if (!Rounded && w.Content is Border root) root.CornerRadius = new CornerRadius(0);
+            // the docs only promise DWM stops rounding a maximised window, not that the line goes too
+            Action edge = () => DwmEdge(w, hwnd, ((SolidColorBrush)w.FindResource(Edge)).Color);
+            edge();
+            w.StateChanged += (_, _) => edge();
+            AppTheme.Changed += edge;
+            w.Closed += (_, _) => AppTheme.Changed -= edge;
             return;
         }
-        w.SourceInitialized += (_, _) =>
-        {
-            var hwnd = new WindowInteropHelper(w).Handle;
-            HwndSource.FromHwnd(hwnd)?.AddHook(Hook);
-            if (Rounded && RoundCorners(hwnd))
-            {
-                // the docs only promise DWM stops rounding a maximised window, not that the line goes too
-                Action edge = () => DwmEdge(w, hwnd, ((SolidColorBrush)w.FindResource(Edge)).Color);
-                edge();
-                w.StateChanged += (_, _) => edge();
-                AppTheme.Changed += edge;
-                w.Closed += (_, _) => AppTheme.Changed -= edge;
-                return;
-            }
-            w.SetResourceReference(Control.BorderBrushProperty, Edge);
-            WpfEdge(w, VisualTreeHelper.GetDpi(w));
-            w.StateChanged += (_, _) => WpfEdge(w, VisualTreeHelper.GetDpi(w));
-            w.DpiChanged += (_, e) => WpfEdge(w, e.NewDpi);
-        };
+        w.SetResourceReference(Control.BorderBrushProperty, Edge);
+        WpfEdge(w, VisualTreeHelper.GetDpi(w));
+        w.StateChanged += (_, _) => WpfEdge(w, VisualTreeHelper.GetDpi(w));
+        w.DpiChanged += (_, e) => WpfEdge(w, e.NewDpi);
     }
 
     private static bool RoundCorners(IntPtr hwnd)

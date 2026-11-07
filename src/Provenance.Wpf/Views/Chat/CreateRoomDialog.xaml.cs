@@ -8,7 +8,7 @@ namespace Provenance.Wpf.Views.Chat;
 
 // the viewer's Create Room form: name, zone, occupancy 2-20, password on or off, and the three category groups with
 // Not set first
-public partial class CreateRoomDialog : Window
+public partial class CreateRoomDialog : AppWindow
 {
     public sealed record Choice(int Code, string Name);
 
@@ -17,7 +17,6 @@ public partial class CreateRoomDialog : Window
     internal CreateRoomDialog()
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         for (int n = ChatRoomFiles.MinOccupancy; n <= ChatRoomFiles.MaxOccupancy; n++) OccupancyBox.Items.Add($"{n} members");
         OccupancyBox.SelectedIndex = ChatRoomFiles.DefaultOccupancy - ChatRoomFiles.MinOccupancy;
         OnPasswordSwitch(this, new RoutedEventArgs());
@@ -48,8 +47,7 @@ public partial class CreateRoomDialog : Window
                                        Func<string, bool> confirm)
     {
         var dlg = For(zones, zone, categories, confirm);
-        dlg.Owner = owner;
-        try { return dlg.ShowDialog() == true ? dlg.Form : null; }
+        try { return dlg.ShowDialogOver(owner) == true ? dlg.Form : null; }
         finally
         {
             dlg.PasswordBox.Clear();

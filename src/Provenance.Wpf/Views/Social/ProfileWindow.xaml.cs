@@ -6,14 +6,13 @@ using Provenance.Wpf.ViewModels.Main;
 
 namespace Provenance.Wpf.Views.Social;
 
-public partial class ProfileWindow : Window
+public partial class ProfileWindow : AppWindow
 {
     private FriendItem _friend;
 
     public ProfileWindow(SocialViewModel vm, FriendItem friend)
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         DataContext = vm;
         _friend = friend;
         SetFriend(friend);
@@ -24,7 +23,6 @@ public partial class ProfileWindow : Window
         });
         vm.ProfilePopup += Popup;
         Closed += (_, _) => vm.ProfilePopup -= Popup;
-        KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Escape) { e.Handled = true; Close(); } };
     }
 
     // the view model only holds one profile, so an open window gets reused rather than two fighting over it

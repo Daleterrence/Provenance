@@ -5,7 +5,7 @@ using Provenance.Wpf.Controls;
 namespace Provenance.Wpf.Views.Dialogs;
 
 // WPF doesn't ship an InputBox, so here's a tiny one
-public partial class InputDialog : Window
+public partial class InputDialog : AppWindow
 {
     private Func<string, string?> _check = _ => null;
     private bool _secret;
@@ -15,14 +15,13 @@ public partial class InputDialog : Window
     internal InputDialog()
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
     }
 
     // the trimmed text, or null when cancelled. validate returns the problem shown under the box, null when it's fine
     public static string? Prompt(Window owner, string title, string prompt, string initialValue = "",
                                  int maxLength = 64, bool allowEmpty = false, Func<string, string?>? validate = null)
     {
-        var dlg = new InputDialog { Owner = owner, Title = title };
+        var dlg = new InputDialog { Title = title };
         dlg.PromptText.Text = prompt;
         dlg.InputBox.MaxLength = maxLength;
         dlg.InputBox.Text = initialValue;
@@ -33,7 +32,7 @@ public partial class InputDialog : Window
             dlg.InputBox.Focus();
             dlg.InputBox.SelectAll();
         };
-        return dlg.ShowDialog() == true ? dlg.InputBox.Text.Trim() : null;
+        return dlg.ShowDialogOver(owner) == true ? dlg.InputBox.Text.Trim() : null;
     }
 
     // the password as typed (never trimmed), or null when cancelled
@@ -41,8 +40,7 @@ public partial class InputDialog : Window
                                        Func<string, string?>? validate = null)
     {
         var dlg = ForSecret(title, prompt, maxLength, validate);
-        dlg.Owner = owner;
-        try { return dlg.ShowDialog() == true ? dlg.SecretBox.Password : null; }
+        try { return dlg.ShowDialogOver(owner) == true ? dlg.SecretBox.Password : null; }
         finally { dlg.SecretBox.Clear(); }
     }
 

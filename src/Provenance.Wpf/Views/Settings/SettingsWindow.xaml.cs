@@ -15,30 +15,28 @@ namespace Provenance.Wpf.Views.Settings;
 
 // General and Windower/Ashita save each change straight away, but the Game page holds its changes until Save, so
 // closing with unsaved Game changes asks first
-public partial class SettingsWindow : Window
+public partial class SettingsWindow : AppWindow
 {
-    private bool _ownerClosing;   // tray Exit: no question that could leave a window up with the tray gone
-
     public SettingsWindow()
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         Tabs.SelectionChanged += (_, _) => ShowPanel((SettingsTab)Tabs.SelectedIndex);
         Loaded += (_, _) => ShowPanel((SettingsTab)Tabs.SelectedIndex);
         Activated += (_, _) => { if (IsLoaded && (SettingsTab)Tabs.SelectedIndex == SettingsTab.General) ReadLargeAddressAware(); };
         Deactivated += (_, _) => CancelConsoleKey();
         PreviewMouseDown += (_, _) => { if (!ConsoleKeyButton.IsMouseOver) CancelConsoleKey(); };
         Closing += OnClosing;
-        // KeyDown not PreviewKeyDown, so an open dropdown gets its Esc first and only closes itself
-        KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Escape) { e.Handled = true; Close(); } };
-        Loaded += (_, _) => { if (Owner != null) Owner.Closing += OnOwnerClosing; };
-        Closed += (_, _) => { if (Owner != null) Owner.Closing -= OnOwnerClosing; };
         DataContextChanged += (_, _) => Wire();
     }
 
     private void Wire()
     {
         if (DataContext is not SettingsViewModel vm) return;
+        // a box handed a new list keeps its old pick without it being in the list, so it's cleared first
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SettingsViewModel.SwitcherProfiles)) ProfileSwitcher.SetCurrentValue(Selector.SelectedItemProperty, null);
+        };
         vm.AskName = (title, prompt, start, check) =>
             InputDialog.Prompt(this, title, prompt, start, maxLength: WindowerNameLength, validate: check);
         vm.Confirm = (title, body, ok, destructive) => MessageDialog.Confirm(this, title, body, ok, destructive: destructive) == 0;
@@ -91,11 +89,9 @@ public partial class SettingsWindow : Window
     // settings.xml takes 255, and Ashita's file names stop well short of that
     private const int WindowerNameLength = 255;
 
-    private void OnOwnerClosing(object? sender, System.ComponentModel.CancelEventArgs e) => _ownerClosing = true;
-
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_ownerClosing || DataContext is not SettingsViewModel { Game.HasUnsavedChanges: true } vm) return;
+        if (OwnerClosing || DataContext is not SettingsViewModel { Game.HasUnsavedChanges: true } vm) return;
         var pick = MessageDialog.Confirm(this, "Unsaved game settings",
             "You've changed some game settings but haven't saved them yet.", "CLOSE",
             "Save the changes, then close", "Close without saving");
@@ -126,8 +122,6 @@ public partial class SettingsWindow : Window
     {
         if (DataContext is SettingsViewModel vm) _ = vm.ReadLargeAddressAwareAsync();
     }
-
-    private void OnClose(object sender, RoutedEventArgs e) => Close();
 
     private void CancelConsoleKey() => (DataContext as SettingsViewModel)?.CancelConsoleKey();
 

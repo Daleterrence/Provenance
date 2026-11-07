@@ -26,7 +26,7 @@ public static class SocialParts
 }
 
 // split, it's two windows on one view model, neither owned by the main window so each lives its own life
-public partial class SocialWindow : Window
+public partial class SocialWindow : AppWindow
 {
     public SocialPart Part { get; }
     private bool HasMessages => Part != SocialPart.Friends;
@@ -37,7 +37,6 @@ public partial class SocialWindow : Window
     {
         Part = part;
         InitializeComponent();
-        WindowFrame.Attach(this);
         ApplyPart();
         // split: a click shows the Messages window alongside (focus stays in the list), a double-click brings it up
         FriendList.FriendSelected += _ => { if (Part == SocialPart.Friends) Vm?.RequestLayout(Layout.ShowMessages); };
@@ -67,13 +66,6 @@ public partial class SocialWindow : Window
         {
             if (Vm is { } vm) Detach(vm);
             if (Application.Current is { } a) a.Activated -= OnAppActivated;
-        };
-        // KeyDown, not Preview, so an open menu, the status list or the comment box gets its Esc first
-        KeyDown += (_, e) =>
-        {
-            if (e.Key != Key.Escape) return;
-            e.Handled = true;
-            Close();
         };
     }
 
@@ -152,7 +144,7 @@ public partial class SocialWindow : Window
             SocialPart.Messages => ("chat", 420.0, 640.0),
             _ => ("smiley", 720.0, 900.0),
         };
-        TitleText.Text = Title = Part.Title();
+        Bar.Title = Title = Part.Title();
         LayoutIcon.Kind = Part == SocialPart.Both ? PackIconKind.ArrowSplitVertical
                                                   : PackIconKind.ArrowCollapseHorizontal;
         var tip = Part == SocialPart.Both ? "Split into a Friends window and a Messages window"
@@ -217,14 +209,6 @@ public partial class SocialWindow : Window
         e.CancelCommand();
         box.SelectedText = ShiftJis.Fit(text, Math.Max(0, room));
         box.CaretIndex = box.SelectionStart + box.SelectionLength;
-    }
-
-    private void OnClose(object sender, RoutedEventArgs e) => Close();
-
-    private void OnMaximize(object sender, RoutedEventArgs e)
-    {
-        if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this);
-        else SystemCommands.MaximizeWindow(this);
     }
 
     private void OnAvatarClick(object sender, MouseButtonEventArgs e) => Vm?.ChangeProfilePictureCommand.Execute(null);

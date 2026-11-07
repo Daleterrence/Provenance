@@ -6,19 +6,13 @@ using Provenance.Wpf.Views.Dialogs;
 
 namespace Provenance.Wpf.Views.Install;
 
-public partial class InstallWindow : Window
+public partial class InstallWindow : AppWindow
 {
-    private bool _ownerClosing;
-
     public InstallWindow()
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         Closing += OnClosing;
-        KeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
-        Loaded += (_, _) => { if (Owner != null) Owner.Closing += OnOwnerClosing; };
         Loaded += (_, _) => GrowForRegionChoice();
-        Closed += (_, _) => { if (Owner != null) Owner.Closing -= OnOwnerClosing; };
     }
 
     // the Region choice only shows with no viewer on the PC. The window grows by exactly its height then (still
@@ -31,13 +25,11 @@ public partial class InstallWindow : Window
         Top -= grow / 2;
     }
 
-    private void OnOwnerClosing(object? sender, System.ComponentModel.CancelEventArgs e) => _ownerClosing = true;
-
     // closing mid-install asks, then stops the download and the installers so nothing keeps running with no window
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (DataContext is not InstallViewModel { Running: true } vm) return;
-        if (_ownerClosing) { vm.CancelCommand.Execute(null); return; }   // the app's closing, so no question
+        if (OwnerClosing) { vm.CancelCommand.Execute(null); return; }   // the app's closing, so no question
         // the view model's "Cancelled" note, worded for a window that's closing
         var what = vm.CurrentStep switch
         {

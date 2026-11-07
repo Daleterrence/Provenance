@@ -27,14 +27,29 @@ public partial class SettingsViewModel
     [ObservableProperty] private ThirdPartyHook _hook;
     [ObservableProperty] private string _ashitaPath = string.Empty;
     [ObservableProperty] private string _windowerPath = string.Empty;
-    [ObservableProperty] private HookProfileItem? _ashitaBootConfig;
-    [ObservableProperty] private HookProfileItem? _windowerProfile;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(SelectedProfile))] private HookProfileItem? _ashitaBootConfig;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(SelectedProfile))] private HookProfileItem? _windowerProfile;
     [ObservableProperty] private string _thirdPartyHookStatus = string.Empty;
     [ObservableProperty] private bool _thirdPartyHookStatusIsError;
     [ObservableProperty] private string _profileStatus = string.Empty;
     [ObservableProperty] private bool _profileStatusIsError;
     public ObservableCollection<HookProfileItem> AshitaBootConfigs { get; } = new();
     public ObservableCollection<HookProfileItem> WindowerProfiles { get; } = new();
+    // the title bar's one switcher shows whichever platform's list is the current one
+    public ObservableCollection<HookProfileItem> SwitcherProfiles => IsAshita ? AshitaBootConfigs : WindowerProfiles;
+    public HookProfileItem? SelectedProfile
+    {
+        get => IsAshita ? AshitaBootConfig : WindowerProfile;
+        // swapping the list in the box clears its selection and says so, which isn't a pick
+        set
+        {
+            if (value is null) return;
+            if (IsAshita) AshitaBootConfig = value;
+            else WindowerProfile = value;
+        }
+    }
+    public string ProfileNoun => IsAshita ? "boot configuration" : "profile";
+    public string ProfileSwitcherName => IsAshita ? "Ashita boot configuration" : "Windower profile";
     public bool IsAshita => Hook == ThirdPartyHook.Ashita;
     public bool IsWindower => Hook == ThirdPartyHook.Windower;
 
@@ -129,6 +144,10 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(IsWindower));
         OnPropertyChanged(nameof(ShowProfileSwitcher));
         OnPropertyChanged(nameof(ProfileSwitcherLabel));
+        OnPropertyChanged(nameof(ProfileSwitcherName));
+        OnPropertyChanged(nameof(ProfileNoun));
+        OnPropertyChanged(nameof(SwitcherProfiles));
+        OnPropertyChanged(nameof(SelectedProfile));
         OnProfilesChanged();
     }
 

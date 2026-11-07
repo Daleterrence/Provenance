@@ -6,7 +6,7 @@ using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
 
-public partial class EditProfileWindow : Window
+public partial class EditProfileWindow : AppWindow
 {
     private readonly EditProfileViewModel _vm;
     private bool _closeQuietly;
@@ -14,7 +14,6 @@ public partial class EditProfileWindow : Window
     public EditProfileWindow(SocialViewModel social)
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         DataContext = _vm = new EditProfileViewModel(social);
         _vm.ConfirmRename = (was, now) => MessageDialog.Confirm(this, "Rename your handle",
             $"Friends will see {now} instead of {was} the next time their friend list loads. You can rename it again later.", "RENAME") is not null;

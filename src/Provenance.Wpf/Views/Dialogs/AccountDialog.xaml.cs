@@ -12,7 +12,7 @@ namespace Provenance.Wpf.Views.Dialogs;
 internal enum ToolView { Hidden, Missing, CantCheck, TooOld, Installing, Ready, DownloadFailed, CheckFailed, DownloadCantCheck, DownloadTooOld, NotSupported }
 
 // The only place the IDs and passwords get typed, they stay off screen everywhere else
-public partial class AccountDialog : Window
+public partial class AccountDialog : AppWindow
 {
     private readonly bool _required;   // adding, or the saved details can't be used any more
     private readonly string _savedAccount;
@@ -26,7 +26,6 @@ public partial class AccountDialog : Window
                           string polId, string squareEnixId, string otpAccount)
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         _required = !edit || requireAll;
         _savedAccount = otpAccount;
         BwLoginText.Text = OtpSources.BitwardenLoginText;
@@ -52,9 +51,7 @@ public partial class AccountDialog : Window
                                             string polId = "", string squareEnixId = "", string otpAccount = "")
     {
         var dlg = new AccountDialog(accountName, useOtp, edit, otpSource, otpItem, requireAll, polId, squareEnixId, otpAccount);
-        if (owner is { IsVisible: true }) dlg.Owner = owner;
-        else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        return dlg.ShowDialog() == true ? dlg.Result : null;
+        return dlg.ShowDialogOver(owner) == true ? dlg.Result : null;
     }
 
     private void OnSave(object sender, RoutedEventArgs e)

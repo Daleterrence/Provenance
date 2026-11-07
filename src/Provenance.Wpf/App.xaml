@@ -13,6 +13,7 @@
                 <ResourceDictionary Source="Themes/Buttons.xaml" />
                 <ResourceDictionary Source="Themes/Fields.xaml" />
                 <ResourceDictionary Source="Themes/Lists.xaml" />
+                <ResourceDictionary Source="Themes/Windows.xaml" />
                 <!-- merged last so the palette wins any clash. AppTheme swaps it for Light.xaml -->
                 <ResourceDictionary Source="Themes/Dark.xaml" />
             </ResourceDictionary.MergedDictionaries>

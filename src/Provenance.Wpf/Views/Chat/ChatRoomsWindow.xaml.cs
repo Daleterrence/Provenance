@@ -12,7 +12,7 @@ using Provenance.Wpf.ViewModels.Social;
 namespace Provenance.Wpf.Views.Chat;
 
 // unowned like the friends window, so it stays up with the main window in the tray. Closing it leaves the room
-public partial class ChatRoomsWindow : Window
+public partial class ChatRoomsWindow : AppWindow
 {
     private const string DialogTitle = "PlayOnline Chat";
     private readonly ChatRoomsViewModel _vm;
@@ -21,7 +21,6 @@ public partial class ChatRoomsWindow : Window
                            Func<int, ImageSource?>? emote = null)
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         DataContext = _vm = new ChatRoomsViewModel(social, savePassword, dropPassword, emote)
         {
             AskChatName = initial => InputDialog.Prompt(this, DialogTitle, "Enter chat name.", initial,
@@ -43,13 +42,10 @@ public partial class ChatRoomsWindow : Window
             _vm.Lines.CollectionChanged -= OnLinesChanged;
             _vm.Dispose();
         };
-        KeyDown += (_, e) =>
-        {
-            if (e.Key != Key.Escape || _vm.InRoom) return;
-            e.Handled = true;
-            Close();
-        };
     }
+
+    // Esc in a room is for the room
+    protected override bool OnEscape() => !_vm.InRoom && base.OnEscape();
 
     public static ChatRoomsWindow? Current => Application.Current.Windows.OfType<ChatRoomsWindow>().FirstOrDefault();
 
@@ -207,13 +203,5 @@ public partial class ChatRoomsWindow : Window
         var item = new MenuItem { Header = header };
         item.Click += (_, _) => act();
         return item;
-    }
-
-    private void OnClose(object sender, RoutedEventArgs e) => Close();
-
-    private void OnMaximize(object sender, RoutedEventArgs e)
-    {
-        if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this);
-        else SystemCommands.MaximizeWindow(this);
     }
 }

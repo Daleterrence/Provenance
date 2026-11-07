@@ -6,20 +6,18 @@ using Provenance.Wpf.ViewModels.Install;
 
 namespace Provenance.Wpf.Views.Install;
 
-public partial class RepairWindow : Window
+public partial class RepairWindow : AppWindow
 {
     private readonly RepairViewModel _vm;
 
     public RepairWindow(RepairViewModel vm)
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         DataContext = _vm = vm;
         // Enter and Esc both answer no, the yes takes DAT mods away for good
         vm.Ask = (title, body) => MessageDialog.Confirm(this, title, body, "CONTINUE", safeKeys: true) is not null;
         Loaded += async (_, _) => await vm.RunAsync();
         Closing += OnClosing;
-        KeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
     }
 
     // closing mid-repair asks, then stops it. The window stays up until the repair's really ended (it can be mid-step)

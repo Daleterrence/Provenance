@@ -1,33 +1,27 @@
-<Window x:Class="Provenance.Wpf.Views.Install.UpdateWindow"
+<controls:AppWindow x:Class="Provenance.Wpf.Views.Install.UpdateWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Provenance" Icon="/Assets/provenance.ico" Width="380" SizeToContent="Height"
-        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
-        TextElement.Foreground="{DynamicResource Text.1}" FontFamily="{DynamicResource Font.Body}"
-        MouseLeftButtonDown="OnDrag">
+        xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+        Title="Provenance" Icon="/Assets/provenance.ico" Width="380" SizeToContent="Height" WindowStartupLocation="CenterScreen"
+        MouseLeftButtonDown="OnDrag"
+        CloseOnEscape="False"
+        Style="{StaticResource DialogCard}">
 
-    <Border Margin="14" CornerRadius="{StaticResource Radius.Dialog}" Background="{DynamicResource Surface.2}"
-            BorderBrush="{DynamicResource Border.Window}" BorderThickness="1">
-        <Border.Effect>
-            <DynamicResource ResourceKey="Shadow.Dialog" />
-        </Border.Effect>
-        <StackPanel Margin="22,20,22,16">
-            <StackPanel Orientation="Horizontal">
-                <Image Source="/Assets/provenance-256.png" Width="28" Height="28" RenderOptions.BitmapScalingMode="HighQuality" />
-                <TextBlock x:Name="StageText" Text="Checking for Provenance updates..." Margin="12,0,0,0" VerticalAlignment="Center"
-                           FontSize="15" FontWeight="SemiBold" />
-            </StackPanel>
-
-            <ProgressBar x:Name="Bar" Margin="0,18,0,0" Height="6" Minimum="0" Maximum="100" IsIndeterminate="True"
-                         Foreground="{DynamicResource Primary}" Background="{DynamicResource Surface.1}" />
-
-            <Grid Margin="0,8,0,0" MinHeight="36">
-                <TextBlock x:Name="DetailText" FontSize="12" Foreground="{DynamicResource Text.3}" VerticalAlignment="Center" />
-                <Button x:Name="SkipButton" HorizontalAlignment="Right" Content="SKIP" Click="OnSkip"
-                        Style="{StaticResource PolButton}"
-                        ToolTip="Start Provenance now. It'll check for updates again next time." />
-            </Grid>
+    <StackPanel Margin="22,20,22,16">
+        <StackPanel Orientation="Horizontal">
+            <Image Source="/Assets/provenance-256.png" Width="28" Height="28" RenderOptions.BitmapScalingMode="HighQuality" />
+            <TextBlock x:Name="StageText" Text="Checking for Provenance updates..." Margin="12,0,0,0" VerticalAlignment="Center"
+                       FontSize="15" FontWeight="SemiBold" />
         </StackPanel>
-    </Border>
-</Window>
+
+        <ProgressBar x:Name="Bar" Margin="0,18,0,0" Height="6" Minimum="0" Maximum="100" IsIndeterminate="True"
+                     Foreground="{DynamicResource Primary}" Background="{DynamicResource Surface.1}" />
+
+        <Grid Margin="0,8,0,0" MinHeight="36">
+            <TextBlock x:Name="DetailText" FontSize="12" Foreground="{DynamicResource Text.3}" VerticalAlignment="Center" />
+            <Button x:Name="SkipButton" HorizontalAlignment="Right" Content="SKIP" Click="OnSkip"
+                    Style="{StaticResource PolButton}"
+                    ToolTip="Start Provenance now. It'll check for updates again next time." />
+        </Grid>
+    </StackPanel>
+</controls:AppWindow>

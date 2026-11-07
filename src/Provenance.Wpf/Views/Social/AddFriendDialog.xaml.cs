@@ -11,14 +11,13 @@ using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
 
-public partial class AddFriendDialog : Window
+public partial class AddFriendDialog : AppWindow
 {
     private SocialViewModel Vm => (SocialViewModel)DataContext;
 
     public AddFriendDialog(SocialViewModel vm, string? handleName = null, string? handleKey = null)
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         DataContext = vm;
         Loaded += (_, _) => NameBox.Focus();
         // a search still out when it closes is nobody's, so its hits never turn up under whatever's asked next

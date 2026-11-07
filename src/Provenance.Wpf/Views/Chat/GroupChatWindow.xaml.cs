@@ -11,7 +11,7 @@ using Provenance.Wpf.ViewModels.Chat;
 namespace Provenance.Wpf.Views.Chat;
 
 // one for the session, unowned like the chat rooms window. Close only hides it (the viewer's Close), the chat stays in
-public partial class GroupChatWindow : Window
+public partial class GroupChatWindow : AppWindow
 {
     private const string DialogTitle = "Group Chat";
     private readonly GroupChatViewModel _vm;
@@ -22,7 +22,6 @@ public partial class GroupChatWindow : Window
     public GroupChatWindow(GroupChatViewModel vm, ISettingsService settings)
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         DataContext = _vm = vm;
         _settings = settings;
         _vm.Lines.CollectionChanged += OnLinesChanged;
@@ -54,12 +53,12 @@ public partial class GroupChatWindow : Window
             _vm.Ended -= OnEnded;
             _vm.LineArrived -= OnLineArrived;
         };
-        KeyDown += (_, e) =>
-        {
-            if (e.Key != Key.Escape) return;
-            e.Handled = true;
-            Hide();
-        };
+    }
+
+    protected override bool OnEscape()
+    {
+        Hide();
+        return true;
     }
 
     public static GroupChatWindow? Current => Application.Current.Windows.OfType<GroupChatWindow>().FirstOrDefault();
@@ -177,11 +176,5 @@ public partial class GroupChatWindow : Window
         int room = GroupChatFiles.MaxText - (box.Text.Length - box.SelectionLength);
         box.SelectedText = kept.Length > room ? kept[..Math.Max(0, room)] : kept;
         box.CaretIndex = box.SelectionStart + box.SelectionLength;
-    }
-
-    private void OnMaximize(object sender, RoutedEventArgs e)
-    {
-        if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this);
-        else SystemCommands.MaximizeWindow(this);
     }
 }

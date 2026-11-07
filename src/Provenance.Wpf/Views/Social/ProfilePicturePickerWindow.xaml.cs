@@ -7,7 +7,7 @@ using Provenance.Wpf.Controls;
 
 namespace Provenance.Wpf.Views.Social;
 
-public partial class ProfilePicturePickerWindow : Window
+public partial class ProfilePicturePickerWindow : AppWindow
 {
     private readonly ProfilePictureCatalog.Catalog _catalog;
     private readonly AvatarService _avatars;
@@ -20,7 +20,6 @@ public partial class ProfilePicturePickerWindow : Window
     public ProfilePicturePickerWindow(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int currentPic)
     {
         InitializeComponent();
-        WindowFrame.Attach(this);
         _catalog = catalog;
         _avatars = avatars;
         _current = currentPic;

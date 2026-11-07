@@ -94,11 +94,9 @@ public partial class MainViewModel
             try { LargeAddressAwareSwitch.Apply(_settings, "after the repair"); }
             finally { _pol.ReleasePrestarts(); }
         }));
-        if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
-        else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Repairing = true;
         RepairGameFilesCommand.NotifyCanExecuteChanged();
-        try { w.ShowDialog(); }
+        try { w.ShowDialogOver(Application.Current.MainWindow); }
         finally
         {
             Repairing = false;
