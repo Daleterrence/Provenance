@@ -273,6 +273,9 @@ public sealed partial class GroupChatViewModel : ObservableObject
         SendCommand.NotifyCanExecuteChanged();
     }
 
+    public ComposeRules ComposeRules => _rules ??= new() { SingleLine = true, MaxChars = GroupChatFiles.MaxText, Filter = FilterInput };
+    private ComposeRules? _rules;
+
     // typing or pasting: what Shift-JIS can't carry is dropped, with a word about it
     public string FilterInput(string text)
     {

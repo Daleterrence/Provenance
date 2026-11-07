@@ -39,6 +39,7 @@ public partial class SocialWindow : AppWindow
         Part = part;
         InitializeComponent();
         ApplyPart();
+        FollowEnd.SetPin(ChatScroll, PinConversation);
         // split: a click shows the Messages window alongside (focus stays in the list), a double-click brings it up
         FriendList.FriendSelected += _ => { if (Part == SocialPart.Friends) Vm?.RequestLayout(Layout.ShowMessages); };
         FriendList.FriendActivated += _ => { if (Part == SocialPart.Friends) Vm?.RequestLayout(Layout.OpenMessages); };
@@ -48,7 +49,6 @@ public partial class SocialWindow : AppWindow
             if (e.OldValue is SocialViewModel old) Detach(old);
             if (e.NewValue is SocialViewModel vm)
             {
-                if (HasMessages) vm.Conversation.CollectionChanged += OnConversationChanged;
                 vm.PropertyChanged += OnVmChanged;
                 vm.MessageReceived += OnMessageLanded;
                 vm.NoticeReceived += OnMessageLanded;
@@ -71,11 +71,7 @@ public partial class SocialWindow : AppWindow
 
     private void Detach(SocialViewModel vm)
     {
-        if (HasMessages)
-        {
-            vm.Conversation.CollectionChanged -= OnConversationChanged;
-            vm.ConversationVisible = false;
-        }
+        if (HasMessages) vm.ConversationVisible = false;
         if (HasFriends) vm.FriendsListVisible = false;
         vm.PropertyChanged -= OnVmChanged;
         vm.MessageReceived -= OnMessageLanded;
@@ -154,53 +150,22 @@ public partial class SocialWindow : AppWindow
     private void OnLayout(object sender, RoutedEventArgs e) =>
         Vm?.RequestLayout(Part == SocialPart.Both ? Layout.Split : Layout.Merge);
 
-    // a redraw only follows to the end if the reader was already there, so scrolling back doesn't get undone
-    private bool _stickToEnd = true;
     private string? _shownWith;
 
-    private void OnConversationChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    // another friend's conversation starts at the end, and so does a line just sent, so nobody sends it twice by mistake
+    private bool PinConversation(NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Reset)
         {
             var f = Vm?.SelectedFriend;
             var with = f is null ? null : f.Key.Length > 0 ? f.Key : f.Name;
-            _stickToEnd = with != _shownWith || ChatScroll.VerticalOffset >= ChatScroll.ScrollableHeight - 24;
+            bool other = with != _shownWith;
             _shownWith = with;
+            return other;
         }
-        // a line just sent always comes into view, so nobody sends it twice by mistake
-        if (e.Action == NotifyCollectionChangedAction.Add &&
-            e.NewItems?[0] is ChatEntry { Outgoing: true, State: "sending" or "queued" } sent &&
-            DateTimeOffset.UtcNow.ToUnixTimeSeconds() - sent.Time < 10)
-            _stickToEnd = true;
-        if (_stickToEnd)
-            Dispatcher.InvokeAsync(ChatScroll.ScrollToEnd, System.Windows.Threading.DispatcherPriority.Background);
-    }
-
-    private void OnComposeKey(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter || (Keyboard.Modifiers & ModifierKeys.Shift) != 0) return;
-        e.Handled = true;
-        if (Vm is { } vm && vm.SendCommand.CanExecute(null)) vm.SendCommand.Execute(null);
-    }
-
-    // the box stops at 300 bytes (Shift-JIS, what FFXI counts), a paste gets cut to what fits
-    private static string WithoutSelection(TextBox box) => box.Text.Remove(box.SelectionStart, box.SelectionLength);
-
-    private void OnComposeInput(object sender, TextCompositionEventArgs e)
-    {
-        if (sender is not TextBox box) return;
-        var next = WithoutSelection(box).Insert(box.SelectionStart, e.Text);
-        if (ShiftJis.ByteCount(next) > PolMessage.MaxTextBytes) e.Handled = true;
-    }
-
-    private void OnComposePaste(object sender, DataObjectPastingEventArgs e)
-    {
-        if (sender is not TextBox box || e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string text) return;
-        int room = PolMessage.MaxTextBytes - ShiftJis.ByteCount(WithoutSelection(box));
-        if (ShiftJis.ByteCount(text) <= room) return;
-        e.CancelCommand();
-        box.SelectedText = ShiftJis.Fit(text, Math.Max(0, room));
-        box.CaretIndex = box.SelectionStart + box.SelectionLength;
+        return e.Action == NotifyCollectionChangedAction.Add &&
+               e.NewItems?[0] is ChatEntry { Outgoing: true, State: "sending" or "queued" } sent &&
+               DateTimeOffset.UtcNow.ToUnixTimeSeconds() - sent.Time < 10;
     }
 
     private void OnAvatarClick(object sender, MouseButtonEventArgs e) => Vm?.ChangeProfilePictureCommand.Execute(null);

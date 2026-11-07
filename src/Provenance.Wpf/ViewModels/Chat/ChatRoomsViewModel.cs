@@ -433,6 +433,17 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         ExitCommand.NotifyCanExecuteChanged();
     }
 
+    // the longest the hook allows is the room's name and mine away from full, so before there's a room it's the worst case
+    public ComposeRules ComposeRules => _rules ??= new()
+    {
+        SingleLine = true,
+        MaxChars = ChatRoomFiles.MaxTextLength,
+        MaxBytes = () => ChatRoomFiles.MaxTextBytes(_roomIrc.Length > 0 ? _roomIrc : new string('#', MaxRoomIrc),
+                                                    _lastNick ?? new string('W', ChatRoomFiles.MaxNameBytes)),
+    };
+    private ComposeRules? _rules;
+    private const int MaxRoomIrc = 63;
+
     private bool CanSend => Current == Page.Room && Compose.Trim().Length > 0 && _gate.CanSend
                             && !_social.GameRunning && !_social.HandleSwitching;
 

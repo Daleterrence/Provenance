@@ -6,6 +6,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Chat"
+        xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
         xmlns:social="clr-namespace:Provenance.Common.Social;assembly=Provenance.Common"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:ChatRoomsViewModel}"
         Title="Chat rooms" Icon="/Assets/provenance.ico"
@@ -217,7 +218,8 @@
                     <ColumnDefinition Width="5" />
                     <ColumnDefinition Width="220" MinWidth="160" />
                 </Grid.ColumnDefinitions>
-                <ScrollViewer x:Name="LineScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
+                <ScrollViewer x:Name="LineScroll" VerticalScrollBarVisibility="Auto" Padding="14,8"
+                                  behaviours:FollowEnd.Source="{Binding Lines}">
                     <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource RoomLine}" />
                 </ScrollViewer>
                 <GridSplitter Grid.Column="1" Style="{StaticResource PaneSplitter}" HorizontalContentAlignment="Right" />
@@ -269,7 +271,7 @@
                              TextWrapping="Wrap" MaxLength="{x:Static social:ChatRoomFiles.MaxTextLength}" Style="{StaticResource OutlinedField}" Padding="10,8"
                              materialDesign:HintAssist.Hint="Say something to the room (Enter sends)" materialDesign:HintAssist.IsFloating="False"
                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
-                             PreviewKeyDown="OnComposeKey" DataObject.Pasting="OnComposePaste" />
+                             behaviours:ComposeBox.Send="{Binding SendCommand}" behaviours:ComposeBox.Rules="{Binding ComposeRules}" />
                     <Button Grid.Column="3" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom" Style="{StaticResource PolButton}"
                             Command="{Binding SendCommand}" Content="SEND" />
                     <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}"

@@ -25,7 +25,6 @@ public partial class GroupChatWindow : AppWindow
         InitializeComponent();
         DataContext = _vm = vm;
         _settings = settings;
-        _vm.Lines.CollectionChanged += OnLinesChanged;
         _vm.Ended += OnEnded;
         _vm.LineArrived += OnLineArrived;
         _tick.Tick += (_, _) => _vm.Tick(DateTime.UtcNow);
@@ -49,7 +48,6 @@ public partial class GroupChatWindow : AppWindow
         Closed += (_, _) =>
         {
             _tick.Stop();
-            _vm.Lines.CollectionChanged -= OnLinesChanged;
             _vm.Ended -= OnEnded;
             _vm.LineArrived -= OnLineArrived;
         };
@@ -93,12 +91,6 @@ public partial class GroupChatWindow : AppWindow
         TaskbarFlash.Start(this);
     }
 
-    private void OnLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (e.Action is NotifyCollectionChangedAction.Add or NotifyCollectionChangedAction.Reset)
-            Dispatcher.InvokeAsync(LineScroll.ScrollToEnd, System.Windows.Threading.DispatcherPriority.Background);
-    }
-
     private void OnHide(object sender, RoutedEventArgs e) => Hide();
 
     private void OnExit(object sender, RoutedEventArgs e)
@@ -127,32 +119,4 @@ public partial class GroupChatWindow : AppWindow
 
     internal void FillLineMenu(ContextMenu menu, TextBox? box, GroupChatLineItem line) =>
         Menus.FillLine(menu, box, _vm.LineMenu(line));
-
-    private void OnComposeKey(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter) return;
-        e.Handled = true;
-        if (_vm.SendCommand.CanExecute(null)) _vm.SendCommand.Execute(null);
-    }
-
-    // characters Shift-JIS can't carry never get in, typed or pasted
-    private void OnComposeInput(object sender, TextCompositionEventArgs e)
-    {
-        var kept = _vm.FilterInput(e.Text);
-        if (kept == e.Text || sender is not TextBox box) return;
-        e.Handled = true;
-        int room = GroupChatFiles.MaxText - (box.Text.Length - box.SelectionLength);
-        box.SelectedText = kept.Length > room ? kept[..Math.Max(0, room)] : kept;
-        box.CaretIndex = box.SelectionStart + box.SelectionLength;
-    }
-
-    private void OnComposePaste(object sender, DataObjectPastingEventArgs e)
-    {
-        if (sender is not TextBox box || e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string text) return;
-        var kept = _vm.FilterInput(text.Replace("\r", "").Replace('\n', ' '));
-        e.CancelCommand();
-        int room = GroupChatFiles.MaxText - (box.Text.Length - box.SelectionLength);
-        box.SelectedText = kept.Length > room ? kept[..Math.Max(0, room)] : kept;
-        box.CaretIndex = box.SelectionStart + box.SelectionLength;
-    }
 }

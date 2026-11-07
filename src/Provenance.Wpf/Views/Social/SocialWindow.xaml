@@ -401,7 +401,8 @@
                             </Grid>
                         </Grid>
                     </Border>
-                    <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
+                    <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8"
+                                  behaviours:FollowEnd.Source="{Binding Conversation}">
                         <ItemsControl ItemsSource="{Binding Conversation}" ItemTemplate="{StaticResource ChatLine}" />
                     </ScrollViewer>
                     <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" FontSize="12"
@@ -419,8 +420,8 @@
                                      materialDesign:HintAssist.Hint="Write a message (Enter sends, Shift+Enter adds a line)"
                                      materialDesign:HintAssist.IsFloating="False"
                                      materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
-                                     IsEnabled="{Binding CanCompose}" PreviewKeyDown="OnComposeKey"
-                                     PreviewTextInput="OnComposeInput" DataObject.Pasting="OnComposePaste" />
+                                     IsEnabled="{Binding CanCompose}"
+                                     behaviours:ComposeBox.Send="{Binding SendCommand}" behaviours:ComposeBox.Rules="{Binding ComposeRules}" />
                             <Button Grid.Column="1" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom"
                                     Style="{StaticResource PolButton}" Command="{Binding SendCommand}" Content="SEND" />
                             <DockPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0">

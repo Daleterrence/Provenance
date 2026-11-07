@@ -36,13 +36,8 @@ public partial class ChatRoomsWindow : AppWindow
                 q => MessageDialog.Confirm(this, "Create Room", q, "YES", cancelLabel: "NO") == 0),
             AskNewPassword = AskNewPassword,
         };
-        _vm.Lines.CollectionChanged += OnLinesChanged;
         Loaded += (_, _) => _vm.Start();
-        Closed += (_, _) =>
-        {
-            _vm.Lines.CollectionChanged -= OnLinesChanged;
-            _vm.Dispose();
-        };
+        Closed += (_, _) => _vm.Dispose();
     }
 
     // Esc in a room is for the room
@@ -70,36 +65,11 @@ public partial class ChatRoomsWindow : AppWindow
         Close();
     }
 
-    private void OnLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (e.Action == NotifyCollectionChangedAction.Add)
-            Dispatcher.InvokeAsync(LineScroll.ScrollToEnd, System.Windows.Threading.DispatcherPriority.Background);
-    }
-
     private void OnRoomDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is DependencyObject d && ItemsControl.ContainerFromElement(RoomList, d) is ListBoxItem
             && _vm.EnterCommand.CanExecute(null))
             _vm.EnterCommand.Execute(null);
-    }
-
-    private void OnComposeKey(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter) return;
-        e.Handled = true;
-        if (_vm.SendCommand.CanExecute(null)) _vm.SendCommand.Execute(null);
-    }
-
-    // MaxLength stops typing at the viewer's 400 characters, a paste gets cut to fit (never half a pair)
-    private void OnComposePaste(object sender, DataObjectPastingEventArgs e)
-    {
-        if (sender is not TextBox box || e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string text) return;
-        text = text.Replace("\r", "").Replace('\n', ' ');
-        int room = Math.Clamp(ChatRoomFiles.MaxTextLength - (box.Text.Length - box.SelectionLength), 0, text.Length);
-        if (room > 0 && room < text.Length && char.IsHighSurrogate(text[room - 1])) room--;
-        e.CancelCommand();
-        box.SelectedText = text[..room];
-        box.CaretIndex = box.SelectionStart + box.SelectionLength;
     }
 
     // the viewer asks for the new one and then again to confirm it

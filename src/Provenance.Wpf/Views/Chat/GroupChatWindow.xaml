@@ -4,6 +4,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
         xmlns:social="clr-namespace:Provenance.Common.Social;assembly=Provenance.Common"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Chat"
@@ -65,7 +66,8 @@
                 <ColumnDefinition Width="5" />
                 <ColumnDefinition Width="200" MinWidth="140" />
             </Grid.ColumnDefinitions>
-            <ScrollViewer x:Name="LineScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
+            <ScrollViewer x:Name="LineScroll" VerticalScrollBarVisibility="Auto" Padding="14,8"
+                                  behaviours:FollowEnd.Source="{Binding Lines}">
                 <ItemsControl x:Name="LineList" ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource GroupLine}" />
             </ScrollViewer>
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding Joining, Converter={StaticResource BoolToVis}}">
@@ -93,7 +95,7 @@
                          TextWrapping="Wrap" MaxLength="{x:Static social:GroupChatFiles.MaxText}" Style="{StaticResource OutlinedField}" Padding="10,8"
                          materialDesign:HintAssist.Hint="Say something to the group (Enter sends)" materialDesign:HintAssist.IsFloating="False"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" IsEnabled="{Binding InChat}"
-                         PreviewKeyDown="OnComposeKey" PreviewTextInput="OnComposeInput" DataObject.Pasting="OnComposePaste" />
+                         behaviours:ComposeBox.Send="{Binding SendCommand}" behaviours:ComposeBox.Rules="{Binding ComposeRules}" />
                 <Button Grid.Column="1" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom" Style="{StaticResource PolButton}"
                         Command="{Binding SendCommand}" Content="SEND" ToolTip="Send the message entered into the text area." />
                 <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}"

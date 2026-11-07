@@ -25,6 +25,11 @@ public static class ChatRoomFiles
     public const int MaxNameBytes = 15, MaxPasswordLength = 23, MaxTextLength = 400, PageSize = 100;
     public const int MaxRoomName = 30, MaxNewPassword = 16, MinOccupancy = 2, MaxOccupancy = 20, DefaultOccupancy = 10;
 
+    // polcore's line is 0x200 bytes. Around the text goes "PRIVMSG <room> :" and the checksum and line end (20 and the
+    // room's name), then the 6 bytes of type, face and colour, the chat name and a tab and the language (3), as Shift-JIS
+    public static int MaxTextBytes(string room, string chatName) =>
+        0x200 - (20 + room.Length) - (9 + ShiftJis.ByteCount(chatName));
+
     public static string LinesPathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.ChatRoom);
 
     public static bool Zones(int pid, string token) => HookFiles.WriteRequest(pid, HookContract.Requests.ChatZones, token);

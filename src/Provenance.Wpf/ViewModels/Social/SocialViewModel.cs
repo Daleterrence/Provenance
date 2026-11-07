@@ -184,6 +184,7 @@ public partial class SocialViewModel : ObservableObject
     }
 
     // the box counts in the bytes FFXI goes by, a Japanese character's two
+    public ComposeRules ComposeRules { get; } = new() { MaxBytes = () => PolMessage.MaxTextBytes };
     public int ComposeBytes => ShiftJis.ByteCount(Compose.Trim());
     public string ComposeCount => $"{ComposeBytes}/{PolMessage.MaxTextBytes}";
     public bool ComposeCountShown => ComposeBytes >= PolMessage.MaxTextBytes * 9 / 10;
