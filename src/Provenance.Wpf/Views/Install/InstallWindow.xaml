@@ -39,15 +39,15 @@
 
                 <StackPanel x:Name="RegionChoice" Visibility="{Binding ShowRegionChoice, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="Region" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
-                    <ComboBox Width="260" HorizontalAlignment="Left" Padding="12,8,8,8" FontSize="13"
-                              Style="{StaticResource OutlinedCombo}" AutomationProperties.Name="Region"
+                    <ComboBox Width="260" HorizontalAlignment="Left"
+                              Style="{StaticResource FieldCombo}" AutomationProperties.Name="Region"
                               ItemsSource="{Binding RegionChoices}" SelectedIndex="{Binding RegionIndex}" IsEnabled="{Binding CanChooseRegion}" />
                 </StackPanel>
 
                 <TextBlock Text="Install to" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBox Text="{Binding InstallFolder}" Style="{StaticResource FieldText}" />
-                    <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
+                    <Button Style="{StaticResource BrowseButton}"
                             Command="{Binding BrowseInstallCommand}" />
                 </Grid>
                 <TextBlock Text="{Binding GameFolderText}" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,4,0,0" TextWrapping="Wrap" />
@@ -58,7 +58,7 @@
                 <TextBlock Text="Download the installer to" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,12,0,2" />
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBox Text="{Binding DownloadFolder}" Style="{StaticResource FieldText}" />
-                    <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
+                    <Button Style="{StaticResource BrowseButton}"
                             Command="{Binding BrowseDownloadCommand}" />
                 </Grid>
             </StackPanel>

@@ -26,10 +26,8 @@
                                    FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" MaxWidth="340" />
                     </StackPanel>
 
-                    <TextBox x:Name="BodyText" Style="{x:Null}" FontSize="13" TextBlock.LineHeight="19" TextWrapping="Wrap"
-                             IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0"
-                             Foreground="{DynamicResource Text.2}" CaretBrush="Transparent" Cursor="IBeam"
-                             SelectionBrush="{DynamicResource Primary}" />
+                    <TextBox x:Name="BodyText" Style="{StaticResource SelectableText}" FontSize="13" TextBlock.LineHeight="19"
+                             Foreground="{DynamicResource Text.2}" />
                 </StackPanel>
             </Grid>
 

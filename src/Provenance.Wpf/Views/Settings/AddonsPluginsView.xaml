@@ -6,34 +6,6 @@
              xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Settings"
              TextElement.Foreground="{DynamicResource Text.1}">
     <UserControl.Resources>
-        <Style x:Key="Section" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="15" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,4,0,10" />
-        </Style>
-        <Style x:Key="Help" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-        </Style>
-        <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource Surface.1}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Border.Hair}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="8" />
-        </Style>
-        <Style x:Key="Switch" TargetType="ToggleButton" BasedOn="{StaticResource MaterialDesignSwitchToggleButton}">
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-        <Style x:Key="Search" TargetType="TextBox" BasedOn="{StaticResource OutlinedField}">
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
-            <Setter Property="materialDesign:TextFieldAssist.HasLeadingIcon" Value="True" />
-            <Setter Property="materialDesign:TextFieldAssist.LeadingIcon" Value="Magnify" />
-            <Setter Property="materialDesign:TextFieldAssist.HasClearButton" Value="True" />
-        </Style>
         <!-- Addons, Plugins and Ashita's POL plugins across the top, one list each, sharing the width evenly -->
         <Style x:Key="SubTabs" TargetType="ListBox">
             <Setter Property="Background" Value="Transparent" />

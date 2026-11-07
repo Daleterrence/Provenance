@@ -27,8 +27,8 @@
 
             <StackPanel x:Name="SourcePanel" Visibility="Collapsed" Margin="0,0,0,14">
                 <StackPanel Orientation="Horizontal">
-                    <ProgressBar x:Name="SourceSpinner" Width="16" Height="16" IsIndeterminate="True" Value="0" VerticalAlignment="Top"
-                                 Margin="0,1,8,0" Style="{StaticResource MaterialDesignCircularProgressBar}" />
+                    <ProgressBar x:Name="SourceSpinner" Width="16" Height="16" VerticalAlignment="Top"
+                                 Margin="0,1,8,0" Style="{StaticResource Spinner}" />
                     <TextBlock x:Name="SourceText" FontSize="12" TextWrapping="Wrap" MaxWidth="290" Foreground="{DynamicResource Text.2}" />
                 </StackPanel>
                 <Grid x:Name="MasterPanel" Visibility="Collapsed" Margin="0,10,0,0" ColumnDefinitions="*,Auto">

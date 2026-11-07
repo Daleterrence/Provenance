@@ -17,39 +17,9 @@
     </shell:WindowChrome.WindowChrome>
 
     <Window.Resources>
-        <Style x:Key="Label" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
-            <Setter Property="Margin" Value="0,0,0,2" />
-        </Style>
-        <Style x:Key="Section" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="15" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,4,0,10" />
-        </Style>
-        <Style x:Key="Help" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-        </Style>
-
         <!-- labels go beside or above, never a floating hint (it draws a dark chip on this background, and I've lost
              that fight before) -->
-        <Style TargetType="ComboBox" BasedOn="{StaticResource OutlinedCombo}">
-            <Setter Property="Padding" Value="12,8,8,8" />
-            <Setter Property="FontSize" Value="13" />
-        </Style>
-        <!-- the other controls fill the row's column, so this puts a switch against the card's edge like them -->
-        <Style x:Key="Switch" TargetType="ToggleButton" BasedOn="{StaticResource MaterialDesignSwitchToggleButton}">
-            <Setter Property="HorizontalAlignment" Value="Right" />
-        </Style>
-        <Style x:Key="DimWhenOff" TargetType="FrameworkElement">
-            <Style.Triggers>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Opacity" Value="0.45" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource FieldCombo}" />
 
         <Style x:Key="ProfileTool" TargetType="Button" BasedOn="{StaticResource IconButton}">
             <Setter Property="Width" Value="32" />
@@ -70,19 +40,7 @@
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Margin" Value="0,0,0,14" />
-            <Style.Triggers>
-                <Trigger Property="Text" Value="">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource Surface.1}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Border.Hair}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{StaticResource Radius.Panel}" />
-            <Setter Property="Padding" Value="16,6" />
-            <Setter Property="Margin" Value="0,0,0,22" />
+            <Setter Property="Visibility" Value="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource NullToVisibilityConverter}}" />
         </Style>
         <!-- label and optional help (Tag) on the left, the control in a fixed column so they all line up -->
         <Style TargetType="HeaderedContentControl">
@@ -264,11 +222,7 @@
                                            TextWrapping="Wrap" FontSize="12" Margin="0,0,0,10">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock" BasedOn="{StaticResource StatusText}">
-                                            <Style.Triggers>
-                                                <Trigger Property="Text" Value="">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                </Trigger>
-                                            </Style.Triggers>
+                                            <Setter Property="Visibility" Value="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource NullToVisibilityConverter}}" />
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
@@ -317,7 +271,7 @@
                                                 </Style>
                                             </TextBox.Style>
                                         </TextBox>
-                                        <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
+                                        <Button Style="{StaticResource BrowseButton}"
                                                 Command="{Binding BrowseBackupFolderCommand}" />
                                         <Button Grid.Column="2" Margin="6,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
                                                 Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
@@ -410,18 +364,14 @@
                             <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
                                 <TextBox Text="{Binding AshitaPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                          AutomationProperties.Name="Ashita folder" />
-                                <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
+                                <Button Style="{StaticResource BrowseButton}"
                                         Command="{Binding BrowseAshitaCommand}" />
                             </Grid>
                             <TextBlock Text="{Binding ProfileStatus}" Tag="{Binding ProfileStatusIsError}" Style="{StaticResource ProfileStatusText}" />
                             <TextBlock Text="{Binding AshitaCardNote}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,14" Foreground="{DynamicResource State.Warn}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
-                                        <Style.Triggers>
-                                            <Trigger Property="Text" Value="">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                            </Trigger>
-                                        </Style.Triggers>
+                                        <Setter Property="Visibility" Value="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource NullToVisibilityConverter}}" />
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
@@ -449,7 +399,7 @@
                             <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
                                 <TextBox Text="{Binding WindowerPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                          AutomationProperties.Name="Windower folder" />
-                                <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
+                                <Button Style="{StaticResource BrowseButton}"
                                         Command="{Binding BrowseWindowerCommand}" />
                             </Grid>
                             <TextBlock Text="{Binding ProfileStatus}" Tag="{Binding ProfileStatusIsError}" Style="{StaticResource ProfileStatusText}" />
@@ -532,16 +482,7 @@
                         <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12" Foreground="{DynamicResource State.Warn}"
                                    Text="Provenance is starting your accounts. You can change these settings once it's finished."
                                    Visibility="{Binding MultiRunGoing, Converter={StaticResource BoolToVis}}" />
-                        <StackPanel IsEnabled="{Binding MultiEditable}">
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
-                                    <Style.Triggers>
-                                        <Trigger Property="IsEnabled" Value="False">
-                                            <Setter Property="Opacity" Value="0.5" />
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </StackPanel.Style>
+                        <StackPanel IsEnabled="{Binding MultiEditable}" Style="{StaticResource DimWhenOff}">
                             <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding MultiContinueOnError}" Margin="0,0,0,4">
                                 <TextBlock Text="Continue multi-account process on error" TextWrapping="Wrap" />
                             </CheckBox>
@@ -552,18 +493,8 @@
                             </CheckBox>
                             <TextBlock Style="{StaticResource Help}" Margin="26,0,0,14"
                                        Text="This will exit Provenance when all of your accounts are successfully logged in. If there is an error logging any account in, it will always stay open to tell you what went wrong and let you try again." />
-                            <TextBlock Text="You haven't added any accounts yet. Add one on the main window.">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Help}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding MultiAccountRows.Count}" Value="0">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
+                            <TextBlock Text="You haven't added any accounts yet. Add one on the main window."
+                                       Style="{StaticResource ShowWhenZero}" Tag="{Binding MultiAccountRows.Count}" />
                             <ItemsControl ItemsSource="{Binding MultiAccountRows}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -573,28 +504,10 @@
                                                 <StackPanel Margin="0,0,10,0" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding Name}" FontSize="14" TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Text="{Binding Problem, StringFormat=Turned off: {0}}" FontSize="11" TextWrapping="Wrap"
-                                                               Foreground="{DynamicResource State.Warn}">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding Problem}" Value="{x:Null}">
-                                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                    <TextBlock Text="{Binding ProfileNeeded}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding ProfileNeeded}" Value="{x:Null}">
-                                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
+                                                               Foreground="{DynamicResource State.Warn}"
+                                                               Visibility="{Binding Problem, Converter={StaticResource NullToVisibilityConverter}}" />
+                                                    <TextBlock Text="{Binding ProfileNeeded}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}"
+                                                               Visibility="{Binding ProfileNeeded, Converter={StaticResource NullToVisibilityConverter}}" />
                                                     <TextBlock Text="Edit this account's login details to turn it on again." FontSize="11" TextWrapping="Wrap"
                                                                Foreground="{DynamicResource State.Warn}"
                                                                Visibility="{Binding CredentialsRefused, Converter={StaticResource BoolToVis}}" />
@@ -851,7 +764,7 @@
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBox Text="{Binding ScreenshotFolder}" Style="{StaticResource FieldText}"
                                                      materialDesign:HintAssist.Hint="Documents\My Games\FINAL FANTASY XI" />
-                                            <Button Grid.Column="1" Margin="8,0,0,0" Height="Auto" Content="BROWSE" Style="{StaticResource PolButton}"
+                                            <Button Style="{StaticResource BrowseButton}"
                                                     Command="{Binding BrowseScreenshotsCommand}" />
                                         </Grid>
                                     </StackPanel>

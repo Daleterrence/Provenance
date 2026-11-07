@@ -9,6 +9,7 @@
                 <materialDesign:BundledTheme BaseTheme="Dark" PrimaryColor="Blue" SecondaryColor="Blue" />
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
                 <ResourceDictionary Source="Themes/Shared.xaml" />
+                <ResourceDictionary Source="Themes/Text.xaml" />
                 <ResourceDictionary Source="Themes/Buttons.xaml" />
                 <ResourceDictionary Source="Themes/Fields.xaml" />
                 <ResourceDictionary Source="Themes/Lists.xaml" />

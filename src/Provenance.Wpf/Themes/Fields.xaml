@@ -43,5 +43,17 @@
         <Setter Property="FontSize" Value="13" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
+        <Setter Property="materialDesign:TextFieldAssist.CharacterCounterVisibility" Value="Collapsed" />
     </Style>
+    <Style x:Key="FieldCombo" TargetType="ComboBox" BasedOn="{StaticResource OutlinedCombo}">
+        <Setter Property="Padding" Value="12,8,8,8" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
+    </Style>
+    <Style x:Key="Search" TargetType="TextBox" BasedOn="{StaticResource FieldText}">
+        <Setter Property="materialDesign:TextFieldAssist.HasLeadingIcon" Value="True" />
+        <Setter Property="materialDesign:TextFieldAssist.LeadingIcon" Value="Magnify" />
+        <Setter Property="materialDesign:TextFieldAssist.HasClearButton" Value="True" />
+    </Style>
+
 </ResourceDictionary>

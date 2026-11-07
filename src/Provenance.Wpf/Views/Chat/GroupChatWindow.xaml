@@ -33,10 +33,7 @@
             <Grid Margin="0,1" ColumnDefinitions="Auto,*">
                 <TextBlock x:Name="Time" Margin="0,1,10,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding TimeText}"
                            Visibility="{Binding DataContext.ShowTimes, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVis}}" />
-                <TextBox x:Name="Body" Grid.Column="1" Style="{x:Null}" Text="{Binding Display, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
-                         IsReadOnly="True" IsTabStop="False" BorderThickness="0" Background="Transparent" Padding="0"
-                         Foreground="{DynamicResource Text.1}" CaretBrush="Transparent" Cursor="IBeam"
-                         SelectionBrush="{DynamicResource Primary}" ContextMenuOpening="OnLineMenu" Tag="{Binding}">
+                <TextBox x:Name="Body" Grid.Column="1" Style="{StaticResource SelectableText}" Text="{Binding Display, Mode=OneWay}" FontSize="13" IsTabStop="False" ContextMenuOpening="OnLineMenu" Tag="{Binding}">
                     <TextBox.ContextMenu>
                         <ContextMenu />
                     </TextBox.ContextMenu>
@@ -74,7 +71,7 @@
             <Border Style="{StaticResource TitleEdge}" />
         </Grid>
 
-        <Border Grid.Row="1" Padding="16,10" BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1" Background="{DynamicResource Surface.1}">
+        <Border Grid.Row="1" Style="{StaticResource PaneHeader}">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock FontSize="15" TextTrimming="CharacterEllipsis">
@@ -104,7 +101,7 @@
                 <ItemsControl x:Name="LineList" ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource GroupLine}" />
             </ScrollViewer>
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding Joining, Converter={StaticResource BoolToVis}}">
-                <ProgressBar Width="28" Height="28" IsIndeterminate="True" Value="0" Style="{StaticResource MaterialDesignCircularProgressBar}" />
+                <ProgressBar Width="28" Height="28" Style="{StaticResource Spinner}" />
             </StackPanel>
             <GridSplitter Grid.Column="1" Style="{StaticResource PaneSplitter}" HorizontalContentAlignment="Right" />
             <ScrollViewer Grid.Column="2" Background="{DynamicResource Surface.1}" VerticalScrollBarVisibility="Auto">

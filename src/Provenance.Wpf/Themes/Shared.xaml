@@ -225,4 +225,100 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
     </Style>
+
+    <!-- read-only text you can still select and copy -->
+    <Style x:Key="SelectableText" TargetType="TextBox">
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
+        <Setter Property="CaretBrush" Value="Transparent" />
+        <Setter Property="Cursor" Value="IBeam" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Primary}" />
+    </Style>
+
+    <Style x:Key="Spinner" TargetType="ProgressBar" BasedOn="{StaticResource MaterialDesignCircularProgressBar}">
+        <Setter Property="IsIndeterminate" Value="True" />
+        <Setter Property="Value" Value="0" />
+    </Style>
+
+    <!-- the strip across the top of a pane -->
+    <Style x:Key="PaneHeader" TargetType="Border">
+        <Setter Property="Padding" Value="16,10" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Pane}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Background" Value="{DynamicResource Surface.1}" />
+    </Style>
+
+    <!-- the pill with a count in it, and the white one that sits on a button -->
+    <Style x:Key="CountBadge" TargetType="Border">
+        <Setter Property="MinWidth" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="6,0" />
+        <Setter Property="Margin" Value="8,0,0,0" />
+        <Setter Property="Background" Value="{DynamicResource Primary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="CountBadgeText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.OnPrimary}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="ButtonBadge" TargetType="Border" BasedOn="{StaticResource CountBadge}">
+        <Setter Property="MinWidth" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="CornerRadius" Value="9" />
+        <Setter Property="Padding" Value="5,0" />
+        <Setter Property="Margin" Value="6,0,0,0" />
+        <Setter Property="Background" Value="White" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Btn.Rim}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style x:Key="ButtonBadgeText" TargetType="TextBlock" BasedOn="{StaticResource CountBadgeText}">
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Btn.Rim}" />
+    </Style>
+
+    <!-- the ring round whatever has keyboard focus (and only for the keyboard), one per shape -->
+    <Style x:Key="FocusRing">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle RadiusX="6" RadiusY="6" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="FocusRingPill">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Margin="-2,-2,6,4" RadiusX="18" RadiusY="18" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="FocusRingCard">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Margin="-3" RadiusX="9" RadiusY="9" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="FocusRingRound">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Margin="-3" RadiusX="41" RadiusY="41" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 </ResourceDictionary>

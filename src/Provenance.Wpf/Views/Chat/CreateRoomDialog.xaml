@@ -9,12 +9,6 @@
         MouseLeftButtonDown="OnDrag">
 
     <Window.Resources>
-        <Style x:Key="Label" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="0,0,14,0" />
-        </Style>
         <Style x:Key="Field" TargetType="FrameworkElement">
             <Setter Property="Margin" Value="0,5" />
         </Style>
@@ -37,19 +31,19 @@
                     <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
                     <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
                 </Grid.RowDefinitions>
-                <TextBlock Style="{StaticResource Label}" Text="Room name" />
+                <TextBlock Style="{StaticResource FormLabel}" Text="Room name" />
                 <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,5" MaxLength="30" FontSize="13" Padding="10,6"
                          Style="{StaticResource OutlinedField}" materialDesign:HintAssist.IsFloating="False"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" TextChanged="OnChanged" />
 
-                <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Zone" />
+                <TextBlock Grid.Row="1" Style="{StaticResource FormLabel}" Text="Zone" />
                 <ComboBox x:Name="ZoneBox" Grid.Row="1" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name"
                           SelectionChanged="OnChanged" />
 
-                <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="Occupancy" />
+                <TextBlock Grid.Row="2" Style="{StaticResource FormLabel}" Text="Occupancy" />
                 <ComboBox x:Name="OccupancyBox" Grid.Row="2" Grid.Column="1" Margin="0,5" FontSize="13" />
 
-                <TextBlock Grid.Row="3" Style="{StaticResource Label}" Text="Password" />
+                <TextBlock Grid.Row="3" Style="{StaticResource FormLabel}" Text="Password" />
                 <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,5" Orientation="Horizontal">
                     <RadioButton x:Name="PasswordOn" Content="On" Margin="0,0,18,0" Checked="OnPasswordSwitch" />
                     <RadioButton x:Name="PasswordOff" Content="Off" IsChecked="True" Checked="OnPasswordSwitch" />
@@ -61,11 +55,11 @@
                              Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Confirm password"
                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
 
-                <TextBlock Grid.Row="6" Style="{StaticResource Label}" Text="Members" />
+                <TextBlock Grid.Row="6" Style="{StaticResource FormLabel}" Text="Members" />
                 <ComboBox x:Name="MembersBox" Grid.Row="6" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
-                <TextBlock Grid.Row="7" Style="{StaticResource Label}" Text="Purpose" />
+                <TextBlock Grid.Row="7" Style="{StaticResource FormLabel}" Text="Purpose" />
                 <ComboBox x:Name="PurposeBox" Grid.Row="7" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
-                <TextBlock Grid.Row="8" Style="{StaticResource Label}" Text="Language" />
+                <TextBlock Grid.Row="8" Style="{StaticResource FormLabel}" Text="Language" />
                 <ComboBox x:Name="LanguageBox" Grid.Row="8" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Name" />
             </Grid>
 

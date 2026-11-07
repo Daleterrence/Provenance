@@ -24,8 +24,10 @@
     <SolidColorBrush x:Key="Btn.Sheen" Color="White" Opacity="0.16" />
     <SolidColorBrush x:Key="Btn.Rim" Color="#0C2D52" />
     <SolidColorBrush x:Key="Btn.Text" Color="#FFFFFF" />
-    <!-- inside the Play segments, so it sits on the button's own blue -->
-    <SolidColorBrush x:Key="Btn.Focus.Inset" Color="#FFFFFF" />
+    <!-- where the template puts the sheen and the focus ring. The Play segments change these -->
+    <Thickness x:Key="Btn.Sheen.Inset">1</Thickness>
+    <Thickness x:Key="Btn.Sheen.Width">0,1,0,0</Thickness>
+    <Thickness x:Key="Btn.Ring.Inset">-4</Thickness>
     <DropShadowEffect x:Key="Btn.Shadow" BlurRadius="8" ShadowDepth="2" Direction="270" Opacity="0.35" Color="Black" />
 
     <!-- Play gets a brighter blue, a lighter edge and a soft blue glow so it's the first thing you see -->
@@ -42,7 +44,6 @@
         <GradientStop Color="#1F5590" Offset="1" />
     </LinearGradientBrush>
     <SolidColorBrush x:Key="Play.Sheen" Color="White" Opacity="0.3" />
-    <Thickness x:Key="Play.Sheen.Width">0,1,0,0</Thickness>
     <SolidColorBrush x:Key="Play.Rim" Color="#3B78C8" />
     <SolidColorBrush x:Key="Play.Divider" Color="White" Opacity="0.22" />
     <DropShadowEffect x:Key="Play.Shadow" BlurRadius="22" ShadowDepth="0" Opacity="0.7" Color="#3F86E0" />
@@ -51,22 +52,20 @@
         <Grid>
             <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}" />
-            <Border x:Name="Sheen" Margin="1" BorderBrush="{DynamicResource Btn.Sheen}" BorderThickness="0,1,0,0" />
+            <Border x:Name="Sheen" Margin="{DynamicResource Btn.Sheen.Inset}" BorderBrush="{DynamicResource Btn.Sheen}"
+                    BorderThickness="{DynamicResource Btn.Sheen.Width}" />
             <!-- outside the button, so keyboard focus never looks like a hover -->
-            <Border x:Name="Ring" Margin="-4" BorderThickness="2" BorderBrush="{DynamicResource Focus.Ring}" Visibility="Collapsed" />
+            <Border x:Name="Ring" Margin="{DynamicResource Btn.Ring.Inset}" BorderThickness="2" BorderBrush="{DynamicResource Focus.Ring}"
+                    Visibility="Collapsed" />
             <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" RecognizesAccessKey="True"
                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
         </Grid>
         <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Btn.Fill.Hover}" />
-            </Trigger>
             <Trigger Property="behaviours:FocusCue.Shown" Value="True">
                 <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Btn.Fill.Press}" />
                 <Setter TargetName="Sheen" Property="Visibility" Value="Collapsed" />
                 <Setter TargetName="Content" Property="RenderTransform">
                     <Setter.Value><TranslateTransform Y="1" /></Setter.Value>
@@ -99,7 +98,14 @@
         <Setter Property="behaviours:FocusCue.Track" Value="True" />
         <Setter Property="Template" Value="{StaticResource Btn.Template}" />
         <!-- on the button, not the template, as content that's its own element (icon and label) takes the button's colour -->
+        <!-- on the button, not the template, so a style can swap the fills (the icon on it reads the same keys) -->
         <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Btn.Fill.Hover}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Btn.Fill.Press}" />
+            </Trigger>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Foreground" Value="{DynamicResource Btn.Disabled.Text}" />
             </Trigger>
@@ -145,6 +151,14 @@
         </Style.Triggers>
     </Style>
 
+    <!-- a folder box's button, in the column after it -->
+    <Style x:Key="BrowseButton" TargetType="Button" BasedOn="{StaticResource PolButton}">
+        <Setter Property="Grid.Column" Value="1" />
+        <Setter Property="Margin" Value="8,0,0,0" />
+        <Setter Property="Height" Value="NaN" />
+        <Setter Property="Content" Value="BROWSE" />
+    </Style>
+
     <!-- the play button: play and the cog sit in one shell, each with its own fill, so each lights up and greys out
          on its own -->
     <Style x:Key="ActionShell" TargetType="Border">
@@ -155,50 +169,27 @@
         <Setter Property="Effect" Value="{DynamicResource Play.Shadow}" />
     </Style>
 
-    <Style x:Key="ActionSegment" TargetType="Button">
-        <Setter Property="Foreground" Value="{DynamicResource Btn.Text}" />
+    <!-- the segments are the button's own template with Play's brighter blue, and the ring and sheen drawn inside. The
+         hover and press are style triggers rather than Btn.Fill.Hover and Btn.Fill.Press resources, as an icon on it reads those
+         two for its disc -->
+    <Style x:Key="ActionSegment" TargetType="Button" BasedOn="{StaticResource PolButton}">
         <Setter Property="Background" Value="{DynamicResource Play.Fill}" />
-        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-        <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="behaviours:FocusCue.Track" Value="True" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Grid>
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" />
-                        <Border x:Name="Sheen" BorderBrush="{DynamicResource Play.Sheen}" BorderThickness="{DynamicResource Play.Sheen.Width}" />
-                        <Border x:Name="Ring" Margin="3" BorderThickness="2" BorderBrush="{DynamicResource Btn.Focus.Inset}" Visibility="Collapsed" />
-                        <ContentPresenter x:Name="Content" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
-                    </Grid>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Play.Fill.Hover}" />
-                        </Trigger>
-                        <Trigger Property="behaviours:FocusCue.Shown" Value="True">
-                            <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Play.Fill.Press}" />
-                            <Setter TargetName="Sheen" Property="Visibility" Value="Collapsed" />
-                            <Setter TargetName="Content" Property="RenderTransform">
-                                <Setter.Value><TranslateTransform Y="1" /></Setter.Value>
-                            </Setter>
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Btn.Disabled.Fill}" />
-                            <Setter TargetName="Sheen" Property="Visibility" Value="Collapsed" />
-                            <Setter Property="Cursor" Value="Arrow" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Height" Value="NaN" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="12" />
+        <Style.Resources>
+            <SolidColorBrush x:Key="Btn.Sheen" Color="White" Opacity="0.3" />
+            <SolidColorBrush x:Key="Focus.Ring" Color="#FFFFFF" />
+            <Thickness x:Key="Btn.Sheen.Inset">0</Thickness>
+            <Thickness x:Key="Btn.Ring.Inset">3</Thickness>
+        </Style.Resources>
         <Style.Triggers>
-            <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Foreground" Value="{DynamicResource Btn.Disabled.Text}" />
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Play.Fill.Hover}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Play.Fill.Press}" />
             </Trigger>
         </Style.Triggers>
     </Style>

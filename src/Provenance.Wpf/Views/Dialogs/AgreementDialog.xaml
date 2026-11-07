@@ -31,11 +31,8 @@
         <Border Grid.Row="2" Margin="18,0,18,0" CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.1}"
                 BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
             <!-- read-only so it can be copied, and it scrolls itself, an outer ScrollViewer fights it for the wheel -->
-            <TextBox x:Name="BodyText" Style="{x:Null}" FontSize="12.5" TextWrapping="Wrap" TextBlock.LineHeight="18"
-                     IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="14,10"
-                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                     Foreground="{DynamicResource Text.1}" CaretBrush="Transparent" Cursor="IBeam"
-                     SelectionBrush="{DynamicResource Primary}" PreviewKeyDown="OnBodyKey" />
+            <TextBox x:Name="BodyText" Style="{StaticResource SelectableText}" FontSize="12.5" TextBlock.LineHeight="18" Padding="14,10"
+                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PreviewKeyDown="OnBodyKey" />
         </Border>
 
         <Border Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FooterBar}">

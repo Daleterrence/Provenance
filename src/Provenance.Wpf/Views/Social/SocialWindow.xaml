@@ -43,19 +43,6 @@
             </Setter>
         </Style>
 
-        <!-- Tag is true on the open tab, which gets an underline as well as the colour -->
-        <Style x:Key="Tab" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
-            <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
-            <Setter Property="BorderThickness" Value="0,0,0,2" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
-                    <Setter Property="Foreground" Value="{DynamicResource Primary}" />
-                    <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
         <!-- the tooltip and icon (Tag) follow the window's state -->
         <Style x:Key="MaxButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
             <Setter Property="ToolTip" Value="Maximise" />
@@ -86,10 +73,7 @@
                         <Border x:Name="Bubble" MaxWidth="420" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}"
                                 Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                             <!-- read-only so it can be copied, no Tab stop so Tab goes on to the compose box -->
-                            <TextBox x:Name="Body" Style="{x:Null}" Text="{Binding Display, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
-                                     IsReadOnly="True" IsTabStop="False" BorderThickness="0" Background="Transparent" Padding="0"
-                                     Foreground="{DynamicResource Text.1}" CaretBrush="Transparent" Cursor="IBeam"
-                                     SelectionBrush="{DynamicResource Primary}" Tag="{Binding}" ContextMenuOpening="OnLineMenu">
+                            <TextBox x:Name="Body" Style="{StaticResource SelectableText}" Text="{Binding Display, Mode=OneWay}" FontSize="13" IsTabStop="False" Tag="{Binding}" ContextMenuOpening="OnLineMenu">
                                 <TextBox.ContextMenu>
                                     <ContextMenu />
                                 </TextBox.ContextMenu>
@@ -220,8 +204,8 @@
                             <controls:ProfilePictureCircle Diameter="52" Source="{Binding Avatar}" Cursor="Hand"
                                                            ToolTip="Change your profile picture"
                                                            MouseLeftButtonUp="OnAvatarClick" />
-                            <ProgressBar Width="52" Height="52" IsIndeterminate="True" Value="0" IsHitTestVisible="False"
-                                         Style="{StaticResource MaterialDesignCircularProgressBar}"
+                            <ProgressBar Width="52" Height="52" IsHitTestVisible="False"
+                                         Style="{StaticResource Spinner}"
                                          Visibility="{Binding ProfilePictureSaving, Converter={StaticResource BoolToVis}}" />
                         </Grid>
                         <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
@@ -238,8 +222,8 @@
                                 <ComboBox Style="{StaticResource StatusPicker}" VerticalAlignment="Center"
                                           IsEnabled="{Binding StatusEditable}"
                                           ItemsSource="{Binding StatusLabels}" SelectedIndex="{Binding MyStatusIndex}" />
-                                <ProgressBar Width="12" Height="12" Margin="6,0,0,0" IsIndeterminate="True" Value="0"
-                                             Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                <ProgressBar Width="12" Height="12" Margin="6,0,0,0"
+                                             Style="{StaticResource Spinner}"
                                              ToolTip="Waiting for PlayOnline to confirm"
                                              Visibility="{Binding StatusPending, Converter={StaticResource BoolToVis}}" />
                                 <TextBlock Text="{Binding Summary}" Margin="10,0,0,0" FontSize="12" VerticalAlignment="Center"
@@ -297,10 +281,10 @@
                                Text="{Binding StatusNote}"
                                Visibility="{Binding StatusNote, Converter={StaticResource NullToVisibilityConverter}}" />
                     <StackPanel Orientation="Horizontal" Margin="-6,8,0,0">
-                        <Button Style="{StaticResource Tab}" Tag="{Binding ShowFriends}" Content="FRIENDS"
-                                Command="{Binding ShowFriendsTabCommand}" FontSize="12" Padding="10,0" Height="28" />
-                        <Button Style="{StaticResource Tab}" Tag="{Binding ShowGroups}" Content="GROUPS"
-                                Command="{Binding ShowGroupsTabCommand}" FontSize="12" Padding="10,0" Height="28" />
+                        <Button Style="{StaticResource UnderlineTab}" Tag="{Binding ShowFriends}" Content="FRIENDS"
+                                Command="{Binding ShowFriendsTabCommand}" Height="28" />
+                        <Button Style="{StaticResource UnderlineTab}" Tag="{Binding ShowGroups}" Content="GROUPS"
+                                Command="{Binding ShowGroupsTabCommand}" Height="28" />
                     </StackPanel>
                 </StackPanel>
 
@@ -336,11 +320,9 @@
                                                     </TextBlock>
                                                     <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="{DynamicResource Text.3}" />
                                                 </StackPanel>
-                                                <Border Grid.Column="1" MinWidth="20" Height="20" CornerRadius="10" Padding="6,0" Margin="8,0,0,0"
-                                                        Background="{DynamicResource Primary}" VerticalAlignment="Center"
+                                                <Border Grid.Column="1" Style="{StaticResource CountBadge}"
                                                         Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}" ToolTip="New group chat lines">
-                                                    <TextBlock Text="{Binding Unread}" FontSize="11" FontWeight="SemiBold"
-                                                               Foreground="{DynamicResource Text.OnPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Unread}" Style="{StaticResource CountBadgeText}" />
                                                 </Border>
                                                 <Button x:Name="GroupChatButton" Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
                                                         Style="{StaticResource IconButton}" Foreground="{DynamicResource Primary}"
@@ -426,8 +408,7 @@
 
                 <Grid RowDefinitions="Auto,*,Auto"
                       Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
-                    <Border Padding="16,10" BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
-                            Background="{DynamicResource Surface.1}">
+                    <Border Style="{StaticResource PaneHeader}">
                         <Grid>
                             <Button HorizontalAlignment="Right" VerticalAlignment="Center" Width="32" Height="32" Padding="0"
                                     Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
@@ -454,17 +435,8 @@
                         <ItemsControl ItemsSource="{Binding Conversation}" ItemTemplate="{StaticResource ChatLine}" />
                     </ScrollViewer>
                     <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" FontSize="12"
-                               Foreground="{DynamicResource Text.3}" TextWrapping="Wrap" TextAlignment="Center">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Conversation.Count}" Value="0">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
+                               Foreground="{DynamicResource Text.3}" TextWrapping="Wrap" TextAlignment="Center"
+                               Style="{StaticResource ShowWhenZero}" Tag="{Binding Conversation.Count}">
                         <Run Text="No messages with " /><Run Text="{Binding SelectedFriend.Name, Mode=OneWay}" /><Run Text=" yet." />
                     </TextBlock>
                     <Border Grid.Row="2" Style="{StaticResource FooterBar}">
