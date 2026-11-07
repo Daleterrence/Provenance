@@ -6,6 +6,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+        xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
         xmlns:socialViews="clr-namespace:Provenance.Wpf.Views.Social"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Main"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
@@ -88,7 +89,7 @@
 
         <controls:TitleBar Title="PROVENANCE" Icon="{StaticResource TitleIcon}" TitleSize="13" DimTitle="True" GlyphSize="17"
                            CloseToolTip="{Binding CloseTooltip}" CloseName="{Binding CloseTooltip}">
-            <StackPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <ToggleButton x:Name="WorldsChip" Style="{x:Null}" VerticalAlignment="Center"
                               Margin="0,0,6,0" Cursor="Hand" Padding="0" KeyboardNavigation.AcceptsReturn="True"
                               shell:WindowChrome.IsHitTestVisibleInChrome="True"
@@ -105,7 +106,7 @@
                     </ToggleButton.Template>
                     <StackPanel Orientation="Horizontal">
                         <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
-                                 Style="{StaticResource WorldDot}" Tag="{Binding WorldsState}" />
+                                 Style="{StaticResource WorldDot}" behaviours:State.Status="{Binding WorldsState}" />
                         <TextBlock Text="{Binding WorldsSummary}" FontSize="12" Foreground="{DynamicResource Text.2}" VerticalAlignment="Center" />
                         <controls:SvgIcon Glyph="down" Flat="True" Width="14" Height="14" Margin="6,0,0,0"
                                           VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" />
@@ -142,7 +143,7 @@
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Margin="0,2,16,2" ToolTip="{Binding Label}">
                                     <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center"
-                                             Style="{StaticResource WorldDot}" Tag="{Binding Status}" />
+                                             Style="{StaticResource WorldDot}" behaviours:State.Status="{Binding Status}" />
                                     <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource Text.2}" />
                                 </StackPanel>
                             </DataTemplate>

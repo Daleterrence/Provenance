@@ -47,8 +47,7 @@ public class AppWindow : Window
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Handled || e.Key != Key.Escape || !CloseOnEscape || !OnEscape()) return;
-        e.Handled = true;
+        if (e.Key == Key.Escape && CloseOnEscape && OnEscape()) e.Handled = true;
     }
 
     protected virtual bool OnEscape()

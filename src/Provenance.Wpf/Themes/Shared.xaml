@@ -323,25 +323,25 @@
         </Setter>
     </Style>
 
-    <!-- a world's dot. Tag is its status, and one we don't know is grey on the chip and in the list -->
+    <!-- a world's dot. State.Status is its status, and one we don't know is grey on the chip and in the list -->
     <Style x:Key="WorldDot" TargetType="Ellipse">
         <Setter Property="Fill" Value="{DynamicResource Text.3}" />
         <Style.Triggers>
-            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="up">
+            <Trigger Property="behaviours:State.Status" Value="up">
                 <Setter Property="Fill" Value="{DynamicResource State.Online}" />
-            </DataTrigger>
-            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="maintenance">
+            </Trigger>
+            <Trigger Property="behaviours:State.Status" Value="maintenance">
                 <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
-            </DataTrigger>
-            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="partial-maintenance">
+            </Trigger>
+            <Trigger Property="behaviours:State.Status" Value="partial-maintenance">
                 <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
-            </DataTrigger>
-            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="down">
+            </Trigger>
+            <Trigger Property="behaviours:State.Status" Value="down">
                 <Setter Property="Fill" Value="{DynamicResource State.Down}" />
-            </DataTrigger>
-            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="partially-down">
+            </Trigger>
+            <Trigger Property="behaviours:State.Status" Value="partially-down">
                 <Setter Property="Fill" Value="{DynamicResource State.Down}" />
-            </DataTrigger>
+            </Trigger>
         </Style.Triggers>
     </Style>
 </ResourceDictionary>

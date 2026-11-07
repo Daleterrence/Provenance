@@ -14,16 +14,7 @@
         Style="{StaticResource DialogCard}" CardMargin="12" WideShadow="True">
 
     <Grid Margin="28,22" RowDefinitions="Auto,*,Auto">
-        <Grid>
-            <StackPanel Orientation="Horizontal">
-                <Image Source="/Assets/provenance-256.png" Width="28" Height="28" RenderOptions.BitmapScalingMode="HighQuality" />
-                <TextBlock Text="Repair game files" FontSize="19" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
-            </StackPanel>
-            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Width="30" Height="30" Padding="0"
-                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}" Click="OnClose" ToolTip="Close" AutomationProperties.Name="Close">
-                <controls:SvgIcon Glyph="close" Flat="True" Width="16" Height="16" />
-            </Button>
-        </Grid>
+        <controls:DialogHeader Title="Repair game files" />
 
         <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,24,0,20">
             <controls:SvgIcon Glyph="ok" Flat="True" Width="44" Height="44" Margin="0,0,0,14" HorizontalAlignment="Center"

@@ -11,6 +11,11 @@ public static class State
     public static readonly DependencyProperty IsCurrentProperty = DependencyProperty.RegisterAttached(
         "IsCurrent", typeof(bool), typeof(State), new PropertyMetadata(false));
 
+    public static readonly DependencyProperty StatusProperty = DependencyProperty.RegisterAttached(
+        "Status", typeof(string), typeof(State), new PropertyMetadata(null));
+
+    public static string? GetStatus(DependencyObject d) => (string?)d.GetValue(StatusProperty);
+    public static void SetStatus(DependencyObject d, string? value) => d.SetValue(StatusProperty, value);
     public static bool GetIsError(DependencyObject d) => (bool)d.GetValue(IsErrorProperty);
     public static void SetIsError(DependencyObject d, bool value) => d.SetValue(IsErrorProperty, value);
     public static bool GetIsCurrent(DependencyObject d) => (bool)d.GetValue(IsCurrentProperty);
