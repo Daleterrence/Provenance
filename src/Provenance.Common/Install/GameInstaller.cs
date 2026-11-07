@@ -164,7 +164,7 @@ public sealed class GameInstaller
         {
             File.Delete(partial);
             throw Shown.Mark(new InvalidDataException(
-                $"The installer part {part.FileName} didn't match the one this version of Provenance installs, so press Try again, " +
+                $"The installer part {part.FileName} didn't match the one this version of Provenance installs, please try again, " +
                 "and if it keeps happening, check for a Provenance update."));
         }
         File.Move(partial, dest, overwrite: true);

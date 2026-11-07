@@ -4,18 +4,19 @@ namespace Provenance.Common.Hook;
 public static class HookFailures
 {
     public const string ChatCommError = "Chat communication error.";
-    public const string NoAnswer = "PlayOnline didn't answer.";
+    public const string Busy = "PlayOnline is busy with something else. Try again in a moment.";
     public const string FriendListChanged = "Your friend list changed. Try again.";
     public const string IgnoredAlready = "That person is already on your ignore list.";
     public const string FriendListFull = "Your friend list is full (200 friends).";
     public static string ChangeRejected(string reason) => $"PlayOnline didn't accept the change ({reason}).";
     public const string RequestWriteFailed = "Provenance couldn't send the request to PlayOnline. Try again.";
     public const string TooLongForLine = "That's too long for one line.";
-    public const string NotSentHandleChanging = "Not sent: your handle was changing.";
+    public const string LineHandleChanging = "Your handle was changing, so that line wasn't sent. Try again.";
     public const string LineMayNotHaveGone = "PlayOnline didn't answer, so that line may not have gone.";
 
     public static class Messages
     {
+        public const string HandleChanging = "Your handle was changing, so the message wasn't sent. Try again.";
         public const string NoAnswer = "Not sent: PlayOnline didn't answer.";
         public const string Unconfirmed = "Not confirmed: Provenance didn't hear back from PlayOnline. It might still have been sent.";
         public const string Unsent = "Not sent: FINAL FANTASY XI didn't finish sending it.";
@@ -34,7 +35,6 @@ public static class HookFailures
 
     public static class Handles
     {
-        public const string Busy = "PlayOnline is busy with something else. Try again in a moment.";
         public const string AlreadyActive = "That handle is already active.";
         public const string LimitText = "Content ID limit reached. Cannot link any more Content IDs.";
         public const string ListChanged = "Your handles or characters changed, so nothing was saved. Try again.";
@@ -56,12 +56,12 @@ public static class HookFailures
         public const string NotNow = "Chat rooms aren't available right now.";
         public const string MasterOnly = "This command is for the room master only.";
         public const string Unlocked = "The old password was removed, but the new one couldn't be set. The room has no password now.";
-        public const string MasterHandleChanging = "Your handle was changing, so nothing was changed.";
+        public const string MasterHandleChanging = "Your handle was changing, so nothing was changed. Try again.";
         public const string Refused = "Room entry refused.";
         public const string WrongPassword = "Wrong password.";
         public const string Full = "Selected chat room is currently full and cannot be entered.";
         public const string Closed = "This room is already closed and cannot be entered.";
-        public const string JoinHandleChanging = "Your handle was changing, so the room wasn't entered.";
+        public const string JoinHandleChanging = "Your handle was changing, so the room wasn't entered. Try again.";
         public const string BadName = "The entered room name cannot be used. Please enter a different name.";
         public static string AlreadyLeft(string name) => $"{name} has already left.";
         public static string RoomListFailed(string reason) => $"The room list didn't load ({reason}).";
@@ -74,7 +74,7 @@ public static class HookFailures
         public const string NotMember = "You are not a member of the selected group.";
         public const string SendFailed = "Unable to send chat message.";
         public const string Characters = "Group chat can't send some of those characters.";
-        public const string JoinHandleChanging = "Your handle was changing, so the group chat wasn't joined.";
+        public const string JoinHandleChanging = "Your handle was changing, so the group chat wasn't joined. Try again.";
         public const string HandlesChanged = "Your handles changed, so the group chat wasn't joined. Try again.";
     }
 
@@ -85,11 +85,12 @@ public static class HookFailures
         public const string IgnoreSelf = "You can't ignore yourself.";
         public const string IgnoreListChanged = "Your ignore list changed. Try again.";
         public const string BadName = "Use 1 to 15 English letters, numbers or symbols.";
-        public const string EditHandleChanging = "Not changed: your handle was changing. Try again.";
+        public const string EditHandleChanging = "Your handle was changing, so nothing was changed. Try again.";
         public const string EditReloaded = "PlayOnline had a newer friend list, so Provenance loaded it instead. Try again.";
         public const string IgnoreListFull = "Your ignore list is full (100 people).";
+        public const string AnswerHandleGone = "This handle does not exist anymore, so the friend request was not received.";
         public const string AnswerNoReply = "PlayOnline didn't reply, so it's not certain your answer got through. If the request's still open, it'll show again next time you log in.";
-        public const string AnswerHandleChanging = "Not sent: your handle was changing. Try again.";
+        public const string AnswerHandleChanging = "Your handle was changing, so your answer wasn't sent. Try again.";
         public const string NoSuchRequest = "That friend request isn't there any more.";
         public const string OwnRequest = "That request is from one of your own handles. You can only decline it.";
         public const string AnswerFriendGone = "That person isn't on your friend list any more, so nothing was sent.";
@@ -101,7 +102,7 @@ public static class HookFailures
         public const string QuoteInName = "Provenance can't search for handle names with an apostrophe (') in them.";
         public const string BadHid = "Type an H-ID in numbers, like 00-1234567.";
         public const string BadCharacterName = "Type a character name of up to 15 English letters, with no spaces, numbers or symbols.";
-        public const string NoSchemaCharacters = "Provenance couldn't read the FINAL FANTASY XI profile layout from your PlayOnline install, so it can't search for characters.";
+        public const string NoSchemaCharacters = "Provenance couldn't read the profile layout from your PlayOnline install, so it can't search for characters.";
         public const string NoSchemaHandles = "Provenance couldn't read the profile layout from your PlayOnline install, so it can't search for handles.";
         public const string NoHidHit = "PlayOnline didn't find a handle with that H-ID.";
         public const string NoCharacterHit = "PlayOnline didn't find a FINAL FANTASY XI character with that name.";
@@ -113,7 +114,7 @@ public static class HookFailures
         public const string RequestHourlyLimit = "You've sent 600 messages in the last hour, so the request wasn't sent. Try again later.";
         public const string RequestListNotSaved = "PlayOnline didn't save the friend list, so your request wasn't sent. Try again.";
         public const string PictureNoAnswer = "PlayOnline didn't answer the profile picture change.";
-        public const string PictureHandleChanging = "Not saved: your handle was changing. Try again.";
+        public const string PictureHandleChanging = "Your handle was changing, so the profile picture wasn't saved. Try again.";
         public const string StatusNoAnswer = "PlayOnline didn't answer the status change.";
         public static string AnswerRejected(string reason) => $"PlayOnline didn't accept your answer ({reason}).";
         public static string SearchRejected(string reason) => $"PlayOnline couldn't run the search ({reason}).";
@@ -127,8 +128,10 @@ public static class HookFailures
 
     public static class Groups
     {
+        public const string NoAnswer = "PlayOnline didn't answer, so the group change may not have gone through.";
+        public const string HandleGone = "This handle does not exist anymore, so the group invitation was not received.";
         public const string DisbandMasterOnly = "Only the group master can disband the group.";
-        public const string HandleChanging = "Not done: your handle was changing. Try again.";
+        public const string HandleChanging = "Your handle was changing, so nothing was done. Try again.";
         public const string NotAllowed = "Only the group master (or a sub-master) can do that.";
         public const string InviteSelf = "You can't invite yourself to a group.";
         public const string OnlyInvited = "You've only been invited to that group. Accept the invitation first.";
@@ -149,6 +152,7 @@ public static class HookFailures
 
     public static class Profile
     {
+        public const string NoAnswer = "PlayOnline didn't answer, so the profile couldn't be shown.";
         public const string None = "This person doesn't have a PlayOnline profile to show.";
         public const string FriendsOnly = "You can only view your friends' profiles.";
         public const string NoSchema = "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show profiles.";
@@ -160,9 +164,10 @@ public static class HookFailures
     public static class ProfileEditor
     {
         public const string Cancelled = "Logging out or starting FINAL FANTASY XI stopped the request.";
-        public const string LoadHandleChanging = "Your handle was changing. Open the profile again.";
-        public const string SaveHandleChanging = "Not saved: your handle was changing. Open the profile again.";
-        public const string NoSchema = "Provenance couldn't read the profile layout from your PlayOnline install.";
+        public const string LoadHandleChanging = "Your handle was changing, so the profile wasn't loaded. Open the profile again.";
+        public const string SaveHandleChanging = "Your handle was changing, so the profile wasn't saved. Open the profile again.";
+        public const string LoadNoAnswer = "PlayOnline didn't answer, so your profile couldn't be loaded.";
+        public const string NoSchema = "Provenance couldn't read the profile layout from your PlayOnline install, so it can't show your profile.";
         public const string NoProfile = "PlayOnline doesn't have a profile for this handle.";
         public const string NotLoaded = "Open the profile again before saving.";
         public const string NothingToSave = "You haven't changed anything, so there's nothing to save.";
@@ -172,7 +177,6 @@ public static class HookFailures
         public const string BadWord = "That handle name has a word in it that PlayOnline doesn't allow. Choose a different name.";
         public const string NameRejected = "The entered name could not be registered. Please register with a different name.";
         public const string NameNotKept = "PlayOnline didn't keep the new handle name. Try again later.";
-        public const string Busy = "PlayOnline was busy with other requests. Try again.";
         public const string MismatchCharacter = "PlayOnline sent a profile that isn't this character's, so nothing was changed.";
         public const string MismatchHandle = "PlayOnline sent a profile that isn't this handle's, so nothing was changed.";
         public const string CharacterGone = "That character isn't on your profile any more. Open the profile again.";

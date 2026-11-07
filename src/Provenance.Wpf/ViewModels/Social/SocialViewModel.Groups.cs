@@ -220,7 +220,8 @@ public partial class SocialViewModel
         }
         EditNote = st switch
         {
-            "timeout" => HookFailures.NoAnswer,
+            "timeout" => HookFailures.Groups.NoAnswer,
+            "failed:busy" => HookFailures.Busy,
             "failed:not master" => HookFailures.Groups.DisbandMasterOnly,
             "failed:handle changing" => HookFailures.Groups.HandleChanging,
             "failed:not allowed" => HookFailures.Groups.NotAllowed,
@@ -233,7 +234,9 @@ public partial class SocialViewModel
             "failed:bad name" => HookFailures.Groups.NeedName,
             "failed:name too long" => HookFailures.Groups.NameTooLong,
             "failed:already a member" => HookFailures.Groups.AlreadyMember,
-            "failed:no such group" or "failed:no such member" or "failed:no such invitation" or "failed:no handle" => HookFailures.Groups.Changed,
+            "failed:no such group" or "failed:no such member" or "failed:no such invitation" => HookFailures.Groups.Changed,
+            "failed:no handle" when invite != null => HookFailures.Groups.HandleGone,
+            "failed:no handle" => HookFailures.Groups.Changed,
             "failed:no such friend" => HookFailures.Groups.FriendGone,
             "failed:-5316" => HookFailures.Groups.NameInUse,
             "failed:-5428" or "failed:-261" => HookFailures.Groups.NameRejected,

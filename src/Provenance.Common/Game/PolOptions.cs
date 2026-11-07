@@ -10,7 +10,7 @@ public static class PolOptions
 {
     public static readonly int[] AutoDisconnectChoices = [-1, 10, 20, 30, 40, 50, 60];
 
-    public const string LinkedText = "Provenance can't change these settings in a PlayOnline Viewer folder that's reached through a link.";
+    public const string LinkedText = "Provenance can't change these settings because your PlayOnline Viewer folder is redirected to another location.";
 
     private static readonly string[] MessageFolders = [@"s\a", @"s\b", @"r\a", @"r\b"];
 

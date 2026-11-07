@@ -310,7 +310,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             return;
         }
         if (DateTime.UtcNow - _at > TimeSpan.FromSeconds(_job == Job.Rename ? 260 : 250))
-            Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.NoAnswer : SaveUnconfirmed);
+            Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : SaveUnconfirmed);
     }
 
     private void Fill(MyProfile p)
@@ -534,12 +534,12 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         "failed:word" => HookFailures.ProfileEditor.BadWord,
         "failed:-261" or "failed:-5429" => HookFailures.ProfileEditor.NameRejected,
         "failed:reloaded" => HookFailures.ProfileEditor.NameNotKept,
-        "failed:busy" => HookFailures.ProfileEditor.Busy,
+        "failed:busy" => HookFailures.Busy,
         "failed:mismatch" => job == Job.LoadXi ? HookFailures.ProfileEditor.MismatchCharacter
                                               : HookFailures.ProfileEditor.MismatchHandle,
         "failed:no character" => HookFailures.ProfileEditor.CharacterGone,
         "failed:write" => HookFailures.ProfileEditor.WriteFailed,
-        "failed:timeout" => job is Job.Load or Job.LoadXi ? HookFailures.NoAnswer : SaveUnconfirmed,
+        "failed:timeout" => job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : SaveUnconfirmed,
         _ => job switch
         {
             Job.Load => HookFailures.ProfileEditor.LoadFailed(Why(state)),

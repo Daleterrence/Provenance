@@ -66,7 +66,7 @@ public static class HandleList
     // "timeout" is the app's own, the rest are the hook's. Codes are polcore's
     public static string Failed(HandleChange op, string state) => state switch
     {
-        "failed:busy" => HookFailures.Handles.Busy,
+        "failed:busy" => HookFailures.Busy,
         "failed:already active" => HookFailures.Handles.AlreadyActive,
         "failed:handle full" or "failed:-7169" => LimitText,
         "failed:list changed" or "failed:not linked" or "failed:already linked" or "failed:not active" or "failed:-7172"

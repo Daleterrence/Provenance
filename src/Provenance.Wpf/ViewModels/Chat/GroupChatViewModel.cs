@@ -408,7 +408,8 @@ public sealed partial class GroupChatViewModel : ObservableObject
             {
                 "failed:too long" => HookFailures.TooLongForLine,
                 "failed:characters" => CharactersText,
-                "failed:handle changing" => HookFailures.NotSentHandleChanging,
+                "failed:handle changing" => HookFailures.LineHandleChanging,
+                "failed:busy" => HookFailures.Busy,
                 "failed:timeout" => HookFailures.LineMayNotHaveGone,
                 _ => _social.ViewerText(0x3eba, HookFailures.GroupChat.SendFailed),
             };

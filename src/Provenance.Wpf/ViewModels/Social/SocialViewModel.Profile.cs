@@ -166,7 +166,8 @@ public partial class SocialViewModel
 
     private static string ProfileFailText(string st) => st switch
     {
-        "timeout" => HookFailures.NoAnswer,
+        "timeout" => HookFailures.Profile.NoAnswer,
+        "failed:busy" => HookFailures.Busy,
         "failed:no such friend" or "failed:friend list changed" => HookFailures.FriendListChanged,
         "failed:pending" => HookFailures.Profile.FriendsOnly,
         "failed:no schema" => HookFailures.Profile.NoSchema,

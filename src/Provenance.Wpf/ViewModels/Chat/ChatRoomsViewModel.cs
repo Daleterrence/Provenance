@@ -342,6 +342,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             "failed:not master" => MasterOnly,
             "failed:unlocked" => UnlockedText,
             "failed:handle changing" => HookFailures.ChatRooms.MasterHandleChanging,
+            "failed:busy" => HookFailures.Busy,
             _ => HookFailures.ChatCommError,
         });
     }
@@ -594,6 +595,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             "failed:closed" => HookFailures.ChatRooms.Closed,
             "failed:no chat" => NotNow,
             "failed:handle changing" => HookFailures.ChatRooms.JoinHandleChanging,
+            "failed:busy" => HookFailures.Busy,
             "failed:bad name" => HookFailures.ChatRooms.BadName,
             _ => HookFailures.ChatCommError,
         };
@@ -727,7 +729,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             {
                 "failed:too long" => HookFailures.TooLongForLine,
                 "failed:timeout" => HookFailures.LineMayNotHaveGone,
-                "failed:handle changing" => HookFailures.NotSentHandleChanging,
+                "failed:handle changing" => HookFailures.LineHandleChanging,
+                "failed:busy" => HookFailures.Busy,
                 _ => HookFailures.ChatCommError,
             };
         // only the hook can tell whether it fits polcore's line, so one that doesn't goes back to be cut down

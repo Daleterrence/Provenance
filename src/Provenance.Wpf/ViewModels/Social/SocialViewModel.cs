@@ -749,6 +749,7 @@ public partial class SocialViewModel : ObservableObject
     private static string EditFailureText(string state) => state switch
     {
         "timeout" => HookFailures.Friends.EditNoAnswer,
+        "failed:busy" => HookFailures.Busy,
         "failed:pending" => HookFailures.Friends.DeleteOnly,
         "failed:self" => HookFailures.Friends.IgnoreSelf,
         "failed:friend list changed" or "failed:no such friend" => HookFailures.FriendListChanged,
@@ -854,6 +855,8 @@ public partial class SocialViewModel : ObservableObject
         {
             "timeout" => HookFailures.Friends.AnswerNoReply,
             "failed:handle changing" => HookFailures.Friends.AnswerHandleChanging,
+            "failed:busy" => HookFailures.Busy,
+            "failed:no handle" => HookFailures.Friends.AnswerHandleGone,
             "failed:no such request" => HookFailures.Friends.NoSuchRequest,
             "failed:self" => HookFailures.Friends.OwnRequest,
             "failed:already ignored" => HookFailures.IgnoredAlready,
@@ -1050,6 +1053,7 @@ public partial class SocialViewModel : ObservableObject
             else SearchFailed(st switch
             {
                 "timeout" => HookFailures.Friends.SearchNoAnswer,
+                "failed:busy" => HookFailures.Busy,
                 "failed:bad name" => BadHandleName,
                 "failed:quote" => QuoteInName,
                 "failed:bad hid" => BadHid,
@@ -1069,6 +1073,7 @@ public partial class SocialViewModel : ObservableObject
             SearchFailed(rst switch
             {
                 "timeout" => HookFailures.Friends.RequestNoAnswer,
+                "failed:busy" => HookFailures.Busy,
                 "failed:already a friend" => HookFailures.Friends.AlreadyFriend(_requestName),
                 "failed:self" => HookFailures.Friends.RequestSelf,
                 "failed:-7181" => HookFailures.Friends.IgnoredFirst(_requestName),
@@ -1129,6 +1134,7 @@ public partial class SocialViewModel : ObservableObject
         {
             "timeout" => HookFailures.Friends.PictureNoAnswer,
             "failed:handle changing" => HookFailures.Friends.PictureHandleChanging,
+            "failed:busy" => HookFailures.Busy,
             _ => HookFailures.Friends.PictureRejected(SocialRequests.FailReason(st)),
         };
     }
