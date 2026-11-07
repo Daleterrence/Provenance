@@ -85,8 +85,21 @@ public partial class SocialViewModel
         }).ToList();
         if (!_groupsDirty && groups.Count == Groups.Count && groups.Zip(Groups).All(p => SameGroup(p.First, p.Second))) return;
         _groupsDirty = false;
-        Groups.Clear();
-        foreach (var g in groups) Groups.Add(g);
+        // patched in place like the friends, so a group that didn't change keeps its row (and an open menu on it)
+        for (int i = 0; i < groups.Count; i++)
+        {
+            int j = -1;
+            for (int k = i; k < Groups.Count && j < 0; k++)
+                if (Groups[k].Id == groups[i].Id) j = k;
+            if (j < 0)
+            {
+                Groups.Insert(i, groups[i]);
+                continue;
+            }
+            if (j != i) Groups.Move(j, i);
+            if (!SameGroup(Groups[i], groups[i])) Groups[i] = groups[i];
+        }
+        while (Groups.Count > groups.Count) Groups.RemoveAt(Groups.Count - 1);
         HasGroups = Groups.Count > 0;
     }
 

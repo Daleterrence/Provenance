@@ -501,7 +501,7 @@ public partial class InstallViewModel : ObservableObject
 
     internal static string PartsNextText(long? gameUpdateBytes) =>
         "PlayOnline updates itself the first time you log in, and the game updates the first time you press Play" +
-        (gameUpdateBytes is long b && b > 0 ? $" ({ByteText.Size(b)} to download)." : ".");
+        (gameUpdateBytes is long b && b > 0 ? $" ({ByteText.Size(b, kb: true)} to download)." : ".");
 
     // the way the first Play picks its files, reusing the mirror's game index. Null when that could come from POL (no
     // version from POL, or the mirror hasn't got it) or the mirror's unreachable

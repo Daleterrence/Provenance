@@ -38,5 +38,5 @@ public sealed class TransferRate(TimeSpan window)
     }
 
     private static string Format(double bps) =>
-        bps >= 1_000_000 ? Invariant($"{bps / 1_000_000:0.0} MB/s") : Invariant($"{bps / 1_000:0} KB/s");
+        bps >= 1_048_576 ? Invariant($"{bps / 1_048_576:0.0} MB/s") : Invariant($"{bps / 1_024:0} KB/s");
 }

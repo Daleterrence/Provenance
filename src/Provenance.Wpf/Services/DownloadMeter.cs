@@ -40,8 +40,7 @@ public sealed class DownloadMeter
     public void Update(long done, long total, double fraction, bool download = true, bool amount = true, object? step = null)
     {
         long now = Environment.TickCount64;
-        bool newStep = !Equals(step, _step);
-        _step = step;
+        bool newStep = NewStep(step);
         if (fraction >= 0) done = Hold(fraction, newStep, done, total);
         if (total != _total || download != _download || newStep)
         {
@@ -65,9 +64,15 @@ public sealed class DownloadMeter
     // for a stage that has a fraction but no bytes
     public void Bar(double fraction, object? step = null)
     {
-        bool newStep = !Equals(step, _step);
-        _step = step;
+        bool newStep = NewStep(step);
         if (fraction >= 0) Hold(fraction, newStep, 0, 0);
+    }
+
+    private bool NewStep(object? step)
+    {
+        bool changed = !Equals(step, _step);
+        _step = step;
+        return changed;
     }
 
     public void Clear()
