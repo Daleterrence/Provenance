@@ -1,0 +1,18 @@
+using System.Windows;
+
+namespace Provenance.Wpf.Controls.Behaviours;
+
+// Flags the shared styles pick their look from, so a view reads State.IsError="{Binding Failed}" and not a bare Tag
+public static class State
+{
+    public static readonly DependencyProperty IsErrorProperty = DependencyProperty.RegisterAttached(
+        "IsError", typeof(bool), typeof(State), new PropertyMetadata(false));
+
+    public static readonly DependencyProperty IsCurrentProperty = DependencyProperty.RegisterAttached(
+        "IsCurrent", typeof(bool), typeof(State), new PropertyMetadata(false));
+
+    public static bool GetIsError(DependencyObject d) => (bool)d.GetValue(IsErrorProperty);
+    public static void SetIsError(DependencyObject d, bool value) => d.SetValue(IsErrorProperty, value);
+    public static bool GetIsCurrent(DependencyObject d) => (bool)d.GetValue(IsCurrentProperty);
+    public static void SetIsCurrent(DependencyObject d, bool value) => d.SetValue(IsCurrentProperty, value);
+}

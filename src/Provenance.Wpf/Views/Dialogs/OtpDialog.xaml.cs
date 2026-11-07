@@ -246,13 +246,7 @@ public partial class OtpDialog : AppWindow
             if (IsVisible) MasterBox.Focus();
             return;
         }
-        RetryButton.Content = label ?? fix switch
-        {
-            OtpFix.Install => "INSTALL IT",
-            OtpFix.OpenOnePasswordSettings => "OPEN 1PASSWORD SETTINGS",
-            OtpFix.TypeInstead => "TYPE THE CODE INSTEAD",
-            _ => "TRY AGAIN",
-        };
+        RetryButton.Content = label ?? ToolFix.Label(fix);
         RetryButton.Visibility = Visibility.Visible;
     }
 
@@ -265,7 +259,7 @@ public partial class OtpDialog : AppWindow
                 break;
             case OtpFix.OpenOnePasswordSettings:
                 // the button asks again once 1Password's open
-                ShowProblem(OtpSources.OpenOnePasswordSettings() ? SourceText.Text : OtpSources.OpenSettingsFailedText, OtpFix.TryAgain);
+                ShowProblem(ToolFix.OpenSettings() ?? SourceText.Text, OtpFix.TryAgain);
                 break;
             case OtpFix.TypeInstead:
                 SourcePanel.Visibility = Visibility.Collapsed;
@@ -295,7 +289,7 @@ public partial class OtpDialog : AppWindow
             return;
         }
         if (r == ToolInstall.NotSupported) ShowProblem(CliTools.ResultText(tool, r), OtpFix.TypeInstead);
-        else ShowProblem(CliTools.ResultText(tool, r), OtpFix.Install, tool, "TRY AGAIN");
+        else ShowProblem(CliTools.ResultText(tool, r), OtpFix.Install, tool, ToolFix.Label(OtpFix.TryAgain));
     }
 
     private void OnUnlock(object sender, RoutedEventArgs e)

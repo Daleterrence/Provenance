@@ -9,8 +9,6 @@ using Serilog;
 
 namespace Provenance.Wpf.Views.Dialogs;
 
-internal enum ToolView { Hidden, Missing, CantCheck, TooOld, Installing, Ready, DownloadFailed, CheckFailed, DownloadCantCheck, DownloadTooOld, NotSupported }
-
 // The only place the IDs and passwords get typed, they stay off screen everywhere else
 public partial class AccountDialog : AppWindow
 {
@@ -166,27 +164,8 @@ public partial class AccountDialog : AppWindow
         ToolPanel.Visibility = view == ToolView.Hidden ? Visibility.Collapsed : Visibility.Visible;
         ToolSpinner.Visibility = view == ToolView.Installing ? Visibility.Visible : Visibility.Collapsed;
         ToolSpinner.IsIndeterminate = true;
-        ToolText.Text = view switch
-        {
-            ToolView.Missing => CliTools.MissingText(tool),
-            ToolView.CantCheck => CliTools.CantCheckText(tool),
-            ToolView.TooOld => CliTools.TooOldText(tool),
-            ToolView.Installing => CliTools.DownloadingText(tool),
-            ToolView.Ready => CliTools.ReadyText(tool),
-            ToolView.DownloadFailed => CliTools.ResultText(tool, ToolInstall.DownloadFailed),
-            ToolView.CheckFailed => CliTools.ResultText(tool, ToolInstall.CheckFailed),
-            ToolView.DownloadCantCheck => CliTools.ResultText(tool, ToolInstall.CantCheck),
-            ToolView.DownloadTooOld => CliTools.ResultText(tool, ToolInstall.TooOld),
-            ToolView.NotSupported => CliTools.ResultText(tool, ToolInstall.NotSupported),
-            _ => "",
-        };
-        ToolButton.Content = view switch
-        {
-            ToolView.Missing or ToolView.CantCheck or ToolView.TooOld => "INSTALL IT",
-            ToolView.DownloadFailed or ToolView.CheckFailed or ToolView.DownloadCantCheck or ToolView.DownloadTooOld => "TRY AGAIN",
-            ToolView.Ready when tool == CliTools.OnePassword => "OPEN 1PASSWORD SETTINGS",
-            _ => null,
-        };
+        ToolText.Text = ToolFix.Text(view, tool);
+        ToolButton.Content = ToolFix.Button(view, tool) is { } fix ? ToolFix.Label(fix) : null;
         ToolButton.Visibility = ToolButton.Content is null ? Visibility.Collapsed : Visibility.Visible;
         bool login = view == ToolView.Ready && tool == CliTools.Bitwarden;
         BitwardenLoginPanel.Visibility = login ? Visibility.Visible : Visibility.Collapsed;
@@ -206,7 +185,7 @@ public partial class AccountDialog : AppWindow
     private void OnToolButton(object sender, RoutedEventArgs e)
     {
         if (_view != ToolView.Ready) _ = InstallAsync();
-        else if (!OtpSources.OpenOnePasswordSettings()) ToolText.Text = OtpSources.OpenSettingsFailedText;
+        else if (ToolFix.OpenSettings() is { } failed) ToolText.Text = failed;
     }
 
     private async Task InstallAsync()
@@ -226,14 +205,7 @@ public partial class AccountDialog : AppWindow
         catch (OperationCanceledException) { return; }
         if (mine.IsCancellationRequested) return;
         if (r == ToolInstall.Installed) await LookForToolAsync();
-        else ShowTool(r switch
-        {
-            ToolInstall.CheckFailed => ToolView.CheckFailed,
-            ToolInstall.CantCheck => ToolView.DownloadCantCheck,
-            ToolInstall.TooOld => ToolView.DownloadTooOld,
-            ToolInstall.NotSupported => ToolView.NotSupported,
-            _ => ToolView.DownloadFailed,
-        });
+        else ShowTool(ToolFix.ViewFor(r));
     }
 
     private void OnBwServerChanged(object sender, SelectionChangedEventArgs e)

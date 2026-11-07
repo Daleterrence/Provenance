@@ -141,6 +141,11 @@ public partial class HandlesViewModel : ObservableObject
         HasUnlinked = Unlinked.Count > 0;
     }
 
+    // the handles a character could go to, a full one greyed out with the limit under its name
+    public IReadOnlyList<MenuAction> LinkMenu(HandleCharacterRow c) =>
+        LinkTargets(c).Select(to => new MenuAction(to.Name, !to.Full, () => Link(c, to)) { Detail = to.Full ? HandleList.LimitText : "" })
+                      .ToList();
+
     // the handles a character could go to, with the full ones greyed
     public IReadOnlyList<HandleRow> LinkTargets(HandleCharacterRow c) =>
         c.Character.Orphan ? [] : Rows.Where(r => r.Handle.Slot != c.Handle?.Slot).ToList();

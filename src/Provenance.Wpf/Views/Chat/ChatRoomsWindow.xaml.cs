@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Chat;
 using Provenance.Wpf.ViewModels.Social;
@@ -125,20 +126,14 @@ public partial class ChatRoomsWindow : AppWindow
         FillMemberMenu(menu, m);
     }
 
-    internal void FillMemberMenu(ContextMenu menu, ChatMemberItem m)
-    {
-        menu.Items.Clear();
-        menu.Items.Add(MenuItem("Kick...", () => _vm.Kick(m)));
-        menu.Items.Add(MenuItem("Designate...", () => _vm.Designate(m)));
-    }
+    internal void FillMemberMenu(ContextMenu menu, ChatMemberItem m) => Menus.Fill(menu, _vm.MemberMenu(m));
 
     private void OnPasswordMenu(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement button) return;
-        var menu = new ContextMenu { PlacementTarget = button, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-        menu.Items.Add(MenuItem(_vm.RoomLocked ? "Change password..." : "Set password...", () => _vm.ChangePassword(false)));
-        if (_vm.RoomLocked) menu.Items.Add(MenuItem("Remove password", () => _vm.ChangePassword(true)));
-        menu.IsOpen = true;
+        var menu = new ContextMenu();
+        Menus.Fill(menu, _vm.PasswordMenu());
+        Menus.ShowBelow(menu, button);
     }
 
     // the viewer's 12 text colours, and none
@@ -150,7 +145,7 @@ public partial class ChatRoomsWindow : AppWindow
     internal ContextMenu ColourMenu(FrameworkElement button)
     {
         var menu = new ContextMenu { PlacementTarget = button, Placement = System.Windows.Controls.Primitives.PlacementMode.Top };
-        menu.Items.Add(MenuItem("No colour", () => _vm.Colour = -1));
+        menu.Items.Add(Menus.Item("No colour", true, () => _vm.Colour = -1));
         foreach (var c in _vm.ColourChoices)
         {
             var swatch = new System.Windows.Shapes.Rectangle { Width = 90, Height = 14, Fill = c.Swatch, RadiusX = 3, RadiusY = 3 };
@@ -196,12 +191,5 @@ public partial class ChatRoomsWindow : AppWindow
             panel.Children.Add(b);
         }
         return popup;
-    }
-
-    private static MenuItem MenuItem(string header, Action act)
-    {
-        var item = new MenuItem { Header = header };
-        item.Click += (_, _) => act();
-        return item;
     }
 }

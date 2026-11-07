@@ -119,7 +119,8 @@ public partial class SocialViewModel : ObservableObject
 
     // the viewer's status menu has these three, only the viewer itself ever sets Busy
     private static readonly PolStatus[] StatusChoices = [PolStatus.Online, PolStatus.Away, PolStatus.AppearOffline];
-    public IReadOnlyList<string> StatusLabels { get; } = StatusChoices.Select(PolStatusText.Label).ToList();
+    public sealed record StatusItem(PolStatus Status, string Label);
+    public IReadOnlyList<StatusItem> StatusItems { get; } = StatusChoices.Select(s => new StatusItem(s, PolStatusText.Label(s))).ToList();
     [ObservableProperty] private int _myStatusIndex;
     [ObservableProperty] private string _statusNote = "";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(StatusEditable))] private bool _statusPending;
@@ -505,7 +506,7 @@ public partial class SocialViewModel : ObservableObject
                 f.Pending ? "Friend request sent" : f.Online ? f.StatusLabel : "Offline", f.Online && !f.Pending, f.Row,
                 _avatars.ProfilePicture(f.ProfilePictureId), _chat?.UnreadFrom(f.Name, f.Key) ?? 0,
                 f.Pending ? FriendSection.RequestsSent : f.Online ? FriendSection.Online : FriendSection.Offline)
-            { Key = f.Key, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, InGame = f.Online && !f.Pending && f.Game is not null };
+            { Key = f.Key, Status = f.Status, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, InGame = f.Online && !f.Pending && f.Game is not null };
         }).ToList();
         // invitations (kind 0xe) and requests (kind 1) stay on the server until they're answered
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_answered.Contains(m.Mid)))
@@ -914,7 +915,7 @@ public partial class SocialViewModel : ObservableObject
         FriendSearchKind.Character => "Search for a FINAL FANTASY XI character by name. The same name can be on more than one world, so check the world (a private profile doesn't show it).",
         _ => "Search PlayOnline for a handle name. Many people can share one name, so check the picture.",
     };
-    public int SearchMaxLength => SearchKind == FriendSearchKind.Hid ? 20 : 15;
+    public int SearchMaxLength => SearchKind == FriendSearchKind.Hid ? PolLimits.HidSearch : PolLimits.HandleName;
 
     private string? _searchToken;
     internal DateTime _searchAt;
@@ -986,6 +987,19 @@ public partial class SocialViewModel : ObservableObject
         SearchNote = "";
         SearchHits.Clear();
     }
+
+    public bool CanRequest(SearchHitItem? hit) => HitProblem(hit) is null;
+
+    public string? RequestProblem(SearchHitItem? hit) => HitProblem(hit) ?? FriendRequestBlocked;
+
+    private string? HitProblem(SearchHitItem? hit) => hit switch
+    {
+        null => SearchKind == FriendSearchKind.Character ? "Choose a character from the list first." : "Choose a handle from the list first.",
+        { IsMe: true } => "That's one of your own handles. You can't add yourself as a friend.",
+        { IsFriend: true } => HookFailures.Friends.AlreadyFriend(hit.Name),
+        { RequestSent: true } => $"You've already sent {hit.Name} a friend request.",
+        _ => null,
+    };
 
     internal string? FriendRequestBlocked =>
         CanEdit ? null

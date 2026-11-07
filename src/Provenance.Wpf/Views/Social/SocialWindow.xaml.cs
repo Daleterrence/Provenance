@@ -9,6 +9,7 @@ using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Social;
 using Layout = Provenance.Wpf.ViewModels.Social.SocialViewModel.LayoutAction;
@@ -59,7 +60,6 @@ public partial class SocialWindow : AppWindow
         };
         IsVisibleChanged += (_, _) => ReportVisible();
         StateChanged += (_, _) => ReportVisible();
-        Activated += (_, _) => _flashing = false;   // coming to the front stops it
         if (Application.Current is { } app) app.Activated += OnAppActivated;
         // the view model outlives the window, so let go or a closed window keeps scrolling in the background
         Closed += (_, _) =>
@@ -97,24 +97,16 @@ public partial class SocialWindow : AppWindow
         if (HasFriends) FlashIfBehind();
     }
 
-    private bool _flashing;
-
     private void FlashIfBehind()
     {
         if (!IsVisible || WindowState == WindowState.Minimized) return;
         if (Application.Current?.Windows.OfType<Window>().Any(w => w.IsActive) == true) return;
         TaskbarFlash.Start(this);
-        _flashing = true;
     }
 
     // it only flashes while it's on screen, so with Provenance back in front it's done its job (the request might've
     // been answered from the main window, say)
-    private void OnAppActivated(object? sender, EventArgs e)
-    {
-        if (!_flashing) return;
-        _flashing = false;
-        TaskbarFlash.Stop(this);
-    }
+    private void OnAppActivated(object? sender, EventArgs e) => TaskbarFlash.StopIfFlashing(this);
 
     // a hidden or minimised window's messages stay unread until it's back, and its requests unseen
     private void ReportVisible()
@@ -215,12 +207,12 @@ public partial class SocialWindow : AppWindow
 
     private void OnResend(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm && sender is FrameworkElement { Tag: ChatEntry entry }) vm.Resend(entry);
+        if (Vm is { } vm && sender is FrameworkElement { DataContext: ChatEntry entry }) vm.Resend(entry);
     }
 
     private void OnRemoveFailed(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm && sender is FrameworkElement { Tag: ChatEntry entry }) vm.RemoveFailedLine(entry);
+        if (Vm is { } vm && sender is FrameworkElement { DataContext: ChatEntry entry }) vm.RemoveFailedLine(entry);
     }
 
     private void OnEditProfile(object sender, RoutedEventArgs e)
@@ -290,66 +282,47 @@ public partial class SocialWindow : AppWindow
     private void OnCreateGroup(object sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm || !vm.CanEdit) return;
-        if (vm.Groups.Count(g => !g.IsInvited) >= 4)
+        if (!vm.CanCreateGroup)
         {
-            MessageDialog.ShowInfo(this, "Friend groups", HookFailures.Groups.TooManyGroups);
+            MessageDialog.ShowInfo(this, "Friend groups", vm.GroupLimitText);
             return;
         }
         string? name = null;
         SvgIcon.OpenWhile(sender, () => name = InputDialog.Prompt(this, "Create a group",
-            "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", "", maxLength: 20));
+            "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", "", maxLength: PolLimits.GroupName));
         if (!string.IsNullOrWhiteSpace(name)) vm.CreateGroup(name);
     }
 
-    private static MenuItem Item(string header, bool enabled, Action click) => FriendsList.Item(header, enabled, click);
-    private Action Confirmed(string title, string body, string ok, Action then) =>
-        FriendsList.Confirmed(this, title, body, ok, then);
+    private readonly ReopenGuard _menuGuard = new();
 
-    // a click on the dots button of an open menu closes it, and this stops that click reopening it. Dumb, but it works
-    private DateTime _menuClosedAt;
-    private void OnMenuClosed(object sender, RoutedEventArgs e) => _menuClosedAt = DateTime.UtcNow;
-    private bool MenuJustClosed => DateTime.UtcNow - _menuClosedAt < TimeSpan.FromMilliseconds(300);
+    private ISocialMenuHost Host(SocialViewModel vm) => new SocialMenuDialogs(vm, this);
 
     private void OnRowMenuButton(object sender, RoutedEventArgs e)
     {
-        if (MenuJustClosed || sender is not FrameworkElement button) return;
+        if (_menuGuard.JustClosed || sender is not FrameworkElement button) return;
         FrameworkElement? row = null;
         for (var p = VisualTreeHelper.GetParent(button); p != null && row is null; p = VisualTreeHelper.GetParent(p))
             if (p is FrameworkElement { ContextMenu: not null } el) row = el;
         if (row?.ContextMenu is not { } menu) return;
-        menu.Closed -= OnMenuClosed;
-        menu.Closed += OnMenuClosed;
+        menu.Closed -= _menuGuard.OnClosed;
+        menu.Closed += _menuGuard.OnClosed;
         if (!BuildRowMenu(row)) return;
-        menu.PlacementTarget = button;
-        menu.Placement = PlacementMode.Bottom;
-        menu.IsOpen = true;
+        Menus.ShowBelow(menu, button);
     }
 
     private void OnConversationMenu(object sender, RoutedEventArgs e)
     {
-        if (MenuJustClosed || sender is not FrameworkElement button || Vm is not { SelectedFriend: { } f } vm) return;
-        var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom };
-        menu.Closed += OnMenuClosed;
-        FriendList.FillMenu(menu, f);
-        if (menu.Items.Count > 0) menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Clear conversation...", vm.Conversation.Any(ChatStore.CanDelete), () => ClearConversation(vm, f)));
-        menu.IsOpen = true;
-    }
-
-    public static string ClearQuestion(string name) =>
-        $"Delete every message with {name} that Provenance has kept on this PC? This can't be undone.";
-
-    internal void ClearConversation(SocialViewModel vm, FriendItem f)
-    {
-        var shown = vm.Conversation.Select(e => e.Key).ToList();
-        if (MessageDialog.Confirm(this, "Clear conversation", ClearQuestion(f.Name), "CLEAR", destructive: true) != 0) return;
-        vm.ClearConversation(shown);
+        if (_menuGuard.JustClosed || sender is not FrameworkElement button || Vm is not { SelectedFriend: { } f } vm) return;
+        var menu = new ContextMenu();
+        menu.Closed += _menuGuard.OnClosed;
+        Menus.Fill(menu, vm.ConversationMenu(f, FriendList.Host(vm)));
+        Menus.ShowBelow(menu, button);
     }
 
     // a line's own menu: copy, or delete this PC's copy of it
     private void OnLineMenu(object sender, ContextMenuEventArgs e)
     {
-        if (Vm is not { } vm || sender is not TextBox { Tag: ChatEntry entry, ContextMenu: { } menu } box)
+        if (Vm is not { } vm || sender is not TextBox { DataContext: ChatEntry entry, ContextMenu: { } menu } box)
         {
             e.Handled = true;
             return;
@@ -357,12 +330,8 @@ public partial class SocialWindow : AppWindow
         FillLineMenu(vm, menu, box, entry);
     }
 
-    internal static void FillLineMenu(SocialViewModel vm, ContextMenu menu, TextBox? box, ChatEntry entry)
-    {
-        menu.Items.Clear();
-        menu.Items.Add(new MenuItem { Header = "Copy", Command = ApplicationCommands.Copy, CommandTarget = box });
-        menu.Items.Add(Item("Delete message", ChatStore.CanDelete(entry), () => vm.DeleteLine(entry)));
-    }
+    internal static void FillLineMenu(SocialViewModel vm, ContextMenu menu, TextBox? box, ChatEntry entry) =>
+        Menus.FillLine(menu, box, vm.LineMenu(entry));
 
     // a right-click opens it at the pointer again, after the dots button put it below itself
     private void OnRowMenu(object sender, ContextMenuEventArgs e)
@@ -378,81 +347,10 @@ public partial class SocialWindow : AppWindow
 
     private bool BuildRowMenu(FrameworkElement row)
     {
-        if (Vm is not { } vm || row.ContextMenu is not { } menu) return false;
-        if (row.Tag is SocialViewModel.GroupItem g)
-        {
-            menu.Items.Clear();
-            FillGroupMenu(vm, menu, g);
-            return true;
-        }
-        if (row.Tag is not SocialViewModel.GroupMemberItem m || m.Me ||
-            vm.Groups.FirstOrDefault(x => x.Members.Any(y => ReferenceEquals(y, m))) is not { } mg) return false;
-        menu.Items.Clear();
-        FillMemberMenu(vm, menu, mg, m);
+        if (Vm is not { } vm || row.ContextMenu is not { } menu || vm.RowMenu(row.DataContext, Host(vm)) is not { } actions)
+            return false;
+        Menus.Fill(menu, actions);
         return true;
-    }
-
-    private void FillGroupMenu(SocialViewModel vm, ContextMenu menu, SocialViewModel.GroupItem g)
-    {
-        // invitations get answered from their own row in the friend list, like the viewer, so two can't get mixed up
-        if (g.IsInvited)
-        {
-            menu.Items.Add(Item("Answer it under Group invitations in your friend list", true,
-                                () => vm.ShowFriendsTabCommand.Execute(null)));
-            return;
-        }
-        bool can = vm.CanEdit;
-        if (g.CanChat)
-        {
-            menu.Items.Add(Item("Group Chat", vm.CanGroupChat, () => vm.OpenGroupChatCommand.Execute(g)));
-            menu.Items.Add(new Separator());
-        }
-        menu.Items.Add(Item("Edit my group comment...", can, () =>
-        {
-            var mine = g.Members.FirstOrDefault(m => m.Me)?.Comment ?? "";
-            var text = InputDialog.Prompt(this, "Group comment", $"Your comment in \"{g.Name}\" (up to 49 characters).",
-                                          mine, maxLength: 49, allowEmpty: true);
-            if (text != null && text != mine) vm.SetGroupComment(g, text);
-        }));
-        if (g.CanInvite)
-        {
-            var sub = new MenuItem { Header = "Invite a friend", IsEnabled = can };
-            foreach (var f in vm.Friends.Where(f => f.IsFriend && !f.Pending &&
-                                                    !g.Members.Any(m => m.Key.Length > 0 && m.Key == f.Key)))
-                sub.Items.Add(Item(f.Name, can, () => vm.InviteToGroup(g, f)));
-            if (sub.Items.Count == 0) sub.IsEnabled = false;
-            menu.Items.Add(sub);
-        }
-        menu.Items.Add(new Separator());
-        var leave = Item("Leave group...", can && !g.IsMaster,
-                         Confirmed("Leave group", $"Leave the group \"{g.Name}\"?", "LEAVE", () => vm.LeaveGroup(g)));
-        if (g.IsMaster)
-        {
-            leave.ToolTip = "The group master can't leave. Make another member the group master first, or disband the group.";
-            ToolTipService.SetShowOnDisabled(leave, true);
-        }
-        menu.Items.Add(leave);
-        menu.Items.Add(Item("Disband group...", can && g.IsMaster, Confirmed("Disband group",
-            $"Disband the group \"{g.Name}\"? The group will be gone for everyone in it.", "DISBAND", () => vm.DisbandGroup(g))));
-    }
-
-    private void FillMemberMenu(SocialViewModel vm, ContextMenu menu, SocialViewModel.GroupItem g,
-                                SocialViewModel.GroupMemberItem m)
-    {
-        bool Can(GroupRole role) => vm.CanEdit && !g.IsInvited && SocialViewModel.CanSetRole(g, m, role);
-        var friend = m.Key.Length > 0 ? vm.Friends.FirstOrDefault(f => f.IsFriend && f.Key == m.Key) : null;
-        menu.Items.Add(Item("Send message", friend is { CanMessage: true }, () => vm.SelectedFriend = friend));
-        menu.Items.Add(Item("View profile", friend is { IsFriend: true, Pending: false },
-                            () => ProfileWindow.ShowFor(vm, friend!, this)));
-        menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Make group master...", Can(GroupRole.Master), Confirmed("Make group master",
-            $"Make {m.Name} the master of \"{g.Name}\"? You'll become an ordinary member.", "MAKE MASTER",
-            () => vm.SetMemberRole(g, m, GroupRole.Master))));
-        if (m.Role == GroupRole.SubMaster)
-            menu.Items.Add(Item("Relieve sub-master", Can(GroupRole.Member), () => vm.SetMemberRole(g, m, GroupRole.Member)));
-        else menu.Items.Add(Item("Make sub-master", Can(GroupRole.SubMaster), () => vm.SetMemberRole(g, m, GroupRole.SubMaster)));
-        menu.Items.Add(Item("Remove from group...", Can(GroupRole.Remove), Confirmed("Remove from group",
-            $"Remove {m.Name} from \"{g.Name}\"?", "REMOVE", () => vm.SetMemberRole(g, m, GroupRole.Remove))));
     }
 
     private void OnAddFriend(object sender, RoutedEventArgs e)
@@ -462,7 +360,7 @@ public partial class SocialWindow : AppWindow
 
     private void OnUnignore(object sender, RoutedEventArgs e)
     {
-        if (Vm is not { } vm || (sender as FrameworkElement)?.Tag is not PolBlocked b) return;
+        if (Vm is not { } vm || (sender as FrameworkElement)?.DataContext is not PolBlocked b) return;
         if (MessageDialog.Confirm(this, "Stop ignoring " + b.Name,
                 $"Take {b.Name} off your ignore list? Their messages will reach you again. " +
                 "This doesn't add them back to your friend list.", "STOP IGNORING") is null) return;

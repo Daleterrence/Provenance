@@ -1,6 +1,7 @@
 <controls:AppWindow x:Class="Provenance.Wpf.Views.Chat.CreateRoomDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:social="clr-namespace:Provenance.Common.Social;assembly=Provenance.Common"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         Title="Create Room" Icon="/Assets/provenance.ico" Width="480" SizeToContent="Height"
@@ -27,7 +28,7 @@
                 <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
             </Grid.RowDefinitions>
             <TextBlock Style="{StaticResource FormLabel}" Text="Room name" />
-            <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,5" MaxLength="30" FontSize="13" Padding="10,6"
+            <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,5" MaxLength="{x:Static social:ChatRoomFiles.MaxRoomName}" FontSize="13" Padding="10,6"
                      Style="{StaticResource OutlinedField}" materialDesign:HintAssist.IsFloating="False"
                      materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" TextChanged="OnChanged" />
 
@@ -43,10 +44,10 @@
                 <RadioButton x:Name="PasswordOn" Content="On" Margin="0,0,18,0" Checked="OnPasswordSwitch" />
                 <RadioButton x:Name="PasswordOff" Content="Off" IsChecked="True" Checked="OnPasswordSwitch" />
             </StackPanel>
-            <PasswordBox x:Name="PasswordBox" Grid.Row="4" Grid.Column="1" Margin="0,5" MaxLength="16" FontSize="13" Padding="10,6"
+            <PasswordBox x:Name="PasswordBox" Grid.Row="4" Grid.Column="1" Margin="0,5" MaxLength="{x:Static social:ChatRoomFiles.MaxNewPassword}" FontSize="13" Padding="10,6"
                          Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Enter room password"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
-            <PasswordBox x:Name="ConfirmBox" Grid.Row="5" Grid.Column="1" Margin="0,5" MaxLength="16" FontSize="13" Padding="10,6"
+            <PasswordBox x:Name="ConfirmBox" Grid.Row="5" Grid.Column="1" Margin="0,5" MaxLength="{x:Static social:ChatRoomFiles.MaxNewPassword}" FontSize="13" Padding="10,6"
                          Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Confirm password"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
 

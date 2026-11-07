@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
+using Provenance.Wpf.ViewModels.Shared;
 using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.ViewModels.Chat;
@@ -290,6 +291,18 @@ public sealed partial class GroupChatViewModel : ObservableObject
         CallOff();
         End(_social.ViewerText(0x3eb8, HookFailures.GroupChat.Busy));
     }
+
+    public static string ClearQuestion(string group) =>
+        $"Delete every line of the \"{group}\" group chat that Provenance has kept on this PC? This can't be undone.";
+
+    public IReadOnlyList<MenuAction> MoreMenu(Func<MenuConfirm, bool> confirm) =>
+        [new("Clear chat...", Lines.Count > 0, () =>
+        {
+            var shown = Lines.Select(l => l.Id).ToList();
+            if (confirm(new("Clear chat", ClearQuestion(GroupName), "CLEAR"))) ClearLines(shown);
+        })];
+
+    public IReadOnlyList<MenuAction> LineMenu(GroupChatLineItem line) => [new("Delete message", true, () => DeleteLine(line))];
 
     public bool DeleteLine(GroupChatLineItem line)
     {

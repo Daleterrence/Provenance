@@ -55,8 +55,7 @@ public partial class AddFriendDialog : AppWindow
         UpdateSend();
     }
 
-    private void UpdateSend() => SendButton.IsEnabled = Vm.CanEdit &&
-        Hits.SelectedItem is SocialViewModel.SearchHitItem { IsFriend: false, RequestSent: false, IsMe: false };
+    private void UpdateSend() => SendButton.IsEnabled = Vm.CanEdit && Vm.CanRequest(Hits.SelectedItem as SocialViewModel.SearchHitItem);
 
     private void OnSearch(object sender, RoutedEventArgs e) => Vm.Search(NameBox.Text);
 
@@ -77,14 +76,7 @@ public partial class AddFriendDialog : AppWindow
     private void OnSend(object sender, RoutedEventArgs e)
     {
         var hit = Hits.SelectedItem as SocialViewModel.SearchHitItem;
-        var problem = hit switch
-        {
-            null => Vm.SearchKind == FriendSearchKind.Character ? "Choose a character from the list first." : "Choose a handle from the list first.",
-            { IsMe: true } => "That's one of your own handles. You can't add yourself as a friend.",
-            { IsFriend: true } => HookFailures.Friends.AlreadyFriend(hit.Name),
-            { RequestSent: true } => $"You've already sent {hit.Name} a friend request.",
-            _ => Vm.FriendRequestBlocked,
-        };
+        var problem = Vm.RequestProblem(hit);
         if (problem != null)
         {
             Vm.SearchNote = problem;

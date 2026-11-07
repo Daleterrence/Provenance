@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.Views.Social;
@@ -16,8 +17,8 @@ namespace Provenance.Wpf.Views.Main;
 public partial class MainWindow : AppWindow
 {
     internal TrayIcon? _tray;
-    private bool _exiting, _askingToExit, _cancellingLogIn, _flashing;
-    private DateTime _worldsClosedAt;
+    private bool _exiting, _askingToExit, _cancellingLogIn;
+    private readonly ReopenGuard _worldsGuard = new();
     private int _newsShown = -1;
 
     public MainWindow()
@@ -28,7 +29,6 @@ public partial class MainWindow : AppWindow
         StateChanged += (_, _) => ReportShown();
         Activated += async (_, _) =>
         {
-            _flashing = false;   // coming to the front stops it
             if (Vm is not { } vm) return;
             vm.Social.MainWindowActive = true;
             await vm.ProbeRepairAsync();
@@ -53,13 +53,13 @@ public partial class MainWindow : AppWindow
     // the list closes on any click outside it, chip included, and that click must only close it
     private void OnWorldsPopupClosed(object? sender, EventArgs e)
     {
-        _worldsClosedAt = DateTime.UtcNow;
+        _worldsGuard.Closed();
         WorldsChip.IsChecked = false;
     }
 
     private void OnWorldsChipMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (DateTime.UtcNow - _worldsClosedAt < TimeSpan.FromMilliseconds(300)) e.Handled = true;   // crude, but it works
+        if (_worldsGuard.JustClosed) e.Handled = true;
     }
 
     private void OnEditProfile(object sender, RoutedEventArgs e)
@@ -144,17 +144,11 @@ public partial class MainWindow : AppWindow
         }
         if (IsActive || !IsVisible || Vm is not { WantsAttention: true }) return;
         TaskbarFlash.Start(this);
-        _flashing = true;
     });
 
     // read in the friends windows, so this window never came to the front to stop it. Queued like the flash, so it
     // can't land before one
-    private void OnAttentionCleared() => Dispatcher.InvokeAsync(() =>
-    {
-        if (!_flashing) return;
-        _flashing = false;
-        TaskbarFlash.Stop(this);
-    });
+    private void OnAttentionCleared() => Dispatcher.InvokeAsync(() => TaskbarFlash.StopIfFlashing(this));
 
     private void OnFriendActivated(FriendItem friend) => Vm?.OpenChatWith(friend);
 
@@ -162,21 +156,11 @@ public partial class MainWindow : AppWindow
     private void OnPlayChoices(object sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm || sender is not FrameworkElement cog) return;
-        var menu = new ContextMenu { PlacementTarget = cog, Placement = PlacementMode.Bottom };
-        menu.Items.Add(new MenuItem { Header = vm.PlayChoicesTitle, IsEnabled = false });
-        menu.Items.Add(new Separator());
-        var choices = vm.PlayChoices();
-        if (choices.Count == 0) menu.Items.Add(new MenuItem { Header = vm.NoPlayChoicesText, IsEnabled = false });
-        foreach (var c in choices)
-        {
-            var item = new MenuItem { Header = c.Display, IsCheckable = true, IsChecked = c.Current };
-            var name = c.Name;
-            item.Click += (_, _) => vm.PickPlayChoice(name);
-            menu.Items.Add(item);
-        }
+        var menu = new ContextMenu();
+        Menus.Fill(menu, vm.PlayChoicesMenu());
         PlayChoicesIcon.IsOpen = true;
         menu.Closed += (_, _) => PlayChoicesIcon.IsOpen = false;
-        menu.IsOpen = true;
+        Menus.ShowBelow(menu, cog);
     }
 
     private void OnOpenNotice(object sender, RoutedEventArgs e) => Vm?.OpenNotice();

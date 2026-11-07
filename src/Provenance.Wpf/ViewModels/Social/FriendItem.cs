@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using Provenance.Common.Social;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
@@ -7,6 +8,8 @@ namespace Provenance.Wpf.ViewModels.Social;
 public sealed record FriendItem(string Name, string Playing, string Comment, string StatusLabel,
                                 bool Online, int Row, ImageSource? Avatar, int Unread, FriendSection Section)
 {
+    public PolStatus Status { get; init; }
+    public bool HasStatus => StatusLabel.Length > 0;
     public string SectionTitle => Section.Title();
     public string PlayingShort { get; init; } = "";
     public string Key { get; init; } = "";   // the hook's hashed POL ID + handle, empty if it couldn't make one

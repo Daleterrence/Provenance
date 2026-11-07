@@ -1219,7 +1219,7 @@ public partial class MainViewModel : ObservableObject
                 "This PlayOnline account doesn't have a handle yet, and FINAL FANTASY XI needs one to log in.\n\n" +
                 "A handle is your name on PlayOnline, and other players can see it. You can rename it later.\n\n" +
                 "Enter 1 to 15 English letters, numbers or symbols:",
-                maxLength: 15,
+                maxLength: PolLimits.HandleName,
                 // the viewer's and polcore's rule, plain ASCII and not just spaces
                 validate: name => name.Any(c => c < 0x20 || c > 0x7e)
                     ? "Use English letters, numbers and symbols only."
@@ -1566,6 +1566,15 @@ public partial class MainViewModel : ObservableObject
             return names.Select(n => new PlayChoice(n, WindowerInstall.DisplayName(n, names), n == picked)).ToList();
         }
         return [];
+    }
+
+    public IReadOnlyList<MenuAction> PlayChoicesMenu()
+    {
+        var menu = new List<MenuAction> { new(PlayChoicesTitle, false), MenuAction.Separator };
+        var choices = PlayChoices();
+        if (choices.Count == 0) menu.Add(new(NoPlayChoicesText, false));
+        foreach (var c in choices) menu.Add(new(c.Display, true, () => PickPlayChoice(c.Name)) { Checked = c.Current });
+        return menu;
     }
 
     public void PickPlayChoice(string name)

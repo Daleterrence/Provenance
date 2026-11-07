@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
+using Provenance.Wpf.ViewModels.Shared;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Social;
 
@@ -260,6 +261,20 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public bool CanMaster => Current == Page.Room && IsMaster && !MasterBusy && !_social.HandleSwitching && !_social.GameRunning;
 
     public bool CanKick(ChatMemberItem? m) => m is { Me: false } && CanMaster;
+
+    // a member's Kick and Designate, only for the room master and never on my own row
+    public IReadOnlyList<MenuAction> MemberMenu(ChatMemberItem m) =>
+        [new("Kick...", true, () => Kick(m)), new("Designate...", true, () => Designate(m))];
+
+    public IReadOnlyList<MenuAction> PasswordMenu()
+    {
+        var menu = new List<MenuAction>
+        {
+            new(RoomLocked ? "Change password..." : "Set password...", true, () => ChangePassword(false)),
+        };
+        if (RoomLocked) menu.Add(new("Remove password", true, () => ChangePassword(true)));
+        return menu;
+    }
 
     // the viewer's Kick and Designate, each with its own question first
     public void Kick(ChatMemberItem m)

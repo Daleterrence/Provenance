@@ -12,7 +12,7 @@ namespace Provenance.Common.Game.Windower;
 public sealed class WindowerSettingsFile
 {
     public const string FileName = "settings.xml";
-    private const int MaxNameLength = 255;
+    public const int MaxNameLength = 255;
     private const string LockName = "windower-settings";
     private const string OldCopySuffix = " (Provenance)", OldDefaultCopy = "(Provenance)";
     private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(5);

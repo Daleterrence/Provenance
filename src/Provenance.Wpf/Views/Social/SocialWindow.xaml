@@ -1,11 +1,13 @@
 <controls:AppWindow x:Class="Provenance.Wpf.Views.Social.SocialWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+        xmlns:social="clr-namespace:Provenance.Common.Social;assembly=Provenance.Common"
         xmlns:local="clr-namespace:Provenance.Wpf.Views.Social"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Social"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialViewModel}"
@@ -55,7 +57,7 @@
                         <Border x:Name="Bubble" MaxWidth="420" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}"
                                 Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                             <!-- read-only so it can be copied, no Tab stop so Tab goes on to the compose box -->
-                            <TextBox x:Name="Body" Style="{StaticResource SelectableText}" Text="{Binding Display, Mode=OneWay}" FontSize="13" IsTabStop="False" Tag="{Binding}" ContextMenuOpening="OnLineMenu">
+                            <TextBox x:Name="Body" Style="{StaticResource SelectableText}" Text="{Binding Display, Mode=OneWay}" FontSize="13" IsTabStop="False" ContextMenuOpening="OnLineMenu">
                                 <TextBox.ContextMenu>
                                     <ContextMenu />
                                 </TextBox.ContextMenu>
@@ -67,9 +69,9 @@
                                     Visibility="Collapsed">
                             <TextBlock x:Name="SendStateText" FontSize="10.5" Foreground="{DynamicResource Text.3}" Text="{Binding StateText}" />
                             <Button x:Name="Retry" Style="{StaticResource LineLink}" Foreground="{DynamicResource Primary}"
-                                    Content="Send again" Visibility="Collapsed" Tag="{Binding}" Click="OnResend" />
+                                    Content="Send again" Visibility="Collapsed" Click="OnResend" />
                             <Button x:Name="RemoveLine" Style="{StaticResource LineLink}" Foreground="{DynamicResource Text.3}"
-                                    Content="Remove" Visibility="Collapsed" Tag="{Binding}" Click="OnRemoveFailed" />
+                                    Content="Remove" Visibility="Collapsed" Click="OnRemoveFailed" />
                         </StackPanel>
                     </StackPanel>
                 </Grid>
@@ -156,7 +158,7 @@
                                                        Visibility="{Binding AllHandles, Converter={StaticResource BoolToVis}}" />
                                         </StackPanel>
                                         <Button Grid.Column="1" Style="{StaticResource PolButton}" FontSize="11" Height="26"
-                                                Padding="8,0" Content="STOP IGNORING" Tag="{Binding}" Click="OnUnignore"
+                                                Padding="8,0" Content="STOP IGNORING" Click="OnUnignore"
                                                 IsEnabled="{Binding DataContext.CanEdit, RelativeSource={RelativeSource AncestorType=Window}}" />
                                     </Grid>
                                 </DataTemplate>
@@ -188,7 +190,7 @@
                             <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
                                 <ComboBox Style="{StaticResource StatusPicker}" VerticalAlignment="Center"
                                           IsEnabled="{Binding StatusEditable}"
-                                          ItemsSource="{Binding StatusLabels}" SelectedIndex="{Binding MyStatusIndex}" />
+                                          ItemsSource="{Binding StatusItems}" SelectedIndex="{Binding MyStatusIndex}" />
                                 <ProgressBar Width="12" Height="12" Margin="6,0,0,0"
                                              Style="{StaticResource Spinner}"
                                              ToolTip="Waiting for PlayOnline to confirm"
@@ -215,7 +217,7 @@
                                     </Style>
                                 </Border.Style>
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <TextBox x:Name="CommentBox" Padding="0,2" FontSize="12" FontStyle="Italic" MaxLength="49"
+                                    <TextBox x:Name="CommentBox" Padding="0,2" FontSize="12" FontStyle="Italic" MaxLength="{x:Static social:PolLimits.Comment}"
                                              Style="{StaticResource PlainField}" BorderThickness="0"
                                              Foreground="{DynamicResource Text.2}"
                                              materialDesign:HintAssist.Hint="Add a comment" materialDesign:HintAssist.IsFloating="False"
@@ -248,9 +250,9 @@
                                Text="{Binding StatusNote}"
                                Visibility="{Binding StatusNote, Converter={StaticResource NullToVisibilityConverter}}" />
                     <StackPanel Orientation="Horizontal" Margin="-6,8,0,0">
-                        <Button Style="{StaticResource UnderlineTab}" Tag="{Binding ShowFriends}" Content="FRIENDS"
+                        <Button Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding ShowFriends}" Content="FRIENDS"
                                 Command="{Binding ShowFriendsTabCommand}" Height="28" />
-                        <Button Style="{StaticResource UnderlineTab}" Tag="{Binding ShowGroups}" Content="GROUPS"
+                        <Button Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding ShowGroups}" Content="GROUPS"
                                 Command="{Binding ShowGroupsTabCommand}" Height="28" />
                     </StackPanel>
                 </StackPanel>
@@ -275,7 +277,7 @@
                                 <DataTemplate>
                                     <StackPanel Margin="0,0,0,6">
                                         <!-- the menu's filled as it opens, the dots button opens the same one -->
-                                        <Border Padding="12,6,8,6" Background="Transparent" Tag="{Binding}"
+                                        <Border Padding="12,6,8,6" Background="Transparent"
                                                 ContextMenuOpening="OnRowMenu" ToolTip="Right-click for group options">
                                             <Border.ContextMenu>
                                                 <ContextMenu />
@@ -307,10 +309,10 @@
                                                 </Button>
                                             </Grid>
                                         </Border>
-                                        <ItemsControl ItemsSource="{Binding Members}" Tag="{Binding}">
+                                        <ItemsControl ItemsSource="{Binding Members}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Grid Margin="16,3,8,3" Background="Transparent" Tag="{Binding}"
+                                                    <Grid Margin="16,3,8,3" Background="Transparent"
                                                           ColumnDefinitions="Auto,*,Auto"
                                                           ContextMenuOpening="OnRowMenu">
                                                         <Grid.ContextMenu>
@@ -337,7 +339,7 @@
                                                                 <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding RoleText, Mode=OneWay}" FontSize="11" Foreground="{DynamicResource Text.3}" />
                                                             </TextBlock>
                                                             <DockPanel>
-                                                                <controls:StatusMark DockPanel.Dock="Left" Status="{Binding StatusLabel}" Margin="0,0,6,0" />
+                                                                <controls:StatusMark DockPanel.Dock="Left" Status="{Binding Status}" Online="{Binding ShowsStatus}" Margin="0,0,6,0" />
                                                                 <TextBlock FontSize="11" Foreground="{DynamicResource Text.3}" TextTrimming="CharacterEllipsis">
                                                                     <Run Text="{Binding StatusLabel, Mode=OneWay}" /><Run Text="{Binding Comment, Mode=OneWay, StringFormat={}   {0}}" />
                                                                 </TextBlock>
@@ -388,7 +390,8 @@
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding SelectedFriend.Name}" FontSize="15" FontWeight="SemiBold" />
                                     <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,Auto,*">
-                                        <controls:StatusMark Status="{Binding SelectedFriend.StatusLabel}" Margin="0,0,6,0" />
+                                        <controls:StatusMark Status="{Binding SelectedFriend.Status}" Online="{Binding SelectedFriend.Online}"
+                                                             Shown="{Binding SelectedFriend.HasStatus, FallbackValue=False}" Margin="0,0,6,0" />
                                         <TextBlock Grid.Column="1" Text="{Binding SelectedFriend.StatusLabel}" FontSize="12"
                                                    Foreground="{DynamicResource Text.3}" VerticalAlignment="Center" />
                                         <controls:FitText Grid.Column="2" Long="{Binding SelectedFriend.Playing}" Short="{Binding SelectedFriend.PlayingShort}"
@@ -411,7 +414,7 @@
                             <!-- MaxLength's only a backstop, the real limit's 300 bytes -->
                             <TextBox x:Name="ComposeBox" MinHeight="40" MaxHeight="120" FontSize="13"
                                      Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
-                                     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="300"
+                                     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="{x:Static social:PolMessage.MaxTextBytes}"
                                      Style="{StaticResource OutlinedField}" Padding="10,8"
                                      materialDesign:HintAssist.Hint="Write a message (Enter sends, Shift+Enter adds a line)"
                                      materialDesign:HintAssist.IsFloating="False"

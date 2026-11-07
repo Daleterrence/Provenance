@@ -7,6 +7,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Social;
 
@@ -116,98 +117,15 @@ public partial class FriendsList : UserControl
         FillMenu(List.ContextMenu ??= new ContextMenu(), f);
     }
 
-    // the friends window's conversation header shows this menu too, so everything's reachable from a conversation
     public void FillMenu(ContextMenu menu, FriendItem f)
     {
-        if (Vm is not { } vm) return;
-        bool edit = vm.CanEdit && f.IsFriend && f.Key.Length > 0;
-        menu.Items.Clear();
-        if (f.IsGroupInvite)
-        {
-            menu.Items.Add(Item("Accept group invitation", vm.CanEdit, () => vm.AnswerGroupInvite(f, true)));
-            menu.Items.Add(Item("Decline group invitation", vm.CanEdit, () => vm.AnswerGroupInvite(f, false)));
-            return;
-        }
-        if (f.IsRequest)
-        {
-            menu.Items.Add(Item("Accept friend request", vm.CanEdit && !f.IsMe,
-                                () => vm.AnswerRequest(f, RequestAnswer.Accept)));
-            menu.Items.Add(Item("Decline friend request...", vm.CanEdit, Confirmed(Owner, "Decline friend request",
-                $"Decline the friend request from {f.Name}?", "DECLINE",
-                () => vm.AnswerRequest(f, RequestAnswer.Decline))));
-            menu.Items.Add(new Separator());
-            // the viewer's request window only ignores this one handle
-            menu.Items.Add(Item("Ignore...", vm.CanEdit && !f.IsMe, Confirmed(Owner, "Ignore " + f.Name,
-                $"Add {f.Name} to your ignore list? PlayOnline will decline the request, and this handle's messages won't reach you any more. You can stop ignoring them later from your ignore list.",
-                "IGNORE", () => vm.AnswerRequest(f, RequestAnswer.Ignore))));
-            return;
-        }
-        if (!f.IsFriend && !f.Pending)
-        {
-            menu.Items.Add(Item($"Add {f.Name} as a friend...", vm.CanEdit,
-                () => new AddFriendDialog(vm, f.Name, f.Key) { Owner = Owner }.ShowDialog()));
-            return;
-        }
-        menu.Items.Add(Item("Send message", f.CanMessage, () =>
-        {
-            vm.SelectedFriend = f;
-            FriendActivated?.Invoke(f);
-        }));
-        menu.Items.Add(Item("View profile", f.IsFriend && !f.Pending, () => ProfileWindow.ShowFor(vm, f, Owner)));
-        // the viewer's Invite into Group: only groups I'm master or sub-master of, and never myself
-        var inviteTo = vm.Groups.Where(g => g.CanInvite && !g.Members.Any(m => m.Key.Length > 0 && m.Key == f.Key))
-                                .ToList();
-        if (inviteTo.Count > 0 && f.IsFriend && !f.Pending && !f.IsMe)
-        {
-            var sub = new MenuItem { Header = "Invite into group", IsEnabled = vm.CanEdit };
-            foreach (var g in inviteTo) sub.Items.Add(Item(g.Name, vm.CanEdit, () => vm.InviteToGroup(g, f)));
-            menu.Items.Add(sub);
-        }
-        menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Rename...", edit && !f.Pending, () => Rename(vm, f)));
-        var removeBody = f.Pending
-            ? $"Delete your friend request to {f.Name}? This takes it off your own friend list."
-            : $"Remove {f.Name} from your PlayOnline friend list? Your saved messages with {f.Name} stay in Provenance.";
-        menu.Items.Add(Item(f.Pending ? "Delete friend request..." : "Remove from friends...", edit,
-            Confirmed(Owner, f.Pending ? "Delete friend request" : "Remove friend", removeBody,
-                      f.Pending ? "DELETE" : "REMOVE", () => vm.RemoveFriend(f))));
-        menu.Items.Add(Item("Ignore...", edit && !f.Pending && !f.IsMe, () => Ignore(vm, f)));
+        if (Vm is { } vm) Menus.Fill(menu, vm.FriendMenu(f, Host(vm)));
     }
 
-    internal static MenuItem Item(string header, bool enabled, Action click)
-    {
-        var mi = new MenuItem { Header = header, IsEnabled = enabled };
-        mi.Click += (_, _) => click();
-        return mi;
-    }
-
-    // asks first (Enter and Esc on cancel), then does it
-    internal static Action Confirmed(Window? owner, string title, string body, string ok, Action then) => () =>
-    {
-        if (MessageDialog.Confirm(owner, title, body, ok, destructive: true) is not null) then();
-    };
+    internal ISocialMenuHost Host(SocialViewModel vm) => new SocialMenuDialogs(vm, Owner, f => FriendActivated?.Invoke(f));
 
     private void OnAddFriend(object sender, RoutedEventArgs e)
     {
         if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => new AddFriendDialog(vm) { Owner = Owner }.ShowDialog());
-    }
-
-    private void Rename(SocialViewModel vm, FriendItem f)
-    {
-        if (Owner is not { } w) return;
-        var name = InputDialog.Prompt(w, "Rename friend",
-            $"Choose a new name for {f.Name} on your friend list (up to 15 English letters, numbers or symbols). " +
-            "PlayOnline saves it with your friend list.", f.Name, maxLength: 15);
-        // the same name has nothing to save, the viewer skips it too
-        if (name is not null && name.Trim() != f.Name) vm.RenameFriend(f, name);
-    }
-
-    private void Ignore(SocialViewModel vm, FriendItem f)
-    {
-        var pick = MessageDialog.Confirm(Owner, "Ignore " + f.Name,
-            $"PlayOnline will take {f.Name} off your friend list, and their messages won't reach you any more. " +
-            "You can stop ignoring them later, but that won't put them back on your friend list.", "IGNORE",
-            "Ignore this handle only", "Ignore every handle of this PlayOnline ID", destructive: true);
-        if (pick is not null) vm.IgnoreFriend(f, pick == 1);
     }
 }

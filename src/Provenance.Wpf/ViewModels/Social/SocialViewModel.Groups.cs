@@ -10,7 +10,11 @@ namespace Provenance.Wpf.ViewModels.Social;
 public partial class SocialViewModel
 {
     public sealed record GroupMemberItem(int Index, string Name, string Key, ImageSource? Avatar, GroupRole Role,
-                                         string RoleText, string StatusLabel, bool Online, bool Me, string Comment);
+                                         string RoleText, string StatusLabel, bool Online, bool Me, string Comment)
+    {
+        public PolStatus Status { get; init; }
+        public bool ShowsStatus => Online && !Me && Role != GroupRole.Invited;
+    }
 
     public sealed record GroupItem(string Id, string Name, GroupRole MyRole, string RoleText, int OnlineCount,
                                    IReadOnlyList<GroupMemberItem> Members)
@@ -80,7 +84,8 @@ public partial class SocialViewModel
                 .ThenBy(m => m.Name, StringComparer.CurrentCultureIgnoreCase)
                 .Select(m => new GroupMemberItem(m.Index, m.Name, m.Key, _avatars.ProfilePicture(m.ProfilePictureId),
                                                  m.Role, RoleText(m.Role), StatusText(m), m.Online, m.Me,
-                                                 m.Me ? m.Comment : Filtered(m.Comment)))   // mine fills its edit box
+                                                 m.Me ? m.Comment : Filtered(m.Comment))
+                    { Status = m.Status switch { MemberStatus.Away => PolStatus.Away, MemberStatus.Busy => PolStatus.Busy, _ => PolStatus.Online } })   // mine fills its edit box
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
             Groups.Add(new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members)
@@ -108,13 +113,16 @@ public partial class SocialViewModel
         EditNote = RequestWriteFailed;
     }
 
+    public bool CanCreateGroup => Groups.Count(x => !x.IsInvited) < PolLimits.MaxGroups;
+    public string GroupLimitText => HookFailures.Groups.TooManyGroups;
+
     // each one checks the viewer's rule as well as the menus do, so no caller can send what the viewer wouldn't
 
     public void CreateGroup(string name)
     {
-        if (Groups.Count(x => !x.IsInvited) >= 4)
+        if (!CanCreateGroup)
         {
-            EditNote = HookFailures.Groups.TooManyGroups;
+            EditNote = GroupLimitText;
             return;
         }
         BeginGroup((pid, token) => SocialRequests.CreateGroup(pid, token, name.Trim()), $"Group \"{name.Trim()}\" created.");

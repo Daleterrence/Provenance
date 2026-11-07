@@ -5,6 +5,7 @@ using System.Windows.Input;
 using Provenance.Common.Settings;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Chat;
 
@@ -17,7 +18,7 @@ public partial class GroupChatWindow : AppWindow
     private readonly GroupChatViewModel _vm;
     private readonly ISettingsService _settings;
     private readonly System.Windows.Threading.DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(500) };
-    private bool _quiet, _flashing;
+    private bool _quiet;
 
     public GroupChatWindow(GroupChatViewModel vm, ISettingsService settings)
     {
@@ -34,8 +35,7 @@ public partial class GroupChatWindow : AppWindow
             _vm.WindowActive = true;
             _vm.ShowTimes = _settings.Current.GroupChatTimes;
             _vm.Seen();
-            if (_flashing) TaskbarFlash.Stop(this);
-            _flashing = false;
+            TaskbarFlash.StopIfFlashing(this);
         };
         Deactivated += (_, _) => _vm.WindowActive = false;
         IsVisibleChanged += (_, _) => { if (!IsVisible) _vm.WindowActive = false; };
@@ -91,7 +91,6 @@ public partial class GroupChatWindow : AppWindow
     {
         if (!_settings.Current.GroupChatFlash || !IsVisible || IsActive) return;
         TaskbarFlash.Start(this);
-        _flashing = true;
     }
 
     private void OnLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -111,24 +110,14 @@ public partial class GroupChatWindow : AppWindow
 
     private void OnMore(object sender, RoutedEventArgs e)
     {
-        var menu = new ContextMenu { PlacementTarget = MoreButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-        menu.Items.Add(MenuItem("Clear chat...", _vm.Lines.Count > 0, ClearChat));
-        menu.IsOpen = true;
+        var menu = new ContextMenu();
+        Menus.Fill(menu, _vm.MoreMenu(Menus.Confirm(this)));
+        Menus.ShowBelow(menu, MoreButton);
     }
-
-    internal void ClearChat()
-    {
-        var shown = _vm.Lines.Select(l => l.Id).ToList();
-        if (MessageDialog.Confirm(this, "Clear chat", ClearQuestion(_vm.GroupName), "CLEAR", destructive: true) != 0) return;
-        _vm.ClearLines(shown);
-    }
-
-    public static string ClearQuestion(string group) =>
-        $"Delete every line of the \"{group}\" group chat that Provenance has kept on this PC? This can't be undone.";
 
     private void OnLineMenu(object sender, ContextMenuEventArgs e)
     {
-        if (sender is not TextBox { Tag: GroupChatLineItem line, ContextMenu: { } menu } box)
+        if (sender is not TextBox { DataContext: GroupChatLineItem line, ContextMenu: { } menu } box)
         {
             e.Handled = true;
             return;
@@ -136,19 +125,8 @@ public partial class GroupChatWindow : AppWindow
         FillLineMenu(menu, box, line);
     }
 
-    internal void FillLineMenu(ContextMenu menu, TextBox? box, GroupChatLineItem line)
-    {
-        menu.Items.Clear();
-        menu.Items.Add(new MenuItem { Header = "Copy", Command = ApplicationCommands.Copy, CommandTarget = box });
-        menu.Items.Add(MenuItem("Delete message", true, () => _vm.DeleteLine(line)));
-    }
-
-    private static MenuItem MenuItem(string header, bool enabled, Action act)
-    {
-        var item = new MenuItem { Header = header, IsEnabled = enabled };
-        item.Click += (_, _) => act();
-        return item;
-    }
+    internal void FillLineMenu(ContextMenu menu, TextBox? box, GroupChatLineItem line) =>
+        Menus.FillLine(menu, box, _vm.LineMenu(line));
 
     private void OnComposeKey(object sender, KeyEventArgs e)
     {

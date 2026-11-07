@@ -1,6 +1,7 @@
 <UserControl x:Class="Provenance.Wpf.Views.Settings.AddonsPluginsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
              xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Settings"
@@ -249,7 +250,7 @@
         <!-- down here so a switch far down the list still shows what happened -->
         <Border Grid.Row="1" Style="{StaticResource FooterBar}"
                 Visibility="{Binding Status, Converter={StaticResource NullToVisibilityConverter}}">
-            <TextBlock Text="{Binding Status}" Tag="{Binding StatusIsError}" Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12" />
+            <TextBlock Text="{Binding Status}" behaviours:State.IsError="{Binding StatusIsError}" Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12" />
         </Border>
     </Grid>
 </UserControl>

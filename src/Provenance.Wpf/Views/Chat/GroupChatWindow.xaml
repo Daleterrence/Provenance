@@ -4,6 +4,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:social="clr-namespace:Provenance.Common.Social;assembly=Provenance.Common"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Chat"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:GroupChatViewModel}"
@@ -16,7 +17,7 @@
             <Grid Margin="0,1" ColumnDefinitions="Auto,*">
                 <TextBlock x:Name="Time" Margin="0,1,10,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding TimeText}"
                            Visibility="{Binding DataContext.ShowTimes, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVis}}" />
-                <TextBox x:Name="Body" Grid.Column="1" Style="{StaticResource SelectableText}" Text="{Binding Display, Mode=OneWay}" FontSize="13" IsTabStop="False" ContextMenuOpening="OnLineMenu" Tag="{Binding}">
+                <TextBox x:Name="Body" Grid.Column="1" Style="{StaticResource SelectableText}" Text="{Binding Display, Mode=OneWay}" FontSize="13" IsTabStop="False" ContextMenuOpening="OnLineMenu">
                     <TextBox.ContextMenu>
                         <ContextMenu />
                     </TextBox.ContextMenu>
@@ -89,7 +90,7 @@
         <Border Grid.Row="3" Style="{StaticResource FooterBar}">
             <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
                 <TextBox x:Name="ComposeBox" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
-                         TextWrapping="Wrap" MaxLength="174" Style="{StaticResource OutlinedField}" Padding="10,8"
+                         TextWrapping="Wrap" MaxLength="{x:Static social:GroupChatFiles.MaxText}" Style="{StaticResource OutlinedField}" Padding="10,8"
                          materialDesign:HintAssist.Hint="Say something to the group (Enter sends)" materialDesign:HintAssist.IsFloating="False"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" IsEnabled="{Binding InChat}"
                          PreviewKeyDown="OnComposeKey" PreviewTextInput="OnComposeInput" DataObject.Pasting="OnComposePaste" />

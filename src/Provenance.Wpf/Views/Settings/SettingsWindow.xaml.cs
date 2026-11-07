@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.ViewModels.Settings;
 using Provenance.Wpf.ViewModels.Shared;
 using Provenance.Wpf.Views.Dialogs;
@@ -38,7 +39,7 @@ public partial class SettingsWindow : AppWindow
             if (e.PropertyName == nameof(SettingsViewModel.SwitcherProfiles)) ProfileSwitcher.SetCurrentValue(Selector.SelectedItemProperty, null);
         };
         vm.AskName = (title, prompt, start, check) =>
-            InputDialog.Prompt(this, title, prompt, start, maxLength: WindowerNameLength, validate: check);
+            InputDialog.Prompt(this, title, prompt, start, maxLength: WindowerSettingsFile.MaxNameLength, validate: check);
         vm.Confirm = (title, body, ok, destructive) => MessageDialog.Confirm(this, title, body, ok, destructive: destructive) == 0;
         vm.AskSaveGame = which => MessageDialog.Confirm(this, "Unsaved game settings",
             $"You've changed some game settings{(which is null ? "" : " for " + which)} but haven't saved them yet.", "CONTINUE",
@@ -71,23 +72,11 @@ public partial class SettingsWindow : AppWindow
     {
         if (sender is not Button { DataContext: HandleCharacterRow c } button ||
             DataContext is not SettingsViewModel vm) return;
-        var menu = new ContextMenu { PlacementTarget = button, Placement = PlacementMode.Bottom };
-        foreach (var to in vm.Handles.LinkTargets(c))
-        {
-            var header = new StackPanel();
-            header.Children.Add(new TextBlock { Text = to.Name, FontSize = 13 });
-            if (to.Full)
-                header.Children.Add(new TextBlock { Text = HandleList.LimitText, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 280 });
-            var item = new MenuItem { Header = header, IsEnabled = !to.Full };
-            item.Click += (_, _) => vm.Handles.Link(c, to);
-            menu.Items.Add(item);
-        }
-        if (menu.Items.Count > 0) menu.IsOpen = true;
+        var menu = new ContextMenu();
+        Menus.Fill(menu, vm.Handles.LinkMenu(c));
+        if (menu.Items.Count > 0) Menus.ShowBelow(menu, button);
         else vm.Handles.NoTarget();
     }
-
-    // settings.xml takes 255, and Ashita's file names stop well short of that
-    private const int WindowerNameLength = 255;
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {

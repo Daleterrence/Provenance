@@ -26,7 +26,7 @@
                     </DockPanel>
                     <!-- docked, so a long comment trims to the row instead of running off it -->
                     <DockPanel Margin="0,2,0,0">
-                        <controls:StatusMark DockPanel.Dock="Left" Status="{Binding StatusLabel}" Margin="0,0,6,0" />
+                        <controls:StatusMark DockPanel.Dock="Left" Status="{Binding Status}" Online="{Binding Online}" Shown="{Binding HasStatus}" Margin="0,0,6,0" />
                         <TextBlock FontSize="12" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Text.3}">
                             <TextBlock.ToolTip>
                                 <TextBlock MaxWidth="320" TextWrapping="Wrap"><Run Text="{Binding StatusLabel, Mode=OneWay}" /><Run Text="{Binding Comment, Mode=OneWay, StringFormat={}   {0}}" /></TextBlock>

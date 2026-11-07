@@ -1,10 +1,12 @@
 <controls:AppWindow x:Class="Provenance.Wpf.Views.Social.EditProfileWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+        xmlns:social="clr-namespace:Provenance.Common.Social;assembly=Provenance.Common"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Social"
         xmlns:services="clr-namespace:Provenance.Wpf.Services"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:EditProfileViewModel}"
@@ -210,7 +212,7 @@
                     </Button>
                     <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="Handle name" Style="{StaticResource ProfileLabel}" />
-                        <TextBox Style="{StaticResource FieldText}" MaxLength="15"
+                        <TextBox Style="{StaticResource FieldText}" MaxLength="{x:Static social:PolLimits.HandleName}"
                                  Text="{Binding HandleName, UpdateSourceTrigger=PropertyChanged}" />
                         <TextBlock Style="{StaticResource ProfileHelp}"
                                    Text="This is the name your friends see, up to 15 English letters, numbers and symbols. They'll see a new name the next time their friend list loads." />
@@ -371,7 +373,7 @@
                                  Style="{StaticResource Spinner}"
                                  Visibility="{Binding Busy, Converter={StaticResource BoolToVis}}" />
                     <TextBlock FontSize="12" TextWrapping="Wrap" MaxWidth="320" VerticalAlignment="Center"
-                               Text="{Binding FooterText}" Tag="{Binding FooterIsError}"
+                               Text="{Binding FooterText}" behaviours:State.IsError="{Binding FooterIsError}"
                                Style="{StaticResource StatusText}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
