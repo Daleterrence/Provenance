@@ -1,3 +1,4 @@
+using Provenance.Common.Install;
 using Provenance.Common.Mirror;
 using Provenance.Common.PolFormat;
 using Serilog;
@@ -7,7 +8,7 @@ namespace Provenance.Common.Patcher;
 public static class GameUpdate
 {
     private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
-    private static readonly MirrorClient Mirror = new(MirrorHttp, MirrorKeys.Trusted);
+    internal static readonly MirrorClient Mirror = new(MirrorHttp, MirrorKeys.Trusted);
 
     // One POL version check, then the patch mirror. POL serves whatever the mirror can't, and beforeChange runs once
     // at most.
@@ -45,6 +46,9 @@ public static class GameUpdate
             Log.Information("Update {Product}: mirror unreachable ({Reason})", product.Name, ex.Message);
             outcome = new MirrorOutcome(false, [], 0);
         }
+
+        // the list comes once the mirror's answered, so a dead one isn't waited on twice
+        if (outcome.OnMirror && product.Game == GameProduct.Viewer) SignedBuilds.RefreshAsync(Mirror, ct).GetAwaiter().GetResult();
 
         if (!outcome.OnMirror)
         {

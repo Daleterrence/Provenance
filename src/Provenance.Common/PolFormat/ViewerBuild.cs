@@ -1,10 +1,11 @@
 using Provenance.Common.IO;
 using Provenance.Common.Install;
+using Provenance.Common.Mirror;
 
 namespace Provenance.Common.PolFormat;
 
-// the hook patches fixed places in pol.exe and polcore, so only 1.18.15e fits (another viewer build is gonna hurt). A
-// fresh install has 1.18.00n till the viewer updates it
+// the builds below are the ones Provenance ships with, and the mirror's signed list can add more. A fresh install has
+// 1.18.00n till the viewer updates it
 public static class ViewerBuild
 {
     public enum State { Supported, Outdated, Unknown, Missing }
@@ -34,8 +35,10 @@ public static class ViewerBuild
         (PolRegion.Japan, "93d34b5a7e1f74473f92b74125aca4f58cab8e56e0df2183ea3a0bbce548801d"),
     ];
 
+    // Signed builds are checked as a pair, so one entry's pol.exe never goes with another's polcore
     internal sealed record Builds(IReadOnlyList<(PolRegion Region, string Off, string On)> PolExes,
-                                  IReadOnlyList<(PolRegion Region, string Sha256)> Polcores);
+                                  IReadOnlyList<(PolRegion Region, string Sha256)> Polcores,
+                                  IReadOnlyList<MirrorBuild>? Signed = null);
 
     internal static readonly Builds Known = new(PolExes, Polcores);
 
@@ -55,7 +58,7 @@ public static class ViewerBuild
         catch { return null; }
     }
 
-    public static State Check(string viewerDir) => Check(viewerDir, RegionOf(viewerDir), Known);
+    internal static State Check(string viewerDir) => Check(viewerDir, RegionOf(viewerDir), Known);
 
     internal static State Check(string viewerDir, PolRegion region, Builds known)
     {
@@ -68,7 +71,7 @@ public static class ViewerBuild
         return v != null && string.CompareOrdinal(v, CurrentVersion) < 0 ? State.Outdated : State.Unknown;
     }
 
-    public static string? Problem(string viewerDir) => Problem(viewerDir, RegionOf(viewerDir), Known);
+    internal static string? Problem(string viewerDir) => Problem(viewerDir, RegionOf(viewerDir), Known);
 
     internal static string? Problem(string viewerDir, PolRegion region, Builds known) => Check(viewerDir, region, known) switch
     {
@@ -83,7 +86,7 @@ public static class ViewerBuild
     };
 
     // held open while pol.exe starts: the files that got checked are the ones that run
-    public static IDisposable? Hold(string viewerDir, out string? problem) => Hold(viewerDir, RegionOf(viewerDir), Known, out problem);
+    internal static IDisposable? Hold(string viewerDir, out string? problem) => Hold(viewerDir, RegionOf(viewerDir), Known, out problem);
 
     internal static IDisposable? Hold(string viewerDir, PolRegion region, Builds known, out string? problem)
     {
@@ -106,8 +109,13 @@ public static class ViewerBuild
         return null;
     }
 
-    private static bool Fits(Builds known, PolRegion region, string polSha, Func<string> coreSha) =>
-        known.PolExes.Any(p => p.Region == region && (polSha == p.Off || polSha == p.On)) && known.Polcores.Contains((region, coreSha()));
+    private static bool Fits(Builds known, PolRegion region, string polSha, Func<string> coreSha)
+    {
+        var core = new Lazy<string>(coreSha);
+        if (known.PolExes.Any(p => p.Region == region && (polSha == p.Off || polSha == p.On)) && known.Polcores.Contains((region, core.Value)))
+            return true;
+        return known.Signed?.Any(b => b.ToPolRegion() == region && (polSha == b.PolExe || polSha == b.PolExeLaa) && core.Value == b.Polcore) == true;
+    }
 
     private sealed class Holder(List<FileStream> files) : IDisposable
     {

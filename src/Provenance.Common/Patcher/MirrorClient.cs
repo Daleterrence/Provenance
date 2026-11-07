@@ -10,7 +10,7 @@ namespace Provenance.Common.Patcher;
 // its target once its size and SHA-256 match the signed entry
 public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, ECDsa> trusted, string baseUrl = MirrorLayout.BaseUrl)
 {
-    private const long MaxSignedBytes = 16 * 1024 * 1024;
+    internal const long MaxSignedBytes = 16 * 1024 * 1024;
 
     private readonly Uri _base = new(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
 
@@ -32,6 +32,13 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
             return idx.Format == MirrorIndex.PackedFormat && idx.Region == region && idx.Product == product && idx.Version == version ? idx : null;
         }
         catch (InvalidDataException) { return null; }
+    }
+
+    // the signed bytes come back too, so the caller can keep them and check them again on the next start
+    public async Task<(MirrorBuilds List, byte[] Blob)?> GetBuildsAsync(CancellationToken ct)
+    {
+        var blob = await GetBlobAsync(MirrorLayout.BuildsKey, ct);
+        return blob is not null && MirrorBuilds.FromSigned(blob, trusted) is { } list ? (list, blob) : null;
     }
 
     public async Task<Stream> OpenSpanAsync(string region, string pack, long start, long length, CancellationToken ct, Action<int>? received = null)
@@ -199,8 +206,14 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         catch (InvalidOperationException ex) { throw new InvalidDataException("mirror object is not valid compressed data", ex); }
     }
 
-    // null on a 404, a body over 16 MB or a bad signature. The 60 secs cap covers the whole read, not just the headers.
     private async Task<byte[]?> GetSignedAsync(string key, CancellationToken ct)
+    {
+        var blob = await GetBlobAsync(key, ct);
+        return blob is not null && SignedBlob.TryOpen(blob, trusted, out var payload) ? payload : null;
+    }
+
+    // null on a 404 or a body over 16 MB. The 60 secs cap covers the whole read, not just the headers.
+    private async Task<byte[]?> GetBlobAsync(string key, CancellationToken ct)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(TimeSpan.FromSeconds(60));
@@ -226,6 +239,6 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         {
             throw new HttpRequestException(HttpRequestError.ResponseEnded, $"the connection dropped while reading {key}: {ex.Message}", ex);
         }
-        return SignedBlob.TryOpen(ms.ToArray(), trusted, out var payload) ? payload : null;
+        return ms.ToArray();
     }
 }

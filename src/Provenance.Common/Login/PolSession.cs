@@ -21,7 +21,7 @@ using Serilog;
 
 namespace Provenance.Common.Login;
 
-internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? problem);
+internal delegate IDisposable? HoldViewerFiles(string viewerDir, CancellationToken ct, out string? problem);
 
 public sealed class PolSession : IDisposable
 {
@@ -159,7 +159,8 @@ public sealed class PolSession : IDisposable
     internal Func<bool> AnyPolRunningNow { get; init; } = AnyPolRunning;
     internal Func<bool?> WindowsScreenSaver { get; init; } = ReadScreenSaver;
     internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerAddonList?, WindowerLaunchSetup> WindowerSetup { get; init; }
-    internal HoldViewerFiles HoldViewer { get; init; } = ViewerBuild.Hold;
+    internal HoldViewerFiles HoldViewer { get; init; } = SignedBuilds.Hold;
+    internal Action<string, CancellationToken> FindBuild { get; init; } = SignedBuilds.FetchIfUnknown;
     internal Func<Prestarted, bool> PrestartAlive { get; init; }
     internal Func<ProcessStamp, bool> IsViewerPol { get; init; } = stamp => stamp.IsViewerPol();
     internal Action ScreenSaverBack { get; init; } = PutScreenSaverBack;
@@ -294,11 +295,17 @@ public sealed class PolSession : IDisposable
             Log.Error(ex, "PlayOnline Viewer update failed");
             return Fail(ErrorText.Of(ex, "The PlayOnline Viewer couldn't be updated. Try logging in again in a moment."));
         }
-        // after the viewer's update and before the hold, which stops any write
+        // after the viewer's update and before the hold, which stops any write. A build only the mirror's list knows has to be on it first
+        FindBuild(viewerDir!, ct);
+        if (ct.IsCancellationRequested)
+        {
+            progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
+            return LoginCodes.Cancelled;
+        }
         LargeAddressAwareBeforeStart(viewerDir!, "before the login");
         NoteScreenSaverNow();
         // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the sign-in ends
-        using var viewerHold = HoldViewer(viewerDir!, out var buildProblem);
+        using var viewerHold = HoldViewer(viewerDir!, ct, out var buildProblem);
         if (buildProblem != null)
         {
             Log.Warning("Viewer build not supported: {Problem}", buildProblem);
@@ -744,7 +751,7 @@ public sealed class PolSession : IDisposable
             var (viewerDir, polExe, launcherExe) = FindLaunchFiles();
             // no network here, the sign-in does the version check. With no game there's no sign-in card to use it, and
             // the install would take it for POL running
-            if (polExe is null || !GameIsInstalled() || ViewerBuild.Check(viewerDir!) != ViewerBuild.State.Supported) return null;
+            if (polExe is null || !GameIsInstalled() || SignedBuilds.Check(viewerDir!) != ViewerBuild.State.Supported) return null;
             // a queued update is the login's job, pol.exe would act on it itself (patch.ini goes to startpol.exe
             // /REPLACEPOLEXE, which starts a pol.exe that isn't mine)
             if (PolUpdater.QueuedWorkPending(viewerDir!))

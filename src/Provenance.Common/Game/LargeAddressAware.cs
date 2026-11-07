@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using Provenance.Common.IO;
 using Provenance.Common.Install;
+using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game;
@@ -18,6 +19,22 @@ public static class LargeAddressAware
     // US and Europe share a pol.exe, so that pair is only in once
     internal static readonly (string Off, string On)[] Known = ViewerBuild.Known.PolExes.Select(p => (p.Off, p.On)).Distinct().ToArray();
 
+    // the built-in pairs and the ones the mirror's signed list adds
+    internal static IEnumerable<(string Off, string On)> Pairs() =>
+        Known.Concat(SignedBuilds.Entries().Select(b => (b.PolExe, b.PolExeLaa))).Distinct();
+
+    // the hashes of a pol.exe's bytes with the bit off and with it on, null when it isn't a PE file
+    public static (string Off, string On)? Pair(byte[] pol)
+    {
+        using var ms = new MemoryStream(pol);
+        if (BitAt(ms) is not { } at) return null;
+        var off = ms.ToArray();
+        off[at] &= unchecked((byte)~Flag);
+        var on = (byte[])off.Clone();
+        on[at] |= Flag;
+        return (FileHash.Sha256(off), FileHash.Sha256(on));
+    }
+
     // null when the file can't be read or isn't a PE file
     public static bool? Read(string path)
     {
@@ -30,7 +47,7 @@ public static class LargeAddressAware
     }
 
     // SE's pol.exe, with or without the bit
-    public static bool IsKnownBuild(string path) => Known.Any(pair => IsKnownBuild(path, pair));
+    public static bool IsKnownBuild(string path) => Pairs().Any(pair => IsKnownBuild(path, pair));
 
     internal static bool IsKnownBuild(string path, (string Off, string On) known)
     {
@@ -47,7 +64,7 @@ public static class LargeAddressAware
         {
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var sha = FileHash.Sha256(fs);
-            pair = Known.FirstOrDefault(k => sha == k.Off || sha == k.On, Known[0]);
+            pair = Pairs().FirstOrDefault(k => sha == k.Off || sha == k.On, Known[0]);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         return Set(path, on, pair);
@@ -97,13 +114,13 @@ public static class LargeAddressAware
 
     // the repair and install scans count Windower's pol.exe as intact, it's SE's file with the one bit set
     public static bool Matches(string relativePath, string listedSha256, string actualSha256) =>
-        Known.Any(pair => Matches(relativePath, listedSha256, actualSha256, pair));
+        Pairs().Any(pair => Matches(relativePath, listedSha256, actualSha256, pair));
 
     internal static bool Matches(string relativePath, string listedSha256, string actualSha256, (string Off, string On) known) =>
         relativePath.Equals(GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase) && listedSha256 == known.Off && actualSha256 == known.On;
 
     // SE's bytes back, when path is pol.exe with only the bit set. POL's patcher compares those against its file list
-    public static byte[]? Unpatched(string path) => Known.Select(pair => Unpatched(path, pair)).FirstOrDefault(b => b is not null);
+    public static byte[]? Unpatched(string path) => Pairs().Select(pair => Unpatched(path, pair)).FirstOrDefault(b => b is not null);
 
     internal static byte[]? Unpatched(string path, (string Off, string On) known)
     {

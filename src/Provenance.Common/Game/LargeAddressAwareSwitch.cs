@@ -56,7 +56,7 @@ public static class LargeAddressAwareSwitch
         try
         {
             if (!LargeAddressAware.IsKnownBuild(polExe))
-                return !on ? null : ViewerBuild.Check(viewerDir) == ViewerBuild.State.Outdated ? OnNextStartText : UnsupportedText;
+                return !on ? null : SignedBuilds.Check(viewerDir) == ViewerBuild.State.Outdated ? OnNextStartText : UnsupportedText;
             var bit = LargeAddressAware.Read(polExe);
             bool behind = on ? bit == false : clearAtStart && bit == true;
             return !behind ? null : _lastWriteDenied ? DeniedText : on ? OnNextStartText : OffNextStartText;
@@ -77,7 +77,7 @@ public static class LargeAddressAwareSwitch
             if (LargeAddressAware.Read(polExe) == on) return Outcome.Done;
             // the next login's own update brings a build Provenance knows
             if (!LargeAddressAware.IsKnownBuild(polExe))
-                return ViewerBuild.Check(dir) == ViewerBuild.State.Outdated ? Outcome.NextStart : Outcome.Done;
+                return SignedBuilds.Check(dir) == ViewerBuild.State.Outdated ? Outcome.NextStart : Outcome.Done;
             if (t.Blocked() is not null) return Outcome.NextStart;
             using var gate = GameFilesLock.TryLock(GameFilesLock.Job.LargeAddressAware, TimeSpan.FromSeconds(2));
             // again under the lock, a login starting now would want my waiting pol.exe
