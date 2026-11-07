@@ -43,7 +43,7 @@ public partial class CreateRoomDialog : AppWindow
         return dlg;
     }
 
-    public static ChatRoomForm? Prompt(Window owner, IReadOnlyList<ChatZone> zones, int zone, IReadOnlyList<ChatCategory> categories,
+    public static ChatRoomForm? Prompt(Window? owner, IReadOnlyList<ChatZone> zones, int zone, IReadOnlyList<ChatCategory> categories,
                                        Func<string, bool> confirm)
     {
         var dlg = For(zones, zone, categories, confirm);

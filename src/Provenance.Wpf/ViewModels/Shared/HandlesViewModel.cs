@@ -3,6 +3,8 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Provenance.Common.Hook;
 using Provenance.Common.Social;
+using Provenance.Wpf.Services;
+using Provenance.Wpf.ViewModels.Chat;
 
 namespace Provenance.Wpf.ViewModels.Shared;
 
@@ -28,6 +30,7 @@ public sealed record HandleRow(HandleGroup Group, ImageSource? Picture, IReadOnl
 // closes says how it went next time
 public partial class HandlesViewModel : ObservableObject
 {
+    private readonly IDialogs _dialogs;
     private readonly Func<int?> _pid;
     private readonly Func<int, ImageSource?>? _picture;
     private PolSocialSnapshot _snap = PolSocialSnapshot.Empty;
@@ -39,8 +42,9 @@ public partial class HandlesViewModel : ObservableObject
     private bool _wasReadOnly;
     private Action<string?>? _after;
 
-    public HandlesViewModel(Func<int?> pid, Func<int, ImageSource?>? picture = null)
+    public HandlesViewModel(IDialogs dialogs, Func<int?> pid, Func<int, ImageSource?>? picture = null)
     {
+        _dialogs = dialogs;
         _pid = pid;
         _picture = picture;
     }
@@ -66,9 +70,6 @@ public partial class HandlesViewModel : ObservableObject
     // mine, or one the hook's still running (it can take mine after the page has given up on it)
     public bool Switching => (Busy && _op == HandleChange.Switch) ||
                              (LoggedIn && _snap is { HandleOp: "switch", HandleState: "working" });
-
-    // title, question, OK label -> yes
-    public Func<string, string, string, bool>? Confirm { get; set; }
 
     // why a switch can't go right now (something open that's bound to the active handle), or null
     public Func<string?>? SwitchBlocked { get; set; }
@@ -179,7 +180,7 @@ public partial class HandlesViewModel : ObservableObject
             Note = why;
             return;
         }
-        if (Confirm?.Invoke("Switch Handle", HandleList.SwitchQuestion(row.Handle, InChatRoom), "SWITCH") != true) return;
+        if (!_dialogs.Confirm("Switch Handle", HandleList.SwitchQuestion(row.Handle, InChatRoom), "SWITCH")) return;
         Send(HandleChange.Switch, (pid, token) => SocialRequests.SwitchHandle(pid, token, row.Handle),
              HandleList.Done(HandleChange.Switch, row.Name, ""));
     }
@@ -201,8 +202,9 @@ public partial class HandlesViewModel : ObservableObject
     public void Closed() => _open = false;
 
     // a group's chat only opens under the handle I joined it with
-    public void OpenGroup(PolGroup group, Func<string, bool> ask, Action open, Action<string> tell)
+    public void OpenGroup(PolGroup group, Action open)
     {
+        void tell(string text) => _dialogs.Info(GroupChatViewModel.DialogTitle, text);
         if (!LoggedIn)
         {
             tell(HandleList.NotLoggedInText);
@@ -220,7 +222,7 @@ public partial class HandlesViewModel : ObservableObject
             tell(why);
             return;
         }
-        if (!ask(check.Question)) return;
+        if (!_dialogs.Confirm(GroupHandleCheck.Title, check.Question, "YES", cancel: "NO")) return;
         Send(HandleChange.Switch, (pid, token) => SocialRequests.SwitchHandle(pid, token, check.To!),
              HandleList.Done(HandleChange.Switch, check.To!.Name, ""));
         if (_token is null) tell(Note);
@@ -237,7 +239,7 @@ public partial class HandlesViewModel : ObservableObject
             return;
         }
         var question = HandleList.LinkQuestion(c.Character, to.Handle, _snap.Handles);
-        if (Confirm?.Invoke("Link", question, "LINK") != true) return;
+        if (!_dialogs.Confirm("Link", question, "LINK")) return;
         Send(HandleChange.Link, (pid, token) => SocialRequests.LinkCharacter(pid, token, to.Handle, c.Character.Record),
              HandleList.Done(HandleChange.Link, to.Name, c.Label));
     }
@@ -245,7 +247,7 @@ public partial class HandlesViewModel : ObservableObject
     public void Unlink(HandleCharacterRow c)
     {
         if (!Editable || c.Handle is not { } from) return;
-        if (Confirm?.Invoke("Unlink", HandleList.UnlinkQuestion(c.Character, from), "UNLINK") != true) return;
+        if (!_dialogs.Confirm("Unlink", HandleList.UnlinkQuestion(c.Character, from), "UNLINK")) return;
         Send(HandleChange.Unlink, (pid, token) => SocialRequests.UnlinkCharacter(pid, token, from, c.Character.Record),
              HandleList.Done(HandleChange.Unlink, from.Name, c.Label));
     }

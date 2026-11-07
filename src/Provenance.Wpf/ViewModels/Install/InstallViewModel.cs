@@ -13,7 +13,6 @@ using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
 using Provenance.Wpf.Services;
-using Provenance.Wpf.ViewModels.Settings;
 
 namespace Provenance.Wpf.ViewModels.Install;
 
@@ -37,14 +36,16 @@ public partial class InstallViewModel : ObservableObject
 
     internal PolRegion _region;
     private readonly PolRegion _autoRegion;
+    private readonly IDialogs _dialogs;
     private readonly Action? _holdPrestarts, _releasePrestarts;
     private readonly GameInstaller _installer = new();
     private readonly DownloadMeter _meter;
     private CancellationTokenSource? _cts;
     private InstallFromMirror? _mirror;
 
-    public InstallViewModel(PolRegion? region, Action? holdPrestarts = null, Action? releasePrestarts = null)
+    public InstallViewModel(IDialogs dialogs, PolRegion? region, Action? holdPrestarts = null, Action? releasePrestarts = null)
     {
+        _dialogs = dialogs;
         // a viewer that's already there decides, otherwise it's the player's pick
         ShowRegionChoice = region is not { } r || !RegionValues.Contains(r);
         // a version that isn't offered yet (Japanese, for now) leaves Auto on the first one that is
@@ -198,13 +199,26 @@ public partial class InstallViewModel : ObservableObject
     [RelayCommand]
     private void BrowseInstall()
     {
-        if (SettingsViewModel.PickFolder("Choose where to install FINAL FANTASY XI") is { } d) InstallFolder = d;
+        if (_dialogs.PickFolder("Choose where to install FINAL FANTASY XI") is { } d) InstallFolder = d;
     }
 
     [RelayCommand]
     private void BrowseDownload()
     {
-        if (SettingsViewModel.PickFolder("Choose where to keep the downloaded installer") is { } d) DownloadFolder = d;
+        if (_dialogs.PickFolder("Choose where to keep the downloaded installer") is { } d) DownloadFolder = d;
+    }
+
+    // closing mid-install asks first, false when the player decides against stopping. The words are the "Cancelled" note's,
+    // worded for a window that's closing
+    internal bool ConfirmStop()
+    {
+        var what = CurrentStep switch
+        {
+            0 => "Closing this window stops the download. It'll carry on from where it left off next time.",
+            1 => "Closing this window stops unpacking. The download is kept, so you can carry on with the install next time.",
+            _ => "Closing this window stops the install before it finishes. You can finish it next time.",
+        };
+        return _dialogs.Confirm("Stop the install?", what, "STOP", ConfirmStyle.Destructive);
     }
 
     // its files run as admin, so it's an admin-only ffxi-download folder in a folder only admins can change, both held

@@ -6,7 +6,6 @@ using System.Windows.Media;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
-using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Chat;
 using Provenance.Wpf.ViewModels.Social;
 
@@ -15,48 +14,19 @@ namespace Provenance.Wpf.Views.Chat;
 // unowned like the friends window, so it stays up with the main window in the tray. Closing it leaves the room
 public partial class ChatRoomsWindow : AppWindow
 {
-    private const string DialogTitle = "PlayOnline Chat";
     private readonly ChatRoomsViewModel _vm;
 
     public ChatRoomsWindow(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword,
                            Func<int, ImageSource?>? emote = null)
     {
         InitializeComponent();
-        DataContext = _vm = new ChatRoomsViewModel(social, savePassword, dropPassword, emote)
-        {
-            AskChatName = initial => InputDialog.Prompt(this, DialogTitle, "Enter chat name.", initial,
-                                                        maxLength: ChatRoomFiles.MaxNameBytes, validate: ChatRoomFiles.NameProblem),
-            AskPassword = () => InputDialog.PromptSecret(this, "Enter room password", "Enter password.",
-                                                         ChatRoomFiles.MaxPasswordLength, ChatRoomFiles.PasswordProblem),
-            ConfirmLeave = question => MessageDialog.Confirm(this, DialogTitle, question, "LEAVE") is not null,
-            ShowError = text => MessageDialog.ShowError(this, DialogTitle, text),
-            ShowInfo = text => MessageDialog.ShowInfo(this, DialogTitle, text),
-            Confirm = question => MessageDialog.Confirm(this, DialogTitle, question, "YES", cancelLabel: "NO") == 0,
-            AskCreate = (zones, zone, cats) => CreateRoomDialog.Prompt(this, zones, zone, cats,
-                q => MessageDialog.Confirm(this, "Create Room", q, "YES", cancelLabel: "NO") == 0),
-            AskNewPassword = AskNewPassword,
-        };
+        DataContext = _vm = new ChatRoomsViewModel(social, savePassword, dropPassword, emote);
         Loaded += (_, _) => _vm.Start();
         Closed += (_, _) => _vm.Dispose();
     }
 
     // Esc in a room is for the room
     protected override bool OnEscape() => !_vm.InRoom && base.OnEscape();
-
-    public static ChatRoomsWindow? Current => Application.Current.Windows.OfType<ChatRoomsWindow>().FirstOrDefault();
-
-    public static void ShowFor(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword,
-                               Func<int, ImageSource?>? emote = null)
-    {
-        if (Current is { } open)
-        {
-            if (!open.IsVisible) open.Show();
-            if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
-            open.Activate();
-            return;
-        }
-        new ChatRoomsWindow(social, savePassword, dropPassword, emote).Show();
-    }
 
     // the session's going, so the room goes with it and no PART is sent
     public void CloseQuietly()
@@ -70,19 +40,6 @@ public partial class ChatRoomsWindow : AppWindow
         if (e.OriginalSource is DependencyObject d && ItemsControl.ContainerFromElement(RoomList, d) is ListBoxItem
             && _vm.EnterCommand.CanExecute(null))
             _vm.EnterCommand.Execute(null);
-    }
-
-    // the viewer asks for the new one and then again to confirm it
-    private string? AskNewPassword()
-    {
-        var pw = InputDialog.PromptSecret(this, "Set password", "Enter password.", ChatRoomFiles.MaxNewPassword,
-                                          ChatRoomFiles.NewPasswordProblem);
-        if (pw is null) return null;
-        var again = InputDialog.PromptSecret(this, "Confirm password", "Enter password.", ChatRoomFiles.MaxNewPassword);
-        if (again is null) return null;
-        if (again == pw) return pw;
-        MessageDialog.ShowError(this, DialogTitle, "The password entered in Room Password(Confirm) does not match.");
-        return null;
     }
 
     // a member's Kick and Designate, only for the room master and never on my own row

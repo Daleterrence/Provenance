@@ -15,7 +15,6 @@ using Provenance.Common.Settings;
 using Provenance.Wpf.Win32;
 using Serilog;
 using Provenance.Wpf.Services;
-using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.Views.Main;
 using Provenance.Wpf.ViewModels.Main;
 
@@ -61,7 +60,7 @@ public partial class App : Application
             Log.Fatal(ex, "Could not prepare the protected folder for the hook's files");
             var text = "Provenance couldn't set up its folder in ProgramData. Close any program that's using that " +
                        "folder, then start Provenance again.";
-            try { MessageDialog.ShowError(null, "Provenance can't start", text, offerLogs: true); }
+            try { WpfDialogs.Default.Error("Provenance can't start", text, offerLogs: true); }
             catch (Exception dialogError)
             {
                 Log.Error(dialogError, "The start-up error card could not be shown");
@@ -89,6 +88,8 @@ public partial class App : Application
                 services.AddSingleton<FeedService>();
                 services.AddSingleton<PolSession>();
                 services.AddSingleton<AvatarService>();
+                services.AddSingleton(WpfDialogs.Default);
+                services.AddSingleton<IWindowManager, WindowManager>();
                 services.AddSingleton<MainViewModel>();
                 services.AddSingleton<MainWindow>();
             })
@@ -110,10 +111,9 @@ public partial class App : Application
             try
             {
                 if (KeyUnavailable(args.Exception) is { } keyProblem)
-                    MessageDialog.ShowError(MainWindow, "Can't open your saved login details", keyProblem.Message,
-                                            offerLogs: true);
+                    WpfDialogs.Default.Error("Can't open your saved login details", keyProblem.Message, offerLogs: true);
                 else
-                    MessageDialog.ShowError(MainWindow, "Provenance ran into a problem",
+                    WpfDialogs.Default.Error("Provenance ran into a problem",
                         "It's still running, but if something isn't working, close Provenance and open it again. Press Open logs to see what went wrong.",
                         offerLogs: true);
             }

@@ -30,6 +30,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public const string UnlockedText = HookFailures.ChatRooms.Unlocked;
 
     private readonly SocialViewModel _social;
+    private readonly IDialogs _dialogs;
     private readonly Func<string, string, bool> _savePassword;
     private readonly Action _dropPassword;
     // a little past the hook's 6 minute wait for a line's answer
@@ -53,6 +54,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                               Func<int, ImageSource?>? emote = null)
     {
         _social = social;
+        _dialogs = social.Dialogs;
         _savePassword = savePassword;
         _dropPassword = dropPassword;
         _emote = emote;
@@ -96,16 +98,26 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     [RelayCommand] private void PickColour(object? pick) => Colour = pick is int i ? i : -1;
     [RelayCommand] private void PickEmote(object? pick) => Emoticon = pick is int i ? i : 0;
 
-    // the view's hooks for the questions only it can ask
-    public Func<string, string?>? AskChatName { get; set; }
-    public Func<string?>? AskPassword { get; set; }
-    public Func<string, bool>? ConfirmLeave { get; set; }
-    public Action<string>? ShowError { get; set; }
-    public Action<string>? ShowInfo { get; set; }
-    // null when the form's cancelled
-    public Func<IReadOnlyList<ChatZone>, int, IReadOnlyList<ChatCategory>, ChatRoomForm?>? AskCreate { get; set; }
-    public Func<string, bool>? Confirm { get; set; }
-    public Func<string?>? AskNewPassword { get; set; }
+    private const string DialogTitle = "PlayOnline Chat";
+
+    private string? AskChatName(string initial) => _dialogs.Ask(DialogTitle, "Enter chat name.", initial,
+                                                                ChatRoomFiles.MaxNameBytes, validate: ChatRoomFiles.NameProblem);
+
+    private void ShowError(string text) => _dialogs.Error(DialogTitle, text);
+
+    private bool Confirm(string question) => _dialogs.Confirm(DialogTitle, question, "YES", cancel: "NO");
+
+    // the viewer asks for the new one and then again to confirm it
+    private string? AskNewPassword()
+    {
+        var pw = _dialogs.AskSecret("Set password", "Enter password.", ChatRoomFiles.MaxNewPassword, ChatRoomFiles.NewPasswordProblem);
+        if (pw is null) return null;
+        var again = _dialogs.AskSecret("Confirm password", "Enter password.", ChatRoomFiles.MaxNewPassword);
+        if (again is null) return null;
+        if (again == pw) return pw;
+        ShowError("The password entered in Room Password(Confirm) does not match.");
+        return null;
+    }
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(InLobby), nameof(InRoom), nameof(CanMaster)), NotifyCanExecuteChangedFor(nameof(EnterCommand), nameof(ExitCommand), nameof(CreateRoomCommand))]
     private Page _current = Page.Lobby;
@@ -190,15 +202,15 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private void Enter()
     {
         if (SelectedRoom is not { } room || Pid is not { } pid) return;
-        var nick = AskChatName?.Invoke(_lastNick ?? DefaultNick());
+        var nick = AskChatName(_lastNick ?? DefaultNick());
         if (nick is null) return;
         var token = HookFiles.NewToken();
         if (room.Locked)
         {
-            if (AskPassword?.Invoke() is not { } pw) return;
+            if (_dialogs.AskSecret("Enter room password", "Enter password.", ChatRoomFiles.MaxPasswordLength, ChatRoomFiles.PasswordProblem) is not { } pw) return;
             if (!_savePassword(token, pw))
             {
-                ShowError?.Invoke(HookFailures.ChatCommError);
+                ShowError(HookFailures.ChatCommError);
                 return;
             }
         }
@@ -214,7 +226,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         {
             if (room.Locked) _dropPassword();
             BackToLobby();
-            ShowError?.Invoke(HookFailures.ChatCommError);
+            ShowError(HookFailures.ChatCommError);
         }
     }
 
@@ -226,14 +238,15 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         if (Pid is not { } pid) return;
         var cats = _categories.Select(c => new ChatCategory(c.Key, "", c.Value)).ToList();
-        if (AskCreate?.Invoke(Zones.Select(z => z.Zone).ToList(), SelectedZone?.Zone.Code ?? 0, cats) is not { } form) return;
-        var nick = AskChatName?.Invoke(_lastNick ?? DefaultNick());
+        if (_dialogs.AskRoom(Zones.Select(z => z.Zone).ToList(), SelectedZone?.Zone.Code ?? 0, cats,
+                             q => _dialogs.Confirm("Create Room", q, "YES", cancel: "NO")) is not { } form) return;
+        var nick = AskChatName(_lastNick ?? DefaultNick());
         if (nick is null) return;
         var token = HookFiles.NewToken();
         bool locked = form.Password is { Length: > 0 };
         if (locked && !_savePassword(token, form.Password!))
         {
-            ShowError?.Invoke(HookFailures.ChatCommError);
+            ShowError(HookFailures.ChatCommError);
             return;
         }
         _lastNick = nick;
@@ -249,7 +262,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         {
             if (locked) _dropPassword();
             BackToLobby();
-            ShowError?.Invoke(HookFailures.ChatCommError);
+            ShowError(HookFailures.ChatCommError);
         }
     }
 
@@ -279,25 +292,25 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     // the viewer's Kick and Designate, each with its own question first
     public void Kick(ChatMemberItem m)
     {
-        if (!CanKick(m)) { ShowError?.Invoke(MasterOnly); return; }
-        if (Confirm?.Invoke($"Kick {m.Name}\nfrom this chat room?") != true) return;
+        if (!CanKick(m)) { ShowError(MasterOnly); return; }
+        if (!Confirm($"Kick {m.Name}\nfrom this chat room?")) return;
         SendMaster(ChatRoomFiles.MasterOp.Kick, MasterJob.Kick, m.Key, m.Name, null);
     }
 
     public void Designate(ChatMemberItem m)
     {
-        if (!CanKick(m)) { ShowError?.Invoke(MasterOnly); return; }
-        if (Confirm?.Invoke($"Designate {m.Name} the new room master?") != true) return;
+        if (!CanKick(m)) { ShowError(MasterOnly); return; }
+        if (!Confirm($"Designate {m.Name} the new room master?")) return;
         SendMaster(ChatRoomFiles.MasterOp.Master, MasterJob.Master, m.Key, m.Name, null);
     }
 
     // a new password, or none to take it off
     public void ChangePassword(bool remove)
     {
-        if (!CanMaster) { ShowError?.Invoke(_social.HandleSwitching ? SocialViewModel.SwitchingNote : MasterOnly); return; }
+        if (!CanMaster) { ShowError(_social.HandleSwitching ? SocialViewModel.SwitchingNote : MasterOnly); return; }
         string? pw = null;
-        if (!remove && (pw = AskNewPassword?.Invoke()) is null) return;
-        if (Confirm?.Invoke("Update chat room settings?") != true) return;
+        if (!remove && (pw = AskNewPassword()) is null) return;
+        if (!Confirm("Update chat room settings?")) return;
         SendMaster(ChatRoomFiles.MasterOp.Password, MasterJob.Password, 0, "", pw);
     }
 
@@ -307,13 +320,13 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         var token = HookFiles.NewToken();
         if (password is { Length: > 0 } && !_savePassword(token, password))
         {
-            ShowError?.Invoke(HookFailures.ChatCommError);
+            ShowError(HookFailures.ChatCommError);
             return;
         }
         if (!ChatRoomFiles.Master(pid, token, op, key, password is { Length: > 0 }))
         {
             if (password is { Length: > 0 }) _dropPassword();
-            ShowError?.Invoke(HookFailures.ChatCommError);
+            ShowError(HookFailures.ChatCommError);
             return;
         }
         _masterToken = token;
@@ -335,7 +348,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (_masterKind == MasterJob.Password) _dropPassword();
         _masterToken = null;
         MasterBusy = false;
-        ShowError?.Invoke(HookFailures.ChatCommError);
+        ShowError(HookFailures.ChatCommError);
     }
 
     private void ApplyMaster(ChatRoomsSnapshot chat)
@@ -346,12 +359,12 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         var name = _masterName ?? "";
         if (chat.MasterState == "done")
         {
-            if (_masterKind == MasterJob.Kick) ShowInfo?.Invoke("Kicked.");
-            else if (_masterKind == MasterJob.Master) ShowInfo?.Invoke("New room master designated.");
+            if (_masterKind == MasterJob.Kick) _dialogs.Info(DialogTitle, "Kicked.");
+            else if (_masterKind == MasterJob.Master) _dialogs.Info(DialogTitle, "New room master designated.");
             return;
         }
         if (_masterKind == MasterJob.Password) _dropPassword();
-        ShowError?.Invoke(chat.MasterState switch
+        ShowError(chat.MasterState switch
         {
             "failed:left" => HookFailures.ChatRooms.AlreadyLeft(name),
             "failed:not master" => MasterOnly,
@@ -375,7 +388,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private void Exit()
     {
         bool othersHere = Members.Count(m => !m.Me) > 0, master = Members.Any(m => m.Me && m.Master);
-        if (ConfirmLeave?.Invoke(master && othersHere ? LeaveAsMaster : LeaveQuestion) == false) return;
+        if (!_dialogs.Confirm(DialogTitle, master && othersHere ? LeaveAsMaster : LeaveQuestion, "LEAVE")) return;
         Leave();
     }
 
@@ -595,16 +608,16 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             // out of the room before the dialog, which runs its own loop where the next snapshot lands
             case "kicked":
                 BackToLobby();
-                ShowError?.Invoke($"You have been kicked\nfrom {title}.");
+                ShowError($"You have been kicked\nfrom {title}.");
                 return;
             case "gone":
                 BackToLobby();
-                ShowError?.Invoke($"You're no longer in {title}.");
+                ShowError($"You're no longer in {title}.");
                 return;
             case "lost":
                 BackToLobby();
                 Unavailable = NotNow;
-                ShowError?.Invoke("Communication error occurred during chat. Quitting PlayOnline Chat.");
+                ShowError("Communication error occurred during chat. Quitting PlayOnline Chat.");
                 return;
             case "left":
                 BackToLobby();
@@ -627,7 +640,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         };
         BackToLobby();
         if (chat.RoomState == "failed:no chat") Unavailable = NotNow;
-        ShowError?.Invoke(why);
+        ShowError(why);
     }
 
     private void ApplyLines(ChatRoomsSnapshot chat)

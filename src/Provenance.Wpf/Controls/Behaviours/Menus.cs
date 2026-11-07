@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Provenance.Wpf.ViewModels.Shared;
-using Provenance.Wpf.Views.Dialogs;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
@@ -14,9 +13,7 @@ public sealed class ReopenGuard
     private static readonly TimeSpan Window = TimeSpan.FromMilliseconds(300);
     private DateTime _closedAt;
 
-    public void Closed() => _closedAt = DateTime.UtcNow;
-
-    public void OnClosed(object? sender, EventArgs e) => Closed();
+    public void OnClosed(object? sender, EventArgs e) => _closedAt = DateTime.UtcNow;
 
     public bool JustClosed => DateTime.UtcNow - _closedAt < Window;
 }
@@ -29,10 +26,6 @@ public static class Menus
         item.Click += (_, _) => click();
         return item;
     }
-
-    // Enter and Esc on cancel
-    public static Func<MenuConfirm, bool> Confirm(Window? owner) => q =>
-        MessageDialog.Confirm(owner, q.Title, q.Body, q.Ok, destructive: true) is not null;
 
     public static void Fill(ContextMenu menu, IEnumerable<MenuAction> actions)
     {

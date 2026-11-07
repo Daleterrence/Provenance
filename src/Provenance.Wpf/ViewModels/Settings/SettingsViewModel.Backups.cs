@@ -21,11 +21,8 @@ public partial class SettingsViewModel
 
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RestoreBackupCommand))] private bool _restoringBackup;
 
-    // a test swaps these for ones that just note what they got
-    internal Func<string, string?> PickBackupFolder { get; set; } = PickFolder;
+    // a test swaps this for one that just notes what it got
     internal Action<string> ShowBackupFolder { get; set; } = Explorer.ShowFolder;
-    internal Func<string, string?> PickBackup { get; set; } = PickZip;
-    internal Action<string, string, bool>? ShowRestored { get; set; }
     internal Func<bool> GameRunning { get; set; } = PolUpdates.GameRunning;
     internal Func<LauncherSettings, BackupSources?>? RestoreSourcesForTest { get; set; }
 
@@ -49,7 +46,7 @@ public partial class SettingsViewModel
     [RelayCommand]
     private void BrowseBackupFolder()
     {
-        if (PickBackupFolder("Choose a folder for your game settings backups") is { } d) BackupFolder = d;
+        if (_dialogs.PickFolder("Choose a folder for your game settings backups") is { } d) BackupFolder = d;
     }
 
     // the folder there's no backup in yet gets made, so there's something to open
@@ -74,17 +71,6 @@ public partial class SettingsViewModel
         }
     }
 
-    private static string? PickZip(string folder)
-    {
-        var dlg = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Choose a backup to restore",
-            Filter = $"Game settings backups|{GameSettingsBackup.NameStart}*.zip",
-            InitialDirectory = Directory.Exists(folder) ? folder : "",
-        };
-        return dlg.ShowDialog() == true ? dlg.FileName : null;
-    }
-
     // the game writes its settings when a character logs out, so a restore under a running one wouldn't last. Asked
     // again right before anything's written
     internal string? RestoreBlocked() =>
@@ -104,37 +90,38 @@ public partial class SettingsViewModel
     {
         if (RestoreBlocked() is { } blocked)
         {
-            ShowRestored?.Invoke(RestoreFailedTitle, blocked, true);
+            _dialogs.Error(RestoreFailedTitle, blocked);
             return;
         }
         var s = _settings.Current;
         var sources = RestoreSourcesForTest is { } test ? test(s) : _settings.DetectedRegion is { } r ? GameBackupPolicy.SourcesFor(s, r, null) : null;
         if (sources is null)
         {
-            ShowRestored?.Invoke(RestoreFailedTitle, "FINAL FANTASY XI isn't installed on this PC, so there's nowhere to restore the backup to.", true);
+            _dialogs.Error(RestoreFailedTitle, "FINAL FANTASY XI isn't installed on this PC, so there's nowhere to restore the backup to.");
             return;
         }
         var folder = GameSettingsBackup.FolderOrDefault(s.BackupFolder);
-        if (PickBackup(folder) is not { } zip) return;
+        if (_dialogs.PickFile("Choose a backup to restore", $"Game settings backups|{GameSettingsBackup.NameStart}*.zip", folder) is not { } zip) return;
         BackupInfo info;
         try { info = GameSettingsBackup.Check(zip); }
         catch (Exception ex)
         {
             Log.Warning(ex, "Restore: {Zip} isn't a backup that can be restored", zip);
-            ShowRestored?.Invoke(RestoreFailedTitle, ex is NotABackupException ? GameBackupPolicy.NotOursText : "Windows couldn't open that file, so nothing was restored.", true);
+            _dialogs.Error(RestoreFailedTitle, ex is NotABackupException ? GameBackupPolicy.NotOursText : "Windows couldn't open that file, so nothing was restored.");
             return;
         }
-        if (Confirm?.Invoke(RestoreTitle,
+        if (!_dialogs.Confirm(RestoreTitle,
                 $"Restore the backup made on {GameBackupPolicy.When(info)}? Every character in it gets the settings and macros from it back, over the " +
                 "ones they have now. Characters that aren't in it keep theirs. Provenance backs up your current settings first, so you can go back " +
-                "to them by restoring that backup.", "RESTORE", false) != true) return;
+                "to them by restoring that backup.", "RESTORE")) return;
         RestoringBackup = true;
         SayBackup("Restoring your game settings...");
         try
         {
             var (done, text) = await Task.Run(() => GameBackupPolicy.Restore(zip, info, sources, folder, RestoreBlocked));
             SayBackup("");
-            ShowRestored?.Invoke(done ? RestoreTitle : RestoreFailedTitle, text, !done);
+            if (done) _dialogs.Info(RestoreTitle, text);
+            else _dialogs.Error(RestoreFailedTitle, text);
         }
         finally { RestoringBackup = false; }
     }

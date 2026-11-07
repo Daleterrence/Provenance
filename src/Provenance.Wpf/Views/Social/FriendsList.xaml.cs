@@ -8,7 +8,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
-using Provenance.Wpf.Views.Dialogs;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
@@ -95,14 +95,14 @@ public partial class FriendsList : UserControl
         if (Vm is not { CanEdit: true } vm) return;
         if (f.IsGroupInvite)
         {
-            if (MessageDialog.Confirm(Owner, "Group invitation from " + f.Name, f.Comment, "ANSWER",
-                                      "Accept: join the group", "Decline") is { } answer)
+            if (vm.Dialogs.Choose("Group invitation from " + f.Name, f.Comment, "ANSWER",
+                                  "Accept: join the group", "Decline") is { } answer)
                 vm.AnswerGroupInvite(f, answer == 0);
             return;
         }
-        if (MessageDialog.Confirm(Owner, "Friend request from " + f.Name,
+        if (vm.Dialogs.Choose("Friend request from " + f.Name,
                 $"{f.Name} would like to be your friend on PlayOnline.", "ANSWER",
-                "Accept: add " + f.Name + " to your friend list", "Decline", destructive: true) is { } pick)
+                "Accept: add " + f.Name + " to your friend list", "Decline", ConfirmStyle.Destructive) is { } pick)
             vm.AnswerRequest(f, pick == 0 ? RequestAnswer.Accept : RequestAnswer.Decline);
     }
 

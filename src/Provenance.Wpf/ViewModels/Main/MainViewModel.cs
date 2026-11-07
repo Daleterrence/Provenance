@@ -23,11 +23,7 @@ using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Common.Login;
 using Provenance.Wpf.Services;
-using Provenance.Wpf.Views.Dialogs;
-using Provenance.Wpf.Views.Install;
-using Provenance.Wpf.Views.Chat;
 using Provenance.Wpf.Views.Social;
-using Provenance.Wpf.Views.Settings;
 using Provenance.Wpf.ViewModels.Shared;
 using Provenance.Wpf.ViewModels.Install;
 using Provenance.Wpf.ViewModels.Chat;
@@ -38,6 +34,8 @@ namespace Provenance.Wpf.ViewModels.Main;
 
 public partial class MainViewModel : ObservableObject
 {
+    private readonly IDialogs _dialogs;
+    private readonly IWindowManager _windows;
     private readonly ICredentialService _credentials;
     private readonly ISettingsService _settings;
     private readonly FeedService _feeds;
@@ -53,17 +51,18 @@ public partial class MainViewModel : ObservableObject
     public event Action<bool>? RequestAttention;
     public event Action? AttentionCleared;
 
-    public MainViewModel(ICredentialService credentials, ISettingsService settings, FeedService feeds, PolSession pol,
-                         AvatarService avatars)
+    public MainViewModel(IDialogs dialogs, IWindowManager windows, ICredentialService credentials, ISettingsService settings,
+                         FeedService feeds, PolSession pol, AvatarService avatars)
     {
+        _dialogs = dialogs;
+        _windows = windows;
         _credentials = credentials;
         _settings = settings;
         _settings.SaveFailed += why => Application.Current?.Dispatcher.InvokeAsync(() =>
-            MessageDialog.ShowError(Application.Current.MainWindow, "Settings not saved",
+            _dialogs.Error("Settings not saved",
                 "Provenance couldn't save your settings, so your changes will only last until Provenance closes.", offerLogs: true));
         if (_settings.LoadProblem is { } loadProblem)
-            Application.Current?.Dispatcher.InvokeAsync(() =>
-                MessageDialog.ShowInfo(Application.Current.MainWindow, "Settings reset", loadProblem));
+            Application.Current?.Dispatcher.InvokeAsync(() => _dialogs.Info("Settings reset", loadProblem));
         _feeds = feeds;
         _pol = pol;
         _avatars = avatars;
@@ -87,13 +86,11 @@ public partial class MainViewModel : ObservableObject
             if (!LoggedIn) return;
             EndSession(SessionEnd.Dropped);   // no question asked, the session's gone so the editor couldn't save anyway
             RequestShow?.Invoke();
-            MessageDialog.ShowInfo(Application.Current.MainWindow, "PlayOnline session ended", why);
+            _dialogs.Info("PlayOnline session ended", why);
             Log.Information("Session ended: the notice was closed");
         });
-        Social = new SocialViewModel(_pol, avatars, _settings);
-        Social.ChangeProfilePictureRequested += OpenProfilePicturePicker;
+        Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings);
         Social.OpenChatRequested += OpenChatWith;
-        Social.LayoutRequested += OnSocialLayout;
 
         Profiles = new ObservableCollection<Account>(_settings.Current.Profiles);
         int needDetails = Profiles.Count(p => !_credentials.HasUsableDetails(p.Id));
@@ -368,33 +365,22 @@ public partial class MainViewModel : ObservableObject
         if (notice || _settings.Current.GroupChatFlash) RequestAttention?.Invoke(notice);
     }
 
-    // the window side, which tests with no windows swap out
-    internal Func<string, bool>? AskGroupHandle { get; set; }
-    internal Action<string>? TellGroupChat { get; set; }
-    internal Action? ShowGroupChat { get; set; }
-
     // the Groups tab's Group Chat: the viewer's handle question (0x3eb0) first when it's needed, then the window
     private void OpenGroupChat(SocialViewModel.GroupItem g)
     {
         if (MultiRunning || Social.Last.GroupList.FirstOrDefault(x => x.Id == g.Id) is not { } group) return;
-        Window? Owner() => Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current?.MainWindow;
-        var show = ShowGroupChat ?? (() => GroupChatWindow.ShowFor(Social.GroupChat));
-        var tell = TellGroupChat ?? (text => MessageDialog.ShowInfo(Owner(), "Group Chat", text));
         if (Social.GroupChat.Open && string.Equals(Social.GroupChat.GroupId, group.Id, StringComparison.OrdinalIgnoreCase))
         {
-            show();
+            _windows.ShowGroupChat(Social.GroupChat);
             return;
         }
         // the Handles page might never have been opened, and the question needs this login's handles
         ShowHandles();
-        Handles.OpenGroup(group,
-            ask: AskGroupHandle ?? (q => MessageDialog.Confirm(Owner(), GroupHandleCheck.Title, q, "YES", cancelLabel: "NO") == 0),
-            open: () =>
-            {
-                if (Social.GroupChat.Join(group)) show();
-                else tell(GroupChatViewModel.JoinFailedText);
-            },
-            tell: tell);
+        Handles.OpenGroup(group, () =>
+        {
+            if (Social.GroupChat.Join(group)) _windows.ShowGroupChat(Social.GroupChat);
+            else _dialogs.Info(GroupChatViewModel.DialogTitle, GroupChatViewModel.JoinFailedText);
+        });
     }
 
     internal void ShowNotice(string text, string icon = "mail", bool opens = true, bool stays = false)
@@ -520,12 +506,12 @@ public partial class MainViewModel : ObservableObject
 
     private bool TryAddAccount()
     {
-        var r = AccountDialog.Show(Application.Current.MainWindow, null, false, edit: false);
+        var r = _dialogs.AskAccount(null, false, edit: false);
         if (r == null) return false;
         // one POL ID twice would be two cards for one account, and the message names the card, never the ID
         if (ProfileWithPolId(r.PolId) is { } same)
         {
-            MessageDialog.ShowInfo(Application.Current.MainWindow, "Account already added",
+            _dialogs.Info("Account already added",
                 $"This PlayOnline ID is already saved as {same.DisplayName}. Press Edit account if you want to change its details.");
             SelectedProfile = same;
             return false;
@@ -557,13 +543,13 @@ public partial class MainViewModel : ObservableObject
         if (SelectedProfile is not { } p) return false;
         requireAll |= AccountRules.NeedsAllDetails(_credentials.HasUsableDetails(p.Id),
                                       _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id)?.Problem);
-        var r = AccountDialog.Show(Application.Current.MainWindow, p.DisplayName, typed?.UseOtp ?? p.UseOtp, edit: true,
-                                   typed?.OtpSource ?? p.OtpSource, typed?.OtpItem ?? p.OtpItem, requireAll: requireAll,
-                                   polId: typed?.PolId ?? "", squareEnixId: typed?.SeaId ?? "", otpAccount: typed?.OtpAccount ?? p.OtpAccount);
+        var r = _dialogs.AskAccount(p.DisplayName, typed?.UseOtp ?? p.UseOtp, edit: true,
+                                    typed?.OtpSource ?? p.OtpSource, typed?.OtpItem ?? p.OtpItem, requireAll: requireAll,
+                                    polId: typed?.PolId ?? "", squareEnixId: typed?.SeaId ?? "", otpAccount: typed?.OtpAccount ?? p.OtpAccount);
         if (r == null) return false;
         if (r.PolId.Length > 0 && ProfileWithPolId(r.PolId, except: p) is { } same)
         {
-            MessageDialog.ShowInfo(Application.Current.MainWindow, "Account already added",
+            _dialogs.Info("Account already added",
                 $"This PlayOnline ID is already saved as {same.DisplayName}, so nothing was changed.");
             return false;
         }
@@ -597,7 +583,7 @@ public partial class MainViewModel : ObservableObject
             _settings.Save(_settings.Current);
         }
         else if (blocked is not null)
-            MessageDialog.ShowInfo(Application.Current.MainWindow, "Edit account", NothingChangedText);
+            _dialogs.Info("Edit account", NothingChangedText);
         LoadCredentialsForProfile(p);
         RefreshProfileDisplay();
         return true;
@@ -613,15 +599,15 @@ public partial class MainViewModel : ObservableObject
     {
         profile ??= SelectedProfile;
         if (profile == null) return;
-        if (MessageDialog.Confirm(Application.Current.MainWindow, "Remove account",
+        if (!_dialogs.Confirm("Remove account",
                 $"Remove {profile.DisplayName} and its saved passwords from this PC? Your PlayOnline account itself won't change.",
-                "REMOVE", destructive: true) is null) return;
+                "REMOVE", ConfirmStyle.Destructive)) return;
         // the card stays when an entry couldn't go, so no saved password's left without a card that names it
         try { _credentials.DeleteProfile(profile.Id); }
         catch (Exception ex)
         {
             Log.Error(ex, "Could not remove the saved details of account {Id}", profile.Id);
-            MessageDialog.ShowError(Application.Current.MainWindow, "Remove account", RemoveFailedText, offerLogs: true);
+            _dialogs.Error("Remove account", RemoveFailedText, offerLogs: true);
             return;
         }
         Profiles.Remove(profile);
@@ -842,24 +828,22 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void LocateInstall()
     {
-        if (SettingsViewModel.PickFolder("Find your FINAL FANTASY XI or PlayOnline folder") is not { } folder) return;
+        if (_dialogs.PickFolder("Find your FINAL FANTASY XI or PlayOnline folder") is not { } folder) return;
         var region = _settings.DetectedRegion ?? PolRegion.UnitedStates;
         var problem = GameInstaller.LocateExisting(folder, region, ex => Log.Warning(ex, "Could not record the install folder {Folder}", folder));
-        if (problem != null) { MessageDialog.ShowError(Application.Current.MainWindow, "Couldn't use that folder", problem); return; }
+        if (problem != null) { _dialogs.Error("Couldn't use that folder", problem); return; }
         _settings.RedetectRegion();
         RefreshInstallState();
-        if (GameInstalled) MessageDialog.ShowInfo(Application.Current.MainWindow, "Install found",
+        if (GameInstalled) _dialogs.Info("Install found",
             "FINAL FANTASY XI is now set up in Provenance.");
-        else MessageDialog.ShowError(Application.Current.MainWindow, "Game not found",
+        else _dialogs.Error("Game not found",
             "Provenance still can't find FINAL FANTASY XI in that folder. Choose the folder FINAL FANTASY XI is in, or install the game.");
     }
 
     [RelayCommand]
     private void DownloadInstall()
     {
-        var vm = new InstallViewModel(_settings.DetectedRegion, _pol.HoldPrestarts, _pol.ReleasePrestarts);
-        var w = new InstallWindow { DataContext = vm };
-        if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
+        var vm = new InstallViewModel(_dialogs, _settings.DetectedRegion, _pol.HoldPrestarts, _pol.ReleasePrestarts);
         vm.Installed += () => Application.Current.Dispatcher.Invoke(() =>
         {
             _settings.RedetectRegion();
@@ -868,7 +852,7 @@ public partial class MainViewModel : ObservableObject
             Task.Run(() => LargeAddressAwareSwitch.Apply(_settings, "after the install", _pol.HoldPrestarts, _pol.ReleasePrestarts,
                                                           LargeAddressAwareBlocked));
         });
-        w.ShowDialog();
+        _windows.ShowInstall(vm);
     }
 
     public void Startup(bool autoLoginSuppressed)
@@ -906,7 +890,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (MultiRunning) return;
         Social.SelectedFriend = Social.Friends.FirstOrDefault(f => f.Is(friend)) ?? friend;
-        ShowSocialWindow(MessagesPart, activate: true);
+        _windows.ShowMessages(Social);
     }
 
     public void OpenNotice()
@@ -915,41 +899,22 @@ public partial class MainViewModel : ObservableObject
         if (!NoticeOpens) return;
         if (_noticeGroupChat)
         {
-            if (Social.GroupChat.Open) GroupChatWindow.ShowFor(Social.GroupChat);
+            if (Social.GroupChat.Open) _windows.ShowGroupChat(Social.GroupChat);
             return;
         }
         if (_lastSender is { } who && Social.Friends.FirstOrDefault(f => f.Name == who) is { } f) OpenChatWith(f);
         else OpenSocial();
     }
 
-    private void OpenProfilePicturePicker()
-    {
-        var viewer = ViewerFolder(_settings.DetectedRegion);
-        var catalog = viewer is null ? null : ProfilePictureCatalog.Load(viewer);
-        if (catalog is null)
-        {
-            MessageDialog.ShowError(Application.Current.MainWindow, "Profile picture",
-                "Provenance couldn't find the PlayOnline profile pictures in the PlayOnline Viewer folder.");
-            return;
-        }
-        var w = new ProfilePicturePickerWindow(catalog, _avatars, Social.MyProfilePictureId);
-        if (Application.Current.Windows.OfType<Window>().FirstOrDefault(x => x.IsActive) is { } owner) w.Owner = owner;
-        if (w.ShowDialog() == true && w.Result is { } pic && pic != Social.MyProfilePictureId)
-            Social.SaveProfilePicture(pic);
-    }
-
-    private SocialPart FriendsPart => _settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both;
-    private SocialPart MessagesPart => _settings.Current.SocialSplit ? SocialPart.Messages : SocialPart.Both;
-
     // the window OpenSocial brings up, where requests and invitations are answered
-    internal string FriendsWindowTitle => FriendsPart.Title();
+    internal string FriendsWindowTitle => (_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both).Title();
 
     [RelayCommand]
     private void OpenSocial()
     {
         if (MultiRunning) return;
         Social.ShowGroups = false;
-        ShowSocialWindow(FriendsPart, activate: true);
+        _windows.ShowFriends(Social);
     }
 
     // groups live on the friends side's Groups tab
@@ -958,7 +923,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (MultiRunning) return;
         Social.ShowGroups = true;
-        ShowSocialWindow(FriendsPart, activate: true);
+        _windows.ShowFriends(Social);
     }
 
     // split, that's the Messages window on its own
@@ -966,92 +931,17 @@ public partial class MainViewModel : ObservableObject
     private void OpenMessages()
     {
         if (MultiRunning) return;
-        ShowSocialWindow(MessagesPart, activate: true);
+        _windows.ShowMessages(Social);
     }
 
     [ObservableProperty] private bool _chatRoomsOpen;
-    private ChatRoomsWindow? _chatRooms;
 
     [RelayCommand]
     private void OpenChatRooms()
     {
         if (MultiRunning) return;
-        ChatRoomsWindow.ShowFor(Social, _pol.SaveChatPassword, _pol.DropChatPassword, SvgIcons.Emote);
-        if (ChatRoomsWindow.Current is not { } w || w == _chatRooms) return;
-        _chatRooms = w;
+        _windows.ShowChatRooms(Social, _pol.SaveChatPassword, _pol.DropChatPassword, SvgIcons.Emote, () => ChatRoomsOpen = false);
         ChatRoomsOpen = true;
-        w.Closed += (_, _) => (_chatRooms, ChatRoomsOpen) = (null, false);
-    }
-
-    private static List<SocialWindow> SocialWindows() => Application.Current.Windows.OfType<SocialWindow>().ToList();
-
-    // unowned, so they stay up while the main window's minimised or in the tray
-    private void ShowSocialWindow(SocialPart part, bool activate, Rect? place = null)
-    {
-        var w = SocialWindows().FirstOrDefault(x => x.Part == part);
-        if (w != null)
-        {
-            // Activate on its own doesn't bring back a minimised or hidden window
-            if (!w.IsVisible) w.Show();
-            if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
-            if (activate) w.Activate();
-            return;
-        }
-        foreach (var old in SocialWindows().Where(x => (x.Part == SocialPart.Both) != (part == SocialPart.Both))) old.Close();
-        w = new SocialWindow(part) { DataContext = Social, ShowActivated = activate };
-        if (place is null && part == SocialPart.Messages
-            && SocialWindows().FirstOrDefault(x => x.Part == SocialPart.Friends) is { IsVisible: true } fw)
-        {
-            double left = fw.Left + fw.ActualWidth + 8;
-            if (left + w.Width > SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth) left = fw.Left - w.Width - 8;
-            place = new Rect(left, fw.Top, w.Width, fw.ActualHeight);
-        }
-        if (place is { } r)
-        {
-            w.WindowStartupLocation = WindowStartupLocation.Manual;
-            (w.Left, w.Top, w.Width, w.Height) = (r.Left, r.Top, r.Width, r.Height);
-        }
-        else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        w.Show();
-    }
-
-    private void OnSocialLayout(SocialViewModel.LayoutAction action)
-    {
-        bool split = _settings.Current.SocialSplit;
-        switch (action)
-        {
-            case SocialViewModel.LayoutAction.Split: SetSocialSplit(true); break;
-            case SocialViewModel.LayoutAction.Merge: SetSocialSplit(false); break;
-            case SocialViewModel.LayoutAction.OpenMessages when split:
-                ShowSocialWindow(SocialPart.Messages, activate: true);
-                break;
-            case SocialViewModel.LayoutAction.ShowMessages when split && !SocialWindows().Any(x => x.Part == SocialPart.Messages):
-                ShowSocialWindow(SocialPart.Messages, activate: false);
-                break;
-        }
-    }
-
-    private void SetSocialSplit(bool split)
-    {
-        if (_settings.Current.SocialSplit == split) return;
-        var open = SocialWindows().Where(w => w.IsVisible).ToList();
-        Rect? area = open.Count == 0 ? null
-            : open.Select(w => w.WindowState == WindowState.Normal ? new Rect(w.Left, w.Top, w.ActualWidth, w.ActualHeight) : w.RestoreBounds)
-                  .Aggregate(Rect.Union);
-        SaveSetting(s => s.SocialSplit = split);
-        foreach (var w in SocialWindows()) w.Close();
-        if (split)
-        {
-            const double friendsWidth = 340, gap = 8;
-            bool conversation = Social.SelectedFriend != null;
-            ShowSocialWindow(SocialPart.Friends, activate: !conversation,
-                             area is { } a ? new Rect(a.Left, a.Top, friendsWidth, a.Height) : null);
-            if (conversation)
-                ShowSocialWindow(SocialPart.Messages, activate: true,
-                                 area is { } b ? new Rect(b.Left + friendsWidth + gap, b.Top, Math.Max(420, b.Width - friendsWidth - gap), b.Height) : null);
-        }
-        else
-            ShowSocialWindow(SocialPart.Both, activate: true, area is { } a ? new Rect(a.Left, a.Top, Math.Max(720, a.Width), a.Height) : null);
     }
 
     [RelayCommand]
@@ -1059,23 +949,15 @@ public partial class MainViewModel : ObservableObject
     {
         // Play's game update needs the session it's holding
         if (MultiRunning || IsLaunching) return;
-        if (!EditProfileWindow.ConfirmDrop("Log out")) return;
+        if (!_windows.ConfirmDropProfileEditor("Log out")) return;
         EndSession(SessionEnd.LogOut);
-    }
-
-    private static void CloseSocialWindows()
-    {
-        EditProfileWindow.Current?.CloseQuietly();
-        ChatRoomsWindow.Current?.CloseQuietly();
-        GroupChatWindow.Current?.CloseQuietly();
-        foreach (var w in SocialWindows()) w.Close();
     }
 
     private void EndSession(SessionEnd end)
     {
         Social.SettleSends(end);
         _socialPoll.Stop();
-        CloseSocialWindows();
+        _windows.CloseSessionWindows();
         Social.GroupChat.CloseQuietly();
         _sessionEnding = true;   // before LoggedIn, so the Repair button never shows enabled in between
         LoggedIn = false;
@@ -1093,22 +975,21 @@ public partial class MainViewModel : ObservableObject
 
     private async Task ConnectSocialAsync()
     {
-        var owner = Application.Current?.MainWindow;
         if (SelectedProfile == null && !TryAddAccount()) return;
         // one account for the whole sign-in, so switching mid-way can't mix two up
         if (SelectedProfile is not { } profile) return;
         if (!HasSavedCredentials && !EditAccount(requireAll: true)) return;
-        if (!EnsureMemberAgreement(owner)) return;
+        if (!EnsureMemberAgreement()) return;
         // a one-time code counts as used once typed, so the details dialog has to come first
-        if (LoadForLogIn(owner, profile) is not { } details) return;
+        if (LoadForLogIn(profile) is not { } details) return;
         var (pol, squareEnix) = details;
         // claimed before the code's asked, so no other copy signs this account in meanwhile
         if (!_pol.TryClaimAccount(profile.Id, out var claimProblem))
         {
-            MessageDialog.ShowError(owner, "Account in use", claimProblem ?? "This account is in use in another copy of Provenance.");
+            _dialogs.Error("Account in use", claimProblem ?? "This account is in use in another copy of Provenance.");
             return;
         }
-        var otp = profile.UseOtp ? AskOtp(owner, profile, squareEnix) : "";
+        var otp = profile.UseOtp ? AskOtp(profile, squareEnix) : "";
         if (otp is null)
         {
             _pol.ReleaseClaim();
@@ -1149,7 +1030,7 @@ public partial class MainViewModel : ObservableObject
                 var failure = AccountRules.LoginFailure(code, lastFailure, AutoLogin);
                 if (failure.AutoOff) AutoLogin = false;
                 if (code != LoginCodes.Cancelled)
-                    MessageDialog.ShowError(Application.Current?.MainWindow, failure.Title, failure.Text, offerLogs: failure.OfferLogs);
+                    _dialogs.Error(failure.Title, failure.Text, offerLogs: failure.OfferLogs);
             }
         }
         catch (OperationCanceledException) { await Task.Run(() => _pol.StopHold()); }
@@ -1157,7 +1038,7 @@ public partial class MainViewModel : ObservableObject
         {
             Log.Error(ex, "Social connect failed");
             await Task.Run(() => _pol.StopHold());
-            MessageDialog.ShowError(Application.Current?.MainWindow, "Couldn't log in",
+            _dialogs.Error("Couldn't log in",
                 ErrorText.Of(ex, "Provenance ran into a problem while logging in. Try again, and if it keeps happening, press Open logs to see what went wrong."),
                 offerLogs: true);
         }
@@ -1170,11 +1051,11 @@ public partial class MainViewModel : ObservableObject
     }
 
     // accounts on one SE ID share an authenticator
-    private static string? AskOtp(Window? owner, Account profile, SquareEnixAccount squareEnix) =>
-        OtpDialog.Ask(owner, profile.OtpSource, profile.OtpItem, "sea:" + squareEnix.Username.Trim().ToLowerInvariant(),
-                      squareEnix.Username, profile.OtpAccount);
+    private string? AskOtp(Account profile, SquareEnixAccount squareEnix) =>
+        _dialogs.AskOtp(profile.OtpSource, profile.OtpItem, "sea:" + squareEnix.Username.Trim().ToLowerInvariant(),
+                        squareEnix.Username, profile.OtpAccount);
 
-    private (PolAccount Pol, SquareEnixAccount Sea)? LoadForLogIn(Window? owner, Account profile)
+    private (PolAccount Pol, SquareEnixAccount Sea)? LoadForLogIn(Account profile)
     {
         var details = AccountRules.PrepareLogIn(_credentials, profile.Id);
         if (details.Missing)
@@ -1183,26 +1064,26 @@ public partial class MainViewModel : ObservableObject
             details = AccountRules.PrepareLogIn(_credentials, profile.Id);
             if (details.Missing)
             {
-                MessageDialog.ShowError(owner, "Account details incomplete", AccountRules.MissingDetailsText(_credentials.ReadIds(profile.Id)));
+                _dialogs.Error("Account details incomplete", AccountRules.MissingDetailsText(_credentials.ReadIds(profile.Id)));
                 return null;
             }
         }
         if (details.Problem is { } problem)
         {
-            MessageDialog.ShowError(owner, "Account details incomplete", problem);
+            _dialogs.Error("Account details incomplete", problem);
             return null;
         }
         return (details.Pol!, details.SquareEnix!);
     }
 
     // the US viewer asks once per POL ID, here it's once per install
-    internal bool EnsureMemberAgreement(Window? owner)
+    internal bool EnsureMemberAgreement()
     {
         if (_settings.Current.AcceptedMemberAgreement) return true;
         if (!PolPaths.Supported(_settings.DetectedRegion)) return true;
         var viewer = ViewerFolder(_settings.DetectedRegion);
         var strings = viewer is null ? null : PolStringTable.Load(viewer);
-        if (!AgreementDialog.Ask(owner, strings))
+        if (!_dialogs.AskAgreement(strings))
         {
             Log.Information("Member Agreement declined: not signing in");
             ShowNotice("You're not logged in, because you didn't accept the PlayOnline Member Agreement.", "InformationOutline", opens: false);
@@ -1212,11 +1093,10 @@ public partial class MainViewModel : ObservableObject
         return true;
     }
 
-    private static string? PromptHandleName() =>
+    private string? PromptHandleName() =>
         Application.Current!.Dispatcher.Invoke(() =>
         {
-            var owner = Application.Current.MainWindow;
-            var name = InputDialog.Prompt(owner, "Create PlayOnline handle",
+            var name = _dialogs.Ask("Create PlayOnline handle",
                 "This PlayOnline account doesn't have a handle yet, and FINAL FANTASY XI needs one to log in.\n\n" +
                 "A handle is your name on PlayOnline, and other players can see it. You can rename it later.\n\n" +
                 "Enter 1 to 15 English letters, numbers or symbols:",
@@ -1227,9 +1107,9 @@ public partial class MainViewModel : ObservableObject
                     : string.IsNullOrWhiteSpace(name) ? "Type a handle name." : null);
             if (name is null) return null;
             // a handle's public straight away, so one last look first
-            return MessageDialog.Confirm(owner, "Create PlayOnline handle",
-                $"Create the handle {name}? Other players will see it, and you can rename it later by editing your profile.", "CREATE") is null
-                ? null : name;
+            return _dialogs.Confirm("Create PlayOnline handle",
+                $"Create the handle {name}? Other players will see it, and you can rename it later by editing your profile.", "CREATE")
+                ? name : null;
         });
 
     [RelayCommand]
@@ -1239,7 +1119,7 @@ public partial class MainViewModel : ObservableObject
         // POL's own Play gate, and it only asks for each list at sign-in so there's no reload here either
         if (Social.PlayBlockedReason is { } why)
         {
-            MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI", why);
+            _dialogs.Error("Can't start FINAL FANTASY XI", why);
             return;
         }
         _socialPoll.Stop();
@@ -1277,7 +1157,7 @@ public partial class MainViewModel : ObservableObject
             _elapsedTimer.Stop();
             IsLaunching = false;
             _socialPoll.Start();
-            MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI",
+            _dialogs.Error("Can't start FINAL FANTASY XI",
                 ex is CredentialKeyUnavailableException ? ex.Message : "Provenance couldn't tell PlayOnline to start the game. Try again.",
                 offerLogs: true);
             return;
@@ -1290,11 +1170,11 @@ public partial class MainViewModel : ObservableObject
             Social.GameRunning = false;
             _elapsedTimer.Stop();
             IsLaunching = false;
-            CloseSocialWindows();
+            _windows.CloseSessionWindows();
             LoggedIn = false;
             RefreshStartAll();
             _pol.Prestart();
-            MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI", failed);
+            _dialogs.Error("Can't start FINAL FANTASY XI", failed);
             return;
         }
         bool up = false;
@@ -1311,31 +1191,29 @@ public partial class MainViewModel : ObservableObject
         if (ended is not null) Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);
         else if (_settings.Current.ExitAfterGameExits) { RequestExit?.Invoke(); return; }
         IsLaunching = false;
-        CloseSocialWindows();
+        _windows.CloseSessionWindows();
         LoggedIn = false;
         RequestShow?.Invoke();
         _pol.Prestart();
-        if (ended is not null) MessageDialog.ShowError(Application.Current.MainWindow, "Can't start FINAL FANTASY XI", ended, offerLogs: true);
+        if (ended is not null) _dialogs.Error("Can't start FINAL FANTASY XI", ended, offerLogs: true);
     }
 
     internal static readonly TimeSpan PlayAnswerTimeout = TimeSpan.FromSeconds(15);
 
-    // a test answers the questions itself, and says whether its made-up session is still there
-    internal Func<string, bool>? PreLaunchAnswerForTest { get; set; }
+    // a test says whether its made-up session is still there
     internal Func<int, bool>? SessionAliveForTest { get; set; }
 
     // where the viewer does it, after the update and right before the game starts
     internal Task<PreLaunchResult> LinkBeforePlayAsync()
     {
-        var owner = Application.Current?.MainWindow;
         ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         return new PreLaunchLink
         {
             Pid = () => _pol.Pid,
-            Ask = text => Asking(() => MessageDialog.Confirm(owner, PreLaunchLink.Title, text, "YES", cancelLabel: "NO") == 0, text),
+            Ask = text => Asking(() => _dialogs.Confirm(PreLaunchLink.Title, text, "YES", cancel: "NO"), text),
             Failed = text => Asking(() =>
             {
-                MessageDialog.ShowError(owner, PreLaunchLink.Title, text);
+                _dialogs.Error(PreLaunchLink.Title, text);
                 return true;
             }, text),
             Saying = text => ProgressText = text,
@@ -1350,7 +1228,7 @@ public partial class MainViewModel : ObservableObject
     {
         var note = Social.StatusNote;
         Social.StatusNote = "";
-        try { return PreLaunchAnswerForTest is { } answer ? answer(text) : dialog(); }
+        try { return dialog(); }
         finally { if (Social.StatusNote == "") Social.StatusNote = note; }
     }
 
@@ -1426,7 +1304,7 @@ public partial class MainViewModel : ObservableObject
         {
             Log.Error(ex, "FINAL FANTASY XI update failed");
             bool inUse = ex is UnauthorizedAccessException || ex.HResult is unchecked((int)0x80070020) or unchecked((int)0x80070021);
-            MessageDialog.ShowError(Application.Current.MainWindow, "Couldn't update FINAL FANTASY XI",
+            _dialogs.Error("Couldn't update FINAL FANTASY XI",
                 inUse ? "One of the FINAL FANTASY XI files is in use, so it couldn't be updated. Close every FINAL FANTASY XI window, then press Play again."
                       : ErrorText.Of(ex, "The FINAL FANTASY XI update didn't finish. Press Play to try again, and if it keeps happening, press Open logs to see what went wrong."),
                 offerLogs: !ErrorText.Ours(ex));
@@ -1465,9 +1343,9 @@ public partial class MainViewModel : ObservableObject
         get
         {
             if (_handles != null) return _handles;
-            _handles = new HandlesViewModel(() => _pol.Pid, _avatars.ProfilePicture)
+            _handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture)
             {
-                SwitchBlocked = () => EditProfileWindow.Current is not null
+                SwitchBlocked = () => _windows.ProfileEditorOpen
                     ? "Close the profile editor first. It's editing the active handle's profile." : Social.PendingWrite(),
             };
             Social.SnapshotApplied += _ => ShowHandles();
@@ -1501,19 +1379,16 @@ public partial class MainViewModel : ObservableObject
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
         var handles = Handles;
         ShowHandles();
-        var vm = new SettingsViewModel(_settings, multiRunning: () => MultiRunning,
+        var vm = new SettingsViewModel(_dialogs, _settings, multiRunning: () => MultiRunning,
                                        holdPrestarts: _pol.HoldPrestarts, releasePrestarts: _pol.ReleasePrestarts,
                                        largeAddressAwareBlocked: LargeAddressAwareBlocked,
                                        stopPrestart: () => Task.Run(_pol.StopPrestart),
                                        loggedIn: () => IsLaunching || LoggedIn || _pol.Pid is not null,
                                        handles: handles);
         vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.Hook)) PlatformChanged(); };
-        var w = new SettingsWindow { DataContext = vm };
-        w.Tabs.SelectedIndex = (int)tab;
-        if (Application.Current.MainWindow is { IsVisible: true } owner) w.Owner = owner;
         _openSettings = vm;
         handles.Opened();
-        try { w.ShowDialog(); }
+        try { _windows.ShowSettings(vm, tab); }
         finally
         {
             _openSettings = null;
@@ -1618,7 +1493,7 @@ public partial class MainViewModel : ObservableObject
             catch (Exception ex2)
             {
                 Log.Warning(ex2, "Could not open {Url}", u.AbsoluteUri);
-                MessageDialog.ShowError(Application.Current?.MainWindow, "Couldn't open the link",
+                _dialogs.Error("Couldn't open the link",
                     $"Windows didn't open the link. You can copy it from here: {u.AbsoluteUri}");
             }
         }

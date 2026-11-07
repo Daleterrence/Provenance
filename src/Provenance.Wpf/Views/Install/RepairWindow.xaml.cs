@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
 using Provenance.Wpf.Controls;
-using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Install;
 
 namespace Provenance.Wpf.Views.Install;
@@ -14,8 +13,6 @@ public partial class RepairWindow : AppWindow
     {
         InitializeComponent();
         DataContext = _vm = vm;
-        // Enter and Esc both answer no, the yes takes DAT mods away for good
-        vm.Ask = (title, body) => MessageDialog.Confirm(this, title, body, "CONTINUE", safeKeys: true) is not null;
         Loaded += async (_, _) => await vm.RunAsync();
         Closing += OnClosing;
     }
@@ -27,10 +24,7 @@ public partial class RepairWindow : AppWindow
         if (!_vm.Running) return;
         e.Cancel = true;
         if (_vm.StopRequested) return;
-        if (MessageDialog.Confirm(this, "Stop the repair?",
-                "The repair will stop after its current step. Run it again later to finish it.", "STOP", destructive: true) is null)
-            return;
-        _vm.CancelCommand.Execute(null);
+        if (_vm.ConfirmStop()) _vm.CancelCommand.Execute(null);
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();

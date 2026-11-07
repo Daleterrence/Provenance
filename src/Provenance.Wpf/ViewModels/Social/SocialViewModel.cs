@@ -26,8 +26,10 @@ public partial class SocialViewModel : ObservableObject
     private PolSocialSnapshot _last = PolSocialSnapshot.Empty;
     private string _friendsSignature = "";
 
-    public SocialViewModel(PolSession pol, AvatarService avatars, ISettingsService settings)
+    public SocialViewModel(IDialogs dialogs, IWindowManager windows, PolSession pol, AvatarService avatars, ISettingsService settings)
     {
+        Dialogs = dialogs;
+        Windows = windows;
         _pol = pol;
         _avatars = avatars;
         _settings = settings;
@@ -43,6 +45,9 @@ public partial class SocialViewModel : ObservableObject
         };
     }
 
+    // what the windows bound to this ask and open through
+    public IDialogs Dialogs { get; }
+    public IWindowManager Windows { get; }
     public GroupChatViewModel GroupChat { get; }
     public int GroupChatUnread => GroupChat.UnreadTotal;
 
@@ -79,7 +84,6 @@ public partial class SocialViewModel : ObservableObject
     private const string NoFriendsText = "You don't have any friends on this PlayOnline account yet.";
     public int? SessionPid => _pol.Pid;
 
-    public event Action? ChangeProfilePictureRequested;
     public event Action<FriendItem>? OpenChatRequested;
     public event Action<string, string>? MessageReceived;
     public event Action<string, string>? NoticeReceived;
@@ -97,7 +101,20 @@ public partial class SocialViewModel : ObservableObject
     {
         if (GameRunning) EditNote = GameRunningNote;
         else if (HandleSwitching) EditNote = SwitchingNote;
-        else if (!ProfilePictureSaving) ChangeProfilePictureRequested?.Invoke();
+        else if (!ProfilePictureSaving) PickProfilePicture();
+    }
+
+    private void PickProfilePicture()
+    {
+        var viewer = ViewerFolder();
+        var catalog = viewer is null ? null : ProfilePictureCatalog.Load(viewer);
+        if (catalog is null)
+        {
+            Dialogs.Error("Profile picture", "Provenance couldn't find the PlayOnline profile pictures in the PlayOnline Viewer folder.");
+            return;
+        }
+        if (Windows.PickProfilePicture(catalog, _avatars, MyProfilePictureId) is { } pic && pic != MyProfilePictureId)
+            SaveProfilePicture(pic);
     }
 
     // a job's last word (ok or "failed:..."), "timeout" once it's run past secs, or null while it's still going
@@ -1236,9 +1253,4 @@ public partial class SocialViewModel : ObservableObject
         _settings.Save(_settings.Current);
         if (_pol.Pid is { } pid) SocialRequests.SetStatus(pid, want);
     }
-
-    public enum LayoutAction { Split, Merge, OpenMessages, ShowMessages }
-
-    public event Action<LayoutAction>? LayoutRequested;
-    public void RequestLayout(LayoutAction action) => LayoutRequested?.Invoke(action);
 }

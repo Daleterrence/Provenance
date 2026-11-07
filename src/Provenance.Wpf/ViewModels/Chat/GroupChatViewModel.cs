@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
 using Provenance.Wpf.ViewModels.Social;
 
@@ -27,6 +28,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
 {
     public enum Phase { Out, Joining, In }
 
+    public const string DialogTitle = "Group Chat";
     public const string ExitQuestion = "Exit Group Chat?";
     public const string JoinFailedText = HookFailures.GroupChat.JoinFailed;
     public const string FilteredNote = "Group chat can't send some of those characters, so they were left out.";
@@ -157,6 +159,11 @@ public sealed partial class GroupChatViewModel : ObservableObject
         Lines.Clear();
         foreach (var e in _log?.Lines(GroupId) ?? []) Lines.Add(Item(e));
     }
+
+    internal void Tell(string text) => _social.Dialogs.Info(DialogTitle, text);
+
+    // true when the player says yes to leaving it
+    internal bool ConfirmExit() => _social.Dialogs.Confirm(DialogTitle, ExitQuestion, "YES", cancel: "NO");
 
     // the viewer's Exit, after its question
     public void Exit()
@@ -308,11 +315,11 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public static string ClearQuestion(string group) =>
         $"Delete every line of the \"{group}\" group chat that Provenance has kept on this PC? This can't be undone.";
 
-    public IReadOnlyList<MenuAction> MoreMenu(Func<MenuConfirm, bool> confirm) =>
+    public IReadOnlyList<MenuAction> MoreMenu() =>
         [new("Clear chat...", Lines.Count > 0, () =>
         {
             var shown = Lines.Select(l => l.Id).ToList();
-            if (confirm(new("Clear chat", ClearQuestion(GroupName), "CLEAR"))) ClearLines(shown);
+            if (_social.Dialogs.Confirm(new MenuConfirm("Clear chat", ClearQuestion(GroupName), "CLEAR"))) ClearLines(shown);
         })];
 
     public IReadOnlyList<MenuAction> LineMenu(GroupChatLineItem line) => [new("Delete message", true, () => DeleteLine(line))];

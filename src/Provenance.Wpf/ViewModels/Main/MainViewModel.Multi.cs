@@ -13,7 +13,7 @@ using Serilog;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
-using Provenance.Wpf.Views.Dialogs;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Settings;
 
 namespace Provenance.Wpf.ViewModels.Main;
@@ -93,8 +93,7 @@ public partial class MainViewModel : IMultiRunHost
             Log.Warning("Multi-account mode: not started, Windower or Ashita is not chosen");
             return;
         }
-        var owner = Application.Current.MainWindow;
-        if (!EnsureMemberAgreement(owner)) return;
+        if (!EnsureMemberAgreement()) return;
         var entries = MultiEntries();
         if (entries.Count == 0) return;
         var accounts = entries.Select(e => Profiles.First(p => p.Id == e.ProfileId))
@@ -104,7 +103,7 @@ public partial class MainViewModel : IMultiRunHost
         {
             Log.Warning("Multi-account mode: not started, {Count} account(s) have no profile picked", unpicked.Count);
             var names = unpicked.Select(e => accounts.First(a => a.ProfileId == e.ProfileId).Name).ToList();
-            MessageDialog.ShowError(owner, "Multi-account mode", MultiAccountRules.NoProfileText(_pol.Platform, names));
+            _dialogs.Error("Multi-account mode", MultiAccountRules.NoProfileText(_pol.Platform, names));
             return;
         }
         _runAccounts = accounts;
@@ -115,7 +114,7 @@ public partial class MainViewModel : IMultiRunHost
         _lateGameFailures.Clear();
         // a friends window left open mustn't write requests to the run's lean sessions
         _socialPoll.Stop();
-        CloseSocialWindows();
+        _windows.CloseSessionWindows();
         MultiRunning = true;
         _multiCts = new CancellationTokenSource();
         var options = new MultiRunOptions(_settings.Current.MultiContinueOnError, _settings.Current.MultiCloseWhenFinished);
@@ -152,7 +151,7 @@ public partial class MainViewModel : IMultiRunHost
             if (unexpected != null) lines.Add(unexpected);
             // a long run can end with the window in the tray
             RequestShow?.Invoke();
-            MessageDialog.ShowError(owner, "Multi-account mode", string.Join("\n", lines), offerLogs: true);
+            _dialogs.Error("Multi-account mode", string.Join("\n", lines), offerLogs: true);
             return;
         }
         if (result is { CloseApp: true }) RequestExit?.Invoke();
@@ -180,6 +179,10 @@ public partial class MainViewModel : IMultiRunHost
         MultiStatus = "Stopping...";
         _multiCts.Cancel();
     }
+
+    // closing the window while they start, false when the player decides to wait
+    internal bool ConfirmStopAccounts() => _dialogs.Confirm("Multi-account mode",
+        "Your accounts are still starting. Stop them and close Provenance?", "STOP AND CLOSE", ConfirmStyle.Destructive);
 
     public void StopAllAccountsAndExit()
     {
@@ -240,7 +243,6 @@ public partial class MainViewModel : IMultiRunHost
     private async Task<AccountFailure?> RunOneAccountAsync(MultiRunAccount account, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var owner = Application.Current.MainWindow;
         int number = Math.Max(1, _runAccounts.ToList().FindIndex(a => a.ProfileId == account.ProfileId) + 1);
         string step = $"({number} of {_runAccounts.Count})";
 
@@ -266,7 +268,7 @@ public partial class MainViewModel : IMultiRunHost
         string otp = "";
         if (profile.UseOtp)
         {
-            var code = AskOtp(owner, profile, squareEnix);
+            var code = AskOtp(profile, squareEnix);
             if (code is null || ct.IsCancellationRequested)
             {
                 _pol.ReleaseClaim();
@@ -410,7 +412,7 @@ public partial class MainViewModel : IMultiRunHost
             {
                 // the window may well be in the tray by now
                 RequestShow?.Invoke();
-                MessageDialog.ShowError(Application.Current?.MainWindow, "Multi-account mode", line, offerLogs: true);
+                _dialogs.Error("Multi-account mode", line, offerLogs: true);
             }
         }
         catch (Exception ex) { Log.Warning(ex, "Multi-account mode: couldn't tell how {Account}'s game ended", account.ProfileId); }

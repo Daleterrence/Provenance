@@ -18,7 +18,7 @@ namespace Provenance.Wpf.ViewModels.Install;
 
 // Checks every file against the mirror's signed index and only replaces game files after a yes. The pol.exe callbacks
 // stop my pre-started pol.exe (it holds viewer files) and keep it off until the repair's done
-public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol = null, Action? restartWaitingPol = null) : ObservableObject
+public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action? stopWaitingPol = null, Action? restartWaitingPol = null) : ObservableObject
 {
     internal const string CheckingStage = "Checking your FINAL FANTASY XI game data...";
     internal const string CheckingText = "This may take a while.";
@@ -38,7 +38,9 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
     internal bool _started;
     private DownloadMeter? _meter;
 
-    public Func<string, string, bool>? Ask { get; set; }
+    // closing mid-repair asks first, false when the player decides against stopping
+    internal bool ConfirmStop() => dialogs.Confirm("Stop the repair?",
+        "The repair will stop after its current step. Run it again later to finish it.", "STOP", ConfirmStyle.Destructive);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Finished))]
@@ -185,7 +187,9 @@ public partial class RepairViewModel(PolRegion? region, Action? stopWaitingPol =
                     if (ask)
                     {
                         bool yes = false;
-                        OnUi(() => yes = Ask?.Invoke("Repair game files?", Question(plan.Count, plan.Bytes, plan.StaleVersions.Count > 0)) ?? false);
+                        // Enter and Esc both answer no, the yes takes DAT mods away for good
+                        OnUi(() => yes = dialogs.Confirm("Repair game files?", Question(plan.Count, plan.Bytes, plan.StaleVersions.Count > 0),
+                                                         "CONTINUE", ConfirmStyle.SafeKeys));
                         if (!yes) return new Outcome(Ending.Declined);
                     }
                     // the check or the question may have been sat there a while

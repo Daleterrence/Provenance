@@ -14,47 +14,36 @@ public partial class MessageDialog : AppWindow
         InitializeComponent();
     }
 
-    public static void ShowError(Window? owner, string title, string body, bool offerLogs = false) =>
-        ForNotice(title, body, offerLogs).ShowDialogOver(owner);
-
-    public static void ShowInfo(Window? owner, string title, string body) =>
-        ForNotice(title, body).ShowDialogOver(owner);
-
     // an error or a notice, set up but not shown yet
     internal static MessageDialog ForNotice(string title, string body, bool offerLogs = false) => Create(title, body, notice: true, offerLogs);
 
-    // Null when cancelled, else 0 (or 1 for the second of two choices). Destructive and safeKeys ones put Enter and Esc
-    // on cancel so a stray key can't do it, and only destructive goes red.
-    public static int? Confirm(Window? owner, string title, string body, string okLabel,
-                               string? choiceA = null, string? choiceB = null, bool destructive = false, bool safeKeys = false,
-                               string? cancelLabel = null)
+    internal static int? Choose(Window? owner, string title, string body, string ok, string first, string second, ConfirmStyle style)
     {
-        var dlg = ForConfirm(title, body, okLabel, choiceA, choiceB, destructive, safeKeys, cancelLabel);
+        var dlg = ForConfirm(title, body, ok, style, null, first, second);
         if (dlg.ShowDialogOver(owner) != true) return null;
-        return dlg.ChoiceB.IsChecked == true && dlg.Choices.Visibility == Visibility.Visible ? 1 : 0;
+        return dlg.ChoiceB.IsChecked == true ? 1 : 0;
     }
 
     // set up but not shown yet
-    internal static MessageDialog ForConfirm(string title, string body, string okLabel,
-                                             string? choiceA = null, string? choiceB = null, bool destructive = false, bool safeKeys = false,
-                                             string? cancelLabel = null)
+    internal static MessageDialog ForConfirm(string title, string body, string ok, ConfirmStyle style = ConfirmStyle.Normal,
+                                             string? cancelLabel = null, string? choiceA = null, string? choiceB = null)
     {
         // a plain question keeps its question mark, one that deletes something is a warning
-        var dlg = Create(title, body, notice: destructive);
+        var dlg = Create(title, body, notice: style == ConfirmStyle.Destructive);
         dlg.CancelButton.Visibility = Visibility.Visible;
         if (cancelLabel != null) dlg.CancelButton.Content = cancelLabel;
-        dlg.OkButton.Content = okLabel;
+        dlg.OkButton.Content = ok;
         dlg.OkButton.IsCancel = false;
         dlg.CancelButton.IsCancel = true;
-        if (destructive || safeKeys)
+        if (style != ConfirmStyle.Normal)
         {
             dlg.OkButton.IsDefault = false;
             dlg.CancelButton.IsDefault = true;
             dlg.Loaded += (_, _) => dlg.CancelButton.Focus();
         }
         // one red button per dialog: the delete when there is one, otherwise cancel. A No answering a question stays blue
-        if (destructive) dlg.OkButton.SetResourceReference(StyleProperty, "RedButton");
-        if (destructive || cancelLabel != null) dlg.CancelButton.SetResourceReference(StyleProperty, "PolButton");
+        if (style == ConfirmStyle.Destructive) dlg.OkButton.SetResourceReference(StyleProperty, "RedButton");
+        if (style == ConfirmStyle.Destructive || cancelLabel != null) dlg.CancelButton.SetResourceReference(StyleProperty, "PolButton");
         if (choiceA != null && choiceB != null)
         {
             dlg.ChoiceA.Content = choiceA;

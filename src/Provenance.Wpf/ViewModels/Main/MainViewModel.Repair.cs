@@ -88,15 +88,15 @@ public partial class MainViewModel
     private void RepairGameFiles()
     {
         // pre-starts are held off for the whole repair, so no background Prestart lands a pol.exe on top of it
-        var w = new RepairWindow(new RepairViewModel(_settings.DetectedRegion, _pol.HoldPrestarts, () =>
+        var vm = new RepairViewModel(_dialogs, _settings.DetectedRegion, _pol.HoldPrestarts, () =>
         {
             // still held, so a pol.exe the repair replaced gets it back before anything pre-starts
             try { LargeAddressAwareSwitch.Apply(_settings, "after the repair"); }
             finally { _pol.ReleasePrestarts(); }
-        }));
+        });
         Repairing = true;
         RepairGameFilesCommand.NotifyCanExecuteChanged();
-        try { w.ShowDialogOver(Application.Current.MainWindow); }
+        try { _windows.ShowRepair(vm); }
         finally
         {
             Repairing = false;

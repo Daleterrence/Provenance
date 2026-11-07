@@ -18,7 +18,7 @@ public partial class InputDialog : AppWindow
     }
 
     // the trimmed text, or null when cancelled. validate returns the problem shown under the box, null when it's fine
-    public static string? Prompt(Window owner, string title, string prompt, string initialValue = "",
+    public static string? Prompt(Window? owner, string title, string prompt, string initialValue = "",
                                  int maxLength = 64, bool allowEmpty = false, Func<string, string?>? validate = null)
     {
         var dlg = new InputDialog { Title = title };
@@ -36,7 +36,7 @@ public partial class InputDialog : AppWindow
     }
 
     // the password as typed (never trimmed), or null when cancelled
-    public static string? PromptSecret(Window owner, string title, string prompt, int maxLength = 64,
+    public static string? PromptSecret(Window? owner, string title, string prompt, int maxLength = 64,
                                        Func<string, string?>? validate = null)
     {
         var dlg = ForSecret(title, prompt, maxLength, validate);

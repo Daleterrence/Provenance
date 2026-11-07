@@ -3,6 +3,7 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
+using Provenance.Wpf.Services;
 using Provenance.Common;
 using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
@@ -53,14 +54,37 @@ public partial class SettingsViewModel
     public bool IsAshita => Hook == ThirdPartyHook.Ashita;
     public bool IsWindower => Hook == ThirdPartyHook.Windower;
 
-    // the window fills these in, a test answers them itself
-    internal Func<string, string, string, Func<string, string?>, string?>? AskName { get; set; }
-    internal Func<string, string, string, bool, bool>? Confirm { get; set; }
-    internal Func<string?, bool?>? AskSaveGame { get; set; }
-    internal Func<string, bool>? AskRestart { get; set; }
-    internal Action? Restart { get; set; }
+    private string? AskName(string title, string prompt, string start, Func<string, string?> check) =>
+        _dialogs.Ask(title, prompt, start, WindowerSettingsFile.MaxNameLength, validate: check);
+
+    // true to save them first, false to leave them, null when the player backs out
+    private bool? AskSaveGame(string? which) => _dialogs.Choose("Unsaved game settings",
+        $"You've changed some game settings{(which is null ? "" : " for " + which)} but haven't saved them yet.", "CONTINUE",
+        "Save them first", "Don't save them") switch { 0 => true, 1 => false, _ => null };
+
+    // closing with unsaved Game changes, false when the player backs out
+    internal bool ConfirmClose()
+    {
+        var pick = _dialogs.Choose("Unsaved game settings", "You've changed some game settings but haven't saved them yet.", "CLOSE",
+            "Save the changes, then close", "Close without saving");
+        if (pick is null) return false;
+        if (pick == 0)
+        {
+            Game.SaveCommand.Execute(null);
+            return !Game.HasUnsavedChanges;   // the save failed, its error's on the page
+        }
+        return true;
+    }
+
+    // the window closes itself, which is how a restart gets going
+    internal event Action? CloseRequested;
+
     // a pick that's turned down goes back once the dropdown's finished with it
-    internal Action<Action> Later { get; set; } = a => a();
+    private static void Later(Action a)
+    {
+        if (System.Windows.Application.Current?.Dispatcher is { } ui && ui.CheckAccess()) ui.BeginInvoke(a);
+        else a();
+    }
 
     // the Settings tab that's showing, which the window keeps up to date
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private SettingsTab _shownTab;
@@ -186,7 +210,7 @@ public partial class SettingsViewModel
     partial void OnHookChanged(ThirdPartyHook oldValue, ThirdPartyHook newValue)
     {
         bool restart = !_loadingThirdPartyHook && _loggedIn?.Invoke() == true;
-        if (restart && AskRestart?.Invoke(RestartText(oldValue, newValue)) != true)
+        if (restart && !_dialogs.Confirm("Restart Provenance?", RestartText(oldValue, newValue), "RESTART"))
         {
             Later(() => PutPlatformBack(oldValue));
             return;
@@ -199,7 +223,7 @@ public partial class SettingsViewModel
         LoadCards();
         if (!restart) return;
         RestartWanted = true;
-        Restart?.Invoke();
+        Later(() => CloseRequested?.Invoke());
     }
 
     private void PutPlatformBack(ThirdPartyHook hook)
@@ -235,7 +259,7 @@ public partial class SettingsViewModel
 
     // on the Game tab the page moves with the pick, so changes it hasn't saved get asked about first. False when the
     // player backs out, and the pick goes back
-    private bool GameFollows() => ShownTab != SettingsTab.Game || ShowingGame(AskSaveGame);
+    private bool GameFollows() => ShownTab != SettingsTab.Game || ShowingGame();
 
     // backing out of that on the way into the Game tab leaves the page on its own profile, so the pick follows it there
     public void PickGameProfile()
@@ -262,16 +286,10 @@ public partial class SettingsViewModel
     }
 
     [RelayCommand]
-    private void BrowseAshita() { if (PickFolder("Choose your Ashita v4 folder") is { } d) AshitaPath = d; }
+    private void BrowseAshita() { if (_dialogs.PickFolder("Choose your Ashita v4 folder") is { } d) AshitaPath = d; }
 
     [RelayCommand]
-    private void BrowseWindower() { if (PickFolder("Choose your Windower 4 folder") is { } d) WindowerPath = d; }
-
-    internal static string? PickFolder(string title)
-    {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = title };
-        return dlg.ShowDialog() == true ? dlg.FolderName : null;
-    }
+    private void BrowseWindower() { if (_dialogs.PickFolder("Choose your Windower 4 folder") is { } d) WindowerPath = d; }
 
     private void Say(string text, bool error = false)
     {
@@ -302,13 +320,13 @@ public partial class SettingsViewModel
         Game.UseStore(want);
     }
 
-    public bool ShowingGame(Func<string?, bool?>? saveFirst)
+    public bool ShowingGame()
     {
         var want = GameStoreForSelection();
         if (want.Key == Game.Store.Key && Game.Available) return true;
         if (Game.HasUnsavedChanges)
         {
-            var answer = saveFirst?.Invoke(Game.HasProfile ? $"the {Game.ProfileKind} {Game.ProfileShown}" : null);
+            var answer = AskSaveGame(Game.HasProfile ? $"the {Game.ProfileKind} {Game.ProfileShown}" : null);
             if (answer is null) return false;
             if (answer == true)
             {
@@ -357,13 +375,13 @@ public partial class SettingsViewModel
         if (IsWindower && WindowerDir is { } w && ReadWindower(w) is { } file)
         {
             var profiles = new WindowerProfiles(_settings, w, file);
-            var name = AskName?.Invoke("Add a Windower profile", "What should the new profile be called?", file.NewProfileName(), n => profiles.NameProblem(n));
+            var name = AskName("Add a Windower profile", "What should the new profile be called?", file.NewProfileName(), n => profiles.NameProblem(n));
             if (name is not null) ChangeProfiles(() => profiles.Add(name), "Provenance couldn't add the profile.");
         }
         else if (IsAshita && AshitaDir is { } a)
         {
             var profiles = new AshitaProfiles(_settings, a, PlayOnlineLanguage);
-            var name = AskName?.Invoke("Add a boot configuration", "What should the new boot configuration be called?", NewAshitaName(profiles), n => profiles.NameProblem(n));
+            var name = AskName("Add a boot configuration", "What should the new boot configuration be called?", NewAshitaName(profiles), n => profiles.NameProblem(n));
             if (name is not null) ChangeProfiles(() => profiles.Add(name), "Provenance couldn't add the boot configuration.");
         }
     }
@@ -382,7 +400,7 @@ public partial class SettingsViewModel
         {
             var profiles = new WindowerProfiles(_settings, w, file);
             var start = profiles.NameProblem($"{p.Display} copy") is null ? $"{p.Display} copy" : file.NewProfileName();
-            var name = AskName?.Invoke("Duplicate a Windower profile", $"What should the copy of {p.Display} be called?", start, n => profiles.NameProblem(n));
+            var name = AskName("Duplicate a Windower profile", $"What should the copy of {p.Display} be called?", start, n => profiles.NameProblem(n));
             if (name is not null) ChangeProfiles(() => profiles.Duplicate(p.Name, name), "Provenance couldn't copy the profile.");
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
@@ -390,7 +408,7 @@ public partial class SettingsViewModel
             var profiles = new AshitaProfiles(_settings, a, PlayOnlineLanguage);
             var stem = Path.GetFileNameWithoutExtension(b.Name);
             var start = profiles.NameProblem($"{stem}-copy.ini") is null ? $"{stem}-copy.ini" : NewAshitaName(profiles);
-            var name = AskName?.Invoke("Duplicate a boot configuration", $"What should the copy of {b.Display} be called?", start, n => profiles.NameProblem(n));
+            var name = AskName("Duplicate a boot configuration", $"What should the copy of {b.Display} be called?", start, n => profiles.NameProblem(n));
             if (name is not null) ChangeProfiles(() => profiles.Duplicate(b.Name, name), "Provenance couldn't copy the boot configuration.");
         }
     }
@@ -402,7 +420,7 @@ public partial class SettingsViewModel
         if (IsWindower && WindowerDir is { } w && WindowerProfile is { } p && ReadWindower(w) is { } file)
         {
             var profiles = new WindowerProfiles(_settings, w, file);
-            var name = AskName?.Invoke("Rename a Windower profile", $"What should {p.Display} be called?", p.Name, n => profiles.NameProblem(n, renaming: p.Name));
+            var name = AskName("Rename a Windower profile", $"What should {p.Display} be called?", p.Name, n => profiles.NameProblem(n, renaming: p.Name));
             if (name is null || name == p.Name) return;
             ChangeProfiles(() => profiles.Rename(p.Name, name), "Provenance couldn't rename the profile.", renamedFrom: p.Name);
         }
@@ -411,7 +429,7 @@ public partial class SettingsViewModel
             // it's the file that's renamed, a name of its own stays put
             var profiles = new AshitaProfiles(_settings, a, PlayOnlineLanguage);
             var ask = b.Display == b.Name ? $"What should {b.Name} be called?" : $"What should the file for {b.Display} be called?";
-            var name = AskName?.Invoke("Rename a boot configuration", ask, b.Name, n => profiles.NameProblem(n, renaming: b.Name));
+            var name = AskName("Rename a boot configuration", ask, b.Name, n => profiles.NameProblem(n, renaming: b.Name));
             if (name is null || AshitaProfiles.FileName(name) == b.Name) return;
             ChangeProfiles(() => profiles.Rename(b.Name, name), "Provenance couldn't rename the boot configuration.", renamedFrom: b.Name);
         }
@@ -423,13 +441,13 @@ public partial class SettingsViewModel
         if (!CanChangeProfile) return;
         if (IsWindower && WindowerDir is { } w && WindowerProfile is { } p)
         {
-            if (Confirm?.Invoke("Delete profile", $"Delete the Windower profile {p.Display}? Its settings are removed from Windower's settings.xml, and this can't be undone.", "DELETE", true) != true) return;
+            if (!_dialogs.Confirm("Delete profile", $"Delete the Windower profile {p.Display}? Its settings are removed from Windower's settings.xml, and this can't be undone.", "DELETE", ConfirmStyle.Destructive)) return;
             ChangeProfiles(() => { new WindowerProfiles(_settings, w).Delete(p.Name); return ""; }, "Provenance couldn't delete the profile.");
         }
         else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
         {
             var file = b.Display == b.Name ? "The file is" : $"Its file, {b.Name}, is";
-            if (Confirm?.Invoke("Delete boot configuration", $"Delete the boot configuration {b.Display}? {file} removed from Ashita's config\\boot folder, and this can't be undone.", "DELETE", true) != true) return;
+            if (!_dialogs.Confirm("Delete boot configuration", $"Delete the boot configuration {b.Display}? {file} removed from Ashita's config\\boot folder, and this can't be undone.", "DELETE", ConfirmStyle.Destructive)) return;
             ChangeProfiles(() => { new AshitaProfiles(_settings, a, PlayOnlineLanguage).Delete(b.Name); return null; }, "Provenance couldn't delete the boot configuration.");
         }
     }
@@ -656,9 +674,9 @@ public partial class SettingsViewModel
     private void StartNewWindowerSettings()
     {
         if (WindowerDir is not { } dir || WindowerLinked) return;
-        if (Confirm?.Invoke("Start a new settings file",
+        if (!_dialogs.Confirm("Start a new settings file",
                 "Windower's settings.xml can't be read. Provenance will keep it next to the new one, and the new one starts with just the Default profile.",
-                "START A NEW ONE", false) != true) return;
+                "START A NEW ONE")) return;
         try
         {
             var file = WindowerSettingsFile.Load(dir);

@@ -21,6 +21,7 @@ public partial class SettingsViewModel : ObservableObject
 {
     private static readonly string[] FeedRegionCodes = ["auto", "na", "eu", "jp"];
 
+    private readonly IDialogs _dialogs;
     private readonly ISettingsService _settings;
     private readonly FeedService? _feeds;
     private readonly Func<bool>? _multiRunning, _loggedIn;
@@ -29,13 +30,14 @@ public partial class SettingsViewModel : ObservableObject
     private readonly Func<bool, RegistryKey?>? _gameKey;
     private bool _loadingThirdPartyHook, _gameReady;
 
-    public SettingsViewModel(ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
+    public SettingsViewModel(IDialogs dialogs, ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
                              Action? holdPrestarts = null, Action? releasePrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
                              Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null, Func<bool>? loggedIn = null,
                              HandlesViewModel? handles = null)
     {
+        _dialogs = dialogs;
         _loggedIn = loggedIn;
-        Handles = handles ?? new HandlesViewModel(() => null);
+        Handles = handles ?? new HandlesViewModel(dialogs, () => null);
         _gameKey = gameKey;
         _stopPrestart = stopPrestart;
         _settings = settings;
@@ -74,7 +76,7 @@ public partial class SettingsViewModel : ObservableObject
         _backupFolder = settings.Current.BackupFolder;
         LoadThirdPartyHook();
         LoadMulti();
-        Game = new GameSettingsViewModel(region, GameStoreForSelection());
+        Game = new GameSettingsViewModel(dialogs, region, GameStoreForSelection());
         _gameReady = true;
         Addons = new AddonsPluginsViewModel(settings, this);
         Addons.PropertyChanged += (_, e) =>

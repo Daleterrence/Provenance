@@ -10,9 +10,7 @@ using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
-using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Social;
-using Layout = Provenance.Wpf.ViewModels.Social.SocialViewModel.LayoutAction;
 
 namespace Provenance.Wpf.Views.Social;
 
@@ -41,8 +39,8 @@ public partial class SocialWindow : AppWindow
         ApplyPart();
         FollowEnd.SetPin(ChatScroll, PinConversation);
         // split: a click shows the Messages window alongside (focus stays in the list), a double-click brings it up
-        FriendList.FriendSelected += _ => { if (Part == SocialPart.Friends) Vm?.RequestLayout(Layout.ShowMessages); };
-        FriendList.FriendActivated += _ => { if (Part == SocialPart.Friends) Vm?.RequestLayout(Layout.OpenMessages); };
+        FriendList.FriendSelected += _ => { if (Part == SocialPart.Friends && Vm is { } vm) vm.Windows.ShowMessagesAlongside(vm, takeFocus: false); };
+        FriendList.FriendActivated += _ => { if (Part == SocialPart.Friends && Vm is { } vm) vm.Windows.ShowMessagesAlongside(vm, takeFocus: true); };
         Loaded += (_, _) => { if (Part == SocialPart.Messages && ShowActivated) ComposeBox.Focus(); };
         DataContextChanged += (_, e) =>
         {
@@ -148,8 +146,12 @@ public partial class SocialWindow : AppWindow
         if (Part == SocialPart.Messages) Title = Vm?.SelectedFriend is { } f ? $"Messages with {f.Name}" : "Messages";
     }
 
-    private void OnLayout(object sender, RoutedEventArgs e) =>
-        Vm?.RequestLayout(Part == SocialPart.Both ? Layout.Split : Layout.Merge);
+    private void OnLayout(object sender, RoutedEventArgs e)
+    {
+        if (Vm is not { } vm) return;
+        if (Part == SocialPart.Both) vm.Windows.Split(vm);
+        else vm.Windows.Merge(vm);
+    }
 
     private string? _shownWith;
 
@@ -183,7 +185,7 @@ public partial class SocialWindow : AppWindow
 
     private void OnEditProfile(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) EditProfileWindow.ShowFor(vm, this);
+        if (Vm is { } vm) vm.Windows.EditProfile(vm);
     }
 
     // the viewer's Edit Comments, in place. Only Enter saves (it's a request to POL), Esc or leaving puts it back
@@ -250,12 +252,12 @@ public partial class SocialWindow : AppWindow
         if (Vm is not { } vm || !vm.CanEdit) return;
         if (!vm.CanCreateGroup)
         {
-            MessageDialog.ShowInfo(this, "Friend groups", vm.GroupLimitText);
+            vm.Dialogs.Info("Friend groups", vm.GroupLimitText);
             return;
         }
         string? name = null;
-        SvgIcon.OpenWhile(sender, () => name = InputDialog.Prompt(this, "Create a group",
-            "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", "", maxLength: PolLimits.GroupName));
+        SvgIcon.OpenWhile(sender, () => name = vm.Dialogs.Ask("Create a group",
+            "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", maxLength: PolLimits.GroupName));
         if (!string.IsNullOrWhiteSpace(name)) vm.CreateGroup(name);
     }
 
@@ -327,9 +329,9 @@ public partial class SocialWindow : AppWindow
     private void OnUnignore(object sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm || (sender as FrameworkElement)?.DataContext is not PolBlocked b) return;
-        if (MessageDialog.Confirm(this, "Stop ignoring " + b.Name,
+        if (!vm.Dialogs.Confirm("Stop ignoring " + b.Name,
                 $"Take {b.Name} off your ignore list? Their messages will reach you again. " +
-                "This doesn't add them back to your friend list.", "STOP IGNORING") is null) return;
+                "This doesn't add them back to your friend list.", "STOP IGNORING")) return;
         vm.Unignore(b);
     }
 }

@@ -6,7 +6,6 @@ using System.Windows.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
-using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
@@ -82,10 +81,10 @@ public partial class AddFriendDialog : AppWindow
             Vm.SearchNote = problem;
             return;
         }
-        if (MessageDialog.Confirm(this, "Send friend request",
+        if (Vm.Dialogs.Confirm("Send friend request",
                 $"Send \"Let's be friends!\" to {hit!.Name}? They'll show on your list" +
                 (hit.IsCharacter ? " under their PlayOnline handle," : "") + " as \"Friend request sent\" until they accept.",
-                "SEND") is not null)
+                "SEND"))
             Vm.SendFriendRequest(hit);
     }
 

@@ -6,7 +6,6 @@ using Provenance.Common.Settings;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
-using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Chat;
 
 namespace Provenance.Wpf.Views.Chat;
@@ -14,7 +13,6 @@ namespace Provenance.Wpf.Views.Chat;
 // one for the session, unowned like the chat rooms window. Close only hides it (the viewer's Close), the chat stays in
 public partial class GroupChatWindow : AppWindow
 {
-    private const string DialogTitle = "Group Chat";
     private readonly GroupChatViewModel _vm;
     private readonly System.Windows.Threading.DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private bool _quiet;
@@ -55,16 +53,6 @@ public partial class GroupChatWindow : AppWindow
         return true;
     }
 
-    public static GroupChatWindow? Current => Application.Current.Windows.OfType<GroupChatWindow>().FirstOrDefault();
-
-    public static void ShowFor(GroupChatViewModel vm)
-    {
-        var w = Current ?? new GroupChatWindow(vm);
-        if (!w.IsVisible) w.Show();
-        if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
-        w.Activate();
-    }
-
     // the session's going, the chat's already dropped with it
     public void CloseQuietly()
     {
@@ -75,9 +63,8 @@ public partial class GroupChatWindow : AppWindow
 
     private void OnEnded(string? message)
     {
-        bool shown = IsVisible;
         Hide();
-        if (message != null) MessageDialog.ShowInfo(shown ? this : Application.Current.MainWindow, DialogTitle, message);
+        if (message != null) _vm.Tell(message);
     }
 
     // hidden or behind: the taskbar button flashes if that's wanted, the notice is the main window's
@@ -92,14 +79,13 @@ public partial class GroupChatWindow : AppWindow
     private void OnExit(object sender, RoutedEventArgs e)
     {
         if (!_vm.Open) { Hide(); return; }
-        if (MessageDialog.Confirm(this, DialogTitle, GroupChatViewModel.ExitQuestion, "YES", cancelLabel: "NO") != 0) return;
-        _vm.Exit();
+        if (_vm.ConfirmExit()) _vm.Exit();
     }
 
     private void OnMore(object sender, RoutedEventArgs e)
     {
         var menu = new ContextMenu();
-        Menus.Fill(menu, _vm.MoreMenu(Menus.Confirm(this)));
+        Menus.Fill(menu, _vm.MoreMenu());
         Menus.ShowBelow(menu, MoreButton);
     }
 

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.Login;
 using Provenance.Common.Social;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
@@ -15,6 +16,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private enum Job { None, Load, Save, Rename, LoadXi }
 
     private readonly SocialViewModel _social;
+    private readonly IDialogs _dialogs;
     private readonly System.Windows.Threading.DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private Job _job;
     private string? _token;
@@ -35,6 +37,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     public EditProfileViewModel(SocialViewModel social)
     {
         _social = social;
+        _dialogs = social.Dialogs;
         _social.SnapshotApplied += OnSnapshot;
         _timer.Tick += (_, _) => CheckTimeout();
         NotSet = social.ViewerText(0x4a81, "Not set");
@@ -401,11 +404,24 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private bool CanSave() => IsLoaded && !Busy && HasChanges && Problem.Length == 0;
 
-    // a save POL turned down, said out loud as well as in the footer
-    internal event Action<string>? SaveRefused;
+    // a load has nothing of theirs in it yet, closing just withdraws the request
+    private bool Saving => Busy && !LoadingProfile;
 
-    // asks before a rename (old name, new name), true to go ahead. Null skips the question
-    internal Func<string, string, bool>? ConfirmRename { get; set; }
+    internal bool HasUnsavedWork => Saving || HasChanges;
+
+    // false when the player backs out of closing the editor
+    internal bool ConfirmClose()
+    {
+        if (Saving)
+            return _dialogs.Confirm("Saving your profile",
+                "Your changes are on their way to PlayOnline. Close anyway? The save might not finish.", "CLOSE", ConfirmStyle.Destructive);
+        return !HasChanges || _dialogs.Confirm("Unsaved profile changes", "Close without saving your changes?", "DISCARD", ConfirmStyle.Destructive);
+    }
+
+    // before sign-out or exit, false when the player backs out
+    internal bool ConfirmDrop(string action) =>
+        !HasUnsavedWork || _dialogs.Confirm("Unsaved profile changes",
+            $"You haven't saved your profile changes. {action} anyway? They'll be lost.", action.ToUpperInvariant(), ConfirmStyle.Destructive);
 
     [RelayCommand(CanExecute = nameof(CanSave))]
     private void Save()
@@ -420,7 +436,9 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             Fail("Log in to edit your profile.");
             return;
         }
-        if (_handleChanges && HandleChanged && ConfirmRename is { } ask && !ask(_savedHandle, HandleName.Trim())) return;
+        if (_handleChanges && HandleChanged && !_dialogs.Confirm("Rename your handle",
+                $"Friends will see {HandleName.Trim()} instead of {_savedHandle} the next time their friend list loads. You can rename it again later.", "RENAME"))
+            return;
         var fields = ChangedFields();
         _renameAfterSave = HandleChanged;
         if (fields.Count == 0 && Level == _savedLevel)
@@ -455,7 +473,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             var job = _job;
             var text = FailText(job, state);
             Fail(text);
-            if (job is Job.Save or Job.Rename && state != "cancelled") SaveRefused?.Invoke(text);
+            if (job is Job.Save or Job.Rename && state != "cancelled") _dialogs.Error("Not saved", text);
             return;
         }
         switch (_job)

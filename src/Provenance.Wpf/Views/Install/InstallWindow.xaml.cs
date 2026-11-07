@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Input;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.ViewModels.Install;
-using Provenance.Wpf.Views.Dialogs;
 
 namespace Provenance.Wpf.Views.Install;
 
@@ -30,14 +29,7 @@ public partial class InstallWindow : AppWindow
     {
         if (DataContext is not InstallViewModel { Running: true } vm) return;
         if (OwnerClosing) { vm.CancelCommand.Execute(null); return; }   // the app's closing, so no question
-        // the view model's "Cancelled" note, worded for a window that's closing
-        var what = vm.CurrentStep switch
-        {
-            0 => "Closing this window stops the download. It'll carry on from where it left off next time.",
-            1 => "Closing this window stops unpacking. The download is kept, so you can carry on with the install next time.",
-            _ => "Closing this window stops the install before it finishes. You can finish it next time.",
-        };
-        if (MessageDialog.Confirm(this, "Stop the install?", what, "STOP", destructive: true) is null)
+        if (!vm.ConfirmStop())
         {
             e.Cancel = true;
             return;

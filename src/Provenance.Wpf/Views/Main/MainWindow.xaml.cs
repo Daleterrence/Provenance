@@ -7,7 +7,6 @@ using System.Windows.Media.Animation;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Services;
-using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.Views.Social;
 using Provenance.Wpf.ViewModels.Social;
 using Provenance.Wpf.ViewModels.Main;
@@ -53,7 +52,7 @@ public partial class MainWindow : AppWindow
     // the list closes on any click outside it, chip included, and that click must only close it
     private void OnWorldsPopupClosed(object? sender, EventArgs e)
     {
-        _worldsGuard.Closed();
+        _worldsGuard.OnClosed(null, EventArgs.Empty);
         WorldsChip.IsChecked = false;
     }
 
@@ -64,7 +63,7 @@ public partial class MainWindow : AppWindow
 
     private void OnEditProfile(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) EditProfileWindow.ShowFor(vm.Social, this);
+        if (Vm is { } vm) vm.Social.Windows.EditProfile(vm.Social);
     }
 
     private void OnNewsHover(object sender, MouseEventArgs e) => Vm?.HoldSlides(true);
@@ -224,8 +223,7 @@ public partial class MainWindow : AppWindow
             e.Cancel = true;
             _exiting = false;
             if (run.MultiStopping) { run.StopAllAccountsAndExit(); return; }
-            if (MessageDialog.Confirm(this, "Multi-account mode", "Your accounts are still starting. Stop them and close Provenance?",
-                                      "STOP AND CLOSE", destructive: true) is not null)
+            if (run.ConfirmStopAccounts())
             {
                 if (run.MultiRunning) run.StopAllAccountsAndExit();
                 else Dispatcher.InvokeAsync(Close);   // the run ended while the question was up, and not from inside Closing
@@ -237,7 +235,7 @@ public partial class MainWindow : AppWindow
         if (_askingToExit) { e.Cancel = true; return; }
         _askingToExit = true;
         bool go;
-        try { go = EditProfileWindow.ConfirmDrop("Exit"); }
+        try { go = Vm?.Social.Windows.ConfirmDropProfileEditor("Exit") ?? true; }
         finally { _askingToExit = false; }
         if (!go)
         {
@@ -289,7 +287,7 @@ public partial class MainWindow : AppWindow
     // it asks nothing and an open profile editor just closes as it is
     internal void ExitWithoutAsking()
     {
-        EditProfileWindow.Current?.CloseQuietly();
+        Vm?.Social.Windows.CloseProfileEditor();
         if (Vm is { MultiRunning: true } run)
         {
             run.StopAllAccountsAndExit();

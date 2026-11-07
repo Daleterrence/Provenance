@@ -9,7 +9,6 @@ using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.ViewModels.Settings;
 using Provenance.Wpf.ViewModels.Shared;
-using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.Win32;
 
 namespace Provenance.Wpf.Views.Settings;
@@ -38,21 +37,7 @@ public partial class SettingsWindow : AppWindow
         {
             if (e.PropertyName == nameof(SettingsViewModel.SwitcherProfiles)) ProfileSwitcher.SetCurrentValue(Selector.SelectedItemProperty, null);
         };
-        vm.AskName = (title, prompt, start, check) =>
-            InputDialog.Prompt(this, title, prompt, start, maxLength: WindowerSettingsFile.MaxNameLength, validate: check);
-        vm.Confirm = (title, body, ok, destructive) => MessageDialog.Confirm(this, title, body, ok, destructive: destructive) == 0;
-        vm.AskSaveGame = which => MessageDialog.Confirm(this, "Unsaved game settings",
-            $"You've changed some game settings{(which is null ? "" : " for " + which)} but haven't saved them yet.", "CONTINUE",
-            "Save them first", "Don't save them") switch { 0 => true, 1 => false, _ => null };
-        vm.Later = a => Dispatcher.BeginInvoke(a);
-        vm.AskRestart = text => MessageDialog.Confirm(this, "Restart Provenance?", text, "RESTART") == 0;
-        vm.Restart = () => Dispatcher.BeginInvoke(Close);
-        vm.ShowRestored = (title, text, error) =>
-        {
-            if (error) MessageDialog.ShowError(this, title, text);
-            else MessageDialog.ShowInfo(this, title, text);
-        };
-        vm.Handles.Confirm = (title, body, ok) => MessageDialog.Confirm(this, title, body, ok) == 0;
+        vm.CloseRequested += Close;
     }
 
     private void OnSwitchHandle(object sender, RoutedEventArgs e)
@@ -81,15 +66,7 @@ public partial class SettingsWindow : AppWindow
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (OwnerClosing || DataContext is not SettingsViewModel { Game.HasUnsavedChanges: true } vm) return;
-        var pick = MessageDialog.Confirm(this, "Unsaved game settings",
-            "You've changed some game settings but haven't saved them yet.", "CLOSE",
-            "Save the changes, then close", "Close without saving");
-        if (pick is null) { e.Cancel = true; return; }
-        if (pick == 0)
-        {
-            vm.Game.SaveCommand.Execute(null);
-            e.Cancel = vm.Game.HasUnsavedChanges;   // the save failed, its error's on the page
-        }
+        if (!vm.ConfirmClose()) e.Cancel = true;
     }
 
     private void ShowPanel(SettingsTab tab)
@@ -98,7 +75,7 @@ public partial class SettingsWindow : AppWindow
         {
             vm.ShownTab = tab;
             // a profile picked on another tab since the Game page was last shown
-            if (tab == SettingsTab.Game && !vm.ShowingGame(vm.AskSaveGame)) vm.PickGameProfile();
+            if (tab == SettingsTab.Game && !vm.ShowingGame()) vm.PickGameProfile();
         }
         for (int i = 0; FindName($"Panel{i}") is UIElement panel; i++)
             panel.Visibility = i == (int)tab ? Visibility.Visible : Visibility.Collapsed;

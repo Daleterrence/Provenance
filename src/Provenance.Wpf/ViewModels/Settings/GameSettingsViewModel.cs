@@ -11,6 +11,7 @@ using Provenance.Common.Game;
 using Provenance.Common.Hook;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
+using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
@@ -18,6 +19,7 @@ namespace Provenance.Wpf.ViewModels.Settings;
 // configuration the store's for. Changes wait for Save, and only the changed values get written
 public partial class GameSettingsViewModel : ObservableObject
 {
+    private readonly IDialogs _dialogs;
     private readonly PolRegion? _region;
     private IGameSettingsStore _store;
     private FfxiSettings _original = FfxiSettings.Defaults();
@@ -25,8 +27,9 @@ public partial class GameSettingsViewModel : ObservableObject
     // 0037/0038 as they'll be saved. A loaded value stays exact until the slider or the resolution moves
     private int _uiWidth, _uiHeight;
 
-    public GameSettingsViewModel(PolRegion? region, IGameSettingsStore? store = null)
+    public GameSettingsViewModel(IDialogs dialogs, PolRegion? region, IGameSettingsStore? store = null)
     {
+        _dialogs = dialogs;
         _region = region;
         _store = store ?? new RegistryGameStore(region);
         foreach (var m in DisplayModes()) Resolutions.Add(m);
@@ -356,7 +359,7 @@ public partial class GameSettingsViewModel : ObservableObject
     [RelayCommand]
     private void BrowseScreenshots()
     {
-        if (SettingsViewModel.PickFolder("Choose a folder for the game's screenshots and settings") is { } d) ScreenshotFolder = d;
+        if (_dialogs.PickFolder("Choose a folder for the game's screenshots and settings") is { } d) ScreenshotFolder = d;
     }
 
     [RelayCommand]
