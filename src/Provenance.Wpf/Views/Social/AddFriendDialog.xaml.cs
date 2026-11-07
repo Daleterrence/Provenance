@@ -40,12 +40,6 @@ public partial class AddFriendDialog : AppWindow
                 Closed += (_, _) => vm.SearchHits.CollectionChanged -= pick;   // the view model outlives the dialog
             }
         }
-        PreviewKeyDown += (_, e) =>
-        {
-            if (e.Key != Key.Escape) return;
-            e.Handled = true;
-            Close();
-        };
         Hits.SelectionChanged += (_, _) => UpdateSend();
         PropertyChangedEventHandler busy = (_, e) =>
         {

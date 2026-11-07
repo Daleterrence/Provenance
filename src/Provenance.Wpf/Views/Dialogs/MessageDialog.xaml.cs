@@ -90,9 +90,4 @@ public partial class MessageDialog : AppWindow
         var dir = AppPaths.Logs;
         if (Directory.Exists(dir)) Explorer.ShowFolder(dir);
     }
-
-    private void OnDrag(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
-    }
 }

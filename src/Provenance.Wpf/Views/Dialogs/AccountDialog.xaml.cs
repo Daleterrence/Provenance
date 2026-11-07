@@ -293,10 +293,4 @@ public partial class AccountDialog : AppWindow
         SquareEnixPasswordBox.Clear();
         DialogResult = false;
     }
-
-    private void OnDrag(object sender, MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is TextBoxBase or PasswordBox) return;
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
-    }
 }

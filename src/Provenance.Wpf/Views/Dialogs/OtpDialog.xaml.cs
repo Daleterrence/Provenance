@@ -324,9 +324,4 @@ public partial class OtpDialog : AppWindow
         try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); } catch { }   // another program may hold the clipboard
         Fill(text, 0);
     }
-
-    private void OnDrag(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
-    }
 }

@@ -10,7 +10,6 @@
         Title="Repair game files" Icon="/Assets/provenance.ico"
         Width="560" SizeToContent="Height" MinHeight="300"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        MouseLeftButtonDown="OnDrag"
         Style="{StaticResource DialogCard}" CardMargin="12" WideShadow="True">
 
     <Grid Margin="28,22" RowDefinitions="Auto,*,Auto">

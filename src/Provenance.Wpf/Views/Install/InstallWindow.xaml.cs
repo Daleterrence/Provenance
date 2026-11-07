@@ -45,11 +45,5 @@ public partial class InstallWindow : AppWindow
         vm.CancelCommand.Execute(null);
     }
 
-    private void OnDrag(object sender, MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is System.Windows.Controls.Primitives.TextBoxBase) return;   // let text selection work
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
-    }
-
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 }

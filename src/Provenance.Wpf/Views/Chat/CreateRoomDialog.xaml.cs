@@ -114,9 +114,4 @@ public partial class CreateRoomDialog : AppWindow
     }
 
     private void OnCancel(object sender, RoutedEventArgs e) => DialogResult = false;
-
-    private void OnDrag(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ChangedButton == MouseButton.Left) DragMove();
-    }
 }

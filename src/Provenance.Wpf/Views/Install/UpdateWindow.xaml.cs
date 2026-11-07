@@ -40,9 +40,4 @@ public partial class UpdateWindow : AppWindow
         SkipButton.IsEnabled = false;
         SkipClicked?.Invoke(this, EventArgs.Empty);
     }
-
-    private void OnDrag(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
-    }
 }

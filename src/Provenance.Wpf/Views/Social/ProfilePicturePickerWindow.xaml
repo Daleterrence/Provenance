@@ -5,8 +5,7 @@
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         Title="Choose your profile picture" Icon="/Assets/provenance.ico"
         Width="760" Height="560" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        Style="{StaticResource AppWindow.Fixed}"
-        CloseOnEscape="False">
+        Style="{StaticResource AppWindow.Fixed}">
 
     <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,*,Auto">
         <controls:TitleBar />

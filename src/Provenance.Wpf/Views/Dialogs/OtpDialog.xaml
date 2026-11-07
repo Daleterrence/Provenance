@@ -4,7 +4,6 @@
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         Title="One-time password" Icon="/Assets/provenance.ico" Width="380" SizeToContent="Height" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
-        MouseLeftButtonDown="OnDrag"
         CloseOnEscape="False"
         Style="{StaticResource DialogCard}">
 

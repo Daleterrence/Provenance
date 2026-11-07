@@ -4,7 +4,6 @@
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         Title="Account" Width="440" SizeToContent="Height" WindowStartupLocation="CenterOwner" Icon="/Assets/provenance.ico"
-        MouseLeftButtonDown="OnDrag"
         CloseOnEscape="False"
         Style="{StaticResource DialogCard}" CardMargin="12">
 

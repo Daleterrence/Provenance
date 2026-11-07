@@ -5,7 +5,6 @@
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         Title="Provenance" Icon="/Assets/provenance.ico" Width="440" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        MouseLeftButtonDown="OnDrag"
         CloseOnEscape="False"
         Style="{StaticResource DialogCard}">
 

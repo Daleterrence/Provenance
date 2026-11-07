@@ -5,7 +5,6 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         Title="Create Room" Icon="/Assets/provenance.ico" Width="480" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        MouseLeftButtonDown="OnDrag"
         CloseOnEscape="False"
         Style="{StaticResource DialogCard}">
 

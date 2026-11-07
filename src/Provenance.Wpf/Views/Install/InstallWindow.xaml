@@ -10,7 +10,6 @@
         Title="Install FINAL FANTASY XI" Icon="/Assets/provenance.ico"
         Width="640" Height="560"
         WindowStartupLocation="CenterOwner"
-        MouseLeftButtonDown="OnDrag"
         Style="{StaticResource DialogCard}" CardMargin="12" WideShadow="True">
 
     <Grid Margin="28,22" RowDefinitions="Auto,Auto,*,Auto">

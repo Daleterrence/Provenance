@@ -29,12 +29,6 @@ public partial class ProfilePicturePickerWindow : AppWindow
             ? catalog.Categories.FirstOrDefault()
             : catalog.Categories.FirstOrDefault(c => c.Key == current.CategoryKey);
         Chosen.Text = current is null ? "" : $"Current: {current.Name}";
-        PreviewKeyDown += (_, e) =>
-        {
-            if (e.Key != Key.Escape) return;
-            e.Handled = true;
-            Close();
-        };
     }
 
     private void OnCategoryChanged(object sender, SelectionChangedEventArgs e)

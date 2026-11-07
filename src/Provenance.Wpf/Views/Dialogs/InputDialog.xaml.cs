@@ -79,9 +79,4 @@ public partial class InputDialog : AppWindow
         e.Handled = true;
         OnCancel(sender, e);
     }
-
-    private void OnDrag(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
-    }
 }

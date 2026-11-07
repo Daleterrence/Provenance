@@ -33,11 +33,5 @@ public partial class RepairWindow : AppWindow
         _vm.CancelCommand.Execute(null);
     }
 
-    private void OnDrag(object sender, MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is System.Windows.Controls.Primitives.TextBoxBase) return;
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
-    }
-
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 }

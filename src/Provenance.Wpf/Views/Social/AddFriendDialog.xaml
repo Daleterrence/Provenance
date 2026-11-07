@@ -10,8 +10,7 @@
         Title="Add a friend" Icon="/Assets/provenance.ico"
         Width="460" Height="520" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        Style="{StaticResource AppWindow.Fixed}"
-        CloseOnEscape="False">
+        Style="{StaticResource AppWindow.Fixed}">
 
     <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,*,Auto">
         <controls:TitleBar />
