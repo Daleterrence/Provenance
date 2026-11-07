@@ -14,7 +14,7 @@ public partial class SocialViewModel
         {
             _characterNames = value;
             _lookups = null;
-            _friendsSignature = "";
+            _friendsDirty = true;
         }
     }
 

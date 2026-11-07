@@ -25,7 +25,7 @@ public partial class SocialViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private ChatStore? _chat;
     private PolSocialSnapshot _last = PolSocialSnapshot.Empty;
-    private string _friendsSignature = "";
+    private bool _friendsDirty = true;
 
     public SocialViewModel(IDialogs dialogs, IWindowManager windows, PolSession pol, AvatarService avatars, ISettingsService settings)
     {
@@ -47,7 +47,7 @@ public partial class SocialViewModel : ObservableObject
         GroupChat = new GroupChatViewModel(this, dialogs, () => _settings.Current.GroupChatTimes, () => _settings.Current.GroupChatFlash);
         GroupChat.UnreadChanged += () =>
         {
-            _groupsSignature = "";
+            _groupsDirty = true;
             RebuildGroups(_last);
             OnPropertyChanged(nameof(GroupChatUnread));
         };
@@ -304,7 +304,7 @@ public partial class SocialViewModel : ObservableObject
     private void Answered(int mid, bool ack)
     {
         _answered.Add(mid);
-        _friendsSignature = "";
+        _friendsDirty = true;
         if (!ack) return;
         _ackPending.Add(mid);
         FlushAcks();
@@ -345,7 +345,7 @@ public partial class SocialViewModel : ObservableObject
         _chat = new ChatStore(profileId, storeRoot);
         GroupChat.SetLog(new GroupChatLog(profileId, storeRoot));
         _chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
-        _friendsSignature = "";
+        _friendsDirty = true;
         _sync.Reset();
         _ackPending.Clear();
         _drafts.Clear();
@@ -366,8 +366,9 @@ public partial class SocialViewModel : ObservableObject
         _profileCache.Clear();   // a new hook has none of the slots the cached profiles' tabs read
         _answerFor = null;
         _sends.Reset();
+        Connected = false;
         GameRunning = false;
-        _groupsSignature = "";
+        _groupsDirty = true;
         Groups.Clear();
         HasGroups = false;
         EditBusy = false;
@@ -420,7 +421,7 @@ public partial class SocialViewModel : ObservableObject
         if (FilterOn != _filterWasOn)
         {
             _filterWasOn = FilterOn;
-            _friendsSignature = _groupsSignature = "";
+            _friendsDirty = _groupsDirty = true;
             chatChanged = true;
         }
         FlushAcks();
@@ -566,12 +567,8 @@ public partial class SocialViewModel : ObservableObject
         }
         items = items.OrderBy(i => i.Section)
                      .ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-        // counted, so an empty list never matches the "" that forces a rebuild and leaves the old rows up
-        var sig = items.Count + ":" + string.Join("|", items.Select(i => $"{i.Name}/{i.Key}/{i.StatusLabel}/{i.Playing}/{i.PlayingShort}/{i.Comment}/" +
-                                                     $"{i.Unread}/{i.Avatar != null}/{i.Section}/{i.Row}/" +
-                                                     $"{i.Pending}/{i.RequestMid}/{i.InGame}"));
-        if (sig == _friendsSignature) return;
-        _friendsSignature = sig;
+        if (!_friendsDirty && items.SequenceEqual(Friends)) return;
+        _friendsDirty = false;
         // patched in place rather than cleared, so the list keeps its scroll position and selection and only the rows
         // that changed get redrawn
         var keep = SelectedFriend;
@@ -621,7 +618,7 @@ public partial class SocialViewModel : ObservableObject
     {
         _chat!.MarkRead(f.Name, f.Key);
         UnreadCount = _chat.Unread;
-        _friendsSignature = "";
+        _friendsDirty = true;
         if (rebuild) RebuildFriends(_last);
     }
 
@@ -1193,7 +1190,7 @@ public partial class SocialViewModel : ObservableObject
     {
         RefreshConversation();
         UnreadCount = _chat?.Unread ?? 0;
-        _friendsSignature = "";
+        _friendsDirty = true;
         RebuildFriends(_last);
     }
 

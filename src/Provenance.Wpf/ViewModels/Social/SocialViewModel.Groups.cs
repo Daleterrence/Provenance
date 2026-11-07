@@ -42,7 +42,7 @@ public partial class SocialViewModel
     [RelayCommand] private void ShowFriendsTab() => ShowGroups = false;
     [RelayCommand] private void ShowGroupsTab() => ShowGroups = true;
 
-    private string _groupsSignature = "";
+    private bool _groupsDirty = true;
     internal string? _groupToken;
     private string _groupDone = "";
     private string? _groupLeaving;
@@ -70,14 +70,7 @@ public partial class SocialViewModel
 
     private void RebuildGroups(PolSocialSnapshot snap)
     {
-        static string MemberSig(PolGroupMember m) =>
-            $"{m.Index}:{m.Name}:{(int)m.Role}:{(int)m.Status}:{m.ProfilePictureId}:{m.Comment}";
-        var sig = snap.GroupList.Count + ":" + string.Join("|", snap.GroupList.Select(g => g.Id + "/" + g.Name + "/" + (int)g.MyRole + "/" + GroupChat.UnreadFor(g.Id) + "/" +
-                                                              string.Join(",", g.Members.Select(MemberSig))));
-        if (sig == _groupsSignature) return;
-        _groupsSignature = sig;
-        Groups.Clear();
-        foreach (var g in snap.GroupList)
+        var groups = snap.GroupList.Select(g =>
         {
             var members = g.Members
                 .OrderByDescending(m => m.Role).ThenByDescending(m => m.Online)
@@ -88,11 +81,19 @@ public partial class SocialViewModel
                     { Status = m.Status switch { MemberStatus.Away => PolStatus.Away, MemberStatus.Busy => PolStatus.Busy, _ => PolStatus.Online } })
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
-            Groups.Add(new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members)
-                       { Unread = GroupChat.UnreadFor(g.Id) });
-        }
+            return new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members) { Unread = GroupChat.UnreadFor(g.Id) };
+        }).ToList();
+        if (!_groupsDirty && groups.Count == Groups.Count && groups.Zip(Groups).All(p => SameGroup(p.First, p.Second))) return;
+        _groupsDirty = false;
+        Groups.Clear();
+        foreach (var g in groups) Groups.Add(g);
         HasGroups = Groups.Count > 0;
     }
+
+    // the members are a list, so the record's own == would only ever say they differ
+    private static bool SameGroup(GroupItem a, GroupItem b) =>
+        a.Id == b.Id && a.Name == b.Name && a.MyRole == b.MyRole && a.OnlineCount == b.OnlineCount && a.Unread == b.Unread &&
+        a.Members.SequenceEqual(b.Members);
 
     // bySend: an invitation or its answer, which report back as sends. leaving: the group this takes me out of
     private void BeginGroup(Func<int, string, bool> write, string doneText, bool bySend = false, string? leaving = null,
