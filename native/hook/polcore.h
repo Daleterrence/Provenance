@@ -1,12 +1,72 @@
-/* polcore.h - what the hook knows about polcore's insides, each address and record layout written once. It's the
-   1.18.15e build only, and US, EU and JP share every offset here. b is always the polcore module's base. */
+/* polcore.h - what the hook knows about polcore's insides, and the few places in pol.exe it uses, each address and
+   record layout written once. The layouts are 1.18.15e's, which US, EU and JP share. b is always the polcore module's
+   base. */
 #ifndef POLCORE_H
 #define POLCORE_H
 #include <stddef.h>
 
-/* the service table, an array of function pointers at b + POLCORE_SERVICES, indexed by byte offset */
-#define POLCORE_SERVICES 0x6fbe8
-static void **pc_slot_at(BYTE *b, unsigned off) { return (void **)(b + POLCORE_SERVICES + off); }
+/* every fixed address the hook uses. addresses.c has where each one is in 1.18.15e and finds them all again before
+   any gets used, in case a POL update's moved them */
+enum hook_address {
+    /* pol.exe */
+    AT_MENU_SESSION,        /* the menu session, jumped over to the hook's own */
+    AT_GAME_RETURN,         /* the content launcher's GameStart call, the trace call after it gets the hook's thunk */
+    AT_CREATE_MUTEX_SLOT,   /* WinMain's MSLU slots, hooked while they still point at MSLU's own stub */
+    AT_OPEN_MUTEX_SLOT,
+    AT_CREATE_DIALOG_SLOT,
+    AT_SPLASH_PROC,         /* the startup splash's dialog proc, only ever compared */
+    AT_SPLASH_CLOSE,        /* destroys the splash on the thread that made it */
+    AT_REGION_INDEX,        /* int, 0 JP, 1 US, 2 EU, set from env.dat before a polcore loads */
+    /* polcore */
+    AT_SERVICES,            /* the service table, function pointers indexed by byte offset */
+    AT_SHA1_INIT,           /* polcore's own SHA-1, the secret hash uses it */
+    AT_SHA1_UPDATE,
+    AT_SHA1_FINAL,
+    AT_SET_SEA_SECRET,      /* also service 0x1778 */
+    AT_SESSION_INIT,        /* also service 0xc90 */
+    AT_INET_INIT,           /* sets the inet flag, connect fails with -2071 without it */
+    AT_CON_OPEN,            /* POLCON_OPEN, type 3 is the network */
+    AT_CON_STEP,            /* POLCON_STEP, the auth state machine, one step */
+    AT_CON_IDLE,            /* what has to run between steps, below 0 when the session's gone */
+    AT_ENCODE_POLID,        /* scrambles the POL ID into polcore, reversible */
+    AT_ENCODED_POLID,       /* where ENCODE_POLID leaves it */
+    AT_AUTH_STATE,          /* unsigned, the login state machine: 0x12 to start it, 30 once I'm in */
+    AT_AUTH_REASON,         /* int, why it stopped, only logged */
+    AT_AUTH_RESULT,         /* int, the server's answer to the step it's on, only logged */
+    AT_AUTH_ERROR,          /* unsigned, the last error. Seeded so the first read means no error */
+    AT_LOGIN_FLAGS,         /* WORD from the login result, bit 0 is the disconnect bit */
+    AT_LINK_INDEX,          /* int, which connection record the session uses (0-15) */
+    AT_SESSION_READY,       /* int, 1 once the login's done (service 0xd10), below 0 is why it dropped */
+    AT_SESSION_ALIVE,       /* int, 0 once the session's gone */
+    AT_LINKS,               /* 16 connection records of POLCORE_LINK_SIZE bytes */
+    AT_IGNORE_ROWS,         /* 100 pol_friend rows, the ignore list */
+    AT_FRIENDS_A,           /* 200 pol_friend rows */
+    AT_FRIENDS_B,           /* 200 pol_friend_extra rows */
+    AT_SERVER_STAMPS,       /* the server's stamp for each list (STAMP_*), newer than mine when its list is */
+    AT_LOCAL_STAMPS,        /* and mine */
+    AT_CONTENT_IDS,         /* 64 pol_chr */
+    AT_HANDLES,             /* 64 pol_handle */
+    AT_STATUS_ANSWERS,      /* a pointer for each job 0-3, POLCORE_STATUS_STRIDE apart: LOAD_MY_STATUS's answer */
+    AT_GCHAT_LINE_HELD,     /* BYTE, non-zero while polcore holds a group chat line it hasn't sent */
+    ADDRESS_COUNT
+};
+
+struct hook_addr {
+    const char *name, *sig;   /* sig: hex bytes of code at or near it, ?? where a build can differ */
+    DWORD usual, sig_at;      /* the address in 1.18.15e, and where sig starts there */
+    int operand;              /* the match's byte holding the address (less the module's base), or ADDR_MATCH */
+    BYTE module, code, required;
+    DWORD at;                 /* what the hook uses: usual until it's checked, 0 when it isn't there */
+    int shows_op;             /* with shows: the match's byte holding an address, whose bytes have to be shows */
+    const char *shows;        /* hex bytes, no ?? */
+    int calls_op;             /* with calls: the match's rel32 of a call, whose target has to start with calls */
+    const char *calls;        /* hex bytes, ?? allowed */
+};
+static struct hook_addr g_addr[ADDRESS_COUNT];
+static BYTE *addr_of(BYTE *base, int id) { return base + g_addr[id].at; }
+static int addr_found(int id) { return g_addr[id].at != 0; }
+
+static void **pc_slot_at(BYTE *b, unsigned off) { return (void **)(addr_of(b, AT_SERVICES) + off); }
 static void *pc_slot(BYTE *b, unsigned off) { return *pc_slot_at(b, off); }
 static int pc_has(BYTE *b, unsigned off) { return pc_slot(b, off) != NULL; }
 
@@ -767,30 +827,12 @@ static int handle_get(BYTE *b, int slot, pol_handle *h)
     return slot >= 0 && slot < 64 && pc_get_handle(b, (unsigned)slot, h) >= 0 && (h->lo & 1);
 }
 
-/* data inside polcore's image, each read or written by offset */
-#define POLCORE_AUTH_STATE        0x99408   /* unsigned, the login state machine: 0x12 to start it, 30 once I'm in */
-#define POLCORE_AUTH_REASON       0x9940c   /* int, why it stopped, only logged */
-#define POLCORE_AUTH_RESULT       0x996b4   /* int, the server's answer to the step it's on, only logged */
-#define POLCORE_AUTH_ERROR        0x9aa14   /* unsigned, the last error. Seeded so the first read means no error */
-#define POLCORE_LOGIN_FLAGS       0x993f4   /* WORD from the login result, bit 0 is the disconnect bit */
-#define POLCORE_LINK_INDEX        0x99250   /* int, which connection record the session uses (0-15) */
-#define POLCORE_SESSION_READY     0x99254   /* int, 1 once the login's done (service 0xd10), below 0 is why it dropped */
-#define POLCORE_SESSION_ALIVE     0x9924c   /* int, 0 once the session's gone */
-#define POLCORE_LINKS             0x3e58a0  /* 16 connection records of 0x3a00 bytes */
 #define POLCORE_LINK_SIZE         0x3a00
 #define POLCORE_LINK_LAST_SEND    0x39d4    /* in a connection record, the tick polcore last sent something */
-#define POLCORE_IGNORE_ROWS       0xafc18   /* 100 pol_friend rows, the ignore list */
-#define POLCORE_FRIENDS_A         0xb40d8   /* 200 pol_friend rows */
-#define POLCORE_FRIENDS_B         0x3fc920  /* 200 pol_friend_extra rows */
-#define POLCORE_FRIENDS_SERVER_STAMP 0x403040   /* the friend list's stamps, the first's newer when the server's list is */
-#define POLCORE_FRIENDS_LOCAL_STAMP  0x40304c
-#define POLCORE_HANDLES_SERVER_STAMP 0x403048   /* and the handle list's */
-#define POLCORE_HANDLES_LOCAL_STAMP  0x403054
-#define POLCORE_CONTENT_IDS       0x403080  /* 64 pol_chr */
-#define POLCORE_HANDLES           0x405800  /* 64 pol_handle */
-#define POLCORE_STATUS_ANSWERS    0x404df8  /* a pointer for each job 0-3, 0x338 apart: LOAD_MY_STATUS's answer */
 #define POLCORE_STATUS_STRIDE     0x338
-#define POLCORE_GCHAT_LINE_HELD   0xbdc30   /* BYTE, non-zero while polcore holds a group chat line it hasn't sent */
+/* which of the stamps is which list's */
+#define STAMP_FRIENDS 0
+#define STAMP_HANDLES 2
 
 #define AUTH_START      0x12
 #define AUTH_IN         30
@@ -798,39 +840,35 @@ static int handle_get(BYTE *b, int slot, pol_handle *h)
 /* the states the login stops on, 30 is in and the rest are refusals */
 static int auth_settled(unsigned st) { return st == AUTH_IN || st == 32 || st == 36 || st == 39; }
 
-static unsigned *pc_auth_state(BYTE *b) { return (unsigned *)(b + POLCORE_AUTH_STATE); }
-static int *pc_auth_reason(BYTE *b) { return (int *)(b + POLCORE_AUTH_REASON); }
-static int *pc_auth_result(BYTE *b) { return (int *)(b + POLCORE_AUTH_RESULT); }
-static unsigned *pc_auth_error(BYTE *b) { return (unsigned *)(b + POLCORE_AUTH_ERROR); }
-static WORD *pc_login_flags(BYTE *b) { return (WORD *)(b + POLCORE_LOGIN_FLAGS); }
-static int *pc_link_index(BYTE *b) { return (int *)(b + POLCORE_LINK_INDEX); }
-static int *pc_session_ready(BYTE *b) { return (int *)(b + POLCORE_SESSION_READY); }
-static int *pc_session_alive(BYTE *b) { return (int *)(b + POLCORE_SESSION_ALIVE); }
+static unsigned *pc_auth_state(BYTE *b) { return (unsigned *)addr_of(b, AT_AUTH_STATE); }
+static int *pc_auth_reason(BYTE *b) { return (int *)addr_of(b, AT_AUTH_REASON); }
+static int *pc_auth_result(BYTE *b) { return (int *)addr_of(b, AT_AUTH_RESULT); }
+static unsigned *pc_auth_error(BYTE *b) { return (unsigned *)addr_of(b, AT_AUTH_ERROR); }
+static WORD *pc_login_flags(BYTE *b) { return (WORD *)addr_of(b, AT_LOGIN_FLAGS); }
+static int *pc_link_index(BYTE *b) { return (int *)addr_of(b, AT_LINK_INDEX); }
+static int *pc_session_ready(BYTE *b) { return (int *)addr_of(b, AT_SESSION_READY); }
+static int *pc_session_alive(BYTE *b) { return (int *)addr_of(b, AT_SESSION_ALIVE); }
 static DWORD *pc_link_last_send(BYTE *b, int link)
 {
-    return (DWORD *)(b + POLCORE_LINKS + link * POLCORE_LINK_SIZE + POLCORE_LINK_LAST_SEND);
+    return (DWORD *)(addr_of(b, AT_LINKS) + link * POLCORE_LINK_SIZE + POLCORE_LINK_LAST_SEND);
 }
-static BYTE *pc_gchat_line_held(BYTE *b) { return b + POLCORE_GCHAT_LINE_HELD; }
+static BYTE *pc_gchat_line_held(BYTE *b) { return addr_of(b, AT_GCHAT_LINE_HELD); }
 static BYTE *pc_status_answer(BYTE *b, int job)
 {
-    return *(BYTE **)(b + POLCORE_STATUS_ANSWERS + job * POLCORE_STATUS_STRIDE);
+    return *(BYTE **)(addr_of(b, AT_STATUS_ANSWERS) + job * POLCORE_STATUS_STRIDE);
 }
+static unsigned *pc_server_stamp(BYTE *b, int list) { return (unsigned *)addr_of(b, AT_SERVER_STAMPS) + list; }
+static unsigned *pc_local_stamp(BYTE *b, int list) { return (unsigned *)addr_of(b, AT_LOCAL_STAMPS) + list; }
 
 /* the three friend arrays and the two record arrays, by row. An out of range row is the caller's to avoid */
-static pol_friend *friend_row(BYTE *b, int i) { return (pol_friend *)(b + POLCORE_FRIENDS_A) + i; }
-static pol_friend *ignore_row(BYTE *b, int i) { return (pol_friend *)(b + POLCORE_IGNORE_ROWS) + i; }
-static pol_friend_extra *friend_extra(BYTE *b, int i) { return (pol_friend_extra *)(b + POLCORE_FRIENDS_B) + i; }
-static pol_chr *content_record(BYTE *b, int idx) { return (pol_chr *)(b + POLCORE_CONTENT_IDS) + idx; }
-static pol_handle *handle_record(BYTE *b, int slot) { return (pol_handle *)(b + POLCORE_HANDLES) + slot; }
+static pol_friend *friend_row(BYTE *b, int i) { return (pol_friend *)addr_of(b, AT_FRIENDS_A) + i; }
+static pol_friend *ignore_row(BYTE *b, int i) { return (pol_friend *)addr_of(b, AT_IGNORE_ROWS) + i; }
+static pol_friend_extra *friend_extra(BYTE *b, int i) { return (pol_friend_extra *)addr_of(b, AT_FRIENDS_B) + i; }
+static pol_chr *content_record(BYTE *b, int idx) { return (pol_chr *)addr_of(b, AT_CONTENT_IDS) + idx; }
+static pol_handle *handle_record(BYTE *b, int slot) { return (pol_handle *)addr_of(b, AT_HANDLES) + slot; }
 /* the list's reload test: the server's stamp is newer than mine, so an upload turns into a load */
-static int friends_server_newer(BYTE *b)
-{
-    return *(unsigned *)(b + POLCORE_FRIENDS_SERVER_STAMP) > *(unsigned *)(b + POLCORE_FRIENDS_LOCAL_STAMP);
-}
-static int handles_server_newer(BYTE *b)
-{
-    return *(unsigned *)(b + POLCORE_HANDLES_SERVER_STAMP) > *(unsigned *)(b + POLCORE_HANDLES_LOCAL_STAMP);
-}
+static int friends_server_newer(BYTE *b) { return *pc_server_stamp(b, STAMP_FRIENDS) > *pc_local_stamp(b, STAMP_FRIENDS); }
+static int handles_server_newer(BYTE *b) { return *pc_server_stamp(b, STAMP_HANDLES) > *pc_local_stamp(b, STAMP_HANDLES); }
 
 static int friend_valid(const pol_friend *f) { return (f->hid_lo & 1) != 0; }
 static unsigned __int64 friend_hid(const pol_friend *f) { return hid_of(f->hid_lo, f->hid_hi); }
@@ -849,37 +887,26 @@ static unsigned mail_kind(const void *h) { return (MAIL(h)->flags >> 7) & 0x1f; 
 static unsigned mail_att_type(const void *h) { return MAIL(h)->flags & 0x7f; }   /* 10 is a group invitation or its answer */
 static int mail_receipt(const void *h) { return ((MAIL(h)->flags >> 12) & 3) == 1; }
 
-/* functions called by offset, not through the service table */
-#define POLCORE_SHA1_INIT       0x2d6a0   /* polcore's own SHA-1, the secret hash uses it */
-#define POLCORE_SHA1_UPDATE     0x2d6d0
-#define POLCORE_SHA1_FINAL      0x2dac0
-#define POLCORE_SET_SEA_SECRET  0x1e4b0   /* also service 0x1778 */
-#define POLCORE_SESSION_INIT    0x44390   /* also service 0xc90 */
-#define POLCORE_INET_INIT       0xfe20    /* sets the inet flag, connect fails with -2071 without it */
-#define POLCON_OPEN             0x448a0   /* type 3 is the network */
-#define POLCON_STEP             0x44a50   /* the auth state machine, one step */
-#define POLCON_IDLE             0x45480   /* what has to run between steps, below 0 when the session's gone */
-#define POLCORE_ENCODE_POLID    0x46e70   /* scrambles the POL ID into polcore, reversible */
-#define POLCORE_ENCODED_POLID   0x99280   /* where ENCODE_POLID leaves it */
-static void pc_sha1_init(BYTE *b, void *ctx) { ((void (__cdecl *)(void *))(b + POLCORE_SHA1_INIT))(ctx); }
+/* functions called by address, not through the service table */
+static void pc_sha1_init(BYTE *b, void *ctx) { ((void (__cdecl *)(void *))addr_of(b, AT_SHA1_INIT))(ctx); }
 static void pc_sha1_update(BYTE *b, void *ctx, const void *data, unsigned len)
 {
-    ((void (__cdecl *)(void *, const void *, unsigned))(b + POLCORE_SHA1_UPDATE))(ctx, data, len);
+    ((void (__cdecl *)(void *, const void *, unsigned))addr_of(b, AT_SHA1_UPDATE))(ctx, data, len);
 }
-static void pc_sha1_final(BYTE *b, void *out, void *ctx) { ((void (__cdecl *)(void *, void *))(b + POLCORE_SHA1_FINAL))(out, ctx); }
+static void pc_sha1_final(BYTE *b, void *out, void *ctx) { ((void (__cdecl *)(void *, void *))addr_of(b, AT_SHA1_FINAL))(out, ctx); }
 static int pc_set_sea_secret(BYTE *b, int mode, const char *id, const void *secret, const void *otp)
 {
-    return ((int (__cdecl *)(int, const char *, const void *, const void *))(b + POLCORE_SET_SEA_SECRET))(mode, id, secret, otp);
+    return ((int (__cdecl *)(int, const char *, const void *, const void *))addr_of(b, AT_SET_SEA_SECRET))(mode, id, secret, otp);
 }
 static void pc_encode_polid(BYTE *b, const char *id)
 {
-    ((void (__cdecl *)(void *, const char *))(b + POLCORE_ENCODE_POLID))(b + POLCORE_ENCODED_POLID, id);
+    ((void (__cdecl *)(void *, const char *))addr_of(b, AT_ENCODE_POLID))(addr_of(b, AT_ENCODED_POLID), id);
 }
-static int pc_session_init(BYTE *b) { return ((int (__cdecl *)(void))(b + POLCORE_SESSION_INIT))(); }
-static int pc_inet_init(BYTE *b) { return ((int (__cdecl *)(void))(b + POLCORE_INET_INIT))(); }
-static int pc_con_open(BYTE *b, int type, void *conn) { return ((int (__cdecl *)(int, void *))(b + POLCON_OPEN))(type, conn); }
-static int pc_con_step(BYTE *b) { return ((int (__cdecl *)(void))(b + POLCON_STEP))(); }
-static int pc_con_idle(BYTE *b) { return ((int (__cdecl *)(void))(b + POLCON_IDLE))(); }
+static int pc_session_init(BYTE *b) { return ((int (__cdecl *)(void))addr_of(b, AT_SESSION_INIT))(); }
+static int pc_inet_init(BYTE *b) { return ((int (__cdecl *)(void))addr_of(b, AT_INET_INIT))(); }
+static int pc_con_open(BYTE *b, int type, void *conn) { return ((int (__cdecl *)(int, void *))addr_of(b, AT_CON_OPEN))(type, conn); }
+static int pc_con_step(BYTE *b) { return ((int (__cdecl *)(void))addr_of(b, AT_CON_STEP))(); }
+static int pc_con_idle(BYTE *b) { return ((int (__cdecl *)(void))addr_of(b, AT_CON_IDLE))(); }
 /* one turn of polcore's own pump, below 0 once the session's gone */
 static int pump_once(BYTE *b)
 {

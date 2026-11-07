@@ -15,6 +15,7 @@ public enum HookExit
     GameStartFailed = 15,       // GAME_START_EXIT
     NotStartedByProvenance = 16, // NO_ENV_EXIT
     NotHooked = 17,             // NOT_HOOKED_EXIT
+    AddressesNotFound = 18,     // ADDRESSES_EXIT
 }
 
 // what the app and the hook have to agree on, the same names as native/hook/hook_contract.h. Change one side and you

@@ -16,6 +16,7 @@ public static class ViewerBuild
     // JP's own compile of the same code (its .rdata sits 8 bytes lower), and its Large Address Aware twin
     internal const string JpPolExeSha256 = "0b5beb0198f0caafc252a0af64628fb3d1ae9b084ef772371b0e221b47ee5c3c";
     internal const string JpPolExeLaaSha256 = "bd93da61469706764f7e6469be4d8d7e1888a8bc1d907a80b2f572fb4f24c492";
+    public const string UnsupportedText = "PlayOnline has been updated, and this version of Provenance doesn't support it yet. Check for a Provenance update.";
     internal const string InUseText = "The PlayOnline Viewer's files are in use or being changed. Close PlayOnline and try again.";
 
     // US and EU share a pol.exe, JP has its own, and each region's polcore is its own file
@@ -78,8 +79,7 @@ public static class ViewerBuild
         _ when Version(viewerDir) == CurrentVersion =>
             $"Your PlayOnline Viewer says it's version {CurrentVersion}, but its files don't match that version. " +
             (region == PolRegion.Japan ? "Reinstall the PlayOnline Viewer to fix them." : "Press Repair game files to fix them."),
-        _ =>$"Provenance doesn't support this version of the PlayOnline Viewer ({Version(viewerDir) ?? "unknown"}) yet. " +
-             "Restart Provenance to check for an update.",
+        _ => UnsupportedText,
     };
 
     // held open while pol.exe starts: the files that got checked are the ones that run

@@ -40,6 +40,7 @@
 #define GAME_START_EXIT 15
 #define NO_ENV_EXIT 16      /* not started by Provenance, its environment isn't there */
 #define NOT_HOOKED_EXIT 17  /* no detour, so it'd only ever get as far as the viewer's own menu */
+#define ADDRESSES_EXIT 18   /* something it needs in pol.exe or polcore can't be found, nothing in it was touched */
 
 /* a request file is pol_hook.<pid>.<name>, written by the app, and the hook renames it to .taking while it reads it */
 #define REQ_SEND "send"

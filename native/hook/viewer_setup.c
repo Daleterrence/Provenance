@@ -18,10 +18,9 @@ static const struct pol_region *viewer_region_of(int idx)
     return !GetModuleHandleA("polcore.dll") && GetModuleHandleA("polcoreEU.dll") ? &g_regions[2] : &g_regions[1];
 }
 
-/* pol.exe's region index (0x0045cd90), set from env.dat before it loads a polcore */
 static const struct pol_region *viewer_region(void)
 {
-    if (!g_region) g_region = viewer_region_of(*(int *)((BYTE *)GetModuleHandleW(NULL) + 0x5cd90));
+    if (!g_region) g_region = viewer_region_of(*(int *)addr_of((BYTE *)GetModuleHandleW(NULL), AT_REGION_INDEX));
     return g_region;
 }
 static HMODULE viewer_polcore_module(void) { return GetModuleHandleA(viewer_region()->polcore); }

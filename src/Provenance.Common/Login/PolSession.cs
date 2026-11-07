@@ -42,9 +42,11 @@ public sealed class PolSession : IDisposable
     public const string NoPolHandleText = "This PlayOnline account doesn't have a handle, and none was created.";
 
     public const string UnfinishedText = "The PlayOnline login didn't finish. Try again.";
+    private const string ClosedBeforeLogInText = "PlayOnline closed before the login finished.";
 
     internal static (int Code, string Text) EndedBeforeLogIn(int? exitCode) => (HookExit?)exitCode switch
     {
+        HookExit.AddressesNotFound => (LoginCodes.Unfinished, ViewerBuild.UnsupportedText),
         HookExit.DetailsUnreadable => (LoginCodes.DetailsUnreadable, DetailsAgainText),
         HookExit.NoHandle => (LoginCodes.NoPolHandle, NoPolHandleText),
         HookExit.BadIpcFolder => (LoginCodes.LauncherFailed, PrivateFolderText),
@@ -53,7 +55,7 @@ public sealed class PolSession : IDisposable
         HookExit.Refused => (LoginCodes.AuthFailed, RefusedText),
         HookExit.TurnedAway => (LoginCodes.AccountBlocked, "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why."),
         HookExit.ListLoadFailed => (LoginCodes.Unfinished, LoadFailedText("")),
-        _ => (LoginCodes.Unfinished, "PlayOnline closed before the login finished."),
+        _ => (LoginCodes.Unfinished, ClosedBeforeLogInText),
     };
 
     internal static string SessionClosedText(int? exitCode) => (HookExit?)exitCode switch

@@ -61,8 +61,8 @@ static FARPROC pol_exe_user32_proc(const char *name)
     if (!u) u = LoadLibraryW(L"user32.dll");
     return u ? GetProcAddress(u, name) : NULL;
 }
-/* pol.exe's splash (dialog 0x67, proc exe+0x6800), made hidden so pol.exe 0x00406a10 skips its 5s dwell. Took a
-   fair few attempts to scrap it */
+/* pol.exe's splash (dialog 0x67, AT_SPLASH_PROC), made hidden so AT_SPLASH_CLOSE skips its 5s dwell. Took a fair few
+   attempts to scrap it */
 typedef HWND (WINAPI *cdip_t)(HINSTANCE, LPCDLGTEMPLATEW, HWND, DLGPROC, LPARAM);
 static DWORD g_splash_tmpl[64];   /* DWORDs keep the DLGTEMPLATE copy aligned */
 static HWND pol_exe_hidden_splash(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
@@ -88,7 +88,8 @@ static HWND (WINAPI *g_realCreateDialogParamW)(HINSTANCE, LPCWSTR, HWND, DLGPROC
 static HWND WINAPI pol_exe_my_CreateDialogParamW(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
 {
     BYTE *exe = (BYTE *)GetModuleHandleW(NULL);
-    if (tmpl == (LPCWSTR)(ULONG_PTR)0x67 && (void *)proc == (void *)(exe + 0x6800)) {
+    if (tmpl == (LPCWSTR)(ULONG_PTR)0x67 && addr_found(AT_SPLASH_PROC)
+        && (BYTE *)proc == addr_of(exe, AT_SPLASH_PROC)) {
         HWND h = pol_exe_hidden_splash(hInst, tmpl, parent, proc, init);
         base_log("pol_hook: startup splash created hidden hwnd=%08x%s\r\n",
            (unsigned)(ULONG_PTR)h, h ? "" : " (NULL fallback)");
@@ -100,14 +101,29 @@ static HWND WINAPI pol_exe_my_CreateDialogParamW(HINSTANCE hInst, LPCWSTR tmpl, 
     return g_realCreateDialogParamW ? g_realCreateDialogParamW(hInst, tmpl, parent, proc, init) : NULL;
 }
 
-/* the real target comes from GetProcAddress, never *slot (the thunk would overwrite the hook) */
-static int pol_exe_hook_slot(HMODULE exe, DWORD rva, DWORD thunk_rva, void *hook, const char *what)
+/* a slot MSLU hasn't filled in yet points at MSLU's stub for it in pol.exe
+   (push fallback; push [module]; push slot; push name; push dll; call loader) */
+static int pol_exe_slot_unfilled(BYTE *exe, DWORD opbase, DWORD slot)
 {
-    void **slot = (void **)((BYTE *)exe + rva);
-    DWORD o;
-    if (*slot != (void *)((BYTE *)exe + thunk_rva)) {
-        base_log("pol_hook: %s slot +%05x = %08x, expected thunk +%05x - skipped\r\n",
-           what, (unsigned)rva, (unsigned)(ULONG_PTR)*slot, (unsigned)thunk_rva);
+    addr_module m;
+    DWORD stub = *(DWORD *)(exe + slot) - opbase;
+    return addr_module_open(&m, exe, opbase)
+        && addr_sig_fits(&m, stub, "68 ?? ?? ?? ?? ff 35 ?? ?? ?? ?? 68 ?? ?? ?? ??")
+        && *(DWORD *)(exe + stub + 12) - opbase == slot;
+}
+
+/* the real target comes from GetProcAddress, never *slot (the stub would overwrite the hook) */
+static int pol_exe_hook_slot(HMODULE exe, int id, void *hook, const char *what)
+{
+    void **slot = (void **)addr_of((BYTE *)exe, id);
+    DWORD o, rva = g_addr[id].at;
+    if (!addr_found(id)) {
+        base_log("pol_hook: %s slot not found - skipped\r\n", what);
+        return 0;
+    }
+    if (!pol_exe_slot_unfilled((BYTE *)exe, (DWORD)(ULONG_PTR)exe, rva)) {
+        base_log("pol_hook: %s slot +%05x = %08x, not MSLU's own stub - skipped\r\n",
+           what, (unsigned)rva, (unsigned)(ULONG_PTR)*slot);
         return 0;
     }
     if (!VirtualProtect(slot, sizeof(void *), PAGE_READWRITE, &o)) {

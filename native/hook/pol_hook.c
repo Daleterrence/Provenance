@@ -12,6 +12,7 @@
 #include "polcore.h"
 #include "session.h"
 #include "base.c"
+#include "addresses.c"
 #include "pol_exe.c"
 #include "credentials.c"
 #include "viewer_setup.c"
@@ -46,12 +47,6 @@ NORETURN static void pol_hook_game_over(UINT code)
     base_end_pol(code);
 }
 
-/* 1.18.15e: the menu session's prologue (push -1; push 0x43fe5a; mov eax, fs:[0]), and the content launcher's
-   GameStart call and the empty trace call after it (call eax; push L"Return from FFXI"; mov esi, eax;
-   call 0x00412430) */
-static const BYTE MENU_PROLOGUE[] = { 0x6a, 0xff, 0x68, 0x5a, 0xfe, 0x43, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00, 0x00 };
-static const BYTE FFXI_RETURN[] = { 0xff, 0xd0, 0x68, 0xa4, 0x2b, 0x44, 0x00, 0x8b, 0xf0, 0xe8, 0x18, 0xf2, 0xff, 0xff };
-
 static int g_game_started;
 /* first thing after GameStart returns, ok or not. On a failed one pol.exe would go on to pass the FFXiEntry it's just
    released (NULL) to 0x00408620, which falls over on it :( */
@@ -77,15 +72,10 @@ static __declspec(naked) void pol_hook_ffxi_returned_thunk(void)
     }
 }
 
-static int pol_hook_detour_game_end(BYTE *exe)
+/* p is the content launcher's call eax; push L"Return from FFXI"; mov esi, eax; call <trace> */
+static int pol_hook_detour_game_end(BYTE *p)
 {
-    BYTE *p = exe + 0x1320a;
     DWORD old;
-    if (memcmp(p, FFXI_RETURN, sizeof FFXI_RETURN) != 0) {
-        base_log("pol_hook: content launcher not as expected (%02x %02x %02x) - game end not hooked\r\n", p[0], p[2],
-            p[9]);
-        return 0;
-    }
     if (!VirtualProtect(p + 9, 5, PAGE_EXECUTE_READWRITE, &old)) {
         base_log("pol_hook: content launcher protect failed - game end not hooked\r\n");
         return 0;
@@ -103,8 +93,7 @@ static unsigned __stdcall pol_hook_menu_stub(unsigned a, unsigned b, unsigned c,
     (void)a; (void)b; (void)c; (void)d;
     fake_session();
     login_set_cwd_ffxi();
-    /* pol.exe 0x00406a10 destroys the hidden splash on the thread that made it */
-    ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x6a10))();
+    ((void (__cdecl *)(void))addr_of((BYTE *)GetModuleHandleW(NULL), AT_SPLASH_CLOSE))();
     hold_run((BYTE *)viewer_polcore_module());
     base_log("pol_hook: menu session -> content code 1 (FFXiEntry)\r\n");
     g_game_started = 1;   /* from here pol_hook_ffxi_returned ends pol.exe when the game does, so this only runs once */
@@ -120,7 +109,9 @@ NORETURN static void pol_hook_not_hooked(void)
 static void pol_hook_install(void)
 {
     HMODULE exe = GetModuleHandleW(NULL);
+    BYTE *p;
     DWORD old, rel;
+    addr_require(IN_EXE, "pol.exe", (BYTE *)exe, (DWORD)(ULONG_PTR)exe);
     /* WinMain reaches CreateMutexW and OpenMutexW through pol.exe's MSLU slots, not the IAT. In a Windower or
        Ashita pol.exe they may already exist, and renaming would make later opens miss. */
     if (base_getenv_set(ENV_LAUNCH_ID)) {
@@ -129,20 +120,15 @@ static void pol_hook_install(void)
         HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
         g_pCreateMutexW = GetProcAddress(k32, "CreateMutexW");
         g_pOpenMutexW   = GetProcAddress(k32, "OpenMutexW");
-        if (g_pCreateMutexW) pol_exe_hook_slot(exe, 0x5c7c4, 0x15674, (void *)pol_exe_my_CreateMutexW, "CreateMutexW");
-        if (g_pOpenMutexW)   pol_exe_hook_slot(exe, 0x5c834, 0x15b39, (void *)pol_exe_my_OpenMutexW,   "OpenMutexW");
+        if (g_pCreateMutexW) pol_exe_hook_slot(exe, AT_CREATE_MUTEX_SLOT, (void *)pol_exe_my_CreateMutexW, "CreateMutexW");
+        if (g_pOpenMutexW) pol_exe_hook_slot(exe, AT_OPEN_MUTEX_SLOT, (void *)pol_exe_my_OpenMutexW, "OpenMutexW");
     }
-    pol_exe_hook_slot(exe, 0x5c864, 0x15493, (void *)pol_exe_my_CreateDialogParamW, "CreateDialogParamW");
-    /* an E9 jmp over the menu session (pol.exe 0x00413710), only in the 1.18.15e pol.exe I wrote this against.
-       Other builds (1.18.00n for one) have other code here. */
-    BYTE *p = (BYTE *)exe + 0x13710;
-    if (memcmp(p, MENU_PROLOGUE, sizeof MENU_PROLOGUE) != 0) {
-        base_log("pol_hook: pol.exe is not the 1.18.15e build (menu session %02x %02x %02x) - not hooked\r\n",
-           p[0], p[1], p[2]);
-        pol_hook_not_hooked();
-    }
+    pol_exe_hook_slot(exe, AT_CREATE_DIALOG_SLOT, (void *)pol_exe_my_CreateDialogParamW, "CreateDialogParamW");
+    /* an E9 jmp over the menu session (pol.exe 0x00413710 in 1.18.15e) */
+    p = addr_of((BYTE *)exe, AT_MENU_SESSION);
     /* the game's end is only ever caught at the content launcher's return, so no detour without that hook */
-    if (!pol_hook_detour_game_end((BYTE *)exe) || !VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &old))
+    if (!pol_hook_detour_game_end(addr_of((BYTE *)exe, AT_GAME_RETURN))
+        || !VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &old))
         pol_hook_not_hooked();
     rel = (DWORD)((BYTE *)pol_hook_menu_stub - (p + 5));
     p[0] = 0xE9;
