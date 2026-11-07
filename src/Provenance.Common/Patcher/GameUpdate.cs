@@ -7,9 +7,6 @@ namespace Provenance.Common.Patcher;
 
 public static class GameUpdate
 {
-    private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
-    internal static readonly MirrorClient Mirror = new(MirrorHttp, MirrorKeys.Trusted);
-
     // One POL version check, then the patch mirror. POL serves whatever the mirror can't, and beforeChange runs once
     // at most.
     internal static PatchResult Run(PatchProduct product, PolRegion installed, IProgress<PatchProgress>? progress,
@@ -34,7 +31,7 @@ public static class GameUpdate
                 outcome = new MirrorOutcome(false, [], 0);
             }
             else
-                outcome = MirrorUpdater.UpdateAsync(Mirror, mirrorRegion, slug, product.Folder, updater, check, Once, progress, ct,
+                outcome = MirrorUpdater.UpdateAsync(MirrorClient.Shared, mirrorRegion, slug, product.Folder, updater, check, Once, progress, ct,
                     (msg, isError) =>
                     {
                         if (isError) Log.Error("Update {Product}: {Message}", product.Name, msg);
@@ -48,7 +45,7 @@ public static class GameUpdate
         }
 
         // the list comes once the mirror's answered, so a dead one isn't waited on twice
-        if (outcome.OnMirror && product.Game == GameProduct.Viewer) SignedBuilds.RefreshAsync(Mirror, ct).GetAwaiter().GetResult();
+        if (outcome.OnMirror && product.Game == GameProduct.Viewer) SignedBuilds.RefreshAsync(MirrorClient.Shared, ct).GetAwaiter().GetResult();
 
         if (!outcome.OnMirror)
         {

@@ -12,7 +12,6 @@ using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Main;
-using static System.FormattableString;
 
 namespace Provenance.Wpf.ViewModels.Install;
 
@@ -29,7 +28,6 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
     private const string GameRunningText = "FINAL FANTASY XI is running. Close every FINAL FANTASY XI window, then run the repair again.";
     private const string ViewerRunningText =
         "PlayOnline is running, either for a logged-in account or in another copy of Provenance. Log out and close it, then run the repair again.";
-    private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
 
     private CancellationTokenSource? _cts;
     private volatile bool _changing;   // GameRepair says so right before the first game file changes
@@ -64,7 +62,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
     public bool StopRequested => _cts?.IsCancellationRequested == true;
 
     // made on first use, on the UI thread. It's fed the bar's own bytes, so its percent is the bar's
-    private DownloadMeter Meter => _meter ??= new DownloadMeter(text => Amount = text, text => TimeLeft = text);
+    private DownloadMeter Meter => _meter ??= new DownloadMeter(text => Amount = text, text => TimeLeft = text, fraction => Fraction = fraction);
 
     // replaced game files win, anything else fixed (registry, COM, DirectX, patch.ver) gets the general line
     internal static string ResultText(RepairResult result) => result switch
@@ -80,15 +78,11 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
     internal static string Question(int files, long bytes, bool outOfDate) => (files, outOfDate) switch
     {
         (0, _) => "Repair found an unfinished PlayOnline Viewer update and can finish it, downloading fresh copies of any files that need it.",
-        (1, false) => $"Repair found an issue with 1 file ({Size(bytes)}) and can download a fresh copy to replace it. " + ModsWarning,
-        (_, false) => $"Repair found an issue with {files} files ({Size(bytes)}) and can download fresh copies to replace them. " + ModsWarning,
-        (1, true) => $"Repair found 1 file that's damaged or out of date ({Size(bytes)}) and can download a fresh copy to replace it. " + ModsWarning,
-        _ => $"Repair found {files} files that are damaged or out of date ({Size(bytes)}) and can download fresh copies to replace them. " + ModsWarning,
+        (1, false) => $"Repair found an issue with 1 file ({ByteText.Size(bytes, kb: true)}) and can download a fresh copy to replace it. " + ModsWarning,
+        (_, false) => $"Repair found an issue with {files} files ({ByteText.Size(bytes, kb: true)}) and can download fresh copies to replace them. " + ModsWarning,
+        (1, true) => $"Repair found 1 file that's damaged or out of date ({ByteText.Size(bytes, kb: true)}) and can download a fresh copy to replace it. " + ModsWarning,
+        _ => $"Repair found {files} files that are damaged or out of date ({ByteText.Size(bytes, kb: true)}) and can download fresh copies to replace them. " + ModsWarning,
     };
-
-    internal static string Size(long bytes) =>
-        bytes >= 1_000_000_000 ? Invariant($"{bytes / 1e9:0.0} GB") : bytes >= 1_000_000 ? Invariant($"{bytes / 1e6:0.0} MB")
-        : Invariant($"{Math.Max(1, bytes / 1000)} KB");
 
     private enum Ending { NotOnMirror, Declined, Repaired }
 
@@ -140,10 +134,8 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
                 // with nothing known wrong the package databases carry on the check's bar, one total by bytes
                 else if (!showSteps) { done += checkTotal; total += checkTotal; }
                 Indeterminate = false;
-                // never back under one title, a retry that takes bytes back just holds the bar
-                Fraction = Math.Max(Fraction, total > 0 ? (double)done / total : 1);
-                // the line under it follows the held bar too, so a retry doesn't show a countdown under a bar that's stood still
-                Meter.Update(Math.Clamp((long)(Fraction * total), done, Math.Max(done, total)), total, download: downloading);
+                // never back under one title, the line under it follows the held bar too
+                Meter.Update(done, total, total > 0 ? (double)done / total : 1, download: downloading);
             });
             var waiting = new Progress<PatchProgress>(p => Status = p.Text);
             // Normal, so the progress reports already queued land first and can't paint over what comes next
@@ -170,7 +162,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
                 var staging = Path.Combine(stagingRoot, Guid.NewGuid().ToString("N"));
                 try
                 {
-                    var repair = new GameRepair(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion)
+                    var repair = new GameRepair(MirrorClient.Shared, mirrorRegion)
                     {
                         StagingDir = staging,
                         Status = status.Report,
@@ -205,8 +197,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
                         Stage = RepairingStage;
                         Status = "";
                         Indeterminate = true;
-                        Fraction = 0;
-                        Meter.Clear();
+                        Meter.Restart();
                     });
                     var result = repair.ApplyAsync(plan, viewerDir, ffxiDir, installRoot, bytes, ct).GetAwaiter().GetResult();
                     return new Outcome(Ending.Repaired, result);

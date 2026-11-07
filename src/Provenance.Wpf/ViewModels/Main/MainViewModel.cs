@@ -65,6 +65,7 @@ public partial class MainViewModel : ObservableObject
         _feeds = feeds;
         _pol = pol;
         _avatars = avatars;
+        _timeLeftMeter = new DownloadMeter(_ => { }, text => TimeLeftText = text);
         _slideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
         _slideTimer.Tick += (_, _) => AdvanceNews(+1);
         // POL only rewrites world status every 5 mins anyway
@@ -145,12 +146,6 @@ public partial class MainViewModel : ObservableObject
         _elapsedTimer.Tick += (_, _) =>
         {
             ElapsedText = Seconds(DateTime.UtcNow - _launchStarted);
-            // reports stop coming in a stall, and the time left should notice
-            if (_timeLeftPhase is not null)
-            {
-                _timeLeft.Add(Environment.TickCount64, _timeLeftDone, 1);
-                TimeLeftText = _timeLeft.Text;
-            }
         };
         StartRepairProbe();
     }
@@ -167,9 +162,7 @@ public partial class MainViewModel : ObservableObject
 
     private DateTime _launchStarted;
     private CancellationTokenSource? _launchCts;
-    private readonly TimeLeft _timeLeft = new();
-    private PatchPhase? _timeLeftPhase;
-    private double _timeLeftDone;
+    private readonly DownloadMeter _timeLeftMeter;
     private bool _updatedFirst;
 
     private static string Seconds(TimeSpan t) => t.TotalSeconds < 60
@@ -230,21 +223,8 @@ public partial class MainViewModel : ObservableObject
     // each phase gets its own, a check's pace says nothing about the download after it
     private void TrackTimeLeft(PatchProgress? patch)
     {
-        if (patch is not { Fraction: >= 0 } p)
-        {
-            _timeLeft.Reset();
-            _timeLeftPhase = null;
-            TimeLeftText = "";
-            return;
-        }
-        if (_timeLeftPhase != p.Phase)
-        {
-            _timeLeft.Reset();
-            _timeLeftPhase = p.Phase;
-        }
-        _timeLeftDone = p.Fraction;
-        _timeLeft.Add(Environment.TickCount64, p.Fraction, 1);
-        TimeLeftText = _timeLeft.Text;
+        if (patch is not { Fraction: >= 0 } p) _timeLeftMeter.Clear();
+        else _timeLeftMeter.Update(p.Fraction, p.Phase);
     }
 
     [RelayCommand(CanExecute = nameof(CanCancel))]

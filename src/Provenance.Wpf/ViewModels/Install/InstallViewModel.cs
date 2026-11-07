@@ -23,7 +23,6 @@ public partial class InstallViewModel : ObservableObject
     private const long GameDriveBytes = 16_500_000_000;       // the installed and updated game, with update temp files
     private const long DownloadDriveBytes = 15_500_000_000;   // the parts and their unpacked copy
     private const string MirrorFolder = "mirror";
-    private static readonly HttpClient MirrorHttp = new() { Timeout = TimeSpan.FromSeconds(60) };
 
     // Japanese installs work, but stay out of the list until a JP login has been seen working
     private const bool OfferJapanese = false;
@@ -55,12 +54,12 @@ public partial class InstallViewModel : ObservableObject
         _region = ShowRegionChoice ? _autoRegion : region!.Value;
         _holdPrestarts = holdPrestarts;
         _releasePrestarts = releasePrestarts;
-        _meter = new DownloadMeter(text => DownloadText = text, text => TimeLeftText = text);
+        _meter = new DownloadMeter(text => DownloadText = text, text => TimeLeftText = text, fraction => DownloadFraction = fraction);
         // the MSIs' own default INSTALLDIR for these 32-bit packages
         InstallFolder = Path.Combine(AppPaths.ProgramFilesX86, "PlayOnline");
         // the installer files run as admin, so they live in an admin-only folder (LockWorkFolder), never %TEMP%
         DownloadFolder = AppPaths.ProgramData;
-        TotalGib = $"{GameInstaller.TotalBytes(_region) / 1024.0 / 1024 / 1024:0.0} GiB";
+        TotalGb = ByteText.Gb(GameInstaller.TotalBytes(_region));
         UpdateSpace();
     }
 
@@ -83,7 +82,7 @@ public partial class InstallViewModel : ObservableObject
     {
         if (RegionLocked || value < 0 || value > RegionValues.Length) return;
         _region = value == 0 ? _autoRegion : RegionValues[value - 1];
-        TotalGib = $"{GameInstaller.TotalBytes(_region) / 1024.0 / 1024 / 1024:0.0} GiB";
+        TotalGb = ByteText.Gb(GameInstaller.TotalBytes(_region));
     }
 
     [ObservableProperty]
@@ -94,7 +93,7 @@ public partial class InstallViewModel : ObservableObject
         $"The game will be installed in {Path.Combine(InstallFolder, "SquareEnix")}.";
 
     [ObservableProperty] private string _downloadFolder = "";
-    [ObservableProperty] private string _totalGib = "";
+    [ObservableProperty] private string _totalGb = "";
     [ObservableProperty] private string _freeSpaceText = "";
 
     [ObservableProperty]
@@ -174,18 +173,17 @@ public partial class InstallViewModel : ObservableObject
                 var dlRoot = string.IsNullOrWhiteSpace(download) ? null : Path.GetPathRoot(Path.GetFullPath(download));
                 bool split = dlRoot != null && !dlRoot.StartsWith(@"\\", StringComparison.Ordinal) &&
                              !string.Equals(dlRoot, root, StringComparison.OrdinalIgnoreCase);
-                static string Gib(long b) => (b / 1024.0 / 1024 / 1024).ToString("0.0");
                 if (!split)
                 {
                     EnoughSpace = d.AvailableFreeSpace >= GameInstaller.RequiredFreeBytes;
-                    FreeSpaceText = $"There's {Gib(d.AvailableFreeSpace)} GiB free on {root}, and the install needs about {GameInstaller.RequiredFreeBytes / 1024.0 / 1024 / 1024:0} GiB.";
+                    FreeSpaceText = $"There's {ByteText.Gb(d.AvailableFreeSpace)} free on {root}, and the install needs about {ByteText.Gb(GameInstaller.RequiredFreeBytes, 0)}.";
                 }
                 else
                 {
                     long dlFree = new DriveInfo(dlRoot!).AvailableFreeSpace;
                     EnoughSpace = d.AvailableFreeSpace >= GameDriveBytes && dlFree >= DownloadDriveBytes;
-                    FreeSpaceText = $"There's {Gib(d.AvailableFreeSpace)} GiB free on {root} for the game, which needs about {Gib(GameDriveBytes)} GiB. " +
-                                    $"There's {Gib(dlFree)} GiB free on {dlRoot} for the download, which needs about {Gib(DownloadDriveBytes)} GiB.";
+                    FreeSpaceText = $"There's {ByteText.Gb(d.AvailableFreeSpace)} free on {root} for the game, which needs about {ByteText.Gb(GameDriveBytes)}. " +
+                                    $"There's {ByteText.Gb(dlFree)} free on {dlRoot} for the download, which needs about {ByteText.Gb(DownloadDriveBytes)}.";
                 }
             }
         }
@@ -245,28 +243,19 @@ public partial class InstallViewModel : ObservableObject
         }
     }
 
-    private object? _barStep;
-
-    // a retry takes bytes back, so within one step the bar holds until it's passed again. A new step starts it over
-    private void ShowFraction(object step, double fraction)
-    {
-        if (!Equals(step, _barStep)) { _barStep = step; DownloadFraction = fraction; }
-        else DownloadFraction = Math.Max(DownloadFraction, fraction);
-    }
-
-    // the bytes the held bar stands for, so the text under it doesn't drop back on a retry either
-    private long Held(long done, long total) => Math.Clamp((long)(DownloadFraction * total), done, Math.Max(done, total));
-
     // the detail already has the sizes, so the meter only adds the time left. Each package is its own step, Windows
     // Installer's retries and rollback included
     private Progress<InstallProgress> InstallStepProgress() => new(p =>
     {
         Detail = p.Detail;
         StageIndeterminate = p.Fraction < 0;
-        if (p.Fraction >= 0)
-            ShowFraction(p.Product?.Slug ?? p.Detail, p.Fraction);
-        if (p.TotalBytes > 0) _meter.Update(p.DoneBytes, p.TotalBytes, download: false, amount: false);
-        else _meter.Clear();
+        object step = p.Product?.Slug ?? p.Detail;
+        if (p.TotalBytes > 0) _meter.Update(p.DoneBytes, p.TotalBytes, p.Fraction, download: false, amount: false, step: step);
+        else
+        {
+            _meter.Bar(p.Fraction, step);
+            _meter.Clear();
+        }
     });
 
     private Progress<ByteProgress> LocalProgress(string? detail = null)
@@ -275,8 +264,7 @@ public partial class InstallViewModel : ObservableObject
         return new(p =>
         {
             if (detail != null) Detail = detail;
-            ShowFraction(step, p.Total > 0 ? (double)p.Done / p.Total : 0);
-            _meter.Update(p.Done, p.Total, download: false);
+            _meter.Update(p.Done, p.Total, p.Total > 0 ? (double)p.Done / p.Total : 0, download: false, step: step);
         });
     }
 
@@ -355,8 +343,7 @@ public partial class InstallViewModel : ObservableObject
                     return new Progress<long>(b =>
                     {
                         long overall = step.DoneBefore + b;
-                        ShowFraction("parts", (double)overall / step.Total);
-                        _meter.Update(Held(overall, step.Total), step.Total);
+                        _meter.Update(overall, step.Total, (double)overall / step.Total, step: "parts");
                     });
                 },
                 Unpacking = () =>
@@ -435,23 +422,21 @@ public partial class InstallViewModel : ObservableObject
         Detail = InstallFromMirror.PrepareText;
         Log.Information("Install source: trying the Provenance mirror");
         var staging = Path.Combine(work, MirrorFolder);
-        var mirror = _mirror = new InstallFromMirror(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion);
+        var mirror = _mirror = new InstallFromMirror(MirrorClient.Shared, mirrorRegion);
         var progress = new Progress<InstallProgress>(p =>
         {
             Stage = p.Stage;
             Detail = p.Detail;
             StageIndeterminate = p.Fraction < 0;
             if (p.Fraction < 0) { _meter.Clear(); return; }
-            ShowFraction((p.Stage, p.TotalBytes), p.Fraction);
-            _meter.Update(Held(p.DoneBytes, p.TotalBytes), p.TotalBytes, download: p.Download);
+            _meter.Update(p.DoneBytes, p.TotalBytes, p.Fraction, download: p.Download, step: (p.Stage, p.TotalBytes));
         });
         async Task<bool> SquareEnixAsync(string reason)
         {
             Log.Information("Install source: Square Enix's parts ({Reason})", reason);
             FromMirror = false;
             StageIndeterminate = true;
-            DownloadFraction = 0;
-            _meter.Clear();
+            _meter.Restart();
             await Task.Run(() => { if (Directory.Exists(staging)) InstallParts.RemoveDir(staging); }, CancellationToken.None);
             return false;
         }
@@ -516,7 +501,7 @@ public partial class InstallViewModel : ObservableObject
 
     internal static string PartsNextText(long? gameUpdateBytes) =>
         "PlayOnline updates itself the first time you log in, and the game updates the first time you press Play" +
-        (gameUpdateBytes is long b && b > 0 ? $" ({RepairViewModel.Size(b)} to download)." : ".");
+        (gameUpdateBytes is long b && b > 0 ? $" ({ByteText.Size(b)} to download)." : ".");
 
     // the way the first Play picks its files, reusing the mirror's game index. Null when that could come from POL (no
     // version from POL, or the mirror hasn't got it) or the mirror's unreachable
@@ -531,13 +516,12 @@ public partial class InstallViewModel : ObservableObject
         var scanned = new Progress<ByteProgress>(p =>
         {
             StageIndeterminate = false;
-            ShowFraction(step, p.Total > 0 ? (double)p.Done / p.Total : 1);
-            _meter.Update(p.Done, p.Total, download: false);
+            _meter.Update(p.Done, p.Total, p.Total > 0 ? (double)p.Done / p.Total : 1, download: false, step: step);
         });
         try
         {
             var local = PatchVer.Read(PatchProduct.Ffxi(ffxiDir, viewerDir, _region));
-            var bytes = await Task.Run(() => MirrorUpdater.DownloadSizeAsync(new MirrorClient(MirrorHttp, MirrorKeys.Trusted), mirrorRegion, GameProduct.Game.Slug,
+            var bytes = await Task.Run(() => MirrorUpdater.DownloadSizeAsync(MirrorClient.Shared, mirrorRegion, GameProduct.Game.Slug,
                 ffxiDir, local, MirrorLayout.OwnFiles(_region, GameProduct.Game.Slug), index, scanned, ct), ct);
             Log.Information("First game update size: {Size}", bytes is { } n ? $"{n:N0} bytes from the Provenance mirror" : "the mirror has no usable copy");
             return bytes;

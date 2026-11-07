@@ -333,17 +333,16 @@ public partial class MainViewModel : IMultiRunHost
 
         if (GameFolders() is { } dirs)
         {
-            var left = new TimeLeft();   // UI thread only, like the status
+            string eta = "";
+            var left = new DownloadMeter(_ => { }, text => eta = text);   // UI thread only, like the status
             var patch = new InlineProgress<PatchProgress>(p =>
             {
                 Kick();
                 if (string.IsNullOrWhiteSpace(p.Text)) return;
-                long now = Environment.TickCount64;
                 Application.Current?.Dispatcher.InvokeAsync(() =>
                 {
-                    if (p.Fraction >= 0) left.Add(now, p.Fraction, 1);
-                    else left.Reset();
-                    var eta = left.Text;
+                    if (p.Fraction >= 0) left.Update(p.Fraction, p.Phase);
+                    else left.Clear();
                     // the apply line just says "Updating FINAL FANTASY XI..." again
                     var what = p.Phase == PatchPhase.Apply ? "" : $". {p.Text.TrimEnd('.')}";
                     SetRunStatus($"Updating FINAL FANTASY XI {step}{what}" + (eta.Length > 0 ? $". {eta}." : "."));
@@ -357,6 +356,7 @@ public partial class MainViewModel : IMultiRunHost
                 return await LetGo(AccountFailureKind.Install,
                                    ErrorText.Of(ex, "The FINAL FANTASY XI update didn't finish."));
             }
+            finally { left.Clear(); }
             SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
         }
         if (token.IsCancellationRequested) return await Stopped();

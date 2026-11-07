@@ -368,7 +368,7 @@ public sealed class GameInstaller
         }
         Say(progress, $"Preparing {name}...", product: product);
         var report = new Progress<ByteProgress>(p => progress?.Report(new InstallProgress("Installing",
-            $"Installing {name}: {p.Done / 1073741824.0:0.00} of {p.Total / 1073741824.0:0.00} GiB",
+            $"Installing {name}: {ByteText.GbNumber(p.Done, 2)} of {ByteText.GbNumber(p.Total, 2)} GB",
             p.Total > 0 ? (double)p.Done / p.Total : -1, p.Done, p.Total, Product: product)));
         var (props, uninstall) = DirectApplySetup(msi, installRoot, product, region);
         var result = await Task.Run(() =>

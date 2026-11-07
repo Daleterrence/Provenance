@@ -16,7 +16,7 @@ internal static class SignedBuilds
     private static string? _path = AppPaths.UserData is { } dir ? Path.Combine(dir, "viewer-builds") : null;
     private static IReadOnlyDictionary<string, ECDsa>? _trusted;
 
-    internal static Func<CancellationToken, Task> Fetch = ct => RefreshAsync(GameUpdate.Mirror, ct);
+    internal static Func<CancellationToken, Task> Fetch = ct => RefreshAsync(MirrorClient.Shared, ct);
 
     public static IReadOnlyList<MirrorBuild> Entries()
     {

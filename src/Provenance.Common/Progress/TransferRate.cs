@@ -34,11 +34,9 @@ public sealed class TransferRate(TimeSpan window)
         if (total <= 0) return "";
         var percent = Math.Floor(100.0 * Math.Clamp(done, 0, total) / total);
         var rate = bytesPerSecond is { } r ? "  " + Format(r) : "";
-        return Invariant($"{percent:0}%{rate}  {Size(done)} of {Size(total)}");
+        return Invariant($"{percent:0}%{rate}  {ByteText.Size(done, 2, 0)} of {ByteText.Size(total, 2, 0)}");
     }
 
     private static string Format(double bps) =>
         bps >= 1_000_000 ? Invariant($"{bps / 1_000_000:0.0} MB/s") : Invariant($"{bps / 1_000:0} KB/s");
-
-    private static string Size(long bytes) => bytes >= 1_000_000_000 ? Invariant($"{bytes / 1e9:0.00} GB") : Invariant($"{bytes / 1e6:0} MB");
 }

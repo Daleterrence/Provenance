@@ -12,6 +12,8 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
 {
     internal const long MaxSignedBytes = 16 * 1024 * 1024;
 
+    public static MirrorClient Shared { get; } = new(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }, MirrorKeys.Trusted);
+
     private readonly Uri _base = new(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
 
     public async Task<MirrorPointer?> GetPointerAsync(string region, CancellationToken ct)
