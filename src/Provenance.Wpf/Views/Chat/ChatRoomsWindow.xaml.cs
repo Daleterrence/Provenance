@@ -6,6 +6,7 @@ using System.Windows.Media;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Chat;
 using Provenance.Wpf.ViewModels.Social;
 
@@ -16,11 +17,11 @@ public partial class ChatRoomsWindow : AppWindow
 {
     private readonly ChatRoomsViewModel _vm;
 
-    public ChatRoomsWindow(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword,
+    public ChatRoomsWindow(SocialViewModel social, IDialogs dialogs, Func<string, string, bool> savePassword, Action dropPassword,
                            Func<int, ImageSource?>? emote = null)
     {
         InitializeComponent();
-        DataContext = _vm = new ChatRoomsViewModel(social, savePassword, dropPassword, emote);
+        DataContext = _vm = new ChatRoomsViewModel(social, dialogs, savePassword, dropPassword, emote);
         Loaded += (_, _) => _vm.Start();
         Closed += (_, _) => _vm.Dispose();
     }

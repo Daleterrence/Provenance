@@ -36,7 +36,7 @@ public partial class SocialViewModel : ObservableObject
         _sync = new(_sends);
         FriendsView = CollectionViewSource.GetDefaultView(Friends);
         FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
-        GroupChat = new GroupChatViewModel(this, () => _settings.Current.GroupChatTimes, () => _settings.Current.GroupChatFlash);
+        GroupChat = new GroupChatViewModel(this, dialogs, () => _settings.Current.GroupChatTimes, () => _settings.Current.GroupChatFlash);
         GroupChat.UnreadChanged += () =>
         {
             _groupsSignature = "";
@@ -45,7 +45,6 @@ public partial class SocialViewModel : ObservableObject
         };
     }
 
-    // what the windows bound to this ask and open through
     public IDialogs Dialogs { get; }
     public IWindowManager Windows { get; }
     public GroupChatViewModel GroupChat { get; }

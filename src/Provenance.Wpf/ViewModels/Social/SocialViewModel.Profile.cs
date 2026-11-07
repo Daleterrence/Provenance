@@ -195,12 +195,20 @@ public partial class SocialViewModel
         ProfileTabs.Clear();
         if (p.Characters.Count > 0)
         {
-            ProfileTabs.Add(new ProfileTab(-1, "", ViewerText(0x4abe, "Handle Profile")) { IsSelected = true });
+            ProfileTabs.Add(new ProfileTab(-1, "", ViewerText(0x4abe, "Handle Profile"))
+            {
+                IsSelected = true,
+                Picture = HandlePicture(p),
+            });
             foreach (var c in p.Characters) ProfileTabs.Add(new ProfileTab(c.Slot, c.Character.Key, TabLabel(c.Character.Key)));
         }
         HasProfileTabs = ProfileTabs.Count > 0;
         ShowProfile(p);
     }
+
+    private ImageSource? HandlePicture(PolProfile p) =>
+        p.Rows.FirstOrDefault(r => r.Field == "z_ficon" && r.State == ProfileFieldState.Shown) is { } row
+            ? _avatars.ProfilePicture(row.ProfilePictureId) : _avatars.NoProfilePicture;
 
     private string TabLabel(string characterKey) =>
         CharacterNames.Get(characterKey) is { Name.Length: > 0 } known ? Filtered(known.Name) : FfxiProfileText.Title;
@@ -210,7 +218,7 @@ public partial class SocialViewModel
     private void SelectProfileTab(ProfileTab? tab)
     {
         if (tab is null || !tab.Clickable || _ffxiToken is not null || ProfileLoading || !ProfileTabs.Contains(tab)) return;
-        if (tab.Slot < 0)
+        if (tab.IsHandle)
         {
             if (_handleProfile is null) return;
             SelectTab(tab);
@@ -265,7 +273,7 @@ public partial class SocialViewModel
     {
         if (tab is null) return;
         SelectTab(tab);
-        if (tab.Slot < 0 && _handleProfile is not null) ShowProfile(_handleProfile);
+        if (tab.IsHandle && _handleProfile is not null) ShowProfile(_handleProfile);
         else ShowCharacterPage(_characterShown?.Slot == tab.Slot ? _characterShown : null);
     }
 
@@ -330,7 +338,7 @@ public partial class SocialViewModel
         ProfileShowsPicture = true;
         ProfileGameLine = "";
         ProfileName = p.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : Filtered(p.Name);
-        ProfilePicture = _avatars.NoProfilePicture;
+        ProfilePicture = HandlePicture(p);
         ProfileHid = p.Hid.Length > 0 ? "H-ID " + p.Hid : "";
         ProfileMail = p.MailState != ProfileFieldState.Shown || p.Mail.Length == 0 ||
                       p.Mail == ViewerText(0x4a7f, "No Mail address") ? "" : Filtered(p.Mail);
@@ -343,7 +351,6 @@ public partial class SocialViewModel
             bool shown = r.State == ProfileFieldState.Shown;
             if (r.Field == "z_ficon")
             {
-                if (shown) ProfilePicture = _avatars.ProfilePicture(r.ProfilePictureId);
                 ProfileRows.Add(new ProfileRowItem(r.Label,
                                                    shown ? ProfilePictureText(r.ProfilePictureId) : StateText(r.State),
                                                    shown ? _avatars.ProfilePicture(r.ProfilePictureId) : null));

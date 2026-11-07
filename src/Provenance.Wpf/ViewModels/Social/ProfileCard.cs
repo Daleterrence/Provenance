@@ -19,13 +19,14 @@ public sealed partial class ProfileCard : ObservableObject
     public bool IsHandle => Character is null;
     public string Key => Character?.Key ?? "";
 
-    [ObservableProperty] private string _title = "";
-    [ObservableProperty] private string _subtitle = "";
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Summary))] private string _title = "";
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Summary))] private string _subtitle = "";
     [ObservableProperty] private ImageSource? _picture;
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private bool _hasChanges;
     [ObservableProperty] private bool _loaded;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(VisibilityHelp))] private PrivacyLevel _level;
 
+    public string Summary => Subtitle.Length > 0 ? $"{Title}, {Subtitle}" : Title;
     public string VisibilityHelp => _help(Level);
 }

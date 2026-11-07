@@ -22,8 +22,8 @@ public partial class SettingsViewModel
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RestoreBackupCommand))] private bool _restoringBackup;
 
     // a test swaps this for one that just notes what it got
-    internal Action<string> ShowBackupFolder { get; set; } = Explorer.ShowFolder;
-    internal Func<bool> GameRunning { get; set; } = PolUpdates.GameRunning;
+    internal Action<string> ShowBackupFolderForTest { get; set; } = Explorer.ShowFolder;
+    internal Func<bool> GameRunningForTest { get; set; } = PolUpdates.GameRunning;
     internal Func<LauncherSettings, BackupSources?>? RestoreSourcesForTest { get; set; }
 
     private const string RestoreTitle = "Restore game settings", RestoreFailedTitle = "Couldn't restore the backup";
@@ -58,7 +58,7 @@ public partial class SettingsViewModel
         {
             if (!Directory.Exists(folder))
                 using (GameSettingsBackup.HoldFolder(folder) ?? throw new BackupFolderLinkedException(folder)) { }
-            ShowBackupFolder(folder);
+            ShowBackupFolderForTest(folder);
         }
         catch (BackupFolderLinkedException)
         {
@@ -74,7 +74,7 @@ public partial class SettingsViewModel
     // the game writes its settings when a character logs out, so a restore under a running one wouldn't last. Asked
     // again right before anything's written
     internal string? RestoreBlocked() =>
-        GameRunning() ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
+        GameRunningForTest() ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
         : _loggedIn?.Invoke() == true ? "You can restore a backup once you're logged out of PlayOnline."
         : MultiRunGoing ? "You can restore a backup once Provenance has finished starting your accounts."
         : null;

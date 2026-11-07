@@ -36,7 +36,7 @@ public partial class GameSettingsViewModel : ObservableObject
         Load();
     }
 
-    internal Func<bool> GameRunning { get; init; } = PolUpdates.GameRunning;
+    internal Func<bool> GameRunningForTest { get; init; } = PolUpdates.GameRunning;
 
     public bool Available => _forTest || _loaded;
     public bool Editable => Available && !_store.ReadOnly;
@@ -303,7 +303,7 @@ public partial class GameSettingsViewModel : ObservableObject
             var saved = _store.Save(Collect(), _original);
             _original = _store.Load();
             Apply(_original);
-            bool running = GameRunning();
+            bool running = GameRunningForTest();
             Status = !saved.Wrote ? "You haven't changed anything, so there's nothing to save." :
                      "Your changes are saved." + (running ? " If the game is running, it'll use them the next time it starts." : "");
             Log.Information("Saved {Count} FFXI settings values ({Store})", saved.Changed, _store.Key);

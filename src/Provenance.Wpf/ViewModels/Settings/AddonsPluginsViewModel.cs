@@ -136,7 +136,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     internal Task Refreshing { get; private set; } = Task.CompletedTask;
 
     // the tests swap this for one that holds the scan back
-    internal Func<Func<object?>, Task<object?>> RunScan { get; set; } = work => Task.Run(work);
+    internal Func<Func<object?>, Task<object?>> RunScanForTest { get; set; } = work => Task.Run(work);
 
     partial void OnSearchChanged(string value) => Filter();
 
@@ -174,7 +174,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
             Filter();
         }
         object? scan;
-        try { scan = await RunScan(() => Scan(target)); }
+        try { scan = await RunScanForTest(() => Scan(target)); }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not read the addons and plugins in {Folder}", target.Folder);
@@ -513,7 +513,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     }
 
     // a test swaps it for one that just notes the path
-    internal Action<string, bool> ShowInExplorer { get; set; } = (path, isFile) => { if (isFile) Explorer.ShowFile(path); else Explorer.ShowFolder(path); };
+    internal Action<string, bool> ShowInExplorerForTest { get; set; } = (path, isFile) => { if (isFile) Explorer.ShowFile(path); else Explorer.ShowFolder(path); };
 
     // an addon opens its own folder, a plugin its folder with the DLL picked
     [RelayCommand]
@@ -527,7 +527,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
             Refreshing = RefreshAsync();
             return;
         }
-        try { ShowInExplorer(path, isFile); }
+        try { ShowInExplorerForTest(path, isFile); }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not open {Path} in Explorer", path);

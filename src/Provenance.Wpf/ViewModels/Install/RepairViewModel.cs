@@ -38,7 +38,10 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
     internal bool _started;
     private DownloadMeter? _meter;
 
-    // closing mid-repair asks first, false when the player decides against stopping
+    // Enter and Esc both answer no, the yes takes DAT mods away for good
+    internal bool ConfirmRepair(int files, long bytes, bool outOfDate) =>
+        dialogs.Confirm("Repair game files?", Question(files, bytes, outOfDate), "CONTINUE", ConfirmStyle.SafeKeys);
+
     internal bool ConfirmStop() => dialogs.Confirm("Stop the repair?",
         "The repair will stop after its current step. Run it again later to finish it.", "STOP", ConfirmStyle.Destructive);
 
@@ -187,9 +190,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
                     if (ask)
                     {
                         bool yes = false;
-                        // Enter and Esc both answer no, the yes takes DAT mods away for good
-                        OnUi(() => yes = dialogs.Confirm("Repair game files?", Question(plan.Count, plan.Bytes, plan.StaleVersions.Count > 0),
-                                                         "CONTINUE", ConfirmStyle.SafeKeys));
+                        OnUi(() => yes = ConfirmRepair(plan.Count, plan.Bytes, plan.StaleVersions.Count > 0));
                         if (!yes) return new Outcome(Ending.Declined);
                     }
                     // the check or the question may have been sat there a while

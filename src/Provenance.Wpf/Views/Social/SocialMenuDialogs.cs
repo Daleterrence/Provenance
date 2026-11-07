@@ -1,4 +1,3 @@
-using System.Windows;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
@@ -6,13 +5,12 @@ using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
 
-// the windows and questions the friend and group menus open, over whichever window the menu belongs to
-internal sealed class SocialMenuDialogs(SocialViewModel vm, Window? owner, Action<FriendItem>? openConversation = null)
+internal sealed class SocialMenuDialogs(SocialViewModel vm, Action<FriendItem>? openConversation = null)
     : ISocialMenuHost
 {
     public bool Confirm(MenuConfirm question) => vm.Dialogs.Confirm(question);
 
-    public void AddFriend(FriendItem f) => new AddFriendDialog(vm, f.Name, f.Key) { Owner = owner }.ShowDialog();
+    public void AddFriend(FriendItem f) => vm.Windows.AddFriend(vm, f.Name, f.Key);
 
     public void ViewProfile(FriendItem f) => vm.Windows.ShowProfile(vm, f);
 

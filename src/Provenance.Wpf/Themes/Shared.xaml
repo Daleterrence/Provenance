@@ -304,15 +304,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="FocusRingCard">
-        <Setter Property="Control.Template">
-            <Setter.Value>
-                <ControlTemplate>
-                    <Rectangle Margin="-3" RadiusX="9" RadiusY="9" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
     <Style x:Key="FocusRingRound">
         <Setter Property="Control.Template">
             <Setter.Value>

@@ -86,36 +86,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- a profile along the top. Picked has the pill's colours, an unsaved one gets a dot -->
-        <Style x:Key="ProfileCardButton" TargetType="Button">
-            <Setter Property="Focusable" Value="True" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Margin" Value="0,0,10,0" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Width="160" Height="62" Padding="10,0,12,0" CornerRadius="{StaticResource Radius.Panel}"
-                                BorderThickness="1" BorderBrush="{DynamicResource Border.Hair}" Background="{DynamicResource Surface.1}"
-                                SnapsToDevicePixels="True">
-                            <ContentPresenter VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Primary.Muted}" />
-                            </Trigger>
-                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Primary.Muted}" />
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Primary}" />
-                            </DataTrigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Cursor" Value="Arrow" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingCard}" />
-        </Style>
     </Window.Resources>
 
     <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,*,Auto">
@@ -131,31 +101,21 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:ProfileCard}">
-                            <Button Style="{StaticResource ProfileCardButton}"
+                            <Button Style="{StaticResource RoundTab}" behaviours:State.IsCurrent="{Binding IsSelected}"
                                     Command="{Binding DataContext.SelectCardCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title}"
-                                    ToolTip="{Binding Title}">
-                                <Grid ColumnDefinitions="Auto,*">
-                                    <Grid Width="40" Height="40" VerticalAlignment="Center">
-                                        <controls:ProfilePictureCircle Diameter="40" Source="{Binding Picture}"
-                                                                       Visibility="{Binding IsHandle, Converter={StaticResource BoolToVis}}" />
-                                        <Border Width="40" Height="40" CornerRadius="20" Background="{DynamicResource Surface.3}"
-                                                Visibility="{Binding IsHandle, Converter={StaticResource InvertBoolToVis}}">
-                                            <Image Source="{x:Static services:SvgIcons.XiBadge}" Width="26" Stretch="Uniform"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </Grid>
-                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Text="{Binding Title}" FontSize="13.5" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource Text.1}" TextTrimming="CharacterEllipsis" />
-                                            <Ellipse Grid.Column="1" Width="7" Height="7" Margin="6,1,0,0" VerticalAlignment="Center"
-                                                     Fill="{DynamicResource Primary}" ToolTip="Not saved yet"
-                                                     Visibility="{Binding HasChanges, Converter={StaticResource BoolToVis}}" />
-                                        </Grid>
-                                        <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Margin="0,2,0,0"
-                                                   Foreground="{DynamicResource Text.3}" TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
+                                    CommandParameter="{Binding}" AutomationProperties.Name="{Binding Summary}"
+                                    ToolTip="{Binding Summary}" ToolTipService.ShowOnDisabled="True">
+                                <Grid Width="40" Height="40">
+                                    <controls:ProfilePictureCircle Diameter="40" Source="{Binding Picture}"
+                                                                   Visibility="{Binding IsHandle, Converter={StaticResource BoolToVis}}" />
+                                    <Ellipse Visibility="{Binding IsHandle, Converter={StaticResource InvertBoolToVis}}">
+                                        <Ellipse.Fill>
+                                            <ImageBrush ImageSource="{x:Static services:SvgIcons.XiBadgeRound}" Stretch="UniformToFill" />
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <Ellipse Width="11" Height="11" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-3,0"
+                                             Fill="{DynamicResource Primary}" Stroke="{DynamicResource Bg.Base}" StrokeThickness="2"
+                                             ToolTip="Not saved yet" Visibility="{Binding HasChanges, Converter={StaticResource BoolToVis}}" />
                                 </Grid>
                             </Button>
                         </DataTemplate>

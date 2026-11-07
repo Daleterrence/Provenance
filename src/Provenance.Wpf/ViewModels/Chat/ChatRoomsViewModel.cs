@@ -50,11 +50,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     // savePassword hands a room password to the hook for one enter (token, password), dropPassword takes back one it
     // never read
-    public ChatRoomsViewModel(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword,
+    public ChatRoomsViewModel(SocialViewModel social, IDialogs dialogs, Func<string, string, bool> savePassword, Action dropPassword,
                               Func<int, ImageSource?>? emote = null)
     {
         _social = social;
-        _dialogs = social.Dialogs;
+        _dialogs = dialogs;
         _savePassword = savePassword;
         _dropPassword = dropPassword;
         _emote = emote;

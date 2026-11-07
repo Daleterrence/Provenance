@@ -178,6 +178,26 @@ public static partial class SvgIcons
 
     public static ImageSource? XiBadge => Cached(XiBadgeFile, () => Framed(XiBadgeFile));
 
+    // the badge cropped square round its letters, for a circle to fill. The crop's as tall as the body so the circle has no
+    // gaps, and it's worked out from the image so a re-exported badge stays centred
+    public static ImageSource? XiBadgeRound => Cached(XiBadgeFile + "#round", () => Frame(Load(XiBadgeFile), RoundFrame()));
+
+    internal static Rect? RoundFrame()
+    {
+        Rect? body = null, letters = null;
+        void Walk(Drawing d)
+        {
+            if (d is DrawingGroup g) { foreach (var child in g.Children) Walk(child); return; }
+            if (d is not GeometryDrawing { Geometry: { } shape } gd) return;
+            var b = shape.Bounds;
+            if (gd.Brush is SolidColorBrush) letters = letters is { } l ? Rect.Union(l, b) : b;
+            else body = b;
+        }
+        if (Load(XiBadgeFile) is { } art) Walk(art);
+        if (body is not { } bd || letters is not { } lt) return null;
+        return new Rect(lt.X + lt.Width / 2 - bd.Height / 2, bd.Y, bd.Height, bd.Height);
+    }
+
     // POL's exclamation mark, for errors and notices
     public static ImageSource? Notice => Cached(NoticeFile, () => Framed(NoticeFile));
 

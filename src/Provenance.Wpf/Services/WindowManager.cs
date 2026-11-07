@@ -13,16 +13,15 @@ using Provenance.Wpf.Views.Social;
 
 namespace Provenance.Wpf.Services;
 
-// every window the app opens besides the main one, so a second ask finds the open one and nothing else needs to
 public interface IWindowManager
 {
     bool ProfileEditorOpen { get; }
+    // "Friends", or "Friends and messages" while they're merged
+    string FriendsTitle { get; }
 
-    // the friends side, or both when they're merged
     void ShowFriends(SocialViewModel social);
-    // the messages side, or both when they're merged
     void ShowMessages(SocialViewModel social);
-    // with the windows split, the messages one next to the friends one. Without it nothing happens
+    // only with the windows split. Without takeFocus it only opens one that isn't up yet
     void ShowMessagesAlongside(SocialViewModel social, bool takeFocus);
     void Split(SocialViewModel social);
     void Merge(SocialViewModel social);
@@ -32,7 +31,7 @@ public interface IWindowManager
     void ShowGroupChat(GroupChatViewModel groupChat);
     void ShowProfile(SocialViewModel social, FriendItem friend);
     void EditProfile(SocialViewModel social);
-    // before a log out or exit: false when the player backs out of losing the editor's changes
+    void AddFriend(SocialViewModel social, string? handleName = null, string? handleKey = null);
     bool ConfirmDropProfileEditor(string action);
     void CloseProfileEditor();
     // the session's going, so these go with it and say nothing
@@ -41,19 +40,14 @@ public interface IWindowManager
     void ShowInstall(InstallViewModel vm);
     void ShowSettings(SettingsViewModel vm, SettingsTab tab);
     void ShowRepair(RepairViewModel vm);
-    // the picture picked, null when cancelled
     int? PickProfilePicture(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int current);
 }
 
-public sealed class WindowManager(ISettingsService settings) : IWindowManager
+public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) : IWindowManager
 {
     private const double FriendsWidth = 340, MessagesMinWidth = 420, BothMinWidth = 720, Gap = 8;
 
     private static T? Find<T>() where T : Window => Application.Current?.Windows.OfType<T>().FirstOrDefault();
-
-    private static Window? ActiveWindow() => Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);
-
-    private static Window? MainIfShown() => Application.Current?.MainWindow is { IsVisible: true } main ? main : null;
 
     // Activate on its own doesn't bring back a minimised or hidden window
     internal static void BringBack(Window w, bool activate = true)
@@ -70,6 +64,8 @@ public sealed class WindowManager(ISettingsService settings) : IWindowManager
     private SocialPart Messages => settings.Current.SocialSplit ? SocialPart.Messages : SocialPart.Both;
 
     public bool ProfileEditorOpen => Find<EditProfileWindow>() is not null;
+
+    public string FriendsTitle => Friends.Title();
 
     public void ShowFriends(SocialViewModel social) => ShowSocial(social, Friends, activate: true);
 
@@ -113,7 +109,6 @@ public sealed class WindowManager(ISettingsService settings) : IWindowManager
 
     public void Merge(SocialViewModel social) => SetSplit(social, false);
 
-    // the new windows open over where the old ones were
     private void SetSplit(SocialViewModel social, bool split)
     {
         if (settings.Current.SocialSplit == split) return;
@@ -145,14 +140,14 @@ public sealed class WindowManager(ISettingsService settings) : IWindowManager
             BringBack(open);
             return;
         }
-        var w = new ChatRoomsWindow(social, savePassword, dropPassword, emote);
+        var w = new ChatRoomsWindow(social, dialogs, savePassword, dropPassword, emote);
         w.Closed += (_, _) => closed();
         w.Show();
     }
 
     public void ShowGroupChat(GroupChatViewModel groupChat) => BringBack(Find<GroupChatWindow>() ?? new GroupChatWindow(groupChat));
 
-    // the view model only holds one profile, so an open window gets reused rather than two fighting over it
+    // the view model only holds one profile, so an open window gets reused
     public void ShowProfile(SocialViewModel social, FriendItem friend)
     {
         if (Find<ProfileWindow>() is { } open)
@@ -162,7 +157,7 @@ public sealed class WindowManager(ISettingsService settings) : IWindowManager
             open.Activate();
             return;
         }
-        new ProfileWindow(social, friend) { Owner = ActiveWindow() }.Show();
+        new ProfileWindow(social, friend) { Owner = WindowOwner.Find() }.Show();
     }
 
     // never parented to the friends window, so closing that can't take unsaved changes down with it
@@ -173,8 +168,8 @@ public sealed class WindowManager(ISettingsService settings) : IWindowManager
             BringBack(open);
             return;
         }
-        var w = new EditProfileWindow(social);
-        if (ActiveWindow() is { IsVisible: true, WindowState: WindowState.Normal } near)
+        var w = new EditProfileWindow(social, dialogs);
+        if (WindowOwner.Active() is { IsVisible: true, WindowState: WindowState.Normal } near)
         {
             w.WindowStartupLocation = WindowStartupLocation.Manual;
             w.Left = near.Left + (near.ActualWidth - w.Width) / 2;
@@ -183,6 +178,9 @@ public sealed class WindowManager(ISettingsService settings) : IWindowManager
         else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         w.Show();
     }
+
+    public void AddFriend(SocialViewModel social, string? handleName = null, string? handleKey = null) =>
+        new AddFriendDialog(social, handleName, handleKey) { Owner = WindowOwner.Find() }.ShowDialog();
 
     public bool ConfirmDropProfileEditor(string action)
     {
@@ -206,10 +204,19 @@ public sealed class WindowManager(ISettingsService settings) : IWindowManager
         foreach (var w in SocialWindows()) w.Close();
     }
 
+    // before the app's services exist, so it's a static
+    internal static UpdateWindow ShowUpdate()
+    {
+        var w = new UpdateWindow();
+        if (WindowOwner.Find() is { } owner) w.Owner = owner;
+        w.Show();
+        return w;
+    }
+
     public void ShowInstall(InstallViewModel vm)
     {
         var w = new InstallWindow { DataContext = vm };
-        if (MainIfShown() is { } owner) w.Owner = owner;
+        if (WindowOwner.Find() is { } owner) w.Owner = owner;
         w.ShowDialog();
     }
 
@@ -217,16 +224,16 @@ public sealed class WindowManager(ISettingsService settings) : IWindowManager
     {
         var w = new SettingsWindow { DataContext = vm };
         w.Tabs.SelectedIndex = (int)tab;
-        if (MainIfShown() is { } owner) w.Owner = owner;
+        if (WindowOwner.Find() is { } owner) w.Owner = owner;
         w.ShowDialog();
     }
 
-    public void ShowRepair(RepairViewModel vm) => new RepairWindow(vm).ShowDialogOver(Application.Current.MainWindow);
+    public void ShowRepair(RepairViewModel vm) => new RepairWindow(vm).ShowDialogOver(WindowOwner.Find());
 
     public int? PickProfilePicture(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int current)
     {
         var w = new ProfilePicturePickerWindow(catalog, avatars, current);
-        if (ActiveWindow() is { } owner) w.Owner = owner;
+        if (WindowOwner.Find() is { } owner) w.Owner = owner;
         return w.ShowDialog() == true ? w.Result : null;
     }
 }

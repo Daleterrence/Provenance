@@ -38,6 +38,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(35);
 
     private readonly SocialViewModel _social;
+    private readonly IDialogs _dialogs;
     private readonly Func<bool> _timesWanted, _flashWanted;
     private readonly ChatSendGate _gate = new(SendGiveUp);
     private GroupChatLog? _log;
@@ -54,9 +55,10 @@ public sealed partial class GroupChatViewModel : ObservableObject
     internal static readonly TimeSpan TailFor = TimeSpan.FromSeconds(10);
     private readonly Dictionary<string, int> _unread = new(StringComparer.OrdinalIgnoreCase);
 
-    public GroupChatViewModel(SocialViewModel social, Func<bool> showTimes, Func<bool> flash)
+    public GroupChatViewModel(SocialViewModel social, IDialogs dialogs, Func<bool> showTimes, Func<bool> flash)
     {
         _social = social;
+        _dialogs = dialogs;
         _timesWanted = showTimes;
         _flashWanted = flash;
         _social.SnapshotApplied += OnSnapshot;
@@ -160,10 +162,9 @@ public sealed partial class GroupChatViewModel : ObservableObject
         foreach (var e in _log?.Lines(GroupId) ?? []) Lines.Add(Item(e));
     }
 
-    internal void Tell(string text) => _social.Dialogs.Info(DialogTitle, text);
+    internal void Tell(string text) => _dialogs.Info(DialogTitle, text);
 
-    // true when the player says yes to leaving it
-    internal bool ConfirmExit() => _social.Dialogs.Confirm(DialogTitle, ExitQuestion, "YES", cancel: "NO");
+    internal bool ConfirmExit() => _dialogs.Confirm(DialogTitle, ExitQuestion, "YES", cancel: "NO");
 
     // the viewer's Exit, after its question
     public void Exit()
@@ -319,7 +320,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         [new("Clear chat...", Lines.Count > 0, () =>
         {
             var shown = Lines.Select(l => l.Id).ToList();
-            if (_social.Dialogs.Confirm(new MenuConfirm("Clear chat", ClearQuestion(GroupName), "CLEAR"))) ClearLines(shown);
+            if (_dialogs.Confirm(new MenuConfirm("Clear chat", ClearQuestion(GroupName), "CLEAR"))) ClearLines(shown);
         })];
 
     public IReadOnlyList<MenuAction> LineMenu(GroupChatLineItem line) => [new("Delete message", true, () => DeleteLine(line))];

@@ -34,10 +34,10 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private ProfileCard? _xiCard;
     private readonly ProfileCard _handleCard;
 
-    public EditProfileViewModel(SocialViewModel social)
+    public EditProfileViewModel(SocialViewModel social, IDialogs dialogs)
     {
         _social = social;
-        _dialogs = social.Dialogs;
+        _dialogs = dialogs;
         _social.SnapshotApplied += OnSnapshot;
         _timer.Tick += (_, _) => CheckTimeout();
         NotSet = social.ViewerText(0x4a81, "Not set");
@@ -409,7 +409,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     internal bool HasUnsavedWork => Saving || HasChanges;
 
-    // false when the player backs out of closing the editor
     internal bool ConfirmClose()
     {
         if (Saving)
@@ -418,7 +417,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         return !HasChanges || _dialogs.Confirm("Unsaved profile changes", "Close without saving your changes?", "DISCARD", ConfirmStyle.Destructive);
     }
 
-    // before sign-out or exit, false when the player backs out
     internal bool ConfirmDrop(string action) =>
         !HasUnsavedWork || _dialogs.Confirm("Unsaved profile changes",
             $"You haven't saved your profile changes. {action} anyway? They'll be lost.", action.ToUpperInvariant(), ConfirmStyle.Destructive);

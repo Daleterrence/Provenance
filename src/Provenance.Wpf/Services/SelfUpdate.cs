@@ -92,10 +92,9 @@ public static class SelfUpdate
         bool handedOver = false;
         try
         {
-            window = new UpdateWindow();
+            window = WindowManager.ShowUpdate();
             window.Closed += Skip;
             window.SkipClicked += Skip;
-            window.Show();
 
             Log.Information("Checking for updates (version {Version})", updates.CurrentVersion);
             var check = Task.Run(() => updates.CheckForUpdatesAsync());

@@ -23,7 +23,6 @@ using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Common.Login;
 using Provenance.Wpf.Services;
-using Provenance.Wpf.Views.Social;
 using Provenance.Wpf.ViewModels.Shared;
 using Provenance.Wpf.ViewModels.Install;
 using Provenance.Wpf.ViewModels.Chat;
@@ -907,7 +906,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     // the window OpenSocial brings up, where requests and invitations are answered
-    internal string FriendsWindowTitle => (_settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both).Title();
+    internal string FriendsWindowTitle => _windows.FriendsTitle;
 
     [RelayCommand]
     private void OpenSocial()

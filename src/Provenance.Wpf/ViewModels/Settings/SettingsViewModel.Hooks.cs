@@ -57,12 +57,10 @@ public partial class SettingsViewModel
     private string? AskName(string title, string prompt, string start, Func<string, string?> check) =>
         _dialogs.Ask(title, prompt, start, WindowerSettingsFile.MaxNameLength, validate: check);
 
-    // true to save them first, false to leave them, null when the player backs out
     private bool? AskSaveGame(string? which) => _dialogs.Choose("Unsaved game settings",
         $"You've changed some game settings{(which is null ? "" : " for " + which)} but haven't saved them yet.", "CONTINUE",
         "Save them first", "Don't save them") switch { 0 => true, 1 => false, _ => null };
 
-    // closing with unsaved Game changes, false when the player backs out
     internal bool ConfirmClose()
     {
         var pick = _dialogs.Choose("Unsaved game settings", "You've changed some game settings but haven't saved them yet.", "CLOSE",
@@ -80,10 +78,10 @@ public partial class SettingsViewModel
     internal event Action? CloseRequested;
 
     // a pick that's turned down goes back once the dropdown's finished with it
-    private static void Later(Action a)
+    private void Later(Action a)
     {
-        if (System.Windows.Application.Current?.Dispatcher is { } ui && ui.CheckAccess()) ui.BeginInvoke(a);
-        else a();
+        if (_ui is null) a();
+        else _ui.BeginInvoke(a);
     }
 
     // the Settings tab that's showing, which the window keeps up to date
@@ -96,7 +94,7 @@ public partial class SettingsViewModel
         && !(ShownTab == SettingsTab.AddonsPlugins && Addons is { SameListForEveryProfile: true });
     public bool ShowProfileTools => ShownTab == SettingsTab.WindowerAshita && (IsWindower || IsAshita);
     public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita boot configuration:" : "Editing Windower profile:";
-    internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = (dir, branch) => new WindowerUpdater(dir, branch);
+    internal Func<string, string, WindowerUpdater> NewWindowerUpdaterForTest { get; set; } = (dir, branch) => new WindowerUpdater(dir, branch);
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
 
     // only the folder in the box, never one found somewhere else, since profiles get changed in it
@@ -559,7 +557,7 @@ public partial class SettingsViewModel
             WindowerVersionText = "Hook.dll isn't installed yet. Provenance gets it the next time you log in.";
             return;
         }
-        try { WindowerVersionText = $"Hook.dll {NewWindowerUpdater(dir, Branch).BranchInfo().HookFile} is installed."; }
+        try { WindowerVersionText = $"Hook.dll {NewWindowerUpdaterForTest(dir, Branch).BranchInfo().HookFile} is installed."; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.Warning(ex, "Could not read Windower's versions");
@@ -646,7 +644,7 @@ public partial class SettingsViewModel
         SwitchingBranch = true;
         try
         {
-            if (!await NewWindowerUpdater(dir, branch).PrepareBranchSwitchAsync())
+            if (!await NewWindowerUpdaterForTest(dir, branch).PrepareBranchSwitchAsync())
             {
                 Say("Provenance couldn't switch Windower's branch. Try again in a moment.", error: true);
                 PutBranchBack();

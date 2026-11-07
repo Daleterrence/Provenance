@@ -32,7 +32,7 @@ public partial class InstallViewModel : ObservableObject
     private static readonly PolRegion[] RegionValues = new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan }
         .Where(r => GameInstaller.CanInstall(r) && PolPaths.Supported(r) && (r != PolRegion.Japan || OfferJapanese)).ToArray();
 
-    internal static Func<PolRegion> LocaleRegion { get; set; } = PolLocale.FromWindows;
+    internal static Func<PolRegion> LocaleRegionForTest { get; set; } = PolLocale.FromWindows;
 
     internal PolRegion _region;
     private readonly PolRegion _autoRegion;
@@ -49,7 +49,7 @@ public partial class InstallViewModel : ObservableObject
         // a viewer that's already there decides, otherwise it's the player's pick
         ShowRegionChoice = region is not { } r || !RegionValues.Contains(r);
         // a version that isn't offered yet (Japanese, for now) leaves Auto on the first one that is
-        var local = LocaleRegion();
+        var local = LocaleRegionForTest();
         _autoRegion = RegionValues.Contains(local) ? local : RegionValues[0];
         RegionChoices = [$"Auto ({PolPaths.RegionName(_autoRegion)})", .. RegionValues.Select(PolPaths.RegionName)];
         _region = ShowRegionChoice ? _autoRegion : region!.Value;
@@ -208,8 +208,6 @@ public partial class InstallViewModel : ObservableObject
         if (_dialogs.PickFolder("Choose where to keep the downloaded installer") is { } d) DownloadFolder = d;
     }
 
-    // closing mid-install asks first, false when the player decides against stopping. The words are the "Cancelled" note's,
-    // worded for a window that's closing
     internal bool ConfirmStop()
     {
         var what = CurrentStep switch

@@ -1,0 +1,11 @@
+using System.Windows;
+
+namespace Provenance.Wpf.Services;
+
+internal static class WindowOwner
+{
+    public static Window? Active() => Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);
+
+    // the active window, else the main one if it's up
+    public static Window? Find() => Active() ?? (Application.Current?.MainWindow is { IsVisible: true } main ? main : null);
+}

@@ -5,10 +5,9 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using MaterialDesignThemes.Wpf;
-using Provenance.Common.Hook;
-using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.ViewModels.Social;
 
@@ -95,7 +94,7 @@ public partial class SocialWindow : AppWindow
     private void FlashIfBehind()
     {
         if (!IsVisible || WindowState == WindowState.Minimized) return;
-        if (Application.Current?.Windows.OfType<Window>().Any(w => w.IsActive) == true) return;
+        if (WindowOwner.Active() is not null) return;
         TaskbarFlash.Start(this);
     }
 
@@ -263,7 +262,7 @@ public partial class SocialWindow : AppWindow
 
     private readonly ReopenGuard _menuGuard = new();
 
-    private ISocialMenuHost Host(SocialViewModel vm) => new SocialMenuDialogs(vm, this);
+    private ISocialMenuHost Host(SocialViewModel vm) => new SocialMenuDialogs(vm);
 
     private void OnRowMenuButton(object sender, RoutedEventArgs e)
     {
@@ -323,7 +322,7 @@ public partial class SocialWindow : AppWindow
 
     private void OnAddFriend(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => new AddFriendDialog(vm) { Owner = this }.ShowDialog());
+        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => vm.Windows.AddFriend(vm));
     }
 
     private void OnUnignore(object sender, RoutedEventArgs e)

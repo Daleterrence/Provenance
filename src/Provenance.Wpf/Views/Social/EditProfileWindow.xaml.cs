@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
@@ -10,10 +11,10 @@ public partial class EditProfileWindow : AppWindow
     private readonly EditProfileViewModel _vm;
     private bool _closeQuietly;
 
-    public EditProfileWindow(SocialViewModel social)
+    public EditProfileWindow(SocialViewModel social, IDialogs dialogs)
     {
         InitializeComponent();
-        DataContext = _vm = new EditProfileViewModel(social);
+        DataContext = _vm = new EditProfileViewModel(social, dialogs);
         // 1366x768, or 1080p with scaling, is shorter than 780
         MaxHeight = SystemParameters.WorkArea.Height;
         if (Height > MaxHeight - 20) Height = MaxHeight - 20;

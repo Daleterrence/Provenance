@@ -11,7 +11,6 @@ using Provenance.Common.Progress;
 using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Common.Patcher;
-using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Settings;
@@ -180,7 +179,6 @@ public partial class MainViewModel : IMultiRunHost
         _multiCts.Cancel();
     }
 
-    // closing the window while they start, false when the player decides to wait
     internal bool ConfirmStopAccounts() => _dialogs.Confirm("Multi-account mode",
         "Your accounts are still starting. Stop them and close Provenance?", "STOP AND CLOSE", ConfirmStyle.Destructive);
 

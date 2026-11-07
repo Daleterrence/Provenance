@@ -41,7 +41,6 @@ public partial class FriendsList : UserControl
     public event Action<FriendItem>? FriendSelected;
 
     private SocialViewModel? Vm => DataContext as SocialViewModel;
-    private Window? Owner => Window.GetWindow(this);
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -122,10 +121,10 @@ public partial class FriendsList : UserControl
         if (Vm is { } vm) Menus.Fill(menu, vm.FriendMenu(f, Host(vm)));
     }
 
-    internal ISocialMenuHost Host(SocialViewModel vm) => new SocialMenuDialogs(vm, Owner, f => FriendActivated?.Invoke(f));
+    internal ISocialMenuHost Host(SocialViewModel vm) => new SocialMenuDialogs(vm, f => FriendActivated?.Invoke(f));
 
     private void OnAddFriend(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => new AddFriendDialog(vm) { Owner = Owner }.ShowDialog());
+        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => vm.Windows.AddFriend(vm));
     }
 }

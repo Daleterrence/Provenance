@@ -92,4 +92,40 @@
             </Trigger>
         </Style.Triggers>
     </Style>
+
+    <!-- a round button with no text, the open one ringed in the accent. State.IsCurrent is true on the open one -->
+    <Style x:Key="RoundTab" TargetType="ButtonBase">
+        <Setter Property="Padding" Value="3" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Hair}" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingRound}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Grid Background="Transparent">
+                        <ContentPresenter Margin="{TemplateBinding Padding}" />
+                        <Ellipse x:Name="Ring" IsHitTestVisible="False" StrokeThickness="2" Stroke="{TemplateBinding BorderBrush}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsMouseOver" Value="True" />
+                    <Condition Property="IsEnabled" Value="True" />
+                </MultiTrigger.Conditions>
+                <Setter Property="BorderBrush" Value="{DynamicResource Primary.Muted}" />
+            </MultiTrigger>
+            <Trigger Property="behaviours:State.IsCurrent" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource Primary}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
 </ResourceDictionary>
