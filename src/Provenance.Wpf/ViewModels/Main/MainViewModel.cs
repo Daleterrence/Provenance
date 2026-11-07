@@ -33,6 +33,7 @@ namespace Provenance.Wpf.ViewModels.Main;
 
 public partial class MainViewModel : ObservableObject
 {
+    private readonly UiThread _ui = new();
     private readonly IDialogs _dialogs;
     private readonly IWindowManager _windows;
     private readonly ICredentialService _credentials;
@@ -57,11 +58,11 @@ public partial class MainViewModel : ObservableObject
         _windows = windows;
         _credentials = credentials;
         _settings = settings;
-        _settings.SaveFailed += why => Application.Current?.Dispatcher.InvokeAsync(() =>
+        _settings.SaveFailed += why => _ui.Post(() =>
             _dialogs.Error("Settings not saved",
                 "Provenance couldn't save your settings, so your changes will only last until Provenance closes.", offerLogs: true));
         if (_settings.LoadProblem is { } loadProblem)
-            Application.Current?.Dispatcher.InvokeAsync(() => _dialogs.Info("Settings reset", loadProblem));
+            _ui.Post(() => _dialogs.Info("Settings reset", loadProblem));
         _feeds = feeds;
         _pol = pol;
         _avatars = avatars;
@@ -71,7 +72,7 @@ public partial class MainViewModel : ObservableObject
         // POL only rewrites world status every 5 mins anyway
         _worldsTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
         _worldsTimer.Tick += async (_, _) => { if (_windowShown) await RefreshIfStaleAsync(); };
-        _feeds.RegionChanged += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
+        _feeds.RegionChanged += (_, _) => _ui.Post(async () =>
         {
             await LoadFeedsAsync(again: true);
             await LoadWorldsAsync();
@@ -79,7 +80,7 @@ public partial class MainViewModel : ObservableObject
         _socialPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _socialPoll.Tick += (_, _) => _pol.Poll();
         _pol.SnapshotUpdated += OnSnapshot;
-        _pol.SessionEnded += why => Application.Current?.Dispatcher.Invoke(() =>
+        _pol.SessionEnded += why => _ui.Run(() =>
         {
             Log.Information("Session ended: {Why} (signed in here: {Connected})", why, LoggedIn);
             StartAllAccountsCommand.NotifyCanExecuteChanged();
@@ -141,6 +142,21 @@ public partial class MainViewModel : ObservableObject
             _lastSender = who;
             ShowNotice($"{who} is online now.", "AccountCheckOutline");
         };
+        Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture)
+        {
+            SwitchBlocked = () => _windows.ProfileEditorOpen
+                ? "Close the profile editor first. It's editing the active handle's profile." : Social.PendingWrite(),
+        };
+        Social.SnapshotApplied += _ => ShowHandles();
+        Handles.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(HandlesViewModel.Busy)) Social.HandleSwitching = Handles.Switching;
+        };
+        PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(LoggedIn) or nameof(MultiRunning)) ShowHandles();
+        };
+        Social.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SocialViewModel.GameRunning)) ShowHandles(); };
         RefreshInstallState();
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _elapsedTimer.Tick += (_, _) =>
@@ -347,7 +363,7 @@ public partial class MainViewModel : ObservableObject
             _windows.ShowGroupChat(Social.GroupChat);
             return;
         }
-        // the Handles page might never have been opened, and the question needs this login's handles
+        // the question needs this login's handles
         ShowHandles();
         Handles.OpenGroup(group, () =>
         {
@@ -820,7 +836,7 @@ public partial class MainViewModel : ObservableObject
     private void DownloadInstall()
     {
         var vm = new InstallViewModel(_dialogs, _settings.DetectedRegion, _pol.HoldPrestarts, _pol.ReleasePrestarts);
-        vm.Installed += () => Application.Current.Dispatcher.Invoke(() =>
+        vm.Installed += () => _ui.Run(() =>
         {
             _settings.RedetectRegion();
             _settings.SaveChange(PolOptions.NewInstall);
@@ -842,7 +858,7 @@ public partial class MainViewModel : ObservableObject
 
     private void OnSnapshot(PolSocialSnapshot snap)
     {
-        Application.Current?.Dispatcher.Invoke(() =>
+        _ui.Run(() =>
         {
             if (_pol.Pid is null) return;   // read just before a sign-out
             // a run's lean session has no social side and nothing here may write a request to its hook
@@ -945,7 +961,7 @@ public partial class MainViewModel : ObservableObject
                 RefreshStartAll();
                 _pol.Prestart();
             }
-            finally { Application.Current?.Dispatcher.InvokeAsync(() => { _sessionEnding = false; RefreshRepair(); }); }
+            finally { _ui.Post(() => { _sessionEnding = false; RefreshRepair(); }); }
         });
     }
 
@@ -986,7 +1002,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             int code = await ConnectProfileAsync(profile, pol, squareEnix, otp, progress, token);
-            await Application.Current!.Dispatcher.InvokeAsync(() => { });   // an empty hop so queued progress reports land first (yes, really)
+            await _ui.Flush();   // queued progress reports have to land first (yes, really)
             if (code == 0)
             {
                 ProgressFraction = 1.0;
@@ -1070,7 +1086,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     private string? PromptHandleName() =>
-        Application.Current!.Dispatcher.Invoke(() =>
+        _ui.Run(() =>
         {
             var name = _dialogs.Ask("Create PlayOnline handle",
                 "This PlayOnline account doesn't have a handle yet, and FINAL FANTASY XI needs one to log in.\n\n" +
@@ -1311,32 +1327,8 @@ public partial class MainViewModel : ObservableObject
         return false;
     }
 
-    private HandlesViewModel? _handles;
-
-    // made once and fed every snapshot, so a change still going when Settings closes is answered all the same
-    internal HandlesViewModel Handles
-    {
-        get
-        {
-            if (_handles != null) return _handles;
-            _handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture)
-            {
-                SwitchBlocked = () => _windows.ProfileEditorOpen
-                    ? "Close the profile editor first. It's editing the active handle's profile." : Social.PendingWrite(),
-            };
-            Social.SnapshotApplied += _ => ShowHandles();
-            _handles.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(HandlesViewModel.Busy)) Social.HandleSwitching = _handles.Switching;
-            };
-            PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName is nameof(LoggedIn) or nameof(MultiRunning)) ShowHandles();
-            };
-            Social.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SocialViewModel.GameRunning)) ShowHandles(); };
-            return _handles;
-        }
-    }
+    // fed every snapshot, so a change still going when Settings closes is answered all the same
+    internal HandlesViewModel Handles { get; }
 
     // a multi-account run's lean sessions take no requests
     private void ShowHandles()

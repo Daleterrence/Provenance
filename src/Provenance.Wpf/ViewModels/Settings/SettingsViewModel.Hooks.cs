@@ -78,8 +78,8 @@ public partial class SettingsViewModel
     // a pick that's turned down goes back once the dropdown's finished with it
     private void Later(Action a)
     {
-        if (_ui is null) a();
-        else _ui.BeginInvoke(a);
+        if (_ui.Available) _ui.Post(a);
+        else a();
     }
 
     // the Settings tab that's showing, which the window keeps up to date

@@ -22,7 +22,7 @@ public partial class SettingsViewModel : ObservableObject
     private static readonly string[] FeedRegionCodes = ["auto", "na", "eu", "jp"];
 
     private readonly IDialogs _dialogs;
-    private readonly System.Windows.Threading.Dispatcher? _ui = System.Windows.Application.Current?.Dispatcher;
+    private readonly UiThread _ui = new();
     private readonly ISettingsService _settings;
     private readonly FeedService? _feeds;
     private readonly Func<bool>? _multiRunning, _loggedIn;

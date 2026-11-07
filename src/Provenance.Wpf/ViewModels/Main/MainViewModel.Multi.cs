@@ -75,7 +75,7 @@ public partial class MainViewModel : IMultiRunHost
 
     // Pid has no change notice, so this gets called wherever it changes (any thread)
     private void RefreshStartAll() =>
-        Application.Current?.Dispatcher.InvokeAsync(() =>
+        _ui.Post(() =>
         {
             StartAllAccountsCommand.NotifyCanExecuteChanged();
             RefreshRepair();
@@ -203,7 +203,7 @@ public partial class MainViewModel : IMultiRunHost
     {
         try
         {
-            return await Application.Current.Dispatcher.InvokeAsync(() => RunAccountAsync(account, ct)).Task.Unwrap().ConfigureAwait(false);
+            return await _ui.RunAsync(() => RunAccountAsync(account, ct)).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
@@ -339,7 +339,7 @@ public partial class MainViewModel : IMultiRunHost
             {
                 Kick();
                 if (string.IsNullOrWhiteSpace(p.Text)) return;
-                Application.Current?.Dispatcher.InvokeAsync(() =>
+                _ui.Post(() =>
                 {
                     if (p.Fraction >= 0) left.Update(p.Fraction, p.Phase);
                     else left.Clear();

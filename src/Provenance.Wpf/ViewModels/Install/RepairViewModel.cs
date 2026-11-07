@@ -29,6 +29,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
     private const string ViewerRunningText =
         "PlayOnline is running, either for a logged-in account or in another copy of Provenance. Log out and close it, then run the repair again.";
 
+    private readonly UiThread _ui = new();
     private CancellationTokenSource? _cts;
     private volatile bool _changing;   // GameRepair says so right before the first game file changes
     private volatile bool _fixed;      // and once the registry pass has put something right, or DXSETUP's started
@@ -138,12 +139,9 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
                 Meter.Update(done, total, total > 0 ? (double)done / total : 1, download: downloading);
             });
             var waiting = new Progress<PatchProgress>(p => Status = p.Text);
-            // Normal, so the progress reports already queued land first and can't paint over what comes next
-            var dispatcher = System.Windows.Application.Current.Dispatcher;
-            void OnUi(Action a) => dispatcher.Invoke(a, System.Windows.Threading.DispatcherPriority.Normal);
             var outcome = await Task.Run(() => GameFilesLock.Locked(GameFilesLock.Job.Repair, ct, waiting, () =>
             {
-                OnUi(() => Status = CheckingText);
+                _ui.Run(() => Status = CheckingText);
                 // again under the lock, another copy may have started the game while this one waited
                 if (PolUpdates.GameRunning()) throw new RefusedException(GameRunningText);
                 // my waiting pol.exe holds viewer files, so it goes first like it does for a viewer update
@@ -182,14 +180,14 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
                     if (ask)
                     {
                         bool yes = false;
-                        OnUi(() => yes = ConfirmRepair(plan.Count, plan.Bytes, plan.StaleVersions.Count > 0));
+                        _ui.Run(() => yes = ConfirmRepair(plan.Count, plan.Bytes, plan.StaleVersions.Count > 0));
                         if (!yes) return new Outcome(Ending.Declined);
                     }
                     // the check or the question may have been sat there a while
                     if (PolUpdates.GameRunning()) throw new RefusedException(GameRunningText);
                     if (PolUpdates.ViewerRunning()) throw new RefusedException(ViewerRunningText);
                     bool known = ask || plan.StaleVersions.Count > 0 || plan.DirectXMissing;
-                    OnUi(() =>
+                    _ui.Run(() =>
                     {
                         downloading = true;
                         if (!known) return;   // the bar carries on for the package databases
