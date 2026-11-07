@@ -92,16 +92,23 @@
     </Window.Resources>
 
     <Grid RowDefinitions="40,*">
-        <!-- only the switcher's controls take clicks, the rest of the bar still drags the window -->
+        <!-- only the switcher's controls take clicks, the rest of the bar still drags the window. The dropdown gives up its
+             width before the title does -->
         <controls:TitleBar Title="Settings">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding ProfileSwitcherLabel}" FontSize="13" VerticalAlignment="Center" Margin="16,0,10,0"
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="104" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="4*" MaxWidth="240" MinWidth="60" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="1" Text="{Binding ProfileSwitcherLabel}" FontSize="13" VerticalAlignment="Center" Margin="16,0,10,0"
                            Foreground="{DynamicResource Text.2}" Visibility="{Binding ShowProfileSwitcher, Converter={StaticResource BoolToVis}}" />
-                <ComboBox x:Name="ProfileSwitcher" Width="240" VerticalAlignment="Center" Style="{StaticResource TitleCombo}" DisplayMemberPath="Display"
+                <ComboBox x:Name="ProfileSwitcher" Grid.Column="2" VerticalAlignment="Center" Style="{StaticResource TitleCombo}" DisplayMemberPath="Display"
                           ItemsSource="{Binding SwitcherProfiles}" SelectedItem="{Binding SelectedProfile}"
                           Visibility="{Binding ShowProfileSwitcher, Converter={StaticResource BoolToVis}}"
                           AutomationProperties.Name="{Binding ProfileSwitcherName}" />
-                <StackPanel Orientation="Horizontal" Margin="6,0,2,0" VerticalAlignment="Center"
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="6,0,2,0" VerticalAlignment="Center"
                             Visibility="{Binding ShowProfileTools, Converter={StaticResource BoolToVis}}">
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding AddProfileCommand}" IsEnabled="{Binding CanManageProfiles}"
                             ToolTip="{Binding ProfileNoun, StringFormat='Add a {0}'}"
@@ -124,7 +131,7 @@
                         <controls:SvgIcon Glyph="delete" Width="20" Height="20" />
                     </Button>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </controls:TitleBar>
 
         <Grid Grid.Row="1" ColumnDefinitions="210,*">

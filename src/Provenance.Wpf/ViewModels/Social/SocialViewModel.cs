@@ -122,7 +122,10 @@ public partial class SocialViewModel : ObservableObject
 
     // the viewer's status menu has these three, only the viewer itself ever sets Busy
     private static readonly PolStatus[] StatusChoices = [PolStatus.Online, PolStatus.Away, PolStatus.AppearOffline];
-    public sealed record StatusItem(PolStatus Status, string Label);
+    public sealed record StatusItem(PolStatus Status, string Label)
+    {
+        public override string ToString() => Label;
+    }
     public IReadOnlyList<StatusItem> StatusItems { get; } = StatusChoices.Select(s => new StatusItem(s, PolStatusText.Label(s))).ToList();
     [ObservableProperty] private int _myStatusIndex;
     [ObservableProperty] private string _statusNote = "";

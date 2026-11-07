@@ -401,8 +401,7 @@
                             </Grid>
                         </Grid>
                     </Border>
-                    <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8"
-                                  behaviours:FollowEnd.Source="{Binding Conversation}">
+                    <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
                         <ItemsControl ItemsSource="{Binding Conversation}" ItemTemplate="{StaticResource ChatLine}" />
                     </ScrollViewer>
                     <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" FontSize="12"

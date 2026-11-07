@@ -70,7 +70,7 @@ public partial class SettingsViewModel
     public bool ShowProfileSwitcher =>
         ShownTab is SettingsTab.WindowerAshita or SettingsTab.Game or SettingsTab.AddonsPlugins && (IsWindower || IsAshita)
         && !(ShownTab == SettingsTab.AddonsPlugins && Addons is { SameListForEveryProfile: true });
-    public bool ShowProfileTools => ShownTab == SettingsTab.WindowerAshita;
+    public bool ShowProfileTools => ShownTab == SettingsTab.WindowerAshita && (IsWindower || IsAshita);
     public string ProfileSwitcherLabel => IsAshita ? "Editing Ashita boot configuration:" : "Editing Windower profile:";
     internal Func<string, string, WindowerUpdater> NewWindowerUpdater { get; set; } = (dir, branch) => new WindowerUpdater(dir, branch);
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
@@ -143,6 +143,7 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(IsAshita));
         OnPropertyChanged(nameof(IsWindower));
         OnPropertyChanged(nameof(ShowProfileSwitcher));
+        OnPropertyChanged(nameof(ShowProfileTools));
         OnPropertyChanged(nameof(ProfileSwitcherLabel));
         OnPropertyChanged(nameof(ProfileSwitcherName));
         OnPropertyChanged(nameof(ProfileNoun));

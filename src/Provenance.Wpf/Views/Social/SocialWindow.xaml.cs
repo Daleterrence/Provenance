@@ -47,6 +47,7 @@ public partial class SocialWindow : AppWindow
         DataContextChanged += (_, e) =>
         {
             if (e.OldValue is SocialViewModel old) Detach(old);
+            FollowEnd.SetSource(ChatScroll, HasMessages ? (e.NewValue as SocialViewModel)?.Conversation : null);
             if (e.NewValue is SocialViewModel vm)
             {
                 vm.PropertyChanged += OnVmChanged;
