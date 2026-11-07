@@ -36,7 +36,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(35);
 
     private readonly SocialViewModel _social;
-    private readonly Func<bool> _timesWanted;
+    private readonly Func<bool> _timesWanted, _flashWanted;
     private readonly ChatSendGate _gate = new(SendGiveUp);
     private GroupChatLog? _log;
     private string? _token;
@@ -52,10 +52,11 @@ public sealed partial class GroupChatViewModel : ObservableObject
     internal static readonly TimeSpan TailFor = TimeSpan.FromSeconds(10);
     private readonly Dictionary<string, int> _unread = new(StringComparer.OrdinalIgnoreCase);
 
-    public GroupChatViewModel(SocialViewModel social, Func<bool> showTimes)
+    public GroupChatViewModel(SocialViewModel social, Func<bool> showTimes, Func<bool> flash)
     {
         _social = social;
         _timesWanted = showTimes;
+        _flashWanted = flash;
         _social.SnapshotApplied += OnSnapshot;
         _social.PropertyChanged += OnSocialChanged;
     }
@@ -80,6 +81,15 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     // the window's on screen and in front, so new lines are read as they land
     public bool WindowActive { get; set; }
+
+    public bool FlashWanted => _flashWanted();
+
+    public void WindowActivated()
+    {
+        WindowActive = true;
+        ShowTimes = _timesWanted();
+        Seen();
+    }
 
     // lines from someone else while the window's hidden or behind, once a batch: the group's name, the last one's
     // sender and text, and how many came

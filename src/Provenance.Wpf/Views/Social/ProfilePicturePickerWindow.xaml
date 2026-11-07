@@ -12,11 +12,13 @@
 
         <Grid Grid.Row="1" ColumnDefinitions="220,*">
             <ListBox x:Name="Categories" Background="{DynamicResource Surface.1}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Border.Pane}"
-                     DisplayMemberPath="Name" SelectionChanged="OnCategoryChanged" Padding="0,8"
+                     ItemsSource="{Binding Categories}" SelectedItem="{Binding Category}"
+                     DisplayMemberPath="Name" Padding="0,8"
                      ItemContainerStyle="{StaticResource NavItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
             <!-- a list so the arrow keys move between pics, and Enter uses the picked one -->
             <ListBox x:Name="Pics" Grid.Column="1" Padding="12" Background="Transparent" BorderThickness="0"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="OnProfilePictureSelected"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ItemsSource="{Binding Tiles}" SelectedItem="{Binding SelectedTile}"
                      MouseDoubleClick="OnProfilePictureDoubleClick" KeyboardNavigation.DirectionalNavigation="Cycle">
                 <ListBox.ItemsPanel>
                     <ItemsPanelTemplate><WrapPanel HorizontalAlignment="Center" /></ItemsPanelTemplate>
@@ -54,11 +56,11 @@
 
         <Border Grid.Row="2" Style="{StaticResource FooterBar}">
             <Grid>
-                <TextBlock x:Name="Chosen" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Text.2}" />
+                <TextBlock x:Name="Chosen" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Text.2}" Text="{Binding Chosen}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Style="{StaticResource RedButton}" Content="CANCEL" Click="OnCancel" />
                     <Button x:Name="UseButton" Style="{StaticResource PolButton}" Content="USE THIS PICTURE" Margin="{StaticResource Footer.Gap}"
-                            IsEnabled="False" Click="OnUse" IsDefault="True" />
+                            IsEnabled="{Binding CanUse}" Click="OnUse" IsDefault="True" />
                 </StackPanel>
             </Grid>
         </Border>

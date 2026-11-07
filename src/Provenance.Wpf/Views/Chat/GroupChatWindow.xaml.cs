@@ -16,24 +16,20 @@ public partial class GroupChatWindow : AppWindow
 {
     private const string DialogTitle = "Group Chat";
     private readonly GroupChatViewModel _vm;
-    private readonly ISettingsService _settings;
     private readonly System.Windows.Threading.DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private bool _quiet;
 
-    public GroupChatWindow(GroupChatViewModel vm, ISettingsService settings)
+    public GroupChatWindow(GroupChatViewModel vm)
     {
         InitializeComponent();
         DataContext = _vm = vm;
-        _settings = settings;
         _vm.Ended += OnEnded;
         _vm.LineArrived += OnLineArrived;
         _tick.Tick += (_, _) => _vm.Tick(DateTime.UtcNow);
         _tick.Start();
         Activated += (_, _) =>
         {
-            _vm.WindowActive = true;
-            _vm.ShowTimes = _settings.Current.GroupChatTimes;
-            _vm.Seen();
+            _vm.WindowActivated();
             TaskbarFlash.StopIfFlashing(this);
         };
         Deactivated += (_, _) => _vm.WindowActive = false;
@@ -61,9 +57,9 @@ public partial class GroupChatWindow : AppWindow
 
     public static GroupChatWindow? Current => Application.Current.Windows.OfType<GroupChatWindow>().FirstOrDefault();
 
-    public static void ShowFor(GroupChatViewModel vm, ISettingsService settings)
+    public static void ShowFor(GroupChatViewModel vm)
     {
-        var w = Current ?? new GroupChatWindow(vm, settings);
+        var w = Current ?? new GroupChatWindow(vm);
         if (!w.IsVisible) w.Show();
         if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
         w.Activate();
@@ -87,7 +83,7 @@ public partial class GroupChatWindow : AppWindow
     // hidden or behind: the taskbar button flashes if that's wanted, the notice is the main window's
     private void OnLineArrived(string group, string who, string text, int count)
     {
-        if (!_settings.Current.GroupChatFlash || !IsVisible || IsActive) return;
+        if (!_vm.FlashWanted || !IsVisible || IsActive) return;
         TaskbarFlash.Start(this);
     }
 

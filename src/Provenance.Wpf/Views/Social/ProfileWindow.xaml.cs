@@ -2,18 +2,18 @@ using System.Windows;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Views.Dialogs;
 using Provenance.Wpf.ViewModels.Social;
-using Provenance.Wpf.ViewModels.Main;
 
 namespace Provenance.Wpf.Views.Social;
 
 public partial class ProfileWindow : AppWindow
 {
+    private readonly SocialViewModel _vm;
     private FriendItem _friend;
 
     public ProfileWindow(SocialViewModel vm, FriendItem friend)
     {
         InitializeComponent();
-        DataContext = vm;
+        DataContext = _vm = vm;
         _friend = friend;
         SetFriend(friend);
         vm.RequestProfile(friend);
@@ -47,7 +47,7 @@ public partial class ProfileWindow : AppWindow
 
     private void OnSendMessage(object sender, RoutedEventArgs e)
     {
-        (Application.Current.MainWindow?.DataContext as MainViewModel)?.OpenChatWith(_friend);
+        _vm.RequestChat(_friend);
         Close();
     }
 

@@ -4,80 +4,41 @@ using System.Windows.Input;
 using Provenance.Common.PolFormat;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
 
 public partial class ProfilePicturePickerWindow : AppWindow
 {
-    private readonly ProfilePictureCatalog.Catalog _catalog;
-    private readonly AvatarService _avatars;
-    private readonly int _current;
-    private ProfilePictureTile? _selected;
-    private bool _syncing;   // showing the pick again isn't a new pick
+    private readonly ProfilePicturePickerViewModel _vm;
 
-    public int? Result { get; private set; }
+    public int? Result => _vm.Result;
 
     public ProfilePicturePickerWindow(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int currentPic)
     {
         InitializeComponent();
-        _catalog = catalog;
-        _avatars = avatars;
-        _current = currentPic;
-        Categories.ItemsSource = catalog.Categories;
-        var current = catalog.ProfilePictures.FirstOrDefault(p => p.Id == currentPic);
-        Categories.SelectedItem = current is null
-            ? catalog.Categories.FirstOrDefault()
-            : catalog.Categories.FirstOrDefault(c => c.Key == current.CategoryKey);
-        Chosen.Text = current is null ? "" : $"Current: {current.Name}";
-    }
-
-    private void OnCategoryChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (Categories.SelectedItem is not ProfilePictureCatalog.Category cat) return;
-        var tiles = _catalog.ProfilePictures.Where(p => p.CategoryKey == cat.Key)
-            .Select(p => new ProfilePictureTile(p, _avatars.ProfilePicture(p.Id))).ToList();
-        foreach (var t in tiles)
-            t.IsSelected = _selected != null ? t.ProfilePicture.Id == _selected.ProfilePicture.Id
-                                             : t.ProfilePicture.Id == _current;
-        if (_selected != null) _selected = tiles.FirstOrDefault(t => t.IsSelected) ?? _selected;
-        _syncing = true;
-        Pics.ItemsSource = tiles;
-        Pics.SelectedItem = tiles.FirstOrDefault(t => t.IsSelected);
-        _syncing = false;
-        // the current pic counts as a pick too, Use keeps it and nothing gets saved
-        if (_selected is null && Pics.SelectedItem is ProfilePictureTile current)
+        _vm = new ProfilePicturePickerViewModel(catalog, avatars.ProfilePicture, currentPic);
+        DataContext = _vm;
+        _vm.PropertyChanged += (_, e) =>
         {
-            _selected = current;
-            UseButton.IsEnabled = true;
-        }
-        // the picked one can be a long way down a big category
-        if (Pics.SelectedItem is { } shown)
-            Dispatcher.BeginInvoke(() => Pics.ScrollIntoView(shown),
-                                   System.Windows.Threading.DispatcherPriority.Loaded);
+            if (e.PropertyName == nameof(ProfilePicturePickerViewModel.Tiles)) ShowPick();
+        };
+        ShowPick();
     }
 
-    private void OnProfilePictureSelected(object sender, SelectionChangedEventArgs e)
+    // the picked one can be a long way down a big category
+    private void ShowPick() => Dispatcher.BeginInvoke(() =>
     {
-        if (_syncing || Pics.SelectedItem is not ProfilePictureTile tile) return;
-        if (_selected != null && !ReferenceEquals(_selected, tile)) _selected.IsSelected = false;
-        _selected = tile;
-        tile.IsSelected = true;
-        Chosen.Text = tile.ProfilePicture.Name;
-        UseButton.IsEnabled = true;
-    }
+        if (_vm.SelectedTile is { } shown) Pics.ScrollIntoView(shown);
+    }, System.Windows.Threading.DispatcherPriority.Loaded);
 
     private void OnProfilePictureDoubleClick(object sender, MouseButtonEventArgs e)
     {
         var row = ItemsControl.ContainerFromElement(Pics, e.OriginalSource as DependencyObject);
-        if (row is ListBoxItem && _selected != null) OnUse(sender, e);
+        if (row is ListBoxItem && _vm.CanUse) OnUse(sender, e);
     }
 
-    // the pic already in use means nothing to save, so nothing goes to POL
-    private void OnUse(object sender, RoutedEventArgs e)
-    {
-        Result = _selected?.ProfilePicture.Id;
-        DialogResult = Result != null && Result != _current;
-    }
+    private void OnUse(object sender, RoutedEventArgs e) => DialogResult = _vm.Use();
 
     private void OnCancel(object sender, RoutedEventArgs e) => Close();
 }

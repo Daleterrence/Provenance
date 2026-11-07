@@ -2,7 +2,7 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Provenance.Common.PolFormat;
 
-namespace Provenance.Wpf.Views.Social;
+namespace Provenance.Wpf.ViewModels.Social;
 
 public sealed partial class ProfilePictureTile(ProfilePictureCatalog.ProfilePicture pic, ImageSource? image)
     : ObservableObject

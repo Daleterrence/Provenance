@@ -84,8 +84,8 @@ public partial class SocialViewModel
                 .ThenBy(m => m.Name, StringComparer.CurrentCultureIgnoreCase)
                 .Select(m => new GroupMemberItem(m.Index, m.Name, m.Key, _avatars.ProfilePicture(m.ProfilePictureId),
                                                  m.Role, RoleText(m.Role), StatusText(m), m.Online, m.Me,
-                                                 m.Me ? m.Comment : Filtered(m.Comment))
-                    { Status = m.Status switch { MemberStatus.Away => PolStatus.Away, MemberStatus.Busy => PolStatus.Busy, _ => PolStatus.Online } })   // mine fills its edit box
+                                                 m.Me ? m.Comment : Filtered(m.Comment))   // mine fills its edit box
+                    { Status = m.Status switch { MemberStatus.Away => PolStatus.Away, MemberStatus.Busy => PolStatus.Busy, _ => PolStatus.Online } })
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
             Groups.Add(new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members)

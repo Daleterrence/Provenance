@@ -34,7 +34,7 @@ public partial class SocialViewModel : ObservableObject
         _sync = new(_sends);
         FriendsView = CollectionViewSource.GetDefaultView(Friends);
         FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
-        GroupChat = new GroupChatViewModel(this, () => _settings.Current.GroupChatTimes);
+        GroupChat = new GroupChatViewModel(this, () => _settings.Current.GroupChatTimes, () => _settings.Current.GroupChatFlash);
         GroupChat.UnreadChanged += () =>
         {
             _groupsSignature = "";
@@ -80,6 +80,7 @@ public partial class SocialViewModel : ObservableObject
     public int? SessionPid => _pol.Pid;
 
     public event Action? ChangeProfilePictureRequested;
+    public event Action<FriendItem>? OpenChatRequested;
     public event Action<string, string>? MessageReceived;
     public event Action<string, string>? NoticeReceived;
     public event Action<string, int>? FriendRequestReceived;
@@ -88,6 +89,8 @@ public partial class SocialViewModel : ObservableObject
     public event Action<PolSocialSnapshot>? SnapshotApplied;
     // the viewer's own popups over the profile window
     public event Action<string>? ProfilePopup;
+
+    public void RequestChat(FriendItem friend) => OpenChatRequested?.Invoke(friend);
 
     [RelayCommand]
     private void ChangeProfilePicture()

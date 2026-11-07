@@ -92,6 +92,7 @@ public partial class MainViewModel : ObservableObject
         });
         Social = new SocialViewModel(_pol, avatars, _settings);
         Social.ChangeProfilePictureRequested += OpenProfilePicturePicker;
+        Social.OpenChatRequested += OpenChatWith;
         Social.LayoutRequested += OnSocialLayout;
 
         Profiles = new ObservableCollection<Account>(_settings.Current.Profiles);
@@ -377,7 +378,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (MultiRunning || Social.Last.GroupList.FirstOrDefault(x => x.Id == g.Id) is not { } group) return;
         Window? Owner() => Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current?.MainWindow;
-        var show = ShowGroupChat ?? (() => GroupChatWindow.ShowFor(Social.GroupChat, _settings));
+        var show = ShowGroupChat ?? (() => GroupChatWindow.ShowFor(Social.GroupChat));
         var tell = TellGroupChat ?? (text => MessageDialog.ShowInfo(Owner(), "Group Chat", text));
         if (Social.GroupChat.Open && string.Equals(Social.GroupChat.GroupId, group.Id, StringComparison.OrdinalIgnoreCase))
         {
@@ -914,7 +915,7 @@ public partial class MainViewModel : ObservableObject
         if (!NoticeOpens) return;
         if (_noticeGroupChat)
         {
-            if (Social.GroupChat.Open) GroupChatWindow.ShowFor(Social.GroupChat, _settings);
+            if (Social.GroupChat.Open) GroupChatWindow.ShowFor(Social.GroupChat);
             return;
         }
         if (_lastSender is { } who && Social.Friends.FirstOrDefault(f => f.Name == who) is { } f) OpenChatWith(f);
