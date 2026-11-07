@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
@@ -12,10 +13,10 @@ public sealed class NamedObjectSecurity : IDisposable
 
     internal SecurityAttributes Attributes { get; }
 
-    private NamedObjectSecurity(string sddl)
+    private NamedObjectSecurity(string sddl, Func<int, Exception> failed)
     {
         if (!Advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out _descriptor, IntPtr.Zero))
-            throw new InvalidOperationException($"Security for a named object couldn't be made (error {Marshal.GetLastPInvokeError()}).");
+            throw failed(Marshal.GetLastPInvokeError());
         Attributes = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = _descriptor };
     }
 
@@ -31,14 +32,15 @@ public sealed class NamedObjectSecurity : IDisposable
     public static NamedObjectSecurity ForCloseRequest()
     {
         using var me = WindowsIdentity.GetCurrent();
-        return new NamedObjectSecurity(CloseRequestSddl(me.User!.Value));
+        return new NamedObjectSecurity(CloseRequestSddl(me.User!.Value), error => new Win32Exception(error));
     }
 
     public static NamedObjectSecurity ForHandover()
     {
         using var me = WindowsIdentity.GetCurrent();
         bool elevated = new WindowsPrincipal(me).IsInRole(WindowsBuiltInRole.Administrator);
-        return new NamedObjectSecurity(HandoverSddl(elevated, me.User!.Value));
+        return new NamedObjectSecurity(HandoverSddl(elevated, me.User!.Value),
+            error => new InvalidOperationException($"Windower's handover security couldn't be made (error {error})."));
     }
 
     // the handle is invalid when it couldn't be made, and error 183 means it was there already

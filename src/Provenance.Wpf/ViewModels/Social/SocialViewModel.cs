@@ -1227,8 +1227,7 @@ public partial class SocialViewModel : ObservableObject
         _requestedAt = DateTime.UtcNow;
         StatusPending = true;
         StatusNote = "";
-        _settings.Current.PlayOnlineStatus = PolStatusText.Code(want);
-        _settings.Save(_settings.Current);
+        _settings.SaveChange(s => s.PlayOnlineStatus = PolStatusText.Code(want));
         if (_pol.Pid is { } pid) SocialRequests.SetStatus(pid, want);
     }
 }

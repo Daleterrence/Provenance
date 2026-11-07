@@ -176,14 +176,16 @@ public partial class SettingsViewModel
     private void SaveThirdPartyHook()
     {
         if (_loadingThirdPartyHook) return;
-        var s = _settings.Current;
-        s.ThirdPartyHookPlatform = Hook;
-        s.AshitaPath = AshitaPath;
-        s.WindowerPath = WindowerPath;
-        // nothing shown (no folder yet) keeps what was picked before
-        if (AshitaBootConfig is { } a) s.AshitaBootConfig = a.Name;
-        if (WindowerProfile is { } w) s.WindowerProfile = w.Name;
-        _settings.Save(s);
+        var (hook, ashita, windower, boot, profile) = (Hook, AshitaPath, WindowerPath, AshitaBootConfig?.Name, WindowerProfile?.Name);
+        _settings.SaveChange(s =>
+        {
+            s.ThirdPartyHookPlatform = hook;
+            s.AshitaPath = ashita;
+            s.WindowerPath = windower;
+            // nothing shown (no folder yet) keeps what was picked before
+            if (boot is not null) s.AshitaBootConfig = boot;
+            if (profile is not null) s.WindowerProfile = profile;
+        });
         UpdateThirdPartyHookStatus();
         SyncGame();
     }

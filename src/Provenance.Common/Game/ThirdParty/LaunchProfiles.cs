@@ -21,14 +21,15 @@ public static class LaunchProfiles
     // account to whatever the Windower/Ashita page says
     internal static void Repoint(ISettingsService settings, ThirdPartyHook platform, string old, string? replacement)
     {
-        var s = settings.Current;
-        if (platform == ThirdPartyHook.Windower)
+        settings.SaveChange(s =>
         {
-            if (Same(s.WindowerProfile, old)) s.WindowerProfile = replacement ?? "";
-        }
-        else if (Same(s.AshitaBootConfig, old)) s.AshitaBootConfig = replacement ?? "";
-        if (s.ThirdPartyHookPlatform == platform)
-            foreach (var e in s.MultiAccounts.Where(e => Same(e.ThirdPartyHookProfile, old))) e.ThirdPartyHookProfile = replacement;
-        settings.Save(s);
+            if (platform == ThirdPartyHook.Windower)
+            {
+                if (Same(s.WindowerProfile, old)) s.WindowerProfile = replacement ?? "";
+            }
+            else if (Same(s.AshitaBootConfig, old)) s.AshitaBootConfig = replacement ?? "";
+            if (s.ThirdPartyHookPlatform == platform)
+                foreach (var e in s.MultiAccounts.Where(e => Same(e.ThirdPartyHookProfile, old))) e.ThirdPartyHookProfile = replacement;
+        });
     }
 }

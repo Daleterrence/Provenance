@@ -107,12 +107,6 @@ public partial class SettingsViewModel : ObservableObject
     public IReadOnlyList<string> AutoDisconnectChoices { get; } =
         PolOptions.AutoDisconnectChoices.Select(m => m < 0 ? "Off" : $"{m} minutes").ToList();
 
-    private void Save(Action<LauncherSettings> change)
-    {
-        change(_settings.Current);
-        _settings.Save(_settings.Current);
-    }
-
     [ObservableProperty] private bool _exitAfterGameExits;
     [ObservableProperty] private bool _keepSignedInInTray;
     [ObservableProperty] private bool _minimizeToTray;
@@ -122,19 +116,19 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _groupChatTimes;
     [ObservableProperty] private int _feedRegionIndex;
 
-    partial void OnExitAfterGameExitsChanged(bool value) => Save(s => s.ExitAfterGameExits = value);
-    partial void OnKeepSignedInInTrayChanged(bool value) => Save(s => s.KeepSignedInInTray = value);
-    partial void OnMinimizeToTrayChanged(bool value) => Save(s => s.MinimizeToTray = value);
-    partial void OnNotifyFriendsOnlineChanged(bool value) => Save(s => s.NotifyFriendsOnline = value);
-    partial void OnGroupChatNoticeChanged(bool value) => Save(s => s.GroupChatNotice = value);
-    partial void OnGroupChatFlashChanged(bool value) => Save(s => s.GroupChatFlash = value);
-    partial void OnGroupChatTimesChanged(bool value) => Save(s => s.GroupChatTimes = value);
+    partial void OnExitAfterGameExitsChanged(bool value) => _settings.SaveChange(s => s.ExitAfterGameExits = value);
+    partial void OnKeepSignedInInTrayChanged(bool value) => _settings.SaveChange(s => s.KeepSignedInInTray = value);
+    partial void OnMinimizeToTrayChanged(bool value) => _settings.SaveChange(s => s.MinimizeToTray = value);
+    partial void OnNotifyFriendsOnlineChanged(bool value) => _settings.SaveChange(s => s.NotifyFriendsOnline = value);
+    partial void OnGroupChatNoticeChanged(bool value) => _settings.SaveChange(s => s.GroupChatNotice = value);
+    partial void OnGroupChatFlashChanged(bool value) => _settings.SaveChange(s => s.GroupChatFlash = value);
+    partial void OnGroupChatTimesChanged(bool value) => _settings.SaveChange(s => s.GroupChatTimes = value);
 
     [ObservableProperty] private bool _chatLanguageFilter;
     [ObservableProperty] private int _autoDisconnectIndex;
 
     // either one set here pins the other at what's on screen, since both get written from then on
-    partial void OnChatLanguageFilterChanged(bool value) => Save(s =>
+    partial void OnChatLanguageFilterChanged(bool value) => _settings.SaveChange(s =>
     {
         s.ChatLanguageFilter = value;
         s.AutoDisconnectMinutes ??= PolOptions.AutoDisconnect(s);
@@ -143,7 +137,7 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnAutoDisconnectIndexChanged(int value)
     {
         if (value < 0 || value >= PolOptions.AutoDisconnectChoices.Length) return;
-        Save(s =>
+        _settings.SaveChange(s =>
         {
             s.AutoDisconnectMinutes = PolOptions.AutoDisconnectChoices[value];
             s.ChatLanguageFilter ??= PolOptions.ChatFilter(s);
@@ -155,14 +149,14 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnThemeIndexChanged(int value)
     {
         if (value < 0 || value >= AppTheme.Names.Length) return;
-        Save(s => s.Theme = AppTheme.Names[value]);
+        _settings.SaveChange(s => s.Theme = AppTheme.Names[value]);
         AppTheme.Apply(AppTheme.Names[value]);
     }
 
     partial void OnFeedRegionIndexChanged(int value)
     {
         if (value < 0 || value >= FeedRegionCodes.Length) return;
-        Save(s => s.FeedRegion = FeedRegionCodes[value]);
+        _settings.SaveChange(s => s.FeedRegion = FeedRegionCodes[value]);
         _feeds?.NotifyRegionSettingChanged();
     }
 
@@ -217,7 +211,7 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnLargeAddressAwareOnChanged(bool value)
     {
         if (_largeAddressAwareForTest) return;
-        Save(s =>
+        _settings.SaveChange(s =>
         {
             s.LargeAddressAware = value;
             s.LargeAddressAwareClearAtStart = false;
@@ -239,7 +233,7 @@ public partial class SettingsViewModel : ObservableObject
             outcome = LargeAddressAwareSwitch.Outcome.NextStart;
         }
         // an on gets applied at every start anyway, an off only once (a refused one too, Windows may allow it later)
-        if (outcome != LargeAddressAwareSwitch.Outcome.Done && !on) Save(s => s.LargeAddressAwareClearAtStart = true);
+        if (outcome != LargeAddressAwareSwitch.Outcome.Done && !on) _settings.SaveChange(s => s.LargeAddressAwareClearAtStart = true);
         var after = await ReadLargeAddressAware();
         LargeAddressAwareBusy = false;
         LargeAddressAwareAvailable = after.Available;
@@ -271,7 +265,7 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnMultiContinueOnErrorChanged(bool value) => SaveUnlessLoading(s => s.MultiContinueOnError = value);
     partial void OnMultiCloseWhenFinishedChanged(bool value) =>
         SaveUnlessLoading(s => s.MultiCloseWhenFinished = value);
-    private void SaveUnlessLoading(Action<LauncherSettings> change) { if (!_loadingMulti) Save(change); }
+    private void SaveUnlessLoading(Action<LauncherSettings> change) { if (!_loadingMulti) _settings.SaveChange(change); }
 
     public void MultiRunChanged()
     {
@@ -363,8 +357,10 @@ public partial class SettingsViewModel : ObservableObject
     {
         var withProfile = _settings.Current.MultiAccounts.Where(e => e.ThirdPartyHookProfile is not null).ToList();
         if (withProfile.Count == 0) return;
-        foreach (var e in withProfile) e.ThirdPartyHookProfile = null;
-        _settings.Save(_settings.Current);
+        _settings.SaveChange(s =>
+        {
+            foreach (var e in s.MultiAccounts.Where(e => e.ThirdPartyHookProfile is not null)) e.ThirdPartyHookProfile = null;
+        });
     }
 
     private void SaveMulti()

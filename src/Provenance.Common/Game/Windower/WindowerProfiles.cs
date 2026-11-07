@@ -37,6 +37,7 @@ public sealed class WindowerProfiles(ISettingsService settings, string dir, Wind
         string renamed = "";
         WindowerSettingsFile.Update(dir, settings.Current.WindowerAddonLists, (f, l) => renamed = f.Rename(name, newName, l).Name);
         LaunchProfiles.Repoint(settings, ThirdPartyHook.Windower, name, renamed);
+        settings.Save(settings.Current);
         return renamed;
     }
 
@@ -44,5 +45,6 @@ public sealed class WindowerProfiles(ISettingsService settings, string dir, Wind
     {
         WindowerSettingsFile.Update(dir, settings.Current.WindowerAddonLists, (f, l) => f.Delete(name, l));
         LaunchProfiles.Repoint(settings, ThirdPartyHook.Windower, name, null);
+        settings.Save(settings.Current);
     }
 }

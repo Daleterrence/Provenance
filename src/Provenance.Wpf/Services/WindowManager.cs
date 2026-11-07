@@ -116,8 +116,7 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         Rect? area = open.Count == 0 ? null
             : open.Select(w => w.WindowState == WindowState.Normal ? new Rect(w.Left, w.Top, w.ActualWidth, w.ActualHeight) : w.RestoreBounds)
                   .Aggregate(Rect.Union);
-        settings.Current.SocialSplit = split;
-        settings.Save(settings.Current);
+        settings.SaveChange(s => s.SocialSplit = split);
         foreach (var w in SocialWindows()) w.Close();
         if (split)
         {

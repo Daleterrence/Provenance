@@ -18,7 +18,16 @@ public sealed class SettingsService : ISettingsService
     // this copy's settings as it last read or saved them, which is what tells its own changes from another copy's
     private JsonObject _known;
 
+    // the app's UI thread, where its settings change. Null with no app, like the tests
+    private readonly SynchronizationContext? _owner;
+
     public LauncherSettings Current { get; private set; }
+
+    public void OnOwnerThread(Action run)
+    {
+        if (_owner is null || SynchronizationContext.Current == _owner) run();
+        else _owner.Post(_ => run(), null);
+    }
 
     public event Action<string>? SaveFailed;
 
@@ -32,10 +41,13 @@ public sealed class SettingsService : ISettingsService
     public static string DefaultPath =>
         Path.Combine(AppPaths.UserData ?? "Provenance", "settings.json");
 
-    public SettingsService() : this(DefaultPath) { }
+    public SettingsService() : this(DefaultPath, null) { }
 
-    internal SettingsService(string path)
+    internal SettingsService(string path) : this(path, null) { }
+
+    public SettingsService(string path, SynchronizationContext? owner)
     {
+        _owner = owner;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         _path = path;
         Current = Load();
@@ -88,6 +100,8 @@ public sealed class SettingsService : ISettingsService
             change(known);
             _known = Node(known);
         }
+        // the next save replaces a file that didn't load, as Save does
+        else if (LoadProblem is not null) Write(Current);
         else Log.Warning("settings.json couldn't be read again, so a change is only kept until Provenance closes");
     }
 

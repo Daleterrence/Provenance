@@ -28,7 +28,7 @@ public partial class SettingsViewModel
 
     private const string RestoreTitle = "Restore game settings", RestoreFailedTitle = "Couldn't restore the backup";
 
-    partial void OnBackupGameSettingsChanged(bool value) => Save(s => s.BackupGameSettings = value);
+    partial void OnBackupGameSettingsChanged(bool value) => _settings.SaveChange(s => s.BackupGameSettings = value);
 
     // an empty box is the default folder
     partial void OnBackupFolderChanged(string value)
@@ -40,7 +40,7 @@ public partial class SettingsViewModel
             return;
         }
         BackupStatus.Clear();
-        Save(s => s.BackupFolder = folder);
+        _settings.SaveChange(s => s.BackupFolder = folder);
     }
 
     [RelayCommand]

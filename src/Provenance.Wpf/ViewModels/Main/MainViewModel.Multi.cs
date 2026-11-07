@@ -161,11 +161,14 @@ public partial class MainViewModel : IMultiRunHost
     {
         Log.Information("Multi-account mode: {Account} failed ({Kind}): {Text}", account.ProfileId, failure.Kind, failure.Text);
         if (failure.Kind is not (AccountFailureKind.Credential or AccountFailureKind.AccountBlocked)) return;
-        if (_settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == account.ProfileId) is not { } entry) return;
-        entry.Enabled = false;
-        entry.Problem = failure.Text;
-        if (failure.Kind == AccountFailureKind.Credential) entry.CredentialsRefused = true;
-        _settings.Save(_settings.Current);
+        if (!_settings.Current.MultiAccounts.Any(e => e.ProfileId == account.ProfileId)) return;
+        _settings.SaveChange(s =>
+        {
+            if (s.MultiAccounts.FirstOrDefault(e => e.ProfileId == account.ProfileId) is not { } e) return;
+            e.Enabled = false;
+            e.Problem = failure.Text;
+            if (failure.Kind == AccountFailureKind.Credential) e.CredentialsRefused = true;
+        });
         RefreshMultiAccounts();
         _openSettings?.MultiRunChanged();
     }

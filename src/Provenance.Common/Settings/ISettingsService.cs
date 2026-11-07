@@ -25,6 +25,10 @@ public interface ISettingsService
         if (JsonSerializer.Serialize(Current) != before) Save(Current);
     }
 
+    // settings only ever change on the thread that made the service, so a worker hands its change over with this. With
+    // no such thread, as here, it just runs
+    void OnOwnerThread(Action run) => run();
+
     // only the first failed save of a run raises it, so a full disk doesn't pop a dialog on every change
     event Action<string>? SaveFailed;
 

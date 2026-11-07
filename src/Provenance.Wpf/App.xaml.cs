@@ -73,18 +73,16 @@ public partial class App : Application
         int swept = HookFiles.Sweep(HookFiles.RequiredDir, ProcessStamp.PidRunning, TimeSpan.FromDays(7), DateTime.UtcNow);
         if (swept > 0) Log.Information("Removed {Count} old hook file(s)", swept);
 
-        LargeAddressAwareSwitch.OnUiThread = run =>
-        {
-            if (Current?.Dispatcher is { } ui && !ui.CheckAccess()) ui.InvokeAsync(run);
-            else run();
-        };
+        // taken here on the UI thread, since the settings are built lazily on whichever thread asks first
+        var uiThread = SynchronizationContext.Current;
+        if (uiThread is null) Log.Warning("The settings were built with no UI thread to hand changes to");
         _host = Host.CreateDefaultBuilder()
             .UseSerilog()
             .ConfigureServices((_, services) =>
             {
                 // a factory, so DI never picks one of the other constructors
                 services.AddSingleton<ICredentialService>(_ => new CredentialService());
-                services.AddSingleton<ISettingsService, SettingsService>();
+                services.AddSingleton<ISettingsService>(_ => new SettingsService(SettingsService.DefaultPath, uiThread));
                 services.AddSingleton<FeedService>();
                 services.AddSingleton<PolSession>();
                 services.AddSingleton<AvatarService>();

@@ -29,9 +29,6 @@ public static class LargeAddressAwareSwitch
     private static readonly TimeSpan LockWait = TimeSpan.FromMilliseconds(500);
     private static volatile bool _lastWriteDenied;
 
-    // the app hands in its hop onto the UI thread, with no app it just runs
-    public static Action<Action> OnUiThread { get; set; } = run => run();
-
     public static Target For(PolRegion? region, Func<string?>? blocked = null) =>
         new(region is { } r ? PolPaths.TryGetInstallFolder(r, GameProduct.Viewer) : null,
             PolUpdates.ViewerRunning, blocked ?? (() => null), Busy);
@@ -83,7 +80,7 @@ public static class LargeAddressAwareSwitch
             // again under the lock, a login starting now would want my waiting pol.exe
             if (gate is null || t.Blocked() is not null) return Outcome.NextStart;
             if (LargeAddressAware.Read(polExe) == on) return Outcome.Done;
-            var result = WithPrestartsHeld(t, holdPrestarts, releasePrestarts, path => Remember(LargeAddressAware.Set(path, on)));
+            var result = TryWrite(t, on, holdPrestarts, releasePrestarts, retryInUse: false);
             Log.Information("Large Address Aware {Done} {State} in pol.exe: {Result}", result == LargeAddressAware.Result.Done ? "turned" : "not turned",
                             on ? "on" : "off", result?.ToString() ?? "a pol.exe was running");
             return result switch
@@ -130,7 +127,7 @@ public static class LargeAddressAwareSwitch
                 return;
             }
             if (t.Blocked() is { } blocked) { Log.Information("Large Address Aware not applied {When}: {Reason}", when, blocked); return; }
-            var result = WithPrestartsHeld(t, holdPrestarts, releasePrestarts, path => Remember(Write(path, on)));
+            var result = TryWrite(t, on, holdPrestarts, releasePrestarts, retryInUse: true);
             if (result is LargeAddressAware.Result.UnknownBuild or LargeAddressAware.Result.NotPe)
                 Log.Information("Large Address Aware not applied {When}: pol.exe is a build Provenance doesn't know, so it was left alone", when);
             else
@@ -142,26 +139,8 @@ public static class LargeAddressAwareSwitch
         catch (Exception e) { Log.Warning(e, "Large Address Aware not applied {When}", when); }
     }
 
-    // a fresh pol.exe from an update tends to get a look from the AV straight away
-    private static LargeAddressAware.Result Write(string polExe, bool on)
-    {
-        var result = LargeAddressAware.Set(polExe, on);
-        for (int i = 0; i < 4 && result == LargeAddressAware.Result.InUse; i++)
-        {
-            Thread.Sleep(100);
-            result = LargeAddressAware.Set(polExe, on);
-        }
-        return result;
-    }
-
-    private static LargeAddressAware.Result Remember(LargeAddressAware.Result result)
-    {
-        if (result == LargeAddressAware.Result.Denied) _lastWriteDenied = true;
-        else if (result == LargeAddressAware.Result.Done) _lastWriteDenied = false;
-        return result;
-    }
-
-    private static LargeAddressAware.Result? WithPrestartsHeld(Target t, Action? hold, Action? release, Func<string, LargeAddressAware.Result> write)
+    // a fresh pol.exe from an update tends to get a look from the AV straight away, so a start retries while it's in use
+    private static LargeAddressAware.Result? TryWrite(Target t, bool on, Action? hold, Action? release, bool retryInUse)
     {
         bool held = false;
         try
@@ -172,7 +151,17 @@ public static class LargeAddressAwareSwitch
                 hold();
                 for (int i = 0; i < 10 && t.PolRunning(); i++) Thread.Sleep(300);
             }
-            return t.PolRunning() ? null : write(Path.Combine(t.ViewerDir!, GameProduct.Viewer.KeyFile));
+            if (t.PolRunning()) return null;
+            var polExe = Path.Combine(t.ViewerDir!, GameProduct.Viewer.KeyFile);
+            var result = LargeAddressAware.Set(polExe, on);
+            for (int i = 0; retryInUse && i < 4 && result == LargeAddressAware.Result.InUse; i++)
+            {
+                Thread.Sleep(100);
+                result = LargeAddressAware.Set(polExe, on);
+            }
+            if (result == LargeAddressAware.Result.Denied) _lastWriteDenied = true;
+            else if (result == LargeAddressAware.Result.Done) _lastWriteDenied = false;
+            return result;
         }
         finally
         {
@@ -184,16 +173,12 @@ public static class LargeAddressAwareSwitch
         }
     }
 
-    // settings only ever change on the UI thread, and a start runs on a worker
+    // a start runs on a worker, and settings only change on the thread that owns them
     private static void ClearDone(ISettingsService settings)
     {
-        void Save()
+        settings.OnOwnerThread(() => settings.SaveChange(s =>
         {
-            var s = settings.Current;
-            if (s.LargeAddressAware || !s.LargeAddressAwareClearAtStart) return;
-            s.LargeAddressAwareClearAtStart = false;
-            settings.Save(s);
-        }
-        OnUiThread(Save);
+            if (!s.LargeAddressAware && s.LargeAddressAwareClearAtStart) s.LargeAddressAwareClearAtStart = false;
+        }));
     }
 }

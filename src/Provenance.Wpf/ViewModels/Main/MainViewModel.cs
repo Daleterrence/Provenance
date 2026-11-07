@@ -288,13 +288,7 @@ public partial class MainViewModel : ObservableObject
     private void RefreshLargeAddressAware() => _ = _openSettings?.ReadLargeAddressAwareAsync();
     public bool TrayTipShown => _settings.Current.TrayTipShown;
 
-    public void MarkTrayTipShown() => SaveSetting(s => s.TrayTipShown = true);
-
-    private void SaveSetting(Action<LauncherSettings> change)
-    {
-        change(_settings.Current);
-        _settings.Save(_settings.Current);
-    }
+    public void MarkTrayTipShown() => _settings.SaveChange(s => s.TrayTipShown = true);
 
     private void Alert(string? sender, string text, string icon = "mail", bool stays = false, int request = 0)
     {
@@ -442,7 +436,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedProfileChanged(Account? value)
     {
         if (value == null) return;
-        SaveSetting(s => s.ActiveProfileId = value.Id);
+        _settings.SaveChange(s => s.ActiveProfileId = value.Id);
         LoadCredentialsForProfile(value);
     }
 
@@ -465,11 +459,10 @@ public partial class MainViewModel : ObservableObject
     private void PersistProfileList(bool slots = false)
     {
         using var gate = slots ? _settings.HoldLock() : null;
-        SaveSetting(s =>
-        {
-            s.Profiles = Profiles.ToList();
-            if (slots) HomeSlots.Assign(s, _settings.ReadSaved());
-        });
+        var s = _settings.Current;
+        s.Profiles = Profiles.ToList();
+        if (slots) HomeSlots.Assign(s, _settings.ReadSaved());
+        _settings.Save(s);
     }
 
     internal Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount squareEnix, string otp,
@@ -576,10 +569,14 @@ public partial class MainViewModel : ObservableObject
         // without a change that can cure the refusal the refused details are still what'd be sent, so the block stays
         if (blocked is not null && cures)
         {
-            blocked.CredentialsRefused = false;
-            blocked.Problem = null;
-            blocked.Enabled = true;
-            _settings.Save(_settings.Current);
+            var id = blocked.ProfileId;
+            _settings.SaveChange(s =>
+            {
+                if (s.MultiAccounts.FirstOrDefault(e => e.ProfileId == id) is not { } e) return;
+                e.CredentialsRefused = false;
+                e.Problem = null;
+                e.Enabled = true;
+            });
         }
         else if (blocked is not null)
             _dialogs.Info("Edit account", NothingChangedText);
@@ -618,11 +615,11 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private bool _autoLogin;
 
-    partial void OnAutoLoginChanged(bool value) => SaveSetting(s => s.AutoLogin = value);
+    partial void OnAutoLoginChanged(bool value) => _settings.SaveChange(s => s.AutoLogin = value);
 
     [ObservableProperty] private bool _startGameImmediately;
 
-    partial void OnStartGameImmediatelyChanged(bool value) => SaveSetting(s => s.StartGameImmediately = value);
+    partial void OnStartGameImmediatelyChanged(bool value) => _settings.SaveChange(s => s.StartGameImmediately = value);
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LogInCommand), nameof(StartAllAccountsCommand), nameof(RepairGameFilesCommand))]
@@ -846,7 +843,7 @@ public partial class MainViewModel : ObservableObject
         vm.Installed += () => Application.Current.Dispatcher.Invoke(() =>
         {
             _settings.RedetectRegion();
-            SaveSetting(PolOptions.NewInstall);
+            _settings.SaveChange(PolOptions.NewInstall);
             RefreshInstallState();
             Task.Run(() => LargeAddressAwareSwitch.Apply(_settings, "after the install", _pol.HoldPrestarts, _pol.ReleasePrestarts,
                                                           LargeAddressAwareBlocked));
@@ -1088,7 +1085,7 @@ public partial class MainViewModel : ObservableObject
             ShowNotice("You're not logged in, because you didn't accept the PlayOnline Member Agreement.", "InformationOutline", opens: false);
             return false;
         }
-        SaveSetting(s => s.AcceptedMemberAgreement = true);
+        _settings.SaveChange(s => s.AcceptedMemberAgreement = true);
         return true;
     }
 
@@ -1454,11 +1451,13 @@ public partial class MainViewModel : ObservableObject
 
     public void PickPlayChoice(string name)
     {
-        var s = _settings.Current;
-        if (_pol.Platform == ThirdPartyHook.Ashita) s.AshitaBootConfig = name;
-        else if (_pol.Platform == ThirdPartyHook.Windower) s.WindowerProfile = name;
-        else return;
-        _settings.Save(s);
+        var platform = _pol.Platform;
+        if (platform is not (ThirdPartyHook.Ashita or ThirdPartyHook.Windower)) return;
+        _settings.SaveChange(s =>
+        {
+            if (platform == ThirdPartyHook.Ashita) s.AshitaBootConfig = name;
+            else s.WindowerProfile = name;
+        });
     }
 
     // the Repair button's own checks, in its order. The lock comes from the switch's copy of its probe
