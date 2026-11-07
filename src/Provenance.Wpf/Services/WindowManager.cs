@@ -156,7 +156,7 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
             open.Activate();
             return;
         }
-        new ProfileWindow(social, friend) { Owner = WindowOwner.Find() }.Show();
+        new ProfileWindow(social, dialogs, friend) { Owner = WindowOwner.Find() }.Show();
     }
 
     // never parented to the friends window, so closing that can't take unsaved changes down with it

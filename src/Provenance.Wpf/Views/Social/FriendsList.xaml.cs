@@ -91,18 +91,7 @@ public partial class FriendsList : UserControl
             FriendActivated?.Invoke(f);
             return;
         }
-        if (Vm is not { CanEdit: true } vm) return;
-        if (f.IsGroupInvite)
-        {
-            if (vm.Dialogs.Choose("Group invitation from " + f.Name, f.Comment, "ANSWER",
-                                  "Accept: join the group", "Decline") is { } answer)
-                vm.AnswerGroupInvite(f, answer == 0);
-            return;
-        }
-        if (vm.Dialogs.Choose("Friend request from " + f.Name,
-                $"{f.Name} would like to be your friend on PlayOnline.", "ANSWER",
-                "Accept: add " + f.Name + " to your friend list", "Decline", ConfirmStyle.Destructive) is { } pick)
-            vm.AnswerRequest(f, pick == 0 ? RequestAnswer.Accept : RequestAnswer.Decline);
+        Vm?.AnswerRow(f);
     }
 
     private void OnContextMenuOpening(object sender, ContextMenuEventArgs e)
@@ -118,13 +107,13 @@ public partial class FriendsList : UserControl
 
     public void FillMenu(ContextMenu menu, FriendItem f)
     {
-        if (Vm is { } vm) Menus.Fill(menu, vm.FriendMenu(f, Host(vm)));
+        if (Vm is { } vm) Menus.Fill(menu, vm.FriendMenu(f, OpenConversation));
     }
 
-    internal ISocialMenuHost Host(SocialViewModel vm) => new SocialMenuDialogs(vm, f => FriendActivated?.Invoke(f));
+    internal void OpenConversation(FriendItem f) => FriendActivated?.Invoke(f);
 
     private void OnAddFriend(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => vm.Windows.AddFriend(vm));
+        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => vm.AddFriend());
     }
 }

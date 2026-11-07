@@ -21,25 +21,17 @@ public static class SocialSnapshotFiles
                 Str(f, "comment"), PolStatusText.Parse(Str(f, "status")), Bool(f, "online"), Bool(f, "pending"),
                 Int(f, "row", -1), Int(f, "pic", -1), Str(f, "key")) { IsMe = Bool(f, "me"), Game = ReadGame(Obj(f, "game")) });
             var messages = Arr(root, "messages", ReadMessage);
-            var (sendToken, sendState) = Job(root, "send");
-            var (editToken, editState) = Job(root, "edit");
-            var (picToken, picState) = Job(root, "pic");
-            var (searchToken, searchState) = Job(root, "search");
             var search = Obj(root, "search");
             var searched = search.ValueKind == JsonValueKind.Object;
-            var (profileToken, profileState) = Job(root, "profile");
-            var (groupToken, groupState) = Job(root, "group");
-            var (meToken, meState) = Job(root, "me");
-            var (xiToken, xiState) = Job(root, "xi");
+            var profileJob = Job(root, "profile");
             var xi = Obj(root, "xi");
-            var (charToken, charState) = Job(root, "character");
-            var (ffxiToken, ffxiState) = Job(root, "ffxiprofile");
-            var (handleToken, handleState) = Job(root, "handleJob");
+            var ffxiJob = Job(root, "ffxiprofile");
             return new PolSocialSnapshot(PolStatusText.Parse(Str(root, "myStatus")),
                                          Str(root, "myHandle"), Int(root, "myPic", -1), friends, messages,
                                          Str(root, "ffxiService"), (int)Long(root, "notice"),
-                                         sendToken, sendState, Str(root, "presence"))
+                                         Str(root, "presence"))
             {
+                SendJob = Job(root, "send"),
                 FriendsLoaded = Bool(root, "friendsLoaded"),
                 Mail = Str(root, "mail"),
                 StatusBusy = Bool(root, "statusBusy"),
@@ -49,49 +41,39 @@ public static class SocialSnapshotFiles
                     Long(s, "seq"), Int(s, "fromSlot", -1), Bool(s, "toOther"))),
                 SendQueue = Arr(root, "queue", q => new PolQueuedSend(Str(q, "token"), Str(q, "state"))),
                 Returned = Arr(root, "returned", r => new PolReturnedSend(Long(r, "time"), Long(r, "seq"), Int(r, "fromSlot", -1))),
-                EditToken = editToken,
-                EditState = editState,
+                EditJob = Job(root, "edit"),
                 MyComment = Str(root, "myComment").Trim(),
                 MyKey = Str(root, "myKey"),
                 Blocked = Arr(root, "blocked", x =>
                     new PolBlocked((int)Long(x, "index"), Str(x, "name"), Str(x, "key"), Bool(x, "allHandles"))),
-                ProfilePictureToken = picToken,
-                ProfilePictureState = picState,
-                SearchToken = searchToken,
-                SearchState = searchState,
+                PictureJob = Job(root, "pic"),
+                SearchJob = Job(root, "search"),
                 SearchResults = Arr(search, "results", h => new PolSearchHit((int)Long(h, "index"),
                     Str(h, "name"), (int)Long(h, "pic"), Str(h, "key"), Bool(h, "friend"))
                     { IsMe = Bool(h, "me"), Handle = Str(h, "handle"), World = Str(h, "world") }),
                 SearchKind = searched ? FriendSearch.FromWire(Str(search, "kind")) : FriendSearchKind.Handle,
                 SearchTotal = searched ? Int(search, "total", 0) : 0,
                 SearchTooMany = searched && Bool(search, "tooMany"),
-                ProfileToken = profileToken,
-                ProfileState = profileState,
-                Profile = profileState == "done" ? ReadProfile(Obj(root, "profile")) : null,
+                ProfileJob = profileJob,
+                Profile = profileJob.State == "done" ? ReadProfile(Obj(root, "profile")) : null,
                 GroupList = Arr(root, "groupList", ReadGroup),
-                GroupToken = groupToken,
-                GroupState = groupState,
-                MeToken = meToken,
-                MeState = meState,
-                XiToken = xiToken,
-                XiState = xiState,
+                GroupJob = Job(root, "group"),
+                MeJob = Job(root, "me"),
+                XiJob = Job(root, "xi"),
                 XiKey = xi.ValueKind == JsonValueKind.Object ? Str(xi, "key") : "",
                 XiLevel = xi.ValueKind == JsonValueKind.Object ? (PrivacyLevel)Int(xi, "level", 0) : PrivacyLevel.Keep,
                 XiName = xi.ValueKind == JsonValueKind.Object ? Str(xi, "name") : "",
                 XiWorldName = xi.ValueKind == JsonValueKind.Object ? Str(xi, "worldName") : "",
-                CharacterToken = charToken,
-                CharacterState = charState,
+                CharacterJob = Job(root, "character"),
                 Character = ReadCharacter(Obj(root, "character")),
-                FfxiProfileToken = ffxiToken,
-                FfxiProfileState = ffxiState,
-                FfxiProfile = ffxiState == "done" ? ReadFfxiProfile(Obj(root, "ffxiprofile")) : null,
+                FfxiProfileJob = ffxiJob,
+                FfxiProfile = ffxiJob.State == "done" ? ReadFfxiProfile(Obj(root, "ffxiprofile")) : null,
                 Handles = Arr(root, "handles", h => new PolHandle(Int(h, "slot", -1), Str(h, "name"), Str(h, "key"),
                     Int(h, "pic", -1), (int)Long(h, "order"), Bool(h, "active"),
                     Arr(h, "contentIds", i => i.TryGetInt32(out var n) ? n : -1))),
                 ContentIds = Arr(root, "contentIds", c => new PolContentId(Int(c, "index", -1), (ContentIdType)Long(c, "type"),
                     Str(c, "name"), Str(c, "text"), (int)Long(c, "order"), Int(c, "handle", -1), Str(c, "key"))),
-                HandleToken = handleToken,
-                HandleState = handleState,
+                HandleJob = Job(root, "handleJob"),
                 HandleOp = Obj(root, "handleJob") is { ValueKind: JsonValueKind.Object } hj ? Str(hj, "op") : "",
                 Chat = ChatRoomsSnapshot.Read(Obj(root, "chat")),
                 GroupChat = GroupChatSnapshot.Read(Obj(root, "groupChat")),
@@ -163,8 +145,8 @@ public static class SocialSnapshotFiles
                                      FieldState(c, "nameState"), (PrivacyLevel)Long(c, "level"), Str(c, "worldName"))
             : null;
 
-    private static (string Token, string State) Job(JsonElement e, string n) =>
-        Obj(e, n) is { ValueKind: JsonValueKind.Object } o ? (Str(o, "token"), Str(o, "state")) : ("", "");
+    private static HookJob Job(JsonElement e, string n) =>
+        Obj(e, n) is { ValueKind: JsonValueKind.Object } o ? new HookJob(Str(o, "token"), Str(o, "state")) : HookJob.None;
 
     public static PolStoredLines? ParseStore(string json)
     {

@@ -231,7 +231,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             return;
         }
         Start(Job.Load);
-        if (!SocialRequests.RequestMyProfile(pid, _token!)) Fail(WriteFailed);
+        if (!SocialRequests.RequestMyProfile(pid, _token!)) Fail(HookFailures.RequestWriteFailed);
     }
 
     private void LoadXi(ProfileCard card)
@@ -249,7 +249,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _xiCard = card;
         LoadingText = $"Loading {card.Title}'s profile...";
         Start(Job.LoadXi);
-        if (!SocialRequests.RequestXiProfile(pid, _token!, _loadedKey, card.Key)) Fail(WriteFailed);
+        if (!SocialRequests.RequestXiProfile(pid, _token!, _loadedKey, card.Key)) Fail(HookFailures.RequestWriteFailed);
     }
 
     private void Start(Job job, string note = "")
@@ -265,8 +265,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _timer.Start();
     }
 
-    private const string WriteFailed = HookFailures.RequestWriteFailed;
-    private const string SaveUnconfirmed = HookFailures.ProfileEditor.SaveUnconfirmed;
 
     private void EndJob()
     {
@@ -315,7 +313,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             return;
         }
         if (DateTime.UtcNow - _at > TimeSpan.FromSeconds(_job == Job.Rename ? 260 : 250))
-            Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : SaveUnconfirmed);
+            Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : HookFailures.ProfileEditor.SaveUnconfirmed);
     }
 
     private void Fill(MyProfile p)
@@ -450,24 +448,24 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         var noMail = fields.Any(f => f.Key == "z_mail" && f.Value == _noMail) ? _noMail : "";
         // level 0 keeps the profile's own, only a level that was picked gets sent
         var level = Level != _savedLevel ? Level : PrivacyLevel.Keep;
-        if (!SocialRequests.SaveMyProfile(pid, _token!, level, fields, noMail)) Fail(WriteFailed);
+        if (!SocialRequests.SaveMyProfile(pid, _token!, level, fields, noMail)) Fail(HookFailures.RequestWriteFailed);
     }
 
     private void StartRename(int pid)
     {
         _renameAfterSave = false;
         Start(Job.Rename, "Renaming your handle...");
-        if (!SocialRequests.RenameHandle(pid, _token!, HandleName.Trim(), _loadedKey)) Fail(WriteFailed);
+        if (!SocialRequests.RenameHandle(pid, _token!, HandleName.Trim(), _loadedKey)) Fail(HookFailures.RequestWriteFailed);
     }
 
     private void OnSnapshot(PolSocialSnapshot snap)
     {
         bool xi = _job == Job.LoadXi;
-        var hookToken = xi ? snap.XiToken : snap.MeToken;
+        var hook = xi ? snap.XiJob : snap.MeJob;
         // waiting its turn behind another profile server job in the hook, so its clock hasn't started
-        if (_job != Job.None && _token is not null && hookToken != _token && snap.ProfileServerBusy) _at = DateTime.UtcNow;
-        if (_job == Job.None || _token is null || hookToken != _token) return;
-        var state = xi ? snap.XiState : snap.MeState;
+        if (_job != Job.None && _token is not null && hook.Token != _token && snap.ProfileServerBusy) _at = DateTime.UtcNow;
+        if (_job == Job.None || _token is null || hook.Token != _token) return;
+        var state = hook.State;
         if (state.StartsWith("failed", StringComparison.Ordinal) || state == "cancelled")
         {
             var job = _job;
@@ -556,7 +554,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                                               : HookFailures.ProfileEditor.MismatchHandle,
         "failed:no character" => HookFailures.ProfileEditor.CharacterGone,
         "failed:write" => HookFailures.ProfileEditor.WriteFailed,
-        "failed:timeout" => job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : SaveUnconfirmed,
+        "failed:timeout" => job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : HookFailures.ProfileEditor.SaveUnconfirmed,
         _ => job switch
         {
             Job.Load => HookFailures.ProfileEditor.LoadFailed(Why(state)),

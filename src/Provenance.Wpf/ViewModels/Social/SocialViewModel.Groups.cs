@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.Social;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
@@ -78,28 +79,15 @@ public partial class SocialViewModel
                 .Select(m => new GroupMemberItem(m.Index, m.Name, m.Key, _avatars.ProfilePicture(m.ProfilePictureId),
                                                  m.Role, RoleText(m.Role), StatusText(m), m.Online, m.Me,
                                                  m.Me ? m.Comment : Filtered(m.Comment))   // mine fills its edit box
-                    { Status = m.Status switch { MemberStatus.Away => PolStatus.Away, MemberStatus.Busy => PolStatus.Busy, _ => PolStatus.Online } })
+                    { Status = m.Status.ToPolStatus() })
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
             return new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members) { Unread = GroupChat.UnreadFor(g.Id) };
         }).ToList();
         if (!_groupsDirty && groups.Count == Groups.Count && groups.Zip(Groups).All(p => SameGroup(p.First, p.Second))) return;
         _groupsDirty = false;
-        // patched in place like the friends, so a group that didn't change keeps its row (and an open menu on it)
-        for (int i = 0; i < groups.Count; i++)
-        {
-            int j = -1;
-            for (int k = i; k < Groups.Count && j < 0; k++)
-                if (Groups[k].Id == groups[i].Id) j = k;
-            if (j < 0)
-            {
-                Groups.Insert(i, groups[i]);
-                continue;
-            }
-            if (j != i) Groups.Move(j, i);
-            if (!SameGroup(Groups[i], groups[i])) Groups[i] = groups[i];
-        }
-        while (Groups.Count > groups.Count) Groups.RemoveAt(Groups.Count - 1);
+        // a group that didn't change keeps its row (and an open menu on it)
+        Groups.Patch(groups, (a, b) => a.Id == b.Id, SameGroup);
         HasGroups = Groups.Count > 0;
     }
 
@@ -124,7 +112,7 @@ public partial class SocialViewModel
         _groupToken = null;
         _answerFor = null;
         EditBusy = false;
-        EditNote.Fail(RequestWriteFailed);
+        EditNote.Fail(HookFailures.RequestWriteFailed);
     }
 
     public bool CanCreateGroup => Groups.Count(x => !x.IsInvited) < PolLimits.MaxGroups;
@@ -215,12 +203,12 @@ public partial class SocialViewModel
     private void ApplyGroupState(PolSocialSnapshot snap)
     {
         if (_groupToken is null) return;
-        bool mine = snap.GroupToken == _groupToken;
+        bool mine = snap.GroupJob.Token == _groupToken;
         string state;
-        if (!_groupBySend) state = mine ? snap.GroupState : "";
+        if (!_groupBySend) state = mine ? snap.GroupJob.State : "";
         else if (snap.SendStateFor(_groupToken) is { } sent) state = sent;
         // a send refused before it went out reports in the group slot
-        else if (mine && snap.GroupState.StartsWith("failed", StringComparison.Ordinal)) state = snap.GroupState;
+        else if (mine && snap.GroupJob.State.StartsWith("failed", StringComparison.Ordinal)) state = snap.GroupJob.State;
         else state = "";
         bool done = state is "sent" or "saved";
         if (Settled(done ? "ok" : state, "ok", _groupAt, 130) is not { } st) return;

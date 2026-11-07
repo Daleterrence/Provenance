@@ -32,8 +32,8 @@ public interface IDialogs
 
 public static class DialogsExtensions
 {
-    public static bool Confirm(this IDialogs dialogs, MenuConfirm q) =>
-        dialogs.Confirm(q.Title, q.Body, q.Ok, ConfirmStyle.Destructive);
+    public static bool YesNo(this IDialogs dialogs, string title, string body) =>
+        dialogs.Confirm(title, body, "YES", cancel: "NO");
 }
 
 public sealed class WpfDialogs : IDialogs

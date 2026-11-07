@@ -86,7 +86,7 @@ public partial class SocialViewModel
         if (SocialRequests.RequestProfile(pid, _profileToken, f.Row, f.Key)) return;
         _profileToken = null;
         ProfileLoading = false;
-        ProfileNote.Fail(RequestWriteFailed);
+        ProfileNote.Fail(HookFailures.RequestWriteFailed);
     }
 
     // after a switch: nothing read under the old handle stays on screen or in the cache
@@ -110,7 +110,7 @@ public partial class SocialViewModel
         _characterShown = null;
         _profileToken = _ffxiToken = null;
         ProfileLoading = false;
-        ProfileNote.Show(ProfileNote.Text);   // the words stay, the error colour goes
+        ProfileNote.Soften();
     }
 
     private string StateText(ProfileFieldState state) => state switch
@@ -138,10 +138,10 @@ public partial class SocialViewModel
     private void ApplyProfileState(PolSocialSnapshot snap)
     {
         if (_profileToken is null) return;
-        WaitingTurn(ref _profileAt, _profileToken, snap.ProfileToken, snap);
+        WaitingTurn(ref _profileAt, _profileToken, snap.ProfileJob.Token, snap);
         // a "done" with no profile isn't an answer yet
-        bool mine = snap.ProfileToken == _profileToken && (snap.ProfileState != "done" || snap.Profile != null);
-        if (Settled(mine ? snap.ProfileState : null, "done", _profileAt, 130) is not { } st) return;
+        bool mine = snap.ProfileJob.Token == _profileToken && (snap.ProfileJob.State != "done" || snap.Profile != null);
+        if (Settled(mine ? snap.ProfileJob.State : null, "done", _profileAt, 130) is not { } st) return;
         if (st == "timeout") DiscardRequest(HookContract.Requests.Profile);
         _profileToken = null;
         ProfileLoading = false;
@@ -252,7 +252,7 @@ public partial class SocialViewModel
         _ffxiToken = null;
         ProfileLoading = false;
         ShowTabAgain(from);
-        ProfileNote.Fail(RequestWriteFailed);
+        ProfileNote.Fail(HookFailures.RequestWriteFailed);
     }
 
     private void SelectTab(ProfileTab tab)
@@ -276,9 +276,9 @@ public partial class SocialViewModel
     private void ApplyFfxiProfileState(PolSocialSnapshot snap)
     {
         if (_ffxiToken is null) return;
-        WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileToken, snap);
-        bool mine = snap.FfxiProfileToken == _ffxiToken && (snap.FfxiProfileState != "done" || snap.FfxiProfile != null);
-        if (Settled(mine ? snap.FfxiProfileState : null, "done", _ffxiAt, 130) is not { } st) return;
+        WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileJob.Token, snap);
+        bool mine = snap.FfxiProfileJob.Token == _ffxiToken && (snap.FfxiProfileJob.State != "done" || snap.FfxiProfile != null);
+        if (Settled(mine ? snap.FfxiProfileJob.State : null, "done", _ffxiAt, 130) is not { } st) return;
         if (st == "timeout") DiscardRequest(HookContract.Requests.FfxiProfile);
         _ffxiToken = null;
         ProfileLoading = false;

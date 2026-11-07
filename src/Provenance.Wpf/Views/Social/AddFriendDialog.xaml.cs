@@ -81,11 +81,7 @@ public partial class AddFriendDialog : AppWindow
             Vm.SearchNote.Show(problem);
             return;
         }
-        if (Vm.Dialogs.Confirm("Send friend request",
-                $"Send \"Let's be friends!\" to {hit!.Name}? They'll show on your list" +
-                (hit.IsCharacter ? " under their PlayOnline handle," : "") + " as \"Friend request sent\" until they accept.",
-                "SEND"))
-            Vm.SendFriendRequest(hit);
+        Vm.AskSendFriendRequest(hit!);
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();

@@ -30,9 +30,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     public const string DialogTitle = "Group Chat";
     public const string ExitQuestion = "Exit Group Chat?";
-    public const string JoinFailedText = HookFailures.GroupChat.JoinFailed;
     public const string FilteredNote = "Group chat can't send some of those characters, so they were left out.";
-    public const string CharactersText = HookFailures.GroupChat.Characters;
     // a little past the hook's own 30 s, for a join or a line it never answered
     internal static readonly TimeSpan JoinGiveUp = TimeSpan.FromSeconds(35);
     internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(35);
@@ -164,7 +162,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     internal void Tell(string text) => _dialogs.Info(DialogTitle, text);
 
-    internal bool ConfirmExit() => _dialogs.Confirm(DialogTitle, ExitQuestion, "YES", cancel: "NO");
+    internal bool ConfirmExit() => _dialogs.YesNo(DialogTitle, ExitQuestion);
 
     // the viewer's Exit, after its question
     public void Exit()
@@ -320,7 +318,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         [new("Clear chat...", Lines.Count > 0, () =>
         {
             var shown = Lines.Select(l => l.Id).ToList();
-            if (_dialogs.Confirm(new MenuConfirm("Clear chat", ClearQuestion(GroupName), "CLEAR"))) ClearLines(shown);
+            if (_dialogs.Confirm("Clear chat", ClearQuestion(GroupName), "CLEAR", ConfirmStyle.Destructive)) ClearLines(shown);
         })];
 
     public IReadOnlyList<MenuAction> LineMenu(GroupChatLineItem line) => [new("Delete message", true, () => DeleteLine(line))];
@@ -395,7 +393,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
                     "failed:not a member" or "failed:no such group" => _social.ViewerText(0x3eb7, HookFailures.GroupChat.NotMember),
                     "failed:handle changing" => HookFailures.GroupChat.JoinHandleChanging,
                     "failed:handle" or "failed:list changed" => HookFailures.GroupChat.HandlesChanged,
-                    _ => _social.ViewerText(0x3eb9, JoinFailedText),
+                    _ => _social.ViewerText(0x3eb9, HookFailures.GroupChat.JoinFailed),
                 });
                 return;
         }
@@ -438,15 +436,8 @@ public sealed partial class GroupChatViewModel : ObservableObject
         }
         else if (done != "sent")
         {
-            ComposeNote = done switch
-            {
-                "failed:too long" => HookFailures.TooLongForLine,
-                "failed:characters" => CharactersText,
-                "failed:handle changing" => HookFailures.LineHandleChanging,
-                "failed:busy" => HookFailures.Busy,
-                "failed:timeout" => HookFailures.LineMayNotHaveGone,
-                _ => _social.ViewerText(0x3eba, HookFailures.GroupChat.SendFailed),
-            };
+            ComposeNote = done == "failed:characters" ? HookFailures.GroupChat.Characters
+                : HookFailures.ForChatLine(done) ?? _social.ViewerText(0x3eba, HookFailures.GroupChat.SendFailed);
             // the line goes back in the box, like the viewer keeps it till it's gone
             if (Compose.Length == 0) Compose = text;
         }

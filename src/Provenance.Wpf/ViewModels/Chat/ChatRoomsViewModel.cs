@@ -21,13 +21,10 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public enum Page { Lobby, Room }
 
     public const string CouldNotGetName = "Could not retrieve chat name.";
-    public const string NotNow = HookFailures.ChatRooms.NotNow;
     public const string GameRunningText = "Chat rooms have to wait till FINAL FANTASY XI is closed.";
     public const string LeaveQuestion = "Leave chat room?";
     public const string LeaveAsMaster =
         "Another member will be automatically designated room master if you leave the chat room now. Leave the room?";
-    public const string MasterOnly = HookFailures.ChatRooms.MasterOnly;
-    public const string UnlockedText = HookFailures.ChatRooms.Unlocked;
 
     private readonly SocialViewModel _social;
     private readonly IDialogs _dialogs;
@@ -105,7 +102,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void ShowError(string text) => _dialogs.Error(DialogTitle, text);
 
-    private bool Confirm(string question) => _dialogs.Confirm(DialogTitle, question, "YES", cancel: "NO");
+    private bool Confirm(string question) => _dialogs.YesNo(DialogTitle, question);
 
     // the viewer asks for the new one and then again to confirm it
     private string? AskNewPassword()
@@ -164,11 +161,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public void Start()
     {
         if (_social.GameRunning) { Unavailable = GameRunningText; return; }
-        if (Pid is not { } pid) { Unavailable = NotNow; return; }
+        if (Pid is not { } pid) { Unavailable = HookFailures.ChatRooms.NotNow; return; }
         Unavailable = null;
         _zonesToken = HookFiles.NewToken();
         ZonesNote = "Searching zones...";
-        if (!ChatRoomFiles.Zones(pid, _zonesToken)) { _zonesToken = null; Unavailable = NotNow; }
+        if (!ChatRoomFiles.Zones(pid, _zonesToken)) { _zonesToken = null; Unavailable = HookFailures.ChatRooms.NotNow; }
     }
 
     private void RequestRooms(int offset)
@@ -179,7 +176,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         RoomsNote = "Searching chat rooms...";
         Rooms.Clear();
         PageText = "";
-        if (!ChatRoomFiles.Rooms(pid, _roomsToken, z.Zone.Code, offset)) { Searching = false; RoomsNote = NotNow; }
+        if (!ChatRoomFiles.Rooms(pid, _roomsToken, z.Zone.Code, offset)) { Searching = false; RoomsNote = HookFailures.ChatRooms.NotNow; }
     }
 
     private bool CanList => SelectedZone != null && !Searching && !Entering;
@@ -239,7 +236,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (Pid is not { } pid) return;
         var cats = _categories.Select(c => new ChatCategory(c.Key, "", c.Value)).ToList();
         if (_dialogs.AskRoom(Zones.Select(z => z.Zone).ToList(), SelectedZone?.Zone.Code ?? 0, cats,
-                             q => _dialogs.Confirm("Create Room", q, "YES", cancel: "NO")) is not { } form) return;
+                             q => _dialogs.YesNo("Create Room", q)) is not { } form) return;
         var nick = AskChatName(_lastNick ?? DefaultNick());
         if (nick is null) return;
         var token = HookFiles.NewToken();
@@ -292,14 +289,14 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     // the viewer's Kick and Designate, each with its own question first
     public void Kick(ChatMemberItem m)
     {
-        if (!CanKick(m)) { ShowError(MasterOnly); return; }
+        if (!CanKick(m)) { ShowError(HookFailures.ChatRooms.MasterOnly); return; }
         if (!Confirm($"Kick {m.Name}\nfrom this chat room?")) return;
         SendMaster(ChatRoomFiles.MasterOp.Kick, MasterJob.Kick, m.Key, m.Name, null);
     }
 
     public void Designate(ChatMemberItem m)
     {
-        if (!CanKick(m)) { ShowError(MasterOnly); return; }
+        if (!CanKick(m)) { ShowError(HookFailures.ChatRooms.MasterOnly); return; }
         if (!Confirm($"Designate {m.Name} the new room master?")) return;
         SendMaster(ChatRoomFiles.MasterOp.Master, MasterJob.Master, m.Key, m.Name, null);
     }
@@ -307,7 +304,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     // a new password, or none to take it off
     public void ChangePassword(bool remove)
     {
-        if (!CanMaster) { ShowError(_social.HandleSwitching ? SocialViewModel.SwitchingNote : MasterOnly); return; }
+        if (!CanMaster) { ShowError(_social.HandleSwitching ? SocialViewModel.SwitchingNote : HookFailures.ChatRooms.MasterOnly); return; }
         string? pw = null;
         if (!remove && (pw = AskNewPassword()) is null) return;
         if (!Confirm("Update chat room settings?")) return;
@@ -367,8 +364,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         ShowError(chat.MasterState switch
         {
             "failed:left" => HookFailures.ChatRooms.AlreadyLeft(name),
-            "failed:not master" => MasterOnly,
-            "failed:unlocked" => UnlockedText,
+            "failed:not master" => HookFailures.ChatRooms.MasterOnly,
+            "failed:unlocked" => HookFailures.ChatRooms.Unlocked,
             "failed:handle changing" => HookFailures.ChatRooms.MasterHandleChanging,
             "failed:busy" => HookFailures.Busy,
             _ => HookFailures.ChatCommError,
@@ -495,7 +492,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             Leave();
             Unavailable = GameRunningText;
         }
-        else Unavailable = NotNow;
+        else Unavailable = HookFailures.ChatRooms.NotNow;
     }
 
     private void OnSnapshot(PolSocialSnapshot snap)
@@ -526,7 +523,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         ZonesNote = "";
         if (chat.ZonesState != "done")
         {
-            Unavailable = NotNow;
+            Unavailable = HookFailures.ChatRooms.NotNow;
             return;
         }
         var keep = SelectedZone?.Zone.Code;
@@ -535,7 +532,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         {
             Zones.Clear();
             foreach (var z in chat.Zones) Zones.Add(new ChatZoneItem(z with { Name = _social.Filtered(z.Name) }));
-            if (Zones.Count == 0) { Unavailable = NotNow; return; }
+            if (Zones.Count == 0) { Unavailable = HookFailures.ChatRooms.NotNow; return; }
             ZonesNote = "Select zone.";
             CreateRoomCommand.NotifyCanExecuteChanged();
             SelectedZone = keep is { } k ? Zones.FirstOrDefault(x => x.Zone.Code == k) : null;
@@ -549,7 +546,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _roomsToken = null;
         Searching = false;
         Rooms.Clear();
-        if (chat.RoomsState == "failed:no chat") { Unavailable = NotNow; return; }
+        if (chat.RoomsState == "failed:no chat") { Unavailable = HookFailures.ChatRooms.NotNow; return; }
         if (chat.RoomsState != "done")
         {
             RoomsNote = HookFailures.ChatRooms.RoomListFailed(SocialRequests.FailReason(chat.RoomsState));
@@ -616,7 +613,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 return;
             case "lost":
                 BackToLobby();
-                Unavailable = NotNow;
+                Unavailable = HookFailures.ChatRooms.NotNow;
                 ShowError("Communication error occurred during chat. Quitting PlayOnline Chat.");
                 return;
             case "left":
@@ -632,14 +629,14 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             "failed:password" => HookFailures.ChatRooms.WrongPassword,
             "failed:full" => HookFailures.ChatRooms.Full,
             "failed:closed" => HookFailures.ChatRooms.Closed,
-            "failed:no chat" => NotNow,
+            "failed:no chat" => HookFailures.ChatRooms.NotNow,
             "failed:handle changing" => HookFailures.ChatRooms.JoinHandleChanging,
             "failed:busy" => HookFailures.Busy,
             "failed:bad name" => HookFailures.ChatRooms.BadName,
             _ => HookFailures.ChatCommError,
         };
         BackToLobby();
-        if (chat.RoomState == "failed:no chat") Unavailable = NotNow;
+        if (chat.RoomState == "failed:no chat") Unavailable = HookFailures.ChatRooms.NotNow;
         ShowError(why);
     }
 
@@ -764,14 +761,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private void Settled(string done, string text)
     {
         if (done != "sent")
-            SendNote = done switch
-            {
-                "failed:too long" => HookFailures.TooLongForLine,
-                "failed:timeout" => HookFailures.LineMayNotHaveGone,
-                "failed:handle changing" => HookFailures.LineHandleChanging,
-                "failed:busy" => HookFailures.Busy,
-                _ => HookFailures.ChatCommError,
-            };
+            SendNote = HookFailures.ForChatLine(done) ?? HookFailures.ChatCommError;
         // only the hook can tell whether it fits polcore's line, so one that doesn't goes back to be cut down
         if (done == "failed:too long" && Compose.Length == 0) Compose = text;
         SendCommand.NotifyCanExecuteChanged();

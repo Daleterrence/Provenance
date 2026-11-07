@@ -63,7 +63,7 @@ public partial class MainWindow : AppWindow
 
     private void OnEditProfile(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) vm.Social.Windows.EditProfile(vm.Social);
+        if (Vm is { } vm) vm.Social.EditProfile();
     }
 
     private void OnNewsHover(object sender, MouseEventArgs e) => Vm?.HoldSlides(true);
@@ -235,7 +235,7 @@ public partial class MainWindow : AppWindow
         if (_askingToExit) { e.Cancel = true; return; }
         _askingToExit = true;
         bool go;
-        try { go = Vm?.Social.Windows.ConfirmDropProfileEditor("Exit") ?? true; }
+        try { go = Vm?.ConfirmExit() ?? true; }
         finally { _askingToExit = false; }
         if (!go)
         {
@@ -287,7 +287,7 @@ public partial class MainWindow : AppWindow
     // it asks nothing and an open profile editor just closes as it is
     internal void ExitWithoutAsking()
     {
-        Vm?.Social.Windows.CloseProfileEditor();
+        Vm?.CloseProfileEditor();
         if (Vm is { MultiRunning: true } run)
         {
             run.StopAllAccountsAndExit();

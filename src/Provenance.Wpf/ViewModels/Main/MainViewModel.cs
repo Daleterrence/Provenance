@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common;
 using Provenance.Common.Credentials;
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Hook;
 using Provenance.Common.Otp;
 using Provenance.Common.Progress;
 using Provenance.Common.Settings;
@@ -368,7 +369,7 @@ public partial class MainViewModel : ObservableObject
         Handles.OpenGroup(group, () =>
         {
             if (Social.GroupChat.Join(group)) _windows.ShowGroupChat(Social.GroupChat);
-            else _dialogs.Info(GroupChatViewModel.DialogTitle, GroupChatViewModel.JoinFailedText);
+            else _dialogs.Info(GroupChatViewModel.DialogTitle, HookFailures.GroupChat.JoinFailed);
         });
     }
 
@@ -936,6 +937,11 @@ public partial class MainViewModel : ObservableObject
         ChatRoomsOpen = true;
     }
 
+    // false when an open profile editor's unsaved changes were kept
+    internal bool ConfirmExit() => _windows.ConfirmDropProfileEditor("Exit");
+
+    internal void CloseProfileEditor() => _windows.CloseProfileEditor();
+
     [RelayCommand]
     private void SignOut()
     {
@@ -1202,7 +1208,7 @@ public partial class MainViewModel : ObservableObject
         return new PreLaunchLink
         {
             Pid = () => _pol.Pid,
-            Ask = text => Asking(() => _dialogs.Confirm(PreLaunchLink.Title, text, "YES", cancel: "NO"), text),
+            Ask = text => Asking(() => _dialogs.YesNo(PreLaunchLink.Title, text), text),
             Failed = text => Asking(() =>
             {
                 _dialogs.Error(PreLaunchLink.Title, text);

@@ -100,7 +100,7 @@ public sealed class PreLaunchLink
             await Delay(Tick);
             if (Pid() != pid || !Alive(pid)) return (true, null);
             var snap = Read(pid);
-            var state = snap is not null && snap.HandleToken == token ? snap.HandleState : "";
+            var state = snap is not null && snap.HandleJob.Token == token ? snap.HandleJob.State : "";
             if (state == "saved") return (false, null);
             if (state.StartsWith("failed", StringComparison.Ordinal)) return (false, Failure(state));
             if (state == "working") taken ??= Now();

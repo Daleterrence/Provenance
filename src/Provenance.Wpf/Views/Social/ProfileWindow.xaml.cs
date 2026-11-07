@@ -1,5 +1,6 @@
 using System.Windows;
 using Provenance.Wpf.Controls;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
@@ -9,7 +10,7 @@ public partial class ProfileWindow : AppWindow
     private readonly SocialViewModel _vm;
     private FriendItem _friend;
 
-    public ProfileWindow(SocialViewModel vm, FriendItem friend)
+    public ProfileWindow(SocialViewModel vm, IDialogs dialogs, FriendItem friend)
     {
         InitializeComponent();
         DataContext = _vm = vm;
@@ -18,7 +19,7 @@ public partial class ProfileWindow : AppWindow
         vm.RequestProfile(friend);
         void Popup(string text) => Dispatcher.BeginInvoke(() =>
         {
-            if (IsVisible) vm.Dialogs.Info("PlayOnline profile", text);
+            if (IsVisible) dialogs.Info("PlayOnline profile", text);
         });
         vm.ProfilePopup += Popup;
         Closed += (_, _) => vm.ProfilePopup -= Popup;

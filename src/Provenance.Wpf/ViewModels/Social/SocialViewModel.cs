@@ -20,6 +20,8 @@ namespace Provenance.Wpf.ViewModels.Social;
 
 public partial class SocialViewModel : ObservableObject
 {
+    private readonly IDialogs _dialogs;
+    private readonly IWindowManager _windows;
     private readonly PolSession _pol;
     private readonly AvatarService _avatars;
     private readonly ISettingsService _settings;
@@ -29,8 +31,8 @@ public partial class SocialViewModel : ObservableObject
 
     public SocialViewModel(IDialogs dialogs, IWindowManager windows, PolSession pol, AvatarService avatars, ISettingsService settings)
     {
-        Dialogs = dialogs;
-        Windows = windows;
+        _dialogs = dialogs;
+        _windows = windows;
         _pol = pol;
         _avatars = avatars;
         _settings = settings;
@@ -53,8 +55,6 @@ public partial class SocialViewModel : ObservableObject
         };
     }
 
-    public IDialogs Dialogs { get; }
-    public IWindowManager Windows { get; }
     public GroupChatViewModel GroupChat { get; }
     public int GroupChatUnread => GroupChat.UnreadTotal;
 
@@ -117,10 +117,10 @@ public partial class SocialViewModel : ObservableObject
         var catalog = viewer is null ? null : ProfilePictureCatalog.Load(viewer);
         if (catalog is null)
         {
-            Dialogs.Error("Profile picture", "Provenance couldn't find the PlayOnline profile pictures in the PlayOnline Viewer folder.");
+            _dialogs.Error("Profile picture", "Provenance couldn't find the PlayOnline profile pictures in the PlayOnline Viewer folder.");
             return;
         }
-        if (Windows.PickProfilePicture(catalog, _avatars, MyProfilePictureId) is { } pic && pic != MyProfilePictureId)
+        if (_windows.PickProfilePicture(catalog, _avatars, MyProfilePictureId) is { } pic && pic != MyProfilePictureId)
             SaveProfilePicture(pic);
     }
 
@@ -569,26 +569,13 @@ public partial class SocialViewModel : ObservableObject
                      .ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         if (!_friendsDirty && items.SequenceEqual(Friends)) return;
         _friendsDirty = false;
-        // patched in place rather than cleared, so the list keeps its scroll position and selection and only the rows
-        // that changed get redrawn
         var keep = SelectedFriend;
-        for (int i = 0; i < items.Count; i++)
+        Friends.Patch(items, SameRow, (a, b) => a == b, (i, item) =>
         {
-            int j = -1;
-            for (int k = i; k < Friends.Count && j < 0; k++)
-                if (SameRow(Friends[k], items[i])) j = k;
-            if (j < 0)
-            {
-                Friends.Insert(i, items[i]);
-                continue;
-            }
-            if (j != i) Friends.Move(j, i);
-            if (Friends[i] == items[i]) continue;
             bool selected = ReferenceEquals(SelectedFriend, Friends[i]);
-            Friends[i] = items[i];
-            if (selected) SelectedFriend = items[i];
-        }
-        while (Friends.Count > items.Count) Friends.RemoveAt(Friends.Count - 1);
+            Friends[i] = item;
+            if (selected) SelectedFriend = item;
+        });
         if (keep != null && !Friends.Contains(SelectedFriend!))
             SelectedFriend = Friends.FirstOrDefault(i => i.Is(keep));
     }
@@ -687,7 +674,6 @@ public partial class SocialViewModel : ObservableObject
 
     private string? _editToken;
     private DateTime _editAt;
-    private const string RequestWriteFailed = HookFailures.RequestWriteFailed;
 
     [RelayCommand]
     private void DismissEditNote() => EditNote.Clear();
@@ -699,7 +685,7 @@ public partial class SocialViewModel : ObservableObject
         _answerToken = null;
         _answerFor = null;
         EditBusy = false;
-        EditNote.Fail(RequestWriteFailed);
+        EditNote.Fail(HookFailures.RequestWriteFailed);
     }
 
     private bool BeginEdit(out int pid, out string token)
@@ -748,7 +734,7 @@ public partial class SocialViewModel : ObservableObject
     {
         if (_editToken is null) return;
         // polcore gives up after 100 secs
-        if (Settled(snap.EditToken == _editToken ? snap.EditState : null, "saved", _editAt, 110) is not { } st) return;
+        if (Settled(snap.EditJob.Token == _editToken ? snap.EditJob.State : null, "saved", _editAt, 110) is not { } st) return;
         _editToken = null;
         EditBusy = false;
         if (st != "saved") EditNote.Fail(EditFailureText(st));
@@ -931,10 +917,6 @@ public partial class SocialViewModel : ObservableObject
     private string _requestKey = "";
     private bool _requestCharacter;
     private DateTime _requestAt;
-    private const string BadHandleName = HookFailures.Friends.BadHandleName;
-    private const string QuoteInName = HookFailures.Friends.QuoteInName;
-    private const string BadHid = HookFailures.Friends.BadHid;
-    private const string BadCharacterName = HookFailures.Friends.BadCharacterName;
     private const int SearchPage = 100;   // the hook fetches the first 100, like the viewer
     private const string TooManyResults = "Too many results. Please narrow your search.";
 
@@ -952,15 +934,15 @@ public partial class SocialViewModel : ObservableObject
         {
             SearchNote.Fail(kind switch
             {
-                FriendSearchKind.Hid => BadHid,
-                FriendSearchKind.Character => BadCharacterName,
-                _ => BadHandleName,
+                FriendSearchKind.Hid => HookFailures.Friends.BadHid,
+                FriendSearchKind.Character => HookFailures.Friends.BadCharacterName,
+                _ => HookFailures.Friends.BadHandleName,
             });
             return;
         }
         if (kind == FriendSearchKind.Handle && value.Contains('\''))
         {
-            SearchNote.Fail(QuoteInName);
+            SearchNote.Fail(HookFailures.Friends.QuoteInName);
             return;
         }
         _searchToken = HookFiles.NewToken();
@@ -973,7 +955,7 @@ public partial class SocialViewModel : ObservableObject
         if (SocialRequests.Search(pid, _searchToken, kind, value)) return;
         _searchToken = null;
         SearchBusy = false;
-        SearchNote.Fail(RequestWriteFailed);
+        SearchNote.Fail(HookFailures.RequestWriteFailed);
     }
 
     // a search nobody's waiting on any more: withdrawn if the hook hasn't taken it yet, and its answer's ignored
@@ -1025,15 +1007,15 @@ public partial class SocialViewModel : ObservableObject
                                              ViewerText(0x46e6, "Would you like to be friends?"))) return;
         _requestToken = null;
         EditBusy = false;
-        SearchNote.Fail(RequestWriteFailed);
+        SearchNote.Fail(HookFailures.RequestWriteFailed);
     }
 
     private void ApplySearchState(PolSocialSnapshot snap)
     {
         // two profile-server jobs, each up to polcore's 100 secs
-        WaitingTurn(ref _searchAt, _searchToken, snap.SearchToken, snap);
+        WaitingTurn(ref _searchAt, _searchToken, snap.SearchJob.Token, snap);
         if (_searchToken != null &&
-            Settled(snap.SearchToken == _searchToken ? snap.SearchState : null, "done", _searchAt, 250) is { } st)
+            Settled(snap.SearchJob.Token == _searchToken ? snap.SearchJob.State : null, "done", _searchAt, 250) is { } st)
         {
             if (st == "timeout") DiscardRequest(HookContract.Requests.Search);
             _searchToken = null;
@@ -1067,10 +1049,10 @@ public partial class SocialViewModel : ObservableObject
             {
                 "timeout" => HookFailures.Friends.SearchNoAnswer,
                 "failed:busy" => HookFailures.Busy,
-                "failed:bad name" => BadHandleName,
-                "failed:quote" => QuoteInName,
-                "failed:bad hid" => BadHid,
-                "failed:bad character" => BadCharacterName,
+                "failed:bad name" => HookFailures.Friends.BadHandleName,
+                "failed:quote" => HookFailures.Friends.QuoteInName,
+                "failed:bad hid" => HookFailures.Friends.BadHid,
+                "failed:bad character" => HookFailures.Friends.BadCharacterName,
                 "failed:no schema" when characters =>
                     HookFailures.Friends.NoSchemaCharacters,
                 "failed:no schema" => HookFailures.Friends.NoSchemaHandles,
@@ -1129,15 +1111,15 @@ public partial class SocialViewModel : ObservableObject
         if (SocialRequests.SetProfilePicture(pid, picId, _picToken)) return;
         _picToken = null;
         ProfilePictureSaving = false;
-        EditNote.Fail(RequestWriteFailed);
+        EditNote.Fail(HookFailures.RequestWriteFailed);
     }
 
     private void ApplyProfilePictureState(PolSocialSnapshot snap)
     {
         if (_picToken is null) return;
-        WaitingTurn(ref _picAt, _picToken, snap.ProfilePictureToken, snap);
+        WaitingTurn(ref _picAt, _picToken, snap.PictureJob.Token, snap);
         // two jobs, each up to 100 secs in polcore
-        if (Settled(snap.ProfilePictureToken == _picToken ? snap.ProfilePictureState : null, "saved", _picAt, 250)
+        if (Settled(snap.PictureJob.Token == _picToken ? snap.PictureJob.State : null, "saved", _picAt, 250)
             is not { } st) return;
         if (st == "timeout") DiscardRequest(HookContract.Requests.Pic);
         _picToken = null;

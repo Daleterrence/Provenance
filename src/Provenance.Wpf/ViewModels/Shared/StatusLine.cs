@@ -16,6 +16,9 @@ public sealed class StatusLine : ObservableObject
 
     public void Clear() => Set("", false);
 
+    // keeps the words and drops the error colour
+    public void Soften() => Set(Text, false);
+
     // for a line that's an error only some of the time
     public void Set(string text, bool isError) => Set(text, isError, null);
 

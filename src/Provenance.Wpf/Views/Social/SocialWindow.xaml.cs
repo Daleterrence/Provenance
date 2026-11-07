@@ -38,8 +38,8 @@ public partial class SocialWindow : AppWindow
         ApplyPart();
         FollowEnd.SetPin(ChatScroll, PinConversation);
         // split: a click shows the Messages window alongside (focus stays in the list), a double-click brings it up
-        FriendList.FriendSelected += _ => { if (Part == SocialPart.Friends && Vm is { } vm) vm.Windows.ShowMessagesAlongside(vm, takeFocus: false); };
-        FriendList.FriendActivated += _ => { if (Part == SocialPart.Friends && Vm is { } vm) vm.Windows.ShowMessagesAlongside(vm, takeFocus: true); };
+        FriendList.FriendSelected += _ => { if (Part == SocialPart.Friends && Vm is { } vm) vm.ShowMessagesAlongside(takeFocus: false); };
+        FriendList.FriendActivated += _ => { if (Part == SocialPart.Friends && Vm is { } vm) vm.ShowMessagesAlongside(takeFocus: true); };
         Loaded += (_, _) => { if (Part == SocialPart.Messages && ShowActivated) ComposeBox.Focus(); };
         DataContextChanged += (_, e) =>
         {
@@ -148,8 +148,7 @@ public partial class SocialWindow : AppWindow
     private void OnLayout(object sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm) return;
-        if (Part == SocialPart.Both) vm.Windows.Split(vm);
-        else vm.Windows.Merge(vm);
+        vm.SetWindowsSplit(Part == SocialPart.Both);
     }
 
     private string? _shownWith;
@@ -184,7 +183,7 @@ public partial class SocialWindow : AppWindow
 
     private void OnEditProfile(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) vm.Windows.EditProfile(vm);
+        if (Vm is { } vm) vm.EditProfile();
     }
 
     // the viewer's Edit Comments, in place. Only Enter saves (it's a request to POL), Esc or leaving puts it back
@@ -251,18 +250,15 @@ public partial class SocialWindow : AppWindow
         if (Vm is not { } vm || !vm.CanEdit) return;
         if (!vm.CanCreateGroup)
         {
-            vm.Dialogs.Info("Friend groups", vm.GroupLimitText);
+            vm.ShowGroupLimit();
             return;
         }
         string? name = null;
-        SvgIcon.OpenWhile(sender, () => name = vm.Dialogs.Ask("Create a group",
-            "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", maxLength: PolLimits.GroupName));
+        SvgIcon.OpenWhile(sender, () => name = vm.AskGroupName());
         if (!string.IsNullOrWhiteSpace(name)) vm.CreateGroup(name);
     }
 
     private readonly ReopenGuard _menuGuard = new();
-
-    private ISocialMenuHost Host(SocialViewModel vm) => new SocialMenuDialogs(vm);
 
     private void OnRowMenuButton(object sender, RoutedEventArgs e)
     {
@@ -282,7 +278,7 @@ public partial class SocialWindow : AppWindow
         if (_menuGuard.JustClosed || sender is not FrameworkElement button || Vm is not { SelectedFriend: { } f } vm) return;
         var menu = new ContextMenu();
         menu.Closed += _menuGuard.OnClosed;
-        Menus.Fill(menu, vm.ConversationMenu(f, FriendList.Host(vm)));
+        Menus.Fill(menu, vm.ConversationMenu(f, FriendList.OpenConversation));
         Menus.ShowBelow(menu, button);
     }
 
@@ -314,7 +310,7 @@ public partial class SocialWindow : AppWindow
 
     private bool BuildRowMenu(FrameworkElement row)
     {
-        if (Vm is not { } vm || row.ContextMenu is not { } menu || vm.RowMenu(row.DataContext, Host(vm)) is not { } actions)
+        if (Vm is not { } vm || row.ContextMenu is not { } menu || vm.RowMenu(row.DataContext) is not { } actions)
             return false;
         Menus.Fill(menu, actions);
         return true;
@@ -322,15 +318,12 @@ public partial class SocialWindow : AppWindow
 
     private void OnAddFriend(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => vm.Windows.AddFriend(vm));
+        if (Vm is { } vm) SvgIcon.OpenWhile(sender, () => vm.AddFriend());
     }
 
     private void OnUnignore(object sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm || (sender as FrameworkElement)?.DataContext is not PolBlocked b) return;
-        if (!vm.Dialogs.Confirm("Stop ignoring " + b.Name,
-                $"Take {b.Name} off your ignore list? Their messages will reach you again. " +
-                "This doesn't add them back to your friend list.", "STOP IGNORING")) return;
-        vm.Unignore(b);
+        vm.AskUnignore(b);
     }
 }

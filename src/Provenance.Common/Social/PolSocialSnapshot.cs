@@ -7,6 +7,12 @@ public sealed record PolSendResult(string Token, string State, long Time = 0, lo
 
 public sealed record PolQueuedSend(string Token, string State);
 
+// the token the app gave the hook for a job and the state the hook has it in. Both are empty when the hook has none
+public sealed record HookJob(string Token, string State)
+{
+    public static readonly HookJob None = new("", "");
+}
+
 // Time and Seq are the header ones of the line that came back
 public sealed record PolReturnedSend(long Time, long Seq, int FromSlot);
 
@@ -14,9 +20,9 @@ public sealed record PolReturnedSend(long Time, long Seq, int FromSlot);
 // "none"), Notice the account notice status (221..252 = LM-01..LM-32)
 public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int MyProfilePictureId,
                                        IReadOnlyList<PolFriend> Friends, IReadOnlyList<PolMessage> Messages,
-                                       string FfxiService = "active", int Notice = 0,
-                                       string SendToken = "", string SendState = "", string Presence = "")
+                                       string FfxiService = "active", int Notice = 0, string Presence = "")
 {
+    public HookJob SendJob { get; init; } = HookJob.None;
     public bool FriendsLoaded { get; init; } = true;
     public string Mail { get; init; } = "";   // "pending", "ok" or "failed"
     public bool StatusBusy { get; init; }
@@ -27,7 +33,7 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     // chat lines, answers and group invites share the send slots, so a result can get bumped between snapshots
     public IReadOnlyList<PolSendResult> SendResults { get; init; } = [];
     // the results plus the one the send slot holds right now
-    public IEnumerable<PolSendResult> AllSends => SendResults.Append(new PolSendResult(SendToken, SendState));
+    public IEnumerable<PolSendResult> AllSends => SendResults.Append(new PolSendResult(SendJob.Token, SendJob.State));
     // the lines the hook has, "sending" once its PUT's started, "queued" before
     public IReadOnlyList<PolQueuedSend> SendQueue { get; init; } = [];
     // chat lines from my own POL ID the hook got back, which never reached anyone
@@ -36,58 +42,48 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public string? SendStateFor(string? token)
     {
         if (string.IsNullOrEmpty(token)) return null;
-        if (SendToken == token) return SendState;
+        if (SendJob.Token == token) return SendJob.State;
         return SendResults.LastOrDefault(r => r.Token == token)?.State;
     }
 
     // job states run "saving"/"searching"/"loading" -> "saved"/"done"/"ready", or "failed:..."
-    public string EditToken { get; init; } = "";
-    public string EditState { get; init; } = "";
+    public HookJob EditJob { get; init; } = HookJob.None;
     public string MyComment { get; init; } = "";
     public string MyKey { get; init; } = "";
     public IReadOnlyList<PolBlocked> Blocked { get; init; } = [];
-    public string ProfilePictureToken { get; init; } = "";
-    public string ProfilePictureState { get; init; } = "";
-    public string SearchToken { get; init; } = "";
-    public string SearchState { get; init; } = "";
+    public HookJob PictureJob { get; init; } = HookJob.None;
+    public HookJob SearchJob { get; init; } = HookJob.None;
     public IReadOnlyList<PolSearchHit> SearchResults { get; init; } = [];
     public FriendSearchKind SearchKind { get; init; }
     // how many POL found, which can be more than came back
     public int SearchTotal { get; init; }
     public bool SearchTooMany { get; init; }
-    public string ProfileToken { get; init; } = "";
-    public string ProfileState { get; init; } = "";
+    public HookJob ProfileJob { get; init; } = HookJob.None;
     public PolProfile? Profile { get; init; }
     public IReadOnlyList<PolGroup> GroupList { get; init; } = [];
-    public string GroupToken { get; init; } = "";
-    public string GroupState { get; init; } = "";
-    public string MeToken { get; init; } = "";
-    public string MeState { get; init; } = "";
+    public HookJob GroupJob { get; init; } = HookJob.None;
+    public HookJob MeJob { get; init; } = HookJob.None;
     // one of my FFXI characters on the profile editor. Key is the character's
-    public string XiToken { get; init; } = "";
-    public string XiState { get; init; } = "";
+    public HookJob XiJob { get; init; } = HookJob.None;
     public string XiKey { get; init; } = "";
     public PrivacyLevel XiLevel { get; init; }
     public string XiName { get; init; } = "";
     public string XiWorldName { get; init; } = "";
-    public string CharacterToken { get; init; } = "";
-    public string CharacterState { get; init; } = "";
+    public HookJob CharacterJob { get; init; } = HookJob.None;
     public PolCharacterLookup? Character { get; init; }
-    public string FfxiProfileToken { get; init; } = "";
-    public string FfxiProfileState { get; init; } = "";
+    public HookJob FfxiProfileJob { get; init; } = HookJob.None;
     public PolFfxiProfile? FfxiProfile { get; init; }
     // the hook runs one profile server job at a time, so while one's going any other just waits its turn
-    public bool ProfileServerBusy => SearchState == "searching" || ProfileState == "loading" || CharacterState == "loading" ||
-                                     FfxiProfileState == "loading" || MeState is "loading" or "saving" || XiState == "loading" ||
-                                     ProfilePictureState == "saving" ||
+    public bool ProfileServerBusy => SearchJob.State == "searching" || ProfileJob.State == "loading" || CharacterJob.State == "loading" ||
+                                     FfxiProfileJob.State == "loading" || MeJob.State is "loading" or "saving" || XiJob.State == "loading" ||
+                                     PictureJob.State == "saving" ||
                                      Chat is { ZonesState: "searching" } or { RoomsState: "searching" } ||
-                                     (HandleState == "working" && HandleOp == "switch");
+                                     (HandleJob.State == "working" && HandleOp == "switch");
     // the game's message store, read once at login (pol_hook.<pid>.store.json), null when there's none
     public PolStoredLines? Stored { get; init; }
     public IReadOnlyList<PolHandle> Handles { get; init; } = [];
     public IReadOnlyList<PolContentId> ContentIds { get; init; } = [];
-    public string HandleToken { get; init; } = "";
-    public string HandleState { get; init; } = "";
+    public HookJob HandleJob { get; init; } = HookJob.None;
     public string HandleOp { get; init; } = "";
     // null till chat rooms get used this session
     public ChatRoomsSnapshot? Chat { get; init; }

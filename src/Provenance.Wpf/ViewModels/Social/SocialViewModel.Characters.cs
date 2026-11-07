@@ -23,8 +23,8 @@ public partial class SocialViewModel
     private void ApplyCharacters(PolSocialSnapshot snap)
     {
         var lookups = Lookups;
-        lookups.Answer(snap.CharacterToken, snap.CharacterState, snap.Character);
-        lookups.Waiting(snap.CharacterToken, snap.ProfileServerBusy, DateTime.UtcNow);
+        lookups.Answer(snap.CharacterJob.Token, snap.CharacterJob.State, snap.Character);
+        lookups.Waiting(snap.CharacterJob.Token, snap.ProfileServerBusy, DateTime.UtcNow);
         if (snap.FriendsLoaded) lookups.Seen(snap.Friends);
         if (GameRunning || _pol.Pid is not { } pid || lookups.Next(DateTime.UtcNow) is not { } game) return;
         if (!SocialRequests.RequestCharacter(pid, lookups.Token, game.Character)) lookups.Failed();

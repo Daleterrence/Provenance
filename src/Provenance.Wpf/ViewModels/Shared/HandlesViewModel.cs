@@ -69,7 +69,7 @@ public partial class HandlesViewModel : ObservableObject
     public bool InChatRoom => _snap.Chat is { RoomState: "in" or "entering" };
     // mine, or one the hook's still running (it can take mine after the page has given up on it)
     public bool Switching => (Busy && _op == HandleChange.Switch) ||
-                             (LoggedIn && _snap is { HandleOp: "switch", HandleState: "working" });
+                             (LoggedIn && _snap is { HandleOp: "switch", HandleJob.State: "working" });
 
     // why a switch can't go right now (something open that's bound to the active handle), or null
     public Func<string?>? SwitchBlocked { get; set; }
@@ -101,7 +101,7 @@ public partial class HandlesViewModel : ObservableObject
     private void Settle()
     {
         if (_token is null) return;
-        var state = _snap.HandleToken == _token ? _snap.HandleState : "";
+        var state = _snap.HandleJob.Token == _token ? _snap.HandleJob.State : "";
         if (state != "saved" && !state.StartsWith("failed", StringComparison.Ordinal))
         {
             // once the hook's taken it, it's the hook's answer that ends it
@@ -214,7 +214,7 @@ public partial class HandlesViewModel : ObservableObject
             tell(why);
             return;
         }
-        if (!_dialogs.Confirm(GroupHandleCheck.Title, check.Question, "YES", cancel: "NO")) return;
+        if (!_dialogs.YesNo(GroupHandleCheck.Title, check.Question)) return;
         Send(HandleChange.Switch, (pid, token) => SocialRequests.SwitchHandle(pid, token, check.To!),
              HandleList.Done(HandleChange.Switch, check.To!.Name, ""));
         if (_token is null) tell(Note.Text);
