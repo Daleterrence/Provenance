@@ -117,24 +117,8 @@
                     </ControlTemplate>
                 </ToggleButton.Template>
                 <StackPanel Orientation="Horizontal">
-                    <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center">
-                        <Ellipse.Style>
-                            <Style TargetType="Ellipse">
-                                <Setter Property="Fill" Value="{DynamicResource Text.3}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding WorldsState}" Value="up">
-                                        <Setter Property="Fill" Value="{DynamicResource State.Online}" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding WorldsState}" Value="maintenance">
-                                        <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding WorldsState}" Value="down">
-                                        <Setter Property="Fill" Value="{DynamicResource State.Down}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Ellipse.Style>
-                    </Ellipse>
+                    <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                             Style="{StaticResource WorldDot}" Tag="{Binding WorldsState}" />
                     <TextBlock Text="{Binding WorldsSummary}" FontSize="12" Foreground="{DynamicResource Text.2}" VerticalAlignment="Center" />
                     <controls:SvgIcon Glyph="down" Flat="True" Width="14" Height="14" Margin="6,0,0,0"
                                       VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" />
@@ -176,24 +160,8 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" Margin="0,2,16,2" ToolTip="{Binding Label}">
-                                    <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
-                                        <Ellipse.Style>
-                                            <Style TargetType="Ellipse">
-                                                <Setter Property="Fill" Value="{DynamicResource State.Down}" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Status}" Value="up">
-                                                        <Setter Property="Fill" Value="{DynamicResource State.Online}" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Status}" Value="maintenance">
-                                                        <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Status}" Value="partial-maintenance">
-                                                        <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Ellipse.Style>
-                                    </Ellipse>
+                                    <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center"
+                                             Style="{StaticResource WorldDot}" Tag="{Binding Status}" />
                                     <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource Text.2}" />
                                 </StackPanel>
                             </DataTemplate>

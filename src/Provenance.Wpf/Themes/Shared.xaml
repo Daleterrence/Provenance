@@ -321,4 +321,26 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!-- a world's dot. Tag is its status, and one we don't know is grey on the chip and in the list -->
+    <Style x:Key="WorldDot" TargetType="Ellipse">
+        <Setter Property="Fill" Value="{DynamicResource Text.3}" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="up">
+                <Setter Property="Fill" Value="{DynamicResource State.Online}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="maintenance">
+                <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="partial-maintenance">
+                <Setter Property="Fill" Value="{DynamicResource Accent.Gold}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="down">
+                <Setter Property="Fill" Value="{DynamicResource State.Down}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="partially-down">
+                <Setter Property="Fill" Value="{DynamicResource State.Down}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
 </ResourceDictionary>
