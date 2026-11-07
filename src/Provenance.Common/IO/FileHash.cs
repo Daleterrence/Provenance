@@ -10,7 +10,7 @@ public static class FileHash
     // the sharing lets it hash a file that something else has open, even one pol.exe is running from
     public static string Sha256(string path, out long length)
     {
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 81920, FileOptions.SequentialScan);
+        using var fs = SharedFile.OpenRead(path, 81920, FileOptions.SequentialScan);
         var sha = Sha256(fs);
         length = fs.Position;
         return sha;

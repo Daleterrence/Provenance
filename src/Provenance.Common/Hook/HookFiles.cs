@@ -39,8 +39,7 @@ public static class HookFiles
     public static void Discard(int pid, string name)
     {
         foreach (var p in RequestPaths(pid, name))
-            try { File.Delete(p); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            FileDelete.Try(p);
     }
 
     // the hook takes a request by renaming it, so this rename and a take can't both happen. A file a scanner has open
@@ -53,7 +52,7 @@ public static class HookFiles
             try
             {
                 File.Move(path, path + ".withdrawn", overwrite: true);
-                try { File.Delete(path + ".withdrawn"); } catch { }
+                FileDelete.Try(path + ".withdrawn");
                 return Withdrawal.Withdrawn;
             }
             catch (FileNotFoundException) { return Withdrawal.Taken; }
@@ -64,8 +63,7 @@ public static class HookFiles
 
     public static void Delete(int pid, string name)
     {
-        try { File.Delete(PathFor(pid, name)); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        FileDelete.Try(PathFor(pid, name));
     }
 
     // what an old process with this pid left that its pol.exe's snapshots and chat rooms would otherwise start from,
@@ -131,9 +129,7 @@ public static class HookFiles
         try
         {
             if (!File.Exists(path) || new FileInfo(path).Length > maxBytes) return null;
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var sr = new StreamReader(fs);
-            return parse(sr.ReadToEnd());
+            return parse(SharedFile.ReadAllText(path));
         }
         catch { return null; }
     }

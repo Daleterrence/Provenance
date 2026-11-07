@@ -1,3 +1,5 @@
+using Provenance.Common.IO;
+
 namespace Provenance.Common.Game.Windower;
 
 internal static class ScriptLoads

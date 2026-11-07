@@ -123,8 +123,7 @@ internal static class WindowerFiles
         }
         catch
         {
-            try { File.Delete(temp); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            FileDelete.Try(temp);
             throw;
         }
     }
@@ -135,8 +134,7 @@ internal static class WindowerFiles
         try { Swap(temp, target, tempDir, guard); }
         catch
         {
-            try { File.Delete(temp); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            FileDelete.Try(temp);
             throw;
         }
     }

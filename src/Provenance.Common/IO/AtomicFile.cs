@@ -13,42 +13,67 @@ public static class AtomicFile
     public static void Write(string path, string text) =>
         Build(path, tmp => File.WriteAllText(tmp, text, new UTF8Encoding(false)));
 
-    public static async Task WriteAsync(string path, byte[] bytes, CancellationToken ct = default)
-    {
-        var tmp = TempFor(path);
-        try
-        {
-            await File.WriteAllBytesAsync(tmp, bytes, ct).ConfigureAwait(false);
-            File.Move(tmp, path, overwrite: true);
-        }
-        catch
-        {
-            Discard(tmp);
-            throw;
-        }
-    }
+    public static Task WriteAsync(string path, byte[] bytes, CancellationToken ct = default) =>
+        BuildAsync(path, tmp => File.WriteAllBytesAsync(tmp, bytes, ct));
 
     // for a file that takes more than a write (a copy that's then edited, a stream with its own settings)
-    public static void Build(string path, Action<string> fill)
+    public static void Build(string path, Action<string> fill) =>
+        BuildAsync(path, tmp => { fill(tmp); return Task.CompletedTask; }).GetAwaiter().GetResult();
+
+    public static async Task BuildAsync(string path, Func<string, Task> fill)
     {
         var tmp = TempFor(path);
         try
         {
-            fill(tmp);
+            await fill(tmp).ConfigureAwait(false);
             File.Move(tmp, path, overwrite: true);
         }
         catch
         {
-            Discard(tmp);
+            FileDelete.Try(tmp);
             throw;
         }
     }
 
-    // a read-only target would make the move over it fail
-    public static void MakeWritable(string path)
+    // never over anything that's there: false if the path is already taken
+    public static bool CreateNew(string path, byte[] bytes)
     {
-        if (File.Exists(path) && File.GetAttributes(path).HasFlag(FileAttributes.ReadOnly))
-            File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+        var tmp = TempFor(path);
+        try
+        {
+            WriteNew(tmp, bytes, flushToDisk: true);
+            try
+            {
+                File.Move(tmp, path, overwrite: false);
+                return true;
+            }
+            catch (IOException) when (File.Exists(path)) { return false; }
+        }
+        finally { FileDelete.Try(tmp); }
+    }
+
+    // a read-only target would make the move over it fail. Returns what the attributes were
+    public static FileAttributes ClearReadOnly(string path)
+    {
+        if (!File.Exists(path)) return 0;
+        var attrs = File.GetAttributes(path);
+        if (attrs.HasFlag(FileAttributes.ReadOnly)) File.SetAttributes(path, attrs & ~FileAttributes.ReadOnly);
+        return attrs;
+    }
+
+    // the installer marks some files read-only, so the new file gets the old attributes back (and the old one keeps
+    // them if the move fails)
+    public static void ReplaceKeepingReadOnly(string temp, string target)
+    {
+        var attrs = ClearReadOnly(target);
+        try { File.Move(temp, target, overwrite: true); }
+        catch
+        {
+            if (attrs.HasFlag(FileAttributes.ReadOnly))
+                try { File.SetAttributes(target, attrs); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            throw;
+        }
+        if (attrs.HasFlag(FileAttributes.ReadOnly)) File.SetAttributes(target, attrs);
     }
 
     // never opened over anything that's already there
@@ -57,11 +82,5 @@ public static class AtomicFile
         using var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None);
         fs.Write(bytes);
         if (flushToDisk) fs.Flush(flushToDisk: true);
-    }
-
-    internal static void Discard(string tmp)
-    {
-        try { File.Delete(tmp); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 }

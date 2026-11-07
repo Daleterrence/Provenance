@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Provenance.Common.Win32;
 
-internal static partial class Cabinet
+internal static class Cabinet
 {
     [DllImport("cabinet.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     [return: MarshalAs(UnmanagedType.Bool)]

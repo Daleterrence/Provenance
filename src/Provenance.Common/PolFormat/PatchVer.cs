@@ -67,7 +67,7 @@ public static class PatchVer
     {
         var path = FileIn(product.Folder);
         var bytes = Encode(version, SeededKey(product));
-        AtomicFile.MakeWritable(path);
+        AtomicFile.ClearReadOnly(path);
         AtomicFile.Write(path, bytes);
     }
 

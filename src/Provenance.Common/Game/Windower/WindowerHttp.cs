@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using Serilog;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -87,9 +88,10 @@ public sealed class WindowerHttp : IDisposable
     }
 
     // Windower/<major>.<minor> (Windows NT <os major>.<os minor>; WOW64). Windower.exe is always x86, so a 64-bit
-    // Windows always gets WOW64 whatever Provenance is built as
+    // Windows always gets WOW64 whatever Provenance is built as. A launcher version that isn't known gets the default
     public static string UserAgentFor(Version launcher)
     {
+        if (launcher.Major == 0) launcher = DefaultLauncher;
         var os = Environment.OSVersion.Version;
         return $"Windower/{launcher.Major}.{launcher.Minor} (Windows NT {os.Major}.{os.Minor}{(Environment.Is64BitOperatingSystem ? "; WOW64" : "")})";
     }
@@ -121,8 +123,7 @@ public sealed class WindowerHttp : IDisposable
         }
         if (!result.Ok && output is not null)
         {
-            try { File.Delete(file); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            FileDelete.Try(file);
         }
         return result;
     }

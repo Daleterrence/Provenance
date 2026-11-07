@@ -13,6 +13,7 @@ using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Provenance.Common.Win32;
 using Serilog;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -322,7 +323,7 @@ public sealed class WindowerLauncher : IDisposable
         _mapping?.Dispose();
         _mapping = null;
         if (_launchId is not null)
-            try { File.Delete(HookFiles.PidFile(_launchId)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            FileDelete.Try(HookFiles.PidFile(_launchId));
         if (_holdsTurn)
         {
             _holdsTurn = false;

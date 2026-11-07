@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Provenance.Common.IO;
 using Provenance.Common.Mirror;
 using Provenance.Common.PolFormat;
 using Serilog;
@@ -105,16 +106,11 @@ internal static class SignedBuilds
     private static void Save(byte[] blob)
     {
         if (_path is null) return;
-        var temp = _path + ".tmp";
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.WriteAllBytes(temp, blob);
-            File.Move(temp, _path, overwrite: true);
+            AtomicFile.Write(_path, blob);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            try { File.Delete(temp); } catch (Exception) { }
-        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 }

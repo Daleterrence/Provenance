@@ -3,7 +3,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Provenance.Common.Win32;
 
-internal static partial class Advapi32
+internal static class Advapi32
 {
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     internal static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl, int revision, out IntPtr descriptor, IntPtr size);

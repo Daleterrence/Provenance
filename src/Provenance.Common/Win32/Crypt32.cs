@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Provenance.Common.Win32;
 
-internal static partial class Crypt32
+internal static class Crypt32
 {
     [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     internal static extern bool CryptProtectData(ref DataBlob pDataIn, string? szDataDescr, ref DataBlob pOptionalEntropy,

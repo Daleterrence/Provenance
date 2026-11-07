@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Provenance.Common.Win32;
 
-internal static partial class User32
+internal static class User32
 {
     [DllImport("user32.dll")]
     internal static extern bool AllowSetForegroundWindow(uint pid);

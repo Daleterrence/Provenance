@@ -65,7 +65,7 @@ public static class AshitaLauncher
         ApplyContract(psi.Environment, launchPsi.Environment, launchId);
 
         var pidFile = HookFiles.PidFile(launchId);
-        try { File.Delete(pidFile); } catch { }
+        FileDelete.Try(pidFile);
         Process? hookProc = null;
         ProcessStamp hook;
         progress?.Report(new LaunchProgress("Starting", $"Starting {name}..."));
@@ -103,7 +103,7 @@ public static class AshitaLauncher
             if (reportBy is { } by ? now >= by : now - startedAt >= limit.Start) break;
             if (ReadPid(pidFile) is { } pid)
             {
-                try { File.Delete(pidFile); } catch { }
+                FileDelete.Try(pidFile);
                 progress?.Report(new LaunchProgress("Starting", $"{name} has started PlayOnline."));
                 return pid;
             }
@@ -156,7 +156,7 @@ public static class AshitaLauncher
         if (ct.IsCancellationRequested)
         {
             bool closed = EndLaunch(hookProc, tree);
-            try { File.Delete(pidFile); } catch { }
+            FileDelete.Try(pidFile);
             progress?.Report(LaunchProgress.Cancelled(closed));
             return null;
         }
@@ -255,9 +255,7 @@ public static class AshitaLauncher
         try
         {
             if (!File.Exists(path)) return null;
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var sr = new StreamReader(fs);
-            return int.TryParse(sr.ReadToEnd().Trim(), out var pid) ? pid : null;
+            return int.TryParse(SharedFile.ReadAllText(path).Trim(), out var pid) ? pid : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }

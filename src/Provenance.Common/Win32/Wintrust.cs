@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Provenance.Common.Win32;
 
-internal static partial class Wintrust
+internal static class Wintrust
 {
     [DllImport("wintrust.dll", ExactSpelling = true)]
     internal static extern int WinVerifyTrust(IntPtr hwnd, ref Guid action, ref WinTrustData data);

@@ -4,7 +4,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Provenance.Common.Win32;
 
-internal static partial class Kernel32
+internal static class Kernel32
 {
     [DllImport("kernel32.dll", SetLastError = true)]
     internal static extern bool CloseHandle(IntPtr handle);

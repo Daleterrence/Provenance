@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using Provenance.Common.IO;
 using Provenance.Common.Security;
 using Serilog;
 
@@ -90,8 +91,7 @@ public static class CredentialKey
         if (exists)
         {
             Log.Warning("The key file {Path} is not a valid key; a new key is made. What it protected ({Protects}) cannot be read any more", path, protects);
-            try { File.Delete(path); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }   // TryCreate then fails on what's still there
+            FileDelete.Try(path);   // TryCreate then fails on what's still there
         }
         return TryCreate(path) ?? throw new IOException($"Provenance could not read or make its credential key {path}.");
     }
@@ -114,31 +114,10 @@ public static class CredentialKey
 
     private static byte[]? TryCreate(string path)
     {
-        var dir = Path.GetDirectoryName(path)!;
-        var tmp = Path.Combine(dir, $"{FileName}.{Guid.NewGuid():N}.tmp");
         var key = RandomNumberGenerator.GetBytes(Length);
-        try
-        {
-            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                fs.Write(key);
-                fs.Flush(flushToDisk: true);
-            }
-            try
-            {
-                File.Move(tmp, path, overwrite: false);
-                return key;
-            }
-            catch (IOException) when (File.Exists(path))
-            {
-                CryptographicOperations.ZeroMemory(key);
-                return null;
-            }
-        }
-        finally
-        {
-            try { File.Delete(tmp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        }
+        if (AtomicFile.CreateNew(path, key)) return key;
+        CryptographicOperations.ZeroMemory(key);
+        return null;
     }
 }
 

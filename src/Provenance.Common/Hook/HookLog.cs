@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Hook;
 
@@ -43,7 +44,7 @@ public sealed class HookLog
         if (!File.Exists(Path)) return lines;
         try
         {
-            using var fs = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var fs = SharedFile.OpenRead(Path);
             if (fs.Length < _offset) _offset = 0;
             fs.Seek(_offset, SeekOrigin.Begin);
             var buf = new byte[fs.Length - _offset];
@@ -74,7 +75,7 @@ public sealed class HookLog
     // each run, so the last one's this pol.exe's. Latin1 keeps one char per byte, so Start is a byte offset too
     private static (string Text, long Start) ThisRun(string path)
     {
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var fs = SharedFile.OpenRead(path);
         using var sr = new StreamReader(fs, Encoding.Latin1, detectEncodingFromByteOrderMarks: false);
         var text = sr.ReadToEnd();
         int at = text.LastIndexOf(HookContract.LogLines.FirstLine, StringComparison.Ordinal);

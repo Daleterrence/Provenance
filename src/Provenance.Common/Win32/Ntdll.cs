@@ -3,7 +3,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Provenance.Common.Win32;
 
-internal static partial class Ntdll
+internal static class Ntdll
 {
     [DllImport("ntdll.dll")]
     internal static extern uint NtCreateFile(out SafeFileHandle handle, uint access, ref ObjectAttributes attributes, out IoStatusBlock io,

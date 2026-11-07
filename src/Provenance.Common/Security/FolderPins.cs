@@ -76,7 +76,7 @@ public sealed class FolderPins : IDisposable
         var full = Rebase(dir);
         if (!Add(_root)) return false;
         if (full.Equals(_root, StringComparison.OrdinalIgnoreCase)) return true;
-        if (!full.StartsWith(_root + "\\", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!PathInside.IsUnder(_root, full)) return false;
         var at = _root;
         foreach (var part in full[(_root.Length + 1)..].Split('\\'))
         {
@@ -97,8 +97,7 @@ public sealed class FolderPins : IDisposable
     public bool Intact(string dir)
     {
         var full = Rebase(dir);
-        if (!full.Equals(_root, StringComparison.OrdinalIgnoreCase) && !full.StartsWith(_root + "\\", StringComparison.OrdinalIgnoreCase))
-            return false;
+        if (!PathInside.Contains(_root, full)) return false;
         var at = _root;
         if (!_held.ContainsKey(at) || !Fine(at)) return false;
         if (full.Length == _root.Length) return true;

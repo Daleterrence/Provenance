@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Provenance.Common.Hook;
 using static Provenance.Common.JsonFields;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Social;
 
@@ -185,7 +186,7 @@ public static class SocialSnapshotFiles
 
     public static void DeleteStore(int pid)
     {
-        try { File.Delete(StorePathForPid(pid)); } catch { }
+        FileDelete.Try(StorePathForPid(pid));
     }
 
     public static PolSocialSnapshot? TryRead(int pid) =>

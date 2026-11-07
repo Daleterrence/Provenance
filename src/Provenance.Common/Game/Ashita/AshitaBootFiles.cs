@@ -207,8 +207,7 @@ public static class AshitaBootFiles
 
     private static void DropLaunchCopy(FolderPins pins, string ashitaDir, string name)
     {
-        try { File.Delete(pins.Real(Path.Combine(Folder(ashitaDir), LaunchCopyName(name)))); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        FileDelete.Try(pins.Real(Path.Combine(Folder(ashitaDir), LaunchCopyName(name))));
     }
 
     // Ashita's [ashita.language] playonline: 1 Japanese, 2 English (North America), 3 European, for the region pol.exe's
@@ -288,7 +287,7 @@ public static class AshitaBootFiles
 
         if (!ReadsRight(target, polExe))
         {
-            try { File.Delete(pins.Real(target)); } catch (IOException) { }
+            FileDelete.Try(pins.Real(target));
             throw Shown.Mark(new InvalidOperationException(
                 $"Provenance couldn't make a copy of {source ?? "its boot configuration"} that Ashita reads the way it should, so it won't start Ashita with it. Check the file for odd line breaks or characters."));
         }

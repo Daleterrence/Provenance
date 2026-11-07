@@ -170,7 +170,7 @@ public static partial class GameSettingsBackup
             Prune(folder, pins, leftOut);
             return new(BackupOutcome.Made, made, leftOut);
         }
-        finally { try { File.Delete(tmp); } catch { } }
+        finally { FileDelete.Try(tmp); }
     }
 
     // the folder's from settings.json, so what's missing is made from the nearest one there, each held and checked
@@ -388,7 +388,7 @@ public static partial class GameSettingsBackup
                 leftOut.Add($"{prefix}{id}: not a character folder");
                 continue;
             }
-            if (new DirectoryInfo(dir).Attributes.HasFlag(FileAttributes.ReparsePoint))
+            if (FileLinks.IsLink(dir))
             {
                 leftOut.Add($"{prefix}{id}: a link, so it's left out");
                 continue;
@@ -527,7 +527,7 @@ public static partial class GameSettingsBackup
 
     private static ZipArchive OpenZip(string path)
     {
-        var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        var fs = SharedFile.OpenRead(path);
         try { return new ZipArchive(fs, ZipArchiveMode.Read); }
         catch
         {
@@ -644,8 +644,8 @@ public static partial class GameSettingsBackup
         try
         {
             var info = Info(h);
-            if ((info.FileAttributes & ReparsePointAttribute) != 0) throw new IOException("it's a link");
-            if ((info.FileAttributes & DirectoryAttribute) != 0) throw new IOException("it's a folder");
+            if (((FileAttributes)info.FileAttributes).HasFlag(FileAttributes.ReparsePoint)) throw new IOException("it's a link");
+            if (((FileAttributes)info.FileAttributes).HasFlag(FileAttributes.Directory)) throw new IOException("it's a folder");
             if (info.NumberOfLinks != 1) throw new IOException("it has other names (a hard link)");
             if (FileHandles.FinalPath(h, allowUnc: true) is not { } where || !string.Equals(Path.GetDirectoryName(where), Path.TrimEndingDirectorySeparator(folder), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("it isn't in the folder it was found in");
@@ -663,6 +663,4 @@ public static partial class GameSettingsBackup
 
     private static ByHandleFileInformation Info(SafeFileHandle h) =>
         FileHandles.TryInfo(h, out var info) ? info : throw new IOException($"its details couldn't be read (error {Marshal.GetLastPInvokeError()})");
-
-    private const uint ReparsePointAttribute = 0x400, DirectoryAttribute = 0x10;
 }

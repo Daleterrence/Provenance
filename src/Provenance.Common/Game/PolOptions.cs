@@ -2,6 +2,7 @@ using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Common.PolFormat;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Game;
 
@@ -31,7 +32,7 @@ public static class PolOptions
     {
         try
         {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var fs = SharedFile.OpenRead(path);
             if (fs.Length > PolOptionFile.MaxSize) return null;
             var bytes = new byte[fs.Length];
             fs.ReadExactly(bytes);
@@ -101,16 +102,8 @@ public static class PolOptions
             Log.Warning("pub\\home{Slot:00} couldn't be held for the write, its POL settings are left alone", slot);
             return;
         }
-        // a new name every time and never opened over an existing one, so a link left in its place can't catch it
-        var tmp = Path.Combine(dir, $"option.bin.{Guid.NewGuid():N}.tmp");
-        try
-        {
-            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                fs.Write(PolOptionFile.Encrypt(plain));
-            File.Move(tmp, path, overwrite: true);
-            Log.Information("POL settings for home{Slot:00}{New}: chat language filter {Filter}, auto-disconnect {Minutes}",
-                            slot, fresh ? " (from the template)" : "", filter == 0, minutes);
-        }
-        finally { try { File.Delete(tmp); } catch { } }
+        SafeWrite.Replace(pins, dir, path, fs => fs.Write(PolOptionFile.Encrypt(plain)));
+        Log.Information("POL settings for home{Slot:00}{New}: chat language filter {Filter}, auto-disconnect {Minutes}",
+                        slot, fresh ? " (from the template)" : "", filter == 0, minutes);
     }
 }

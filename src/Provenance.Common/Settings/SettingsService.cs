@@ -227,7 +227,7 @@ public sealed class SettingsService : ISettingsService
         {
             using var gate = AdminLock.TryAcquire(AdminLock.PerUser("settings"), TimeSpan.FromMilliseconds(500), reentrant: true);
             if (gate is null || !File.Exists(_path)) return null;
-            using var fs = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var fs = SharedFile.OpenRead(_path);
             return JsonSerializer.Deserialize<LauncherSettings>(fs);
         }
         catch (Exception ex)

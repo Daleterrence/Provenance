@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
+using Provenance.Common.Security;
 using System.Text;
 using System.Text.Json;
 using Provenance.Common.IO;
@@ -23,8 +24,7 @@ public sealed class FeedClient
     public FeedClient(HttpClient? http = null)
     {
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        if (!_http.DefaultRequestHeaders.UserAgent.TryParseAdd("Provenance/1.0"))
-            _http.DefaultRequestHeaders.Add("User-Agent", "Provenance/1.0");
+        HttpAgent.Set(_http);
     }
 
     internal static string Code(PolRegion r) => r switch { PolRegion.Europe => "eu", PolRegion.Japan => "jp", _ => "na" };
@@ -227,8 +227,7 @@ public sealed class FeedClient
         try
         {
             if (localPath is null || CacheDir("images") is not { } dir) return;
-            var full = Path.GetFullPath(localPath);
-            if (full.StartsWith(Path.GetFullPath(dir), StringComparison.OrdinalIgnoreCase)) File.Delete(full);
+            if (PathInside.IsUnder(dir, localPath)) File.Delete(Path.GetFullPath(localPath));
         }
         catch { }
     }
@@ -240,7 +239,7 @@ public sealed class FeedClient
             if (CacheDir("images") is not { } dir || !Directory.Exists(dir)) return;
             var cutoff = DateTime.UtcNow - maxAge;
             foreach (var f in Directory.EnumerateFiles(dir))
-                if (File.GetLastWriteTimeUtc(f) < cutoff) { try { File.Delete(f); } catch { } }
+                if (File.GetLastWriteTimeUtc(f) < cutoff) { FileDelete.Try(f); }
         }
         catch { }
     }

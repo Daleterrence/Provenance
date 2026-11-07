@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Unicode;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Game;
 
@@ -63,7 +64,7 @@ internal sealed class PeFile
     {
         try
         {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var fs = SharedFile.OpenRead(path);
             if (fs.Length > maxSize) return null;
             var bytes = new byte[fs.Length];
             fs.ReadExactly(bytes);

@@ -10,13 +10,7 @@ public static class PathInside
         var rel = relative.Replace('/', '\\');
         if (rel.Length == 0 || Path.IsPathRooted(rel) || rel.Contains(':') || rel.Contains('\0') || rel.Split('\\').Any(part => part is "" or "." or ".."))
             return null;
-        try
-        {
-            var top = Top(root);
-            var full = Path.GetFullPath(Path.Combine(top, rel));
-            return Below(top, full) ? full : null;
-        }
-        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
+        return Collapse(root, rel);
     }
 
     // for names that are the player's own or a zip's spelling: "./x", "a//b" and "sub/../x" are fine, the full path

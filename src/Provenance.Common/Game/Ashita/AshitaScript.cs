@@ -136,15 +136,15 @@ public sealed partial class AshitaScript
     // changes every boot config on it. Those get copied first
     public static bool NeedsCopy(string ashitaDir, string? script, string bootName, IEnumerable<(string Boot, string? Script)> configs)
     {
-        if (string.IsNullOrWhiteSpace(script) || PathFor(ashitaDir, script) is not { } file || Same(file, PathFor(ashitaDir, "default.txt")!))
+        if (string.IsNullOrWhiteSpace(script) || PathFor(ashitaDir, script) is not { } file || file.Equals(PathFor(ashitaDir, "default.txt")!, StringComparison.OrdinalIgnoreCase))
             return true;
         var me = BootStem(bootName);
         foreach (var (boot, other) in configs)
         {
             var stem = BootStem(boot);
             // the launch copies Provenance writes keep their source's script, they don't count as sharing it
-            if (Same(stem, me) || Same(stem, "provenance") || stem.StartsWith("provenance.", StringComparison.OrdinalIgnoreCase)) continue;
-            if (!string.IsNullOrWhiteSpace(other) && PathFor(ashitaDir, other) is { } path && Same(path, file)) return true;
+            if (stem.Equals(me, StringComparison.OrdinalIgnoreCase) || stem.Equals("provenance", StringComparison.OrdinalIgnoreCase) || stem.StartsWith("provenance.", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.IsNullOrWhiteSpace(other) && PathFor(ashitaDir, other) is { } path && path.Equals(file, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
     }
@@ -267,7 +267,7 @@ public sealed partial class AshitaScript
                     case Verb.Load: a.Add(at, c.Addon, Op.Load, name, false, true, c.Args, unordered); break;
                     case Verb.Unload:
                         a.Add(at, c.Addon, Op.Unload, name, false, true, "", unordered);
-                        if (!c.Addon && Same(name, AddonsPlugin)) a.Add(at, true, Op.UnloadAll, "", false, true, "", unordered);
+                        if (!c.Addon && name.Equals(AddonsPlugin, StringComparison.OrdinalIgnoreCase)) a.Add(at, true, Op.UnloadAll, "", false, true, "", unordered);
                         break;
                     case Verb.UnloadAll:
                         a.Add(at, c.Addon, Op.UnloadAll, "", false, true, "", unordered);
@@ -347,8 +347,6 @@ public sealed partial class AshitaScript
         int end = s.IndexOfAny([' ', '\t']);
         return end < 0 ? (s, "") : (s[..end], s[(end + 1)..].Trim(' ', '\t'));
     }
-
-    private static bool Same(string a, string b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
 
     private List<AshitaScriptLoad> Listed(bool addon)
     {

@@ -1157,20 +1157,14 @@ public sealed class PolSession : IDisposable
 
     public void ReleaseClaim()
     {
-        if (_claimFile is { } f) DeleteQuietly(f);
+        if (_claimFile is { } f) FileDelete.Try(f);
         _claimFile = null;
     }
 
     private void ClearSession()
     {
-        if (_sessionFile is { } f) DeleteQuietly(f);
+        if (_sessionFile is { } f) FileDelete.Try(f);
         _sessionFile = null;
-    }
-
-    private static void DeleteQuietly(string path)
-    {
-        try { File.Delete(path); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     // a copy that ended before Play can leave its pol.exe logged in (or still logging itself out), so it's ended here
@@ -1185,12 +1179,12 @@ public sealed class PolSession : IDisposable
             if (ownerAlive && s.OwnerPid != Environment.ProcessId) continue;
             if (!Ours(s.Game))
             {
-                DeleteQuietly(path);
+                FileDelete.Try(path);
                 continue;
             }
             if (s.Played || ownerAlive) continue;
             EndOrphan(s.Game);
-            DeleteQuietly(path);
+            FileDelete.Try(path);
         }
     }
 

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -86,7 +87,7 @@ public static partial class WindowerAddons
             var name = ((string?)a.Element("name"))?.Trim();
             if (string.IsNullOrEmpty(name) || map.ContainsKey(name)) continue;
             var desc = (string?)a.Element("description");
-            map[name] = new Listed(((string?)a.Element("author"))?.Trim() ?? "", desc is null ? null : TextFiles.Spaces(desc));
+            map[name] = new Listed(((string?)a.Element("author"))?.Trim() ?? "", desc is null ? null : WindowerText.Spaces(desc));
         }
         return map;
     }

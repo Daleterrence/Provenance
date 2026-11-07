@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using Provenance.Common.Security;
 using Serilog;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Game.Windower;
 
@@ -167,7 +168,7 @@ public sealed class WindowerUpdater
     private WindowerHttp NewHttp()
     {
         var v = WindowerFiles.LauncherVersion(LauncherPath);
-        return new WindowerHttp { UserAgent = WindowerHttp.UserAgentFor(v.Major > 0 ? v : WindowerHttp.DefaultLauncher) };
+        return new WindowerHttp { UserAgent = WindowerHttp.UserAgentFor(v) };
     }
 
     private async Task<(WindowerUpdateMutex? Hold, bool TimedOut)> TakeMutexAsync(List<string> errors, CancellationToken ct)
@@ -340,7 +341,7 @@ public sealed class WindowerUpdater
             await ReplaceAsync(job, $"{Branch}/Windower.exe", LauncherPath, "Windower's own launcher"))
         {
             result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath);
-            job.Http.UserAgent = WindowerHttp.UserAgentFor(result.LauncherAfter.Major > 0 ? result.LauncherAfter : WindowerHttp.DefaultLauncher);
+            job.Http.UserAgent = WindowerHttp.UserAgentFor(result.LauncherAfter);
         }
         // a missing Hook.dll can't be loaded by anything, so it comes down even while games run
         if ((!skip || !File.Exists(HookPath)) && WindowerFiles.FileVersion(HookPath) != manifest.HookVersion &&
@@ -671,7 +672,7 @@ public sealed class WindowerUpdater
     private bool WriteAddonFile(Job job, ZipArchive zip, WindowerAddonFile f)
     {
         var target = PathInside.Collapse(Folder, f.Path);
-        if (target is null || !target.StartsWith(AddonsDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (target is null || !PathInside.IsUnder(AddonsDir, target))
         {
             job.Errors.Add($"The addon list has a file outside the addons folder ({f.Path}), so it was skipped.");
             return false;

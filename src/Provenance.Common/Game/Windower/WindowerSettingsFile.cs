@@ -70,7 +70,7 @@ public sealed class WindowerSettingsFile
         XDocument doc;
         try
         {
-            var rs = new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore, XmlResolver = null, IgnoreWhitespace = true };
+            var rs = TextFiles.XmlSettings(ignoreWhitespace: true);
             using var r = XmlReader.Create(s, rs);
             doc = XDocument.Load(r);
         }

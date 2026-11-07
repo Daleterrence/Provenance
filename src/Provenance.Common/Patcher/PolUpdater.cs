@@ -428,13 +428,13 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
     private static void Replace(string staged, string target)
     {
-        AtomicFile.MakeWritable(target);
+        AtomicFile.ClearReadOnly(target);
         File.Move(staged, target, overwrite: true);
     }
 
     private static void DeleteFile(string path)
     {
-        AtomicFile.MakeWritable(path);
+        AtomicFile.ClearReadOnly(path);
         File.Delete(path);
     }
 
@@ -471,17 +471,17 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             // every copy before any delete, so a file in use leaves the whole queue to run again
             foreach (var (target, staged) in queued)
             {
-                AtomicFile.MakeWritable(target);
+                AtomicFile.ClearReadOnly(target);
                 File.Copy(staged, target, overwrite: true);
             }
             foreach (var (_, staged) in queued) DeleteFile(staged);
-            AtomicFile.MakeWritable(Path.Combine(viewerDir, "patch.bak"));
+            AtomicFile.ClearReadOnly(Path.Combine(viewerDir, "patch.bak"));
             File.Copy(ini, Path.Combine(viewerDir, "patch.bak"), overwrite: true);
             DeleteFile(ini);
         }
         foreach (var (staged, live) in BootCopies(viewerDir))
         {
-            AtomicFile.MakeWritable(live);
+            AtomicFile.ClearReadOnly(live);
             File.Copy(staged, live, overwrite: true);
         }
     }

@@ -1,6 +1,7 @@
 using Provenance.Common.Game;
 using Provenance.Common.Security;
 using Serilog;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Patcher;
 
@@ -58,9 +59,7 @@ public static class GameFilesLock
     {
         try
         {
-            string text;
-            using (var fs = new FileStream(RecordPath(), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            using (var reader = new StreamReader(fs)) text = reader.ReadToEnd();
+            var text = SharedFile.ReadAllText(RecordPath());
             var parts = text.Split(' ');
             if (parts.Length != 3 || !int.TryParse(parts[0], out var pid) || !long.TryParse(parts[1], out var started)
                 || !Enum.TryParse<Job>(parts[2], out var job) || !Enum.IsDefined(job)) return null;

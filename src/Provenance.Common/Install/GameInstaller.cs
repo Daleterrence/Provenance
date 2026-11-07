@@ -89,8 +89,7 @@ public sealed class GameInstaller
     {
         _http = http ?? new HttpClient(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.None })
             { Timeout = Timeout.InfiniteTimeSpan };
-        if (!_http.DefaultRequestHeaders.UserAgent.TryParseAdd("Provenance/1.0"))
-            _http.DefaultRequestHeaders.Add("User-Agent", "Provenance/1.0");
+        HttpAgent.Set(_http);
     }
 
     public static IReadOnlyList<GamePart> PartsFor(PolRegion region)

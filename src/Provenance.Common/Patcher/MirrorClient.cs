@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using Provenance.Common.IO;
 using Provenance.Common.Mirror;
 
 namespace Provenance.Common.Patcher;
@@ -91,13 +92,13 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
                 var copy = targets[i] + ".mirror";
                 temps.Add(copy);
                 File.Copy(temp, copy, overwrite: true);
-                ReplaceKeepingReadOnly(copy, targets[i]);
+                AtomicFile.ReplaceKeepingReadOnly(copy, targets[i]);
             }
-            ReplaceKeepingReadOnly(temp, targets[0]);
+            AtomicFile.ReplaceKeepingReadOnly(temp, targets[0]);
         }
         catch (Exception ex)
         {
-            foreach (var t in temps) try { File.Delete(t); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            foreach (var t in temps) FileDelete.Try(t);
             if (input.Broken || ex is OperationCanceledException) throw;
             await input.DrainAsync(ct);
             throw;
@@ -119,25 +120,6 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         }
         if (total != entry.Size) throw new InvalidDataException($"mirror object size mismatch for {entry.Path}");
         return Convert.ToHexStringLower(hash.GetHashAndReset());
-    }
-
-    // the installer marks some files read-only, so the new file gets the old attributes back (and the old one keeps
-    // them if the move fails)
-    private static void ReplaceKeepingReadOnly(string temp, string targetPath)
-    {
-        FileAttributes? old = null;
-        if (File.Exists(targetPath) && File.GetAttributes(targetPath) is var a && a.HasFlag(FileAttributes.ReadOnly))
-        {
-            File.SetAttributes(targetPath, a & ~FileAttributes.ReadOnly);
-            old = a;
-        }
-        try { File.Move(temp, targetPath, overwrite: true); }
-        catch
-        {
-            if (old is { } back) try { File.SetAttributes(targetPath, back); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-            throw;
-        }
-        if (old is { } restore) File.SetAttributes(targetPath, restore);
     }
 
     private sealed class WindowStream(Stream inner, long skip, long length, Action<int>? read, IDisposable? owner) : Stream

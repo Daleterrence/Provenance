@@ -46,7 +46,7 @@ public static class SafeWrite
         catch
         {
             // a Replace that failed halfway can leave the temp file as the only copy
-            if (!replacing || File.Exists(full)) AtomicFile.Discard(tmp);
+            if (!replacing || File.Exists(full)) FileDelete.Try(tmp);
             throw;
         }
         if (plan == Backup.DropOld) File.Delete(bak);
@@ -55,18 +55,11 @@ public static class SafeWrite
     // for folders the caller already holds: the write goes in a temp, the held folders are checked, then it's moved over
     public static void Replace(FolderPins pins, string dir, string path, Action<FileStream> write)
     {
-        var tmp = AtomicFile.TempFor(path);
-        try
+        AtomicFile.Build(path, tmp =>
         {
             using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) write(fs);
             pins.Recheck(dir);
-            File.Move(tmp, path, overwrite: true);
-        }
-        catch
-        {
-            AtomicFile.Discard(tmp);
-            throw;
-        }
+        });
     }
 
     // the first name nameFor gives (1, 2, 3...) that isn't taken gets the bytes and is returned, never over a file
@@ -93,7 +86,7 @@ public static class SafeWrite
                 }
                 catch (IOException) when (Path.Exists(target)) { }
             }
-            finally { AtomicFile.Discard(tmp); }
+            finally { FileDelete.Try(tmp); }
         }
         return null;
     }

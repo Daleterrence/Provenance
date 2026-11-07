@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Provenance.Common.Win32;
 
-internal static partial class Msi
+internal static class Msi
 {
     [DllImport("msi.dll")] internal static extern uint MsiCloseHandle(IntPtr handle);
     [DllImport("msi.dll")] internal static extern IntPtr MsiCreateRecord(uint fields);

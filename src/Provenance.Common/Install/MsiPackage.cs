@@ -190,7 +190,7 @@ public sealed class MsiPackage : IDisposable
         {
             ExceptionDispatchInfo.Capture(ae.Flatten().InnerExceptions[0]).Throw();
         }
-        finally { foreach (var t in temps) try { File.Delete(t); } catch { } }
+        finally { foreach (var t in temps) FileDelete.Try(t); }
         ct.ThrowIfCancellationRequested();
         status?.Invoke("Checking the installed files...");
         foreach (var f in files.Values)
@@ -417,7 +417,7 @@ public sealed class MsiPackage : IDisposable
             foreach (var r in Query("SELECT `Root`,`Key`,`Name`,`Value`,`Component_` FROM `Registry`"))
                 if (on(r[4]) && r[0] == "2" && format(r[1]).Equals(folderKey, StringComparison.OrdinalIgnoreCase) && format(r[2]) == setup.FolderValue
                     && Path.TrimEndingDirectorySeparator(format(r[3])) is var t && Path.IsPathFullyQualified(t)
-                    && t.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase))
+                    && PathInside.IsUnder(root, t))
                     tree = t;
         bool InTree(string path) => tree != null && PathInside.Contains(tree, path);
         var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -427,7 +427,7 @@ public sealed class MsiPackage : IDisposable
             {
                 folders.Add(d);
                 if (d.Equals(root, StringComparison.OrdinalIgnoreCase)) break;
-                if (!d.StartsWith(root, StringComparison.OrdinalIgnoreCase)) break;
+                if (!PathInside.Contains(root, d)) break;
             }
         }
         foreach (var r in Query("SELECT `Directory_`,`Name`,`Component_` FROM `Shortcut`"))
@@ -709,11 +709,11 @@ public sealed class MsiPackage : IDisposable
         Directory.CreateDirectory(folder);
         // a copy left by a crash is a whole installer, so it goes
         foreach (var old in Directory.EnumerateFiles(folder, Path.GetFileName(target) + ".*.tmp").Where(f => f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)))
-            try { File.Delete(old); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            FileDelete.Try(old);
         AtomicFile.Build(target, tmp =>
         {
             File.Copy(sourceMsi, tmp);
-            File.SetAttributes(tmp, File.GetAttributes(tmp) & ~FileAttributes.ReadOnly);
+            AtomicFile.ClearReadOnly(tmp);
             Check(Msi.MsiOpenDatabaseW(tmp, (IntPtr)1 /* MSIDBOPEN_TRANSACT */, out var db), "open");
             try
             {

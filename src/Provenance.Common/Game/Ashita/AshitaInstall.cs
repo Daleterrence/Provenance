@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using static Provenance.Common.Game.ThirdParty.ThirdPartyHooks;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Game.Ashita;
 
@@ -27,7 +28,7 @@ public static class AshitaInstall
             var re = new Regex(@"Config Script:\s*\\boot\\(?<n>[^\\/:\r\n]+\.ini)", RegexOptions.IgnoreCase);
             foreach (var f in new DirectoryInfo(logs).GetFiles("*.txt").OrderByDescending(f => f.LastWriteTimeUtc).Take(20))
             {
-                using var fs = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var fs = SharedFile.OpenRead(f.FullName);
                 using var sr = new StreamReader(fs);
                 var buf = new char[16384];   // the header's at the top
                 var head = new string(buf, 0, sr.Read(buf, 0, buf.Length));

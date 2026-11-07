@@ -40,7 +40,7 @@ public static class LargeAddressAware
     {
         try
         {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var fs = SharedFile.OpenRead(path);
             return BitAt(fs) is { } at ? (ByteAt(fs, at) & Flag) != 0 : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
@@ -51,7 +51,7 @@ public static class LargeAddressAware
 
     internal static bool IsKnownBuild(string path, (string Off, string On) known)
     {
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var fs = SharedFile.OpenRead(path);
         var sha = FileHash.Sha256(fs);
         return sha == known.Off || sha == known.On;
     }
@@ -62,7 +62,7 @@ public static class LargeAddressAware
         var pair = Known[0];
         try
         {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var fs = SharedFile.OpenRead(path);
             var sha = FileHash.Sha256(fs);
             pair = Pairs().FirstOrDefault(k => sha == k.Off || sha == k.On, Known[0]);
         }

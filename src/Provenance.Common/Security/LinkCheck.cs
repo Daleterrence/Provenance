@@ -7,9 +7,9 @@ namespace Provenance.Common.Security;
 // OneDrive, Dev Drive and the like use reparse points too, but they don't redirect
 public static class LinkCheck
 {
-    private const uint ReparsePoint = 0x400, MountPoint = 0xA0000003, Symlink = 0xA000000C;
+    private const uint MountPoint = 0xA0000003, Symlink = 0xA000000C;
 
-    public static bool IsRedirect(uint attributes, uint reparseTag) => (attributes & ReparsePoint) != 0 && reparseTag is MountPoint or Symlink;
+    public static bool IsRedirect(uint attributes, uint reparseTag) => ((FileAttributes)attributes).HasFlag(FileAttributes.ReparsePoint) && reparseTag is MountPoint or Symlink;
 
     // a drive root or something that isn't there isn't one
     public static bool IsRedirect(string path)
