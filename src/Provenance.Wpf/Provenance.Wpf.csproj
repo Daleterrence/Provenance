@@ -34,6 +34,7 @@
     <Resource Include="$(ProvenanceAssetsDir)\app\no-image.jpg" Link="Assets\no-image.jpg" />
     <Resource Include="$(ProvenanceAssetsDir)\app\icons\*.svg" Link="Assets\icons\%(Filename)%(Extension)" />
     <None Include="$(ProvenanceAssetsDir)\installer\zones\*.jpg" Link="zones\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="..\Provenance.Launcher\CloseRequestName.cs" Link="Services\CloseRequestName.cs" />
   </ItemGroup>
 
   <ItemGroup>

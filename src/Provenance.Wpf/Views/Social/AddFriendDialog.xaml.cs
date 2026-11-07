@@ -78,7 +78,7 @@ public partial class AddFriendDialog : AppWindow
         var problem = Vm.RequestProblem(hit);
         if (problem != null)
         {
-            Vm.SearchNote = problem;
+            Vm.SearchNote.Show(problem);
             return;
         }
         if (Vm.Dialogs.Confirm("Send friend request",

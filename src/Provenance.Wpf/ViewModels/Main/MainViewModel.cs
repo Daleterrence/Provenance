@@ -1216,7 +1216,7 @@ public partial class MainViewModel : ObservableObject
                 return true;
             }, text),
             Saying = text => ProgressText = text,
-            PageWaiting = () => Handles.Busy ? Handles.Note : null,
+            PageWaiting = () => Handles.Busy ? Handles.Note.Text : null,
             Alive = SessionAliveForTest ?? ProcessStamp.PidRunning,
             Read = _ => Social.Last,
         }.RunAsync();

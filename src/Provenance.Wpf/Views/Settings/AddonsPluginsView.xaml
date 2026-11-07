@@ -249,8 +249,8 @@
 
         <!-- down here so a switch far down the list still shows what happened -->
         <Border Grid.Row="1" Style="{StaticResource FooterBar}"
-                Visibility="{Binding Status, Converter={StaticResource NullToVisibilityConverter}}">
-            <TextBlock Text="{Binding Status}" behaviours:State.IsError="{Binding StatusIsError}" Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12" />
+                Visibility="{Binding Status.Text, Converter={StaticResource NullToVisibilityConverter}}">
+            <TextBlock Text="{Binding Status.Text}" behaviours:State.IsError="{Binding Status.IsError}" Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12" />
         </Border>
     </Grid>
 </UserControl>

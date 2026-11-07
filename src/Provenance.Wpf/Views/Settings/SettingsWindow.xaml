@@ -243,7 +243,7 @@
                                             <controls:SvgIcon Glyph="folder" Width="18" Height="18" />
                                         </Button>
                                     </Grid>
-                                    <TextBlock Text="{Binding BackupStatus}" behaviours:State.IsError="{Binding BackupStatusIsError}" Style="{StaticResource ProfileStatusText}" Margin="0,8,0,0" />
+                                    <TextBlock Text="{Binding BackupStatus.Text}" behaviours:State.IsError="{Binding BackupStatus.IsError}" Style="{StaticResource ProfileStatusText}" Margin="0,8,0,0" />
                                 </StackPanel>
                                 <HeaderedContentControl Header="Restore a backup" Tag="Puts your game settings back from one of your backups.">
                                     <Button Content="RESTORE" Style="{StaticResource PolButton}" FontSize="12"
@@ -319,7 +319,7 @@
                         <TextBlock Text="Platform" Style="{StaticResource Label}" />
                         <ComboBox Width="260" HorizontalAlignment="Left" AutomationProperties.Name="Platform"
                                   ItemsSource="{Binding ThirdPartyHookChoices}" SelectedValuePath="Code" SelectedValue="{Binding Hook}" />
-                        <TextBlock Text="{Binding ThirdPartyHookStatus}" behaviours:State.IsError="{Binding ThirdPartyHookStatusIsError}"
+                        <TextBlock Text="{Binding ThirdPartyHookStatus.Text}" behaviours:State.IsError="{Binding ThirdPartyHookStatus.IsError}"
                                    Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12"
                                    Margin="0,10,0,16" />
 
@@ -331,7 +331,7 @@
                                 <Button Style="{StaticResource BrowseButton}"
                                         Command="{Binding BrowseAshitaCommand}" />
                             </Grid>
-                            <TextBlock Text="{Binding ProfileStatus}" behaviours:State.IsError="{Binding ProfileStatusIsError}" Style="{StaticResource ProfileStatusText}" />
+                            <TextBlock Text="{Binding ProfileStatus.Text}" behaviours:State.IsError="{Binding ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
                             <TextBlock Text="{Binding AshitaCardNote}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,14" Foreground="{DynamicResource State.Warn}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
@@ -366,7 +366,7 @@
                                 <Button Style="{StaticResource BrowseButton}"
                                         Command="{Binding BrowseWindowerCommand}" />
                             </Grid>
-                            <TextBlock Text="{Binding ProfileStatus}" behaviours:State.IsError="{Binding ProfileStatusIsError}" Style="{StaticResource ProfileStatusText}" />
+                            <TextBlock Text="{Binding ProfileStatus.Text}" behaviours:State.IsError="{Binding ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
                             <Border Margin="0,0,0,14" Padding="14,10" CornerRadius="{StaticResource Radius.Panel}" BorderThickness="1" BorderBrush="{DynamicResource State.Warn}"
                                     Visibility="{Binding WindowerSettingsProblem, Converter={StaticResource NullToVisibilityConverter}}">
                                 <StackPanel>
@@ -515,7 +515,7 @@
                             <TextBlock Text="{Binding ReadOnlyText}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12"
                                        Foreground="{DynamicResource State.Warn}"
                                        Visibility="{Binding ReadOnly, Converter={StaticResource BoolToVis}}" />
-                            <TextBlock Text="{Binding Note}" behaviours:State.IsError="{Binding NoteIsError}" Style="{StaticResource ProfileStatusText}" />
+                            <TextBlock Text="{Binding Note.Text}" behaviours:State.IsError="{Binding Note.IsError}" Style="{StaticResource ProfileStatusText}" />
                             <ItemsControl ItemsSource="{Binding Rows}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -754,7 +754,7 @@
                     <!-- padded like the page above it, the right side with the page's scrollbar (17) added -->
                     <Border Grid.Row="1" Style="{StaticResource FooterBar}" Padding="28,10,45,10">
                         <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Text="{Binding Status}" behaviours:State.IsError="{Binding StatusIsError}"
+                            <TextBlock Text="{Binding Status.Text}" behaviours:State.IsError="{Binding Status.IsError}"
                                        Style="{StaticResource StatusText}" VerticalAlignment="Center"
                                        TextWrapping="Wrap" FontSize="12" Margin="0,0,12,0" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal">

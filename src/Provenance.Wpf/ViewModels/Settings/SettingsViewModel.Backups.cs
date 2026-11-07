@@ -6,6 +6,7 @@ using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Common.Game;
 using Provenance.Wpf.Services;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
@@ -14,8 +15,7 @@ public partial class SettingsViewModel
 {
     [ObservableProperty] private bool _backupGameSettings;
     [ObservableProperty] private string _backupFolder = "";
-    [ObservableProperty] private string _backupStatus = "";
-    [ObservableProperty] private bool _backupStatusIsError;
+    public StatusLine BackupStatus { get; } = new();
 
     public string DefaultBackupFolder => GameSettingsBackup.DefaultFolder;
 
@@ -36,10 +36,10 @@ public partial class SettingsViewModel
         var folder = value.Trim();
         if (folder.Length > 0 && !Path.IsPathFullyQualified(folder))
         {
-            SayBackup(@"Type the whole path of a folder, like D:\FFXI backups.", error: true);
+            BackupStatus.Fail(@"Type the whole path of a folder, like D:\FFXI backups.");
             return;
         }
-        SayBackup("");
+        BackupStatus.Clear();
         Save(s => s.BackupFolder = folder);
     }
 
@@ -62,12 +62,12 @@ public partial class SettingsViewModel
         }
         catch (BackupFolderLinkedException)
         {
-            SayBackup("Your backups folder goes through a link to somewhere else, so Provenance won't make it. Choose another folder.", error: true);
+            BackupStatus.Fail("Your backups folder goes through a link to somewhere else, so Provenance won't make it. Choose another folder.");
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not open the backups folder {Folder}", folder);
-            SayBackup("Windows couldn't open that folder.", error: true);
+            BackupStatus.Fail("Windows couldn't open that folder.");
         }
     }
 
@@ -115,20 +115,14 @@ public partial class SettingsViewModel
                 "ones they have now. Characters that aren't in it keep theirs. Provenance backs up your current settings first, so you can go back " +
                 "to them by restoring that backup.", "RESTORE")) return;
         RestoringBackup = true;
-        SayBackup("Restoring your game settings...");
+        BackupStatus.Show("Restoring your game settings...");
         try
         {
             var (done, text) = await Task.Run(() => GameBackupPolicy.Restore(zip, info, sources, folder, RestoreBlocked));
-            SayBackup("");
+            BackupStatus.Clear();
             if (done) _dialogs.Info(RestoreTitle, text);
             else _dialogs.Error(RestoreFailedTitle, text);
         }
         finally { RestoringBackup = false; }
-    }
-
-    private void SayBackup(string text, bool error = false)
-    {
-        BackupStatus = text;
-        BackupStatusIsError = error;
     }
 }

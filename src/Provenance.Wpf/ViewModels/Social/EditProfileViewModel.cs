@@ -51,6 +51,12 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         SelectedCard = _handleCard;
         Cards.Add(_handleCard);
         _social.PropertyChanged += OnSocialChanged;
+        Note.PropertyChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(FooterText));
+            OnPropertyChanged(nameof(FooterIsError));
+            OnPropertyChanged(nameof(CanRetryLoad));
+        };
     }
 
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
@@ -81,7 +87,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         SelectedCard.IsSelected = false;
         card.IsSelected = true;
         SelectedCard = card;
-        if (NoteIsError) { NoteIsError = false; Note = ""; }
+        if (Note.IsError) Note.Clear();
         if (!card.IsHandle && !card.Loaded) LoadXi(card);
     }
 
@@ -104,17 +110,15 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                               nameof(CanSelectCard))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private bool _busy;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(FooterText), nameof(FooterIsError))] private string _note = "";
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(FooterIsError), nameof(CanRetryLoad))]
-    private bool _noteIsError;
+    public StatusLine Note { get; } = new();
 
     // puts the window's loading overlay up. Only the load gets one, a save leaves the form in view
     [ObservableProperty] private bool _loadingProfile;
 
-    public string FooterText => !Busy && Problem.Length > 0 ? Problem : Note;
-    public bool FooterIsError => !Busy && Problem.Length > 0 || NoteIsError;
+    public string FooterText => !Busy && Problem.Length > 0 ? Problem : Note.Text;
+    public bool FooterIsError => !Busy && Problem.Length > 0 || Note.IsError;
     public bool CanEditFields => IsLoaded && !Busy;
-    public bool CanRetryLoad => !Busy && NoteIsError && (IsHandleCard ? !IsLoaded : !SelectedCard.Loaded);
+    public bool CanRetryLoad => !Busy && Note.IsError && (IsHandleCard ? !IsLoaded : !SelectedCard.Loaded);
 
     [RelayCommand]
     private void RetryLoad()
@@ -169,7 +173,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _handleCard.HasChanges = _handleChanges;
         HasChanges = _handleChanges;
         SaveCommand.NotifyCanExecuteChanged();
-        if (!Busy && !NoteIsError) Note = "";
+        if (!Busy && !Note.IsError) Note.Clear();
     }
 
     private bool HandleChanged => HandleName.Trim() != _savedHandle;
@@ -257,8 +261,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         if (job == Job.Load) LoadingText = "Loading your profile...";
         LoadingProfile = job is Job.Load or Job.LoadXi;
         Busy = true;
-        NoteIsError = false;
-        Note = note;
+        Note.Show(note);
         _timer.Start();
     }
 
@@ -278,8 +281,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     {
         _renameAfterSave = false;
         EndJob();
-        NoteIsError = true;
-        Note = text;
+        Note.Fail(text);
     }
 
     private string? JobExt => _job switch
@@ -484,7 +486,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                     return;
                 }
                 EndJob();
-                Note = "";
+                Note.Clear();
                 Fill(p);
                 break;
             case Job.Save when state == "saved":
@@ -518,7 +520,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                     return;
                 }
                 EndJob();
-                Note = "";
+                Note.Clear();
                 card.Loaded = true;
                 card.Level = snap.XiLevel is >= PrivacyLevel.Private and <= PrivacyLevel.Everyone ? snap.XiLevel : PrivacyLevel.Keep;
                 if (card.Character is { Name.Length: 0 } && snap.XiName.Trim().Length > 0) card.Title = snap.XiName.Trim();
@@ -530,9 +532,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     {
         EndJob();
         _xiCard = null;
-        NoteIsError = false;
         Dirty();
-        Note = text;   // after Dirty, which clears it
+        Note.Show(text);   // after Dirty, which clears it
     }
 
     private static string FailText(Job job, string state) => state switch

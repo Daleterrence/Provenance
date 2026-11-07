@@ -1,8 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
-using System.Text;
 using Velopack;
 using Velopack.Locators;
 using Velopack.Logging;
@@ -62,7 +60,7 @@ internal static class Program
         {
             using (p)
             {
-                var name = CloseRequestName(p.Id);
+                var name = CloseRequestName.For(AppContext.BaseDirectory, p.Id);
                 var h = OpenEventW(EventModifyState | Synchronize, false, name);
                 if (h == IntPtr.Zero)
                 {
@@ -111,14 +109,6 @@ internal static class Program
             if (Environment.TickCount64 >= until) return false;
             Thread.Sleep(250);
         }
-    }
-
-    // same name as Provenance.Wpf's CloseRequest. Both exes sit in the same folder, so the hash matches
-    private static string CloseRequestName(int pid)
-    {
-        var dir = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory).ToUpperInvariant();
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(dir)), 0, 8);
-        return $@"Local\Provenance-close-{hash}-{pid}";
     }
 
     private static void Message(string text, uint icon) =>

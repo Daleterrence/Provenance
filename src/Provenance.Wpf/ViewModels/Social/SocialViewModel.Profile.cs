@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
@@ -19,9 +20,7 @@ public partial class SocialViewModel
     [ObservableProperty] private string _profileGameLine = "";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ProfileTabsClickable))] private bool _profileLoading;
     public bool ProfileTabsClickable => !ProfileLoading;
-    [ObservableProperty] private string _profileNote = "";
-    [ObservableProperty] private bool _profileNoteIsError;
-    partial void OnProfileNoteChanged(string value) => ProfileNoteIsError = false;
+    public StatusLine ProfileNote { get; } = new();
     [ObservableProperty] private string _profileName = "";
     [ObservableProperty] private string _profileHid = "";
     [ObservableProperty] private string _profileMail = "";
@@ -64,31 +63,30 @@ public partial class SocialViewModel
         // a request with no answer yet has no profile to show (the viewer greys it out)
         if (!f.IsFriend || f.Pending || _pol.Pid is not { } pid)
         {
-            ProfileNote = HookFailures.Profile.FriendsOnly;
+            ProfileNote.Show(HookFailures.Profile.FriendsOnly);
             return;
         }
         if (GameRunning)
         {
-            ProfileNote = GameRunningNote;
+            ProfileNote.Show(GameRunningNote);
             return;
         }
         // the same profile again within 5 mins shows the copy already here, no second request for a page just read
         if (f.Key.Length > 0 && _profileCache.TryGetValue(f.Key, out var hit) &&
             DateTime.UtcNow - hit.At < TimeSpan.FromMinutes(5))
         {
-            ProfileNote = "";
+            ProfileNote.Clear();
             HandleProfileArrived(hit.Profile);
             return;
         }
         _profileToken = HookFiles.NewToken();
         _profileAt = DateTime.UtcNow;
         ProfileLoading = true;
-        ProfileNote = "Loading the profile from PlayOnline...";
+        ProfileNote.Show("Loading the profile from PlayOnline...");
         if (SocialRequests.RequestProfile(pid, _profileToken, f.Row, f.Key)) return;
         _profileToken = null;
         ProfileLoading = false;
-        ProfileNote = RequestWriteFailed;
-        ProfileNoteIsError = true;
+        ProfileNote.Fail(RequestWriteFailed);
     }
 
     // after a switch: nothing read under the old handle stays on screen or in the cache
@@ -97,7 +95,7 @@ public partial class SocialViewModel
         _profileCache.Clear();
         if (_profileFor.Length == 0) return;
         ClearProfile();
-        ProfileNote = "Your active handle changed. Open the profile again to see it from this handle.";
+        ProfileNote.Show("Your active handle changed. Open the profile again to see it from this handle.");
     }
 
     private void ClearProfile()
@@ -112,7 +110,7 @@ public partial class SocialViewModel
         _characterShown = null;
         _profileToken = _ffxiToken = null;
         ProfileLoading = false;
-        ProfileNoteIsError = false;
+        ProfileNote.Show(ProfileNote.Text);   // the words stay, the error colour goes
     }
 
     private string StateText(ProfileFieldState state) => state switch
@@ -149,19 +147,18 @@ public partial class SocialViewModel
         ProfileLoading = false;
         if (st == "done")
         {
-            ProfileNote = "";
+            ProfileNote.Clear();
             if (_profileKey.Length > 0) _profileCache[_profileKey] = (snap.Profile!, DateTime.UtcNow);
             HandleProfileArrived(snap.Profile!);
             return;
         }
-        ProfileNote = st switch
+        ProfileNote.Set(st switch
         {
             "failed:no profile" => HookFailures.Profile.None,
             // -0x14cc, which the viewer calls a hidden profile
             "failed:-5324" => ViewerText(0x4ab4, "Profile of %s's handle is hidden.").Replace("%s", Filtered(_profileFor)),
             _ => ProfileFailText(st),
-        };
-        ProfileNoteIsError = st is not ("failed:no profile" or "failed:-5324");
+        }, st is not ("failed:no profile" or "failed:-5324"));
     }
 
     private static string ProfileFailText(string st) => st switch
@@ -222,13 +219,13 @@ public partial class SocialViewModel
         {
             if (_handleProfile is null) return;
             SelectTab(tab);
-            ProfileNote = "";
+            ProfileNote.Clear();
             ShowProfile(_handleProfile);
             return;
         }
         if (GameRunning)
         {
-            ProfileNote = GameRunningNote;
+            ProfileNote.Show(GameRunningNote);
             return;
         }
         if (_pol.Pid is not { } pid) return;
@@ -237,7 +234,7 @@ public partial class SocialViewModel
         {
             if (_last.Friends.FirstOrDefault(x => x.Key == _profileKey && x.Row >= 0) is not { Pending: false } now)
             {
-                ProfileNote = HookFailures.Profile.FriendsOnly;
+                ProfileNote.Show(HookFailures.Profile.FriendsOnly);
                 return;
             }
             _profileRow = now.Row;
@@ -250,13 +247,12 @@ public partial class SocialViewModel
         _ffxiFor = tab;
         _ffxiFrom = from;
         ProfileLoading = true;
-        ProfileNote = ViewerText(0x4a82, "Retrieving profile data...");
+        ProfileNote.Show(ViewerText(0x4a82, "Retrieving profile data..."));
         if (SocialRequests.RequestFfxiProfile(pid, _ffxiToken, _profileRow, _profileKey, tab.Slot)) return;
         _ffxiToken = null;
         ProfileLoading = false;
         ShowTabAgain(from);
-        ProfileNote = RequestWriteFailed;
-        ProfileNoteIsError = true;
+        ProfileNote.Fail(RequestWriteFailed);
     }
 
     private void SelectTab(ProfileTab tab)
@@ -292,7 +288,7 @@ public partial class SocialViewModel
         if (st == "done")
         {
             var r = snap.FfxiProfile!;
-            ProfileNote = "";
+            ProfileNote.Clear();
             var known = CharacterNames.FromProfile(r);
             if (known is not null && CharacterNames.Get(tab.CharacterKey) != known) CharacterNames.Remember(tab.CharacterKey, known);
             tab.Label = TabLabel(tab.CharacterKey);
@@ -303,15 +299,14 @@ public partial class SocialViewModel
         if (st == "failed:hidden")
         {
             ShowTabAgain(_ffxiFrom);
-            ProfileNote = "";
+            ProfileNote.Clear();
             _popupAfterApply = ViewerText(0x4ab6, "Selected profile is hidden.");
             return;
         }
         // a profile shown again from the copy has slots the hook's lost, so opening it again reads it afresh
         if (st == NoCharacter) _profileCache.Remove(_profileKey);
-        ProfileNote = st == "failed:no profile" ? ViewerText(0x4a83, "No profile data found.") : ProfileFailText(st);
-        ProfileNoteIsError = st != "failed:no profile";
-        tab.Failed = ProfileNoteIsError;
+        ProfileNote.Set(st == "failed:no profile" ? ViewerText(0x4a83, "No profile data found.") : ProfileFailText(st), st != "failed:no profile");
+        tab.Failed = ProfileNote.IsError;
     }
 
     // the handle's H-ID and mail stay, there's no picture and the record level goes after the game's name

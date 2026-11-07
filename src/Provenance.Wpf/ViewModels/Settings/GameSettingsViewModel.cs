@@ -12,6 +12,7 @@ using Provenance.Common.Hook;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Wpf.Services;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
@@ -129,9 +130,7 @@ public partial class GameSettingsViewModel : ObservableObject
     [ObservableProperty] private bool _padHat;
     [ObservableProperty] private bool _padBackground;
     [ObservableProperty] private bool _padXInput;
-    [ObservableProperty] private string _status = "";
-    [ObservableProperty] private bool _statusIsError;
-    partial void OnStatusChanged(string value) => StatusIsError = false;
+    public StatusLine Status { get; } = new();
 
     public string BrightnessText => Brightness.ToString("+0.0;-0.0;0.0");
     partial void OnBrightnessChanged(double value) => OnPropertyChanged(nameof(BrightnessText));
@@ -202,7 +201,7 @@ public partial class GameSettingsViewModel : ObservableObject
         Apply(_original);
         OnPropertyChanged(nameof(Available));
         OnPropertyChanged(nameof(Editable));
-        Status = problem ?? (HasProfile ? $"These are the current game settings for this {ProfileKind}." : "These are your current game settings.");
+        Status.Show(problem ?? (HasProfile ? $"These are the current game settings for this {ProfileKind}." : "These are your current game settings."));
     }
 
     // made-up settings in place of this PC's, and Save never writes them
@@ -213,7 +212,7 @@ public partial class GameSettingsViewModel : ObservableObject
         Apply(_original);
         OnPropertyChanged(nameof(Available));
         OnPropertyChanged(nameof(Editable));
-        Status = "These are your current game settings.";
+        Status.Show("These are your current game settings.");
     }
 
     public bool HasUnsavedChanges => Editable && _edited;
@@ -222,7 +221,7 @@ public partial class GameSettingsViewModel : ObservableObject
     protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (!_applying && e.PropertyName is not (nameof(Status) or nameof(StatusIsError) or nameof(BrightnessText) or nameof(Available)
+        if (!_applying && e.PropertyName is not (nameof(BrightnessText) or nameof(Available)
                 or nameof(HasUnsavedChanges) or nameof(UiScaleText) or nameof(UiSizeText) or nameof(UiScaleMax) or nameof(Store)
                 or nameof(HasProfile) or nameof(ProfileKind) or nameof(ProfileShown) or nameof(Platform) or nameof(ProfileHeading) or nameof(IntroText)
                 or nameof(KeepAspectShown) or nameof(Editable) or nameof(ReadOnlyNote)))
@@ -295,35 +294,33 @@ public partial class GameSettingsViewModel : ObservableObject
     private void Save()
     {
         if (_forTest) return;
-        if (!HasProfile && _region is null) { Status = "Provenance couldn't find a PlayOnline install, so there's nowhere to save these settings."; return; }
-        if (!_loaded) { Status = "FINAL FANTASY XI isn't installed on this PC, so there are no settings to save."; return; }
-        if (_store.ReadOnly) { Status = ReadOnlyNote; StatusIsError = true; return; }
+        if (!HasProfile && _region is null) { Status.Show("Provenance couldn't find a PlayOnline install, so there's nowhere to save these settings."); return; }
+        if (!_loaded) { Status.Show("FINAL FANTASY XI isn't installed on this PC, so there are no settings to save."); return; }
+        if (_store.ReadOnly) { Status.Fail(ReadOnlyNote); return; }
         try
         {
             var saved = _store.Save(Collect(), _original);
             _original = _store.Load();
             Apply(_original);
             bool running = GameRunningForTest();
-            Status = !saved.Wrote ? "You haven't changed anything, so there's nothing to save." :
-                     "Your changes are saved." + (running ? " If the game is running, it'll use them the next time it starts." : "");
+            Status.Show(!saved.Wrote ? "You haven't changed anything, so there's nothing to save." :
+                        "Your changes are saved." + (running ? " If the game is running, it'll use them the next time it starts." : ""));
             Log.Information("Saved {Count} FFXI settings values ({Store})", saved.Changed, _store.Key);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
         {
             Log.Error(ex, "FFXI settings save refused");
-            Status = "Your changes couldn't be saved because Windows didn't let Provenance change the FINAL FANTASY XI settings.";
-            StatusIsError = true;
+            Status.Fail("Your changes couldn't be saved because Windows didn't let Provenance change the FINAL FANTASY XI settings.");
         }
         catch (Exception ex)
         {
             Log.Error(ex, "FFXI settings save failed");
-            Status = ErrorText.Of(ex, "Provenance couldn't write the FINAL FANTASY XI settings, so your changes weren't saved.");
-            StatusIsError = true;
+            Status.Fail(ErrorText.Of(ex, "Provenance couldn't write the FINAL FANTASY XI settings, so your changes weren't saved."));
         }
     }
 
     [RelayCommand]
-    private void Revert() { Apply(_original); Status = "Your unsaved changes have been undone."; }
+    private void Revert() { Apply(_original); Status.Show("Your unsaved changes have been undone."); }
 
     [RelayCommand]
     private void Defaults()
@@ -333,7 +330,7 @@ public partial class GameSettingsViewModel : ObservableObject
         d.PadMode = PadModeShown();
         Apply(d);
         _edited = true;
-        Status = "The default settings are shown. Press Save to keep them.";
+        Status.Show("The default settings are shown. Press Save to keep them.");
     }
 
     // the official tool's presets, which only touch the graphics values
@@ -353,7 +350,7 @@ public partial class GameSettingsViewModel : ObservableObject
                 RenderSize = PickOrAdd(SameShapeOnly ? RenderSizes.FirstOrDefault() ?? Fmt(w, h) : Fmt(512, 512));
                 Textures = 0; Maps2D = 0; Fonts = 0; Vegetation = 1; DrawDistance = false; EnhancedShading = false; break;
         }
-        Status = $"The {which} preset is shown. Press Save to keep it.";
+        Status.Show($"The {which} preset is shown. Press Save to keep it.");
     }
 
     [RelayCommand]
@@ -368,9 +365,9 @@ public partial class GameSettingsViewModel : ObservableObject
         var ffxi = _region is { } r ? PolPaths.TryGetInstallFolder(r, GameProduct.Game) : null;
         var tools = _region switch { PolRegion.Europe => "ToolsEU", PolRegion.Japan => "Tools", _ => "ToolsUS" };
         var exe = ffxi is null ? null : Path.Combine(ffxi, tools, "FFXiPadConfig.exe");
-        if (exe is null || !File.Exists(exe)) { Status = "Provenance couldn't find the FINAL FANTASY XI gamepad tool in the game's folder."; StatusIsError = true; return; }
+        if (exe is null || !File.Exists(exe)) { Status.Fail("Provenance couldn't find the FINAL FANTASY XI gamepad tool in the game's folder."); return; }
         Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe)! });
-        Status = "The gamepad tool is open. When you've finished with it, close these settings and open them again to see its changes.";
+        Status.Show("The gamepad tool is open. When you've finished with it, close these settings and open them again to see its changes.");
     }
 
     // Windower keeps the 3D resolution as one scale of the game's, so only that shape can be saved there

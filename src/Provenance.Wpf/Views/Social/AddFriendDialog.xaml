@@ -38,8 +38,8 @@
                 <ProgressBar Width="14" Height="14" Margin="0,0,8,0"
                              Style="{StaticResource Spinner}"
                              Visibility="{Binding SearchBusy, Converter={StaticResource BoolToVis}}" />
-                <TextBlock FontSize="12" TextWrapping="Wrap" MaxWidth="400" Text="{Binding SearchNote}"
-                           behaviours:State.IsError="{Binding SearchNoteIsError}" Style="{StaticResource DimStatusText}" />
+                <TextBlock FontSize="12" TextWrapping="Wrap" MaxWidth="400" Text="{Binding SearchNote.Text}"
+                           behaviours:State.IsError="{Binding SearchNote.IsError}" Style="{StaticResource DimStatusText}" />
             </StackPanel>
         </StackPanel>
 

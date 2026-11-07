@@ -14,6 +14,7 @@ using Provenance.Common.Settings;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Chat;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
@@ -34,6 +35,13 @@ public partial class SocialViewModel : ObservableObject
         _avatars = avatars;
         _settings = settings;
         _sync = new(_sends);
+        EditNote.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(StatusLine.Text)) return;
+            OnPropertyChanged(nameof(EditNoteShown));
+            OnPropertyChanged(nameof(EditStatus));
+            OnPropertyChanged(nameof(EditStatusShown));
+        };
         FriendsView = CollectionViewSource.GetDefaultView(Friends);
         FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
         GroupChat = new GroupChatViewModel(this, dialogs, () => _settings.Current.GroupChatTimes, () => _settings.Current.GroupChatFlash);
@@ -98,8 +106,8 @@ public partial class SocialViewModel : ObservableObject
     [RelayCommand]
     private void ChangeProfilePicture()
     {
-        if (GameRunning) EditNote = GameRunningNote;
-        else if (HandleSwitching) EditNote = SwitchingNote;
+        if (GameRunning) EditNote.Fail(GameRunningNote);
+        else if (HandleSwitching) EditNote.Fail(SwitchingNote);
         else if (!ProfilePictureSaving) PickProfilePicture();
     }
 
@@ -200,7 +208,7 @@ public partial class SocialViewModel : ObservableObject
     partial void OnHandleSwitchingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanGroupChat));
-        if (!value && EditNote == SwitchingNote) EditNote = "";
+        if (!value && EditNote.Text == SwitchingNote) EditNote.Clear();
         if (GameRunning) return;
         StatusNote = value ? SwitchingNote : StatusNote == SwitchingNote ? "" : StatusNote;
     }
@@ -352,7 +360,7 @@ public partial class SocialViewModel : ObservableObject
         _onlineFriends.Clear();
         _presenceQuietUntil = null;
         _lookups?.Reset();
-        if (_profileToken is not null || _ffxiToken is not null) ProfileNote = "";   // nothing's coming for those
+        if (_profileToken is not null || _ffxiToken is not null) ProfileNote.Clear();   // nothing's coming for those
         _answerToken = _editToken = _picToken = _searchToken = _requestToken = _profileToken = _groupToken = _ffxiToken = null;
         ProfileLoading = false;
         _profileCache.Clear();   // a new hook has none of the slots the cached profiles' tabs read
@@ -365,8 +373,8 @@ public partial class SocialViewModel : ObservableObject
         EditBusy = false;
         ProfilePictureSaving = false;
         SearchBusy = false;
-        EditNote = "";
-        SearchNote = "";
+        EditNote.Clear();
+        SearchNote.Clear();
         SearchHits.Clear();
         Conversation.Clear();
         SelectedFriend = null;
@@ -672,41 +680,20 @@ public partial class SocialViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanEdit), nameof(EditNoteShown), nameof(Saving))]
     [NotifyPropertyChangedFor(nameof(EditStatus), nameof(EditStatusShown))]
     private bool _editBusy;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(EditNoteShown), nameof(EditStatus), nameof(EditStatusShown))]
-    private string _editNote = "";
-    public bool EditNoteShown => EditNote.Length > 0 && !EditBusy && !ProfilePictureSaving;
+    public StatusLine EditNote { get; } = new();
+    public bool EditNoteShown => EditNote.Text.Length > 0 && !EditBusy && !ProfilePictureSaving;
     public bool Saving => EditBusy || ProfilePictureSaving;
     public string EditStatus => EditBusy ? "Saving the change to PlayOnline..."
-                              : ProfilePictureSaving ? "Saving your profile picture to PlayOnline..." : EditNote;
-    public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote);
+                              : ProfilePictureSaving ? "Saving your profile picture to PlayOnline..." : EditNote.Text;
+    public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote.Text);
     public bool CanEdit => Connected && !EditBusy && _pol.Pid != null && !GameRunning && !HandleSwitching;
 
-    private DispatcherTimer? _noteTimer;
-    // success notes go by themselves, failures stay until dismissed. A note's a failure unless the setter says so
-    private bool _noteIsSuccess;
     private string? _editToken;
     private DateTime _editAt;
     private const string RequestWriteFailed = HookFailures.RequestWriteFailed;
 
-    partial void OnEditNoteChanged(string value)
-    {
-        bool success = _noteIsSuccess;
-        _noteIsSuccess = false;
-        if (_noteTimer is null)
-        {
-            _noteTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
-            _noteTimer.Tick += (_, _) =>
-            {
-                _noteTimer.Stop();
-                EditNote = "";
-            };
-        }
-        _noteTimer.Stop();
-        if (value.Length > 0 && success) _noteTimer.Start();
-    }
-
     [RelayCommand]
-    private void DismissEditNote() => EditNote = "";
+    private void DismissEditNote() => EditNote.Clear();
 
     private void WriteOrFail(bool written)
     {
@@ -715,7 +702,7 @@ public partial class SocialViewModel : ObservableObject
         _answerToken = null;
         _answerFor = null;
         EditBusy = false;
-        EditNote = RequestWriteFailed;
+        EditNote.Fail(RequestWriteFailed);
     }
 
     private bool BeginEdit(out int pid, out string token)
@@ -726,7 +713,7 @@ public partial class SocialViewModel : ObservableObject
         _editToken = token;
         _editAt = DateTime.UtcNow;
         EditBusy = true;
-        EditNote = "";
+        EditNote.Clear();
         return true;
     }
 
@@ -767,7 +754,7 @@ public partial class SocialViewModel : ObservableObject
         if (Settled(snap.EditToken == _editToken ? snap.EditState : null, "saved", _editAt, 110) is not { } st) return;
         _editToken = null;
         EditBusy = false;
-        if (st != "saved") EditNote = EditFailureText(st);
+        if (st != "saved") EditNote.Fail(EditFailureText(st));
     }
 
     private static string EditFailureText(string state) => state switch
@@ -828,17 +815,17 @@ public partial class SocialViewModel : ObservableObject
         if (!f.IsRequest) return;
         if (f.IsMe && answer != RequestAnswer.Decline)
         {
-            EditNote = HookFailures.Friends.OwnRequest;
+            EditNote.Fail(HookFailures.Friends.OwnRequest);
             return;
         }
         if (answer == RequestAnswer.Accept && Friends.Count(x => x.IsFriend) >= 200)
         {
-            EditNote = HookFailures.FriendListFull;
+            EditNote.Fail(HookFailures.FriendListFull);
             return;
         }
         if (answer == RequestAnswer.Ignore && f.Key.Length > 0 && Blocked.Any(x => x.Key == f.Key))
         {
-            EditNote = $"{f.Name} is already on your ignore list.";
+            EditNote.Fail($"{f.Name} is already on your ignore list.");
             return;
         }
         if (!BeginEdit(out var pid, out var token)) return;
@@ -875,7 +862,7 @@ public partial class SocialViewModel : ObservableObject
         }
         // it may still have gone out, so it leaves the list for this session rather than invite a second answer
         if (st == "timeout") Answered(f.RequestMid, ack: false);
-        EditNote = st switch
+        EditNote.Fail(st switch
         {
             "timeout" => HookFailures.Friends.AnswerNoReply,
             "failed:handle changing" => HookFailures.Friends.AnswerHandleChanging,
@@ -891,7 +878,7 @@ public partial class SocialViewModel : ObservableObject
             var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
                 HookFailures.Friends.AnswerListNotSaved,
             var s => HookFailures.Friends.AnswerRejected(SocialRequests.FailReason(s)),
-        };
+        });
     }
 
     // Name is the character's for a character hit, which shows like a friend in game does
@@ -908,9 +895,7 @@ public partial class SocialViewModel : ObservableObject
 
     public ObservableCollection<SearchHitItem> SearchHits { get; } = new();
     [ObservableProperty] private bool _searchBusy;
-    [ObservableProperty] private string _searchNote = "";
-    [ObservableProperty] private bool _searchNoteIsError;
-    partial void OnSearchNoteChanged(string value) => SearchNoteIsError = false;
+    public StatusLine SearchNote { get; } = new();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchByHandle), nameof(SearchByHid), nameof(SearchByCharacter), nameof(SearchHint),
@@ -921,7 +906,7 @@ public partial class SocialViewModel : ObservableObject
     {
         if (SearchBusy) return;
         SearchHits.Clear();
-        SearchNote = "";
+        SearchNote.Clear();
     }
     public bool SearchByHandle { get => SearchKind == FriendSearchKind.Handle; set { if (value) SearchKind = FriendSearchKind.Handle; } }
     public bool SearchByHid { get => SearchKind == FriendSearchKind.Hid; set { if (value) SearchKind = FriendSearchKind.Hid; } }
@@ -956,12 +941,6 @@ public partial class SocialViewModel : ObservableObject
     private const int SearchPage = 100;   // the hook fetches the first 100, like the viewer
     private const string TooManyResults = "Too many results. Please narrow your search.";
 
-    private void SearchFailed(string note)
-    {
-        SearchNote = note;
-        SearchNoteIsError = true;
-    }
-
     public void Search(string text)
     {
         var value = text.Trim();
@@ -969,12 +948,12 @@ public partial class SocialViewModel : ObservableObject
         if (SearchBusy || !Connected || _pol.Pid is not { } pid) return;
         if (GameRunning)
         {
-            SearchFailed(GameRunningNote);
+            SearchNote.Fail(GameRunningNote);
             return;
         }
         if (!FriendSearch.Ok(kind, value))
         {
-            SearchFailed(kind switch
+            SearchNote.Fail(kind switch
             {
                 FriendSearchKind.Hid => BadHid,
                 FriendSearchKind.Character => BadCharacterName,
@@ -984,7 +963,7 @@ public partial class SocialViewModel : ObservableObject
         }
         if (kind == FriendSearchKind.Handle && value.Contains('\''))
         {
-            SearchFailed(QuoteInName);
+            SearchNote.Fail(QuoteInName);
             return;
         }
         _searchToken = HookFiles.NewToken();
@@ -993,11 +972,11 @@ public partial class SocialViewModel : ObservableObject
         _searchedValue = value;
         SearchHits.Clear();
         SearchBusy = true;
-        SearchNote = "Searching PlayOnline...";
+        SearchNote.Show("Searching PlayOnline...");
         if (SocialRequests.Search(pid, _searchToken, kind, value)) return;
         _searchToken = null;
         SearchBusy = false;
-        SearchFailed(RequestWriteFailed);
+        SearchNote.Fail(RequestWriteFailed);
     }
 
     // a search nobody's waiting on any more: withdrawn if the hook hasn't taken it yet, and its answer's ignored
@@ -1007,7 +986,7 @@ public partial class SocialViewModel : ObservableObject
         DiscardRequest(HookContract.Requests.Search);
         _searchToken = null;
         SearchBusy = false;
-        SearchNote = "";
+        SearchNote.Clear();
         SearchHits.Clear();
     }
 
@@ -1034,7 +1013,7 @@ public partial class SocialViewModel : ObservableObject
     {
         if (hit.IsMe)
         {
-            SearchFailed(HookFailures.Friends.RequestSelf);
+            SearchNote.Fail(HookFailures.Friends.RequestSelf);
             return;
         }
         if (hit.IsFriend || hit.RequestSent || _requestToken != null || !BeginEdit(out var pid, out var token)) return;
@@ -1044,12 +1023,12 @@ public partial class SocialViewModel : ObservableObject
         _requestKey = hit.Key;
         _requestCharacter = hit.IsCharacter;
         _requestAt = DateTime.UtcNow;
-        SearchNote = $"Sending a friend request to {hit.Name}...";
+        SearchNote.Show($"Sending a friend request to {hit.Name}...");
         if (SocialRequests.SendFriendRequest(pid, token, hit.Index, hit.Key, ViewerText(0x46c9, "Let's be friends!"),
                                              ViewerText(0x46e6, "Would you like to be friends?"))) return;
         _requestToken = null;
         EditBusy = false;
-        SearchFailed(RequestWriteFailed);
+        SearchNote.Fail(RequestWriteFailed);
     }
 
     private void ApplySearchState(PolSocialSnapshot snap)
@@ -1063,7 +1042,7 @@ public partial class SocialViewModel : ObservableObject
             _searchToken = null;
             SearchBusy = false;
             var characters = _searchedKind == FriendSearchKind.Character;
-            if (st == "done" && snap.SearchTooMany) SearchFailed(TooManyResults);
+            if (st == "done" && snap.SearchTooMany) SearchNote.Fail(TooManyResults);
             else if (st == "done")
             {
                 SearchHits.Clear();
@@ -1078,16 +1057,16 @@ public partial class SocialViewModel : ObservableObject
                 var what = characters ? "character" : "handle";
                 // only past the first page were there more than came back, the hook drops a hit with nothing in it
                 var total = snap.SearchTotal > SearchPage ? snap.SearchTotal : SearchHits.Count;
-                SearchNote = SearchHits.Count == 0 ? _searchedKind switch
-                             {
-                                 FriendSearchKind.Hid => HookFailures.Friends.NoHidHit,
-                                 FriendSearchKind.Character => HookFailures.Friends.NoCharacterHit,
-                                 _ => HookFailures.Friends.NoHandleHit,
-                             }
-                           : total > SearchHits.Count ? $"Found {total} {what}s. Showing {SearchHits.Count} of them."
-                           : SearchHits.Count == 1 ? $"Found 1 {what}." : $"Found {SearchHits.Count} {what}s.";
+                SearchNote.Show(SearchHits.Count == 0 ? _searchedKind switch
+                                {
+                                    FriendSearchKind.Hid => HookFailures.Friends.NoHidHit,
+                                    FriendSearchKind.Character => HookFailures.Friends.NoCharacterHit,
+                                    _ => HookFailures.Friends.NoHandleHit,
+                                }
+                              : total > SearchHits.Count ? $"Found {total} {what}s. Showing {SearchHits.Count} of them."
+                              : SearchHits.Count == 1 ? $"Found 1 {what}." : $"Found {SearchHits.Count} {what}s.");
             }
-            else SearchFailed(st switch
+            else SearchNote.Fail(st switch
             {
                 "timeout" => HookFailures.Friends.SearchNoAnswer,
                 "failed:busy" => HookFailures.Busy,
@@ -1107,7 +1086,7 @@ public partial class SocialViewModel : ObservableObject
         EditBusy = false;
         if (rst != "sent")
         {
-            SearchFailed(rst switch
+            SearchNote.Fail(rst switch
             {
                 "timeout" => HookFailures.Friends.RequestNoAnswer,
                 "failed:busy" => HookFailures.Busy,
@@ -1125,7 +1104,7 @@ public partial class SocialViewModel : ObservableObject
             });
             return;
         }
-        SearchNote = $"Friend request sent to {_requestName}. They'll show on your list{(_requestCharacter ? " under their PlayOnline handle," : "")} as \"Friend request sent\" until they accept.";
+        SearchNote.Show($"Friend request sent to {_requestName}. They'll show on your list{(_requestCharacter ? " under their PlayOnline handle," : "")} as \"Friend request sent\" until they accept.");
         for (int i = 0; i < SearchHits.Count; i++)
             if (SearchHits[i].Name == _requestName && SearchHits[i].Key == _requestKey)
                 SearchHits[i] = SearchHits[i] with { RequestSent = true };
@@ -1143,17 +1122,17 @@ public partial class SocialViewModel : ObservableObject
         if (ProfilePictureSaving || !Connected || _pol.Pid is not { } pid) return;
         if (GameRunning || HandleSwitching)
         {
-            EditNote = GameRunning ? GameRunningNote : SwitchingNote;
+            EditNote.Fail(GameRunning ? GameRunningNote : SwitchingNote);
             return;
         }
         _picToken = HookFiles.NewToken();
         _picAt = DateTime.UtcNow;
         ProfilePictureSaving = true;
-        EditNote = "";
+        EditNote.Clear();
         if (SocialRequests.SetProfilePicture(pid, picId, _picToken)) return;
         _picToken = null;
         ProfilePictureSaving = false;
-        EditNote = RequestWriteFailed;
+        EditNote.Fail(RequestWriteFailed);
     }
 
     private void ApplyProfilePictureState(PolSocialSnapshot snap)
@@ -1167,13 +1146,13 @@ public partial class SocialViewModel : ObservableObject
         _picToken = null;
         ProfilePictureSaving = false;
         if (st == "saved") return;
-        EditNote = st switch
+        EditNote.Fail(st switch
         {
             "timeout" => HookFailures.Friends.PictureNoAnswer,
             "failed:handle changing" => HookFailures.Friends.PictureHandleChanging,
             "failed:busy" => HookFailures.Busy,
             _ => HookFailures.Friends.PictureRejected(SocialRequests.FailReason(st)),
-        };
+        });
     }
 
     private bool CanSend() =>

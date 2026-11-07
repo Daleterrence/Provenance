@@ -47,6 +47,7 @@ public partial class HandlesViewModel : ObservableObject
         _dialogs = dialogs;
         _pid = pid;
         _picture = picture;
+        Note.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(StatusLine.Text)) _noteSeen = _open; };
     }
 
     public ObservableCollection<HandleRow> Rows { get; } = new();
@@ -55,9 +56,8 @@ public partial class HandlesViewModel : ObservableObject
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable))] private bool _loggedIn;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ReadOnly), nameof(Editable))] private string? _readOnlyText;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable))] private bool _busy;
-    [ObservableProperty] private string _note = "";
+    public StatusLine Note { get; } = new();
     private bool _open, _noteSeen;
-    [ObservableProperty] private bool _noteIsError;
     [ObservableProperty] private bool _hasUnlinked;
 
     public bool ReadOnly => ReadOnlyText != null;
@@ -85,10 +85,9 @@ public partial class HandlesViewModel : ObservableObject
         {
             // the session that had it is gone, and so is anything that could say how it went
             _token = null;
-            NoteIsError = true;
-            Note = _op == HandleChange.Switch ? "The PlayOnline session ended before Provenance could confirm the switch."
-                                              : "The PlayOnline session ended before Provenance could confirm the change.";
-            After(Note);
+            Note.Fail(_op == HandleChange.Switch ? "The PlayOnline session ended before Provenance could confirm the switch."
+                                                 : "The PlayOnline session ended before Provenance could confirm the change.");
+            After(Note.Text);
         }
         // the wait doesn't count while the game's starting, nothing can be changed then
         if (readOnly != null || _wasReadOnly) _at = DateTime.UtcNow;
@@ -111,9 +110,8 @@ public partial class HandlesViewModel : ObservableObject
             state = "timeout";
         }
         _token = null;
-        NoteIsError = state != "saved";
-        Note = state == "saved" ? _doneText : HandleList.Failed(_op, state);
-        After(state == "saved" ? null : Note);
+        Note.Set(state == "saved" ? _doneText : HandleList.Failed(_op, state), state != "saved");
+        After(state == "saved" ? null : Note.Text);
     }
 
     private void After(string? failed)
@@ -158,17 +156,15 @@ public partial class HandlesViewModel : ObservableObject
         if (_token is null) return;
         _token = null;
         Busy = false;
-        NoteIsError = true;
-        Note = HandleList.GameStartedText;
-        After(Note);
+        Note.Fail(HandleList.GameStartedText);
+        After(Note.Text);
         Rebuild();
     }
 
     // Link to... with nowhere to go says so rather than opening nothing
     public void NoTarget()
     {
-        NoteIsError = false;
-        Note = HandleList.NoTargetText;
+        Note.Show(HandleList.NoTargetText);
     }
 
     public void Switch(HandleRow row)
@@ -176,8 +172,7 @@ public partial class HandlesViewModel : ObservableObject
         if (!Editable || row.Active) return;
         if (SwitchBlocked?.Invoke() is { } why)
         {
-            NoteIsError = true;
-            Note = why;
+            Note.Fail(why);
             return;
         }
         if (!_dialogs.Confirm("Switch Handle", HandleList.SwitchQuestion(row.Handle, InChatRoom), "SWITCH")) return;
@@ -185,15 +180,12 @@ public partial class HandlesViewModel : ObservableObject
              HandleList.Done(HandleChange.Switch, row.Name, ""));
     }
 
-    partial void OnNoteChanged(string value) => _noteSeen = _open;
-
     // Settings is opening: an answer that came in while it was shut shows this once, one already seen there goes
     public void Opened()
     {
         if (!Busy && _noteSeen)
         {
-            Note = "";
-            NoteIsError = false;
+            Note.Clear();
         }
         _open = true;
         _noteSeen = true;
@@ -225,7 +217,7 @@ public partial class HandlesViewModel : ObservableObject
         if (!_dialogs.Confirm(GroupHandleCheck.Title, check.Question, "YES", cancel: "NO")) return;
         Send(HandleChange.Switch, (pid, token) => SocialRequests.SwitchHandle(pid, token, check.To!),
              HandleList.Done(HandleChange.Switch, check.To!.Name, ""));
-        if (_token is null) tell(Note);
+        if (_token is null) tell(Note.Text);
         else _after = failed => { if (failed is null) open(); else tell(failed); };
     }
 
@@ -234,8 +226,7 @@ public partial class HandlesViewModel : ObservableObject
         if (!c.CanLink || !Editable || c.Handle?.Slot == to.Handle.Slot) return;
         if (to.Full)
         {
-            NoteIsError = true;
-            Note = HandleList.LimitText;
+            Note.Fail(HandleList.LimitText);
             return;
         }
         var question = HandleList.LinkQuestion(c.Character, to.Handle, _snap.Handles);
@@ -258,16 +249,14 @@ public partial class HandlesViewModel : ObservableObject
         var token = HookFiles.NewToken();
         if (_pid() is not { } pid || !write(pid, token))
         {
-            NoteIsError = true;
-            Note = "Provenance couldn't pass the change to PlayOnline.";
+            Note.Fail("Provenance couldn't pass the change to PlayOnline.");
             return;
         }
         _token = token;
         _at = DateTime.UtcNow;
         _op = op;
         _doneText = done;
-        NoteIsError = false;
-        Note = op == HandleChange.Switch ? "Updating online status..." : "Updating Content ID list...";
+        Note.Show(op == HandleChange.Switch ? "Updating online status..." : "Updating Content ID list...");
         Busy = true;
         Rebuild();
     }

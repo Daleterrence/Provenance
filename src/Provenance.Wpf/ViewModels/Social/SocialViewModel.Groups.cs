@@ -110,7 +110,7 @@ public partial class SocialViewModel
         _groupToken = null;
         _answerFor = null;
         EditBusy = false;
-        EditNote = RequestWriteFailed;
+        EditNote.Fail(RequestWriteFailed);
     }
 
     public bool CanCreateGroup => Groups.Count(x => !x.IsInvited) < PolLimits.MaxGroups;
@@ -122,7 +122,7 @@ public partial class SocialViewModel
     {
         if (!CanCreateGroup)
         {
-            EditNote = GroupLimitText;
+            EditNote.Fail(GroupLimitText);
             return;
         }
         BeginGroup((pid, token) => SocialRequests.CreateGroup(pid, token, name.Trim()), $"Group \"{name.Trim()}\" created.");
@@ -171,12 +171,12 @@ public partial class SocialViewModel
         if (!f.IsFriend || f.Pending || f.IsMe || !g.CanInvite) return;
         if (f.Key.Length > 0 && g.Members.Any(m => m.Key == f.Key))
         {
-            EditNote = $"{f.Name} is already in this group, or already invited.";
+            EditNote.Fail($"{f.Name} is already in this group, or already invited.");
             return;
         }
         if (g.Members.Count >= 64)
         {
-            EditNote = HookFailures.Groups.Full;
+            EditNote.Fail(HookFailures.Groups.Full);
             return;
         }
         var text = ViewerText(0x46d5, "Would you like to join the group \"%s\"?").Replace("%s", g.Name);
@@ -222,11 +222,10 @@ public partial class SocialViewModel
         {
             // with its chat open, the chat says it (and only once), and the lines kept for it go either way
             if (left != null && GroupChat.GroupLeft(left, _groupDone)) return;
-            _noteIsSuccess = true;
-            EditNote = _groupDone;
+            EditNote.Show(_groupDone, TimeSpan.FromSeconds(12));
             return;
         }
-        EditNote = st switch
+        EditNote.Fail(st switch
         {
             "timeout" => HookFailures.Groups.NoAnswer,
             "failed:busy" => HookFailures.Busy,
@@ -251,8 +250,8 @@ public partial class SocialViewModel
             "failed:stopped" => HookFailures.Groups.Stopped,
             "failed:hourly limit" => HookFailures.Groups.HourlyLimit,
             var s => HookFailures.ChangeRejected(SocialRequests.FailReason(s)),
-        };
+        });
         // the hook leaves the group's chat before the group, so a refused leave can still have closed it
-        if (left != null && GroupChat.LeaveFailed(left, snap)) EditNote += " " + ChatClosedNote;
+        if (left != null && GroupChat.LeaveFailed(left, snap)) EditNote.Fail(EditNote.Text + " " + ChatClosedNote);
     }
 }

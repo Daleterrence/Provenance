@@ -30,10 +30,8 @@ public partial class SettingsViewModel
     [ObservableProperty] private string _windowerPath = string.Empty;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SelectedProfile))] private HookProfileItem? _ashitaBootConfig;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SelectedProfile))] private HookProfileItem? _windowerProfile;
-    [ObservableProperty] private string _thirdPartyHookStatus = string.Empty;
-    [ObservableProperty] private bool _thirdPartyHookStatusIsError;
-    [ObservableProperty] private string _profileStatus = string.Empty;
-    [ObservableProperty] private bool _profileStatusIsError;
+    public StatusLine ThirdPartyHookStatus { get; } = new();
+    public StatusLine ProfileStatus { get; } = new();
     public ObservableCollection<HookProfileItem> AshitaBootConfigs { get; } = new();
     public ObservableCollection<HookProfileItem> WindowerProfiles { get; } = new();
     // the title bar's one switcher shows whichever platform's list is the current one
@@ -153,7 +151,7 @@ public partial class SettingsViewModel
 
     private void UpdateThirdPartyHookStatus()
     {
-        (ThirdPartyHookStatus, ThirdPartyHookStatusIsError) = Hook switch
+        var (text, isError) = Hook switch
         {
             ThirdPartyHook.Ashita when AshitaDir is null => ("Couldn't find Ashita v4 in that folder.", true),
             ThirdPartyHook.Ashita => ("The game starts through Ashita with the boot configuration picked at the top.", false),
@@ -162,6 +160,7 @@ public partial class SettingsViewModel
             ThirdPartyHook.Windower => ("The game starts through Windower with the profile picked at the top.", false),
             _ => ("The game starts directly, without Windower or Ashita.", false),
         };
+        ThirdPartyHookStatus.Set(text, isError);
         OnPropertyChanged(nameof(IsAshita));
         OnPropertyChanged(nameof(IsWindower));
         OnPropertyChanged(nameof(ShowProfileSwitcher));
@@ -289,12 +288,6 @@ public partial class SettingsViewModel
     [RelayCommand]
     private void BrowseWindower() { if (_dialogs.PickFolder("Choose your Windower 4 folder") is { } d) WindowerPath = d; }
 
-    private void Say(string text, bool error = false)
-    {
-        ProfileStatus = text;
-        ProfileStatusIsError = error;
-    }
-
     // with no list to pick from (settings.xml unreadable, say) it's still the chosen profile's, so its problem shows
     private IGameSettingsStore GameStoreForSelection()
     {
@@ -361,7 +354,7 @@ public partial class SettingsViewModel
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.Warning(ex, "Could not read Windower's settings.xml");
-            Say("Provenance couldn't read Windower's settings.xml. Try again in a moment.", error: true);
+            ProfileStatus.Fail("Provenance couldn't read Windower's settings.xml. Try again in a moment.");
             return null;
         }
     }
@@ -458,12 +451,12 @@ public partial class SettingsViewModel
         {
             pick = change();
             ok = true;
-            Say("");
+            ProfileStatus.Clear();
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Profile change failed");
-            Say(ErrorText.Of(ex, failed), error: true);
+            ProfileStatus.Fail(ErrorText.Of(ex, failed));
         }
         var gamePlatform = Game.Store.Platform;
         var gameProfile = Game.Store.ProfileName;
@@ -608,12 +601,12 @@ public partial class SettingsViewModel
                 change(Find(f, item.Name) ?? (item.Name.Length == 0 ? f.GetOrAddUnnamed()
                     : throw Provenance.Common.Shown.Mark(new InvalidOperationException($"The profile {item.Display} isn't in Windower's settings.xml any more.")))));
             _settings.Save(_settings.Current);
-            Say("");
+            ProfileStatus.Clear();
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not save a Windower profile setting");
-            Say(ErrorText.Of(ex, "Provenance couldn't save that to Windower's settings.xml."), error: true);
+            ProfileStatus.Fail(ErrorText.Of(ex, "Provenance couldn't save that to Windower's settings.xml."));
         }
     }
 
@@ -640,13 +633,13 @@ public partial class SettingsViewModel
     private async Task SwitchBranchAsync(string branch)
     {
         if (WindowerDir is not { } dir) return;
-        Say("");
+        ProfileStatus.Clear();
         SwitchingBranch = true;
         try
         {
             if (!await NewWindowerUpdaterForTest(dir, branch).PrepareBranchSwitchAsync())
             {
-                Say("Provenance couldn't switch Windower's branch. Try again in a moment.", error: true);
+                ProfileStatus.Fail("Provenance couldn't switch Windower's branch. Try again in a moment.");
                 PutBranchBack();
                 return;
             }
@@ -656,7 +649,7 @@ public partial class SettingsViewModel
         catch (Exception ex)
         {
             Log.Warning(ex, "Windower branch switch failed");
-            Say(ErrorText.Of(ex, "Provenance couldn't switch Windower's branch. Try again in a moment."), error: true);
+            ProfileStatus.Fail(ErrorText.Of(ex, "Provenance couldn't switch Windower's branch. Try again in a moment."));
             PutBranchBack();
         }
         finally
@@ -680,12 +673,12 @@ public partial class SettingsViewModel
             var file = WindowerSettingsFile.Load(dir);
             var moved = file.MoveBadFileAside(dir);
             file.Save(dir);
-            Say(moved is null ? "" : $"Windower's old settings.xml is kept as {Path.GetFileName(moved)}.");
+            ProfileStatus.Show(moved is null ? "" : $"Windower's old settings.xml is kept as {Path.GetFileName(moved)}.");
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not set Windower's settings.xml aside");
-            Say(ErrorText.Of(ex, "Provenance couldn't set Windower's settings.xml aside."), error: true);
+            ProfileStatus.Fail(ErrorText.Of(ex, "Provenance couldn't set Windower's settings.xml aside."));
         }
         RefreshThirdPartyHookLists();
         SaveThirdPartyHook();
@@ -769,13 +762,13 @@ public partial class SettingsViewModel
             var cfg = BootConfig.Load(path);
             change(cfg);
             if (cfg.Ini.Changed) cfg.Save(path);
-            Say("");
+            ProfileStatus.Clear();
             return true;
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not save the boot configuration");
-            Say(ErrorText.Of(ex, "Provenance couldn't save that to the boot configuration."), error: true);
+            ProfileStatus.Fail(ErrorText.Of(ex, "Provenance couldn't save that to the boot configuration."));
             LoadAshitaCard();
             return false;
         }

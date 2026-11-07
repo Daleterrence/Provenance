@@ -11,6 +11,7 @@ using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Hook;
 using Provenance.Wpf.Services;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
@@ -97,8 +98,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasLists), nameof(PageTitle))] private string? _message = "";
     [ObservableProperty] private string _intro = "";
     [ObservableProperty] private string? _problem;
-    [ObservableProperty] private string _status = "";
-    [ObservableProperty] private bool _statusIsError;
+    public StatusLine Status { get; } = new();
     [ObservableProperty] private bool _isWindower;
     [ObservableProperty] private bool _isAshita;
     [ObservableProperty] private ThirdPartyHook? _cardPlatform;
@@ -162,7 +162,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
             _shown = null;
             _scan = null;
             _page = null;
-            Status = "";
+            Status.Clear();
             Problem = null;
             IsWindower = IsAshita = false;
             Addons.Clear();
@@ -209,7 +209,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         _page = page;
         Message = page.Message;
         Intro = page.Intro;
-        Problem = page.Problem == Status ? null : page.Problem;
+        Problem = page.Problem == Status.Text ? null : page.Problem;
         IsWindower = page.Message is null && page.Platform == ThirdPartyHook.Windower;
         IsAshita = page.Message is null && page.Platform == ThirdPartyHook.Ashita;
         SyncTabs(page);
@@ -276,18 +276,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
     private static string? Nothing(ObservableCollection<AddonRow> rows, string? none) =>
         rows.Count == 0 ? none : rows.Any(r => r.Visible) ? null : "Nothing here matches your search.";
 
-    private void ShowError(string text)
-    {
-        Status = text;
-        StatusIsError = true;
-    }
-
-    private void ShowNote(string text)
-    {
-        Status = text;
-        StatusIsError = false;
-    }
-
     public bool UseGlobal
     {
         get => _useGlobal;
@@ -296,12 +284,12 @@ public partial class AddonsPluginsViewModel : ObservableObject
             if (value == _useGlobal) return;
             if (_shown is { Platform: ThirdPartyHook.Windower, Folder: { } dir } && _page is { } page)
             {
-                ShowNote("");
+                Status.Clear();
                 try { SetUseGlobal(dir, page.Key, value); }
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "Could not change whether {Profile} uses the shared list", page.Key);
-                    ShowError(ErrorText.Of(ex, "Provenance couldn't save that change."));
+                    Status.Fail(ErrorText.Of(ex, "Provenance couldn't save that change."));
                 }
                 Reload();
             }
@@ -356,7 +344,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     internal void Switch(AddonRow row, bool on)
     {
         if (_shown is not { Folder: { } dir } target || _page is not { } page) return;
-        ShowNote("");
+        Status.Clear();
         try
         {
             if (target.Platform == ThirdPartyHook.Windower) SwitchWindower(dir, page.Key, row, on);
@@ -365,7 +353,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not turn {Name} {State}", row.Key, on ? "on" : "off");
-            ShowError(ErrorText.Of(ex, "Provenance couldn't save that change. If the file is open in another program, close it and try again."));
+            Status.Fail(ErrorText.Of(ex, "Provenance couldn't save that change. If the file is open in another program, close it and try again."));
         }
         Reload();
     }
@@ -449,7 +437,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
             throw;
         }
         Log.Information("Gave the Ashita boot config {Boot} its own script {Script}", bootName, copyName);
-        ShowNote(string.IsNullOrWhiteSpace(name)
+        Status.Show(string.IsNullOrWhiteSpace(name)
             ? $"This boot configuration now has its own script, {copyName}."
             : $"This boot configuration now has its own script, {copyName} (a copy of {AshitaScript.FileName(name)}), so {AshitaScript.FileName(name)} stays as it is.");
     }
@@ -491,21 +479,21 @@ public partial class AddonsPluginsViewModel : ObservableObject
     {
         if (row is null || _shown is not { Platform: ThirdPartyHook.Windower, Folder: { } dir } || _page is not { } page) return;
         row.Installing = true;
-        ShowNote($"Installing {row.Name}...");
+        Status.Show($"Installing {row.Name}...");
         try
         {
             var result = await _install(dir, page.Branch, row.Kind, row.Key);
-            if (result.Installed) ShowNote($"{row.Name} is installed.");
+            if (result.Installed) Status.Show($"{row.Name} is installed.");
             else
             {
                 Log.Warning("Could not install {Name}: {Errors}", row.Key, string.Join(" | ", result.Errors));
-                ShowError($"{row.Name} couldn't be installed. {result.Errors.FirstOrDefault() ?? "Windower's servers didn't send it."}");
+                Status.Fail($"{row.Name} couldn't be installed. {result.Errors.FirstOrDefault() ?? "Windower's servers didn't send it."}");
             }
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not install {Name}", row.Key);
-            ShowError(ErrorText.Of(ex, $"{row.Name} couldn't be installed. Try again in a moment."));
+            Status.Fail(ErrorText.Of(ex, $"{row.Name} couldn't be installed. Try again in a moment."));
         }
         finally { row.Installing = false; }
         Refreshing = RefreshAsync();
@@ -523,7 +511,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         bool isFile = row.Kind != AddonKind.Addon;
         if (isFile ? !File.Exists(path) : !Directory.Exists(path))
         {
-            ShowError($"{row.Name} isn't installed any more.");
+            Status.Fail($"{row.Name} isn't installed any more.");
             Refreshing = RefreshAsync();
             return;
         }
@@ -531,7 +519,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not open {Path} in Explorer", path);
-            ShowError("Windows couldn't open that folder.");
+            Status.Fail("Windows couldn't open that folder.");
         }
     }
 

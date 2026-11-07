@@ -267,7 +267,7 @@ public sealed class WindowerLauncher : IDisposable
     // its own event though, and an admin's is fine
     private void OpenHandover()
     {
-        using var sa = HandoverSecurity.Create();
+        using var sa = NamedObjectSecurity.ForHandover();
         var mapping = Kernel32.CreateFileMappingW(new IntPtr(-1), sa.Attributes, PageReadWrite, 0, (uint)WindowerHookBlock.Size, WindowerHookBlock.MappingName);
         int error = Marshal.GetLastPInvokeError();
         if (mapping.IsInvalid || error == ErrorAlreadyExists)
@@ -282,8 +282,7 @@ public sealed class WindowerLauncher : IDisposable
         try { Marshal.Copy(Block!.Bytes, 0, view, Block.Bytes.Length); }
         finally { Kernel32.UnmapViewOfFile(view); }
 
-        var ready = Kernel32.CreateEventW(sa.Attributes, false, false, WindowerHookBlock.EventName);
-        error = Marshal.GetLastPInvokeError();
+        var ready = sa.CreateEvent(WindowerHookBlock.EventName, false, out error);
         if (ready.IsInvalid || error == ErrorAlreadyExists && !OwnedByAdmins(ready))
         {
             ready.Dispose();
@@ -332,34 +331,6 @@ public sealed class WindowerLauncher : IDisposable
         }
         _turn?.Dispose();
         _turn = null;
-    }
-
-    // Elevated, only Administrators and SYSTEM, and nothing below high can open either. Not elevated (a dev run) the
-    // user too, or the launch couldn't open its own
-    private sealed class HandoverSecurity : IDisposable
-    {
-        private IntPtr _descriptor;
-        public SecurityAttributes Attributes;
-
-        public static HandoverSecurity Create()
-        {
-            using var me = WindowsIdentity.GetCurrent();
-            bool elevated = new WindowsPrincipal(me).IsInRole(WindowsBuiltInRole.Administrator);
-            var sddl = elevated ? "O:BAD:P(A;;GA;;;SY)(A;;GA;;;BA)S:(ML;;NWNRNX;;;HI)" : $"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{me.User})";
-            if (!Advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out var sd, IntPtr.Zero))
-                throw new InvalidOperationException($"Windower's handover security couldn't be made (error {Marshal.GetLastPInvokeError()}).");
-            return new HandoverSecurity
-            {
-                _descriptor = sd,
-                Attributes = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = sd },
-            };
-        }
-
-        public void Dispose()
-        {
-            if (_descriptor != IntPtr.Zero) Kernel32.LocalFree(_descriptor);
-            _descriptor = IntPtr.Zero;
-        }
     }
 
     private const int ErrorAlreadyExists = 183, KernelObject = 6, OwnerInformation = 1;
