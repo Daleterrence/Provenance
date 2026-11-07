@@ -183,11 +183,11 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     {
         var name = HandleName.Trim();
         if (name.Length == 0) return "Enter a handle name.";
-        if (name.Length > 15) return "A handle name can be 15 characters at most.";
+        if (name.Length > PolLimits.HandleName) return $"A handle name can be {PolLimits.HandleName} characters at most.";
         if (name.Any(c => c < 0x20 || c > 0x7e)) return "A handle name can only use English letters, numbers and symbols.";
         var age = AgeText.Trim();
         if (age.Length > 0 && !(age.All(char.IsAsciiDigit) && age.Length <= 3)) return "Age is a number from 1 to 999.";
-        if (Mail.Trim().Length > 319) return HookFailures.ProfileEditor.MailTooLong;
+        if (Mail.Trim().Length > PolLimits.Mail) return HookFailures.ProfileEditor.MailTooLong;
         // it loads masked, so an edited copy of the mask would save as the new address
         if (Mail.Trim() != _savedMail && Mail.Contains("***")) return "Type your whole mail address to change it.";
         var langs = new[] { Lang0, Lang1, Lang2 }.Where(x => x != 0).ToList();

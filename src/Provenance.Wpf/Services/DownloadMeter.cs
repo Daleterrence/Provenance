@@ -7,8 +7,6 @@ namespace Provenance.Wpf.Services;
 // left going away. The bar never goes back within a step, a retry that takes bytes back just holds it
 public sealed class DownloadMeter
 {
-    private const long Whole = 1_000_000;
-
     private readonly TransferRate _rate = new(TimeSpan.FromSeconds(5));
     private readonly TimeLeft _left = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -56,10 +54,6 @@ public sealed class DownloadMeter
         if (!_timer.IsEnabled) _timer.Start();
         Show();
     }
-
-    // time left from the fraction alone, no sizes
-    public void Update(double fraction, object? step = null) =>
-        Update((long)(Math.Clamp(fraction, 0, 1) * Whole), Whole, fraction, download: false, amount: false, step);
 
     // for a stage that has a fraction but no bytes
     public void Bar(double fraction, object? step = null)

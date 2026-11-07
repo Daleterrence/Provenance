@@ -23,6 +23,20 @@ public sealed class AshitaProfiles(ISettingsService settings, string dir, int pl
         return null;
     }
 
+    public string NewName()
+    {
+        for (int i = 1; ; i++)
+            if (NameProblem($"profile{i}.ini") is null) return $"profile{i}.ini";
+    }
+
+    public string CopyName(string name, string display)
+    {
+        var copy = $"{Path.GetFileNameWithoutExtension(name)}-copy.ini";
+        return NameProblem(copy) is null ? copy : NewName();
+    }
+
+    public string Canonical(string typed) => FileName(typed);
+
     public string Add(string name) =>
         Path.GetFileName(AshitaBootFiles.Create(dir, FileName(name), fromExample: true, playOnline));
 

@@ -334,7 +334,7 @@ public partial class MainViewModel : IMultiRunHost
         if (GameFolders() is { } dirs)
         {
             string eta = "";
-            var left = new DownloadMeter(_ => { }, text => eta = text);   // UI thread only, like the status
+            var left = new PhaseTimeLeft(text => eta = text);   // UI thread only, like the status
             var patch = new InlineProgress<PatchProgress>(p =>
             {
                 Kick();

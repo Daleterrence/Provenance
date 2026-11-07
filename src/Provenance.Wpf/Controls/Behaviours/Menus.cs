@@ -6,18 +6,6 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// a click on the button of an open menu or popup closes it, and this stops that same click opening it again. Dumb, but
-// it works
-public sealed class ReopenGuard
-{
-    private static readonly TimeSpan Window = TimeSpan.FromMilliseconds(300);
-    private DateTime _closedAt;
-
-    public void OnClosed(object? sender, EventArgs e) => _closedAt = DateTime.UtcNow;
-
-    public bool JustClosed => DateTime.UtcNow - _closedAt < Window;
-}
-
 public static class Menus
 {
     public static MenuItem Item(string header, bool enabled, Action click)

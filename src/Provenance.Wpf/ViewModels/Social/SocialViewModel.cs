@@ -801,7 +801,7 @@ public partial class SocialViewModel : ObservableObject
             EditNote.Fail(HookFailures.Friends.OwnRequest);
             return;
         }
-        if (answer == RequestAnswer.Accept && Friends.Count(x => x.IsFriend) >= 200)
+        if (answer == RequestAnswer.Accept && Friends.Count(x => x.IsFriend) >= PolLimits.MaxFriends)
         {
             EditNote.Fail(HookFailures.FriendListFull);
             return;

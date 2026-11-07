@@ -1420,10 +1420,9 @@ public sealed class PolSession : IDisposable
     internal string AdoptPlayedForTest(int pid, DateTime started, string profileId, (int Pid, DateTime Start)? hook = null)
     {
         var launchId = "test" + ShortId.New(8);
+        AdoptHeldForTest(pid, started);
         lock (_gate)
         {
-            Pid = pid;
-            _polStamp = new ProcessStamp(pid, started.ToUniversalTime().Ticks);
             _launchId = launchId;
             _played = true;
         }

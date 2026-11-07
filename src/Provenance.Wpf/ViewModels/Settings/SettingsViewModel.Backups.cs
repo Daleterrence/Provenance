@@ -23,7 +23,6 @@ public partial class SettingsViewModel
 
     // a test swaps this for one that just notes what it got
     internal Action<string> ShowBackupFolderForTest { get; set; } = Explorer.ShowFolder;
-    internal Func<bool> GameRunningForTest { get; set; } = PolUpdates.GameRunning;
     internal Func<LauncherSettings, BackupSources?>? RestoreSourcesForTest { get; set; }
 
     private const string RestoreTitle = "Restore game settings", RestoreFailedTitle = "Couldn't restore the backup";
@@ -74,7 +73,7 @@ public partial class SettingsViewModel
     // the game writes its settings when a character logs out, so a restore under a running one wouldn't last. Asked
     // again right before anything's written
     internal string? RestoreBlocked() =>
-        GameRunningForTest() ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
+        _gameRunning() ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
         : _loggedIn?.Invoke() == true ? "You can restore a backup once you're logged out of PlayOnline."
         : MultiRunGoing ? "You can restore a backup once Provenance has finished starting your accounts."
         : null;

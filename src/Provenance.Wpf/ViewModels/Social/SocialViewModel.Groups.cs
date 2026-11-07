@@ -176,7 +176,7 @@ public partial class SocialViewModel
             EditNote.Fail($"{f.Name} is already in this group, or already invited.");
             return;
         }
-        if (g.Members.Count >= 64)
+        if (g.Members.Count >= PolLimits.MaxGroupMembers)
         {
             EditNote.Fail(HookFailures.Groups.Full);
             return;

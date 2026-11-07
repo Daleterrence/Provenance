@@ -179,7 +179,7 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     }
 
     public void AddFriend(SocialViewModel social, string? handleName = null, string? handleKey = null) =>
-        new AddFriendDialog(social, handleName, handleKey) { Owner = WindowOwner.Find() }.ShowDialog();
+        new AddFriendDialog(social, handleName, handleKey).ShowDialogOver(WindowOwner.Find());
 
     public bool ConfirmDropProfileEditor(string action)
     {
@@ -214,17 +214,14 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
 
     public void ShowInstall(InstallViewModel vm)
     {
-        var w = new InstallWindow { DataContext = vm };
-        if (WindowOwner.Find() is { } owner) w.Owner = owner;
-        w.ShowDialog();
+        new InstallWindow { DataContext = vm }.ShowDialogOver(WindowOwner.Find());
     }
 
     public void ShowSettings(SettingsViewModel vm, SettingsTab tab)
     {
         var w = new SettingsWindow { DataContext = vm };
-        w.Tabs.SelectedIndex = (int)tab;
-        if (WindowOwner.Find() is { } owner) w.Owner = owner;
-        w.ShowDialog();
+        w.SelectTab(tab);
+        w.ShowDialogOver(WindowOwner.Find());
     }
 
     public void ShowRepair(RepairViewModel vm) => new RepairWindow(vm).ShowDialogOver(WindowOwner.Find());
@@ -232,7 +229,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     public int? PickProfilePicture(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int current)
     {
         var w = new ProfilePicturePickerWindow(catalog, avatars, current);
-        if (WindowOwner.Find() is { } owner) w.Owner = owner;
-        return w.ShowDialog() == true ? w.Result : null;
+        return w.ShowDialogOver(WindowOwner.Find()) == true ? w.Result : null;
     }
 }

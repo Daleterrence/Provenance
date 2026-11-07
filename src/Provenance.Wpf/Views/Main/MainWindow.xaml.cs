@@ -52,7 +52,7 @@ public partial class MainWindow : AppWindow
     // the list closes on any click outside it, chip included, and that click must only close it
     private void OnWorldsPopupClosed(object? sender, EventArgs e)
     {
-        _worldsGuard.OnClosed(null, EventArgs.Empty);
+        _worldsGuard.MarkClosed();
         WorldsChip.IsChecked = false;
     }
 

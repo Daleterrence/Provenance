@@ -3,6 +3,7 @@ using System.Windows.Input;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.ViewModels.Chat;
+using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.Views.Chat;
 
@@ -10,8 +11,6 @@ namespace Provenance.Wpf.Views.Chat;
 // Not set first
 public partial class CreateRoomDialog : AppWindow
 {
-    public sealed record Choice(int Code, string Name);
-
     private Func<string, bool>? _confirm;
 
     internal CreateRoomDialog()
@@ -28,13 +27,13 @@ public partial class CreateRoomDialog : AppWindow
                                          Func<string, bool>? confirm)
     {
         var dlg = new CreateRoomDialog { _confirm = confirm };
-        foreach (var z in zones) dlg.ZoneBox.Items.Add(new Choice(z.Code, z.Name));
-        dlg.ZoneBox.SelectedItem = dlg.ZoneBox.Items.Cast<Choice>().FirstOrDefault(c => c.Code == zone);
+        foreach (var z in zones) dlg.ZoneBox.Items.Add(new Choice<int>(z.Code, z.Name));
+        dlg.ZoneBox.SelectedItem = dlg.ZoneBox.Items.Cast<Choice<int>>().FirstOrDefault(c => c.Code == zone);
         void Fill(System.Windows.Controls.ComboBox box, int from)
         {
-            box.Items.Add(new Choice(0, "Not set"));
+            box.Items.Add(new Choice<int>(0, "Not set"));
             foreach (var c in categories.Where(c => c.Code >= from && c.Code < from + 100).OrderBy(c => c.Code))
-                box.Items.Add(new Choice(c.Code, c.Name));
+                box.Items.Add(new Choice<int>(c.Code, c.Name));
             box.SelectedIndex = 0;
         }
         Fill(dlg.MembersBox, 100);
@@ -57,8 +56,8 @@ public partial class CreateRoomDialog : AppWindow
 
     internal ChatRoomForm? Form { get; private set; }
 
-    private int Code(System.Windows.Controls.ComboBox box) => (box.SelectedItem as Choice)?.Code ?? 0;
-    private string Text(System.Windows.Controls.ComboBox box) => (box.SelectedItem as Choice)?.Name ?? "Not set";
+    private int Code(System.Windows.Controls.ComboBox box) => (box.SelectedItem as Choice<int>)?.Code ?? 0;
+    private string Text(System.Windows.Controls.ComboBox box) => (box.SelectedItem as Choice<int>)?.Text ?? "Not set";
 
     // the viewer's own checks, in its order
     internal string? Problem()

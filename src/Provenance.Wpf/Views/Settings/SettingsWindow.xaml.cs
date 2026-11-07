@@ -20,14 +20,18 @@ public partial class SettingsWindow : AppWindow
     public SettingsWindow()
     {
         InitializeComponent();
-        Tabs.SelectionChanged += (_, _) => ShowPanel((SettingsTab)Tabs.SelectedIndex);
-        Loaded += (_, _) => ShowPanel((SettingsTab)Tabs.SelectedIndex);
-        Activated += (_, _) => { if (IsLoaded && (SettingsTab)Tabs.SelectedIndex == SettingsTab.General) ReadLargeAddressAware(); };
+        Tabs.SelectionChanged += (_, _) => ShowPanel(SelectedTab);
+        Loaded += (_, _) => ShowPanel(SelectedTab);
+        Activated += (_, _) => { if (IsLoaded && SelectedTab == SettingsTab.General) ReadLargeAddressAware(); };
         Deactivated += (_, _) => CancelConsoleKey();
         PreviewMouseDown += (_, _) => { if (!ConsoleKeyButton.IsMouseOver) CancelConsoleKey(); };
         Closing += OnClosing;
         DataContextChanged += (_, _) => Wire();
     }
+
+    private SettingsTab SelectedTab => Tabs.SelectedItem is FrameworkElement { Tag: SettingsTab tab } ? tab : SettingsTab.General;
+
+    internal void SelectTab(SettingsTab tab) => Tabs.SelectedItem = Tabs.Items.OfType<FrameworkElement>().First(i => Equals(i.Tag, tab));
 
     private void Wire()
     {
@@ -77,8 +81,8 @@ public partial class SettingsWindow : AppWindow
             // a profile picked on another tab since the Game page was last shown
             if (tab == SettingsTab.Game && !vm.ShowingGame()) vm.PickGameProfile();
         }
-        for (int i = 0; FindName($"Panel{i}") is UIElement panel; i++)
-            panel.Visibility = i == (int)tab ? Visibility.Visible : Visibility.Collapsed;
+        foreach (FrameworkElement panel in Panels.Children)
+            panel.Visibility = Equals(panel.Tag, tab) ? Visibility.Visible : Visibility.Collapsed;
         if (tab == SettingsTab.General) ReadLargeAddressAware();
         if (tab == SettingsTab.WindowerAshita && DataContext is SettingsViewModel hooks) hooks.ShowingHooks();
     }

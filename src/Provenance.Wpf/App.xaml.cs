@@ -86,6 +86,7 @@ public partial class App : Application
                 services.AddSingleton<FeedService>();
                 services.AddSingleton<PolSession>();
                 services.AddSingleton<AvatarService>();
+                // the same one the start-up errors use, as the host isn't built when they show
                 services.AddSingleton(WpfDialogs.Default);
                 services.AddSingleton<IWindowManager, WindowManager>();
                 services.AddSingleton<MainViewModel>();

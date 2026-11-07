@@ -97,8 +97,8 @@
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="behaviours:FocusCue.Track" Value="True" />
         <Setter Property="Template" Value="{StaticResource Btn.Template}" />
-        <!-- on the button, not the template, as content that's its own element (icon and label) takes the button's colour -->
-        <!-- on the button, not the template, so a style can swap the fills (the icon on it reads the same keys) -->
+        <!-- on the button, not the template, as content that's its own element (icon and label) takes the button's colour,
+             and so a style can swap the fills (the icon on it reads the same keys) -->
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{DynamicResource Btn.Fill.Hover}" />

@@ -6,6 +6,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:local="clr-namespace:Provenance.Wpf.Views.Settings"
+        xmlns:tabs="clr-namespace:Provenance.Wpf.ViewModels.Settings"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         Title="Provenance settings" Icon="/Assets/provenance.ico"
         Width="760" Height="600" MinWidth="720" MinHeight="480" ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
@@ -137,34 +138,34 @@
         <Grid Grid.Row="1" ColumnDefinitions="210,*">
             <ListBox x:Name="Tabs" Background="{DynamicResource Surface.1}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Border.Pane}" ItemContainerStyle="{StaticResource NavItem}"
                      Padding="0,10" SelectedIndex="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Tag="{x:Static tabs:SettingsTab.General}">
                     <controls:SvgIcon Glyph="settings" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="General" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Tag="{x:Static tabs:SettingsTab.WindowerAshita}">
                     <controls:SvgIcon Glyph="plugin" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="Windower/Ashita" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Tag="{x:Static tabs:SettingsTab.Game}">
                     <controls:SvgIcon Glyph="gamepad" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="Game" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Tag="{x:Static tabs:SettingsTab.AddonsPlugins}">
                     <materialDesign:PackIcon Kind="PowerPlugOutline" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="Addons and plugins" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Tag="{x:Static tabs:SettingsTab.MultiAccount}">
                     <controls:SvgIcon Glyph="accounts" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="Multi-account" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Tag="{x:Static tabs:SettingsTab.Handles}">
                     <controls:SvgIcon Glyph="person" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     <TextBlock Text="Handles" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                 </StackPanel>
             </ListBox>
 
-            <Grid Grid.Column="1" Background="{DynamicResource Bg.Base}">
-                <ScrollViewer x:Name="Panel0" Visibility="Collapsed" VerticalScrollBarVisibility="Visible">
+            <Grid x:Name="Panels" Grid.Column="1" Background="{DynamicResource Bg.Base}">
+                <ScrollViewer x:Name="Panel0" Tag="{x:Static tabs:SettingsTab.General}" Visibility="Collapsed" VerticalScrollBarVisibility="Visible">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Installation" Style="{StaticResource Section}" />
                         <TextBlock Text="Region" Style="{StaticResource Label}" />
@@ -311,7 +312,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <ScrollViewer x:Name="Panel1" Visibility="Collapsed" VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="Panel1" Tag="{x:Static tabs:SettingsTab.WindowerAshita}" Visibility="Collapsed" VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Windower/Ashita" Style="{StaticResource Section}" />
                         <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,14"
@@ -431,9 +432,9 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <local:AddonsPluginsView x:Name="Panel3" Visibility="Collapsed" DataContext="{Binding Addons}" />
+                <local:AddonsPluginsView x:Name="Panel3" Tag="{x:Static tabs:SettingsTab.AddonsPlugins}" Visibility="Collapsed" DataContext="{Binding Addons}" />
 
-                <ScrollViewer x:Name="Panel4" Visibility="Collapsed" VerticalScrollBarVisibility="Visible">
+                <ScrollViewer x:Name="Panel4" Tag="{x:Static tabs:SettingsTab.MultiAccount}" Visibility="Collapsed" VerticalScrollBarVisibility="Visible">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Multi-account mode" Style="{StaticResource Section}" />
                         <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,8"
@@ -458,7 +459,7 @@
                             <TextBlock Style="{StaticResource Help}" Margin="26,0,0,14"
                                        Text="This will exit Provenance when all of your accounts are successfully logged in. If there is an error logging any account in, it will always stay open to tell you what went wrong and let you try again." />
                             <TextBlock Text="You haven't added any accounts yet. Add one on the main window."
-                                       Style="{StaticResource ShowWhenZero}" Tag="{Binding MultiAccountRows.Count}" />
+                                       Style="{StaticResource ShowWhenZero}" behaviours:State.Count="{Binding MultiAccountRows.Count}" />
                             <ItemsControl ItemsSource="{Binding MultiAccountRows}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -506,7 +507,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <ScrollViewer x:Name="Panel5" Visibility="Collapsed" VerticalScrollBarVisibility="Visible" DataContext="{Binding Handles}">
+                <ScrollViewer x:Name="Panel5" Tag="{x:Static tabs:SettingsTab.Handles}" Visibility="Collapsed" VerticalScrollBarVisibility="Visible" DataContext="{Binding Handles}">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Handles" Style="{StaticResource Section}" />
                         <TextBlock Text="{Binding LoggedOutText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
@@ -560,7 +561,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <Grid x:Name="Panel2" Visibility="Collapsed" DataContext="{Binding Game}" RowDefinitions="*,Auto">
+                <Grid x:Name="Panel2" Tag="{x:Static tabs:SettingsTab.Game}" Visibility="Collapsed" DataContext="{Binding Game}" RowDefinitions="*,Auto">
                     <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="28,22,28,6">
                             <Border Style="{StaticResource PlatformCard}" Tag="{Binding Platform}" Margin="0,0,0,12"

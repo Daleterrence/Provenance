@@ -7,6 +7,7 @@ using Provenance.Common.Feeds;
 using Provenance.Common.Game;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Install;
+using Provenance.Common.Patcher;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Serilog;
@@ -26,6 +27,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private readonly FeedService? _feeds;
     private readonly Func<bool>? _multiRunning, _loggedIn;
+    private readonly Func<bool> _gameRunning;
     private readonly Func<string?>? _largeAddressAwareBlocked;
     private readonly Action? _holdPrestarts, _releasePrestarts, _stopPrestart;
     private readonly Func<bool, RegistryKey?>? _gameKey;
@@ -34,8 +36,9 @@ public partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(IDialogs dialogs, ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
                              Action? holdPrestarts = null, Action? releasePrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
                              Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null, Func<bool>? loggedIn = null,
-                             HandlesViewModel? handles = null)
+                             HandlesViewModel? handles = null, Func<bool>? gameRunning = null)
     {
+        _gameRunning = gameRunning ?? PolUpdates.GameRunning;
         _dialogs = dialogs;
         _loggedIn = loggedIn;
         Handles = handles ?? new HandlesViewModel(dialogs, () => null);
@@ -77,7 +80,7 @@ public partial class SettingsViewModel : ObservableObject
         _backupFolder = settings.Current.BackupFolder;
         LoadThirdPartyHook();
         LoadMulti();
-        Game = new GameSettingsViewModel(dialogs, region, GameStoreForSelection());
+        Game = new GameSettingsViewModel(dialogs, region, GameStoreForSelection(), _gameRunning);
         _gameReady = true;
         Addons = new AddonsPluginsViewModel(settings, this);
         Addons.PropertyChanged += (_, e) =>

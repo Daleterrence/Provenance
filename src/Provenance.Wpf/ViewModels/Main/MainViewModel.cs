@@ -67,7 +67,7 @@ public partial class MainViewModel : ObservableObject
         _feeds = feeds;
         _pol = pol;
         _avatars = avatars;
-        _timeLeftMeter = new DownloadMeter(_ => { }, text => TimeLeftText = text);
+        _timeLeft = new PhaseTimeLeft(text => TimeLeftText = text);
         _slideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
         _slideTimer.Tick += (_, _) => AdvanceNews(+1);
         // POL only rewrites world status every 5 mins anyway
@@ -179,7 +179,7 @@ public partial class MainViewModel : ObservableObject
 
     private DateTime _launchStarted;
     private CancellationTokenSource? _launchCts;
-    private readonly DownloadMeter _timeLeftMeter;
+    private readonly PhaseTimeLeft _timeLeft;
     private bool _updatedFirst;
 
     private static string Seconds(TimeSpan t) => t.TotalSeconds < 60
@@ -240,8 +240,8 @@ public partial class MainViewModel : ObservableObject
     // each phase gets its own, a check's pace says nothing about the download after it
     private void TrackTimeLeft(PatchProgress? patch)
     {
-        if (patch is not { Fraction: >= 0 } p) _timeLeftMeter.Clear();
-        else _timeLeftMeter.Update(p.Fraction, p.Phase);
+        if (patch is not { Fraction: >= 0 } p) _timeLeft.Clear();
+        else _timeLeft.Update(p.Fraction, p.Phase);
     }
 
     [RelayCommand(CanExecute = nameof(CanCancel))]
@@ -1351,22 +1351,21 @@ public partial class MainViewModel : ObservableObject
     private void OpenSettingsAt(SettingsTab tab)
     {
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
-        var handles = Handles;
         ShowHandles();
         var vm = new SettingsViewModel(_dialogs, _settings, multiRunning: () => MultiRunning,
                                        holdPrestarts: _pol.HoldPrestarts, releasePrestarts: _pol.ReleasePrestarts,
                                        largeAddressAwareBlocked: LargeAddressAwareBlocked,
                                        stopPrestart: () => Task.Run(_pol.StopPrestart),
                                        loggedIn: () => IsLaunching || LoggedIn || _pol.Pid is not null,
-                                       handles: handles);
+                                       handles: Handles);
         vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.Hook)) PlatformChanged(); };
         _openSettings = vm;
-        handles.Opened();
+        Handles.Opened();
         try { _windows.ShowSettings(vm, tab); }
         finally
         {
             _openSettings = null;
-            handles.Closed();
+            Handles.Closed();
         }
         if (vm.RestartWanted)
         {

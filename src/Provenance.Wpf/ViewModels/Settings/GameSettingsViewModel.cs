@@ -22,22 +22,22 @@ public partial class GameSettingsViewModel : ObservableObject
 {
     private readonly IDialogs _dialogs;
     private readonly PolRegion? _region;
+    private readonly Func<bool> _gameRunning;
     private IGameSettingsStore _store;
     private FfxiSettings _original = FfxiSettings.Defaults();
     private bool _applying, _edited, _forTest, _loaded;
     // 0037/0038 as they'll be saved. A loaded value stays exact until the slider or the resolution moves
     private int _uiWidth, _uiHeight;
 
-    public GameSettingsViewModel(IDialogs dialogs, PolRegion? region, IGameSettingsStore? store = null)
+    public GameSettingsViewModel(IDialogs dialogs, PolRegion? region, IGameSettingsStore? store = null, Func<bool>? gameRunning = null)
     {
+        _gameRunning = gameRunning ?? PolUpdates.GameRunning;
         _dialogs = dialogs;
         _region = region;
         _store = store ?? new RegistryGameStore(region);
         foreach (var m in DisplayModes()) Resolutions.Add(m);
         Load();
     }
-
-    internal Func<bool> GameRunningForTest { get; init; } = PolUpdates.GameRunning;
 
     public bool Available => _forTest || _loaded;
     public bool Editable => Available && !_store.ReadOnly;
@@ -302,7 +302,7 @@ public partial class GameSettingsViewModel : ObservableObject
             var saved = _store.Save(Collect(), _original);
             _original = _store.Load();
             Apply(_original);
-            bool running = GameRunningForTest();
+            bool running = _gameRunning();
             Status.Show(!saved.Wrote ? "You haven't changed anything, so there's nothing to save." :
                         "Your changes are saved." + (running ? " If the game is running, it'll use them the next time it starts." : ""));
             Log.Information("Saved {Count} FFXI settings values ({Store})", saved.Changed, _store.Key);

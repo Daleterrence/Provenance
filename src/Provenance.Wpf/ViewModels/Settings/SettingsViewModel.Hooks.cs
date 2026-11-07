@@ -361,88 +361,64 @@ public partial class SettingsViewModel
         }
     }
 
+    // the current platform's side of the profile commands. A delete doesn't need Windower's settings.xml read, and
+    // KeepAfterDelete is what the list picks once one's gone (Windower's unnamed profile if there is one)
+    private sealed record ProfileSet(ILaunchProfiles Profiles, string Label, HookProfileItem? Selected, string? KeepAfterDelete);
+
+    private ProfileSet? CurrentProfiles(bool needsSelected, bool readWindower = true)
+    {
+        if (IsWindower && WindowerDir is { } w)
+        {
+            if (needsSelected && WindowerProfile is null) return null;
+            WindowerSettingsFile? file = null;
+            if (readWindower && (file = ReadWindower(w)) is null) return null;
+            return new(new WindowerProfiles(_settings, w, file), "a Windower profile", WindowerProfile, "");
+        }
+        if (IsAshita && AshitaDir is { } a)
+        {
+            if (needsSelected && AshitaBootConfig is null) return null;
+            return new(new AshitaProfiles(_settings, a, PlayOnlineLanguage), "a boot configuration", AshitaBootConfig, null);
+        }
+        return null;
+    }
+
     [RelayCommand]
     private void AddProfile()
     {
-        if (!CanManageProfiles) return;
-        if (IsWindower && WindowerDir is { } w && ReadWindower(w) is { } file)
-        {
-            var profiles = new WindowerProfiles(_settings, w, file);
-            var name = AskName("Add a Windower profile", "What should the new profile be called?", file.NewProfileName(), n => profiles.NameProblem(n));
-            if (name is not null) ChangeProfiles(() => profiles.Add(name), "Provenance couldn't add the profile.");
-        }
-        else if (IsAshita && AshitaDir is { } a)
-        {
-            var profiles = new AshitaProfiles(_settings, a, PlayOnlineLanguage);
-            var name = AskName("Add a boot configuration", "What should the new boot configuration be called?", NewAshitaName(profiles), n => profiles.NameProblem(n));
-            if (name is not null) ChangeProfiles(() => profiles.Add(name), "Provenance couldn't add the boot configuration.");
-        }
-    }
-
-    private static string NewAshitaName(AshitaProfiles profiles)
-    {
-        for (int i = 1; ; i++)
-            if (profiles.NameProblem($"profile{i}.ini") is null) return $"profile{i}.ini";
+        if (!CanManageProfiles || CurrentProfiles(needsSelected: false) is not { } set) return;
+        var name = AskName($"Add {set.Label}", $"What should the new {ProfileNoun} be called?", set.Profiles.NewName(), n => set.Profiles.NameProblem(n));
+        if (name is not null) ChangeProfiles(() => set.Profiles.Add(name), $"Provenance couldn't add the {ProfileNoun}.");
     }
 
     [RelayCommand]
     private void DuplicateProfile()
     {
-        if (!CanCopyProfile) return;
-        if (IsWindower && WindowerDir is { } w && WindowerProfile is { } p && ReadWindower(w) is { } file)
-        {
-            var profiles = new WindowerProfiles(_settings, w, file);
-            var start = profiles.NameProblem($"{p.Display} copy") is null ? $"{p.Display} copy" : file.NewProfileName();
-            var name = AskName("Duplicate a Windower profile", $"What should the copy of {p.Display} be called?", start, n => profiles.NameProblem(n));
-            if (name is not null) ChangeProfiles(() => profiles.Duplicate(p.Name, name), "Provenance couldn't copy the profile.");
-        }
-        else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
-        {
-            var profiles = new AshitaProfiles(_settings, a, PlayOnlineLanguage);
-            var stem = Path.GetFileNameWithoutExtension(b.Name);
-            var start = profiles.NameProblem($"{stem}-copy.ini") is null ? $"{stem}-copy.ini" : NewAshitaName(profiles);
-            var name = AskName("Duplicate a boot configuration", $"What should the copy of {b.Display} be called?", start, n => profiles.NameProblem(n));
-            if (name is not null) ChangeProfiles(() => profiles.Duplicate(b.Name, name), "Provenance couldn't copy the boot configuration.");
-        }
+        if (!CanCopyProfile || CurrentProfiles(needsSelected: true) is not { Selected: { } p } set) return;
+        var name = AskName($"Duplicate {set.Label}", $"What should the copy of {p.Display} be called?", set.Profiles.CopyName(p.Name, p.Display),
+                           n => set.Profiles.NameProblem(n));
+        if (name is not null) ChangeProfiles(() => set.Profiles.Duplicate(p.Name, name), $"Provenance couldn't copy the {ProfileNoun}.");
     }
 
     [RelayCommand]
     private void RenameProfile()
     {
-        if (!CanChangeProfile) return;
-        if (IsWindower && WindowerDir is { } w && WindowerProfile is { } p && ReadWindower(w) is { } file)
-        {
-            var profiles = new WindowerProfiles(_settings, w, file);
-            var name = AskName("Rename a Windower profile", $"What should {p.Display} be called?", p.Name, n => profiles.NameProblem(n, renaming: p.Name));
-            if (name is null || name == p.Name) return;
-            ChangeProfiles(() => profiles.Rename(p.Name, name), "Provenance couldn't rename the profile.", renamedFrom: p.Name);
-        }
-        else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
-        {
-            // it's the file that's renamed, a name of its own stays put
-            var profiles = new AshitaProfiles(_settings, a, PlayOnlineLanguage);
-            var ask = b.Display == b.Name ? $"What should {b.Name} be called?" : $"What should the file for {b.Display} be called?";
-            var name = AskName("Rename a boot configuration", ask, b.Name, n => profiles.NameProblem(n, renaming: b.Name));
-            if (name is null || AshitaProfiles.FileName(name) == b.Name) return;
-            ChangeProfiles(() => profiles.Rename(b.Name, name), "Provenance couldn't rename the boot configuration.", renamedFrom: b.Name);
-        }
+        if (!CanChangeProfile || CurrentProfiles(needsSelected: true) is not { Selected: { } p } set) return;
+        // Ashita renames the file, a name of its own stays put
+        var ask = IsAshita && p.Display != p.Name ? $"What should the file for {p.Display} be called?" : $"What should {p.Display} be called?";
+        var name = AskName($"Rename {set.Label}", ask, p.Name, n => set.Profiles.NameProblem(n, renaming: p.Name));
+        if (name is null || set.Profiles.Canonical(name) == p.Name) return;
+        ChangeProfiles(() => set.Profiles.Rename(p.Name, name), $"Provenance couldn't rename the {ProfileNoun}.", renamedFrom: p.Name);
     }
 
     [RelayCommand]
     private void DeleteProfile()
     {
-        if (!CanChangeProfile) return;
-        if (IsWindower && WindowerDir is { } w && WindowerProfile is { } p)
-        {
-            if (!_dialogs.Confirm("Delete profile", $"Delete the Windower profile {p.Display}? Its settings are removed from Windower's settings.xml, and this can't be undone.", "DELETE", ConfirmStyle.Destructive)) return;
-            ChangeProfiles(() => { new WindowerProfiles(_settings, w).Delete(p.Name); return ""; }, "Provenance couldn't delete the profile.");
-        }
-        else if (IsAshita && AshitaDir is { } a && AshitaBootConfig is { } b)
-        {
-            var file = b.Display == b.Name ? "The file is" : $"Its file, {b.Name}, is";
-            if (!_dialogs.Confirm("Delete boot configuration", $"Delete the boot configuration {b.Display}? {file} removed from Ashita's config\\boot folder, and this can't be undone.", "DELETE", ConfirmStyle.Destructive)) return;
-            ChangeProfiles(() => { new AshitaProfiles(_settings, a, PlayOnlineLanguage).Delete(b.Name); return null; }, "Provenance couldn't delete the boot configuration.");
-        }
+        if (!CanChangeProfile || CurrentProfiles(needsSelected: true, readWindower: false) is not { Selected: { } p } set) return;
+        var body = IsAshita
+            ? $"Delete the boot configuration {p.Display}? {(p.Display == p.Name ? "The file is" : $"Its file, {p.Name}, is")} removed from Ashita's config\\boot folder, and this can't be undone."
+            : $"Delete the Windower profile {p.Display}? Its settings are removed from Windower's settings.xml, and this can't be undone.";
+        if (!_dialogs.Confirm($"Delete {ProfileNoun}", body, "DELETE", ConfirmStyle.Destructive)) return;
+        ChangeProfiles(() => { set.Profiles.Delete(p.Name); return set.KeepAfterDelete; }, $"Provenance couldn't delete the {ProfileNoun}.");
     }
 
     private void ChangeProfiles(Func<string?> change, string failed, string? renamedFrom = null)

@@ -16,6 +16,16 @@ public sealed class WindowerProfiles(ISettingsService settings, string dir, Wind
         return file.NameProblem(name, renaming is null ? null : file.Profiles.FirstOrDefault(p => p.Name == renaming));
     }
 
+    public string NewName() => Current.NewProfileName();
+
+    public string CopyName(string name, string display)
+    {
+        var copy = $"{display} copy";
+        return NameProblem(copy) is null ? copy : NewName();
+    }
+
+    public string Canonical(string typed) => typed;
+
     public string Add(string name) => Edit((f, l) => f.Add(name, l).Name);
 
     public string Duplicate(string source, string name) => Edit((f, l) => f.Duplicate(source, name, l).Name);

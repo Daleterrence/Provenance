@@ -6,6 +6,11 @@ public interface ILaunchProfiles
 {
     IReadOnlyList<string> List();
     string? NameProblem(string name, string? renaming = null);
+    // a name for a new one that's free, and the one to offer for a copy of name (shown as display)
+    string NewName();
+    string CopyName(string name, string display);
+    // what a typed name is called once it's made, to tell a rename that changes nothing
+    string Canonical(string typed);
     string Add(string name);
     string Duplicate(string source, string name);
     string Rename(string name, string newName);

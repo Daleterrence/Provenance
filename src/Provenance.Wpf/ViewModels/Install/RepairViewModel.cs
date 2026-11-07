@@ -76,14 +76,18 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
 
     // an update that's out but not in yet shows up as changed files too, so then they're "damaged or out of date". With
     // no file different there are no DAT changes to lose
-    internal static string Question(int files, long bytes, bool outOfDate) => (files, outOfDate) switch
+    internal static string Question(int files, long bytes, bool outOfDate)
     {
-        (0, _) => "Repair found an unfinished PlayOnline Viewer update and can finish it, downloading fresh copies of any files that need it.",
-        (1, false) => $"Repair found an issue with 1 file ({ByteText.Size(bytes, kb: true)}) and can download a fresh copy to replace it. " + ModsWarning,
-        (_, false) => $"Repair found an issue with {files} files ({ByteText.Size(bytes, kb: true)}) and can download fresh copies to replace them. " + ModsWarning,
-        (1, true) => $"Repair found 1 file that's damaged or out of date ({ByteText.Size(bytes, kb: true)}) and can download a fresh copy to replace it. " + ModsWarning,
-        _ => $"Repair found {files} files that are damaged or out of date ({ByteText.Size(bytes, kb: true)}) and can download fresh copies to replace them. " + ModsWarning,
-    };
+        var size = ByteText.Size(bytes, kb: true);
+        return (files, outOfDate) switch
+        {
+            (0, _) => "Repair found an unfinished PlayOnline Viewer update and can finish it, downloading fresh copies of any files that need it.",
+            (1, false) => $"Repair found an issue with 1 file ({size}) and can download a fresh copy to replace it. " + ModsWarning,
+            (_, false) => $"Repair found an issue with {files} files ({size}) and can download fresh copies to replace them. " + ModsWarning,
+            (1, true) => $"Repair found 1 file that's damaged or out of date ({size}) and can download a fresh copy to replace it. " + ModsWarning,
+            _ => $"Repair found {files} files that are damaged or out of date ({size}) and can download fresh copies to replace them. " + ModsWarning,
+        };
+    }
 
     private enum Ending { NotOnMirror, Declined, Repaired }
 

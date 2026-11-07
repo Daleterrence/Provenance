@@ -45,7 +45,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
     private readonly AddonsHeading _addonsHeading = new(), _pluginsHeading = new(),
         _polHeading = new("Plugins Ashita loads into PlayOnline before the game starts."), _end = new();
     private AddonsTarget? _shown;
-    private object? _scan;
+    private Scanned? _scan;
     private Page? _page;
     private int _refreshes, _tab;
     private bool _visible, _useGlobal;
@@ -135,8 +135,11 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     internal Task Refreshing { get; private set; } = Task.CompletedTask;
 
+    // what a scan found, so a Windower page and an Ashita one each take their own
+    internal abstract record Scanned;
+
     // the tests swap this for one that holds the scan back
-    internal Func<Func<object?>, Task<object?>> RunScanForTest { get; set; } = work => Task.Run(work);
+    internal Func<Func<Scanned?>, Task<Scanned?>> RunScanForTest { get; set; } = work => Task.Run(work);
 
     partial void OnSearchChanged(string value) => Filter();
 
@@ -173,7 +176,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
                                       && _settings.Current.WindowerAddonLists?.GetValueOrDefault(target.Profile) is not { UseGlobal: false };
             Filter();
         }
-        object? scan;
+        Scanned? scan;
         try { scan = await RunScanForTest(() => Scan(target)); }
         catch (Exception ex)
         {
@@ -529,7 +532,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         return kind == AddonKind.Plugin ? updater.InstallPluginAsync(name) : updater.InstallAddonAsync(name);
     }
 
-    private static object? Scan(AddonsTarget target) => target switch
+    private static Scanned? Scan(AddonsTarget target) => target switch
     {
         { Platform: ThirdPartyHook.Windower, Folder: { } dir } when !FolderPins.Linked(dir) =>
             new WindowerScan(WindowerPlugins.Scan(dir), WindowerAddons.Scan(dir), WindowerAddonTree.Load(WindowerAddonTree.CachePath(dir))),
@@ -538,7 +541,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         _ => null,
     };
 
-    private static Page Build(AddonsTarget target, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras, object? scan) => target switch
+    private static Page Build(AddonsTarget target, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras, Scanned? scan) => target switch
     {
         { Platform: ThirdPartyHook.Windower, Folder: null } =>
             Page.Empty("Provenance couldn't find Windower. Choose its folder under Windower/Ashita first."),
@@ -550,7 +553,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         _ => Page.Empty("Choose Windower or Ashita and its folder under Windower/Ashita first."),
     };
 
-    private sealed record WindowerScan(IReadOnlyList<WindowerPluginInfo> Plugins, IReadOnlyList<WindowerAddonInfo> Addons, WindowerAddonTree? Tree);
+    private sealed record WindowerScan(IReadOnlyList<WindowerPluginInfo> Plugins, IReadOnlyList<WindowerAddonInfo> Addons, WindowerAddonTree? Tree) : Scanned;
 
     private static Page BuildWindower(string dir, string profileName, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras,
                                       WindowerScan? scan)
@@ -655,7 +658,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         return reasons;
     }
 
-    private sealed record AshitaScan(IReadOnlyList<AshitaAddon> Addons, IReadOnlyList<AshitaPlugin> Plugins);
+    private sealed record AshitaScan(IReadOnlyList<AshitaAddon> Addons, IReadOnlyList<AshitaPlugin> Plugins) : Scanned;
 
     private static Page BuildAshita(string dir, string bootName, AshitaScan? scan)
     {
