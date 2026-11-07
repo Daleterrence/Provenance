@@ -301,7 +301,7 @@ public partial class MainViewModel : IMultiRunHost
         {
             Kick();
             Log.Information("progress: {Stage}: {Detail}", p.Stage, p.Detail);
-            if (p.Stage == "Failed") lastFailure = p.Detail;
+            if (p.Kind == LaunchProgressKind.Failed) lastFailure = p.Detail;
         });
         string? AskHandleName()
         {

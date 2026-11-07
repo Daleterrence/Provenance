@@ -126,7 +126,7 @@ public sealed class WindowerLauncher : IDisposable
             if (!said)
             {
                 said = true;
-                progress?.Report(new LaunchProgress("Starting", "Waiting for another game to finish starting through Windower...", LaunchSteps.StartPol));
+                progress?.Report(new LaunchProgress("Starting", "Waiting for another game to finish starting through Windower..."));
             }
             if (DateTime.UtcNow >= until)
                 throw Shown.Mark(new TimeoutException("Another game is still starting through Windower. Try again once it's up."));
@@ -164,7 +164,7 @@ public sealed class WindowerLauncher : IDisposable
 
     private void UpdateWindower(string branch, IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
-        progress?.Report(new LaunchProgress("Starting", "Checking for Windower updates...", LaunchSteps.StartPol));
+        progress?.Report(new LaunchProgress("Starting", "Checking for Windower updates..."));
         var updater = (_setup.NewUpdater ?? ((d, b) => new WindowerUpdater(d, b)))(_setup.WindowerDir, branch);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(_setup.UpdateLimit);
@@ -190,7 +190,7 @@ public sealed class WindowerLauncher : IDisposable
         }
         if (!failed && Update is { Errors.Count: 0, LockTimedOut: false }) return;
         UpdateNotice = UpdateNoticeText;
-        progress?.Report(new LaunchProgress("Notice", UpdateNotice));
+        progress?.Report(LaunchProgress.Notice(UpdateNotice));
     }
 
     private void ApplyRegistry()

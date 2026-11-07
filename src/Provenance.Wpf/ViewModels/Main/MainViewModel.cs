@@ -216,7 +216,7 @@ public partial class MainViewModel : ObservableObject
 
     private void OnProgress(LaunchProgress p)
     {
-        if (p.Stage == "Notice")
+        if (p.Kind == LaunchProgressKind.Notice)
         {
             Log.Information("progress: notice: {Detail}", p.Detail);
             ShowNotice(p.Detail, "InformationOutline", opens: false);
@@ -233,7 +233,7 @@ public partial class MainViewModel : ObservableObject
         }
         TrackTimeLeft(p.Patch);
         Log.Information("progress: {Stage}: {Detail}", p.Stage, p.Detail);
-        if (p.Stage is "Failed" or "Stopped") _elapsedTimer.Stop();
+        if (p.Kind is LaunchProgressKind.Failed or LaunchProgressKind.Stopped) _elapsedTimer.Stop();
     }
 
     // each phase gets its own, a check's pace says nothing about the download after it
@@ -997,7 +997,7 @@ public partial class MainViewModel : ObservableObject
         var progress = new Progress<LaunchProgress>(p =>
         {
             OnProgress(p);
-            if (p.Stage is "Failed" or "Stopped") lastFailure = p.Detail;
+            if (p.Kind is LaunchProgressKind.Failed or LaunchProgressKind.Stopped) lastFailure = p.Detail;
         });
         try
         {
@@ -1140,7 +1140,7 @@ public partial class MainViewModel : ObservableObject
         WritePolOptions(_sessionProfileId);
         ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         await BackUpGameSettingsAsync(null, text => ProgressText = text);
-        OnProgress(new LaunchProgress("Starting game", "Starting FINAL FANTASY XI...", LaunchSteps.StartGame, 0.5));
+        OnProgress(new LaunchProgress("Starting game", "Starting FINAL FANTASY XI...", 0.5));
         try { _pol.SignalPlay(); }
         catch (Exception ex)
         {
@@ -1281,7 +1281,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (GameFolders() is not { } dirs) return true;
         var ct = BeginCancellable("Updating FINAL FANTASY XI", "Checking for FINAL FANTASY XI updates...");
-        var progress = new Progress<PatchProgress>(p => OnProgress(LaunchProgress.Updating("Updating", LaunchSteps.StartGame, p, 0.01, 0.99)));
+        var progress = new Progress<PatchProgress>(p => OnProgress(LaunchProgress.Updating("Updating", p, 0.01, 0.99)));
         try
         {
             await Task.Run(() => PolUpdates.UpdateFfxi(dirs.Ffxi, dirs.Viewer, dirs.Region, progress, ct), ct);

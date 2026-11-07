@@ -264,7 +264,7 @@ public sealed class PolSession : IDisposable
     {
         int Fail(string text, int code = LoginCodes.LauncherFailed)
         {
-            progress?.Report(new LaunchProgress("Failed", text));
+            progress?.Report(LaunchProgress.Failed(text));
             return code;
         }
         _hookLog = null;
@@ -282,12 +282,12 @@ public sealed class PolSession : IDisposable
         try
         {
             UpdateViewer(viewerDir!, new InlineProgress<PatchProgress>(
-                p => progress?.Report(LaunchProgress.Updating("Starting", LaunchSteps.StartPol, p, 0.02, LaunchProgress.LogInUpdateEnd))),
+                p => progress?.Report(LaunchProgress.Updating("Starting", p, 0.02, LaunchProgress.LogInUpdateEnd))),
                 FreeViewerFiles, ct);
         }
         catch (OperationCanceledException)
         {
-            progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
+            progress?.Report(LaunchProgress.Cancelled());
             return LoginCodes.Cancelled;
         }
         catch (Exception ex)
@@ -299,7 +299,7 @@ public sealed class PolSession : IDisposable
         FindBuild(viewerDir!, ct);
         if (ct.IsCancellationRequested)
         {
-            progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
+            progress?.Report(LaunchProgress.Cancelled());
             return LoginCodes.Cancelled;
         }
         LargeAddressAwareBeforeStart(viewerDir!, "before the login");
@@ -336,15 +336,15 @@ public sealed class PolSession : IDisposable
             keys.Add(Key(kind));
             return Target(Key(kind));
         }
-        int Stopped(string text)
+        int Stopped(bool polClosed = false)
         {
-            progress?.Report(new LaunchProgress("Stopped", text));
+            progress?.Report(LaunchProgress.Cancelled(polClosed));
             return LoginCodes.Cancelled;
         }
         int Fail(int code, string detail)
         {
             if (code == LoginCodes.DetailsUnreadable) DropKey();
-            progress?.Report(new LaunchProgress("Failed", detail));
+            progress?.Report(LaunchProgress.Failed(detail));
             return code;
         }
 
@@ -384,8 +384,8 @@ public sealed class PolSession : IDisposable
             env[HookContract.Env.Home] = options.HomeSlot.ToString(System.Globalization.CultureInfo.InvariantCulture);
         SetHandleEnvironment(env, options.HandleKey);
 
-        if (ct.IsCancellationRequested) return Stopped("The login was cancelled.");
-        progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.02));
+        if (ct.IsCancellationRequested) return Stopped();
+        progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.02));
         int pid;
         var platform = Platform;
         Volatile.Write(ref _windowerPlay, null);
@@ -411,7 +411,7 @@ public sealed class PolSession : IDisposable
         else
         {
             // a cancel while the pre-start was being taken leaves it waiting, so nothing starts in its place
-            if (ct.IsCancellationRequested) return Stopped("The login was cancelled.");
+            if (ct.IsCancellationRequested) return Stopped();
             if (StartWithWatcher(psi, progress, ct, WatcherLimit, PolDidNotStart) is not { } started)
                 return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
             pid = started;
@@ -427,7 +427,7 @@ public sealed class PolSession : IDisposable
         // saved now, if this copy dies mid sign-in the next start ends this pol.exe
         SaveSession(rememberedProfileId);
         Log.Information("Hold session: pol.exe pid {Pid}", pid);
-        progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", LaunchSteps.StartPol, 0.04));
+        progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.04));
         // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its sign-in from it
         HookFiles.ClearFor(pid);
         DropChatPassword();
@@ -489,7 +489,7 @@ public sealed class PolSession : IDisposable
                 SnapshotUpdated?.Invoke(snap with { Stored = SocialSnapshotFiles.TryReadStore(pid) });
                 StartWatcher(pid);
                 SaveSession(rememberedProfileId);
-                progress?.Report(new LaunchProgress("Connected", "You're logged in.", LaunchSteps.StartGame, 1.0));
+                progress?.Report(new LaunchProgress("Connected", "You're logged in.", 1.0));
                 return 0;
             }
             if (!ProcessStamp.PidRunning(pid))
@@ -509,7 +509,7 @@ public sealed class PolSession : IDisposable
                 return Fail(LoginCodes.Stalled, "PlayOnline stopped responding during the login. Try again in a moment.");
             Thread.Sleep(250);
         }
-        return Stopped("The login was cancelled, and PlayOnline has been closed.");
+        return Stopped(polClosed: true);
     }
 
     // null once progress has said why
@@ -521,20 +521,20 @@ public sealed class PolSession : IDisposable
         try { windower = WindowerLauncher.Prepare(WindowerSetup(polExe, profile, lists, shared), progress, ct); }
         catch (OperationCanceledException)
         {
-            progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
+            progress?.Report(LaunchProgress.Cancelled());
             return null;
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Windower wasn't ready to start the game");
-            progress?.Report(new LaunchProgress("Failed", ErrorText.Of(ex, "Provenance couldn't get Windower ready to start the game. Try again in a moment.")));
+            progress?.Report(LaunchProgress.Failed(ErrorText.Of(ex, "Provenance couldn't get Windower ready to start the game. Try again in a moment.")));
             return null;
         }
         // held till the watcher is done, Hook.dll copies the mapping out before it signals
         using (windower)
         {
             windower.ApplyTo(psi, launchId);
-            progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline with Windower...", LaunchSteps.StartPol, 0.02));
+            progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline with Windower...", 0.02));
             var pid = StartWithWatcher(psi, progress, ct, WindowerLauncher.WatcherLimit, WindowerDidNotStart);
             if (pid is not null) Volatile.Write(ref _windowerPlay, windower.GameValues);
             return pid;
@@ -990,7 +990,7 @@ public sealed class PolSession : IDisposable
             if (outcome == LaunchOutcome.Started) return launchedPid;
             if (outcome == LaunchOutcome.Cancelled)
             {
-                progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
+                progress?.Report(LaunchProgress.Cancelled());
                 return null;
             }
             bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, HookFiles.WatcherExe, "pol_hook.dll");
@@ -998,16 +998,16 @@ public sealed class PolSession : IDisposable
             {
                 var wait = RefusedRetryWaits[attempt - 1];
                 Log.Warning("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll (attempt {Attempt}); trying again in {Wait}", attempt, wait);
-                progress?.Report(new LaunchProgress("Starting", $"Windows is checking Provenance's files. Trying again in {wait.TotalSeconds:0} seconds...", LaunchSteps.StartPol, 0.02));
+                progress?.Report(new LaunchProgress("Starting", $"Windows is checking Provenance's files. Trying again in {wait.TotalSeconds:0} seconds...", 0.02));
                 if (ct.WaitHandle.WaitOne(wait))
                 {
-                    progress?.Report(new LaunchProgress("Stopped", "The login was cancelled."));
+                    progress?.Report(LaunchProgress.Cancelled());
                     return null;
                 }
                 continue;
             }
             if (refused) Log.Error("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll {Attempts} times", attempt);
-            progress?.Report(new LaunchProgress("Failed", refused ? CodeIntegrity.RefusedText : failure));
+            progress?.Report(LaunchProgress.Failed(refused ? CodeIntegrity.RefusedText : failure));
             return null;
         }
     }

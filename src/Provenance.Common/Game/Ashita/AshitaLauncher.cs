@@ -40,7 +40,7 @@ public static class AshitaLauncher
         var limit = limits ?? LaunchLimits.Default;
         int? Fail(string text)
         {
-            progress?.Report(new LaunchProgress("Failed", text));
+            progress?.Report(LaunchProgress.Failed(text));
             return null;
         }
         var s = settings.Current;
@@ -68,7 +68,7 @@ public static class AshitaLauncher
         try { File.Delete(pidFile); } catch { }
         Process? hookProc = null;
         ProcessStamp hook;
-        progress?.Report(new LaunchProgress("Starting", $"Starting {name}...", LaunchSteps.StartPol));
+        progress?.Report(new LaunchProgress("Starting", $"Starting {name}..."));
         Log.Information("Launching through {Platform} at {Dir}", name, dir);
         try
         {
@@ -104,7 +104,7 @@ public static class AshitaLauncher
             if (ReadPid(pidFile) is { } pid)
             {
                 try { File.Delete(pidFile); } catch { }
-                progress?.Report(new LaunchProgress("Starting", $"{name} has started PlayOnline.", LaunchSteps.StartPol));
+                progress?.Report(new LaunchProgress("Starting", $"{name} has started PlayOnline."));
                 return pid;
             }
             bool hookGone = hookProc.HasExited;   // read first, any pol.exe it made is in the snapshot by then
@@ -149,7 +149,7 @@ public static class AshitaLauncher
             if (reportBy is null && !saidSlow && now - startedAt >= limit.SlowNote)
             {
                 saidSlow = true;
-                progress?.Report(new LaunchProgress("Starting", $"{name} is still starting. Press Cancel to stop it.", LaunchSteps.StartPol));
+                progress?.Report(new LaunchProgress("Starting", $"{name} is still starting. Press Cancel to stop it."));
             }
             Thread.Sleep(attached is null ? 100 : 250);
         }
@@ -157,8 +157,7 @@ public static class AshitaLauncher
         {
             bool closed = EndLaunch(hookProc, tree);
             try { File.Delete(pidFile); } catch { }
-            progress?.Report(new LaunchProgress("Stopped", closed ? "The login was cancelled, and PlayOnline has been closed."
-                                                                  : "The login was cancelled."));
+            progress?.Report(LaunchProgress.Cancelled(closed));
             return null;
         }
         // never reported, so nothing it started stays (a hooked one would be half signed in)
