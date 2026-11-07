@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using Provenance.Common.IO;
 using Provenance.Common.Install;
 using Provenance.Common.Patcher;
@@ -26,9 +25,8 @@ public static class LargeAddressAware
     // the hashes of a pol.exe's bytes with the bit off and with it on, null when it isn't a PE file
     public static (string Off, string On)? Pair(byte[] pol)
     {
-        using var ms = new MemoryStream(pol);
-        if (BitAt(ms) is not { } at) return null;
-        var off = ms.ToArray();
+        if (PeFile.CharacteristicsAt(pol) is not { } at) return null;
+        var off = (byte[])pol.Clone();
         off[at] &= unchecked((byte)~Flag);
         var on = (byte[])off.Clone();
         on[at] |= Flag;
@@ -129,29 +127,19 @@ public static class LargeAddressAware
         {
             var bytes = File.ReadAllBytes(path);
             if (FileHash.Sha256(bytes) != known.On) return null;
-            using var ms = new MemoryStream(bytes);
-            if (BitAt(ms) is not { } at) return null;
+            if (PeFile.CharacteristicsAt(bytes) is not { } at) return null;
             bytes[at] &= unchecked((byte)~Flag);
             return bytes;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    // "MZ", e_lfanew at 0x3c, "PE\0\0" there, and the low byte of Characteristics 22 bytes on (0x146 in pol.exe)
     private static long? BitAt(Stream s)
     {
-        Span<byte> b = stackalloc byte[4];
-        if (s.Length < 0x40) return null;
         s.Position = 0;
-        s.ReadExactly(b[..2]);
-        if (b[0] != 'M' || b[1] != 'Z') return null;
-        s.Position = 0x3c;
-        s.ReadExactly(b);
-        long pe = BinaryPrimitives.ReadInt32LittleEndian(b);
-        if (pe < 0x40 || pe > s.Length - 24) return null;
-        s.Position = pe;
-        s.ReadExactly(b);
-        return b is [(byte)'P', (byte)'E', 0, 0] ? pe + 22 : null;
+        var bytes = new byte[s.Length];
+        s.ReadExactly(bytes);
+        return PeFile.CharacteristicsAt(bytes);
     }
 
     private static byte ByteAt(Stream s, long at)

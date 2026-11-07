@@ -36,13 +36,19 @@ public sealed class AshitaProfiles(ISettingsService settings, string dir, int pl
     public string Rename(string name, string newName)
     {
         var renamed = Path.GetFileName(AshitaBootFiles.Rename(dir, FileOf(name), FileName(newName)));
-        LaunchProfiles.Repoint(settings, ThirdPartyHook.Ashita, name, renamed);
+        Repoint(name, renamed);
         return renamed;
     }
 
     public void Delete(string name)
     {
         AshitaBootFiles.Delete(dir, FileOf(name));
-        LaunchProfiles.Repoint(settings, ThirdPartyHook.Ashita, name, null);
+        Repoint(name, null);
     }
+
+    private void Repoint(string old, string? replacement) =>
+        LaunchProfiles.Repoint(settings, ThirdPartyHook.Ashita, old, replacement, s =>
+        {
+            if (LaunchProfiles.Same(s.AshitaBootConfig, old)) s.AshitaBootConfig = replacement ?? "";
+        });
 }

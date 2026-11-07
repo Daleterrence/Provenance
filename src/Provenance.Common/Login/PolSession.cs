@@ -227,7 +227,7 @@ public sealed class PolSession : IDisposable
 
     internal string NewLaunchId()
     {
-        var id = Guid.NewGuid().ToString("N")[..12];
+        var id = ShortId.New(12);
         lock (_gate) _usedLaunchIds.Add(id);
         return id;
     }
@@ -573,7 +573,7 @@ public sealed class PolSession : IDisposable
         var polExe = viewerDir is null ? null : Path.Combine(viewerDir, GameProduct.Viewer.KeyFile);
         var launcherExe = Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe);
         bool found = polExe != null && File.Exists(polExe) && File.Exists(launcherExe)
-                     && File.Exists(Path.Combine(HookFiles.NativeDir, "pol_hook.dll"));
+                     && File.Exists(WatcherProcess.HookDllPath);
         return (viewerDir, found ? polExe : null, launcherExe);
     }
 
@@ -585,13 +585,9 @@ public sealed class PolSession : IDisposable
 
     internal static ProcessStartInfo LauncherStart(string launcherExe, string polExe)
     {
-        var psi = new ProcessStartInfo(launcherExe)
-        {
-            WorkingDirectory = HookFiles.NativeDir, UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true,
-        };
+        var psi = WatcherProcess.StartInfo(launcherExe);
         psi.ArgumentList.Add(polExe);
-        psi.ArgumentList.Add(Path.Combine(HookFiles.NativeDir, "pol_hook.dll"));
+        psi.ArgumentList.Add(WatcherProcess.HookDllPath);
         return psi;
     }
 
@@ -970,13 +966,11 @@ public sealed class PolSession : IDisposable
 
     internal static readonly TimeSpan WatcherLimit = TimeSpan.FromSeconds(60);
 
-    private static (int ExitCode, string Out, string Err)? RunLauncher(Process launcher, TimeSpan limit)
+    private static WatcherRun? RunLauncher(Process launcher, TimeSpan limit)
     {
-        // both pipes, a full stderr pipe would block the watcher forever
-        var outTask = launcher.StandardOutput.ReadToEndAsync();
-        var errTask = launcher.StandardError.ReadToEndAsync();
-        if (!launcher.WaitForExit(limit)) { EndStuckLauncher(launcher, limit); return null; }
-        return (launcher.ExitCode, outTask.GetAwaiter().GetResult(), errTask.GetAwaiter().GetResult());
+        var run = WatcherProcess.Wait(launcher, limit);
+        if (run is null) EndStuckLauncher(launcher, limit);
+        return run;
     }
 
     // Smart App Control refuses a new unsigned build till Windows' cloud check knows it, so that gets retried. Null once
@@ -993,7 +987,7 @@ public sealed class PolSession : IDisposable
                 progress?.Report(LaunchProgress.Cancelled());
                 return null;
             }
-            bool refused = outcome == LaunchOutcome.Refused || CodeIntegrity.Refused(attemptStart, HookFiles.WatcherExe, "pol_hook.dll");
+            bool refused = outcome == LaunchOutcome.Refused || WatcherProcess.Refused(attemptStart);
             if (refused && attempt <= RefusedRetryWaits.Length)
             {
                 var wait = RefusedRetryWaits[attempt - 1];
@@ -1038,7 +1032,7 @@ public sealed class PolSession : IDisposable
             }
             return (LaunchOutcome.Started, pid, "");
         }
-        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == CodeIntegrity.PolicyViolation)
+        catch (Win32Exception ex) when (WatcherProcess.RefusedToStart(ex))
         {
             Log.Warning(ex, "Windows refused to start Provenance Watcher.exe");
             return (LaunchOutcome.Refused, 0, "");
@@ -1425,7 +1419,7 @@ public sealed class PolSession : IDisposable
 
     internal string AdoptPlayedForTest(int pid, DateTime started, string profileId, (int Pid, DateTime Start)? hook = null)
     {
-        var launchId = "test" + Guid.NewGuid().ToString("N")[..8];
+        var launchId = "test" + ShortId.New(8);
         lock (_gate)
         {
             Pid = pid;

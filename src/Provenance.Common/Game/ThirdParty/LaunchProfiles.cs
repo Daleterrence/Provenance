@@ -17,17 +17,14 @@ public static class LaunchProfiles
     // a launch finds a profile by its name in any case and trimmed, so these do too
     internal static bool Same(string? a, string b) => a is not null && a.Trim().Equals(b.Trim(), StringComparison.OrdinalIgnoreCase);
 
-    // what used the old name goes to the new one. With no new name (a delete) the chosen one goes back to the default and an
-    // account to whatever the Windower/Ashita page says
-    internal static void Repoint(ISettingsService settings, ThirdPartyHook platform, string old, string? replacement)
+    // what used the old name goes to the new one. With no new name (a delete) an account goes back to whatever the
+    // Windower/Ashita page says. The platform's own chosen profile is its own to change
+    internal static void Repoint(ISettingsService settings, ThirdPartyHook platform, string old, string? replacement,
+                                 Action<LauncherSettings> repointChosen)
     {
         settings.SaveChange(s =>
         {
-            if (platform == ThirdPartyHook.Windower)
-            {
-                if (Same(s.WindowerProfile, old)) s.WindowerProfile = replacement ?? "";
-            }
-            else if (Same(s.AshitaBootConfig, old)) s.AshitaBootConfig = replacement ?? "";
+            repointChosen(s);
             if (s.ThirdPartyHookPlatform == platform)
                 foreach (var e in s.MultiAccounts.Where(e => Same(e.ThirdPartyHookProfile, old))) e.ThirdPartyHookProfile = replacement;
         });

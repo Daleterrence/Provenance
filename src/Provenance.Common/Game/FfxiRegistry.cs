@@ -74,7 +74,7 @@ public static class FfxiRegistry
         foreach (var v in FfxiValues.All)
             switch (v)
             {
-                case IntValue { IsSecond: true }:
+                case IntValue second when FfxiValues.IsSecond(second):
                     break;
                 case IntValue i:
                     var partner = FfxiValues.Partner(i);
@@ -112,7 +112,7 @@ public static class FfxiRegistry
         foreach (var v in FfxiValues.All)
             switch (v)
             {
-                case IntValue { IsSecond: true }:
+                case IntValue second when FfxiValues.IsSecond(second):
                     break;
                 case BrightnessValue b:
                     var bright = MathF.Round(Math.Clamp(s.Brightness, -1f, 1f), 1);

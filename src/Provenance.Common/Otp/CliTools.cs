@@ -541,7 +541,7 @@ public static class CliTools
     {
         var dir = Dir;
         Sweep(dir, tool);
-        var stamp = Guid.NewGuid().ToString("N")[..8];
+        var stamp = ShortId.New(8);
         var zip = Path.Combine(dir, $"{tool}-new-{stamp}.zip");
         var exe = Path.Combine(dir, $"{tool}-new-{stamp}.exe");
         try
@@ -632,7 +632,7 @@ public static class CliTools
         catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && File.Exists(final))
         {
             // a copy that's running can't be replaced, but it can be moved out of the way
-            File.Move(final, Path.Combine(dir, $"{tool}-old-{Guid.NewGuid().ToString("N")[..8]}.exe"));
+            File.Move(final, Path.Combine(dir, $"{tool}-old-{ShortId.New(8)}.exe"));
             File.Move(fresh, final);
         }
     }

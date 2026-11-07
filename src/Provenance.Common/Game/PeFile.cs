@@ -73,12 +73,21 @@ internal sealed class PeFile
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    // keepSections is for a caller that only trusts the first few
-    public static PeFile? Parse(byte[] d, int keepSections = MaxSections)
+    // where the low byte of Characteristics is (0x146 in pol.exe): "MZ", e_lfanew at 0x3c, "PE" and two zero bytes there, and the
+    // field 22 bytes on. Null when it isn't a PE file
+    public static long? CharacteristicsAt(byte[] d) => PeAt(d) is { } pe ? pe + 22 : null;
+
+    private static long? PeAt(byte[] d)
     {
         if (d.Length < 0x40 || d[0] != 'M' || d[1] != 'Z') return null;
         long pe = U32(d, 0x3C);
-        if (pe + 24 > d.Length || U32(d, pe) != 0x00004550) return null;
+        return pe < 0x40 || pe + 24 > d.Length || U32(d, pe) != 0x00004550 ? null : pe;
+    }
+
+    // keepSections is for a caller that only trusts the first few
+    public static PeFile? Parse(byte[] d, int keepSections = MaxSections)
+    {
+        if (PeAt(d) is not { } pe) return null;
         int count = U16(d, pe + 6), optSize = U16(d, pe + 20);
         if (count > MaxSections) return null;
         count = Math.Min(count, keepSections);

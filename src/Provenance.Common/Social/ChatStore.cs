@@ -85,7 +85,7 @@ public sealed class ChatStore
 
     public void AddNote(string peer, string peerKey, string text)
     {
-        Add(new ChatEntry("note:" + Guid.NewGuid().ToString("N")[..12], peer, true, "", text,
+        Add(new ChatEntry("note:" + ShortId.New(12), peer, true, "", text,
                           DateTimeOffset.UtcNow.ToUnixTimeSeconds(), true, "notice") { PeerKey = peerKey });
         Changed();
     }

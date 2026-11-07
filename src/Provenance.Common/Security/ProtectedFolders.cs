@@ -8,6 +8,7 @@ using Microsoft.Win32.SafeHandles;
 using Provenance.Common.Win32;
 using Serilog;
 using static Provenance.Common.IO.FileHandles;
+using Provenance.Common.IO;
 
 namespace Provenance.Common.Security;
 
@@ -258,7 +259,7 @@ public static class ProtectedFolders
             int moveError;
             if (bin is null)
             {
-                var name = Path.GetFileName(path) + ".untrusted-" + Guid.NewGuid().ToString("N")[..8];
+                var name = Path.GetFileName(path) + ".untrusted-" + ShortId.New(8);
                 to = Path.Combine(Path.GetDirectoryName(path)!, name);
                 using var parent = OpenLinkItself(Path.GetDirectoryName(path)!, ListDirectory | Synchronize, ShareAll);
                 moveError = parent.IsInvalid ? Marshal.GetLastPInvokeError() : Rename(h, parent, name);

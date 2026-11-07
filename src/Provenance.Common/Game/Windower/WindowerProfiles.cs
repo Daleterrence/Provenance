@@ -16,35 +16,32 @@ public sealed class WindowerProfiles(ISettingsService settings, string dir, Wind
         return file.NameProblem(name, renaming is null ? null : file.Profiles.FirstOrDefault(p => p.Name == renaming));
     }
 
-    public string Add(string name)
-    {
-        string added = "";
-        WindowerSettingsFile.Update(dir, settings.Current.WindowerAddonLists, (f, l) => added = f.Add(name, l).Name);
-        settings.Save(settings.Current);
-        return added;
-    }
+    public string Add(string name) => Edit((f, l) => f.Add(name, l).Name);
 
-    public string Duplicate(string source, string name)
-    {
-        string made = "";
-        WindowerSettingsFile.Update(dir, settings.Current.WindowerAddonLists, (f, l) => made = f.Duplicate(source, name, l).Name);
-        settings.Save(settings.Current);
-        return made;
-    }
+    public string Duplicate(string source, string name) => Edit((f, l) => f.Duplicate(source, name, l).Name);
 
     public string Rename(string name, string newName)
     {
-        string renamed = "";
-        WindowerSettingsFile.Update(dir, settings.Current.WindowerAddonLists, (f, l) => renamed = f.Rename(name, newName, l).Name);
-        LaunchProfiles.Repoint(settings, ThirdPartyHook.Windower, name, renamed);
-        settings.Save(settings.Current);
-        return renamed;
+        var renamed = "";
+        return Edit((f, l) => renamed = f.Rename(name, newName, l).Name, () => Repoint(name, renamed));
     }
 
-    public void Delete(string name)
+    public void Delete(string name) =>
+        Edit((f, l) => { f.Delete(name, l); return ""; }, () => Repoint(name, null));
+
+    // the settings only get saved once everything's been changed, so the save can't be missed
+    private string Edit(Func<WindowerSettingsFile, IDictionary<string, WindowerAddonList>, string> change, Action? then = null)
     {
-        WindowerSettingsFile.Update(dir, settings.Current.WindowerAddonLists, (f, l) => f.Delete(name, l));
-        LaunchProfiles.Repoint(settings, ThirdPartyHook.Windower, name, null);
+        var result = "";
+        WindowerSettingsFile.Update(dir, settings.Current.WindowerAddonLists, (f, l) => result = change(f, l));
+        then?.Invoke();
         settings.Save(settings.Current);
+        return result;
     }
+
+    private void Repoint(string old, string? replacement) =>
+        LaunchProfiles.Repoint(settings, ThirdPartyHook.Windower, old, replacement, s =>
+        {
+            if (LaunchProfiles.Same(s.WindowerProfile, old)) s.WindowerProfile = replacement ?? "";
+        });
 }

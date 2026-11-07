@@ -11,6 +11,7 @@ public static class HookFiles
 
     public static string NativeDir => Path.Combine(AppContext.BaseDirectory, "native");
     public const string WatcherExe = "Provenance Watcher.exe";
+    public const string HookDll = "pol_hook.dll";
 
     // set at start-up, and there's no fallback: a file path asked for before that throws
     public static string? Dir
@@ -81,7 +82,7 @@ public static class HookFiles
     public static void RequestStop(int pid) => File.WriteAllText(PathFor(pid, HookContract.Files.Stop), "stop");
 
     // what a request carries so a snapshot can say which job it answers
-    public static string NewToken() => Guid.NewGuid().ToString("N")[..12];
+    public static string NewToken() => ShortId.New(12);
 
     // free text for the last field of a request, the one place line breaks survive. Everything else is one line
     public readonly record struct RequestBody(string Text);

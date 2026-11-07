@@ -310,7 +310,7 @@ public sealed class WindowerLauncher : IDisposable
         psi.ArgumentList.Add("--windower");
         psi.ArgumentList.Add(HookDll);
         psi.ArgumentList.Add(_setup.PolExe);
-        psi.ArgumentList.Add(Path.Combine(HookFiles.NativeDir, "pol_hook.dll"));
+        psi.ArgumentList.Add(WatcherProcess.HookDllPath);
         // pol_hook leaves pol.exe's mutex names to Hook.dll when it sees this
         psi.Environment[HookContract.Env.LaunchId] = _launchId = launchId;
     }

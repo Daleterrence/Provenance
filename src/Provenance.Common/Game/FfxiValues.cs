@@ -16,7 +16,6 @@ public class IntValue : FfxiValue
     public Func<int, int>? AshitaRange { get; init; }
     // set on the first of a pair, the two always go in together
     public string? Partner { get; init; }
-    public bool IsSecond { get; init; }
     // a stored number outside Range reads as Range's answer
     public bool ReadsInRange { get; init; }
     // and stays as it is on a save that doesn't change the value
@@ -54,19 +53,24 @@ public static class FfxiValues
     private static Func<int, int> Clamp(int min, int max) => v => Math.Clamp(v, min, max);
 
     private static IntValue Int(string name, Func<FfxiSettings, int> get, Action<FfxiSettings, int> set, Func<int, int>? range = null,
-        bool windower = false, bool ashita = true, string? partner = null, bool second = false) =>
-        new() { Name = name, Get = get, Set = set, Range = range ?? (v => v), Ashita = ashita, Windower = windower, Partner = partner, IsSecond = second };
+        bool windower = false, bool ashita = true, string? partner = null, Func<int, int>? ashitaRange = null,
+        bool readsInRange = false, bool keepsStored = false) =>
+        new()
+        {
+            Name = name, Get = get, Set = set, Range = range ?? (v => v), AshitaRange = ashitaRange, Ashita = ashita, Windower = windower,
+            Partner = partner, ReadsInRange = readsInRange, KeepsStored = keepsStored,
+        };
 
     private static FixedValue Fixed(string name, int value) => new() { Name = name, Value = value };
 
     public static readonly IReadOnlyList<FfxiValue> All =
     [
         // a mip level 0-6 in Ashita, not FfxiSettings' on/off
-        new IntValue { Name = "0000", Get = s => s.DrawDistanceMip, Set = (s, v) => s.DrawDistanceMip = v, AshitaRange = Clamp(0, 6), Ashita = true, Windower = true },
+        Int("0000", s => s.DrawDistanceMip, (s, v) => s.DrawDistanceMip = v, windower: true, ashitaRange: Clamp(0, 6)),
         Int("0001", s => s.Width, (s, v) => s.Width = v, windower: true, partner: "0002"),
-        Int("0002", s => s.Height, (s, v) => s.Height = v, windower: true, second: true),
+        Int("0002", s => s.Height, (s, v) => s.Height = v, windower: true),
         Int("0003", s => s.BgWidth, (s, v) => s.BgWidth = v, windower: true, partner: "0004"),
-        Int("0004", s => s.BgHeight, (s, v) => s.BgHeight = v, windower: true, second: true),
+        Int("0004", s => s.BgHeight, (s, v) => s.BgHeight = v, windower: true),
         Int("0007", s => s.Sound, (s, v) => s.Sound = v, windower: true),
         Int("0011", s => s.Vegetation, (s, v) => s.Vegetation = v, Clamp(0, 2)),
         Int("0017", s => s.EnhancedShading, (s, v) => s.EnhancedShading = v, windower: true),
@@ -87,15 +91,12 @@ public static class FfxiValues
         Fixed("0031", 0x3BC49BA6),
         Fixed("0032", 0),
         Fixed("0033", 0),
-        new IntValue
-        {
-            Name = "0034", Get = s => s.WindowMode, Set = (s, v) => s.WindowMode = v, Range = FfxiSettings.KnownWindowMode,
-            ReadsInRange = true, KeepsStored = true, Ashita = true, Windower = true,
-        },
+        Int("0034", s => s.WindowMode, (s, v) => s.WindowMode = v, FfxiSettings.KnownWindowMode, windower: true,
+            readsInRange: true, keepsStored: true),
         Int("0035", s => s.BackgroundSound, (s, v) => s.BackgroundSound = v, windower: true),
         Int("0036", s => s.Fonts, (s, v) => s.Fonts = v, Clamp(0, 2)),
         Int("0037", s => s.UiWidth, (s, v) => s.UiWidth = v, windower: true, partner: "0038"),
-        Int("0038", s => s.UiHeight, (s, v) => s.UiHeight = v, windower: true, second: true),
+        Int("0038", s => s.UiHeight, (s, v) => s.UiHeight = v, windower: true),
         Fixed("0039", 1),
         Int("0040", s => s.GraphicsFix, (s, v) => s.GraphicsFix = v),
         Fixed("0041", 0),
@@ -110,6 +111,9 @@ public static class FfxiValues
     ];
 
     public static FfxiValue Find(string name) => All.First(v => v.Name == name);
+
+    // the second of a pair is the one another value names as its partner
+    public static bool IsSecond(IntValue v) => All.OfType<IntValue>().Any(i => i.Partner == v.Name);
 
     public static IntValue? Partner(IntValue v) => v.Partner is { } p ? (IntValue)Find(p) : null;
 }

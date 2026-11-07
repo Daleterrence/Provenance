@@ -214,28 +214,24 @@ public static class AshitaLauncher
     private static string? AttachHook(int pid)
     {
         var started = DateTime.UtcNow;
-        var psi = new ProcessStartInfo(Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe))
-        {
-            WorkingDirectory = HookFiles.NativeDir, UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true,
-        };
+        var psi = WatcherProcess.StartInfo(Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe));
         psi.ArgumentList.Add("--attach");
         psi.ArgumentList.Add(pid.ToString());
-        psi.ArgumentList.Add(Path.Combine(HookFiles.NativeDir, "pol_hook.dll"));
+        psi.ArgumentList.Add(WatcherProcess.HookDllPath);
         try
         {
             using var p = Process.Start(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
-            var outTask = p.StandardOutput.ReadToEndAsync();
-            var errTask = p.StandardError.ReadToEndAsync();
-            if (!p.WaitForExit(30_000)) { try { p.Kill(); } catch { } return "Provenance couldn't start logging in to PlayOnline in time. Try again."; }
-            var stdout = outTask.GetAwaiter().GetResult();
-            var stderr = errTask.GetAwaiter().GetResult().Trim();
-            if (p.ExitCode == 0 && HookLog.Attached(stdout)) return null;
-            Log.Error("Provenance Watcher --attach {Pid} failed: {Error}", pid, stderr);
-            return CodeIntegrity.Refused(started, HookFiles.WatcherExe, "pol_hook.dll") ? CodeIntegrity.RefusedText
+            if (WatcherProcess.Wait(p, TimeSpan.FromSeconds(30)) is not { } run)
+            {
+                try { p.Kill(); } catch { }
+                return "Provenance couldn't start logging in to PlayOnline in time. Try again.";
+            }
+            if (run.ExitCode == 0 && HookLog.Attached(run.Out)) return null;
+            Log.Error("Provenance Watcher --attach {Pid} failed: {Error}", pid, run.Err.Trim());
+            return WatcherProcess.Refused(started) ? CodeIntegrity.RefusedText
                  : NotPickedUp;
         }
-        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == CodeIntegrity.PolicyViolation)
+        catch (System.ComponentModel.Win32Exception ex) when (WatcherProcess.RefusedToStart(ex))
         {
             Log.Warning(ex, "Windows refused to start Provenance Watcher.exe");
             return CodeIntegrity.RefusedText;
