@@ -309,7 +309,7 @@ static void chat_frame_hello(BYTE *b, int type, WCHAR *w)
 static void chat_frame_say(BYTE *b, const WCHAR *text, WCHAR *w, int cap)
 {
     static const WCHAR cc[] = L"0123456789abcdefghijklmn";
-    int lang = pc_has(b, SV_VIEWER_LANGUAGE) ? pc_viewer_language(b) : 0, n;
+    int lang = pc_viewer_language_or(b, 0), n;
     wsprintfW(w, L"%x%2x%2x%c", 0, 0, g_cr_emote, g_cr_colour < 0 ? L'0' : cc[g_cr_colour + 5]);
     lstrcatW(w, g_cr_nick);
     n = lstrlenW(w);

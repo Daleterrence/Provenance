@@ -3,7 +3,7 @@ static int g_my_slot = -1;
 static int peers_get_chr(BYTE *b, int i, pol_chr *rec)
 {
     memset(rec, 0, sizeof *rec);
-    return pc_has(b, SV_GET_CONTENT_ID) && pc_get_content_id(b, (unsigned)i, rec) == 0 && chr_valid(rec);
+    return pc_has(b, SV_GET_CONTENT_ID) && pc_get_content_id(b, (unsigned)i, rec) == 0 && pc_chr_valid(rec);
 }
 /* a Handle ID as the key the app knows it by */
 static void peers_hid_key(unsigned __int64 hid, char k[17])
@@ -139,7 +139,7 @@ static int peers_secret(void)
     DWORD n = 0;
     int r;
     if (g_peer_secret_ok) return 1;
-    n = GetEnvironmentVariableW(L_(ENV_IPC_DIR), path, MAX_PATH);
+    n = GetEnvironmentVariableW(WIDE(ENV_IPC_DIR), path, MAX_PATH);
     if (!n || n >= MAX_PATH || !peers_secret_name(name, 256)) return 0;
     if (path[n - 1] != L'\\' && path[n - 1] != L'/') lstrcatW(path, L"\\");
     lstrcatW(path, name);
@@ -194,18 +194,18 @@ static int peers_is_me(BYTE *b, unsigned lo, unsigned hi)
 static int peers_get_friend(BYTE *b, int row, pol_friend_copy *fr)
 {
     memset(fr, 0, sizeof *fr);
-    return pc_friend_copy(b, row, fr) >= 0 && friend_valid(&fr->f);
+    return pc_friend_copy(b, row, fr) >= 0 && pc_friend_valid(&fr->f);
 }
 static void peers_friend_key(BYTE *b, const pol_friend *f, char k[17])
 {
-    peers_key(b, f->id_lo, f->id_hi, (unsigned)friend_slot(f), k);
+    peers_key(b, f->id_lo, f->id_hi, (unsigned)pc_friend_slot(f), k);
 }
 /* the same test as polcore.dll 0x100254d0 */
 static int peers_find_friend_row(BYTE *b, DWORD lo, DWORD hi, int slot)
 {
     pol_friend_copy r;
     for (int i = 0; i < 200; i++)
-        if (peers_get_friend(b, i, &r) && r.f.id_lo == lo && r.f.id_hi == hi && friend_slot(&r.f) == slot) return i;
+        if (peers_get_friend(b, i, &r) && r.f.id_lo == lo && r.f.id_hi == hi && pc_friend_slot(&r.f) == slot) return i;
     return -1;
 }
 

@@ -1,7 +1,7 @@
 static int hold_db_free(void)
 {
-    return GetTickCount64() - g_s.db_last >= 3000 && !g_s.srch_step && !g_s.prof_step && !g_s.ch_step && !g_s.fp_step &&
-           !g_s.cr_db && !g_s.me_step && !g_s.xi_step && g_s.pic_want < 0;
+    return GetTickCount64() - g_s.db_last >= 3000 && !g_s.search_step && !g_s.prof_step && !g_s.character_step && !g_s.ffxi_profile_step &&
+           !g_s.cr_db && !g_s.me_step && !g_s.ffxi_step && g_s.pic_want < 0;
 }
 
 /* the server's handle, else the first in use (app.dll 0x10028a76). Provenance's last one (POL_HANDLE) goes before
@@ -49,26 +49,26 @@ static void hold_handle(BYTE *b)
 static void hold_db_reads_abandon(BYTE *b)
 {
     if (g_s.prof_step != 0) profiles_profile_abandon(b);
-    if (g_s.ch_step != 0) profiles_character_abandon(b);
-    if (g_s.fp_step != 0) profiles_ffxiprofile_abandon(b);
-    if (g_s.srch_step != 0) profiles_search_abandon(b);
+    if (g_s.character_step != 0) profiles_character_abandon(b);
+    if (g_s.ffxi_profile_step != 0) profiles_ffxiprofile_abandon(b);
+    if (g_s.search_step != 0) profiles_search_abandon(b);
 }
 
 static int hold_writes_pending(void)
 {
-    return g_s.sq_n || g_s.status_job >= 0 || g_s.edit_job >= 0 || g_s.edit_upload_want ||
+    return g_s.send_queue_n || g_s.status_job >= 0 || g_s.edit_job >= 0 || g_s.edit_upload_want ||
            g_s.comment_wanted || g_s.pic_want >= 0 || g_s.grp_job >= 0 || g_s.answer_kind || g_s.me_step >= 3 ||
-           g_s.hop;
+           g_s.handle_op;
 }
 /* writes that are due but haven't got a job slot yet, or an answer's message still to come */
 static int hold_writes_waiting(void)
 {
     return mail_send_built() || g_s.answer_kind || g_s.edit_upload_want || g_s.comment_wanted || g_s.me_step == 3 ||
-           g_s.hwant;
+           g_s.handle_want;
 }
 static void hold_drain_turn(BYTE *b, int mail)
 {
-    pump_once(b);
+    pc_pump_once(b);
     login_status_pump(b);
     if (mail) mail_inbox_pump(b);
     mail_send_pump(b);
@@ -153,9 +153,9 @@ static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
     group_chat_end(b, "left", 1);
     while (hold_writes_pending() && GetTickCount64() < until)
         hold_drain_turn(b, !g_lean);
-    for (int i = 0; i < FETCH_LANES; i++) if (g_s.rd[i].job >= 0) pc_cancel_job(b, g_s.rd[i].job);
+    for (int i = 0; i < FETCH_LANES; i++) if (g_s.mail_lanes[i].job >= 0) pc_cancel_job(b, g_s.mail_lanes[i].job);
     if (g_s.del_job >= 0) pc_cancel_job(b, g_s.del_job);
-    for (int i = 0; i < g_s.sq_n; i++) if (g_sq[i].job >= 0) pc_cancel_job(b, g_sq[i].job);
+    for (int i = 0; i < g_s.send_queue_n; i++) if (g_sq[i].job >= 0) pc_cancel_job(b, g_sq[i].job);
     if (g_s.status_job >= 0) pc_cancel_job(b, g_s.status_job);
     handles_abandon(b);
     g_in_hold = 0;
@@ -254,7 +254,7 @@ static void hold_run(BYTE *b)
         if (ctl) lastCtl = GetTickCount64();
         /* a dropped session (another login of this POL ID, KILL, a ban push, the server hanging up) ends the hold,
            so Play never boots FFXI on a dead one */
-        idle = pump_once(b);
+        idle = pc_pump_once(b);
         reason = *pc_session_ready(b);
         if (idle < 0 || reason < 0 || *pc_session_alive(b) == 0) {
             why = idle < 0 ? idle : reason < 0 ? reason : (int)*pc_auth_error(b);
@@ -274,7 +274,7 @@ static void hold_run(BYTE *b)
             base_end_pol(0);
         }
         if (ctl) hold_link_watch(b);
-        if (ctl && pc_has(b, SV_JAILED) && pc_jailed(b)) {
+        if (ctl && pc_jailed_or(b, 0)) {
             DeleteFileA(spath);
             message_store_drop();
             login_account_blocked(b, "jail");

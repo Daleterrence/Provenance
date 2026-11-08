@@ -2,12 +2,12 @@
 #define SEND_MAX 2
 typedef struct { BYTE *msg; int job; ULONGLONG started; char token[48]; } sendrec;
 static sendrec g_sq[SEND_MAX];
-static int mail_send_going(void) { return g_s.sq_n > 0; }
+static int mail_send_going(void) { return g_s.send_queue_n > 0; }
 static int mail_send_msg_jobs(void)
 {
     int n = g_s.del_job >= 0, i;
-    for (i = 0; i < FETCH_LANES; i++) n += g_s.rd[i].job >= 0;
-    for (i = 0; i < g_s.sq_n; i++) n += g_sq[i].job >= 0;
+    for (i = 0; i < FETCH_LANES; i++) n += g_s.mail_lanes[i].job >= 0;
+    for (i = 0; i < g_s.send_queue_n; i++) n += g_sq[i].job >= 0;
     return n;
 }
 static int mail_send_slots_free(BYTE *b)
@@ -25,7 +25,7 @@ static int mail_send_msg_slot_ok(BYTE *b)
 }
 static int mail_send_built(void)
 {
-    for (int i = 0; i < g_s.sq_n; i++) if (g_sq[i].job < 0) return 1;
+    for (int i = 0; i < g_s.send_queue_n; i++) if (g_sq[i].job < 0) return 1;
     return 0;
 }
 
@@ -118,8 +118,8 @@ static void mail_send_fail(const char *why)
 static void mail_send_drop(int i)
 {
     HeapFree(GetProcessHeap(), 0, g_sq[i].msg);
-    for (; i < g_s.sq_n - 1; i++) g_sq[i] = g_sq[i + 1];
-    g_s.sq_n--;
+    for (; i < g_s.send_queue_n - 1; i++) g_sq[i] = g_sq[i + 1];
+    g_s.send_queue_n--;
 }
 /* chat lines, answers and group messages all get paced here (a chat take only checks first), oldest built first */
 static void mail_send_start(BYTE *b)
@@ -129,8 +129,8 @@ static void mail_send_start(BYTE *b)
     const char *no = mail_send_pace_refusal();
     char st[24];
     sendrec *s;
-    for (i = 0; i < g_s.sq_n && g_sq[i].job >= 0; i++) ;
-    if (i == g_s.sq_n) return;
+    for (i = 0; i < g_s.send_queue_n && g_sq[i].job >= 0; i++) ;
+    if (i == g_s.send_queue_n) return;
     s = &g_sq[i];
     if (no) {
         base_log("mail: send refused - %s\r\n", no);
@@ -170,7 +170,7 @@ static int mail_send_msg_build(BYTE *b, int kind, unsigned toLo, unsigned toHi, 
     int attLen = att ? 0x20 : 0;
     int need = lstrlenA(sj_subj) + 1 + lstrlenA(sj_text) + 1 + attLen, n;
     BYTE *msg;
-    if (g_s.sq_n >= SEND_MAX) return -1;
+    if (g_s.send_queue_n >= SEND_MAX) return -1;
     msg = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, MAIL_BUILT_SIZE + need + 8);
     if (!msg || ((ULONG_PTR)msg & 7)) {
         if (msg) HeapFree(GetProcessHeap(), 0, msg);
@@ -181,11 +181,11 @@ static int mail_send_msg_build(BYTE *b, int kind, unsigned toLo, unsigned toHi, 
     pc_mail_header(b, msg, kind, (unsigned)me, (unsigned)(me >> 32), toLo, toHi, myName, sj_subj,
                    fromSlot, toSlot, 1000, att ? attType : 0, n);
     mail_inbox_log_hdr("send", msg);
-    g_sq[g_s.sq_n].msg = msg;
-    g_sq[g_s.sq_n].job = -1;
-    g_sq[g_s.sq_n].started = 0;
-    lstrcpynA(g_sq[g_s.sq_n].token, g_s.send_token, sizeof g_sq[0].token);
-    g_s.sq_n++;
+    g_sq[g_s.send_queue_n].msg = msg;
+    g_sq[g_s.send_queue_n].job = -1;
+    g_sq[g_s.send_queue_n].started = 0;
+    lstrcpynA(g_sq[g_s.send_queue_n].token, g_s.send_token, sizeof g_sq[0].token);
+    g_s.send_queue_n++;
     g_snap_dirty = 1;
     return n;
 }
@@ -228,7 +228,7 @@ static void mail_send_parse(BYTE *b, char *buf)
     n = json_utf8_to_sjis(text, sj_text, 0x1000);
     if (!sj_text[0]) { mail_send_fail("failed:empty"); return; }
     if (n > TEXT_MAX_BYTES) { mail_send_fail("failed:too long"); return; }
-    n = mail_send_msg_build(b, 0, fr.f.id_lo, fr.f.id_hi, mySlot, friend_slot(&fr.f), myName,
+    n = mail_send_msg_build(b, 0, fr.f.id_lo, fr.f.id_hi, mySlot, pc_friend_slot(&fr.f), myName,
                   sj_subj, sj_text, NULL, 0);
     if (n < 0) { mail_send_fail("failed:alloc"); return; }
     base_log("mail: send to row %d (my slot %d, body %d bytes)\r\n", row, mySlot, n);
@@ -240,7 +240,7 @@ static void mail_send_pump(BYTE *b)
     char *buf, st[24];
     int i, r, why, again = 0;
     ULONGLONG ms;
-    for (i = 0; i < g_s.sq_n; i++) {
+    for (i = 0; i < g_s.send_queue_n; i++) {
         sendrec *s = &g_sq[i];
         if (s->job < 0 || (r = pc_mail_send_check(b, s->job)) == 0) continue;
         s->job = -1;
@@ -259,7 +259,7 @@ static void mail_send_pump(BYTE *b)
     if (mail_send_built()) { if (!again) mail_send_start(b); return; }
     /* an answer owns the send slots from its request to its message. A waiting answer or group request goes
        before the next line, they only start with nothing sending */
-    if (g_s.sq_n >= SEND_MAX || g_s.draining || g_s.answer_kind || handles_switching() || !requests_waiting(REQ_SEND) ||
+    if (g_s.send_queue_n >= SEND_MAX || g_s.draining || g_s.answer_kind || handles_switching() || !requests_waiting(REQ_SEND) ||
         requests_new(REQ_ANSWER) || requests_new(REQ_GROUP))
         return;
     /* stopped or at the hourly cap, a request is still taken so the app hears it wasn't sent */
@@ -330,7 +330,7 @@ static void mail_send_answer_request(BYTE *b)
     if (mail_send_pace_refusal()) { mail_send_answer_fail(mail_send_pace_refusal()); return; }
     if (!requests_parse_num(mids, 6, &mid)) { mail_send_answer_fail("failed:bad request"); return; }
     if (lstrcmpA(op, "request") == 0) {
-        if (mid >= g_s.srch_n || g_s.srch_step != 0) { mail_send_answer_fail("failed:no such result"); return; }
+        if (mid >= g_s.search_n || g_s.search_step != 0) { mail_send_answer_fail("failed:no such result"); return; }
         h = &g_srch[mid];
         /* the hit must be the one the launcher showed, a newer search replaces the list */
         peers_key(b, h->lo, h->hi, (unsigned)h->slot, k);
@@ -359,7 +359,7 @@ static void mail_send_answer_request(BYTE *b)
     }
     g_answer_text[0] = 0;
     for (i = 0; i < g_s.mail_n; i++) if (g_mail[i].mid == mid) { m = &g_mail[i]; break; }
-    if (!m || mail_kind(m->hdr) != 1) { mail_send_answer_fail("failed:no such request"); return; }
+    if (!m || pc_mail_kind(m->hdr) != 1) { mail_send_answer_fail("failed:no such request"); return; }
     memcpy(g_answer_hdr, m->hdr, MAIL_KEY_SIZE);
     json_utf8_to_sjis(subj, g_answer_subj, 0x80);
     memcpy(nm, MAIL(m->hdr)->name, 15);
@@ -416,10 +416,10 @@ static void mail_send_answer_pump(BYTE *b, int ctl)
     }
     /* in a drain too, the upload with the new row is done so its message has to follow */
     if (g_s.answer_kind && !g_s.answer_wait) {
-        if (g_s.sq_n) return;
+        if (g_s.send_queue_n) return;
         mail_send_answer_send(b);
         return;
     }
-    if (ctl && !g_s.draining && g_s.edit_job < 0 && !g_s.edit_upload_want && !g_s.comment_wanted && !g_s.sq_n)
+    if (ctl && !g_s.draining && g_s.edit_job < 0 && !g_s.edit_upload_want && !g_s.comment_wanted && !g_s.send_queue_n)
         mail_send_answer_request(b);
 }

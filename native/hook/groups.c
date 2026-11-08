@@ -75,7 +75,7 @@ static void groups_answer(BYTE *b, int accept, int mid, const char *subj, const 
     grp_hdr gh;
     lstrcpynA(g_s.grp_token, tok, sizeof g_s.grp_token);
     for (int i = 0; i < g_s.mail_n; i++) if (g_mail[i].mid == mid) { m = &g_mail[i]; break; }
-    if (!m || mail_kind(m->hdr) != 0xe || !m->has_att) {
+    if (!m || pc_mail_kind(m->hdr) != 0xe || !m->has_att) {
         group_fail("failed:no such invitation");
         return;
     }
@@ -102,7 +102,7 @@ static void groups_request(BYTE *b)
     grp_mem m;
     int myClass = 0, haveGroup = 0, mid, slot, idx, cls, tcls, me, row, used = 0;
     /* a group job's -0x100 is a failure, so wait for a free polcore slot */
-    if (g_s.sq_n || g_s.answer_kind || mail_send_slots_free(b) < 1) return;
+    if (g_s.send_queue_n || g_s.answer_kind || mail_send_slots_free(b) < 1) return;
     if (requests_take(REQ_GROUP, buf, sizeof buf) < 0) return;
     p = buf;
     op = requests_line(&p); tok = requests_line(&p); gid = requests_line(&p); a = requests_line(&p);
@@ -195,7 +195,7 @@ static void groups_request(BYTE *b)
         memcpy(att + 4, &gh.idHi, 4);
         memcpy(att + 8, gh.name, 0x14);
         lstrcpyA(g_s.grp_state, "sent as a message");
-        groups_send(b, 0xe, fr.f.id_lo, fr.f.id_hi, friend_slot(&fr.f),
+        groups_send(b, 0xe, fr.f.id_lo, fr.f.id_hi, pc_friend_slot(&fr.f),
                    (int)((gh.flags >> 4) & 0x3f), bb, c, att, tok);
     } else {
         group_fail("failed:bad request");

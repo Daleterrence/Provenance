@@ -35,7 +35,7 @@ static void mail_inbox_parse(mailrec *m, const char *body, int len)
     else json_sjis_to_utf8(body, bel > 0x80 ? 0x80 : bel, m->subj, sizeof m->subj);
     for (end = bel + 1; end < len && body[end]; end++) ;
     json_sjis_to_utf8(body + bel + 1, end - bel - 1, m->text, sizeof m->text);
-    if (bel >= 0 && mail_att_type(m->hdr) == 10 && len - (end + 1) >= 0x20) {
+    if (bel >= 0 && pc_mail_att_type(m->hdr) == 10 && len - (end + 1) >= 0x20) {
         memcpy(m->att, body + end + 1, 0x20);
         m->has_att = 1;
     }
@@ -78,10 +78,10 @@ static ULONGLONG mail_inbox_order(const BYTE *h)
 static int mail_inbox_held(const mailrec *m)
 {
     const BYTE *e = m->hdr, *o;
-    if (m->state != 1 || mail_kind(e) != 0) return 0;
+    if (m->state != 1 || pc_mail_kind(e) != 0) return 0;
     for (int i = 0; i < g_s.mail_n; i++) {
         o = g_mail[i].hdr;
-        if (g_mail[i].state == 0 && mail_kind(o) == 0 && MAIL(o)->from_lo == MAIL(e)->from_lo &&
+        if (g_mail[i].state == 0 && pc_mail_kind(o) == 0 && MAIL(o)->from_lo == MAIL(e)->from_lo &&
             MAIL(o)->from_hi == MAIL(e)->from_hi && MAIL(o)->from_slot == MAIL(e)->from_slot &&
             mail_inbox_order(o) < mail_inbox_order(e))
             return 1;
@@ -126,7 +126,7 @@ static void mail_inbox_log_hdr(const char *what, const BYTE *h)
     char nm[64];
     json_sjis(nm, sizeof nm, (const BYTE *)MAIL(h)->name, 0x0f);
     base_log("mail: %s from=%s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what, nm,
-       MAIL(h)->from_slot, (unsigned)mail_kind(h), MAIL(h)->len,
+       MAIL(h)->from_slot, (unsigned)pc_mail_kind(h), MAIL(h)->len,
        MAIL(h)->seq, MAIL(h)->time, MAIL(h)->flags, MAIL(h)->seen);
 }
 /* push callbacks run inside polcore's IRC processing on the hold loop's thread, H on its stack, so copy and get out */
@@ -145,7 +145,7 @@ static void __cdecl mail_inbox_raw(void *arg)
     BYTE *h = (BYTE *)arg;
     if (!h || IsBadReadPtr(h, sizeof(pol_mail))) return;
     mail_inbox_log_hdr("real-time", h);
-    if (mail_receipt(h)) return;
+    if (pc_mail_receipt(h)) return;
     mailrec *m = mail_inbox_add(h);
     if (m) {
         const char *body = MAIL(h)->body;
@@ -158,7 +158,7 @@ static void __cdecl mail_inbox_raw(void *arg)
 
 static int mail_inbox_mine(BYTE *b, const BYTE *h)
 {
-    return mail_kind(h) == 0 && peers_is_me(b, MAIL(h)->from_lo, MAIL(h)->from_hi);
+    return pc_mail_kind(h) == 0 && peers_is_me(b, MAIL(h)->from_lo, MAIL(h)->from_hi);
 }
 
 /* every line this session sent to another POL ID: header time and seq and the slot it went from */
@@ -226,11 +226,11 @@ static void mail_inbox_recheck(BYTE *b)
 static int mail_inbox_sender_ignored(BYTE *b, const BYTE *h)
 {
     for (int bi = 0; bi < 100; bi++) {
-        const pol_friend *a = ignore_row(b, bi);
+        const pol_friend *a = pc_ignore_row(b, bi);
         if (IsBadReadPtr(a, sizeof *a)) break;
-        if (!friend_valid(a)) continue;
+        if (!pc_friend_valid(a)) continue;
         if (a->id_lo != MAIL(h)->from_lo || a->id_hi != MAIL(h)->from_hi) continue;
-        if ((a->flags & 3) || friend_slot(a) == MAIL(h)->from_slot) return 1;
+        if ((a->flags & 3) || pc_friend_slot(a) == MAIL(h)->from_slot) return 1;
     }
     return 0;
 }
@@ -263,9 +263,9 @@ static void mail_inbox_list_done(int r)
 }
 static void mail_inbox_read_done(int lane, int r)
 {
-    mailrec *m = &g_mail[g_s.rd[lane].idx];
+    mailrec *m = &g_mail[g_s.mail_lanes[lane].idx];
     if (r == 1) {
-        mail_inbox_parse(m, g_s.rd[lane].body, (int)MAIL(m->hdr)->len);
+        mail_inbox_parse(m, g_s.mail_lanes[lane].body, (int)MAIL(m->hdr)->len);
         m->state = 1;
         g_mail_fresh = 1;
         base_log("mail: body read (%u bytes)\r\n", MAIL(m->hdr)->len);
@@ -274,8 +274,8 @@ static void mail_inbox_read_done(int lane, int r)
         base_log("mail: body read failed %d\r\n", r);
     }
     MAIL(m->hdr)->body = NULL;
-    HeapFree(GetProcessHeap(), 0, g_s.rd[lane].body);
-    g_s.rd[lane].body = NULL;
+    HeapFree(GetProcessHeap(), 0, g_s.mail_lanes[lane].body);
+    g_s.mail_lanes[lane].body = NULL;
     g_snap_dirty = 1;
 }
 static int mail_send_msg_jobs(void);
@@ -286,7 +286,7 @@ static int handles_switching(void);
 static int mail_inbox_lane_busy(int kind, int idx)
 {
     for (int l = 0; l < FETCH_LANES; l++)
-        if (g_s.rd[l].job >= 0 && g_s.rd[l].kind == kind && (kind == 1 || g_s.rd[l].idx == idx)) return 1;
+        if (g_s.mail_lanes[l].job >= 0 && g_s.mail_lanes[l].kind == kind && (kind == 1 || g_s.mail_lanes[l].idx == idx)) return 1;
     return 0;
 }
 /* list or read, -0x100 (no free polcore slot, refused locally) tries again next turn. Only the list waits out the
@@ -302,13 +302,13 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
         base_log("mail: list start -> %d\r\n", t);
         g_s.mail_refresh = 0;
         if (t < 0) { mail_inbox_list_done(t); return; }
-        g_s.rd[lane].job = t; g_s.rd[lane].kind = 1;
+        g_s.mail_lanes[lane].job = t; g_s.mail_lanes[lane].kind = 1;
         return;
     }
     for (i = mail_inbox_next(0, 1); i >= 0; i = mail_inbox_next(g_mail[i].mid, 1)) {
         mailrec *m = &g_mail[i];
         DWORD len = MAIL(m->hdr)->len;
-        unsigned kd = mail_kind(m->hdr);
+        unsigned kd = pc_mail_kind(m->hdr);
         if (mail_inbox_lane_busy(2, i)) continue;
         if (len == 0 || len > 0x101100) { m->state = 2; continue; }
         if (kd == 0 && mail_inbox_sender_ignored(b, m->hdr)) {
@@ -343,7 +343,7 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
             if (t != NO_SLOT) m->state = 2;
             return;
         }
-        g_s.rd[lane].job = t; g_s.rd[lane].kind = 2; g_s.rd[lane].idx = i; g_s.rd[lane].body = body;
+        g_s.mail_lanes[lane].job = t; g_s.mail_lanes[lane].kind = 2; g_s.mail_lanes[lane].idx = i; g_s.mail_lanes[lane].body = body;
         return;
     }
 }
@@ -374,10 +374,10 @@ static void mail_inbox_pump(BYTE *b)
     mail_inbox_recheck(b);
     /* never cancelled here, polcore fails a stuck job at 100 s itself and svc 0x520 stalls every job poll 10 s */
     for (i = 0; i < FETCH_LANES; i++)
-        if (g_s.rd[i].job >= 0 &&
-            (r = g_s.rd[i].kind == 1 ? pc_mail_list_check(b, g_s.rd[i].job) : pc_mail_read_check(b, g_s.rd[i].job)) != 0) {
-            g_s.rd[i].job = -1;
-            if (g_s.rd[i].kind == 1) mail_inbox_list_done(r); else mail_inbox_read_done(i, r);
+        if (g_s.mail_lanes[i].job >= 0 &&
+            (r = g_s.mail_lanes[i].kind == 1 ? pc_mail_list_check(b, g_s.mail_lanes[i].job) : pc_mail_read_check(b, g_s.mail_lanes[i].job)) != 0) {
+            g_s.mail_lanes[i].job = -1;
+            if (g_s.mail_lanes[i].kind == 1) mail_inbox_list_done(r); else mail_inbox_read_done(i, r);
             done = 1;
         }
     if (g_s.del_job >= 0 && (r = pc_mail_delete_check(b, g_s.del_job)) != 0) {
@@ -391,9 +391,9 @@ static void mail_inbox_pump(BYTE *b)
     if (done) return;
     if (!g_s.draining)
         for (i = 0; i < FETCH_LANES && mail_send_msg_slot_ok(b); i++) {
-            if (g_s.rd[i].job >= 0) continue;
+            if (g_s.mail_lanes[i].job >= 0) continue;
             mail_inbox_fetch_start(b, i);
-            if (g_s.rd[i].job < 0) break;   /* nothing to read, or polcore said no */
+            if (g_s.mail_lanes[i].job < 0) break;   /* nothing to read, or polcore said no */
         }
     /* a delete keeps to the viewer's 2 jobs. In a drain it only goes with no write waiting for a slot, and nothing
        waits for it */

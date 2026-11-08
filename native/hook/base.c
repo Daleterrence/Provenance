@@ -1,4 +1,3 @@
-#define NORETURN __declspec(noreturn)
 static CRITICAL_SECTION g_lgcs;
 static int g_lgcs_ready;
 

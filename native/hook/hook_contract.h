@@ -3,10 +3,6 @@
 #ifndef HOOK_CONTRACT_H
 #define HOOK_CONTRACT_H
 
-/* wide copy of a string macro above, L_(ENV_IPC_DIR) */
-#define L_(s) L_I(s)
-#define L_I(s) L##s
-
 /* set on pol.exe's start, and a pre-started one's go file can carry some of them later */
 #define ENV_IPC_DIR "POL_IPC_DIR"
 #define ENV_CRED_KEYFILE "POL_CRED_KEYFILE"

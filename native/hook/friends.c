@@ -6,7 +6,7 @@ static WCHAR g_comment_want[0x33];
 /* like the viewer, a local edit (svc 0x5f4/0x2f0/0x2e4/0x2e8) marks the row, then one list upload sends it */
 static void friends_upload_start(BYTE *b)
 {
-    int reload = friends_server_newer(b);
+    int reload = pc_friends_server_newer(b);
     int t = pc_friends_save(b);
     if (t == NO_SLOT) { g_s.edit_upload_want = 1; return; }
     g_s.edit_upload_want = 0;
@@ -68,7 +68,7 @@ static void friends_edit_request(BYTE *b)
     /* <key> is the row's snapshot key, so an edit never lands on a row that changed */
     if (lstrcmpA(op, "unignore") == 0) {
         memset(&fr, 0, sizeof fr);
-        if (row >= 100 || pc_ignore_copy(b, row, &fr) < 0 || !friend_valid(&fr.f)) {
+        if (row >= 100 || pc_ignore_copy(b, row, &fr) < 0 || !pc_friend_valid(&fr.f)) {
             edit_fail("failed:no such entry"); return;
         }
         peers_friend_key(b, &fr.f, k);
@@ -99,7 +99,7 @@ static void friends_edit_request(BYTE *b)
         memcpy(nm, fr.f.name, 15); nm[15] = 0;
         /* AddBlock takes them off the friend list as well (polcore.dll 0x10024ad0) */
         r = pc_ignore_add(b, -1, arg[0] == '1' ? 1u : 0u, fr.f.id_lo, fr.f.id_hi,
-                               (unsigned)friend_slot(&fr.f), nm);
+                               (unsigned)pc_friend_slot(&fr.f), nm);
         base_log("friends: ignore row %d (%s) -> %d\r\n", row, arg[0] == '1' ? "every handle" : "this handle", r);
         if (r < 0) { lstrcpyA(g_s.edit_state, requests_failed(r)); g_snap_dirty = 1; return; }
     } else {

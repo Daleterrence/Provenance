@@ -27,9 +27,11 @@
 #include "mail_send.c"
 #include "groups.c"
 #include "my_profile.c"
+#include "my_profile_ffxi.c"
 #include "chat_frames.c"
 #include "chat_lists.c"
 #include "chat_room.c"
+#include "chat_room_master.c"
 #include "group_chat.c"
 #include "login.c"
 #include "handles.c"
@@ -93,7 +95,7 @@ static unsigned __stdcall pol_hook_menu_stub(unsigned a, unsigned b, unsigned c,
     (void)a; (void)b; (void)c; (void)d;
     fake_session();
     login_set_cwd_ffxi();
-    ((void (__cdecl *)(void))addr_of((BYTE *)GetModuleHandleW(NULL), AT_SPLASH_CLOSE))();
+    ((void (__cdecl *)(void))pc_addr_of((BYTE *)GetModuleHandleW(NULL), AT_SPLASH_CLOSE))();
     hold_run((BYTE *)viewer_polcore_module());
     base_log("pol_hook: menu session -> content code 1 (FFXiEntry)\r\n");
     g_game_started = 1;   /* from here pol_hook_ffxi_returned ends pol.exe when the game does, so this only runs once */
@@ -125,9 +127,9 @@ static void pol_hook_install(void)
     }
     pol_exe_hook_slot(exe, AT_CREATE_DIALOG_SLOT, (void *)pol_exe_my_CreateDialogParamW, "CreateDialogParamW");
     /* an E9 jmp over the menu session (pol.exe 0x00413710 in 1.18.15e) */
-    p = addr_of((BYTE *)exe, AT_MENU_SESSION);
+    p = pc_addr_of((BYTE *)exe, AT_MENU_SESSION);
     /* the game's end is only ever caught at the content launcher's return, so no detour without that hook */
-    if (!pol_hook_detour_game_end(addr_of((BYTE *)exe, AT_GAME_RETURN))
+    if (!pol_hook_detour_game_end(pc_addr_of((BYTE *)exe, AT_GAME_RETURN))
         || !VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &old))
         pol_hook_not_hooked();
     rel = (DWORD)((BYTE *)pol_hook_menu_stub - (p + 5));

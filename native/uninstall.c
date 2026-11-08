@@ -40,9 +40,6 @@
 #include <stdlib.h>
 #include "pol_regions.h"
 
-#define WIDE_(s) L##s
-#define WIDE(s) WIDE_(s)
-
 #ifdef FFXI_UNINSTALL
 #define TITLE L"Provenance - FINAL FANTASY XI Uninstall"
 #define PRODUCT_NAME L"FINAL FANTASY XI"

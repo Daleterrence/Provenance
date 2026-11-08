@@ -20,7 +20,7 @@ static const struct pol_region *viewer_region_of(int idx)
 
 static const struct pol_region *viewer_region(void)
 {
-    if (!g_region) g_region = viewer_region_of(*(int *)addr_of((BYTE *)GetModuleHandleW(NULL), AT_REGION_INDEX));
+    if (!g_region) g_region = viewer_region_of(*(int *)pc_addr_of((BYTE *)GetModuleHandleW(NULL), AT_REGION_INDEX));
     return g_region;
 }
 static HMODULE viewer_polcore_module(void) { return GetModuleHandleA(viewer_region()->polcore); }

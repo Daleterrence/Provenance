@@ -11,4 +11,8 @@
 #define POL_HIVE_US "PlayOnlineUS"
 #define POL_HIVE_EU "PlayOnlineEU"
 
+/* the wide copy of a string macro, WIDE(POL_HIVE_JP) */
+#define WIDE(s) WIDE_I(s)
+#define WIDE_I(s) L##s
+
 #endif

@@ -105,7 +105,7 @@ static void login_home_pick(BYTE *b)
     }
     if (!viewer_home_set(b, slot)) return;
     base_log("home: user slot %d (pub\\home%02d)\r\n", slot, slot);
-    if (message_store_legacy_home_there()) login_home_copy(b, slot, pc_has(b, SV_MY_ID) ? pc_my_id(b) : 0);
+    if (message_store_legacy_home_there()) login_home_copy(b, slot, pc_my_id_or(b, 0));
 }
 
 /* notices whose viewer screen only offers log out or a fix-it page (closed, suspended, banned...). The JP, US and EU
@@ -165,7 +165,7 @@ static void login_status_pump(BYTE *b)
     if (r == 0) return;
     g_s.status_job = -1;
     base_log("presence: ChangeMyStatus done -> %d (current handle %d, my status %d)\r\n", r,
-       pc_current_handle(b), pc_my_status(b));
+       pc_current_handle_or(b, -1), pc_my_status_or(b, -1));
     if (r == 1) lstrcpyA(g_presence, "online"); else lstrcpyA(g_presence, requests_failed(r));
     g_snap_dirty = 1;
 }
@@ -177,11 +177,11 @@ static void login_status_reply_log(BYTE *b, int t)
 {
     BYTE *r = t >= 0 && t <= 3 ? pc_status_answer(b, t) : NULL;
     if (!r || IsBadReadPtr(r, 8)) {
-        base_log(LOG_PROFILE "my status from the server: unreadable (current handle %d)\r\n", pc_current_handle(b));
+        base_log(LOG_PROFILE "my status from the server: unreadable (current handle %d)\r\n", pc_current_handle_or(b, -1));
         return;
     }
     base_log(LOG_PROFILE "my status from the server: handle %u, status byte %u (current handle %d, my status %d)\r\n",
-       r[0], r[6], pc_current_handle(b), pc_has(b, SV_MY_STATUS) ? pc_my_status(b) : -1);
+       r[0], r[6], pc_current_handle_or(b, -1), pc_my_status_or(b, -1));
 }
 #define LOADS_IN_FLIGHT 4   /* polcore's job slots, the viewer's own peak */
 static void login_run_loads(BYTE *b, struct pending_load *items, int n)
@@ -226,7 +226,7 @@ static void login_run_loads(BYTE *b, struct pending_load *items, int n)
             login_viewer_sign_out(b);
             base_end_pol(STOPPED_EXIT);
         }
-        pump_once(b);
+        pc_pump_once(b);
         Sleep(1);
     }
     for (i = 0; i < n; i++)
@@ -279,7 +279,7 @@ static int login_wait_handle_name(BYTE *b, char *name, int cap)
             login_viewer_sign_out(b);
             base_end_pol(STOPPED_EXIT);
         }
-        pump_once(b);
+        pc_pump_once(b);
         Sleep(200);
     }
     base_log("phase_c: no handle name within 10 minutes\r\n");
@@ -482,7 +482,7 @@ static void log_in(HMODULE pc)
             base_log("phase_c: Provenance ended during sign-in - exiting, FFXI NOT started\r\n");
             base_end_pol(STOPPED_EXIT);
         }
-        pump_once(b);
+        pc_pump_once(b);
         if (*pc_auth_state(b) == sm) Sleep(16);
     }
     sm = *pc_auth_state(b);
@@ -495,7 +495,7 @@ static void log_in(HMODULE pc)
     login_notice_read(b);
     /* stricter than the viewer on purpose, a blocked account stops here */
     flags = *pc_login_flags(b);
-    jail = pc_has(b, SV_JAILED) ? pc_jailed(b) : 0;
+    jail = pc_jailed_or(b, 0);
     base_log("phase_c: login result flags %04x notice %u jail %d\r\n", flags, g_notice, jail);
     if (flags & 1) login_account_blocked(b, "disconnect-bit");
     if (login_notice_blocks(g_notice)) {

@@ -1,4 +1,5 @@
-/* session.h - the hook's state for one login in a single struct, so resetting it can't miss a global somebody adds */
+/* session.h - the jobs the hook has in flight and what each one waits on, for the files that share them. The rest of
+   their state sits in globals next to the code that owns it */
 
 #define FETCH_LANES 2
 #define SEND_HIST 8
@@ -43,16 +44,16 @@ typedef struct hook_session {
     char grp_token[48];
     char grp_state[32];
     /* handles */
-    int hop;
-    int hjob;
-    int hwant;
-    int hslot;
-    int hidx;
-    int hfrom;
-    int hpos;
-    int hreload;
-    char htoken[48];
-    char hstate[48];
+    int handle_op;
+    int handle_job;
+    int handle_want;
+    int handle_slot;
+    int handle_idx;
+    int handle_from;
+    int handle_pos;
+    int handle_reload;
+    char handle_token[48];
+    char handle_state[48];
     /* presence */
     int status_job;
     int status_want;
@@ -62,7 +63,7 @@ typedef struct hook_session {
     int mail_mid;
     int mail_seen_n;
     int mail_seen_next;
-    fetch_lane rd[FETCH_LANES];
+    fetch_lane mail_lanes[FETCH_LANES];
     int del_job;
     int del_idx;
     ULONGLONG mail_retry_at;
@@ -75,36 +76,36 @@ typedef struct hook_session {
     /* sending */
     char send_token[48];   /* the snapshot's "send", the newest message and its state */
     char send_state[48];
-    int sq_n;
+    int send_queue_n;
     send_pace pace;
     send_hist send_hist[SEND_HIST];
     int send_hist_next;
     /* my profile and picture */
     int me_step;
-    int xi_step;   /* my FFXI character's privacy: 1 load waits for a slot, 2 load job */
+    int ffxi_step;   /* my FFXI character's privacy: 1 load waits for a slot, 2 load job */
     char me_token[48];
     char me_state[32];
     int pic_want;
     char pic_state[32];
     char pic_token[48];
-    int xi_job;
-    char xi_token[48];
-    char xi_state[32];
-    char xi_json[0x200];
-    char xi_key[25];
-    ULONGLONG xi_t0;
-    ULONGLONG xi_last;
+    int ffxi_job;
+    char ffxi_token[48];
+    char ffxi_state[32];
+    char ffxi_json[0x200];
+    char ffxi_key[25];
+    ULONGLONG ffxi_t0;
+    ULONGLONG ffxi_last;
     /* searches and profile reads */
-    int srch_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
+    int search_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
     int prof_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
-    int ch_step;
-    int fp_step;
-    int srch_n;
-    int srch_kind;
-    int srch_total;
-    int srch_many;
-    char srch_token[48];
-    char srch_state[32];
+    int character_step;
+    int ffxi_profile_step;
+    int search_n;
+    int search_kind;
+    int search_total;
+    int search_many;
+    char search_token[48];
+    char search_state[32];
     char prof_token[48];
     char prof_state[32];
 } hook_session;
@@ -113,18 +114,18 @@ typedef struct hook_session {
 #define SESSION_IDLE \
     .edit_job = -1, \
     .grp_job = -1, \
-    .hjob = -1, \
-    .hslot = -1, \
-    .hidx = -1, \
-    .hfrom = -1, \
-    .hpos = -1, \
+    .handle_job = -1, \
+    .handle_slot = -1, \
+    .handle_idx = -1, \
+    .handle_from = -1, \
+    .handle_pos = -1, \
     .status_job = -1, \
     .status_want = -1, \
     .status_loc = -2, \
-    .rd = { { -1 }, { -1 } }, \
+    .mail_lanes = { { -1 }, { -1 } }, \
     .del_job = -1, \
     .pic_want = -1, \
-    .xi_job = -1
+    .ffxi_job = -1
 
 static hook_session g_s = { SESSION_IDLE, .mail_refresh = 1 };   /* the inbox gets listed as soon as there's a hold */
 

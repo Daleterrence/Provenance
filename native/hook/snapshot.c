@@ -58,7 +58,7 @@ static void snapshot_social(BYTE *b)
     jw_end(&w);
     /* the messages the hook has, and whether each one's PUT has started */
     jw_arr(&w, "queue");
-    for (i = 0; i < g_s.sq_n; i++) {
+    for (i = 0; i < g_s.send_queue_n; i++) {
         jw_obj(&w, NULL);
         jw_str(&w, "token", g_sq[i].token, 100);
         jw_lit(&w, "state", g_sq[i].job >= 0 ? "sending" : "queued");
@@ -74,14 +74,14 @@ static void snapshot_social(BYTE *b)
     jw_end(&w);
     profiles_search_mark(b);
     jw_obj(&w, "search");
-    jw_str(&w, "token", g_s.srch_token, 100);
-    jw_lit(&w, "state", g_s.srch_state);
-    jw_lit(&w, "kind", g_srch_kinds[g_s.srch_kind]);
-    jw_int(&w, "total", g_s.srch_total);
-    jw_bool(&w, "tooMany", g_s.srch_many);
+    jw_str(&w, "token", g_s.search_token, 100);
+    jw_lit(&w, "state", g_s.search_state);
+    jw_lit(&w, "kind", g_srch_kinds[g_s.search_kind]);
+    jw_int(&w, "total", g_s.search_total);
+    jw_bool(&w, "tooMany", g_s.search_many);
     jw_arr(&w, "results");
-    for (i = 0; i < g_s.srch_n; i++) {
-        const char *shown = g_s.srch_kind == SK_CHARACTER ? g_srch[i].chname : g_srch[i].name;
+    for (i = 0; i < g_s.search_n; i++) {
+        const char *shown = g_s.search_kind == SK_CHARACTER ? g_srch[i].chname : g_srch[i].name;
         jw_obj(&w, NULL);
         jw_int(&w, "index", i);
         jw_sjis(&w, "name", (const BYTE *)shown, 0x0f, SNAPSHOT_NAME_CAP);
@@ -97,8 +97,8 @@ static void snapshot_social(BYTE *b)
     jw_end(&w);
     jw_job(&w, "me", g_s.me_token, g_s.me_state);
     jw_end(&w);
-    jw_job(&w, "xi", g_s.xi_token, g_s.xi_state);
-    if (g_s.xi_json[0] && !lstrcmpA(g_s.xi_state, "ready")) jw_splice(&w, g_s.xi_json, lstrlenA(g_s.xi_json));
+    jw_job(&w, "xi", g_s.ffxi_token, g_s.ffxi_state);
+    if (g_s.ffxi_json[0] && !lstrcmpA(g_s.ffxi_state, "ready")) jw_splice(&w, g_s.ffxi_json, lstrlenA(g_s.ffxi_json));
     jw_end(&w);
     jw_job(&w, "group", g_s.grp_token, g_s.grp_state);
     jw_end(&w);
@@ -174,9 +174,9 @@ static void snapshot_social(BYTE *b)
     }
     jw_arr(&w, "blocked");
     for (int bi = 0; bi < 100; bi++) {
-        const pol_friend *a = ignore_row(b, bi);
+        const pol_friend *a = pc_ignore_row(b, bi);
         if (IsBadReadPtr(a, sizeof *a)) break;
-        if (!friend_valid(a)) continue;
+        if (!pc_friend_valid(a)) continue;
         peers_friend_key(b, a, sk);
         jw_obj(&w, NULL);
         jw_int(&w, "index", bi);
@@ -186,7 +186,7 @@ static void snapshot_social(BYTE *b)
         jw_end(&w);
     }
     jw_end(&w);
-    st = pc_has(b, SV_MY_STATUS) ? pc_my_status(b) : 4;
+    st = pc_my_status_or(b, 4);
     name = st == 0 ? "online" : st == 1 ? "away" : st == 2 ? "busy" : "appear-offline";
     jw_lit(&w, "myStatus", name);
     /* the current handle's record: +0x08 the name in SJIS, +0x1c the profile pic id */
@@ -209,13 +209,13 @@ static void snapshot_social(BYTE *b)
     handles_json(b, &w);
     jw_arr(&w, "friends");
     for (i = 0; i < 200; i++) {
-        const pol_friend *a = friend_row(b, i);
-        const pol_friend_extra *bn = friend_extra(b, i);
+        const pol_friend *a = pc_friend_row(b, i);
+        const pol_friend_extra *bn = pc_friend_extra(b, i);
         WCHAR fw[0x33] = {0};
         char combuf[0x33 * 3 + 1] = {0};
         DWORD cs, cl, chi;
         if (IsBadReadPtr(a, sizeof *a) || IsBadReadPtr(bn, sizeof *bn)) break;
-        if (!friend_valid(a)) continue;   /* polcore.dll 0x10024d30 */
+        if (!pc_friend_valid(a)) continue;   /* polcore.dll 0x10024d30 */
         /* the comment's UTF-16 while the names are SJIS (learnt that from a list of one-letter comments :D) */
         memcpy(fw, bn->comment, 0x32 * sizeof(WCHAR));
         WideCharToMultiByte(CP_UTF8, 0, fw, -1, combuf, (int)sizeof combuf - 1, NULL, NULL);

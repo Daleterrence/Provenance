@@ -334,7 +334,7 @@ static void group_chat_end_by(BYTE *b, const char *state, int reset, ULONGLONG u
     if (g_gc_st == GC_IN && pc_has(b, SV_GCHAT_LEAVE) && pc_gchat_leave(b) > 0) {
         base_log("groupchat: leaving\r\n");
         while (GetTickCount64() < until && (r = pc_gchat_left_check(b)) == 0) {
-            pump_once(b);
+            pc_pump_once(b);
             Sleep(16);
         }
         base_log("groupchat: PART answered %d\r\n", r);
@@ -342,7 +342,7 @@ static void group_chat_end_by(BYTE *b, const char *state, int reset, ULONGLONG u
     if (group_chat_joined(b) || g_gc_st == GC_JOINING) {
         group_chat_force_leave(b);
         while (GetTickCount64() < until && group_chat_joined(b)) {
-            pump_once(b);
+            pc_pump_once(b);
             Sleep(16);
         }
     }
@@ -363,7 +363,7 @@ static void group_chat_group_going(BYTE *b, DWORD lo, DWORD hi)
     /* a room command's answer comes first, or the room would read the PART's. The room's pump returns once it's read
        one, so it can't start another in here */
     while (chat_room_cmd_busy() && GetTickCount64() < until) {
-        pump_once(b);
+        pc_pump_once(b);
         chat_room_in_room_pump(b, 0);
         Sleep(16);
     }

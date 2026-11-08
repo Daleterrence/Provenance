@@ -42,6 +42,9 @@ public static class PathInside
         return string.Equals(full, Path.TrimEndingDirectorySeparator(top), StringComparison.OrdinalIgnoreCase) || Below(top, full);
     }
 
+    // either one is the other or inside it
+    public static bool Overlaps(string a, string b) => Contains(a, b) || Contains(b, a);
+
     private static bool Below(string top, string full) => full.StartsWith(top, StringComparison.OrdinalIgnoreCase) && full.Length > top.Length;
 
     public static bool Same(string a, string b) => string.Equals(Full(a), Full(b), StringComparison.OrdinalIgnoreCase);

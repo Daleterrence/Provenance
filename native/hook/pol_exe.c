@@ -88,8 +88,8 @@ static HWND (WINAPI *g_realCreateDialogParamW)(HINSTANCE, LPCWSTR, HWND, DLGPROC
 static HWND WINAPI pol_exe_my_CreateDialogParamW(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
 {
     BYTE *exe = (BYTE *)GetModuleHandleW(NULL);
-    if (tmpl == (LPCWSTR)(ULONG_PTR)0x67 && addr_found(AT_SPLASH_PROC)
-        && (BYTE *)proc == addr_of(exe, AT_SPLASH_PROC)) {
+    if (tmpl == (LPCWSTR)(ULONG_PTR)0x67 && pc_addr_found(AT_SPLASH_PROC)
+        && (BYTE *)proc == pc_addr_of(exe, AT_SPLASH_PROC)) {
         HWND h = pol_exe_hidden_splash(hInst, tmpl, parent, proc, init);
         base_log("pol_hook: startup splash created hidden hwnd=%08x%s\r\n",
            (unsigned)(ULONG_PTR)h, h ? "" : " (NULL fallback)");
@@ -115,9 +115,9 @@ static int pol_exe_slot_unfilled(BYTE *exe, DWORD opbase, DWORD slot)
 /* the real target comes from GetProcAddress, never *slot (the stub would overwrite the hook) */
 static int pol_exe_hook_slot(HMODULE exe, int id, void *hook, const char *what)
 {
-    void **slot = (void **)addr_of((BYTE *)exe, id);
+    void **slot = (void **)pc_addr_of((BYTE *)exe, id);
     DWORD o, rva = g_addr[id].at;
-    if (!addr_found(id)) {
+    if (!pc_addr_found(id)) {
         base_log("pol_hook: %s slot not found - skipped\r\n", what);
         return 0;
     }

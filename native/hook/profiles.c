@@ -47,19 +47,19 @@ static DWORD g_srch_marked_for;
 
 static void profiles_search_done(const char *state)
 {
-    lstrcpynA(g_s.srch_state, state, sizeof g_s.srch_state);
+    lstrcpynA(g_s.search_state, state, sizeof g_s.search_state);
     if (g_srch_buf) { HeapFree(GetProcessHeap(), 0, g_srch_buf); g_srch_buf = NULL; }
-    g_s.srch_step = 0;
+    g_s.search_step = 0;
     g_srch_job = -1;
     g_srch_marked = 0;
-    base_log("friends: search %s (%d hits)\r\n", state, g_s.srch_n);
+    base_log("friends: search %s (%d hits)\r\n", state, g_s.search_n);
     g_snap_dirty = 1;
 }
 /* polcore can still write into a cancelled read, so its buffer's never freed (the mail reads too). A small leak
    beats polcore going ham over freed memory */
 static void profiles_search_abandon(BYTE *b)
 {
-    if (g_srch_job >= 0 && (g_s.srch_step == 2 || g_s.srch_step == 4))
+    if (g_srch_job >= 0 && (g_s.search_step == 2 || g_s.search_step == 4))
         pc_free_job(b, g_srch_job);
     g_srch_buf = NULL;
     profiles_search_done("cancelled");
@@ -67,21 +67,21 @@ static void profiles_search_abandon(BYTE *b)
 static void profiles_search_start(BYTE *b)
 {
     int t = pc_pdb_search_start(b, g_srch_pib, &g_srch_cond, NULL);
-    if (t == NO_SLOT) { g_s.srch_step = 1; return; }
+    if (t == NO_SLOT) { g_s.search_step = 1; return; }
     base_log("friends: search start -> %d\r\n", t);
     if (t < 0) { profiles_search_done(requests_failed(t)); return; }
     g_srch_job = t;
-    g_s.srch_step = 2;
+    g_s.search_step = 2;
 }
 static void profiles_search_fetch(BYTE *b)
 {
     int r = pc_pdb_search_fetch(b, (int)g_srch_set, g_srch_pib, 0,
                                                                         (int)g_srch_want, g_srch_buf);
-    if (r == NO_SLOT) { g_s.srch_step = 3; return; }
+    if (r == NO_SLOT) { g_s.search_step = 3; return; }
     base_log("friends: search fetching %u -> %d\r\n", g_srch_want, r);
     if (r < 0) { profiles_search_done(requests_failed(r)); return; }
     g_srch_job = r;
-    g_s.srch_step = 4;
+    g_s.search_step = 4;
 }
 /* an H-ID as the viewer shows it (00-1234567) or just the number: '-' and spaces go, then 1-13 digits */
 static int profiles_hid_parse(const char *s, unsigned __int64 *out)
@@ -116,12 +116,12 @@ static void profiles_search_request(BYTE *b)
     tok = requests_line(&p);
     kind = requests_line(&p);
     val = requests_line(&p);
-    lstrcpynA(g_s.srch_token, tok, sizeof g_s.srch_token);
-    g_s.srch_n = 0;
-    g_s.srch_total = 0;
-    g_s.srch_many = 0;
+    lstrcpynA(g_s.search_token, tok, sizeof g_s.search_token);
+    g_s.search_n = 0;
+    g_s.search_total = 0;
+    g_s.search_many = 0;
     while (k < 3 && lstrcmpA(kind, g_srch_kinds[k]) != 0) k++;
-    g_s.srch_kind = k < 3 ? k : SK_HANDLE;
+    g_s.search_kind = k < 3 ? k : SK_HANDLE;
     if (k == 3) { profiles_search_done("failed:bad request"); return; }
     if (k == SK_HANDLE) {
         if (!peers_ascii_name_ok(val)) { profiles_search_done("failed:bad name"); return; }
@@ -152,24 +152,24 @@ static void profiles_search_request(BYTE *b)
     }
     pc_pdb_cond_text(b, &g_srch_cond, 7, g_srch_clause);
     base_log("friends: search %s \"%s\"\r\n", g_srch_kinds[k], val);
-    lstrcpyA(g_s.srch_state, "searching");
+    lstrcpyA(g_s.search_state, "searching");
     g_snap_dirty = 1;
     profiles_search_start(b);
 }
 static void profiles_search_pump(BYTE *b, int ctl)
 {
     int r, guard = 0;
-    if (g_s.srch_step == 0) {
+    if (g_s.search_step == 0) {
         if (ctl && !g_s.draining) profiles_search_request(b);
         return;
     }
-    if (g_s.srch_step == 1) {
+    if (g_s.search_step == 1) {
         if (!g_s.draining) profiles_search_start(b); else profiles_search_done("cancelled"); return;
     }
-    if (g_s.srch_step == 3) {
+    if (g_s.search_step == 3) {
         if (!g_s.draining) profiles_search_fetch(b); else profiles_search_done("cancelled"); return;
     }
-    if (g_s.srch_step == 2) {
+    if (g_s.search_step == 2) {
         DWORD out[3] = { 0, 0, 0 };
         r = pc_pdb_search_hits(b, g_srch_job, out);
         if (r == 0) return;
@@ -178,9 +178,9 @@ static void profiles_search_pump(BYTE *b, int ctl)
         if (r < 0) { profiles_search_done(requests_failed(r)); return; }
         if ((int)out[0] < 0) { profiles_search_done("done"); return; }
         base_log("friends: search %d hits%s\r\n", (int)out[1], out[2] ? " (too many)" : "");
-        g_s.srch_total = (int)out[1] > 0 ? (int)out[1] : 0;
+        g_s.search_total = (int)out[1] > 0 ? (int)out[1] : 0;
         /* the viewer goes by the too-many flag before it looks at the count */
-        if (out[2] || (int)out[1] >= SEARCH_TOO_MANY) { g_s.srch_many = 1; profiles_search_done("done"); return; }
+        if (out[2] || (int)out[1] >= SEARCH_TOO_MANY) { g_s.search_many = 1; profiles_search_done("done"); return; }
         if ((int)out[1] <= 0) { profiles_search_done("done"); return; }
         g_srch_set = out[0];
         g_srch_want = out[1] > SEARCH_MAX ? SEARCH_MAX : out[1];
@@ -194,20 +194,20 @@ static void profiles_search_pump(BYTE *b, int ctl)
     if (r == 0) return;
     g_srch_job = -1;
     if (r < 0) { profiles_search_done(requests_failed(r)); return; }
-    for (BYTE *rec = g_srch_buf; rec && g_s.srch_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
+    for (BYTE *rec = g_srch_buf; rec && g_s.search_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
         pdb_item *ph, *it;
         const pol_friend *fr;
-        srchrec *h = &g_srch[g_s.srch_n];
+        srchrec *h = &g_srch[g_s.search_n];
         if (!*(DWORD *)(rec + 0xc)) continue;
         ph = profile_db_get(b, g_srch_pib, "z_phead", (pdb_rec *)rec);
         if (!ph || !(ph->flags & 1) || !(fr = (const pol_friend *)ph->v.bytes.p) || IsBadReadPtr(fr, sizeof *fr)) continue;
-        if (!friend_valid(fr)) continue;
+        if (!pc_friend_valid(fr)) continue;
         memset(h, 0, sizeof *h);
         h->lo = fr->id_lo;
         h->hi = fr->id_hi;
-        h->slot = friend_slot(fr);
+        h->slot = pc_friend_slot(fr);
         memcpy(h->name, fr->name, 15);
-        if (g_s.srch_kind == SK_CHARACTER) {
+        if (g_s.search_kind == SK_CHARACTER) {
             /* prof_001 has no profile picture. The world stays out of a Private record */
             it = profile_db_get(b, g_srch_pib, "z_name", (pdb_rec *)rec);
             if (it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, 0x40))
@@ -219,7 +219,7 @@ static void profiles_search_pump(BYTE *b, int ctl)
             it = profile_db_get(b, g_srch_pib, "z_ficon", (pdb_rec *)rec);
             h->pic = it && (it->flags & 1) ? it->v.u32 : 0;
         }
-        g_s.srch_n++;
+        g_s.search_n++;
     }
     profiles_search_done("done");
 }
@@ -339,10 +339,10 @@ static void profiles_profile_build(BYTE *b)
         const pol_friend *h = ph && (ph->flags & 1) ? (const pol_friend *)ph->v.bytes.p : NULL;
         const pol_game *src = NULL;
         const char *from = "nowhere";
-        if (h && !IsBadReadPtr(h, sizeof *h) && friend_valid(h) && friend_hid(h) == g_prof_hid) {
+        if (h && !IsBadReadPtr(h, sizeof *h) && pc_friend_valid(h) && pc_friend_hid(h) == g_prof_hid) {
             src = h->games;
             from = "z_phead";
-        } else if (peers_get_friend(b, g_prof_row, &fr) && friend_hid(&fr.f) == g_prof_hid) {
+        } else if (peers_get_friend(b, g_prof_row, &fr) && pc_friend_hid(&fr.f) == g_prof_hid) {
             src = fr.f.games;
             from = "the friend row";
         }
@@ -415,7 +415,7 @@ static void profiles_profile_request(BYTE *b)
     /* a row still waiting for an answer has no handle id yet, so no query that could find someone else */
     if (fr.f.flags & FRIEND_PENDING) { profiles_profile_done("failed:pending"); return; }
     if (!(s = profile_db_load_pib(b)) || !profile_db_load_pfb(b)) { profiles_profile_done("failed:no schema"); return; }
-    unsigned __int64 hid = friend_hid(&fr.f);
+    unsigned __int64 hid = pc_friend_hid(&fr.f);
     g_prof_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, s->rec_size + 8);
     if (!g_prof_rec) { profiles_profile_done("failed:alloc"); return; }
     memset(&g_prof_cond, 0, sizeof g_prof_cond);
@@ -470,14 +470,14 @@ static void profiles_character_done(const char *state)
 {
     lstrcpynA(g_ch_state, state, sizeof g_ch_state);
     if (g_ch_rec) { HeapFree(GetProcessHeap(), 0, g_ch_rec); g_ch_rec = NULL; }
-    g_s.ch_step = 0;
+    g_s.character_step = 0;
     g_ch_job = -1;
     base_log("character: %s\r\n", state);
     g_snap_dirty = 1;
 }
 static void profiles_character_abandon(BYTE *b)
 {
-    if (g_s.ch_step == 1 && g_ch_job >= 0) pc_free_job(b, g_ch_job);
+    if (g_s.character_step == 1 && g_ch_job >= 0) pc_free_job(b, g_ch_job);
     g_ch_rec = NULL;   /* a cancelled read can still write, so never freed */
     profiles_character_done("cancelled");
 }
@@ -503,19 +503,19 @@ static void profiles_character_build(BYTE *b)
 static void profiles_character_start(BYTE *b)
 {
     int t = pc_pdb_load_start(b, g_ch_pib, g_ch_where, g_ch_rec);
-    if (t == NO_SLOT) { g_s.ch_step = 2; return; }
+    if (t == NO_SLOT) { g_s.character_step = 2; return; }
     base_log("character: load -> %d\r\n", t);
     if (t < 0) { profiles_character_done(requests_failed(t)); return; }
     g_ch_job = t;
-    g_s.ch_step = 1;
+    g_s.character_step = 1;
 }
 static int profiles_ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
 {
     DWORD cs, cl, chi;
     for (int i = 0; i < 200; i++) {
-        const pol_friend *a = friend_row(b, i);
+        const pol_friend *a = pc_friend_row(b, i);
         if (IsBadReadPtr(a, sizeof *a)) break;
-        if (friend_valid(a) && peers_friend_ffxi(a, &cs, &cl, &chi) && cs == ctsid && cl == lo && chi == hi)
+        if (pc_friend_valid(a) && peers_friend_ffxi(a, &cs, &cl, &chi) && cs == ctsid && cl == lo && chi == hi)
             return 1;
     }
     return 0;
@@ -559,11 +559,11 @@ static void profiles_character_request(BYTE *b)
 }
 static void profiles_character_pump(BYTE *b, int ctl)
 {
-    if (g_s.ch_step == 0) {
+    if (g_s.character_step == 0) {
         if (ctl && !g_s.draining) profiles_character_request(b);
         return;
     }
-    if (g_s.ch_step == 2) {
+    if (g_s.character_step == 2) {
         if (!g_s.draining) profiles_character_start(b); else profiles_character_done("cancelled"); return;
     }
     int r = pc_pdb_load_check(b, g_ch_job);
@@ -601,14 +601,14 @@ static void profiles_ffxiprofile_done(const char *state)
 {
     lstrcpynA(g_fp_state, state, sizeof g_fp_state);
     if (g_fp_rec) { HeapFree(GetProcessHeap(), 0, g_fp_rec); g_fp_rec = NULL; }
-    g_s.fp_step = 0;
+    g_s.ffxi_profile_step = 0;
     g_fp_job = -1;
     base_log("ffxiprofile: %s\r\n", state);
     g_snap_dirty = 1;
 }
 static void profiles_ffxiprofile_abandon(BYTE *b)
 {
-    if (g_s.fp_step == 1 && g_fp_job >= 0) pc_free_job(b, g_fp_job);
+    if (g_s.ffxi_profile_step == 1 && g_fp_job >= 0) pc_free_job(b, g_fp_job);
     g_fp_rec = NULL;   /* a cancelled read can still write, so never freed */
     profiles_ffxiprofile_done("cancelled");
 }
@@ -641,11 +641,11 @@ static void profiles_ffxiprofile_build(BYTE *b)
 static void profiles_ffxiprofile_start(BYTE *b)
 {
     int t = pc_pdb_load_start(b, g_ch_pib, g_fp_where, g_fp_rec);
-    if (t == NO_SLOT) { g_s.fp_step = 2; return; }
+    if (t == NO_SLOT) { g_s.ffxi_profile_step = 2; return; }
     base_log("ffxiprofile: load -> %d\r\n", t);
     if (t < 0) { profiles_ffxiprofile_done(requests_failed(t)); return; }
     g_fp_job = t;
-    g_s.fp_step = 1;
+    g_s.ffxi_profile_step = 1;
 }
 static void profiles_ffxiprofile_request(BYTE *b)
 {
@@ -676,7 +676,7 @@ static void profiles_ffxiprofile_request(BYTE *b)
     if (lstrcmpA(k, key) != 0) { profiles_ffxiprofile_done("failed:friend list changed"); return; }
     if (fr.f.flags & FRIEND_PENDING) { profiles_ffxiprofile_done("failed:pending"); return; }
     /* the slots the tabs came from when it's the same handle, like the viewer looks in z_phead first */
-    slot = profiles_slots_for(friend_hid(&fr.f));
+    slot = profiles_slots_for(pc_friend_hid(&fr.f));
     slot = (slot ? slot : fr.f.games) + n;
     if (!(slot->flags & 1) || slot->title != 1) { profiles_ffxiprofile_done("failed:no character"); return; }
     g_fp_ctsid = slot->ctsid;
@@ -705,11 +705,11 @@ static void profiles_ffxiprofile_request(BYTE *b)
 }
 static void profiles_ffxiprofile_pump(BYTE *b, int ctl)
 {
-    if (g_s.fp_step == 0) {
+    if (g_s.ffxi_profile_step == 0) {
         if (ctl && !g_s.draining) profiles_ffxiprofile_request(b);
         return;
     }
-    if (g_s.fp_step == 2) {
+    if (g_s.ffxi_profile_step == 2) {
         if (!g_s.draining) profiles_ffxiprofile_start(b); else profiles_ffxiprofile_done("cancelled"); return;
     }
     int r = pc_pdb_load_check(b, g_fp_job);
@@ -728,7 +728,7 @@ static DWORD profiles_friends_sig(BYTE *b)
 {
     DWORD h = 2166136261u;
     for (int i = 0; i < 200; i++) {
-        const pol_friend *a = friend_row(b, i);
+        const pol_friend *a = pc_friend_row(b, i);
         if (IsBadReadPtr(a, sizeof *a)) break;
         h = (h ^ a->id_lo) * 16777619u;
         h = (h ^ a->id_hi) * 16777619u;
@@ -741,10 +741,10 @@ static void profiles_search_mark(BYTE *b)
 {
     DWORD sig = profiles_friends_sig(b);
     int i;
-    for (i = 0; i < g_s.srch_n; i++)
+    for (i = 0; i < g_s.search_n; i++)
         if (!g_srch[i].key[0]) peers_key(b, g_srch[i].lo, g_srch[i].hi, (unsigned)g_srch[i].slot, g_srch[i].key);
     if (g_srch_marked && sig == g_srch_marked_for) return;
-    for (i = 0; i < g_s.srch_n; i++) {
+    for (i = 0; i < g_s.search_n; i++) {
         g_srch[i].isfriend = peers_find_friend_row(b, g_srch[i].lo, g_srch[i].hi, g_srch[i].slot) >= 0;
         g_srch[i].me = (BYTE)peers_is_me(b, g_srch[i].lo, g_srch[i].hi);
     }

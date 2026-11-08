@@ -181,7 +181,7 @@ static int chat_list_db_load(BYTE *b, int rooms)
     if (!g_cr_rpfb) g_cr_rpfb = profile_db_pfb_load(b, L"c_chan.pfb", "chat: ");
     if (!g_cr_zone_n) {
         const pfb_tab *t = chat_list_tab_of(g_cr_cpfb, 0);
-        int lang = pc_has(b, SV_VIEWER_LANGUAGE) ? pc_viewer_language(b) : 0, row = 0;
+        int lang = pc_viewer_language_or(b, 0), row = 0;
         for (int i = 0; i < t->n && g_cr_zone_n < CR_ZONES; i++) {
             /* the viewer lists a group's name (part 0) and the zone (part 2), leaving out rows 5-8, or 6-8 in Japanese
                (app.dll 0x100a12bd, by svc 0xf18). By row, not by name, same as it does */

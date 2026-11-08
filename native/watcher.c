@@ -9,12 +9,9 @@
 
 /* the app reads this output and the exit codes, so they don't change */
 static HANDLE g_child;   /* the suspended pol.exe, killed on any later failure */
-static HANDLE g_buf_process;   /* a buffer in a process that stays running, freed on a failure that leaves it unused */
-static void *g_buf;
 static void die(const char *m)
 {
     DWORD err = GetLastError();
-    if (g_buf) VirtualFreeEx(g_buf_process, g_buf, 0, MEM_RELEASE);
     fprintf(stderr, "watcher: %s (err=%lu)\n", m, err);
     if (g_child) TerminateProcess(g_child, 1);
     exit(1);
@@ -34,13 +31,23 @@ static const char *utf8(const WCHAR *w)
     return buf;
 }
 
-static DWORD remote_run(HANDLE p, FARPROC fn, void *arg, DWORD wait_ms, const char *create_msg, const char *timeout_msg)
+/* runs fn(arg) on a thread in p. A buffer arg points at gets freed if no thread starts, but not on a timeout (the thread
+   may still be reading it) */
+static FARPROC k32_proc(const char *name)
+{
+    return GetProcAddress(GetModuleHandleA("kernel32.dll"), name);
+}
+
+static DWORD remote_run(HANDLE p, FARPROC fn, void *arg, void *buf, DWORD wait_ms, const char *create_msg,
+                        const char *timeout_msg)
 {
     DWORD code = 0;
     HANDLE th = CreateRemoteThread(p, NULL, 0, (LPTHREAD_START_ROUTINE)fn, arg, 0, NULL);
-    if (!th) die(create_msg);
+    if (!th) {
+        if (buf) VirtualFreeEx(p, buf, 0, MEM_RELEASE);
+        die(create_msg);
+    }
     if (WaitForSingleObject(th, wait_ms) != WAIT_OBJECT_0) {
-        g_buf = NULL;   /* the thread may still be reading it */
         CloseHandle(th);
         die(timeout_msg);
     }
@@ -51,7 +58,7 @@ static DWORD remote_run(HANDLE p, FARPROC fn, void *arg, DWORD wait_ms, const ch
 
 static DWORD remote_call(HANDLE p, FARPROC fn, void *arg, const char *what)
 {
-    return remote_run(p, fn, arg, 10000, what, what);
+    return remote_run(p, fn, arg, NULL, 10000, what, what);
 }
 
 /* data goes into the process and loader runs on it in a thread there, giving back what that returns */
@@ -60,20 +67,20 @@ static DWORD remote_load(HANDLE process, FARPROC loader, const void *data, DWORD
     DWORD code;
     void *remote = VirtualAllocEx(process, NULL, size, MEM_COMMIT, PAGE_READWRITE);
     if (!remote) die("VirtualAllocEx");
-    g_buf_process = process;
-    g_buf = remote;
-    if (!WriteProcessMemory(process, remote, data, size, NULL)) die("WriteProcessMemory");
-    code = remote_run(process, loader, remote, wait_ms, "CreateRemoteThread", timeout_msg);
-    g_buf = NULL;
+    if (!WriteProcessMemory(process, remote, data, size, NULL)) {
+        DWORD err = GetLastError();
+        VirtualFreeEx(process, remote, 0, MEM_RELEASE);
+        SetLastError(err);
+        die("WriteProcessMemory");
+    }
+    code = remote_run(process, loader, remote, remote, wait_ms, "CreateRemoteThread", timeout_msg);
     VirtualFreeEx(process, remote, 0, MEM_RELEASE);
     return code;
 }
 
 static int attach(DWORD pid, const WCHAR *dll)
 {
-    HMODULE k32 = GetModuleHandleA("kernel32.dll");
-    FARPROC set_error_mode = GetProcAddress(k32, "SetErrorMode");
-    FARPROC load_library = GetProcAddress(k32, "LoadLibraryW");
+    FARPROC set_error_mode = k32_proc("SetErrorMode");
     HANDLE p;
     DWORD old, code;
 
@@ -85,7 +92,7 @@ static int attach(DWORD pid, const WCHAR *dll)
        load until someone clicks OK. Great feature :D */
     old = remote_call(p, set_error_mode, (void *)(UINT_PTR)(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX),
                       "setting the error mode timed out");
-    code = remote_load(p, load_library, dll, (lstrlenW(dll) + 1) * sizeof(WCHAR), 10000, "hook dll load timed out in target");
+    code = remote_load(p, k32_proc("LoadLibraryW"), dll, (lstrlenW(dll) + 1) * sizeof(WCHAR), 10000, "hook dll load timed out in target");
     remote_call(p, set_error_mode, (void *)(UINT_PTR)old, "restoring the error mode timed out");
     CloseHandle(p);
     printf("watcher: attach, LoadLibraryW -> %08lx\n", code);
@@ -97,7 +104,7 @@ static int attach(DWORD pid, const WCHAR *dll)
 static int hook_and_resume(PROCESS_INFORMATION *pi, const void *dll, DWORD size, UINT errmode, FARPROC load_library,
                            const char *how)
 {
-    FARPROC set_error_mode = GetProcAddress(GetModuleHandleA("kernel32.dll"), "SetErrorMode");
+    FARPROC set_error_mode = k32_proc("SetErrorMode");
     char noresume[4] = {0};
     DWORD code = remote_load(pi->hProcess, load_library, dll, size, 10000, "hook dll load timed out in target");
 
@@ -199,7 +206,7 @@ static int windower(int argc, WCHAR **arg)
     /* a signal left over from some earlier launch would let pol.exe resume before the hook's in */
     WaitForSingleObject(ready, 0);
     /* Windower.exe waits as long as it takes here, and a cold start with antivirus poking at it can be slow */
-    code = remote_load(pi.hProcess, GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryW"), hook,
+    code = remote_load(pi.hProcess, k32_proc("LoadLibraryW"), hook,
                        (lstrlenW(hook) + 1) * sizeof(WCHAR), wait_ms, "Windower's Hook.dll load timed out in target");
     printf("watcher: windower, LoadLibraryW -> %08lx\n", code);
     if (!code) die("Windower's Hook.dll was refused or failed to load in target");
@@ -215,7 +222,7 @@ static int windower(int argc, WCHAR **arg)
        gets past on a quirk in its check (not one I'd bet on lasting). KernelBase's export goes round the detour */
     kernelbase = GetModuleHandleA("kernelbase.dll");
     if (kernelbase) load_library = GetProcAddress(kernelbase, "LoadLibraryA");
-    if (!load_library) load_library = GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA");
+    if (!load_library) load_library = k32_proc("LoadLibraryA");
     return hook_and_resume(&pi, dll, lstrlenA(dll) + 1, errmode, load_library, "LoadLibraryA");
 }
 
@@ -246,5 +253,5 @@ int wmain(int argc, WCHAR **argv)
     printf("watcher: hook=%s\n", utf8(dll));
     errmode = start_suspended(pol, &pi);
     return hook_and_resume(&pi, dll, (lstrlenW(dll) + 1) * sizeof(WCHAR), errmode,
-                           GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryW"), "LoadLibraryW");
+                           k32_proc("LoadLibraryW"), "LoadLibraryW");
 }

@@ -95,8 +95,8 @@ static int message_store_owned(const BYTE *h, int sub, unsigned __int64 me)
 /* requests and invitations can't be answered from a copy, the server's is gone */
 static int message_store_wanted(const BYTE *h, int sub)
 {
-    unsigned kd = mail_kind(h);
-    if (mail_receipt(h)) return 0;
+    unsigned kd = pc_mail_kind(h);
+    if (pc_mail_receipt(h)) return 0;
     if (sub >= 2) return kd == 0;
     return kd == 0 || kd == 9 || kd == 10 || kd == 0xf || kd == 0x10 || kd == 0x12 || kd == 0x13;
 }
