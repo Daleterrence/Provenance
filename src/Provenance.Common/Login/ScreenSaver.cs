@@ -27,6 +27,7 @@ public static class ScreenSaver
                               Func<bool>? endedUnseen = null, Action<bool>? set = null)
     {
         bool? on;
+        var kept = settings.Current.ScreenSaverWasOn;
         if (polRunning())
         {
             on = settings.Current.ScreenSaverWasOn ?? readWindows();
@@ -43,12 +44,17 @@ public static class ScreenSaver
             }
             if (on is { } fresh)
             {
-                if (settings.LoadProblem is null) settings.SaveChange(s => s.ScreenSaverWasOn = fresh);
-                else settings.Current.ScreenSaverWasOn = fresh;
+                // a start runs on a worker, and settings only change on the thread that owns them
+                settings.OnOwnerThread(() =>
+                {
+                    if (settings.LoadProblem is null) settings.SaveChange(s => s.ScreenSaverWasOn = fresh);
+                    else settings.Current.ScreenSaverWasOn = fresh;
+                });
+                kept = fresh;
             }
         }
         AtStart = on is { } v ? (v ? "1" : "0") : null;
-        Saved = settings.Current.ScreenSaverWasOn;
+        Saved = kept;
         if (on is null) Log.Warning("Could not read the screen saver setting, the hook reads it itself");
     }
 
