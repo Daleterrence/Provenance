@@ -3,7 +3,6 @@ using Provenance.Common.Game;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Hook;
 using Provenance.Common.Install;
-using Provenance.Common.IO;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
@@ -19,7 +18,6 @@ public sealed class Prestarter
 
     internal sealed record Prestarted(int Pid, ProcessStamp? Stamp);
 
-    // what a start reaches outside this class, and the checks that tell if a waiting pol.exe is still the viewer's
     internal sealed record Seams
     {
         public Func<bool>? GameIsInstalled { get; init; }
@@ -51,7 +49,6 @@ public sealed class Prestarter
         _warmDns = seams?.WarmDns ?? ResolveDns;
     }
 
-    // what's waiting for the next login
     internal Task<Prestarted?>? Waiting
     {
         get { lock (_gate) return _prestart; }
@@ -60,7 +57,6 @@ public sealed class Prestarter
 
     private PolRegion Region => _settings.DetectedRegion ?? PolRegion.UnitedStates;
 
-    // once closed, nothing waiting is kept for a next login
     internal void Close() => _closed = true;
 
     // pol.exe and polcore take about 2 s to start, so one starts with the app and waits for its go file. Not with

@@ -1,13 +1,10 @@
 using System.ComponentModel;
 using Provenance.Common.Credentials;
 using Provenance.Common.IO;
-using Provenance.Common.Security;
 using Serilog;
 
 namespace Provenance.Common.Login;
 
-// What a launch hands the hook through Credential Manager: one-shot entries under LAUNCH:<id>: that the hook deletes
-// once read, and a sweep for any a crashed copy left
 public sealed class LaunchCredentials
 {
     private const string LaunchKeyPrefix = "LAUNCH:";
@@ -107,7 +104,6 @@ public sealed class LaunchCredentials
 
     internal void ForgetLaunch() => LaunchId = null;
 
-    // every launch id this copy used, whatever's left under them goes
     internal void DeleteLaunches()
     {
         string[] ids;
@@ -127,7 +123,6 @@ public sealed class LaunchCredentials
 
     internal string? SavedUserName(string target) => _store.ReadUserName(target);
 
-    // keys collects what to delete when the login's over, however it ends
     internal string SaveOneShot(string kind, string user, string secret, List<string> keys)
     {
         Wrapped.Save(Key(kind), user, secret, sessionOnly: true);

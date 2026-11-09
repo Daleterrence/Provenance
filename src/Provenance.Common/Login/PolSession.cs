@@ -1,22 +1,16 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Provenance.Common.Credentials;
 using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Hook;
-using Provenance.Common.IO;
-using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
-using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Provenance.Common.Social;
-using Provenance.Common.Win32;
 using Serilog;
 
 namespace Provenance.Common.Login;
@@ -66,7 +60,6 @@ public sealed class PolSession : IDisposable
         _ => "Your PlayOnline session has closed. Log in again to see your friends and messages.",
     };
 
-
     private readonly ISettingsService _settings;
     private readonly LaunchCredentials _credentials;
     private readonly Watcher _starter;
@@ -102,7 +95,6 @@ public sealed class PolSession : IDisposable
 
     public Prestarter Prestarter { get; }
 
-    // everything a pol.exe start reaches outside this class, so they can be checked offline with stand-ins
     internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; }
     internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerAddonList?, WindowerLaunchSetup> WindowerSetup { get; init; }
     internal HoldViewerFiles HoldViewer { get; init; } = SignedBuilds.Hold;
@@ -237,7 +229,6 @@ public sealed class PolSession : IDisposable
         return LoginCodes.Cancelled;
     }
 
-    // the one-shot entries this login's details go in, and the environment that names them for the hook
     private ProcessStartInfo BuildEnvironment(LoginRequest request, string polExe, string launcherExe, List<string> keys)
     {
         string polTarget, squareEnixTarget;
@@ -274,9 +265,8 @@ public sealed class PolSession : IDisposable
         var platform = Platform;
         if (platform == ThirdPartyHook.Ashita)
         {
-            return AshitaLauncher.StartViaAshita(
-                _settings, psi, polExe, _credentials.LaunchId!, options.ThirdPartyHookProfile, progress, ct,
-                hookStarted: TrackThirdPartyHook);
+            return AshitaLauncher.StartViaAshita(_settings, _starter, psi, polExe, _credentials.LaunchId!, options.ThirdPartyHookProfile,
+                                                 progress, ct, hookStarted: TrackThirdPartyHook);
         }
         if (platform == ThirdPartyHook.Windower)
             return StartThroughWindower(psi, polExe, _credentials.LaunchId!, request, ct);

@@ -118,7 +118,6 @@ public sealed class SessionRecords(Func<ProcessStamp, bool> ours, Func<ProcessSt
         _sessionFile = null;
     }
 
-    // the record stays as it is for the game that's running
     internal void Forget()
     {
         _sessionFile = null;

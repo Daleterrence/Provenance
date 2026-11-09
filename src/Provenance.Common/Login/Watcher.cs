@@ -14,9 +14,9 @@ namespace Provenance.Common.Login;
 internal sealed class Watcher
 {
     internal static readonly TimeSpan Limit = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan[] RefusedRetryWaits = [TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(60)];
+    private static readonly TimeSpan AttachLimit = TimeSpan.FromSeconds(30);
 
-    private enum LaunchOutcome { Started, Failed, Refused, Cancelled }
+    internal enum LaunchOutcome { Started, Failed, Refused, Cancelled }
 
     private readonly ISettingsService _settings;
 
@@ -26,14 +26,14 @@ internal sealed class Watcher
         FindFiles = () => LaunchFiles(Region);
     }
 
-    // everything a pol.exe start (or ending an earlier copy's) reaches outside this class, so they can be checked
-    // offline with stand-ins
     internal Func<(string? ViewerDir, string? PolExe, string LauncherExe)> FindFiles { get; init; }
     internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
     internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
     internal Func<bool> AnyPolRunningNow { get; init; } = ScreenSaver.AnyPolRunning;
     internal Func<bool?> WindowsScreenSaver { get; init; } = ScreenSaver.Read;
     internal Func<ProcessStamp, bool> IsViewerPol { get; init; } = stamp => stamp.IsViewerPol();
+    internal Func<DateTime, bool> CodeIntegrityRefused { get; init; } = WatcherProcess.Refused;
+    internal TimeSpan[] RefusedRetryWaits { get; init; } = [TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(60)];
 
     // a login or pre-start only gets this far on a supported region
     private PolRegion Region => _settings.DetectedRegion ?? PolRegion.UnitedStates;
@@ -82,32 +82,73 @@ internal sealed class Watcher
     // progress has said why
     internal int? Start(ProcessStartInfo psi, IProgress<LaunchProgress>? progress, CancellationToken ct, TimeSpan limit, string failText)
     {
-        for (int attempt = 1; ; attempt++)
+        var (outcome, pid, text) = Retrying(() => RunOnce(psi, ct, limit, failText), progress, ct);
+        switch (outcome)
         {
-            var attemptStart = DateTime.UtcNow;
-            var (outcome, launchedPid, failure) = RunOnce(psi, ct, limit, failText);
-            if (outcome == LaunchOutcome.Started) return launchedPid;
-            if (outcome == LaunchOutcome.Cancelled)
-            {
+            case LaunchOutcome.Started:
+                return pid;
+            case LaunchOutcome.Cancelled:
                 progress?.Report(LaunchProgress.Cancelled());
                 return null;
-            }
-            bool refused = outcome == LaunchOutcome.Refused || WatcherProcess.Refused(attemptStart);
-            if (refused && attempt <= RefusedRetryWaits.Length)
+            default:
+                progress?.Report(LaunchProgress.Failed(text));
+                return null;
+        }
+    }
+
+    // the attempt has to leave nothing behind for the next one to trip over. Only the wait is reported from here. An
+    // attempt that says Refused itself (checkLog false) isn't looked up in the log again
+    internal (LaunchOutcome Outcome, T? Value, string Text) Retrying<T>(Func<(LaunchOutcome Outcome, T? Value, string Failure)> attempt,
+                                                                      IProgress<LaunchProgress>? progress, CancellationToken ct, bool checkLog = true)
+    {
+        for (int number = 1; ; number++)
+        {
+            var attemptStart = DateTime.UtcNow;
+            var (outcome, value, failure) = attempt();
+            if (outcome == LaunchOutcome.Started) return (outcome, value, "");
+            if (outcome == LaunchOutcome.Cancelled) return (outcome, value, "");
+            bool refused = outcome == LaunchOutcome.Refused || (checkLog && CodeIntegrityRefused(attemptStart));
+            if (refused && number <= RefusedRetryWaits.Length)
             {
-                var wait = RefusedRetryWaits[attempt - 1];
-                Log.Warning("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll (attempt {Attempt}); trying again in {Wait}", attempt, wait);
+                var wait = RefusedRetryWaits[number - 1];
+                Log.Warning("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll (attempt {Attempt}); trying again in {Wait}", number, wait);
                 progress?.Report(new LaunchProgress("Starting", $"Windows is checking Provenance's files. Trying again in {wait.TotalSeconds:0} seconds...", 0.02));
-                if (ct.WaitHandle.WaitOne(wait))
-                {
-                    progress?.Report(LaunchProgress.Cancelled());
-                    return null;
-                }
+                if (ct.WaitHandle.WaitOne(wait)) return (LaunchOutcome.Cancelled, default, "");
                 continue;
             }
-            if (refused) Log.Error("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll {Attempts} times", attempt);
-            progress?.Report(LaunchProgress.Failed(refused ? CodeIntegrity.RefusedText : failure));
-            return null;
+            if (refused) Log.Error("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll {Attempts} times", number);
+            return (LaunchOutcome.Failed, default, refused ? CodeIntegrity.RefusedText : failure);
+        }
+    }
+
+    private const string NotPickedUp = "Provenance couldn't start logging in to PlayOnline. Try again.";
+
+    // loads the hook into a pol.exe that something else started
+    internal (LaunchOutcome Outcome, string Failure) Attach(int pid)
+    {
+        var psi = StartInfo(Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe), ["--attach", pid.ToString(), WatcherProcess.HookDllPath]);
+        var started = DateTime.UtcNow;
+        try
+        {
+            using var p = StartProcess(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
+            if (WatcherProcess.Wait(p, AttachLimit) is not { } run)
+            {
+                try { p.Kill(); } catch { }
+                return (LaunchOutcome.Failed, "Provenance couldn't start logging in to PlayOnline in time. Try again.");
+            }
+            if (run.ExitCode == 0 && HookLog.Attached(run.Out)) return (LaunchOutcome.Started, "");
+            Log.Error("Provenance Watcher --attach {Pid} failed: {Error}", pid, run.Err.Trim());
+            return CodeIntegrityRefused(started) ? (LaunchOutcome.Refused, "") : (LaunchOutcome.Failed, NotPickedUp);
+        }
+        catch (Win32Exception ex) when (WatcherProcess.RefusedToStart(ex))
+        {
+            Log.Warning(ex, "Windows refused to start Provenance Watcher.exe");
+            return (LaunchOutcome.Refused, "");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Provenance Watcher --attach {Pid} did not run", pid);
+            return (LaunchOutcome.Failed, NotPickedUp);
         }
     }
 

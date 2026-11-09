@@ -18,19 +18,35 @@ public static class AshitaLauncher
 
     // Ashita-cli starts pol.exe itself, then the watcher's --attach loads the hook into it. Credentials only travel as
     // Credential Manager target names in the environment, never on a command line
-    internal static int? StartViaAshita(ISettingsService settings, ProcessStartInfo launchPsi,
-                                        string polExe, string launchId, string? profile,
-                                        IProgress<LaunchProgress>? progress, CancellationToken ct,
-                                        Action<ProcessStamp>? hookStarted = null, Action? polStarted = null,
+    internal static int? StartViaAshita(ISettingsService settings, Watcher watcher, ProcessStartInfo launchPsi,
+                                        string polExe, string launchId, string? profile, IProgress<LaunchProgress>? progress,
+                                        CancellationToken ct, Action<ProcessStamp>? hookStarted = null, Action? polStarted = null,
                                         LaunchLimits? limits = null)
     {
-        const string name = "Ashita";
-        var limit = limits ?? LaunchLimits.Default;
-        int? Fail(string text)
+        var (outcome, started, text) = watcher.Retrying(
+            () => Attempt(settings, watcher, launchPsi, polExe, launchId, profile, progress, ct,
+                          hookStarted, polStarted, limits ?? LaunchLimits.Default),
+            progress, ct, checkLog: false);
+        switch (outcome)
         {
-            progress?.Report(LaunchProgress.Failed(text));
-            return null;
+            case Watcher.LaunchOutcome.Started:
+                return started.Pid;
+            case Watcher.LaunchOutcome.Cancelled:
+                progress?.Report(LaunchProgress.Cancelled(started.Closed));
+                return null;
+            default:
+                progress?.Report(LaunchProgress.Failed(text));
+                return null;
         }
+    }
+
+    // ends everything it started if it doesn't get there, so a retry starts from nothing
+    private static (Watcher.LaunchOutcome Outcome, (int Pid, bool Closed) Value, string Failure) Attempt(
+        ISettingsService settings, Watcher watcher, ProcessStartInfo launchPsi, string polExe, string launchId, string? profile,
+        IProgress<LaunchProgress>? progress, CancellationToken ct, Action<ProcessStamp>? hookStarted, Action? polStarted, LaunchLimits limit)
+    {
+        const string name = "Ashita";
+        (Watcher.LaunchOutcome, (int, bool), string) Fail(string text) => (Watcher.LaunchOutcome.Failed, default, text);
         var s = settings.Current;
         var target = PlayTarget.For(s, profile, ThirdPartyHook.Ashita);
         string? dir = target.Dir;
@@ -93,7 +109,7 @@ public static class AshitaLauncher
             {
                 FileDelete.Try(pidFile);
                 progress?.Report(new LaunchProgress("Starting", $"{name} has started PlayOnline."));
-                return pid;
+                return (Watcher.LaunchOutcome.Started, (pid, false), "");
             }
             bool hookGone = hookProc.HasExited;   // read first, any pol.exe it made is in the snapshot by then
             tree.Update();
@@ -119,10 +135,12 @@ public static class AshitaLauncher
                 {
                     skipped.Add(newPol.Pid);
                     attached = newPol.Pid;
-                    if (AttachHook(newPol.Pid) is { } attachError)
+                    var attach = watcher.Attach(newPol.Pid);
+                    if (attach.Outcome != Watcher.LaunchOutcome.Started)
                     {
                         EndLaunch(hookProc, tree);
-                        return Fail(attachError);
+                        FileDelete.Try(pidFile);
+                        return (attach.Outcome, default, attach.Failure);
                     }
                     Log.Information("Loaded the Provenance hook into {Platform}'s pol.exe (pid {Pid})", name, newPol.Pid);
                 }
@@ -145,8 +163,7 @@ public static class AshitaLauncher
         {
             bool closed = EndLaunch(hookProc, tree);
             FileDelete.Try(pidFile);
-            progress?.Report(LaunchProgress.Cancelled(closed));
-            return null;
+            return (Watcher.LaunchOutcome.Cancelled, (0, closed), "");
         }
         // never reported, so nothing it started stays (a hooked one would be half signed in)
         EndLaunch(hookProc, tree);
@@ -198,40 +215,6 @@ public static class AshitaLauncher
 
     private static bool SamePath(string? a, string b) =>
         a is not null && PathInside.Same(a, b);
-
-    private static string? AttachHook(int pid)
-    {
-        var started = DateTime.UtcNow;
-        var psi = WatcherProcess.StartInfo(Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe));
-        psi.ArgumentList.Add("--attach");
-        psi.ArgumentList.Add(pid.ToString());
-        psi.ArgumentList.Add(WatcherProcess.HookDllPath);
-        try
-        {
-            using var p = Process.Start(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
-            if (WatcherProcess.Wait(p, TimeSpan.FromSeconds(30)) is not { } run)
-            {
-                try { p.Kill(); } catch { }
-                return "Provenance couldn't start logging in to PlayOnline in time. Try again.";
-            }
-            if (run.ExitCode == 0 && HookLog.Attached(run.Out)) return null;
-            Log.Error("Provenance Watcher --attach {Pid} failed: {Error}", pid, run.Err.Trim());
-            return WatcherProcess.Refused(started) ? CodeIntegrity.RefusedText
-                 : NotPickedUp;
-        }
-        catch (System.ComponentModel.Win32Exception ex) when (WatcherProcess.RefusedToStart(ex))
-        {
-            Log.Warning(ex, "Windows refused to start Provenance Watcher.exe");
-            return CodeIntegrity.RefusedText;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Provenance Watcher --attach {Pid} did not run", pid);
-            return NotPickedUp;
-        }
-    }
-
-    private const string NotPickedUp = "Provenance couldn't start logging in to PlayOnline. Try again.";
 
     // null while it's missing or mid-write (the hook writes it with read sharing only)
     private static int? ReadPid(string path)

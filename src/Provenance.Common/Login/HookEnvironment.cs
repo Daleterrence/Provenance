@@ -5,10 +5,8 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Common.Login;
 
-// The POL_* values the hook reads, whether they go in a process's environment or a pre-started pol.exe's go file
 internal static class HookEnvironment
 {
-    // what a login's one-shot entries are called to the hook. OneShot lists the kinds it should delete once read
     internal sealed record Targets(string Pol, string SquareEnix, IReadOnlyList<string> OneShot, string? Otp, string Handle, string Play,
                                    string Chat);
 
