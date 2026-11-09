@@ -304,15 +304,10 @@ public sealed class WindowerLauncher : IDisposable
         finally { Kernel32.LocalFree(sd); }
     }
 
-    public void ApplyTo(ProcessStartInfo psi, string launchId)
+    public string[] Arguments(string launchId)
     {
-        psi.ArgumentList.Clear();
-        psi.ArgumentList.Add("--windower");
-        psi.ArgumentList.Add(HookDll);
-        psi.ArgumentList.Add(_setup.PolExe);
-        psi.ArgumentList.Add(WatcherProcess.HookDllPath);
-        // pol_hook leaves pol.exe's mutex names to Hook.dll when it sees this
-        psi.Environment[HookContract.Env.LaunchId] = _launchId = launchId;
+        _launchId = launchId;
+        return ["--windower", HookDll, _setup.PolExe, WatcherProcess.HookDllPath];
     }
 
     // on the thread that took the turn, a mutex can't be let go from another

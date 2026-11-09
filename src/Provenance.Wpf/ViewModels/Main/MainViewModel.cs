@@ -324,8 +324,13 @@ public partial class MainViewModel : ObservableObject
 
     internal Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount squareEnix, string otp,
                                            IProgress<LaunchProgress>? progress, CancellationToken token) =>
-        _pol.ConnectAsync(pol, squareEnix, otp, p.Id, progress, PromptHandleName, token,
-                          new SessionOptions(false, null, Accounts.EnsureHomeSlot(p), HandleKey: p.HandleKey));
+        _pol.ConnectAsync(new LoginRequest(pol, squareEnix, otp)
+        {
+            ProfileId = p.Id,
+            Progress = progress,
+            AskHandleName = PromptHandleName,
+            Options = new SessionOptions(false, null, Accounts.EnsureHomeSlot(p), HandleKey: p.HandleKey),
+        }, token);
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LogInCommand))]
@@ -401,13 +406,13 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void DownloadInstall()
     {
-        var vm = new InstallViewModel(_dialogs, _settings.DetectedRegion, _pol.HoldPrestarts, _pol.ReleasePrestarts);
+        var vm = new InstallViewModel(_dialogs, _settings.DetectedRegion, _pol.Prestarter.HoldPrestarts, _pol.Prestarter.ReleasePrestarts);
         vm.Installed += () => _ui.Run(() =>
         {
             _settings.RedetectRegion();
             _settings.SaveChange(PolOptions.NewInstall);
             RefreshInstallState();
-            Task.Run(() => LargeAddressAwareSwitch.Apply(_settings, "after the install", _pol.HoldPrestarts, _pol.ReleasePrestarts,
+            Task.Run(() => LargeAddressAwareSwitch.Apply(_settings, "after the install", _pol.Prestarter.HoldPrestarts, _pol.Prestarter.ReleasePrestarts,
                                                           LargeAddressAwareBlocked));
         });
         _windows.ShowInstall(vm);
@@ -416,7 +421,7 @@ public partial class MainViewModel : ObservableObject
     public void Startup(bool autoLoginSuppressed)
     {
         _pol.Records.EndOrphans();
-        _pol.Prestart();
+        _pol.Prestarter.Prestart();
         if (!Accounts.AutoLogin || autoLoginSuppressed || !Accounts.HasSavedCredentials) return;
         Log.Information("Auto sign-in for {Account}", Accounts.SelectedProfile?.Id);
         LogInCommand.Execute(null);
@@ -497,7 +502,7 @@ public partial class MainViewModel : ObservableObject
     private void OpenChatRooms()
     {
         if (Multi.Running) return;
-        _windows.ShowChatRooms(Social, _pol.SaveChatPassword, _pol.DropChatPassword, SvgIcons.Emote, () => ChatRoomsOpen = false);
+        _windows.ShowChatRooms(Social, _pol.Credentials.SaveChatPassword, _pol.Credentials.DropChatPassword, SvgIcons.Emote, () => ChatRoomsOpen = false);
         ChatRoomsOpen = true;
     }
 
@@ -529,7 +534,7 @@ public partial class MainViewModel : ObservableObject
             {
                 _pol.StopHold();    // the kill waits a few seconds, so keep it off the UI thread
                 RefreshStartAll();
-                _pol.Prestart();
+                _pol.Prestarter.Prestart();
             }
             finally { _ui.Post(() => { Repair.SessionEnding = false; Repair.Refresh(); }); }
         });
@@ -587,7 +592,7 @@ public partial class MainViewModel : ObservableObject
                 await Task.Run(() =>
                 {
                     _pol.StopHold();
-                    _pol.Prestart();
+                    _pol.Prestarter.Prestart();
                 });
                 var failure = AccountRules.LoginFailure(code, lastFailure, Accounts.AutoLogin);
                 if (failure.AutoOff) Accounts.AutoLogin = false;
@@ -709,7 +714,7 @@ public partial class MainViewModel : ObservableObject
             _windows.CloseSessionWindows();
             LoggedIn = false;
             RefreshStartAll();
-            _pol.Prestart();
+            _pol.Prestarter.Prestart();
             _dialogs.Error("Can't start FINAL FANTASY XI", failed);
             return;
         }
@@ -730,7 +735,7 @@ public partial class MainViewModel : ObservableObject
         _windows.CloseSessionWindows();
         LoggedIn = false;
         RequestShow?.Invoke();
-        _pol.Prestart();
+        _pol.Prestarter.Prestart();
         if (ended is not null) _dialogs.Error("Can't start FINAL FANTASY XI", ended, offerLogs: true);
     }
 
@@ -891,9 +896,9 @@ public partial class MainViewModel : ObservableObject
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
         ShowHandles();
         var vm = new SettingsViewModel(_dialogs, _settings, multiRunning: () => Multi.Running,
-                                       holdPrestarts: _pol.HoldPrestarts, releasePrestarts: _pol.ReleasePrestarts,
+                                       holdPrestarts: _pol.Prestarter.HoldPrestarts, releasePrestarts: _pol.Prestarter.ReleasePrestarts,
                                        largeAddressAwareBlocked: LargeAddressAwareBlocked,
-                                       stopPrestart: () => Task.Run(_pol.StopPrestart),
+                                       stopPrestart: () => Task.Run(_pol.Prestarter.StopPrestart),
                                        loggedIn: () => IsLaunching || LoggedIn || _pol.Pid is not null,
                                        handles: Handles);
         vm.Hooks.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(HookSettings.Hook)) PlatformChanged(); };
@@ -913,7 +918,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CloseTooltip));
         Multi.Refresh();
         if (_settings.Current.ThirdPartyHookPlatform != hookBefore && !LoggedIn && !IsLaunching)
-            Task.Run(() => { _pol.StopPrestart(); _pol.Prestart(); });
+            Task.Run(() => { _pol.Prestarter.StopPrestart(); _pol.Prestarter.Prestart(); });
     }
 
     public string? PlaySubtitle => _pol.Platform switch

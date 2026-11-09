@@ -334,9 +334,13 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         int logIn;
         try
         {
-            logIn = await _pol.ConnectAsync(pol, squareEnix, otp, profile.Id, progress, AskHandleName, token,
-                                             new SessionOptions(Lean: true, ThirdPartyHookProfile: hookProfile,
-                                                                HomeSlot: _accounts.EnsureHomeSlot(profile)));
+            logIn = await _pol.ConnectAsync(new LoginRequest(pol, squareEnix, otp)
+            {
+                ProfileId = profile.Id,
+                Progress = progress,
+                AskHandleName = AskHandleName,
+                Options = new SessionOptions(Lean: true, ThirdPartyHookProfile: hookProfile, HomeSlot: _accounts.EnsureHomeSlot(profile)),
+            }, token);
         }
         catch (Exception) when (token.IsCancellationRequested) { return await Stopped(); }
         if (logIn != 0)

@@ -16,18 +16,6 @@ public static class AshitaLauncher
     public const string AccountBootFileProblem =
         "The Ashita boot configuration chosen for this account has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Multi-account.";
 
-    // nothing POL_ or PROVENANCE_ from the user's environment, every POL_ value of this sign-in, plus the launch marker
-    // and id. Never PROVENANCE_HOOK, the watcher's --attach loads the hook
-    internal static void ApplyContract(IDictionary<string, string?> target, IDictionary<string, string?> launchEnv, string launchId)
-    {
-        LaunchEnvironment.Reset(target);
-        foreach (var kv in launchEnv)
-            if (kv.Key.StartsWith(HookContract.Env.PolPrefix, StringComparison.OrdinalIgnoreCase) && kv.Value != null)
-                target[kv.Key] = kv.Value;
-        target["PROVENANCE_LAUNCH"] = "1";
-        target[HookContract.Env.LaunchId] = launchId;
-    }
-
     // Ashita-cli starts pol.exe itself, then the watcher's --attach loads the hook into it. Credentials only travel as
     // Credential Manager target names in the environment, never on a command line
     internal static int? StartViaAshita(ISettingsService settings, ProcessStartInfo launchPsi,
@@ -62,7 +50,7 @@ public static class AshitaLauncher
         // no shell, so it inherits the environment below
         var psi = new ProcessStartInfo(Path.Combine(dir, "Ashita-cli.exe")) { WorkingDirectory = dir, UseShellExecute = false, CreateNoWindow = true };
         psi.ArgumentList.Add(bootFile);
-        ApplyContract(psi.Environment, launchPsi.Environment, launchId);
+        HookEnvironment.ApplyContract(psi.Environment, launchPsi.Environment, launchId);
 
         var pidFile = HookFiles.PidFile(launchId);
         FileDelete.Try(pidFile);

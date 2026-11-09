@@ -66,85 +66,47 @@ public sealed class PolSession : IDisposable
         _ => "Your PlayOnline session has closed. Log in again to see your friends and messages.",
     };
 
-    private const string LaunchKeyPrefix = "LAUNCH:";
-
-    // the room password's one-shot entry, and the full target the hook gets as POL_CRED_CHAT
-    internal static string ChatKey(string launchId) => $"{LaunchKeyPrefix}{launchId}:CHAT";
-    internal static string ChatTarget(string launchId) => $"{WindowsCredentialStore.DefaultPrefix}:{ChatKey(launchId)}";
-    private const string PrestartLock = "prestart";
-    private static readonly TimeSpan[] RefusedRetryWaits = [TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(60)];
-    private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan LeftoverAge = TimeSpan.FromMinutes(10);
-
-    private enum LaunchOutcome { Started, Failed, Refused, Cancelled }
-
-    internal sealed record Prestarted(int Pid, ProcessStamp? Stamp);
-
-    internal static long _dnsWarmedAt;
 
     private readonly ISettingsService _settings;
-    private readonly WindowsCredentialStore _store;
-    private readonly WrappedStoreCache<WindowsCredentialStore> _wrapped;
-    private readonly Action? _dropKey;
-    private readonly System.Threading.Timer _sweepTimer;
-    private readonly HashSet<string> _usedLaunchIds = [];
+    private readonly LaunchCredentials _credentials;
+    private readonly Watcher _starter;
     private readonly object _gate = new();
     private readonly object _hookGate = new();
-    private volatile bool _disposed;
-    private int _sweepRuns;
-    internal string? _launchId;
     private HookLog? _hookLog;
-    internal bool _played;   // the held pol.exe is the game now, never kill it
+    private bool _played;   // the held pol.exe is the game now, never kill it
     private ProcessStamp? _polStamp;
-    internal Process? _polProc;
+    private Process? _polProc;
     private FileSystemWatcher? _watcher;
     private Timer? _debounce;
-    internal Task<Prestarted?>? _prestart;
-    private int _prestartHolds;   // under _gate
     private ProcessStamp? _hook;
     private WindowerGameValues? _windowerPlay;
 
-    public PolSession(ISettingsService settings)
-        : this(settings, new WindowsCredentialStore(), () => new WindowsCredentialStore(wrapKey: CredentialKey.Open()),
-               SweepInterval, CredentialKey.Reload) { }
+    public PolSession(ISettingsService settings) : this(settings, new LaunchCredentials()) { }
 
-    internal PolSession(ISettingsService settings, WindowsCredentialStore store,
-                               Func<WindowsCredentialStore> openWrapped, TimeSpan sweepEvery,
-                               Action? dropKey = null)
+    internal PolSession(ISettingsService settings, LaunchCredentials credentials, Watcher? watcher = null, Prestarter.Seams? prestart = null)
     {
         _settings = settings;
-        _store = store;
-        _wrapped = new WrappedStoreCache<WindowsCredentialStore>(openWrapped);
-        _dropKey = dropKey;
-        FindLaunchFiles = () => LaunchFiles(Region);
-        GameIsInstalled = () => GameInstalled(Region);
+        _credentials = credentials;
+        _starter = watcher ?? new Watcher(settings);
+        Prestarter = new Prestarter(settings, _starter, () => Pid is not null, _gate, prestart);
         UpdateViewer = (dir, progress, freeFiles, ct) => PolUpdates.UpdateViewer(dir, Region, progress, freeFiles, ct);
         WindowerSetup = (polExe, profile, lists, shared) => WindowerLauncher.SetupFor(_settings, polExe, profile, lists, shared);
-        // no recorded start time means no proof, so it's never mine (the user may run their own pol.exe on a reused pid)
-        PrestartAlive = pre => pre.Stamp is { } stamp && Ours(stamp);
-        Records = new SessionRecords(Ours, stamp => EndOurs(stamp, afterMs: 3000));
-        DeleteLeftovers();
-        _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
+        Records = new SessionRecords(_starter.Ours, stamp => _starter.EndOurs(stamp, afterMs: 3000));
     }
 
     public int? Pid { get; internal set; }
 
     public SessionRecords Records { get; }
 
-    // everything a pol.exe start (or ending an earlier copy's) reaches outside this class, so they can be checked
-    // offline with stand-ins
-    internal Func<(string? ViewerDir, string? PolExe, string LauncherExe)> FindLaunchFiles { get; init; }
-    internal Func<bool> GameIsInstalled { get; init; }
-    internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
+    public LaunchCredentials Credentials => _credentials;
+
+    public Prestarter Prestarter { get; }
+
+    // everything a pol.exe start reaches outside this class, so they can be checked offline with stand-ins
     internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; }
-    internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
-    internal Func<bool> AnyPolRunningNow { get; init; } = ScreenSaver.AnyPolRunning;
-    internal Func<bool?> WindowsScreenSaver { get; init; } = ScreenSaver.Read;
     internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerAddonList?, WindowerLaunchSetup> WindowerSetup { get; init; }
     internal HoldViewerFiles HoldViewer { get; init; } = SignedBuilds.Hold;
     internal Action<string, CancellationToken> FindBuild { get; init; } = SignedBuilds.FetchIfUnknown;
-    internal Func<Prestarted, bool> PrestartAlive { get; init; }
-    internal Func<ProcessStamp, bool> IsViewerPol { get; init; } = stamp => stamp.IsViewerPol();
     internal Action ScreenSaverBack { get; init; } = ScreenSaver.PutBack;
     // quiet this long and the login's stuck. polcore fails a list load or a login step at 100 s by itself, apart from
     // state 23, which it sits in for 400 s
@@ -160,73 +122,20 @@ public sealed class PolSession : IDisposable
 
     public ThirdPartyHook Platform => _settings.Current.ThirdPartyHookPlatform;
 
-    internal int SweepRuns => Volatile.Read(ref _sweepRuns);
-
-    private WindowsCredentialStore Wrapped => _wrapped.Get();
-
     // a login or pre-start only gets this far on a supported region
     private PolRegion Region => _settings.DetectedRegion ?? PolRegion.UnitedStates;
 
-    // the key's opened before anything starts, so one that can't be read gets its own text
-    internal string? KeyForLogIn()
-    {
-        try
-        {
-            _ = Wrapped;
-            return null;
-        }
-        catch (CredentialKeyUnavailableException) { return CredentialKey.UnavailableText; }
-    }
-
-    internal void DropKey()
-    {
-        try { _dropKey?.Invoke(); }
-        catch (Exception ex) { Log.Warning(ex, "Could not read the key file again after the hook could not read an entry"); }
-    }
-
-    public Task OpenKeyInBackground() => Task.Run(() =>
-    {
-        try { _ = Wrapped; }
-        catch (CredentialKeyUnavailableException) { }
-    });
-
-    private void SweepLeftovers()
-    {
-        if (_disposed) return;
-        Interlocked.Increment(ref _sweepRuns);
-        DeleteLeftovers();
-    }
-
-    private void DeleteLeftovers()
-    {
-        try
-        {
-            int swept = _store.DeleteByPrefix(LaunchKeyPrefix, LeftoverAge);
-            if (swept > 0) Log.Warning("Removed {Count} leftover one-shot sign-in credential(s)", swept);
-        }
-        catch (Exception ex) { Log.Warning(ex, "Sweep of leftover sign-in credentials failed"); }
-    }
-
-    internal string NewLaunchId()
-    {
-        var id = ShortId.New(12);
-        lock (_gate) _usedLaunchIds.Add(id);
-        return id;
-    }
-
-    public async Task<int> ConnectAsync(PolAccount pol, SquareEnixAccount squareEnix, string otp, string? rememberedProfileId,
-                                        IProgress<LaunchProgress>? progress, Func<string?>? askHandleName,
-                                        CancellationToken ct = default, SessionOptions? options = null)
+    public async Task<int> ConnectAsync(LoginRequest request, CancellationToken ct = default)
     {
         // no gate here, StopHold can hold it for seconds and this is the UI thread
         if (Volatile.Read(ref _played))
             throw Shown.Mark(new InvalidOperationException("Provenance is still finishing your last game. Close Provenance and open it again, then log in."));
         LastRefusalReason = null;
-        var launch = ForLaunch(options);
+        var launch = request with { Options = ForLaunch(request.Options) };
         int rc = LoginCodes.LauncherFailed;
         try
         {
-            rc = await Task.Run(() => ConnectCore(pol, squareEnix, otp, rememberedProfileId, progress, askHandleName, launch, ct), ct);
+            rc = await Task.Run(() => ConnectCore(launch, ct), ct);
             return rc;
         }
         finally { if (rc != 0) Records.ReleaseClaim(); }
@@ -240,10 +149,9 @@ public sealed class PolSession : IDisposable
             WindowerShared = _settings.Current.WindowerSharedExtras?.Copy(),
         };
 
-    private int ConnectCore(PolAccount pol, SquareEnixAccount squareEnix, string otp, string? rememberedProfileId,
-                            IProgress<LaunchProgress>? progress, Func<string?>? askHandleName, SessionOptions options,
-                            CancellationToken ct)
+    private int ConnectCore(LoginRequest request, CancellationToken ct)
     {
+        var progress = request.Progress;
         int Fail(string text, int code = LoginCodes.LauncherFailed)
         {
             progress?.Report(LaunchProgress.Failed(text));
@@ -251,21 +159,21 @@ public sealed class PolSession : IDisposable
         }
         _hookLog = null;
         _played = false;
-        if (pol.Password.Length > MaxPolPasswordLength) return Fail(PolPasswordTooLongText, LoginCodes.DetailsUnreadable);
+        if (request.Pol.Password.Length > MaxPolPasswordLength) return Fail(PolPasswordTooLongText, LoginCodes.DetailsUnreadable);
         var region = _settings.DetectedRegion;
         if (!PolPaths.Supported(region))
             return Fail(region is null
                 ? "PlayOnline isn't installed." : $"Provenance doesn't support the {PolPaths.VersionName(region.Value)} version of PlayOnline yet.");
-        var (viewerDir, polExe, launcherExe) = FindLaunchFiles();
+        var (viewerDir, polExe, launcherExe) = _starter.FindFiles();
         if (polExe is null)
             return Fail("Some of the files needed to start PlayOnline are missing. Check FINAL FANTASY XI is installed, and if it is, reinstall Provenance.");
-        if (KeyForLogIn() is { } keyProblem) return Fail(keyProblem);
+        if (_credentials.KeyForLogIn() is { } keyProblem) return Fail(keyProblem);
         // the viewer checks for its own update on every connect and always says yes
         try
         {
             UpdateViewer(viewerDir!, new InlineProgress<PatchProgress>(
                 p => progress?.Report(LaunchProgress.Updating("Starting", p, 0.02, LaunchProgress.LogInUpdateEnd))),
-                FreeViewerFiles, ct);
+                Prestarter.FreeViewerFiles, ct);
         }
         catch (OperationCanceledException)
         {
@@ -284,8 +192,7 @@ public sealed class PolSession : IDisposable
             progress?.Report(LaunchProgress.Cancelled());
             return LoginCodes.Cancelled;
         }
-        LargeAddressAwareBeforeStart(viewerDir!, "before the login");
-        NoteScreenSaverNow();
+        _starter.BeforeStart(viewerDir!, "before the login");
         // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the sign-in ends
         using var viewerHold = HoldViewer(viewerDir!, ct, out var buildProblem);
         if (buildProblem != null)
@@ -293,111 +200,99 @@ public sealed class PolSession : IDisposable
             Log.Warning("Viewer build not supported: {Problem}", buildProblem);
             return Fail(buildProblem);
         }
-        _launchId = NewLaunchId();
+        lock (_gate) _credentials.NewLaunchId();
         var keys = new List<string>();
         try
         {
-            return ConnectHeld(pol, squareEnix, otp, rememberedProfileId, progress, askHandleName, polExe, launcherExe, keys,
-                               options, ct);
+            return ConnectHeld(request, polExe, launcherExe, keys, ct);
         }
         finally
         {
-            CleanupOneShots(keys);   // on every way out, so passwords never linger in Credential Manager
+            _credentials.CleanupOneShots(keys);   // on every way out, so passwords never linger in Credential Manager
         }
     }
 
-    private int ConnectHeld(PolAccount pol, SquareEnixAccount squareEnix, string otp, string? rememberedProfileId,
-                            IProgress<LaunchProgress>? progress, Func<string?>? askHandleName, string polExe,
-                            string launcherExe, List<string> keys, SessionOptions options, CancellationToken ct)
+    private int ConnectHeld(LoginRequest request, string polExe, string launcherExe, List<string> keys, CancellationToken ct)
     {
-        string Key(string kind) => $"{LaunchKeyPrefix}{_launchId}:{kind}";
-        string Target(string key) => $"{WindowsCredentialStore.DefaultPrefix}:{key}";
-        string OneShot(string kind, string user, string secret)
-        {
-            Wrapped.Save(Key(kind), user, secret, sessionOnly: true);
-            keys.Add(Key(kind));
-            return Target(Key(kind));
-        }
-        int Stopped(bool polClosed = false)
-        {
-            progress?.Report(LaunchProgress.Cancelled(polClosed));
-            return LoginCodes.Cancelled;
-        }
-        int Fail(int code, string detail)
-        {
-            if (code == LoginCodes.DetailsUnreadable) DropKey();
-            progress?.Report(LaunchProgress.Failed(detail));
-            return code;
-        }
+        var progress = request.Progress;
+        var psi = BuildEnvironment(request, polExe, launcherExe, keys);
+        if (ct.IsCancellationRequested) return Stopped(progress);
+        progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.02));
+        Volatile.Write(ref _windowerPlay, null);
+        if (StartPol(request, psi, polExe, ct) is not { } pid)
+            return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
+        AdoptPid(pid, request.ProfileId);
+        progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.04));
+        // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its sign-in from it
+        HookFiles.ClearFor(pid);
+        _credentials.DropChatPassword();
+        HookFiles.Delete(pid, HookContract.Files.Stop);
+        HookFiles.Delete(pid, HookContract.Files.Ended);
+        return WaitForLogin(request, pid, ct);
+    }
 
+    private static int Stopped(IProgress<LaunchProgress>? progress, bool polClosed = false)
+    {
+        progress?.Report(LaunchProgress.Cancelled(polClosed));
+        return LoginCodes.Cancelled;
+    }
+
+    // the one-shot entries this login's details go in, and the environment that names them for the hook
+    private ProcessStartInfo BuildEnvironment(LoginRequest request, string polExe, string launcherExe, List<string> keys)
+    {
         string polTarget, squareEnixTarget;
         var oneShot = new List<string> { "OTP" };
-        var profile = string.IsNullOrWhiteSpace(rememberedProfileId) ? null : rememberedProfileId;
-        if (profile != null && _store.ReadUserName($"{CredentialTargets.Pol}:{profile}") == pol.PolId &&
-            _store.ReadUserName($"{CredentialTargets.Sea}:{profile}") == squareEnix.Username)
+        var profile = string.IsNullOrWhiteSpace(request.ProfileId) ? null : request.ProfileId;
+        if (profile != null && _credentials.SavedUserName($"{CredentialTargets.Pol}:{profile}") == request.Pol.PolId &&
+            _credentials.SavedUserName($"{CredentialTargets.Sea}:{profile}") == request.SquareEnix.Username)
         {
-            polTarget = Target($"{CredentialTargets.Pol}:{profile}");
-            squareEnixTarget = Target($"{CredentialTargets.Sea}:{profile}");
+            polTarget = LaunchCredentials.Target($"{CredentialTargets.Pol}:{profile}");
+            squareEnixTarget = LaunchCredentials.Target($"{CredentialTargets.Sea}:{profile}");
         }
         else
         {
-            polTarget = OneShot("POL", pol.PolId, pol.Password);
-            squareEnixTarget = OneShot("SEA", squareEnix.Username, squareEnix.Password);
+            polTarget = _credentials.SaveOneShot("POL", request.Pol.PolId, request.Pol.Password, keys);
+            squareEnixTarget = _credentials.SaveOneShot("SEA", request.SquareEnix.Username, request.SquareEnix.Password, keys);
             oneShot.InsertRange(0, ["POL", "SEA"]);
         }
-        var otpTarget = string.IsNullOrWhiteSpace(otp) ? null : OneShot("OTP", "otp", otp.Trim());
+        var otpTarget = string.IsNullOrWhiteSpace(request.Otp) ? null : _credentials.SaveOneShot("OTP", "otp", request.Otp.Trim(), keys);
 
-        var psi = LauncherStart(launcherExe, polExe);
-        var env = psi.Environment;
-        SetBaseEnvironment(env);
-        // only the viewer's menu values, busy goes online
-        var status = _settings.Current.PlayOnlineStatus;
-        env[HookContract.Env.Status] = status is 0 or 1 or 4 ? status.ToString() : "0";
-        env[HookContract.Env.CredPol] = polTarget;
-        env[HookContract.Env.CredSea] = squareEnixTarget;
-        env[HookContract.Env.CredOneshot] = string.Join(",", oneShot);
-        env[HookContract.Env.CredHandle] = Target(Key("HANDLE"));
-        env[HookContract.Env.CredPlay] = Target(Key("PLAY"));
-        env[HookContract.Env.CredChat] = ChatTarget(_launchId!);
-        keys.AddRange([Key("HANDLE"), Key("PLAY")]);
-        if (otpTarget != null) env[HookContract.Env.CredOtp] = otpTarget;
-        if (options.Lean) env[HookContract.Env.Lean] = "1";
-        if (HomeSlots.Valid(options.HomeSlot))
-            env[HookContract.Env.Home] = options.HomeSlot.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        SetHandleEnvironment(env, options.HandleKey);
+        var psi = Watcher.LauncherStart(launcherExe, polExe);
+        keys.AddRange([_credentials.Key("HANDLE"), _credentials.Key("PLAY")]);
+        HookEnvironment.SetLogin(psi.Environment,
+            new HookEnvironment.Targets(polTarget, squareEnixTarget, oneShot, otpTarget, _credentials.TargetOf("HANDLE"),
+                                        _credentials.TargetOf("PLAY"), LaunchCredentials.ChatTarget(_credentials.LaunchId!)),
+            _settings.Current.PlayOnlineStatus, request.Options);
+        return psi;
+    }
 
-        if (ct.IsCancellationRequested) return Stopped();
-        progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.02));
-        int pid;
+    // null once progress has said why
+    private int? StartPol(LoginRequest request, ProcessStartInfo psi, string polExe, CancellationToken ct)
+    {
+        var progress = request.Progress;
+        var options = request.Options;
         var platform = Platform;
-        Volatile.Write(ref _windowerPlay, null);
         if (platform == ThirdPartyHook.Ashita)
         {
-            var hookPid = AshitaLauncher.StartViaAshita(
-                _settings, psi, polExe, _launchId!, options.ThirdPartyHookProfile, progress, ct,
+            return AshitaLauncher.StartViaAshita(
+                _settings, psi, polExe, _credentials.LaunchId!, options.ThirdPartyHookProfile, progress, ct,
                 hookStarted: TrackThirdPartyHook);
-            if (hookPid is null) return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
-            pid = hookPid.Value;
         }
-        else if (platform == ThirdPartyHook.Windower)
-        {
-            if (StartThroughWindower(psi, polExe, options.ThirdPartyHookProfile, _launchId!, progress, ct, options.WindowerLists, options.WindowerShared) is not { } started)
-                return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
-            pid = started;
-        }
+        if (platform == ThirdPartyHook.Windower)
+            return StartThroughWindower(psi, polExe, _credentials.LaunchId!, request, ct);
         // never for a lean session, the go file can't carry POL_LEAN
-        else if (!options.Lean && TakePrestarted(psi, ct) is { } pre)
+        if (!options.Lean && Prestarter.TakePrestarted(psi, ct) is { } pre) return pre;
+        // a cancel while the pre-start was being taken leaves it waiting, so nothing starts in its place
+        if (ct.IsCancellationRequested)
         {
-            pid = pre;
+            progress?.Report(LaunchProgress.Cancelled());
+            return null;
         }
-        else
-        {
-            // a cancel while the pre-start was being taken leaves it waiting, so nothing starts in its place
-            if (ct.IsCancellationRequested) return Stopped();
-            if (StartWithWatcher(psi, progress, ct, WatcherLimit, PolDidNotStart) is not { } started)
-                return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
-            pid = started;
-        }
+        return _starter.Start(psi, progress, ct, Watcher.Limit, Watcher.PolDidNotStart);
+    }
+
+    internal void AdoptPid(int pid, string? profileId)
+    {
         lock (_gate)
         {
             Pid = pid;
@@ -407,15 +302,19 @@ public sealed class PolSession : IDisposable
             catch (Exception e) when (e is ArgumentException or InvalidOperationException or Win32Exception) { _polProc = null; _polStamp = null; }
         }
         // saved now, if this copy dies mid sign-in the next start ends this pol.exe
-        SaveSession(rememberedProfileId);
+        SaveSession(profileId);
         Log.Information("Hold session: pol.exe pid {Pid}", pid);
-        progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.04));
-        // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its sign-in from it
-        HookFiles.ClearFor(pid);
-        DropChatPassword();
-        HookFiles.Delete(pid, HookContract.Files.Stop);
-        HookFiles.Delete(pid, HookContract.Files.Ended);
+    }
 
+    private int WaitForLogin(LoginRequest request, int pid, CancellationToken ct)
+    {
+        var progress = request.Progress;
+        int Fail(int code, string detail)
+        {
+            if (code == LoginCodes.DetailsUnreadable) _credentials.DropKey();
+            progress?.Report(LaunchProgress.Failed(detail));
+            return code;
+        }
         var logPath = HookFiles.PathFor(pid, HookContract.Files.Log);
         var hookLog = _hookLog = HookLog.OfThisRun(logPath);
         var progressOf = new HookProgress();
@@ -460,8 +359,8 @@ public sealed class PolSession : IDisposable
                 if (Ending(e) is { } result) return result;
                 if (e is not HandleWanted) continue;
                 progress?.Report(new LaunchProgress("PlayOnline handle", "This account needs a PlayOnline handle."));
-                var name = askHandleName?.Invoke();
-                Wrapped.Save(Key("HANDLE"), "handle", string.IsNullOrWhiteSpace(name) ? "" : name!.Trim(), sessionOnly: true);
+                var name = request.AskHandleName?.Invoke();
+                _credentials.SaveHandle(name);
                 lastActivity = DateTime.UtcNow;
             }
             if (ct.IsCancellationRequested) break;   // a cancel that lands with the first snapshot still wins
@@ -470,7 +369,7 @@ public sealed class PolSession : IDisposable
                 // the hook writes the store file before its first snapshot, so it's there now even if Play comes next
                 SnapshotUpdated?.Invoke(snap with { Stored = SocialSnapshotFiles.TryReadStore(pid) });
                 StartWatcher(pid);
-                SaveSession(rememberedProfileId);
+                SaveSession(request.ProfileId);
                 progress?.Report(new LaunchProgress("Connected", "You're logged in.", 1.0));
                 return 0;
             }
@@ -491,16 +390,16 @@ public sealed class PolSession : IDisposable
                 return Fail(LoginCodes.Stalled, "PlayOnline stopped responding during the login. Try again in a moment.");
             Thread.Sleep(250);
         }
-        return Stopped(polClosed: true);
+        return Stopped(progress, polClosed: true);
     }
 
     // null once progress has said why
-    internal int? StartThroughWindower(ProcessStartInfo psi, string polExe, string? profile, string launchId,
-                                       IProgress<LaunchProgress>? progress, CancellationToken ct,
-                                       IReadOnlyDictionary<string, WindowerAddonList>? lists, WindowerAddonList? shared = null)
+    internal int? StartThroughWindower(ProcessStartInfo psi, string polExe, string launchId, LoginRequest request, CancellationToken ct)
     {
+        var progress = request.Progress;
+        var options = request.Options;
         WindowerLauncher windower;
-        try { windower = WindowerLauncher.Prepare(WindowerSetup(polExe, profile, lists, shared), progress, ct); }
+        try { windower = WindowerLauncher.Prepare(WindowerSetup(polExe, options.ThirdPartyHookProfile, options.WindowerLists, options.WindowerShared), progress, ct); }
         catch (OperationCanceledException)
         {
             progress?.Report(LaunchProgress.Cancelled());
@@ -515,9 +414,10 @@ public sealed class PolSession : IDisposable
         // held till the watcher is done, Hook.dll copies the mapping out before it signals
         using (windower)
         {
-            windower.ApplyTo(psi, launchId);
+            Watcher.SetArguments(psi, windower.Arguments(launchId));
+            HookEnvironment.SetWindower(psi.Environment, launchId);
             progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline with Windower...", 0.02));
-            var pid = StartWithWatcher(psi, progress, ct, WindowerLauncher.WatcherLimit, WindowerDidNotStart);
+            var pid = _starter.Start(psi, progress, ct, WindowerLauncher.WatcherLimit, Watcher.WindowerDidNotStart);
             if (pid is not null) Volatile.Write(ref _windowerPlay, windower.GameValues);
             return pid;
         }
@@ -549,41 +449,6 @@ public sealed class PolSession : IDisposable
     private static string LoadFailedText(string list) =>
         $"PlayOnline didn't send {list switch { "status" => "your status", "friends" => "your friend list", "handles" => "your handles", "characters" => "your Content ID list", "groups" => "your friend groups", _ => "everything it needs at login" }}, so you've been logged out. Try again in a moment.";
 
-    private static (string? ViewerDir, string? PolExe, string LauncherExe) LaunchFiles(PolRegion region)
-    {
-        var viewerDir = PolPaths.TryGetInstallFolder(region, GameProduct.Viewer);
-        var polExe = viewerDir is null ? null : Path.Combine(viewerDir, GameProduct.Viewer.KeyFile);
-        var launcherExe = Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe);
-        bool found = polExe != null && File.Exists(polExe) && File.Exists(launcherExe)
-                     && File.Exists(WatcherProcess.HookDllPath);
-        return (viewerDir, found ? polExe : null, launcherExe);
-    }
-
-    private void LargeAddressAwareBeforeStart(string viewerDir, string when) =>
-        LargeAddressAwareSwitch.Apply(_settings, new LargeAddressAwareSwitch.Target(viewerDir, ViewerPolRunning, () => null, () => null), when);
-
-    // Provenance can sit in the tray for days, so the screen saver's read again before every pol.exe start
-    private void NoteScreenSaverNow() => ScreenSaver.Note(_settings, AnyPolRunningNow, WindowsScreenSaver);
-
-    internal static ProcessStartInfo LauncherStart(string launcherExe, string polExe)
-    {
-        var psi = WatcherProcess.StartInfo(launcherExe);
-        psi.ArgumentList.Add(polExe);
-        psi.ArgumentList.Add(WatcherProcess.HookDllPath);
-        return psi;
-    }
-
-    // with POL_OWNER the hook logs out once this copy's gone, unless the game's started
-    internal static void SetBaseEnvironment(IDictionary<string, string?> env)
-    {
-        LaunchEnvironment.Reset(env);
-        env[HookContract.Env.IpcDir] = HookFiles.RequiredDir;
-        env[HookContract.Env.CredKeyfile] = CredentialKey.FilePath;
-        env[HookContract.Env.Hold] = "1";
-        env[HookContract.Env.Owner] = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (ScreenSaver.AtStart is { } saver) env[HookContract.Env.Screensaver] = saver;
-    }
-
     private void StartWatcher(int pid)
     {
         StopWatcher();
@@ -610,386 +475,6 @@ public sealed class PolSession : IDisposable
         _watcher = null;
         _debounce?.Dispose();
         _debounce = null;
-    }
-
-    // pol.exe and polcore take about 2 s to start, so one starts with the app and waits for its go file. Not with
-    // Windower/Ashita, it'd open them.
-    public void Prestart()
-    {
-        WarmDns();
-        lock (_gate)
-        {
-            if (!MayPrestart()) return;
-            _prestart = Task.Run(StartPrestarted);
-        }
-    }
-
-    // under _gate
-    private bool MayPrestart() =>
-        _prestart == null && Pid == null && _prestartHolds == 0
-        && Platform is not (ThirdPartyHook.Ashita or ThirdPartyHook.Windower)
-        && PolPaths.Supported(_settings.DetectedRegion);
-
-    internal bool PrestartAllowed
-    {
-        get { lock (_gate) return MayPrestart(); }
-    }
-
-    internal int PrestartHolds
-    {
-        get { lock (_gate) return _prestartHolds; }
-    }
-
-    // only the resolver sees this, nothing connects to POL
-    private static void WarmDns()
-    {
-        long now = Environment.TickCount64;
-        if (_dnsWarmedAt != 0 && now - _dnsWarmedAt < 600_000) return;
-        _dnsWarmedAt = now;
-        _ = Task.Run(async () =>
-        {
-            try { await System.Net.Dns.GetHostAddressesAsync("ci000.pol.com").ConfigureAwait(false); }
-            catch (System.Net.Sockets.SocketException) { }
-        });
-    }
-
-    internal Prestarted? StartPrestarted()
-    {
-        try
-        {
-            var (viewerDir, polExe, launcherExe) = FindLaunchFiles();
-            // no network here, the sign-in does the version check. With no game there's no sign-in card to use it, and
-            // the install would take it for POL running
-            if (polExe is null || !GameIsInstalled() || SignedBuilds.Check(viewerDir!) != ViewerBuild.State.Supported) return null;
-            // a queued update is the login's job, pol.exe would act on it itself (patch.ini goes to startpol.exe
-            // /REPLACEPOLEXE, which starts a pol.exe that isn't mine)
-            if (ViewerQueue.QueuedWorkPending(viewerDir!))
-            {
-                Log.Information("Not pre-starting pol.exe: the viewer has update work queued, the next login finishes it first");
-                return null;
-            }
-            LargeAddressAwareBeforeStart(viewerDir!, "before the pre-start");
-            NoteScreenSaverNow();
-            var psi = LauncherStart(launcherExe, polExe);
-            SetPrestartEnvironment(psi.Environment);
-            using var launcher = StartProcess(psi);
-            if (launcher is null || RunLauncher(launcher, WatcherLimit) is not { } run) return null;
-            if (run.ExitCode != 0 || HookLog.StartedPid(run.Out) is not { } pid) return null;
-            // an older pol.exe with this pid left these, and its stop file would end this one before it logs in
-            foreach (var name in new[] { HookContract.Files.Stop, HookContract.Files.Ended, HookContract.Files.Go }) HookFiles.Delete(pid, name);
-            var stamp = ProcessStamp.Of(pid);
-            // so another copy that's about to change the viewer's files can end it while it's only waiting
-            if (stamp is { } at)
-                try { File.WriteAllText(HookFiles.PathFor(pid, HookContract.Files.Prestart), at.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the pre-started pol.exe for other copies"); }
-            Log.Information("Pre-started pol.exe (pid {Pid}), waiting for LOG IN", pid);
-            return new Prestarted(pid, stamp);
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Pre-start failed; LOG IN starts pol.exe itself");
-            return null;
-        }
-    }
-
-    private static bool GameInstalled(PolRegion region) =>
-        PolPaths.TryGetInstallFolder(region, GameProduct.Game) is { } ffxi && File.Exists(Path.Combine(ffxi, GameProduct.Game.KeyFile));
-
-    // POL_IPC_DIR, POL_CRED_KEYFILE and POL_OWNER have to go in here, the go file never carries them
-    internal static void SetPrestartEnvironment(IDictionary<string, string?> env)
-    {
-        SetBaseEnvironment(env);
-        env[HookContract.Env.Prestart] = "1";
-    }
-
-    // the hook's key for a Handle ID is 11 hex digits, anything else from a hand-edited settings.json stays out
-    internal static void SetHandleEnvironment(IDictionary<string, string?> env, string? key)
-    {
-        if (key is { Length: 11 } && key.All(char.IsAsciiHexDigit)) env[HookContract.Env.Handle] = key;
-        else env.Remove(HookContract.Env.Handle);
-    }
-
-    internal static IEnumerable<string> GoFileEntries(IDictionary<string, string?> env)
-    {
-        foreach (var k in HookContract.Env.GoFile)
-            if (env.TryGetValue(k, out var v) && v != null) yield return $"{k}={v}";
-    }
-
-    // nothing's sent till the go file's written, so a cancel before then leaves it waiting, hidden, for the next login.
-    // Only a live one goes back, a dead one would block a fresh Prestart
-    internal int? TakePrestarted(ProcessStartInfo psi, CancellationToken ct)
-    {
-        if (TakePrestart(ct) is not { } pre) return null;
-        int pid = pre.Pid;
-        try
-        {
-            if (!PrestartAlive(pre)) return null;
-            if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
-            var log = HookFiles.PathFor(pid, HookContract.Files.Log);
-            var until = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (DateTime.UtcNow < until && !PrestartIsReady(log) && !ct.IsCancellationRequested) Thread.Sleep(100);
-            if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
-            if (!PrestartIsReady(log)) { EndPrestarted(pre); return null; }
-            // under the lock another copy ends waiting pre-starts with, so it's either been stopped or it's mine to use
-            using (var handOver = AdminLock.TryAcquire(PrestartLock, TimeSpan.FromSeconds(5)))
-            {
-                if (handOver is null || File.Exists(HookFiles.PathFor(pid, HookContract.Files.Stop))) { EndPrestarted(pre); return null; }
-                File.Delete(HookFiles.PathFor(pid, HookContract.Files.Prestart));
-                var go = HookFiles.PathFor(pid, HookContract.Files.Go);
-                AtomicFile.Write(go, string.Join("\n", GoFileEntries(psi.Environment)));
-            }
-            Log.Information("Using the pre-started pol.exe (pid {Pid})", pid);
-            return pid;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException) { EndPrestarted(pre); return null; }
-    }
-
-    private Prestarted? TakePrestart(CancellationToken ct = default)
-    {
-        Task<Prestarted?>? task;
-        lock (_gate) { task = _prestart; _prestart = null; }
-        if (task is null) return null;
-        try
-        {
-            if (task.Wait(8000, ct)) return task.Result;
-        }
-        catch (OperationCanceledException)
-        {
-            GiveBack(task);
-            return null;
-        }
-        EndWhenDone(task);
-        return null;
-    }
-
-    // kept for the next login, unless another one, a session or a hold has turned up meanwhile
-    private void GiveBack(Task<Prestarted?> task)
-    {
-        lock (_gate)
-        {
-            if (!_disposed && MayPrestart())
-            {
-                _prestart = task;
-                return;
-            }
-        }
-        EndWhenDone(task);
-    }
-
-    private void EndWhenDone(Task<Prestarted?> task) =>
-        task.ContinueWith(t => { if (t.Result is { } late) EndPrestarted(late); }, TaskContinuationOptions.OnlyOnRanToCompletion);
-
-    private void EndPrestarted(Prestarted pre)
-    {
-        try { HookFiles.RequestStop(pre.Pid); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        HookFiles.Delete(pre.Pid, HookContract.Files.Prestart);
-        if (pre.Stamp is { } stamp) EndOurs(stamp, graceMs: 3000);
-    }
-
-    public void StopPrestart()
-    {
-        try { if (TakePrestart() is { } pre) EndPrestarted(pre); }
-        catch (AggregateException) { }
-    }
-
-    // a repair, an install or a Large Address Aware write changes viewer files, so nothing pre-starts pol.exe until
-    // every hold's let go (a sign-out's own Prestart included). They nest
-    public void HoldPrestarts()
-    {
-        lock (_gate) _prestartHolds++;
-        FreeViewerFiles();
-    }
-
-    private void FreeViewerFiles()
-    {
-        StopPrestart();
-        EndWaitingPrestarts();
-    }
-
-    // other copies' waiting pre-starts hold the viewer's files too (their next login just starts another). One already
-    // being handed to a login has lost its record by the time this has the lock
-    internal void EndWaitingPrestarts()
-    {
-        var ending = new List<ProcessStamp>();
-        try
-        {
-            using var handOver = AdminLock.TryAcquire(PrestartLock, TimeSpan.FromSeconds(5));
-            if (handOver is null)
-            {
-                Log.Warning("Other copies' pre-started pol.exe were left running: the hand-over lock stayed busy");
-                return;
-            }
-            foreach (var record in Directory.GetFiles(HookFiles.RequiredDir, "pol_hook.*.prestart"))
-            {
-                try
-                {
-                    var parts = Path.GetFileName(record).Split('.');
-                    if (parts.Length != 3 || !int.TryParse(parts[1], out var pid)
-                        || !long.TryParse(File.ReadAllText(record).Trim(), out var ticks)) continue;
-                    var stamp = new ProcessStamp(pid, ticks);
-                    if (Ours(stamp))
-                    {
-                        HookFiles.RequestStop(pid);
-                        ending.Add(stamp);
-                    }
-                    File.Delete(record);
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-                {
-                    Log.Warning(e, "Could not end the pre-started pol.exe of {Record}", Path.GetFileName(record));
-                }
-            }
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
-        {
-            Log.Warning(e, "Could not end other copies' pre-started pol.exe");
-        }
-        foreach (var stamp in ending)
-        {
-            Log.Information("Ending another copy's pre-started pol.exe (pid {Pid}): the viewer's files are about to change", stamp.Pid);
-            EndOurs(stamp, graceMs: 3000);
-        }
-    }
-
-    public void ReleasePrestarts()
-    {
-        if (LetGoPrestarts()) Prestart();
-    }
-
-    // true when that was the last hold
-    internal bool LetGoPrestarts()
-    {
-        lock (_gate)
-        {
-            if (_prestartHolds == 0)
-            {
-                Log.Warning("Pre-starts were let go with none held");
-                return false;
-            }
-            return --_prestartHolds == 0;
-        }
-    }
-
-    private static bool PrestartIsReady(string logPath)
-    {
-        try { return HookLog.PrestartReadyInThisRun(logPath); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
-    }
-
-    internal static readonly TimeSpan WatcherLimit = TimeSpan.FromSeconds(60);
-
-    private static WatcherRun? RunLauncher(Process launcher, TimeSpan limit)
-    {
-        var run = WatcherProcess.Wait(launcher, limit);
-        if (run is null) EndStuckLauncher(launcher, limit);
-        return run;
-    }
-
-    // Smart App Control refuses a new unsigned build till Windows' cloud check knows it, so that gets retried. Null once
-    // progress has said why
-    private int? StartWithWatcher(ProcessStartInfo psi, IProgress<LaunchProgress>? progress, CancellationToken ct, TimeSpan limit, string failText)
-    {
-        for (int attempt = 1; ; attempt++)
-        {
-            var attemptStart = DateTime.UtcNow;
-            var (outcome, launchedPid, failure) = RunWatcher(psi, ct, limit, failText);
-            if (outcome == LaunchOutcome.Started) return launchedPid;
-            if (outcome == LaunchOutcome.Cancelled)
-            {
-                progress?.Report(LaunchProgress.Cancelled());
-                return null;
-            }
-            bool refused = outcome == LaunchOutcome.Refused || WatcherProcess.Refused(attemptStart);
-            if (refused && attempt <= RefusedRetryWaits.Length)
-            {
-                var wait = RefusedRetryWaits[attempt - 1];
-                Log.Warning("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll (attempt {Attempt}); trying again in {Wait}", attempt, wait);
-                progress?.Report(new LaunchProgress("Starting", $"Windows is checking Provenance's files. Trying again in {wait.TotalSeconds:0} seconds...", 0.02));
-                if (ct.WaitHandle.WaitOne(wait))
-                {
-                    progress?.Report(LaunchProgress.Cancelled());
-                    return null;
-                }
-                continue;
-            }
-            if (refused) Log.Error("Windows Code Integrity refused Provenance Watcher.exe or pol_hook.dll {Attempts} times", attempt);
-            progress?.Report(LaunchProgress.Failed(refused ? CodeIntegrity.RefusedText : failure));
-            return null;
-        }
-    }
-
-    // A cancel waits for the watcher (its steps time out on their own) then ends its pol.exe. Killing it half way would
-    // leave a suspended pol.exe behind.
-    private (LaunchOutcome Outcome, int Pid, string Failure) RunWatcher(ProcessStartInfo psi, CancellationToken ct, TimeSpan limit, string failText)
-    {
-        try
-        {
-            using var launcher = StartProcess(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
-            var launcherStamp = ProcessStamp.Of(launcher.Id);
-            if (RunLauncher(launcher, limit) is not { } run)
-                return ct.IsCancellationRequested
-                    ? (LaunchOutcome.Cancelled, 0, "")
-                    : (LaunchOutcome.Failed, 0, failText);
-            var startedPid = HookLog.StartedPid(run.Out);
-            if (ct.IsCancellationRequested)
-            {
-                if (startedPid is { } stray && launcherStamp is { } started) EndNewPol(stray, started);
-                return (LaunchOutcome.Cancelled, 0, "");
-            }
-            var stderr = run.Err.Trim();
-            if (run.ExitCode != 0 || startedPid is not { } pid)
-            {
-                Log.Error("Provenance Watcher exited {Code}: {Error}", run.ExitCode, stderr.Length > 0 ? stderr : "no message");
-                return (LaunchOutcome.Failed, 0, failText);
-            }
-            return (LaunchOutcome.Started, pid, "");
-        }
-        catch (Win32Exception ex) when (WatcherProcess.RefusedToStart(ex))
-        {
-            Log.Warning(ex, "Windows refused to start Provenance Watcher.exe");
-            return (LaunchOutcome.Refused, 0, "");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Hold launch failed");
-            return (LaunchOutcome.Failed, 0, failText);
-        }
-    }
-
-    private const string PolDidNotStart = "PlayOnline didn't start. Try again in a moment.";
-    private const string WindowerDidNotStart = "PlayOnline didn't start with Windower. Try again in a moment.";
-
-    // a pol.exe the watcher started since the launcher did
-    private static void EndNewPol(int pid, ProcessStamp launcher)
-    {
-        bool NewPol(ProcessStamp pol) => pol.StartUtcTicks >= launcher.StartUtcTicks
-            && string.Equals(Path.GetFileName(ProcessTree.ImagePath(pol.Pid)), GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase);
-        if (ProcessStamp.Of(pid) is { } found && End(found, 0, 2000, NewPol))
-            Log.Information("Ended pol.exe (pid {Pid}): the sign-in was cancelled", pid);
-    }
-
-    private static void EndStuckLauncher(Process launcher, TimeSpan limit)
-    {
-        int id = launcher.Id;
-        var stamp = ProcessStamp.Of(id);
-        try { launcher.Kill(); }
-        catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
-        if (stamp is { } started)
-            foreach (var child in ProcessTree.ChildrenOf(id)) EndNewPol(child, started);
-        Log.Warning("Provenance Watcher (pid {Pid}) did not exit in {Limit} and was ended", id, limit);
-    }
-
-    // still that pol.exe, and a viewer's
-    private bool Ours(ProcessStamp stamp) => stamp.IsRunning() && IsViewerPol(stamp);
-
-    private bool EndOurs(ProcessStamp stamp, int graceMs = 0, int afterMs = 0) => End(stamp, graceMs, afterMs, IsViewerPol);
-
-    private static bool End(ProcessStamp stamp, int graceMs, int afterMs, Func<ProcessStamp, bool> alsoIf)
-    {
-        var result = stamp.EndIfStill(graceMs, afterMs, alsoIf);
-        if (result != ProcessStamp.Ending.NotThat) ScreenSaver.PutBack();
-        return result == ProcessStamp.Ending.Ended;
     }
 
     private void SaveSession(string? profileId, bool played = false)
@@ -1024,7 +509,7 @@ public sealed class PolSession : IDisposable
             Log.Warning("Held PlayOnline session (pid {Pid}) ended on its own (exit code {Exit})", pid, exit);
             ScreenSaver.PutBack();
             HookFiles.ClearFor(pid);
-            DropChatPassword();
+            _credentials.DropChatPassword();
             Pid = null;
             _polStamp = null;
         }
@@ -1052,45 +537,22 @@ public sealed class PolSession : IDisposable
         return why;
     }
 
-    // the room password goes to the hook as a one-shot entry like the account details, the hook deletes it once read.
-    // User is the enter's token, so it only ever works for that one
-    public bool SaveChatPassword(string token, string password)
-    {
-        if (_launchId is not { } id) return false;
-        try
-        {
-            Wrapped.Save(ChatKey(id), token, password, sessionOnly: true);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Could not hand the room password to the hook");
-            return false;
-        }
-    }
-
-    public void DropChatPassword()
-    {
-        if (_launchId is { } id)
-            try { _store.Delete(ChatKey(id)); } catch (Win32Exception) { }
-    }
-
     public void SignalPlay()
     {
-        if (_launchId is null) return;
+        if (_credentials.LaunchId is null) return;
         // skip the log so far, only the answer to this Play counts and not an unreadable entry planted earlier
         if (Pid is { } pid)
             try { LogOf(pid).ReadNewLines(); } catch (Exception ex) { Log.Warning(ex, "Could not read the hook log before Play"); }
         PutWindowerValuesBack();
         // saved first, so a throw leaves the session held
-        Wrapped.Save($"{LaunchKeyPrefix}{_launchId}:PLAY", "play", "go", sessionOnly: true);
+        _credentials.SavePlay();
         _played = true;
         StopWatcher();
         // the record stays as the game's, so no copy signs this account in on top of it
         SaveSession(Records.Profile, played: true);
     }
 
-    private void TrackThirdPartyHook(ProcessStamp hook)
+    internal void TrackThirdPartyHook(ProcessStamp hook)
     {
         lock (_hookGate) _hook = hook;
     }
@@ -1127,11 +589,11 @@ public sealed class PolSession : IDisposable
                 var stamp = _polStamp;
                 try { HookFiles.RequestStop(pid); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-                if (stamp is { } game && EndOurs(game, (int)StopGrace.TotalMilliseconds, afterMs: 2000))
+                if (stamp is { } game && _starter.EndOurs(game, (int)StopGrace.TotalMilliseconds, afterMs: 2000))
                     Log.Warning("pol.exe {Pid} hadn't logged out {Seconds} s after its stop file, so it was ended", pid,
                                 (int)StopGrace.TotalSeconds);
                 HookFiles.ClearFor(pid);
-                DropChatPassword();
+                _credentials.DropChatPassword();
                 Log.Information("Stopped held PlayOnline session (pid {Pid})", pid);
                 Pid = null;
                 _polStamp = null;
@@ -1142,29 +604,14 @@ public sealed class PolSession : IDisposable
 
     public void Dispose()
     {
-        // no sweep touches the store once this returns
-        _disposed = true;
+        Prestarter.Close();
+        _credentials.StopSweeps();
         try
         {
-            using var sweepsDone = new ManualResetEvent(false);
-            if (_sweepTimer.Dispose(sweepsDone)) sweepsDone.WaitOne();
-        }
-        catch (Exception ex) { Log.Warning(ex, "Stopping the sweep of leftover sign-in credentials failed"); }
-        try
-        {
-            try { StopPrestart(); }
+            try { Prestarter.StopPrestart(); }
             finally { StopHold(); }
         }
-        finally
-        {
-            string[] ids;
-            lock (_gate) { ids = _usedLaunchIds.ToArray(); _usedLaunchIds.Clear(); }
-            foreach (var id in ids)
-            {
-                try { _store.DeleteByPrefix($"{LaunchKeyPrefix}{id}:"); }
-                catch (Exception ex) { Log.Warning(ex, "Removing the one-shot sign-in credentials of a launch failed"); }
-            }
-        }
+        finally { _credentials.DeleteLaunches(); }
     }
 
     public void GameExited()
@@ -1191,7 +638,7 @@ public sealed class PolSession : IDisposable
             Log.Information("Let go of the played session (pid {Pid}); the game keeps running", Pid);
             Pid = null;
             _polStamp = null;
-            _launchId = null;
+            _credentials.ForgetLaunch();
             _played = false;
             Records.Forget();
             // nothing watches the game from here, and one that crashes leaves the screen saver off
@@ -1200,29 +647,6 @@ public sealed class PolSession : IDisposable
             _polProc = null;
             lock (_hookGate) _hook = null;
         }
-    }
-
-    internal void AdoptHeldForTest(int pid, DateTime started)
-    {
-        lock (_gate)
-        {
-            Pid = pid;
-            _polStamp = new ProcessStamp(pid, started.ToUniversalTime().Ticks);
-        }
-    }
-
-    internal string AdoptPlayedForTest(int pid, DateTime started, string profileId, (int Pid, DateTime Start)? hook = null)
-    {
-        var launchId = "test" + ShortId.New(8);
-        AdoptHeldForTest(pid, started);
-        lock (_gate)
-        {
-            _launchId = launchId;
-            _played = true;
-        }
-        if (hook is { } h) TrackThirdPartyHook(new ProcessStamp(h.Pid, h.Start.ToUniversalTime().Ticks));
-        SaveSession(profileId, played: true);
-        return launchId;
     }
 
     public Task<string?> WaitForPlayAnswerAsync(TimeSpan timeout) => Task.Run(() =>
@@ -1246,7 +670,7 @@ public sealed class PolSession : IDisposable
                         return null;
                     case PlayUnreadable:
                         Log.Error("The hook could not read the Play entry (pol.exe {Pid}): the game did not start; ending the session", pid);
-                        DropKey();
+                        _credentials.DropKey();
                         EndUnstartedPlay();
                         return PlayUnreadableText;
                     case PlayRefused:
@@ -1281,11 +705,7 @@ public sealed class PolSession : IDisposable
     private void EndUnstartedPlay()
     {
         // the Play entry goes first, a hook that wakes late checks Play before the stop file and would boot the game
-        if (_launchId is { } id)
-        {
-            try { _store.Delete($"{LaunchKeyPrefix}{id}:PLAY"); }
-            catch (Exception ex) { Log.Warning(ex, "Could not remove the Play entry of the game that did not start"); }
-        }
+        _credentials.DeletePlay();
         lock (_gate) _played = false;
         StopHold();
     }
@@ -1309,15 +729,6 @@ public sealed class PolSession : IDisposable
 
     // what to tell the player once the game's pol.exe has ended, null for a normal end
     public static string? GameEndedText(int? exitCode) => exitCode == (int)HookExit.GameStartFailed ? GameStartFailedText : null;
-
-    private void CleanupOneShots(List<string> keys)
-    {
-        foreach (var k in keys)
-        {
-            try { _store.Delete(k); } catch (Win32Exception) { }
-        }
-        keys.Clear();
-    }
 
     private HookLog LogOf(int pid)
     {

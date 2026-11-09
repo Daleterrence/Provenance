@@ -126,7 +126,7 @@ public partial class App : Application
     private void WarmKeys()
     {
         _ = (Services.GetRequiredService<ICredentialService>() as CredentialService)?.OpenKeyInBackground();
-        _ = Services.GetRequiredService<PolSession>().OpenKeyInBackground();
+        _ = Services.GetRequiredService<PolSession>().Credentials.OpenKeyInBackground();
         _ = KeePassXc.OpenKeyInBackground();
         _ = OtpReuse.OpenKeyInBackground();
     }
