@@ -10,6 +10,9 @@
 
     <FontFamily x:Key="Font.Body">Segoe UI</FontFamily>
 
+    <!-- lives here so the cards share one decode, near the size shown (the source is 1026x907) -->
+    <BitmapImage x:Key="BgLogo" UriSource="/Assets/bg-logo.png" DecodePixelHeight="680" />
+
     <!-- cards, panels and popups, then the floating dialogs (Windows' own window corner). Buttons stay square -->
     <CornerRadius x:Key="Radius.Panel">6</CornerRadius>
     <CornerRadius x:Key="Radius.Dialog">8</CornerRadius>

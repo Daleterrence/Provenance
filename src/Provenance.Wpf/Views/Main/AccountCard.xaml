@@ -1,0 +1,96 @@
+<UserControl x:Class="Provenance.Wpf.Views.Main.AccountCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="MainResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Margin="28,22,28,14" RowDefinitions="*,Auto,Auto">
+        <Image Source="{StaticResource BgLogo}" OpacityMask="{DynamicResource Logo.Mask}" MaxHeight="340" Margin="0,0,0,10"
+               Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+
+        <StackPanel Grid.Row="1"
+                    Visibility="{Binding Accounts.HasProfile, Converter={StaticResource InvertBoolToVis}}">
+            <TextBlock Text="Welcome" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            <TextBlock Margin="0,6,0,18" TextAlignment="Center" TextWrapping="Wrap" FontSize="13"
+                       Foreground="{DynamicResource Text.2}"
+                       Text="Add your PlayOnline account to get started. Your login details stay in Windows Credential Manager." />
+            <Button Height="46" FontSize="15" Command="{Binding Accounts.AddAccountCommand}"
+                    Style="{StaticResource PolButton}" Content="ADD ACCOUNT" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Visibility="{Binding Accounts.HasProfile, Converter={StaticResource BoolToVis}}">
+            <Grid Margin="0,0,0,6" ColumnDefinitions="Auto,*">
+                <controls:ProfilePictureCircle Diameter="52" Margin="0,0,12,0"
+                                               VerticalAlignment="Center"
+                                               Source="{Binding Accounts.ProfilePicture}" />
+                <!-- a floating hint draws a grey strip MaterialDesign 5 won't recolour -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Account" FontSize="11.5" Margin="0,0,0,4" Foreground="{DynamicResource Text.3}" />
+                    <ComboBox Style="{StaticResource OutlinedCombo}" FontSize="16"
+                              Padding="14,10,10,10" materialDesign:HintAssist.IsFloating="False"
+                              ItemsSource="{Binding Accounts.Profiles}" DisplayMemberPath="DisplayName"
+                              SelectedItem="{Binding Accounts.SelectedProfile}">
+                        <ComboBox.ItemContainerStyle>
+                            <Style TargetType="ComboBoxItem" BasedOn="{StaticResource MaterialDesignComboBoxItemStyle}">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
+                    </ComboBox>
+                </StackPanel>
+            </Grid>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+                <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12"
+                        Command="{Binding Accounts.EditAccountCommand}" Content="EDIT ACCOUNT" />
+                <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12" Margin="6,0,0,0"
+                        Command="{Binding Accounts.AddAccountCommand}" Content="ADD ACCOUNT" />
+                <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12" Margin="6,0,0,0"
+                        Command="{Binding Accounts.RemoveAccountCommand}" Content="REMOVE"
+                        ToolTip="Remove this account and its saved passwords from this PC"
+                        AutomationProperties.Name="Remove this account and its saved passwords from this PC" />
+            </StackPanel>
+
+            <CheckBox Content="This account uses a one-time password" FontSize="13" Margin="0,0,0,10"
+                      Foreground="{DynamicResource Text.2}" IsChecked="{Binding Accounts.UseOtp}"
+                      ToolTip="Provenance asks for the code from your authenticator each time you log in to this account." />
+            <TextBlock Text="All accounts" FontSize="11.5" Foreground="{DynamicResource Text.3}" Margin="0,0,0,4" />
+            <CheckBox Content="Log in automatically" FontSize="13" Margin="0,0,0,6"
+                      Foreground="{DynamicResource Text.2}" IsChecked="{Binding Accounts.AutoLogin}"
+                      ToolTip="When Provenance opens, it logs in to the selected account. Hold Shift while it opens to skip this once." />
+            <CheckBox Content="Start game after logging in" FontSize="13"
+                      Foreground="{DynamicResource Text.2}" IsChecked="{Binding Accounts.StartGameImmediately}" />
+
+            <Button Margin="0,18,0,0" Height="48" FontSize="16" Command="{Binding LogInCommand}"
+                    Style="{StaticResource ActionButton}" IsDefault="True" AutomationProperties.Name="Log in">
+                <StackPanel Orientation="Horizontal">
+                    <controls:SvgIcon Glyph="key" Width="24" Height="24" IsOpen="{Binding IsLaunching}" />
+                    <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Text="LOG IN" />
+                </StackPanel>
+            </Button>
+            <Grid Margin="0,8,0,0" Visibility="{Binding Multi.HasAccounts, Converter={StaticResource BoolToVis}}">
+                <Button Height="36" Style="{StaticResource PolButton}"
+                        Command="{Binding Multi.StartAllAccountsCommand}" Content="{Binding Multi.StartAllText}"
+                        Visibility="{Binding Multi.Running, Converter={StaticResource InvertBoolToVis}}"
+                        ToolTip="Logs in and starts the game for each account you've turned on in Settings, under Multi-account, one after another." />
+                <!-- it's a stop button while the run's going -->
+                <Button Height="36" Style="{StaticResource RedButton}"
+                        Command="{Binding Multi.StartAllAccountsCommand}" Content="{Binding Multi.StartAllText}"
+                        Visibility="{Binding Multi.Running, Converter={StaticResource BoolToVis}}" />
+            </Grid>
+            <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="{DynamicResource Text.2}" TextWrapping="Wrap"
+                       TextAlignment="Center" Text="{Binding Multi.Status}"
+                       Visibility="{Binding Multi.Status, Converter={StaticResource NullToVisibilityConverter}}" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Margin="0,8,0,0">
+            <Button Style="{StaticResource RepairButton}" />
+            <TextBlock Style="{StaticResource RepairReason}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

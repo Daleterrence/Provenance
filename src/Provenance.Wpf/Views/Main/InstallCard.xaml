@@ -1,0 +1,29 @@
+<UserControl x:Class="Provenance.Wpf.Views.Main.InstallCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="MainResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Margin="28,22" VerticalAlignment="Center">
+        <StackPanel>
+            <controls:SvgIcon Glyph="download" Flat="True" Width="46" Height="46"
+                              HorizontalAlignment="Center" Foreground="{DynamicResource Primary}" />
+            <TextBlock Text="FINAL FANTASY XI isn't installed" FontSize="17" FontWeight="SemiBold"
+                       TextAlignment="Center" TextWrapping="Wrap" Margin="0,12,0,4" />
+            <TextBlock TextAlignment="Center" TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource Text.2}"
+                       Text="Provenance can download and install the game for you, or use an install you already have." />
+            <Button Margin="0,22,0,0" Height="48" FontSize="15" Command="{Binding DownloadInstallCommand}"
+                    Style="{StaticResource PolButton}" Content="DOWNLOAD AND INSTALL" />
+            <Button Margin="0,10,0,0" Height="42" FontSize="14" Command="{Binding LocateInstallCommand}"
+                    Style="{StaticResource PolButton}" Content="LOCATE EXISTING INSTALL" />
+            <Button Margin="0,14,0,0" Style="{StaticResource RepairButton}" />
+            <TextBlock Style="{StaticResource RepairReason}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

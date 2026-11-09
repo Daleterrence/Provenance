@@ -1,0 +1,194 @@
+<UserControl x:Class="Provenance.Wpf.Views.Main.NewsCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="MainResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BitmapImage x:Key="NoImage" UriSource="/Assets/no-image.jpg" />
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Margin="24" RowDefinitions="3*,Auto,1.1*">
+        <!-- laid out like POL's own topic cards: the 415x100 banner, then title, local date and summary -->
+        <Border CornerRadius="{StaticResource Radius.Panel}" Padding="16,16,16,10" Background="{DynamicResource Surface.2}"
+                BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1" Effect="{DynamicResource Shadow.Card}">
+            <Grid ClipToBounds="True" Background="Transparent" MouseEnter="OnNewsHover" MouseLeave="OnNewsLeave"
+                  IsKeyboardFocusWithinChanged="OnNewsFocus" RowDefinitions="Auto,Auto,Auto,*,Auto">
+                <Grid x:Name="NewsContent" Grid.RowSpan="4" RowDefinitions="Auto,Auto,Auto,*">
+                <Grid.RenderTransform>
+                    <TranslateTransform />
+                </Grid.RenderTransform>
+
+                <Grid Cursor="Hand">
+                    <Grid.InputBindings>
+                        <MouseBinding Gesture="LeftClick" Command="{Binding News.OpenCurrentNewsCommand}" />
+                    </Grid.InputBindings>
+                    <!-- invisible sizer, a Border won't size to its ImageBrush (hacky, but round corners) -->
+                    <Image Source="{Binding News.CurrentNews.ImageUrl}" Stretch="Uniform" Opacity="0" ImageFailed="OnBannerFailed" />
+                    <Border CornerRadius="4">
+                        <Border.Background>
+                            <ImageBrush ImageSource="{Binding News.CurrentNews.ImageUrl}" Stretch="Fill" />
+                        </Border.Background>
+                    </Border>
+                    <Grid Visibility="{Binding News.CurrentNews.ImageUrl, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=invert}">
+                        <Image Source="{StaticResource NoImage}" Stretch="Uniform" Opacity="0" />
+                        <Border CornerRadius="4">
+                            <Border.Background>
+                                <ImageBrush ImageSource="{StaticResource NoImage}" Stretch="Fill" />
+                            </Border.Background>
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <TextBlock Grid.Row="1" Margin="2,14,2,0" Cursor="Hand" ToolTip="{Binding News.CurrentNews.Title}"
+                           Text="{Binding News.CurrentNews.Title, Converter={StaticResource ArticleTimesConverter}}"
+                           Foreground="{DynamicResource Text.1}" FontSize="17" FontWeight="SemiBold"
+                           TextWrapping="Wrap" MaxHeight="48" TextTrimming="CharacterEllipsis">
+                    <TextBlock.InputBindings>
+                        <MouseBinding Gesture="LeftClick" Command="{Binding News.OpenCurrentNewsCommand}" />
+                    </TextBlock.InputBindings>
+                </TextBlock>
+
+                <TextBlock Grid.Row="2" Margin="2,4,2,0" FontSize="12" Foreground="{DynamicResource Primary}"
+                           Visibility="{Binding News.CurrentNews.Date, Converter={StaticResource NullToVisibilityConverter}}">
+                    <Run Text="Posted" Foreground="{DynamicResource Text.3}" /><Run Text=" " /><Run Text="{Binding News.CurrentNews.Date, Mode=OneWay, Converter={StaticResource LocalTimeConverter}}" />
+                </TextBlock>
+
+                <TextBlock Grid.Row="3" Margin="2,10,2,0" FontSize="13" LineHeight="19"
+                           Foreground="{DynamicResource Text.2}" TextWrapping="Wrap" TextTrimming="WordEllipsis"
+                           Text="{Binding News.CurrentNews.Summary,
+                                          Converter={StaticResource ArticleTimesConverter}}" />
+                </Grid>
+
+                <Grid Grid.Row="4" Margin="0,8,0,0" ColumnDefinitions="*,Auto,Auto,Auto"
+                      Visibility="{Binding News.CurrentNews, Converter={StaticResource NullToVisibilityConverter}}">
+                    <Button VerticalAlignment="Center" Margin="2,0,0,0" FontSize="13"
+                            Style="{StaticResource LinkButton}" Command="{Binding News.OpenCurrentNewsCommand}"
+                            AutomationProperties.Name="Read on PlayOnline">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Read on PlayOnline" VerticalAlignment="Center" />
+                            <controls:SvgIcon Glyph="right" Flat="True" Width="16" Height="16" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="1" Width="28" Height="28" Padding="0"
+                            Style="{StaticResource IconButton}"
+                            Foreground="{DynamicResource Text.2}" ToolTip="Previous" AutomationProperties.Name="Previous"
+                            Command="{Binding News.PrevNewsCommand}">
+                        <controls:SvgIcon Glyph="left" Flat="True" Width="20" Height="20" />
+                    </Button>
+                    <ListBox Grid.Column="2" VerticalAlignment="Center" Margin="2,0"
+                             ItemsSource="{Binding News.NewsItems}"
+                             SelectedIndex="{Binding News.CurrentNewsIndex, Mode=TwoWay}"
+                             Background="Transparent" BorderThickness="0" Padding="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Cursor" Value="Hand" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border Background="Transparent" Padding="3,8">
+                                                <Border x:Name="Dot" Width="8" Height="8" CornerRadius="4"
+                                                        Background="{DynamicResource Text.3}" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Dot" Property="Background" Value="{DynamicResource Text.2}" />
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Dot" Property="Background" Value="{DynamicResource Primary}" />
+                                                    <Setter TargetName="Dot" Property="Width" Value="20" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+                    <Button Grid.Column="3" Width="28" Height="28" Padding="0"
+                            Style="{StaticResource IconButton}"
+                            Foreground="{DynamicResource Text.2}" ToolTip="Next" AutomationProperties.Name="Next"
+                            Command="{Binding News.NextNewsCommand}">
+                        <controls:SvgIcon Glyph="right" Flat="True" Width="20" Height="20" />
+                    </Button>
+                </Grid>
+
+                <StackPanel Grid.RowSpan="5" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Visibility="{Binding News.ShowLoadingHint, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding News.FeedsHint}" Foreground="{DynamicResource Text.3}" FontSize="13"
+                               HorizontalAlignment="Center" />
+                    <Button Content="TRY AGAIN" Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="12"
+                            Style="{StaticResource PolButton}" Command="{Binding News.RetryFeedsCommand}"
+                            Visibility="{Binding News.FeedsFailed, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="2,12">
+            <Border Height="1" VerticalAlignment="Center" Background="{DynamicResource Accent.Gold}" Opacity="0.4" />
+            <Rectangle Width="7" Height="7" HorizontalAlignment="Center" Fill="{DynamicResource Accent.Gold}"
+                       Opacity="0.75" RenderTransformOrigin="0.5,0.5">
+                <Rectangle.RenderTransform><RotateTransform Angle="45" /></Rectangle.RenderTransform>
+            </Rectangle>
+        </Grid>
+
+        <ItemsControl Grid.Row="2" ItemsSource="{Binding News.StatusItems}" ClipToBounds="True">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Button Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding Url}" Cursor="Hand"
+                            HorizontalContentAlignment="Stretch" BorderThickness="0" Padding="6,8"
+                            Background="Transparent" Foreground="{DynamicResource Text.1}">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <!-- the post's category on POL's Information page, or a dot when there's none -->
+                            <Ellipse Width="7" Height="7" Margin="0,0,10,0"
+                                     VerticalAlignment="Center" Fill="{DynamicResource Text.3}"
+                                     Visibility="{Binding HasCategory, Converter={StaticResource InvertBoolToVis}}" />
+                            <Border CornerRadius="4" Padding="6,1" Margin="0,0,10,0" VerticalAlignment="Center"
+                                    MinWidth="76" Visibility="{Binding HasCategory, Converter={StaticResource BoolToVis}}"
+                                    ToolTip="{Binding BadgeLabel}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="{DynamicResource Badge.Neutral}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Category}" Value="Important">
+                                                <Setter Property="Background" Value="{DynamicResource Badge.Alert}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Category}" Value="Maintenance">
+                                                <Setter Property="Background" Value="{DynamicResource Badge.Maintenance}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Category}" Value="Events">
+                                                <Setter Property="Background" Value="{DynamicResource Badge.Event}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Category}" Value="Updates">
+                                                <Setter Property="Background" Value="{DynamicResource Badge.Update}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Badge}" Value="Outage">
+                                                <Setter Property="Background" Value="{DynamicResource Badge.Alert}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding CategoryLabel}" FontSize="10.5" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" Foreground="{DynamicResource Text.1}" />
+                            </Border>
+                            <TextBlock Grid.Column="1" Text="{Binding Title, Converter={StaticResource ArticleTimesConverter}}" TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource Text.1}" FontSize="13" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                                       Text="{Binding Date, Converter={StaticResource LocalTimeConverter}}"
+                                       Foreground="{DynamicResource Text.3}" FontSize="11" />
+                        </Grid>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+</UserControl>

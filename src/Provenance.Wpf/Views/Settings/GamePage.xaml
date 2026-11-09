@@ -1,0 +1,213 @@
+<UserControl x:Class="Provenance.Wpf.Views.Settings.GamePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
+    <Grid RowDefinitions="*,Auto">
+        <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="28,22,28,6">
+                <Border Style="{StaticResource PlatformCard}" Tag="{Binding Platform}" Margin="0,0,0,12"
+                        Visibility="{Binding HasProfile, Converter={StaticResource BoolToVis}}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <controls:SvgIcon Glyph="plugin" Flat="True" Width="22" Height="22" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                            <TextBlock Text="{Binding ProfileHeading}" FontSize="12" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding ProfileShown}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <TextBlock Text="{Binding ReadOnlyNote}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12"
+                           Foreground="{DynamicResource State.Warn}"
+                           Visibility="{Binding ReadOnlyNote, Converter={StaticResource NullToVisibilityConverter}}" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,16"
+                           Text="{Binding IntroText}" />
+
+                <!-- only the cards need the game's saved settings, a broken install may have none -->
+                <TextBlock Text="Display" Style="{StaticResource Section}" />
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Resolution">
+                            <ComboBox ItemsSource="{Binding Resolutions}" SelectedItem="{Binding Resolution}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Window mode">
+                            <ComboBox ItemsSource="{Binding WindowModes}" SelectedIndex="{Binding WindowModeIndex}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="UI size" Tag="Higher values make the menus bigger.">
+                            <StackPanel>
+                                <Grid ColumnDefinitions="*,46">
+                                    <Slider Minimum="1" Maximum="{Binding UiScaleMax}" Value="{Binding UiScale}"
+                                            TickFrequency="0.05" IsSnapToTickEnabled="True" SmallChange="0.05" LargeChange="0.25"
+                                            VerticalAlignment="Center" AutomationProperties.Name="UI size" />
+                                    <TextBlock Grid.Column="1" Text="{Binding UiScaleText}" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" Foreground="{DynamicResource Text.2}" />
+                                </Grid>
+                                <TextBlock Text="{Binding UiSizeText}" Style="{StaticResource Help}" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Brightness">
+                            <Grid ColumnDefinitions="*,46">
+                                <Slider Minimum="-1" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                        Value="{Binding Brightness}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding BrightnessText}" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource Text.2}" />
+                            </Grid>
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Graphics" Style="{StaticResource Section}" />
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
+                    <StackPanel>
+                        <Grid Margin="0,8,0,6" ColumnDefinitions="*,Auto">
+                            <StackPanel Style="{StaticResource DimWhenOff}" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Quick preset" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource Text.1}" />
+                                <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
+                                           Text="A preset changes the graphics settings below in one go. Press Save to keep the changes." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Content="ULTRA" Style="{StaticResource PolButton}" Padding="12,0" MinWidth="76" FontSize="12"
+                                        Command="{Binding PresetCommand}" CommandParameter="Ultra" />
+                                <Button Content="HIGH" Style="{StaticResource PolButton}" Padding="12,0" MinWidth="76" FontSize="12"
+                                        Margin="8,0,0,0" Command="{Binding PresetCommand}" CommandParameter="High" />
+                                <Button Content="STANDARD" Style="{StaticResource PolButton}" Padding="12,0" MinWidth="76" FontSize="12"
+                                        Margin="8,0,0,0" Command="{Binding PresetCommand}" CommandParameter="Standard" />
+                            </StackPanel>
+                        </Grid>
+                        <HeaderedContentControl Header="3D resolution" Tag="This is the resolution the game draws its 3D graphics at, before scaling them to the game resolution.">
+                            <ComboBox ItemsSource="{Binding RenderSizes}" SelectedItem="{Binding RenderSize}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Keep aspect ratio" Tag="When this is on, the 3D resolution list only shows sizes that are the same shape as the game resolution."
+                                                Visibility="{Binding KeepAspectShown, Converter={StaticResource BoolToVis}}">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding KeepAspect}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Textures" Tag="This only changes the quality of light flares and clouds.">
+                            <ComboBox ItemsSource="{Binding Quality3}" SelectedIndex="{Binding Textures}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Fonts">
+                            <ComboBox ItemsSource="{Binding Quality3}" SelectedIndex="{Binding Fonts}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Map quality">
+                            <ComboBox ItemsSource="{Binding Quality2}" SelectedIndex="{Binding Maps2D}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Vegetation movement">
+                            <ComboBox ItemsSource="{Binding VegetationLevels}" SelectedIndex="{Binding Vegetation}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Distant textures" Tag="When this is on, distant objects get full-size textures instead of lower-resolution ones.">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding DrawDistance}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Enhanced shading">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding EnhancedShading}" />
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Sound" Style="{StaticResource Section}" />
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Sound">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding Sound}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Simultaneous sound effects" IsEnabled="{Binding Sound}">
+                            <Grid ColumnDefinitions="*,46">
+                                <Slider Minimum="12" Maximum="20" TickFrequency="1" IsSnapToTickEnabled="True"
+                                        Value="{Binding SoundEffects}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding SoundEffects}" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource Text.2}" />
+                            </Grid>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Sound in the background" Tag="When this is on, the sound keeps playing when you switch to another window."
+                                                IsEnabled="{Binding Sound}">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding BackgroundSound}" />
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Gamepad" Style="{StaticResource Section}" />
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Gamepad">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadEnabled}" />
+                        </HeaderedContentControl>
+                        <StackPanel Margin="20,0,0,0" IsEnabled="{Binding PadEnabled}">
+                            <HeaderedContentControl Header="Force feedback">
+                                <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadForceFeedback}" />
+                            </HeaderedContentControl>
+                            <HeaderedContentControl Header="Analogue sliders">
+                                <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadSlider}" />
+                            </HeaderedContentControl>
+                            <HeaderedContentControl Header="Hat switches">
+                                <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadHat}" />
+                            </HeaderedContentControl>
+                            <HeaderedContentControl Header="Gamepad in the background" Tag="When this is on, the gamepad keeps working when you switch to another window.">
+                                <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadBackground}" />
+                            </HeaderedContentControl>
+                            <HeaderedContentControl Header="XInput controller" Tag="Turn this on if you use an Xbox controller, or one that works like it.">
+                                <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding PadXInput}" />
+                            </HeaderedContentControl>
+                        </StackPanel>
+                        <HeaderedContentControl Header="Buttons" Tag="This opens the FINAL FANTASY XI gamepad tool, where you can choose what each button does.">
+                            <Button Content="SET UP BUTTONS" Style="{StaticResource PolButton}" FontSize="12"
+                                    Command="{Binding OpenPadConfigCommand}" />
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Other" Style="{StaticResource Section}" />
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Opening movie" Tag="When this is on, the game plays its opening movie each time it starts.">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding OpeningMovie}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Full-size screenshots" Tag="When this is on, your screenshots are saved at your screen's resolution.">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding FullResScreenshots}" />
+                        </HeaderedContentControl>
+                        <StackPanel Margin="0,8,0,10">
+                            <StackPanel Style="{StaticResource DimWhenOff}">
+                                <TextBlock Text="Screenshots and settings folder" FontSize="13" Foreground="{DynamicResource Text.1}" />
+                                <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
+                                           Text="The game saves your screenshots and some of its settings in this folder." />
+                                <Border Height="8" />
+                            </StackPanel>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Text="{Binding ScreenshotFolder}" Style="{StaticResource FieldText}"
+                                         materialDesign:HintAssist.Hint="Documents\My Games\FINAL FANTASY XI" />
+                                <Button Style="{StaticResource BrowseButton}"
+                                        Command="{Binding BrowseScreenshotsCommand}" />
+                            </Grid>
+                        </StackPanel>
+                        <HeaderedContentControl Header="Hardware mouse cursor">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding HardwareMouse}" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Legacy settings" Tag="Turn this on to change Simple character creation and Graphics card fix. Turning it off clears them.">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding LegacySettings}" />
+                        </HeaderedContentControl>
+                        <StackPanel Margin="20,0,0,0">
+                            <HeaderedContentControl Header="Simple character creation" IsEnabled="{Binding LegacySettings}" Tag="When this is on, character creation shows still pictures instead of 3D models.">
+                                <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding SimpleCharSelect}" />
+                            </HeaderedContentControl>
+                            <HeaderedContentControl Header="Graphics card fix" IsEnabled="{Binding LegacySettings}" Tag="This setting is also called Graphics Stabilization. It can help the game run properly on some graphics cards.">
+                                <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GraphicsFix}" />
+                            </HeaderedContentControl>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- padded like the page above it, the right side with the page's scrollbar (17) added -->
+        <Border Grid.Row="1" Style="{StaticResource FooterBar}" Padding="28,10,45,10">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding Status.Text}" behaviours:State.IsError="{Binding Status.IsError}"
+                           Style="{StaticResource StatusText}" VerticalAlignment="Center"
+                           TextWrapping="Wrap" FontSize="12" Margin="0,0,12,0" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="DEFAULTS" MinWidth="100" Style="{StaticResource PolButton}" Command="{Binding DefaultsCommand}" IsEnabled="{Binding Editable}" />
+                    <Button Content="REVERT" MinWidth="100" Style="{StaticResource PolButton}" Command="{Binding RevertCommand}" Margin="{StaticResource Footer.Gap}" IsEnabled="{Binding Editable}" />
+                    <Button Content="SAVE" MinWidth="100" Margin="{StaticResource Footer.Gap}" Style="{StaticResource PolButton}"
+                            Command="{Binding SaveCommand}" IsEnabled="{Binding Editable}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

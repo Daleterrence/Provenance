@@ -1,0 +1,132 @@
+<UserControl x:Class="Provenance.Wpf.Views.Settings.WindowerAshitaPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="SettingsResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="28,22">
+            <TextBlock Text="Windower/Ashita" Style="{StaticResource Section}" />
+            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,14"
+                       Text="Start the game through Windower 4 or Ashita v4, so everything you've set up in them loads as usual. Provenance still logs you in." />
+            <TextBlock Text="Platform" Style="{StaticResource Label}" />
+            <ComboBox Width="260" HorizontalAlignment="Left" AutomationProperties.Name="Platform"
+                      ItemsSource="{Binding Hooks.ThirdPartyHookChoices}" SelectedValuePath="Code" SelectedValue="{Binding Hooks.Hook}" />
+            <TextBlock Text="{Binding Hooks.ThirdPartyHookStatus.Text}" behaviours:State.IsError="{Binding Hooks.ThirdPartyHookStatus.IsError}"
+                       Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12"
+                       Margin="0,10,0,16" />
+
+            <StackPanel Visibility="{Binding Hooks.IsAshita, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="Ashita folder" Style="{StaticResource Label}" />
+                <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
+                    <TextBox Text="{Binding Hooks.AshitaPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
+                             AutomationProperties.Name="Ashita folder" />
+                    <Button Style="{StaticResource BrowseButton}"
+                            Command="{Binding Hooks.BrowseAshitaCommand}" />
+                </Grid>
+                <TextBlock Text="{Binding Hooks.ProfileStatus.Text}" behaviours:State.IsError="{Binding Hooks.ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
+                <TextBlock Text="{Binding Ashita.AshitaCardNote}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,14" Foreground="{DynamicResource State.Warn}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource NullToVisibilityConverter}}" />
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <TextBlock Text="Boot configuration settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Ashita.AshitaCardEnabled}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Name" Tag="The name Ashita's launcher shows for this boot configuration instead of its file name.">
+                            <TextBox Text="{Binding Ashita.AshitaName, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
+                                     AutomationProperties.Name="Name" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Script" Tag="The script Ashita runs when the game starts, from its scripts folder.">
+                            <ComboBox ItemsSource="{Binding Ashita.AshitaScripts}" SelectedItem="{Binding Ashita.AshitaScript}" AutomationProperties.Name="Script" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Script arguments" Tag="Passed to the script when Ashita runs it, if it takes any.">
+                            <TextBox Text="{Binding Ashita.AshitaScriptArgs, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
+                                     AutomationProperties.Name="Script arguments" />
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Visibility="{Binding Hooks.IsWindower, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="Windower folder" Style="{StaticResource Label}" />
+                <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
+                    <TextBox Text="{Binding Hooks.WindowerPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
+                             AutomationProperties.Name="Windower folder" />
+                    <Button Style="{StaticResource BrowseButton}"
+                            Command="{Binding Hooks.BrowseWindowerCommand}" />
+                </Grid>
+                <TextBlock Text="{Binding Hooks.ProfileStatus.Text}" behaviours:State.IsError="{Binding Hooks.ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
+                <Border Margin="0,0,0,14" Padding="14,10" CornerRadius="{StaticResource Radius.Panel}" BorderThickness="1" BorderBrush="{DynamicResource State.Warn}"
+                        Visibility="{Binding Windower.WindowerSettingsProblem, Converter={StaticResource NullToVisibilityConverter}}">
+                    <StackPanel>
+                        <TextBlock Text="{Binding Windower.WindowerSettingsProblem}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource State.Warn}" />
+                        <Button Content="START A NEW SETTINGS FILE" HorizontalAlignment="Left" Margin="0,10,0,0" FontSize="12"
+                                Style="{StaticResource PolButton}" Command="{Binding Windower.StartNewWindowerSettingsCommand}"
+                                Visibility="{Binding Windower.CanStartNewWindowerSettings, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Profile settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Windower.WindowerCardEnabled}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Console key" Tag="The key that opens and closes the Windower console in game.">
+                            <Button x:Name="ConsoleKeyButton" Content="{Binding Windower.ConsoleKeyText}" FontSize="12" Command="{Binding Windower.EditConsoleKeyCommand}"
+                                    PreviewKeyDown="OnConsoleKeyDown" PreviewKeyUp="OnConsoleKeyUp" LostKeyboardFocus="OnConsoleKeyFocusLost"
+                                    AutomationProperties.Name="Console key">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource PolButton}">
+                                        <Style.Triggers>
+                                            <!-- its own look while it waits for a key, so a hover can't hide it -->
+                                            <DataTrigger Binding="{Binding Windower.WaitingForConsoleKey}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{DynamicResource Primary.Muted}" BorderBrush="{DynamicResource Primary}"
+                                                                    BorderThickness="1" Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Allow the Windows key" Tag="Makes Windows handle keybinds before Windower. Required for normal Windows 11 Alt-Tab behaviour.">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding Windower.WindowerAllowWinKey}"
+                                          AutomationProperties.Name="Allow the Windows key" />
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Updates" Style="{StaticResource Section}" />
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Windower.WindowerBranchEnabled}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Branch">
+                            <HeaderedContentControl.Tag>
+                                <TextBlock Style="{StaticResource Help}"><Run Text="Switches Windower, its plugins and its addons between Stable and Development. The switch happens the next time you log in. " /><Bold>Leave this on Stable unless you know what you're doing.</Bold></TextBlock>
+                            </HeaderedContentControl.Tag>
+                            <Button Content="{Binding Windower.WindowerBranchName, Converter={StaticResource UpperCase}}" Style="{StaticResource PolButton}" FontSize="12"
+                                    Command="{Binding Windower.FlipWindowerBranchCommand}" AutomationProperties.Name="Branch" />
+                        </HeaderedContentControl>
+                        <TextBlock Text="{Binding Windower.WindowerVersionText}" TextWrapping="Wrap" FontSize="12" Margin="0,2,0,10"
+                                   Foreground="{DynamicResource Text.2}" Visibility="{Binding Windower.WindowerVersionText, Converter={StaticResource NullToVisibilityConverter}}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
