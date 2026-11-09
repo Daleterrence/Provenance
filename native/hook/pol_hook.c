@@ -74,16 +74,16 @@ static __declspec(naked) void pol_hook_ffxi_returned_thunk(void)
     }
 }
 
-/* p is the content launcher's call eax; push L"Return from FFXI"; mov esi, eax; call <trace> */
+/* p is the trace call the content launcher makes right after GameStart returns: e8 rel32, call <trace> */
 static int pol_hook_detour_game_end(BYTE *p)
 {
     DWORD old;
-    if (!VirtualProtect(p + 9, 5, PAGE_EXECUTE_READWRITE, &old)) {
+    if (!VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &old)) {
         base_log("pol_hook: content launcher protect failed - game end not hooked\r\n");
         return 0;
     }
-    *(DWORD *)(p + 10) = (DWORD)((BYTE *)pol_hook_ffxi_returned_thunk - (p + 14));
-    VirtualProtect(p + 9, 5, old, &old);
+    *(DWORD *)(p + 1) = (DWORD)((BYTE *)pol_hook_ffxi_returned_thunk - (p + 5));
+    VirtualProtect(p, 5, old, &old);
     base_log("pol_hook: content launcher's return hooked\r\n");
     return 1;
 }

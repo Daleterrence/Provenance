@@ -1,56 +1,60 @@
-/* addresses.c - where each of polcore.h's addresses is in 1.18.15e, the bytes of some code that uses it, and the
-   resolver that finds them all again before anything's read or patched */
+/* addresses.c - where each of polcore.h's addresses is in the current pol.exe/polcore build, the bytes of some code
+   that uses it, and the resolver that finds them all again before anything's read or patched. */
 #define IN_EXE 0
 #define IN_POLCORE 1
 #define IS_DATA 0
 #define IS_CODE 1          /* in .text: patched, called or compared */
 #define SKIPPABLE 0        /* the hook can do without it, and skips what needs it */
 #define REQUIRED 1
-#define ADDR_MATCH (-1)    /* the address is in the match, as far in as 1.18.15e has it */
+#define ADDR_MATCH (-1)    /* the address is in the match, as far in as the current build has it */
 
 /* the list stamps' setter, which picks the server's or mine by its argument */
 #define SIG_STAMPS "8b 44 24 04 85 c0 b8 ?? ?? ?? ?? 75 05 b8 ?? ?? ?? ?? 8b 4c 24 08 85 c9 74 02 89 08"
-/* CreateDialogParamW(hinst, 0x67, NULL, splash proc, 0) */
-#define SIG_SPLASH "6a 00 68 ?? ?? ?? ?? 6a 00 6a 67 52 ff 15 ?? ?? ?? ??"
+/* CreateDialogParamW(hinst, 0x67, NULL, splash proc, 0). hInstance now comes off a global instead of a register, so
+   there's an extra "ff 35" load before the call than there was in 1.18.15e */
+#define SIG_SPLASH "6a 00 68 ?? ?? ?? ?? 6a 00 6a 67 ff 35 ?? ?? ?? ?? ff 15 ?? ?? ?? ??"
 
 static struct hook_addr g_addr[ADDRESS_COUNT] = {
     [AT_MENU_SESSION] = { .name = "menu session", .module = IN_EXE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x13710, .sig_at = 0x13710, .operand = ADDR_MATCH,
-        .sig = "6a ff 68 ?? ?? ?? ?? 64 a1 00 00 00 00 50 b8 88 10 00 00 e8 ?? ?? ?? ?? a1 ?? ?? ?? ?? 33 c4" },
-    /* the other content launcher is the same code bar its addresses, so this starts at the GUID the right one asks
-       FFXiEntry for and checks the bytes that address points at. The call at the end has to be the do-nothing trace
-       function the hook takes over */
+        .usual = 0x27033, .sig_at = 0x27033, .operand = ADDR_MATCH,
+        .sig = "6a ff 68 ?? ?? ?? ?? 64 a1 00 00 00 00 50 81 ec 88 08 00 00 a1 ?? ?? ?? ?? 33 c5 89 45 f0 56 57 50 "
+            "8d 45 f4 64 a3 00 00 00 00 8b f1 80 7e 21 01" },
+    /* the other content launchers are the same code bar their addresses, so this starts at the GUID the right one
+       asks FFXiEntry for and checks the bytes that address points at. The call at the end has to be the do-nothing
+       trace function the hook takes over - usual now points straight at that call (pol_hook.c patches it directly),
+       not at the vtable call 9 bytes before it like it used to */
     [AT_GAME_RETURN] = { .name = "game return", .module = IN_EXE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x1320a, .sig_at = 0x13188, .operand = ADDR_MATCH,
-        .sig = "51 68 ?? ?? ?? ?? 6a 17 6a 00 50 c7 44 24 ?? 00 00 00 00 ff 15 ?? ?? ?? ?? 85 c0 7d 06 50 e8 ?? ?? ?? ?? "
-            "68 ?? ?? ?? ?? e8 ?? ?? ?? ?? a1 ?? ?? ?? ?? c1 e0 04 05 ?? ?? ?? ?? 8b 10 8b 48 04 89 54 24 ?? 8b 50 08 "
-            "8b 40 0c 89 4c 24 ?? 8b 4c 24 ?? 89 44 24 ?? 8b 06 83 c4 04 89 4c 24 ?? 8b 4c 24 ?? 8d 74 24 ?? 56 c7 44 24 "
-            "?? 1c 00 00 00 c7 44 24 ?? 00 02 00 00 89 54 24 ?? 8b 11 50 8b 42 0c 51 ff d0 68 ?? ?? ?? ?? 8b f0 e8 ?? ?? ?? ??",
+        .usual = 0x20c58, .sig_at = 0x20bf4, .operand = ADDR_MATCH,
+        .sig = "51 68 ?? ?? ?? ?? 6a 17 6a 00 50 ff 15 ?? ?? ?? ?? 85 c0 0f 88 ?? ?? ?? ?? "
+            "68 ?? ?? ?? ?? e8 ?? ?? ?? ?? a1 ?? ?? ?? ?? 8d 55 d4 c1 e0 04 83 c4 04 05 ?? ?? ?? ?? "
+            "c7 45 d4 1c 00 00 00 c7 45 d8 00 02 00 00 52 0f 10 00 8b 45 10 ff 37 89 45 ec 8b 45 d0 "
+            "0f 11 45 dc 50 8b 08 ff 51 0c 68 ?? ?? ?? ?? 8b f8 e8 ?? ?? ?? ??",
         .shows_op = 2, .shows = "0c 79 9d 98 36 62 d4 11 80 e9 00 10 5a 81 e8 90",
-        .calls_op = 140, .calls = "51 a1 ?? ?? ?? ?? 33 c4 89 04 24 8b 0c 24 33 cc e8 ?? ?? ?? ?? 59 c3" },
+        .calls_op = 101, .calls = "c2 00 00" },
     [AT_CREATE_MUTEX_SLOT] = { .name = "CreateMutexW slot", .module = IN_EXE, .code = IS_DATA, .required = SKIPPABLE,
-        .usual = 0x5c7c4, .sig_at = 0x75a6, .operand = 8,
-        .sig = "6a 01 6a 00 8b f1 ff 15 ?? ?? ?? ?? 85 c0" },
+        .usual = 0xee734, .sig_at = 0x25c07, .operand = 8,
+        .sig = "8b f1 6a 01 6a 00 ff 15 ?? ?? ?? ??" },
     [AT_OPEN_MUTEX_SLOT] = { .name = "OpenMutexW slot", .module = IN_EXE, .code = IS_DATA, .required = SKIPPABLE,
         .usual = 0x5c834, .sig_at = 0x146b2, .operand = 9,
         .sig = "6a 01 68 01 00 1f 00 ff 15 ?? ?? ?? ?? 85 c0" },
     [AT_CREATE_DIALOG_SLOT] = { .name = "CreateDialogParamW slot", .module = IN_EXE, .code = IS_DATA, .required = SKIPPABLE,
-        .usual = 0x5c864, .sig_at = 0x69e2, .operand = 14,
+        .usual = 0xee7e4, .sig_at = 0x2642a, .operand = 19,
         .sig = SIG_SPLASH },
     [AT_SPLASH_PROC] = { .name = "splash proc", .module = IN_EXE, .code = IS_CODE, .required = SKIPPABLE,
-        .usual = 0x6800, .sig_at = 0x69e2, .operand = 3,
+        .usual = 0x26b10, .sig_at = 0x2642a, .operand = 3,
         .sig = SIG_SPLASH },
     [AT_SPLASH_CLOSE] = { .name = "splash close", .module = IN_EXE, .code = IS_CODE, .required = REQUIRED,
         .usual = 0x6a10, .sig_at = 0x6a10, .operand = ADDR_MATCH,
-        .sig = "83 ec 08 83 3d ?? ?? ?? ?? 00 74 64 6a 05 e8 ?? ?? ?? ?? 2b 05 ?? ?? ?? ?? 1b 15 ?? ?? ?? ??" },
+        .sig = "83 ec 08 83 3d ?? ?? ?? ?? 00 74 ?? 6a 05 e8 ?? ?? ?? ?? 2b 05 ?? ?? ?? ?? 1b 15 ?? ?? ?? ??" },
     [AT_REGION_INDEX] = { .name = "region index", .module = IN_EXE, .code = IS_DATA, .required = REQUIRED,
         .usual = 0x5cd90, .sig_at = 0x697c, .operand = 2,
-        .sig = "8b 0d ?? ?? ?? ?? 8b c1 83 e8 00 74 3b 83 e8 01 74 2c" },
+        .sig = "8b 0d ?? ?? ?? ?? 8b c1 83 e8 00 74 ?? 83 e8 01 74 ??" },
 
-    /* the COM getter that hands the service table over */
+    /* the COM getter that hands the service table over. Picked up an EBP frame and its argument moved from
+       [esp+8] to [ebp+0xc], same as the other sites that grew a frame this build */
     [AT_SERVICES] = { .name = "service table", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x6fbe8, .sig_at = 0x690e, .operand = 6,
-        .sig = "8b 44 24 08 c7 00 ?? ?? ?? ?? 33 c0 c2 08 00" },
+        .usual = 0xc4180, .sig_at = 0x51f85, .operand = 8,
+        .sig = "55 8b ec 8b 45 0c c7 00 ?? ?? ?? ?? 33 c0 5d c2 08 00" },
     [AT_SHA1_INIT] = { .name = "SHA-1 init", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
         .usual = 0x2d6a0, .sig_at = 0x2d6a0, .operand = ADDR_MATCH,
         .sig = "8b 44 24 04 33 c9 c7 00 01 23 45 67 c7 40 04 89 ab cd ef" },

@@ -10,13 +10,13 @@ public static class ViewerBuild
 {
     public enum State { Supported, Outdated, Unknown, Missing }
 
-    public const string CurrentVersion = "1.18.15e";
-    internal const string PolExeSha256 = "f496bfc7c26b33e42b7ccf263e29854725a8009deb784f0e6c508a6004f13f00";
+    public const string CurrentVersion = "1.18.15f";
+    internal const string PolExeSha256 = "38058db285a99f188a4b7cae6f0df061cd556ea7b7527089e992574e981fdfd9";
     // the same file with Large Address Aware on, byte for byte what Windower's Tools page writes
-    internal const string PolExeLaaSha256 = "f9ce70440b8639652355ff28d74871eb290119f3448938817bd0f684657cab2e";
-    // JP's own compile of the same code (its .rdata sits 8 bytes lower), and its Large Address Aware twin
-    internal const string JpPolExeSha256 = "0b5beb0198f0caafc252a0af64628fb3d1ae9b084ef772371b0e221b47ee5c3c";
-    internal const string JpPolExeLaaSha256 = "bd93da61469706764f7e6469be4d8d7e1888a8bc1d907a80b2f572fb4f24c492";
+    internal const string PolExeLaaSha256 = "6ee1b42f68d63e6f87b3108dfa028cbba77df7278cea7f033fc073b21590a886";
+    // JP's own compile of the same code, and its Large Address Aware twin
+    internal const string JpPolExeSha256 = "cc4d5458828bd658d5c376e9d6be2e5957aee182a89fb6177679be652fd37c0a";
+    internal const string JpPolExeLaaSha256 = "02f3b99cbb15ebe1b59764e11d927236824e27956ddb7a269cb290ee61c8f56b";
     public const string UnsupportedText = "PlayOnline has been updated, and this version of Provenance doesn't support it yet. Check for a Provenance update.";
     internal const string InUseText = "The PlayOnline Viewer's files are in use or being changed. Close PlayOnline and try again.";
 
@@ -30,9 +30,9 @@ public static class ViewerBuild
 
     private static readonly (PolRegion Region, string Sha256)[] Polcores =
     [
-        (PolRegion.UnitedStates, "73b1864bf522d3aa6ec28e9f4bb226fcee956f7f4848a238c9c2d756dc703b06"),
-        (PolRegion.Europe, "84c5329299bdf009192f12870d9ccd5809c3a3cefdad52efadf1c062bd7188bb"),
-        (PolRegion.Japan, "93d34b5a7e1f74473f92b74125aca4f58cab8e56e0df2183ea3a0bbce548801d"),
+        (PolRegion.UnitedStates, "3c07c1a34ea600413257e7ade72b4f451d539d79667bab5fa3793c369c468015"),
+        (PolRegion.Europe, "b71e48d56c4218adbfe2132a5fa3573b0b047bf7f3e6c909b1b38d632bea094e"),
+        (PolRegion.Japan, "bdba55ed820ebdf64533c7603ee09057032dd564c799ad7411be2e43d34db15e"),
     ];
 
     // Signed builds are checked as a pair, so one entry's pol.exe never goes with another's polcore
@@ -70,7 +70,7 @@ public static class ViewerBuild
         var core = Path.Combine(viewerDir, PolcorePath(region));
         if (!File.Exists(pol) || !File.Exists(core)) return State.Missing;
         if (Fits(known, region, FileHash.Sha256(pol), () => FileHash.Sha256(core))) return State.Supported;
-        // viewer versions compare as text, "1.18.00n" < "1.18.15e"
+        // viewer versions compare as text, "1.18.00n" < "1.18.15f"
         var v = Version(viewerDir);
         return v != null && string.CompareOrdinal(v, CurrentVersion) < 0 ? State.Outdated : State.Unknown;
     }
