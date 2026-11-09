@@ -25,7 +25,9 @@ public partial class GameSettingsViewModel : ObservableObject
     private readonly Func<bool> _gameRunning;
     private IGameSettingsStore _store;
     private FfxiSettings _original = FfxiSettings.Defaults();
-    private bool _applying, _edited, _forTest, _loaded;
+    // what the page read back to when it showed _original, which a clamped value or a nearest render size can move off it
+    private FfxiSettings _shown = FfxiSettings.Defaults();
+    private bool _applying, _forTest, _loaded;
     // 0037/0038 as they'll be saved. A loaded value stays exact until the slider or the resolution moves
     private int _uiWidth, _uiHeight;
 
@@ -198,7 +200,7 @@ public partial class GameSettingsViewModel : ObservableObject
         }
         _loaded = loaded is not null;
         _original = loaded ?? FfxiSettings.Defaults();
-        Apply(_original);
+        ShowOriginal();
         OnPropertyChanged(nameof(Available));
         OnPropertyChanged(nameof(Editable));
         Status.Show(problem ?? (HasProfile ? $"These are the current game settings for this {ProfileKind}." : "These are your current game settings."));
@@ -209,23 +211,18 @@ public partial class GameSettingsViewModel : ObservableObject
     {
         _forTest = true;
         _original = s.Clone();
-        Apply(_original);
+        ShowOriginal();
         OnPropertyChanged(nameof(Available));
         OnPropertyChanged(nameof(Editable));
         Status.Show("These are your current game settings.");
     }
 
-    public bool HasUnsavedChanges => Editable && _edited;
+    public bool HasUnsavedChanges => Editable && GameFields.Changed(Collect(), _shown).Count > 0;
 
-    // any property change that isn't loading values (or a read-out) counts as an edit
-    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    private void ShowOriginal()
     {
-        base.OnPropertyChanged(e);
-        if (!_applying && e.PropertyName is not (nameof(BrightnessText) or nameof(Available)
-                or nameof(HasUnsavedChanges) or nameof(UiScaleText) or nameof(UiSizeText) or nameof(UiScaleMax) or nameof(Store)
-                or nameof(HasProfile) or nameof(ProfileKind) or nameof(ProfileShown) or nameof(Platform) or nameof(ProfileHeading) or nameof(IntroText)
-                or nameof(KeepAspectShown) or nameof(Editable) or nameof(ReadOnlyNote)))
-            _edited = true;
+        Apply(_original);
+        _shown = Collect();
     }
 
     private void Apply(FfxiSettings s)
@@ -266,7 +263,6 @@ public partial class GameSettingsViewModel : ObservableObject
             PadHat = s.PadMode[3] == 1; PadBackground = s.PadMode[4] == 1; PadXInput = s.PadMode[5] == 1;
         }
         finally { _applying = false; }
-        _edited = false;
     }
 
     private FfxiSettings Collect()
@@ -301,7 +297,7 @@ public partial class GameSettingsViewModel : ObservableObject
         {
             var saved = _store.Save(Collect(), _original);
             _original = _store.Load();
-            Apply(_original);
+            ShowOriginal();
             bool running = _gameRunning();
             Status.Show(!saved.Wrote ? "You haven't changed anything, so there's nothing to save." :
                         "Your changes are saved." + (running ? " If the game is running, it'll use them the next time it starts." : ""));
@@ -320,7 +316,7 @@ public partial class GameSettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Revert() { Apply(_original); Status.Show("Your unsaved changes have been undone."); }
+    private void Revert() { ShowOriginal(); Status.Show("Your unsaved changes have been undone."); }
 
     [RelayCommand]
     private void Defaults()
@@ -329,7 +325,6 @@ public partial class GameSettingsViewModel : ObservableObject
         var d = FfxiSettings.Defaults();
         d.PadMode = PadModeShown();
         Apply(d);
-        _edited = true;
         Status.Show("The default settings are shown. Press Save to keep them.");
     }
 

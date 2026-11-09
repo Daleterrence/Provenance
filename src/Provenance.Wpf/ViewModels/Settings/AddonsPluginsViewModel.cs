@@ -320,16 +320,11 @@ public partial class AddonsPluginsViewModel : ObservableObject
         SaveSettings();
     }
 
-    // Save swallows its errors, only the first of a run comes out as SaveFailed. The change still holds until Provenance
+    // Save swallows its errors, so a failed one only says so by returning false. The change still holds until Provenance
     // closes, so the page keeps it and says so
     private void SaveSettings()
     {
-        bool failed = false;
-        void Failed(string _) => failed = true;
-        _settings.SaveFailed += Failed;
-        try { _settings.Save(_settings.Current); }
-        finally { _settings.SaveFailed -= Failed; }
-        if (failed) throw Shown.Mark(new IOException(SettingsNotSaved));
+        if (!_settings.Save(_settings.Current)) throw Shown.Mark(new IOException(SettingsNotSaved));
     }
 
     private static WindowerSettingsFile Readable(string dir)

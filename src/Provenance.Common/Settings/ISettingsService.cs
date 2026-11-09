@@ -14,7 +14,8 @@ public interface ISettingsService
     // after an install or a located one, which can be another region than the one found before
     void RedetectRegion() { }
 
-    void Save(LauncherSettings settings);
+    // false when settings.json couldn't be written, so a caller can tell its own save failed
+    bool Save(LauncherSettings settings);
 
     // just this change goes into settings.json as it is now, and only when it changes something there. With no file,
     // as here, Current stands in for it

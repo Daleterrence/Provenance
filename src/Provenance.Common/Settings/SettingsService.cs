@@ -79,11 +79,11 @@ public sealed class SettingsService : ISettingsService
         }
     }
 
-    public void Save(LauncherSettings settings)
+    public bool Save(LauncherSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         Current = settings;
-        Write(settings);
+        return Write(settings);
     }
 
     public void SaveChange(Action<LauncherSettings> change)
@@ -107,7 +107,7 @@ public sealed class SettingsService : ISettingsService
 
     // what this copy changed since it last read or saved goes on top of the file as it is now, so another copy's
     // changes meanwhile stay. An unreadable file is replaced whole
-    private void Write(LauncherSettings settings)
+    private bool Write(LauncherSettings settings)
     {
         using var gate = HoldLock();
         var saved = ReadSaved();
@@ -117,7 +117,12 @@ public sealed class SettingsService : ISettingsService
         var mine = Node(settings);
         var file = saved is null ? null : Node(saved);
         var merged = file is null ? mine : Merge(mine, _known, file);
-        if ((file is not null && JsonNode.DeepEquals(merged, file)) || WriteFile(merged)) _known = mine;
+        if ((file is not null && JsonNode.DeepEquals(merged, file)) || WriteFile(merged))
+        {
+            _known = mine;
+            return true;
+        }
+        return false;
     }
 
     // temp file then a move, a truncated settings.json would load as defaults and lose every account
