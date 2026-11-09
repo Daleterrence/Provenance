@@ -155,7 +155,7 @@ public partial class App : Application
 
         bool suppressed = shiftAtStart || ShiftDown()
                           || e.Args.Any(a => a.Equals("--noautologin", StringComparison.OrdinalIgnoreCase));
-        _ = Task.Run(() => Provenance.Common.Feeds.FeedClient.PruneImages(TimeSpan.FromDays(60)));
+        _ = Task.Run(() => Provenance.Common.Feeds.BannerImages.Prune(TimeSpan.FromDays(60)));
         _ = mainVm.LoadFeedsAsync();
         _ = mainVm.LoadWorldsAsync();
         mainVm.Startup(suppressed);

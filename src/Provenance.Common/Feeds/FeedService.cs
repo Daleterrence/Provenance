@@ -51,7 +51,7 @@ public sealed class FeedService(ISettingsService settings)
     public async Task<IReadOnlyList<FeedItem>> WithLocalImagesAsync(IReadOnlyList<FeedItem> items) =>
         await Task.WhenAll(items.Select(async it =>
             it.ImageUrl is not { Length: > 0 } img ? it
-                : it with { ImageUrl = await _client.LocalImageAsync(img).ConfigureAwait(false) })).ConfigureAwait(false);
+                : it with { ImageUrl = await BannerImages.LocalAsync(img).ConfigureAwait(false) })).ConfigureAwait(false);
 
-    public string ServicePageUrl => FeedClient.ServicePage(Region);
+    public string ServicePageUrl => PlayOnlineSite.ServicePage(Region);
 }

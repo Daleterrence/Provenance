@@ -334,7 +334,7 @@ public partial class MainViewModel : ObservableObject
     public void BannerFailed()
     {
         if (CurrentNews is not { ImageUrl: not null } item) return;
-        FeedClient.ForgetImage(item.ImageUrl);
+        BannerImages.Forget(item.ImageUrl);
         var i = NewsItems.IndexOf(item);
         var plain = item with { ImageUrl = null };
         if (i >= 0) NewsItems[i] = plain;

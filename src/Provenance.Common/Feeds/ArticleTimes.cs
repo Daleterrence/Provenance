@@ -9,7 +9,7 @@ public static class ArticleTimes
     private static readonly Dictionary<string, int> ZoneMinutes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["PDT"] = -7 * 60, ["PST"] = -8 * 60, ["MDT"] = -6 * 60, ["MST"] = -7 * 60,
-        ["CDT"] = -5 * 60, ["EDT"] = -4 * 60, ["EST"] = -5 * 60,
+        ["CDT"] = -5 * 60, ["CST"] = -6 * 60, ["EDT"] = -4 * 60, ["EST"] = -5 * 60,
         ["JST"] = 9 * 60, ["GMT"] = 0, ["UTC"] = 0, ["BST"] = 60, ["CET"] = 60, ["CEST"] = 120,
     };
 
