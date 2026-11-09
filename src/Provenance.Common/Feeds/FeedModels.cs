@@ -32,6 +32,12 @@ public sealed record FeedItem(string Title, string Url, DateTimeOffset? Date, st
 
 public sealed record FeedResult(PolRegion Region, FeedKind Kind, IReadOnlyList<FeedItem> Items);
 
+// At is when the worker last answered for these (the saved copy's time when Stale), null when there's nothing
+public sealed record FeedFetch<T>(IReadOnlyList<T> Items, DateTime? At, bool Stale)
+{
+    internal static readonly FeedFetch<T> None = new([], null, false);
+}
+
 public enum InfoCategory { None, Important, Maintenance, General, Events, Updates }
 
 public enum InfoBadge { None, Outage, Maintenance, Recovery, FollowUp }

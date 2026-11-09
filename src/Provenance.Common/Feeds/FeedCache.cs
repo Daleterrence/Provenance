@@ -6,10 +6,12 @@ namespace Provenance.Common.Feeds;
 // the last answer the worker gave for each address, so a worker that can't be reached still has something to show
 public static class FeedCache
 {
-    public sealed record Entry(string Body, string? ETag, string? LastModified);
+    public sealed record Entry(string Body, string? ETag, string? LastModified, DateTime SavedAt);
+
+    internal static string? RootOverride { get; set; }
 
     internal static string? Folder(string name) =>
-        AppPaths.UserData is { } root ? Path.Combine(root, "cache", name) : null;
+        (RootOverride ?? AppPaths.UserData) is { } root ? Path.Combine(root, "cache", name) : null;
 
     private static string? CachePath(string url) =>
         Folder("feeds") is { } dir ? Path.Combine(dir, FileHash.Sha256(Encoding.UTF8.GetBytes(url)) + ".cache") : null;
@@ -24,7 +26,8 @@ public static class FeedCache
             var split = text.IndexOf("\n\n", StringComparison.Ordinal);
             if (split < 0) return null;
             var head = text[..split].Split('\n');
-            return new Entry(text[(split + 2)..], Header(head, "ETag:"), Header(head, "Last-Modified:"));
+            return new Entry(text[(split + 2)..], Header(head, "ETag:"), Header(head, "Last-Modified:"),
+                             File.GetLastWriteTimeUtc(path));
         }
         catch { return null; }
 
@@ -33,6 +36,16 @@ public static class FeedCache
             var line = lines.LastOrDefault(l => l.StartsWith(name, StringComparison.Ordinal));
             return line?[(line.IndexOf(':') + 1)..].Trim() is { Length: > 0 } v ? v : null;
         }
+    }
+
+    // a 304 means the saved copy is still current, so it counts as checked now
+    public static void Touch(string url)
+    {
+        try
+        {
+            if (CachePath(url) is { } path && File.Exists(path)) File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+        }
+        catch { }
     }
 
     public static void Write(string url, string body, string? etag, string? lastModified)

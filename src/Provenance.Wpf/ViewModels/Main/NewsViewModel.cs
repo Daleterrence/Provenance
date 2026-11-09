@@ -86,17 +86,19 @@ public partial class NewsViewModel : ObservableObject
     {
         if (_worldsLoading) return;
         _worldsLoading = true;
-        IReadOnlyList<WorldStatus> list;
-        try { list = await _feeds.LoadWorldsAsync(); }
+        FeedFetch<WorldStatus> fetch;
+        try { fetch = await _feeds.LoadWorldsAsync(); }
         finally { _worldsLoading = false; }
         _worldsTimer.Start();
+        var list = fetch.Items;
         if (list.Count == 0)
         {
             if (Worlds.Count == 0) { WorldsSummary = "World status isn't available"; WorldsState = ""; }
             return;
         }
-        _worldsAt = DateTime.UtcNow;   // only a good read counts, a failed one's tried again on the next tick
-        WorldsCheckedText = "Checked at " + DateTime.Now.ToString("t", CultureInfo.CurrentCulture);
+        // only a good read counts, a saved copy's tried again on the next tick
+        if (!fetch.Stale) _worldsAt = DateTime.UtcNow;
+        WorldsCheckedText = "Checked at " + (fetch.At ?? DateTime.UtcNow).ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
         Worlds.Clear();
         foreach (var w in list) Worlds.Add(w);
         var notUp = list.Where(w => !w.IsUp).ToList();

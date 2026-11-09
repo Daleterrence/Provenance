@@ -22,23 +22,23 @@ public sealed class FeedClient
     public async Task<FeedResult> GetAsync(PolRegion region, FeedKind kind, string? workerBaseUrl, CancellationToken ct = default)
     {
         var path = $"feeds/{Code(region)}/{(kind == FeedKind.News ? "news" : "status")}.json";
-        return new FeedResult(region, kind, await FromWorkerAsync(workerBaseUrl, path, ParseWorker, ct).ConfigureAwait(false));
+        return new FeedResult(region, kind, (await FromWorkerAsync(workerBaseUrl, path, ParseWorker, ct).ConfigureAwait(false)).Items);
     }
 
     // the worker 502s when it finds no worlds
-    public Task<IReadOnlyList<WorldStatus>> GetWorldsAsync(PolRegion region, string? workerBaseUrl, CancellationToken ct = default) =>
+    public Task<FeedFetch<WorldStatus>> GetWorldsAsync(PolRegion region, string? workerBaseUrl, CancellationToken ct = default) =>
         FromWorkerAsync(workerBaseUrl, $"worlds/{Code(region)}.json", ParseWorkerWorlds, ct);
 
-    private async Task<IReadOnlyList<T>> FromWorkerAsync<T>(string? workerBaseUrl, string path,
-                                                            Func<string, IReadOnlyList<T>> parse, CancellationToken ct)
+    private async Task<FeedFetch<T>> FromWorkerAsync<T>(string? workerBaseUrl, string path,
+                                                        Func<string, IReadOnlyList<T>> parse, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(workerBaseUrl)) return [];
+        if (string.IsNullOrWhiteSpace(workerBaseUrl)) return FeedFetch<T>.None;
         try
         {
             var url = $"{workerBaseUrl.TrimEnd('/')}/{path}";
             return await FetchAsync(url, parse, ct).ConfigureAwait(false);
         }
-        catch when (!ct.IsCancellationRequested) { return []; }
+        catch when (!ct.IsCancellationRequested) { return FeedFetch<T>.None; }
     }
 
     internal static IReadOnlyList<FeedItem> ParseWorker(string json)
@@ -84,7 +84,7 @@ public sealed class FeedClient
         return list;
     }
 
-    private async Task<T> FetchAsync<T>(string url, Func<string, T> parse, CancellationToken ct)
+    private async Task<FeedFetch<T>> FetchAsync<T>(string url, Func<string, IReadOnlyList<T>> parse, CancellationToken ct)
     {
         var cached = await FeedCache.ReadAsync(url, ct).ConfigureAwait(false);
         try
@@ -93,16 +93,21 @@ public sealed class FeedClient
             if (cached is { ETag: { Length: > 0 } etag }) req.Headers.TryAddWithoutValidation("If-None-Match", etag);
             if (cached is { LastModified: { Length: > 0 } lm }) req.Headers.TryAddWithoutValidation("If-Modified-Since", lm);
             using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
-            if (resp.StatusCode == HttpStatusCode.NotModified && cached != null) return parse(cached.Body);
+            if (resp.StatusCode == HttpStatusCode.NotModified && cached != null)
+            {
+                var items = parse(cached.Body);
+                FeedCache.Touch(url);
+                return new FeedFetch<T>(items, DateTime.UtcNow, false);
+            }
             resp.EnsureSuccessStatusCode();
             var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             var result = parse(body);
             FeedCache.Write(url, body, resp.Headers.ETag?.ToString(), resp.Content.Headers.LastModified?.ToString("R"));
-            return result;
+            return new FeedFetch<T>(result, DateTime.UtcNow, false);
         }
         catch when (cached != null && !ct.IsCancellationRequested)
         {
-            return parse(cached.Body);
+            return new FeedFetch<T>(parse(cached.Body), cached.SavedAt, true);
         }
     }
 }

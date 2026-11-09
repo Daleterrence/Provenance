@@ -44,7 +44,7 @@ public sealed class FeedService(ISettingsService settings)
         return (news.Result, status.Result);
     }
 
-    public Task<IReadOnlyList<WorldStatus>> LoadWorldsAsync(CancellationToken ct = default) =>
+    public Task<FeedFetch<WorldStatus>> LoadWorldsAsync(CancellationToken ct = default) =>
         _client.GetWorldsAsync(Region, Worker, ct);
 
     // the window never loads a URL itself, so it never fetches from a host other than POL's
