@@ -15,10 +15,11 @@
 #define SIG_SPLASH "6a 00 68 ?? ?? ?? ?? 6a 00 6a 67 ff 35 ?? ?? ?? ?? ff 15 ?? ?? ?? ??"
 
 static struct hook_addr g_addr[ADDRESS_COUNT] = {
+    /* Starts on the push ebp, a detour past the frame setup leaves the stub's stack a dword off */
     [AT_MENU_SESSION] = { .name = "menu session", .module = IN_EXE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x27033, .sig_at = 0x27033, .operand = ADDR_MATCH,
-        .sig = "6a ff 68 ?? ?? ?? ?? 64 a1 00 00 00 00 50 81 ec 88 08 00 00 a1 ?? ?? ?? ?? 33 c5 89 45 f0 56 57 50 "
-            "8d 45 f4 64 a3 00 00 00 00 8b f1 80 7e 21 01" },
+        .usual = 0x27030, .sig_at = 0x27030, .operand = ADDR_MATCH,
+        .sig = "55 8b ec 6a ff 68 ?? ?? ?? ?? 64 a1 00 00 00 00 50 81 ec 88 08 00 00 a1 ?? ?? ?? ?? 33 c5 89 45 f0 "
+            "56 57 50 8d 45 f4 64 a3 00 00 00 00 8b f1 80 7e 21 01" },
     /* the other content launchers are the same code bar their addresses, so this starts at the GUID the right one
        asks FFXiEntry for and checks the bytes that address points at. The call at the end has to be the do-nothing
        trace function the hook takes over - usual now points straight at that call (pol_hook.c patches it directly),
@@ -43,9 +44,10 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
     [AT_SPLASH_PROC] = { .name = "splash proc", .module = IN_EXE, .code = IS_CODE, .required = SKIPPABLE,
         .usual = 0x26b10, .sig_at = 0x2642a, .operand = 3,
         .sig = SIG_SPLASH },
+    /* Called as a plain function, so it starts on the push ebp or it runs on the caller's frame */
     [AT_SPLASH_CLOSE] = { .name = "splash close", .module = IN_EXE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x6a10, .sig_at = 0x6a10, .operand = ADDR_MATCH,
-        .sig = "83 ec 08 83 3d ?? ?? ?? ?? 00 74 ?? 6a 05 e8 ?? ?? ?? ?? 2b 05 ?? ?? ?? ?? 1b 15 ?? ?? ?? ??" },
+        .usual = 0x26a40, .sig_at = 0x26a40, .operand = ADDR_MATCH,
+        .sig = "55 8b ec 83 ec 08 83 3d ?? ?? ?? ?? 00 74 ?? 6a 05 e8 ?? ?? ?? ?? 2b 05 ?? ?? ?? ?? 1b 15 ?? ?? ?? ??" },
     [AT_REGION_INDEX] = { .name = "region index", .module = IN_EXE, .code = IS_DATA, .required = REQUIRED,
         .usual = 0x5cd90, .sig_at = 0x697c, .operand = 2,
         .sig = "8b 0d ?? ?? ?? ?? 8b c1 83 e8 00 74 ?? 83 e8 01 74 ??" },

@@ -63,11 +63,11 @@ static void __cdecl pol_hook_ffxi_returned(HRESULT hr)
         pol_hook_game_over(0);
     }
 }
-/* GameStart's HRESULT is in esi by the trace call, and the caller pops the string itself */
+/* GameStart's result is in edi by the time the trace call runs, and the caller pops the string itself */
 static __declspec(naked) void pol_hook_ffxi_returned_thunk(void)
 {
     __asm {
-        push esi
+        push edi
         call pol_hook_ffxi_returned
         add esp, 4
         ret
