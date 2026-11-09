@@ -26,7 +26,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public const string LeaveAsMaster =
         "Another member will be automatically designated room master if you leave the chat room now. Leave the room?";
 
-    private readonly SocialViewModel _social;
+    private readonly ISocialSession _social;
     private readonly IDialogs _dialogs;
     private readonly Func<string, string, bool> _savePassword;
     private readonly Action _dropPassword;
@@ -47,7 +47,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     // savePassword hands a room password to the hook for one enter (token, password), dropPassword takes back one it
     // never read
-    public ChatRoomsViewModel(SocialViewModel social, IDialogs dialogs, Func<string, string, bool> savePassword, Action dropPassword,
+    internal ChatRoomsViewModel(ISocialSession social, IDialogs dialogs, Func<string, string, bool> savePassword, Action dropPassword,
                               Func<int, ImageSource?>? emote = null)
     {
         _social = social;
@@ -55,7 +55,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _savePassword = savePassword;
         _dropPassword = dropPassword;
         _emote = emote;
-        for (int i = 0; i < ChatLook.Colours; i++) ColourChoices.Add(new ChatColourItem(i, ChatColours.LineBrush(ChatLook.PickerArgb(i))));
+        var grounds = ChatColours.Grounds();
+        for (int i = 0; i < ChatLook.Colours; i++) ColourChoices.Add(new ChatColourItem(i, ChatColours.LineBrush(ChatLook.PickerArgb(i), grounds)));
         AppTheme.Changed += OnThemeChanged;
         for (int i = 1; i <= ChatLook.Emotes; i++)
             if (emote?.Invoke(i) is { } img) EmoteChoices.Add(new ChatEmoteItem(i, img));
@@ -70,7 +71,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     internal void SendTick(DateTime now)
     {
         SendCommand.NotifyCanExecuteChanged();
-        if (_gate.Expire(now) is { } done) Settled(done.State, done.Text);
+        if (_gate.Expire(now) is { } done) FinishSend(done.State, done.Text);
         MasterTick(now);
         if (_gate.CanSend && _masterToken is null) _tick.Stop();
     }
@@ -260,7 +261,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         $"Create chat room with these settings?\n\nZone: {zone}\nOccupancy: {occupancy}\nPassword: {(password ? "ON" : "Off")}\n" +
         $"Category 1: {members}\nCategory 2: {purpose}\nCategory 3: {language}";
 
-    public bool CanMaster => Current == Page.Room && IsMaster && !MasterBusy && !_social.HandleSwitching && !_social.GameRunning;
+    public bool CanMaster => Current == Page.Room && IsMaster && !MasterBusy && _social.WriteBlockedNote is null;
 
     public bool CanKick(ChatMemberItem? m) => m is { Me: false } && CanMaster;
 
@@ -467,9 +468,9 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     // the game starting leaves the room straight away, the hook might never see the Play. Try again once it's closed
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(SocialViewModel.HandleSwitching) or nameof(SocialViewModel.GameRunning))
+        if (e.PropertyName is nameof(ISocialSession.HandleSwitching) or nameof(ISocialSession.GameRunning))
             OnPropertyChanged(nameof(CanMaster));
-        if (e.PropertyName == nameof(SocialViewModel.HandleSwitching))
+        if (e.PropertyName == nameof(ISocialSession.HandleSwitching))
         {
             EnterCommand.NotifyCanExecuteChanged();
             CreateRoomCommand.NotifyCanExecuteChanged();
@@ -477,7 +478,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             SendNote = _social.HandleSwitching ? SocialViewModel.SwitchingNote : SendNote == SocialViewModel.SwitchingNote ? "" : SendNote;
             return;
         }
-        if (e.PropertyName != nameof(SocialViewModel.GameRunning)) return;
+        if (e.PropertyName != nameof(ISocialSession.GameRunning)) return;
         if (_social.GameRunning)
         {
             Leave();
@@ -635,6 +636,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         if (Current != Page.Room || chat.LineSeq <= _seenSeq || Pid is not { } pid) return;
         if (ChatRoomFiles.TryReadLines(pid) is not { } file || !string.Equals(file.Room, _roomIrc, StringComparison.OrdinalIgnoreCase)) return;
+        var grounds = ChatColours.Grounds();
         foreach (var l in file.Lines.Where(x => x.Seq > _seenSeq).OrderBy(x => x.Seq))
         {
             var (text, style) = LineText(l);
@@ -643,7 +645,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 line = line with
                 {
                     Argb = ChatLook.Argb(l.Colour),
-                    Colour = ChatLook.Argb(l.Colour) is { } c ? ChatColours.LineBrush(c) : null,
+                    Colour = ChatLook.Argb(l.Colour) is { } c ? ChatColours.LineBrush(c, grounds) : null,
                     Emote = ChatLook.Emote(l.Emote) is > 0 and var e ? _emote?.Invoke(e) : null,
                 };
             Lines.Add(line);
@@ -673,10 +675,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void OnThemeChanged()
     {
+        var grounds = ChatColours.Grounds();
         for (int i = 0; i < ColourChoices.Count; i++)
-            ColourChoices[i] = ColourChoices[i] with { Swatch = ChatColours.LineBrush(ChatLook.PickerArgb(ColourChoices[i].Pick)) };
+            ColourChoices[i] = ColourChoices[i] with { Swatch = ChatColours.LineBrush(ChatLook.PickerArgb(ColourChoices[i].Pick), grounds) };
         for (int i = 0; i < Lines.Count; i++)
-            if (Lines[i].Argb is { } argb) Lines[i] = Lines[i] with { Colour = ChatColours.LineBrush(argb) };
+            if (Lines[i].Argb is { } argb) Lines[i] = Lines[i] with { Colour = ChatColours.LineBrush(argb, grounds) };
         OnPropertyChanged(nameof(PickedColour));
     }
 
@@ -685,10 +688,10 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void ApplySend(ChatRoomsSnapshot chat)
     {
-        if (_gate.Settle(chat.SendToken, chat.SendState, DateTime.UtcNow) is { } done) Settled(done.State, done.Text);
+        if (_gate.Settle(chat.SendToken, chat.SendState, DateTime.UtcNow) is { } done) FinishSend(done.State, done.Text);
     }
 
-    private void Settled(string done, string text)
+    private void FinishSend(string done, string text)
     {
         if (done != "sent")
             SendNote = HookFailures.ForChatLine(done) ?? HookFailures.ChatCommError;

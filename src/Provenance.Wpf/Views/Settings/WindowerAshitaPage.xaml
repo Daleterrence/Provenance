@@ -69,7 +69,7 @@
                 </Border>
 
                 <TextBlock Text="Profile settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
-                <Border Style="{StaticResource Card}" IsEnabled="{Binding Windower.WindowerCardEnabled}">
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Windower.CardEnabled}">
                     <StackPanel>
                         <HeaderedContentControl Header="Console key" Tag="The key that opens and closes the Windower console in game.">
                             <Button x:Name="ConsoleKeyButton" Content="{Binding Windower.ConsoleKeyText}" FontSize="12" Command="{Binding Windower.EditConsoleKeyCommand}"
@@ -98,7 +98,7 @@
                             </Button>
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="Allow the Windows key" Tag="Makes Windows handle keybinds before Windower. Required for normal Windows 11 Alt-Tab behaviour.">
-                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding Windower.WindowerAllowWinKey}"
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding Windower.AllowWinKey}"
                                           AutomationProperties.Name="Allow the Windows key" />
                         </HeaderedContentControl>
                     </StackPanel>
@@ -114,8 +114,8 @@
                             <Button Content="{Binding Windower.WindowerBranchName, Converter={StaticResource UpperCase}}" Style="{StaticResource PolButton}" FontSize="12"
                                     Command="{Binding Windower.FlipWindowerBranchCommand}" AutomationProperties.Name="Branch" />
                         </HeaderedContentControl>
-                        <TextBlock Style="{StaticResource IntroText}" Text="{Binding Windower.WindowerVersionText}" Margin="0,2,0,10"
-                                   Visibility="{Binding Windower.WindowerVersionText, Converter={StaticResource NullToVisibilityConverter}}" />
+                        <TextBlock Style="{StaticResource IntroText}" Text="{Binding Windower.VersionText}" Margin="0,2,0,10"
+                                   Visibility="{Binding Windower.VersionText, Converter={StaticResource NullToVisibilityConverter}}" />
                     </StackPanel>
                 </Border>
             </StackPanel>

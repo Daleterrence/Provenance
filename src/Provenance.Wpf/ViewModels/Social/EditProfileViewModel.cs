@@ -250,8 +250,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private bool Waiting()
     {
-        if (!_social.GameRunning && !_social.HandleSwitching) return false;
-        Fail(_social.GameRunning ? SocialViewModel.GameRunningNote : SocialViewModel.SwitchingNote);
+        if (_social.WriteBlockedNote is not { } note) return false;
+        Fail(note);
         return true;
     }
 

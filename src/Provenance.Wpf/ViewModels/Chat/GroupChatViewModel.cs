@@ -35,7 +35,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     internal static readonly TimeSpan JoinGiveUp = TimeSpan.FromSeconds(35);
     internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(35);
 
-    private readonly SocialViewModel _social;
+    private readonly ISocialSession _social;
     private readonly IDialogs _dialogs;
     private readonly Func<bool> _timesWanted, _flashWanted;
     private readonly ChatSendGate _gate = new(SendGiveUp);
@@ -53,7 +53,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     internal static readonly TimeSpan TailFor = TimeSpan.FromSeconds(10);
     private readonly Dictionary<string, int> _unread = new(StringComparer.OrdinalIgnoreCase);
 
-    public GroupChatViewModel(SocialViewModel social, IDialogs dialogs, Func<bool> showTimes, Func<bool> flash)
+    internal GroupChatViewModel(ISocialSession social, IDialogs dialogs, Func<bool> showTimes, Func<bool> flash)
     {
         _social = social;
         _dialogs = dialogs;
@@ -268,7 +268,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     }
 
     private bool CanSend => Current == Phase.In && Compose.Trim().Length > 0 && _gate.CanSend &&
-                            !_social.GameRunning && !_social.HandleSwitching;
+                            _social.WriteBlockedNote is null;
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
@@ -305,7 +305,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         SendCommand.NotifyCanExecuteChanged();
         _log?.SaveIfDue(now);
-        if (_gate.Expire(now) is { } done) Settled(done.State, done.Text);
+        if (_gate.Expire(now) is { } done) FinishSend(done.State, done.Text);
         if (Current != Phase.Joining || now - _joinAt < JoinGiveUp) return;
         CallOff();
         End(_social.ViewerText(0x3eb8, HookFailures.GroupChat.Busy));
@@ -340,9 +340,9 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(SocialViewModel.HandleSwitching)) SendCommand.NotifyCanExecuteChanged();
+        if (e.PropertyName is nameof(ISocialSession.HandleSwitching)) SendCommand.NotifyCanExecuteChanged();
         // the hook leaves for the game, the window goes with it
-        if (e.PropertyName == nameof(SocialViewModel.GameRunning) && _social.GameRunning && Open) End(null);
+        if (e.PropertyName == nameof(ISocialSession.GameRunning) && _social.GameRunning && Open) End(null);
     }
 
     private void OnSnapshot(PolSocialSnapshot snap)
@@ -369,7 +369,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
             case "gone" or "removed":
                 ReadLines(gc);
                 // my own leave or disband from the Groups tab, which comes before its answer, and that one says it
-                if (_social.Groups.LeavingGroupId is { } leaving && SameGroup(leaving))
+                if (_social.LeavingGroupId is { } leaving && SameGroup(leaving))
                 {
                     _quietlyEnded = GroupId;
                     End(null);
@@ -422,10 +422,10 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void ApplySend(GroupChatSnapshot gc)
     {
-        if (_gate.Settle(gc.SendToken, gc.SendState, DateTime.UtcNow) is { } done) Settled(done.State, done.Text);
+        if (_gate.Settle(gc.SendToken, gc.SendState, DateTime.UtcNow) is { } done) FinishSend(done.State, done.Text);
     }
 
-    private void Settled(string done, string text)
+    private void FinishSend(string done, string text)
     {
         // it went, but with no row of mine in the group polcore never hands my copy back, so it's shown from here
         if (done == "sent:unechoed" && _sentLine is { } line)

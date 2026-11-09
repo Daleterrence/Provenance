@@ -14,34 +14,35 @@ namespace Provenance.Wpf.ViewModels.Settings;
 // The Windower side of the Windower/Ashita page: the picked profile's console key and Windows key, and the branch
 public partial class WindowerCard : ObservableObject
 {
-    private readonly HookSettings _hook;
+    private readonly IProfileHost _hook;
     private readonly ISettingsService _settings;
     private readonly IDialogs _dialogs;
+    private readonly Func<string, string, WindowerUpdater> _newUpdater;
     private bool _loadingCard;
 
-    public WindowerCard(HookSettings hook, ISettingsService settings, IDialogs dialogs)
+    public WindowerCard(IProfileHost hook, ISettingsService settings, IDialogs dialogs, Func<string, string, WindowerUpdater>? newUpdater = null)
     {
+        _newUpdater = newUpdater ?? ((dir, branch) => new WindowerUpdater(dir, branch));
         _hook = hook;
         _settings = settings;
         _dialogs = dialogs;
         hook.WindowerReload += Load;
         hook.ProfilesChanged += () =>
         {
-            OnPropertyChanged(nameof(WindowerCardEnabled));
+            OnPropertyChanged(nameof(CardEnabled));
             OnPropertyChanged(nameof(WindowerBranchEnabled));
             OnPropertyChanged(nameof(CanStartNewWindowerSettings));
         };
     }
 
-    internal Func<string, string, WindowerUpdater> NewWindowerUpdaterForTest { get; set; } = (dir, branch) => new WindowerUpdater(dir, branch);
     internal Task WindowerWork { get; private set; } = Task.CompletedTask;
 
     public IReadOnlyList<ConsoleKeyChoice> ConsoleKeys { get; } = WindowerKeyNames.Pickable();
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ConsoleKeyText))] private ConsoleKeyChoice? _windowerConsoleKey;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ConsoleKeyText))] private ConsoleKeyChoice? _consoleKey;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ConsoleKeyText))] private bool _waitingForConsoleKey;
-    [ObservableProperty] private bool _windowerAllowWinKey;
+    [ObservableProperty] private bool _allowWinKey;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(WindowerBranchName))] private bool _windowerDev;
-    [ObservableProperty] private string _windowerVersionText = "";
+    [ObservableProperty] private string _versionText = "";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(WindowerBranchEnabled))] private bool _switchingBranch;
     [ObservableProperty] private string? _windowerSettingsProblem;
 
@@ -51,7 +52,7 @@ public partial class WindowerCard : ObservableObject
         _hook.NotifyProfilesChanged();
     }
 
-    public bool WindowerCardEnabled => _hook.WindowerDir is not null && !_hook.WindowerLinked && WindowerSettingsProblem is null && _hook.WindowerProfile is not null;
+    public bool CardEnabled => _hook.WindowerDir is not null && !_hook.WindowerLinked && WindowerSettingsProblem is null && _hook.WindowerProfile is not null;
     public bool WindowerBranchEnabled => _hook.WindowerDir is not null && !_hook.WindowerLinked && WindowerSettingsProblem is null && !SwitchingBranch;
     public string WindowerBranchName => BranchName(Branch);
 
@@ -76,8 +77,8 @@ public partial class WindowerCard : ObservableObject
                 WindowerSettingsProblem = file.Unreadable("start a new one here. The old one's kept next to it.");
             }
             var p = file is { LoadError: null } && _hook.WindowerProfile is { } item ? Find(file, item.Name) : null;
-            WindowerConsoleKey = Choice(p?.ConsoleKey ?? WindowerKeys.Insert);
-            WindowerAllowWinKey = p?.AllowWinKey ?? false;
+            ConsoleKey = Choice(p?.ConsoleKey ?? WindowerKeys.Insert);
+            AllowWinKey = p?.AllowWinKey ?? false;
             // mid-switch the branch is the switch's, it reloads the card once it's done
             if (!SwitchingBranch)
             {
@@ -100,29 +101,29 @@ public partial class WindowerCard : ObservableObject
 
     private void RefreshWindowerVersion()
     {
-        if (_hook.WindowerDir is not { } dir) { WindowerVersionText = ""; return; }
+        if (_hook.WindowerDir is not { } dir) { VersionText = ""; return; }
         if (!File.Exists(Path.Combine(dir, "Hook.dll")))
         {
-            WindowerVersionText = "Hook.dll isn't installed yet. Provenance gets it the next time you log in.";
+            VersionText = "Hook.dll isn't installed yet. Provenance gets it the next time you log in.";
             return;
         }
-        try { WindowerVersionText = $"Hook.dll {NewWindowerUpdaterForTest(dir, Branch).BranchInfo().HookFile} is installed."; }
+        try { VersionText = $"Hook.dll {_newUpdater(dir, Branch).BranchInfo().HookFile} is installed."; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.Warning(ex, "Could not read Windower's versions");
-            WindowerVersionText = "";
+            VersionText = "";
         }
     }
 
-    partial void OnWindowerConsoleKeyChanged(ConsoleKeyChoice? value)
+    partial void OnConsoleKeyChanged(ConsoleKeyChoice? value)
     {
         if (!_loadingCard && value is not null) SaveWindowerProfile(p => p.ConsoleKey = value.Key);
     }
 
-    public string ConsoleKeyText => WaitingForConsoleKey ? "Press Key Now, Esc to Cancel" : $"{(WindowerConsoleKey ?? Choice(WindowerKeys.Insert)).Display} (Click to Edit)";
+    public string ConsoleKeyText => WaitingForConsoleKey ? "Press Key Now, Esc to Cancel" : $"{(ConsoleKey ?? Choice(WindowerKeys.Insert)).Display} (Click to Edit)";
 
     [RelayCommand]
-    private void EditConsoleKey() => WaitingForConsoleKey = !WaitingForConsoleKey && WindowerCardEnabled;
+    private void EditConsoleKey() => WaitingForConsoleKey = !WaitingForConsoleKey && CardEnabled;
 
     public void CancelConsoleKey() => WaitingForConsoleKey = false;
 
@@ -138,12 +139,12 @@ public partial class WindowerCard : ObservableObject
         }
         if (ConsoleKeys.FirstOrDefault(c => c.Key.ScanCode == code) is not { } pick) return;
         WaitingForConsoleKey = false;
-        WindowerConsoleKey = pick;
+        ConsoleKey = pick;
     }
 
     private const int EscapeCode = 1;
 
-    partial void OnWindowerAllowWinKeyChanged(bool value)
+    partial void OnAllowWinKeyChanged(bool value)
     {
         if (!_loadingCard) SaveWindowerProfile(p => p.AllowWinKey = value);
     }
@@ -193,7 +194,7 @@ public partial class WindowerCard : ObservableObject
         SwitchingBranch = true;
         try
         {
-            if (!await NewWindowerUpdaterForTest(dir, branch).PrepareBranchSwitchAsync())
+            if (!await _newUpdater(dir, branch).PrepareBranchSwitchAsync())
             {
                 _hook.ProfileStatus.Fail("Provenance couldn't switch Windower's branch. Try again in a moment.");
                 PutBranchBack();

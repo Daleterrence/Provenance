@@ -62,22 +62,8 @@ public static class SelfUpdate
             window.Closed += Skip;
             window.SkipClicked += Skip;
 
-            Log.Information("Checking for updates (version {Version})", updates.CurrentVersion);
-            var check = Task.Run(() => updates.CheckForUpdatesAsync());
-            if (await Task.WhenAny(check, Task.Delay(CheckTimeout, skip.Token)) != check)
-            {
-                _ = check.ContinueWith(t => Log.Debug(t.Exception, "The abandoned update check failed"),
-                                       TaskContinuationOptions.OnlyOnFaulted);
-                if (skip.IsCancellationRequested) Log.Information("Update check skipped");
-                else Log.Warning("Update check took over {Seconds}s, carrying on without it", CheckTimeout.TotalSeconds);
-                return false;
-            }
-            var update = await check;
-            if (update is null)
-            {
-                Log.Information("Provenance is up to date");
-                return false;
-            }
+            var update = await Check(updates, skip.Token);
+            if (update is null) return false;
 
             var target = update.TargetFullRelease;
             if (FailedRecently(target.Version))
@@ -85,21 +71,7 @@ public static class SelfUpdate
                 Log.Information("Provenance {Version} failed to install less than a day ago, not trying it again yet", target.Version);
                 return false;
             }
-            Log.Information("Downloading Provenance {Version}", target.Version);
-            window.ShowDownload(target.Version.ToString());
-            // the progress only moves every 2-3%, so a slow line needs a long stall time
-            using var stall = CancellationTokenSource.CreateLinkedTokenSource(skip.Token);
-            stall.CancelAfter(StallTimeout);
-            var shown = window;
-            await Task.Run(() => updates.DownloadUpdatesAsync(update, percent =>
-            {
-                stall.CancelAfter(StallTimeout);
-                shown.Dispatcher.BeginInvoke(() =>
-                {
-                    try { shown.ShowProgress(percent); }
-                    catch (Exception ex) { Log.Debug(ex, "The update window could not show the progress"); }
-                });
-            }, stall.Token));
+            await Download(updates, update, window, skip.Token);
 
             // again, a copy started during the download would get killed. The package stays, so the next start installs it
             if (skip.IsCancellationRequested)
@@ -113,10 +85,7 @@ public static class SelfUpdate
                 return false;
             }
 
-            window.ShowInstalling();
-            Log.Information("Handing over to Update.exe to install {Version}", target.Version);
-            var restartArgs = args.ForRestart(noAutoLogin);
-            QueueHandOver(() => UpdateExe.Apply(VelopackLocator.Current, target, silent: false, waitPid: 0, restart: true, restartArgs), restartArgs);
+            QueueInstall(window, target, args.ForRestart(noAutoLogin));
             handedOver = true;
             return true;
         }
@@ -151,25 +120,65 @@ public static class SelfUpdate
         }
     }
 
-    private static Action? _handOver;
-    private static string[] _handOverArgs = [];
-
-    internal static void QueueHandOver(Action start, string[] restartArgs)
+    private static async Task<UpdateInfo?> Check(UpdateManager updates, CancellationToken skip)
     {
-        _handOverArgs = restartArgs;
-        _handOver = start;
+        Log.Information("Checking for updates (version {Version})", updates.CurrentVersion);
+        var check = Task.Run(() => updates.CheckForUpdatesAsync());
+        if (await Task.WhenAny(check, Task.Delay(CheckTimeout, skip)) != check)
+        {
+            _ = check.ContinueWith(t => Log.Debug(t.Exception, "The abandoned update check failed"),
+                                   TaskContinuationOptions.OnlyOnFaulted);
+            if (skip.IsCancellationRequested) Log.Information("Update check skipped");
+            else Log.Warning("Update check took over {Seconds}s, carrying on without it", CheckTimeout.TotalSeconds);
+            return null;
+        }
+        var update = await check;
+        if (update is null) Log.Information("Provenance is up to date");
+        return update;
     }
+
+    private static async Task Download(UpdateManager updates, UpdateInfo update, UpdateWindow window, CancellationToken skip)
+    {
+        var target = update.TargetFullRelease;
+        Log.Information("Downloading Provenance {Version}", target.Version);
+        window.ShowDownload(target.Version.ToString());
+        // the progress only moves every 2-3%, so a slow line needs a long stall time
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(skip);
+        stall.CancelAfter(StallTimeout);
+        await Task.Run(() => updates.DownloadUpdatesAsync(update, percent =>
+        {
+            stall.CancelAfter(StallTimeout);
+            window.Dispatcher.BeginInvoke(() =>
+            {
+                try { window.ShowProgress(percent); }
+                catch (Exception ex) { Log.Debug(ex, "The update window could not show the progress"); }
+            });
+        }, stall.Token));
+    }
+
+    private static void QueueInstall(UpdateWindow window, VelopackAsset target, string[] restartArgs)
+    {
+        window.ShowInstalling();
+        Log.Information("Handing over to Update.exe to install {Version}", target.Version);
+        QueueHandOver(() => UpdateExe.Apply(VelopackLocator.Current, target, silent: false, waitPid: 0, restart: true, restartArgs), restartArgs);
+    }
+
+    private sealed record HandOver(Action Start, string[] RestartArgs);
+
+    private static HandOver? _handOver;
+
+    internal static void QueueHandOver(Action start, string[] restartArgs) => _handOver = new HandOver(start, restartArgs);
 
     // Update.exe starts at the end of the exit with no wait, told to wait on our pid it gets "Access is denied" opening
     // the elevated process. False if it won't start, restartArgs is then what to start the app again with
     internal static bool HandOverAfterExit(out string[] restartArgs)
     {
-        restartArgs = _handOverArgs;
-        var start = Interlocked.Exchange(ref _handOver, null);
-        if (start is null) return true;
+        restartArgs = [];
+        if (Interlocked.Exchange(ref _handOver, null) is not { } queued) return true;
+        restartArgs = queued.RestartArgs;
         try
         {
-            start();
+            queued.Start();
             Log.Information("Update.exe started");
             return true;
         }

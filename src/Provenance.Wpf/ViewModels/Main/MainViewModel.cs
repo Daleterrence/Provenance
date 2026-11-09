@@ -94,7 +94,7 @@ public partial class MainViewModel : ObservableObject
             LogInCommand.NotifyCanExecuteChanged();
             ShowHandles();
         };
-        Social.MessageReceived += (from, text) => Alert(from, $"New message from {from}: {Preview(text, 60)}");
+        Social.MessageReceived += (from, text) => Alert(from, $"New message from {from}: {TextBits.Preview(text, 60)}");
         Social.FriendRequestReceived += (who, mid) =>
             Alert(null, $"{who} sent you a friend request. Open {FriendsWindowTitle} to answer it.", "AccountPlusOutline",
                   stays: true, request: mid);
@@ -104,12 +104,6 @@ public partial class MainViewModel : ObservableObject
         Social.NoticeReceived += (who, text) => Alert(who, text, "BellOutline");
         Social.GroupChatRequested += OpenGroupChat;
         Social.GroupChat.LineArrived += OnGroupChatLine;
-        Social.SnapshotApplied += _ => Notice.DropIfAnswered(Social.IsWaiting);
-        Social.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is nameof(SocialViewModel.UnseenCount) or nameof(SocialViewModel.GroupChatUnread) && !WantsAttention)
-                AttentionCleared?.Invoke();
-        };
         // a quiet one, no taskbar flash, and it never covers a message notice
         Social.FriendCameOnline += who =>
         {
@@ -121,7 +115,23 @@ public partial class MainViewModel : ObservableObject
             SwitchBlocked = () => _windows.ProfileEditorOpen
                 ? "Close the profile editor first. It's editing the active handle's profile." : Social.PendingWrite(),
         };
-        Social.SnapshotApplied += _ => ShowHandles();
+        Social.SnapshotApplied += _ =>
+        {
+            Notice.DropIfAnswered(Social.IsWaiting);
+            ShowHandles();
+        };
+        Social.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(SocialViewModel.UnseenCount) or nameof(SocialViewModel.GroupChatUnread):
+                    if (!WantsAttention) AttentionCleared?.Invoke();
+                    break;
+                case nameof(SocialViewModel.GameRunning):
+                    ShowHandles();
+                    break;
+            }
+        };
         Handles.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(HandlesViewModel.Busy)) Social.HandleSwitching = Handles.Switching;
@@ -130,12 +140,11 @@ public partial class MainViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(LoggedIn)) ShowHandles();
         };
-        Social.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SocialViewModel.GameRunning)) ShowHandles(); };
         RefreshInstallState();
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _elapsedTimer.Tick += (_, _) =>
         {
-            ElapsedText = Seconds(DateTime.UtcNow - _launchStarted);
+            ElapsedText = TextBits.Seconds(DateTime.UtcNow - _launchStarted);
         };
     }
 
@@ -153,10 +162,6 @@ public partial class MainViewModel : ObservableObject
     private CancellationTokenSource? _launchCts;
     private readonly PhaseTimeLeft _timeLeft;
     private bool _updatedFirst;
-
-    private static string Seconds(TimeSpan t) => t.TotalSeconds < 60
-        ? $"{t.TotalSeconds:0}s"
-        : $"{(int)t.TotalMinutes}m {t.Seconds:00}s";
 
     private void ResetProgress(string title, string text)
     {
@@ -284,21 +289,13 @@ public partial class MainViewModel : ObservableObject
     // false once everything's been read or seen, like a message landing in a conversation that's already on screen
     public bool WantsAttention => Social.UnseenCount > 0 || (_settings.Current.GroupChatFlash && Social.GroupChatUnread > 0);
 
-    private static string Preview(string text, int max)
-    {
-        text = text.ReplaceLineEndings(" ").Trim();
-        if (text.Length <= max) return text;
-        var cut = text.LastIndexOf(' ', max);
-        return (cut > max / 2 ? text[..cut] : text[..max]).TrimEnd() + "...";
-    }
-
     // lines in the group chat with its window hidden or behind, one notice a batch, as the settings say
     private void OnGroupChatLine(string group, string who, string text, int count)
     {
         bool notice = _settings.Current.GroupChatNotice;
         if (notice)
         {
-            Notice.Show(count == 1 ? $"{who} in {group}: {Preview(text, 60)}" : $"{count} new lines in {group}", "Forum",
+            Notice.Show(count == 1 ? $"{who} in {group}: {TextBits.Preview(text, 60)}" : $"{count} new lines in {group}", "Forum",
                         NoticeTarget.GroupChat);
         }
         if (notice || _settings.Current.GroupChatFlash) RequestAttention?.Invoke(notice);

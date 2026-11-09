@@ -18,23 +18,22 @@ namespace Provenance.Wpf.ViewModels.Settings;
 
 // The Windower/Ashita page: the platform, its folder and the profiles. Like General, every change saves straight away.
 // The cards, the accounts and the Game page follow it through the events
-public partial class HookSettings : ObservableObject
+public partial class HookSettings : ObservableObject, IProfileHost
 {
     private readonly IDialogs _dialogs;
     private readonly UiThread _ui = new();
     private readonly ISettingsService _settings;
-    private readonly Func<bool>? _multiRunning, _loggedIn;
+    private readonly SettingsContext _context;
     private readonly Action? _stopPrestart;
     private readonly Func<bool> _gameFollows;
     private bool _loading;
 
-    public HookSettings(IDialogs dialogs, ISettingsService settings, Func<bool>? multiRunning, Func<bool>? loggedIn, Action? stopPrestart,
-                        Func<bool> gameFollows)
+    internal HookSettings(IDialogs dialogs, ISettingsService settings, SettingsContext context, Action? stopPrestart,
+                          Func<bool> gameFollows)
     {
         _dialogs = dialogs;
         _settings = settings;
-        _multiRunning = multiRunning;
-        _loggedIn = loggedIn;
+        _context = context;
         _stopPrestart = stopPrestart;
         _gameFollows = gameFollows;
     }
@@ -44,8 +43,9 @@ public partial class HookSettings : ObservableObject
     internal event Action? ListsRefreshed;
     // true when the player switched platform, false for the first load
     internal event Action<bool>? PlatformSwitched;
-    internal event Action? WindowerReload, AshitaReload, AccountsReload;
-    internal event Action? ProfilesChanged;
+    public event Action? WindowerReload, AshitaReload;
+    internal event Action? AccountsReload;
+    public event Action? ProfilesChanged;
     // whether the change worked, and the profile's old name after a rename
     internal event Action<bool, string?>? ProfileEdited;
     // the window closes itself, which is how a restart gets going
@@ -103,10 +103,10 @@ public partial class HookSettings : ObservableObject
     }
 
     // only the folder in the box, never one found somewhere else, since profiles get changed in it
-    internal string? WindowerDir => WindowerInstall.IsFolder(WindowerPath) ? WindowerPath : null;
+    public string? WindowerDir => WindowerInstall.IsFolder(WindowerPath) ? WindowerPath : null;
     // settings.xml's writer refuses one too, so nothing here offers to change it
-    internal bool WindowerLinked => WindowerDir is { } d && FolderPins.Linked(d);
-    internal string? AshitaDir => AshitaInstall.IsFolder(AshitaPath) ? AshitaPath : null;
+    public bool WindowerLinked => WindowerDir is { } d && FolderPins.Linked(d);
+    public string? AshitaDir => AshitaInstall.IsFolder(AshitaPath) ? AshitaPath : null;
 
     internal void Load()
     {
@@ -142,7 +142,7 @@ public partial class HookSettings : ObservableObject
     }
 
     // the lists change under a ComboBox, which drops its pick on the way, so the pick's put back by name
-    internal void RefreshThirdPartyHookLists(string? windowerKeep = null, string? ashitaKeep = null)
+    public void RefreshThirdPartyHookLists(string? windowerKeep = null, string? ashitaKeep = null)
     {
         windowerKeep ??= WindowerProfile?.Name ?? _settings.Current.WindowerProfile;
         ashitaKeep ??= AshitaBootConfig?.Name ?? _settings.Current.AshitaBootConfig;
@@ -187,7 +187,7 @@ public partial class HookSettings : ObservableObject
         NotifyProfilesChanged();
     }
 
-    internal void SaveThirdPartyHook()
+    public void SaveThirdPartyHook()
     {
         if (_loading) return;
         var (hook, ashita, windower, boot, profile) = (Hook, AshitaPath, WindowerPath, AshitaBootConfig?.Name, WindowerProfile?.Name);
@@ -222,7 +222,7 @@ public partial class HookSettings : ObservableObject
     // old one's loaded, so it takes a restart, and a no puts it back unsaved
     partial void OnHookChanged(ThirdPartyHook oldValue, ThirdPartyHook newValue)
     {
-        bool restart = !_loading && _loggedIn?.Invoke() == true;
+        bool restart = !_loading && _context.LoggedIn();
         if (restart && !_dialogs.Confirm("Restart Provenance?", RestartText(oldValue, newValue), "RESTART"))
         {
             Later(() => PutPlatformBack(oldValue));
@@ -293,9 +293,9 @@ public partial class HookSettings : ObservableObject
     private void BrowseWindower() { if (_dialogs.PickFolder("Choose your Windower 4 folder") is { } d) WindowerPath = d; }
 
     // the Windower card keeps this up to date
-    internal string? WindowerProblem { get; set; }
+    public string? WindowerProblem { get; set; }
 
-    public bool CanManageProfiles => _multiRunning?.Invoke() != true
+    public bool CanManageProfiles => !_context.MultiRunning()
         && (IsWindower ? WindowerDir is not null && !WindowerLinked && WindowerProblem is null : IsAshita && AshitaDir is not null);
     public bool CanCopyProfile => CanManageProfiles && (IsWindower ? WindowerProfile is not null : AshitaBootConfig is not null);
     // the unnamed Windower profile and Ashita's own examples stay as they are
@@ -303,7 +303,7 @@ public partial class HookSettings : ObservableObject
         ? WindowerProfile is { Name.Length: > 0 }
         : AshitaBootConfig is { } a && !AshitaBootFiles.IsShippedExample(a.Name));
 
-    internal void NotifyProfilesChanged()
+    public void NotifyProfilesChanged()
     {
         OnPropertyChanged(nameof(CanManageProfiles));
         OnPropertyChanged(nameof(CanCopyProfile));
@@ -313,7 +313,7 @@ public partial class HookSettings : ObservableObject
 
     private int PlayOnlineLanguage => _settings.DetectedRegion switch { PolRegion.Japan => 1, PolRegion.Europe => 3, _ => 2 };
 
-    internal WindowerSettingsFile? ReadWindower(string dir)
+    public WindowerSettingsFile? ReadWindower(string dir)
     {
         try { return WindowerSettingsFile.Load(dir); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

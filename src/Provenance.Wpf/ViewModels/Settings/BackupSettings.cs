@@ -15,16 +15,13 @@ public partial class BackupSettings : ObservableObject
 {
     private readonly IDialogs _dialogs;
     private readonly ISettingsService _settings;
-    private readonly Func<bool> _gameRunning;
-    private readonly Func<bool>? _loggedIn, _multiRunning;
+    private readonly SettingsContext _context;
 
-    public BackupSettings(IDialogs dialogs, ISettingsService settings, Func<bool> gameRunning, Func<bool>? loggedIn, Func<bool>? multiRunning)
+    internal BackupSettings(IDialogs dialogs, ISettingsService settings, SettingsContext context)
     {
         _dialogs = dialogs;
         _settings = settings;
-        _gameRunning = gameRunning;
-        _loggedIn = loggedIn;
-        _multiRunning = multiRunning;
+        _context = context;
         _backupGameSettings = settings.Current.BackupGameSettings;
         _backupFolder = settings.Current.BackupFolder;
     }
@@ -89,9 +86,9 @@ public partial class BackupSettings : ObservableObject
     // the game writes its settings when a character logs out, so a restore under a running one wouldn't last. Asked
     // again right before anything's written
     internal string? RestoreBlocked() =>
-        _gameRunning() ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
-        : _loggedIn?.Invoke() == true ? "You can restore a backup once you're logged out of PlayOnline."
-        : _multiRunning?.Invoke() == true ? "You can restore a backup once Provenance has finished starting your accounts."
+        _context.GameRunning() ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
+        : _context.LoggedIn() ? "You can restore a backup once you're logged out of PlayOnline."
+        : _context.MultiRunning() ? "You can restore a backup once Provenance has finished starting your accounts."
         : null;
 
     private bool CanRestore() => !RestoringBackup;

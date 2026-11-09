@@ -14,10 +14,10 @@ public partial class AshitaCard : ObservableObject
 {
     private const string NoScript = "None";
 
-    private readonly HookSettings _hook;
+    private readonly IProfileHost _hook;
     private bool _loadingCard;
 
-    public AshitaCard(HookSettings hook)
+    public AshitaCard(IProfileHost hook)
     {
         _hook = hook;
         hook.AshitaReload += Load;

@@ -11,17 +11,17 @@ public partial class MultiAccountSettings : ObservableObject
 {
     private readonly HookSettings _hook;
     private readonly ISettingsService _settings;
-    private readonly Func<bool>? _multiRunning;
+    private readonly SettingsContext _context;
     private bool _loadingMulti;
 
     // each account's stored Enabled as last loaded or saved. One that's gone off since got turned off by a run
     private Dictionary<string, bool> _multiEnabledAsKnown = new();
 
-    public MultiAccountSettings(HookSettings hook, ISettingsService settings, Func<bool>? multiRunning)
+    internal MultiAccountSettings(HookSettings hook, ISettingsService settings, SettingsContext context)
     {
         _hook = hook;
         _settings = settings;
-        _multiRunning = multiRunning;
+        _context = context;
         hook.ListsRefreshed += () => RefreshMultiChoices();
         hook.PlatformSwitched += RefreshMultiChoices;
         hook.AccountsReload += Load;
@@ -35,7 +35,7 @@ public partial class MultiAccountSettings : ObservableObject
 
     // read-only while a run goes, it saves refused and blocked accounts as they happen and a save from here
     // mustn't undo that
-    public bool MultiRunGoing => _multiRunning?.Invoke() ?? false;
+    public bool MultiRunGoing => _context.MultiRunning();
     public bool MultiEditable => MultiHasThirdPartyHook && !MultiRunGoing;
 
     [ObservableProperty] private bool _multiContinueOnError;

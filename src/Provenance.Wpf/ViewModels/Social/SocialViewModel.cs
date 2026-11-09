@@ -17,7 +17,7 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
-public partial class SocialViewModel : ObservableObject
+public partial class SocialViewModel : ObservableObject, ISocialSession
 {
     private readonly IDialogs _dialogs;
     private readonly IWindowManager _windows;
@@ -110,8 +110,7 @@ public partial class SocialViewModel : ObservableObject
     [RelayCommand]
     private void ChangeProfilePicture()
     {
-        if (GameRunning) EditNote.Fail(GameRunningNote);
-        else if (HandleSwitching) EditNote.Fail(SwitchingNote);
+        if (WriteBlockedNote is { } blocked) EditNote.Fail(blocked);
         else if (!ProfilePictureSaving) PickProfilePicture();
     }
 
@@ -162,7 +161,7 @@ public partial class SocialViewModel : ObservableObject
     [ObservableProperty] private int _myStatusIndex;
     [ObservableProperty] private string _statusNote = "";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(StatusEditable))] private bool _statusPending;
-    public bool StatusEditable => !StatusPending && !GameRunning && !HandleSwitching;
+    public bool StatusEditable => !StatusPending && WriteBlockedNote is null;
     private PolStatus? _requestedStatus;
     private DateTime _requestedAt;
     private bool _applyingSnapshot;
@@ -196,7 +195,7 @@ public partial class SocialViewModel : ObservableObject
 
     // more than one account running means lean sessions, which have no chat at all
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanGroupChat))] private bool _groupChatBlocked;
-    public bool CanGroupChat => Connected && !GameRunning && !HandleSwitching && !GroupChatBlocked;
+    public bool CanGroupChat => Connected && WriteBlockedNote is null && !GroupChatBlocked;
 
     partial void OnConnectedChanged(bool value) => OnPropertyChanged(nameof(CanGroupChat));
 
@@ -214,6 +213,11 @@ public partial class SocialViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanEdit), nameof(StatusEditable))]
     private bool _handleSwitching;
     public const string SwitchingNote = "Wait for the handle switch to finish.";
+
+    // why nothing can be written right now, null when it can
+    string? ISocialSession.LeavingGroupId => Groups.LeavingGroupId;
+
+    public string? WriteBlockedNote => GameRunning ? GameRunningNote : HandleSwitching ? SwitchingNote : null;
 
     partial void OnHandleSwitchingChanged(bool value)
     {
@@ -297,13 +301,11 @@ public partial class SocialViewModel : ObservableObject
         PolMessage.KindGroupAccepted => "Accepted your group invitation.",
         PolMessage.KindGroupDeclined => "Declined your group invitation.",
         PolMessage.KindGroupRemoved => m.Group.Length == 0 ? "You have been removed from a friend group."
-            : OneLine(ViewerText(0x46dd, "You have been removed from the group \"%s.\"")).Replace("%s", m.Group),
+            : TextBits.OneLine(ViewerText(0x46dd, "You have been removed from the group \"%s.\"")).Replace("%s", m.Group),
         PolMessage.KindGroupDisbanded => m.Group.Length == 0 ? "A friend group you were in has been disbanded."
-            : OneLine(ViewerText(0x46db, "The group \"%s\" has been disbanded.")).Replace("%s", m.Group),
+            : TextBits.OneLine(ViewerText(0x46db, "The group \"%s\" has been disbanded.")).Replace("%s", m.Group),
         _ => null,
     };
-
-    private static string OneLine(string s) => s.Replace("\r\n", " ").Replace('\n', ' ');
 
     private void NoticeComingOnline(PolSocialSnapshot snap)
     {
@@ -463,7 +465,7 @@ public partial class SocialViewModel : ObservableObject
     private bool MergeChat(ChatStore chat, PolSocialSnapshot snap)
     {
         (string, string)? open = Messages.ConversationVisible && SelectedFriend is { } f ? (f.Name, f.Key) : null;
-        var r = _sync.Merge(chat, snap, _pol.Pid, GameRunning || HandleSwitching, open, NoticeText, Filtered);
+        var r = _sync.Merge(chat, snap, _pol.Pid, WriteBlockedNote is not null, open, NoticeText, Filtered);
         if (r.SendsChanged) Messages.Refresh();
         foreach (var n in r.News)
             switch (n.Kind)
@@ -561,7 +563,7 @@ public partial class SocialViewModel : ObservableObject
     public string EditStatus => EditBusy ? "Saving the change to PlayOnline..."
                               : ProfilePictureSaving ? "Saving your profile picture to PlayOnline..." : EditNote.Text;
     public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote.Text);
-    public bool CanEdit => Connected && !EditBusy && _pol.Pid != null && !GameRunning && !HandleSwitching;
+    public bool CanEdit => Connected && !EditBusy && _pol.Pid != null && WriteBlockedNote is null;
 
     private string? _editToken;
     private DateTime _editAt;
@@ -655,7 +657,7 @@ public partial class SocialViewModel : ObservableObject
     private bool FilterOn => PolOptions.ChatFilter(_settings.Current);
 
     // the chat language filter where the viewer runs it: what other people wrote, never my own lines
-    internal string Filtered(string text)
+    public string Filtered(string text)
     {
         if (text.Length == 0 || !FilterOn) return text;
         if (!_wordFilterTried && _settings.DetectedRegion != null)
@@ -667,7 +669,7 @@ public partial class SocialViewModel : ObservableObject
         return _wordFilter?.Apply(text) ?? text;
     }
 
-    internal string ViewerText(int id, string fallback)
+    public string ViewerText(int id, string fallback)
     {
         if (!_viewerStringsTried)
         {
@@ -688,9 +690,9 @@ public partial class SocialViewModel : ObservableObject
     public void SaveProfilePicture(int picId)
     {
         if (ProfilePictureSaving || !Connected || _pol.Pid is not { } pid) return;
-        if (GameRunning || HandleSwitching)
+        if (WriteBlockedNote is { } blocked)
         {
-            EditNote.Fail(GameRunning ? GameRunningNote : SwitchingNote);
+            EditNote.Fail(blocked);
             return;
         }
         _picToken = HookFiles.NewToken();
@@ -725,7 +727,7 @@ public partial class SocialViewModel : ObservableObject
 
     partial void OnMyStatusIndexChanged(int value)
     {
-        if (_applyingSnapshot || GameRunning || HandleSwitching || value < 0 || value >= StatusChoices.Length) return;
+        if (_applyingSnapshot || WriteBlockedNote is not null || value < 0 || value >= StatusChoices.Length) return;
         if (StatusPending) return;
         var want = StatusChoices[value];
         _requestedStatus = want;

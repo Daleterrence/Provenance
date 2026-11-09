@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Game.Windower;
 using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Provenance.Common.Security;
@@ -29,7 +30,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IDialogs _dialogs;
     private readonly ISettingsService _settings;
     private readonly FeedService? _feeds;
-    private readonly Func<bool> _gameRunning;
+    private readonly SettingsContext _context;
     private readonly Func<string?>? _largeAddressAwareBlocked;
     private readonly Action? _holdPrestarts, _releasePrestarts;
     private readonly Func<bool, RegistryKey?>? _gameKey;
@@ -38,25 +39,18 @@ public partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(IDialogs dialogs, ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
                              Action? holdPrestarts = null, Action? releasePrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
                              Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null, Func<bool>? loggedIn = null,
-                             HandlesViewModel? handles = null, Func<bool>? gameRunning = null)
+                             HandlesViewModel? handles = null, Func<bool>? gameRunning = null,
+                             Func<string, string, WindowerUpdater>? windowerUpdater = null)
     {
-        _gameRunning = gameRunning ?? PolUpdates.GameRunning;
+        _context = new SettingsContext(multiRunning ?? (() => false), loggedIn ?? (() => false), gameRunning ?? PolUpdates.GameRunning);
         _dialogs = dialogs;
         Handles = handles ?? new HandlesViewModel(dialogs, () => null);
         _gameKey = gameKey;
         _settings = settings;
-        Hooks = new HookSettings(dialogs, settings, multiRunning, loggedIn, stopPrestart, GameFollows);
-        Windower = new WindowerCard(Hooks, settings, dialogs);
+        Hooks = new HookSettings(dialogs, settings, _context, stopPrestart, GameFollows);
+        Windower = new WindowerCard(Hooks, settings, dialogs, windowerUpdater);
         Ashita = new AshitaCard(Hooks);
-        Multi = new MultiAccountSettings(Hooks, settings, multiRunning);
-        Hooks.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is nameof(HookSettings.IsAshita) or nameof(HookSettings.IsWindower))
-            {
-                OnPropertyChanged(nameof(ShowProfileSwitcher));
-                OnPropertyChanged(nameof(ShowProfileTools));
-            }
-        };
+        Multi = new MultiAccountSettings(Hooks, settings, _context);
         Hooks.Saved += SyncGame;
         Hooks.ProfileEdited += RetargetGameAfterEdit;
         Ashita.Renamed += AshitaRenamed;
@@ -90,13 +84,21 @@ public partial class SettingsViewModel : ObservableObject
         _largeAddressAwareOn = settings.Current.LargeAddressAware;
         _chatLanguageFilter = PolOptions.ChatFilter(settings.Current);
         _autoDisconnectIndex = Math.Max(0, Array.IndexOf(PolOptions.AutoDisconnectChoices, PolOptions.AutoDisconnect(settings.Current)));
-        Backups = new BackupSettings(dialogs, settings, _gameRunning, loggedIn, multiRunning);
+        Backups = new BackupSettings(dialogs, settings, _context);
         Hooks.Load();
         Multi.Load();
-        Game = new GameSettingsViewModel(dialogs, region, GameStoreForSelection(), _gameRunning);
+        Game = new GameSettingsViewModel(dialogs, region, GameStoreForSelection(), _context.GameRunning);
         _gameReady = true;
         Addons = new AddonsPluginsViewModel(settings, Hooks.PickedAddonsTarget);
-        Hooks.PropertyChanged += (_, e) => { if (AddonsTargetProperties.Contains(e.PropertyName)) Addons.TargetChanged(); };
+        Hooks.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(HookSettings.IsAshita) or nameof(HookSettings.IsWindower))
+            {
+                OnPropertyChanged(nameof(ShowProfileSwitcher));
+                OnPropertyChanged(nameof(ShowProfileTools));
+            }
+            if (AddonsTargetProperties.Contains(e.PropertyName)) Addons.TargetChanged();
+        };
         Addons.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AddonsPluginsViewModel.SameListForEveryProfile)) OnPropertyChanged(nameof(ShowProfileSwitcher));
