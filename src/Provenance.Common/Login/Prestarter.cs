@@ -23,39 +23,36 @@ public sealed class Prestarter
         public Func<bool>? GameIsInstalled { get; init; }
         public Func<Prestarted, bool>? PrestartAlive { get; init; }
         public Action? WarmDns { get; init; }
+        public Func<Prestarted?>? Start { get; init; }
     }
 
     private readonly ISettingsService _settings;
     private readonly Watcher _watcher;
+    private readonly OurPol _pol;
     private readonly Func<bool> _sessionActive;
     private readonly object _gate;
     private readonly Func<bool> _gameIsInstalled;
     private readonly Func<Prestarted, bool> _prestartAlive;
     private readonly Action _warmDns;
+    private readonly Func<Prestarted?> _start;
     private volatile bool _closed;
     private Task<Prestarted?>? _prestart;
     private int _prestartHolds;   // under _gate
 
     // the gate is the session's, so a pre-start and a session starting can't miss each other
-    internal Prestarter(ISettingsService settings, Watcher watcher, Func<bool> sessionActive, object gate, Seams? seams = null)
+    internal Prestarter(ISettingsService settings, Watcher watcher, OurPol pol, Func<bool> sessionActive, object gate, Seams? seams = null)
     {
         _settings = settings;
         _watcher = watcher;
+        _pol = pol;
         _sessionActive = sessionActive;
         _gate = gate;
-        _gameIsInstalled = seams?.GameIsInstalled ?? (() => GameInstalled(Region));
+        _gameIsInstalled = seams?.GameIsInstalled ?? (() => GameInstalled(_settings.RegionOrDefault));
         // no recorded start time means no proof, so it's never mine (the user may run their own pol.exe on a reused pid)
-        _prestartAlive = seams?.PrestartAlive ?? (pre => pre.Stamp is { } stamp && _watcher.Ours(stamp));
+        _prestartAlive = seams?.PrestartAlive ?? (pre => pre.Stamp is { } stamp && _pol.Ours(stamp));
         _warmDns = seams?.WarmDns ?? ResolveDns;
+        _start = seams?.Start ?? StartPrestarted;
     }
-
-    internal Task<Prestarted?>? Waiting
-    {
-        get { lock (_gate) return _prestart; }
-        set { lock (_gate) _prestart = value; }
-    }
-
-    private PolRegion Region => _settings.DetectedRegion ?? PolRegion.UnitedStates;
 
     internal void Close() => _closed = true;
 
@@ -67,7 +64,7 @@ public sealed class Prestarter
         lock (_gate)
         {
             if (!MayPrestart()) return;
-            _prestart = Task.Run(StartPrestarted);
+            _prestart = Task.Run(_start);
         }
     }
 
@@ -199,7 +196,7 @@ public sealed class Prestarter
         try { HookFiles.RequestStop(pre.Pid); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         HookFiles.Delete(pre.Pid, HookContract.Files.Prestart);
-        if (pre.Stamp is { } stamp) _watcher.EndOurs(stamp, graceMs: 3000);
+        if (pre.Stamp is { } stamp) _pol.End(stamp, graceMs: 3000);
     }
 
     public void StopPrestart()
@@ -243,7 +240,7 @@ public sealed class Prestarter
                     if (parts.Length != 3 || !int.TryParse(parts[1], out var pid)
                         || !long.TryParse(File.ReadAllText(record).Trim(), out var ticks)) continue;
                     var stamp = new ProcessStamp(pid, ticks);
-                    if (_watcher.Ours(stamp))
+                    if (_pol.Ours(stamp))
                     {
                         HookFiles.RequestStop(pid);
                         ending.Add(stamp);
@@ -263,7 +260,7 @@ public sealed class Prestarter
         foreach (var stamp in ending)
         {
             Log.Information("Ending another copy's pre-started pol.exe (pid {Pid}): the viewer's files are about to change", stamp.Pid);
-            _watcher.EndOurs(stamp, graceMs: 3000);
+            _pol.End(stamp, graceMs: 3000);
         }
     }
 

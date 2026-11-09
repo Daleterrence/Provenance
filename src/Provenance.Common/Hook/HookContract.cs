@@ -42,6 +42,7 @@ public static class HookContract
         public const string Home = "POL_HOME";
         public const string Handle = "POL_HANDLE";
         public const string LaunchId = "PROVENANCE_LAUNCH_ID";
+        public const string Launch = "PROVENANCE_LAUNCH";
 
         // the hook reads anything starting with either, so a launch clears them out of the user's own environment
         public const string PolPrefix = "POL_";

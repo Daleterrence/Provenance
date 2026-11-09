@@ -430,7 +430,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         try
         {
             var code = await exited;
-            if (PolSession.GameEndedText(code) is not { } text) return;
+            if (HookExitText.GameEndedText(code) is not { } text) return;
             Log.Error("Multi-account mode: FINAL FANTASY XI didn't start for {Account} (pol.exe exit code {Code})", account.ProfileId, code);
             var line = $"{account.Name}: {text}";
             if (Running) _lateGameFailures.Add(line);

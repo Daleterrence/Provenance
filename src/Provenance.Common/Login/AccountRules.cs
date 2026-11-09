@@ -19,7 +19,7 @@ public static class AccountRules
 
     // a key that's gone still passes the header test, so the run's details-again text is what tells
     public static bool NeedsAllDetails(bool usable, string? multiProblem) =>
-        !usable || multiProblem == PolSession.DetailsAgainText;
+        !usable || multiProblem == HookExitText.DetailsAgainText;
 
     public static bool FillFailed(SideEdit polEdit, PolAccount? pol, SideEdit squareEnixEdit, SquareEnixAccount? squareEnix) =>
         (polEdit == SideEdit.Fill && pol is null) || (squareEnixEdit == SideEdit.Fill && squareEnix is null);
@@ -65,7 +65,7 @@ public static class AccountRules
     private static bool BothIds((string? PolId, string? SeaId) ids) => !string.IsNullOrEmpty(ids.PolId) && !string.IsNullOrEmpty(ids.SeaId);
 
     public static string MissingDetailsText((string? PolId, string? SeaId) ids) =>
-        BothIds(ids) ? PolSession.DetailsAgainText : "This account's login details are missing. Press Edit account to add them.";
+        BothIds(ids) ? HookExitText.DetailsAgainText : "This account's login details are missing. Press Edit account to add them.";
 
     // both entries there but unusable is a Credential failure, so it stays off until edited (like hook exit 11)
     public static AccountFailure MissingDetailsFailure((string? PolId, string? SeaId) ids) =>
@@ -82,7 +82,7 @@ public static class AccountRules
 
     // an unread or unanswered Play wants a restart so the run stops, a refusal or a lost session is this account's problem
     public static AccountFailureKind PlayFailureKind(string text) =>
-        text == PolSession.PlayUnreadableText ? AccountFailureKind.Install : AccountFailureKind.Account;
+        text == HookExitText.PlayUnreadableText ? AccountFailureKind.Install : AccountFailureKind.Account;
 
     internal static string TitleFor(int code) => code switch
     {

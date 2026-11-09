@@ -65,7 +65,7 @@ public partial class MainViewModel : ObservableObject
         _socialPoll.Tick += (_, _) => _pol.Poll();
         Multi = new MultiRunViewModel(dialogs, windows, settings, credentials, pol, _ui, Accounts,
             new MultiRunLinks(LoggedInOrLaunching, _socialPoll.Stop, EnsureMemberAgreement, PromptHandleName, GameFolders,
-                              () => PlayRegion, WritePolOptions, BackUpGameSettingsAsync));
+                              () => _settings.RegionOrDefault, WritePolOptions, BackUpGameSettingsAsync));
         Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, () => News.WindowShown, LoggedInOrLaunching, () => Multi.Running,
                                            RefreshInstallState, RefreshLargeAddressAware);
         _pol.SnapshotUpdated += OnSnapshot;
@@ -392,7 +392,7 @@ public partial class MainViewModel : ObservableObject
     private void LocateInstall()
     {
         if (_dialogs.PickFolder("Find your FINAL FANTASY XI or PlayOnline folder") is not { } folder) return;
-        var region = _settings.DetectedRegion ?? PolRegion.UnitedStates;
+        var region = _settings.RegionOrDefault;
         var problem = GameInstaller.LocateExisting(folder, region, ex => Log.Warning(ex, "Could not record the install folder {Folder}", folder));
         if (problem != null) { _dialogs.Error("Couldn't use that folder", problem); return; }
         _settings.RedetectRegion();
@@ -685,7 +685,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         // SE's installer only writes 3 of the game settings
-        FfxiSettings.WriteFirstStartSettings(PlayRegion);
+        FfxiSettings.WriteFirstStartSettings(_settings.RegionOrDefault);
         WritePolOptions(Accounts.SessionProfileId);
         ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         await BackUpGameSettingsAsync(null, text => ProgressText = text);
@@ -728,7 +728,7 @@ public partial class MainViewModel : ObservableObject
         _gameRunning = false;
         Social.GameRunning = false;
         _pol.GameExited();
-        var ended = PolSession.GameEndedText(exit);
+        var ended = HookExitText.GameEndedText(exit);
         if (ended is not null) Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);
         else if (_settings.Current.ExitAfterGameExits) { RequestExit?.Invoke(); return; }
         IsLaunching = false;
@@ -773,13 +773,10 @@ public partial class MainViewModel : ObservableObject
         finally { if (Social.StatusNote == "") Social.StatusNote = note; }
     }
 
-    // Play only comes up after a login, which only a supported region gets
-    private PolRegion PlayRegion => _settings.DetectedRegion ?? PolRegion.UnitedStates;
-
     // the game reads these from the account's option.bin when it starts, so they go in before every start
     private void WritePolOptions(string? profileId)
     {
-        if (PolPaths.TryGetInstallFolder(PlayRegion, GameProduct.Viewer) is { } viewer) WritePolOptions(profileId, viewer);
+        if (PolPaths.TryGetInstallFolder(_settings.RegionOrDefault, GameProduct.Viewer) is { } viewer) WritePolOptions(profileId, viewer);
     }
 
     internal void WritePolOptions(string? profileId, string viewer)
@@ -801,7 +798,7 @@ public partial class MainViewModel : ObservableObject
                     s.AutoDisconnectMinutes = saved.AutoDisconnectMinutes ?? s.AutoDisconnectMinutes;
                 }
             }
-            PolOptions.Apply(s, viewer, PolOptions.SlotInUse(viewer, profile.HomeSlot), PlayRegion);
+            PolOptions.Apply(s, viewer, PolOptions.SlotInUse(viewer, profile.HomeSlot), _settings.RegionOrDefault);
         }
         catch (Exception e) { Log.Warning(e, "Could not write the POL settings before the game start"); }
     }
@@ -815,16 +812,16 @@ public partial class MainViewModel : ObservableObject
         var s = _settings.ReadSaved() ?? _settings.Current;
         if (!s.BackupGameSettings) return;
         saying?.Invoke(GameBackupPolicy.WorkingText);
-        var region = PlayRegion;
+        var region = _settings.RegionOrDefault;
         var sources = GameBackupSourcesForTest ?? ((settings, boot) => GameBackupPolicy.SourcesFor(settings, region, boot));
         if (await Task.Run(() => GameBackupPolicy.BeforePlay(s, () => sources(s, accountBoot))) is { } problem)
             Notice.Show(problem, "AlertCircleOutline", stays: true);
     }
 
     private (string Ffxi, string Viewer, PolRegion Region)? GameFolders() =>
-        PolPaths.TryGetInstallFolder(PlayRegion, GameProduct.Game) is { } ffxi
-        && PolPaths.TryGetInstallFolder(PlayRegion, GameProduct.Viewer) is { } viewer
-            ? (ffxi, viewer, PlayRegion) : null;
+        PolPaths.TryGetInstallFolder(_settings.RegionOrDefault, GameProduct.Game) is { } ffxi
+        && PolPaths.TryGetInstallFolder(_settings.RegionOrDefault, GameProduct.Viewer) is { } viewer
+            ? (ffxi, viewer, _settings.RegionOrDefault) : null;
 
     internal async Task<bool> UpdateGameAsync()
     {

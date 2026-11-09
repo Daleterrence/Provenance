@@ -8,12 +8,14 @@ namespace Provenance.Common.Login;
 public sealed class LaunchCredentials
 {
     private const string LaunchKeyPrefix = "LAUNCH:";
+    private const string HandleKind = "HANDLE";
+    private const string PlayKind = "PLAY";
     internal static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan LeftoverAge = TimeSpan.FromMinutes(10);
 
     // the room password's one-shot entry, and the full target the hook gets as POL_CRED_CHAT
     internal static string ChatKey(string launchId) => $"{LaunchKeyPrefix}{launchId}:CHAT";
-    internal static string ChatTarget(string launchId) => $"{WindowsCredentialStore.DefaultPrefix}:{ChatKey(launchId)}";
+    internal static string ChatTarget(string launchId) => Target(ChatKey(launchId));
 
     private readonly WindowsCredentialStore _store;
     private readonly WrappedStoreCache<WindowsCredentialStore> _wrapped;
@@ -115,23 +117,48 @@ public sealed class LaunchCredentials
         }
     }
 
-    internal string Key(string kind) => $"{LaunchKeyPrefix}{LaunchId}:{kind}";
+    private string Key(string kind) => $"{LaunchKeyPrefix}{LaunchId}:{kind}";
 
-    internal string TargetOf(string kind) => Target(Key(kind));
+    private string TargetOf(string kind) => Target(Key(kind));
 
     internal static string Target(string key) => $"{WindowsCredentialStore.DefaultPrefix}:{key}";
 
-    internal string? SavedUserName(string target) => _store.ReadUserName(target);
+    private string? SavedUserName(string target) => _store.ReadUserName(target);
 
-    internal string SaveOneShot(string kind, string user, string secret, List<string> keys)
+    private string SaveOneShot(string kind, string user, string secret, List<string> keys)
     {
-        Wrapped.Save(Key(kind), user, secret, sessionOnly: true);
-        keys.Add(Key(kind));
-        return Target(Key(kind));
+        var key = Key(kind);
+        Wrapped.Save(key, user, secret, sessionOnly: true);
+        keys.Add(key);
+        return Target(key);
+    }
+
+    // the account's saved entries when they're still this request's, otherwise one-shot copies of what was typed
+    internal HookEnvironment.Targets TargetsFor(LoginRequest request, List<string> keys)
+    {
+        string polTarget, squareEnixTarget;
+        var oneShot = new List<string> { "OTP" };
+        var profile = string.IsNullOrWhiteSpace(request.ProfileId) ? null : request.ProfileId;
+        if (profile != null && SavedUserName($"{CredentialTargets.Pol}:{profile}") == request.Pol.PolId &&
+            SavedUserName($"{CredentialTargets.Sea}:{profile}") == request.SquareEnix.Username)
+        {
+            polTarget = Target($"{CredentialTargets.Pol}:{profile}");
+            squareEnixTarget = Target($"{CredentialTargets.Sea}:{profile}");
+        }
+        else
+        {
+            polTarget = SaveOneShot("POL", request.Pol.PolId, request.Pol.Password, keys);
+            squareEnixTarget = SaveOneShot("SEA", request.SquareEnix.Username, request.SquareEnix.Password, keys);
+            oneShot.InsertRange(0, ["POL", "SEA"]);
+        }
+        var otpTarget = string.IsNullOrWhiteSpace(request.Otp) ? null : SaveOneShot("OTP", "otp", request.Otp.Trim(), keys);
+        keys.AddRange([Key(HandleKind), Key(PlayKind)]);
+        return new HookEnvironment.Targets(polTarget, squareEnixTarget, oneShot, otpTarget, TargetOf(HandleKind), TargetOf(PlayKind),
+                                           ChatTarget(LaunchId!));
     }
 
     internal void SaveHandle(string? name) =>
-        Wrapped.Save(Key("HANDLE"), "handle", string.IsNullOrWhiteSpace(name) ? "" : name!.Trim(), sessionOnly: true);
+        Wrapped.Save(Key(HandleKind), "handle", string.IsNullOrWhiteSpace(name) ? "" : name!.Trim(), sessionOnly: true);
 
     internal void CleanupOneShots(List<string> keys)
     {
@@ -165,12 +192,12 @@ public sealed class LaunchCredentials
             try { _store.Delete(ChatKey(id)); } catch (Win32Exception) { }
     }
 
-    internal void SavePlay() => Wrapped.Save(Key("PLAY"), "play", "go", sessionOnly: true);
+    internal void SavePlay() => Wrapped.Save(Key(PlayKind), "play", "go", sessionOnly: true);
 
     internal void DeletePlay()
     {
         if (LaunchId is null) return;
-        try { _store.Delete(Key("PLAY")); }
+        try { _store.Delete(Key(PlayKind)); }
         catch (Exception ex) { Log.Warning(ex, "Could not remove the Play entry of the game that did not start"); }
     }
 }

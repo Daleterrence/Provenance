@@ -23,7 +23,7 @@ internal sealed class Watcher
     public Watcher(ISettingsService settings)
     {
         _settings = settings;
-        FindFiles = () => LaunchFiles(Region);
+        FindFiles = () => LaunchFiles(_settings.RegionOrDefault);
     }
 
     internal Func<(string? ViewerDir, string? PolExe, string LauncherExe)> FindFiles { get; init; }
@@ -31,12 +31,8 @@ internal sealed class Watcher
     internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
     internal Func<bool> AnyPolRunningNow { get; init; } = ScreenSaver.AnyPolRunning;
     internal Func<bool?> WindowsScreenSaver { get; init; } = ScreenSaver.Read;
-    internal Func<ProcessStamp, bool> IsViewerPol { get; init; } = stamp => stamp.IsViewerPol();
     internal Func<DateTime, bool> CodeIntegrityRefused { get; init; } = WatcherProcess.Refused;
     internal TimeSpan[] RefusedRetryWaits { get; init; } = [TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(60)];
-
-    // a login or pre-start only gets this far on a supported region
-    private PolRegion Region => _settings.DetectedRegion ?? PolRegion.UnitedStates;
 
     private static (string? ViewerDir, string? PolExe, string LauncherExe) LaunchFiles(PolRegion region)
     {
@@ -167,7 +163,7 @@ internal sealed class Watcher
             var startedPid = HookLog.StartedPid(run.Out);
             if (ct.IsCancellationRequested)
             {
-                if (startedPid is { } stray && launcherStamp is { } started) EndNewPol(stray, started);
+                if (startedPid is { } stray && launcherStamp is { } started) OurPol.EndNewPol(stray, started);
                 return (LaunchOutcome.Cancelled, 0, "");
             }
             var stderr = run.Err.Trim();
@@ -193,15 +189,6 @@ internal sealed class Watcher
     internal const string PolDidNotStart = "PlayOnline didn't start. Try again in a moment.";
     internal const string WindowerDidNotStart = "PlayOnline didn't start with Windower. Try again in a moment.";
 
-    // a pol.exe the watcher started since the launcher did
-    private static void EndNewPol(int pid, ProcessStamp launcher)
-    {
-        bool NewPol(ProcessStamp pol) => pol.StartUtcTicks >= launcher.StartUtcTicks
-            && string.Equals(Path.GetFileName(ProcessTree.ImagePath(pol.Pid)), GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase);
-        if (ProcessStamp.Of(pid) is { } found && End(found, 0, 2000, NewPol))
-            Log.Information("Ended pol.exe (pid {Pid}): the sign-in was cancelled", pid);
-    }
-
     private static void EndStuckLauncher(Process launcher, TimeSpan limit)
     {
         int id = launcher.Id;
@@ -209,19 +196,7 @@ internal sealed class Watcher
         try { launcher.Kill(); }
         catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
         if (stamp is { } started)
-            foreach (var child in ProcessTree.ChildrenOf(id)) EndNewPol(child, started);
+            foreach (var child in ProcessTree.ChildrenOf(id)) OurPol.EndNewPol(child, started);
         Log.Warning("Provenance Watcher (pid {Pid}) did not exit in {Limit} and was ended", id, limit);
-    }
-
-    // still that pol.exe, and a viewer's
-    internal bool Ours(ProcessStamp stamp) => stamp.IsRunning() && IsViewerPol(stamp);
-
-    internal bool EndOurs(ProcessStamp stamp, int graceMs = 0, int afterMs = 0) => End(stamp, graceMs, afterMs, IsViewerPol);
-
-    private static bool End(ProcessStamp stamp, int graceMs, int afterMs, Func<ProcessStamp, bool> alsoIf)
-    {
-        var result = stamp.EndIfStill(graceMs, afterMs, alsoIf);
-        if (result != ProcessStamp.Ending.NotThat) ScreenSaver.PutBack();
-        return result == ProcessStamp.Ending.Ended;
     }
 }

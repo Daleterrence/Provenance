@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Provenance.Common.Game;
 using Provenance.Common.IO;
 using Provenance.Common.Security;
@@ -7,66 +5,41 @@ using Serilog;
 
 namespace Provenance.Common.Login;
 
-public sealed class SessionRecords(Func<ProcessStamp, bool> ours, Func<ProcessStamp, bool> endOurs)
+public sealed class SessionRecords
 {
     private const string SessionClaimLock = "session-claim";
 
-    // Pid 0 is a claim, start times are UTC ticks. The property names are the file's format, older copies read it too
-    private sealed record SessionFile(int Pid, long StartTicks, string? ProfileId, int OwnerPid = 0, long OwnerStartTicks = 0,
-                                      bool Played = false)
-    {
-        [JsonIgnore] public ProcessStamp Game => new(Pid, StartTicks);
-        [JsonIgnore] public ProcessStamp Owner => new(OwnerPid, OwnerStartTicks);
-    }
+    private readonly OurPol _ourPol;
 
-    // admin-only, so nothing running as the user can plant a record that makes the app end a process. Only a good
-    // answer's kept, a failed check gets tried again next time
-    private static readonly object SessionDirGate = new();
-    private static string? _sessionDir;
-    private static string SessionDir
-    {
-        get { lock (SessionDirGate) return _sessionDir ??= ProtectedFolders.SubDir("sessions"); }
-    }
+    internal SessionRecords(OurPol ourPol) => _ourPol = ourPol;
 
     private string? _sessionFile;
     private string? _claimFile;
+    private ProcessStamp? _stamp;
 
     internal string? Profile { get; private set; }
 
     // a record whose pol.exe and copy have both gone, so nothing saw that pol.exe end
-    internal static bool PolEndedUnseen() => SessionFilePaths().Any(path =>
-        TryReadRecord(path) is { Pid: > 0 } f && !f.Game.IsRunning() && !f.Owner.MightBeRunning());
+    internal static bool PolEndedUnseen() => SessionStore.SessionFilePaths().Any(path =>
+        SessionStore.TryReadRecord(path) is { Pid: > 0 } f && !f.Game.IsRunning() && !f.Owner.MightBeRunning());
 
-    private static SessionFile? TryReadRecord(string path)
+    internal void Save(ProcessStamp stamp, string? profileId) => Write(stamp, profileId, played: false);
+
+    // the record stays as the game's, so no copy signs this account in on top of it
+    internal void MarkPlayed()
     {
-        try { return JsonSerializer.Deserialize<SessionFile>(File.ReadAllText(path)); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { return null; }
+        if (_stamp is { } stamp) Write(stamp, Profile, played: true);
     }
 
-    // write then move, another copy may read it at any moment
-    private static void WriteRecord(string path, ProcessStamp game, string? profileId, bool played = false)
-    {
-        var me = ProcessStamp.Of(Environment.ProcessId) ?? new ProcessStamp(Environment.ProcessId, 0);
-        AtomicFile.Write(path, JsonSerializer.Serialize(
-            new SessionFile(game.Pid, game.StartUtcTicks, profileId, me.Pid, me.StartUtcTicks, played)));
-    }
-
-    private static List<string> SessionFilePaths()
-    {
-        var files = new List<string>();
-        try { if (Directory.Exists(SessionDir)) files.AddRange(Directory.GetFiles(SessionDir, "*.json")); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        return files;
-    }
-
-    internal void Save(ProcessStamp stamp, string? profileId, bool played = false)
+    private void Write(ProcessStamp stamp, string? profileId, bool played)
     {
         try
         {
+            _stamp = stamp;
             Profile = profileId;
-            Directory.CreateDirectory(SessionDir);
-            var path = Path.Combine(SessionDir, $"{stamp.Pid}.json");
-            WriteRecord(path, stamp, profileId, played);
+            Directory.CreateDirectory(SessionStore.SessionDir);
+            var path = Path.Combine(SessionStore.SessionDir, $"{stamp.Pid}.json");
+            SessionStore.WriteRecord(path, stamp, profileId, played);
             _sessionFile = path;
             ReleaseClaim();
         }
@@ -92,8 +65,8 @@ public sealed class SessionRecords(Func<ProcessStamp, bool> ours, Func<ProcessSt
                 return false;
             }
             ReleaseClaim();
-            var path = Path.Combine(SessionDir, $"claim-{Environment.ProcessId}.json");
-            WriteRecord(path, default, profileId);
+            var path = Path.Combine(SessionStore.SessionDir, $"claim-{Environment.ProcessId}.json");
+            SessionStore.WriteRecord(path, default, profileId);
             _claimFile = path;
             return true;
         }
@@ -116,11 +89,13 @@ public sealed class SessionRecords(Func<ProcessStamp, bool> ours, Func<ProcessSt
     {
         if (_sessionFile is { } f) FileDelete.Try(f);
         _sessionFile = null;
+        _stamp = null;
     }
 
     internal void Forget()
     {
         _sessionFile = null;
+        _stamp = null;
         Profile = null;
     }
 
@@ -128,13 +103,13 @@ public sealed class SessionRecords(Func<ProcessStamp, bool> ours, Func<ProcessSt
     // and the next login starts fresh
     public void EndOrphans()
     {
-        foreach (var path in SessionFilePaths())
+        foreach (var path in SessionStore.SessionFilePaths())
         {
             // one that won't read may be another copy's mid-replace, so it's never deleted
-            if (TryReadRecord(path) is not { } s) continue;
+            if (SessionStore.TryReadRecord(path) is not { } s) continue;
             bool ownerAlive = s.Owner.MightBeRunning();
             if (ownerAlive && s.OwnerPid != Environment.ProcessId) continue;
-            if (!ours(s.Game))
+            if (!_ourPol.Ours(s.Game))
             {
                 FileDelete.Try(path);
                 continue;
@@ -145,11 +120,11 @@ public sealed class SessionRecords(Func<ProcessStamp, bool> ours, Func<ProcessSt
         }
     }
 
-    public static bool HeldByAnotherCopy(string profileId)
+    internal static bool HeldByAnotherCopy(string profileId)
     {
-        foreach (var path in SessionFilePaths())
+        foreach (var path in SessionStore.SessionFilePaths())
         {
-            if (TryReadRecord(path) is not { } f || f.ProfileId != profileId) continue;
+            if (SessionStore.TryReadRecord(path) is not { } f || f.ProfileId != profileId) continue;
             if (f.Pid != 0 && !f.Game.IsRunning()) continue;
             if (f.Played) return true;
             if (f.OwnerPid != Environment.ProcessId && f.Owner.MightBeRunning()) return true;
@@ -157,12 +132,12 @@ public sealed class SessionRecords(Func<ProcessStamp, bool> ours, Func<ProcessSt
         return false;
     }
 
-    public static bool GameRunningFor(string profileId) => SessionFilePaths().Any(path =>
-        TryReadRecord(path) is { Played: true } f && f.ProfileId == profileId && f.Game.IsRunning());
+    public static bool GameRunningFor(string profileId) => SessionStore.SessionFilePaths().Any(path =>
+        SessionStore.TryReadRecord(path) is { Played: true } f && f.ProfileId == profileId && f.Game.IsRunning());
 
-    private void EndOrphan(ProcessStamp pol)
+    private void EndOrphan(ProcessStamp game)
     {
-        if (endOurs(pol))
-            Log.Warning("Ended pol.exe {Pid}: its copy of Provenance ended before the game started", pol.Pid);
+        if (_ourPol.End(game, afterMs: 3000))
+            Log.Warning("Ended pol.exe {Pid}: its copy of Provenance ended before the game started", game.Pid);
     }
 }

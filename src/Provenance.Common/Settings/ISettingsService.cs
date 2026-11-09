@@ -11,6 +11,9 @@ public interface ISettingsService
     // from the registry, not a setting. A PC only ever has one working install
     PolRegion? DetectedRegion { get; }
 
+    // a login, a pre-start or Play only gets this far on a supported region
+    PolRegion RegionOrDefault => DetectedRegion ?? PolRegion.UnitedStates;
+
     // after an install or a located one, which can be another region than the one found before
     void RedetectRegion() { }
 

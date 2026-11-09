@@ -62,7 +62,7 @@ internal static class HookEnvironment
     }
 
     // pol_hook leaves pol.exe's mutex names to Hook.dll when it sees the launch id
-    internal static void SetWindower(IDictionary<string, string?> env, string launchId) =>
+    internal static void SetLaunchId(IDictionary<string, string?> env, string launchId) =>
         env[HookContract.Env.LaunchId] = launchId;
 
     internal static IEnumerable<string> GoFileEntries(IDictionary<string, string?> env)
@@ -82,7 +82,7 @@ internal static class HookEnvironment
         foreach (var kv in launchEnv)
             if (kv.Key.StartsWith(HookContract.Env.PolPrefix, StringComparison.OrdinalIgnoreCase) && kv.Value != null)
                 target[kv.Key] = kv.Value;
-        target["PROVENANCE_LAUNCH"] = "1";
-        target[HookContract.Env.LaunchId] = launchId;
+        target[HookContract.Env.Launch] = "1";
+        SetLaunchId(target, launchId);
     }
 }
