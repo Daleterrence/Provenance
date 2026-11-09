@@ -30,7 +30,7 @@ public partial class RepairButtonViewModel : ObservableObject
     private readonly IWindowManager _windows;
     private readonly ISettingsService _settings;
     private readonly PolSession _pol;
-    private readonly NewsViewModel _news;
+    private readonly Func<bool> _windowShown;
     private readonly Func<bool> _loggedInOrLaunching;
     private readonly Func<bool> _multiRunning;
     private readonly Action _installChanged;
@@ -41,14 +41,14 @@ public partial class RepairButtonViewModel : ObservableObject
     private bool _probing;
 
     public RepairButtonViewModel(IDialogs dialogs, IWindowManager windows, ISettingsService settings, PolSession pol,
-                                 NewsViewModel news, Func<bool> loggedInOrLaunching, Func<bool> multiRunning,
+                                 Func<bool> windowShown, Func<bool> loggedInOrLaunching, Func<bool> multiRunning,
                                  Action installChanged, Action largeAddressAwareChanged)
     {
         _dialogs = dialogs;
         _windows = windows;
         _settings = settings;
         _pol = pol;
-        _news = news;
+        _windowShown = windowShown;
         _loggedInOrLaunching = loggedInOrLaunching;
         _multiRunning = multiRunning;
         _installChanged = installChanged;
@@ -139,7 +139,7 @@ public partial class RepairButtonViewModel : ObservableObject
     public async Task ProbeAsync()
     {
         // a multi-account run holds the update lock in this copy, which isn't "another copy"
-        if (_probing || Repairing || !_news.WindowShown || !Available || NotYet is not null || _loggedInOrLaunching() || _multiRunning()) return;
+        if (_probing || Repairing || !_windowShown() || !Available || NotYet is not null || _loggedInOrLaunching() || _multiRunning()) return;
         _probing = true;
         try { BusyReason = await Task.Run(Busy); }
         finally { _probing = false; }

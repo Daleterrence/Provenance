@@ -210,13 +210,10 @@ public sealed partial class SocialSearch : ObservableObject
             ? _social.ViewerText(0x46d0, "Friend registration accepted")
             : _social.ViewerText(0x46d1, "Friend registration declined");
         // ignoring from a request only ever covers this handle, same as the viewer
-        bool written = SocialRequests.AnswerRequest(pid, answer, token, f.RequestMid, subject, allHandles: false);
-        if (!written)
-        {
-            _answerToken = null;
-            _answerFor = null;
-        }
-        _social.WriteOrFail(written);
+        if (SocialRequests.AnswerRequest(pid, answer, token, f.RequestMid, subject, allHandles: false)) return;
+        _answerToken = null;
+        _answerFor = null;
+        _social.WriteOrFail(false);
     }
 
     internal void Apply(PolSocialSnapshot snap)

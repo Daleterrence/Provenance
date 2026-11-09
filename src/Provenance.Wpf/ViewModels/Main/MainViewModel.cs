@@ -64,9 +64,9 @@ public partial class MainViewModel : ObservableObject
         _socialPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _socialPoll.Tick += (_, _) => _pol.Poll();
         Multi = new MultiRunViewModel(dialogs, windows, settings, credentials, pol, _ui, Accounts,
-            new MultiRunLinks(() => IsLaunching || LoggedIn, _socialPoll.Stop, EnsureMemberAgreement, PromptHandleName, GameFolders,
+            new MultiRunLinks(LoggedInOrLaunching, _socialPoll.Stop, EnsureMemberAgreement, PromptHandleName, GameFolders,
                               () => PlayRegion, WritePolOptions, BackUpGameSettingsAsync));
-        Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, News, () => IsLaunching || LoggedIn, () => Multi.Running,
+        Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, () => News.WindowShown, LoggedInOrLaunching, () => Multi.Running,
                                            RefreshInstallState, RefreshLargeAddressAware);
         _pol.SnapshotUpdated += OnSnapshot;
         _pol.SessionEnded += why => _ui.Run(() =>
@@ -187,6 +187,8 @@ public partial class MainViewModel : ObservableObject
         _launchCts = null;
     }
 
+    private readonly ProgressLog _progressLog = new();
+
     private void OnProgress(LaunchProgress p)
     {
         if (p.Kind == LaunchProgressKind.Notice)
@@ -205,7 +207,7 @@ public partial class MainViewModel : ObservableObject
             if (f > ProgressFraction) ProgressFraction = Math.Min(f, 1.0);
         }
         TrackTimeLeft(p.Patch);
-        Log.Information("progress: {Stage}: {Detail}", p.Stage, p.Detail);
+        _progressLog.Write(p);
         if (p.Kind is LaunchProgressKind.Failed or LaunchProgressKind.Stopped) _elapsedTimer.Stop();
     }
 
@@ -238,8 +240,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnLoggedInChanged(bool value)
     {
         OnPropertyChanged(nameof(CloseTooltip));
-        Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
-        Repair.StartCommand.NotifyCanExecuteChanged();
+        RefreshStartButtons();
         if (value && (_settings.Current.KeepSignedInInTray || _settings.Current.MinimizeToTray)) TrayIcon.Warm();
         RefreshLargeAddressAware();
         // the hook numbers mail per session, so a request's notice can't outlive it
@@ -248,12 +249,18 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnIsLaunchingChanged(bool value)
     {
-        Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
-        Repair.StartCommand.NotifyCanExecuteChanged();
+        RefreshStartButtons();
         RefreshLargeAddressAware();
     }
 
-    // an open Settings page's Large Address Aware row goes by the same sign-in and run state as Repair
+    private bool LoggedInOrLaunching() => IsLaunching || LoggedIn;
+
+    private void RefreshStartButtons()
+    {
+        Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
+        Repair.StartCommand.NotifyCanExecuteChanged();
+    }
+
     // Pid has no change notice, so this gets called wherever it changes (any thread)
     private void RefreshStartAll() =>
         _ui.Post(() =>
@@ -262,6 +269,7 @@ public partial class MainViewModel : ObservableObject
             Repair.Refresh();
         });
 
+    // an open Settings page's Large Address Aware row goes by the same sign-in and run state as Repair
     private void RefreshLargeAddressAware() => _ = _openSettings?.ReadLargeAddressAwareAsync();
     public bool TrayTipShown => _settings.Current.TrayTipShown;
 

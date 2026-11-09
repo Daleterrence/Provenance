@@ -120,8 +120,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         if (write(pid, token)) return;
         _groupToken = null;
         _inviteFor = null;
-        _social.EditBusy = false;
-        _social.EditNote.Fail(HookFailures.RequestWriteFailed);
+        _social.WriteOrFail(false);
     }
 
     public bool CanCreate => Items.Count(x => !x.IsInvited) < PolLimits.MaxGroups;

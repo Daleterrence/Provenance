@@ -7,7 +7,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Social"
-        mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialViewModel}"
+        mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialSearch}"
         Title="Add a friend" Icon="/Assets/provenance.ico"
         Width="460" Height="520" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"

@@ -317,10 +317,11 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         }
 
         string? lastFailure = null;
+        var progressLog = new ProgressLog();
         var progress = new InlineProgress<LaunchProgress>(p =>
         {
             Kick();
-            Log.Information("progress: {Stage}: {Detail}", p.Stage, p.Detail);
+            progressLog.Write(p);
             if (p.Kind == LaunchProgressKind.Failed) lastFailure = p.Detail;
         });
         string? AskHandleName()

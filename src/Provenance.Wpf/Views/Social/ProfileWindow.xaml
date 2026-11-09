@@ -8,7 +8,7 @@
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Social"
         xmlns:services="clr-namespace:Provenance.Wpf.Services"
-        mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialViewModel}"
+        mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:FriendProfileViewModel}"
         Title="PlayOnline profile" Icon="/Assets/provenance.ico"
         Width="440" Height="600" ResizeMode="CanResize" MinWidth="380" MinHeight="360"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
