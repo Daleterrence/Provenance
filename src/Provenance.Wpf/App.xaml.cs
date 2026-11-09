@@ -173,7 +173,7 @@ public partial class App : Application
         var mainVm = Services.GetRequiredService<MainViewModel>();
         // after the view model's listening for a failed save, before its start-up clears the records of gone pol.exes or
         // pre-starts one
-        PolSession.NoteScreenSaver(Services.GetRequiredService<ISettingsService>());
+        ScreenSaver.Note(Services.GetRequiredService<ISettingsService>());
         // Windows logging off cancels a sign-in, and WPF would close the window ignoring its Cancel, so it closes the normal
         // way first: a held session's logged out and nothing goes to the tray
         SessionEnding += (_, _) =>

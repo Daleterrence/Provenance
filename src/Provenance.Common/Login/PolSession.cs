@@ -71,7 +71,6 @@ public sealed class PolSession : IDisposable
     // the room password's one-shot entry, and the full target the hook gets as POL_CRED_CHAT
     internal static string ChatKey(string launchId) => $"{LaunchKeyPrefix}{launchId}:CHAT";
     internal static string ChatTarget(string launchId) => $"{WindowsCredentialStore.DefaultPrefix}:{ChatKey(launchId)}";
-    private const string SessionClaimLock = "session-claim";
     private const string PrestartLock = "prestart";
     private static readonly TimeSpan[] RefusedRetryWaits = [TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(60)];
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(10);
@@ -80,23 +79,6 @@ public sealed class PolSession : IDisposable
     private enum LaunchOutcome { Started, Failed, Refused, Cancelled }
 
     internal sealed record Prestarted(int Pid, ProcessStamp? Stamp);
-
-    // Pid 0 is a claim, start times are UTC ticks. The property names are the file's format, older copies read it too
-    private sealed record SessionFile(int Pid, long StartTicks, string? ProfileId, int OwnerPid = 0, long OwnerStartTicks = 0,
-                                      bool Played = false)
-    {
-        [JsonIgnore] public ProcessStamp Game => new(Pid, StartTicks);
-        [JsonIgnore] public ProcessStamp Owner => new(OwnerPid, OwnerStartTicks);
-    }
-
-    // admin-only, so nothing running as the user can plant a record that makes the app end a process. Only a good
-    // answer's kept, a failed check gets tried again next time
-    private static readonly object SessionDirGate = new();
-    private static string? _sessionDir;
-    private static string SessionDir
-    {
-        get { lock (SessionDirGate) return _sessionDir ??= ProtectedFolders.SubDir("sessions"); }
-    }
 
     internal static long _dnsWarmedAt;
 
@@ -119,9 +101,6 @@ public sealed class PolSession : IDisposable
     private Timer? _debounce;
     internal Task<Prestarted?>? _prestart;
     private int _prestartHolds;   // under _gate
-    private string? _sessionFile;
-    private string? _sessionProfile;
-    private string? _claimFile;
     private ProcessStamp? _hook;
     private WindowerGameValues? _windowerPlay;
 
@@ -143,11 +122,14 @@ public sealed class PolSession : IDisposable
         WindowerSetup = (polExe, profile, lists, shared) => WindowerLauncher.SetupFor(_settings, polExe, profile, lists, shared);
         // no recorded start time means no proof, so it's never mine (the user may run their own pol.exe on a reused pid)
         PrestartAlive = pre => pre.Stamp is { } stamp && Ours(stamp);
+        Records = new SessionRecords(Ours, stamp => EndOurs(stamp, afterMs: 3000));
         DeleteLeftovers();
         _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
     }
 
     public int? Pid { get; internal set; }
+
+    public SessionRecords Records { get; }
 
     // everything a pol.exe start (or ending an earlier copy's) reaches outside this class, so they can be checked
     // offline with stand-ins
@@ -156,14 +138,14 @@ public sealed class PolSession : IDisposable
     internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
     internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; }
     internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
-    internal Func<bool> AnyPolRunningNow { get; init; } = AnyPolRunning;
-    internal Func<bool?> WindowsScreenSaver { get; init; } = ReadScreenSaver;
+    internal Func<bool> AnyPolRunningNow { get; init; } = ScreenSaver.AnyPolRunning;
+    internal Func<bool?> WindowsScreenSaver { get; init; } = ScreenSaver.Read;
     internal Func<string, string?, IReadOnlyDictionary<string, WindowerAddonList>?, WindowerAddonList?, WindowerLaunchSetup> WindowerSetup { get; init; }
     internal HoldViewerFiles HoldViewer { get; init; } = SignedBuilds.Hold;
     internal Action<string, CancellationToken> FindBuild { get; init; } = SignedBuilds.FetchIfUnknown;
     internal Func<Prestarted, bool> PrestartAlive { get; init; }
     internal Func<ProcessStamp, bool> IsViewerPol { get; init; } = stamp => stamp.IsViewerPol();
-    internal Action ScreenSaverBack { get; init; } = PutScreenSaverBack;
+    internal Action ScreenSaverBack { get; init; } = ScreenSaver.PutBack;
     // quiet this long and the login's stuck. polcore fails a list load or a login step at 100 s by itself, apart from
     // state 23, which it sits in for 400 s
     internal TimeSpan StallLimit { get; init; } = TimeSpan.FromSeconds(260);
@@ -247,7 +229,7 @@ public sealed class PolSession : IDisposable
             rc = await Task.Run(() => ConnectCore(pol, squareEnix, otp, rememberedProfileId, progress, askHandleName, launch, ct), ct);
             return rc;
         }
-        finally { if (rc != 0) ReleaseClaim(); }
+        finally { if (rc != 0) Records.ReleaseClaim(); }
     }
 
     // on the UI thread, where Settings changes the live addon lists while the login carries on in the background
@@ -500,7 +482,7 @@ public sealed class PolSession : IDisposable
                 int? exit = null;
                 try { if (_polProc is { HasExited: true } ended) exit = ended.ExitCode; }
                 catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
-                PutScreenSaverBack();
+                ScreenSaver.PutBack();
                 LogEarlyExit(pid, exit, logPath);
                 var (endedCode, endedText) = EndedBeforeLogIn(exit);
                 return Fail(endedCode, endedText);
@@ -581,7 +563,7 @@ public sealed class PolSession : IDisposable
         LargeAddressAwareSwitch.Apply(_settings, new LargeAddressAwareSwitch.Target(viewerDir, ViewerPolRunning, () => null, () => null), when);
 
     // Provenance can sit in the tray for days, so the screen saver's read again before every pol.exe start
-    private void NoteScreenSaverNow() => NoteScreenSaver(_settings, AnyPolRunningNow, WindowsScreenSaver);
+    private void NoteScreenSaverNow() => ScreenSaver.Note(_settings, AnyPolRunningNow, WindowsScreenSaver);
 
     internal static ProcessStartInfo LauncherStart(string launcherExe, string polExe)
     {
@@ -599,77 +581,8 @@ public sealed class PolSession : IDisposable
         env[HookContract.Env.CredKeyfile] = CredentialKey.FilePath;
         env[HookContract.Env.Hold] = "1";
         env[HookContract.Env.Owner] = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (ScreenSaverAtStart is { } saver) env[HookContract.Env.Screensaver] = saver;
+        if (ScreenSaver.AtStart is { } saver) env[HookContract.Env.Screensaver] = saver;
     }
-
-    // pol.exe switches the screen saver off while it runs, so it's read before each start and the last pol.exe out puts
-    // it back
-    internal static string? ScreenSaverAtStart { get; set; }
-
-    public static void NoteScreenSaver(ISettingsService settings) =>
-        NoteScreenSaver(settings, AnyPolRunning, ReadScreenSaver, PolEndedUnseen, SetScreenSaver);
-
-    private static bool AnyPolRunning()
-    {
-        var pols = Process.GetProcessesByName("pol");
-        foreach (var p in pols) p.Dispose();
-        return pols.Length > 0;
-    }
-
-    // Windows only has the real answer with no pol.exe about, so that's kept for starts while one runs. A settings.json
-    // that didn't load is left for the user's next save
-    internal static void NoteScreenSaver(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows,
-                                         Func<bool>? endedUnseen = null, Action<bool>? set = null)
-    {
-        bool? on;
-        if (polRunning())
-        {
-            on = settings.Current.ScreenSaverWasOn ?? readWindows();
-        }
-        else
-        {
-            on = readWindows();
-            // pol.exe only ever switches it off, and one that crashed with nothing watching never put it back
-            if (on == false && settings.Current.ScreenSaverWasOn == true && set is not null && endedUnseen?.Invoke() == true)
-            {
-                Log.Information("A pol.exe ended while no copy of Provenance was watching, so the screen saver's been put back on");
-                set(true);
-                on = true;
-            }
-            if (on is { } fresh)
-            {
-                if (settings.LoadProblem is null) settings.SaveChange(s => s.ScreenSaverWasOn = fresh);
-                else settings.Current.ScreenSaverWasOn = fresh;
-            }
-        }
-        ScreenSaverAtStart = on is { } v ? (v ? "1" : "0") : null;
-        SavedScreenSaver = settings.Current.ScreenSaverWasOn;
-        if (on is null) Log.Warning("Could not read the screen saver setting, the hook reads it itself");
-    }
-
-    internal static bool? SavedScreenSaver { get; set; }
-
-    // a pol.exe that crashed or got killed never put it back itself, and the next start's read has to be the real one
-    internal static void PutScreenSaverBack() => PutScreenSaverBack(SavedScreenSaver, AnyPolRunning, SetScreenSaver);
-
-    internal static bool PutScreenSaverBack(bool? wasOn, Func<bool> polRunning, Action<bool> set)
-    {
-        if (wasOn is not { } on || polRunning()) return false;
-        set(on);
-        return true;
-    }
-
-    private static bool? ReadScreenSaver() =>
-        User32.SystemParametersInfoW(SpiGetScreenSaveActive, 0, out int on, 0) ? on != 0 : null;
-
-    private static void SetScreenSaver(bool on) => User32.SystemParametersInfoW(SpiSetScreenSaveActive, on ? 1u : 0u, IntPtr.Zero, 0);
-
-    // a record whose pol.exe and copy have both gone, so nothing saw that pol.exe end
-    internal static bool PolEndedUnseen() => SessionFilePaths().Any(path =>
-        TryReadRecord(path) is { Pid: > 0 } f && !f.Game.IsRunning() && !f.Owner.MightBeRunning());
-
-    private const uint SpiGetScreenSaveActive = 0x10;
-    private const uint SpiSetScreenSaveActive = 0x11;
 
     private void StartWatcher(int pid)
     {
@@ -1075,132 +988,14 @@ public sealed class PolSession : IDisposable
     private static bool End(ProcessStamp stamp, int graceMs, int afterMs, Func<ProcessStamp, bool> alsoIf)
     {
         var result = stamp.EndIfStill(graceMs, afterMs, alsoIf);
-        if (result != ProcessStamp.Ending.NotThat) PutScreenSaverBack();
+        if (result != ProcessStamp.Ending.NotThat) ScreenSaver.PutBack();
         return result == ProcessStamp.Ending.Ended;
-    }
-
-    private static SessionFile? TryReadRecord(string path)
-    {
-        try { return JsonSerializer.Deserialize<SessionFile>(File.ReadAllText(path)); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { return null; }
-    }
-
-    // write then move, another copy may read it at any moment
-    private static void WriteRecord(string path, ProcessStamp game, string? profileId, bool played = false)
-    {
-        var me = ProcessStamp.Of(Environment.ProcessId) ?? new ProcessStamp(Environment.ProcessId, 0);
-        AtomicFile.Write(path, JsonSerializer.Serialize(
-            new SessionFile(game.Pid, game.StartUtcTicks, profileId, me.Pid, me.StartUtcTicks, played)));
-    }
-
-    private static List<string> SessionFilePaths()
-    {
-        var files = new List<string>();
-        try { if (Directory.Exists(SessionDir)) files.AddRange(Directory.GetFiles(SessionDir, "*.json")); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        return files;
     }
 
     private void SaveSession(string? profileId, bool played = false)
     {
-        try
-        {
-            if (Pid is not { } pid || _polStamp is not { } stamp) return;
-            _sessionProfile = profileId;
-            Directory.CreateDirectory(SessionDir);
-            var path = Path.Combine(SessionDir, $"{pid}.json");
-            WriteRecord(path, stamp, profileId, played);
-            _sessionFile = path;
-            ReleaseClaim();
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            Log.Warning(e, "Could not save the session record, another copy may not see this login");
-        }
-    }
-
-    public bool TryClaimAccount(string profileId, out string? problem)
-    {
-        problem = null;
-        try
-        {
-            using var claim = AdminLock.TryAcquire(SessionClaimLock, TimeSpan.FromSeconds(5));
-            if (claim is null) { problem = "Another copy of Provenance is busy logging in. Try again in a moment."; return false; }
-            if (HeldByAnotherCopy(profileId))
-            {
-                // multi-account mode lets go of its games, so a game's record might have no live copy
-                problem = GameRunningFor(profileId)
-                    ? "FINAL FANTASY XI is already running on this account. Log in again once you've closed that game."
-                    : "Another copy of Provenance is already logged in to this account, or logging in. Use that copy, or log out there first.";
-                return false;
-            }
-            ReleaseClaim();
-            var path = Path.Combine(SessionDir, $"claim-{Environment.ProcessId}.json");
-            WriteRecord(path, default, profileId);
-            _claimFile = path;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            // can't check means not safe, a sign-in here could take another copy's session over
-            Log.Warning(ex, "Could not claim account {Account}", profileId);
-            problem = "Provenance couldn't check whether another copy of Provenance is using this account. Try again in a moment.";
-            return false;
-        }
-    }
-
-    public void ReleaseClaim()
-    {
-        if (_claimFile is { } f) FileDelete.Try(f);
-        _claimFile = null;
-    }
-
-    private void ClearSession()
-    {
-        if (_sessionFile is { } f) FileDelete.Try(f);
-        _sessionFile = null;
-    }
-
-    // a copy that ended before Play can leave its pol.exe logged in (or still logging itself out), so it's ended here
-    // and the next login starts fresh
-    public void EndOrphans()
-    {
-        foreach (var path in SessionFilePaths())
-        {
-            // one that won't read may be another copy's mid-replace, so it's never deleted
-            if (TryReadRecord(path) is not { } s) continue;
-            bool ownerAlive = s.Owner.MightBeRunning();
-            if (ownerAlive && s.OwnerPid != Environment.ProcessId) continue;
-            if (!Ours(s.Game))
-            {
-                FileDelete.Try(path);
-                continue;
-            }
-            if (s.Played || ownerAlive) continue;
-            EndOrphan(s.Game);
-            FileDelete.Try(path);
-        }
-    }
-
-    public static bool HeldByAnotherCopy(string profileId)
-    {
-        foreach (var path in SessionFilePaths())
-        {
-            if (TryReadRecord(path) is not { } f || f.ProfileId != profileId) continue;
-            if (f.Pid != 0 && !f.Game.IsRunning()) continue;
-            if (f.Played) return true;
-            if (f.OwnerPid != Environment.ProcessId && f.Owner.MightBeRunning()) return true;
-        }
-        return false;
-    }
-
-    public static bool GameRunningFor(string profileId) => SessionFilePaths().Any(path =>
-        TryReadRecord(path) is { Played: true } f && f.ProfileId == profileId && f.Game.IsRunning());
-
-    private void EndOrphan(ProcessStamp pol)
-    {
-        if (EndOurs(pol, afterMs: 3000))
-            Log.Warning("Ended pol.exe {Pid}: its copy of Provenance ended before the game started", pol.Pid);
+        if (Pid is not { } || _polStamp is not { } stamp) return;
+        Records.Save(stamp, profileId, played);
     }
 
     private void ReadSnapshot()
@@ -1227,7 +1022,7 @@ public sealed class PolSession : IDisposable
             try { if (_polProc is { HasExited: true } gone && gone.Id == pid) exit = gone.ExitCode; }
             catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
             Log.Warning("Held PlayOnline session (pid {Pid}) ended on its own (exit code {Exit})", pid, exit);
-            PutScreenSaverBack();
+            ScreenSaver.PutBack();
             HookFiles.ClearFor(pid);
             DropChatPassword();
             Pid = null;
@@ -1235,7 +1030,7 @@ public sealed class PolSession : IDisposable
         }
         finally { Monitor.Exit(_gate); }
         StopWatcher();
-        ClearSession();
+        Records.Clear();
         // taken now so one that a new sign-in starts meanwhile is left alone
         var hook = TakeThirdPartyHook();
         Task.Run(() => EndThirdPartyHook(hook));
@@ -1292,7 +1087,7 @@ public sealed class PolSession : IDisposable
         _played = true;
         StopWatcher();
         // the record stays as the game's, so no copy signs this account in on top of it
-        SaveSession(_sessionProfile, played: true);
+        SaveSession(Records.Profile, played: true);
     }
 
     private void TrackThirdPartyHook(ProcessStamp hook)
@@ -1326,7 +1121,7 @@ public sealed class PolSession : IDisposable
         lock (_gate)
         {
             if (_played) return;
-            ClearSession();
+            Records.Clear();
             if (Pid is { } pid)
             {
                 var stamp = _polStamp;
@@ -1374,7 +1169,7 @@ public sealed class PolSession : IDisposable
 
     public void GameExited()
     {
-        PutScreenSaverBack();
+        ScreenSaver.PutBack();
         lock (_gate)
         {
             if (!_played) return;
@@ -1382,7 +1177,7 @@ public sealed class PolSession : IDisposable
             _polStamp = null;
             _played = false;
         }
-        ClearSession();
+        Records.Clear();
         TakeThirdPartyHook();
     }
 
@@ -1398,8 +1193,7 @@ public sealed class PolSession : IDisposable
             _polStamp = null;
             _launchId = null;
             _played = false;
-            _sessionFile = null;
-            _sessionProfile = null;
+            Records.Forget();
             // nothing watches the game from here, and one that crashes leaves the screen saver off
             if (_polProc is { } game)
                 game.WaitForExitAsync().ContinueWith(_ => { game.Dispose(); ScreenSaverBack(); }, TaskScheduler.Default);
@@ -1466,7 +1260,7 @@ public sealed class PolSession : IDisposable
             {
                 Log.Warning("pol.exe {Pid} ended before the game started, the PlayOnline session was lost", pid);
                 var why = LostSessionText(pid) ?? PlaySessionClosedText;
-                PutScreenSaverBack();
+                ScreenSaver.PutBack();
                 EndUnstartedPlay();
                 // no pol.exe left to stop, and a later one with this pid would read it
                 HookFiles.Delete(pid, HookContract.Files.Stop);

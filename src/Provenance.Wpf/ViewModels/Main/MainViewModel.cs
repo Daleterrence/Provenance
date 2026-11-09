@@ -415,7 +415,7 @@ public partial class MainViewModel : ObservableObject
 
     public void Startup(bool autoLoginSuppressed)
     {
-        _pol.EndOrphans();
+        _pol.Records.EndOrphans();
         _pol.Prestart();
         if (!Accounts.AutoLogin || autoLoginSuppressed || !Accounts.HasSavedCredentials) return;
         Log.Information("Auto sign-in for {Account}", Accounts.SelectedProfile?.Id);
@@ -546,7 +546,7 @@ public partial class MainViewModel : ObservableObject
         if (Accounts.LoadForLogIn(profile) is not { } details) return;
         var (pol, squareEnix) = details;
         // claimed before the code's asked, so no other copy signs this account in meanwhile
-        if (!_pol.TryClaimAccount(profile.Id, out var claimProblem))
+        if (!_pol.Records.TryClaimAccount(profile.Id, out var claimProblem))
         {
             _dialogs.Error("Account in use", claimProblem ?? "This account is in use in another copy of Provenance.");
             return;
@@ -554,7 +554,7 @@ public partial class MainViewModel : ObservableObject
         var otp = profile.UseOtp ? Accounts.AskOtp(profile, squareEnix) : "";
         if (otp is null)
         {
-            _pol.ReleaseClaim();
+            _pol.Records.ReleaseClaim();
             return;
         }
         Social.Start(profile.Id);

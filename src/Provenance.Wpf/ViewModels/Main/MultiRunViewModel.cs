@@ -217,7 +217,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         if (Running && !Stopping) Status = text;
     }
 
-    bool IMultiRunHost.IsInGame(string profileId) => PolSession.GameRunningFor(profileId);
+    bool IMultiRunHost.IsInGame(string profileId) => SessionRecords.GameRunningFor(profileId);
 
     async Task<AccountFailure?> IMultiRunHost.LogInAndPlayAsync(MultiRunAccount account, CancellationToken ct)
     {
@@ -282,7 +282,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         if (details.Problem is { } problem) return new(AccountFailureKind.Account, problem);
         var (pol, squareEnix) = (details.Pol!, details.SquareEnix!);
 
-        if (!_pol.TryClaimAccount(profile.Id, out var claimProblem))
+        if (!_pol.Records.TryClaimAccount(profile.Id, out var claimProblem))
             return new(AccountFailureKind.Account, claimProblem ?? "This account is in use in another copy of Provenance.");
 
         // outside the no-progress guard, it waits for the user
@@ -292,7 +292,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             var code = _accounts.AskOtp(profile, squareEnix);
             if (code is null || ct.IsCancellationRequested)
             {
-                _pol.ReleaseClaim();
+                _pol.Records.ReleaseClaim();
                 ct.ThrowIfCancellationRequested();
                 return new(AccountFailureKind.Account, "The one-time password was cancelled.");
             }
@@ -445,7 +445,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
     {
         try
         {
-            _pol.ReleaseClaim();
+            _pol.Records.ReleaseClaim();
             await Task.Run(() =>
             {
                 _pol.StopHold();
