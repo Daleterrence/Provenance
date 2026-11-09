@@ -225,6 +225,7 @@ public partial class App : Application
             try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }
             if (_host is { } host) EndHost(host);
             if (RestartOnExit) StartAgain();
+            if (!SelfUpdate.HandOverAfterExit()) StartAgain(LaunchArgs.SkipUpdateCheckSwitch);
         }
         finally
         {
@@ -234,11 +235,12 @@ public partial class App : Application
     }
 
     // after the host's gone, so a held session's already logged out by the time the new copy starts
-    private static void StartAgain()
+    private static void StartAgain(params string[] args)
     {
         try
         {
             var psi = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, WorkingDirectory = AppContext.BaseDirectory };
+            foreach (var a in args) psi.ArgumentList.Add(a);
             using var started = System.Diagnostics.Process.Start(psi);
             Log.Information("Started Provenance again (pid {Pid})", started?.Id);
         }

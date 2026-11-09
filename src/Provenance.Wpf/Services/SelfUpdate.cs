@@ -115,7 +115,8 @@ public static class SelfUpdate
 
             window.ShowInstalling();
             Log.Information("Handing over to Update.exe to install {Version}", target.Version);
-            updates.WaitExitThenApplyUpdates(target, silent: false, restart: true, args.ForRestart(noAutoLogin));
+            var restartArgs = args.ForRestart(noAutoLogin);
+            QueueHandOver(() => UpdateExe.Apply(VelopackLocator.Current, target, silent: false, waitPid: 0, restart: true, restartArgs));
             handedOver = true;
             return true;
         }
@@ -147,6 +148,29 @@ public static class SelfUpdate
                     catch (Exception ex) { Log.Debug(ex, "The update window would not close"); }
                 }
             }
+        }
+    }
+
+    private static Action? _handOver;
+
+    internal static void QueueHandOver(Action start) => _handOver = start;
+
+    // Update.exe is started once this copy's gone. Told to wait on our pid it gets "Access is denied" opening the
+    // elevated process and carries on without waiting
+    internal static bool HandOverAfterExit()
+    {
+        var start = Interlocked.Exchange(ref _handOver, null);
+        if (start is null) return true;
+        try
+        {
+            start();
+            Log.Information("Update.exe started");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Could not start Update.exe");
+            return false;
         }
     }
 
