@@ -3,7 +3,6 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Windower;
 
-// the plugins step of an update, and a single plugin install
 internal sealed class WindowerPluginUpdate(WindowerUpdateFolder job, WindowerServers servers, string branch)
 {
     private readonly string _pluginsDir = Path.Combine(job.Root, "plugins");

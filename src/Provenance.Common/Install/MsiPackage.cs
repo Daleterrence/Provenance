@@ -14,7 +14,6 @@ namespace Provenance.Common.Install;
 // refuses what it can't do
 public sealed class MsiPackage : IDisposable
 {
-    internal const string SharedDlls = @"SOFTWARE\Microsoft\Windows\CurrentVersion\SharedDLLs";
     private static readonly Regex TokenRx = new(@"\[(\\.|[^\[\]]*)\]");
     private static readonly Regex ConditionRx = new(@"^\s*([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*""([^""]*)""\s*$");
     private readonly MsiDatabase _db;
@@ -209,8 +208,8 @@ public sealed class MsiPackage : IDisposable
         foreach (var (comp, c) in comps)
             if ((c.Attrs & 8) != 0 && On(comp) && files.TryGetValue(c.KeyPath, out var shared))
             {
-                using var hive = Hive(sandbox);
-                using var k = hive.CreateSubKey(SharedDlls, true);
+                using var hive = MsiRegistry.Hive(sandbox);
+                using var k = hive.CreateSubKey(MsiRegistry.SharedDlls, true);
                 if (keepExisting && k.GetValue(shared.Path) is not null) continue;   // a repair isn't another install
                 k.SetValue(shared.Path, (k.GetValue(shared.Path) is int n ? n : 0) + 1, RegistryValueKind.DWord);
                 if (keepExisting) values++;
@@ -315,16 +314,12 @@ public sealed class MsiPackage : IDisposable
         _db.Query($"SELECT `Directory_` FROM `Component` WHERE `Component`='{component.Replace("'", "")}'").FirstOrDefault() is { } r &&
         dirs.TryGetValue(r[0], out var d) ? d : null;
 
-    internal static RegistryKey Hive(Sandbox? sandbox, bool user = false) => sandbox != null
-        ? Registry.CurrentUser.CreateSubKey(sandbox.RegistryKey + (user ? @"\HKCU" : @"\HKLM"), true)
-        : RegistryKey.OpenBaseKey(user ? RegistryHive.CurrentUser : RegistryHive.LocalMachine, RegistryView.Registry32);
-
     // root 0 = classes (per machine here), 1 = current user, 2 = machine
     private static int WriteRegistry(int root, string key, string name, string value, Func<string, string> format, Sandbox? sandbox,
                                      bool keepExisting = false, Keep how = Keep.Kind)
     {
         if (root is not (0 or 1 or 2 or -1)) throw new InvalidDataException($"Registry root {root} is not supported.");
-        using var hive = Hive(sandbox, user: root == 1);
+        using var hive = MsiRegistry.Hive(sandbox, user: root == 1);
         var path = root == 0 ? @"SOFTWARE\Classes\" + key : key;
         // "+" or "*" with no value creates the key, "-" is only a removal rule for uninstall
         if (value.Length == 0 && name is "+" or "*" or "-")

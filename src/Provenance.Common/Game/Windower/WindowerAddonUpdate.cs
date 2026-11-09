@@ -4,7 +4,6 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Windower;
 
-// the addons step of an update, and a single addon install
 internal sealed class WindowerAddonUpdate(WindowerUpdateFolder job, WindowerServers servers, string branch)
 {
     private readonly string _addonsDir = Path.Combine(job.Root, "addons");

@@ -404,12 +404,14 @@ public sealed partial class AshitaScript
     // each step asks for the analysis again, an edit throws the last one away
     private bool Set(bool addon, string name, bool on)
     {
-        if (State(Now(addon), name) == AshitaLoad.ByScript || on && !ValidName(name) && Toggles(Now(addon), name).Count == 0) return false;
+        var loads = Now(addon);
+        if (State(loads, name) == AshitaLoad.ByScript || on && !ValidName(name) && Toggles(loads, name).Count == 0) return false;
         if (on && addon && State(Now(false), AddonsPlugin) == AshitaLoad.Off && !Set(false, AddonsPlugin, true)) return false;
-        var state = State(Now(addon), name);
+        loads = Now(addon);
+        var state = State(loads, name);
         if (state == AshitaLoad.ByScript) return false;
         if (state == (on ? AshitaLoad.On : AshitaLoad.Off)) return true;
-        var toggles = Toggles(Now(addon), name);
+        var toggles = Toggles(loads, name);
         if (!on)
         {
             foreach (var e in toggles.Where(e => e.Active)) Edit(e.Line, "#" + lines[e.Line].Text);
@@ -419,7 +421,7 @@ public sealed partial class AshitaScript
         int after = addon ? AddonsLine() : -1;
         int off = toggles.FindIndex(e => !e.Active && e.Line > after);
         if (off >= 0) Edit(toggles[off].Line, lines[toggles[off].Line].Text[1..]);
-        else Insert(InsertAt(Now(addon)), (addon ? "/addon load " : "/load ") + name);
+        else Insert(InsertAt(loads), (addon ? "/addon load " : "/load ") + name);
         return true;
     }
 
@@ -430,7 +432,8 @@ public sealed partial class AshitaScript
     // which is there to give addons time to load
     private int InsertAt(Loads loads)
     {
-        int wait = Analyse().FirstWait < 0 ? lines.Count : Analyse().FirstWait;
+        var wait = Analyse().FirstWait;
+        if (wait < 0) wait = lines.Count;
         int last = loads.Toggles.Where(e => e.Line < wait).Select(e => e.Line).DefaultIfEmpty(-1).Max();
         if (loads.IsAddons)
         {

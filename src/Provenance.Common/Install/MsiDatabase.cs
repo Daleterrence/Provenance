@@ -5,7 +5,6 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Install;
 
-// the tables, streams and handles of one MSI file, read straight through msi.dll
 public sealed class MsiDatabase : IDisposable
 {
     private readonly IntPtr _db;

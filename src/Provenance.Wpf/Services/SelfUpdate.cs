@@ -16,11 +16,6 @@ public static class SelfUpdate
 {
     public const string UpdateServer = "https://updates.provenancexi.app/";
 
-    // the restart after an update passes both. The first stops a failed apply looping, the second means only that
-    // start (not a shortcut that has the first) judges how the update went
-    public const string SkipCheckArg = "--no-update-check";
-    public const string AfterUpdateArg = "--after-update";
-
     private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan StallTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan FailedApplyPause = TimeSpan.FromDays(1);
@@ -35,7 +30,7 @@ public static class SelfUpdate
         File.Exists(Path.Combine(AppContext.BaseDirectory, "..", "Update.exe"));
 
     // true when this copy should just close: Update.exe is installing an update and starts Provenance again itself
-    public static async Task<bool> RunAsync(string[] args, bool noAutoLogin)
+    public static async Task<bool> RunAsync(LaunchArgs args, bool noAutoLogin)
     {
         if (!InstalledCopy)
         {
@@ -49,32 +44,7 @@ public static class SelfUpdate
         {
             updates = new UpdateManager(new ChannelSource(UpdateServer, VelopackLocator.Current.CurrentlyInstalledVersion));
             root = VelopackLocator.Current.RootAppDir ?? throw new InvalidOperationException("Velopack found no install folder.");
-            if (!updates.IsInstalled)
-            {
-                Log.Information("Not an installed copy, so no update check");
-                return false;
-            }
-            if (args.Any(a => a.Equals(SkipCheckArg, StringComparison.OrdinalIgnoreCase)))
-            {
-                if (args.Any(a => a.Equals(AfterUpdateArg, StringComparison.OrdinalIgnoreCase)))
-                {
-                    Log.Information("Update check skipped, this start follows an update");
-                    NoteApplyResult(updates);
-                }
-                else Log.Information("Update check skipped ({Arg})", SkipCheckArg);
-                return false;
-            }
-            // a copy that starts while Update.exe swaps the files would only get killed by it
-            if (FindRunning(root, "Update") is { } updater)
-            {
-                Log.Information("{Updater} is installing an update and starts Provenance again afterwards, so this copy closes", updater);
-                return true;
-            }
-            if (FindRunning(root, InUseNames) is { } user)
-            {
-                Log.Information("Update check skipped, {Process} is running from the install folder", user);
-                return false;
-            }
+            if (WhyNoCheck(args, updates, root) is { } why) return why.CloseThisCopy;
         }
         catch (Exception ex)
         {
@@ -145,11 +115,7 @@ public static class SelfUpdate
 
             window.ShowInstalling();
             Log.Information("Handing over to Update.exe to install {Version}", target.Version);
-            // a held Shift would be gone by the time the new version starts
-            string[] restartArgs = noAutoLogin && !args.Any(a => a.Equals("--noautologin", StringComparison.OrdinalIgnoreCase))
-                ? [.. args, "--noautologin", SkipCheckArg, AfterUpdateArg]
-                : [.. args, SkipCheckArg, AfterUpdateArg];
-            updates.WaitExitThenApplyUpdates(target, silent: false, restart: true, restartArgs);
+            updates.WaitExitThenApplyUpdates(target, silent: false, restart: true, args.ForRestart(noAutoLogin));
             handedOver = true;
             return true;
         }
@@ -182,6 +148,40 @@ public static class SelfUpdate
                 }
             }
         }
+    }
+
+    private readonly record struct NoCheck(bool CloseThisCopy);
+
+    // null when the check should go ahead. Logs why when it shouldn't
+    private static NoCheck? WhyNoCheck(LaunchArgs args, UpdateManager updates, string root)
+    {
+        if (!updates.IsInstalled)
+        {
+            Log.Information("Not an installed copy, so no update check");
+            return new NoCheck(false);
+        }
+        if (args.SkipUpdateCheck)
+        {
+            if (args.AfterUpdate)
+            {
+                Log.Information("Update check skipped, this start follows an update");
+                NoteApplyResult(updates);
+            }
+            else Log.Information("Update check skipped ({Arg})", LaunchArgs.SkipUpdateCheckSwitch);
+            return new NoCheck(false);
+        }
+        // a copy that starts while Update.exe swaps the files would only get killed by it
+        if (FindRunning(root, "Update") is { } updater)
+        {
+            Log.Information("{Updater} is installing an update and starts Provenance again afterwards, so this copy closes", updater);
+            return new NoCheck(true);
+        }
+        if (FindRunning(root, InUseNames) is { } user)
+        {
+            Log.Information("Update check skipped, {Process} is running from the install folder", user);
+            return new NoCheck(false);
+        }
+        return null;
     }
 
     // the exe path for Provenance, the watcher and Update.exe, the loaded modules for pol.exe (it lives in the

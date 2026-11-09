@@ -239,6 +239,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
         var workers = new DownloadWorkers(ep, connections, product.Name, total, progress,
             (link, f, moved, kept, token) => FetchOne(link, f, local, moved, kept, token));
+        // biggest files first
         workers.Run(work.OrderByDescending(w => w.Bytes).Select(w => w.File), ct);
     }
 
@@ -250,7 +251,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         else if (d.Kind == Kind.Indirect) Indirect(link, f, d.From, d.FromTmp2, moved, kept, ct);
     }
 
-    // Biggest files first. A broken connection gets replaced and its file restarted (three goes max), a refused one
+    // A broken connection gets replaced and its file restarted (three goes max), a refused one
     // hands its file back, and whatever's left gets one single-connection round.
     private sealed class DownloadWorkers(IPEndPoint ep, int connections, string productName, long total, IProgress<PatchProgress>? progress,
                                          Action<PatchServerLink, PatchFile, Action<long>, Action, CancellationToken> fetch)

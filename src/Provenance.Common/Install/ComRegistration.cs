@@ -14,7 +14,7 @@ internal static class ComRegistration
     {
         var progIds = db.Query("SELECT `ProgId`,`ProgId_Parent`,`Class_`,`Description` FROM `ProgId`");
         int classes = 0, progIdsWritten = 0;
-        using var hklm = MsiPackage.Hive(sandbox);
+        using var hklm = MsiRegistry.Hive(sandbox);
         foreach (var r in db.Query("SELECT `CLSID`,`Context`,`Component_`,`ProgId_Default`,`Description` FROM `Class`"))
         {
             if (!on(r[2])) continue;
@@ -95,7 +95,7 @@ internal static class ComRegistration
     private static bool TypeLibIntact(string path)
     {
         if (ReadTypeLib(path) is not { } a) return false;
-        using var hklm = MsiPackage.Hive(null);
+        using var hklm = MsiRegistry.Hive(null);
         using var k = hklm.OpenSubKey($@"SOFTWARE\Classes\TypeLib\{a.guid:B}\{a.wMajorVerNum:x}.{a.wMinorVerNum:x}\{a.lcid:x}\win32");
         return k?.GetValue("") is string named && SamePath(Unquote(named), path) && File.Exists(Unquote(named));
     }

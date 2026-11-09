@@ -50,33 +50,24 @@ internal sealed class WindowerUpdateFolder : IDisposable
         return Path.Combine(TempDir, Guid.NewGuid().ToString());
     }
 
-    // Downloads into a fresh temp file. Temp is null when nothing usable came down: why is in Errors, and the temp's
-    // gone. Fetch says how it went either way, a 304 isn't an error
+    // Downloads into a fresh temp file. Temp is null when nothing usable came down, and why is in Errors. Whatever's
+    // left in updates	emp is Cleanup's. Fetch says how it went either way, a 304 isn't an error
     public async Task<(WindowerFetch Fetch, string? Temp)> FetchToTemp(Uri site, string url, DateTime? since, string what,
                                                                        Func<string, bool>? usable = null, string? unusable = null)
     {
         var temp = NewTemp();
-        try
+        var f = await Http.DownloadAsync(site, url, temp, since, Ct);
+        if (!f.Ok)
         {
-            var f = await Http.DownloadAsync(site, url, temp, since, Ct);
-            if (!f.Ok)
-            {
-                Note(what, f);
-                return (f, null);
-            }
-            if (usable is not null && !usable(temp))
-            {
-                Errors.Add(unusable!);
-                Delete(temp);
-                return (f, null);
-            }
-            return (f, temp);
+            Note(what, f);
+            return (f, null);
         }
-        catch
+        if (usable is not null && !usable(temp))
         {
-            Delete(temp);
-            throw;
+            Errors.Add(unusable!);
+            return (f, null);
         }
+        return (f, temp);
     }
 
     public void Note(string what, WindowerFetch f)

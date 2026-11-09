@@ -42,7 +42,8 @@ public static partial class GameSettingsBackup
     private static readonly string[] FilterLists = ["allowed.txt", "prohibited.txt"];
 
     private const int ManifestFormat = 1;
-    internal const long MaxFile = 16 << 20, MaxTotal = 1L << 30;
+    internal const long MaxFile = 16 << 20;
+    private const long MaxTotal = 1L << 30;
     private const int MaxEntries = 100_000;
 
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
@@ -84,7 +85,6 @@ public static partial class GameSettingsBackup
         public long Size { get; set; }
         public DateTime Written { get; set; }
     }
-
 
     public static BackupResult BackUp(BackupSources sources, string folder, DateTime? now = null)
     {
@@ -427,8 +427,6 @@ public static partial class GameSettingsBackup
                             && m.Written.ToUniversalTime().ToFileTimeUtc() == f.Stat.Written);
     }
 
-
-
     private static void Add(ZipArchive zip, string entry, byte[] data, long written)
     {
         var e = zip.CreateEntry(entry, CompressionLevel.Optimal);
@@ -541,5 +539,4 @@ public static partial class GameSettingsBackup
             if (written is { } at) File.SetLastWriteTimeUtc(fs.SafeFileHandle, at.ToUniversalTime());
         });
     }
-
 }

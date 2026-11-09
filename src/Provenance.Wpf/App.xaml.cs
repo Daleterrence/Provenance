@@ -32,6 +32,7 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        var args = new LaunchArgs(e.Args);
         // first thing: the update check (or a whole update) can outlast a held Shift
         bool shiftAtStart = ShiftDown();
         Log.Information("Provenance starting");
@@ -43,17 +44,37 @@ public partial class App : Application
         // first, while nothing else runs, so an update can restart the app straight away. Closing the update window or
         // the start-up error card mustn't end the app (last window closed)
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        if (await SelfUpdate.RunAsync(e.Args, noAutoLogin: shiftAtStart))
+        if (await SelfUpdate.RunAsync(args, noAutoLogin: shiftAtStart))
         {
             Shutdown(0);
             return;
         }
 
         // admin-only before any service starts, or a user-level program could plant hook files or hold a lock
+        if (!PrepareProtectedFolders())
+        {
+            Shutdown(1);
+            return;
+        }
+        SweepOldHookFiles();
+
+        BuildHost();
+        await _host!.StartAsync();
+
+        WarmKeys();
+        CatchUnhandled();
+
+        var mainVm = ShowMainWindow();
+        StartMainViewModel(mainVm, shiftAtStart || ShiftDown() || args.NoAutoLogin);
+    }
+
+    private static bool PrepareProtectedFolders()
+    {
         try
         {
             HookFiles.Dir = ProtectedFolders.SubDir("hook");
             AdminLock.Dir = ProtectedFolders.SubDir("locks");
+            return true;
         }
         catch (Exception ex)
         {
@@ -66,13 +87,19 @@ public partial class App : Application
                 Log.Error(dialogError, "The start-up error card could not be shown");
                 MessageBox.Show(text, "Provenance", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-            Shutdown(1);
-            return;
+            return false;
         }
-        // a snapshot holds friends' messages, so it goes once its pol.exe has
+    }
+
+    // a snapshot holds friends' messages, so it goes once its pol.exe has
+    private static void SweepOldHookFiles()
+    {
         int swept = HookFiles.Sweep(HookFiles.RequiredDir, ProcessStamp.PidRunning, TimeSpan.FromDays(7), DateTime.UtcNow);
         if (swept > 0) Log.Information("Removed {Count} old hook file(s)", swept);
+    }
 
+    private void BuildHost()
+    {
         // taken here on the UI thread, since the settings are built lazily on whichever thread asks first
         var uiThread = SynchronizationContext.Current;
         if (uiThread is null) Log.Warning("The settings were built with no UI thread to hand changes to");
@@ -93,14 +120,19 @@ public partial class App : Application
                 services.AddSingleton<MainWindow>();
             })
             .Build();
-        await _host.StartAsync();
+    }
 
-        // every key's read on a worker now, so the first use on the UI thread finds it ready
+    // every key's read on a worker now, so the first use on the UI thread finds it ready
+    private void WarmKeys()
+    {
         _ = (Services.GetRequiredService<ICredentialService>() as CredentialService)?.OpenKeyInBackground();
         _ = Services.GetRequiredService<PolSession>().OpenKeyInBackground();
         _ = KeePassXc.OpenKeyInBackground();
         _ = OtpReuse.OpenKeyInBackground();
+    }
 
+    private void CatchUnhandled()
+    {
         DispatcherUnhandledException += (_, args) =>
         {
             Log.Error(args.Exception, "Unhandled dispatcher exception");
@@ -131,7 +163,10 @@ public partial class App : Application
         };
         // without "Provenance exiting" before it, something ended the process outside WPF's shutdown
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Log.Information("Process exit");
+    }
 
+    private MainViewModel ShowMainWindow()
+    {
         // the friends windows are unowned, so the app ends with the main window (the tray only hides it)
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         var mainWindow = Services.GetRequiredService<MainWindow>();
@@ -152,9 +187,11 @@ public partial class App : Application
         mainWindow.Show();
         if (Services.GetRequiredService<ISettingsService>().Current.MinimizeToTray) TrayIcon.Warm();
         if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));
+        return mainVm;
+    }
 
-        bool suppressed = shiftAtStart || ShiftDown()
-                          || e.Args.Any(a => a.Equals("--noautologin", StringComparison.OrdinalIgnoreCase));
+    private static void StartMainViewModel(MainViewModel mainVm, bool suppressed)
+    {
         _ = Task.Run(() => Provenance.Common.Feeds.BannerImages.Prune(TimeSpan.FromDays(60)));
         _ = mainVm.LoadFeedsAsync();
         _ = mainVm.LoadWorldsAsync();

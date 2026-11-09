@@ -16,7 +16,7 @@ internal static class UninstallRecord
     {
         var code = db.Query("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'").FirstOrDefault()?[0];
         if (string.IsNullOrEmpty(code)) return false;
-        using var hklm = MsiPackage.Hive(sandbox);
+        using var hklm = MsiRegistry.Hive(sandbox);
         using var k = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + code);
         if (k?.GetValue("UninstallString", null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not string command) return false;
         var parts = Regex.Matches(command, "\"([^\"]*)\"").Select(m => m.Groups[1].Value).ToList();
@@ -91,7 +91,7 @@ internal static class UninstallRecord
         }
         foreach (var c in db.Query("SELECT `Component`,`Attributes`,`KeyPath` FROM `Component`"))
             if (on(c[0]) && int.TryParse(c[1], out var ca) && (ca & 8) != 0 && files.TryGetValue(c[2], out var shared))
-                lines.Add($"V M {MsiPackage.SharedDlls}\t{shared.Path}");
+                lines.Add($"V M {MsiRegistry.SharedDlls}\t{shared.Path}");
         foreach (var r in db.Query("SELECT `CLSID`,`Component_` FROM `Class`"))
             if (on(r[1])) lines.Add(@"C SOFTWARE\Classes\CLSID\" + r[0]);
         foreach (var r in db.Query("SELECT `ProgId` FROM `ProgId`"))
@@ -149,7 +149,7 @@ internal static class UninstallRecord
         var version = p.GetValueOrDefault("ProductVersion", "0.0.0").Split('.').Select(x => int.TryParse(x, out var v) ? v : 0).Concat([0, 0, 0]).ToArray();
         long kb = files.Values.Sum(f => (f.Size + 4095) / 4096 * 4);
         string command = $"\"{exe}\" \"{list}\"";
-        using var hklm = MsiPackage.Hive(sandbox);
+        using var hklm = MsiRegistry.Hive(sandbox);
         using var k = hklm.CreateSubKey(arpKey, true);
         foreach (var empty in new[] { "AuthorizedCDFPrefix", "Comments", "Contact", "HelpLink", "HelpTelephone", "InstallLocation",
                                       "Readme", "Size", "URLInfoAbout", "URLUpdateInfo" })
