@@ -297,7 +297,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     // the Groups tab's Group Chat: the viewer's handle question (0x3eb0) first when it's needed, then the window
-    private void OpenGroupChat(SocialViewModel.GroupItem g)
+    private void OpenGroupChat(GroupsViewModel.GroupItem g)
     {
         if (Multi.Running || Social.Last.GroupList.FirstOrDefault(x => x.Id == g.Id) is not { } group) return;
         if (Social.GroupChat.Open && string.Equals(Social.GroupChat.GroupId, group.Id, StringComparison.OrdinalIgnoreCase))
@@ -509,7 +509,7 @@ public partial class MainViewModel : ObservableObject
 
     private void EndSession(SessionEnd end)
     {
-        Social.SettleSends(end);
+        Social.Messages.SettleSends(end);
         _socialPoll.Stop();
         _windows.CloseSessionWindows();
         Social.GroupChat.CloseQuietly();
@@ -690,7 +690,7 @@ public partial class MainViewModel : ObservableObject
                 offerLogs: true);
             return;
         }
-        Social.SettleSends(SessionEnd.Play);
+        Social.Messages.SettleSends(SessionEnd.Play);
         _gameRunning = true;
         if (await _pol.WaitForPlayAnswerAsync(PlayAnswerTimeout) is { } failed)
         {

@@ -244,7 +244,7 @@ public partial class MainWindow : AppWindow
             App.RestartOnExit = false;
             return;
         }
-        Vm?.Social.SettleSends(SessionEnd.LogOut);
+        Vm?.Social.Messages.SettleSends(SessionEnd.LogOut);
         _tray?.Dispose();
         _tray = null;
         base.OnClosing(e);

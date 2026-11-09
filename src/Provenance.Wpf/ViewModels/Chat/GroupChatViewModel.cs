@@ -369,7 +369,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
             case "gone" or "removed":
                 ReadLines(gc);
                 // my own leave or disband from the Groups tab, which comes before its answer, and that one says it
-                if (_social.LeavingGroupId is { } leaving && SameGroup(leaving))
+                if (_social.Groups.LeavingGroupId is { } leaving && SameGroup(leaving))
                 {
                     _quietlyEnded = GroupId;
                     End(null);

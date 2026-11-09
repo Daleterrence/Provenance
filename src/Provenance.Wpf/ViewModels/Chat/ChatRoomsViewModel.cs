@@ -55,7 +55,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _savePassword = savePassword;
         _dropPassword = dropPassword;
         _emote = emote;
-        for (int i = 0; i < ChatLook.Colours; i++) ColourChoices.Add(new ChatColourItem(i, LineBrush(ChatLook.PickerArgb(i))));
+        for (int i = 0; i < ChatLook.Colours; i++) ColourChoices.Add(new ChatColourItem(i, ChatColours.LineBrush(ChatLook.PickerArgb(i))));
         AppTheme.Changed += OnThemeChanged;
         for (int i = 1; i <= ChatLook.Emotes; i++)
             if (emote?.Invoke(i) is { } img) EmoteChoices.Add(new ChatEmoteItem(i, img));
@@ -211,20 +211,24 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 return;
             }
         }
+        BeginJoin(token, nick, room.Locked, room.Room.Irc, room.Name, "Entering chat room...",
+                  () => ChatRoomFiles.Join(pid, token, room.Room.Irc, room.Locked, nick));
+    }
+
+    private void BeginJoin(string token, string nick, bool locked, string irc, string title, string busyText, Func<bool> write)
+    {
         _lastNick = nick;
         _joinToken = token;
-        _joinLocked = room.Locked;
+        _joinLocked = locked;
         _joinSeq = _lastSeq;
-        _roomIrc = room.Room.Irc;
-        _roomTitle = room.Name;
+        _roomIrc = irc;
+        _roomTitle = title;
         Entering = true;
-        BusyText = "Entering chat room...";
-        if (!ChatRoomFiles.Join(pid, token, room.Room.Irc, room.Locked, nick))
-        {
-            if (room.Locked) _dropPassword();
-            BackToLobby();
-            ShowError(HookFailures.ChatCommError);
-        }
+        BusyText = busyText;
+        if (write()) return;
+        if (locked) _dropPassword();
+        BackToLobby();
+        ShowError(HookFailures.ChatCommError);
     }
 
     private bool CanCreate => Zones.Count > 0 && !Entering && !Searching && Current == Page.Lobby && !_social.HandleSwitching;
@@ -246,21 +250,9 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             ShowError(HookFailures.ChatCommError);
             return;
         }
-        _lastNick = nick;
-        _joinToken = token;
-        _joinLocked = locked;
-        _joinSeq = _lastSeq;
-        _roomIrc = "";
-        _roomTitle = form.Name.Trim();
-        Entering = true;
-        BusyText = "Creating chat room...";
-        if (!ChatRoomFiles.Create(pid, token, locked, form.Zone, form.Occupancy, form.Members, form.Purpose, form.Language, nick,
-                                  form.Name.Trim()))
-        {
-            if (locked) _dropPassword();
-            BackToLobby();
-            ShowError(HookFailures.ChatCommError);
-        }
+        BeginJoin(token, nick, locked, "", form.Name.Trim(), "Creating chat room...",
+                  () => ChatRoomFiles.Create(pid, token, locked, form.Zone, form.Occupancy, form.Members, form.Purpose, form.Language,
+                                             nick, form.Name.Trim()));
     }
 
     // the create form's question, in the viewer's words (0x4eef/0x4ef0)
@@ -287,18 +279,17 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     }
 
     // the viewer's Kick and Designate, each with its own question first
-    public void Kick(ChatMemberItem m)
-    {
-        if (!CanKick(m)) { ShowError(HookFailures.ChatRooms.MasterOnly); return; }
-        if (!Confirm($"Kick {m.Name}\nfrom this chat room?")) return;
-        SendMaster(ChatRoomFiles.MasterOp.Kick, MasterJob.Kick, m.Key, m.Name, null);
-    }
+    public void Kick(ChatMemberItem m) =>
+        MasterAction(m, $"Kick {m.Name}\nfrom this chat room?", ChatRoomFiles.MasterOp.Kick, MasterJob.Kick);
 
-    public void Designate(ChatMemberItem m)
+    public void Designate(ChatMemberItem m) =>
+        MasterAction(m, $"Designate {m.Name} the new room master?", ChatRoomFiles.MasterOp.Master, MasterJob.Master);
+
+    private void MasterAction(ChatMemberItem m, string question, ChatRoomFiles.MasterOp op, MasterJob job)
     {
         if (!CanKick(m)) { ShowError(HookFailures.ChatRooms.MasterOnly); return; }
-        if (!Confirm($"Designate {m.Name} the new room master?")) return;
-        SendMaster(ChatRoomFiles.MasterOp.Master, MasterJob.Master, m.Key, m.Name, null);
+        if (!Confirm(question)) return;
+        SendMaster(op, job, m.Key, m.Name, null);
     }
 
     // a new password, or none to take it off
@@ -652,7 +643,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 line = line with
                 {
                     Argb = ChatLook.Argb(l.Colour),
-                    Colour = ChatLook.Argb(l.Colour) is { } c ? LineBrush(c) : null,
+                    Colour = ChatLook.Argb(l.Colour) is { } c ? ChatColours.LineBrush(c) : null,
                     Emote = ChatLook.Emote(l.Emote) is > 0 and var e ? _emote?.Invoke(e) : null,
                 };
             Lines.Add(line);
@@ -683,71 +674,10 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private void OnThemeChanged()
     {
         for (int i = 0; i < ColourChoices.Count; i++)
-            ColourChoices[i] = ColourChoices[i] with { Swatch = LineBrush(ChatLook.PickerArgb(ColourChoices[i].Pick)) };
+            ColourChoices[i] = ColourChoices[i] with { Swatch = ChatColours.LineBrush(ChatLook.PickerArgb(ColourChoices[i].Pick)) };
         for (int i = 0; i < Lines.Count; i++)
-            if (Lines[i].Argb is { } argb) Lines[i] = Lines[i] with { Colour = LineBrush(argb) };
+            if (Lines[i].Argb is { } argb) Lines[i] = Lines[i] with { Colour = ChatColours.LineBrush(argb) };
         OnPropertyChanged(nameof(PickedColour));
-    }
-
-    internal static SolidColorBrush LineBrush(uint argb) => LineBrush(argb, ChatGrounds());
-
-    // what the lines and the colour picker sit on, in whichever theme's showing
-    internal static Color[] ChatGrounds() =>
-        [.. new[] { "Bg.Base", "Surface.1", "Surface.2" }
-            .Select(k => Application.Current?.TryFindResource(k) as SolidColorBrush).OfType<SolidColorBrush>().Select(b => b.Color)];
-
-    // the viewer's colours are for its light window. On a dark one they're lifted to the same hue at a lightness that
-    // reads, on a light one only the few too pale get darkened
-    internal static SolidColorBrush LineBrush(uint argb, IReadOnlyList<Color> grounds)
-    {
-        bool light = grounds.Count > 0 && grounds.Average(c => (c.R + c.G + c.B) / 765.0) > 0.5;
-        double r = ((argb >> 16) & 0xff) / 255.0, g = ((argb >> 8) & 0xff) / 255.0, b = (argb & 0xff) / 255.0;
-        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), l = (max + min) / 2, h = 0, s = 0;
-        if (max > min)
-        {
-            double d = max - min;
-            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-            h = max == r ? (g - b) / d + (g < b ? 6 : 0) : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
-            h /= 6;
-        }
-        if (!light)
-        {
-            l = Math.Max(l, 0.68);
-            s = Math.Min(1, s * 1.1);
-        }
-        static double Hue(double p, double q, double t)
-        {
-            if (t < 0) t += 1;
-            if (t > 1) t -= 1;
-            return t < 1 / 6.0 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3.0 ? p + (q - p) * (2 / 3.0 - t) * 6 : p;
-        }
-        Color Rgb(double l)
-        {
-            byte C(double v) => (byte)Math.Round(Math.Clamp(v, 0, 1) * 255);
-            if (s == 0) return Color.FromRgb(C(l), C(l), C(l));
-            double q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
-            return Color.FromRgb(C(Hue(p, q, h + 1 / 3.0)), C(Hue(p, q, h)), C(Hue(p, q, h - 1 / 3.0)));
-        }
-        // HSL's lightness isn't what the eye sees (a yellow at 0.4 is still pale, a blue at 0.7 still dark), so it
-        // carries on till it's AA on everything it sits on
-        var colour = Rgb(l);
-        double Worst(Color c) => grounds.Count == 0 ? 21 : grounds.Min(gr => Contrast(c, gr));
-        if (light) while (Worst(colour) < 4.5 && l > 0) colour = Rgb(l -= 0.02);
-        else while (Worst(colour) < 4.5 && l < 1) colour = Rgb(l += 0.02);
-        var brush = new SolidColorBrush(colour);
-        brush.Freeze();
-        return brush;
-    }
-
-    internal static double Contrast(Color a, Color b)
-    {
-        static double Lum(Color c)
-        {
-            static double Ch(byte v) { double x = v / 255.0; return x <= 0.03928 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4); }
-            return 0.2126 * Ch(c.R) + 0.7152 * Ch(c.G) + 0.0722 * Ch(c.B);
-        }
-        double la = Lum(a), lb = Lum(b);
-        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
     }
 
     private void AddLine(long seq, string text, string style, DateTimeOffset? when = null) =>

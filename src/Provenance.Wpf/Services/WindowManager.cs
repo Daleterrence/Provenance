@@ -152,7 +152,7 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         if (Find<ProfileWindow>() is { } open)
         {
             open.SetFriend(friend);
-            social.RequestProfile(friend);
+            social.Profile.Request(friend);
             open.Activate();
             return;
         }

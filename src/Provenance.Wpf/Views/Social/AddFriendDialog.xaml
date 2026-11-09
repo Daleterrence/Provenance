@@ -17,33 +17,33 @@
         <controls:TitleBar />
 
         <StackPanel Grid.Row="1" Margin="16,8,16,6">
-            <StackPanel Orientation="Horizontal" Margin="-10,0,0,8" IsEnabled="{Binding SearchBusy, Converter={StaticResource InvertBool}}">
-                <RadioButton Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding SearchByHandle}" GroupName="SearchKind" Content="Handle"
-                             IsChecked="{Binding SearchByHandle}" Checked="OnKindPicked" />
-                <RadioButton Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding SearchByHid}" GroupName="SearchKind" Content="H-ID"
-                             IsChecked="{Binding SearchByHid}" Checked="OnKindPicked" />
-                <RadioButton Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding SearchByCharacter}" GroupName="SearchKind" Content="Character"
-                             IsChecked="{Binding SearchByCharacter}" Checked="OnKindPicked" />
+            <StackPanel Orientation="Horizontal" Margin="-10,0,0,8" IsEnabled="{Binding Busy, Converter={StaticResource InvertBool}}">
+                <RadioButton Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding ByHandle}" GroupName="SearchKind" Content="Handle"
+                             IsChecked="{Binding ByHandle}" Checked="OnKindPicked" />
+                <RadioButton Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding ByHid}" GroupName="SearchKind" Content="H-ID"
+                             IsChecked="{Binding ByHid}" Checked="OnKindPicked" />
+                <RadioButton Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding ByCharacter}" GroupName="SearchKind" Content="Character"
+                             IsChecked="{Binding ByCharacter}" Checked="OnKindPicked" />
             </StackPanel>
-            <TextBlock FontSize="12" Foreground="{DynamicResource Text.2}" TextWrapping="Wrap" Text="{Binding SearchIntro}" />
+            <TextBlock FontSize="12" Foreground="{DynamicResource Text.2}" TextWrapping="Wrap" Text="{Binding Intro}" />
             <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
-                <TextBox x:Name="NameBox" FontSize="13" Height="40" Padding="10,6" MaxLength="{Binding SearchMaxLength}"
+                <TextBox x:Name="NameBox" FontSize="13" Height="40" Padding="10,6" MaxLength="{Binding MaxLength}"
                          Style="{StaticResource OutlinedField}"
-                         materialDesign:HintAssist.Hint="{Binding SearchHint}" materialDesign:HintAssist.IsFloating="False"
-                         AutomationProperties.Name="{Binding SearchHint}" KeyDown="OnNameKey" />
+                         materialDesign:HintAssist.Hint="{Binding Hint}" materialDesign:HintAssist.IsFloating="False"
+                         AutomationProperties.Name="{Binding Hint}" KeyDown="OnNameKey" />
                 <Button Grid.Column="1" Margin="10,0,0,0" Height="40" Content="SEARCH" Click="OnSearch"
                         Style="{StaticResource PolButton}" />
             </Grid>
             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                 <ProgressBar Width="14" Height="14" Margin="0,0,8,0"
                              Style="{StaticResource Spinner}"
-                             Visibility="{Binding SearchBusy, Converter={StaticResource BoolToVis}}" />
-                <TextBlock FontSize="12" TextWrapping="Wrap" MaxWidth="400" Text="{Binding SearchNote.Text}"
-                           behaviours:State.IsError="{Binding SearchNote.IsError}" Style="{StaticResource DimStatusText}" />
+                             Visibility="{Binding Busy, Converter={StaticResource BoolToVis}}" />
+                <TextBlock FontSize="12" TextWrapping="Wrap" MaxWidth="400" Text="{Binding Note.Text}"
+                           behaviours:State.IsError="{Binding Note.IsError}" Style="{StaticResource DimStatusText}" />
             </StackPanel>
         </StackPanel>
 
-        <ListBox x:Name="Hits" Grid.Row="2" Margin="10,4" ItemsSource="{Binding SearchHits}"
+        <ListBox x:Name="Hits" Grid.Row="2" Margin="10,4" ItemsSource="{Binding Hits}"
                  HorizontalContentAlignment="Stretch" BorderThickness="0" Background="Transparent" ItemContainerStyle="{StaticResource RowItem}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>

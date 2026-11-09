@@ -220,36 +220,39 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     public void Load()
     {
-        if (_social.SessionPid is not { } pid)
-        {
-            Fail("Log in to edit your profile.");
-            return;
-        }
-        if (_social.GameRunning || _social.HandleSwitching)
-        {
-            Fail(_social.GameRunning ? SocialViewModel.GameRunningNote : SocialViewModel.SwitchingNote);
-            return;
-        }
+        if (!Ready(out var pid)) return;
         Start(Job.Load);
         if (!SocialRequests.RequestMyProfile(pid, _token!)) Fail(HookFailures.RequestWriteFailed);
     }
 
     private void LoadXi(ProfileCard card)
     {
-        if (_social.SessionPid is not { } pid)
-        {
-            Fail("Log in to edit your profile.");
-            return;
-        }
-        if (_social.GameRunning || _social.HandleSwitching)
-        {
-            Fail(_social.GameRunning ? SocialViewModel.GameRunningNote : SocialViewModel.SwitchingNote);
-            return;
-        }
+        if (!Ready(out var pid)) return;
         _xiCard = card;
         LoadingText = $"Loading {card.Title}'s profile...";
         Start(Job.LoadXi);
         if (!SocialRequests.RequestXiProfile(pid, _token!, _loadedKey, card.Key)) Fail(HookFailures.RequestWriteFailed);
+    }
+
+    // a closed session and a waiting game or handle switch each have their own note, and callers differ on which comes first
+    private bool Ready(out int pid, bool gameFirst = false)
+    {
+        pid = 0;
+        if (gameFirst && Waiting()) return false;
+        if (_social.SessionPid is not { } session)
+        {
+            Fail("Log in to edit your profile.");
+            return false;
+        }
+        pid = session;
+        return gameFirst || !Waiting();
+    }
+
+    private bool Waiting()
+    {
+        if (!_social.GameRunning && !_social.HandleSwitching) return false;
+        Fail(_social.GameRunning ? SocialViewModel.GameRunningNote : SocialViewModel.SwitchingNote);
+        return true;
     }
 
     private void Start(Job job, string note = "")
@@ -424,16 +427,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanSave))]
     private void Save()
     {
-        if (_social.GameRunning || _social.HandleSwitching)
-        {
-            Fail(_social.GameRunning ? SocialViewModel.GameRunningNote : SocialViewModel.SwitchingNote);
-            return;
-        }
-        if (_social.SessionPid is not { } pid)
-        {
-            Fail("Log in to edit your profile.");
-            return;
-        }
+        if (!Ready(out var pid, gameFirst: true)) return;
         if (_handleChanges && HandleChanged && !_dialogs.Confirm("Rename your handle",
                 $"Friends will see {HandleName.Trim()} instead of {_savedHandle} the next time their friend list loads. You can rename it again later.", "RENAME"))
             return;

@@ -270,9 +270,9 @@
                     </Button>
                     <TextBlock Grid.Row="1" Margin="16,8" FontSize="12" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
                                Text="You're not in any friend groups yet. A group lets up to 64 friends see each other."
-                               Visibility="{Binding NoGroups, Converter={StaticResource BoolToVis}}" />
+                               Visibility="{Binding Groups.NoGroups, Converter={StaticResource BoolToVis}}" />
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding Groups}">
+                        <ItemsControl ItemsSource="{Binding Groups.Items}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Margin="0,0,0,6">
@@ -402,34 +402,34 @@
                         </Grid>
                     </Border>
                     <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
-                        <ItemsControl ItemsSource="{Binding Conversation}" ItemTemplate="{StaticResource ChatLine}" />
+                        <ItemsControl ItemsSource="{Binding Messages.Conversation}" ItemTemplate="{StaticResource ChatLine}" />
                     </ScrollViewer>
                     <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" FontSize="12"
                                Foreground="{DynamicResource Text.3}" TextWrapping="Wrap" TextAlignment="Center"
-                               Style="{StaticResource ShowWhenZero}" behaviours:State.Count="{Binding Conversation.Count}">
+                               Style="{StaticResource ShowWhenZero}" behaviours:State.Count="{Binding Messages.Conversation.Count}">
                         <Run Text="No messages with " /><Run Text="{Binding SelectedFriend.Name, Mode=OneWay}" /><Run Text=" yet." />
                     </TextBlock>
                     <Border Grid.Row="2" Style="{StaticResource FooterBar}">
                         <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
                             <!-- MaxLength's only a backstop, the real limit's 300 bytes -->
                             <TextBox x:Name="ComposeBox" MinHeight="40" MaxHeight="120" FontSize="13"
-                                     Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
+                                     Text="{Binding Messages.Compose, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
                                      TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="{x:Static social:PolMessage.MaxTextBytes}"
                                      Style="{StaticResource OutlinedField}" Padding="10,8"
                                      materialDesign:HintAssist.Hint="Write a message (Enter sends, Shift+Enter adds a line)"
                                      materialDesign:HintAssist.IsFloating="False"
                                      materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
-                                     IsEnabled="{Binding CanCompose}"
-                                     behaviours:ComposeBox.Send="{Binding SendCommand}" behaviours:ComposeBox.Rules="{Binding ComposeRules}" />
+                                     IsEnabled="{Binding Messages.CanCompose}"
+                                     behaviours:ComposeBox.Send="{Binding Messages.SendCommand}" behaviours:ComposeBox.Rules="{Binding Messages.ComposeRules}" />
                             <Button Grid.Column="1" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom"
-                                    Style="{StaticResource PolButton}" Command="{Binding SendCommand}" Content="SEND" />
+                                    Style="{StaticResource PolButton}" Command="{Binding Messages.SendCommand}" Content="SEND" />
                             <DockPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0">
                                 <!-- the "n/300" count only shows near the limit -->
                                 <TextBlock DockPanel.Dock="Right" Margin="10,0,0,0" FontSize="11" Foreground="{DynamicResource Text.3}"
-                                           Text="{Binding ComposeCount}"
-                                           Visibility="{Binding ComposeCountShown, Converter={StaticResource BoolToVis}}" />
+                                           Text="{Binding Messages.ComposeCount}"
+                                           Visibility="{Binding Messages.ComposeCountShown, Converter={StaticResource BoolToVis}}" />
                                 <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource Text.3}"
-                                           Text="{Binding ComposeNote}" />
+                                           Text="{Binding Messages.ComposeNote}" />
                             </DockPanel>
                         </Grid>
                     </Border>

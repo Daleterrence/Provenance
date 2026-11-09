@@ -9,26 +9,33 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
-public partial class SocialViewModel
+public sealed partial class FriendProfileViewModel : ObservableObject
 {
-    public sealed record ProfileRowItem(string Label, string Value, ImageSource? Picture);
+    private readonly SocialViewModel _social;
 
-    public ObservableCollection<ProfileRowItem> ProfileRows { get; } = new();
-    public ObservableCollection<ProfileTab> ProfileTabs { get; } = new();
-    [ObservableProperty] private bool _hasProfileTabs;
-    [ObservableProperty] private bool _profileShowsPicture = true;
-    [ObservableProperty] private string _profileGameLine = "";
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ProfileTabsClickable))] private bool _profileLoading;
-    public bool ProfileTabsClickable => !ProfileLoading;
-    public StatusLine ProfileNote { get; } = new();
-    [ObservableProperty] private string _profileName = "";
-    [ObservableProperty] private string _profileHid = "";
-    [ObservableProperty] private string _profileMail = "";
-    [ObservableProperty] private string _profileUpdated = "";
-    [ObservableProperty] private string _profilePrivacy = "";
-    [ObservableProperty] private string _profileAway = "";
-    [ObservableProperty] private string _profileAwayFrom = "";
-    [ObservableProperty] private ImageSource? _profilePicture;
+    public FriendProfileViewModel(SocialViewModel social) => _social = social;
+
+    // the viewer's own popups over the profile window
+    public event Action<string>? Popup;
+
+    public sealed record RowItem(string Label, string Value, ImageSource? Picture);
+
+    public ObservableCollection<RowItem> Rows { get; } = new();
+    public ObservableCollection<ProfileTab> Tabs { get; } = new();
+    [ObservableProperty] private bool _hasTabs;
+    [ObservableProperty] private bool _showsPicture = true;
+    [ObservableProperty] private string _gameLine = "";
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(TabsClickable))] private bool _loading;
+    public bool TabsClickable => !Loading;
+    public StatusLine Note { get; } = new();
+    [ObservableProperty] private string _name = "";
+    [ObservableProperty] private string _hid = "";
+    [ObservableProperty] private string _mail = "";
+    [ObservableProperty] private string _updated = "";
+    [ObservableProperty] private string _privacy = "";
+    [ObservableProperty] private string _away = "";
+    [ObservableProperty] private string _awayFrom = "";
+    [ObservableProperty] private ImageSource? _picture;
     private string? _profileToken;
     private string _profileKey = "", _profileFor = "";
     private int _profileRow = -1;
@@ -42,82 +49,83 @@ public partial class SocialViewModel
     private readonly Dictionary<string, (PolProfile Profile, DateTime At)> _profileCache = new();
     private ProfilePictureCatalog.Catalog? _picCatalog;
     private bool _picCatalogTried;
+    private string? _popupAfterApply;
 
     // nothing from the friend row goes in the header, a Private profile hides the name and picture too
-    public void RequestProfile(FriendItem f)
+    public void Request(FriendItem f)
     {
-        ProfileRows.Clear();
-        ProfileName = ProfileHid = ProfileMail = ProfileUpdated = ProfilePrivacy = ProfileAway = ProfileAwayFrom = "";
-        ProfileGameLine = "";
-        ProfilePicture = _avatars.NoProfilePicture;
-        ProfileShowsPicture = true;
-        ProfileTabs.Clear();
-        HasProfileTabs = false;
+        Rows.Clear();
+        Name = Hid = Mail = Updated = Privacy = Away = AwayFrom = "";
+        GameLine = "";
+        Picture = _social.Avatars.NoProfilePicture;
+        ShowsPicture = true;
+        Tabs.Clear();
+        HasTabs = false;
         _handleProfile = null;
         _characterShown = null;
         _profileToken = _ffxiToken = null;
-        ProfileLoading = false;
+        Loading = false;
         _profileFor = f.Name;
         _profileRow = f.Row;
         _profileKey = f.Key;
         // a request with no answer yet has no profile to show (the viewer greys it out)
-        if (!f.IsFriend || f.Pending || _pol.Pid is not { } pid)
+        if (!f.IsFriend || f.Pending || _social.SessionPid is not { } pid)
         {
-            ProfileNote.Show(HookFailures.Profile.FriendsOnly);
+            Note.Show(HookFailures.Profile.FriendsOnly);
             return;
         }
-        if (GameRunning)
+        if (_social.GameRunning)
         {
-            ProfileNote.Show(GameRunningNote);
+            Note.Show(SocialViewModel.GameRunningNote);
             return;
         }
         // the same profile again within 5 mins shows the copy already here, no second request for a page just read
         if (f.Key.Length > 0 && _profileCache.TryGetValue(f.Key, out var hit) &&
             DateTime.UtcNow - hit.At < TimeSpan.FromMinutes(5))
         {
-            ProfileNote.Clear();
+            Note.Clear();
             HandleProfileArrived(hit.Profile);
             return;
         }
         _profileToken = HookFiles.NewToken();
         _profileAt = DateTime.UtcNow;
-        ProfileLoading = true;
-        ProfileNote.Show("Loading the profile from PlayOnline...");
+        Loading = true;
+        Note.Show("Loading the profile from PlayOnline...");
         if (SocialRequests.RequestProfile(pid, _profileToken, f.Row, f.Key)) return;
         _profileToken = null;
-        ProfileLoading = false;
-        ProfileNote.Fail(HookFailures.RequestWriteFailed);
+        Loading = false;
+        Note.Fail(HookFailures.RequestWriteFailed);
     }
 
     // after a switch: nothing read under the old handle stays on screen or in the cache
-    private void ForgetProfiles()
+    internal void Forget()
     {
         _profileCache.Clear();
         if (_profileFor.Length == 0) return;
-        ClearProfile();
-        ProfileNote.Show("Your active handle changed. Open the profile again to see it from this handle.");
+        Clear();
+        Note.Show("Your active handle changed. Open the profile again to see it from this handle.");
     }
 
-    private void ClearProfile()
+    private void Clear()
     {
-        ProfileRows.Clear();
-        ProfileName = ProfileHid = ProfileMail = ProfileUpdated = ProfilePrivacy = ProfileAway = ProfileAwayFrom = "";
-        ProfileGameLine = "";
-        ProfilePicture = _avatars.NoProfilePicture;
-        ProfileTabs.Clear();
-        HasProfileTabs = false;
+        Rows.Clear();
+        Name = Hid = Mail = Updated = Privacy = Away = AwayFrom = "";
+        GameLine = "";
+        Picture = _social.Avatars.NoProfilePicture;
+        Tabs.Clear();
+        HasTabs = false;
         _handleProfile = null;
         _characterShown = null;
         _profileToken = _ffxiToken = null;
-        ProfileLoading = false;
-        ProfileNote.Soften();
+        Loading = false;
+        Note.Soften();
     }
 
     private string StateText(ProfileFieldState state) => state switch
     {
-        ProfileFieldState.Private => ViewerText(0x4a73, "Private"),
-        ProfileFieldState.UnderTen => ViewerText(0x4a75, "Under age ten"),
-        _ => ViewerText(0x4a81, "Not set"),
+        ProfileFieldState.Private => _social.ViewerText(0x4a73, "Private"),
+        ProfileFieldState.UnderTen => _social.ViewerText(0x4a75, "Under age ten"),
+        _ => _social.ViewerText(0x4a81, "Not set"),
     };
 
     // "name (category)" like the viewer's Portrait row
@@ -126,37 +134,61 @@ public partial class SocialViewModel
         if (!_picCatalogTried)
         {
             _picCatalogTried = true;
-            var viewer = ViewerFolder();
+            var viewer = _social.ViewerFolder();
             _picCatalog = viewer is null ? null : ProfilePictureCatalog.Load(viewer);
         }
         var pic = _picCatalog?.ProfilePictures.FirstOrDefault(x => x.Id == picId);
-        if (pic is null) return ViewerText(0x4a73, "Private");
+        if (pic is null) return _social.ViewerText(0x4a73, "Private");
         var cat = _picCatalog!.Categories.FirstOrDefault(c => c.Key == pic.CategoryKey)?.Name ?? "";
         return cat.Length > 0 ? $"{pic.Name} ({cat})" : pic.Name;
+    }
+
+    // a popup's modal loop lets the next snapshot in, so it waits till the snapshot's all applied
+    internal void RaisePopup()
+    {
+        if (_popupAfterApply is not { } text) return;
+        _popupAfterApply = null;
+        Popup?.Invoke(text);
+    }
+
+    internal bool Waiting => _profileToken is not null || _ffxiToken is not null;
+
+    internal void Apply(PolSocialSnapshot snap)
+    {
+        ApplyProfileState(snap);
+        ApplyFfxiProfileState(snap);
+    }
+
+    // a new login, so nothing from the last one stays up
+    internal void Reset()
+    {
+        if (Waiting) Note.Clear();   // nothing's coming for those
+        _profileCache.Clear();   // a new hook has none of the slots the cached profiles' tabs read
+        Clear();
     }
 
     private void ApplyProfileState(PolSocialSnapshot snap)
     {
         if (_profileToken is null) return;
-        WaitingTurn(ref _profileAt, _profileToken, snap.ProfileJob.Token, snap);
+        SocialViewModel.WaitingTurn(ref _profileAt, _profileToken, snap.ProfileJob.Token, snap);
         // a "done" with no profile isn't an answer yet
         bool mine = snap.ProfileJob.Token == _profileToken && (snap.ProfileJob.State != "done" || snap.Profile != null);
-        if (Settled(mine ? snap.ProfileJob.State : null, "done", _profileAt, 130) is not { } st) return;
-        if (st == "timeout") DiscardRequest(HookContract.Requests.Profile);
+        if (SocialViewModel.Settled(mine ? snap.ProfileJob.State : null, "done", _profileAt, 130) is not { } st) return;
+        if (st == "timeout") _social.DiscardRequest(HookContract.Requests.Profile);
         _profileToken = null;
-        ProfileLoading = false;
+        Loading = false;
         if (st == "done")
         {
-            ProfileNote.Clear();
+            Note.Clear();
             if (_profileKey.Length > 0) _profileCache[_profileKey] = (snap.Profile!, DateTime.UtcNow);
             HandleProfileArrived(snap.Profile!);
             return;
         }
-        ProfileNote.Set(st switch
+        Note.Set(st switch
         {
             "failed:no profile" => HookFailures.Profile.None,
             // -0x14cc, which the viewer calls a hidden profile
-            "failed:-5324" => ViewerText(0x4ab4, "Profile of %s's handle is hidden.").Replace("%s", Filtered(_profileFor)),
+            "failed:-5324" => _social.ViewerText(0x4ab4, "Profile of %s's handle is hidden.").Replace("%s", _social.Filtered(_profileFor)),
             _ => ProfileFailText(st),
         }, st is not ("failed:no profile" or "failed:-5324"));
     }
@@ -178,9 +210,9 @@ public partial class SocialViewModel
 
     private string PrivacyText(PrivacyLevel level) => level switch
     {
-        PrivacyLevel.Private => ViewerText(0x4a7d, "Private"),
-        PrivacyLevel.FriendsOnly => ViewerText(0x4a7e, "Show to friends"),
-        PrivacyLevel.Everyone => ViewerText(0x4a7c, "Show to all"),
+        PrivacyLevel.Private => _social.ViewerText(0x4a7d, "Private"),
+        PrivacyLevel.FriendsOnly => _social.ViewerText(0x4a7e, "Show to friends"),
+        PrivacyLevel.Everyone => _social.ViewerText(0x4a7c, "Show to all"),
         _ => "",
     };
 
@@ -189,75 +221,75 @@ public partial class SocialViewModel
     {
         _handleProfile = p;
         _characterShown = null;
-        ProfileTabs.Clear();
+        Tabs.Clear();
         if (p.Characters.Count > 0)
         {
-            ProfileTabs.Add(new ProfileTab(-1, "", ViewerText(0x4abe, "Handle Profile"))
+            Tabs.Add(new ProfileTab(-1, "", _social.ViewerText(0x4abe, "Handle Profile"))
             {
                 IsSelected = true,
                 Picture = HandlePicture(p),
             });
-            foreach (var c in p.Characters) ProfileTabs.Add(new ProfileTab(c.Slot, c.Character.Key, TabLabel(c.Character.Key)));
+            foreach (var c in p.Characters) Tabs.Add(new ProfileTab(c.Slot, c.Character.Key, TabLabel(c.Character.Key)));
         }
-        HasProfileTabs = ProfileTabs.Count > 0;
+        HasTabs = Tabs.Count > 0;
         ShowProfile(p);
     }
 
     private ImageSource? HandlePicture(PolProfile p) =>
         p.Rows.FirstOrDefault(r => r.Field == "z_ficon" && r.State == ProfileFieldState.Shown) is { } row
-            ? _avatars.ProfilePicture(row.ProfilePictureId) : _avatars.NoProfilePicture;
+            ? _social.Avatars.ProfilePicture(row.ProfilePictureId) : _social.Avatars.NoProfilePicture;
 
     private string TabLabel(string characterKey) =>
-        CharacterNames.Get(characterKey) is { Name.Length: > 0 } known ? Filtered(known.Name) : FfxiProfileText.Title;
+        _social.CharacterNames.Get(characterKey) is { Name.Length: > 0 } known ? _social.Filtered(known.Name) : FfxiProfileText.Title;
 
     // one read per click, never for the tab that's already up or while one's out. Handle Profile shows the answer it had
     [RelayCommand]
-    private void SelectProfileTab(ProfileTab? tab)
+    private void SelectTab(ProfileTab? tab)
     {
-        if (tab is null || !tab.Clickable || _ffxiToken is not null || ProfileLoading || !ProfileTabs.Contains(tab)) return;
+        if (tab is null || !tab.Clickable || _ffxiToken is not null || Loading || !Tabs.Contains(tab)) return;
         if (tab.IsHandle)
         {
             if (_handleProfile is null) return;
-            SelectTab(tab);
-            ProfileNote.Clear();
+            MarkSelected(tab);
+            Note.Clear();
             ShowProfile(_handleProfile);
             return;
         }
-        if (GameRunning)
+        if (_social.GameRunning)
         {
-            ProfileNote.Show(GameRunningNote);
+            Note.Show(SocialViewModel.GameRunningNote);
             return;
         }
-        if (_pol.Pid is not { } pid) return;
+        if (_social.SessionPid is not { } pid) return;
         // the row from the latest friend list, a friend added or removed above this one moves it
-        if (_profileKey.Length > 0 && _last.FriendsLoaded)
+        if (_profileKey.Length > 0 && _social.Last.FriendsLoaded)
         {
-            if (_last.Friends.FirstOrDefault(x => x.Key == _profileKey && x.Row >= 0) is not { Pending: false } now)
+            if (_social.Last.Friends.FirstOrDefault(x => x.Key == _profileKey && x.Row >= 0) is not { Pending: false } now)
             {
-                ProfileNote.Show(HookFailures.Profile.FriendsOnly);
+                Note.Show(HookFailures.Profile.FriendsOnly);
                 return;
             }
             _profileRow = now.Row;
         }
-        var from = ProfileTabs.FirstOrDefault(t => t.IsSelected && !t.Failed) ?? _ffxiFrom;
-        SelectTab(tab);
+        var from = Tabs.FirstOrDefault(t => t.IsSelected && !t.Failed) ?? _ffxiFrom;
+        MarkSelected(tab);
         ShowCharacterPage(null);
         _ffxiToken = HookFiles.NewToken();
         _ffxiAt = DateTime.UtcNow;
         _ffxiFor = tab;
         _ffxiFrom = from;
-        ProfileLoading = true;
-        ProfileNote.Show(ViewerText(0x4a82, "Retrieving profile data..."));
+        Loading = true;
+        Note.Show(_social.ViewerText(0x4a82, "Retrieving profile data..."));
         if (SocialRequests.RequestFfxiProfile(pid, _ffxiToken, _profileRow, _profileKey, tab.Slot)) return;
         _ffxiToken = null;
-        ProfileLoading = false;
+        Loading = false;
         ShowTabAgain(from);
-        ProfileNote.Fail(HookFailures.RequestWriteFailed);
+        Note.Fail(HookFailures.RequestWriteFailed);
     }
 
-    private void SelectTab(ProfileTab tab)
+    private void MarkSelected(ProfileTab tab)
     {
-        foreach (var t in ProfileTabs)
+        foreach (var t in Tabs)
         {
             t.IsSelected = t == tab;
             t.Failed = false;
@@ -268,7 +300,7 @@ public partial class SocialViewModel
     private void ShowTabAgain(ProfileTab? tab)
     {
         if (tab is null) return;
-        SelectTab(tab);
+        MarkSelected(tab);
         if (tab.IsHandle && _handleProfile is not null) ShowProfile(_handleProfile);
         else ShowCharacterPage(_characterShown?.Slot == tab.Slot ? _characterShown : null);
     }
@@ -276,21 +308,21 @@ public partial class SocialViewModel
     private void ApplyFfxiProfileState(PolSocialSnapshot snap)
     {
         if (_ffxiToken is null) return;
-        WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileJob.Token, snap);
+        SocialViewModel.WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileJob.Token, snap);
         bool mine = snap.FfxiProfileJob.Token == _ffxiToken && (snap.FfxiProfileJob.State != "done" || snap.FfxiProfile != null);
-        if (Settled(mine ? snap.FfxiProfileJob.State : null, "done", _ffxiAt, 130) is not { } st) return;
-        if (st == "timeout") DiscardRequest(HookContract.Requests.FfxiProfile);
+        if (SocialViewModel.Settled(mine ? snap.FfxiProfileJob.State : null, "done", _ffxiAt, 130) is not { } st) return;
+        if (st == "timeout") _social.DiscardRequest(HookContract.Requests.FfxiProfile);
         _ffxiToken = null;
-        ProfileLoading = false;
+        Loading = false;
         var tab = _ffxiFor!;
         // the hook read whatever's in that slot now, which has to be the character the tab's for
         if (st == "done" && snap.FfxiProfile!.Character.Key != tab.CharacterKey) st = NoCharacter;
         if (st == "done")
         {
             var r = snap.FfxiProfile!;
-            ProfileNote.Clear();
+            Note.Clear();
             var known = CharacterNames.FromProfile(r);
-            if (known is not null && CharacterNames.Get(tab.CharacterKey) != known) CharacterNames.Remember(tab.CharacterKey, known);
+            if (known is not null && _social.CharacterNames.Get(tab.CharacterKey) != known) _social.CharacterNames.Remember(tab.CharacterKey, known);
             tab.Label = TabLabel(tab.CharacterKey);
             _characterShown = r with { Slot = tab.Slot };
             ShowCharacterPage(_characterShown);
@@ -299,63 +331,63 @@ public partial class SocialViewModel
         if (st == "failed:hidden")
         {
             ShowTabAgain(_ffxiFrom);
-            ProfileNote.Clear();
-            _popupAfterApply = ViewerText(0x4ab6, "Selected profile is hidden.");
+            Note.Clear();
+            _popupAfterApply = _social.ViewerText(0x4ab6, "Selected profile is hidden.");
             return;
         }
         // a profile shown again from the copy has slots the hook's lost, so opening it again reads it afresh
         if (st == NoCharacter) _profileCache.Remove(_profileKey);
-        ProfileNote.Set(st == "failed:no profile" ? ViewerText(0x4a83, "No profile data found.") : ProfileFailText(st), st != "failed:no profile");
-        tab.Failed = ProfileNote.IsError;
+        Note.Set(st == "failed:no profile" ? _social.ViewerText(0x4a83, "No profile data found.") : ProfileFailText(st), st != "failed:no profile");
+        tab.Failed = Note.IsError;
     }
 
     // the handle's H-ID and mail stay, there's no picture and the record level goes after the game's name
     private void ShowCharacterPage(PolFfxiProfile? r)
     {
-        ProfileShowsPicture = false;
-        ProfilePicture = _avatars.NoProfilePicture;
-        ProfileUpdated = ProfilePrivacy = ProfileAway = ProfileAwayFrom = "";
-        ProfileRows.Clear();
+        ShowsPicture = false;
+        Picture = _social.Avatars.NoProfilePicture;
+        Updated = Privacy = Away = AwayFrom = "";
+        Rows.Clear();
         if (r is null)
         {
-            ProfileName = "";
-            ProfileGameLine = FfxiProfileText.Title;
+            Name = "";
+            GameLine = FfxiProfileText.Title;
             return;
         }
-        ProfileName = r.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : Filtered(r.Name);
-        ProfileGameLine = FfxiProfileText.Line(PrivacyText(r.Level));
-        foreach (var (label, value) in FfxiProfileText.Rows(r, StateText(ProfileFieldState.Private), StateText(ProfileFieldState.NotSet), Filtered))
-            ProfileRows.Add(new ProfileRowItem(label, value, null));
+        Name = r.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : _social.Filtered(r.Name);
+        GameLine = FfxiProfileText.Line(PrivacyText(r.Level));
+        foreach (var (label, value) in FfxiProfileText.Rows(r, StateText(ProfileFieldState.Private), StateText(ProfileFieldState.NotSet), _social.Filtered))
+            Rows.Add(new RowItem(label, value, null));
     }
 
     private void ShowProfile(PolProfile p)
     {
-        ProfileShowsPicture = true;
-        ProfileGameLine = "";
-        ProfileName = p.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : Filtered(p.Name);
-        ProfilePicture = HandlePicture(p);
-        ProfileHid = p.Hid.Length > 0 ? "H-ID " + p.Hid : "";
-        ProfileMail = p.MailState != ProfileFieldState.Shown || p.Mail.Length == 0 ||
-                      p.Mail == ViewerText(0x4a7f, "No Mail address") ? "" : Filtered(p.Mail);
-        ProfileUpdated = p.Updated is > 0 and < 253402300800   // FromUnixTimeSeconds throws past the year 9999
+        ShowsPicture = true;
+        GameLine = "";
+        Name = p.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : _social.Filtered(p.Name);
+        Picture = HandlePicture(p);
+        Hid = p.Hid.Length > 0 ? "H-ID " + p.Hid : "";
+        Mail = p.MailState != ProfileFieldState.Shown || p.Mail.Length == 0 ||
+                      p.Mail == _social.ViewerText(0x4a7f, "No Mail address") ? "" : _social.Filtered(p.Mail);
+        Updated = p.Updated is > 0 and < 253402300800   // FromUnixTimeSeconds throws past the year 9999
             ? "Updated " + DateTimeOffset.FromUnixTimeSeconds(p.Updated).ToLocalTime().ToString("d MMM yyyy") : "";
-        ProfilePrivacy = PrivacyText(p.Level);
-        ProfileRows.Clear();
+        Privacy = PrivacyText(p.Level);
+        Rows.Clear();
         foreach (var r in p.Rows)
         {
             bool shown = r.State == ProfileFieldState.Shown;
             if (r.Field == "z_ficon")
             {
-                ProfileRows.Add(new ProfileRowItem(r.Label,
+                Rows.Add(new RowItem(r.Label,
                                                    shown ? ProfilePictureText(r.ProfilePictureId) : StateText(r.State),
-                                                   shown ? _avatars.ProfilePicture(r.ProfilePictureId) : null));
+                                                   shown ? _social.Avatars.ProfilePicture(r.ProfilePictureId) : null));
                 continue;
             }
-            var lines = r.Lines.Where(l => l.Length > 0).Select(Filtered).ToList();
-            ProfileRows.Add(new ProfileRowItem(r.Label, shown && lines.Count > 0
+            var lines = r.Lines.Where(l => l.Length > 0).Select(_social.Filtered).ToList();
+            Rows.Add(new RowItem(r.Label, shown && lines.Count > 0
                 ? string.Join("\n", lines) : StateText(shown ? ProfileFieldState.NotSet : r.State), null));
         }
-        ProfileAway = string.Join("\n", p.Away.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0));
-        ProfileAwayFrom = p.AwayFrom;
+        Away = string.Join("\n", p.Away.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0));
+        AwayFrom = p.AwayFrom;
     }
 }

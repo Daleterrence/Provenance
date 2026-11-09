@@ -44,7 +44,7 @@ public partial class SocialWindow : AppWindow
         DataContextChanged += (_, e) =>
         {
             if (e.OldValue is SocialViewModel old) Detach(old);
-            FollowEnd.SetSource(ChatScroll, HasMessages ? (e.NewValue as SocialViewModel)?.Conversation : null);
+            FollowEnd.SetSource(ChatScroll, HasMessages ? (e.NewValue as SocialViewModel)?.Messages.Conversation : null);
             if (e.NewValue is SocialViewModel vm)
             {
                 vm.PropertyChanged += OnVmChanged;
@@ -69,7 +69,7 @@ public partial class SocialWindow : AppWindow
 
     private void Detach(SocialViewModel vm)
     {
-        if (HasMessages) vm.ConversationVisible = false;
+        if (HasMessages) vm.Messages.ConversationVisible = false;
         if (HasFriends) vm.FriendsListVisible = false;
         vm.PropertyChanged -= OnVmChanged;
         vm.MessageReceived -= OnMessageLanded;
@@ -107,7 +107,7 @@ public partial class SocialWindow : AppWindow
     {
         if (Vm is not { } vm) return;
         bool shown = IsVisible && WindowState != WindowState.Minimized;
-        if (HasMessages) vm.ConversationVisible = shown;
+        if (HasMessages) vm.Messages.ConversationVisible = shown;
         if (HasFriends) vm.FriendsListVisible = shown;
     }
 
@@ -173,12 +173,12 @@ public partial class SocialWindow : AppWindow
 
     private void OnResend(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm && sender is FrameworkElement { DataContext: ChatEntry entry }) vm.Resend(entry);
+        if (Vm is { } vm && sender is FrameworkElement { DataContext: ChatEntry entry }) vm.Messages.Resend(entry);
     }
 
     private void OnRemoveFailed(object sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm && sender is FrameworkElement { DataContext: ChatEntry entry }) vm.RemoveFailedLine(entry);
+        if (Vm is { } vm && sender is FrameworkElement { DataContext: ChatEntry entry }) vm.Messages.RemoveFailedLine(entry);
     }
 
     private void OnEditProfile(object sender, RoutedEventArgs e)
@@ -248,14 +248,14 @@ public partial class SocialWindow : AppWindow
     private void OnCreateGroup(object sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm || !vm.CanEdit) return;
-        if (!vm.CanCreateGroup)
+        if (!vm.Groups.CanCreate)
         {
-            vm.ShowGroupLimit();
+            vm.Groups.ShowLimit();
             return;
         }
         string? name = null;
-        SvgIcon.OpenWhile(sender, () => name = vm.AskGroupName());
-        if (!string.IsNullOrWhiteSpace(name)) vm.CreateGroup(name);
+        SvgIcon.OpenWhile(sender, () => name = vm.Groups.AskName());
+        if (!string.IsNullOrWhiteSpace(name)) vm.Groups.Create(name);
     }
 
     private readonly ReopenGuard _menuGuard = new();
@@ -278,7 +278,7 @@ public partial class SocialWindow : AppWindow
         if (_menuGuard.JustClosed || sender is not FrameworkElement button || Vm is not { SelectedFriend: { } f } vm) return;
         var menu = new ContextMenu();
         menu.Closed += _menuGuard.OnClosed;
-        Menus.Fill(menu, vm.ConversationMenu(f, FriendList.OpenConversation));
+        Menus.Fill(menu, vm.Messages.ConversationMenu(f, FriendList.OpenConversation));
         Menus.ShowBelow(menu, button);
     }
 
@@ -294,7 +294,7 @@ public partial class SocialWindow : AppWindow
     }
 
     internal static void FillLineMenu(SocialViewModel vm, ContextMenu menu, TextBox? box, ChatEntry entry) =>
-        Menus.FillLine(menu, box, vm.LineMenu(entry));
+        Menus.FillLine(menu, box, vm.Messages.LineMenu(entry));
 
     // a right-click opens it at the pointer again, after the dots button put it below itself
     private void OnRowMenu(object sender, ContextMenuEventArgs e)
@@ -310,7 +310,7 @@ public partial class SocialWindow : AppWindow
 
     private bool BuildRowMenu(FrameworkElement row)
     {
-        if (Vm is not { } vm || row.ContextMenu is not { } menu || vm.RowMenu(row.DataContext) is not { } actions)
+        if (Vm is not { } vm || row.ContextMenu is not { } menu || vm.Groups.RowMenu(row.DataContext) is not { } actions)
             return false;
         Menus.Fill(menu, actions);
         return true;

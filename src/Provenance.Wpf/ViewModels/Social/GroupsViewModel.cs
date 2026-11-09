@@ -1,15 +1,19 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.Social;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
-public partial class SocialViewModel
+public sealed partial class GroupsViewModel : ObservableObject
 {
+    private readonly SocialViewModel _social;
+
+    public GroupsViewModel(SocialViewModel social) => _social = social;
+
     public sealed record GroupMemberItem(int Index, string Name, string Key, ImageSource? Avatar, GroupRole Role,
                                          string RoleText, string StatusLabel, bool Online, bool Me, string Comment)
     {
@@ -31,25 +35,31 @@ public partial class SocialViewModel
         public bool HasUnread => Unread > 0;
     }
 
-    public ObservableCollection<GroupItem> Groups { get; } = new();
+    public ObservableCollection<GroupItem> Items { get; } = new();
     [ObservableProperty, NotifyPropertyChangedFor(nameof(NoGroups))] private bool _hasGroups;
     public bool NoGroups => !HasGroups;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowFriends), nameof(FriendsTabVisible), nameof(GroupsTabVisible))]
-    private bool _showGroups;
-    public bool ShowFriends => !ShowGroups;
-    public bool FriendsTabVisible => FriendsListVisible && !ShowGroups;
-    public bool GroupsTabVisible => FriendsListVisible && ShowGroups;
 
-    [RelayCommand] private void ShowFriendsTab() => ShowGroups = false;
-    [RelayCommand] private void ShowGroupsTab() => ShowGroups = true;
-
-    private bool _groupsDirty = true;
+    private bool _dirty = true;
     internal string? _groupToken;
     private string _groupDone = "";
     private string? _groupLeaving;
     internal string? LeavingGroupId => _groupLeaving;
     private DateTime _groupAt;
     private bool _groupBySend;
+    private FriendItem? _inviteFor;
+
+    internal bool Writing => _groupToken != null;
+
+    internal void MarkDirty() => _dirty = true;
+
+    internal void Reset()
+    {
+        _dirty = true;
+        _groupToken = null;
+        _inviteFor = null;
+        Items.Clear();
+        HasGroups = false;
+    }
 
     private static string RoleText(GroupRole role) => role switch
     {
@@ -69,26 +79,26 @@ public partial class SocialViewModel
         _ => "Online",
     };
 
-    private void RebuildGroups(PolSocialSnapshot snap)
+    internal void Rebuild(PolSocialSnapshot snap)
     {
         var groups = snap.GroupList.Select(g =>
         {
             var members = g.Members
                 .OrderByDescending(m => m.Role).ThenByDescending(m => m.Online)
                 .ThenBy(m => m.Name, StringComparer.CurrentCultureIgnoreCase)
-                .Select(m => new GroupMemberItem(m.Index, m.Name, m.Key, _avatars.ProfilePicture(m.ProfilePictureId),
+                .Select(m => new GroupMemberItem(m.Index, m.Name, m.Key, _social.Avatars.ProfilePicture(m.ProfilePictureId),
                                                  m.Role, RoleText(m.Role), StatusText(m), m.Online, m.Me,
-                                                 m.Me ? m.Comment : Filtered(m.Comment))   // mine fills its edit box
+                                                 m.Me ? m.Comment : _social.Filtered(m.Comment))   // mine fills its edit box
                     { Status = m.Status.ToPolStatus() })
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
-            return new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members) { Unread = GroupChat.UnreadFor(g.Id) };
+            return new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members) { Unread = _social.GroupChat.UnreadFor(g.Id) };
         }).ToList();
-        if (!_groupsDirty && groups.Count == Groups.Count && groups.Zip(Groups).All(p => SameGroup(p.First, p.Second))) return;
-        _groupsDirty = false;
+        if (!_dirty && groups.Count == Items.Count && groups.Zip(Items).All(p => SameGroup(p.First, p.Second))) return;
+        _dirty = false;
         // a group that didn't change keeps its row (and an open menu on it)
-        Groups.Patch(groups, (a, b) => a.Id == b.Id, SameGroup);
-        HasGroups = Groups.Count > 0;
+        Items.Patch(groups, (a, b) => a.Id == b.Id, SameGroup);
+        HasGroups = Items.Count > 0;
     }
 
     // the members are a list, so the record's own == would only ever say they differ
@@ -100,48 +110,47 @@ public partial class SocialViewModel
     private void BeginGroup(Func<int, string, bool> write, string doneText, bool bySend = false, string? leaving = null,
                             FriendItem? invite = null)
     {
-        if (!BeginEdit(out var pid, out var token)) return;
-        _editToken = null;
+        if (!_social.BeginEdit(out var pid, out var token, followSend: true)) return;
         _groupToken = token;
         _groupDone = doneText;
         _groupAt = DateTime.UtcNow;
         _groupBySend = bySend;
         _groupLeaving = leaving;
-        _answerFor = invite;   // only now, a refused click must never mark it answered
+        _inviteFor = invite;   // only now, a refused click must never mark it answered
         if (write(pid, token)) return;
         _groupToken = null;
-        _answerFor = null;
-        EditBusy = false;
-        EditNote.Fail(HookFailures.RequestWriteFailed);
+        _inviteFor = null;
+        _social.EditBusy = false;
+        _social.EditNote.Fail(HookFailures.RequestWriteFailed);
     }
 
-    public bool CanCreateGroup => Groups.Count(x => !x.IsInvited) < PolLimits.MaxGroups;
-    public string GroupLimitText => HookFailures.Groups.TooManyGroups;
+    public bool CanCreate => Items.Count(x => !x.IsInvited) < PolLimits.MaxGroups;
+    public string LimitText => HookFailures.Groups.TooManyGroups;
 
     // each one checks the viewer's rule as well as the menus do, so no caller can send what the viewer wouldn't
 
-    public void CreateGroup(string name)
+    public void Create(string name)
     {
-        if (!CanCreateGroup)
+        if (!CanCreate)
         {
-            EditNote.Fail(GroupLimitText);
+            _social.EditNote.Fail(LimitText);
             return;
         }
         BeginGroup((pid, token) => SocialRequests.CreateGroup(pid, token, name.Trim()), $"Group \"{name.Trim()}\" created.");
     }
 
-    public void DisbandGroup(GroupItem g)
+    public void Disband(GroupItem g)
     {
         if (g.IsMaster)
             BeginGroup((pid, token) => SocialRequests.DisbandGroup(pid, token, g.Id), $"Group \"{g.Name}\" disbanded.", leaving: g.Id);
     }
 
     // a member or sub-master, an invitation gets answered instead
-    public void LeaveGroup(GroupItem g)
+    public void Leave(GroupItem g)
     {
         if (g.MyRole is not (< GroupRole.Member or GroupRole.Master))
             BeginGroup((pid, token) => SocialRequests.LeaveGroup(pid, token, g.Id),
-                       ViewerText(0x3eab, "You have left the group \"%s.\"").Replace("%s", g.Name), leaving: g.Id);
+                       _social.ViewerText(0x3eab, "You have left the group \"%s.\"").Replace("%s", g.Name), leaving: g.Id);
     }
 
     // masters and sub-masters remove non-masters and relieve sub-masters (back to Member), only the master promotes to
@@ -162,37 +171,37 @@ public partial class SocialViewModel
                        role == GroupRole.Remove ? $"{m.Name} was removed from the group." : "The group was changed.");
     }
 
-    public void SetGroupComment(GroupItem g, string text)
+    public void SetComment(GroupItem g, string text)
     {
         if (g.MyRole >= GroupRole.Member)
             BeginGroup((pid, token) => SocialRequests.SetGroupComment(pid, token, g.Id, text.Trim()), "Your group comment was saved.");
     }
 
-    public void InviteToGroup(GroupItem g, FriendItem f)
+    public void Invite(GroupItem g, FriendItem f)
     {
         if (!f.IsFriend || f.Pending || f.IsMe || !g.CanInvite) return;
         if (f.Key.Length > 0 && g.Members.Any(m => m.Key == f.Key))
         {
-            EditNote.Fail($"{f.Name} is already in this group, or already invited.");
+            _social.EditNote.Fail($"{f.Name} is already in this group, or already invited.");
             return;
         }
         if (g.Members.Count >= PolLimits.MaxGroupMembers)
         {
-            EditNote.Fail(HookFailures.Groups.Full);
+            _social.EditNote.Fail(HookFailures.Groups.Full);
             return;
         }
-        var text = ViewerText(0x46d5, "Would you like to join the group \"%s\"?").Replace("%s", g.Name);
-        var subject = ViewerText(0x46d4, "Would you like to join a friend group?");
+        var text = _social.ViewerText(0x46d5, "Would you like to join the group \"%s\"?").Replace("%s", g.Name);
+        var subject = _social.ViewerText(0x46d4, "Would you like to join a friend group?");
         BeginGroup((pid, token) => SocialRequests.InviteToGroup(pid, token, g.Id, f.Row, subject, text, f.Key),
                    $"Invitation to \"{g.Name}\" sent to {f.Name}.", bySend: true);
     }
 
     // an invitation (kind 0xe) gets a kind 0xf or 0x10 message back
-    public void AnswerGroupInvite(FriendItem invite, bool accept)
+    public void AnswerInvite(FriendItem invite, bool accept)
     {
-        if (!invite.IsGroupInvite || !CanEdit) return;   // refused before the viewer's string table gets read
-        var subject = accept ? ViewerText(0x46d6, "Group registration accepted")
-                             : ViewerText(0x46d1, "Friend registration declined");
+        if (!invite.IsGroupInvite || !_social.CanEdit) return;   // refused before the viewer's string table gets read
+        var subject = accept ? _social.ViewerText(0x46d6, "Group registration accepted")
+                             : _social.ViewerText(0x46d1, "Friend registration declined");
         BeginGroup((pid, token) => SocialRequests.AnswerGroupInvite(pid, token, accept, invite.RequestMid, subject),
                    accept ? "You accepted the group invitation." : "You declined the group invitation.",
                    bySend: true, invite: invite);
@@ -200,7 +209,7 @@ public partial class SocialViewModel
 
     internal const string ChatClosedNote = "The group chat was closed, but you're still in the group.";
 
-    private void ApplyGroupState(PolSocialSnapshot snap)
+    internal void Apply(PolSocialSnapshot snap)
     {
         if (_groupToken is null) return;
         bool mine = snap.GroupJob.Token == _groupToken;
@@ -211,23 +220,23 @@ public partial class SocialViewModel
         else if (mine && snap.GroupJob.State.StartsWith("failed", StringComparison.Ordinal)) state = snap.GroupJob.State;
         else state = "";
         bool done = state is "sent" or "saved";
-        if (Settled(done ? "ok" : state, "ok", _groupAt, 130) is not { } st) return;
-        var invite = _answerFor is { IsGroupInvite: true } inv ? inv : null;
+        if (SocialViewModel.Settled(done ? "ok" : state, "ok", _groupAt, 130) is not { } st) return;
+        var invite = _inviteFor is { IsGroupInvite: true } inv ? inv : null;
         var left = _groupLeaving;
         _groupLeaving = null;
         _groupToken = null;
-        _answerFor = null;
-        EditBusy = false;
+        _inviteFor = null;
+        _social.EditBusy = false;
         // a timed-out answer leaves the list for this session too, so it can't be answered twice
-        if (invite != null && st is "ok" or "timeout") Answered(invite.RequestMid, ack: st == "ok");
+        if (invite != null && st is "ok" or "timeout") _social.Answered(invite.RequestMid, ack: st == "ok");
         if (st == "ok")
         {
             // with its chat open, the chat says it (and only once), and the lines kept for it go either way
-            if (left != null && GroupChat.GroupLeft(left, _groupDone)) return;
-            EditNote.Show(_groupDone, TimeSpan.FromSeconds(12));
+            if (left != null && _social.GroupChat.GroupLeft(left, _groupDone)) return;
+            _social.EditNote.Show(_groupDone, TimeSpan.FromSeconds(12));
             return;
         }
-        EditNote.Fail(st switch
+        _social.EditNote.Fail(st switch
         {
             "timeout" => HookFailures.Groups.NoAnswer,
             "failed:busy" => HookFailures.Busy,
@@ -254,6 +263,87 @@ public partial class SocialViewModel
             var s => HookFailures.ChangeRejected(SocialRequests.FailReason(s)),
         });
         // the hook leaves the group's chat before the group, so a refused leave can still have closed it
-        if (left != null && GroupChat.LeaveFailed(left, snap)) EditNote.Fail(EditNote.Text + " " + ChatClosedNote);
+        if (left != null && _social.GroupChat.LeaveFailed(left, snap)) _social.EditNote.Fail(_social.EditNote.Text + " " + ChatClosedNote);
+    }
+
+    public void ShowLimit() => _social.Dialogs.Info("Friend groups", LimitText);
+
+    public string? AskName() => _social.Dialogs.Ask("Create a group",
+        "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", maxLength: PolLimits.GroupName);
+
+    public GroupItem? GroupOf(GroupMemberItem m) => Items.FirstOrDefault(g => g.Members.Any(x => ReferenceEquals(x, m)));
+
+    // a group row's own menu, or a member's (never my own row), null when there isn't one
+    public IReadOnlyList<MenuAction>? RowMenu(object? row) => row switch
+    {
+        GroupItem g => GroupMenu(g),
+        GroupMemberItem { Me: false } m when GroupOf(m) is { } mg => MemberMenu(mg, m),
+        _ => null,
+    };
+
+    public IReadOnlyList<MenuAction> GroupMenu(GroupItem g)
+    {
+        // invitations get answered from their own row in the friend list, like the viewer, so two can't get mixed up
+        if (g.IsInvited)
+            return [new("Answer it under Group invitations in your friend list", true, () => _social.ShowFriendsTabCommand.Execute(null))];
+        bool can = _social.CanEdit;
+        var menu = new List<MenuAction>();
+        if (g.CanChat)
+        {
+            menu.Add(new("Group Chat", _social.CanGroupChat, () => _social.OpenGroupChatCommand.Execute(g)));
+            menu.Add(MenuAction.Separator);
+        }
+        menu.Add(new("Edit my group comment...", can, () =>
+        {
+            var mine = g.Members.FirstOrDefault(m => m.Me)?.Comment ?? "";
+            var text = _social.Dialogs.Ask("Group comment", $"Your comment in \"{g.Name}\" (up to 49 characters).", mine,
+                                    maxLength: PolLimits.Comment, allowEmpty: true);
+            if (text != null && text != mine) SetComment(g, text);
+        }));
+        if (g.CanInvite)
+        {
+            var invite = _social.Friends.Where(f => f.IsFriend && !f.Pending && !g.Members.Any(m => m.Key.Length > 0 && m.Key == f.Key))
+                                .Select(f => new MenuAction(f.Name, can, () => Invite(g, f))).ToList();
+            menu.Add(new("Invite a friend", can && invite.Count > 0) { Items = invite });
+        }
+        menu.Add(MenuAction.Separator);
+        menu.Add(new("Leave group...", can && !g.IsMaster, () =>
+        {
+            if (_social.ConfirmDestructive("Leave group", $"Leave the group \"{g.Name}\"?", "LEAVE")) Leave(g);
+        })
+        {
+            Tip = g.IsMaster ? "The group master can't leave. Make another member the group master first, or disband the group." : null,
+        });
+        menu.Add(new("Disband group...", can && g.IsMaster, () =>
+        {
+            if (_social.ConfirmDestructive("Disband group", $"Disband the group \"{g.Name}\"? The group will be gone for everyone in it.", "DISBAND"))
+                Disband(g);
+        }));
+        return menu;
+    }
+
+    public IReadOnlyList<MenuAction> MemberMenu(GroupItem g, GroupMemberItem m)
+    {
+        bool Can(GroupRole role) => _social.CanEdit && !g.IsInvited && CanSetRole(g, m, role);
+        var friend = m.Key.Length > 0 ? _social.Friends.FirstOrDefault(f => f.IsFriend && f.Key == m.Key) : null;
+        return
+        [
+            new("Send message", friend is { CanMessage: true }, () => _social.SelectedFriend = friend),
+            new("View profile", friend is { IsFriend: true, Pending: false }, () => _social.ShowProfile(friend!)),
+            MenuAction.Separator,
+            new("Make group master...", Can(GroupRole.Master), () =>
+            {
+                if (_social.ConfirmDestructive("Make group master", $"Make {m.Name} the master of \"{g.Name}\"? You'll become an ordinary member.", "MAKE MASTER"))
+                    SetMemberRole(g, m, GroupRole.Master);
+            }),
+            m.Role == GroupRole.SubMaster
+                ? new("Relieve sub-master", Can(GroupRole.Member), () => SetMemberRole(g, m, GroupRole.Member))
+                : new("Make sub-master", Can(GroupRole.SubMaster), () => SetMemberRole(g, m, GroupRole.SubMaster)),
+            new("Remove from group...", Can(GroupRole.Remove), () =>
+            {
+                if (_social.ConfirmDestructive("Remove from group", $"Remove {m.Name} from \"{g.Name}\"?", "REMOVE"))
+                    SetMemberRole(g, m, GroupRole.Remove);
+            }),
+        ];
     }
 }

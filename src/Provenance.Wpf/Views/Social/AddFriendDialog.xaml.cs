@@ -12,31 +12,33 @@ namespace Provenance.Wpf.Views.Social;
 
 public partial class AddFriendDialog : AppWindow
 {
-    private SocialViewModel Vm => (SocialViewModel)DataContext;
+    private readonly SocialViewModel _social;
+    private SocialSearch Search => _social.Search;
 
     public AddFriendDialog(SocialViewModel vm, string? handleName = null, string? handleKey = null)
     {
         InitializeComponent();
-        DataContext = vm;
+        _social = vm;
+        DataContext = vm.Search;
         Loaded += (_, _) => NameBox.Focus();
         // a search still out when it closes is nobody's, so its hits never turn up under whatever's asked next
-        Closed += (_, _) => vm.CancelSearch();
+        Closed += (_, _) => Search.Cancel();
         // opened from a row: search their name straight away, then pick their own hit (two people can share a name)
         if (handleName != null)
         {
-            vm.CancelSearch();
-            vm.SearchKind = FriendSearchKind.Handle;
+            Search.Cancel();
+            Search.Kind = FriendSearchKind.Handle;
             NameBox.Text = handleName;
-            Loaded += (_, _) => Vm.Search(NameBox.Text);
+            Loaded += (_, _) => Search.Run(NameBox.Text);
             if (!string.IsNullOrEmpty(handleKey))
             {
                 NotifyCollectionChangedEventHandler pick = (_, _) =>
                 {
-                    if (Hits.SelectedItem == null && vm.SearchHits.FirstOrDefault(h => h.Key == handleKey) is { } mine)
+                    if (Hits.SelectedItem == null && Search.Hits.FirstOrDefault(h => h.Key == handleKey) is { } mine)
                         Hits.SelectedItem = mine;
                 };
-                vm.SearchHits.CollectionChanged += pick;
-                Closed += (_, _) => vm.SearchHits.CollectionChanged -= pick;   // the view model outlives the dialog
+                Search.Hits.CollectionChanged += pick;
+                Closed += (_, _) => Search.Hits.CollectionChanged -= pick;   // the view model outlives the dialog
             }
         }
         Hits.SelectionChanged += (_, _) => UpdateSend();
@@ -54,9 +56,9 @@ public partial class AddFriendDialog : AppWindow
         UpdateSend();
     }
 
-    private void UpdateSend() => SendButton.IsEnabled = Vm.CanEdit && Vm.CanRequest(Hits.SelectedItem as SocialViewModel.SearchHitItem);
+    private void UpdateSend() => SendButton.IsEnabled = _social.CanEdit && Search.CanRequest(Hits.SelectedItem as SocialSearch.SearchHitItem);
 
-    private void OnSearch(object sender, RoutedEventArgs e) => Vm.Search(NameBox.Text);
+    private void OnSearch(object sender, RoutedEventArgs e) => Search.Run(NameBox.Text);
 
     private void OnKindPicked(object sender, RoutedEventArgs e)
     {
@@ -69,19 +71,19 @@ public partial class AddFriendDialog : AppWindow
     {
         if (e.Key != Key.Enter) return;
         e.Handled = true;
-        Vm.Search(NameBox.Text);
+        Search.Run(NameBox.Text);
     }
 
     private void OnSend(object sender, RoutedEventArgs e)
     {
-        var hit = Hits.SelectedItem as SocialViewModel.SearchHitItem;
-        var problem = Vm.RequestProblem(hit);
+        var hit = Hits.SelectedItem as SocialSearch.SearchHitItem;
+        var problem = Search.RequestProblem(hit);
         if (problem != null)
         {
-            Vm.SearchNote.Show(problem);
+            Search.Note.Show(problem);
             return;
         }
-        Vm.AskSendFriendRequest(hit!);
+        Search.AskSendRequest(hit!);
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();

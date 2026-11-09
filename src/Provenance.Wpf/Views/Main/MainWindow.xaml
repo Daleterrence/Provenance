@@ -672,7 +672,7 @@
                         </Button>
                         <Button Command="{Binding OpenMessagesCommand}" ToolTip="Open messages" AutomationProperties.Name="Open messages">
                             <StackPanel Orientation="Horizontal">
-                                <controls:SvgIcon Glyph="chat" IsOpen="{Binding Social.ConversationVisible}" />
+                                <controls:SvgIcon Glyph="chat" IsOpen="{Binding Social.Messages.ConversationVisible}" />
                                 <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="MESSAGES" />
                                 <Border Style="{StaticResource ButtonBadge}"
                                         Visibility="{Binding Social.HasUnread, Converter={StaticResource BoolToVis}}"

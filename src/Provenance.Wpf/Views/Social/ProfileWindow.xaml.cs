@@ -13,16 +13,17 @@ public partial class ProfileWindow : AppWindow
     public ProfileWindow(SocialViewModel vm, IDialogs dialogs, FriendItem friend)
     {
         InitializeComponent();
-        DataContext = _vm = vm;
+        _vm = vm;
+        DataContext = vm.Profile;
         _friend = friend;
         SetFriend(friend);
-        vm.RequestProfile(friend);
+        vm.Profile.Request(friend);
         void Popup(string text) => Dispatcher.BeginInvoke(() =>
         {
             if (IsVisible) dialogs.Info("PlayOnline profile", text);
         });
-        vm.ProfilePopup += Popup;
-        Closed += (_, _) => vm.ProfilePopup -= Popup;
+        vm.Profile.Popup += Popup;
+        Closed += (_, _) => vm.Profile.Popup -= Popup;
     }
 
     internal void SetFriend(FriendItem friend)
