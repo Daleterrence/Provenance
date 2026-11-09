@@ -278,7 +278,7 @@ public partial class OtpDialog : AppWindow
         var mine = _fetch = new CancellationTokenSource();
         RetryButton.Visibility = Visibility.Collapsed;
         SourceSpinner.Visibility = Visibility.Visible;
-        SourceText.Text = ToolText.Downloading(tool);
+        SourceText.Text = ToolTexts.Downloading(tool);
         ToolInstall r;
         try { r = await ToolInstaller.InstallAsync(tool, null, mine.Token); }
         catch (OperationCanceledException) { return; }
@@ -288,8 +288,8 @@ public partial class OtpDialog : AppWindow
             _ = FetchAsync(null);
             return;
         }
-        if (r == ToolInstall.NotSupported) ShowProblem(ToolText.Result(tool, r), OtpFix.TypeInstead);
-        else ShowProblem(ToolText.Result(tool, r), OtpFix.Install, tool, ToolFix.Label(OtpFix.TryAgain));
+        if (r == ToolInstall.NotSupported) ShowProblem(ToolTexts.Result(tool, r), OtpFix.TypeInstead);
+        else ShowProblem(ToolTexts.Result(tool, r), OtpFix.Install, tool, ToolFix.Label(OtpFix.TryAgain));
     }
 
     private void OnUnlock(object sender, RoutedEventArgs e)

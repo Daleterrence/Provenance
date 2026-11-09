@@ -9,7 +9,6 @@ using Provenance.Common.IO;
 using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
-using Provenance.Common.Win32;
 
 namespace Provenance.Common.Patcher;
 
@@ -157,7 +156,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             PatchCodecs.Lzss(src, dst, ct, 256L << 20);   // the biggest manifest is about 6 MB
         File.Delete(tmp1);
         Replace(tmp2, Path.Combine(Dir, "patch.cfg"));
-        DeleteFile(Path.Combine(Dir, "patch2.cfg"));
+        AtomicFile.DeleteReadOnly(Path.Combine(Dir, "patch2.cfg"));
         return PatchFileList.Parse(File.ReadAllText(Path.Combine(Dir, "patch.cfg"), Encoding.Latin1), product.TagFilter);
     }
 
@@ -206,7 +205,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             if (k == f.Lines.Count - 1) return new Decision(Kind.Current, 0, 0, fromTmp2);
             if (k < 0)
             {
-                if (fromTmp2) { DeleteFile(tmp2); continue; }   // POL's "illegal tmp2 file rollback"
+                if (fromTmp2) { AtomicFile.DeleteReadOnly(tmp2); continue; }   // POL's "illegal tmp2 file rollback"
                 // Windower's Large Address Aware pol.exe is SE's file with one bit set. A newer pol.exe replaces it whole
                 if (KeepLargeAddressAware && f.Name.Equals(GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase) &&
                     LargeAddressAware.Unpatched(target) is { } se && FileSig.Of(new MemoryStream(se), ct) == f.Last.Sig)
@@ -226,8 +225,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
     private static Decision DirectOf(PatchFile f) => new(Kind.Direct, 0, f.Last.SlcLen, false);
 
-    // Biggest files first. A broken connection gets replaced and its file restarted (three goes max), a refused one
-    // hands its file back, and whatever's left gets one single-connection round.
     private void Download(List<(PatchFile File, long Bytes)> work, IPEndPoint ep, string local, long total,
                           IProgress<PatchProgress>? progress, CancellationToken ct)
     {
@@ -240,92 +237,110 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
                 throw new InvalidDataException($"The {product.Name} file list names {f.Name} twice or as a temporary file.");
         }
 
-        var queue = new ConcurrentQueue<PatchFile>(work.OrderByDescending(w => w.Bytes).Select(w => w.File));
-        var attempts = new ConcurrentDictionary<string, int>();
-        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        long done = 0, lastReport = 0;
-        Exception? failure = null, lastNetwork = null;
-        var gate = new object();
-        void Add(long n, bool force = false)
-        {
-            lock (gate)
-            {
-                done += n;
-                if (!force && done < total && Environment.TickCount64 - lastReport < 250) return;
-                lastReport = Environment.TickCount64;
-                progress?.Report(new PatchProgress(PatchPhase.Download,
-                    $"Downloading {product.Name}: {done / 1048576.0:0.0} of {total / 1048576.0:0.0} MB", total > 0 ? Math.Clamp((double)done / total, 0, 1) : -1));
-            }
-        }
-        void Fail(Exception e)
-        {
-            Interlocked.CompareExchange(ref failure, e, null);
-            stop.Cancel();
-        }
-        void Worker()
-        {
-            PatchServerLink? link = null;
-            try
-            {
-                while (!stop.IsCancellationRequested && queue.TryDequeue(out var f))
-                {
-                    long counted = 0, kept = 0;
-                    void Moved(long n) { counted += n; Add(n); }
-                    void Kept() => kept = counted;
-                    bool connecting = link is null;
-                    try
-                    {
-                        link ??= PatchServerLink.Connect(ep, stop.Token);
-                        connecting = false;
-                        if (Environment.TickCount64 - link.LastRequestTicks > KeepAliveMs) KeepAlive(link, stop.Token);
-                        var d = Decide(f, manifestScan: false, local, stop.Token);
-                        if (d.Kind == Kind.Direct) Direct(link, f, Moved, stop.Token);
-                        else if (d.Kind == Kind.Indirect) Indirect(link, f, d.From, d.FromTmp2, Moved, Kept, stop.Token);
-                    }
-                    catch (PatchServerNetworkException e) when (!stop.IsCancellationRequested)
-                    {
-                        Add(kept - counted);
-                        link?.Dispose();
-                        link = null;
-                        lastNetwork = e;
-                        if (!connecting && attempts.AddOrUpdate(f.Name, 1, (_, n) => n + 1) >= 3) { Fail(e); return; }
-                        queue.Enqueue(f);
-                        if (connecting) return;
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-            catch (Exception e) { Fail(e); }
-            finally { link?.Dispose(); }
-        }
-        void Round(int workers)
-        {
-            var started = new List<Thread>();
-            try
-            {
-                for (int i = 0; i < workers; i++)
-                {
-                    var t = new Thread(Worker) { IsBackground = true, Name = $"update {i}" };
-                    t.Start();
-                    started.Add(t);
-                }
-            }
-            catch
-            {
-                stop.Cancel();
-                started.ForEach(t => t.Join());
-                throw;
-            }
-            started.ForEach(t => t.Join());
-        }
+        var workers = new DownloadWorkers(ep, connections, product.Name, total, progress,
+            (link, f, moved, kept, token) => FetchOne(link, f, local, moved, kept, token));
+        workers.Run(work.OrderByDescending(w => w.Bytes).Select(w => w.File), ct);
+    }
 
-        Round(Math.Max(1, connections));
-        if (failure == null && !ct.IsCancellationRequested && !queue.IsEmpty) Round(1);
-        ct.ThrowIfCancellationRequested();
-        if (failure != null) ExceptionDispatchInfo.Capture(failure).Throw();
-        if (!queue.IsEmpty)
-            throw new PatchServerNetworkException($"PlayOnline's update server stopped answering, so {queue.Count:N0} {product.Name} files weren't downloaded. Try again in a moment.", lastNetwork);
-        Add(0, force: true);
+    private void FetchOne(PatchServerLink link, PatchFile f, string local, Action<long> moved, Action kept, CancellationToken ct)
+    {
+        if (Environment.TickCount64 - link.LastRequestTicks > KeepAliveMs) KeepAlive(link, ct);
+        var d = Decide(f, manifestScan: false, local, ct);
+        if (d.Kind == Kind.Direct) Direct(link, f, moved, ct);
+        else if (d.Kind == Kind.Indirect) Indirect(link, f, d.From, d.FromTmp2, moved, kept, ct);
+    }
+
+    // Biggest files first. A broken connection gets replaced and its file restarted (three goes max), a refused one
+    // hands its file back, and whatever's left gets one single-connection round.
+    private sealed class DownloadWorkers(IPEndPoint ep, int connections, string productName, long total, IProgress<PatchProgress>? progress,
+                                         Action<PatchServerLink, PatchFile, Action<long>, Action, CancellationToken> fetch)
+    {
+        public void Run(IEnumerable<PatchFile> files, CancellationToken ct)
+        {
+            var queue = new ConcurrentQueue<PatchFile>(files);
+            var attempts = new ConcurrentDictionary<string, int>();
+            using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            long done = 0, lastReport = 0;
+            Exception? failure = null, lastNetwork = null;
+            var gate = new object();
+            void Add(long n, bool force = false)
+            {
+                lock (gate)
+                {
+                    done += n;
+                    if (!force && done < total && Environment.TickCount64 - lastReport < 250) return;
+                    lastReport = Environment.TickCount64;
+                    progress?.Report(new PatchProgress(PatchPhase.Download,
+                        $"Downloading {productName}: {done / 1048576.0:0.0} of {total / 1048576.0:0.0} MB", total > 0 ? Math.Clamp((double)done / total, 0, 1) : -1));
+                }
+            }
+            void Fail(Exception e)
+            {
+                Interlocked.CompareExchange(ref failure, e, null);
+                stop.Cancel();
+            }
+            void Worker()
+            {
+                PatchServerLink? link = null;
+                try
+                {
+                    while (!stop.IsCancellationRequested && queue.TryDequeue(out var f))
+                    {
+                        long counted = 0, kept = 0;
+                        void Moved(long n) { counted += n; Add(n); }
+                        void Kept() => kept = counted;
+                        bool connecting = link is null;
+                        try
+                        {
+                            link ??= PatchServerLink.Connect(ep, stop.Token);
+                            connecting = false;
+                            fetch(link, f, Moved, Kept, stop.Token);
+                        }
+                        catch (PatchServerNetworkException e) when (!stop.IsCancellationRequested)
+                        {
+                            Add(kept - counted);
+                            link?.Dispose();
+                            link = null;
+                            lastNetwork = e;
+                            if (!connecting && attempts.AddOrUpdate(f.Name, 1, (_, n) => n + 1) >= 3) { Fail(e); return; }
+                            queue.Enqueue(f);
+                            if (connecting) return;
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+                catch (Exception e) { Fail(e); }
+                finally { link?.Dispose(); }
+            }
+            void Round(int workers)
+            {
+                var started = new List<Thread>();
+                try
+                {
+                    for (int i = 0; i < workers; i++)
+                    {
+                        var t = new Thread(Worker) { IsBackground = true, Name = $"update {i}" };
+                        t.Start();
+                        started.Add(t);
+                    }
+                }
+                catch
+                {
+                    stop.Cancel();
+                    started.ForEach(t => t.Join());
+                    throw;
+                }
+                started.ForEach(t => t.Join());
+            }
+
+            Round(Math.Max(1, connections));
+            if (failure == null && !ct.IsCancellationRequested && !queue.IsEmpty) Round(1);
+            ct.ThrowIfCancellationRequested();
+            if (failure != null) ExceptionDispatchInfo.Capture(failure).Throw();
+            if (!queue.IsEmpty)
+                throw new PatchServerNetworkException($"PlayOnline's update server stopped answering, so {queue.Count:N0} {productName} files weren't downloaded. Try again in a moment.", lastNetwork);
+            Add(0, force: true);
+        }
     }
 
     private byte Fetch(PatchServerLink link, string path, long size, string tmp, bool typeByte, Action<long> moved, CancellationToken ct)
@@ -393,7 +408,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             if (f.Attribute == BlockAttribute.Reset2)
             {
                 // files a running viewer has open get queued in its patch.ini for startpol.exe
-                if (!Queue(product.ViewerFolder, product.Folder.TrimEnd('\\') + "\\" + f.Name))
+                if (!ViewerQueue.Queue(product.ViewerFolder, product.Folder.TrimEnd('\\') + "\\" + f.Name))
                     throw Shown.Mark(new IOException($"Provenance couldn't set {f.Name} to update when PlayOnline restarts. Try again."));
                 rst.Append(f.Name).Append(' ');
                 queued = true;
@@ -419,7 +434,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             foreach (var f in manifest)
             {
                 var tmp2 = Local(f.Name) + ".tmp2";
-                if (File.Exists(tmp2)) DeleteFile(tmp2);
+                if (File.Exists(tmp2)) AtomicFile.DeleteReadOnly(tmp2);
             }
             throw Shown.Mark(new InvalidDataException(
                 $"PlayOnline's update server sent {product.Name} files for another version of PlayOnline, so none of them were installed."));
@@ -432,12 +447,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         File.Move(staged, target, overwrite: true);
     }
 
-    private static void DeleteFile(string path)
-    {
-        AtomicFile.ClearReadOnly(path);
-        File.Delete(path);
-    }
-
     private void WriteText(string name, string text) => WriteBytes(name, Encoding.Latin1.GetBytes(text));
 
     private void WriteBytes(string name, byte[] bytes)
@@ -445,73 +454,5 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         var path = Path.Combine(Dir, name);
         File.WriteAllBytes(path + ".provenance", bytes);
         Replace(path + ".provenance", path);
-    }
-
-    // SE's writer, in the ANSI code page like startpol.exe's reader
-    internal static bool Queue(string viewerDir, string target) =>
-        Kernel32.WritePrivateProfileStringA("Rename", target, target + ".tmp2", Path.Combine(viewerDir, "patch.ini"));
-
-    // The viewer's next start, done here: startpol.exe /REPLACEPOLEXE moves queued .tmp2 files in (patch.ini ->
-    // patch.bak), then pol.exe's boot step at 0x00410710 refreshes the DLLs. Throws if any are in use.
-    public static void ApplyQueued(string viewerDir)
-    {
-        var ini = Path.Combine(viewerDir, "patch.ini");
-        if (File.Exists(ini))
-        {
-            var queued = new List<(string Target, string Staged)>();
-            foreach (var line in RenameSection(ini))
-            {
-                int eq = line.IndexOf('=');
-                if (eq <= 0) continue;
-                string target = line[..eq].Trim(), staged = line[(eq + 1)..].Trim();
-                if (!PathInside.IsUnder(viewerDir, target) || !PathInside.IsUnder(viewerDir, staged))
-                    throw new InvalidDataException($"patch.ini names a file outside the PlayOnline Viewer folder: {target}");
-                if (File.Exists(staged)) queued.Add((target, staged));
-            }
-            // every copy before any delete, so a file in use leaves the whole queue to run again
-            foreach (var (target, staged) in queued)
-            {
-                AtomicFile.ClearReadOnly(target);
-                File.Copy(staged, target, overwrite: true);
-            }
-            foreach (var (_, staged) in queued) DeleteFile(staged);
-            AtomicFile.ClearReadOnly(Path.Combine(viewerDir, "patch.bak"));
-            File.Copy(ini, Path.Combine(viewerDir, "patch.bak"), overwrite: true);
-            DeleteFile(ini);
-        }
-        foreach (var (staged, live) in BootCopies(viewerDir))
-        {
-            AtomicFile.ClearReadOnly(live);
-            File.Copy(staged, live, overwrite: true);
-        }
-    }
-
-    public static bool QueuedWorkPending(string viewerDir) =>
-        File.Exists(Path.Combine(viewerDir, "patch.ini")) || BootCopies(viewerDir).Any();
-
-    public static readonly IReadOnlyList<string> BootCopyNames = ["app.dll", "appEU.dll", "polcore.dll", "polcoreEU.dll"];
-
-    // the two each region's viewer runs, the EU ones are its own builds
-    public static IReadOnlyList<string> BootCopyNamesFor(PolRegion region) =>
-        region == PolRegion.Europe ? ["appEU.dll", "polcoreEU.dll"] : ["app.dll", "polcore.dll"];
-
-    public const string LiveFolder = "viewer/com/", BootCopyFolder = "patchfiles/PlayOnlineViewer/viewer/com/";
-
-    // pol.exe's boot list (wide strings at 0x453134) and its test (0x004073d0), which only compares write times (of
-    // course). A different time means a copy every start, failing if a DLL's held
-    private static IEnumerable<(string Staged, string Live)> BootCopies(string viewerDir) =>
-        from name in BootCopyNames
-        let staged = Path.Combine(viewerDir, BootCopyFolder.Replace('/', Path.DirectorySeparatorChar), name)
-        let live = Path.Combine(viewerDir, LiveFolder.Replace('/', Path.DirectorySeparatorChar), name)
-        where File.Exists(staged)
-              && (!File.Exists(live) || File.GetLastWriteTimeUtc(staged) != File.GetLastWriteTimeUtc(live))
-        select (staged, live);
-
-    // Windows decodes it with the same code page that wrote it
-    private static IEnumerable<string> RenameSection(string ini)
-    {
-        var buf = new char[32767];
-        int n = Kernel32.GetPrivateProfileSectionW("Rename", buf, buf.Length, ini);
-        return new string(buf, 0, n).Split('\0', StringSplitOptions.RemoveEmptyEntries);
     }
 }

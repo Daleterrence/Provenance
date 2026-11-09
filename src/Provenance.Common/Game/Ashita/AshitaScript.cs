@@ -113,8 +113,8 @@ public sealed partial class AshitaScript
     public IReadOnlyList<AshitaScriptLoad> Plugins => Listed(false);
     public IReadOnlyList<AshitaScriptLoad> Addons => Listed(true);
 
-    public AshitaLoad Plugin(string name) => State(false, name);
-    public AshitaLoad Addon(string name) => State(true, name);
+    public AshitaLoad Plugin(string name) => State(Now(false), name);
+    public AshitaLoad Addon(string name) => State(Now(true), name);
 
     // false when the script loads it in a way a toggle can't touch, or the name can't go in a script. Turning an addon
     // on turns the addons plugin on too
@@ -197,32 +197,47 @@ public sealed partial class AshitaScript
 
     private readonly record struct Event(int Line, int Seq, Op Op, string Name, bool Toggle, bool Active, string Args, bool Unordered);
 
+    // what a script does to plugins, or to addons. An /unloadall is kept apart from the named events, since it covers
+    // every name
+    private sealed class Loads(bool isAddons)
+    {
+        public readonly bool IsAddons = isAddons;
+        public readonly Dictionary<string, List<Event>> ByName = new(StringComparer.OrdinalIgnoreCase);
+        public readonly List<string> Loaded = [];
+        public readonly List<Event> Toggles = [];
+        public int UnloadAllSeq = -1, UnloadAllLine = -1;
+        public bool UnloadAllUnordered;
+        private readonly HashSet<string> _loadedSet = new(StringComparer.OrdinalIgnoreCase);
+
+        public void Add(Event e)
+        {
+            if (!ByName.TryGetValue(e.Name, out var list)) ByName[e.Name] = list = [];
+            if (e.Op == Op.Load && _loadedSet.Add(e.Name)) Loaded.Add(e.Name);
+            list.Add(e);
+            if (e.Toggle) Toggles.Add(e);
+        }
+
+        public void AddUnloadAll(Event e)
+        {
+            UnloadAllSeq = e.Seq;
+            UnloadAllLine = Math.Max(UnloadAllLine, e.Line);
+            UnloadAllUnordered |= e.Unordered;
+        }
+    }
+
     private sealed class Analysis
     {
         public readonly Dictionary<string, List<string>?> Files = new(StringComparer.OrdinalIgnoreCase);
-        public readonly Dictionary<string, List<Event>>[] ByName = [new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase)];
-        public readonly List<string>[] Loaded = [[], []];
-        public readonly HashSet<string>[] LoadedSet = [new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase)];
-        public readonly List<Event>[] Toggles = [[], []];
-        public readonly int[] AllSeq = [-1, -1], AllLine = [-1, -1];
-        public readonly bool[] AllUnordered = [false, false];
+        public readonly Loads Plugins = new(false), Addons = new(true);
         public int FirstWait = -1, Walked, Seq;
+
+        public Loads For(bool addon) => addon ? Addons : Plugins;
 
         public void Add(int line, bool addon, Op op, string name, bool toggle, bool active, string args, bool unordered)
         {
-            int k = addon ? 1 : 0;
             var e = new Event(line, Seq++, op, name, toggle, active, args, unordered);
-            if (op == Op.UnloadAll)
-            {
-                AllSeq[k] = e.Seq;
-                AllLine[k] = Math.Max(AllLine[k], line);
-                AllUnordered[k] |= unordered;
-                return;
-            }
-            if (!ByName[k].TryGetValue(name, out var list)) ByName[k][name] = list = [];
-            if (op == Op.Load && LoadedSet[k].Add(name)) Loaded[k].Add(name);
-            list.Add(e);
-            if (toggle) Toggles[k].Add(e);
+            if (op == Op.UnloadAll) For(addon).AddUnloadAll(e);
+            else For(addon).Add(e);
         }
     }
 
@@ -350,23 +365,23 @@ public sealed partial class AshitaScript
 
     private List<AshitaScriptLoad> Listed(bool addon)
     {
-        var a = Analyse();
-        return a.Loaded[addon ? 1 : 0]
-            .Select(n => new AshitaScriptLoad(n, State(addon, n), Toggles(addon, n).OrderBy(e => !e.Active).Select(e => e.Args).FirstOrDefault() is
+        var loads = Now(addon);
+        return loads.Loaded
+            .Select(n => new AshitaScriptLoad(n, State(loads, n), Toggles(loads, n).OrderBy(e => !e.Active).Select(e => e.Args).FirstOrDefault() is
                                                   { Length: > 0 } args ? args : null))
             .ToList();
     }
 
-    private List<Event> Toggles(bool addon, string name) =>
-        Analyse().ByName[addon ? 1 : 0].GetValueOrDefault(name)?.Where(e => e.Toggle).ToList() ?? [];
+    private Loads Now(bool addon) => Analyse().For(addon);
 
-    private AshitaLoad State(bool addon, string name)
+    private static List<Event> Toggles(Loads loads, string name) =>
+        loads.ByName.GetValueOrDefault(name)?.Where(e => e.Toggle).ToList() ?? [];
+
+    private AshitaLoad State(Loads loads, string name)
     {
-        var a = Analyse();
-        int k = addon ? 1 : 0;
-        int firstLoad = int.MaxValue, lastUnload = a.AllSeq[k], lastUnloadLine = a.AllLine[k];
-        bool active = false, other = false, unordered = a.AllUnordered[k];
-        foreach (var e in a.ByName[k].GetValueOrDefault(name) ?? [])
+        int firstLoad = int.MaxValue, lastUnload = loads.UnloadAllSeq, lastUnloadLine = loads.UnloadAllLine;
+        bool active = false, other = false, unordered = loads.UnloadAllUnordered;
+        foreach (var e in loads.ByName.GetValueOrDefault(name) ?? [])
         {
             if (e.Op == Op.Load)
             {
@@ -383,17 +398,18 @@ public sealed partial class AshitaScript
         }
         if (other || unordered) return AshitaLoad.ByScript;
         if (firstLoad != int.MaxValue) return lastUnload > firstLoad ? AshitaLoad.ByScript : active ? AshitaLoad.On : AshitaLoad.Off;
-        return lastUnloadLine >= InsertAt(addon) ? AshitaLoad.ByScript : AshitaLoad.Off;
+        return lastUnloadLine >= InsertAt(loads) ? AshitaLoad.ByScript : AshitaLoad.Off;
     }
 
+    // each step asks for the analysis again, an edit throws the last one away
     private bool Set(bool addon, string name, bool on)
     {
-        if (State(addon, name) == AshitaLoad.ByScript || on && !ValidName(name) && Toggles(addon, name).Count == 0) return false;
-        if (on && addon && State(false, AddonsPlugin) == AshitaLoad.Off && !Set(false, AddonsPlugin, true)) return false;
-        var state = State(addon, name);
+        if (State(Now(addon), name) == AshitaLoad.ByScript || on && !ValidName(name) && Toggles(Now(addon), name).Count == 0) return false;
+        if (on && addon && State(Now(false), AddonsPlugin) == AshitaLoad.Off && !Set(false, AddonsPlugin, true)) return false;
+        var state = State(Now(addon), name);
         if (state == AshitaLoad.ByScript) return false;
         if (state == (on ? AshitaLoad.On : AshitaLoad.Off)) return true;
-        var toggles = Toggles(addon, name);
+        var toggles = Toggles(Now(addon), name);
         if (!on)
         {
             foreach (var e in toggles.Where(e => e.Active)) Edit(e.Line, "#" + lines[e.Line].Text);
@@ -403,21 +419,20 @@ public sealed partial class AshitaScript
         int after = addon ? AddonsLine() : -1;
         int off = toggles.FindIndex(e => !e.Active && e.Line > after);
         if (off >= 0) Edit(toggles[off].Line, lines[toggles[off].Line].Text[1..]);
-        else Insert(InsertAt(addon), (addon ? "/addon load " : "/load ") + name);
+        else Insert(InsertAt(Now(addon)), (addon ? "/addon load " : "/load ") + name);
         return true;
     }
 
     private int AddonsLine() =>
-        Analyse().ByName[0].GetValueOrDefault(AddonsPlugin)?.Where(e => e.Op == Op.Load && e.Active).Select(e => e.Line).DefaultIfEmpty(-1).Min() ?? -1;
+        Now(false).ByName.GetValueOrDefault(AddonsPlugin)?.Where(e => e.Op == Op.Load && e.Active).Select(e => e.Line).DefaultIfEmpty(-1).Min() ?? -1;
 
     // after the last top-level line of the same kind (and an addon after the addons plugin), before the first /wait,
     // which is there to give addons time to load
-    private int InsertAt(bool addon)
+    private int InsertAt(Loads loads)
     {
-        var a = Analyse();
-        int wait = a.FirstWait < 0 ? lines.Count : a.FirstWait;
-        int last = a.Toggles[addon ? 1 : 0].Where(e => e.Line < wait).Select(e => e.Line).DefaultIfEmpty(-1).Max();
-        if (addon)
+        int wait = Analyse().FirstWait < 0 ? lines.Count : Analyse().FirstWait;
+        int last = loads.Toggles.Where(e => e.Line < wait).Select(e => e.Line).DefaultIfEmpty(-1).Max();
+        if (loads.IsAddons)
         {
             last = Math.Max(last, AddonsLine());
             return last >= 0 ? last + 1 : wait;

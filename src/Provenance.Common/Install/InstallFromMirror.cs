@@ -117,7 +117,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
         await FetchAsync(plans.Select(p => (p.Product.Product.Folder, p.Index, p.Name, true)).ToList(), progress, ct);
 
         // pol.exe's boot step now, the downloads gave viewer\com\*.dll and their patchfiles copies different times
-        if (PolUpdater.QueuedWorkPending(viewerDir)) PolUpdater.ApplyQueued(viewerDir);
+        if (ViewerQueue.QueuedWorkPending(viewerDir)) ViewerQueue.ApplyQueued(viewerDir);
         Staged = plans.Select(p => p.Product).ToList();
         return stagingDir;
     }

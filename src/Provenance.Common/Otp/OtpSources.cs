@@ -67,7 +67,7 @@ public static class OtpSources
 
     internal static OtpFetchResult ToolProblem(string tool, ToolFind found) =>
         Problem(found.State switch { FindState.CantCheck => "couldn't check", FindState.TooOld => "too old", _ => "not installed" },
-                ToolText.Problem(found.State, tool), OtpFix.Install, tool);
+                ToolTexts.Problem(found.State, tool), OtpFix.Install, tool);
 
     // a leading dash would make the item an option, and settings.json is the user's, so this is checked at the run too
     public static bool StartsWithDash(string item) => item.TrimStart().StartsWith('-');

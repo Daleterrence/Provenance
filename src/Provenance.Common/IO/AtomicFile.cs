@@ -61,6 +61,12 @@ public static class AtomicFile
         return attrs;
     }
 
+    public static void DeleteReadOnly(string path)
+    {
+        ClearReadOnly(path);
+        File.Delete(path);
+    }
+
     // the installer marks some files read-only, so the new file gets the old attributes back (and the old one keeps
     // them if the move fails)
     public static void ReplaceKeepingReadOnly(string temp, string target)

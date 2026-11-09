@@ -750,7 +750,7 @@ public sealed class PolSession : IDisposable
             if (polExe is null || !GameIsInstalled() || SignedBuilds.Check(viewerDir!) != ViewerBuild.State.Supported) return null;
             // a queued update is the login's job, pol.exe would act on it itself (patch.ini goes to startpol.exe
             // /REPLACEPOLEXE, which starts a pol.exe that isn't mine)
-            if (PolUpdater.QueuedWorkPending(viewerDir!))
+            if (ViewerQueue.QueuedWorkPending(viewerDir!))
             {
                 Log.Information("Not pre-starting pol.exe: the viewer has update work queued, the next login finishes it first");
                 return null;

@@ -23,9 +23,9 @@ public static class PolUpdates
             }
             void ApplyQueued()
             {
-                if (!PolUpdater.QueuedWorkPending(viewerDir)) return;
+                if (!ViewerQueue.QueuedWorkPending(viewerDir)) return;
                 BeforeChange();
-                PolUpdater.ApplyQueued(viewerDir);
+                ViewerQueue.ApplyQueued(viewerDir);
             }
             // a stale queue (.tmp2) mustn't overwrite what the mirror writes below
             ApplyQueued();

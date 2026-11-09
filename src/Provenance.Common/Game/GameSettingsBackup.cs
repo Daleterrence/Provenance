@@ -1,13 +1,10 @@
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.Win32.SafeHandles;
 using Provenance.Common.IO;
 using Provenance.Common.Security;
-using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game;
 
@@ -44,16 +41,11 @@ public static partial class GameSettingsBackup
     private const string UserDir = "USER", VirtualStoreDir = "VirtualStore", FfxiUserDir = "ffxiuser", Shared = "tig.dat";
     private static readonly string[] FilterLists = ["allowed.txt", "prohibited.txt"];
 
-    private const int Tries = 4, SettleRounds = 3, ManifestFormat = 1;
-    private const long MaxFile = 16 << 20, MaxTotal = 1L << 30;
+    private const int ManifestFormat = 1;
+    internal const long MaxFile = 16 << 20, MaxTotal = 1L << 30;
     private const int MaxEntries = 100_000;
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(50);
-    internal static TimeSpan Settle = TimeSpan.FromMilliseconds(150);
 
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
-
-    internal static Action<string>? AfterReadForTest;
-    internal static Action? BeforeSettleForTest;
 
     public static string DefaultFolder =>
         Path.Combine(AppPaths.UserData ?? "Provenance", "Backups");
@@ -93,17 +85,6 @@ public static partial class GameSettingsBackup
         public DateTime Written { get; set; }
     }
 
-    private readonly record struct Stat(long Size, long Written);
-
-    private sealed record Found(string Entry, string Path, string Folder, bool ZeroIsTorn, Stat Stat);
-
-    private sealed class Taken(Found file, byte[] data, Stat stat, long readAt)
-    {
-        public Found File = file;
-        public byte[] Data = data;
-        public Stat Stat = stat;
-        public long ReadAt = readAt;
-    }
 
     public static BackupResult BackUp(BackupSources sources, string folder, DateTime? now = null)
     {
@@ -116,18 +97,18 @@ public static partial class GameSettingsBackup
         var newest = List(folder).FirstOrDefault();
         if (newest is not null && Same(newest.Manifest, found)) return new(BackupOutcome.Unchanged, newest.Path, leftOut);
 
-        var taken = new List<Taken>();
-        var torn = new List<Found>();
+        var taken = new List<BackupReader.Taken>();
+        var torn = new List<BackupReader.Found>();
         foreach (var f in found)
         {
             try
             {
-                if (ReadSteady(f) is { } t) taken.Add(t);
+                if (BackupReader.ReadSteady(f) is { } t) taken.Add(t);
                 else torn.Add(f);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { leftOut.Add($"{f.Entry}: {e.Message}"); }
         }
-        SettleDown(taken, torn, leftOut);
+        BackupReader.SettleDown(taken, torn, leftOut);
 
         var at = now ?? DateTime.Now;
         var manifest = new Manifest { Format = ManifestFormat, Created = at.ToUniversalTime() };
@@ -365,9 +346,9 @@ public static partial class GameSettingsBackup
         _ => null,
     };
 
-    private static List<Found> Scan(BackupSources s, List<string> leftOut)
+    private static List<BackupReader.Found> Scan(BackupSources s, List<string> leftOut)
     {
-        var found = new List<Found>();
+        var found = new List<BackupReader.Found>();
         ScanUser(s.User, UserDir + "/", found, leftOut);
         ScanUser(s.VirtualStoreUser, $"{VirtualStoreDir}/{UserDir}/", found, leftOut);
         if (Place(s.FfxiUser, FfxiUserDir, leftOut) is { } settings)
@@ -376,7 +357,7 @@ public static partial class GameSettingsBackup
         return found;
     }
 
-    private static void ScanUser(string? root, string prefix, List<Found> found, List<string> leftOut)
+    private static void ScanUser(string? root, string prefix, List<BackupReader.Found> found, List<string> leftOut)
     {
         if (Place(root, prefix.TrimEnd('/'), leftOut) is not { } real) return;
         AddFound(Path.Combine(real, Shared), real, prefix + Shared, true, found, leftOut);
@@ -426,18 +407,18 @@ public static partial class GameSettingsBackup
         return FolderPins.RealPath(full);
     }
 
-    private static void AddFound(string path, string folder, string entry, bool zeroIsTorn, List<Found> found, List<string> leftOut)
+    private static void AddFound(string path, string folder, string entry, bool zeroIsTorn, List<BackupReader.Found> found, List<string> leftOut)
     {
         if (!File.Exists(path)) return;
         try
         {
-            using var h = OpenChecked(path, folder, data: false, out var stat);
+            using var h = BackupReader.OpenChecked(path, folder, data: false, out var stat);
             found.Add(new(entry, path, folder, zeroIsTorn, stat));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { leftOut.Add($"{entry}: {e.Message}"); }
     }
 
-    private static bool Same(IReadOnlyList<ManifestFile> last, List<Found> now)
+    private static bool Same(IReadOnlyList<ManifestFile> last, List<BackupReader.Found> now)
     {
         if (last.Count != now.Count) return false;
         var byName = new Dictionary<string, ManifestFile>(StringComparer.OrdinalIgnoreCase);
@@ -446,75 +427,7 @@ public static partial class GameSettingsBackup
                             && m.Written.ToUniversalTime().ToFileTimeUtc() == f.Stat.Written);
     }
 
-    // size and last write before and after each read, a few goes at it. An empty character file is one caught
-    // mid-write, the game always writes something
-    private static Taken? ReadSteady(Found f)
-    {
-        for (int i = 0; i < Tries; i++)
-        {
-            if (i > 0) Thread.Sleep(RetryDelay);
-            using var h = OpenChecked(f.Path, f.Folder, data: true, out var before);
-            if (before.Size > MaxFile) throw new IOException($"it's {before.Size} bytes, far bigger than any game settings file");
-            var data = ReadAll(h, before.Size);
-            AfterReadForTest?.Invoke(f.Path);
-            var after = StatOf(Info(h));
-            if (data is not null && after == before && !(f.ZeroIsTorn && before.Size == 0)) return new(f, data, before, Environment.TickCount64);
-        }
-        return null;
-    }
 
-    // the C runtime writes a big file in two goes, and between them it sits there at the first part's size. A look
-    // after the game's had time to finish catches that
-    private static void SettleDown(List<Taken> taken, List<Found> torn, List<string> leftOut)
-    {
-        BeforeSettleForTest?.Invoke();
-        for (int round = 0; taken.Count > 0; round++)
-        {
-            var wait = Settle - TimeSpan.FromMilliseconds(Environment.TickCount64 - taken.Max(t => t.ReadAt));
-            if (wait > TimeSpan.Zero) Thread.Sleep(wait);
-            var moved = taken.Where(t => !StillAt(t)).ToList();
-            if (moved.Count == 0) return;
-            foreach (var t in moved)
-            {
-                taken.Remove(t);
-                if (round == SettleRounds)
-                {
-                    torn.Add(t.File);
-                    continue;
-                }
-                try
-                {
-                    if (ReadSteady(t.File) is { } again) taken.Add(again);
-                    else torn.Add(t.File);
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { leftOut.Add($"{t.File.Entry}: {e.Message}"); }
-            }
-            if (round == SettleRounds) return;
-        }
-    }
-
-    private static bool StillAt(Taken t)
-    {
-        try
-        {
-            using var h = OpenChecked(t.File.Path, t.File.Folder, data: false, out var now);
-            return now == t.Stat;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
-    }
-
-    private static byte[]? ReadAll(SafeFileHandle h, long size)
-    {
-        var data = new byte[size + 1];
-        int got = 0;
-        while (got < data.Length)
-        {
-            int n = RandomAccess.Read(h, data.AsSpan(got), got);
-            if (n == 0) break;
-            got += n;
-        }
-        return got == size ? data[..got] : null;
-    }
 
     private static void Add(ZipArchive zip, string entry, byte[] data, long written)
     {
@@ -629,38 +542,4 @@ public static partial class GameSettingsBackup
         });
     }
 
-    // a link, a hard link or a file moved out from under its folder would have an elevated copy read what it
-    // shouldn't, so all three are refused on the open handle
-    private static SafeFileHandle OpenChecked(string path, string folder, bool data, out Stat stat)
-    {
-        var h = FileHandles.Open(FileHandles.LongPath(Path.GetFullPath(path)), data ? FileHandles.GenericRead : FileHandles.ReadAttributes,
-                                 FileHandles.ShareAll, FileHandles.OpenReparsePoint);
-        if (h.IsInvalid)
-        {
-            int err = Marshal.GetLastPInvokeError();
-            h.Dispose();
-            throw err == 5 ? new UnauthorizedAccessException("Windows didn't let Provenance read it") : new IOException($"it couldn't be opened (error {err})");
-        }
-        try
-        {
-            var info = Info(h);
-            if (((FileAttributes)info.FileAttributes).HasFlag(FileAttributes.ReparsePoint)) throw new IOException("it's a link");
-            if (((FileAttributes)info.FileAttributes).HasFlag(FileAttributes.Directory)) throw new IOException("it's a folder");
-            if (info.NumberOfLinks != 1) throw new IOException("it has other names (a hard link)");
-            if (FileHandles.FinalPath(h, allowUnc: true) is not { } where || !string.Equals(Path.GetDirectoryName(where), Path.TrimEndingDirectorySeparator(folder), StringComparison.OrdinalIgnoreCase))
-                throw new IOException("it isn't in the folder it was found in");
-            stat = StatOf(info);
-            return h;
-        }
-        catch
-        {
-            h.Dispose();
-            throw;
-        }
-    }
-
-    private static Stat StatOf(ByHandleFileInformation info) => new(((long)info.FileSizeHigh << 32) | info.FileSizeLow, info.LastWriteTime);
-
-    private static ByHandleFileInformation Info(SafeFileHandle h) =>
-        FileHandles.TryInfo(h, out var info) ? info : throw new IOException($"its details couldn't be read (error {Marshal.GetLastPInvokeError()})");
 }

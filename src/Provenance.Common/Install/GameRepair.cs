@@ -97,7 +97,7 @@ public sealed class GameRepair(MirrorClient client, string region)
         return new RepairPlan(work, work.Values.Sum(w => w.Sum(e => e.Size)), found.ToDictionary(f => f.Product.Game.Slug, f => f.Index))
         {
             StaleVersions = stale,
-            QueuePending = PolUpdater.QueuedWorkPending(viewerDir),
+            QueuePending = ViewerQueue.QueuedWorkPending(viewerDir),
             DirectXMissing = !DirectXPresent(),
         };
     }
@@ -280,10 +280,10 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     private bool ApplyViewerQueue(string viewerDir)
     {
-        if (!PolUpdater.QueuedWorkPending(viewerDir)) return false;
+        if (!ViewerQueue.QueuedWorkPending(viewerDir)) return false;
         ChangingNow();
         Status?.Invoke($"Finishing the last {GameProduct.Viewer.Name} update...");
-        PolUpdater.ApplyQueued(viewerDir);
+        ViewerQueue.ApplyQueued(viewerDir);
         Say($"applied the {GameProduct.Viewer.Name}'s queued update files");
         return true;
     }

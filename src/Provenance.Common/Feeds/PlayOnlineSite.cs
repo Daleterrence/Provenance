@@ -2,7 +2,7 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Feeds;
 
-// POL's site addresses, and the feed worker's category and badge keys
+// POL's site addresses and URL checks
 public static class PlayOnlineSite
 {
     private static string RegionToken(PolRegion r) =>
@@ -22,18 +22,4 @@ public static class PlayOnlineSite
         var https = u.Scheme == Uri.UriSchemeHttps ? u : new UriBuilder(u) { Scheme = Uri.UriSchemeHttps, Port = u.IsDefaultPort ? -1 : u.Port }.Uri;
         return IsPlayOnlineUrl(https) ? https : null;
     }
-
-    public static InfoCategory CategoryFromKey(string? key) => key switch
-    {
-        "important" => InfoCategory.Important, "maintenance" => InfoCategory.Maintenance,
-        "general" => InfoCategory.General, "events" => InfoCategory.Events, "updates" => InfoCategory.Updates,
-        _ => InfoCategory.None,
-    };
-
-    public static InfoBadge BadgeFromKey(string? key) => key switch
-    {
-        "outage" => InfoBadge.Outage, "maintenance" => InfoBadge.Maintenance,
-        "recovery" => InfoBadge.Recovery, "followup" => InfoBadge.FollowUp,
-        _ => InfoBadge.None,
-    };
 }

@@ -52,11 +52,25 @@ public sealed class FeedClient
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed) ? parsed : null;
             items.Add(new FeedItem(Str(it, "title"), Str(it, "url"), date,
                 it.TryGetProperty("image", out var im) && im.ValueKind == JsonValueKind.String ? im.GetString() : null,
-                Str(it, "summary").Replace("\u2026", "..."), PlayOnlineSite.CategoryFromKey(Str(it, "category")),
-                PlayOnlineSite.BadgeFromKey(Str(it, "badge"))));
+                Str(it, "summary").Replace("\u2026", "..."), CategoryFromKey(Str(it, "category")),
+                BadgeFromKey(Str(it, "badge"))));
         }
         return items;
     }
+
+    private static InfoCategory CategoryFromKey(string? key) => key switch
+    {
+        "important" => InfoCategory.Important, "maintenance" => InfoCategory.Maintenance,
+        "general" => InfoCategory.General, "events" => InfoCategory.Events, "updates" => InfoCategory.Updates,
+        _ => InfoCategory.None,
+    };
+
+    private static InfoBadge BadgeFromKey(string? key) => key switch
+    {
+        "outage" => InfoBadge.Outage, "maintenance" => InfoBadge.Maintenance,
+        "recovery" => InfoBadge.Recovery, "followup" => InfoBadge.FollowUp,
+        _ => InfoBadge.None,
+    };
 
     internal static IReadOnlyList<WorldStatus> ParseWorkerWorlds(string json)
     {

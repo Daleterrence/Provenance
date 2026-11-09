@@ -2,7 +2,7 @@ namespace Provenance.Common.Otp;
 
 // the lines about a command-line tool. A fetch that can't go ahead says Problem, the dialogs say Offer, which adds that
 // Provenance can download a copy
-public static class ToolText
+public static class ToolTexts
 {
     public static string Problem(FindState state, string tool) => state switch
     {

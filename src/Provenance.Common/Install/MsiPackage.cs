@@ -7,7 +7,6 @@ using Microsoft.Win32;
 using Provenance.Common.IO;
 using Provenance.Common.Progress;
 using Provenance.Common.Security;
-using Provenance.Common.Win32;
 
 namespace Provenance.Common.Install;
 
@@ -15,48 +14,14 @@ namespace Provenance.Common.Install;
 // refuses what it can't do
 public sealed class MsiPackage : IDisposable
 {
-    private const string SharedDlls = @"SOFTWARE\Microsoft\Windows\CurrentVersion\SharedDLLs";
+    internal const string SharedDlls = @"SOFTWARE\Microsoft\Windows\CurrentVersion\SharedDLLs";
     private static readonly Regex TokenRx = new(@"\[(\\.|[^\[\]]*)\]");
     private static readonly Regex ConditionRx = new(@"^\s*([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*""([^""]*)""\s*$");
-    private readonly IntPtr _db;
-    private readonly string _path;
+    private readonly MsiDatabase _db;
 
-    public MsiPackage(string path)
-    {
-        _path = Path.GetFullPath(path);
-        if (Msi.MsiOpenDatabaseW(_path, IntPtr.Zero /* MSIDBOPEN_READONLY */, out _db) != 0)
-            throw new InvalidDataException($"{Path.GetFileName(path)} is not a readable installer package.");
-    }
+    public MsiPackage(string path) => _db = new MsiDatabase(path);
 
-    public void Dispose() => Msi.MsiCloseHandle(_db);
-
-    public List<string[]> Query(string sql)
-    {
-        var rows = new List<string[]>();
-        uint r = Msi.MsiDatabaseOpenViewW(_db, sql, out var view);
-        if (r == 1615 /* ERROR_BAD_QUERY_SYNTAX: no such table in this package */) return rows;
-        if (r != 0) throw Unreadable(r);
-        try
-        {
-            if ((r = Msi.MsiViewExecute(view, IntPtr.Zero)) != 0) throw Unreadable(r);
-            while ((r = Msi.MsiViewFetch(view, out var rec)) != 259 /* ERROR_NO_MORE_ITEMS */)
-            {
-                if (r != 0) throw Unreadable(r);
-                try
-                {
-                    var row = new string[Msi.MsiRecordGetFieldCount(rec)];
-                    for (int i = 0; i < row.Length; i++) row[i] = RecordString(rec, (uint)i + 1);
-                    rows.Add(row);
-                }
-                finally { Msi.MsiCloseHandle(rec); }
-            }
-        }
-        finally { Msi.MsiCloseHandle(view); }
-        return rows;
-    }
-
-    private static InvalidDataException Unreadable(uint error) =>
-        new($"The package could not be read (error {error}).");
+    public void Dispose() => _db.Dispose();
 
     // Tables Apply reproduces, or that do nothing on an installed machine (the installer's own dialogs and sequences,
     // searches, hashes). Any other table with rows makes the package unsupported.
@@ -91,17 +56,17 @@ public sealed class MsiPackage : IDisposable
 
     public string? Supported()
     {
-        foreach (var t in Query("SELECT `Name` FROM `_Tables`").Select(r => r[0]))
-            if (!Known.Contains(t) && Query($"SELECT * FROM `{t}`").Count > 0) return "the " + t + " table";
-        var custom = Query("SELECT `Action` FROM `CustomAction`").Select(r => r[0]).ToHashSet(StringComparer.Ordinal);
-        foreach (var a in Query("SELECT `Action` FROM `InstallExecuteSequence`").Select(r => r[0]))
+        foreach (var t in _db.Query("SELECT `Name` FROM `_Tables`").Select(r => r[0]))
+            if (!Known.Contains(t) && _db.Query($"SELECT * FROM `{t}`").Count > 0) return "the " + t + " table";
+        var custom = _db.Query("SELECT `Action` FROM `CustomAction`").Select(r => r[0]).ToHashSet(StringComparer.Ordinal);
+        foreach (var a in _db.Query("SELECT `Action` FROM `InstallExecuteSequence`").Select(r => r[0]))
             if (custom.Contains(a) && !KnownActions.Contains(a)) return "the custom action " + a;
-        if (Query("SELECT `Level` FROM `Feature`").Any(r => !int.TryParse(r[0], out var l) || l < 1)) return "a feature that is not installed by default";
-        foreach (var r in Query("SELECT `Directory`,`Directory_Parent` FROM `Directory`"))
+        if (_db.Query("SELECT `Level` FROM `Feature`").Any(r => !int.TryParse(r[0], out var l) || l < 1)) return "a feature that is not installed by default";
+        foreach (var r in _db.Query("SELECT `Directory`,`Directory_Parent` FROM `Directory`"))
             if ((r[1].Length == 0 || r[1] == "TARGETDIR") && !KnownRoots.Contains(r[0])) return "the folder " + r[0];
-        var fileKeys = Query("SELECT `File` FROM `File`").Select(r => r[0]).ToHashSet(StringComparer.Ordinal);
+        var fileKeys = _db.Query("SELECT `File` FROM `File`").Select(r => r[0]).ToHashSet(StringComparer.Ordinal);
         var keyPaths = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var c in Query("SELECT `Component`,`Condition`,`Attributes`,`KeyPath` FROM `Component`"))
+        foreach (var c in _db.Query("SELECT `Component`,`Condition`,`Attributes`,`KeyPath` FROM `Component`"))
         {
             // only simple PROPERTY="value" conditions, and attributes 4 (registry key path) and 8 (shared DLL count)
             if (c[1].Length > 0 && !ConditionRx.IsMatch(c[1])) return "the component condition " + c[1];
@@ -109,14 +74,14 @@ public sealed class MsiPackage : IDisposable
             keyPaths[c[0]] = c[3];
         }
         // read-only, hidden, system, vital and the two compression flags
-        if (Query("SELECT `Attributes` FROM `File`").Any(r => r[0].Length > 0 && (!int.TryParse(r[0], out var a) || (a & ~(1 | 2 | 4 | 512 | 8192 | 16384)) != 0)))
+        if (_db.Query("SELECT `Attributes` FROM `File`").Any(r => r[0].Length > 0 && (!int.TryParse(r[0], out var a) || (a & ~(1 | 2 | 4 | 512 | 8192 | 16384)) != 0)))
             return "file attributes";
-        foreach (var r in Query("SELECT `Component_`,`AppId_`,`FileTypeMask`,`Icon_`,`DefInprocHandler`,`Argument` FROM `Class`"))
+        foreach (var r in _db.Query("SELECT `Component_`,`AppId_`,`FileTypeMask`,`Icon_`,`DefInprocHandler`,`Argument` FROM `Class`"))
             if (!keyPaths.TryGetValue(r[0], out var kp) || !fileKeys.Contains(kp) || r.Skip(1).Any(x => x.Length > 0)) return "a COM class this does not reproduce";
-        foreach (var r in Query("SELECT `Component_` FROM `TypeLib`"))
+        foreach (var r in _db.Query("SELECT `Component_` FROM `TypeLib`"))
             if (!keyPaths.TryGetValue(r[0], out var kp) || !fileKeys.Contains(kp)) return "a type library this does not reproduce";
-        if (Query("SELECT `Icon_` FROM `ProgId`").Any(r => r[0].Length > 0)) return "a ProgID icon";
-        if (Query("SELECT `Icon_`,`Hotkey`,`ShowCmd` FROM `Shortcut`").Any(r => r.Any(x => x.Length > 0))) return "a shortcut icon, hotkey or window state";
+        if (_db.Query("SELECT `Icon_` FROM `ProgId`").Any(r => r[0].Length > 0)) return "a ProgID icon";
+        if (_db.Query("SELECT `Icon_`,`Hotkey`,`ShowCmd` FROM `Shortcut`").Any(r => r.Any(x => x.Length > 0))) return "a shortcut icon, hotkey or window state";
         return null;
     }
 
@@ -149,15 +114,15 @@ public sealed class MsiPackage : IDisposable
         };
         var dirs = ResolveDirectories(props, sandbox);
         // attributes come from this one query, since a query per component (61,353 for FFXI) left the install sat at 100% for ages
-        var comps = Query("SELECT `Component`,`Directory_`,`Condition`,`KeyPath`,`Attributes` FROM `Component`")
+        var comps = _db.Query("SELECT `Component`,`Directory_`,`Condition`,`KeyPath`,`Attributes` FROM `Component`")
             .ToDictionary(r => r[0], r => (Dir: r[1], Condition: r[2], KeyPath: r[3], Attrs: int.TryParse(r[4], out var a) ? a : 0));
         bool On(string comp) => comps.TryGetValue(comp, out var c) && Condition(c.Condition, props);
         var files = new Dictionary<string, (string Path, long Size)>(StringComparer.Ordinal);
         var fileAttrs = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var r in Query("SELECT `File`,`Component_`,`FileName`,`FileSize`,`Attributes` FROM `File`"))
+        foreach (var r in _db.Query("SELECT `File`,`Component_`,`FileName`,`FileSize`,`Attributes` FROM `File`"))
         {
             if (!On(r[1])) continue;
-            var path = Path.Combine(dirs[comps[r[1]].Dir], LongName(r[2]));
+            var path = Path.Combine(dirs[comps[r[1]].Dir], MsiDatabase.LongName(r[2]));
             files[r[0]] = (path, long.TryParse(r[3], out var sz) ? sz : 0);
             if (int.TryParse(r[4], out var fa) && (fa & 7) != 0) fileAttrs[r[0]] = fa & 7;
         }
@@ -174,12 +139,12 @@ public sealed class MsiPackage : IDisposable
                 progress?.Report(new ByteProgress(done, total));
             }
         }
-        var cabs = payloadInPlace ? [] : Query("SELECT `Cabinet` FROM `Media`").Select(r => r[0]).Where(c => c.Length > 0).ToList();
+        var cabs = payloadInPlace ? [] : _db.Query("SELECT `Cabinet` FROM `Media`").Select(r => r[0]).Where(c => c.Length > 0).ToList();
         var temps = new List<string>();
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
         {
-            var cabPaths = cabs.Select(c => c.StartsWith('#') ? ExtractStream(c[1..], temps) : Path.Combine(Path.GetDirectoryName(_path)!, c)).ToList();
+            var cabPaths = cabs.Select(c => c.StartsWith('#') ? _db.ExtractStream(c[1..], temps) : Path.Combine(Path.GetDirectoryName(_db.Location)!, c)).ToList();
             Parallel.ForEach(cabPaths, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, parallel), CancellationToken = stop.Token }, cab =>
             {
                 try { CabExtractor.Extract(cab, name => files.TryGetValue(name, out var f) ? f.Path : null, Written, stop.Token); }
@@ -218,19 +183,20 @@ public sealed class MsiPackage : IDisposable
                   .GroupBy(x => (x.r.Root == 1, (x.r.Root == 0 ? @"SOFTWARE\Classes\" + x.r.Key : x.r.Key).ToUpperInvariant(), x.r.Name.ToUpperInvariant()))
                   .Select(g => g.Last()).OrderBy(x => x.i).Select(x => x.r);
 
+        var registry = _db.Query("SELECT `Root`,`Key`,`Name`,`Value`,`Component_` FROM `Registry`");
         // before anything that marks the product installed, so it's never installed without an uninstall entry
         bool wroteUninstall = false;
-        if (uninstall != null && !(keepExisting && UninstallIntact(uninstall, sandbox)))
+        if (uninstall != null && !(keepExisting && UninstallRecord.Intact(_db, uninstall, sandbox)))
         {
             status?.Invoke("Saving the uninstall information...");
-            WriteUninstall(uninstall, props, dirs, comps, files, On, Format, sandbox);
+            UninstallRecord.Write(_db, uninstall, props, dirs, comps, files, On, Format, registry, sandbox);
             wroteUninstall = true;
         }
         status?.Invoke("Finishing the setup in Windows...");
         int values = 0;
         var rows = new List<(int Root, string Key, string Name, string Value)>();
         var last = new List<(int Root, string Key, string Name, string Value)>();
-        foreach (var r in Query("SELECT `Root`,`Key`,`Name`,`Value`,`Component_` FROM `Registry`"))
+        foreach (var r in registry)
         {
             if (!On(r[4])) continue;
             var key = Format(r[1]);
@@ -250,71 +216,20 @@ public sealed class MsiPackage : IDisposable
                 if (keepExisting) values++;
             }
 
-        // RegisterClassInfo and RegisterProgIdInfo, minus the descriptor value that'd send COM off to Windows Installer
-        var progIds = Query("SELECT `ProgId`,`ProgId_Parent`,`Class_`,`Description` FROM `ProgId`");
-        int classes = 0, progIdsWritten = 0;
-        using (var hklm = Hive(sandbox))
-        {
-            foreach (var r in Query("SELECT `CLSID`,`Context`,`Component_`,`ProgId_Default`,`Description` FROM `Class`"))
-            {
-                if (!On(r[2])) continue;
-                var server = files[comps[r[2]].KeyPath];   // Supported() checked it's a file
-                if (keepExisting && ClassIntact(hklm, r[0], r[1], server.Path)) continue;
-                using var cls = hklm.CreateSubKey($@"SOFTWARE\Classes\CLSID\{r[0]}", true);
-                if (r[4].Length > 0) cls.SetValue("", r[4]);
-                using (var ctx = cls.CreateSubKey(r[1], true)) ctx.SetValue("", server.Path);
-                if (r[3].Length > 0)
-                {
-                    using (var p = cls.CreateSubKey("ProgID", true)) p.SetValue("", r[3]);
-                    if (progIds.FirstOrDefault(x => x[1] == r[3]) is { } vi)
-                        using (var v = cls.CreateSubKey("VersionIndependentProgID", true)) v.SetValue("", vi[0]);
-                }
-                classes++;
-            }
-            foreach (var p in progIds)
-            {
-                var clsid = p[2].Length > 0 ? p[2] : progIds.FirstOrDefault(x => x[0] == p[1])?[2] ?? "";
-                if (keepExisting)
-                {
-                    using var had = hklm.OpenSubKey($@"SOFTWARE\Classes\{p[0]}");
-                    using var hadClsid = had?.OpenSubKey("CLSID");
-                    if (had is not null && (clsid.Length == 0 || string.Equals(hadClsid?.GetValue("") as string, clsid, StringComparison.OrdinalIgnoreCase)))
-                        continue;
-                }
-                using var k = hklm.CreateSubKey($@"SOFTWARE\Classes\{p[0]}", true);
-                if (p[3].Length > 0) k.SetValue("", p[3]);
-                if (clsid.Length > 0) using (var c = k.CreateSubKey("CLSID", true)) c.SetValue("", clsid);
-                if (p[1].Length > 0) using (var c = k.CreateSubKey("CurVer", true)) c.SetValue("", p[1]);
-                progIdsWritten++;
-            }
-        }
-
-        int typeLibs = 0;
-        foreach (var r in Query("SELECT `LibID`,`Component_` FROM `TypeLib`"))
-        {
-            if (!On(r[1])) continue;
-            var lib = files[comps[r[1]].KeyPath];
-            if (sandbox != null) { if (!keepExisting) typeLibs++; continue; }   // a sandbox can't register one, or check it
-            if (keepExisting && TypeLibIntact(lib.Path)) continue;
-            Marshal.ThrowExceptionForHR(Oleaut32.LoadTypeLibEx(lib.Path, 1 /* REGKIND_REGISTER */, out var tl));
-            if (tl != null) Marshal.ReleaseComObject(tl);
-            // REGKIND_REGISTER says S_OK even when the registry write was refused, so a repair looks for itself
-            if (keepExisting && !TypeLibIntact(lib.Path))
-                throw Shown.Mark(new InvalidOperationException(
-                    $"Windows didn't register {Path.GetFileName(lib.Path)}, which the game needs. Run the repair again."));
-            typeLibs++;
-        }
+        string KeyFile(string comp) => files[comps[comp].KeyPath].Path;
+        var (classes, progIdsWritten) = ComRegistration.RegisterClasses(_db, On, KeyFile, sandbox, keepExisting);
+        int typeLibs = ComRegistration.RegisterTypeLibs(_db, On, KeyFile, sandbox, keepExisting);
 
         // a repair leaves shortcuts be, a missing one doesn't stop the game and it's usually gone on purpose
         int shortcuts = 0;
         if (!keepExisting)
         {
             status?.Invoke("Creating the shortcuts...");
-            foreach (var r in Query("SELECT `Directory_`,`Name`,`Component_`,`Target`,`Arguments`,`Description`,`WkDir` FROM `Shortcut`"))
+            foreach (var r in _db.Query("SELECT `Directory_`,`Name`,`Component_`,`Target`,`Arguments`,`Description`,`WkDir` FROM `Shortcut`"))
             {
                 if (!On(r[2]) || !dirs.TryGetValue(r[0], out var dir)) continue;
                 var wk = r[6].Length > 0 && dirs.TryGetValue(r[6], out var w) ? w.TrimEnd('\\') : "";
-                CreateShortcut(Path.Combine(dir, LongName(r[1]) + ".lnk"), Format(r[3]), Format(r[4]), Format(r[5]), wk);
+                CreateShortcut(Path.Combine(dir, MsiDatabase.LongName(r[1]) + ".lnk"), Format(r[3]), Format(r[4]), Format(r[5]), wk);
                 shortcuts++;
             }
         }
@@ -324,235 +239,16 @@ public sealed class MsiPackage : IDisposable
         return new Result(files.Count, total, values, classes, typeLibs, shortcuts, progIdsWritten, wroteUninstall);
     }
 
-    // the entry, and both files it runs as this build's pair in an admin-only folder, so a repair replaces an older
-    // pair (an entry whose uninstaller's gone can't uninstall anything)
-    private bool UninstallIntact(UninstallSetup setup, Sandbox? sandbox)
-    {
-        var code = Query("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'").FirstOrDefault()?[0];
-        if (string.IsNullOrEmpty(code)) return false;
-        using var hklm = Hive(sandbox);
-        using var k = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + code);
-        if (k?.GetValue("UninstallString", null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not string command) return false;
-        var parts = Regex.Matches(command, "\"([^\"]*)\"").Select(m => m.Groups[1].Value).ToList();
-        if (parts.Count != 2 || !parts.All(File.Exists)) return false;
-        if (!UninstallFolder.Protected(Path.GetDirectoryName(parts[1])!, parts[1])) return false;
-        if (!Path.GetFileName(parts[0]).Equals(Path.GetFileName(setup.UninstallerExe), StringComparison.OrdinalIgnoreCase)) return false;
-        try
-        {
-            var record = File.ReadAllLines(parts[1], Encoding.Unicode);
-            return record.Any(l => l.StartsWith("I ", StringComparison.Ordinal))
-                   && (setup.RegionKey is null || record.Any(l => l.StartsWith("L ", StringComparison.Ordinal)));
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
-    }
-
-    private static bool ClassIntact(RegistryKey hklm, string clsid, string context, string server)
-    {
-        using var k = hklm.OpenSubKey($@"SOFTWARE\Classes\CLSID\{clsid}\{context}");
-        return k?.GetValue("") is string named && SamePath(Unquote(named), server) && File.Exists(Unquote(named));
-    }
-
-    // registered, and at this file
-    private static bool TypeLibIntact(string path)
-    {
-        if (Oleaut32.LoadTypeLibEx(path, 2 /* REGKIND_NONE */, out var tl) != 0 || tl is not ITypeLib typeLib) return false;
-        try
-        {
-            typeLib.GetLibAttr(out var pa);
-            var a = Marshal.PtrToStructure<TYPELIBATTR>(pa);
-            typeLib.ReleaseTLibAttr(pa);
-            using var hklm = Hive(null);
-            using var k = hklm.OpenSubKey($@"SOFTWARE\Classes\TypeLib\{a.guid:B}\{a.wMajorVerNum:x}.{a.wMinorVerNum:x}\{a.lcid:x}\win32");
-            return k?.GetValue("") is string named && SamePath(Unquote(named), path) && File.Exists(Unquote(named));
-        }
-        finally { Marshal.ReleaseComObject(typeLib); }
-    }
-
-    private static string Unquote(string s) => s.Trim().Trim('"');
-
-    private static bool SamePath(string a, string b)
-    {
-        try { return PathInside.Same(a, b); }
-        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
-    }
-
     public List<(string Path, byte[]? Md5)> Targets(string installDir)
     {
         var props = new Dictionary<string, string> { ["INSTALLDIR"] = installDir.TrimEnd('\\') + "\\" };
         var dirs = ResolveDirectories(props, null);
-        var comps = Query("SELECT `Component`,`Directory_` FROM `Component`").ToDictionary(r => r[0], r => r[1]);
-        var hashes = Query("SELECT `File_`,`HashPart1`,`HashPart2`,`HashPart3`,`HashPart4` FROM `MsiFileHash`")
+        var comps = _db.Query("SELECT `Component`,`Directory_` FROM `Component`").ToDictionary(r => r[0], r => r[1]);
+        var hashes = _db.Query("SELECT `File_`,`HashPart1`,`HashPart2`,`HashPart3`,`HashPart4` FROM `MsiFileHash`")
             .ToDictionary(r => r[0], r => r.Skip(1).SelectMany(h => BitConverter.GetBytes(int.Parse(h))).ToArray());
-        return Query("SELECT `File`,`Component_`,`FileName` FROM `File`")
-            .Select(r => (Path.Combine(dirs[comps[r[1]]], LongName(r[2])), hashes.TryGetValue(r[0], out var h) ? h : null))
+        return _db.Query("SELECT `File`,`Component_`,`FileName` FROM `File`")
+            .Select(r => (Path.Combine(dirs[comps[r[1]]], MsiDatabase.LongName(r[2])), hashes.TryGetValue(r[0], out var h) ? h : null))
             .ToList();
-    }
-
-    // The Add/Remove Programs entry as Windows Installer writes it, except uninstall and modify run my uninstaller
-    // (MsiExec /X would fail, the product isn't registered with it) and NoRepair is set
-    private void WriteUninstall(UninstallSetup setup, Dictionary<string, string> props, Dictionary<string, string> dirs,
-                                Dictionary<string, (string Dir, string Condition, string KeyPath, int Attrs)> comps,
-                                Dictionary<string, (string Path, long Size)> files, Func<string, bool> on,
-                                Func<string, string> format, Sandbox? sandbox)
-    {
-        var p = Query("SELECT `Property`,`Value` FROM `Property`").ToDictionary(r => r[0], r => r[1]);
-        string code = p["ProductCode"];
-        string arpKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + code;
-        using var held = UninstallFolder.Hold(setup.Folder);
-        string exe = Path.Combine(setup.Folder, Path.GetFileName(setup.UninstallerExe));
-        string list = Path.Combine(setup.Folder, code + ".txt");
-        // made fresh, so they take the folder's permissions rather than keeping whatever they had
-        File.Delete(exe);
-        File.Delete(list);
-        File.Copy(setup.UninstallerExe, exe);
-        UninstallFolder.Own(exe);
-
-        var root = Path.TrimEndingDirectorySeparator(props["INSTALLDIR"]);
-        // the record format's at the top of native\uninstall.c, so a letter changes on both sides or neither
-        var lines = new List<string> { "N " + p.GetValueOrDefault("ProductName", ""), "A " + arpKey, "I " + root };
-        // the product's folder, as its InstallFolder value names it. It goes whole, so nothing in it gets a line of its own
-        string? tree = null;
-        string folderKey = setup.RegionKey + @"\InstallFolder";
-        if (setup.RegionKey != null && setup.FolderValue != null)
-            foreach (var r in Query("SELECT `Root`,`Key`,`Name`,`Value`,`Component_` FROM `Registry`"))
-                if (on(r[4]) && r[0] == "2" && format(r[1]).Equals(folderKey, StringComparison.OrdinalIgnoreCase) && format(r[2]) == setup.FolderValue
-                    && Path.TrimEndingDirectorySeparator(format(r[3])) is var t && Path.IsPathFullyQualified(t)
-                    && PathInside.IsUnder(root, t))
-                    tree = t;
-        bool InTree(string path) => tree != null && PathInside.Contains(tree, path);
-        var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        void Folder(string dir)
-        {
-            for (var d = Path.TrimEndingDirectorySeparator(dir); d.Length > 3; d = Path.GetDirectoryName(d)!)
-            {
-                folders.Add(d);
-                if (d.Equals(root, StringComparison.OrdinalIgnoreCase)) break;
-                if (!PathInside.Contains(root, d)) break;
-            }
-        }
-        foreach (var r in Query("SELECT `Directory_`,`Name`,`Component_` FROM `Shortcut`"))
-            if (on(r[2]) && dirs.TryGetValue(r[0], out var d))
-            {
-                lines.Add("S " + Path.Combine(d, LongName(r[1]) + ".lnk"));
-                folders.Add(Path.TrimEndingDirectorySeparator(d));
-            }
-        foreach (var r in Query("SELECT `Root`,`Key`,`Name`,`Value`,`Component_` FROM `Registry`"))
-        {
-            if (!on(r[4]) || r[2] == "-") continue;
-            var key = format(r[1]);
-            if (key.Contains(@"\Installer\UserData\", StringComparison.OrdinalIgnoreCase)) continue;
-            if (r[0] == "0") key = @"SOFTWARE\Classes\" + key;
-            bool keyRow = r[3].Length == 0 && (r[2] is "+" or "*" || r[2].Length == 0);
-            lines.Add($"V {(r[0] == "1" ? 'U' : 'M')} {key}\t{(keyRow ? "+" : format(r[2]))}");
-        }
-        foreach (var c in Query("SELECT `Component`,`Attributes`,`KeyPath` FROM `Component`"))
-            if (on(c[0]) && int.TryParse(c[1], out var ca) && (ca & 8) != 0 && files.TryGetValue(c[2], out var shared))
-                lines.Add($"V M {SharedDlls}\t{shared.Path}");
-        foreach (var r in Query("SELECT `CLSID`,`Component_` FROM `Class`"))
-            if (on(r[1])) lines.Add(@"C SOFTWARE\Classes\CLSID\" + r[0]);
-        foreach (var r in Query("SELECT `ProgId` FROM `ProgId`"))
-            lines.Add(@"C SOFTWARE\Classes\" + r[0]);
-        foreach (var r in Query("SELECT `LibID`,`Component_` FROM `TypeLib`"))
-        {
-            if (!on(r[1]) || !files.TryGetValue(comps[r[1]].KeyPath, out var lib)) continue;
-            if (Oleaut32.LoadTypeLibEx(lib.Path, 2 /* REGKIND_NONE */, out var tl) == 0 && tl is ITypeLib typeLib)
-            {
-                typeLib.GetLibAttr(out var pa);
-                var a = Marshal.PtrToStructure<TYPELIBATTR>(pa);
-                typeLib.ReleaseTLibAttr(pa);
-                lines.Add($"T {a.guid:B} {a.wMajorVerNum} {a.wMinorVerNum} {a.lcid}");
-                Marshal.ReleaseComObject(typeLib);
-            }
-        }
-        foreach (var f in files.Values)
-        {
-            if (!InTree(f.Path)) lines.Add("F " + f.Path);
-            Folder(Path.GetDirectoryName(f.Path)!);
-        }
-        foreach (var r in Query("SELECT `Component_`,`FileName`,`DirProperty`,`InstallMode` FROM `RemoveFile`"))
-        {
-            // install modes 2 and 3 run on uninstall
-            if (!on(r[0]) || !int.TryParse(r[3], out var mode) || (mode & 2) == 0) continue;
-            var dir = dirs.TryGetValue(r[2], out var dd) ? dd : props.GetValueOrDefault(r[2], "");
-            if (dir.Length == 0) continue;
-            if (r[1].Length == 0) folders.Add(Path.TrimEndingDirectorySeparator(dir));
-            else if (!InTree(Path.TrimEndingDirectorySeparator(dir))) lines.Add($"P {Path.TrimEndingDirectorySeparator(dir)}\t{LongName(r[1])}");
-        }
-        if (tree != null) lines.Add("R " + tree);
-        if (setup.SettingsKey != null) lines.Add("K " + setup.SettingsKey);
-        if (setup.RegionKey != null)
-        {
-            if (setup.FolderValue != null && !lines.Contains($"V M {folderKey}\t{setup.FolderValue}", StringComparer.OrdinalIgnoreCase))
-                lines.Add($"V M {folderKey}\t{setup.FolderValue}");
-            lines.Add("L " + setup.RegionKey);
-        }
-
-        string? icon = null;
-        using var iconData = new MemoryStream();
-        if (p.TryGetValue("ARPPRODUCTICON", out var iconName) && iconName.Length > 0 &&
-            CopyStream($"SELECT `Data` FROM `Icon` WHERE `Name`='{iconName.Replace("'", "")}'", iconData))
-        {
-            var bytes = iconData.ToArray();
-            bool isExe = bytes.Length > 1 && bytes[0] == 'M' && bytes[1] == 'Z';
-            icon = Path.Combine(setup.Folder, code + (isExe ? ".exe" : ".ico"));
-            File.WriteAllBytes(icon, bytes);
-            lines.Add("F " + icon);
-        }
-        var special = new[] { Environment.SpecialFolder.CommonDesktopDirectory, Environment.SpecialFolder.CommonPrograms,
-                              Environment.SpecialFolder.CommonStartMenu, Environment.SpecialFolder.ProgramFilesX86,
-                              Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.CommonProgramFilesX86,
-                              Environment.SpecialFolder.Windows, Environment.SpecialFolder.SystemX86 }
-            .Select(f => Path.TrimEndingDirectorySeparator(AppPaths.Special(f))).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        lines.AddRange(folders.Where(f => !special.Contains(f) && Path.GetPathRoot(f) != f + "\\" && !InTree(f))
-                              .OrderByDescending(f => f.Length).Select(f => "D " + f));
-        File.WriteAllText(list, string.Join("\r\n", lines) + "\r\n", Encoding.Unicode);
-        UninstallFolder.Own(list);
-
-        var version = p.GetValueOrDefault("ProductVersion", "0.0.0").Split('.').Select(x => int.TryParse(x, out var v) ? v : 0).Concat([0, 0, 0]).ToArray();
-        long kb = files.Values.Sum(f => (f.Size + 4095) / 4096 * 4);
-        string command = $"\"{exe}\" \"{list}\"";
-        using var hklm = Hive(sandbox);
-        using var k = hklm.CreateSubKey(arpKey, true);
-        foreach (var empty in new[] { "AuthorizedCDFPrefix", "Comments", "Contact", "HelpLink", "HelpTelephone", "InstallLocation",
-                                      "Readme", "Size", "URLInfoAbout", "URLUpdateInfo" })
-            k.SetValue(empty, "");
-        k.SetValue("DisplayName", p.GetValueOrDefault("ProductName", ""));
-        k.SetValue("DisplayVersion", p.GetValueOrDefault("ProductVersion", ""));
-        k.SetValue("Publisher", p.GetValueOrDefault("Manufacturer", ""));
-        k.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
-        k.SetValue("InstallSource", setup.InstallSource);
-        k.SetValue("UninstallString", command, RegistryValueKind.ExpandString);
-        k.SetValue("ModifyPath", command, RegistryValueKind.ExpandString);
-        if (p.GetValueOrDefault("ARPNOMODIFY") == "1") k.SetValue("NoModify", 1, RegistryValueKind.DWord);
-        k.SetValue("NoRepair", 1, RegistryValueKind.DWord);
-        k.SetValue("EstimatedSize", (int)Math.Min(kb, int.MaxValue), RegistryValueKind.DWord);
-        k.SetValue("VersionMajor", version[0], RegistryValueKind.DWord);
-        k.SetValue("VersionMinor", version[1], RegistryValueKind.DWord);
-        k.SetValue("Version", (version[0] << 24) | (version[1] << 16) | (version[2] & 0xFFFF), RegistryValueKind.DWord);
-        if (int.TryParse(p.GetValueOrDefault("ProductLanguage"), out var lang)) k.SetValue("Language", lang, RegistryValueKind.DWord);
-        if (icon != null) k.SetValue("DisplayIcon", icon);
-    }
-
-    private bool CopyStream(string sql, Stream dest)
-    {
-        if (Msi.MsiDatabaseOpenViewW(_db, sql, out var view) != 0) return false;
-        try
-        {
-            if (Msi.MsiViewExecute(view, IntPtr.Zero) != 0 || Msi.MsiViewFetch(view, out var rec) != 0) return false;
-            try
-            {
-                var buf = new byte[1 << 16];
-                while (true)
-                {
-                    uint n = (uint)buf.Length;
-                    if (Msi.MsiRecordReadStream(rec, 1, buf, ref n) != 0) throw Shown.Mark(new IOException("Provenance couldn't read part of an installer package. Try again."));
-                    if (n == 0) return true;
-                    dest.Write(buf, 0, (int)n);
-                }
-            }
-            finally { Msi.MsiCloseHandle(rec); }
-        }
-        finally { Msi.MsiCloseHandle(view); }
     }
 
     private static bool Condition(string condition, IReadOnlyDictionary<string, string> props)
@@ -562,17 +258,9 @@ public sealed class MsiPackage : IDisposable
         return m.Success && props.TryGetValue(m.Groups[1].Value, out var v) && v == m.Groups[2].Value;
     }
 
-    private static string LongName(string s)
-    {
-        int colon = s.IndexOf(':');
-        if (colon >= 0) s = s[..colon];
-        int bar = s.IndexOf('|');
-        return bar >= 0 ? s[(bar + 1)..] : s;
-    }
-
     private Dictionary<string, string> ResolveDirectories(Dictionary<string, string> props, Sandbox? sandbox)
     {
-        var rows = Query("SELECT `Directory`,`Directory_Parent`,`DefaultDir` FROM `Directory`").ToDictionary(r => r[0], r => r);
+        var rows = _db.Query("SELECT `Directory`,`Directory_Parent`,`DefaultDir` FROM `Directory`").ToDictionary(r => r[0], r => r);
         static string Sys(Environment.SpecialFolder f) => AppPaths.Special(f).TrimEnd('\\') + "\\";
         var known = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -598,7 +286,7 @@ public sealed class MsiPackage : IDisposable
             else if (known.TryGetValue(key, out var k)) path = k;
             else if (rows.TryGetValue(key, out var r) && r[1].Length > 0)
             {
-                var name = LongName(r[2]);
+                var name = MsiDatabase.LongName(r[2]);
                 var parent = Resolve(r[1], depth + 1);
                 path = name is "." or "" ? parent : Path.Combine(parent, name) + "\\";
             }
@@ -624,10 +312,10 @@ public sealed class MsiPackage : IDisposable
         });
 
     private string? ComponentDir(string component, Dictionary<string, string> dirs) =>
-        Query($"SELECT `Directory_` FROM `Component` WHERE `Component`='{component.Replace("'", "")}'").FirstOrDefault() is { } r &&
+        _db.Query($"SELECT `Directory_` FROM `Component` WHERE `Component`='{component.Replace("'", "")}'").FirstOrDefault() is { } r &&
         dirs.TryGetValue(r[0], out var d) ? d : null;
 
-    private static RegistryKey Hive(Sandbox? sandbox, bool user = false) => sandbox != null
+    internal static RegistryKey Hive(Sandbox? sandbox, bool user = false) => sandbox != null
         ? Registry.CurrentUser.CreateSubKey(sandbox.RegistryKey + (user ? @"\HKCU" : @"\HKLM"), true)
         : RegistryKey.OpenBaseKey(user ? RegistryHive.CurrentUser : RegistryHive.LocalMachine, RegistryView.Registry32);
 
@@ -688,62 +376,6 @@ public sealed class MsiPackage : IDisposable
     private static bool SameText(string a, string b) =>
         string.Equals(a.TrimEnd('\\'), b.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 
-    private string ExtractStream(string name, List<string> temps)
-    {
-        var path = Path.Combine(Path.GetDirectoryName(_path)!, name + ".provenance");
-        temps.Add(path);
-        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16);
-        if (!CopyStream($"SELECT `Data` FROM `_Streams` WHERE `Name`='{name.Replace("'", "")}'", fs))
-            throw new InvalidDataException($"The package has no embedded cabinet {name}.");
-        return path;
-    }
-
-    public static void WithoutEmbeddedCabinets(string sourceMsi, string targetMsi)
-    {
-        List<string> embedded;
-        using (var src = new MsiPackage(sourceMsi))
-            embedded = src.Query("SELECT `Cabinet` FROM `Media`").Select(r => r[0]).Where(c => c.StartsWith('#')).Select(c => c[1..])
-                          .Distinct(StringComparer.Ordinal).ToList();
-        var target = Path.GetFullPath(targetMsi);
-        var folder = Path.GetDirectoryName(target)!;
-        Directory.CreateDirectory(folder);
-        // a copy left by a crash is a whole installer, so it goes
-        foreach (var old in Directory.EnumerateFiles(folder, Path.GetFileName(target) + ".*.tmp").Where(f => f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)))
-            FileDelete.Try(old);
-        AtomicFile.Build(target, tmp =>
-        {
-            File.Copy(sourceMsi, tmp);
-            AtomicFile.ClearReadOnly(tmp);
-            Check(Msi.MsiOpenDatabaseW(tmp, (IntPtr)1 /* MSIDBOPEN_TRANSACT */, out var db), "open");
-            try
-            {
-                foreach (var name in embedded)
-                {
-                    Check(Msi.MsiDatabaseOpenViewW(db, "SELECT `Name`,`Data` FROM `_Streams` WHERE `Name`=?", out var view), "view");
-                    var arg = Msi.MsiCreateRecord(1);
-                    try
-                    {
-                        Check(Msi.MsiRecordSetStringW(arg, 1, name), "name");
-                        Check(Msi.MsiViewExecute(view, arg), "query");
-                        uint r = Msi.MsiViewFetch(view, out var rec);
-                        if (r == 259 /* ERROR_NO_MORE_ITEMS */) throw new InvalidDataException($"The package has no embedded cabinet {name}.");
-                        Check(r, "fetch");
-                        try { Check(Msi.MsiViewModify(view, 6 /* MSIMODIFY_DELETE */, rec), "delete " + name); }
-                        finally { Msi.MsiCloseHandle(rec); }
-                    }
-                    finally { Msi.MsiCloseHandle(arg); Msi.MsiCloseHandle(view); }
-                }
-                Check(Msi.MsiDatabaseCommit(db), "commit");
-            }
-            finally { Msi.MsiCloseHandle(db); }
-        });
-
-        static void Check(uint r, string step)
-        {
-            if (r != 0) throw new InvalidDataException($"The package's cabinets could not be removed ({step}: error {r}).");
-        }
-    }
-
     private static void CreateShortcut(string lnk, string target, string args, string description, string workDir)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(lnk)!);
@@ -757,19 +389,6 @@ public sealed class MsiPackage : IDisposable
             ((IPersistFile)link).Save(lnk, true);
         }
         finally { Marshal.ReleaseComObject(link); }
-    }
-
-    private static string RecordString(IntPtr rec, uint field)
-    {
-        uint len = 0;
-        var sb = new StringBuilder(1);
-        uint r = Msi.MsiRecordGetStringW(rec, field, sb, ref len);
-        if (r == 234 /* ERROR_MORE_DATA */)
-        {
-            sb = new StringBuilder((int)++len);
-            r = Msi.MsiRecordGetStringW(rec, field, sb, ref len);
-        }
-        return r == 0 ? sb.ToString() : "";
     }
 
     [ComImport, Guid("00021401-0000-0000-C000-000000000046")]

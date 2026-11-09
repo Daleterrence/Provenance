@@ -14,7 +14,7 @@ public static class ToolFacts
         new(Bitwarden, OtpSources.Bitwarden, "Bitwarden", new(2026, 10, 1)),
     ];
 
-    public static string Name(string tool) => Table.Single(f => f.Tool == tool).Name;
+    public static string Name(string tool) => Table.FirstOrDefault(f => f.Tool == tool)?.Name ?? "Bitwarden";
 
     public static string? ForSource(string source) => Table.FirstOrDefault(f => f.Source == source)?.Tool;
 

@@ -16,16 +16,16 @@ public static class ToolFix
 
     public static string Text(ToolView view, string tool) => view switch
     {
-        ToolView.Missing => ToolText.Offer(FindState.NotInstalled, tool),
-        ToolView.CantCheck => ToolText.Offer(FindState.CantCheck, tool),
-        ToolView.TooOld => ToolText.Offer(FindState.TooOld, tool),
-        ToolView.Installing => ToolText.Downloading(tool),
-        ToolView.Ready => ToolText.Ready(tool),
-        ToolView.DownloadFailed => ToolText.Result(tool, ToolInstall.DownloadFailed),
-        ToolView.CheckFailed => ToolText.Result(tool, ToolInstall.CheckFailed),
-        ToolView.DownloadCantCheck => ToolText.Result(tool, ToolInstall.CantCheck),
-        ToolView.DownloadTooOld => ToolText.Result(tool, ToolInstall.TooOld),
-        ToolView.NotSupported => ToolText.Result(tool, ToolInstall.NotSupported),
+        ToolView.Missing => ToolTexts.Offer(FindState.NotInstalled, tool),
+        ToolView.CantCheck => ToolTexts.Offer(FindState.CantCheck, tool),
+        ToolView.TooOld => ToolTexts.Offer(FindState.TooOld, tool),
+        ToolView.Installing => ToolTexts.Downloading(tool),
+        ToolView.Ready => ToolTexts.Ready(tool),
+        ToolView.DownloadFailed => ToolTexts.Result(tool, ToolInstall.DownloadFailed),
+        ToolView.CheckFailed => ToolTexts.Result(tool, ToolInstall.CheckFailed),
+        ToolView.DownloadCantCheck => ToolTexts.Result(tool, ToolInstall.CantCheck),
+        ToolView.DownloadTooOld => ToolTexts.Result(tool, ToolInstall.TooOld),
+        ToolView.NotSupported => ToolTexts.Result(tool, ToolInstall.NotSupported),
         _ => "",
     };
 
