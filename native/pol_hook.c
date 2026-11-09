@@ -178,7 +178,7 @@ static FARPROC user32_proc(const char *name)
     if (!u) u = LoadLibraryW(L"user32.dll");
     return u ? GetProcAddress(u, name) : NULL;
 }
-/* pol.exe's splash (dialog 0x67, proc exe+0x6800), made hidden so pol.exe 0x00406a10 skips its 5s dwell. Took a
+/* pol.exe's splash (dialog 0x67, proc exe+0x26b10), made hidden so pol.exe 0x00426a43 skips its 5s dwell. Took a
    fair few attempts to scrap it */
 typedef HWND (WINAPI *cdip_t)(HINSTANCE, LPCDLGTEMPLATEW, HWND, DLGPROC, LPARAM);
 static DWORD g_splash_tmpl[64];   /* DWORDs keep the DLGTEMPLATE copy aligned */
@@ -205,7 +205,7 @@ static HWND (WINAPI *g_realCreateDialogParamW)(HINSTANCE, LPCWSTR, HWND, DLGPROC
 static HWND WINAPI my_CreateDialogParamW(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
 {
     BYTE *exe = (BYTE *)GetModuleHandleW(NULL);
-    if (tmpl == (LPCWSTR)(ULONG_PTR)0x67 && (void *)proc == (void *)(exe + 0x6800)) {
+    if (tmpl == (LPCWSTR)(ULONG_PTR)0x67 && (void *)proc == (void *)(exe + 0x26b10)) {
         HWND h = hidden_splash(hInst, tmpl, parent, proc, init);
         lg("pol_hook: startup splash created hidden hwnd=%08x%s\r\n",
            (unsigned)(ULONG_PTR)h, h ? "" : " (NULL fallback)");
@@ -413,13 +413,13 @@ static void patch_fx_sockets(BYTE *fx)
     g_fx_iat_done = 1;
 }
 
-/* polcore's own SHA-1 (polcore.dll 0x1002d6a0/d6d0/dac0), the exact hash the wire uses. 0x5c-byte context. */
+/* polcore's own SHA-1 (polcore.dll 0x100286a0/86d0/8ac0), the exact hash the wire uses. 0x5c-byte context. */
 static void pc_sha1(BYTE *b, const void *data, unsigned len, BYTE out[20])
 {
     BYTE ctx[0x80];
-    ((void (__cdecl *)(void *))(b + 0x2d6a0))(ctx);
-    ((void (__cdecl *)(void *, const void *, unsigned))(b + 0x2d6d0))(ctx, data, len);
-    ((void (__cdecl *)(void *, void *))(b + 0x2dac0))(out, ctx);
+    ((void (__cdecl *)(void *))(b + 0x286a0))(ctx);
+    ((void (__cdecl *)(void *, const void *, unsigned))(b + 0x286d0))(ctx, data, len);
+    ((void (__cdecl *)(void *, void *))(b + 0x28ac0))(out, ctx);
 }
 
 static int launcher_mode(void)
@@ -580,7 +580,7 @@ static void sea_seed(BYTE *b)
         if (ok) mode = 2;
         else { lg("phase_c: POL-OTP malformed (need 6 digits) - ignoring\r\n"); otp[0] = 0; }
     }
-    ((int (__cdecl *)(int, const char *, const void *, const void *))(b + 0x1e4b0))(
+    ((int (__cdecl *)(int, const char *, const void *, const void *))(b + 0x1a8e0))(
         mode, seid, secret, mode == 2 ? otp : NULL);
     SecureZeroMemory(otp, sizeof otp);
     SecureZeroMemory(secret, sizeof secret);
@@ -588,7 +588,7 @@ static void sea_seed(BYTE *b)
     SecureZeroMemory(seid, sizeof seid);
 }
 
-#define SVC(off) (*(void **)(b + 0x6fbe8 + (off)))   /* polcore's service table, byte offset off */
+#define SVC(off) (*(void **)(b + 0xc4180 + (off)))   /* polcore's service table, byte offset off */
 #define PSLOT(n) SVC((n) * 4)
 typedef int (__cdecl *svc_v)(void);
 typedef int (__cdecl *svc_i)(int);
@@ -596,8 +596,8 @@ typedef int (__cdecl *svc_p)(void *);
 typedef int (__cdecl *svc_ip)(int, void *);
 #define CANCEL_JOB(j) ((svc_i)SVC(0x520))(j)
 #define NO_SLOT (-0x100)   /* polcore has no free job slot, try next turn */
-#define POLCON_STEP(b) ((svc_v)((b) + 0x44a50))()
-#define POLCON_IDLE(b) ((svc_v)((b) + 0x45480))()
+#define POLCON_STEP(b) ((svc_v)((b) + 0x3faf0))()
+#define POLCON_IDLE(b) ((svc_v)((b) + 0x40520))()
 
 /* the unwrapped GetHandle: the wrapper's "polhandle scan" line would read as an in-game failure */
 static void *g_svc_2c4, *g_svc_2b4;
@@ -640,7 +640,7 @@ static const struct pol_region *region(void)
     DWORD n;
     int idx;
     if (g_region) return g_region;
-    idx = *(int *)((BYTE *)GetModuleHandleW(NULL) + 0x5cd90);
+    idx = *(int *)((BYTE *)GetModuleHandleW(NULL) + 0xf03dc);
     n = GetEnvironmentVariableA("POL_REGION", want, sizeof want);
     if (n > 1 || (n == 1 && (want[0] < '0' || want[0] > '2')))
         lg("pol_hook: POL_REGION isn't 0, 1 or 2 - going by pol.exe's own region\r\n");
@@ -887,7 +887,7 @@ static void viewer_init(BYTE *b)
     lstrcpynA(g_viewer, folder, sizeof g_viewer);
     /* the placeholder ID still, so always 84. home_pick moves the account to its own after the login, then the folders
        get made */
-    CopyMemory(polid, b + 0x99280, 8);
+    CopyMemory(polid, b + 0xed850, 8);
     for (i = 0; i < 8; i++) h = h * 31 + (unsigned char)polid[i];
     slot = 50 + (int)(h % 50);
     ((int (__cdecl *)(int))PSLOT(0x366))(slot);
@@ -1384,10 +1384,10 @@ static void phase_c_seed(HMODULE pc)
         return;
     }
     lg("phase_c: REAL auth: POL ID='%s'\r\n", mask_id(id, m));
-    ((svc_v)(b + 0x44390))();   /* session init (svc+0xc90) */
-    /* inet init (polcore.dll 0x1000fe20 sets the flag at 0x100a66d4, the connect helper returns -2071 without it).
+    ((svc_v)(b + 0x3f430))();   /* session init (svc+0xc90) */
+    /* inet init (polcore.dll 0x1000aa90 sets the inet flag, the connect helper returns -2071 without it).
        One piece of the POL-2071 hunt, which was a fucking nightmare honestly good lord */
-    r = ((svc_v)(b + 0xfe20))();
+    r = ((svc_v)(b + 0xaa90))();
     lg("phase_c: inet init -> %d\r\n", r);
     if (wrap_slot(b, 0xb04, (void *)poll_masked, &g_polcon_poll_orig))
         lg("poll mask: POLCON_POLL wrapped (negative -> 0)\r\n");
@@ -1398,9 +1398,9 @@ static void phase_c_seed(HMODULE pc)
     wrap_slot(b, 0x2c4, (void *)w_svc_2c4, &g_svc_2c4);
     wrap_slot(b, 0x2b4, (void *)w_svc_2b4, &g_svc_2b4);
     lg("lobby: svc slots wrapped (0x30c/0x310/0xea0/0xfac/0x2c4/0x2b4, log only)\r\n");
-    /* POLCON_OPEN (polcore.dll 0x100448a0) type 3 = network, kind 1 + five zeroed dial-up buffers. It overwrites
+    /* POLCON_OPEN (polcore.dll 0x1003f940) type 3 = network, kind 1 + five zeroed dial-up buffers. It overwrites
        the password and host, so both go in after it. */
-    r = ((int (__cdecl *)(int, void *))(b + 0x448a0))(3, &conn);
+    r = ((int (__cdecl *)(int, void *))(b + 0x3f940))(3, &conn);
     lg("phase_c: POLCON_OPEN(3) -> %d\r\n", r);
     ((int (__cdecl *)(void *, const char *))SVC(0xd60))(encpw, pw);   /* ENCODE_PASSWORD */
     SecureZeroMemory(pw, sizeof pw);
@@ -1409,16 +1409,16 @@ static void phase_c_seed(HMODULE pc)
     SecureZeroMemory(encpw, sizeof encpw);
     ((int (__cdecl *)(void *, const char *))SVC(0xd90))(hostbuf, "ci000.pol.com");   /* ENCODE_HOST */
     ((svc_p)SVC(0xd54))(hostbuf);   /* SET_POLCOM_HOST */
-    /* ENCODE_POLID (polcore.dll 0x10046e70) scrambles the ID into polcore. It's reversible, so never logged. */
-    ((void (__cdecl *)(void *, const char *))(b + 0x46e70))(b + 0x99280, id);
+    /* ENCODE_POLID (polcore.dll 0x10041f30) scrambles the ID into polcore. It's reversible, so never logged. */
+    ((void (__cdecl *)(void *, const char *))(b + 0x41f30))(b + 0xed850, id);
     SecureZeroMemory(id, sizeof id);
     sea_seed(b);
-    *(unsigned *)(b + 0x9aa14) = 0xfffffbee;
-    if (*(unsigned *)(b + 0x99408) == 0)
-        *(unsigned *)(b + 0x99408) = 0x12;
+    *(unsigned *)(b + 0xeefe4) = 0xfffffbee;
+    if (*(unsigned *)(b + 0xed9d8) == 0)
+        *(unsigned *)(b + 0xed9d8) = 0x12;
     ULONGLONG tState = GetTickCount64();
     for (;;) {
-        sm = *(unsigned *)(b + 0x99408);
+        sm = *(unsigned *)(b + 0xed9d8);
         /* 110 s per state, 180 s for 23, the chat-server login (polcore itself allows that one 400 s) */
         if (GetTickCount64() - tState > (sm == 23 ? 180000ULL : 110000ULL)) {
             lg("auth SM: no progress in state %u - giving up\r\n", sm);
@@ -1427,7 +1427,7 @@ static void phase_c_seed(HMODULE pc)
         if (sm != (unsigned)last) {
             tState = GetTickCount64();
             last = (int)sm;
-            lg("auth SM: state=%u res=%d err=%08x\r\n", sm, *(int *)(b + 0x996b4), *(unsigned *)(b + 0x9aa14));
+            lg("auth SM: state=%u res=%d err=%08x\r\n", sm, *(int *)(b + 0xedc84), *(unsigned *)(b + 0xeefe4));
         }
         if (sm == 30 || sm == 32 || sm == 36 || sm == 39) break;
         if (stop_requested()) {
@@ -1440,12 +1440,12 @@ static void phase_c_seed(HMODULE pc)
         }
         POLCON_STEP(b);
         POLCON_IDLE(b);
-        if (*(unsigned *)(b + 0x99408) == sm) Sleep(16);
+        if (*(unsigned *)(b + 0xed9d8) == sm) Sleep(16);
     }
-    sm = *(unsigned *)(b + 0x99408);
+    sm = *(unsigned *)(b + 0xed9d8);
     if (sm != 30) {
         lg("phase_c: AUTH FAILED (state=%u res=%d err=%08x reason=%d) - exiting, FFXI NOT started\r\n",
-           sm, *(int *)(b + 0x996b4), *(unsigned *)(b + 0x9aa14), *(int *)(b + 0x9940c));
+           sm, *(int *)(b + 0xedc84), *(unsigned *)(b + 0xeefe4), *(int *)(b + 0xed9dc));
         end_pol(3);
         return;
     }
@@ -1453,7 +1453,7 @@ static void phase_c_seed(HMODULE pc)
     g_real_auth = 1;
     notice_read(b);
     /* stricter than the viewer on purpose, a blocked account stops here */
-    flags = *(WORD *)(b + 0x993f4);
+    flags = *(WORD *)(b + 0xed9c4);
     jail = SVC(0x13e4) ? ((svc_v)SVC(0x13e4))() : 0;
     lg("phase_c: login result flags %04x notice %u jail %d\r\n", flags, g_notice, jail);
     if (flags & 1) account_blocked(b, "disconnect-bit");
@@ -1515,7 +1515,7 @@ static void phase_c_seed(HMODULE pc)
         viewer_sign_out(b);
         end_pol((UINT)rc);
     }
-    *(unsigned *)(b + 0x99254) = 1;
+    *(unsigned *)(b + 0xed824) = 1;
     lg("phase_c: session shaped (notices+lists) - game can boot\r\n");
 }
 
@@ -1529,12 +1529,12 @@ static void prime_session(void)
     /* before the login, so a crash during it gets a CRASH line too. Not a VEH, that'd catch IsBadReadPtr's
        first-chance probes and recurse through lg (yes, IsBadReadPtr, I know) */
     SetUnhandledExceptionFilter(veh_proc);
-    *(unsigned *)((BYTE *)pc + 0x992e0) = 0;   /* login status >= 0 = in */
-    *(unsigned *)((BYTE *)pc + 0x99254) = 1;   /* ready flag (svc+0xd10) */
-    CopyMemory((BYTE *)pc + 0x99280, id64, 8);
-    CopyMemory((BYTE *)pc + 0x99288, name17, 17);
+    *(unsigned *)((BYTE *)pc + 0xed8b0) = 0;   /* login status >= 0 = in */
+    *(unsigned *)((BYTE *)pc + 0xed824) = 1;   /* ready flag (svc+0xd10) */
+    CopyMemory((BYTE *)pc + 0xed850, id64, 8);
+    CopyMemory((BYTE *)pc + 0xed858, name17, 17);
     /* svc+0x730's state (polcore.dll 0x1009aa58) is -1 without a real menu session, 0 suits the pre-flight */
-    *(unsigned *)((BYTE *)pc + 0x9aa58) = 0;
+    *(unsigned *)((BYTE *)pc + 0xef028) = 0;
     /* the JP/US selector (polcore.dll 0x100aa318), 0 JP, 1 anything else. svc 0xf14 sets it again in viewer_init */
     *(unsigned *)((BYTE *)pc + 0xaa318) = (unsigned)r->selector;
     lg("pol_hook: fake session poked into polcore @ %08x\r\n", (unsigned)(ULONG_PTR)pc);
@@ -1689,11 +1689,11 @@ static int utf8_to_sjis(const char *src, char *out, int cap)
     return m > 0 ? m : 0;
 }
 
-/* Friend rows live in two polcore arrays (the ignore list is 100 rows of A's shape just before it, b+0xafc18):
-     A  b+0xb40d8, stride 0xb0    +0x08 flags (bits 13-15 status, 0x800 online, 0x10000 a game slot's in use,
+/* Friend rows live in two polcore arrays (the ignore list is 100 rows of A's shape just before it, b+0x104dc8):
+     A  b+0x109288, stride 0xb0   +0x08 flags (bits 13-15 status, 0x800 online, 0x10000 a game slot's in use,
                                         bits 17-19 which slot, 0x10000000 pending request)
                                   +0x18 eight 16-byte game slots, +0x98 valid, +0xa0 handle name (SJIS)
-     B  b+0x3fc920, stride 0x84   +0x00 profile pic, +0x1c comment (UTF-16)
+     B  b+0x454de0, stride 0x84   +0x00 profile pic, +0x1c comment (UTF-16)
    (flags >> 13) & 7 is status + 1 (1 online, 2 away, 3 busy), 0 offline. Online also needs 0x800. */
 static int friend_online(unsigned fa)
 {
@@ -2135,7 +2135,7 @@ static void mail_recheck(BYTE *b)
 static int sender_ignored(BYTE *b, const BYTE *h)
 {
     for (int bi = 0; bi < 100; bi++) {
-        BYTE *a = b + 0xafc18 + bi * 0xb0;
+        BYTE *a = b + 0x104dc8 + bi * 0xb0;
         if (IsBadReadPtr(a, 0xb0)) break;
         if (!(*(unsigned *)(a + 0x98) & 1)) continue;
         if (*(DWORD *)(a + 0x00) != *(const DWORD *)(h + 0x00) || *(DWORD *)(a + 0x04) != *(const DWORD *)(h + 0x04))
@@ -3274,7 +3274,7 @@ typedef int (__cdecl *svc_add)(int, unsigned, unsigned, unsigned, unsigned, cons
 /* like the viewer, a local edit (svc 0x5f4/0x2f0/0x2e4/0x2e8) marks the row, then one list upload sends it */
 static void friend_upload_start(BYTE *b)
 {
-    int reload = *(unsigned *)(b + 0x403040) > *(unsigned *)(b + 0x40304c);
+    int reload = *(unsigned *)(b + 0x45b500) > *(unsigned *)(b + 0x45b50c);
     int t = ((svc_v)SVC(0x1028))();
     if (t == NO_SLOT) { g_edit_upload_want = 1; return; }
     g_edit_upload_want = 0;
@@ -4134,7 +4134,7 @@ static int ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
 {
     DWORD cs, cl, chi;
     for (int i = 0; i < 200; i++) {
-        BYTE *a = b + 0xb40d8 + i * 0xb0;
+        BYTE *a = b + 0x109288 + i * 0xb0;
         if (IsBadReadPtr(a, 0xb0)) break;
         if ((*(unsigned *)(a + 0x98) & 1) && friend_ffxi(a, &cs, &cl, &chi) && cs == ctsid && cl == lo && chi == hi)
             return 1;
@@ -5161,11 +5161,11 @@ static void handle_switch_start(BYTE *b)
     g_hjob = t;
 }
 /* polcore links into the first free one of a handle's 8, which needn't be where it was. Put back by hand in the
-   records (polcore.dll 0x10403080 Content IDs, 0x10405800 handles), all on this thread like polcore's own calls */
+   records (polcore.dll 0x104533e0 Content IDs, 0x1045b520 handles), all on this thread like polcore's own calls */
 static void handle_place(BYTE *b, int idx, int slot, int pos)
 {
-    BYTE *hs = b + 0x405820 + slot * 0x28;
-    DWORD *f = (DWORD *)(b + 0x403090 + idx * 0x68);
+    BYTE *hs = b + 0x45b540 + slot * 0x28;
+    DWORD *f = (DWORD *)(b + 0x4533f0 + idx * 0x68);
     int now = (int)((*f >> 22) & 7);
     if (pos < 0 || pos > 7 || now == pos || !(*f & CHR_LINKED) || (int)CHR_HANDLE(*f) != slot || (hs[pos] & 1) ||
         !(hs[now] & 1) || ((hs[now] >> 1) & 0x3f) != idx)
@@ -5190,7 +5190,7 @@ static void handle_undo(BYTE *b)
    still says 1 (polcore.dll 0x10023350) */
 static void handle_put_start(BYTE *b)
 {
-    int reload = *(unsigned *)(b + 0x403048) > *(unsigned *)(b + 0x403054);
+    int reload = *(unsigned *)(b + 0x45b508) > *(unsigned *)(b + 0x45b514);
     int t = ((svc_v)SVC(0x1038))();
     g_hwant = t == NO_SLOT;
     if (g_hwant) return;
@@ -5493,7 +5493,7 @@ static DWORD friends_sig(BYTE *b)
 {
     DWORD h = 2166136261u;
     for (int i = 0; i < 200; i++) {
-        const DWORD *a = (const DWORD *)(b + 0xb40d8 + i * 0xb0);
+        const DWORD *a = (const DWORD *)(b + 0x109288 + i * 0xb0);
         if (IsBadReadPtr(a, 0xb0)) break;
         h = (h ^ a[0]) * 16777619u;
         h = (h ^ a[1]) * 16777619u;
@@ -5681,7 +5681,7 @@ static void snapshot_social(BYTE *b)
     }
     wr(h, ",\"blocked\":[");
     for (int bi = 0, bfirst = 1; bi < 100; bi++) {
-        BYTE *a = b + 0xafc18 + bi * 0xb0;
+        BYTE *a = b + 0x104dc8 + bi * 0xb0;
         if (IsBadReadPtr(a, 0xb0)) break;
         if (!(*(unsigned *)(a + 0x98) & 1)) continue;
         sjis_json(nm, sizeof nm, a + 0xa0, 0x0f);
@@ -5715,7 +5715,7 @@ static void snapshot_social(BYTE *b)
     handles_json(b, h);
     wr(h, ",\"friends\":[");
     for (i = 0, first = 1; i < 200; i++) {
-        BYTE *a = b + 0xb40d8 + i * 0xb0, *bn = b + 0x3fc920 + i * 0x84;
+        BYTE *a = b + 0x109288 + i * 0xb0, *bn = b + 0x454de0 + i * 0x84;
         WCHAR fw[0x33] = {0};
         char combuf[0x33 * 3 + 1] = {0};
         unsigned idLo, idHi, fa;
@@ -5960,11 +5960,11 @@ static ULONGLONG g_link_sent_at, g_link_logged_at;
 static int g_link_sends;
 static void link_watch(BYTE *b)
 {
-    int s = *(int *)(b + 0x99250);
+    int s = *(int *)(b + 0xed820);
     BYTE *at;
     DWORD sent;
     if (s < 0 || s > 15) return;
-    at = b + 0x3e58a0 + s * 0x3a00 + 0x39d4;
+    at = b + 0x43c340 + s * 0x3a00 + 0x39d4;
     if (IsBadReadPtr(at, 4) || !(sent = *(DWORD *)at) || sent == g_link_sent) return;
     g_link_sent = sent;
     g_link_sent_at = GetTickCount64();
@@ -5991,8 +5991,8 @@ static void pol_hold(BYTE *b)
     HANDLE ef;
     DWORD wn;
     if (!b) return;
-    if (*(unsigned *)(b + 0x99408) != 30) {
-        lg("hold: no signed-in session (auth state %u) - exiting, FFXI NOT started\r\n", *(unsigned *)(b + 0x99408));
+    if (*(unsigned *)(b + 0xed9d8) != 30) {
+        lg("hold: no signed-in session (auth state %u) - exiting, FFXI NOT started\r\n", *(unsigned *)(b + 0xed9d8));
         end_pol(3);
     }
     ipc_file(spath, "social.json");
@@ -6033,9 +6033,9 @@ static void pol_hold(BYTE *b)
         /* a dropped session (another login of this POL ID, KILL, a ban push, the server hanging up) ends the hold,
            so Play never boots FFXI on a dead one */
         idle = POLCON_IDLE(b);
-        reason = *(int *)(b + 0x99254);
-        if (idle < 0 || reason < 0 || *(int *)(b + 0x9924c) == 0) {
-            why = idle < 0 ? idle : reason < 0 ? reason : *(int *)(b + 0x9aa14);
+        reason = *(int *)(b + 0xed824);
+        if (idle < 0 || reason < 0 || *(int *)(b + 0xed81c) == 0) {
+            why = idle < 0 ? idle : reason < 0 ? reason : *(int *)(b + 0xeefe4);
             if (g_link_sent_at)
                 lg("hold: SESSION LOST reason=%d - signed out (last answered the server %lu s before)\r\n", why,
                    (DWORD)((GetTickCount64() - g_link_sent_at) / 1000));
@@ -6139,11 +6139,12 @@ static void game_over(UINT code)
     end_pol(code);
 }
 
-/* 1.18.15e: the menu session's prologue (push -1; push 0x43fe5a; mov eax, fs:[0]), and the content launcher's
-   GameStart call and the empty trace call after it (call eax; push L"Return from FFXI"; mov esi, eax;
-   call 0x00412430) */
-static const BYTE MENU_PROLOGUE[] = { 0x6a, 0xff, 0x68, 0x5a, 0xfe, 0x43, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00, 0x00 };
-static const BYTE FFXI_RETURN[] = { 0xff, 0xd0, 0x68, 0xa4, 0x2b, 0x44, 0x00, 0x8b, 0xf0, 0xe8, 0x18, 0xf2, 0xff, 0xff };
+/* the build that landed 2026-11-09 (file version still 1.18.13, pol.exe grew to 2,333,440 bytes): the menu session's
+   prologue (push -1; push 0x4b67b3; mov eax, fs:[0]), and the content launcher's GameStart call (now through
+   [ecx+0xc], one byte longer than 1.18.15e's call eax) and the empty trace call after it (call [ecx+0xc];
+   push L"Return from FFXI"; mov edi, eax; call 0x0042bbe0, which is just a ret) */
+static const BYTE MENU_PROLOGUE[] = { 0x6a, 0xff, 0x68, 0xb3, 0x67, 0x4b, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00, 0x00 };
+static const BYTE FFXI_RETURN[] = { 0xff, 0x51, 0x0c, 0x68, 0x64, 0x05, 0x4c, 0x00, 0x8b, 0xf8, 0xe8, 0x83, 0xaf, 0x00, 0x00 };
 
 static int g_game_started;
 /* first thing after GameStart returns, ok or not. On a failed one pol.exe would go on to pass the FFXiEntry it's just
@@ -6172,18 +6173,18 @@ static __declspec(naked) void ffxi_returned_thunk(void)
 
 static int hook_game_end(BYTE *exe)
 {
-    BYTE *p = exe + 0x1320a;
+    BYTE *p = exe + 0x20c4e;
     DWORD old;
     if (memcmp(p, FFXI_RETURN, sizeof FFXI_RETURN) != 0) {
-        lg("pol_hook: content launcher not as expected (%02x %02x %02x) - game end not hooked\r\n", p[0], p[2], p[9]);
+        lg("pol_hook: content launcher not as expected (%02x %02x %02x) - game end not hooked\r\n", p[0], p[2], p[10]);
         return 0;
     }
-    if (!VirtualProtect(p + 9, 5, PAGE_EXECUTE_READWRITE, &old)) {
+    if (!VirtualProtect(p + 10, 5, PAGE_EXECUTE_READWRITE, &old)) {
         lg("pol_hook: content launcher protect failed - game end not hooked\r\n");
         return 0;
     }
-    *(DWORD *)(p + 10) = (DWORD)((BYTE *)ffxi_returned_thunk - (p + 14));
-    VirtualProtect(p + 9, 5, old, &old);
+    *(DWORD *)(p + 11) = (DWORD)((BYTE *)ffxi_returned_thunk - (p + 15));
+    VirtualProtect(p + 10, 5, old, &old);
     lg("pol_hook: content launcher's return hooked\r\n");
     return 1;
 }
@@ -6294,8 +6295,8 @@ static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned
     if (++g_menu_calls == 1) {
         prime_session();
         set_cwd_ffxi();
-        /* pol.exe 0x00406a10 destroys the hidden splash on the thread that made it */
-        ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x6a10))();
+        /* pol.exe 0x00426a43 destroys the hidden splash on the thread that made it */
+        ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x26a43))();
         if (getenv_set("POL_HOLD")) {
             sweep_stale_social();
             pol_hold((BYTE *)polcore_module());
@@ -6324,15 +6325,15 @@ static void install(void)
         HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
         g_pCreateMutexW = GetProcAddress(k32, "CreateMutexW");
         g_pOpenMutexW   = GetProcAddress(k32, "OpenMutexW");
-        if (g_pCreateMutexW) hook_slot(exe, 0x5c7c4, 0x15674, (void *)my_CreateMutexW, "CreateMutexW");
-        if (g_pOpenMutexW)   hook_slot(exe, 0x5c834, 0x15b39, (void *)my_OpenMutexW,   "OpenMutexW");
+        if (g_pCreateMutexW) hook_slot(exe, 0xee734, 0x1285, (void *)my_CreateMutexW, "CreateMutexW");
+        if (g_pOpenMutexW)   hook_slot(exe, 0xee7b4, 0x12b0, (void *)my_OpenMutexW,   "OpenMutexW");
     }
-    hook_slot(exe, 0x5c864, 0x15493, (void *)my_CreateDialogParamW, "CreateDialogParamW");
-    /* An E9 jmp over the menu session (pol.exe 0x00413710), only in the 1.18.15e pol.exe I wrote this against.
-       Other builds (1.18.00n for one) have other code here. */
-    BYTE *p = (BYTE *)exe + 0x13710;
+    hook_slot(exe, 0xee7e4, 0x160c, (void *)my_CreateDialogParamW, "CreateDialogParamW");
+    /* An E9 jmp over the menu session (pol.exe 0x00427033), only in the build that landed 2026-11-09 (file version
+       still 1.18.13, pol.exe grown to 2,333,440 bytes) I rewrote this against. Other builds have other code here. */
+    BYTE *p = (BYTE *)exe + 0x27033;
     if (memcmp(p, MENU_PROLOGUE, sizeof MENU_PROLOGUE) != 0) {
-        lg("pol_hook: pol.exe is not the 1.18.15e build (menu session %02x %02x %02x) - not hooked\r\n",
+        lg("pol_hook: pol.exe isn't the build this was written for (menu session %02x %02x %02x) - not hooked\r\n",
            p[0], p[1], p[2]);
         return;
     }
