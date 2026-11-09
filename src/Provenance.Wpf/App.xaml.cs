@@ -64,6 +64,7 @@ public partial class App : Application
         CatchUnhandled();
 
         var mainVm = ShowMainWindow();
+        SelfUpdate.TellIfUpdateFailed(mainVm.Notice);
         StartMainViewModel(mainVm, shiftAtStart || ShiftDown() || args.NoAutoLogin);
     }
 

@@ -4,6 +4,7 @@ using System.IO;
 using Provenance.Common.Security;
 using Provenance.Common;
 using Provenance.Common.Game;
+using Provenance.Wpf.ViewModels.Main;
 using Provenance.Wpf.Views.Install;
 using Serilog;
 using Velopack;
@@ -18,7 +19,7 @@ public static class SelfUpdate
 
     private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan StallTimeout = TimeSpan.FromMinutes(2);
-    private static readonly TimeSpan FailedApplyPause = TimeSpan.FromDays(1);
+    private static readonly TimeSpan FailedApplyPause = TimeSpan.FromHours(1);
 
     // Update.exe kills everything running from the install folder before it swaps the files, and a pol.exe holding
     // pol_hook.dll stops the swap anyway
@@ -56,19 +57,20 @@ public static class SelfUpdate
         using var skip = new CancellationTokenSource();
         void Skip(object? sender, EventArgs e) => skip.Cancel();
         bool handedOver = false;
-        try
+
+        async Task<bool> CheckAndInstall()
         {
             window = WindowManager.ShowUpdate();
             window.Closed += Skip;
             window.SkipClicked += Skip;
 
-            var update = await Check(updates, skip.Token);
+            var update = await Check(updates, skip.Token, CheckTimeout);
             if (update is null) return false;
 
             var target = update.TargetFullRelease;
             if (FailedRecently(target.Version))
             {
-                Log.Information("Provenance {Version} failed to install less than a day ago, not trying it again yet", target.Version);
+                Log.Information("Provenance {Version} failed to install less than an hour ago, not trying it again yet", target.Version);
                 return false;
             }
             await Download(updates, update, window, skip.Token);
@@ -89,21 +91,8 @@ public static class SelfUpdate
             handedOver = true;
             return true;
         }
-        catch (OperationCanceledException) when (skip.IsCancellationRequested)
-        {
-            Log.Information("Update skipped");
-            return false;
-        }
-        catch (OperationCanceledException)
-        {
-            Log.Warning("Update download stalled for {Minutes} minutes, carrying on without it", StallTimeout.TotalMinutes);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Update check failed, carrying on without it");
-            return false;
-        }
+
+        try { return await CarryOnIfItFails(CheckAndInstall, skip.Token); }
         finally
         {
             // a handed-over window stays up until the shutdown, and skip's gone by then
@@ -120,16 +109,43 @@ public static class SelfUpdate
         }
     }
 
-    private static async Task<UpdateInfo?> Check(UpdateManager updates, CancellationToken skip)
+    // a problem with the update never stops the app starting
+    internal static async Task<bool> CarryOnIfItFails(Func<Task<bool>> update, CancellationToken skip)
+    {
+        try { return await update(); }
+        catch (OperationCanceledException) when (skip.IsCancellationRequested)
+        {
+            Log.Information("Update skipped");
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Warning("Update download stalled for {Minutes} minutes, carrying on without it", StallTimeout.TotalMinutes);
+            _updateFailed = true;
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Update check failed, carrying on without it");
+            _updateFailed = true;
+            return false;
+        }
+    }
+
+    internal static async Task<UpdateInfo?> Check(UpdateManager updates, CancellationToken skip, TimeSpan timeout)
     {
         Log.Information("Checking for updates (version {Version})", updates.CurrentVersion);
         var check = Task.Run(() => updates.CheckForUpdatesAsync());
-        if (await Task.WhenAny(check, Task.Delay(CheckTimeout, skip)) != check)
+        if (await Task.WhenAny(check, Task.Delay(timeout, skip)) != check)
         {
             _ = check.ContinueWith(t => Log.Debug(t.Exception, "The abandoned update check failed"),
                                    TaskContinuationOptions.OnlyOnFaulted);
             if (skip.IsCancellationRequested) Log.Information("Update check skipped");
-            else Log.Warning("Update check took over {Seconds}s, carrying on without it", CheckTimeout.TotalSeconds);
+            else
+            {
+                Log.Warning("Update check took over {Seconds}s, carrying on without it", timeout.TotalSeconds);
+                _updateFailed = true;
+            }
             return null;
         }
         var update = await check;
@@ -256,32 +272,44 @@ public static class SelfUpdate
     // Without a note every start would try again and fail the same way
     private static void NoteApplyResult(UpdateManager updates)
     {
-        try
-        {
-            if (updates.UpdatePendingRestart is { } stuck)
-            {
-                Log.Warning("Provenance {Version} did not install, this is still {Current}. It gets another try in a day",
-                            stuck.Version, updates.CurrentVersion);
-                File.WriteAllText(FailedApplyFile, $"{stuck.Version} {DateTime.UtcNow:O}");
-            }
-            else File.Delete(FailedApplyFile);
-        }
+        try { NoteApplyResult(updates.UpdatePendingRestart?.Version, updates.CurrentVersion, FailedApplyFile); }
         catch (Exception ex) { Log.Debug(ex, "Could not note how the update went"); }
+    }
+
+    private static bool _updateFailed;
+
+    internal static void NoteApplyResult(SemanticVersion? stuck, SemanticVersion? current, string noteFile)
+    {
+        // first, a note that can't be saved shouldn't cost the player the notice
+        _updateFailed = stuck is not null;
+        if (stuck is not null)
+        {
+            Log.Warning("Provenance {Version} did not install, this is still {Current}. It gets another try in an hour", stuck, current);
+            File.WriteAllText(noteFile, $"{stuck} {DateTime.UtcNow:O}");
+        }
+        else File.Delete(noteFile);
+    }
+
+    internal static void TellIfUpdateFailed(NoticeBanner notice)
+    {
+        if (_updateFailed)
+            notice.Show("Provenance could not be updated, this is normally a temporary problem, please try again later.", "AlertCircleOutline", stays: true);
     }
 
     private static bool FailedRecently(SemanticVersion version)
     {
-        try
-        {
-            if (!File.Exists(FailedApplyFile)) return false;
-            var parts = File.ReadAllText(FailedApplyFile).Trim().Split(' ', 2);
-            if (parts.Length != 2 || parts[0] != version.ToString() ||
-                !DateTime.TryParse(parts[1], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at))
-                return false;
-            // a time in the future (a clock that was ahead) mustn't hold the update back until then
-            var ago = DateTime.UtcNow - at.ToUniversalTime();
-            return ago >= TimeSpan.Zero && ago < FailedApplyPause;
-        }
+        try { return File.Exists(FailedApplyFile) && HeldBack(File.ReadAllText(FailedApplyFile), version, DateTime.UtcNow); }
         catch { return false; }
+    }
+
+    internal static bool HeldBack(string note, SemanticVersion version, DateTime utcNow)
+    {
+        var parts = note.Trim().Split(' ', 2);
+        if (parts.Length != 2 || parts[0] != version.ToString() ||
+            !DateTime.TryParse(parts[1], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at))
+            return false;
+        // a time in the future (a clock that was ahead) mustn't hold the update back until then
+        var ago = utcNow - at.ToUniversalTime();
+        return ago >= TimeSpan.Zero && ago < FailedApplyPause;
     }
 }
