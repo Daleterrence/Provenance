@@ -6,14 +6,14 @@
     <ScrollViewer VerticalScrollBarVisibility="Visible">
         <StackPanel Margin="28,22">
             <TextBlock Text="Multi-account mode" Style="{StaticResource Section}" />
-            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,8"
+            <TextBlock Style="{StaticResource IntroText}" Margin="0,0,0,8"
                        Text="Press Start all accounts on the main window to log in to each account you turn on here and start FINAL FANTASY XI for it, one after another, in this order." />
             <TextBlock Style="{StaticResource Help}" Margin="0,0,0,14"
                        Text="Each account starts once the one before it is in the game. If an account uses a one-time password, Provenance asks for it when that account's turn comes." />
-            <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12" Foreground="{DynamicResource State.Warn}"
+            <TextBlock Style="{StaticResource WarnText}" Margin="0,0,0,12"
                        Text="You must use either Windower or Ashita with Provenance to use multi-account login."
                        Visibility="{Binding MultiHasThirdPartyHook, Converter={StaticResource InvertBoolToVis}}" />
-            <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12" Foreground="{DynamicResource State.Warn}"
+            <TextBlock Style="{StaticResource WarnText}" Margin="0,0,0,12"
                        Text="Provenance is starting your accounts. You can change these settings once it's finished."
                        Visibility="{Binding MultiRunGoing, Converter={StaticResource BoolToVis}}" />
             <StackPanel IsEnabled="{Binding MultiEditable}" Style="{StaticResource DimWhenOff}">

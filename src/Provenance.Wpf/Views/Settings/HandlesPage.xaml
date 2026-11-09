@@ -4,33 +4,28 @@
              xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
     <UserControl.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="SettingsResources.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <DataTemplate x:Key="HandleCharacter">
-                <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="32">
-                    <TextBlock Text="{Binding Label}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                    <Button Grid.Column="1" Content="LINK TO..." FontSize="12" Height="30" Padding="10,0" Margin="8,0,0,0"
-                            Style="{StaticResource PolButton}" IsEnabled="{Binding CanLink}" Click="OnLinkCharacter"
-                            AutomationProperties.Name="{Binding Label, StringFormat=Link {0} to a handle}" />
-                    <Button Grid.Column="2" Content="UNLINK" FontSize="12" Height="30" Padding="10,0" Margin="4,0,0,0"
-                            Style="{StaticResource PolButton}" IsEnabled="{Binding CanUnlink}" Click="OnUnlinkCharacter"
-                            Visibility="{Binding Handle, Converter={StaticResource NullToVisibilityConverter}}"
-                            AutomationProperties.Name="{Binding Label, StringFormat=Unlink {0}}" />
-                </Grid>
-            </DataTemplate>
-        </ResourceDictionary>
+        <DataTemplate x:Key="HandleCharacter">
+            <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="32">
+                <TextBlock Text="{Binding Label}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="1" Content="LINK TO..." FontSize="12" Height="30" Padding="10,0" Margin="8,0,0,0"
+                        Style="{StaticResource PolButton}" IsEnabled="{Binding CanLink}" Click="OnLinkCharacter"
+                        AutomationProperties.Name="{Binding Label, StringFormat=Link {0} to a handle}" />
+                <Button Grid.Column="2" Content="UNLINK" FontSize="12" Height="30" Padding="10,0" Margin="4,0,0,0"
+                        Style="{StaticResource PolButton}" IsEnabled="{Binding CanUnlink}"
+                        Command="{Binding DataContext.UnlinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                        Visibility="{Binding Handle, Converter={StaticResource NullToVisibilityConverter}}"
+                        AutomationProperties.Name="{Binding Label, StringFormat=Unlink {0}}" />
+            </Grid>
+        </DataTemplate>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Visible">
         <StackPanel Margin="28,22">
             <TextBlock Text="Handles" Style="{StaticResource Section}" />
-            <TextBlock Text="{Binding LoggedOutText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
+            <TextBlock Style="{StaticResource IntroText}" Text="{Binding LoggedOutText}"
                        Visibility="{Binding LoggedIn, Converter={StaticResource InvertBoolToVis}}" />
             <StackPanel Visibility="{Binding LoggedIn, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="{Binding ReadOnlyText}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12"
-                           Foreground="{DynamicResource State.Warn}"
+                <TextBlock Style="{StaticResource WarnText}" Text="{Binding ReadOnlyText}" Margin="0,0,0,12"
                            Visibility="{Binding ReadOnly, Converter={StaticResource BoolToVis}}" />
                 <TextBlock Text="{Binding Note.Text}" behaviours:State.IsError="{Binding Note.IsError}" Style="{StaticResource ProfileStatusText}" />
                 <ItemsControl ItemsSource="{Binding Rows}" Focusable="False">
@@ -52,7 +47,8 @@
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="SWITCH" FontSize="12" VerticalAlignment="Center"
                                                 Style="{StaticResource PolButton}" IsEnabled="{Binding CanSwitch}"
-                                                Click="OnSwitchHandle" AutomationProperties.Name="{Binding Name, StringFormat=Make {0} active}" />
+                                                Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name, StringFormat=Make {0} active}" />
                                     </Grid>
                                     <TextBlock Text="{Binding DataContext.NoCharactersText, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                Style="{StaticResource Help}" Margin="52,8,0,0"

@@ -9,18 +9,6 @@ public partial class HandlesPage : UserControl
 {
     public HandlesPage() => InitializeComponent();
 
-    private void OnSwitchHandle(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: HandleRow row } && DataContext is HandlesViewModel handles)
-            handles.Switch(row);
-    }
-
-    private void OnUnlinkCharacter(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: HandleCharacterRow c } && DataContext is HandlesViewModel handles)
-            handles.Unlink(c);
-    }
-
     // the other handles to pick from, a full one greyed out with the limit under its name
     private void OnLinkCharacter(object sender, RoutedEventArgs e)
     {

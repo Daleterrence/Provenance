@@ -45,14 +45,7 @@ public partial class SocialWindow : AppWindow
         {
             if (e.OldValue is SocialViewModel old) Detach(old);
             FollowEnd.SetSource(ChatScroll, HasMessages ? (e.NewValue as SocialViewModel)?.Messages.Conversation : null);
-            if (e.NewValue is SocialViewModel vm)
-            {
-                vm.PropertyChanged += OnVmChanged;
-                vm.MessageReceived += OnMessageLanded;
-                vm.NoticeReceived += OnMessageLanded;
-                vm.FriendRequestReceived += OnRequestLanded;
-                vm.GroupInviteReceived += OnRequestLanded;
-            }
+            if (e.NewValue is SocialViewModel vm) Attach(vm);
             ShowFriendInTitle();
             ReportVisible();
         };
@@ -65,6 +58,15 @@ public partial class SocialWindow : AppWindow
             if (Vm is { } vm) Detach(vm);
             if (Application.Current is { } a) a.Activated -= OnAppActivated;
         };
+    }
+
+    private void Attach(SocialViewModel vm)
+    {
+        vm.PropertyChanged += OnVmChanged;
+        vm.MessageReceived += OnMessageLanded;
+        vm.NoticeReceived += OnMessageLanded;
+        vm.FriendRequestReceived += OnRequestLanded;
+        vm.GroupInviteReceived += OnRequestLanded;
     }
 
     private void Detach(SocialViewModel vm)
@@ -169,8 +171,6 @@ public partial class SocialWindow : AppWindow
                DateTimeOffset.UtcNow.ToUnixTimeSeconds() - sent.Time < 10;
     }
 
-    private void OnAvatarClick(object sender, MouseButtonEventArgs e) => Vm?.ChangeProfilePictureCommand.Execute(null);
-
     private void OnResend(object sender, RoutedEventArgs e)
     {
         if (Vm is { } vm && sender is FrameworkElement { DataContext: ChatEntry entry }) vm.Messages.Resend(entry);
@@ -179,11 +179,6 @@ public partial class SocialWindow : AppWindow
     private void OnRemoveFailed(object sender, RoutedEventArgs e)
     {
         if (Vm is { } vm && sender is FrameworkElement { DataContext: ChatEntry entry }) vm.Messages.RemoveFailedLine(entry);
-    }
-
-    private void OnEditProfile(object sender, RoutedEventArgs e)
-    {
-        if (Vm is { } vm) vm.EditProfile();
     }
 
     // the viewer's Edit Comments, in place. Only Enter saves (it's a request to POL), Esc or leaving puts it back

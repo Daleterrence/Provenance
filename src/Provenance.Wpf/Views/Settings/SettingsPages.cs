@@ -3,24 +3,22 @@ using Provenance.Wpf.ViewModels.Settings;
 
 namespace Provenance.Wpf.Views.Settings;
 
-public record SettingsPage(SettingsTab Tab, string Title, Func<SettingsViewModel, FrameworkElement> Create);
+public record GlyphIcon(string Glyph);
 
-public sealed record GlyphPage(SettingsTab Tab, string Title, string Glyph, Func<SettingsViewModel, FrameworkElement> Create)
-    : SettingsPage(Tab, Title, Create);
+public record MaterialIcon(string Kind);
 
-public sealed record MaterialPage(SettingsTab Tab, string Title, string Kind, Func<SettingsViewModel, FrameworkElement> Create)
-    : SettingsPage(Tab, Title, Create);
+public record SettingsPage(SettingsTab Tab, string Title, object Icon, Func<SettingsViewModel, FrameworkElement> Create);
 
 // the nav list, in SettingsTab order
 public static class SettingsPages
 {
     public static IReadOnlyList<SettingsPage> All { get; } =
     [
-        new GlyphPage(SettingsTab.General, "General", "settings", vm => new GeneralPage { DataContext = vm }),
-        new GlyphPage(SettingsTab.WindowerAshita, "Windower/Ashita", "plugin", vm => new WindowerAshitaPage { DataContext = vm }),
-        new GlyphPage(SettingsTab.Game, "Game", "gamepad", vm => new GamePage { DataContext = vm.Game }),
-        new MaterialPage(SettingsTab.AddonsPlugins, "Addons and plugins", "PowerPlugOutline", vm => new AddonsPluginsView { DataContext = vm.Addons }),
-        new GlyphPage(SettingsTab.MultiAccount, "Multi-account", "accounts", vm => new MultiAccountPage { DataContext = vm.Multi }),
-        new GlyphPage(SettingsTab.Handles, "Handles", "person", vm => new HandlesPage { DataContext = vm.Handles }),
+        new SettingsPage(SettingsTab.General, "General", new GlyphIcon("settings"), vm => new GeneralPage { DataContext = vm }),
+        new SettingsPage(SettingsTab.WindowerAshita, "Windower/Ashita", new GlyphIcon("plugin"), vm => new WindowerAshitaPage { DataContext = vm }),
+        new SettingsPage(SettingsTab.Game, "Game", new GlyphIcon("gamepad"), vm => new GamePage { DataContext = vm.Game }),
+        new SettingsPage(SettingsTab.AddonsPlugins, "Addons and plugins", new MaterialIcon("PowerPlugOutline"), vm => new AddonsPluginsView { DataContext = vm.Addons }),
+        new SettingsPage(SettingsTab.MultiAccount, "Multi-account", new GlyphIcon("accounts"), vm => new MultiAccountPage { DataContext = vm.Multi }),
+        new SettingsPage(SettingsTab.Handles, "Handles", new GlyphIcon("person"), vm => new HandlesPage { DataContext = vm.Handles }),
     ];
 }

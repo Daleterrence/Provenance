@@ -1,19 +1,14 @@
 <UserControl x:Class="Provenance.Wpf.Views.Main.SocialFooter"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+             xmlns:social="clr-namespace:Provenance.Wpf.Views.Social">
     <Border Height="44" Style="{StaticResource FooterBar}" Padding="16,0">
         <Grid ColumnDefinitions="Auto,*,Auto">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <controls:ProfilePictureCircle Diameter="32" Margin="0,0,10,0" Source="{Binding Social.Avatar}"
-                                               Cursor="Hand" ToolTip="Change your profile picture"
-                                               MouseLeftButtonUp="OnAvatarClick" />
+                <social:MyProfilePicture Diameter="32" Margin="0,0,10,0" DataContext="{Binding Social}" />
                 <TextBlock Text="{Binding Social.AccountName}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <Button Margin="4,0,0,0" Width="28" Height="28" Padding="0" VerticalAlignment="Center"
-                        Style="{StaticResource IconButton}"
-                        ToolTip="Edit your PlayOnline profile" AutomationProperties.Name="Edit your PlayOnline profile" Click="OnEditProfile">
-                    <controls:SvgIcon Glyph="card" />
-                </Button>
+                <social:EditProfileButton Margin="4,0,0,0" VerticalAlignment="Center" DataContext="{Binding Social}" />
                 <!-- locked with a spinner until POL confirms -->
                 <ComboBox Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource StatusPicker}"
                           IsEnabled="{Binding Social.StatusEditable}"

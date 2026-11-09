@@ -170,9 +170,7 @@
                 <StackPanel Margin="14,12,14,8">
                     <Grid ColumnDefinitions="Auto,*">
                         <Grid>
-                            <controls:ProfilePictureCircle Diameter="52" Source="{Binding Avatar}" Cursor="Hand"
-                                                           ToolTip="Change your profile picture"
-                                                           MouseLeftButtonUp="OnAvatarClick" />
+                            <local:MyProfilePicture Diameter="52" />
                             <ProgressBar Width="52" Height="52" IsHitTestVisible="False"
                                          Style="{StaticResource Spinner}"
                                          Visibility="{Binding ProfilePictureSaving, Converter={StaticResource BoolToVis}}" />
@@ -181,11 +179,7 @@
                             <Grid ColumnDefinitions="Auto,*">
                                 <TextBlock Text="{Binding AccountName}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center" />
-                                <Button Grid.Column="1" HorizontalAlignment="Left" Margin="6,0,0,0" Width="28" Height="28" Padding="0"
-                                        Style="{StaticResource IconButton}"
-                                        ToolTip="Edit your PlayOnline profile" AutomationProperties.Name="Edit your PlayOnline profile" Click="OnEditProfile" IsEnabled="{Binding Connected}">
-                                    <controls:SvgIcon Glyph="card" />
-                                </Button>
+                                <local:EditProfileButton Grid.Column="1" HorizontalAlignment="Left" Margin="6,0,0,0" IsEnabled="{Binding Connected}" />
                             </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
                                 <ComboBox Style="{StaticResource StatusPicker}" VerticalAlignment="Center"

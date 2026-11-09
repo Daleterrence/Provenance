@@ -773,6 +773,7 @@ public partial class SocialViewModel : ObservableObject
 
     internal void ShowProfile(FriendItem f) => _windows.ShowProfile(this, f);
 
+    [RelayCommand]
     public void EditProfile() => _windows.EditProfile(this);
 
     public void ShowMessagesAlongside(bool takeFocus) => _windows.ShowMessagesAlongside(this, takeFocus);

@@ -99,7 +99,7 @@
                     </Style>
                 </StackPanel.Style>
                 <TextBlock Text="{Binding PageTitle}" Style="{StaticResource Section}" />
-                <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
+                <TextBlock Style="{StaticResource IntroText}" Text="{Binding Message}"
                            Visibility="{Binding Message, Converter={StaticResource NullToVisibilityConverter}}" />
                 <StackPanel Visibility="{Binding HasLists, Converter={StaticResource BoolToVis}}">
                     <Border Style="{StaticResource PlatformCard}" Tag="{Binding CardPlatform}" Margin="0,0,0,12">
@@ -111,8 +111,8 @@
                             </StackPanel>
                         </Grid>
                     </Border>
-                    <TextBlock Text="{Binding Intro}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,14" />
-                    <TextBlock Text="{Binding Problem}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource State.Warn}" Margin="0,0,0,14"
+                    <TextBlock Style="{StaticResource IntroText}" Text="{Binding Intro}" Margin="0,0,0,14" />
+                    <TextBlock Style="{StaticResource WarnText}" Text="{Binding Problem}" Margin="0,0,0,14"
                                Visibility="{Binding Problem, Converter={StaticResource NullToVisibilityConverter}}" />
                     <Border Style="{StaticResource Card}" Padding="16,10" Margin="0,0,0,18"
                             Visibility="{Binding IsWindower, Converter={StaticResource BoolToVis}}">
@@ -137,7 +137,7 @@
             <StackPanel Margin="28,16,28,0">
                 <TextBlock Text="{Binding Help}" Style="{StaticResource Help}" FontSize="12" Margin="0,0,0,10"
                            Visibility="{Binding Help, Converter={StaticResource NullToVisibilityConverter}}" />
-                <TextBlock Text="{Binding Warning}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12" Foreground="{DynamicResource State.Warn}"
+                <TextBlock Style="{StaticResource WarnText}" Text="{Binding Warning}" Margin="0,0,0,12"
                            Visibility="{Binding Warning, Converter={StaticResource NullToVisibilityConverter}}" />
                 <TextBlock Text="{Binding Note}" Style="{StaticResource ListNote}" />
             </StackPanel>

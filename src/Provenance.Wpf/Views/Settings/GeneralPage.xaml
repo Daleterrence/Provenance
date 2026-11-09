@@ -4,14 +4,6 @@
              xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
-    <UserControl.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="SettingsResources.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
-    </UserControl.Resources>
-
     <ScrollViewer VerticalScrollBarVisibility="Visible">
         <StackPanel Margin="28,22">
             <TextBlock Text="Installation" Style="{StaticResource Section}" />

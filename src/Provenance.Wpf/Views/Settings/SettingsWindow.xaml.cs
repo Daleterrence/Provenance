@@ -18,13 +18,9 @@ public partial class SettingsWindow : AppWindow
         Tabs.SelectedIndex = 0;
         Tabs.SelectionChanged += (_, _) => ShowPage(SelectedTab);
         Loaded += (_, _) => ShowPage(SelectedTab);
-        Activated += (_, _) => { if (IsLoaded && SelectedTab == SettingsTab.General) ReadLargeAddressAware(); };
+        Activated += (_, _) => { if (IsLoaded && DataContext is SettingsViewModel vm) vm.WindowActivated(); };
         Closing += OnClosing;
-        DataContextChanged += (_, _) =>
-        {
-            Wire();
-            if (IsLoaded) ShowPage(SelectedTab);
-        };
+        DataContextChanged += OnDataContextChanged;
     }
 
     private SettingsTab SelectedTab => Tabs.SelectedItem is SettingsPage page ? page.Tab : SettingsTab.General;
@@ -33,15 +29,26 @@ public partial class SettingsWindow : AppWindow
 
     internal void SelectTab(SettingsTab tab) => Tabs.SelectedItem = SettingsPages.All.First(p => p.Tab == tab);
 
-    private void Wire()
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (DataContext is not SettingsViewModel vm) return;
-        // a box handed a new list keeps its old pick without it being in the list, so it's cleared first
-        vm.Hooks.PropertyChanged += (_, e) =>
+        if (e.OldValue is SettingsViewModel old)
         {
-            if (e.PropertyName == nameof(HookSettings.SwitcherProfiles)) ProfileSwitcher.SetCurrentValue(Selector.SelectedItemProperty, null);
-        };
-        vm.Hooks.CloseRequested += Close;
+            old.Hooks.PropertyChanged -= OnHooksChanged;
+            old.Hooks.CloseRequested -= Close;
+        }
+        _pages.Clear();
+        if (e.NewValue is SettingsViewModel vm)
+        {
+            vm.Hooks.PropertyChanged += OnHooksChanged;
+            vm.Hooks.CloseRequested += Close;
+        }
+        if (IsLoaded) ShowPage(SelectedTab);
+    }
+
+    // a box handed a new list keeps its old pick without it being in the list, so it's cleared first
+    private void OnHooksChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(HookSettings.SwitcherProfiles)) ProfileSwitcher.SetCurrentValue(Selector.SelectedItemProperty, null);
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -53,19 +60,9 @@ public partial class SettingsWindow : AppWindow
     private void ShowPage(SettingsTab tab)
     {
         if (DataContext is not SettingsViewModel vm) return;
-        vm.ShownTab = tab;
-        // a profile picked on another tab since the Game page was last shown
-        if (tab == SettingsTab.Game && !vm.ShowingGame()) vm.PickGameProfile();
+        vm.ShowTab(tab);
         if (!_pages.TryGetValue(tab, out var page))
             _pages[tab] = page = SettingsPages.All.First(p => p.Tab == tab).Create(vm);
         PageHost.Content = page;
-        if (tab == SettingsTab.General) ReadLargeAddressAware();
-        if (tab == SettingsTab.WindowerAshita) vm.Hooks.ReloadCards();
-    }
-
-    // Windower can change pol.exe while this window's open, so it's read again on every show and every switch back
-    private void ReadLargeAddressAware()
-    {
-        if (DataContext is SettingsViewModel vm) _ = vm.ReadLargeAddressAwareAsync();
     }
 }

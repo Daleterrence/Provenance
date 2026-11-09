@@ -9,8 +9,6 @@ namespace Provenance.Wpf.Views.Main;
 
 public partial class NewsCard : UserControl
 {
-    private int _newsShown = -1;
-
     public NewsCard()
     {
         InitializeComponent();
@@ -37,20 +35,8 @@ public partial class NewsCard : UserControl
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.OldValue is MainViewModel old) old.News.PropertyChanged -= OnNewsChanged;
-        if (e.NewValue is MainViewModel @new) @new.News.PropertyChanged += OnNewsChanged;
-    }
-
-    // forward (the timer, the next arrow, a later dot) slides in from the right, back from the left
-    private void OnNewsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(NewsViewModel.CurrentNewsIndex) || sender is not NewsViewModel vm) return;
-        int n = vm.NewsItems.Count, now = vm.CurrentNewsIndex, was = _newsShown;
-        if (now < 0) return;   // the pager pushes -1 while the list is rebuilt
-        _newsShown = now;
-        if (n < 2 || was < 0 || was >= n || was == now) return;
-        int dir = now == (was + 1) % n ? 1 : now == (was - 1 + n) % n ? -1 : Math.Sign(now - was);
-        AnimateNews(dir);
+        if (e.OldValue is MainViewModel old) old.News.Slid -= AnimateNews;
+        if (e.NewValue is MainViewModel @new) @new.News.Slid += AnimateNews;
     }
 
     private void AnimateNews(int dir)

@@ -3,12 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
     <UserControl.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="MainResources.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <BitmapImage x:Key="NoImage" UriSource="/Assets/no-image.jpg" />
-        </ResourceDictionary>
+        <BitmapImage x:Key="NoImage" UriSource="/Assets/no-image.jpg" />
     </UserControl.Resources>
 
     <Grid Margin="24" RowDefinitions="3*,Auto,1.1*">

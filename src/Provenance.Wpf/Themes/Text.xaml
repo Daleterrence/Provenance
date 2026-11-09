@@ -17,6 +17,32 @@
         <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
+    <Style x:Key="RepairReason" TargetType="TextBlock">
+        <Setter Property="Margin" Value="0,2,0,0" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="Text" Value="{Binding Repair.BlockedReason}" />
+        <Setter Property="Visibility" Value="{Binding Repair.BlockedReason, Converter={StaticResource NullToVisibilityConverter}}" />
+    </Style>
+    <Style x:Key="ProfileStatusText" TargetType="TextBlock" BasedOn="{StaticResource StatusText}">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Margin" Value="0,0,0,14" />
+        <Setter Property="Visibility" Value="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource NullToVisibilityConverter}}" />
+    </Style>
+    <Style x:Key="IntroText" TargetType="TextBlock">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
+    </Style>
+    <Style x:Key="WarnText" TargetType="TextBlock">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource State.Warn}" />
+    </Style>
     <!-- a row's name in a form, beside its field -->
     <Style x:Key="FormLabel" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />

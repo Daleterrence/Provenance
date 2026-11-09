@@ -14,6 +14,7 @@ public partial class NewsViewModel : ObservableObject
     private readonly FeedService _feeds;
     private readonly Action<string?> _openLink;
     private readonly DispatcherTimer _slideTimer, _worldsTimer;
+    private int _slideFrom = -1;
 
     public NewsViewModel(FeedService feeds, UiThread ui, Action<string?> openLink)
     {
@@ -30,6 +31,8 @@ public partial class NewsViewModel : ObservableObject
             await LoadWorldsAsync();
         });
     }
+
+    public event Action<int>? Slid;
 
     public ObservableCollection<FeedItem> NewsItems { get; } = new();
     public ObservableCollection<FeedItem> StatusItems { get; } = new();
@@ -169,8 +172,19 @@ public partial class NewsViewModel : ObservableObject
         CurrentNewsIndex = ((CurrentNewsIndex + delta) % NewsItems.Count + NewsItems.Count) % NewsItems.Count;
     }
 
+    // forward (the timer, the next arrow, a later dot) slides in from the right, back from the left
+    private void RaiseSlid(int now)
+    {
+        int n = NewsItems.Count, was = _slideFrom;
+        if (now < 0) return;   // the pager pushes -1 while the list is rebuilt
+        _slideFrom = now;
+        if (n < 2 || was < 0 || was >= n || was == now) return;
+        Slid?.Invoke(now == (was + 1) % n ? 1 : now == (was - 1 + n) % n ? -1 : Math.Sign(now - was));
+    }
+
     partial void OnCurrentNewsIndexChanged(int value)
     {
+        RaiseSlid(value);
         if (value < 0 || value >= NewsItems.Count) return;   // the ListBox pushes -1 while the list's rebuilt
         CurrentNews = NewsItems[value];
         if (NewsItems.Count > 1) { _slideTimer.Stop(); _slideTimer.Start(); }

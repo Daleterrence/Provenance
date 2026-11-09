@@ -3,14 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
-    <UserControl.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="MainResources.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
-    </UserControl.Resources>
-
     <Grid Margin="28,22,28,14" RowDefinitions="*,Auto,Auto">
         <Image Source="{StaticResource BgLogo}" OpacityMask="{DynamicResource Logo.Mask}" MaxHeight="340" Margin="0,0,0,10"
                Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />

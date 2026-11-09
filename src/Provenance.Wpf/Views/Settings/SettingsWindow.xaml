@@ -123,16 +123,16 @@
             <ListBox x:Name="Tabs" Background="{DynamicResource Surface.1}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Border.Pane}" ItemContainerStyle="{StaticResource NavPage}"
                      Padding="0,10" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.Resources>
-                    <!-- unsnapped, snapping moves the icons half a pixel on a scaled screen -->
-                    <DataTemplate DataType="{x:Type local:GlyphPage}">
-                        <StackPanel Orientation="Horizontal" SnapsToDevicePixels="False">
-                            <controls:SvgIcon Glyph="{Binding Glyph}" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
-                            <TextBlock Text="{Binding Title}" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
-                        </StackPanel>
+                    <DataTemplate DataType="{x:Type local:GlyphIcon}">
+                        <controls:SvgIcon Glyph="{Binding Glyph}" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                     </DataTemplate>
-                    <DataTemplate DataType="{x:Type local:MaterialPage}">
+                    <DataTemplate DataType="{x:Type local:MaterialIcon}">
+                        <materialDesign:PackIcon Kind="{Binding Kind}" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
+                    </DataTemplate>
+                    <!-- unsnapped, snapping moves the icons half a pixel on a scaled screen -->
+                    <DataTemplate DataType="{x:Type local:SettingsPage}">
                         <StackPanel Orientation="Horizontal" SnapsToDevicePixels="False">
-                            <materialDesign:PackIcon Kind="{Binding Kind}" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
+                            <ContentPresenter Content="{Binding Icon}" />
                             <TextBlock Text="{Binding Title}" Margin="12,0,0,0" FontSize="14" VerticalAlignment="Center" />
                         </StackPanel>
                     </DataTemplate>

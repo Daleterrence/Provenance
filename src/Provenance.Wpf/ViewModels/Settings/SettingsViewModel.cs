@@ -275,8 +275,23 @@ public partial class SettingsViewModel : ObservableObject
         Hooks.NotifyProfilesChanged();
     }
 
-    // the Settings tab that's showing, which the window keeps up to date
+    // the Settings tab that's showing, ShowTab moves it
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private SettingsTab _shownTab;
+
+    public void ShowTab(SettingsTab tab)
+    {
+        ShownTab = tab;
+        // a profile picked on another tab since the Game page was last shown
+        if (tab == SettingsTab.Game && !ShowingGame()) PickGameProfile();
+        if (tab == SettingsTab.General) _ = ReadLargeAddressAwareAsync();
+        if (tab == SettingsTab.WindowerAshita) Hooks.ReloadCards();
+    }
+
+    // Windower can change pol.exe while the window's open, so it's read again on every show, switch back and activate
+    public void WindowActivated()
+    {
+        if (ShownTab == SettingsTab.General) _ = ReadLargeAddressAwareAsync();
+    }
 
     // Windower/Ashita, Game and Addons and plugins are the tabs that change a profile, though there's nothing to pick
     // on Addons and plugins while every profile gets the same list

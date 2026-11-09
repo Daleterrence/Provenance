@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
@@ -167,6 +168,7 @@ public partial class HandlesViewModel : ObservableObject
         Note.Show(HandleList.NoTargetText);
     }
 
+    [RelayCommand]
     public void Switch(HandleRow row)
     {
         if (!Editable || row.Active) return;
@@ -235,6 +237,7 @@ public partial class HandlesViewModel : ObservableObject
              HandleList.Done(HandleChange.Link, to.Name, c.Label));
     }
 
+    [RelayCommand]
     public void Unlink(HandleCharacterRow c)
     {
         if (!Editable || c.Handle is not { } from) return;

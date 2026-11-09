@@ -17,10 +17,9 @@
                         </StackPanel>
                     </Grid>
                 </Border>
-                <TextBlock Text="{Binding ReadOnlyNote}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12"
-                           Foreground="{DynamicResource State.Warn}"
+                <TextBlock Style="{StaticResource WarnText}" Text="{Binding ReadOnlyNote}" Margin="0,0,0,12"
                            Visibility="{Binding ReadOnlyNote, Converter={StaticResource NullToVisibilityConverter}}" />
-                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,16"
+                <TextBlock Style="{StaticResource IntroText}" Margin="0,0,0,16"
                            Text="{Binding IntroText}" />
 
                 <!-- only the cards need the game's saved settings, a broken install may have none -->

@@ -16,13 +16,8 @@
         CloseOnEscape="False">
 
     <Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="MainResources.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <!-- decoded once near the size shown, the source is 256x256 -->
-            <BitmapImage x:Key="TitleIcon" UriSource="/Assets/provenance-256.png" DecodePixelWidth="64" />
-        </ResourceDictionary>
+        <!-- decoded once near the size shown, the source is 256x256 -->
+        <BitmapImage x:Key="TitleIcon" UriSource="/Assets/provenance-256.png" DecodePixelWidth="64" />
     </Window.Resources>
 
     <Grid RowDefinitions="40,*,Auto">
