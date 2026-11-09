@@ -14,7 +14,7 @@ public static class ViewerBuild
 {
     public enum State { Supported, Outdated, Unknown, Missing }
 
-    public const string CurrentVersion = "1.18.15e";
+    public const string CurrentVersion = "1.18.15f";
     internal const string PolExeSha256 = "38058db285a99f188a4b7cae6f0df061cd556ea7b7527089e992574e981fdfd9";
     // the same file with Large Address Aware on, byte for byte what Windower's Tools page writes
     internal const string PolExeLaaSha256 = "6ee1b42f68d63e6f87b3108dfa028cbba77df7278cea7f033fc073b21590a886";
@@ -65,7 +65,7 @@ public static class ViewerBuild
         var core = Path.Combine(viewerDir, PolcorePath(region));
         if (!File.Exists(pol) || !File.Exists(core)) return State.Missing;
         if (Fits(known, region, Sha256(pol), () => Sha256(core))) return State.Supported;
-        // viewer versions compare as text, "1.18.00n" < "1.18.15e"
+        // Viewer versions compare as text, so "1.18.00n" is lower than "1.18.15f"
         var v = Version(viewerDir);
         return v != null && string.CompareOrdinal(v, CurrentVersion) < 0 ? State.Outdated : State.Unknown;
     }

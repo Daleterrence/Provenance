@@ -264,6 +264,7 @@ static int patch_iat(HMODULE exe, const char *dll, const char *fn, int ord, void
     return 0;
 }
 
+static void crash_context(EXCEPTION_POINTERS *ep);
 static LONG WINAPI veh_proc(EXCEPTION_POINTERS *ep)
 {
     unsigned eip = (unsigned)(ULONG_PTR)ep->ExceptionRecord->ExceptionAddress;
@@ -280,8 +281,47 @@ static LONG WINAPI veh_proc(EXCEPTION_POINTERS *ep)
         /* just the file name, the full viewer path ate the whole buffer and hid which dll it was */
         if ((slash = strrchr(mod, '\\')) != NULL) name = slash + 1;
         lg("CRASH %08x at %08x = %s+%05x\r\n", code, eip, name, eip - base);
+        crash_context(ep);
     }
     return EXCEPTION_CONTINUE_SEARCH;
+}
+
+/* Module and offset for an address, or ? when it isn't inside a loaded module */
+static void where(unsigned addr, char *out, int n)
+{
+    MEMORY_BASIC_INFORMATION mbi;
+    char mod[MAX_PATH] = "", *name = mod, *slash;
+    mbi.AllocationBase = 0;
+    if (VirtualQuery((void *)(ULONG_PTR)addr, &mbi, sizeof mbi) && mbi.Type == MEM_IMAGE && mbi.AllocationBase &&
+        GetModuleFileNameA((HMODULE)mbi.AllocationBase, mod, sizeof mod)) {
+        if ((slash = strrchr(mod, '\\')) != NULL) name = slash + 1;
+        wsprintfA(out, "%s+%05x", name, addr - (unsigned)(ULONG_PTR)mbi.AllocationBase);
+    } else {
+        lstrcpynA(out, "?", n);
+    }
+}
+
+/* Registers and a short stack walk, the crash address on its own doesn't say what actually went wrong */
+static void crash_context(EXCEPTION_POINTERS *ep)
+{
+    CONTEXT *c = ep->ContextRecord;
+    char w[64];
+    DWORD *sp = (DWORD *)(ULONG_PTR)c->Esp;
+    int i, shown = 0;
+    lg("CRASH regs eax=%08x ebx=%08x ecx=%08x edx=%08x esi=%08x edi=%08x ebp=%08x esp=%08x\r\n",
+       c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi, c->Ebp, c->Esp);
+    if (ep->ExceptionRecord->NumberParameters >= 2) {
+        where((unsigned)ep->ExceptionRecord->ExceptionInformation[1], w, sizeof w);
+        lg("CRASH fault %s at %08x (%s)\r\n", ep->ExceptionRecord->ExceptionInformation[0] ? "writing" : "reading",
+           (unsigned)ep->ExceptionRecord->ExceptionInformation[1], w);
+    }
+    for (i = 0; i < 64 && shown < 12; i++) {
+        if (IsBadReadPtr(sp + i, 4)) break;
+        where(sp[i], w, sizeof w);
+        if (w[0] == '?') continue;
+        lg("CRASH stack[%02x] %08x = %s\r\n", i * 4, sp[i], w);
+        shown++;
+    }
 }
 
 /* FFXiMain imports ws2_32 itself (by ordinal bar two), so its sockets skip polcore. UINT_PTR stands in for SOCKET. */
@@ -1535,8 +1575,8 @@ static void prime_session(void)
     CopyMemory((BYTE *)pc + 0xed858, name17, 17);
     /* svc+0x730's state (polcore.dll 0x1009aa58) is -1 without a real menu session, 0 suits the pre-flight */
     *(unsigned *)((BYTE *)pc + 0xef028) = 0;
-    /* the JP/US selector (polcore.dll 0x100aa318), 0 JP, 1 anything else. svc 0xf14 sets it again in viewer_init */
-    *(unsigned *)((BYTE *)pc + 0xaa318) = (unsigned)r->selector;
+    /* JP/US selector at polcore 0x100ff500, 0 for JP and 1 for anything else, viewer_init sets it again */
+    *(unsigned *)((BYTE *)pc + 0xff500) = (unsigned)r->selector;
     lg("pol_hook: fake session poked into polcore @ %08x\r\n", (unsigned)(ULONG_PTR)pc);
     viewer_init((BYTE *)pc);
     phase_c_seed(pc);
@@ -6146,7 +6186,7 @@ static void game_over(UINT code)
    baked at pol.exe's preferred base (0x400000) on disk, but a real pol.exe can load relocated (no ASLR opt-in
    needed) and the loader's own fixup changes that immediate - so those 4 bytes are skipped here, same as the string
    address that moves a few bytes between locale builds (JP != US/EU) */
-static const BYTE MENU_PROLOGUE[] = { 0x6a, 0xff, 0x68, 0xb3, 0x67, 0x4b, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00, 0x00 };
+static const BYTE MENU_PROLOGUE[] = { 0x55, 0x8b, 0xec, 0x6a, 0xff, 0x68, 0xb3, 0x67, 0x4b, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00, 0x00 };
 static const BYTE FFXI_RETURN[] = { 0xff, 0x51, 0x0c, 0x68, 0x64, 0x05, 0x4c, 0x00, 0x8b, 0xf8, 0xe8, 0x83, 0xaf, 0x00, 0x00 };
 
 static int g_game_started;
@@ -6163,11 +6203,11 @@ static void __cdecl ffxi_returned(HRESULT hr)
         game_over(0);
     }
 }
-/* GameStart's HRESULT is in esi by the trace call, and the caller pops the string itself */
+/* GameStart's result is in edi by the time the trace call runs, and the caller pops the string itself */
 static __declspec(naked) void ffxi_returned_thunk(void)
 {
     __asm {
-        push esi
+        push edi
         call ffxi_returned
         add esp, 4
         ret
@@ -6298,8 +6338,7 @@ static unsigned __stdcall menu_stub(unsigned a, unsigned b, unsigned c, unsigned
     if (++g_menu_calls == 1) {
         prime_session();
         set_cwd_ffxi();
-        /* pol.exe 0x00426a43 destroys the hidden splash on the thread that made it */
-        ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x26a43))();
+        ((void (__cdecl *)(void))((BYTE *)GetModuleHandleW(NULL) + 0x26a40))();
         if (getenv_set("POL_HOLD")) {
             sweep_stale_social();
             pol_hold((BYTE *)polcore_module());
@@ -6332,10 +6371,8 @@ static void install(void)
         if (g_pOpenMutexW)   hook_slot(exe, 0xee7b4, 0x12b0, (void *)my_OpenMutexW,   "OpenMutexW");
     }
     hook_slot(exe, 0xee7e4, 0x160c, (void *)my_CreateDialogParamW, "CreateDialogParamW");
-    /* An E9 jmp over the menu session (pol.exe 0x00427033), only in the build that landed 2026-11-09 (file version
-       still 1.18.13, pol.exe grown to 2,333,440 bytes) I rewrote this against. Other builds have other code here. */
-    BYTE *p = (BYTE *)exe + 0x27033;
-    if (memcmp(p, MENU_PROLOGUE, 3) != 0 || memcmp(p + 7, MENU_PROLOGUE + 7, sizeof MENU_PROLOGUE - 7) != 0) {
+    BYTE *p = (BYTE *)exe + 0x27030;
+    if (memcmp(p, MENU_PROLOGUE, 6) != 0 || memcmp(p + 10, MENU_PROLOGUE + 10, sizeof MENU_PROLOGUE - 10) != 0) {
         lg("pol_hook: pol.exe isn't the build this was written for (menu session %02x %02x %02x) - not hooked\r\n",
            p[0], p[1], p[2]);
         return;
