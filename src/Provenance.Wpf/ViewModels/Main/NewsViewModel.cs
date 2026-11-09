@@ -98,7 +98,7 @@ public partial class NewsViewModel : ObservableObject
         }
         // only a good read counts, a saved copy's tried again on the next tick
         if (!fetch.Stale) _worldsAt = DateTime.UtcNow;
-        WorldsCheckedText = "Checked at " + (fetch.At ?? DateTime.UtcNow).ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
+        WorldsCheckedText = "Checked at " + fetch.At!.Value.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
         Worlds.Clear();
         foreach (var w in list) Worlds.Add(w);
         var notUp = list.Where(w => !w.IsUp).ToList();

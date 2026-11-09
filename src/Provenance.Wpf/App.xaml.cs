@@ -225,7 +225,7 @@ public partial class App : Application
             try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }
             if (_host is { } host) EndHost(host);
             if (RestartOnExit) StartAgain();
-            if (!SelfUpdate.HandOverAfterExit()) StartAgain(LaunchArgs.SkipUpdateCheckSwitch);
+            if (!SelfUpdate.HandOverAfterExit(out var restartArgs)) StartAgain(restartArgs);
         }
         finally
         {

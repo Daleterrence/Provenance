@@ -5,11 +5,11 @@ using Provenance.Common.PolFormat;
 namespace Provenance.Common.Feeds;
 
 // the feed worker keeps one edge-cached copy for every launcher, so POL serves each page about once per cache period
-public sealed class FeedService(ISettingsService settings)
+public sealed class FeedService(ISettingsService settings, FeedClient? client = null)
 {
     public const string Worker = "https://news.provenancexi.app";
 
-    private readonly FeedClient _client = new();
+    private readonly FeedClient _client = client ?? new();
     private PolRegion? _loadedRegion;
 
     public event EventHandler? RegionChanged;

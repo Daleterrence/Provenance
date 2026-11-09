@@ -116,7 +116,7 @@ public static class SelfUpdate
             window.ShowInstalling();
             Log.Information("Handing over to Update.exe to install {Version}", target.Version);
             var restartArgs = args.ForRestart(noAutoLogin);
-            QueueHandOver(() => UpdateExe.Apply(VelopackLocator.Current, target, silent: false, waitPid: 0, restart: true, restartArgs));
+            QueueHandOver(() => UpdateExe.Apply(VelopackLocator.Current, target, silent: false, waitPid: 0, restart: true, restartArgs), restartArgs);
             handedOver = true;
             return true;
         }
@@ -152,13 +152,19 @@ public static class SelfUpdate
     }
 
     private static Action? _handOver;
+    private static string[] _handOverArgs = [];
 
-    internal static void QueueHandOver(Action start) => _handOver = start;
-
-    // Update.exe is started once this copy's gone. Told to wait on our pid it gets "Access is denied" opening the
-    // elevated process and carries on without waiting
-    internal static bool HandOverAfterExit()
+    internal static void QueueHandOver(Action start, string[] restartArgs)
     {
+        _handOverArgs = restartArgs;
+        _handOver = start;
+    }
+
+    // Update.exe starts at the end of the exit with no wait, told to wait on our pid it gets "Access is denied" opening
+    // the elevated process. False if it won't start, restartArgs is then what to start the app again with
+    internal static bool HandOverAfterExit(out string[] restartArgs)
+    {
+        restartArgs = _handOverArgs;
         var start = Interlocked.Exchange(ref _handOver, null);
         if (start is null) return true;
         try
