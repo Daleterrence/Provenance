@@ -45,9 +45,8 @@ public partial class SettingsViewModel : ObservableObject
         Handles = handles ?? new HandlesViewModel(dialogs, () => null);
         _gameKey = gameKey;
         _settings = settings;
-        WindowerCard? windower = null;
-        Hooks = new HookSettings(dialogs, settings, multiRunning, loggedIn, stopPrestart, () => windower?.WindowerSettingsProblem, GameFollows);
-        Windower = windower = new WindowerCard(Hooks, settings, dialogs);
+        Hooks = new HookSettings(dialogs, settings, multiRunning, loggedIn, stopPrestart, GameFollows);
+        Windower = new WindowerCard(Hooks, settings, dialogs);
         Ashita = new AshitaCard(Hooks);
         Multi = new MultiAccountSettings(Hooks, settings, multiRunning);
         Hooks.PropertyChanged += (_, e) =>

@@ -25,19 +25,17 @@ public partial class HookSettings : ObservableObject
     private readonly ISettingsService _settings;
     private readonly Func<bool>? _multiRunning, _loggedIn;
     private readonly Action? _stopPrestart;
-    private readonly Func<string?> _windowerProblem;
     private readonly Func<bool> _gameFollows;
     private bool _loading;
 
     public HookSettings(IDialogs dialogs, ISettingsService settings, Func<bool>? multiRunning, Func<bool>? loggedIn, Action? stopPrestart,
-                        Func<string?> windowerProblem, Func<bool> gameFollows)
+                        Func<bool> gameFollows)
     {
         _dialogs = dialogs;
         _settings = settings;
         _multiRunning = multiRunning;
         _loggedIn = loggedIn;
         _stopPrestart = stopPrestart;
-        _windowerProblem = windowerProblem;
         _gameFollows = gameFollows;
     }
 
@@ -294,8 +292,11 @@ public partial class HookSettings : ObservableObject
     [RelayCommand]
     private void BrowseWindower() { if (_dialogs.PickFolder("Choose your Windower 4 folder") is { } d) WindowerPath = d; }
 
+    // the Windower card keeps this up to date
+    internal string? WindowerProblem { get; set; }
+
     public bool CanManageProfiles => _multiRunning?.Invoke() != true
-        && (IsWindower ? WindowerDir is not null && !WindowerLinked && _windowerProblem() is null : IsAshita && AshitaDir is not null);
+        && (IsWindower ? WindowerDir is not null && !WindowerLinked && WindowerProblem is null : IsAshita && AshitaDir is not null);
     public bool CanCopyProfile => CanManageProfiles && (IsWindower ? WindowerProfile is not null : AshitaBootConfig is not null);
     // the unnamed Windower profile and Ashita's own examples stay as they are
     public bool CanChangeProfile => CanManageProfiles && (IsWindower

@@ -45,7 +45,11 @@ public partial class WindowerCard : ObservableObject
     [ObservableProperty, NotifyPropertyChangedFor(nameof(WindowerBranchEnabled))] private bool _switchingBranch;
     [ObservableProperty] private string? _windowerSettingsProblem;
 
-    partial void OnWindowerSettingsProblemChanged(string? value) => _hook.NotifyProfilesChanged();
+    partial void OnWindowerSettingsProblemChanged(string? value)
+    {
+        _hook.WindowerProblem = value;
+        _hook.NotifyProfilesChanged();
+    }
 
     public bool WindowerCardEnabled => _hook.WindowerDir is not null && !_hook.WindowerLinked && WindowerSettingsProblem is null && _hook.WindowerProfile is not null;
     public bool WindowerBranchEnabled => _hook.WindowerDir is not null && !_hook.WindowerLinked && WindowerSettingsProblem is null && !SwitchingBranch;

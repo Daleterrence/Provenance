@@ -111,9 +111,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     internal Task Refreshing { get; private set; } = Task.CompletedTask;
 
-    // what a scan found, so a Windower page and an Ashita one each take their own
-    internal abstract record Scanned;
-
     // the tests swap this for one that holds the scan back
     internal Func<Func<AddonsScan?>, Task<AddonsScan?>> RunScanForTest { get; set; } = work => Task.Run(work);
 
