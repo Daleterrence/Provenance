@@ -28,7 +28,7 @@ public sealed record RepairPlan(IReadOnlyDictionary<string, IReadOnlyList<Mirror
 public sealed record RepairResult(int FilesReplaced, int OtherFixes);
 
 // repairs by size and SHA-256, not POL's signatures, and the caller holds the update lock. Nothing that's already
-// right gets written again, the registry included, and shortcuts are left alone
+// right gets written again, the registry and shortcuts included
 public sealed class GameRepair(MirrorClient client, string region)
 {
     public const string DirectXFailed =
@@ -37,6 +37,13 @@ public sealed class GameRepair(MirrorClient client, string region)
     public Func<PatchProduct, string, CancellationToken, string> ServerVersion { get; init; } = (p, local, ct) => new PolUpdater(p).Check(local, ct).Server;
 
     public Func<string, bool> InstalledByWindowsInstaller { get; init; } = MsiInstaller.IsInstalled;
+
+    // the viewer's web cache index. It's installed empty and the viewer rewrites or loses it as it runs, so whatever's
+    // there is fine, and a missing one only has to exist
+    private static readonly string[] ViewerOwned = ["usr/all/url/cache/dcfat0.bin"];
+
+    private static bool IsOwned(string slug, string path) =>
+        slug == GameProduct.Viewer.Slug && ViewerOwned.Contains(path.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
 
     private static void Say(string line) => Log.Information("Repair: {Message}", line);
 
@@ -91,7 +98,8 @@ public sealed class GameRepair(MirrorClient client, string region)
         {
             var slug = product.Game.Slug;
             Status?.Invoke($"Checking the {product.Name} files...");
-            work[slug] = await MirrorDownloads.ScanAsync(product.Folder, index, Offset(progress, before, total), ct, keepLargeAddressAware: true);
+            var damaged = await MirrorDownloads.ScanAsync(product.Folder, index, Offset(progress, before, total), ct, keepLargeAddressAware: true);
+            work[slug] = damaged.Where(e => !IsOwned(slug, e.Path)).ToList();
             before += index.Files.Sum(e => e.Size);
         }
         return new RepairPlan(work, work.Values.Sum(w => w.Sum(e => e.Size)), found.ToDictionary(f => f.Product.Game.Slug, f => f.Index))
@@ -135,6 +143,7 @@ public sealed class GameRepair(MirrorClient client, string region)
             before += MirrorDownloads.DownloadSize(work);
         }
         ThrowIfFailed(failed);
+        CreateMissingOwned(plan, viewer);
 
         // the viewer's patchfiles copies might have been among them, and whatever the queue changed has to match the
         // index too before patch.ver claims the version
@@ -192,6 +201,20 @@ public sealed class GameRepair(MirrorClient client, string region)
         return new RepairResult(replaced.Count, other);
     }
 
+    private static IEnumerable<string> OwnedPaths(RepairPlan plan, PatchProduct product) =>
+        plan.Indexes.TryGetValue(product.Game.Slug, out var index)
+            ? index.Files.Where(e => IsOwned(product.Game.Slug, e.Path)).Select(e => MirrorDownloads.SafePath(product.Folder, e.Path))
+            : [];
+
+    private static void CreateMissingOwned(RepairPlan plan, PatchProduct product)
+    {
+        foreach (var path in OwnedPaths(plan, product).Where(p => !File.Exists(p)))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.Create(path).Dispose();
+        }
+    }
+
     // only where it isn't already right, DownloadAsync dropped it for a product it touched
     private int WriteVersions(RepairPlan plan, PatchProduct[] products)
     {
@@ -232,13 +255,18 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     private sealed record Package(string Name, string Msi, Dictionary<string, string> Properties, MsiPackage.UninstallSetup Uninstall);
 
-    // the two package databases (a few MB), and the DirectX redist only when the runtime's missing. Writes only to the
-    // staging folder
+    // the install data (both packages, and the DirectX redist only when the runtime's missing), unless Windows Installer
+    // owns both products and DirectX is in place, then nothing would use it. Writes only to the staging folder
     private async Task<(List<Package> Packages, bool InstallDirectX)> PrepareAsync(RepairPlan plan, PatchProduct[] products,
         string installRoot, IProgress<ByteProgress>? progress, CancellationToken ct)
     {
         if (StagingDir is null) throw new InvalidOperationException("GameRepair.StagingDir is not set.");
         bool installDirectX = plan.DirectXMissing;
+        if (!installDirectX && GameProduct.All.All(g => InstalledByWindowsInstaller(g.ProductCode(Region))))
+        {
+            Say("the installer data isn't needed: Windows Installer has both products");
+            return ([], false);
+        }
         var install = new InstallFromMirror(client, region, "Repair", LogEventLevel.Information);
         Status?.Invoke("Downloading the installer data...");
         // the download only, the look over anything already in the staging folder is local and counts other bytes
@@ -265,7 +293,8 @@ public sealed class GameRepair(MirrorClient client, string region)
                 Say($"{name} is not checked: Windows Installer has product {productCode}");
                 continue;
             }
-            var coming = new HashSet<string>(WorkOf(plan, slug).Select(e => MirrorDownloads.SafePath(product.Folder, e.Path)), StringComparer.OrdinalIgnoreCase);
+            var coming = new HashSet<string>(WorkOf(plan, slug).Select(e => MirrorDownloads.SafePath(product.Folder, e.Path)).Concat(OwnedPaths(plan, product)),
+                                             StringComparer.OrdinalIgnoreCase);
             if (targets.FirstOrDefault(t => !coming.Contains(Path.GetFullPath(t)) && !File.Exists(t)) is { } absent)
             {
                 var rel = PathInside.IsUnder(product.Folder, absent) ? Path.GetRelativePath(product.Folder, absent).Replace('\\', '/') : absent;

@@ -219,18 +219,17 @@ public sealed class MsiPackage : IDisposable
         var (classes, progIdsWritten) = ComRegistration.RegisterClasses(_db, On, KeyFile, sandbox, keepExisting);
         int typeLibs = ComRegistration.RegisterTypeLibs(_db, On, KeyFile, sandbox, keepExisting);
 
-        // a repair leaves shortcuts be, a missing one doesn't stop the game and it's usually gone on purpose
+        // a repair only puts back the ones that are gone
         int shortcuts = 0;
-        if (!keepExisting)
+        status?.Invoke("Creating the shortcuts...");
+        foreach (var r in _db.Query("SELECT `Directory_`,`Name`,`Component_`,`Target`,`Arguments`,`Description`,`WkDir` FROM `Shortcut`"))
         {
-            status?.Invoke("Creating the shortcuts...");
-            foreach (var r in _db.Query("SELECT `Directory_`,`Name`,`Component_`,`Target`,`Arguments`,`Description`,`WkDir` FROM `Shortcut`"))
-            {
-                if (!On(r[2]) || !dirs.TryGetValue(r[0], out var dir)) continue;
-                var wk = r[6].Length > 0 && dirs.TryGetValue(r[6], out var w) ? w.TrimEnd('\\') : "";
-                CreateShortcut(Path.Combine(dir, MsiDatabase.LongName(r[1]) + ".lnk"), Format(r[3]), Format(r[4]), Format(r[5]), wk);
-                shortcuts++;
-            }
+            if (!On(r[2]) || !dirs.TryGetValue(r[0], out var dir)) continue;
+            var lnk = Path.Combine(dir, MsiDatabase.LongName(r[1]) + ".lnk");
+            if (keepExisting && File.Exists(lnk)) continue;
+            var wk = r[6].Length > 0 && dirs.TryGetValue(r[6], out var w) ? w.TrimEnd('\\') : "";
+            CreateShortcut(lnk, Format(r[3]), Format(r[4]), Format(r[5]), wk);
+            shortcuts++;
         }
 
         foreach (var (root, key, name, value) in Final(last))
