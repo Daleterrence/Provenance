@@ -179,10 +179,28 @@ public static partial class SvgIcons
     public static ImageSource? XiBadge => Cached(XiBadgeFile, () => Framed(XiBadgeFile));
 
     // the badge cropped square round its letters, for a circle to fill. The crop's as tall as the body so the circle has no
-    // gaps, and it's worked out from the image so a re-exported badge stays centred
-    public static ImageSource? XiBadgeRound => Cached(XiBadgeFile + "#round", () => Frame(Load(XiBadgeFile), RoundFrame()));
+    // gaps, and it's worked out from the image so a re-exported badge stays centred. The letters are drawn smaller so the X's
+    // tips clear the edge
+    public static ImageSource? XiBadgeRound => Cached(XiBadgeFile + "#round", () => Frame(SmallerLetters(Load(XiBadgeFile)), RoundFrame()));
 
-    internal static Rect? RoundFrame()
+    private const double RoundLetterScale = 0.86;
+
+    private static Drawing? SmallerLetters(Drawing? art)
+    {
+        if (art is null || Parts(art).Letters is not { } l) return art;
+        var group = new DrawingGroup();
+        void Add(Drawing d)
+        {
+            if (d is DrawingGroup g) { foreach (var child in g.Children) Add(child); return; }
+            if (d is GeometryDrawing { Brush: SolidColorBrush } gd)
+                d = new DrawingGroup { Transform = new ScaleTransform(RoundLetterScale, RoundLetterScale, l.X + l.Width / 2, l.Y + l.Height / 2), Children = { gd } };
+            group.Children.Add(d);
+        }
+        Add(art);
+        return group;
+    }
+
+    private static (Rect? Body, Rect? Letters) Parts(Drawing art)
     {
         Rect? body = null, letters = null;
         void Walk(Drawing d)
@@ -193,8 +211,13 @@ public static partial class SvgIcons
             if (gd.Brush is SolidColorBrush) letters = letters is { } l ? Rect.Union(l, b) : b;
             else body = b;
         }
-        if (Load(XiBadgeFile) is { } art) Walk(art);
-        if (body is not { } bd || letters is not { } lt) return null;
+        Walk(art);
+        return (body, letters);
+    }
+
+    internal static Rect? RoundFrame()
+    {
+        if (Load(XiBadgeFile) is not { } art || Parts(art) is not (Rect bd, Rect lt)) return null;
         return new Rect(lt.X + lt.Width / 2 - bd.Height / 2, bd.Y, bd.Height, bd.Height);
     }
 
