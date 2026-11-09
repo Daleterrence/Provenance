@@ -37,11 +37,11 @@ public partial class SettingsWindow : AppWindow
     {
         if (DataContext is not SettingsViewModel vm) return;
         // a box handed a new list keeps its old pick without it being in the list, so it's cleared first
-        vm.PropertyChanged += (_, e) =>
+        vm.Hooks.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(SettingsViewModel.SwitcherProfiles)) ProfileSwitcher.SetCurrentValue(Selector.SelectedItemProperty, null);
+            if (e.PropertyName == nameof(HookSettings.SwitcherProfiles)) ProfileSwitcher.SetCurrentValue(Selector.SelectedItemProperty, null);
         };
-        vm.CloseRequested += Close;
+        vm.Hooks.CloseRequested += Close;
     }
 
     private void OnSwitchHandle(object sender, RoutedEventArgs e)
@@ -84,7 +84,7 @@ public partial class SettingsWindow : AppWindow
         foreach (FrameworkElement panel in Panels.Children)
             panel.Visibility = Equals(panel.Tag, tab) ? Visibility.Visible : Visibility.Collapsed;
         if (tab == SettingsTab.General) ReadLargeAddressAware();
-        if (tab == SettingsTab.WindowerAshita && DataContext is SettingsViewModel hooks) hooks.ShowingHooks();
+        if (tab == SettingsTab.WindowerAshita && DataContext is SettingsViewModel hooks) hooks.Hooks.ReloadCards();
     }
 
     // Windower can change pol.exe while this window's open, so it's read again on every show and every switch back
@@ -93,7 +93,7 @@ public partial class SettingsWindow : AppWindow
         if (DataContext is SettingsViewModel vm) _ = vm.ReadLargeAddressAwareAsync();
     }
 
-    private void CancelConsoleKey() => (DataContext as SettingsViewModel)?.CancelConsoleKey();
+    private void CancelConsoleKey() => (DataContext as SettingsViewModel)?.Windower.CancelConsoleKey();
 
     private void OnConsoleKeyFocusLost(object sender, KeyboardFocusChangedEventArgs e) => CancelConsoleKey();
 
@@ -101,16 +101,16 @@ public partial class SettingsWindow : AppWindow
     // repeats don't count
     private void OnConsoleKeyDown(object sender, KeyEventArgs e)
     {
-        if (DataContext is not SettingsViewModel { WaitingForConsoleKey: true } vm) return;
+        if (DataContext is not SettingsViewModel { Windower.WaitingForConsoleKey: true } vm) return;
         e.Handled = true;
-        if (!e.IsRepeat) vm.PressConsoleKey(DirectInputCode(e.Key == Key.System ? e.SystemKey : e.Key));
+        if (!e.IsRepeat) vm.Windower.PressConsoleKey(DirectInputCode(e.Key == Key.System ? e.SystemKey : e.Key));
     }
 
     private void OnConsoleKeyUp(object sender, KeyEventArgs e)
     {
-        if (DataContext is not SettingsViewModel { WaitingForConsoleKey: true } vm) return;
+        if (DataContext is not SettingsViewModel { Windower.WaitingForConsoleKey: true } vm) return;
         e.Handled = true;
-        if ((e.Key == Key.System ? e.SystemKey : e.Key) == Key.Snapshot) vm.PressConsoleKey(DirectInputCode(Key.Snapshot));
+        if ((e.Key == Key.System ? e.SystemKey : e.Key) == Key.Snapshot) vm.Windower.PressConsoleKey(DirectInputCode(Key.Snapshot));
     }
 
     // the scan code's in the key message itself, which tells Enter from the keypad's. A key that didn't come from one

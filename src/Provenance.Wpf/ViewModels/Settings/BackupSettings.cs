@@ -1,18 +1,34 @@
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Game;
 using Provenance.Common.Patcher;
 using Provenance.Common.Settings;
-using Serilog;
-using Provenance.Common.Game;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
+using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
 // General's backups card. Like the rest of the page every change saves straight away
-public partial class SettingsViewModel
+public partial class BackupSettings : ObservableObject
 {
+    private readonly IDialogs _dialogs;
+    private readonly ISettingsService _settings;
+    private readonly Func<bool> _gameRunning;
+    private readonly Func<bool>? _loggedIn, _multiRunning;
+
+    public BackupSettings(IDialogs dialogs, ISettingsService settings, Func<bool> gameRunning, Func<bool>? loggedIn, Func<bool>? multiRunning)
+    {
+        _dialogs = dialogs;
+        _settings = settings;
+        _gameRunning = gameRunning;
+        _loggedIn = loggedIn;
+        _multiRunning = multiRunning;
+        _backupGameSettings = settings.Current.BackupGameSettings;
+        _backupFolder = settings.Current.BackupFolder;
+    }
+
     [ObservableProperty] private bool _backupGameSettings;
     [ObservableProperty] private string _backupFolder = "";
     public StatusLine BackupStatus { get; } = new();
@@ -75,7 +91,7 @@ public partial class SettingsViewModel
     internal string? RestoreBlocked() =>
         _gameRunning() ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
         : _loggedIn?.Invoke() == true ? "You can restore a backup once you're logged out of PlayOnline."
-        : MultiRunGoing ? "You can restore a backup once Provenance has finished starting your accounts."
+        : _multiRunning?.Invoke() == true ? "You can restore a backup once Provenance has finished starting your accounts."
         : null;
 
     private bool CanRestore() => !RestoringBackup;

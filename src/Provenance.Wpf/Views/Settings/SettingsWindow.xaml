@@ -103,32 +103,32 @@
                     <ColumnDefinition Width="4*" MaxWidth="240" MinWidth="60" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="1" Text="{Binding ProfileSwitcherLabel}" FontSize="13" VerticalAlignment="Center" Margin="16,0,10,0"
+                <TextBlock Grid.Column="1" Text="{Binding Hooks.ProfileSwitcherLabel}" FontSize="13" VerticalAlignment="Center" Margin="16,0,10,0"
                            Foreground="{DynamicResource Text.2}" Visibility="{Binding ShowProfileSwitcher, Converter={StaticResource BoolToVis}}" />
                 <ComboBox x:Name="ProfileSwitcher" Grid.Column="2" VerticalAlignment="Center" Style="{StaticResource TitleCombo}" DisplayMemberPath="Display"
-                          ItemsSource="{Binding SwitcherProfiles}" SelectedItem="{Binding SelectedProfile}"
+                          ItemsSource="{Binding Hooks.SwitcherProfiles}" SelectedItem="{Binding Hooks.SelectedProfile}"
                           Visibility="{Binding ShowProfileSwitcher, Converter={StaticResource BoolToVis}}"
-                          AutomationProperties.Name="{Binding ProfileSwitcherName}" />
+                          AutomationProperties.Name="{Binding Hooks.ProfileSwitcherName}" />
                 <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="6,0,2,0" VerticalAlignment="Center"
                             Visibility="{Binding ShowProfileTools, Converter={StaticResource BoolToVis}}">
-                    <Button Style="{StaticResource ProfileTool}" Command="{Binding AddProfileCommand}" IsEnabled="{Binding CanManageProfiles}"
-                            ToolTip="{Binding ProfileNoun, StringFormat='Add a {0}'}"
-                            AutomationProperties.Name="{Binding ProfileNoun, StringFormat='Add a {0}'}">
+                    <Button Style="{StaticResource ProfileTool}" Command="{Binding Hooks.AddProfileCommand}" IsEnabled="{Binding Hooks.CanManageProfiles}"
+                            ToolTip="{Binding Hooks.ProfileNoun, StringFormat='Add a {0}'}"
+                            AutomationProperties.Name="{Binding Hooks.ProfileNoun, StringFormat='Add a {0}'}">
                         <controls:SvgIcon Glyph="add" Width="20" Height="20" />
                     </Button>
-                    <Button Style="{StaticResource ProfileTool}" Command="{Binding DuplicateProfileCommand}" IsEnabled="{Binding CanCopyProfile}"
-                            ToolTip="{Binding ProfileNoun, StringFormat='Duplicate this {0}'}"
-                            AutomationProperties.Name="{Binding ProfileNoun, StringFormat='Duplicate this {0}'}">
+                    <Button Style="{StaticResource ProfileTool}" Command="{Binding Hooks.DuplicateProfileCommand}" IsEnabled="{Binding Hooks.CanCopyProfile}"
+                            ToolTip="{Binding Hooks.ProfileNoun, StringFormat='Duplicate this {0}'}"
+                            AutomationProperties.Name="{Binding Hooks.ProfileNoun, StringFormat='Duplicate this {0}'}">
                         <controls:SvgIcon Glyph="copy" Width="20" Height="20" />
                     </Button>
-                    <Button Style="{StaticResource ProfileTool}" Command="{Binding RenameProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
-                            ToolTip="{Binding ProfileNoun, StringFormat='Rename this {0}'}"
-                            AutomationProperties.Name="{Binding ProfileNoun, StringFormat='Rename this {0}'}">
+                    <Button Style="{StaticResource ProfileTool}" Command="{Binding Hooks.RenameProfileCommand}" IsEnabled="{Binding Hooks.CanChangeProfile}"
+                            ToolTip="{Binding Hooks.ProfileNoun, StringFormat='Rename this {0}'}"
+                            AutomationProperties.Name="{Binding Hooks.ProfileNoun, StringFormat='Rename this {0}'}">
                         <controls:SvgIcon Glyph="edit" Width="20" Height="20" />
                     </Button>
-                    <Button Style="{StaticResource ProfileTool}" Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding CanChangeProfile}"
-                            ToolTip="{Binding ProfileNoun, StringFormat='Delete this {0}'}"
-                            AutomationProperties.Name="{Binding ProfileNoun, StringFormat='Delete this {0}'}">
+                    <Button Style="{StaticResource ProfileTool}" Command="{Binding Hooks.DeleteProfileCommand}" IsEnabled="{Binding Hooks.CanChangeProfile}"
+                            ToolTip="{Binding Hooks.ProfileNoun, StringFormat='Delete this {0}'}"
+                            AutomationProperties.Name="{Binding Hooks.ProfileNoun, StringFormat='Delete this {0}'}">
                         <controls:SvgIcon Glyph="delete" Width="20" Height="20" />
                     </Button>
                 </StackPanel>
@@ -212,7 +212,7 @@
                         </Border>
 
                         <TextBlock Text="Backups" Style="{StaticResource Section}" />
-                        <Border Style="{StaticResource Card}">
+                        <Border Style="{StaticResource Card}" DataContext="{Binding Backups}">
                             <StackPanel>
                                 <HeaderedContentControl Header="Automatic backups"
                                                         Tag="When this is on, Provenance backs up your characters' in-game settings and macros before the game starts, if they've changed. It keeps the newest 5.">
@@ -319,21 +319,21 @@
                                    Text="Start the game through Windower 4 or Ashita v4, so everything you've set up in them loads as usual. Provenance still logs you in." />
                         <TextBlock Text="Platform" Style="{StaticResource Label}" />
                         <ComboBox Width="260" HorizontalAlignment="Left" AutomationProperties.Name="Platform"
-                                  ItemsSource="{Binding ThirdPartyHookChoices}" SelectedValuePath="Code" SelectedValue="{Binding Hook}" />
-                        <TextBlock Text="{Binding ThirdPartyHookStatus.Text}" behaviours:State.IsError="{Binding ThirdPartyHookStatus.IsError}"
+                                  ItemsSource="{Binding Hooks.ThirdPartyHookChoices}" SelectedValuePath="Code" SelectedValue="{Binding Hooks.Hook}" />
+                        <TextBlock Text="{Binding Hooks.ThirdPartyHookStatus.Text}" behaviours:State.IsError="{Binding Hooks.ThirdPartyHookStatus.IsError}"
                                    Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12"
                                    Margin="0,10,0,16" />
 
-                        <StackPanel Visibility="{Binding IsAshita, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Visibility="{Binding Hooks.IsAshita, Converter={StaticResource BoolToVis}}">
                             <TextBlock Text="Ashita folder" Style="{StaticResource Label}" />
                             <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
-                                <TextBox Text="{Binding AshitaPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
+                                <TextBox Text="{Binding Hooks.AshitaPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                          AutomationProperties.Name="Ashita folder" />
                                 <Button Style="{StaticResource BrowseButton}"
-                                        Command="{Binding BrowseAshitaCommand}" />
+                                        Command="{Binding Hooks.BrowseAshitaCommand}" />
                             </Grid>
-                            <TextBlock Text="{Binding ProfileStatus.Text}" behaviours:State.IsError="{Binding ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
-                            <TextBlock Text="{Binding AshitaCardNote}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,14" Foreground="{DynamicResource State.Warn}">
+                            <TextBlock Text="{Binding Hooks.ProfileStatus.Text}" behaviours:State.IsError="{Binding Hooks.ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
+                            <TextBlock Text="{Binding Ashita.AshitaCardNote}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,14" Foreground="{DynamicResource State.Warn}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource NullToVisibilityConverter}}" />
@@ -342,54 +342,54 @@
                             </TextBlock>
 
                             <TextBlock Text="Boot configuration settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding AshitaCardEnabled}">
+                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Ashita.AshitaCardEnabled}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Name" Tag="The name Ashita's launcher shows for this boot configuration instead of its file name.">
-                                        <TextBox Text="{Binding AshitaName, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
+                                        <TextBox Text="{Binding Ashita.AshitaName, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                                  AutomationProperties.Name="Name" />
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="Script" Tag="The script Ashita runs when the game starts, from its scripts folder.">
-                                        <ComboBox ItemsSource="{Binding AshitaScripts}" SelectedItem="{Binding AshitaScript}" AutomationProperties.Name="Script" />
+                                        <ComboBox ItemsSource="{Binding Ashita.AshitaScripts}" SelectedItem="{Binding Ashita.AshitaScript}" AutomationProperties.Name="Script" />
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="Script arguments" Tag="Passed to the script when Ashita runs it, if it takes any.">
-                                        <TextBox Text="{Binding AshitaScriptArgs, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
+                                        <TextBox Text="{Binding Ashita.AshitaScriptArgs, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                                  AutomationProperties.Name="Script arguments" />
                                     </HeaderedContentControl>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
 
-                        <StackPanel Visibility="{Binding IsWindower, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Visibility="{Binding Hooks.IsWindower, Converter={StaticResource BoolToVis}}">
                             <TextBlock Text="Windower folder" Style="{StaticResource Label}" />
                             <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
-                                <TextBox Text="{Binding WindowerPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
+                                <TextBox Text="{Binding Hooks.WindowerPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                                          AutomationProperties.Name="Windower folder" />
                                 <Button Style="{StaticResource BrowseButton}"
-                                        Command="{Binding BrowseWindowerCommand}" />
+                                        Command="{Binding Hooks.BrowseWindowerCommand}" />
                             </Grid>
-                            <TextBlock Text="{Binding ProfileStatus.Text}" behaviours:State.IsError="{Binding ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
+                            <TextBlock Text="{Binding Hooks.ProfileStatus.Text}" behaviours:State.IsError="{Binding Hooks.ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
                             <Border Margin="0,0,0,14" Padding="14,10" CornerRadius="{StaticResource Radius.Panel}" BorderThickness="1" BorderBrush="{DynamicResource State.Warn}"
-                                    Visibility="{Binding WindowerSettingsProblem, Converter={StaticResource NullToVisibilityConverter}}">
+                                    Visibility="{Binding Windower.WindowerSettingsProblem, Converter={StaticResource NullToVisibilityConverter}}">
                                 <StackPanel>
-                                    <TextBlock Text="{Binding WindowerSettingsProblem}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource State.Warn}" />
+                                    <TextBlock Text="{Binding Windower.WindowerSettingsProblem}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource State.Warn}" />
                                     <Button Content="START A NEW SETTINGS FILE" HorizontalAlignment="Left" Margin="0,10,0,0" FontSize="12"
-                                            Style="{StaticResource PolButton}" Command="{Binding StartNewWindowerSettingsCommand}"
-                                            Visibility="{Binding CanStartNewWindowerSettings, Converter={StaticResource BoolToVis}}" />
+                                            Style="{StaticResource PolButton}" Command="{Binding Windower.StartNewWindowerSettingsCommand}"
+                                            Visibility="{Binding Windower.CanStartNewWindowerSettings, Converter={StaticResource BoolToVis}}" />
                                 </StackPanel>
                             </Border>
 
                             <TextBlock Text="Profile settings" Style="{StaticResource Section}" Margin="0,8,0,10" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding WindowerCardEnabled}">
+                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Windower.WindowerCardEnabled}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Console key" Tag="The key that opens and closes the Windower console in game.">
-                                        <Button x:Name="ConsoleKeyButton" Content="{Binding ConsoleKeyText}" FontSize="12" Command="{Binding EditConsoleKeyCommand}"
+                                        <Button x:Name="ConsoleKeyButton" Content="{Binding Windower.ConsoleKeyText}" FontSize="12" Command="{Binding Windower.EditConsoleKeyCommand}"
                                                 PreviewKeyDown="OnConsoleKeyDown" PreviewKeyUp="OnConsoleKeyUp" LostKeyboardFocus="OnConsoleKeyFocusLost"
                                                 AutomationProperties.Name="Console key">
                                             <Button.Style>
                                                 <Style TargetType="Button" BasedOn="{StaticResource PolButton}">
                                                     <Style.Triggers>
                                                         <!-- its own look while it waits for a key, so a hover can't hide it -->
-                                                        <DataTrigger Binding="{Binding WaitingForConsoleKey}" Value="True">
+                                                        <DataTrigger Binding="{Binding Windower.WaitingForConsoleKey}" Value="True">
                                                             <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
                                                             <Setter Property="Template">
                                                                 <Setter.Value>
@@ -408,24 +408,24 @@
                                         </Button>
                                     </HeaderedContentControl>
                                     <HeaderedContentControl Header="Allow the Windows key" Tag="Makes Windows handle keybinds before Windower. Required for normal Windows 11 Alt-Tab behaviour.">
-                                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding WindowerAllowWinKey}"
+                                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding Windower.WindowerAllowWinKey}"
                                                       AutomationProperties.Name="Allow the Windows key" />
                                     </HeaderedContentControl>
                                 </StackPanel>
                             </Border>
 
                             <TextBlock Text="Updates" Style="{StaticResource Section}" />
-                            <Border Style="{StaticResource Card}" IsEnabled="{Binding WindowerBranchEnabled}">
+                            <Border Style="{StaticResource Card}" IsEnabled="{Binding Windower.WindowerBranchEnabled}">
                                 <StackPanel>
                                     <HeaderedContentControl Header="Branch">
                                         <HeaderedContentControl.Tag>
                                             <TextBlock Style="{StaticResource Help}"><Run Text="Switches Windower, its plugins and its addons between Stable and Development. The switch happens the next time you log in. " /><Bold>Leave this on Stable unless you know what you're doing.</Bold></TextBlock>
                                         </HeaderedContentControl.Tag>
-                                        <Button Content="{Binding WindowerBranchName, Converter={StaticResource UpperCase}}" Style="{StaticResource PolButton}" FontSize="12"
-                                                Command="{Binding FlipWindowerBranchCommand}" AutomationProperties.Name="Branch" />
+                                        <Button Content="{Binding Windower.WindowerBranchName, Converter={StaticResource UpperCase}}" Style="{StaticResource PolButton}" FontSize="12"
+                                                Command="{Binding Windower.FlipWindowerBranchCommand}" AutomationProperties.Name="Branch" />
                                     </HeaderedContentControl>
-                                    <TextBlock Text="{Binding WindowerVersionText}" TextWrapping="Wrap" FontSize="12" Margin="0,2,0,10"
-                                               Foreground="{DynamicResource Text.2}" Visibility="{Binding WindowerVersionText, Converter={StaticResource NullToVisibilityConverter}}" />
+                                    <TextBlock Text="{Binding Windower.WindowerVersionText}" TextWrapping="Wrap" FontSize="12" Margin="0,2,0,10"
+                                               Foreground="{DynamicResource Text.2}" Visibility="{Binding Windower.WindowerVersionText, Converter={StaticResource NullToVisibilityConverter}}" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -434,7 +434,7 @@
 
                 <local:AddonsPluginsView x:Name="Panel3" Tag="{x:Static tabs:SettingsTab.AddonsPlugins}" Visibility="Collapsed" DataContext="{Binding Addons}" />
 
-                <ScrollViewer x:Name="Panel4" Tag="{x:Static tabs:SettingsTab.MultiAccount}" Visibility="Collapsed" VerticalScrollBarVisibility="Visible">
+                <ScrollViewer x:Name="Panel4" Tag="{x:Static tabs:SettingsTab.MultiAccount}" Visibility="Collapsed" VerticalScrollBarVisibility="Visible" DataContext="{Binding Multi}">
                     <StackPanel Margin="28,22">
                         <TextBlock Text="Multi-account mode" Style="{StaticResource Section}" />
                         <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" Margin="0,0,0,8"

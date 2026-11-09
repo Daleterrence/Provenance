@@ -896,7 +896,7 @@ public partial class MainViewModel : ObservableObject
                                        stopPrestart: () => Task.Run(_pol.StopPrestart),
                                        loggedIn: () => IsLaunching || LoggedIn || _pol.Pid is not null,
                                        handles: Handles);
-        vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SettingsViewModel.Hook)) PlatformChanged(); };
+        vm.Hooks.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(HookSettings.Hook)) PlatformChanged(); };
         _openSettings = vm;
         Handles.Opened();
         try { _windows.ShowSettings(vm, tab); }
@@ -905,7 +905,7 @@ public partial class MainViewModel : ObservableObject
             _openSettings = null;
             Handles.Closed();
         }
-        if (vm.RestartWanted)
+        if (vm.Hooks.RestartWanted)
         {
             RequestRestart?.Invoke();
             return;

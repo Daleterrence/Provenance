@@ -1,7 +1,5 @@
-using System.Collections.ObjectModel;
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;
@@ -22,16 +20,20 @@ public partial class SettingsViewModel : ObservableObject
 {
     private static readonly string[] FeedRegionCodes = ["auto", "na", "eu", "jp"];
 
+    private static readonly string[] AddonsTargetProperties =
+    [
+        nameof(HookSettings.Hook), nameof(HookSettings.WindowerPath), nameof(HookSettings.AshitaPath),
+        nameof(HookSettings.WindowerProfile), nameof(HookSettings.AshitaBootConfig),
+    ];
+
     private readonly IDialogs _dialogs;
-    private readonly UiThread _ui = new();
     private readonly ISettingsService _settings;
     private readonly FeedService? _feeds;
-    private readonly Func<bool>? _multiRunning, _loggedIn;
     private readonly Func<bool> _gameRunning;
     private readonly Func<string?>? _largeAddressAwareBlocked;
-    private readonly Action? _holdPrestarts, _releasePrestarts, _stopPrestart;
+    private readonly Action? _holdPrestarts, _releasePrestarts;
     private readonly Func<bool, RegistryKey?>? _gameKey;
-    private bool _loadingThirdPartyHook, _gameReady;
+    private bool _gameReady;
 
     public SettingsViewModel(IDialogs dialogs, ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
                              Action? holdPrestarts = null, Action? releasePrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
@@ -40,12 +42,25 @@ public partial class SettingsViewModel : ObservableObject
     {
         _gameRunning = gameRunning ?? PolUpdates.GameRunning;
         _dialogs = dialogs;
-        _loggedIn = loggedIn;
         Handles = handles ?? new HandlesViewModel(dialogs, () => null);
         _gameKey = gameKey;
-        _stopPrestart = stopPrestart;
         _settings = settings;
-        _multiRunning = multiRunning;
+        WindowerCard? windower = null;
+        Hooks = new HookSettings(dialogs, settings, multiRunning, loggedIn, stopPrestart, () => windower?.WindowerSettingsProblem, GameFollows);
+        Windower = windower = new WindowerCard(Hooks, settings, dialogs);
+        Ashita = new AshitaCard(Hooks);
+        Multi = new MultiAccountSettings(Hooks, settings, multiRunning);
+        Hooks.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(HookSettings.IsAshita) or nameof(HookSettings.IsWindower))
+            {
+                OnPropertyChanged(nameof(ShowProfileSwitcher));
+                OnPropertyChanged(nameof(ShowProfileTools));
+            }
+        };
+        Hooks.Saved += SyncGame;
+        Hooks.ProfileEdited += RetargetGameAfterEdit;
+        Ashita.Renamed += AshitaRenamed;
         _largeAddressAwareBlocked = largeAddressAwareBlocked;
         _holdPrestarts = holdPrestarts;
         _releasePrestarts = releasePrestarts;
@@ -76,21 +91,26 @@ public partial class SettingsViewModel : ObservableObject
         _largeAddressAwareOn = settings.Current.LargeAddressAware;
         _chatLanguageFilter = PolOptions.ChatFilter(settings.Current);
         _autoDisconnectIndex = Math.Max(0, Array.IndexOf(PolOptions.AutoDisconnectChoices, PolOptions.AutoDisconnect(settings.Current)));
-        _backupGameSettings = settings.Current.BackupGameSettings;
-        _backupFolder = settings.Current.BackupFolder;
-        LoadThirdPartyHook();
-        LoadMulti();
+        Backups = new BackupSettings(dialogs, settings, _gameRunning, loggedIn, multiRunning);
+        Hooks.Load();
+        Multi.Load();
         Game = new GameSettingsViewModel(dialogs, region, GameStoreForSelection(), _gameRunning);
         _gameReady = true;
-        Addons = new AddonsPluginsViewModel(settings, this);
+        Addons = new AddonsPluginsViewModel(settings, Hooks.PickedAddonsTarget);
+        Hooks.PropertyChanged += (_, e) => { if (AddonsTargetProperties.Contains(e.PropertyName)) Addons.TargetChanged(); };
         Addons.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AddonsPluginsViewModel.SameListForEveryProfile)) OnPropertyChanged(nameof(ShowProfileSwitcher));
         };
     }
 
+    public HookSettings Hooks { get; }
+    public WindowerCard Windower { get; }
+    public AshitaCard Ashita { get; }
+    public MultiAccountSettings Multi { get; }
     public GameSettingsViewModel Game { get; }
     public AddonsPluginsViewModel Addons { get; }
+    public BackupSettings Backups { get; }
     public HandlesViewModel Handles { get; }
     public string RegionText { get; }
     public string ViewerFolder { get; }
@@ -250,164 +270,108 @@ public partial class SettingsViewModel : ObservableObject
         catch (InvalidOperationException) { return null; }   // host not started (design time)
     }
 
-    // Multi-account page. The first profile choice is none, which an account that's turned on can't start with
-    public string ProfileDefaultChoice => IsAshita ? "Select Ashita boot configuration..." : "Select Windower profile...";
-    public ObservableCollection<MultiAccountRow> MultiAccountRows { get; } = new();
-    public ObservableCollection<string> MultiProfileChoices { get; } = new();
-    public bool MultiHasThirdPartyHook => Hook != ThirdPartyHook.None;
-    public string MultiProfileLabel => IsAshita ? "Ashita boot configuration" : "Windower profile";
-
-    // read-only while a run goes, it saves refused and blocked accounts as they happen and a save from here
-    // mustn't undo that
-    public bool MultiRunGoing => _multiRunning?.Invoke() ?? false;
-    public bool MultiEditable => MultiHasThirdPartyHook && !MultiRunGoing;
-
-    [ObservableProperty] private bool _multiContinueOnError;
-    [ObservableProperty] private bool _multiCloseWhenFinished;
-
-    partial void OnMultiContinueOnErrorChanged(bool value) => SaveUnlessLoading(s => s.MultiContinueOnError = value);
-    partial void OnMultiCloseWhenFinishedChanged(bool value) =>
-        SaveUnlessLoading(s => s.MultiCloseWhenFinished = value);
-    private void SaveUnlessLoading(Action<LauncherSettings> change) { if (!_loadingMulti) _settings.SaveChange(change); }
-
     public void MultiRunChanged()
     {
-        LoadMulti();
-        OnPropertyChanged(nameof(MultiRunGoing));
-        OnPropertyChanged(nameof(MultiEditable));
-        OnProfilesChanged();
+        Multi.RunChanged();
+        Hooks.NotifyProfilesChanged();
     }
 
-    private bool _loadingMulti;
+    // the Settings tab that's showing, which the window keeps up to date
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private SettingsTab _shownTab;
 
-    // each account's stored Enabled as last loaded or saved. One that's gone off since got turned off by a run
-    private Dictionary<string, bool> _multiEnabledAsKnown = new();
+    // Windower/Ashita, Game and Addons and plugins are the tabs that change a profile, though there's nothing to pick
+    // on Addons and plugins while every profile gets the same list
+    public bool ShowProfileSwitcher =>
+        ShownTab is SettingsTab.WindowerAshita or SettingsTab.Game or SettingsTab.AddonsPlugins && (Hooks.IsWindower || Hooks.IsAshita)
+        && !(ShownTab == SettingsTab.AddonsPlugins && Addons is { SameListForEveryProfile: true });
+    public bool ShowProfileTools => ShownTab == SettingsTab.WindowerAshita && (Hooks.IsWindower || Hooks.IsAshita);
 
-    private void RememberMulti(IEnumerable<MultiAccountEntry> stored) =>
-        _multiEnabledAsKnown = stored.GroupBy(e => e.ProfileId).ToDictionary(g => g.Key, g => g.First().Enabled);
+    private bool? AskSaveGame(string? which) => _dialogs.Choose("Unsaved game settings",
+        $"You've changed some game settings{(which is null ? "" : " for " + which)} but haven't saved them yet.", "CONTINUE",
+        "Save them first", "Don't save them") switch { 0 => true, 1 => false, _ => null };
 
-    private void LoadMulti()
+    internal bool ConfirmClose()
     {
-        _loadingMulti = true;
-        MultiAccountRows.Clear();
-        var s = _settings.Current;
-        RememberMulti(s.MultiAccounts);
-        MultiContinueOnError = s.MultiContinueOnError;
-        MultiCloseWhenFinished = s.MultiCloseWhenFinished;
-        var byId = s.Profiles.ToDictionary(p => p.Id);
-        var ids = s.MultiAccounts.Select(e => e.ProfileId).Where(byId.ContainsKey).Distinct()
-                   .Concat(s.Profiles.Select(p => p.Id)).Distinct().ToList();
-        foreach (var id in ids)
+        var pick = _dialogs.Choose("Unsaved game settings", "You've changed some game settings but haven't saved them yet.", "CLOSE",
+            "Save the changes, then close", "Close without saving");
+        if (pick is null) return false;
+        if (pick == 0)
         {
-            var entry = s.MultiAccounts.FirstOrDefault(e => e.ProfileId == id);
-            var p = byId[id];
-            var row = new MultiAccountRow
-            {
-                ProfileId = id,
-                Name = string.IsNullOrWhiteSpace(p.HandleName) ? p.DisplayName : p.HandleName!,
-                Enabled = entry?.Enabled ?? false,
-                Problem = entry?.Problem,
-                CredentialsRefused = entry?.CredentialsRefused ?? false,
-                ThirdPartyHookProfile = ToChoice(entry?.ThirdPartyHookProfile),
-            };
-            row.Changed = () => { SaveMulti(); NoteUnpicked(); };
-            MultiAccountRows.Add(row);
+            Game.SaveCommand.Execute(null);
+            return !Game.HasUnsavedChanges;   // the save failed, its error's on the page
         }
-        _loadingMulti = false;
-        RefreshMultiChoices();
+        return true;
     }
 
-    private ObservableCollection<HookProfileItem>? ChoiceItems => Hook switch { ThirdPartyHook.Ashita => AshitaBootConfigs, ThirdPartyHook.Windower => WindowerProfiles, _ => null };
-
-    private string ToChoice(string? stored) =>
-        stored is null ? ProfileDefaultChoice
-        : ChoiceItems is { } items ? Item(items, stored)?.Display ?? stored
-        : stored;
-
-    private string? FromChoice(string choice) =>
-        choice == ProfileDefaultChoice ? null
-        : ChoiceItems?.FirstOrDefault(i => i.Display == choice)?.Name ?? choice;
-
-    // a Windower profile means nothing to Ashita and vice versa, so a platform switch clears every stored one
-    private void RefreshMultiChoices(bool platformChanged = false)
+    // with no list to pick from (settings.xml unreadable, say) it's still the chosen profile's, so its problem shows
+    private IGameSettingsStore GameStoreForSelection()
     {
-        _loadingMulti = true;
-        var keep = MultiAccountRows.Select(r => r.ThirdPartyHookProfile).ToList();
-        MultiProfileChoices.Clear();
-        MultiProfileChoices.Add(ProfileDefaultChoice);
-        foreach (var c in ChoiceItems ?? Enumerable.Empty<HookProfileItem>())
-            MultiProfileChoices.Add(c.Display);
-        for (int i = 0; i < MultiAccountRows.Count; i++)
-            MultiAccountRows[i].ThirdPartyHookProfile = !platformChanged && MultiProfileChoices.Contains(keep[i]) ? keep[i] : ProfileDefaultChoice;
-        _loadingMulti = false;
-        if (platformChanged) ClearMultiProfiles();
-        OnPropertyChanged(nameof(ProfileDefaultChoice));
-        OnPropertyChanged(nameof(MultiHasThirdPartyHook));
-        OnPropertyChanged(nameof(MultiEditable));
-        OnPropertyChanged(nameof(MultiProfileLabel));
-        NoteUnpicked();
+        var registry = new RegistryGameStore(_settings.DetectedRegion, _gameKey);
+        var s = _settings.Current;
+        if (Hooks.IsWindower && Hooks.WindowerDir is { } w)
+            return Hooks.WindowerProfile is { } p ? new WindowerGameStore(w, p.Name, registry, p.Display)
+                 : new WindowerGameStore(w, PlayTarget.For(s, null, ThirdPartyHook.Windower).Profile, registry);
+        if (Hooks.IsAshita && Hooks.AshitaDir is { } a
+            && (Hooks.AshitaBootConfig?.Name ?? PlayTarget.For(s, null, ThirdPartyHook.Ashita).Profile) is { Length: > 0 } boot)
+            return new AshitaGameStore(a, boot, registry, Hooks.AshitaBootConfig?.Display);
+        return registry;
     }
 
-    private void NoteUnpicked()
+    // changes made on the Game page for the profile before wait there, ShowingGame asks about them
+    private void SyncGame()
     {
-        foreach (var r in MultiAccountRows)
-            r.ProfileNeeded = MultiHasThirdPartyHook && r.Enabled && r.ThirdPartyHookProfile == ProfileDefaultChoice
-                ? $"Choose the {MultiProfileLabel} {r.Name} starts with." : null;
+        if (!_gameReady) return;
+        var want = GameStoreForSelection();
+        // one that couldn't load gets another go, settings.xml may have been sorted since
+        if (want.Key == Game.Store.Key && Game.Available || Game.HasUnsavedChanges) return;
+        Game.UseStore(want);
     }
 
-    // safe mid-run too: the run read its profiles at the start, and only the profile changes
-    private void ClearMultiProfiles()
+    // on the Game tab the page moves with the pick, so changes it hasn't saved get asked about first. False when the
+    // player backs out, and the pick goes back
+    private bool GameFollows() => ShownTab != SettingsTab.Game || ShowingGame();
+
+    public bool ShowingGame()
     {
-        var withProfile = _settings.Current.MultiAccounts.Where(e => e.ThirdPartyHookProfile is not null).ToList();
-        if (withProfile.Count == 0) return;
-        _settings.SaveChange(s =>
+        var want = GameStoreForSelection();
+        if (want.Key == Game.Store.Key && Game.Available) return true;
+        if (Game.HasUnsavedChanges)
         {
-            foreach (var e in s.MultiAccounts.Where(e => e.ThirdPartyHookProfile is not null)) e.ThirdPartyHookProfile = null;
-        });
-    }
-
-    private void SaveMulti()
-    {
-        if (_loadingMulti || MultiRunGoing) return;
-        // read the stored list again, a run may have saved a failure since the rows were loaded
-        var stored = _settings.Current.MultiAccounts;
-        var saved = new List<MultiAccountEntry>();
-        _loadingMulti = true;   // the rows brought in line below mustn't save again
-        try
-        {
-            foreach (var r in MultiAccountRows)
+            var answer = AskSaveGame(Game.HasProfile ? $"the {Game.ProfileKind} {Game.ProfileShown}" : null);
+            if (answer is null) return false;
+            if (answer == true)
             {
-                var entry = new MultiAccountEntry { ProfileId = r.ProfileId, Enabled = r.Enabled, ThirdPartyHookProfile = FromChoice(r.ThirdPartyHookProfile), Problem = r.Problem };
-                // a refused password, or one a run turned off since the load: the stored state wins, so no edit
-                // here turns it back on by mistake
-                if (stored.FirstOrDefault(e => e.ProfileId == r.ProfileId) is { } now &&
-                    (now.CredentialsRefused || (!now.Enabled && _multiEnabledAsKnown.GetValueOrDefault(r.ProfileId))))
-                {
-                    entry.Enabled = false;
-                    entry.Problem = now.Problem;
-                    entry.CredentialsRefused = now.CredentialsRefused;
-                    r.Enabled = false;
-                    r.Problem = now.Problem;
-                    r.CredentialsRefused = now.CredentialsRefused;
-                }
-                saved.Add(entry);
+                Game.SaveCommand.Execute(null);
+                if (Game.HasUnsavedChanges) return false;   // the save failed, its error's on the page
             }
         }
-        finally { _loadingMulti = false; }
-        _settings.Current.MultiAccounts = saved;
-        _settings.Save(_settings.Current);
-        RememberMulti(saved);
+        Game.UseStore(want);
+        return true;
     }
 
-    [RelayCommand] private void MoveMultiUp(MultiAccountRow? row) => MoveMulti(row, -1);
-    [RelayCommand] private void MoveMultiDown(MultiAccountRow? row) => MoveMulti(row, +1);
-
-    private void MoveMulti(MultiAccountRow? row, int by)
+    // backing out of that on the way into the Game tab leaves the page on its own profile, so the pick follows it there
+    public void PickGameProfile()
     {
-        if (row is null) return;
-        int i = MultiAccountRows.IndexOf(row), j = i + by;
-        if (i < 0 || j < 0 || j >= MultiAccountRows.Count) return;
-        MultiAccountRows.Move(i, j);
-        SaveMulti();
+        if (Game.Store.ProfileName is not { } name) return;
+        if (Hooks.IsWindower && Game.Store.Platform == ThirdPartyHook.Windower)
+            Hooks.WindowerProfile = HookSettings.Item(Hooks.WindowerProfiles, name) ?? Hooks.WindowerProfile;
+        else if (Hooks.IsAshita && Game.Store.Platform == ThirdPartyHook.Ashita)
+            Hooks.AshitaBootConfig = HookSettings.Item(Hooks.AshitaBootConfigs, name) ?? Hooks.AshitaBootConfig;
+    }
+
+    // the Game page keeps a renamed profile's unsaved changes, a deleted one's go with it
+    private void RetargetGameAfterEdit(bool ok, string? renamedFrom)
+    {
+        var gameProfile = Game.Store.ProfileName;
+        if (!ok || gameProfile is null || Game.Store.Platform != (Hooks.IsWindower ? ThirdPartyHook.Windower : ThirdPartyHook.Ashita)) return;
+        if (renamedFrom is not null && gameProfile == renamedFrom) Game.Retarget(GameStoreForSelection());
+        else if (!Hooks.StillThere(gameProfile)) Game.UseStore(GameStoreForSelection());
+    }
+
+    private void AshitaRenamed()
+    {
+        Multi.Load();
+        if (Game.Store.Platform == ThirdPartyHook.Ashita && Game.Store.ProfileName == Hooks.AshitaBootConfig?.Name)
+            Game.Retarget(GameStoreForSelection());
     }
 }

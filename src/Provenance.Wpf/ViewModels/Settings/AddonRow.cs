@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Provenance.Common.Game.ThirdParty;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
