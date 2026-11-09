@@ -45,6 +45,12 @@ public sealed class GameRepair(MirrorClient client, string region)
     private static bool IsOwned(string slug, string path) =>
         slug == GameProduct.Viewer.Slug && ViewerOwned.Contains(path.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
 
+    private static async Task<IReadOnlyList<MirrorEntry>> ScanAsync(string slug, string folder, MirrorIndex index, IProgress<ByteProgress>? progress, CancellationToken ct)
+    {
+        var damaged = await MirrorDownloads.ScanAsync(folder, index, progress, ct, keepLargeAddressAware: true);
+        return damaged.Where(e => !IsOwned(slug, e.Path)).ToList();
+    }
+
     private static void Say(string line) => Log.Information("Repair: {Message}", line);
 
     public Func<bool> DirectXPresent { get; init; } = GameInstaller.DirectXJun2010Present;
@@ -98,8 +104,7 @@ public sealed class GameRepair(MirrorClient client, string region)
         {
             var slug = product.Game.Slug;
             Status?.Invoke($"Checking the {product.Name} files...");
-            var damaged = await MirrorDownloads.ScanAsync(product.Folder, index, Offset(progress, before, total), ct, keepLargeAddressAware: true);
-            work[slug] = damaged.Where(e => !IsOwned(slug, e.Path)).ToList();
+            work[slug] = await ScanAsync(slug, product.Folder, index, Offset(progress, before, total), ct);
             before += index.Files.Sum(e => e.Size);
         }
         return new RepairPlan(work, work.Values.Sum(w => w.Sum(e => e.Size)), found.ToDictionary(f => f.Product.Game.Slug, f => f.Index))
@@ -151,7 +156,7 @@ public sealed class GameRepair(MirrorClient client, string region)
         if (queued)
         {
             Status?.Invoke($"Checking the {GameProduct.Viewer.Name} files again...");
-            var again = await MirrorDownloads.ScanAsync(viewer.Folder, plan.Indexes[GameProduct.Viewer.Slug], null, ct, keepLargeAddressAware: true);
+            var again = await ScanAsync(GameProduct.Viewer.Slug, viewer.Folder, plan.Indexes[GameProduct.Viewer.Slug], null, ct);
             if (again.Count > 0) Say($"the Viewer's queued update files changed {again.Count} file(s); they are downloaded again");
             // no share of the bar for these, it'd have to start again from nothing
             ThrowIfFailed(await DownloadAsync(GameProduct.Viewer.Slug, viewer, again, null, replaced, ct));
