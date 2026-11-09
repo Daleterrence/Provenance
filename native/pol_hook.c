@@ -6140,9 +6140,12 @@ static void game_over(UINT code)
 }
 
 /* the build that landed 2026-11-09 (file version still 1.18.13, pol.exe grew to 2,333,440 bytes): the menu session's
-   prologue (push -1; push 0x4b67b3; mov eax, fs:[0]), and the content launcher's GameStart call (now through
+   prologue (push -1; push <handler>; mov eax, fs:[0]), and the content launcher's GameStart call (now through
    [ecx+0xc], one byte longer than 1.18.15e's call eax) and the empty trace call after it (call [ecx+0xc];
-   push L"Return from FFXI"; mov edi, eax; call 0x0042bbe0, which is just a ret) */
+   push L"Return from FFXI"; mov edi, eax; call <trace>, which is just a ret). Both push an absolute address that's
+   baked at pol.exe's preferred base (0x400000) on disk, but a real pol.exe can load relocated (no ASLR opt-in
+   needed) and the loader's own fixup changes that immediate - so those 4 bytes are skipped here, same as the string
+   address that moves a few bytes between locale builds (JP != US/EU) */
 static const BYTE MENU_PROLOGUE[] = { 0x6a, 0xff, 0x68, 0xb3, 0x67, 0x4b, 0x00, 0x64, 0xa1, 0x00, 0x00, 0x00, 0x00 };
 static const BYTE FFXI_RETURN[] = { 0xff, 0x51, 0x0c, 0x68, 0x64, 0x05, 0x4c, 0x00, 0x8b, 0xf8, 0xe8, 0x83, 0xaf, 0x00, 0x00 };
 
@@ -6175,7 +6178,7 @@ static int hook_game_end(BYTE *exe)
 {
     BYTE *p = exe + 0x20c4e;
     DWORD old;
-    if (memcmp(p, FFXI_RETURN, sizeof FFXI_RETURN) != 0) {
+    if (memcmp(p, FFXI_RETURN, 4) != 0 || memcmp(p + 8, FFXI_RETURN + 8, sizeof FFXI_RETURN - 8) != 0) {
         lg("pol_hook: content launcher not as expected (%02x %02x %02x) - game end not hooked\r\n", p[0], p[2], p[10]);
         return 0;
     }
@@ -6332,7 +6335,7 @@ static void install(void)
     /* An E9 jmp over the menu session (pol.exe 0x00427033), only in the build that landed 2026-11-09 (file version
        still 1.18.13, pol.exe grown to 2,333,440 bytes) I rewrote this against. Other builds have other code here. */
     BYTE *p = (BYTE *)exe + 0x27033;
-    if (memcmp(p, MENU_PROLOGUE, sizeof MENU_PROLOGUE) != 0) {
+    if (memcmp(p, MENU_PROLOGUE, 3) != 0 || memcmp(p + 7, MENU_PROLOGUE + 7, sizeof MENU_PROLOGUE - 7) != 0) {
         lg("pol_hook: pol.exe isn't the build this was written for (menu session %02x %02x %02x) - not hooked\r\n",
            p[0], p[1], p[2]);
         return;

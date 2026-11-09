@@ -13,7 +13,11 @@ public static class LargeAddressAware
     private const int SharingViolation = unchecked((int)0x80070020);
     private const int LockViolation = unchecked((int)0x80070021);
 
-    internal static readonly (string Off, string On)[] Known = [(ViewerBuild.PolExeSha256, ViewerBuild.PolExeLaaSha256)];
+    internal static readonly (string Off, string On)[] Known =
+    [
+        (ViewerBuild.PolExeSha256, ViewerBuild.PolExeLaaSha256),
+        (ViewerBuild.JpPolExeSha256, ViewerBuild.JpPolExeLaaSha256),
+    ];
 
     // null when the file can't be read or isn't a PE file
     public static bool? Read(string path)

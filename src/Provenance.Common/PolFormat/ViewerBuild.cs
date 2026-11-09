@@ -6,9 +6,10 @@ namespace Provenance.Common.PolFormat;
 // hurt). A fresh install has 1.18.00n till the viewer updates it. SE pushed a new build 2026-11-09 (file version
 // still 1.18.13, pol.exe grew to 2,333,440 bytes) and native/pol_hook.c was rewritten for its offsets, with no
 // fallback for the pre-2026-11-09 bytes - so this is a cutover, not an addition, and both layers have to agree on
-// which build is supported, region by region. US and EU's pol.exe is byte for byte the same file. JP takes the same
-// hashes for the moment, on the assumption it ships the same binaries as US/EU now - if a real JP install doesn't
-// match it just shows "doesn't support this version yet", same as if nothing had changed here
+// which build is supported, region by region. The hashes below cover US, EU and JP. US and EU's pol.exe is the same
+// file byte for byte. JP's pol.exe and polcore aren't, despite being the same size, the code's identical but a
+// handful of embedded data addresses shift by a few bytes between locale builds (the hook's own signatures wildcard
+// those, this hash gate can't)
 public static class ViewerBuild
 {
     public enum State { Supported, Outdated, Unknown, Missing }
@@ -17,22 +18,22 @@ public static class ViewerBuild
     internal const string PolExeSha256 = "38058db285a99f188a4b7cae6f0df061cd556ea7b7527089e992574e981fdfd9";
     // the same file with Large Address Aware on, byte for byte what Windower's Tools page writes
     internal const string PolExeLaaSha256 = "6ee1b42f68d63e6f87b3108dfa028cbba77df7278cea7f033fc073b21590a886";
+    internal const string JpPolExeSha256 = "cc4d5458828bd658d5c376e9d6be2e5957aee182a89fb6177679be652fd37c0a";
+    internal const string JpPolExeLaaSha256 = "02f3b99cbb15ebe1b59764e11d927236824e27956ddb7a269cb290ee61c8f56b";
     internal const string InUseText = "The PlayOnline Viewer's files are in use or being changed. Close PlayOnline and try again.";
 
-    // US, EU and (going on the assumption) JP all share this pol.exe now
     private static readonly (PolRegion Region, string Off, string On)[] PolExes =
     [
         (PolRegion.UnitedStates, PolExeSha256, PolExeLaaSha256),
         (PolRegion.Europe, PolExeSha256, PolExeLaaSha256),
-        (PolRegion.Japan, PolExeSha256, PolExeLaaSha256),
+        (PolRegion.Japan, JpPolExeSha256, JpPolExeLaaSha256),
     ];
 
     private static readonly (PolRegion Region, string Sha256)[] Polcores =
     [
         (PolRegion.UnitedStates, "3c07c1a34ea600413257e7ade72b4f451d539d79667bab5fa3793c369c468015"),
         (PolRegion.Europe, "b71e48d56c4218adbfe2132a5fa3573b0b047bf7f3e6c909b1b38d632bea094e"),
-        // going on the assumption JP's polcore is the same file as US's now
-        (PolRegion.Japan, "3c07c1a34ea600413257e7ade72b4f451d539d79667bab5fa3793c369c468015"),
+        (PolRegion.Japan, "bdba55ed820ebdf64533c7603ee09057032dd564c799ad7411be2e43d34db15e"),
     ];
 
     internal sealed record Builds(IReadOnlyList<(PolRegion Region, string Off, string On)> PolExes,
