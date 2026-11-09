@@ -8,7 +8,7 @@ namespace Provenance.Common.Otp;
 public sealed class KeePassXcException(int code, string message) : Exception(message)
 {
     public int Code { get; } = code;
-    public const int DatabaseLocked = 1, Denied = 6, NotAssociated = 8, NoLogins = 15;
+    public const int DatabaseLocked = 1, NoPublicKey = 3, CannotDecrypt = 4, Denied = 6, NotAssociated = 8, NoLogins = 15, BadFrame = -1;
 }
 
 public sealed record KeePassXcEntry(string Name, string Login, string Uuid, string? Totp);
@@ -39,7 +39,7 @@ public sealed class KeePassXcClient : IDisposable
         {
             ["action"] = "change-public-keys", ["publicKey"] = B64(_publicKey), ["nonce"] = B64(nonce), ["clientID"] = _clientId,
         }, nonce, ct);
-        var hostKey = Convert.FromBase64String(Str(reply, "publicKey") ?? throw new KeePassXcException(3, "KeePassXC didn't send its public key."));
+        var hostKey = Convert.FromBase64String(Str(reply, "publicKey") ?? throw new KeePassXcException(KeePassXcException.NoPublicKey, "KeePassXC didn't send its public key."));
         _box?.Dispose();
         _box = new Curve25519XSalsa20Poly1305(_secretKey, hostKey);
     }
@@ -115,11 +115,11 @@ public sealed class KeePassXcClient : IDisposable
             };
             if (triggerUnlock) envelope["triggerUnlock"] = "true";
             var reply = await RoundTripAsync(envelope, nonce, ct);
-            var cipher = Convert.FromBase64String(Str(reply, "message") ?? throw new KeePassXcException(4, "KeePassXC didn't send a message."));
-            if (cipher.Length < XSalsa20Poly1305.TagLength) throw new KeePassXcException(4, "KeePassXC sent a message that's too short.");
+            var cipher = Convert.FromBase64String(Str(reply, "message") ?? throw new KeePassXcException(KeePassXcException.CannotDecrypt, "KeePassXC didn't send a message."));
+            if (cipher.Length < XSalsa20Poly1305.TagLength) throw new KeePassXcException(KeePassXcException.CannotDecrypt, "KeePassXC sent a message that's too short.");
             opened = new byte[cipher.Length - XSalsa20Poly1305.TagLength];
             if (!_box.TryDecrypt(opened, cipher, Increment(nonce)))
-                throw new KeePassXcException(4, "A message from KeePassXC couldn't be opened.");
+                throw new KeePassXcException(KeePassXcException.CannotDecrypt, "A message from KeePassXC couldn't be opened.");
             using var doc = JsonDocument.Parse(opened);
             var root = doc.RootElement.Clone();
             ThrowIfError(root);
@@ -140,7 +140,7 @@ public sealed class KeePassXcClient : IDisposable
         await WriteAsync(envelope, ct);
         var reply = await ReadReplyAsync(envelope["action"], ct);
         ThrowIfError(reply);
-        if (Str(reply, "nonce") != B64(Increment(nonce))) throw new KeePassXcException(4, "KeePassXC answered with the wrong nonce.");
+        if (Str(reply, "nonce") != B64(Increment(nonce))) throw new KeePassXcException(KeePassXcException.CannotDecrypt, "KeePassXC answered with the wrong nonce.");
         return reply;
     }
 
@@ -157,7 +157,7 @@ public sealed class KeePassXcClient : IDisposable
     private static void ThrowIfError(JsonElement m)
     {
         if (!m.TryGetProperty("errorCode", out var c)) return;
-        int code = c.ValueKind == JsonValueKind.Number ? c.GetInt32() : int.TryParse(c.GetString(), out var n) ? n : -1;
+        int code = c.ValueKind == JsonValueKind.Number ? c.GetInt32() : int.TryParse(c.GetString(), out var n) ? n : KeePassXcException.BadFrame;
         throw new KeePassXcException(code, Str(m, "error") ?? $"KeePassXC error {code}.");
     }
 
@@ -177,7 +177,7 @@ public sealed class KeePassXcClient : IDisposable
         var head = new byte[4];
         await _fromHost.ReadExactlyAsync(head, ct);
         int length = (int)BitConverter.ToUInt32(head, 0);
-        if (length is <= 0 or > 1 << 20) throw new KeePassXcException(-1, "KeePassXC sent a message that's the wrong size.");
+        if (length is <= 0 or > 1 << 20) throw new KeePassXcException(KeePassXcException.BadFrame, "KeePassXC sent a message that's the wrong size.");
         var body = new byte[length];
         await _fromHost.ReadExactlyAsync(body, ct);
         using var doc = JsonDocument.Parse(body);

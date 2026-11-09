@@ -2,12 +2,24 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Provenance.Common.Otp;
 
-// Path is held open (no writes, no deletes) until this is disposed, so what runs is the file that was checked
-public sealed class ToolFind(string? path, bool cantCheck = false, SafeFileHandle? handle = null, bool tooOld = false) : IDisposable
-{
-    public string? Path { get; } = path;
-    public bool CantCheck { get; } = cantCheck;
-    public bool TooOld { get; } = tooOld;
+public enum FindState { Found, NotInstalled, CantCheck, TooOld }
 
-    public void Dispose() => handle?.Dispose();
+// Path is held open (no writes, no deletes) until this is disposed, so what runs is the file that was checked
+public sealed class ToolFind : IDisposable
+{
+    private readonly SafeFileHandle? _handle;
+
+    public ToolFind(string path, SafeFileHandle? handle = null)
+    {
+        Path = path;
+        _handle = handle;
+        State = FindState.Found;
+    }
+
+    public ToolFind(FindState notFound) => State = notFound;
+
+    public string? Path { get; }
+    public FindState State { get; }
+
+    public void Dispose() => _handle?.Dispose();
 }

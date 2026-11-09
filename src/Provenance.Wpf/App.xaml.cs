@@ -98,7 +98,7 @@ public partial class App : Application
         // every key's read on a worker now, so the first use on the UI thread finds it ready
         _ = (Services.GetRequiredService<ICredentialService>() as CredentialService)?.OpenKeyInBackground();
         _ = Services.GetRequiredService<PolSession>().OpenKeyInBackground();
-        _ = OtpSources.OpenKeyInBackground();
+        _ = KeePassXc.OpenKeyInBackground();
         _ = OtpReuse.OpenKeyInBackground();
 
         DispatcherUnhandledException += (_, args) =>
@@ -185,7 +185,7 @@ public partial class App : Application
         try
         {
             Log.Information("Provenance exiting (code {Code})", e.ApplicationExitCode);
-            try { Task.Run(OtpSources.LockBitwardenAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }
+            try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }
             if (_host is { } host) EndHost(host);
             if (RestartOnExit) StartAgain();
         }

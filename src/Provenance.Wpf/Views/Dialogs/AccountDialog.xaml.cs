@@ -26,7 +26,7 @@ public partial class AccountDialog : AppWindow
         InitializeComponent();
         _required = !edit || requireAll;
         _savedAccount = otpAccount;
-        BwLoginText.Text = OtpSources.BitwardenLoginText;
+        BwLoginText.Text = Bitwarden.LoginText;
         Closed += (_, _) => _toolWork?.Cancel();
         // before its first sign-in the name's a placeholder ("New account"), which reads badly after "Edit"
         HeaderText.Text = !edit ? "Add account"
@@ -73,7 +73,7 @@ public partial class AccountDialog : AppWindow
         else if (AccountRules.PasswordProblem(squareEnixPassword) is { } squareEnixPasswordProblem) problem = (squareEnixPasswordProblem, SquareEnixPasswordBox);
         else if (OtpBox.IsChecked == true && OtpSource.Length > 0 && OtpItemBox.Text.Trim().Length == 0)
             problem = ("Enter the item that holds the authenticator, or choose to type the code in.", OtpItemBox);
-        else if (OtpBox.IsChecked == true && CliTools.ForSource(OtpSource) is not null && OtpSources.StartsWithDash(OtpItemBox.Text))
+        else if (OtpBox.IsChecked == true && ToolFacts.ForSource(OtpSource) is not null && OtpSources.StartsWithDash(OtpItemBox.Text))
             problem = (OtpSources.DashText, OtpItemBox);
 
         if (problem is { } p)
@@ -116,15 +116,15 @@ public partial class AccountDialog : AppWindow
         _toolWork?.Cancel();
         _accounts = null;
         OpAccountPanel.Visibility = Visibility.Collapsed;
-        _tool = CliTools.ForSource(OtpSource);
+        _tool = ToolFacts.ForSource(OtpSource);
         ShowTool(ToolView.Hidden);
         if (_tool is not { } tool) return;
         var mine = _toolWork = new CancellationTokenSource();
         ToolFind found;
-        try { found = await Task.Run(() => CliTools.Find(tool)); }
+        try { found = await Task.Run(() => ToolFinder.Find(tool)); }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Looking for {Name}'s command-line tool failed", CliTools.Name(tool));
+            Log.Warning(ex, "Looking for {Name}'s command-line tool failed", ToolFacts.Name(tool));
             return;
         }
         using (found)
@@ -132,13 +132,13 @@ public partial class AccountDialog : AppWindow
             if (mine.IsCancellationRequested) return;
             if (found.Path is not { } path)
             {
-                ShowTool(found.CantCheck ? ToolView.CantCheck : found.TooOld ? ToolView.TooOld : ToolView.Missing);
+                ShowTool(ToolFix.ViewFor(found.State));
                 return;
             }
             ShowTool(ToolView.Ready);
-            if (tool != CliTools.OnePassword) return;
+            if (tool != ToolFacts.OnePassword) return;
             IReadOnlyList<OnePasswordAccount>? list;
-            try { list = await OtpSources.OnePasswordAccountsAsync(path, mine.Token); }
+            try { list = await OnePassword.AccountsAsync(path, mine.Token); }
             catch (OperationCanceledException) { return; }
             if (mine.IsCancellationRequested) return;
             ShowAccounts(list);
@@ -167,11 +167,11 @@ public partial class AccountDialog : AppWindow
         ToolText.Text = ToolFix.Text(view, tool);
         ToolButton.Content = ToolFix.Button(view, tool) is { } fix ? ToolFix.Label(fix) : null;
         ToolButton.Visibility = ToolButton.Content is null ? Visibility.Collapsed : Visibility.Visible;
-        bool login = view == ToolView.Ready && tool == CliTools.Bitwarden;
+        bool login = view == ToolView.Ready && tool == ToolFacts.Bitwarden;
         BitwardenLoginPanel.Visibility = login ? Visibility.Visible : Visibility.Collapsed;
         if (!login) return;
         // a login window that's still open gets watched again, and nothing's left greyed out once there isn't one
-        if (OtpSources.BitwardenLoginRunning is { } running) _ = WatchLoginAsync(running);
+        if (Bitwarden.LoginRunning is { } running) _ = WatchLoginAsync(running);
         else ShowLoginWaiting(false);
     }
 
@@ -179,7 +179,7 @@ public partial class AccountDialog : AppWindow
     {
         BwLoginButton.IsEnabled = BwServerBox.IsEnabled = BwServerUrlBox.IsEnabled = !waiting;
         BwLoginSpinner.Visibility = waiting ? Visibility.Visible : Visibility.Collapsed;
-        BwLoginText.Text = OtpSources.BitwardenLoginText;
+        BwLoginText.Text = Bitwarden.LoginText;
     }
 
     private void OnToolButton(object sender, RoutedEventArgs e)
@@ -201,7 +201,7 @@ public partial class AccountDialog : AppWindow
             ToolSpinner.Value = f * 100;
         });
         ToolInstall r;
-        try { r = await CliTools.InstallAsync(tool, progress, mine.Token); }
+        try { r = await ToolInstaller.InstallAsync(tool, progress, mine.Token); }
         catch (OperationCanceledException) { return; }
         if (mine.IsCancellationRequested) return;
         if (r == ToolInstall.Installed) await LookForToolAsync();
@@ -219,13 +219,13 @@ public partial class AccountDialog : AppWindow
     private async Task LogInToBitwardenAsync()
     {
         var picked = (BwServerBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
-        if (OtpSources.BitwardenServer(picked, BwServerUrlBox.Text) is not { } server)
+        if (Bitwarden.Server(picked, BwServerUrlBox.Text) is not { } server)
         {
             BwLoginText.Text = "Enter the server's address, starting with https://";
             BwServerUrlBox.Focus();
             return;
         }
-        await WatchLoginAsync(OtpSources.LogInToBitwardenAsync(server));
+        await WatchLoginAsync(Bitwarden.LogInAsync(server));
     }
 
     // only stops watching when the dialog closes or the source changes, the login itself carries on and locks after

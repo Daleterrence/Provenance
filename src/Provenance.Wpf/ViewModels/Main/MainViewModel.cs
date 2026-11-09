@@ -562,7 +562,7 @@ public partial class MainViewModel : ObservableObject
         p.OtpItem = r.OtpItem;
         p.OtpAccount = r.OtpAccount;
         PersistProfileList();
-        OtpSources.ForgetKeePassXcIfUnused(Profiles);
+        KeePassXc.ForgetIfUnused(Profiles);
         // without a change that can cure the refusal the refused details are still what'd be sent, so the block stays
         if (blocked is not null && cures)
         {
@@ -605,7 +605,7 @@ public partial class MainViewModel : ObservableObject
         }
         Profiles.Remove(profile);
         PersistProfileList();
-        OtpSources.ForgetKeePassXcIfUnused(Profiles);
+        KeePassXc.ForgetIfUnused(Profiles);
         if (profile == SelectedProfile) SelectedProfile = Profiles.FirstOrDefault();
         Log.Information("Removed account {Id}", profile.Id);
     }

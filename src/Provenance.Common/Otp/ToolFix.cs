@@ -16,16 +16,16 @@ public static class ToolFix
 
     public static string Text(ToolView view, string tool) => view switch
     {
-        ToolView.Missing => CliTools.MissingText(tool),
-        ToolView.CantCheck => CliTools.CantCheckText(tool),
-        ToolView.TooOld => CliTools.TooOldText(tool),
-        ToolView.Installing => CliTools.DownloadingText(tool),
-        ToolView.Ready => CliTools.ReadyText(tool),
-        ToolView.DownloadFailed => CliTools.ResultText(tool, ToolInstall.DownloadFailed),
-        ToolView.CheckFailed => CliTools.ResultText(tool, ToolInstall.CheckFailed),
-        ToolView.DownloadCantCheck => CliTools.ResultText(tool, ToolInstall.CantCheck),
-        ToolView.DownloadTooOld => CliTools.ResultText(tool, ToolInstall.TooOld),
-        ToolView.NotSupported => CliTools.ResultText(tool, ToolInstall.NotSupported),
+        ToolView.Missing => ToolText.Offer(FindState.NotInstalled, tool),
+        ToolView.CantCheck => ToolText.Offer(FindState.CantCheck, tool),
+        ToolView.TooOld => ToolText.Offer(FindState.TooOld, tool),
+        ToolView.Installing => ToolText.Downloading(tool),
+        ToolView.Ready => ToolText.Ready(tool),
+        ToolView.DownloadFailed => ToolText.Result(tool, ToolInstall.DownloadFailed),
+        ToolView.CheckFailed => ToolText.Result(tool, ToolInstall.CheckFailed),
+        ToolView.DownloadCantCheck => ToolText.Result(tool, ToolInstall.CantCheck),
+        ToolView.DownloadTooOld => ToolText.Result(tool, ToolInstall.TooOld),
+        ToolView.NotSupported => ToolText.Result(tool, ToolInstall.NotSupported),
         _ => "",
     };
 
@@ -33,8 +33,15 @@ public static class ToolFix
     {
         ToolView.Missing or ToolView.CantCheck or ToolView.TooOld => OtpFix.Install,
         ToolView.DownloadFailed or ToolView.CheckFailed or ToolView.DownloadCantCheck or ToolView.DownloadTooOld => OtpFix.TryAgain,
-        ToolView.Ready when tool == CliTools.OnePassword => OtpFix.OpenOnePasswordSettings,
+        ToolView.Ready when tool == ToolFacts.OnePassword => OtpFix.OpenOnePasswordSettings,
         _ => null,
+    };
+
+    public static ToolView ViewFor(FindState state) => state switch
+    {
+        FindState.CantCheck => ToolView.CantCheck,
+        FindState.TooOld => ToolView.TooOld,
+        _ => ToolView.Missing,
     };
 
     public static ToolView ViewFor(ToolInstall failed) => failed switch
@@ -47,5 +54,5 @@ public static class ToolFix
     };
 
     // null once it's open, otherwise the line to show
-    public static string? OpenSettings() => OtpSources.OpenOnePasswordSettings() ? null : OtpSources.OpenSettingsFailedText;
+    public static string? OpenSettings() => OnePassword.OpenSettings() ? null : OnePassword.OpenSettingsFailedText;
 }

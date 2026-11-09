@@ -200,7 +200,7 @@ public partial class OtpDialog : AppWindow
         SourceSpinner.Visibility = Visibility.Visible;
         MasterPanel.Visibility = RetryButton.Visibility = Visibility.Collapsed;
         _installTool = null;
-        SourceText.Text = _source == OtpSources.OnePassword ? OtpSources.OnePasswordWaitText : $"Getting the code from {name}...";
+        SourceText.Text = _source == OtpSources.OnePassword ? OnePassword.WaitText : $"Getting the code from {name}...";
         _fetch?.Cancel();
         var mine = _fetch = new CancellationTokenSource();
         var r = await OtpSources.FetchAsync(_source, _item, _account, _squareEnixId, masterPassword, mine.Token);
@@ -278,9 +278,9 @@ public partial class OtpDialog : AppWindow
         var mine = _fetch = new CancellationTokenSource();
         RetryButton.Visibility = Visibility.Collapsed;
         SourceSpinner.Visibility = Visibility.Visible;
-        SourceText.Text = CliTools.DownloadingText(tool);
+        SourceText.Text = ToolText.Downloading(tool);
         ToolInstall r;
-        try { r = await CliTools.InstallAsync(tool, null, mine.Token); }
+        try { r = await ToolInstaller.InstallAsync(tool, null, mine.Token); }
         catch (OperationCanceledException) { return; }
         if (!IsVisible || _code != null || mine != _fetch || mine.IsCancellationRequested) return;
         if (r == ToolInstall.Installed)
@@ -288,8 +288,8 @@ public partial class OtpDialog : AppWindow
             _ = FetchAsync(null);
             return;
         }
-        if (r == ToolInstall.NotSupported) ShowProblem(CliTools.ResultText(tool, r), OtpFix.TypeInstead);
-        else ShowProblem(CliTools.ResultText(tool, r), OtpFix.Install, tool, ToolFix.Label(OtpFix.TryAgain));
+        if (r == ToolInstall.NotSupported) ShowProblem(ToolText.Result(tool, r), OtpFix.TypeInstead);
+        else ShowProblem(ToolText.Result(tool, r), OtpFix.Install, tool, ToolFix.Label(OtpFix.TryAgain));
     }
 
     private void OnUnlock(object sender, RoutedEventArgs e)
