@@ -14,8 +14,9 @@ public static class MultiAccountRules
     }
 
     // each account has to have its own picked, so nobody's left guessing which one it starts with
+    // null is nothing picked, an empty name is Windower's Default profile
     public static List<MultiAccountEntry> WithoutProfile(IEnumerable<MultiAccountEntry> runEntries) =>
-        runEntries.Where(e => string.IsNullOrWhiteSpace(e.ThirdPartyHookProfile)).ToList();
+        runEntries.Where(e => e.ThirdPartyHookProfile is null).ToList();
 
     public static string NoProfileText(ThirdPartyHook platform, IReadOnlyList<string> names)
     {
