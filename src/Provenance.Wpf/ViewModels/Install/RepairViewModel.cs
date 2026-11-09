@@ -108,7 +108,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
             var installed = region ?? PolRegion.UnitedStates;
             if (MirrorLayout.RegionFolder(installed) is not { } mirrorRegion)
             {
-                End("Repair isn't available", MainViewModel.RepairNotYetText(installed), failed: false);
+                End("Repair isn't available", RepairButtonViewModel.NotYetText(installed), failed: false);
                 return;
             }
             var viewerDir = PolPaths.TryGetInstallFolder(installed, GameProduct.Viewer);

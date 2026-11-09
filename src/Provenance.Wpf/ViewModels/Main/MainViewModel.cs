@@ -1,8 +1,5 @@
-using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
-using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -10,8 +7,6 @@ using Provenance.Common;
 using Provenance.Common.Credentials;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Hook;
-using Provenance.Common.Otp;
-using Provenance.Common.Progress;
 using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Common.Feeds;
@@ -37,12 +32,10 @@ public partial class MainViewModel : ObservableObject
     private readonly UiThread _ui = new();
     private readonly IDialogs _dialogs;
     private readonly IWindowManager _windows;
-    private readonly ICredentialService _credentials;
     private readonly ISettingsService _settings;
-    private readonly FeedService _feeds;
     private readonly PolSession _pol;
     private readonly AvatarService _avatars;
-    private readonly DispatcherTimer _slideTimer, _socialPoll, _worldsTimer, _elapsedTimer;
+    private readonly DispatcherTimer _socialPoll, _elapsedTimer;
 
     public event Action? RequestHide;
     public event Action? RequestShow;
@@ -57,34 +50,29 @@ public partial class MainViewModel : ObservableObject
     {
         _dialogs = dialogs;
         _windows = windows;
-        _credentials = credentials;
         _settings = settings;
         _settings.SaveFailed += why => _ui.Post(() =>
             _dialogs.Error("Settings not saved",
                 "Provenance couldn't save your settings, so your changes will only last until Provenance closes.", offerLogs: true));
         if (_settings.LoadProblem is { } loadProblem)
             _ui.Post(() => _dialogs.Info("Settings reset", loadProblem));
-        _feeds = feeds;
         _pol = pol;
         _avatars = avatars;
         _timeLeft = new PhaseTimeLeft(text => TimeLeftText = text);
-        _slideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
-        _slideTimer.Tick += (_, _) => AdvanceNews(+1);
-        // POL only rewrites world status every 5 mins anyway
-        _worldsTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
-        _worldsTimer.Tick += async (_, _) => { if (_windowShown) await RefreshIfStaleAsync(); };
-        _feeds.RegionChanged += (_, _) => _ui.Post(async () =>
-        {
-            await LoadFeedsAsync(again: true);
-            await LoadWorldsAsync();
-        });
+        News = new NewsViewModel(feeds, _ui, OpenLink);
+        Accounts = new AccountsViewModel(dialogs, credentials, settings, avatars);
         _socialPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _socialPoll.Tick += (_, _) => _pol.Poll();
+        Multi = new MultiRunViewModel(dialogs, windows, settings, credentials, pol, _ui, Accounts,
+            new MultiRunLinks(() => IsLaunching || LoggedIn, _socialPoll.Stop, EnsureMemberAgreement, PromptHandleName, GameFolders,
+                              () => PlayRegion, WritePolOptions, BackUpGameSettingsAsync));
+        Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, News, () => IsLaunching || LoggedIn, () => Multi.Running,
+                                           RefreshInstallState, RefreshLargeAddressAware);
         _pol.SnapshotUpdated += OnSnapshot;
         _pol.SessionEnded += why => _ui.Run(() =>
         {
             Log.Information("Session ended: {Why} (signed in here: {Connected})", why, LoggedIn);
-            StartAllAccountsCommand.NotifyCanExecuteChanged();
+            Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
             if (!LoggedIn) return;
             EndSession(SessionEnd.Dropped);   // no question asked, the session's gone so the editor couldn't save anyway
             RequestShow?.Invoke();
@@ -94,32 +82,18 @@ public partial class MainViewModel : ObservableObject
         Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings);
         Social.OpenChatRequested += OpenChatWith;
 
-        Profiles = new ObservableCollection<Account>(_settings.Current.Profiles);
-        int needDetails = Profiles.Count(p => !_credentials.HasUsableDetails(p.Id));
-        if (needDetails > 0)
-            Log.Information("{Count} account(s) need their sign-in details again", needDetails);
-        // a fresh settings file's "Default" and a never-signed-in "New account" get a proper name
-        int n = 0;
-        bool changed = false;
-        foreach (var p in Profiles)
+        Multi.RequestShow += () => RequestShow?.Invoke();
+        Multi.RequestExit += () => RequestExit?.Invoke();
+        Multi.Changed += () => _openSettings?.MultiRunChanged();
+        Multi.PropertyChanged += (_, e) =>
         {
-            n++;
-            if (p.DisplayName is "New account" or "Default")
-            {
-                p.DisplayName = string.IsNullOrWhiteSpace(p.HandleName) ? $"Account {n}" : p.HandleName!;
-                changed = true;
-            }
-        }
-        // an account without a home slot gets one, in list order (the order they were added)
-        changed |= HomeSlots.Assign(_settings.Current);
-        if (changed) PersistProfileList();   // no settings write on an ordinary start
-        avatars.Prewarm(Profiles.Select(p => p.ProfilePictureId));
-
-        var active = Profiles.FirstOrDefault(p => p.Id == _settings.Current.ActiveProfileId) ?? Profiles.FirstOrDefault();
-        _selectedProfile = active;
-        _autoLogin = _settings.Current.AutoLogin;
-        if (active != null) LoadCredentialsForProfile(active);
-        _startGameImmediately = _settings.Current.StartGameImmediately;
+            if (e.PropertyName != nameof(MultiRunViewModel.Running)) return;
+            Social.GroupChatBlocked = Multi.Running;
+            Repair.Refresh();
+            if (!Multi.Running) _ = Repair.ProbeAsync();
+            LogInCommand.NotifyCanExecuteChanged();
+            ShowHandles();
+        };
         Social.MessageReceived += (from, text) => Alert(from, $"New message from {from}: {Preview(text, 60)}");
         Social.FriendRequestReceived += (who, mid) =>
             Alert(null, $"{who} sent you a friend request. Open {FriendsWindowTitle} to answer it.", "AccountPlusOutline",
@@ -130,7 +104,7 @@ public partial class MainViewModel : ObservableObject
         Social.NoticeReceived += (who, text) => Alert(who, text, "BellOutline");
         Social.GroupChatRequested += OpenGroupChat;
         Social.GroupChat.LineArrived += OnGroupChatLine;
-        Social.SnapshotApplied += _ => DropAnsweredNotice();
+        Social.SnapshotApplied += _ => Notice.DropIfAnswered(Social.IsWaiting);
         Social.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(SocialViewModel.UnseenCount) or nameof(SocialViewModel.GroupChatUnread) && !WantsAttention)
@@ -139,9 +113,8 @@ public partial class MainViewModel : ObservableObject
         // a quiet one, no taskbar flash, and it never covers a message notice
         Social.FriendCameOnline += who =>
         {
-            if (!_settings.Current.NotifyFriendsOnline || Notice is { Length: > 0 }) return;
-            _lastSender = who;
-            ShowNotice($"{who} is online now.", "AccountCheckOutline");
+            if (!_settings.Current.NotifyFriendsOnline || Notice.Current is { Text.Length: > 0 }) return;
+            Notice.Show($"{who} is online now.", "AccountCheckOutline", NoticeTarget.Chat, who);
         };
         Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture)
         {
@@ -155,7 +128,7 @@ public partial class MainViewModel : ObservableObject
         };
         PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(LoggedIn) or nameof(MultiRunning)) ShowHandles();
+            if (e.PropertyName == nameof(LoggedIn)) ShowHandles();
         };
         Social.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SocialViewModel.GameRunning)) ShowHandles(); };
         RefreshInstallState();
@@ -164,7 +137,6 @@ public partial class MainViewModel : ObservableObject
         {
             ElapsedText = Seconds(DateTime.UtcNow - _launchStarted);
         };
-        StartRepairProbe();
     }
 
     [ObservableProperty] private string _progressText = string.Empty;
@@ -220,7 +192,7 @@ public partial class MainViewModel : ObservableObject
         if (p.Kind == LaunchProgressKind.Notice)
         {
             Log.Information("progress: notice: {Detail}", p.Detail);
-            ShowNotice(p.Detail, "InformationOutline", opens: false);
+            Notice.Show(p.Detail, "InformationOutline");
             return;
         }
         if (!string.IsNullOrWhiteSpace(p.Detail)) ProgressText = p.Detail;
@@ -253,15 +225,8 @@ public partial class MainViewModel : ObservableObject
         cts.Cancel();
     }
 
-    [ObservableProperty] private string? _notice;
-    // "mail" is POL's envelope, anything else is a Material icon name
-    [ObservableProperty] private string _noticeIcon = "mail";
-    [ObservableProperty] private bool _noticeOpens = true;
-    private bool _noticeStays;
-    private int _noticeRequest;   // the request or invitation the notice is about
-    private DispatcherTimer? _noticeTimer;
-    private string? _lastSender;
     private bool _gameRunning;
+    private SettingsViewModel? _openSettings;
 
     public bool MinimizeGoesToTray => _settings.Current.MinimizeToTray && !_gameRunning;
 
@@ -273,15 +238,30 @@ public partial class MainViewModel : ObservableObject
     partial void OnLoggedInChanged(bool value)
     {
         OnPropertyChanged(nameof(CloseTooltip));
+        Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
+        Repair.StartCommand.NotifyCanExecuteChanged();
         if (value && (_settings.Current.KeepSignedInInTray || _settings.Current.MinimizeToTray)) TrayIcon.Warm();
         RefreshLargeAddressAware();
         // the hook numbers mail per session, so a request's notice can't outlive it
-        if (!value && _noticeRequest != 0) Notice = null;
+        if (!value) Notice.DropRequest();
     }
 
-    partial void OnIsLaunchingChanged(bool value) => RefreshLargeAddressAware();
+    partial void OnIsLaunchingChanged(bool value)
+    {
+        Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
+        Repair.StartCommand.NotifyCanExecuteChanged();
+        RefreshLargeAddressAware();
+    }
 
     // an open Settings page's Large Address Aware row goes by the same sign-in and run state as Repair
+    // Pid has no change notice, so this gets called wherever it changes (any thread)
+    private void RefreshStartAll() =>
+        _ui.Post(() =>
+        {
+            Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
+            Repair.Refresh();
+        });
+
     private void RefreshLargeAddressAware() => _ = _openSettings?.ReadLargeAddressAwareAsync();
     public bool TrayTipShown => _settings.Current.TrayTipShown;
 
@@ -289,26 +269,12 @@ public partial class MainViewModel : ObservableObject
 
     private void Alert(string? sender, string text, string icon = "mail", bool stays = false, int request = 0)
     {
-        _lastSender = sender;
-        ShowNotice(text, icon, stays: stays);
-        _noticeRequest = request;
+        Notice.Show(text, icon, sender is null ? NoticeTarget.Friends : NoticeTarget.Chat, sender, request, stays);
         RequestAttention?.Invoke(true);
     }
 
     // false once everything's been read or seen, like a message landing in a conversation that's already on screen
     public bool WantsAttention => Social.UnseenCount > 0 || (_settings.Current.GroupChatFlash && Social.GroupChatUnread > 0);
-
-    // answered here, the request leaves the list and the notice goes with it. Answering it anywhere else takes another
-    // login of this POL ID, which ends this session, and logging out takes the notice down
-    private void DropAnsweredNotice()
-    {
-        if (_noticeRequest != 0 && Notice != null && !Social.IsWaiting(_noticeRequest)) Notice = null;
-    }
-
-    partial void OnNoticeChanged(string? value)
-    {
-        if (value is null) _noticeRequest = 0;
-    }
 
     private static string Preview(string text, int max)
     {
@@ -318,39 +284,14 @@ public partial class MainViewModel : ObservableObject
         return (cut > max / 2 ? text[..cut] : text[..max]).TrimEnd() + "...";
     }
 
-    public void HoldNotice(bool hold)
-    {
-        if (_noticeTimer is null || Notice is null || _noticeStays) return;
-        if (hold) _noticeTimer.Stop();
-        else _noticeTimer.Start();
-    }
-
-    public void HoldSlides(bool hold)
-    {
-        if (hold) _slideTimer.Stop();
-        else if (NewsItems.Count > 1) _slideTimer.Start();
-    }
-
-    public void BannerFailed()
-    {
-        if (CurrentNews is not { ImageUrl: not null } item) return;
-        BannerImages.Forget(item.ImageUrl);
-        var i = NewsItems.IndexOf(item);
-        var plain = item with { ImageUrl = null };
-        if (i >= 0) NewsItems[i] = plain;
-        CurrentNews = plain;
-    }
-
-    private bool _noticeGroupChat;
-
     // lines in the group chat with its window hidden or behind, one notice a batch, as the settings say
     private void OnGroupChatLine(string group, string who, string text, int count)
     {
         bool notice = _settings.Current.GroupChatNotice;
         if (notice)
         {
-            ShowNotice(count == 1 ? $"{who} in {group}: {Preview(text, 60)}" : $"{count} new lines in {group}", "Forum");
-            _noticeGroupChat = true;
+            Notice.Show(count == 1 ? $"{who} in {group}: {Preview(text, 60)}" : $"{count} new lines in {group}", "Forum",
+                        NoticeTarget.GroupChat);
         }
         if (notice || _settings.Current.GroupChatFlash) RequestAttention?.Invoke(notice);
     }
@@ -358,7 +299,7 @@ public partial class MainViewModel : ObservableObject
     // the Groups tab's Group Chat: the viewer's handle question (0x3eb0) first when it's needed, then the window
     private void OpenGroupChat(SocialViewModel.GroupItem g)
     {
-        if (MultiRunning || Social.Last.GroupList.FirstOrDefault(x => x.Id == g.Id) is not { } group) return;
+        if (Multi.Running || Social.Last.GroupList.FirstOrDefault(x => x.Id == g.Id) is not { } group) return;
         if (Social.GroupChat.Open && string.Equals(Social.GroupChat.GroupId, group.Id, StringComparison.OrdinalIgnoreCase))
         {
             _windows.ShowGroupChat(Social.GroupChat);
@@ -373,257 +314,17 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
-    internal void ShowNotice(string text, string icon = "mail", bool opens = true, bool stays = false)
-    {
-        _noticeRequest = 0;
-        _noticeGroupChat = false;
-        Notice = text;
-        NoticeIcon = icon;
-        NoticeOpens = opens;
-        _noticeStays = stays;
-        if (_noticeTimer is null)
-        {
-            _noticeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
-            _noticeTimer.Tick += (_, _) =>
-            {
-                Notice = null;
-                _noticeTimer?.Stop();
-            };
-        }
-        _noticeTimer.Stop();
-        if (!stays) _noticeTimer.Start();
-    }
-
-    [RelayCommand]
-    private void DismissNotice() => Notice = null;
-
-    public ObservableCollection<Account> Profiles { get; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasProfile), nameof(ProfileTitle), nameof(ProfilePicture))]
-    private Account? _selectedProfile;
-
-    public bool HasProfile => SelectedProfile != null;
-
-    public string ProfileTitle => SelectedProfile?.DisplayName ?? string.Empty;
-
-    public System.Windows.Media.ImageSource? ProfilePicture =>
-        _avatars.ProfilePicture(SelectedProfile?.ProfilePictureId ?? 0);
-
-    internal string? _sessionProfileId;   // can differ from the selection
-
-    internal void LearnIdentity(PolSocialSnapshot snap)
-    {
-        if (string.IsNullOrWhiteSpace(snap.MyHandle) || _sessionProfileId is null) return;
-        if (Profiles.FirstOrDefault(p => p.Id == _sessionProfileId) is not { } prof) return;
-        var key = snap.Handles.FirstOrDefault(h => h.Active)?.Key;
-        // no profile picture (-1) says nothing, comparing it anyway would rewrite settings.json every 2 s
-        if (prof.DisplayName == snap.MyHandle && prof.HandleName == snap.MyHandle &&
-            (snap.MyProfilePictureId < 0 || prof.ProfilePictureId == snap.MyProfilePictureId) &&
-            (string.IsNullOrEmpty(key) || prof.HandleKey == key)) return;
-        prof.DisplayName = snap.MyHandle;
-        prof.HandleName = snap.MyHandle;
-        if (snap.MyProfilePictureId >= 0) prof.ProfilePictureId = snap.MyProfilePictureId;
-        if (!string.IsNullOrEmpty(key)) prof.HandleKey = key;
-        PersistProfileList();
-        if (prof == SelectedProfile) RefreshProfileDisplay();
-        else { var i = Profiles.IndexOf(prof); if (i >= 0) Profiles[i] = prof; }
-    }
-
-    partial void OnSelectedProfileChanged(Account? value)
-    {
-        if (value == null) return;
-        _settings.SaveChange(s => s.ActiveProfileId = value.Id);
-        LoadCredentialsForProfile(value);
-    }
-
-    [ObservableProperty] private bool _useOtp;
-
-    partial void OnUseOtpChanged(bool value)
-    {
-        if (SelectedProfile is { } p && p.UseOtp != value) { p.UseOtp = value; PersistProfileList(); }
-    }
-
-    public bool HasSavedCredentials { get; private set; }
-
-    private void LoadCredentialsForProfile(Account profile)
-    {
-        UseOtp = profile.UseOtp;
-        HasSavedCredentials = _credentials.HasUsableDetails(profile.Id);
-    }
-
-    // with slots, the settings lock is held from reading another copy's numbers to saving, so two can't give out one
-    private void PersistProfileList(bool slots = false)
-    {
-        using var gate = slots ? _settings.HoldLock() : null;
-        var s = _settings.Current;
-        s.Profiles = Profiles.ToList();
-        if (slots) HomeSlots.Assign(s, _settings.ReadSaved());
-        _settings.Save(s);
-    }
-
     internal Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount squareEnix, string otp,
                                            IProgress<LaunchProgress>? progress, CancellationToken token) =>
         _pol.ConnectAsync(pol, squareEnix, otp, p.Id, progress, PromptHandleName, token,
-                          new SessionOptions(false, null, EnsureHomeSlot(p), HandleKey: p.HandleKey));
-
-    // a login always goes with the account's own home slot, so one without gets it now
-    internal int EnsureHomeSlot(Account p)
-    {
-        if (!HomeSlots.Valid(p.HomeSlot) || Profiles.Any(o => o != p && o.HomeSlot == p.HomeSlot))
-            PersistProfileList(slots: true);
-        return p.HomeSlot;
-    }
-
-    // only the POL entries' user names get read, no password's decoded
-    private Account? ProfileWithPolId(string polId, Account? except = null) =>
-        Profiles.FirstOrDefault(p => p != except &&
-                                     string.Equals(_credentials.ReadPolId(p.Id), polId, StringComparison.OrdinalIgnoreCase));
-
-    private void RefreshProfileDisplay()
-    {
-        if (SelectedProfile is not { } p) return;
-        var idx = Profiles.IndexOf(p);
-        if (idx >= 0) Profiles[idx] = p;   // redraws the switcher's text after an in-place rename
-        SelectedProfile = p;
-        OnPropertyChanged(nameof(ProfileTitle));
-        OnPropertyChanged(nameof(ProfilePicture));
-    }
-
-    [RelayCommand]
-    private void AddAccount() => TryAddAccount();
-
-    private bool TryAddAccount()
-    {
-        var r = _dialogs.AskAccount(null, false, edit: false);
-        if (r == null) return false;
-        // one POL ID twice would be two cards for one account, and the message names the card, never the ID
-        if (ProfileWithPolId(r.PolId) is { } same)
-        {
-            _dialogs.Info("Account already added",
-                $"This PlayOnline ID is already saved as {same.DisplayName}. Press Edit account if you want to change its details.");
-            SelectedProfile = same;
-            return false;
-        }
-        int n = Profiles.Count(p => p.DisplayName.StartsWith("New account", StringComparison.Ordinal));
-        var profile = new Account { DisplayName = n == 0 ? "New account" : $"New account {n + 1}", UseOtp = r.UseOtp,
-                                    OtpSource = r.OtpSource, OtpItem = r.OtpItem, OtpAccount = r.OtpAccount };
-        _credentials.SavePolAccount(profile.Id, new PolAccount(r.PolId, r.PolPassword));
-        try { _credentials.SaveSquareEnixAccount(profile.Id, new SquareEnixAccount(r.SeaId, r.SeaPassword)); }
-        catch
-        {
-            // the account isn't added, so its POL entry mustn't stay behind
-            try { _credentials.DeletePolAccount(profile.Id); }
-            catch (Exception ex) { Log.Warning(ex, "Could not remove the POL entry of account {Id} after a failed save", profile.Id); }
-            throw;
-        }
-        Profiles.Add(profile);
-        PersistProfileList(slots: true);
-        SelectedProfile = profile;
-        Log.Information("Added account {Id}", profile.Id);
-        return true;
-    }
-
-    [RelayCommand]
-    private void EditAccount() => EditAccount(requireAll: false);
-
-    private bool EditAccount(bool requireAll, AccountDialogResult? typed = null)
-    {
-        if (SelectedProfile is not { } p) return false;
-        requireAll |= AccountRules.NeedsAllDetails(_credentials.HasUsableDetails(p.Id),
-                                      _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id)?.Problem);
-        var r = _dialogs.AskAccount(p.DisplayName, typed?.UseOtp ?? p.UseOtp, edit: true,
-                                    typed?.OtpSource ?? p.OtpSource, typed?.OtpItem ?? p.OtpItem, requireAll: requireAll,
-                                    polId: typed?.PolId ?? "", squareEnixId: typed?.SeaId ?? "", otpAccount: typed?.OtpAccount ?? p.OtpAccount);
-        if (r == null) return false;
-        if (r.PolId.Length > 0 && ProfileWithPolId(r.PolId, except: p) is { } same)
-        {
-            _dialogs.Info("Account already added",
-                $"This PlayOnline ID is already saved as {same.DisplayName}, so nothing was changed.");
-            return false;
-        }
-        var polEdit = AccountRules.SideEditOf(r.PolId, r.PolPassword);
-        var squareEnixEdit = AccountRules.SideEditOf(r.SeaId, r.SeaPassword);
-        var pol = polEdit == AccountRules.SideEdit.Fill ? _credentials.LoadPolAccount(p.Id) : null;
-        var squareEnix = squareEnixEdit == AccountRules.SideEdit.Fill ? _credentials.LoadSquareEnixAccount(p.Id) : null;
-        if (AccountRules.FillFailed(polEdit, pol, squareEnixEdit, squareEnix))
-            return EditAccount(requireAll: true, typed: AccountRules.WithoutPasswords(r));
-        // read before anything's saved, so the typed details get compared with the saved ones
-        var blocked = _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id && e.CredentialsRefused);
-        bool cures = blocked is not null && AccountRules.ChangesLogIn(r, _credentials.ReadIds(p.Id), p.UseOtp, p.OtpSource, p.OtpItem, p.OtpAccount);
-        if (polEdit != AccountRules.SideEdit.Keep)
-            _credentials.SavePolAccount(p.Id, new PolAccount(r.PolId.Length > 0 ? r.PolId : pol!.PolId,
-                                                             r.PolPassword.Length > 0 ? r.PolPassword : pol!.Password));
-        if (squareEnixEdit != AccountRules.SideEdit.Keep)
-            _credentials.SaveSquareEnixAccount(p.Id, new SquareEnixAccount(r.SeaId.Length > 0 ? r.SeaId : squareEnix!.Username,
-                                                             r.SeaPassword.Length > 0 ? r.SeaPassword : squareEnix!.Password));
-        p.UseOtp = r.UseOtp;
-        p.OtpSource = r.OtpSource;
-        p.OtpItem = r.OtpItem;
-        p.OtpAccount = r.OtpAccount;
-        PersistProfileList();
-        KeePassXc.ForgetIfUnused(Profiles);
-        // without a change that can cure the refusal the refused details are still what'd be sent, so the block stays
-        if (blocked is not null && cures)
-        {
-            var id = blocked.ProfileId;
-            _settings.SaveChange(s =>
-            {
-                if (s.MultiAccounts.FirstOrDefault(e => e.ProfileId == id) is not { } e) return;
-                e.CredentialsRefused = false;
-                e.Problem = null;
-                e.Enabled = true;
-            });
-        }
-        else if (blocked is not null)
-            _dialogs.Info("Edit account", NothingChangedText);
-        LoadCredentialsForProfile(p);
-        RefreshProfileDisplay();
-        return true;
-    }
-
-    internal const string NothingChangedText =
-        "You didn't change anything that affects logging in, so this account stays turned off for multi-account login.";
-
-    internal const string RemoveFailedText = "Provenance couldn't remove this account's saved details.";
-
-    [RelayCommand]
-    private void RemoveAccount(Account? profile)
-    {
-        profile ??= SelectedProfile;
-        if (profile == null) return;
-        if (!_dialogs.Confirm("Remove account",
-                $"Remove {profile.DisplayName} and its saved passwords from this PC? Your PlayOnline account itself won't change.",
-                "REMOVE", ConfirmStyle.Destructive)) return;
-        // the card stays when an entry couldn't go, so no saved password's left without a card that names it
-        try { _credentials.DeleteProfile(profile.Id); }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Could not remove the saved details of account {Id}", profile.Id);
-            _dialogs.Error("Remove account", RemoveFailedText, offerLogs: true);
-            return;
-        }
-        Profiles.Remove(profile);
-        PersistProfileList();
-        KeePassXc.ForgetIfUnused(Profiles);
-        if (profile == SelectedProfile) SelectedProfile = Profiles.FirstOrDefault();
-        Log.Information("Removed account {Id}", profile.Id);
-    }
-
-    [ObservableProperty] private bool _autoLogin;
-
-    partial void OnAutoLoginChanged(bool value) => _settings.SaveChange(s => s.AutoLogin = value);
-
-    [ObservableProperty] private bool _startGameImmediately;
-
-    partial void OnStartGameImmediatelyChanged(bool value) => _settings.SaveChange(s => s.StartGameImmediately = value);
+                          new SessionOptions(false, null, Accounts.EnsureHomeSlot(p), HandleKey: p.HandleKey));
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(LogInCommand), nameof(StartAllAccountsCommand), nameof(RepairGameFilesCommand))]
+    [NotifyCanExecuteChangedFor(nameof(LogInCommand))]
     [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowLogInCard), nameof(ShowFriendsCard))]
     private bool _isLaunching;
 
-    private bool CanLogin() => !IsLaunching && !MultiRunning;
+    private bool CanLogin() => !IsLaunching && !Multi.Running;
 
     [RelayCommand(CanExecute = nameof(CanLogin))]
     private Task LogInAsync() => _connectTask = ConnectSocialAsync();
@@ -638,163 +339,19 @@ public partial class MainViewModel : ObservableObject
         if (_connectTask is { } t) await Task.WhenAny(t, Task.Delay(TimeSpan.FromSeconds(15)));
     }
 
-    public ObservableCollection<FeedItem> NewsItems { get; } = new();
-    public ObservableCollection<FeedItem> StatusItems { get; } = new();
-
-    [ObservableProperty] private FeedItem? _currentNews;
-    [ObservableProperty] private int _currentNewsIndex;
-    [ObservableProperty] private bool _feedsLoaded;
-
-    public bool ShowLoadingHint => NewsItems.Count == 0;
-    partial void OnFeedsLoadedChanged(bool value) { OnPropertyChanged(nameof(ShowLoadingHint)); OnPropertyChanged(nameof(FeedsHint)); }
-
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FeedsHint))]
-    private bool _feedsFailed;
-
-    public string FeedsHint => FeedsFailed ? "PlayOnline news isn't available right now."
-                             : FeedsLoaded ? "No news right now." : "Loading PlayOnline news...";
-
-    [RelayCommand]
-    private async Task RetryFeeds()
-    {
-        FeedsFailed = false;
-        await LoadFeedsAsync();
-    }
-
-    public ObservableCollection<WorldStatus> Worlds { get; } = new();
-
-    [ObservableProperty] private string _worldsSummary = "Checking world status...";
-    [ObservableProperty] private string _worldsState = "";
-    [ObservableProperty] private string _worldsCheckedText = "";
-
-    internal DateTime _worldsAt = DateTime.MinValue;
-    internal DateTime _feedsAt = DateTime.MinValue;
-    private bool _worldsLoading, _feedsLoading, _feedsAgain, _windowShown = true;
-    private static readonly TimeSpan WorldsMaxAge = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan FeedsMaxAge = TimeSpan.FromMinutes(30);
-
-    public void SetWindowShown(bool shown)
-    {
-        bool was = _windowShown;
-        _windowShown = shown;
-        if (shown && !was) _ = RefreshIfStaleAsync();
-    }
-
-    private async Task RefreshIfStaleAsync()
-    {
-        if (DateTime.UtcNow - _worldsAt >= WorldsMaxAge) await LoadWorldsAsync();
-        if (DateTime.UtcNow - _feedsAt >= FeedsMaxAge) await LoadFeedsAsync();
-    }
-
-    public async Task LoadWorldsAsync()
-    {
-        if (_worldsLoading) return;
-        _worldsLoading = true;
-        IReadOnlyList<WorldStatus> list;
-        try { list = await _feeds.LoadWorldsAsync(); }
-        finally { _worldsLoading = false; }
-        _worldsTimer.Start();
-        if (list.Count == 0)
-        {
-            if (Worlds.Count == 0) { WorldsSummary = "World status isn't available"; WorldsState = ""; }
-            return;
-        }
-        _worldsAt = DateTime.UtcNow;   // only a good read counts, a failed one's tried again on the next tick
-        WorldsCheckedText = "Checked at " + DateTime.Now.ToString("t", CultureInfo.CurrentCulture);
-        Worlds.Clear();
-        foreach (var w in list) Worlds.Add(w);
-        var notUp = list.Where(w => !w.IsUp).ToList();
-        bool onlyMaintenance = notUp.All(w => w.Status is "maintenance" or "partial-maintenance");
-        WorldsSummary = notUp.Count switch
-        {
-            0 => $"All {list.Count} worlds up",
-            _ when notUp.Count == list.Count => onlyMaintenance ? "All worlds in maintenance" : "Worlds are down",
-            1 => $"{notUp[0].Name}: {notUp[0].Label}",
-            _ => $"{notUp.Count} worlds {(onlyMaintenance ? "in maintenance" : "not up")}",
-        };
-        WorldsState = notUp.Count == 0 ? "up" : onlyMaintenance ? "maintenance" : "down";
-    }
-
-    [RelayCommand]
-    private void OpenServerStatus() => OpenLink(_feeds.ServicePageUrl);
-
-    public async Task LoadFeedsAsync(bool again = false)
-    {
-        // a region change mid-load mustn't get lost
-        if (_feedsLoading) { _feedsAgain |= again; return; }
-        _feedsLoading = true;
-        try
-        {
-            var (news, status) = await _feeds.LoadAsync();
-            if (news.Items.Count + status.Items.Count > 0) _feedsAt = DateTime.UtcNow;
-            var newNews = (await _feeds.WithLocalImagesAsync(news.Items.Take(5).ToList())).ToList();
-            static string Sig(IEnumerable<FeedItem> items) =>
-                string.Join("\n", items.Select(i => $"{i.Url}|{i.Title}|{i.Date:O}|{i.Category}|{i.Badge}"));
-            if (newNews.Count + status.Items.Count == 0 && FeedsLoaded) return;
-            if (Sig(newNews) != Sig(NewsItems))
-            {
-                var keepUrl = CurrentNews?.Url;
-                NewsItems.Clear();
-                foreach (var it in newNews) NewsItems.Add(it);
-                var at = keepUrl is null ? 0 : Math.Max(0, newNews.FindIndex(n => n.Url == keepUrl));
-                CurrentNewsIndex = at;
-                CurrentNews = NewsItems.ElementAtOrDefault(at);
-            }
-            // four fit without a scroll bar
-            var topStatus = status.Items.Take(4).ToList();
-            if (Sig(topStatus) != Sig(StatusItems))
-            {
-                StatusItems.Clear();
-                foreach (var it in topStatus) StatusItems.Add(it);
-            }
-            FeedsLoaded = NewsItems.Count > 0 || StatusItems.Count > 0;
-            FeedsFailed = !FeedsLoaded;
-            OnPropertyChanged(nameof(ShowLoadingHint));
-            OnPropertyChanged(nameof(FeedsHint));
-            if (NewsItems.Count > 1) _slideTimer.Start();
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Feed load failed");
-            FeedsFailed = !FeedsLoaded;
-        }
-        finally
-        {
-            _feedsLoading = false;
-            if (_feedsAgain) { _feedsAgain = false; _ = LoadFeedsAsync(); }
-        }
-    }
-
-    private void AdvanceNews(int delta)
-    {
-        if (NewsItems.Count == 0) return;
-        CurrentNewsIndex = ((CurrentNewsIndex + delta) % NewsItems.Count + NewsItems.Count) % NewsItems.Count;
-    }
-
-    partial void OnCurrentNewsIndexChanged(int value)
-    {
-        if (value < 0 || value >= NewsItems.Count) return;   // the ListBox pushes -1 while the list's rebuilt
-        CurrentNews = NewsItems[value];
-        if (NewsItems.Count > 1) { _slideTimer.Stop(); _slideTimer.Start(); }
-    }
-
-    [RelayCommand]
-    private void NextNews() => AdvanceNews(+1);
-
-    [RelayCommand]
-    private void PrevNews() => AdvanceNews(-1);
-
-    [RelayCommand]
-    private void OpenCurrentNews()
-    {
-        if (CurrentNews is { Url: { Length: > 0 } url }) OpenLink(url);
-    }
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(StartAllAccountsCommand), nameof(RepairGameFilesCommand))]
     [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowLogInCard), nameof(ShowFriendsCard))]
     private bool _loggedIn;
+
+    public NewsViewModel News { get; }
+
+    public AccountsViewModel Accounts { get; }
+
+    public MultiRunViewModel Multi { get; }
+
+    public NoticeBanner Notice { get; } = new();
+
+    public RepairButtonViewModel Repair { get; }
 
     public SocialViewModel Social { get; }
 
@@ -815,7 +372,7 @@ public partial class MainViewModel : ObservableObject
         GameInstalled = region is { } r &&
                         PolPaths.TryGetInstallFolder(r, GameProduct.Game) is { } f &&
                         File.Exists(Path.Combine(f, GameProduct.Game.KeyFile));
-        RefreshRepairAvailable(region);
+        Repair.SetRegion(region);
     }
 
     [RelayCommand]
@@ -852,8 +409,8 @@ public partial class MainViewModel : ObservableObject
     {
         _pol.EndOrphans();
         _pol.Prestart();
-        if (!AutoLogin || autoLoginSuppressed || !HasSavedCredentials) return;
-        Log.Information("Auto sign-in for {Account}", SelectedProfile?.Id);
+        if (!Accounts.AutoLogin || autoLoginSuppressed || !Accounts.HasSavedCredentials) return;
+        Log.Information("Auto sign-in for {Account}", Accounts.SelectedProfile?.Id);
         LogInCommand.Execute(null);
     }
 
@@ -863,12 +420,12 @@ public partial class MainViewModel : ObservableObject
         {
             if (_pol.Pid is null) return;   // read just before a sign-out
             // a run's lean session has no social side and nothing here may write a request to its hook
-            if (MultiRunning) { _runSnapshot = snap; return; }
+            if (Multi.Running) { Multi.RunSnapshot = snap; return; }
             try
             {
-                Social.AccountName = SelectedProfile?.DisplayName ?? "PlayOnline";
+                Social.AccountName = Accounts.SelectedProfile?.DisplayName ?? "PlayOnline";
                 Social.Apply(snap);
-                LearnIdentity(snap);
+                Accounts.LearnIdentity(snap);
                 if (!LoggedIn) { LoggedIn = true; _socialPoll.Start(); }
             }
             catch (Exception ex)
@@ -881,21 +438,20 @@ public partial class MainViewModel : ObservableObject
 
     public void OpenChatWith(FriendItem friend)
     {
-        if (MultiRunning) return;
+        if (Multi.Running) return;
         Social.SelectedFriend = Social.Friends.FirstOrDefault(f => f.Is(friend)) ?? friend;
         _windows.ShowMessages(Social);
     }
 
     public void OpenNotice()
     {
-        Notice = null;
-        if (!NoticeOpens) return;
-        if (_noticeGroupChat)
+        if (Notice.Take() is not { Opens: true } notice) return;
+        if (notice.Target == NoticeTarget.GroupChat)
         {
             if (Social.GroupChat.Open) _windows.ShowGroupChat(Social.GroupChat);
             return;
         }
-        if (_lastSender is { } who && Social.Friends.FirstOrDefault(f => f.Name == who) is { } f) OpenChatWith(f);
+        if (notice.Sender is { } who && Social.Friends.FirstOrDefault(f => f.Name == who) is { } f) OpenChatWith(f);
         else OpenSocial();
     }
 
@@ -905,7 +461,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenSocial()
     {
-        if (MultiRunning) return;
+        if (Multi.Running) return;
         Social.ShowGroups = false;
         _windows.ShowFriends(Social);
     }
@@ -914,7 +470,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenGroups()
     {
-        if (MultiRunning) return;
+        if (Multi.Running) return;
         Social.ShowGroups = true;
         _windows.ShowFriends(Social);
     }
@@ -923,7 +479,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenMessages()
     {
-        if (MultiRunning) return;
+        if (Multi.Running) return;
         _windows.ShowMessages(Social);
     }
 
@@ -932,7 +488,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenChatRooms()
     {
-        if (MultiRunning) return;
+        if (Multi.Running) return;
         _windows.ShowChatRooms(Social, _pol.SaveChatPassword, _pol.DropChatPassword, SvgIcons.Emote, () => ChatRoomsOpen = false);
         ChatRoomsOpen = true;
     }
@@ -946,7 +502,7 @@ public partial class MainViewModel : ObservableObject
     private void SignOut()
     {
         // Play's game update needs the session it's holding
-        if (MultiRunning || IsLaunching) return;
+        if (Multi.Running || IsLaunching) return;
         if (!_windows.ConfirmDropProfileEditor("Log out")) return;
         EndSession(SessionEnd.LogOut);
     }
@@ -957,7 +513,7 @@ public partial class MainViewModel : ObservableObject
         _socialPoll.Stop();
         _windows.CloseSessionWindows();
         Social.GroupChat.CloseQuietly();
-        _sessionEnding = true;   // before LoggedIn, so the Repair button never shows enabled in between
+        Repair.SessionEnding = true;   // before LoggedIn, so the Repair button never shows enabled in between
         LoggedIn = false;
         Task.Run(() =>
         {
@@ -967,19 +523,19 @@ public partial class MainViewModel : ObservableObject
                 RefreshStartAll();
                 _pol.Prestart();
             }
-            finally { _ui.Post(() => { _sessionEnding = false; RefreshRepair(); }); }
+            finally { _ui.Post(() => { Repair.SessionEnding = false; Repair.Refresh(); }); }
         });
     }
 
     private async Task ConnectSocialAsync()
     {
-        if (SelectedProfile == null && !TryAddAccount()) return;
+        if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount()) return;
         // one account for the whole sign-in, so switching mid-way can't mix two up
-        if (SelectedProfile is not { } profile) return;
-        if (!HasSavedCredentials && !EditAccount(requireAll: true)) return;
+        if (Accounts.SelectedProfile is not { } profile) return;
+        if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(requireAll: true)) return;
         if (!EnsureMemberAgreement()) return;
         // a one-time code counts as used once typed, so the details dialog has to come first
-        if (LoadForLogIn(profile) is not { } details) return;
+        if (Accounts.LoadForLogIn(profile) is not { } details) return;
         var (pol, squareEnix) = details;
         // claimed before the code's asked, so no other copy signs this account in meanwhile
         if (!_pol.TryClaimAccount(profile.Id, out var claimProblem))
@@ -987,17 +543,17 @@ public partial class MainViewModel : ObservableObject
             _dialogs.Error("Account in use", claimProblem ?? "This account is in use in another copy of Provenance.");
             return;
         }
-        var otp = profile.UseOtp ? AskOtp(profile, squareEnix) : "";
+        var otp = profile.UseOtp ? Accounts.AskOtp(profile, squareEnix) : "";
         if (otp is null)
         {
             _pol.ReleaseClaim();
             return;
         }
         Social.Start(profile.Id);
-        _sessionProfileId = profile.Id;
+        Accounts.SessionProfileId = profile.Id;
         IsLaunching = true;
-        var token = BeginCancellable(ProfileTitle.StartsWith("New account", StringComparison.Ordinal)
-            ? "Logging in to PlayOnline" : "Logging in to " + ProfileTitle, "Starting PlayOnline...");
+        var token = BeginCancellable(Accounts.ProfileTitle.StartsWith("New account", StringComparison.Ordinal)
+            ? "Logging in to PlayOnline" : "Logging in to " + Accounts.ProfileTitle, "Starting PlayOnline...");
         bool startAfter = false;
         string? lastFailure = null;
         var progress = new Progress<LaunchProgress>(p =>
@@ -1015,7 +571,7 @@ public partial class MainViewModel : ObservableObject
                 _elapsedTimer.Stop();
                 LoggedIn = true;
                 _socialPoll.Start();
-                startAfter = StartGameImmediately;
+                startAfter = Accounts.StartGameImmediately;
             }
             else
             {
@@ -1025,8 +581,8 @@ public partial class MainViewModel : ObservableObject
                     _pol.StopHold();
                     _pol.Prestart();
                 });
-                var failure = AccountRules.LoginFailure(code, lastFailure, AutoLogin);
-                if (failure.AutoOff) AutoLogin = false;
+                var failure = AccountRules.LoginFailure(code, lastFailure, Accounts.AutoLogin);
+                if (failure.AutoOff) Accounts.AutoLogin = false;
                 if (code != LoginCodes.Cancelled)
                     _dialogs.Error(failure.Title, failure.Text, offerLogs: failure.OfferLogs);
             }
@@ -1048,32 +604,6 @@ public partial class MainViewModel : ObservableObject
         if (startAfter && PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null);
     }
 
-    // accounts on one SE ID share an authenticator
-    private string? AskOtp(Account profile, SquareEnixAccount squareEnix) =>
-        _dialogs.AskOtp(profile.OtpSource, profile.OtpItem, "sea:" + squareEnix.Username.Trim().ToLowerInvariant(),
-                        squareEnix.Username, profile.OtpAccount);
-
-    private (PolAccount Pol, SquareEnixAccount Sea)? LoadForLogIn(Account profile)
-    {
-        var details = AccountRules.PrepareLogIn(_credentials, profile.Id);
-        if (details.Missing)
-        {
-            if (!EditAccount(requireAll: true)) return null;
-            details = AccountRules.PrepareLogIn(_credentials, profile.Id);
-            if (details.Missing)
-            {
-                _dialogs.Error("Account details incomplete", AccountRules.MissingDetailsText(_credentials.ReadIds(profile.Id)));
-                return null;
-            }
-        }
-        if (details.Problem is { } problem)
-        {
-            _dialogs.Error("Account details incomplete", problem);
-            return null;
-        }
-        return (details.Pol!, details.SquareEnix!);
-    }
-
     // the US viewer asks once per POL ID, here it's once per install
     internal bool EnsureMemberAgreement()
     {
@@ -1084,7 +614,7 @@ public partial class MainViewModel : ObservableObject
         if (!_dialogs.AskAgreement(strings))
         {
             Log.Information("Member Agreement declined: not signing in");
-            ShowNotice("You're not logged in, because you didn't accept the PlayOnline Member Agreement.", "InformationOutline", opens: false);
+            Notice.Show("You're not logged in, because you didn't accept the PlayOnline Member Agreement.", "InformationOutline");
             return false;
         }
         _settings.SaveChange(s => s.AcceptedMemberAgreement = true);
@@ -1113,7 +643,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task PlayAsync()
     {
-        if (MultiRunning) return;
+        if (Multi.Running) return;
         // POL's own Play gate, and it only asks for each list at sign-in so there's no reload here either
         if (Social.PlayBlockedReason is { } why)
         {
@@ -1143,7 +673,7 @@ public partial class MainViewModel : ObservableObject
         }
         // SE's installer only writes 3 of the game settings
         FfxiSettings.WriteFirstStartSettings(PlayRegion);
-        WritePolOptions(_sessionProfileId);
+        WritePolOptions(Accounts.SessionProfileId);
         ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         await BackUpGameSettingsAsync(null, text => ProgressText = text);
         OnProgress(new LaunchProgress("Starting game", "Starting FINAL FANTASY XI...", 0.5));
@@ -1243,7 +773,7 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            if (Profiles.FirstOrDefault(p => p.Id == profileId) is not { } profile)
+            if (Accounts.Profiles.FirstOrDefault(p => p.Id == profileId) is not { } profile)
             {
                 Log.Warning("The session's account is gone, its POL settings aren't written");
                 return;
@@ -1275,7 +805,7 @@ public partial class MainViewModel : ObservableObject
         var region = PlayRegion;
         var sources = GameBackupSourcesForTest ?? ((settings, boot) => GameBackupPolicy.SourcesFor(settings, region, boot));
         if (await Task.Run(() => GameBackupPolicy.BeforePlay(s, () => sources(s, accountBoot))) is { } problem)
-            ShowNotice(problem, "AlertCircleOutline", opens: false, stays: true);
+            Notice.Show(problem, "AlertCircleOutline", stays: true);
     }
 
     private (string Ffxi, string Viewer, PolRegion Region)? GameFolders() =>
@@ -1295,7 +825,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            ShowNotice("The FINAL FANTASY XI update was stopped. Press Play to continue it.", "InformationOutline", opens: false);
+            Notice.Show("The FINAL FANTASY XI update was stopped. Press Play to continue it.", "InformationOutline");
             return false;
         }
         catch (Exception ex)
@@ -1341,7 +871,7 @@ public partial class MainViewModel : ObservableObject
     {
         bool on = LoggedIn && _pol.Pid is not null;
         Handles.Update(on ? Social.Last : null, on,
-                       Social.GameRunning ? HandleList.ReadOnlyText : MultiRunning ? HandleList.MultiRunText : null);
+                       Social.GameRunning ? HandleList.ReadOnlyText : Multi.Running ? HandleList.MultiRunText : null);
         Social.HandleSwitching = Handles.Switching;
     }
 
@@ -1352,7 +882,7 @@ public partial class MainViewModel : ObservableObject
     {
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
         ShowHandles();
-        var vm = new SettingsViewModel(_dialogs, _settings, multiRunning: () => MultiRunning,
+        var vm = new SettingsViewModel(_dialogs, _settings, multiRunning: () => Multi.Running,
                                        holdPrestarts: _pol.HoldPrestarts, releasePrestarts: _pol.ReleasePrestarts,
                                        largeAddressAwareBlocked: LargeAddressAwareBlocked,
                                        stopPrestart: () => Task.Run(_pol.StopPrestart),
@@ -1373,7 +903,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         OnPropertyChanged(nameof(CloseTooltip));
-        RefreshMultiAccounts();
+        Multi.Refresh();
         if (_settings.Current.ThirdPartyHookPlatform != hookBefore && !LoggedIn && !IsLaunching)
             Task.Run(() => { _pol.StopPrestart(); _pol.Prestart(); });
     }
@@ -1439,8 +969,8 @@ public partial class MainViewModel : ObservableObject
 
     // the Repair button's own checks, in its order. The lock comes from the switch's copy of its probe
     private string? LargeAddressAwareBlocked() =>
-        IsLaunching || LoggedIn || _pol.Pid is not null || _sessionEnding ? LargeAddressAwareSwitch.LoggedInText
-        : MultiRunning ? LargeAddressAwareSwitch.MultiRunText
+        IsLaunching || LoggedIn || _pol.Pid is not null || Repair.SessionEnding ? LargeAddressAwareSwitch.LoggedInText
+        : Multi.Running ? LargeAddressAwareSwitch.MultiRunText
         : null;
 
     // the URL comes from a feed, and ShellExecute would happily run a program, a network path or another protocol

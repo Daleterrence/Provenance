@@ -30,7 +30,7 @@ public partial class MainWindow : AppWindow
         {
             if (Vm is not { } vm) return;
             vm.Social.MainWindowActive = true;
-            await vm.ProbeRepairAsync();
+            await vm.Repair.ProbeAsync();
         };
         Deactivated += (_, _) => { if (Vm is { } vm) vm.Social.MainWindowActive = false; };
         FitWorkArea();
@@ -66,26 +66,26 @@ public partial class MainWindow : AppWindow
         if (Vm is { } vm) vm.Social.EditProfile();
     }
 
-    private void OnNewsHover(object sender, MouseEventArgs e) => Vm?.HoldSlides(true);
+    private void OnNewsHover(object sender, MouseEventArgs e) => Vm?.News.HoldSlides(true);
 
     private void OnNewsLeave(object sender, MouseEventArgs e)
     {
         if (sender is UIElement { IsKeyboardFocusWithin: true }) return;
-        Vm?.HoldSlides(false);
+        Vm?.News.HoldSlides(false);
     }
 
     // focus on the Read link holds the article too, so Enter opens the one shown
     private void OnNewsFocus(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (sender is UIElement card) Vm?.HoldSlides(card.IsKeyboardFocusWithin || card.IsMouseOver);
+        if (sender is UIElement card) Vm?.News.HoldSlides(card.IsKeyboardFocusWithin || card.IsMouseOver);
     }
 
-    private void OnNoticeHover(object sender, MouseEventArgs e) => Vm?.HoldNotice(true);
-    private void OnNoticeLeave(object sender, MouseEventArgs e) => Vm?.HoldNotice(false);
+    private void OnNoticeHover(object sender, MouseEventArgs e) => Vm?.Notice.Hold(true);
+    private void OnNoticeLeave(object sender, MouseEventArgs e) => Vm?.Notice.Hold(false);
 
-    private void OnBannerFailed(object? sender, ExceptionRoutedEventArgs e) => Vm?.BannerFailed();
+    private void OnBannerFailed(object? sender, ExceptionRoutedEventArgs e) => Vm?.News.BannerFailed();
 
-    private void ReportShown() => Vm?.SetWindowShown(IsVisible && WindowState != WindowState.Minimized);
+    private void ReportShown() => Vm?.News.SetWindowShown(IsVisible && WindowState != WindowState.Minimized);
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
@@ -97,7 +97,7 @@ public partial class MainWindow : AppWindow
             old.RequestExit -= OnRequestExit;
             old.RequestAttention -= OnRequestAttention;
             old.AttentionCleared -= OnAttentionCleared;
-            old.PropertyChanged -= OnVmPropertyChanged;
+            old.News.PropertyChanged -= OnNewsChanged;
         }
         if (e.NewValue is MainViewModel @new)
         {
@@ -107,14 +107,14 @@ public partial class MainWindow : AppWindow
             @new.RequestExit += OnRequestExit;
             @new.RequestAttention += OnRequestAttention;
             @new.AttentionCleared += OnAttentionCleared;
-            @new.PropertyChanged += OnVmPropertyChanged;
+            @new.News.PropertyChanged += OnNewsChanged;
         }
     }
 
     // forward (the timer, the next arrow, a later dot) slides in from the right, back from the left
-    private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnNewsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(MainViewModel.CurrentNewsIndex) || sender is not MainViewModel vm) return;
+        if (e.PropertyName != nameof(NewsViewModel.CurrentNewsIndex) || sender is not NewsViewModel vm) return;
         int n = vm.NewsItems.Count, now = vm.CurrentNewsIndex, was = _newsShown;
         if (now < 0) return;   // the pager pushes -1 while the list is rebuilt
         _newsShown = now;
@@ -136,9 +136,9 @@ public partial class MainWindow : AppWindow
     // a tray tip only for a notice that's just been shown, never an old one again for a flash on its own
     private void OnRequestAttention(bool tip) => Dispatcher.InvokeAsync(() =>
     {
-        if (tip && _tray is { Visible: true } tray && Vm?.Notice is { } text)
+        if (tip && _tray is { Visible: true } tray && Vm?.Notice.Current is { } notice)
         {
-            tray.ShowTip("PlayOnline", text);
+            tray.ShowTip("PlayOnline", notice.Text);
             return;
         }
         if (IsActive || !IsVisible || Vm is not { WantsAttention: true }) return;
@@ -218,14 +218,14 @@ public partial class MainWindow : AppWindow
             });
             return;
         }
-        if (Vm is { MultiRunning: true } run)
+        if (Vm?.Multi is { Running: true } run)
         {
             e.Cancel = true;
             _exiting = false;
-            if (run.MultiStopping) { run.StopAllAccountsAndExit(); return; }
+            if (run.Stopping) { run.StopAllAccountsAndExit(); return; }
             if (run.ConfirmStopAccounts())
             {
-                if (run.MultiRunning) run.StopAllAccountsAndExit();
+                if (run.Running) run.StopAllAccountsAndExit();
                 else Dispatcher.InvokeAsync(Close);   // the run ended while the question was up, and not from inside Closing
             }
             else App.RestartOnExit = false;
@@ -288,7 +288,7 @@ public partial class MainWindow : AppWindow
     internal void ExitWithoutAsking()
     {
         Vm?.CloseProfileEditor();
-        if (Vm is { MultiRunning: true } run)
+        if (Vm?.Multi is { Running: true } run)
         {
             run.StopAllAccountsAndExit();
             return;

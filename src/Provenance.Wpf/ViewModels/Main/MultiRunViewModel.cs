@@ -1,4 +1,3 @@
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common;
@@ -7,95 +6,116 @@ using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Login;
+using Provenance.Common.Patcher;
+using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
 using Provenance.Common.Settings;
-using Serilog;
-using Provenance.Common.Patcher;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
-using Provenance.Wpf.ViewModels.Settings;
+using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-public partial class MainViewModel : IMultiRunHost
+// what a run needs from the main window's own login and Play code
+internal sealed record MultiRunLinks(
+    Func<bool> LoggedInOrLaunching,
+    Action StopSocialPoll,
+    Func<bool> EnsureMemberAgreement,
+    Func<string?> PromptHandleName,
+    Func<(string Ffxi, string Viewer, PolRegion Region)?> GameFolders,
+    Func<PolRegion> PlayRegion,
+    Action<string?> WritePolOptions,
+    Func<string?, Action<string>?, Task> BackUpGameSettings);
+
+public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 {
+    private readonly IDialogs _dialogs;
+    private readonly IWindowManager _windows;
+    private readonly ISettingsService _settings;
+    private readonly ICredentialService _credentials;
+    private readonly PolSession _pol;
+    private readonly UiThread _ui;
+    private readonly AccountsViewModel _accounts;
+    private readonly MultiRunLinks _links;
+
+    public event Action? RequestShow;
+    public event Action? RequestExit;
+    // the accounts list or a run's state changed, for an open Settings page
+    public event Action? Changed;
+
+    internal MultiRunViewModel(IDialogs dialogs, IWindowManager windows, ISettingsService settings, ICredentialService credentials,
+                               PolSession pol, UiThread ui, AccountsViewModel accounts, MultiRunLinks links)
+    {
+        _dialogs = dialogs;
+        _windows = windows;
+        _settings = settings;
+        _credentials = credentials;
+        _pol = pol;
+        _ui = ui;
+        _accounts = accounts;
+        _links = links;
+    }
+
     // each progress report restarts the clock, so the first account can download an update of any size
     private static readonly TimeSpan NoProgressLimit = TimeSpan.FromMinutes(10);
 
     private List<MultiAccountEntry> MultiEntries() =>
-        MultiAccountRules.RunEntries(_settings.Current.MultiAccounts, Profiles.Select(p => p.Id));
+        MultiAccountRules.RunEntries(_settings.Current.MultiAccounts, _accounts.Profiles.Select(p => p.Id));
 
-    public int MultiAccountCount => MultiEntries().Count;
-    public bool HasMultiAccounts => MultiRunning || (MultiAccountCount > 0 && MultiPlatformChosen());
-    public string StartAllText => MultiStopping ? "STOPPING..." : MultiRunning ? "STOP ALL ACCOUNTS" : $"START ALL ACCOUNTS ({MultiAccountCount})";
+    public int AccountCount => MultiEntries().Count;
+    public bool HasAccounts => Running || (AccountCount > 0 && MultiPlatformChosen());
+    public string StartAllText => Stopping ? "STOPPING..." : Running ? "STOP ALL ACCOUNTS" : $"START ALL ACCOUNTS ({AccountCount})";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StartAllText), nameof(HasMultiAccounts))]
-    [NotifyCanExecuteChangedFor(nameof(StartAllAccountsCommand), nameof(LogInCommand))]
-    private bool _multiRunning;
-
-    partial void OnMultiRunningChanged(bool value)
-    {
-        Social.GroupChatBlocked = value;
-        RefreshRepair();
-        if (!value) _ = ProbeRepairAsync();
-    }
+    [NotifyPropertyChangedFor(nameof(StartAllText), nameof(HasAccounts))]
+    [NotifyCanExecuteChangedFor(nameof(StartAllAccountsCommand))]
+    private bool _running;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StartAllText))]
     [NotifyCanExecuteChangedFor(nameof(StartAllAccountsCommand))]
-    private bool _multiStopping;
+    private bool _stopping;
 
-    [ObservableProperty] private string _multiStatus = "";
+    [ObservableProperty] private string _status = "";
 
-    private CancellationTokenSource? _multiCts;
+    private CancellationTokenSource? _cts;
     private bool _exitAfterStop;
 
     private IReadOnlyList<MultiRunAccount> _runAccounts = [];
     private Dictionary<string, string?> _runHookProfiles = new();
     private ThirdPartyHook _runPlatform;
 
-    private PolSocialSnapshot? _runSnapshot;
+    internal PolSocialSnapshot? RunSnapshot { get; set; }
     private readonly List<string> _lateGameFailures = [];
     private bool _runBackedUp;
 
-    private SettingsViewModel? _openSettings;
-
-    private void RefreshMultiAccounts()
+    internal void Refresh()
     {
-        OnPropertyChanged(nameof(MultiAccountCount));
-        OnPropertyChanged(nameof(HasMultiAccounts));
+        OnPropertyChanged(nameof(AccountCount));
+        OnPropertyChanged(nameof(HasAccounts));
         OnPropertyChanged(nameof(StartAllText));
     }
 
     private bool MultiPlatformChosen() =>
         _pol.Platform is ThirdPartyHook.Windower or ThirdPartyHook.Ashita;
 
-    private bool CanStartOrStop() => MultiRunning ? !MultiStopping : !IsLaunching && !LoggedIn && _pol.Pid is null;
-
-    // Pid has no change notice, so this gets called wherever it changes (any thread)
-    private void RefreshStartAll() =>
-        _ui.Post(() =>
-        {
-            StartAllAccountsCommand.NotifyCanExecuteChanged();
-            RefreshRepair();
-        });
+    private bool CanStartOrStop() => Running ? !Stopping : !_links.LoggedInOrLaunching() && _pol.Pid is null;
 
     // concurrent, so the same button stays clickable as the stop while a run goes
     [RelayCommand(CanExecute = nameof(CanStartOrStop), AllowConcurrentExecutions = true)]
     private async Task StartAllAccountsAsync()
     {
-        if (MultiRunning) { StopAllAccounts(); return; }
-        if (IsLaunching || LoggedIn || _pol.Pid is not null) return;
+        if (Running) { StopAllAccounts(); return; }
+        if (_links.LoggedInOrLaunching() || _pol.Pid is not null) return;
         if (!MultiPlatformChosen())
         {
             Log.Warning("Multi-account mode: not started, Windower or Ashita is not chosen");
             return;
         }
-        if (!EnsureMemberAgreement()) return;
+        if (!_links.EnsureMemberAgreement()) return;
         var entries = MultiEntries();
         if (entries.Count == 0) return;
-        var accounts = entries.Select(e => Profiles.First(p => p.Id == e.ProfileId))
+        var accounts = entries.Select(e => _accounts.Profiles.First(p => p.Id == e.ProfileId))
                               .Select(p => new MultiRunAccount(p.Id, string.IsNullOrWhiteSpace(p.HandleName) ? p.DisplayName : p.HandleName!))
                               .ToList();
         if (MultiAccountRules.WithoutProfile(entries) is { Count: > 0 } unpicked)
@@ -112,16 +132,16 @@ public partial class MainViewModel : IMultiRunHost
         _runBackedUp = false;
         _lateGameFailures.Clear();
         // a friends window left open mustn't write requests to the run's lean sessions
-        _socialPoll.Stop();
+        _links.StopSocialPoll();
         _windows.CloseSessionWindows();
-        MultiRunning = true;
-        _multiCts = new CancellationTokenSource();
+        Running = true;
+        _cts = new CancellationTokenSource();
         var options = new MultiRunOptions(_settings.Current.MultiContinueOnError, _settings.Current.MultiCloseWhenFinished);
         var status = new Progress<string>(SetRunStatus);
         Log.Information("Multi-account mode: starting {Count} account(s)", accounts.Count);
         MultiRunResult? result = null;
         string? unexpected = null;
-        try { result = await MultiAccountRunner.RunAsync(accounts, options, this, status, _multiCts.Token); }
+        try { result = await MultiAccountRunner.RunAsync(accounts, options, this, status, _cts.Token); }
         catch (Exception ex)
         {
             Log.Error(ex, "Multi-account mode: the run ended with an error");
@@ -129,16 +149,16 @@ public partial class MainViewModel : IMultiRunHost
         }
         finally
         {
-            MultiRunning = false;
-            MultiStopping = false;
-            MultiStatus = "";
-            _multiCts.Dispose();
-            _multiCts = null;
-            _runSnapshot = null;
+            Running = false;
+            Stopping = false;
+            Status = "";
+            _cts.Dispose();
+            _cts = null;
+            RunSnapshot = null;
             _runAccounts = [];
             _runHookProfiles = new();
             _runPlatform = ThirdPartyHook.None;
-            _openSettings?.MultiRunChanged();
+            Changed?.Invoke();
         }
         var failures = result?.Failures ?? [];
         Log.Information("Multi-account mode: finished, {Failures} failure(s), stopped {Stopped}", failures.Count, result?.Stopped);
@@ -169,17 +189,17 @@ public partial class MainViewModel : IMultiRunHost
             e.Problem = failure.Text;
             if (failure.Kind == AccountFailureKind.Credential) e.CredentialsRefused = true;
         });
-        RefreshMultiAccounts();
-        _openSettings?.MultiRunChanged();
+        Refresh();
+        Changed?.Invoke();
     }
 
     public void StopAllAccounts()
     {
-        if (!MultiRunning || MultiStopping || _multiCts is null) return;
+        if (!Running || Stopping || _cts is null) return;
         Log.Warning("Multi-account mode: stop");
-        MultiStopping = true;
-        MultiStatus = "Stopping...";
-        _multiCts.Cancel();
+        Stopping = true;
+        Status = "Stopping...";
+        _cts.Cancel();
     }
 
     internal bool ConfirmStopAccounts() => _dialogs.Confirm("Multi-account mode",
@@ -187,14 +207,14 @@ public partial class MainViewModel : IMultiRunHost
 
     public void StopAllAccountsAndExit()
     {
-        if (!MultiRunning) return;
+        if (!Running) return;
         _exitAfterStop = true;
         StopAllAccounts();
     }
 
     private void SetRunStatus(string text)
     {
-        if (MultiRunning && !MultiStopping) MultiStatus = text;
+        if (Running && !Stopping) Status = text;
     }
 
     bool IMultiRunHost.IsInGame(string profileId) => PolSession.GameRunningFor(profileId);
@@ -255,7 +275,7 @@ public partial class MainViewModel : IMultiRunHost
             && !AshitaBootFiles.IsBootFileName(boot))
             return new(AccountFailureKind.Account, AshitaLauncher.AccountBootFileProblem);
 
-        var profile = Profiles.FirstOrDefault(p => p.Id == account.ProfileId);
+        var profile = _accounts.Profiles.FirstOrDefault(p => p.Id == account.ProfileId);
         if (profile is null) return AccountRules.MissingDetailsFailure(default);
         var details = AccountRules.PrepareLogIn(_credentials, profile.Id);
         if (details.Missing) return AccountRules.MissingDetailsFailure(_credentials.ReadIds(profile.Id));
@@ -269,7 +289,7 @@ public partial class MainViewModel : IMultiRunHost
         string otp = "";
         if (profile.UseOtp)
         {
-            var code = AskOtp(profile, squareEnix);
+            var code = _accounts.AskOtp(profile, squareEnix);
             if (code is null || ct.IsCancellationRequested)
             {
                 _pol.ReleaseClaim();
@@ -306,16 +326,16 @@ public partial class MainViewModel : IMultiRunHost
         string? AskHandleName()
         {
             Pause();
-            try { return PromptHandleName(); }
+            try { return _links.PromptHandleName(); }
             finally { Kick(); }
         }
-        _runSnapshot = null;
+        RunSnapshot = null;
         int logIn;
         try
         {
             logIn = await _pol.ConnectAsync(pol, squareEnix, otp, profile.Id, progress, AskHandleName, token,
                                              new SessionOptions(Lean: true, ThirdPartyHookProfile: hookProfile,
-                                                                HomeSlot: EnsureHomeSlot(profile)));
+                                                                HomeSlot: _accounts.EnsureHomeSlot(profile)));
         }
         catch (Exception) when (token.IsCancellationRequested) { return await Stopped(); }
         if (logIn != 0)
@@ -327,11 +347,11 @@ public partial class MainViewModel : IMultiRunHost
         }
         SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
 
-        var snap = _runSnapshot ?? (_pol.Pid is { } pid ? SocialSnapshotFiles.TryRead(pid) : null);
+        var snap = RunSnapshot ?? (_pol.Pid is { } pid ? SocialSnapshotFiles.TryRead(pid) : null);
         if (AccountRules.PlayGateFailure(snap) is { } gate) return await LetGo(gate.Kind, gate.Text);
         if (token.IsCancellationRequested) return await Stopped();
 
-        if (GameFolders() is { } dirs)
+        if (_links.GameFolders() is { } dirs)
         {
             string eta = "";
             var left = new PhaseTimeLeft(text => eta = text);   // UI thread only, like the status
@@ -361,8 +381,8 @@ public partial class MainViewModel : IMultiRunHost
         }
         if (token.IsCancellationRequested) return await Stopped();
 
-        FfxiSettings.WriteFirstStartSettings(PlayRegion);
-        WritePolOptions(account.ProfileId);
+        FfxiSettings.WriteFirstStartSettings(_links.PlayRegion());
+        _links.WritePolOptions(account.ProfileId);
         if (await BackUpForRunAsync(hookProfile))
         {
             if (token.IsCancellationRequested) return await Stopped();
@@ -376,7 +396,7 @@ public partial class MainViewModel : IMultiRunHost
                 ? await LetGo(AccountFailureKind.Install, ex.Message)
                 : await LetGo(AccountFailureKind.Account, "Provenance couldn't tell PlayOnline to start the game.");
         }
-        if (await _pol.WaitForPlayAnswerAsync(PlayAnswerTimeout) is { } playFailed)
+        if (await _pol.WaitForPlayAnswerAsync(MainViewModel.PlayAnswerTimeout) is { } playFailed)
         {
             Log.Error("Multi-account mode: the game did not start for {Account}: {Why}", account.ProfileId, playFailed);
             return await LetGo(AccountRules.PlayFailureKind(playFailed), playFailed);
@@ -394,7 +414,7 @@ public partial class MainViewModel : IMultiRunHost
     {
         if (_runBackedUp) return false;
         _runBackedUp = true;
-        await BackUpGameSettingsAsync(accountBoot, SetRunStatus);
+        await _links.BackUpGameSettings(accountBoot, SetRunStatus);
         return true;
     }
 
@@ -408,7 +428,7 @@ public partial class MainViewModel : IMultiRunHost
             if (PolSession.GameEndedText(code) is not { } text) return;
             Log.Error("Multi-account mode: FINAL FANTASY XI didn't start for {Account} (pol.exe exit code {Code})", account.ProfileId, code);
             var line = $"{account.Name}: {text}";
-            if (MultiRunning) _lateGameFailures.Add(line);
+            if (Running) _lateGameFailures.Add(line);
             else
             {
                 // the window may well be in the tray by now

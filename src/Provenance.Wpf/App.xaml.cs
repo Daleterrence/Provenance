@@ -193,8 +193,8 @@ public partial class App : Application
     private static void StartMainViewModel(MainViewModel mainVm, bool suppressed)
     {
         _ = Task.Run(() => Provenance.Common.Feeds.BannerImages.Prune(TimeSpan.FromDays(60)));
-        _ = mainVm.LoadFeedsAsync();
-        _ = mainVm.LoadWorldsAsync();
+        _ = mainVm.News.LoadFeedsAsync();
+        _ = mainVm.News.LoadWorldsAsync();
         mainVm.Startup(suppressed);
     }
 
