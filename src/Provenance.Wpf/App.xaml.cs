@@ -41,8 +41,7 @@ public partial class App : Application
         // before the first window, the update one included, so nothing opens in the other theme first
         AppTheme.Apply(AppTheme.FromSettingsFile(SettingsService.DefaultPath));
 
-        // first, while nothing else runs, so an update can restart the app straight away. Closing the update window or
-        // the start-up error card mustn't end the app (last window closed)
+        // first, so an update can restart the app straight away. Closing the update window or the error card mustn't end the app
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         if (await SelfUpdate.RunAsync(args, noAutoLogin: shiftAtStart))
         {
@@ -79,14 +78,8 @@ public partial class App : Application
         catch (Exception ex)
         {
             Log.Fatal(ex, "Could not prepare the protected folder for the hook's files");
-            var text = "Provenance couldn't set up its folder in ProgramData. Close any program that's using that " +
-                       "folder, then start Provenance again.";
-            try { WpfDialogs.Default.Error("Provenance can't start", text, offerLogs: true); }
-            catch (Exception dialogError)
-            {
-                Log.Error(dialogError, "The start-up error card could not be shown");
-                MessageBox.Show(text, "Provenance", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            StartupErrors.Show("Provenance can't start", "Provenance couldn't set up its folder in ProgramData. Close any program that's using that " +
+                               "folder, then start Provenance again.", offerLogs: true);
             return false;
         }
     }
@@ -142,15 +135,11 @@ public partial class App : Application
             try
             {
                 if (KeyUnavailable(args.Exception) is { } keyProblem)
-                    WpfDialogs.Default.Error("Can't open your saved login details", keyProblem.Message, offerLogs: true);
+                    StartupErrors.Show("Can't open your saved login details", keyProblem.Message, offerLogs: true, UnexpectedText);
                 else
-                    WpfDialogs.Default.Error("Provenance ran into a problem",
+                    StartupErrors.Show("Provenance ran into a problem",
                         "It's still running, but if something isn't working, close Provenance and open it again. Press Open logs to see what went wrong.",
-                        offerLogs: true);
-            }
-            catch
-            {
-                MessageBox.Show(UnexpectedText, "Provenance", MessageBoxButton.OK, MessageBoxImage.Error);
+                        offerLogs: true, UnexpectedText);
             }
             finally { _showingError = false; }
         };
@@ -174,8 +163,8 @@ public partial class App : Application
         // after the view model's listening for a failed save, before its start-up clears the records of gone pol.exes or
         // pre-starts one
         ScreenSaver.Note(Services.GetRequiredService<ISettingsService>());
-        // Windows logging off cancels a sign-in, and WPF would close the window ignoring its Cancel, so it closes the normal
-        // way first: a held session's logged out and nothing goes to the tray
+        // Windows logging off cancels a log in and WPF would close the window ignoring its Cancel, so it closes the normal
+        // way first. A held session gets logged out and nothing goes to the tray
         SessionEnding += (_, _) =>
         {
             Log.Information("Windows session ending");
@@ -215,8 +204,8 @@ public partial class App : Application
         _ => null,
     };
 
-    // No await here: WPF kills the dispatcher when OnExit returns, so a held session would never get signed out. Every
-    // wait is time-limited on the pool.
+    // no await, WPF kills the dispatcher when OnExit returns and a held session would never get logged out. Every wait
+    // is time-limited on the pool
     protected override void OnExit(ExitEventArgs e)
     {
         try
@@ -225,7 +214,7 @@ public partial class App : Application
             try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }
             if (_host is { } host) EndHost(host);
             if (RestartOnExit) StartAgain();
-            if (!SelfUpdate.HandOverAfterExit(out var restartArgs)) StartAgain(restartArgs);
+            else if (!SelfUpdate.HandOverAfterExit(out var restartArgs)) StartAgain(restartArgs);
         }
         finally
         {
