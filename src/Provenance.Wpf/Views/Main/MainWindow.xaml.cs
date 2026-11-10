@@ -106,7 +106,8 @@ public partial class MainWindow : AppWindow
         }
     }
 
-    // a tray tip only for a notice that's just been shown, never an old one again for a flash on its own
+    // a tray tip only for a notice that's just been shown, never an old one again for a flash on its own. Queued, the
+    // snapshot that raised this hasn't counted the new message yet
     private void OnRequestAttention(bool tip) => Dispatcher.InvokeAsync(() =>
     {
         if (tip && _tray is { Visible: true } tray && Vm?.Notice.Current is { } notice)
@@ -124,18 +125,18 @@ public partial class MainWindow : AppWindow
 
     private void OnOpenNotice(object sender, RoutedEventArgs e) => Vm?.OpenNotice();
 
-    private void OnRequestHide() => Dispatcher.Invoke(Hide);
+    private void OnRequestHide() => Hide();
 
-    private void OnRequestShow() => Dispatcher.Invoke(ShowFromTray);
+    private void OnRequestShow() => ShowFromTray();
 
     // the same exit as the tray's, which logs a held session out, then the app starts again once it's gone
-    private void OnRequestRestart() => Dispatcher.InvokeAsync(() =>
+    private void OnRequestRestart()
     {
         App.RestartOnExit = true;
         ExitApp();
-    });
+    }
 
-    private void OnRequestExit() => Dispatcher.InvokeAsync(ExitWithoutAsking);
+    private void OnRequestExit() => ExitWithoutAsking();
 
     internal void OnMinimize(object sender, RoutedEventArgs e)
     {
@@ -167,6 +168,7 @@ public partial class MainWindow : AppWindow
             e.Cancel = true;
             if (_cancellingLogIn) return;
             _cancellingLogIn = true;
+            // not from inside Closing, Close throws in there
             Dispatcher.InvokeAsync(async () =>
             {
                 await signing.CancelLogInAsync();
@@ -220,12 +222,18 @@ public partial class MainWindow : AppWindow
         if (_tray == null)
         {
             _tray = new TrayIcon(() => vm.FriendsWindowTitle);
-            _tray.OpenRequested += () => Dispatcher.Invoke(() => ShowFromTray());
+            _tray.OpenRequested += ShowFromTray;
             _tray.FriendsRequested += () =>
-                Dispatcher.Invoke(() => { ShowFromTray(); vm.OpenSocialCommand.Execute(null); });
+            {
+                ShowFromTray();
+                vm.OpenSocialCommand.Execute(null);
+            };
             _tray.SignOutRequested += () =>
-                Dispatcher.Invoke(() => { vm.SignOutCommand.Execute(null); ShowFromTray(); });
-            _tray.ExitRequested += () => Dispatcher.Invoke(ExitApp);
+            {
+                vm.SignOutCommand.Execute(null);
+                ShowFromTray();
+            };
+            _tray.ExitRequested += ExitApp;
         }
         _tray.SetLoggedIn(loggedIn);
         _tray.Visible = true;

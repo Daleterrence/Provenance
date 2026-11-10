@@ -29,8 +29,11 @@ public partial class App : Application
 
     internal static bool RestartOnExit { get; set; }
 
+    internal static bool SkipStartup { get; set; }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
+        if (SkipStartup) return;
         base.OnStartup(e);
         var args = new LaunchArgs(e.Args);
         // first thing: the update check (or a whole update) can outlast a held Shift
@@ -182,6 +185,7 @@ public partial class App : Application
         MainWindow = mainWindow;
         mainWindow.Show();
         if (Services.GetRequiredService<ISettingsService>().Current.MinimizeToTray) TrayIcon.Warm();
+        // this one really is off the UI thread, the wait's on the pool
         if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));
         return mainVm;
     }

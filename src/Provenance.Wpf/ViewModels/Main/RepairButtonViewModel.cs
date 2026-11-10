@@ -34,7 +34,7 @@ public partial class RepairButtonViewModel : ObservableObject
     private readonly Func<bool> _windowShown;
     private readonly Action _installChanged;
 
-    internal DispatcherTimer? _repairProbe;
+    private readonly DispatcherTimer _repairProbe;
     private bool _probing;
 
     public RepairButtonViewModel(IDialogs dialogs, IWindowManager windows, ISettingsService settings, PolSession pol,
@@ -127,6 +127,8 @@ public partial class RepairButtonViewModel : ObservableObject
     }
 
     // when the window comes forward, and every few seconds while a signed-out card's up
+    internal void StopProbing() => _repairProbe.Stop();
+
     public async Task ProbeAsync()
     {
         // a multi-account run holds the update lock in this copy, which isn't "another copy"

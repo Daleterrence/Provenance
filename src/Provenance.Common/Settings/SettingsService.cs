@@ -14,7 +14,7 @@ public sealed class SettingsService : ISettingsService
 
     private readonly string _path;
     private bool _saveFailedRaised;
-    internal PolRegion? _region;
+    private PolRegion? _region;
     // this copy's settings as it last read or saved them, which is what tells its own changes from another copy's
     private JsonObject _known;
 
@@ -37,6 +37,8 @@ public sealed class SettingsService : ISettingsService
     public PolRegion? DetectedRegion => _region ??= PolPaths.TryAutoDetectRegion();
 
     public void RedetectRegion() => _region = null;
+
+    internal void SetDetectedRegion(PolRegion region) => _region = region;
 
     public static string DefaultPath =>
         Path.Combine(AppPaths.UserData ?? "Provenance", "settings.json");

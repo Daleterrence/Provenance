@@ -33,7 +33,7 @@ public partial class InstallViewModel : ObservableObject
 
     internal static Func<PolRegion> LocaleRegionForTest { get; set; } = PolLocale.FromWindows;
 
-    internal PolRegion _region;
+    private PolRegion _region;
     private readonly PolRegion _autoRegion;
     private readonly IDialogs _dialogs;
     private readonly Func<IDisposable>? _holdPrestarts;
@@ -41,6 +41,8 @@ public partial class InstallViewModel : ObservableObject
     private readonly DownloadMeter _meter;
     private CancellationTokenSource? _cts;
     private InstallFromMirror? _mirror;
+
+    internal PolRegion Region => _region;
 
     public InstallViewModel(IDialogs dialogs, PolRegion? region, Func<IDisposable>? holdPrestarts = null)
     {

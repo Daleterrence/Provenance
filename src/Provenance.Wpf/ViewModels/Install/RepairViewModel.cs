@@ -32,7 +32,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
     private volatile bool _changing;   // GameRepair says so right before the first game file changes
     private volatile bool _fixed;      // and once the registry pass has put something right, or DXSETUP's started
     private volatile bool _fixing;     // as the registry pass or DXSETUP starts
-    internal bool _started;
+    private bool _started;
     private DownloadMeter? _meter;
     private GameProduct _product = GameProduct.Viewer;   // the one GameRepair's last said it's working on, the viewer goes first
     private bool _repairing;           // the stage has moved from checking to repairing
@@ -137,6 +137,8 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
     private sealed record Outcome(Ending Ending, RepairResult? Result = null);
 
     private sealed class RefusedException(string message) : Exception(message);
+
+    internal void MarkStarted() => _started = true;
 
     public async Task RunAsync()
     {
