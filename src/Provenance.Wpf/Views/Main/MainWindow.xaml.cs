@@ -11,13 +11,14 @@ namespace Provenance.Wpf.Views.Main;
 
 public partial class MainWindow : AppWindow
 {
-    internal TrayIcon? _tray;
-    private bool _exiting, _askingToExit, _cancellingLogIn;
+    private readonly TrayMode _tray;
+    private bool _exiting, _asking, _cancellingLogIn;
     private readonly ReopenGuard _worldsGuard = new();
 
     public MainWindow()
     {
         InitializeComponent();
+        _tray = new TrayMode(this, ExitApp, () => _asking);
         DataContextChanged += OnDataContextChanged;
         IsVisibleChanged += (_, _) => ReportShown();
         StateChanged += (_, _) => ReportShown();
@@ -33,6 +34,8 @@ public partial class MainWindow : AppWindow
 
     private MainViewModel? Vm => DataContext as MainViewModel;
 
+    internal TrayMode Tray => _tray;
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -44,16 +47,7 @@ public partial class MainWindow : AppWindow
     {
         if ((uint)msg != TrayCopy.Message) return IntPtr.Zero;
         handled = true;
-        return TryReuseFromTray() ? 1 : 0;
-    }
-
-    private bool TryReuseFromTray()
-    {
-        if (Vm is not { } vm || !TrayCopy.Reusable(_tray is { Visible: true }, !IsVisible, vm.Session.LoggedIn, vm.Session.Launching, vm.Session.InMultiRun))
-            return false;
-        // queued, the other copy's stuck inside SendMessage until this returns and COM calls fail while it is
-        Dispatcher.InvokeAsync(ShowFromTray);
-        return true;
+        return _tray.TryReuse(Vm) ? 1 : 0;
     }
 
     // fixed design size, so on a small or scaled screen (1366x768 at 125%, say) the whole thing scales down
@@ -110,11 +104,7 @@ public partial class MainWindow : AppWindow
     // snapshot that raised this hasn't counted the new message yet
     private void OnRequestAttention(bool tip) => Dispatcher.InvokeAsync(() =>
     {
-        if (tip && _tray is { Visible: true } tray && Vm?.Notice.Current is { } notice)
-        {
-            tray.ShowTip("PlayOnline", notice.Text);
-            return;
-        }
+        if (tip && Vm?.Notice.Current is { } notice && _tray.ShowNotice(notice.Text)) return;
         if (IsActive || !IsVisible || Vm is not { WantsAttention: true }) return;
         TaskbarFlash.Start(this);
     });
@@ -127,7 +117,7 @@ public partial class MainWindow : AppWindow
 
     private void OnRequestHide() => Hide();
 
-    private void OnRequestShow() => ShowFromTray();
+    private void OnRequestShow() => _tray.ShowWindow();
 
     // the same exit as the tray's, which logs a held session out, then the app starts again once it's gone
     private void OnRequestRestart()
@@ -142,110 +132,97 @@ public partial class MainWindow : AppWindow
     {
         if (Vm is { MinimizeGoesToTray: true } vm)
         {
-            ToTray(vm, vm.LoggedIn);
+            _tray.HideWindow(vm, vm.LoggedIn);
             return;
         }
         WindowState = WindowState.Minimized;
     }
 
-    // closing while signed in (with the setting on) keeps POL signed in from the tray, like an open viewer
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        if (!_exiting && Vm is { KeepInTrayOnClose: true } vm)
-        {
-            e.Cancel = true;
-            ToTray(vm, true);
-            if (!vm.TrayTipShown)
-            {
-                _tray!.ShowTip("Provenance is still running",
-                    "You're still logged in to PlayOnline, so your friends and messages stay up to date. Right-click this icon to exit.");
-                vm.MarkTrayTipShown();
-            }
-            return;
-        }
-        if (Vm is { LoggingIn: true } signing)
-        {
-            e.Cancel = true;
-            if (_cancellingLogIn) return;
-            _cancellingLogIn = true;
-            // not from inside Closing, Close throws in there
-            Dispatcher.InvokeAsync(async () =>
-            {
-                await signing.CancelLogInAsync();
-                _cancellingLogIn = false;
-                Close();
-            });
-            return;
-        }
-        if (Vm?.Multi is { Running: true } run)
-        {
-            e.Cancel = true;
-            _exiting = false;
-            if (run.Stopping) { run.StopAllAccountsAndExit(); return; }
-            if (run.ConfirmStopAccounts())
-            {
-                if (run.Running) run.StopAllAccountsAndExit();
-                else Dispatcher.InvokeAsync(Close);   // the run ended while the question was up, and not from inside Closing
-            }
-            else App.RestartOnExit = false;
-            return;
-        }
-        // a second close while the unsaved-changes question's up (Alt+F4, tray Exit) waits for its answer
-        if (_askingToExit) { e.Cancel = true; return; }
-        _askingToExit = true;
-        bool go;
-        try { go = Vm?.ConfirmExit() ?? true; }
-        finally { _askingToExit = false; }
-        if (!go)
-        {
-            e.Cancel = true;
-            _exiting = false;
-            App.RestartOnExit = false;
-            return;
-        }
+        if (GoToTray(e) || WaitForLogInCancel(e) || WaitForAnswer(e) || StopMultiRun(e) || ConfirmDropProfile(e)) return;
         Vm?.Social.Messages.SettleSends(SessionEnd.LogOut);
-        _tray?.Dispose();
-        _tray = null;
+        _tray.Dispose();
         base.OnClosing(e);
+    }
+
+    // closing while signed in (with the setting on) keeps POL signed in from the tray, like an open viewer
+    private bool GoToTray(System.ComponentModel.CancelEventArgs e)
+    {
+        if (_exiting || Vm is not { KeepInTrayOnClose: true } vm) return false;
+        e.Cancel = true;
+        _tray.HideWindow(vm, true);
+        _tray.ShowFirstCloseTip(vm);
+        return true;
+    }
+
+    private bool WaitForLogInCancel(System.ComponentModel.CancelEventArgs e)
+    {
+        if (Vm is not { LoggingIn: true } signing) return false;
+        e.Cancel = true;
+        if (_cancellingLogIn) return true;
+        _cancellingLogIn = true;
+        // not from inside Closing, Close throws in there
+        Dispatcher.InvokeAsync(async () =>
+        {
+            await signing.CancelLogInAsync();
+            _cancellingLogIn = false;
+            Close();
+        });
+        return true;
+    }
+
+    private bool StopMultiRun(System.ComponentModel.CancelEventArgs e)
+    {
+        if (Vm?.Multi is not { Running: true } run) return false;
+        e.Cancel = true;
+        _exiting = false;
+        if (run.Stopping) { run.StopAllAccountsAndExit(); return true; }
+        bool stop;
+        _asking = true;
+        try { stop = run.ConfirmStopAccounts(); }
+        finally { _asking = false; }
+        if (!stop)
+        {
+            StayOpen();
+            return true;
+        }
+        if (run.Running) run.StopAllAccountsAndExit();
+        else Dispatcher.InvokeAsync(Close);   // the run ended while the question was up, and not from inside Closing
+        return true;
+    }
+
+    // a second close while a question's up (Alt+F4, the taskbar's Close) waits for its answer
+    private bool WaitForAnswer(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!_asking) return false;
+        e.Cancel = true;
+        return true;
+    }
+
+    private bool ConfirmDropProfile(System.ComponentModel.CancelEventArgs e)
+    {
+        bool go;
+        _asking = true;
+        try { go = Vm?.ConfirmExit() ?? true; }
+        finally { _asking = false; }
+        if (go) return false;
+        e.Cancel = true;
+        StayOpen();
+        return true;
+    }
+
+    private void StayOpen()
+    {
+        _exiting = false;
+        App.RestartOnExit = false;
     }
 
     // a shutdown closes the window whatever OnClosing says, so the icon can't be left behind
     protected override void OnClosed(EventArgs e)
     {
-        _tray?.Dispose();
-        _tray = null;
+        _tray.Dispose();
         base.OnClosed(e);
-    }
-
-    private void ToTray(MainViewModel vm, bool loggedIn)
-    {
-        if (_tray == null)
-        {
-            _tray = new TrayIcon(() => vm.FriendsWindowTitle);
-            _tray.OpenRequested += ShowFromTray;
-            _tray.FriendsRequested += () =>
-            {
-                ShowFromTray();
-                vm.OpenSocialCommand.Execute(null);
-            };
-            _tray.SignOutRequested += () =>
-            {
-                vm.SignOutCommand.Execute(null);
-                ShowFromTray();
-            };
-            _tray.ExitRequested += ExitApp;
-        }
-        _tray.SetLoggedIn(loggedIn);
-        _tray.Visible = true;
-        Hide();   // the friends windows are their own windows and stay as they are
-    }
-
-    internal void ShowFromTray()
-    {
-        if (_tray != null) _tray.Visible = false;
-        Show();
-        WindowState = WindowState.Normal;
-        Activate();
     }
 
     // the uninstaller, Windows logging off and closing when the game exits have nobody there to answer questions, so
@@ -264,6 +241,7 @@ public partial class MainWindow : AppWindow
     private void ExitApp()
     {
         _exiting = true;
-        Close();   // the app's exit signs the held session out
+        // inside OnClosing with a question up, Close would throw. The answer decides
+        if (!_asking) Close();   // the app's exit signs the held session out
     }
 }
