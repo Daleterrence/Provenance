@@ -100,6 +100,66 @@ static pdb_item *profile_db_get(BYTE *b, pdb_schema *s, const char *name, pdb_re
     return pc_pdb_find(b, s, name, rec);
 }
 
+/* the viewer's where for one handle, or a character by its two ids. NULL when polcore wouldn't take a field */
+static pdb_cond *db_where_hid(BYTE *b, pdb_schema *s, unsigned __int64 *hid, pdb_cond *c)
+{
+    memset(c, 0, sizeof *c);
+    pc_pdb_item_set(b, s, &c->item, "z_hid", hid, 1);
+    if (!(c->item.flags & 1)) return NULL;
+    pc_pdb_cond_op(b, c, 1);
+    return pc_pdb_where(b, 1, c);
+}
+static pdb_cond *db_where_character(BYTE *b, pdb_schema *s, DWORD *ctsid, unsigned __int64 *ctid, pdb_cond c[2])
+{
+    memset(c, 0, 2 * sizeof c[0]);
+    pc_pdb_item_set(b, s, &c[0].item, "z_ctsid", ctsid, 1);
+    pc_pdb_item_set(b, s, &c[1].item, "z_ctid", ctid, 1);
+    if (!(c[0].item.flags & 1) || !(c[1].item.flags & 1)) return NULL;
+    pc_pdb_cond_op(b, &c[0], 1);
+    pc_pdb_cond_op(b, &c[1], 1);
+    return pc_pdb_where(b, 2, &c[0], &c[1]);
+}
+
+/* what t, a start call's answer, does to the job. A failure is left to the caller */
+static void db_job_started(db_job *j, int phase, int t)
+{
+    if (t == NO_SLOT) { j->step = 1 + 2 * phase; return; }
+    if (t < 0) return;
+    j->job = t;
+    j->step = 2 + 2 * phase;
+}
+static void db_job_done(db_job *j, const char *state)
+{
+    lstrcpynA(j->state, state, j->cap);
+    if (j->rec && !j->keep) { HeapFree(GetProcessHeap(), 0, j->rec); j->rec = NULL; }
+    j->step = 0;
+    j->job = -1;
+}
+/* a read that's running is freed on polcore's side and its record's left alone. One still waiting never gave polcore anything */
+static void db_job_abandon(BYTE *b, db_job *j)
+{
+    if (j->step < 1 || j->step > j->last_read) return;
+    if (!(j->step & 1) && j->job >= 0) {
+        pc_free_job(b, j->job);
+        j->rec = NULL;   /* a cancelled read can still be written into, so its record's never freed */
+    }
+    j->done("cancelled");
+}
+/* a step that's waiting for a slot: cancelled in a drain, given up on at wait_ms, else tried again */
+static void db_job_waiting(BYTE *b, db_job *j, int cancel_on_drain)
+{
+    if (g_s.draining && cancel_on_drain) j->done("cancelled");
+    else if (j->wait_ms && GetTickCount64() - j->t0 >= j->wait_ms) j->done("failed:busy");
+    else j->start(b, j);
+}
+/* 1 while the poll's answer r is still no answer, and a read that's polled in a drain is called off */
+static int db_job_pending(BYTE *b, db_job *j, int r, int cancel_on_drain)
+{
+    if (r) return 0;
+    if (g_s.draining && cancel_on_drain) db_job_abandon(b, j);
+    return 1;
+}
+
 /* searches, profiles (friends', FFXI and my own), character lookups and picture saves all go to the profile server, so
    they share the 3s gap and go one at a time like the viewer */
 
@@ -222,8 +282,6 @@ static int profile_db_pfb_value(BYTE *b, pdb_schema *s, pfb_hdr *p, pdb_rec *rec
 /* the app asks for the next lookup as soon as one's answered, so the user's own reads and saves go first */
 static int profile_db_user_waiting(void)
 {
-    static const char *const ext[] = { REQ_SEARCH, REQ_PROFILE, REQ_FFXIPROFILE, REQ_MYPROFILE, REQ_SAVEPROFILE, REQ_RENAME, REQ_PIC,
-                                       REQ_CHATZONES, REQ_CHATROOMS, REQ_HANDLE, REQ_XIPROFILE };
-    for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (requests_waiting(ext[i])) return 1;
-    return 0;
+    return requests_listed(RQ_USER);
+
 }

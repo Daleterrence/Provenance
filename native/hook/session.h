@@ -16,6 +16,23 @@ typedef struct {
     int fails, stopped;              /* failed sends in a row, no more sends this session */
 } send_pace;
 
+/* a job on the profile server: the step it's at (0 idle, 1 waiting for a slot, 2 running, 3 and 4 the same for a second call),
+   polcore's job number, and what polcore writes into. last_read is the highest step that's still a read */
+typedef struct db_job {
+    int step, job;
+    ULONGLONG t0;
+    void *rec;
+    char *state;
+    int cap;
+    void (*done)(const char *state);
+    void (*start)(BYTE *b, struct db_job *j);
+    DWORD wait_ms;
+    int keep;
+    int last_read;
+    __declspec(align(8)) pdb_cond cond[2];
+    pdb_cond *where;
+} db_job;
+
 typedef struct hook_session {
     /* general */
     int draining;
@@ -29,7 +46,6 @@ typedef struct hook_session {
     int cr_hello;
     int cr_replies;
     int cr_joined;   /* a JOIN's gone and no PART since: the server might have me in the room */
-    int cr_db;   /* chat's zone and room lists, 0 idle, the steps are chat_list_db_pump's */
     /* friend edits, answers and my comment */
     int answer_kind;
     char edit_token[48];
@@ -81,24 +97,16 @@ typedef struct hook_session {
     send_hist send_hist[SEND_HIST];
     int send_hist_next;
     /* my profile and picture */
-    int me_step;
-    int ffxi_step;   /* my FFXI character's privacy: 1 load waits for a slot, 2 load job */
     char me_token[48];
     char me_state[32];
     int pic_want;
     char pic_state[32];
     char pic_token[48];
-    int ffxi_job;
     char ffxi_token[48];
     char ffxi_state[32];
     char ffxi_json[0x200];
     char ffxi_key[25];
-    ULONGLONG ffxi_t0;
     /* searches and profile reads */
-    int search_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
-    int prof_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
-    int character_step;
-    int ffxi_profile_step;
     int search_n;
     int search_kind;
     int search_total;
@@ -123,8 +131,7 @@ typedef struct hook_session {
     .status_loc = -2, \
     .mail_lanes = { { -1 }, { -1 } }, \
     .del_job = -1, \
-    .pic_want = -1, \
-    .ffxi_job = -1
+    .pic_want = -1
 
 static hook_session g_s = { SESSION_IDLE, .mail_refresh = 1 };   /* the inbox gets listed as soon as there's a hold */
 

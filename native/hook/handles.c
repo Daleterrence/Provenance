@@ -101,44 +101,9 @@ static void handles_switched(BYTE *b)
     base_log("handles: active handle now slot %d\r\n", g_my_slot);
 }
 
-/* while a switch runs, a write is taken and answered as not done, it'd go from the new handle otherwise. A chat
-   enter waiting when the switch is taken is called off the same way */
-#define SWITCHING "failed:handle changing"
-static void handles_writes_refuse(void)
-{
-    static const char *const ext[] = { REQ_SEND, REQ_FRIEND, REQ_COMMENT, REQ_ANSWER, REQ_GROUP, REQ_PIC, REQ_STATUS, REQ_MYPROFILE,
-                                       REQ_SAVEPROFILE, REQ_RENAME, REQ_CHATJOIN, REQ_CHATSEND, REQ_CHATCREATE, REQ_CHATMASTER,
-                                       REQ_GROUPCHATJOIN, REQ_GROUPCHATSEND, REQ_XIPROFILE };
-    char buf[512], *p, *l1, *l2, *l3;
-    for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) {
-        if (requests_take(ext[i], buf, sizeof buf) < 0) continue;
-        base_log("handles: %s request refused - the handle's changing\r\n", ext[i]);
-        p = buf;
-        l1 = requests_line(&p); l2 = requests_line(&p); l3 = requests_line(&p);
-        switch (i) {
-        case 0: case 3: lstrcpynA(g_s.send_token, l2, sizeof g_s.send_token); mail_send_fail(SWITCHING); break;
-        case 1: lstrcpynA(g_s.edit_token, l2, sizeof g_s.edit_token); edit_fail(SWITCHING); break;
-        case 2: lstrcpynA(g_s.edit_token, l1, sizeof g_s.edit_token); edit_fail(SWITCHING); break;
-        case 4: lstrcpynA(g_s.grp_token, l2, sizeof g_s.grp_token); group_fail(SWITCHING); break;
-        case 5: lstrcpynA(g_s.pic_token, l2, sizeof g_s.pic_token); pic_fail(SWITCHING); break;
-        case 7: case 8: case 9: lstrcpynA(g_s.me_token, l1, sizeof g_s.me_token); my_profile_done(SWITCHING); break;
-        case 10: chat_room_join_refused_switching(l1, l3); break;
-        case 11: chat_room_send_refused_switching(l1); break;
-        case 12: chat_room_create_refused(l1, l2); break;
-        case 13: chat_room_master_refused_switching(l1, l2); break;
-        case 14: group_chat_join_refused(l1, SWITCHING); break;
-        case 15: group_chat_send_refused(l1, SWITCHING); break;
-        case 16: lstrcpynA(g_s.ffxi_token, l1, sizeof g_s.ffxi_token); my_profile_xi_done(SWITCHING); break;
-        }
-    }
-}
 /* written by the app for the handle that's active now, but not taken yet */
-static int handles_writes_asked(void)
-{
-    static const char *const ext[] = { REQ_SEND, REQ_FRIEND, REQ_COMMENT, REQ_ANSWER, REQ_GROUP, REQ_PIC, REQ_STATUS };
-    for (int i = 0; i < (int)(sizeof ext / sizeof ext[0]); i++) if (requests_waiting(ext[i])) return 1;
-    return 0;
-}
+static int handles_writes_asked(void) { return requests_listed(RQ_ASKED); }
+
 
 /* the viewer's link before it starts a game (app.dll 0x100235d5): unlinked ones go on the active handle, all in one
    PutChrList. The app only sends what fits, so it's all or nothing here */
@@ -190,7 +155,7 @@ static void handles_request(BYTE *b)
     int slot, idx = -1, kind, cur, old = -1, r;
     DWORD f;
     /* a background character lookup finishes first, rather than the switch being turned away as busy */
-    if (g_s.character_step) return;
+    if (g_ch_read.j.step) return;
     if (requests_take(REQ_HANDLE, buf, sizeof buf) < 0) return;
     p = buf;
     op = requests_line(&p); tok = requests_line(&p); sl = requests_line(&p); hk = requests_line(&p);
@@ -213,8 +178,7 @@ static void handles_request(BYTE *b)
         if (slot == cur) { handle_fail("failed:already active"); return; }
         /* they went under the old handle, some with its slot in them, and a read's answer is what the old handle
            was allowed to see */
-        if (hold_writes_pending() || handles_writes_asked() || g_s.me_step || g_s.status_want >= 0 || g_s.search_step || g_s.prof_step ||
-            g_s.ffxi_profile_step || g_s.ffxi_step || g_s.cr_db) {
+        if ((requests_busy() & (JB_WRITE | JB_SWITCH)) || handles_writes_asked()) {
             handle_fail("failed:busy");
             return;
         }

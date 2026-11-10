@@ -1,7 +1,6 @@
 static int hold_db_free(void)
 {
-    return GetTickCount64() - g_s.db_last >= 3000 && !g_s.search_step && !g_s.prof_step && !g_s.character_step && !g_s.ffxi_profile_step &&
-           !g_s.cr_db && !g_s.me_step && !g_s.ffxi_step && g_s.pic_want < 0;
+    return GetTickCount64() - g_s.db_last >= 3000 && !(requests_busy() & JB_DB);
 }
 
 /* the server's handle, else the first in use (app.dll 0x10028a76). Provenance's last one (POL_HANDLE) goes before
@@ -48,23 +47,33 @@ static void hold_handle(BYTE *b)
 
 static void hold_db_reads_abandon(BYTE *b)
 {
-    if (g_s.prof_step != 0) profiles_profile_abandon(b);
-    if (g_s.character_step != 0) profiles_character_abandon(b);
-    if (g_s.ffxi_profile_step != 0) profiles_ffxiprofile_abandon(b);
-    if (g_s.search_step != 0) profiles_search_abandon(b);
+    if (g_prof.step != 0) profiles_profile_abandon(b);
+    if (g_ch_read.j.step != 0) profiles_character_abandon(b);
+    if (g_fp_read.j.step != 0) profiles_ffxiprofile_abandon(b);
+    if (g_search.step != 0) profiles_search_abandon(b);
+    if (g_xi.step != 0) my_profile_xi_abandon(b);
+
 }
 
 static int hold_writes_pending(void)
 {
-    return g_s.send_queue_n || g_s.status_job >= 0 || g_s.edit_job >= 0 || g_s.edit_upload_want ||
-           g_s.comment_wanted || g_s.pic_want >= 0 || g_s.grp_job >= 0 || g_s.answer_kind || g_s.me_step >= 3 ||
-           g_s.handle_op;
+    return (requests_busy() & JB_WRITE) != 0;
 }
 /* writes that are due but haven't got a job slot yet, or an answer's message still to come */
 static int hold_writes_waiting(void)
 {
-    return mail_send_built() || g_s.answer_kind || g_s.edit_upload_want || g_s.comment_wanted || g_s.me_step == 3 ||
-           g_s.handle_want;
+    return (requests_busy() & JB_WAIT) != 0;
+
+}
+/* every job idle again, for a test that starts from a fresh login */
+static void db_jobs_reset(void)
+{
+    db_job *all[] = { &g_search, &g_prof, &g_ch_read.j, &g_fp_read.j, &g_me, &g_xi, &g_cr, &g_pic };
+    for (int i = 0; i < (int)(sizeof all / sizeof all[0]); i++) {
+        all[i]->step = 0;
+        all[i]->job = -1;
+        all[i]->rec = NULL;
+    }
 }
 static void hold_drain_turn(BYTE *b, int mail)
 {

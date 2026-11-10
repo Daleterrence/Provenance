@@ -33,6 +33,8 @@
 #include "chat_room.c"
 #include "chat_room_master.c"
 #include "group_chat.c"
+#include "request_table.c"
+
 #include "login.c"
 #include "handles.c"
 #include "snapshot.c"

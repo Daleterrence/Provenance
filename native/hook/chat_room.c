@@ -645,14 +645,14 @@ static void chat_room_pump(BYTE *b, int ctl)
     chat_room_in_room_pump(b, ctl);
     if (ctl && (g_s.cr_st != CR_IN || g_s.cr_leave) && requests_waiting(REQ_CHATSEND)) chat_room_send_request(b);
     if (ctl && (g_s.cr_st != CR_IN || g_s.cr_leave) && requests_waiting(REQ_CHATMASTER)) chat_room_master_request();
-    if (g_s.cr_db) chat_list_db_pump(b);
+    if (g_cr.step) chat_list_db_pump(b);
     if (!ctl) return;
     /* waiting, not new: a .taking left by a read that failed is tried again first */
     if (requests_waiting(REQ_CHATLEAVE)) { chat_room_leave_request(b); return; }
     /* a PART goes first */
     if (g_s.cr_st == CR_OUT && requests_waiting(REQ_CHATJOIN)) { chat_room_join_request(b); return; }
     if (g_s.cr_st == CR_OUT && requests_waiting(REQ_CHATCREATE)) { chat_room_create_request(b); return; }
-    if (g_s.cr_db || !hold_db_free()) return;
+    if (g_cr.step || !hold_db_free()) return;
     if (requests_waiting(REQ_CHATZONES)) { chat_list_zones_request(b); return; }
     if (requests_waiting(REQ_CHATROOMS)) chat_list_rooms_request(b);
 }
@@ -700,7 +700,7 @@ static void chat_room_end(BYTE *b)
 {
     int s = chat_frame_session(b), r;
     ULONGLONG until = GetTickCount64() + 3000;
-    if (g_s.cr_db) chat_list_db_abandon(b);
+    if (g_cr.step) chat_list_db_abandon(b);
     if (g_s.cr_st == CR_OUT) return;
     if (s >= 0 && g_s.cr_wait != CRW_NONE) pc_chat_command_forget(b, s);
     g_s.cr_wait = CRW_NONE;

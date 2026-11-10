@@ -215,12 +215,8 @@ static void message_store_drop(void)
     base_ipc_file(p, IPC_GROUPCHAT);
     DeleteFileA(p);
     /* and an enter, a create, a master's change or a group chat request that never got taken */
-    for (int i = 0; i < 12; i++) {
-        static const char *const ext[] = { REQ_CHATJOIN, REQ_CHATCREATE, REQ_CHATMASTER, REQ_GROUPCHATJOIN, REQ_GROUPCHATSEND, REQ_GROUPCHATLEAVE };
-        base_ipc_file(p, ext[i / 2]);
-        lstrcatA(p, i % 2 ? IPC_TAKING : "");
-        DeleteFileA(p);
-    }
+    requests_sweep();
+
 }
 /* FFXI deletes what it fetches from the server, so the store's the only copy of what was handled in game. Read
    once, nothing on the wire */

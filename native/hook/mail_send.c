@@ -330,7 +330,7 @@ static void mail_send_answer_request(BYTE *b)
     if (mail_send_pace_refusal()) { mail_send_answer_fail(mail_send_pace_refusal()); return; }
     if (!requests_parse_num(mids, 6, &mid)) { mail_send_answer_fail("failed:bad request"); return; }
     if (lstrcmpA(op, "request") == 0) {
-        if (mid >= g_s.search_n || g_s.search_step != 0) { mail_send_answer_fail("failed:no such result"); return; }
+        if (mid >= g_s.search_n || g_search.step != 0) { mail_send_answer_fail("failed:no such result"); return; }
         h = &g_srch[mid];
         /* the hit must be the one the launcher showed, a newer search replaces the list */
         peers_key(b, h->lo, h->hi, (unsigned)h->slot, k);

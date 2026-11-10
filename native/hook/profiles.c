@@ -36,53 +36,42 @@ typedef struct {
     BYTE isfriend, me;
 } srchrec;
 static srchrec g_srch[SEARCH_MAX];
-static int g_srch_job = -1;
-static __declspec(align(8)) pdb_cond g_srch_cond;
 static char g_srch_clause[64];
-static BYTE *g_srch_buf;
 static pdb_schema *g_srch_pib;
 static DWORD g_srch_set, g_srch_want;
 static int g_srch_marked;
 static DWORD g_srch_marked_for;
 
+static void profiles_search_done(const char *state);
+static void profiles_search_start(BYTE *b, db_job *j)
+{
+    int t = pc_pdb_search_start(b, g_srch_pib, &j->cond[0], NULL);
+    if (t != NO_SLOT) base_log("friends: search start -> %d\r\n", t);
+    if (t < 0 && t != NO_SLOT) { j->done(requests_failed(t)); return; }
+    db_job_started(j, 0, t);
+}
+static void profiles_search_fetch(BYTE *b, db_job *j)
+{
+    int r = pc_pdb_search_fetch(b, (int)g_srch_set, g_srch_pib, 0,
+                                                                        (int)g_srch_want, j->rec);
+    if (r != NO_SLOT) base_log("friends: search fetching %u -> %d\r\n", g_srch_want, r);
+    if (r < 0 && r != NO_SLOT) { j->done(requests_failed(r)); return; }
+    db_job_started(j, 1, r);
+}
+static void profiles_search_go(BYTE *b, db_job *j)
+{
+    if (j->step == 3) profiles_search_fetch(b, j); else profiles_search_start(b, j);
+}
+static db_job g_search = { .job = -1, .state = g_s.search_state, .cap = sizeof g_s.search_state, .done = profiles_search_done,
+                           .start = profiles_search_go, .last_read = 4 };
 static void profiles_search_done(const char *state)
 {
-    lstrcpynA(g_s.search_state, state, sizeof g_s.search_state);
-    if (g_srch_buf) { HeapFree(GetProcessHeap(), 0, g_srch_buf); g_srch_buf = NULL; }
-    g_s.search_step = 0;
-    g_srch_job = -1;
+    db_job_done(&g_search, state);
     g_srch_marked = 0;
     base_log("friends: search %s (%d hits)\r\n", state, g_s.search_n);
     g_snap_dirty = 1;
 }
-/* polcore can still write into a cancelled read, so its buffer's never freed (the mail reads too). A small leak
-   beats polcore going ham over freed memory */
-static void profiles_search_abandon(BYTE *b)
-{
-    if (g_srch_job >= 0 && (g_s.search_step == 2 || g_s.search_step == 4))
-        pc_free_job(b, g_srch_job);
-    g_srch_buf = NULL;
-    profiles_search_done("cancelled");
-}
-static void profiles_search_start(BYTE *b)
-{
-    int t = pc_pdb_search_start(b, g_srch_pib, &g_srch_cond, NULL);
-    if (t == NO_SLOT) { g_s.search_step = 1; return; }
-    base_log("friends: search start -> %d\r\n", t);
-    if (t < 0) { profiles_search_done(requests_failed(t)); return; }
-    g_srch_job = t;
-    g_s.search_step = 2;
-}
-static void profiles_search_fetch(BYTE *b)
-{
-    int r = pc_pdb_search_fetch(b, (int)g_srch_set, g_srch_pib, 0,
-                                                                        (int)g_srch_want, g_srch_buf);
-    if (r == NO_SLOT) { g_s.search_step = 3; return; }
-    base_log("friends: search fetching %u -> %d\r\n", g_srch_want, r);
-    if (r < 0) { profiles_search_done(requests_failed(r)); return; }
-    g_srch_job = r;
-    g_s.search_step = 4;
-}
+static void profiles_search_abandon(BYTE *b) { db_job_abandon(b, &g_search); }
 /* an H-ID as the viewer shows it (00-1234567) or just the number: '-' and spaces go, then 1-13 digits */
 static int profiles_hid_parse(const char *s, unsigned __int64 *out)
 {
@@ -135,7 +124,7 @@ static void profiles_search_request(BYTE *b)
     }
     g_srch_pib = k == SK_CHARACTER ? profiles_character_load_pib(b) : profile_db_load_pib(b);
     if (!g_srch_pib) { profiles_search_done("failed:no schema"); return; }
-    memset(&g_srch_cond, 0, sizeof g_srch_cond);
+    memset(&g_search.cond[0], 0, sizeof g_search.cond[0]);
     /* the clauses are the viewer's, from the .pfb files. The H-ID goes back out as a plain number like svc 0x784
        leaves it, and INITCAP is how FFXI names are kept */
     if (k == SK_HANDLE) {
@@ -150,30 +139,26 @@ static void profiles_search_request(BYTE *b)
     } else {
         wsprintfA(g_srch_clause, "z_name=INITCAP(\x04%s\x04)", val);
     }
-    pc_pdb_cond_text(b, &g_srch_cond, 7, g_srch_clause);
+    pc_pdb_cond_text(b, &g_search.cond[0], 7, g_srch_clause);
     base_log("friends: search %s \"%s\"\r\n", g_srch_kinds[k], val);
     lstrcpyA(g_s.search_state, "searching");
     g_snap_dirty = 1;
-    profiles_search_start(b);
+    profiles_search_start(b, &g_search);
 }
 static void profiles_search_pump(BYTE *b, int ctl)
 {
+    db_job *j = &g_search;
     int r, guard = 0;
-    if (g_s.search_step == 0) {
+    if (j->step == 0) {
         if (ctl && !g_s.draining) profiles_search_request(b);
         return;
     }
-    if (g_s.search_step == 1) {
-        if (!g_s.draining) profiles_search_start(b); else profiles_search_done("cancelled"); return;
-    }
-    if (g_s.search_step == 3) {
-        if (!g_s.draining) profiles_search_fetch(b); else profiles_search_done("cancelled"); return;
-    }
-    if (g_s.search_step == 2) {
+    if (j->step == 1 || j->step == 3) { db_job_waiting(b, j, 1); return; }
+    if (j->step == 2) {
         DWORD out[3] = { 0, 0, 0 };
-        r = pc_pdb_search_hits(b, g_srch_job, out);
-        if (r == 0) return;
-        g_srch_job = -1;
+        r = pc_pdb_search_hits(b, j->job, out);
+        if (db_job_pending(b, j, r, 0)) return;
+        j->job = -1;
         if (r == NOTHING_FOUND) { profiles_search_done("done"); return; }   /* "No matching results were found." */
         if (r < 0) { profiles_search_done(requests_failed(r)); return; }
         if ((int)out[0] < 0) { profiles_search_done("done"); return; }
@@ -184,17 +169,17 @@ static void profiles_search_pump(BYTE *b, int ctl)
         if ((int)out[1] <= 0) { profiles_search_done("done"); return; }
         g_srch_set = out[0];
         g_srch_want = out[1] > SEARCH_MAX ? SEARCH_MAX : out[1];
-        g_srch_buf = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-                                       (SIZE_T)g_srch_pib->rec_size * g_srch_want + 64);
-        if (!g_srch_buf) { profiles_search_done("failed:alloc"); return; }
-        profiles_search_fetch(b);
+        j->rec = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)g_srch_pib->rec_size * g_srch_want + 64);
+        if (!j->rec) { profiles_search_done("failed:alloc"); return; }
+        profiles_search_fetch(b, j);
         return;
     }
-    r = pc_pdb_search_fetch_check(b, g_srch_job);
-    if (r == 0) return;
-    g_srch_job = -1;
+    r = pc_pdb_search_fetch_check(b, j->job);
+    if (db_job_pending(b, j, r, 0)) return;
+    j->job = -1;
     if (r < 0) { profiles_search_done(requests_failed(r)); return; }
-    for (BYTE *rec = g_srch_buf; rec && g_s.search_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
+    for (BYTE *rec = (BYTE *)j->rec; rec
+ && g_s.search_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
         pdb_item *ph, *it;
         const pol_friend *fr;
         srchrec *h = &g_srch[g_s.search_n];
@@ -224,11 +209,13 @@ static void profiles_search_pump(BYTE *b, int ctl)
     profiles_search_done("done");
 }
 
-static pdb_cond g_prof_cond;
-static int g_prof_job = -1, g_prof_row;
+static void profiles_profile_done(const char *state);
+static void profiles_profile_start(BYTE *b, db_job *j);
+static db_job g_prof = { .job = -1, .state = g_s.prof_state, .cap = sizeof g_s.prof_state, .done = profiles_profile_done,
+                         .start = profiles_profile_start, .last_read = 2 };
+static int g_prof_row;
 static unsigned __int64 g_prof_hid;
 static char *g_prof_json;
-static pdb_rec *g_prof_rec;
 /* game slots (z_phead, or the friend row) from the last 16 profiles read, by H-ID. The app shows a profile again from
    its own copy and the tabs still need them */
 #define PROF_SLOTS_KEPT 16
@@ -259,36 +246,29 @@ static void profiles_slots_keep(unsigned __int64 hid, const pol_game *src)
 
 static void profiles_profile_done(const char *state)
 {
-    lstrcpynA(g_s.prof_state, state, sizeof g_s.prof_state);
-    if (g_prof_rec) { HeapFree(GetProcessHeap(), 0, g_prof_rec); g_prof_rec = NULL; }
-    g_s.prof_step = 0;
-    g_prof_job = -1;
+    db_job_done(&g_prof, state);
     base_log(LOG_PROFILE "%s\r\n", state);
     g_snap_dirty = 1;
 }
-static void profiles_profile_abandon(BYTE *b)
-{
-    if (g_s.prof_step == 1 && g_prof_job >= 0) pc_free_job(b, g_prof_job);
-    g_prof_rec = NULL;   /* a cancelled read can still write, so never freed */
-    profiles_profile_done("cancelled");
-}
+static void profiles_profile_abandon(BYTE *b) { db_job_abandon(b, &g_prof); }
 static void profiles_profile_build(BYTE *b)
 {
     static const char *aa[] = { "z_aa_mt", "z_aa_dt", "z_aa_t", "z_aa_m", "z_aa_c", "z_aa_w", "z_aa_d", "z_aa_e" };
     static char lines[3][0x80], t[0x400], f[0x400];
+    pdb_rec *rec = g_prof.rec;
     pdb_schema *s = g_profile_db_pib;
     pfb_hdr *p = g_pfb;
     char hid[0x24], *q;
     int i, k, n, st, set = 0, r;
     pdb_item *it;
     jw w = {0};
-    st = profile_db_pfb_value(b, s, p, g_prof_rec, "z_name", 1, lines, &n);
+    st = profile_db_pfb_value(b, s, p, rec, "z_name", 1, lines, &n);
     jw_pol(&w, "name", b, lines[0], 0x600, 0xc00);
     jw_int(&w, "nameState", st);
-    st = profile_db_pfb_value(b, s, p, g_prof_rec, "z_mail", 1, lines, &n);
+    st = profile_db_pfb_value(b, s, p, rec, "z_mail", 1, lines, &n);
     jw_pol(&w, "mail", b, lines[0], 0x600, 0xc00);
     jw_int(&w, "mailState", st);
-    it = profile_db_get(b, s, "z_hid", g_prof_rec);
+    it = profile_db_get(b, s, "z_hid", rec);
     memset(hid, 0, sizeof hid);
     /* the viewer prints the record's low 32 bits, or the H-ID it asked for when that's 0 (a hidden one) */
     if (pc_has(b, SV_FORMAT_HID)) {
@@ -298,9 +278,9 @@ static void profiles_profile_build(BYTE *b)
     }
     hid[0x20] = 0;
     jw_str(&w, "hid", hid, 0xc00);
-    it = profile_db_get(b, s, "z_utime", g_prof_rec);
+    it = profile_db_get(b, s, "z_utime", rec);
     jw_uint(&w, "updated", it ? it->v.u32 : 0);
-    jw_uint(&w, "level", g_prof_rec->level);
+    jw_uint(&w, "level", rec->level);
     jw_arr(&w, "rows");
     for (i = 0; p && i < p->nItems; i++) {
         const pfb_item *pi = &p->items[i];
@@ -312,8 +292,8 @@ static void profiles_profile_build(BYTE *b)
         jw_obj(&w, NULL);
         jw_pol(&w, "label", b, pi->label, 0x100, 0xc00);
         if (!strcmp(fname, "z_ficon")) {
-            pdb_item *fi = profile_db_get(b, s, "z_ficon", g_prof_rec);
-            st = (!fi || g_prof_rec->level < 1 || fi->level == 0 ||
+            pdb_item *fi = profile_db_get(b, s, "z_ficon", rec);
+            st = (!fi || rec->level < 1 || fi->level == 0 ||
                   ((s->fields[pi->field].flags & 0x40) && fi->level < 1)) ? PV_PRIVATE
                : (int)fi->v.u32 <= 0 ? PV_NOTSET : PV_OK;
             jw_lit(&w, "field", "z_ficon");
@@ -322,7 +302,7 @@ static void profiles_profile_build(BYTE *b)
             jw_end(&w);
             continue;
         }
-        st = profile_db_pfb_value(b, s, p, g_prof_rec, fname, 1, lines, &n);
+        st = profile_db_pfb_value(b, s, p, rec, fname, 1, lines, &n);
         jw_lit(&w, "field", fname);
         jw_int(&w, "state", st);
         jw_arr(&w, "lines");
@@ -335,7 +315,7 @@ static void profiles_profile_build(BYTE *b)
        1, other games' profiles never get a tab here */
     {
         pol_friend_copy fr;
-        pdb_item *ph = profile_db_get(b, s, "z_phead", g_prof_rec);
+        pdb_item *ph = profile_db_get(b, s, "z_phead", rec);
         const pol_friend *h = ph && (ph->flags & 1) ? (const pol_friend *)ph->v.bytes.p : NULL;
         const pol_game *src = NULL;
         const char *from = "nowhere";
@@ -367,13 +347,13 @@ static void profiles_profile_build(BYTE *b)
     /* svc 0x1200 is the viewer's away text (-0x14cc = none or no access). All z_aa_* at 0 means none, though 0x1200
        would happily invent "I am away from the keyboard". */
     for (k = 0; k < 8 && !set; k++) {
-        pdb_item *a2 = profile_db_get(b, s, aa[k], g_prof_rec);
+        pdb_item *a2 = profile_db_get(b, s, aa[k], rec);
         if (a2 && a2->v.bytes.p && *(BYTE *)a2->v.bytes.p) set = 1;
     }
     if (set && pc_has(b, SV_AWAY_TEXT)) {
         memset(t, 0, sizeof t);
         memset(f, 0, sizeof f);
-        r = pc_away_text(b, s, p, g_prof_rec, g_prof_row, t, sizeof t, f, sizeof f);
+        r = pc_away_text(b, s, p, rec, g_prof_row, t, sizeof t, f, sizeof f);
         if (r >= 0) {
             for (q = t; *q; q++) if (*q == 7) *q = '\n';
             jw_pol(&w, "away", b, t, 0x600, 0xc00);
@@ -384,14 +364,12 @@ static void profiles_profile_build(BYTE *b)
     if (g_prof_json) jw_fit(&w, g_prof_json, 0x8000, "profile");
     jw_free(&w);
 }
-static void profiles_profile_start(BYTE *b)
+static void profiles_profile_start(BYTE *b, db_job *j)
 {
-    int t = pc_pdb_load_start(b, g_profile_db_pib, &g_prof_cond, g_prof_rec);
-    if (t == NO_SLOT) { g_s.prof_step = 2; return; }
-    base_log(LOG_PROFILE "load row %d -> %d\r\n", g_prof_row, t);
-    if (t < 0) { profiles_profile_done(requests_failed(t)); return; }
-    g_prof_job = t;
-    g_s.prof_step = 1;
+    int t = pc_pdb_load_start(b, g_profile_db_pib, j->where, (pdb_rec *)j->rec);
+    if (t != NO_SLOT) base_log(LOG_PROFILE "load row %d -> %d\r\n", g_prof_row, t);
+    if (t < 0 && t != NO_SLOT) { j->done(requests_failed(t)); return; }
+    db_job_started(j, 0, t);
 }
 static void profiles_profile_request(BYTE *b)
 {
@@ -416,45 +394,50 @@ static void profiles_profile_request(BYTE *b)
     if (fr.f.flags & FRIEND_PENDING) { profiles_profile_done("failed:pending"); return; }
     if (!(s = profile_db_load_pib(b)) || !profile_db_load_pfb(b)) { profiles_profile_done("failed:no schema"); return; }
     unsigned __int64 hid = pc_friend_hid(&fr.f);
-    g_prof_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, s->rec_size + 8);
-    if (!g_prof_rec) { profiles_profile_done("failed:alloc"); return; }
-    memset(&g_prof_cond, 0, sizeof g_prof_cond);
-    pc_pdb_item_set(b, s, &g_prof_cond.item, "z_hid", &hid, 1);
-    if (!(g_prof_cond.item.flags & 1)) { profiles_profile_done("failed:schema"); return; }
-    pc_pdb_cond_op(b, &g_prof_cond, 1);
-    pc_pdb_where(b, 1, &g_prof_cond);
+    g_prof.rec = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, s->rec_size + 8);
+    if (!g_prof.rec) { profiles_profile_done("failed:alloc"); return; }
+    g_prof.where = db_where_hid(b, s, &hid, &g_prof.cond[0]);
+    if (!g_prof.where) { profiles_profile_done("failed:schema"); return; }
     g_prof_row = row;
     g_prof_hid = hid;
     lstrcpyA(g_s.prof_state, "loading");
     g_snap_dirty = 1;
-    profiles_profile_start(b);
+    profiles_profile_start(b, &g_prof);
 }
 static void profiles_profile_pump(BYTE *b, int ctl)
 {
-    if (g_s.prof_step == 0) {
+    db_job *j = &g_prof;
+    int r;
+    if (j->step == 0) {
         if (ctl && !g_s.draining) profiles_profile_request(b);
         return;
     }
-    if (g_s.prof_step == 2) {
-        if (!g_s.draining) profiles_profile_start(b); else profiles_profile_done("cancelled"); return;
-    }
-    int r = pc_pdb_load_check(b, g_prof_job);
-    if (r == 0) return;
-    g_prof_job = -1;
+    if (j->step == 1) { db_job_waiting(b, j, 1); return; }
+    r = pc_pdb_load_check(b, j->job);
+    if (db_job_pending(b, j, r, 0)) return;
+    j->job = -1;
     if (r < 0) { profiles_profile_done(requests_failed(r)); return; }
-    if (!g_prof_rec->items) { profiles_profile_done("failed:no profile"); return; }
+    if (!((pdb_rec *)j->rec)->items) { profiles_profile_done("failed:no profile"); return; }
+
     profiles_profile_build(b);
     profiles_profile_done("done");
 }
 
-/* a friend's FFXI character, the way the viewer's FFXI profile tab finds it: prof_001 (title 1) by z_ctsid and z_ctid
-   together. Only for a character a friend's on right now */
-static __declspec(align(8)) pdb_cond g_ch_cond[2];
-static pdb_cond *g_ch_where;
-static int g_ch_job = -1;
+/* prof_001 (title 1) by z_ctsid and z_ctid together: a friend's FFXI character, the way the viewer's profile tab finds it,
+   for one that's on right now, and for one of a friend's tabs. Same where, same load, a builder each */
+typedef struct ffxi_read {
+    db_job j;
+    const char *prefix;
+    int hidden;
+    DWORD *ctsid, *lo, *hi;
+    unsigned __int64 ctid;
+    void (*build)(BYTE *b, pdb_rec *rec);
+} ffxi_read;
 static DWORD g_ch_ctsid, g_ch_lo, g_ch_hi;
 static char g_ch_token[48], g_ch_state[32] = "", g_ch_json[0x400];
-static pdb_rec *g_ch_rec;
+static DWORD g_fp_ctsid, g_fp_lo, g_fp_hi;
+static int g_fp_slot = -1;
+static char g_fp_token[48], g_fp_state[32] = "", g_fp_json[0x400];
 
 /* the record's string field, empty when it isn't there */
 static void profiles_character_text(BYTE *b, pdb_rec *rec, const char *name, char *js, int cap, BYTE *level)
@@ -466,48 +449,24 @@ static void profiles_character_text(BYTE *b, pdb_rec *rec, const char *name, cha
         json_sjis_copy(raw, it->v.str, sizeof raw);
     json_pol(b, raw, 0x80, js, cap);
 }
-static void profiles_character_done(const char *state)
-{
-    lstrcpynA(g_ch_state, state, sizeof g_ch_state);
-    if (g_ch_rec) { HeapFree(GetProcessHeap(), 0, g_ch_rec); g_ch_rec = NULL; }
-    g_s.character_step = 0;
-    g_ch_job = -1;
-    base_log("character: %s\r\n", state);
-    g_snap_dirty = 1;
-}
-static void profiles_character_abandon(BYTE *b)
-{
-    if (g_s.character_step == 1 && g_ch_job >= 0) pc_free_job(b, g_ch_job);
-    g_ch_rec = NULL;   /* a cancelled read can still write, so never freed */
-    profiles_character_done("cancelled");
-}
 /* nameState 0 shown, 1 withheld, 2 empty. Like the viewer with a header field (and prof_pol's z_name), only the record
    level says whether the name's visible, z_name's own level just goes in the log */
-static void profiles_character_build(BYTE *b)
+static void profiles_character_build(BYTE *b, pdb_rec *rec)
 {
     char nm[0x100], wn[0x100];
     BYTE lv = 0;
     int st;
-    profiles_character_text(b, g_ch_rec, "z_name", nm, sizeof nm, &lv);
-    st = g_ch_rec->level < 1 ? 1 : strcmp(nm, "\"\"") == 0 ? 2 : 0;
-    profiles_character_text(b, g_ch_rec, "z_worldname", wn, sizeof wn, NULL);
+    profiles_character_text(b, rec, "z_name", nm, sizeof nm, &lv);
+    st = rec->level < 1 ? 1 : strcmp(nm, "\"\"") == 0 ? 2 : 0;
+    profiles_character_text(b, rec, "z_worldname", wn, sizeof wn, NULL);
     jw w = {0};
     jw_raw(&w, "name", st == 1 ? "\"\"" : nm);
     jw_int(&w, "nameState", st);
-    jw_uint(&w, "level", g_ch_rec->level);
+    jw_uint(&w, "level", rec->level);
     jw_raw(&w, "worldName", wn);
     jw_fit(&w, g_ch_json, sizeof g_ch_json, "character");
     jw_free(&w);
-    base_log("character: record level %u, name level %u, state %d\r\n", g_ch_rec->level, lv, st);
-}
-static void profiles_character_start(BYTE *b)
-{
-    int t = pc_pdb_load_start(b, g_ch_pib, g_ch_where, g_ch_rec);
-    if (t == NO_SLOT) { g_s.character_step = 2; return; }
-    base_log("character: load -> %d\r\n", t);
-    if (t < 0) { profiles_character_done(requests_failed(t)); return; }
-    g_ch_job = t;
-    g_s.character_step = 1;
+    base_log("character: record level %u, name level %u, state %d\r\n", rec->level, lv, st);
 }
 static int profiles_ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
 {
@@ -521,10 +480,109 @@ static int profiles_ffxi_friend_on(BYTE *b, DWORD ctsid, DWORD lo, DWORD hi)
     return 0;
 }
 
+static const char *const g_fp_nums[][2] = {
+    { "z_countryid", "countryId" }, { "z_zoneid", "zoneId" }, { "z_jobid", "jobId" }, { "z_joblevel", "jobLevel" },
+    { "z_raceid", "raceId" },
+};
+
+static int profiles_ffxiprofile_check_schema(BYTE *b, pdb_schema *s)
+{
+    int i, idx;
+    for (i = 0; i < (int)(sizeof g_fp_nums / sizeof g_fp_nums[0]); i++) {
+        const pdb_field *f = profile_db_field(s, g_fp_nums[i][0], &idx);
+        if (!f || f->type != 3 || pc_pdb_field_index(b, s, g_fp_nums[i][0]) != idx) return 0;
+    }
+    return 1;
+}
+/* states as the handle profile's, and prof_001 has no per-field levels so the record level decides them all. Type 3
+   is a signed short */
+static void profiles_ffxiprofile_build(BYTE *b, pdb_rec *rec)
+{
+    char nm[0x100], wn[0x100];
+    int priv = rec->level < 1, i, st;
+    char kn[40];
+    jw w = {0};
+    profiles_character_text(b, rec, "z_name", nm, sizeof nm, NULL);
+    profiles_character_text(b, rec, "z_worldname", wn, sizeof wn, NULL);
+    jw_uint(&w, "level", rec->level);
+    jw_raw(&w, "name", priv ? "\"\"" : nm);
+    jw_int(&w, "nameState", priv ? PV_PRIVATE : strcmp(nm, "\"\"") ? PV_OK : PV_NOTSET);
+    jw_raw(&w, "worldName", priv ? "\"\"" : wn);
+    jw_int(&w, "worldNameState", priv ? PV_PRIVATE : strcmp(wn, "\"\"") ? PV_OK : PV_NOTSET);
+    for (i = 0; i < (int)(sizeof g_fp_nums / sizeof g_fp_nums[0]); i++) {
+        pdb_item *it = profile_db_get(b, g_ch_pib, g_fp_nums[i][0], rec);
+        st = priv ? PV_PRIVATE : it && (it->flags & 1) ? PV_OK : PV_NOTSET;
+        jw_int(&w, g_fp_nums[i][1], st == PV_OK ? (int)(short)it->v.u16 : 0);
+        wsprintfA(kn, "%sState", g_fp_nums[i][1]);
+        jw_int(&w, kn, st);
+    }
+    jw_fit(&w, g_fp_json, sizeof g_fp_json, "FFXI profile");
+    jw_free(&w);
+    base_log("ffxiprofile: slot %d, record level %u\r\n", g_fp_slot, rec->level);
+}
+static void ffxi_read_done(ffxi_read *r, const char *state)
+{
+    db_job_done(&r->j, state);
+    base_log("%s: %s\r\n", r->prefix, state);
+    g_snap_dirty = 1;
+}
+static void ffxi_read_start(BYTE *b, db_job *j)
+{
+    ffxi_read *r = (ffxi_read *)j;
+    int t = pc_pdb_load_start(b, g_ch_pib, j->where, (pdb_rec *)j->rec);
+    if (t != NO_SLOT) base_log("%s: load -> %d\r\n", r->prefix, t);
+    if (t < 0 && t != NO_SLOT) { j->done(requests_failed(t)); return; }
+    db_job_started(j, 0, t);
+}
+/* note is a line for the log once the where's built, or NULL */
+static void ffxi_read_go(BYTE *b, ffxi_read *r, const char *note)
+{
+    db_job *j = &r->j;
+    j->rec = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
+    if (!j->rec) { j->done("failed:alloc"); return; }
+    r->ctid = (unsigned __int64)*r->hi << 32 | *r->lo;
+    j->where = db_where_character(b, g_ch_pib, r->ctsid, &r->ctid, j->cond);
+    if (!j->where) { j->done("failed:schema"); return; }
+    if (note) base_log("%s", note);
+    lstrcpyA(j->state, "loading");
+    g_snap_dirty = 1;
+    ffxi_read_start(b, j);
+}
+static void ffxi_read_pump(BYTE *b, ffxi_read *r, int ctl, void (*request)(BYTE *))
+{
+    db_job *j = &r->j;
+    int rc;
+    if (j->step == 0) {
+        if (ctl && !g_s.draining) request(b);
+        return;
+    }
+    if (j->step == 1) { db_job_waiting(b, j, 1); return; }
+    rc = pc_pdb_load_check(b, j->job);
+    if (db_job_pending(b, j, rc, 0)) return;
+    j->job = -1;
+    /* "Selected profile is hidden." */
+    if (rc == NOTHING_FOUND && r->hidden) { j->done("failed:hidden"); return; }
+    if (rc < 0) { j->done(requests_failed(rc)); return; }
+    if (!((pdb_rec *)j->rec)->items) { j->done("failed:no profile"); return; }
+    r->build(b, (pdb_rec *)j->rec);
+    j->done("done");
+}
+static void profiles_character_done(const char *state);
+static void profiles_ffxiprofile_done(const char *state);
+static ffxi_read g_ch_read = { { .job = -1, .state = g_ch_state, .cap = sizeof g_ch_state, .done = profiles_character_done,
+                                 .start = ffxi_read_start, .last_read = 2 },
+                               "character", 0, &g_ch_ctsid, &g_ch_lo, &g_ch_hi, 0, profiles_character_build };
+static ffxi_read g_fp_read = { { .job = -1, .state = g_fp_state, .cap = sizeof g_fp_state, .done = profiles_ffxiprofile_done,
+                                 .start = ffxi_read_start, .last_read = 2 },
+                               "ffxiprofile", 1, &g_fp_ctsid, &g_fp_lo, &g_fp_hi, 0, profiles_ffxiprofile_build };
+static void profiles_character_done(const char *state) { ffxi_read_done(&g_ch_read, state); }
+static void profiles_ffxiprofile_done(const char *state) { ffxi_read_done(&g_fp_read, state); }
+static void profiles_character_abandon(BYTE *b) { db_job_abandon(b, &g_ch_read.j); }
+static void profiles_ffxiprofile_abandon(BYTE *b) { db_job_abandon(b, &g_fp_read.j); }
+
 static void profiles_character_request(BYTE *b)
 {
     char buf[128], *p, *tok;
-    unsigned __int64 ctid;
     if (!hold_db_free() || profile_db_user_waiting()) return;
     if (requests_take(REQ_CHARACTER, buf, sizeof buf) < 0) return;
     g_s.db_last = GetTickCount64();
@@ -540,120 +598,18 @@ static void profiles_character_request(BYTE *b)
         profiles_character_done("failed:not playing"); return;
     }
     if (!profiles_character_load_pib(b)) { profiles_character_done("failed:no schema"); return; }
-    g_ch_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
-    if (!g_ch_rec) { profiles_character_done("failed:alloc"); return; }
-    ctid = (unsigned __int64)g_ch_hi << 32 | g_ch_lo;
-    memset(g_ch_cond, 0, sizeof g_ch_cond);
-    pc_pdb_item_set(b, g_ch_pib, &g_ch_cond[0].item, "z_ctsid", &g_ch_ctsid, 1);
-    pc_pdb_item_set(b, g_ch_pib, &g_ch_cond[1].item, "z_ctid", &ctid, 1);
-    if (!(g_ch_cond[0].item.flags & 1) || !(g_ch_cond[1].item.flags & 1)) {
-        profiles_character_done("failed:schema"); return;
-    }
-    pc_pdb_cond_op(b, &g_ch_cond[0], 1);
-    pc_pdb_cond_op(b, &g_ch_cond[1], 1);
-    g_ch_where = pc_pdb_where(b, 2, &g_ch_cond[0], &g_ch_cond[1]);
-    if (!g_ch_where) { profiles_character_done("failed:schema"); return; }
-    lstrcpyA(g_ch_state, "loading");
-    g_snap_dirty = 1;
-    profiles_character_start(b);
+    ffxi_read_go(b, &g_ch_read, NULL);
 }
-static void profiles_character_pump(BYTE *b, int ctl)
-{
-    if (g_s.character_step == 0) {
-        if (ctl && !g_s.draining) profiles_character_request(b);
-        return;
-    }
-    if (g_s.character_step == 2) {
-        if (!g_s.draining) profiles_character_start(b); else profiles_character_done("cancelled"); return;
-    }
-    int r = pc_pdb_load_check(b, g_ch_job);
-    if (r == 0) return;
-    g_ch_job = -1;
-    if (r < 0) { profiles_character_done(requests_failed(r)); return; }
-    if (!g_ch_rec->items) { profiles_character_done("failed:no profile"); return; }
-    profiles_character_build(b);
-    profiles_character_done("done");
-}
+static void profiles_character_pump(BYTE *b, int ctl) { ffxi_read_pump(b, &g_ch_read, ctl, profiles_character_request); }
 
 /* a friend's FFXI character for their profile's tabs, the viewer's prof_001 read. The app only says which slot, the
    ids come from the friend's own slots */
-static __declspec(align(8)) pdb_cond g_fp_cond[2];
-static pdb_cond *g_fp_where;
-static int g_fp_job = -1, g_fp_slot = -1;
-static DWORD g_fp_ctsid, g_fp_lo, g_fp_hi;
-static char g_fp_token[48], g_fp_state[32] = "", g_fp_json[0x400];
-static pdb_rec *g_fp_rec;
-static const char *const g_fp_nums[][2] = {
-    { "z_countryid", "countryId" }, { "z_zoneid", "zoneId" }, { "z_jobid", "jobId" }, { "z_joblevel", "jobLevel" },
-    { "z_raceid", "raceId" },
-};
-
-static int profiles_ffxiprofile_check_schema(BYTE *b, pdb_schema *s)
-{
-    int i, idx;
-    for (i = 0; i < (int)(sizeof g_fp_nums / sizeof g_fp_nums[0]); i++) {
-        const pdb_field *f = profile_db_field(s, g_fp_nums[i][0], &idx);
-        if (!f || f->type != 3 || pc_pdb_field_index(b, s, g_fp_nums[i][0]) != idx) return 0;
-    }
-    return 1;
-}
-static void profiles_ffxiprofile_done(const char *state)
-{
-    lstrcpynA(g_fp_state, state, sizeof g_fp_state);
-    if (g_fp_rec) { HeapFree(GetProcessHeap(), 0, g_fp_rec); g_fp_rec = NULL; }
-    g_s.ffxi_profile_step = 0;
-    g_fp_job = -1;
-    base_log("ffxiprofile: %s\r\n", state);
-    g_snap_dirty = 1;
-}
-static void profiles_ffxiprofile_abandon(BYTE *b)
-{
-    if (g_s.ffxi_profile_step == 1 && g_fp_job >= 0) pc_free_job(b, g_fp_job);
-    g_fp_rec = NULL;   /* a cancelled read can still write, so never freed */
-    profiles_ffxiprofile_done("cancelled");
-}
-/* states as the handle profile's, and prof_001 has no per-field levels so the record level decides them all. Type 3
-   is a signed short */
-static void profiles_ffxiprofile_build(BYTE *b)
-{
-    char nm[0x100], wn[0x100];
-    int priv = g_fp_rec->level < 1, i, st;
-    char kn[40];
-    jw w = {0};
-    profiles_character_text(b, g_fp_rec, "z_name", nm, sizeof nm, NULL);
-    profiles_character_text(b, g_fp_rec, "z_worldname", wn, sizeof wn, NULL);
-    jw_uint(&w, "level", g_fp_rec->level);
-    jw_raw(&w, "name", priv ? "\"\"" : nm);
-    jw_int(&w, "nameState", priv ? PV_PRIVATE : strcmp(nm, "\"\"") ? PV_OK : PV_NOTSET);
-    jw_raw(&w, "worldName", priv ? "\"\"" : wn);
-    jw_int(&w, "worldNameState", priv ? PV_PRIVATE : strcmp(wn, "\"\"") ? PV_OK : PV_NOTSET);
-    for (i = 0; i < (int)(sizeof g_fp_nums / sizeof g_fp_nums[0]); i++) {
-        pdb_item *it = profile_db_get(b, g_ch_pib, g_fp_nums[i][0], g_fp_rec);
-        st = priv ? PV_PRIVATE : it && (it->flags & 1) ? PV_OK : PV_NOTSET;
-        jw_int(&w, g_fp_nums[i][1], st == PV_OK ? (int)(short)it->v.u16 : 0);
-        wsprintfA(kn, "%sState", g_fp_nums[i][1]);
-        jw_int(&w, kn, st);
-    }
-    jw_fit(&w, g_fp_json, sizeof g_fp_json, "FFXI profile");
-    jw_free(&w);
-    base_log("ffxiprofile: slot %d, record level %u\r\n", g_fp_slot, g_fp_rec->level);
-}
-static void profiles_ffxiprofile_start(BYTE *b)
-{
-    int t = pc_pdb_load_start(b, g_ch_pib, g_fp_where, g_fp_rec);
-    if (t == NO_SLOT) { g_s.ffxi_profile_step = 2; return; }
-    base_log("ffxiprofile: load -> %d\r\n", t);
-    if (t < 0) { profiles_ffxiprofile_done(requests_failed(t)); return; }
-    g_fp_job = t;
-    g_s.ffxi_profile_step = 1;
-}
 static void profiles_ffxiprofile_request(BYTE *b)
 {
     char buf[128], *p, *tok, *rows, *key, *sl, k[17];
     pol_friend_copy fr;
     const pol_game *slot;
     int row, n;
-    unsigned __int64 ctid;
     if (!hold_db_free()) return;
     if (requests_take(REQ_FFXIPROFILE, buf, sizeof buf) < 0) return;
     g_s.db_last = GetTickCount64();
@@ -685,43 +641,13 @@ static void profiles_ffxiprofile_request(BYTE *b)
     if (!profiles_character_load_pib(b) || !profiles_ffxiprofile_check_schema(b, g_ch_pib)) {
         profiles_ffxiprofile_done("failed:no schema"); return;
     }
-    g_fp_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
-    if (!g_fp_rec) { profiles_ffxiprofile_done("failed:alloc"); return; }
-    ctid = (unsigned __int64)g_fp_hi << 32 | g_fp_lo;
-    memset(g_fp_cond, 0, sizeof g_fp_cond);
-    pc_pdb_item_set(b, g_ch_pib, &g_fp_cond[0].item, "z_ctsid", &g_fp_ctsid, 1);
-    pc_pdb_item_set(b, g_ch_pib, &g_fp_cond[1].item, "z_ctid", &ctid, 1);
-    if (!(g_fp_cond[0].item.flags & 1) || !(g_fp_cond[1].item.flags & 1)) {
-        profiles_ffxiprofile_done("failed:schema"); return;
+    {
+        char note[48];
+        wsprintfA(note, "ffxiprofile: row %d slot %d\r\n", row, n);
+        ffxi_read_go(b, &g_fp_read, note);
     }
-    pc_pdb_cond_op(b, &g_fp_cond[0], 1);
-    pc_pdb_cond_op(b, &g_fp_cond[1], 1);
-    g_fp_where = pc_pdb_where(b, 2, &g_fp_cond[0], &g_fp_cond[1]);
-    if (!g_fp_where) { profiles_ffxiprofile_done("failed:schema"); return; }
-    base_log("ffxiprofile: row %d slot %d\r\n", row, n);
-    lstrcpyA(g_fp_state, "loading");
-    g_snap_dirty = 1;
-    profiles_ffxiprofile_start(b);
 }
-static void profiles_ffxiprofile_pump(BYTE *b, int ctl)
-{
-    if (g_s.ffxi_profile_step == 0) {
-        if (ctl && !g_s.draining) profiles_ffxiprofile_request(b);
-        return;
-    }
-    if (g_s.ffxi_profile_step == 2) {
-        if (!g_s.draining) profiles_ffxiprofile_start(b); else profiles_ffxiprofile_done("cancelled"); return;
-    }
-    int r = pc_pdb_load_check(b, g_fp_job);
-    if (r == 0) return;
-    g_fp_job = -1;
-    /* "Selected profile is hidden." */
-    if (r == NOTHING_FOUND) { profiles_ffxiprofile_done("failed:hidden"); return; }
-    if (r < 0) { profiles_ffxiprofile_done(requests_failed(r)); return; }
-    if (!g_fp_rec->items) { profiles_ffxiprofile_done("failed:no profile"); return; }
-    profiles_ffxiprofile_build(b);
-    profiles_ffxiprofile_done("done");
-}
+static void profiles_ffxiprofile_pump(BYTE *b, int ctl) { ffxi_read_pump(b, &g_fp_read, ctl, profiles_ffxiprofile_request); }
 
 /* a cheap look at who's on the friend list, so the hits' marks only get worked out again when it changes */
 static DWORD profiles_friends_sig(BYTE *b)

@@ -1,11 +1,7 @@
-/* the viewer's profile pic save: load my record, UPDATE z_ficon + z_utime, then SetHandle
-   locally */
-
 /* polcore's own negative codes pass straight through, mine sit in a range it doesn't use */
 #define FS_PENDING        0
 #define FS_DONE           1
 #define FS_E_ARGS     (-0x7f01)
-#define FS_E_BUSY     (-0x7f02)
 #define FS_E_HANDLE   (-0x7f03)
 #define FS_E_PIB      (-0x7f04)
 #define FS_E_MEM      (-0x7f05)
@@ -16,175 +12,7 @@
 
 #define FS_STRICT_PNUM  1
 
-enum { ST_IDLE, ST_LOAD_START, ST_LOAD_POLL, ST_UPD_START, ST_UPD_POLL };
-
-static struct {
-    int        st;
-    int        slot;
-    unsigned   pic;
-    unsigned __int64 hid;
-    int        job;
-    pdb_rec   *rec;
-} g_fs = { ST_IDLE, -1, 0, 0, -1, NULL };
-
-
-
-/* SetHandle only marks the slot dirty and copies the pic into my group entries, nothing goes out */
-static int my_profile_pic_apply_local(BYTE *b, int slot, unsigned pic, unsigned __int64 hid)
-{
-    pol_handle h;
-    int r;
-    if (!handle_get(b, slot, &h) || handle_hid(&h) != hid) return FS_E_HANDLE;
-    h.pic = pic;
-    r = pc_set_handle(b, (unsigned)slot, &h);
-    return r < 0 ? r : FS_DONE;
-}
-
-static void my_profile_pic_reset(void)
-{
-    if (g_fs.rec) HeapFree(GetProcessHeap(), 0, g_fs.rec);
-    g_fs.rec = NULL;
-    g_fs.st = ST_IDLE;
-    g_fs.job = -1;
-    g_fs.slot = -1;
-}
-
-static int my_profile_pic_fail(int code, const char *what)
-{
-    DB_LOG("pic: %s -> %d (0x%x)\r\n", what, code, (unsigned)code);
-    my_profile_pic_reset();
-    return code;
-}
-
 #define P8(a, i) a[i], a[(i)+1], a[(i)+2], a[(i)+3], a[(i)+4], a[(i)+5], a[(i)+6], a[(i)+7]
-
-/* once per loop turn, same args, until it's non-zero (1 done, < 0 error). no_write lets a running job finish but
-   starts no write */
-static int my_profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   /* pic = sheet*8 + cell */
-{
-    pdb_schema *s;
-    int r;
-
-    if (g_fs.st != ST_IDLE && (slot != g_fs.slot || pic != g_fs.pic)) return FS_E_BUSY;
-
-    switch (g_fs.st) {
-    case ST_IDLE: {
-        pol_handle h;
-        if (slot < 0 || slot > 63) return FS_E_ARGS;
-        if (!(s = profile_db_load_pib(b))) return FS_E_PIB;
-        /* the viewer keeps its slot in bits 13-18 too and uses it as the GetHandle index, so both have to agree */
-        if (!handle_get(b, slot, &h) || (int)((h.hi >> 13) & 0x3f) != slot) return FS_E_HANDLE;
-        g_fs.hid = handle_hid(&h);
-        g_fs.rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, s->rec_size + 8);
-        if (!g_fs.rec) return FS_E_MEM;
-        g_fs.slot = slot;
-        g_fs.pic = pic;
-        g_fs.st = ST_LOAD_START;
-    }   /* fall through */
-    case ST_LOAD_START: {
-        static pdb_cond c;
-        pdb_cond *where;
-        s = g_profile_db_pib;
-        memset(&c, 0, sizeof c);
-        pc_pdb_item_set(b, s, &c.item, "z_hid", &g_fs.hid, 1);
-        if (!(c.item.flags & 1)) return my_profile_pic_fail(FS_E_ITEM, "z_hid condition");
-        pc_pdb_cond_op(b, &c, 1);
-        where = pc_pdb_where(b, 1, &c);
-        r = pc_pdb_load_start(b, s, where, g_fs.rec);
-        if (r == NO_SLOT) return FS_PENDING;              /* all 4 job slots busy, try again next turn */
-        if (r < 0) return my_profile_pic_fail(r, "profile load start (svc 0x4b4)");
-        g_fs.job = r;
-        g_fs.st = ST_LOAD_POLL;
-        DB_LOG("pic: loading profile of slot %d (hid 0x%08x%08x), job %d\r\n", slot,
-               (unsigned)(g_fs.hid >> 32), (unsigned)g_fs.hid, r);
-        return FS_PENDING;
-    }
-    case ST_LOAD_POLL: {
-        pdb_item *it;
-        s = g_profile_db_pib;
-        r = pc_pdb_load_check(b, g_fs.job);
-        if (r == 0) return FS_PENDING;
-        g_fs.job = -1;
-        if (r < 0) return my_profile_pic_fail(r, "profile load (svc 0x4b8)");
-        if (!g_fs.rec->items) return my_profile_pic_fail(FS_E_NOREC, "no profile record on the server");
-        /* the record has to be this handle's. The viewer doesn't check */
-        it = pc_pdb_find(b, s, "z_hid", g_fs.rec);
-        if (!it || it->v.u64 != g_fs.hid) return my_profile_pic_fail(FS_E_MISMATCH, "record z_hid differs");
-        it = pc_pdb_find(b, s, "z_pnum", g_fs.rec);
-        if (FS_STRICT_PNUM && it && (it->flags & 1) && it->v.bytes.p &&
-            *(BYTE *)it->v.bytes.p != (BYTE)g_fs.slot)
-            return my_profile_pic_fail(FS_E_MISMATCH, "record z_pnum differs from slot");
-        if (!pc_pdb_find(b, s, "z_ficon", g_fs.rec) ||
-            !pc_pdb_find(b, s, "z_utime", g_fs.rec))
-            return my_profile_pic_fail(FS_E_NOREC, "record lacks z_ficon / z_utime");
-        DB_LOG("pic: profile loaded, record level %u\r\n", g_fs.rec->level);
-        g_fs.st = ST_UPD_START;
-    }   /* fall through */
-    case ST_UPD_START: {
-        pdb_item it[2] = {0}, *rf, *ru;
-        pdb_cond k = {0};
-        pdb_rec set = {0};
-        void *sl[64] = {0};
-        pdb_cond *where;
-        DWORD fval = g_fs.pic, now = 0;
-        BYTE pnum = (BYTE)g_fs.slot;
-        s = g_profile_db_pib;
-        if (no_write) return my_profile_pic_fail(FS_E_CANCELLED, "shutting down before the update");
-        rf = pc_pdb_find(b, s, "z_ficon", g_fs.rec);
-        ru = pc_pdb_find(b, s, "z_utime", g_fs.rec);
-        if (!rf || !ru) return my_profile_pic_fail(FS_E_NOREC, "record lacks z_ficon / z_utime");
-        pc_pdb_item_set(b, s, &it[0], "z_ficon", &fval, rf->level);
-        pc_server_time(b, &now);          /* server-synced seconds */
-        pc_pdb_item_set(b, s, &it[1], "z_utime", &now, ru->level);
-        /* svc 0x4d4 writes every SET item but only sizes the flagged ones, so an unflagged one corrupts the body */
-        if (!(it[0].flags & 1) || !(it[1].flags & 1)) return my_profile_pic_fail(FS_E_ITEM, "SET items");
-        pc_pdb_item_set(b, s, &k.item, "z_pnum", &pnum, 1);
-        if (!(k.item.flags & 1)) return my_profile_pic_fail(FS_E_ITEM, "z_pnum condition");
-        pc_pdb_cond_op(b, &k, 1);
-        where = pc_pdb_where(b, 1, &k);
-        /* 64 item slots, NULLs skipped, same as the viewer */
-        sl[0] = &it[0];
-        sl[1] = &it[1];
-        pc_pdb_rec_set(b, &set, g_fs.rec->level, 0x40,
-                               P8(sl, 0), P8(sl, 8), P8(sl, 16), P8(sl, 24),
-                               P8(sl, 32), P8(sl, 40), P8(sl, 48), P8(sl, 56));
-        /* the body's built into polcore's job buffer right here, so the items, cond and set can go out of scope */
-        r = pc_pdb_update_start(b, s, where, &set);
-        if (r == NO_SLOT) return FS_PENDING;
-        if (r < 0) return my_profile_pic_fail(r, "profile update start (svc 0x4d4)");
-        g_fs.job = r;
-        g_fs.st = ST_UPD_POLL;
-        DB_LOG("pic: update z_ficon=%u z_utime=%u level %u/%u/%u where z_pnum=%u, job %d\r\n",
-               fval, now, g_fs.rec->level, rf->level, ru->level, pnum, r);
-        return FS_PENDING;
-    }
-    case ST_UPD_POLL: {
-        r = pc_pdb_update_check(b, g_fs.job);
-        if (r == 0) return FS_PENDING;
-        g_fs.job = -1;
-        /* the viewer shits itself after 18000 polls and calls the save done anyway regardless (luv me POL innit), for
-           me polcore's own fail at 100s is an error */
-        if (r < 0) return my_profile_pic_fail(r, "profile update (svc 0x4d8)");
-        r = my_profile_pic_apply_local(b, g_fs.slot, g_fs.pic, g_fs.hid);
-        if (r < 0) DB_LOG("pic: server updated, local handle apply failed %d\r\n", r);
-        else DB_LOG("pic: slot %d pic %u saved\r\n", g_fs.slot, g_fs.pic);
-        my_profile_pic_reset();
-        return FS_DONE;
-    }
-    }
-    return my_profile_pic_fail(FS_E_ARGS, "bad state");
-}
-
-/* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for the next 10s (why tho?????),
-   so it's only for shutdown */
-static void my_profile_pic_cancel(BYTE *b)
-{
-    if (g_fs.job >= 0) {
-        pc_free_job(b, g_fs.job);
-        if (g_fs.st == ST_LOAD_POLL) g_fs.rec = NULL;   /* a cancelled read can still write into it, so never freed */
-    }
-    my_profile_pic_reset();
-}
 
 /* my own profile save and the handle rename, the viewer's way. The save is the pic save's UPDATE with N items
    instead of 2 */
@@ -426,20 +254,20 @@ static int my_profile_handle_rename(BYTE *b, int slot, const WCHAR *newName)
 }
 
 /* saveprofile levels: 1 private, 2 friends, 3 everyone, 0 keep */
-static int g_me_job = -1;
-static pdb_rec *g_me_rec;
-static pdb_cond g_me_cond;
 static pe_req g_me_req;
 static char g_me_mail[0x150];
 static WCHAR g_me_name[32];
-static ULONGLONG g_me_t0;
 static unsigned __int64 g_me_hid;
 
+/* 1 load waits for a slot, 2 load job, 3 save waits, 4 save job, 5 rename. The loaded record stays for the saves */
+static void my_profile_done(const char *state);
+static void my_profile_go(BYTE *b, db_job *j);
+static db_job g_me = { .job = -1, .state = g_s.me_state, .cap = sizeof g_s.me_state, .done = my_profile_done,
+                       .start = my_profile_go, .wait_ms = JOB_TIMEOUT_MS, .keep = 1, .last_read = 2 };
+#define ME_REC ((pdb_rec *)g_me.rec)
 static void my_profile_done(const char *state)
 {
-    lstrcpynA(g_s.me_state, state, sizeof g_s.me_state);
-    g_s.me_step = 0;
-    g_me_job = -1;
+    db_job_done(&g_me, state);
     base_log("profile edit: %s\r\n", state);
     g_snap_dirty = 1;
 }
@@ -481,8 +309,8 @@ static void my_profile_mask_mail(const char *in, char *out, int cap)
 typedef struct me_chr { int slot; DWORD ctsid, lo, hi; } me_chr;
 static int my_profile_chars(BYTE *b, me_chr *out, const char **from)
 {
-    pdb_item *ph = g_me_rec && g_me_rec->items && g_profile_db_pib
-        ? profile_db_get(b, g_profile_db_pib, "z_phead", g_me_rec)
+    pdb_item *ph = g_me.rec && ME_REC->items && g_profile_db_pib
+        ? profile_db_get(b, g_profile_db_pib, "z_phead", ME_REC)
         : NULL;
     const pol_friend *h = ph && (ph->flags & 1) ? (const pol_friend *)ph->v.bytes.p : NULL;
     pol_chr c;
@@ -565,10 +393,10 @@ static int my_profile_write_json(BYTE *b)
     jw_int(&w, "slot", g_my_slot);
     wsprintfA(key, "%03x%08x", (unsigned)(g_me_hid >> 32), (unsigned)g_me_hid);
     jw_lit(&w, "key", key);
-    jw_uint(&w, "level", g_me_rec->level);
+    jw_uint(&w, "level", ME_REC->level);
     jw_obj(&w, "fields");
     for (i = 0; i < (int)(sizeof g_me_fields / sizeof g_me_fields[0]); i++) {
-        pdb_item *it = profile_db_get(b, s, g_me_fields[i], g_me_rec);
+        pdb_item *it = profile_db_get(b, s, g_me_fields[i], ME_REC);
         int idx = pc_pdb_field_index(b, s, g_me_fields[i]);
         const pfb_item *pi = idx >= 0 ? profile_db_pfb_item(p, idx) : NULL;
         DWORD v = 0;
@@ -583,8 +411,8 @@ static int my_profile_write_json(BYTE *b)
                 masked, sizeof masked);
             jw_pol(&w, "s", b, masked, 0x400, 0xc00);
         } else if (!strcmp(g_me_fields[i], "z_area")) {
-            pdb_item *c = profile_db_get(b, s, "z_cntry", g_me_rec), *a = profile_db_get(b, s, "z_wide", g_me_rec),
-                     *l = profile_db_get(b, s, "z_local", g_me_rec);
+            pdb_item *c = profile_db_get(b, s, "z_cntry", ME_REC), *a = profile_db_get(b, s, "z_wide", ME_REC),
+                     *l = profile_db_get(b, s, "z_local", ME_REC);
             v = (it->v.bytes.p ? (DWORD)*(BYTE *)it->v.bytes.p << 24 : 0) |
                 (c && c->v.bytes.p ? (DWORD)*(BYTE *)c->v.bytes.p << 16 : 0) |
                 (a && a->v.bytes.p ? (DWORD)*(BYTE *)a->v.bytes.p << 8 : 0) |
@@ -614,31 +442,24 @@ static int my_profile_write_json(BYTE *b)
     jw_free(&w);
     return ok;
 }
-static void my_profile_abandon(BYTE *b)
-{
-    if (g_s.me_step == 2 && g_me_job >= 0) {
-        pc_free_job(b, g_me_job);
-        g_me_rec = NULL;                    /* a cancelled read can still write, so never freed */
-    }
-    if (g_s.me_step == 1 || g_s.me_step == 2) my_profile_done("cancelled");
-}
+static void my_profile_abandon(BYTE *b) { db_job_abandon(b, &g_me); }
 static void my_profile_load_start(BYTE *b)
 {
-    int t = pc_pdb_load_start(b, g_profile_db_pib, &g_me_cond, g_me_rec);
-    if (t == NO_SLOT) { g_s.me_step = 1; return; }
-    base_log("profile edit: load -> %d\r\n", t);
-    if (t < 0) { my_profile_done(requests_failed(t)); return; }
-    g_me_job = t;
-    g_s.me_step = 2;
+    int t = pc_pdb_load_start(b, g_profile_db_pib, g_me.where, ME_REC);
+    if (t != NO_SLOT) base_log("profile edit: load -> %d\r\n", t);
+    if (t < 0 && t != NO_SLOT) { my_profile_done(requests_failed(t)); return; }
+    db_job_started(&g_me, 0, t);
 }
 static void my_profile_save_start(BYTE *b)
 {
-    int t = my_profile_edit_update_start(b, g_profile_db_pib, g_me_rec, g_my_slot, &g_me_req);
-    if (t == NO_SLOT) { g_s.me_step = 3; return; }
-    base_log("profile edit: save %d field(s), level %d -> %d\r\n", g_me_req.n, g_me_req.level, t);
-    if (t < 0) { my_profile_done(requests_failed(t)); return; }
-    g_me_job = t;
-    g_s.me_step = 4;
+    int t = my_profile_edit_update_start(b, g_profile_db_pib, ME_REC, g_my_slot, &g_me_req);
+    if (t != NO_SLOT) base_log("profile edit: save %d field(s), level %d -> %d\r\n", g_me_req.n, g_me_req.level, t);
+    if (t < 0 && t != NO_SLOT) { my_profile_done(requests_failed(t)); return; }
+    db_job_started(&g_me, 1, t);
+}
+static void my_profile_go(BYTE *b, db_job *j)
+{
+    if (j->step == 3) my_profile_save_start(b); else my_profile_load_start(b);
 }
 static int my_profile_field_ok(const char *n)
 {
@@ -660,22 +481,19 @@ static void my_profile_request(BYTE *b)
     tok = requests_line(&p);
     lstrcpynA(g_s.me_token, tok, sizeof g_s.me_token);
     if (!profile_db_load_pib(b) || !profile_db_load_pfb(b)) { my_profile_done("failed:no schema"); return; }
-    g_me_t0 = GetTickCount64();
+    g_me.t0 = GetTickCount64();
     if (kind == 1) {
         base_ipc_file(jp, IPC_MYPROFILE);
         DeleteFileA(jp);
         memset(&h, 0, sizeof h);
         pc_get_handle(b, (unsigned)g_my_slot, &h);
         g_me_hid = handle_hid(&h);
-        if (!g_me_rec)
-            g_me_rec = (pdb_rec *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_profile_db_pib->rec_size + 8);
-        else memset(g_me_rec, 0, g_profile_db_pib->rec_size + 8);
-        if (!g_me_rec) { my_profile_done("failed:alloc"); return; }
-        memset(&g_me_cond, 0, sizeof g_me_cond);
-        pc_pdb_item_set(b, g_profile_db_pib, &g_me_cond.item, "z_hid", &g_me_hid, 1);
-        if (!(g_me_cond.item.flags & 1)) { my_profile_done("failed:schema"); return; }
-        pc_pdb_cond_op(b, &g_me_cond, 1);
-        pc_pdb_where(b, 1, &g_me_cond);
+        if (!g_me.rec)
+            g_me.rec = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_profile_db_pib->rec_size + 8);
+        else memset(g_me.rec, 0, g_profile_db_pib->rec_size + 8);
+        if (!g_me.rec) { my_profile_done("failed:alloc"); return; }
+        g_me.where = db_where_hid(b, g_profile_db_pib, &g_me_hid, &g_me.cond[0]);
+        if (!g_me.where) { my_profile_done("failed:schema"); return; }
         lstrcpyA(g_s.me_state, "loading");
         g_snap_dirty = 1;
         my_profile_load_start(b);
@@ -696,8 +514,8 @@ static void my_profile_request(BYTE *b)
             return;
         }
         lstrcpyA(g_s.me_state, "saving");
-        g_s.me_step = 5;
-        g_me_t0 = GetTickCount64();
+        g_me.step = 5;
+        g_me.t0 = GetTickCount64();
         g_snap_dirty = 1;
         return;
     }
@@ -706,7 +524,8 @@ static void my_profile_request(BYTE *b)
     memset(&h, 0, sizeof h);
     pc_get_handle(b, (unsigned)g_my_slot, &h);
     /* one loaded under another handle (before a switch) isn't this one's */
-    if (!g_me_rec || !g_me_rec->items || handle_hid(&h) != g_me_hid) {
+    if (!g_me.rec || !ME_REC->items || handle_hid(&h) != g_me_hid) {
+
         my_profile_done("failed:not loaded");
         return;
     }
@@ -754,28 +573,23 @@ static void my_profile_pump(BYTE *b, int ctl)
 {
     pdb_item *it;
     int r;
-    switch (g_s.me_step) {   /* 1 load waits for a slot, 2 load job, 3 save waits, 4 save job, 5 rename */
+    switch (g_me.step) {
     case 0:
         if (ctl && !g_s.draining) my_profile_request(b);
         return;
     case 1:
-        if (g_s.draining) my_profile_done("cancelled");
-        else if (GetTickCount64() - g_me_t0 >= JOB_TIMEOUT_MS) my_profile_done("failed:busy");
-        else my_profile_load_start(b);
+        db_job_waiting(b, &g_me, 1);
         return;
     case 2:
-        r = pc_pdb_load_check(b, g_me_job);
-        if (r == 0) {
-            if (g_s.draining) my_profile_abandon(b);
-            return;
-        }
-        g_me_job = -1;
+        r = pc_pdb_load_check(b, g_me.job);
+        if (db_job_pending(b, &g_me, r, 1)) return;
+        g_me.job = -1;
         if (r < 0) { my_profile_done(requests_failed(r)); return; }
-        if (!g_me_rec->items) { my_profile_done("failed:no profile"); return; }
+        if (!ME_REC->items) { my_profile_done("failed:no profile"); return; }
         /* as in the profile pic save, the record must be this handle's (the viewer doesn't check) */
-        it = profile_db_get(b, g_profile_db_pib, "z_hid", g_me_rec);
+        it = profile_db_get(b, g_profile_db_pib, "z_hid", ME_REC);
         if (!it || it->v.u64 != g_me_hid) { my_profile_done("failed:mismatch"); return; }
-        it = profile_db_get(b, g_profile_db_pib, "z_pnum", g_me_rec);
+        it = profile_db_get(b, g_profile_db_pib, "z_pnum", ME_REC);
         if (FS_STRICT_PNUM && it && (it->flags & 1) && it->v.bytes.p && *(BYTE *)it->v.bytes.p != (BYTE)g_my_slot) {
             my_profile_done("failed:mismatch");
             return;
@@ -783,19 +597,19 @@ static void my_profile_pump(BYTE *b, int ctl)
         my_profile_done(my_profile_write_json(b) ? "ready" : "failed:write");
         return;
     case 3:
-        if (GetTickCount64() - g_me_t0 >= JOB_TIMEOUT_MS) my_profile_done("failed:busy");
-        else my_profile_save_start(b);   /* a write, so it still runs during a drain */
+        db_job_waiting(b, &g_me, 0);   /* a write, so it still runs during a drain */
         return;
     case 4:
-        r = pc_pdb_update_check(b, g_me_job);
+        r = pc_pdb_update_check(b, g_me.job);
         if (r == 0) return;
-        g_me_job = -1;
+        g_me.job = -1;
         my_profile_done(r == 1 ? "saved" : requests_failed(r));
         return;
     case 5:
         r = my_profile_handle_rename(b, g_my_slot, g_me_name);
         if (r == 0) {
-            if (GetTickCount64() - g_me_t0 >= 2 * JOB_TIMEOUT_MS) {
+            if (GetTickCount64() - g_me.t0 >= 2 * JOB_TIMEOUT_MS) {
+
                 g_hr.st = HR_IDLE; my_profile_done("failed:timeout");
             }
             return;
@@ -807,9 +621,133 @@ static void my_profile_pump(BYTE *b, int ctl)
     }
 }
 
+/* the viewer's profile pic save: load my record, UPDATE z_ficon (and z_utime) like a profile save, then SetHandle locally.
+   1 load waits for a slot, 2 load job, 3 update waits, 4 update job */
+static int g_pic_slot;
+static unsigned g_pic_pic;   /* sheet * 8 + cell */
+static unsigned __int64 g_pic_hid;
+static void my_profile_pic_done(const char *state);
+static void my_profile_pic_go(BYTE *b, db_job *j);
+static db_job g_pic = { .job = -1, .state = g_s.pic_state, .cap = sizeof g_s.pic_state, .done = my_profile_pic_done,
+                        .start = my_profile_pic_go, .last_read = 2 };
+#define PIC_REC ((pdb_rec *)g_pic.rec)
+
+static void my_profile_pic_done(const char *state)
+{
+    db_job_done(&g_pic, state);
+    g_s.pic_want = -1;
+    g_snap_dirty = 1;
+}
+/* SetHandle only marks the slot dirty and copies the pic into my group entries, nothing goes out */
+static int my_profile_pic_apply_local(BYTE *b, int slot, unsigned pic, unsigned __int64 hid)
+{
+    pol_handle h;
+    int r;
+    if (!handle_get(b, slot, &h) || handle_hid(&h) != hid) return FS_E_HANDLE;
+    h.pic = pic;
+    r = pc_set_handle(b, (unsigned)slot, &h);
+    return r < 0 ? r : FS_DONE;
+}
+static void my_profile_pic_reset(void)
+{
+    if (g_pic.rec) HeapFree(GetProcessHeap(), 0, g_pic.rec);
+    g_pic.rec = NULL;
+    g_pic.step = 0;
+    g_pic.job = -1;
+}
+static void my_profile_pic_fail(int code, const char *what)
+{
+    DB_LOG("pic: %s -> %d (0x%x)\r\n", what, code, (unsigned)code);
+    my_profile_pic_done(requests_failed(code));
+}
+static void my_profile_pic_load_start(BYTE *b, db_job *j)
+{
+    pdb_schema *s = g_profile_db_pib;
+    int r;
+    j->where = db_where_hid(b, s, &g_pic_hid, &j->cond[0]);
+    if (!j->where) { my_profile_pic_fail(FS_E_ITEM, "z_hid condition"); return; }
+    r = pc_pdb_load_start(b, s, j->where, PIC_REC);
+    if (r < 0 && r != NO_SLOT) { my_profile_pic_fail(r, "profile load start (svc 0x4b4)"); return; }
+    db_job_started(j, 0, r);
+    if (r >= 0)
+        DB_LOG("pic: loading profile of slot %d (hid 0x%08x%08x), job %d\r\n", g_pic_slot,
+               (unsigned)(g_pic_hid >> 32), (unsigned)g_pic_hid, r);
+}
+/* the one-field save, where a drain stops the write */
+static void my_profile_pic_update_start(BYTE *b, db_job *j)
+{
+    pe_req q;
+    int r;
+    if (g_s.draining) { my_profile_pic_fail(FS_E_CANCELLED, "shutting down before the update"); return; }
+    memset(&q, 0, sizeof q);
+    q.utime = 1;
+    q.n = 1;
+    q.f[0].name = "z_ficon";
+    q.f[0].v = g_pic_pic;
+    r = my_profile_edit_update_start(b, g_profile_db_pib, PIC_REC, g_pic_slot, &q);
+    if (r < 0 && r != NO_SLOT) { my_profile_pic_fail(r, "profile update start (svc 0x4d4)"); return; }
+    db_job_started(j, 1, r);
+    if (r >= 0) DB_LOG("pic: update z_ficon=%u, job %d\r\n", g_pic_pic, r);
+}
+static void my_profile_pic_go(BYTE *b, db_job *j)
+{
+    if (j->step == 3) my_profile_pic_update_start(b, j); else my_profile_pic_load_start(b, j);
+}
+/* the first turn of a save, on the slot my profile's on */
+static void my_profile_pic_begin(BYTE *b)
+{
+    pol_handle h;
+    pdb_schema *s;
+    if (g_my_slot < 0 || g_my_slot > 63) { my_profile_pic_done(requests_failed(FS_E_ARGS)); return; }
+    if (!(s = profile_db_load_pib(b))) { my_profile_pic_done(requests_failed(FS_E_PIB)); return; }
+    /* the viewer keeps its slot in bits 13-18 too and uses it as the GetHandle index, so both have to agree */
+    if (!handle_get(b, g_my_slot, &h) || (int)((h.hi >> 13) & 0x3f) != g_my_slot) {
+        my_profile_pic_done(requests_failed(FS_E_HANDLE));
+        return;
+    }
+    g_pic_hid = handle_hid(&h);
+    g_pic.rec = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, s->rec_size + 8);
+    if (!g_pic.rec) { my_profile_pic_done(requests_failed(FS_E_MEM)); return; }
+    g_pic_slot = g_my_slot;
+    g_pic_pic = (unsigned)g_s.pic_want;
+    my_profile_pic_load_start(b, &g_pic);
+}
+static void my_profile_pic_loaded(BYTE *b)
+{
+    pdb_schema *s = g_profile_db_pib;
+    pdb_item *it;
+    if (!PIC_REC->items) { my_profile_pic_fail(FS_E_NOREC, "no profile record on the server"); return; }
+    /* the record has to be this handle's. The viewer doesn't check */
+    it = pc_pdb_find(b, s, "z_hid", PIC_REC);
+    if (!it || it->v.u64 != g_pic_hid) { my_profile_pic_fail(FS_E_MISMATCH, "record z_hid differs"); return; }
+    it = pc_pdb_find(b, s, "z_pnum", PIC_REC);
+    if (FS_STRICT_PNUM && it && (it->flags & 1) && it->v.bytes.p && *(BYTE *)it->v.bytes.p != (BYTE)g_pic_slot) {
+        my_profile_pic_fail(FS_E_MISMATCH, "record z_pnum differs from slot");
+        return;
+    }
+    if (!pc_pdb_find(b, s, "z_ficon", PIC_REC) || !pc_pdb_find(b, s, "z_utime", PIC_REC)) {
+        my_profile_pic_fail(FS_E_NOREC, "record lacks z_ficon / z_utime");
+        return;
+    }
+    DB_LOG("pic: profile loaded, record level %u\r\n", PIC_REC->level);
+    g_pic.step = 3;
+    my_profile_pic_update_start(b, &g_pic);
+}
+/* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for the next 10s (why tho?????),
+   so it's only for shutdown. The state and what's wanted are left as they were */
+static void my_profile_pic_cancel(BYTE *b)
+{
+    if (g_pic.job >= 0) {
+        pc_free_job(b, g_pic.job);
+        if (g_pic.step == 2) g_pic.rec = NULL;   /* a cancelled read can still write into it, so never freed */
+    }
+    my_profile_pic_reset();
+}
+
 #define pic_fail(why) requests_refuse(g_s.pic_state, sizeof g_s.pic_state, "pic: request refused - %s\r\n", why)
 static void my_profile_pic_pump(BYTE *b, int ctl)
 {
+    db_job *j = &g_pic;
     int r;
     if (g_s.pic_want < 0) {
         char buf[96], *p;
@@ -828,17 +766,38 @@ static void my_profile_pic_pump(BYTE *b, int ctl)
         lstrcpyA(g_s.pic_state, "saving");
         base_log("pic: save pic %d on slot %d\r\n", v, g_my_slot);
         g_snap_dirty = 1;
+        my_profile_pic_begin(b);
+        return;
     }
-    if (g_s.draining && g_fs.st != ST_LOAD_POLL && g_fs.st != ST_UPD_POLL) {
+    /* a write that's running is left to finish, one that hasn't started is called off */
+    if (g_s.draining && j->step != 2 && j->step != 4) {
         my_profile_pic_reset();
         g_s.pic_want = -1;
         lstrcpyA(g_s.pic_state, "failed:cancelled");
         return;
     }
-    r = my_profile_pic_save(b, g_my_slot, (unsigned)g_s.pic_want, g_s.draining);
-    if (r == 0) return;
-    if (r == 1) lstrcpyA(g_s.pic_state, "saved");
-    else lstrcpyA(g_s.pic_state, requests_failed(r));
-    g_s.pic_want = -1;
-    g_snap_dirty = 1;
+    switch (j->step) {
+    case 1: case 3:
+        db_job_waiting(b, j, 0);
+        return;
+    case 2:
+        r = pc_pdb_load_check(b, j->job);
+        if (db_job_pending(b, j, r, 0)) return;
+        j->job = -1;
+        if (r < 0) { my_profile_pic_fail(r, "profile load (svc 0x4b8)"); return; }
+        my_profile_pic_loaded(b);
+        return;
+    case 4:
+        r = pc_pdb_update_check(b, j->job);
+        if (db_job_pending(b, j, r, 0)) return;
+        j->job = -1;
+        /* the viewer shits itself after 18000 polls and calls the save done anyway regardless (luv me POL innit), for
+           me polcore's own fail at 100s is an error */
+        if (r < 0) { my_profile_pic_fail(r, "profile update (svc 0x4d8)"); return; }
+        r = my_profile_pic_apply_local(b, g_pic_slot, g_pic_pic, g_pic_hid);
+        if (r < 0) DB_LOG("pic: server updated, local handle apply failed %d\r\n", r);
+        else DB_LOG("pic: slot %d pic %u saved\r\n", g_pic_slot, g_pic_pic);
+        my_profile_pic_done("saved");
+        return;
+    }
 }
