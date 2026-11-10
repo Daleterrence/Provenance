@@ -18,17 +18,7 @@ public static class KeePassXc
     }
 
     // wrapped with the saved accounts' key, and opened on a worker so the lock wait never lands on the UI thread
-    private static readonly WrappedStoreCache<Task<WindowsCredentialStore>> AssociationStore =
-        new(() => Task.Run(() => new WindowsCredentialStore(wrapKey: CredentialKey.Open())),
-            keep: static t => t is { IsFaulted: false, IsCanceled: false });
-
-    internal static Task<WindowsCredentialStore> AssociationStoreAsync() => AssociationStore.Get();
-
-    public static Task OpenKeyInBackground() =>
-        AssociationStoreAsync().ContinueWith(static t => _ = t.Exception, CancellationToken.None,
-                                             TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-
-    internal static void ResetAssociationStoreForTest() => AssociationStore.Reset();
+    internal static Task<WindowsCredentialStore> AssociationStoreAsync() => CredentialKey.WrappedAsync();
 
     internal static async Task<OtpFetchResult> FetchAsync(string url, string squareEnixId, CancellationToken ct)
     {
@@ -143,7 +133,7 @@ public static class KeePassXc
 
     // deletes need no wrap key, so the key file's never touched (and it never throws)
     public static void ForgetIfUnused(IEnumerable<Account> profiles) =>
-        ForgetIfUnused(profiles, static () => new WindowsCredentialStore());
+        ForgetIfUnused(profiles, static () => CredentialKey.Keyless);
 
     internal static void ForgetIfUnused(IEnumerable<Account> profiles, Func<WindowsCredentialStore> keylessStore)
     {

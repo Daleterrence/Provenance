@@ -7,29 +7,21 @@ namespace Provenance.Common.Credentials;
 public sealed class CredentialService : ICredentialService
 {
     private readonly WindowsCredentialStore _store;
-    private readonly WrappedStoreCache<WindowsCredentialStore> _wrapped;
+    private readonly Func<WindowsCredentialStore> _wrapped;
 
-    public CredentialService()
-        : this(new WindowsCredentialStore(), () => new WindowsCredentialStore(wrapKey: CredentialKey.Open())) { }
+    public CredentialService() : this(CredentialKey.Keyless, CredentialKey.Wrapped) { }
 
     public CredentialService(WindowsCredentialStore store) : this(store, () => store) { }
 
-    internal CredentialService(WindowsCredentialStore store, Func<WindowsCredentialStore> openWrapped)
+    internal CredentialService(WindowsCredentialStore keyless, Func<WindowsCredentialStore> wrapped)
     {
-        ArgumentNullException.ThrowIfNull(store);
-        ArgumentNullException.ThrowIfNull(openWrapped);
-        _store = store;
-        _wrapped = new WrappedStoreCache<WindowsCredentialStore>(openWrapped);
+        ArgumentNullException.ThrowIfNull(keyless);
+        ArgumentNullException.ThrowIfNull(wrapped);
+        _store = keyless;
+        _wrapped = wrapped;
     }
 
-    private WindowsCredentialStore Wrapped => _wrapped.Get();
-
-    // so the first load or save on the UI thread never sits waiting on the key file's lock
-    public Task OpenKeyInBackground() => Task.Run(() =>
-    {
-        try { _ = Wrapped; }
-        catch (CredentialKeyUnavailableException) { }
-    });
+    private WindowsCredentialStore Wrapped => _wrapped();
 
     public PolAccount? LoadPolAccount(string profileId) =>
         ReadOrNull(KeyFor(CredentialTargets.Pol, profileId)) is { } c ? new PolAccount(c.UserName, c.Secret) : null;

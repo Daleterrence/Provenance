@@ -18,21 +18,20 @@ public sealed class LaunchCredentials
     internal static string ChatTarget(string launchId) => Target(ChatKey(launchId));
 
     private readonly WindowsCredentialStore _store;
-    private readonly WrappedStoreCache<WindowsCredentialStore> _wrapped;
+    private readonly Func<WindowsCredentialStore> _wrapped;
     private readonly Action? _dropKey;
     private readonly System.Threading.Timer _sweepTimer;
     private readonly HashSet<string> _usedLaunchIds = [];
     private readonly object _ids = new();
     private volatile bool _sweepsStopped;
 
-    public LaunchCredentials() : this(new WindowsCredentialStore(), () => new WindowsCredentialStore(wrapKey: CredentialKey.Open()),
-                                      SweepInterval, CredentialKey.Reload) { }
+    public LaunchCredentials() : this(CredentialKey.Keyless, CredentialKey.Wrapped, SweepInterval, CredentialKey.Reload) { }
 
-    internal LaunchCredentials(WindowsCredentialStore store, Func<WindowsCredentialStore> openWrapped, TimeSpan sweepEvery,
+    internal LaunchCredentials(WindowsCredentialStore keyless, Func<WindowsCredentialStore> wrapped, TimeSpan sweepEvery,
                                Action? dropKey = null)
     {
-        _store = store;
-        _wrapped = new WrappedStoreCache<WindowsCredentialStore>(openWrapped);
+        _store = keyless;
+        _wrapped = wrapped;
         _dropKey = dropKey;
         DeleteLeftovers();
         _sweepTimer = new System.Threading.Timer(_ => SweepLeftovers(), null, sweepEvery, sweepEvery);
@@ -42,7 +41,7 @@ public sealed class LaunchCredentials
 
     internal Action? OnSweep { get; init; }
 
-    private WindowsCredentialStore Wrapped => _wrapped.Get();
+    private WindowsCredentialStore Wrapped => _wrapped();
 
     // the key's opened before anything starts, so one that can't be read gets its own text
     internal string? KeyForLogIn()
@@ -60,12 +59,6 @@ public sealed class LaunchCredentials
         try { _dropKey?.Invoke(); }
         catch (Exception ex) { Log.Warning(ex, "Could not read the key file again after the hook could not read an entry"); }
     }
-
-    public Task OpenKeyInBackground() => Task.Run(() =>
-    {
-        try { _ = Wrapped; }
-        catch (CredentialKeyUnavailableException) { }
-    });
 
     private void SweepLeftovers()
     {

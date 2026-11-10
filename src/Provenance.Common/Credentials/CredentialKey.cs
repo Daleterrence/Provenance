@@ -36,20 +36,57 @@ public static class CredentialKey
     // held while cred.key's read for _inUse, so two threads never read it twice for one use
     private static readonly object InUseGate = new();
     private static byte[]? _inUse;
-    private static int _generation;
+    private static WindowsCredentialStore? _wrapped;
 
-    // bumped whenever the key in use is dropped, and every WrappedStoreCache remakes its value on its next use
-    public static int Generation => Volatile.Read(ref _generation);
+    private static readonly object KeylessGate = new();
+    private static WindowsCredentialStore? _keyless;
+    private static string _prefix = WindowsCredentialStore.DefaultPrefix;
 
-    public static byte[] Open(string? path = null, string protects = SavedAccounts)
+    // tests, so they never touch the real entries
+    internal static string Prefix
     {
-        if (path is not null) return OpenFile(path, protects);
+        get => Volatile.Read(ref _prefix);
+        set
+        {
+            lock (KeylessGate) { _prefix = value; _keyless = null; }
+            lock (InUseGate) DropInUse();
+        }
+    }
+
+    // never reads or makes the key file, so it's safe anywhere (a delete or a header test needs no key)
+    public static WindowsCredentialStore Keyless
+    {
+        get { lock (KeylessGate) return _keyless ??= new WindowsCredentialStore(Prefix); }
+    }
+
+    // the one store everything wrapped goes through, made on first use. A key file that can't be opened throws, and
+    // nothing's kept from that
+    public static WindowsCredentialStore Wrapped()
+    {
+        lock (InUseGate) return _wrapped ??= new WindowsCredentialStore(Prefix, InUse());
+    }
+
+    // on a worker, so the key file's lock wait never lands on the UI thread
+    public static Task<WindowsCredentialStore> WrappedAsync() => Task.Run(Wrapped);
+
+    // so the first load or save on the UI thread never sits waiting on the key file's lock
+    public static Task WarmUp() => Task.Run(() =>
+    {
+        try { _ = Wrapped(); }
+        catch (CredentialKeyUnavailableException) { }
+    });
+
+    // a copy of the key in use, read from the file on first use. Wiping it leaves the key itself alone
+    internal static byte[] InUse()
+    {
         lock (InUseGate)
         {
-            _inUse ??= OpenFile(FilePath, protects);
+            _inUse ??= OpenFile(FilePath, SavedAccounts);
             return (byte[])_inUse.Clone();
         }
     }
+
+    public static byte[] Open(string path, string protects = SavedAccounts) => OpenFile(path, protects);
 
     // the hook couldn't read an entry (exit 11, or "hold: Play entry unreadable"), so reread it now on this worker
     public static void Reload()
@@ -62,12 +99,12 @@ public static class CredentialKey
         }
     }
 
-    // under InUseGate. The stores hold their own copies, so wiping this one's safe
+    // under InUseGate. The store holds its own copy, so wiping this one's safe, and the next use makes a new store
     private static void DropInUse()
     {
         if (_inUse is { } old) CryptographicOperations.ZeroMemory(old);
         _inUse = null;
-        Interlocked.Increment(ref _generation);
+        _wrapped = null;
     }
 
     private static byte[] OpenFile(string path, string protects)

@@ -69,7 +69,7 @@ public partial class App : Application
         var settings = new SettingsService(SettingsService.DefaultPath, uiThread);
         var pol = _pol = new PolSession(settings);
 
-        WarmKeys(credentials, pol);
+        WarmKeys();
         CatchUnhandled();
 
         var mainVm = ShowMainWindow(credentials, settings, pol);
@@ -102,11 +102,9 @@ public partial class App : Application
     }
 
     // every key's read on a worker now, so the first use on the UI thread finds it ready
-    private static void WarmKeys(CredentialService credentials, PolSession pol)
+    private static void WarmKeys()
     {
-        _ = credentials.OpenKeyInBackground();
-        _ = pol.Credentials.OpenKeyInBackground();
-        _ = KeePassXc.OpenKeyInBackground();
+        _ = CredentialKey.WarmUp();
         _ = OtpReuse.OpenKeyInBackground();
     }
 
