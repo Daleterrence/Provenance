@@ -215,7 +215,7 @@ static void mail_send_parse(BYTE *b, char *buf)
     lstrcpynA(g_s.send_token, tok, sizeof g_s.send_token);
     if (row >= 200 || !peers_get_friend(b, row, &fr)) { mail_send_fail("failed:no such friend"); return; }
     n = lstrlenA(fr.f.name);
-    json_sjis_to_utf8(fr.f.name, n > 15 ? 15 : n, frName, sizeof frName);
+    pol_utf8(b, fr.f.name, n > 15 ? 15 : n, frName, sizeof frName);
     if (lstrcmpA(frName, who) != 0) { mail_send_fail("failed:friend list changed"); return; }
     if (fr.f.flags & FRIEND_PENDING) { mail_send_fail("failed:pending"); return; }
     if (peers_is_me(b, fr.f.id_lo, fr.f.id_hi)) { mail_send_fail("failed:self"); return; }
@@ -224,8 +224,8 @@ static void mail_send_parse(BYTE *b, char *buf)
     for (q = text; *q; q++) if ((BYTE)*q < 0x20 && *q != '\n') *q = ' ';
     for (q = subj; *q; q++) if ((BYTE)*q < 0x20) *q = ' ';
     mySlot = peers_my_handle(b, myName);
-    json_utf8_to_sjis(subj, sj_subj, 0x80);
-    n = json_utf8_to_sjis(text, sj_text, 0x1000);
+    pol_sjis(b, subj, sj_subj, 0x80);
+    n = pol_sjis(b, text, sj_text, 0x1000);
     if (!sj_text[0]) { mail_send_fail("failed:empty"); return; }
     if (n > TEXT_MAX_BYTES) { mail_send_fail("failed:too long"); return; }
     n = mail_send_msg_build(b, 0, fr.f.id_lo, fr.f.id_hi, mySlot, pc_friend_slot(&fr.f), myName,
@@ -347,8 +347,8 @@ static void mail_send_answer_request(BYTE *b)
         MAIL(g_answer_hdr)->from_hi = h->hi;
         MAIL(g_answer_hdr)->from_slot = (BYTE)h->slot;
         MAIL(g_answer_hdr)->to_slot = (BYTE)g_my_slot;
-        json_utf8_to_sjis(subj, g_answer_subj, 0x80);
-        json_utf8_to_sjis(arg, g_answer_text, 0x80);
+        pol_sjis(b, subj, g_answer_subj, 0x80);
+        pol_sjis(b, arg, g_answer_text, 0x80);
         g_s.answer_kind = 1;
         g_s.answer_wait = 1;
         lstrcpynA(g_s.edit_token, tok, sizeof g_s.edit_token);
@@ -361,7 +361,7 @@ static void mail_send_answer_request(BYTE *b)
     for (i = 0; i < g_s.mail_n; i++) if (g_mail[i].mid == mid) { m = &g_mail[i]; break; }
     if (!m || pc_mail_kind(m->hdr) != 1) { mail_send_answer_fail("failed:no such request"); return; }
     memcpy(g_answer_hdr, m->hdr, MAIL_KEY_SIZE);
-    json_utf8_to_sjis(subj, g_answer_subj, 0x80);
+    pol_sjis(b, subj, g_answer_subj, 0x80);
     memcpy(nm, MAIL(m->hdr)->name, 15);
     nm[15] = 0;
     if (lstrcmpA(op, "decline") != 0 && peers_is_me(b, MAIL(m->hdr)->from_lo, MAIL(m->hdr)->from_hi)) {

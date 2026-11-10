@@ -366,7 +366,7 @@ static void my_profile_chars_json(BYTE *b, jw *w)
         jw_int(w, "slot", ch[i].slot);
         jw_lit(w, "key", k);
         jw_uint(w, "world", (ch[i].ctsid >> 16) & 0xff);
-        if (named) jw_sjis(w, "name", (const BYTE *)c.name, 0x0f, 64);
+        if (named) jw_sjis(w, "name", b, (const BYTE *)c.name, 0x0f, 64);
         else jw_raw(w, "name", "\"\"");
         jw_end(w);
     }
@@ -525,7 +525,6 @@ static void my_profile_request(BYTE *b)
     pc_get_handle(b, (unsigned)g_my_slot, &h);
     /* one loaded under another handle (before a switch) isn't this one's */
     if (!g_me.rec || !ME_REC->items || handle_hid(&h) != g_me_hid) {
-
         my_profile_done("failed:not loaded");
         return;
     }
@@ -538,13 +537,13 @@ static void my_profile_request(BYTE *b)
         char *eq = strchr(line, '=');
         if (!eq) { my_profile_done("failed:bad request"); return; }
         *eq++ = 0;
-        if (!strcmp(line, "nomail")) { json_utf8_to_sjis(eq, nomail, sizeof nomail); continue; }
+        if (!strcmp(line, "nomail")) { pol_sjis(b, eq, nomail, sizeof nomail); continue; }
         if (!(idx = my_profile_field_ok(line)) || g_me_req.n >= PE_MAXF) {
             my_profile_done("failed:bad field"); return;
         }
         g_me_req.f[g_me_req.n].name = g_me_fields[idx - 1];   /* static, buf's gone by the time the save runs */
         if (idx == 1) {
-            json_utf8_to_sjis(eq, g_me_mail, sizeof g_me_mail);
+            pol_sjis(b, eq, g_me_mail, sizeof g_me_mail);
             if (lstrlenA(g_me_mail) > 0x13f) { my_profile_done("failed:mail too long"); return; }
             /* the viewer checks an address with svc 0x6e8, and its own "No Mail address" text isn't one */
             if (!(nomail[0] && !lstrcmpA(g_me_mail, nomail)) &&
@@ -609,7 +608,6 @@ static void my_profile_pump(BYTE *b, int ctl)
         r = my_profile_handle_rename(b, g_my_slot, g_me_name);
         if (r == 0) {
             if (GetTickCount64() - g_me.t0 >= 2 * JOB_TIMEOUT_MS) {
-
                 g_hr.st = HR_IDLE; my_profile_done("failed:timeout");
             }
             return;

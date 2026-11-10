@@ -10,7 +10,7 @@ static void message_store_msg_json(BYTE *b, jw *w, const BYTE *e, int mid, const
     peers_key(b, tlo, thi, MAIL(e)->to_slot, tk);
     jw_obj(w, NULL);
     jw_int(w, "mid", mid);
-    jw_sjis(w, "from", (const BYTE *)MAIL(e)->name, 0x0f, 64);
+    jw_sjis(w, "from", b, (const BYTE *)MAIL(e)->name, 0x0f, 64);
     jw_lit(w, "fromKey", sk);
     jw_uint(w, "fromSlot", MAIL(e)->from_slot);
     jw_bool(w, "me", peers_is_me(b, MAIL(e)->from_lo, MAIL(e)->from_hi));
@@ -22,7 +22,7 @@ static void message_store_msg_json(BYTE *b, jw *w, const BYTE *e, int mid, const
     jw_lit(w, "state", state);
     if (read >= 0) jw_bool(w, "read", read);
     /* removed from a group (0x12) or it was disbanded (0x13): the name's in the type-10 attachment, the text's empty */
-    if (att && (kind == 0x12 || kind == 0x13)) jw_sjis(w, "group", att + 8, 0x14, 71);
+    if (att && (kind == 0x12 || kind == 0x13)) jw_sjis(w, "group", b, att + 8, 0x14, 71);
     jw_text(w, "subject", subj);
     jw_text(w, "text", text);
     jw_end(w);
@@ -191,7 +191,7 @@ static void message_store_sent_json(BYTE *b, jw *w, const BYTE *e, int mid, cons
     peers_key(b, lo, hi, MAIL(e)->to_slot, sk);
     jw_obj(w, NULL);
     jw_int(w, "mid", mid);
-    if (row >= 0 && peers_get_friend(b, row, &fr)) jw_sjis(w, "to", (const BYTE *)fr.f.name, 0x0f, 64);
+    if (row >= 0 && peers_get_friend(b, row, &fr)) jw_sjis(w, "to", b, (const BYTE *)fr.f.name, 0x0f, 64);
     else jw_raw(w, "to", "\"\"");
     jw_lit(w, "toKey", sk);
     jw_uint(w, "toSlot", MAIL(e)->to_slot);
@@ -216,7 +216,6 @@ static void message_store_drop(void)
     DeleteFileA(p);
     /* and an enter, a create, a master's change or a group chat request that never got taken */
     requests_sweep();
-
 }
 /* FFXI deletes what it fetches from the server, so the store's the only copy of what was handled in game. Read
    once, nothing on the wire */
@@ -271,7 +270,7 @@ static void message_store_import(BYTE *b)
         if ((got = message_store_body(&all[i], body, sizeof body)) <= 0) continue;
         memset(&scratch, 0, sizeof scratch);
         memcpy(scratch.hdr, all[i].hdr, MAIL_KEY_SIZE);
-        mail_inbox_parse(&scratch, body, got);
+        mail_inbox_parse(b, &scratch, body, got);
         if (sent) message_store_sent_json(b, &one, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent",
                                   scratch.subj, scratch.text);
         else message_store_msg_json(b, &one, all[i].hdr, 0, "local", (MAIL(all[i].hdr)->seen >> 8) & 1,

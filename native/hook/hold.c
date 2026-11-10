@@ -52,7 +52,6 @@ static void hold_db_reads_abandon(BYTE *b)
     if (g_fp_read.j.step != 0) profiles_ffxiprofile_abandon(b);
     if (g_search.step != 0) profiles_search_abandon(b);
     if (g_xi.step != 0) my_profile_xi_abandon(b);
-
 }
 
 static int hold_writes_pending(void)
@@ -63,7 +62,6 @@ static int hold_writes_pending(void)
 static int hold_writes_waiting(void)
 {
     return (requests_busy() & JB_WAIT) != 0;
-
 }
 /* every job idle again, for a test that starts from a fresh login */
 static void db_jobs_reset(void)

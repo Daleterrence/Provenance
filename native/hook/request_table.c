@@ -1,8 +1,5 @@
-/* every request the app can write, one row each. in says which lists of files it's in: refused while a handle switches,
-   asked for and not taken, held back for by the profile server jobs, swept at Play and log out. A refused one's token
-   goes to a line of the request (1 or 2) and its state fails, or it has a function of its own. busy says what the job it
-   starts is doing, as JB_ bits: a profile server job going, a write pending, a write due with no slot yet, or something a
-   handle switch can't start over */
+/* every request the app can write, one row each: which lists it's in, where a refusal's token goes, and what the job it
+   starts is doing (JB_ bits) */
 #define SWITCHING "failed:handle changing"
 
 enum { JB_DB = 1, JB_WRITE = 2, JB_WAIT = 4, JB_SWITCH = 8 };

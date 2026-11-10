@@ -5,7 +5,6 @@ enum { RQ_REFUSE = 1, RQ_ASKED = 2, RQ_USER = 4, RQ_SWEPT = 8 };
 static int requests_listed(int list);
 static void requests_sweep(void);
 
-
 static char *requests_failed(int r)
 {
     static char why[24];

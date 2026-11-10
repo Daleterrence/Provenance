@@ -18,7 +18,6 @@ static void my_profile_xi_done(const char *state)
 static void my_profile_xi_abandon(BYTE *b) { db_job_abandon(b, &g_xi); }
 static void my_profile_xi_load_start(BYTE *b, db_job *j)
 {
-
     int t = pc_pdb_load_start(b, g_ch_pib, j->where, XI_REC);
     if (t != NO_SLOT) base_log("ffxi profile edit: load -> %d\r\n", t);
     if (t < 0 && t != NO_SLOT) { my_profile_xi_done(requests_failed(t)); return; }
@@ -114,7 +113,6 @@ static void my_profile_xi_pump(BYTE *b, int ctl)
         profiles_character_text(b, XI_REC, "z_worldname", wn, sizeof wn, NULL);
         my_profile_xi_build(nm, wn);
         base_log("ffxi profile edit: record level %u\r\n", XI_REC->level);
-
         my_profile_xi_done("ready");
         return;
     }

@@ -16,8 +16,8 @@ typedef struct {
     int fails, stopped;              /* failed sends in a row, no more sends this session */
 } send_pace;
 
-/* a job on the profile server: the step it's at (0 idle, 1 waiting for a slot, 2 running, 3 and 4 the same for a second call),
-   polcore's job number, and what polcore writes into. last_read is the highest step that's still a read */
+/* a profile server job: step 0 idle, 1 waiting for a slot, 2 running, 3 and 4 the same for a second call. last_read is the
+   highest step still a read */
 typedef struct db_job {
     int step, job;
     ULONGLONG t0;

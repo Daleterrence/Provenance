@@ -59,8 +59,8 @@ static void groups_send(BYTE *b, int kind, DWORD toLo, DWORD toHi, int toSlot, i
     char myName[16], sj_subj[0x84], sj_text[0x104];
     lstrcpynA(g_s.send_token, tok, sizeof g_s.send_token);
     if (!peers_slot_name(b, fromSlot, myName)) { mail_send_fail("failed:no handle"); return; }
-    json_utf8_to_sjis(subj, sj_subj, 0x80);
-    json_utf8_to_sjis(text, sj_text, 0x100);
+    pol_sjis(b, subj, sj_subj, 0x80);
+    pol_sjis(b, text, sj_text, 0x100);
     int n = mail_send_msg_build(b, kind, toLo, toHi, fromSlot, toSlot, myName, sj_subj, sj_text, att, 10);
     base_log("groups: message kind 0x%x from slot %d to slot %d (body %d)\r\n", kind, fromSlot, toSlot, n);
     if (n < 0) { mail_send_fail("failed:alloc"); return; }
@@ -131,7 +131,7 @@ static void groups_request(BYTE *b)
         for (x = a; *x; x++) if ((BYTE)*x < 0x20) break;
         memset(nm, 0, sizeof nm);
         if (*x || !a[0]) { group_fail("failed:bad name"); return; }
-        json_utf8_to_sjis(a, nm, sizeof nm);
+        pol_sjis(b, a, nm, sizeof nm);
         if (!nm[0] || lstrlenA(nm) > 0x14) { group_fail("failed:name too long"); return; }
         if (slot < 0) slot = g_my_slot;
         g_grp_new[0] = g_grp_new[1] = 0xffffffff;

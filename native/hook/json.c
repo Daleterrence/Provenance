@@ -30,48 +30,86 @@ static int json_text(char *out, int cap, const char *s)
     out[o] = 0;
     return o;
 }
-static void json_sjis(char *out, int cap, const BYTE *src, int srcMax)
+/* the longest prefix of w (n characters) whose converted length is at most max, for a cut at whole characters. len(k) is how
+   long its first k come out, and only ever grows with k */
+static int json_cut(const WCHAR *w, int n, int max, int (*len)(const WCHAR *w, int k, void *ctx), void *ctx)
 {
-    WCHAR w[64];
-    char u[192], tmp[64];
-    int i, n;
-    for (i = 0; i < srcMax && i < (int)sizeof tmp - 1 && src[i]; i++) tmp[i] = (char)src[i];
-    tmp[i] = 0;
-    n = MultiByteToWideChar(932, 0, tmp, -1, w, 64);
-    if (n <= 0) { out[0] = '"'; out[1] = '"'; out[2] = 0; return; }
-    WideCharToMultiByte(CP_UTF8, 0, w, -1, u, sizeof u - 1, NULL, NULL);
-    json_str(out, cap, u);
-}
-static void json_sjis_to_utf8(const char *src, int srcLen, char *out, int cap)
-{
-    out[0] = 0;
-    if (srcLen <= 0) return;
-    WCHAR *w = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (srcLen + 1) * sizeof(WCHAR));
-    if (!w) return;
-    int n = MultiByteToWideChar(932, 0, src, srcLen, w, srcLen);
-    if (n > 0) {
-        int u = WideCharToMultiByte(CP_UTF8, 0, w, n, out, cap - 1, NULL, NULL);
-        out[u > 0 ? u : 0] = 0;
+    int lo = 0, hi = n;
+    if (len(w, n, ctx) <= max) return n;
+    while (lo < hi) {
+        int mid = (lo + hi + 1) / 2;
+        if (len(w, mid, ctx) <= max) lo = mid; else hi = mid - 1;
     }
-    HeapFree(GetProcessHeap(), 0, w);
+    /* never between the halves of a surrogate pair */
+    if (lo > 0 && lo < n && w[lo - 1] >= 0xd800 && w[lo - 1] < 0xdc00 && w[lo] >= 0xdc00 && w[lo] < 0xe000) lo--;
+    return lo;
 }
-static int json_utf8_to_sjis(const char *src, char *out, int cap)
+static int json_utf8_len(const WCHAR *w, int k, void *ctx)
 {
-    int n = MultiByteToWideChar(CP_UTF8, 0, src, -1, NULL, 0), k, m = 0;
+    (void)ctx;
+    return k > 0 ? WideCharToMultiByte(CP_UTF8, 0, w, k, NULL, 0, NULL, NULL) : 0;
+}
+/* POL's Shift-JIS (the EU Latin extension too) to UTF-8, svc 0xa38 doing it. Cut at whole characters to cap */
+static void pol_utf8(BYTE *b, const char *src, int len, char *out, int cap)
+{
+    WCHAR *w;
+    char *tmp;
+    int n, m;
     out[0] = 0;
-    if (n <= 1) return 0;
-    WCHAR *w = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, n * sizeof(WCHAR));
+    if (!src || len <= 0 || cap < 1) return;
+    tmp = (char *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)len + 2);
+    w = (WCHAR *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ((SIZE_T)len + 2) * sizeof(WCHAR));
+    if (tmp && w) {
+        memcpy(tmp, src, (size_t)len);                  /* svc 0xa38 has no bound, so the copy ends in two NULs */
+        pc_sjis_to_wide(b, w, tmp, WIDE_GETA);
+        w[len + 1] = 0;
+        n = json_cut(w, lstrlenW(w), cap - 1, json_utf8_len, NULL);
+        m = n > 0 ? WideCharToMultiByte(CP_UTF8, 0, w, n, out, cap - 1, NULL, NULL) : 0;
+        out[m > 0 ? m : 0] = 0;
+    }
+    if (tmp) HeapFree(GetProcessHeap(), 0, tmp);
+    if (w) HeapFree(GetProcessHeap(), 0, w);
+}
+static int json_sjis_len(const WCHAR *w, int k, void *ctx)
+{
+    WCHAR keep = w[k], *at = (WCHAR *)&w[k];
+    int n;
+    *at = 0;
+    n = pc_wide_to_sjis((BYTE *)ctx, NULL, w, SJIS_GETA);
+    *at = keep;
+    return n;
+}
+/* UTF-8 to POL's Shift-JIS through svc 0xa40, cut at whole characters to cap. Gives back how many bytes it came to, 0 when
+   there's nothing or no room */
+static int pol_sjis(BYTE *b, const char *src, char *out, int cap)
+{
+    WCHAR *w;
+    int n, k, m = 0;
+    out[0] = 0;
+    n = MultiByteToWideChar(CP_UTF8, 0, src, -1, NULL, 0);
+    if (n <= 1 || cap < 2) return 0;
+    w = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)n * sizeof(WCHAR));
     if (!w) return 0;
     MultiByteToWideChar(CP_UTF8, 0, src, -1, w, n);
-    k = n - 1;
-    if (k > cap) k = cap;
-    while (k > 0 && WideCharToMultiByte(932, 0, w, k, NULL, 0, NULL, NULL) > cap - 1) k--;
-    if (k > 0) m = WideCharToMultiByte(932, 0, w, k, out, cap - 1, NULL, NULL);
+    k = json_cut(w, n - 1, cap - 1, json_sjis_len, b);
+    if (k > 0) {
+        w[k] = 0;
+        m = pc_wide_to_sjis(b, out, w, SJIS_GETA);
+    }
     out[m > 0 ? m : 0] = 0;
     HeapFree(GetProcessHeap(), 0, w);
     return m > 0 ? m : 0;
 }
-
+/* a name as a JSON string, control characters turned to spaces */
+static void json_sjis(BYTE *b, char *out, int cap, const BYTE *src, int srcMax)
+{
+    char sj[64], u[192];
+    int i;
+    for (i = 0; i < srcMax && i < (int)sizeof sj - 1 && src[i]; i++) sj[i] = (char)src[i];
+    sj[i] = 0;
+    pol_utf8(b, sj, i, u, sizeof u);
+    json_str(out, cap, u);
+}
 /* cut at whole SJIS characters, never between a lead byte and its trail */
 static void json_sjis_copy(char *out, const char *src, int cap)
 {
@@ -236,12 +274,12 @@ static void jw_text(jw *w, const char *key, const char *s)
     if (!(o = jw_room(w, cap))) return;
     w->n += json_text(o, cap, s);
 }
-static void jw_sjis(jw *w, const char *key, const BYTE *src, int srcMax, int cap)
+static void jw_sjis(jw *w, const char *key, BYTE *b, const BYTE *src, int srcMax, int cap)
 {
     char *o;
     jw_key(w, key);
     if (!(o = jw_room(w, cap))) return;
-    json_sjis(o, cap, src, srcMax);
+    json_sjis(b, o, cap, src, srcMax);
     w->n += lstrlenA(o);
 }
 static void jw_pol(jw *w, const char *key, BYTE *b, const char *sj, int u8cap, int cap)

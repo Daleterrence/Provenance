@@ -283,5 +283,4 @@ static int profile_db_pfb_value(BYTE *b, pdb_schema *s, pfb_hdr *p, pdb_rec *rec
 static int profile_db_user_waiting(void)
 {
     return requests_listed(RQ_USER);
-
 }

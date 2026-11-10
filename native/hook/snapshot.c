@@ -84,9 +84,9 @@ static void snapshot_social(BYTE *b)
         const char *shown = g_s.search_kind == SK_CHARACTER ? g_srch[i].chname : g_srch[i].name;
         jw_obj(&w, NULL);
         jw_int(&w, "index", i);
-        jw_sjis(&w, "name", (const BYTE *)shown, 0x0f, SNAPSHOT_NAME_CAP);
-        jw_sjis(&w, "handle", (const BYTE *)g_srch[i].name, 0x0f, SNAPSHOT_NAME_CAP);
-        jw_sjis(&w, "world", (const BYTE *)g_srch[i].world, 0x0f, SNAPSHOT_NAME_CAP);
+        jw_sjis(&w, "name", b, (const BYTE *)shown, 0x0f, SNAPSHOT_NAME_CAP);
+        jw_sjis(&w, "handle", b, (const BYTE *)g_srch[i].name, 0x0f, SNAPSHOT_NAME_CAP);
+        jw_sjis(&w, "world", b, (const BYTE *)g_srch[i].world, 0x0f, SNAPSHOT_NAME_CAP);
         jw_uint(&w, "pic", g_srch[i].pic);
         jw_lit(&w, "key", g_srch[i].key);
         jw_bool(&w, "friend", g_srch[i].isfriend);
@@ -129,7 +129,7 @@ static void snapshot_social(BYTE *b)
             wsprintfA(id, "%08x%08x", gh.idHi, gh.idLo);
             jw_obj(&w, NULL);
             jw_lit(&w, "id", id);
-            jw_sjis(&w, "name", (const BYTE *)gh.name, 0x14, SNAPSHOT_GROUP_CAP);
+            jw_sjis(&w, "name", b, (const BYTE *)gh.name, 0x14, SNAPSHOT_GROUP_CAP);
             jw_uint(&w, "myClass", (gh.flags >> 1) & 7);
             jw_uint(&w, "myStatus", (gh.flags >> 10) & 7);
             jw_arr(&w, "members");
@@ -143,7 +143,7 @@ static void snapshot_social(BYTE *b)
                 peers_hid_key(hid_of(m.hLo, m.hHi), hk);
                 jw_obj(&w, NULL);
                 jw_int(&w, "index", mi);
-                jw_sjis(&w, "name", (const BYTE *)m.name, 0x0f, SNAPSHOT_NAME_CAP);
+                jw_sjis(&w, "name", b, (const BYTE *)m.name, 0x0f, SNAPSHOT_NAME_CAP);
                 jw_lit(&w, "key", sk);
                 jw_uint(&w, "slot", (m.hHi >> 13) & 0x3f);
                 jw_lit(&w, "hid", hk);
@@ -154,7 +154,7 @@ static void snapshot_social(BYTE *b)
                 jw_bool(&w, "me", (m.flags >> 21) & 1);
                 jw_bool(&w, "ignored", (m.flags >> 1) & 1);
                 jw_bool(&w, "inChat", (m.flags >> 22) & 1);
-                jw_sjis(&w, "text", (const BYTE *)m.text, 0x17, SNAPSHOT_TEXT_CAP);
+                jw_sjis(&w, "text", b, (const BYTE *)m.text, 0x17, SNAPSHOT_TEXT_CAP);
                 jw_str(&w, "comment", cu, SNAPSHOT_COMMENT_CAP);
                 jw_end(&w);
             }
@@ -180,7 +180,7 @@ static void snapshot_social(BYTE *b)
         peers_friend_key(b, a, sk);
         jw_obj(&w, NULL);
         jw_int(&w, "index", bi);
-        jw_sjis(&w, "name", (const BYTE *)a->name, 0x0f, SNAPSHOT_NAME_CAP);
+        jw_sjis(&w, "name", b, (const BYTE *)a->name, 0x0f, SNAPSHOT_NAME_CAP);
         jw_lit(&w, "key", sk);
         jw_bool(&w, "allHandles", a->flags & 3);
         jw_end(&w);
@@ -195,7 +195,7 @@ static void snapshot_social(BYTE *b)
         pol_handle rec = {0};
         if (slot < 0) slot = g_my_slot;
         if (pc_get_handle(b, (unsigned)slot, &rec) == 0) {
-            json_sjis(hn, sizeof hn, (const BYTE *)rec.name, 0x0f);
+            json_sjis(b, hn, sizeof hn, (const BYTE *)rec.name, 0x0f);
             have_hn = 1;
             pic = rec.pic;
         }
@@ -223,7 +223,7 @@ static void snapshot_social(BYTE *b)
         jw_obj(&w, NULL);
         jw_int(&w, "row", i);
         jw_lit(&w, "key", sk);
-        jw_sjis(&w, "name", (const BYTE *)a->name, 0x0f, SNAPSHOT_NAME_CAP);
+        jw_sjis(&w, "name", b, (const BYTE *)a->name, 0x0f, SNAPSHOT_NAME_CAP);
         jw_str(&w, "comment", combuf, 192);
         jw_lit(&w, "status", peers_friend_status(a->flags));
         jw_bool(&w, "online", peers_friend_online(a->flags));
@@ -245,7 +245,7 @@ static void snapshot_social(BYTE *b)
     /* states 0-3, oldest first since slots get reused */
     for (i = mail_inbox_next(0, 0xf); i >= 0; i = mail_inbox_next(g_mail[i].mid, 0xf)) {
         const mailrec *ml = &g_mail[i];
-        int hold = mail_inbox_held(ml) || mail_inbox_undecided(b, ml);
+        int hold = mail_inbox_held(ml) || mail_inbox_undecided(b, ml) || ml->raw_pending;
         held += hold;
         message_store_msg_json(b, &w, ml->hdr, ml->mid,
                       hold ? "pending" : ml->state == 3 ? "realtime" : ml->state == 2 ? "failed"

@@ -8,6 +8,8 @@
 typedef struct {
     __declspec(align(8)) BYTE hdr[sizeof(pol_mail)];   /* 8-aligned: 0x518 rejects anything else */
     int state;                             /* 0 listed, 1 read, 2 failed, 3 real-time, 4 saved, 5 deleted, 6 skip */
+    BYTE raw[0x180];                       /* a real-time body, parsed on the next turn */
+    int raw_len, raw_pending;
     int mid;
     char subj[400];
     char text[13000];
@@ -27,14 +29,14 @@ static BYTE g_push_q[8][MAIL_KEY_SIZE];
 
 /* body "subject 0x07 text 0x00 [attachment]". Group invitations and their answers add a type-10 {u64 group id,
    char[0x14] name} (svc 0x440 appends it raw). */
-static void mail_inbox_parse(mailrec *m, const char *body, int len)
+static void mail_inbox_parse(BYTE *b, mailrec *m, const char *body, int len)
 {
     int i, bel = -1, end;
     for (i = 0; i < len; i++) if (body[i] == 0x07) { bel = i; break; }
     if (bel < 0) m->subj[0] = 0;
-    else json_sjis_to_utf8(body, bel > 0x80 ? 0x80 : bel, m->subj, sizeof m->subj);
+    else pol_utf8(b, body, bel > 0x80 ? 0x80 : bel, m->subj, sizeof m->subj);
     for (end = bel + 1; end < len && body[end]; end++) ;
-    json_sjis_to_utf8(body + bel + 1, end - bel - 1, m->text, sizeof m->text);
+    pol_utf8(b, body + bel + 1, end - bel - 1, m->text, sizeof m->text);
     if (bel >= 0 && pc_mail_att_type(m->hdr) == 10 && len - (end + 1) >= 0x20) {
         memcpy(m->att, body + end + 1, 0x20);
         m->has_att = 1;
@@ -123,9 +125,7 @@ static mailrec *mail_inbox_add(const BYTE *hdr)
 }
 static void mail_inbox_log_hdr(const char *what, const BYTE *h)
 {
-    char nm[64];
-    json_sjis(nm, sizeof nm, (const BYTE *)MAIL(h)->name, 0x0f);
-    base_log("mail: %s from=%s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what, nm,
+    base_log("mail: %s from=%.15s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what, MAIL(h)->name,
        MAIL(h)->from_slot, (unsigned)pc_mail_kind(h), MAIL(h)->len,
        MAIL(h)->seq, MAIL(h)->time, MAIL(h)->flags, MAIL(h)->seen);
 }
@@ -150,7 +150,11 @@ static void __cdecl mail_inbox_raw(void *arg)
     if (m) {
         const char *body = MAIL(h)->body;
         DWORD len = MAIL(h)->len;
-        if (body && len <= 0x180 && !IsBadReadPtr(body, len)) mail_inbox_parse(m, body, (int)len);
+        if (body && len <= 0x180 && !IsBadReadPtr(body, len)) {
+            memcpy(m->raw, body, len);
+            m->raw_len = (int)len;
+            m->raw_pending = 1;
+        }
         m->state = 3;
         g_snap_dirty = g_mail_fresh = g_mail_raw_new = 1;
     }
@@ -261,11 +265,11 @@ static void mail_inbox_list_done(int r)
     }
     base_log("mail: list done, %d on server, %d new\r\n", found, added);
 }
-static void mail_inbox_read_done(int lane, int r)
+static void mail_inbox_read_done(BYTE *b, int lane, int r)
 {
     mailrec *m = &g_mail[g_s.mail_lanes[lane].idx];
     if (r == 1) {
-        mail_inbox_parse(m, g_s.mail_lanes[lane].body, (int)MAIL(m->hdr)->len);
+        mail_inbox_parse(b, m, g_s.mail_lanes[lane].body, (int)MAIL(m->hdr)->len);
         m->state = 1;
         g_mail_fresh = 1;
         base_log("mail: body read (%u bytes)\r\n", MAIL(m->hdr)->len);
@@ -371,13 +375,20 @@ static void mail_inbox_pump(BYTE *b)
         mail_inbox_add(g_push_q[i]);
     }
     g_s.push_n = 0;
+    /* a real-time body is only copied in the callback, so it's parsed here */
+    for (i = 0; i < g_s.mail_n; i++)
+        if (g_mail[i].raw_pending) {
+            mail_inbox_parse(b, &g_mail[i], (const char *)g_mail[i].raw, g_mail[i].raw_len);
+            g_mail[i].raw_pending = 0;
+            g_snap_dirty = 1;
+        }
     mail_inbox_recheck(b);
     /* never cancelled here, polcore fails a stuck job at 100s itself and svc 0x520 stalls every job poll 10s */
     for (i = 0; i < FETCH_LANES; i++)
         if (g_s.mail_lanes[i].job >= 0 &&
             (r = g_s.mail_lanes[i].kind == 1 ? pc_mail_list_check(b, g_s.mail_lanes[i].job) : pc_mail_read_check(b, g_s.mail_lanes[i].job)) != 0) {
             g_s.mail_lanes[i].job = -1;
-            if (g_s.mail_lanes[i].kind == 1) mail_inbox_list_done(r); else mail_inbox_read_done(i, r);
+            if (g_s.mail_lanes[i].kind == 1) mail_inbox_list_done(r); else mail_inbox_read_done(b, i, r);
             done = 1;
         }
     if (g_s.del_job >= 0 && (r = pc_mail_delete_check(b, g_s.del_job)) != 0) {

@@ -178,8 +178,7 @@ static void profiles_search_pump(BYTE *b, int ctl)
     if (db_job_pending(b, j, r, 0)) return;
     j->job = -1;
     if (r < 0) { profiles_search_done(requests_failed(r)); return; }
-    for (BYTE *rec = (BYTE *)j->rec; rec
- && g_s.search_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
+    for (BYTE *rec = (BYTE *)j->rec; rec && g_s.search_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
         pdb_item *ph, *it;
         const pol_friend *fr;
         srchrec *h = &g_srch[g_s.search_n];
@@ -418,7 +417,6 @@ static void profiles_profile_pump(BYTE *b, int ctl)
     j->job = -1;
     if (r < 0) { profiles_profile_done(requests_failed(r)); return; }
     if (!((pdb_rec *)j->rec)->items) { profiles_profile_done("failed:no profile"); return; }
-
     profiles_profile_build(b);
     profiles_profile_done("done");
 }

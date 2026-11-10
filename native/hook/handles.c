@@ -104,7 +104,6 @@ static void handles_switched(BYTE *b)
 /* written by the app for the handle that's active now, but not taken yet */
 static int handles_writes_asked(void) { return requests_listed(RQ_ASKED); }
 
-
 /* the viewer's link before it starts a game (app.dll 0x100235d5): unlinked ones go on the active handle, all in one
    PutChrList. The app only sends what fits, so it's all or nothing here */
 static void handles_linkall(BYTE *b, int slot, const pol_handle *h, char *ix, char *ck, char *p)
@@ -288,7 +287,7 @@ static void handles_json(BYTE *b, jw *w)
         peers_hid_key(handle_hid(&hd), k);
         jw_obj(w, NULL);
         jw_int(w, "slot", i);
-        jw_sjis(w, "name", (const BYTE *)hd.name, 0x0f, HANDLES_NAME_CAP);
+        jw_sjis(w, "name", b, (const BYTE *)hd.name, 0x0f, HANDLES_NAME_CAP);
         jw_lit(w, "key", k);
         jw_uint(w, "pic", hd.pic);
         jw_uint(w, "order", (hd.flags >> 2) & 0x3f);
@@ -308,8 +307,8 @@ static void handles_json(BYTE *b, jw *w)
         jw_obj(w, NULL);
         jw_int(w, "index", i);
         jw_uint(w, "type", rec.title);
-        jw_sjis(w, "name", (const BYTE *)rec.name, 0x0f, HANDLES_NAME_CAP);
-        jw_sjis(w, "text", (const BYTE *)rec.text, 0x3f, HANDLES_TEXT_CAP);
+        jw_sjis(w, "name", b, (const BYTE *)rec.name, 0x0f, HANDLES_NAME_CAP);
+        jw_sjis(w, "text", b, (const BYTE *)rec.text, 0x3f, HANDLES_TEXT_CAP);
         jw_uint(w, "order", f & 0xff);
         jw_int(w, "handle", (f & CHR_LINKED) ? (int)CHR_HANDLE(f) : -1);
         jw_lit(w, "key", k);
