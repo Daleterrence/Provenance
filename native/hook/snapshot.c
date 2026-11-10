@@ -163,7 +163,7 @@ static void snapshot_social(BYTE *b)
         }
         jw_end(&w);
     }
-    /* GetMyComment (svc 0x688) and GetMyStatus (0x338) are local reads, fine every 2 s */
+    /* GetMyComment (svc 0x688) and GetMyStatus (0x338) are local reads, fine every 2s */
     if (pc_has(b, SV_MY_COMMENT)) {
         memset(wc, 0, sizeof wc);
         pc_my_comment(b, -2, wc);

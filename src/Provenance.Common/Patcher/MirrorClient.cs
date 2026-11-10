@@ -196,7 +196,7 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         return blob is not null && SignedBlob.TryOpen(blob, trusted, out var payload) ? payload : null;
     }
 
-    // null on a 404 or a body over 16 MB. The 60 secs cap covers the whole read, not just the headers.
+    // null on a 404 or a body over 16 MB. The 60s cap covers the whole read, not just the headers.
     private async Task<byte[]?> GetBlobAsync(string key, CancellationToken ct)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);

@@ -110,7 +110,7 @@ public sealed class CharacterNames
         }
     }
 
-    // null after 2 secs of trying, a save stuck that long behind another one goes ahead anyway
+    // null after 2s of trying, a save stuck that long behind another one goes ahead anyway
     private static IDisposable? Lock(string path)
     {
         try

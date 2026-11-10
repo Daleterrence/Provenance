@@ -551,7 +551,7 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
         if (r == 0 && GetTickCount64() - g_cr_sent_at < CR_WAIT_MS) return;
         if (r == 0) {
             pc_chat_command_forget(b, s);   /* forget it, the viewer's own timeout. Never sent again without a new click */
-            base_log("chat: no answer in %u s (step %d)\r\n", CR_WAIT_MS / 1000, g_s.cr_st);
+            base_log("chat: no answer in %us (step %d)\r\n", CR_WAIT_MS / 1000, g_s.cr_st);
             if (g_s.cr_wait == CRW_MSG) { chat_room_msg_done(0, "failed:timeout"); return; }
             /* a JOIN that timed out but got there anyway counts */
             if (g_s.cr_st == CR_JOIN && chat_room_members(b)) { chat_room_step_done(b, 1); return; }

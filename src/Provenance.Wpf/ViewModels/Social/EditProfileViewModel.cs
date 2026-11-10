@@ -306,7 +306,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Fail(text);
     }
 
-    // the hook gives up waiting for a slot at 120 secs and on a rename at 240, and polcore fails a job at 100, this
+    // the hook gives up waiting for a slot at 120s and on a rename at 240, and polcore fails a job at 100, this
     // catches one gone quiet
     internal void CheckTimeout()
     {

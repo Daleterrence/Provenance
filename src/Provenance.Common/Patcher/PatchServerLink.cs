@@ -30,7 +30,7 @@ public sealed class PatchServerLink : IDisposable
     public static PatchServerLink Connect(IPEndPoint ep, CancellationToken ct)
     {
         // Nagle off and an ACK per segment, but no fixed socket buffers, they turn off Windows' receive-window tuning.
-        // 381 ms per 64 KB request against POL's 590, which is pretty neat.
+        // 381ms per 64 KB request against POL's 590, which is pretty neat.
         var tcp = new TcpClient(AddressFamily.InterNetwork) { NoDelay = true };
         try { tcp.Client.IOControl(unchecked((int)0x98000017) /* SIO_TCP_SET_ACK_FREQUENCY */, BitConverter.GetBytes(1), null); }
         catch (SocketException) { }   // older Windows, delayed ACKs it is

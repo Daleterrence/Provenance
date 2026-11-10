@@ -56,7 +56,7 @@ public sealed class Prestarter
 
     internal void Close() => _closed = true;
 
-    // pol.exe and polcore take about 2 s to start, so one starts with the app and waits for its go file. Not with
+    // pol.exe and polcore take about 2s to start, so one starts with the app and waits for its go file. Not with
     // Windower/Ashita, it'd open them.
     public void Prestart()
     {

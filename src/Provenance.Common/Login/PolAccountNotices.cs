@@ -129,7 +129,7 @@ public static class PolAccountNotices
     }
 
     // a dropped session, the viewer's way: its two disconnect texts, else msg 0x5654 with POL-nnnn (0x5a16) and
-    // polerr's text. A -250 (no PING for 400 s) only shares LM-30's number
+    // polerr's text. A -250 (no PING for 400s) only shares LM-30's number
     public static string SessionLost(int reason, PolRegion region = PolRegion.UnitedStates) => reason switch
     {
         -0x40f => "Disconnected. The current PlayOnline ID was used to log in from another terminal.",

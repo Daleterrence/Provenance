@@ -91,7 +91,7 @@ public sealed class MailSendQueue
             var x = _inFlight[i];
             // only the newest can still be untaken, the next file's only written once the hook's taken the last
             var w = i == newest ? HookFiles.Withdraw(x.Pid, HookContract.Requests.Send) : Withdrawal.Taken;
-            // held a second ago it could've started since, the snapshot that says so takes about 300 ms to get here
+            // held a second ago it could've started since, the snapshot that says so takes about 300ms to get here
             bool held = x.HookState == "queued" && Now() - x.HookSaid >= TimeSpan.FromSeconds(1);
             bool went = w == Withdrawal.Taken ? drained || !held
                       : w == Withdrawal.Unknown && drained;   // the hook might take it before the drain

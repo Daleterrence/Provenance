@@ -211,7 +211,7 @@ static void login_run_loads(BYTE *b, struct pending_load *items, int n)
             }
             items[i].res = items[i].check(b, items[i].ticket);
             if (items[i].res == 0) { pending++; continue; }
-            base_log(LOG_PROFILE "%s -> %d after %u ms\r\n", items[i].name, items[i].res,
+            base_log(LOG_PROFILE "%s -> %d after %ums\r\n", items[i].name, items[i].res,
                (unsigned)(GetTickCount64() - started[i]));
             if (items[i].load == pc_status_load && items[i].res == 1) login_status_reply_log(b, items[i].ticket);
         }

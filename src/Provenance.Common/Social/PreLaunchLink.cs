@@ -84,7 +84,7 @@ public sealed class PreLaunchLink
     private static string Failure(string state) =>
         state == "failed:-7168" ? HookFailures.Handles.PreLaunchAlreadyLinked : HandleList.Failed(HandleChange.Link, state);
 
-    // Failed is null once it's saved. Once the hook has it, only its answer (or its 150 secs) ends the wait
+    // Failed is null once it's saved. Once the hook has it, only its answer (or its 150s) ends the wait
     private async Task<(bool Gone, string? Failed)> SaveAsync(int pid, Plan plan)
     {
         if (!Alive(pid)) return (true, null);

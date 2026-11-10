@@ -98,7 +98,7 @@ public static class AshitaLauncher
         DateTime? reportBy = null, hookGoneAt = null;
         bool saidSlow = false;
         int? attached = null;
-        // not the viewer's (Ashita's own bootloader, say), or its path unreadable for 2 secs
+        // not the viewer's (Ashita's own bootloader, say), or its path unreadable for 2s
         var skipped = new HashSet<int>();
         var tries = new Dictionary<int, int>();
         while (!ct.IsCancellationRequested)
@@ -127,7 +127,7 @@ public static class AshitaLauncher
                     skipped.Add(newPol.Pid);
                 else if (image is null)
                 {
-                    // gives up after 2 secs, so it can't hide a later pol.exe
+                    // gives up after 2s, so it can't hide a later pol.exe
                     tries[newPol.Pid] = tries.GetValueOrDefault(newPol.Pid) + 1;
                     if (tries[newPol.Pid] >= 20) skipped.Add(newPol.Pid);
                 }

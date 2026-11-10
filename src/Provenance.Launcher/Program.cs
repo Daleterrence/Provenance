@@ -51,7 +51,7 @@ internal static class Program
     // to close the normal way instead, like its tray's Exit
     private static void CloseRunningCopies()
     {
-        // Velopack kills this hook at 30 s, so it all fits in 25 and an unanswered message can't hold it past that
+        // Velopack kills this hook at 30s, so it all fits in 25 and an unanswered message can't hold it past that
         long until = Environment.TickCount64 + 25_000;
         TimeSpan Left() => TimeSpan.FromMilliseconds(Math.Max(0, until - Environment.TickCount64));
         var asked = new List<string>();

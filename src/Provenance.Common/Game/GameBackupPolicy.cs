@@ -57,7 +57,7 @@ public static class GameBackupPolicy
             }
             var took = Stopwatch.StartNew();
             var result = GameSettingsBackup.BackUp(from, GameSettingsBackup.FolderOrDefault(s.BackupFolder));
-            Log.Information("Game settings backup: {Outcome} {Zip} in {Ms} ms", result.Outcome, result.Zip, took.ElapsedMilliseconds);
+            Log.Information("Game settings backup: {Outcome} {Zip} in {Ms}ms", result.Outcome, result.Zip, took.ElapsedMilliseconds);
             foreach (var line in result.LeftOut) Log.Information("Game settings backup: {Line}", line);
             return null;
         }
@@ -85,7 +85,7 @@ public static class GameBackupPolicy
             if (gate is null) return (false, BusyText);
             var took = Stopwatch.StartNew();
             var r = GameSettingsBackup.Restore(zip, sources, folder, blocked);
-            Log.Information("Restored {Count} files from {Zip} in {Ms} ms, backed up first: {Outcome} {Before}", r.Restored, zip,
+            Log.Information("Restored {Count} files from {Zip} in {Ms}ms, backed up first: {Outcome} {Before}", r.Restored, zip,
                             took.ElapsedMilliseconds, r.Before.Outcome, r.Before.Zip);
             foreach (var line in r.LeftOut) Log.Information("Restore: {Line}", line);
             return (true, $"Your game settings from the backup made on {When(info)} are back.");

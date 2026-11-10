@@ -14,7 +14,7 @@ public sealed class ChatStore
     private bool _deletedDirty;
     public const int KeepDeleted = 5000;
     internal int DeletedCount => _deleted.Count;
-    // the 2 sec poll asks for counts every time, so they're worked out once per change, not per ask
+    // the 2s poll asks for counts every time, so they're worked out once per change, not per ask
     private int _version;
     private Stats? _stats;
 
@@ -224,7 +224,7 @@ public sealed class ChatStore
         return true;
     }
 
-    // the hook takes 40 lines a minute, so each one queued behind gets 1.5 secs on top of the 3 mins
+    // the hook takes 40 lines a minute, so each one queued behind gets 1.5s on top of the 3 mins
     public static TimeSpan SendExpiry(int queued) =>
         TimeSpan.FromMinutes(3) + TimeSpan.FromMilliseconds(1500 * Math.Max(0, queued));
 

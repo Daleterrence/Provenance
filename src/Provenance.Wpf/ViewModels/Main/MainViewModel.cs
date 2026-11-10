@@ -772,7 +772,7 @@ public partial class MainViewModel : ObservableObject
             }
             await Task.Delay(250);
         }
-        Log.Warning("No game window from pol.exe {Pid} after 90 s", pid);
+        Log.Warning("No game window from pol.exe {Pid} after 90s", pid);
         return false;
     }
 

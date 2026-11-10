@@ -36,7 +36,7 @@ public static class GameFilesLock
         {
             ct.ThrowIfCancellationRequested();
             if (TryLock(job, TimeSpan.FromMilliseconds(500), ct) is { } gate) return gate;
-            // every 5 s, which a multi-account run's no-progress guard counts as progress
+            // every 5s, which a multi-account run's no-progress guard counts as progress
             if (waits % 10 == 0) progress?.Report(new PatchProgress(PatchPhase.Check, WaitingText(Holder()), -1));
         }
     }

@@ -101,7 +101,7 @@ static pdb_item *profile_db_get(BYTE *b, pdb_schema *s, const char *name, pdb_re
 }
 
 /* searches, profiles (friends', FFXI and my own), character lookups and picture saves all go to the profile server, so
-   they share the 3 s gap and go one at a time like the viewer */
+   they share the 3s gap and go one at a time like the viewer */
 
 static int hold_db_free(void);
 

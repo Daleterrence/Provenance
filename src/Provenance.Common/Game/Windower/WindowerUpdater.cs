@@ -181,7 +181,7 @@ public sealed class WindowerUpdater
             var wait = WindowerRunning() && MutexWait > TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : MutexWait;
             var hold = await WindowerUpdateMutex.AcquireAsync(MutexName, wait, ct);
             if (hold is null)
-                errors.Add($"Windower's update lock was held elsewhere for {wait.TotalSeconds:0.#} s, so nothing was changed this time.");
+                errors.Add($"Windower's update lock was held elsewhere for {wait.TotalSeconds:0.#}s, so nothing was changed this time.");
             return (hold, hold is null);
         }
         catch (Exception e) when (e is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)

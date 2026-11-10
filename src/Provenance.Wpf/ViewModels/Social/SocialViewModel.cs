@@ -92,7 +92,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public int MyProfilePictureId { get; private set; }
 
     public bool HasUnread => UnreadCount > 0;
-    // requests get a badge too (on Friends), so one's never just an 8 sec banner
+    // requests get a badge too (on Friends), so one's never just an 8s banner
     public bool HasPendingAnswers => PendingAnswers > 0;
     public bool CanPlay => PlayBlockedReason is null;
     public string Summary => OnlineCount switch { 0 => "No friends online", 1 => "1 friend online", var n => $"{n} friends online" };
@@ -404,7 +404,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             }
             else if (Now - _login.RequestedAt > HookLimits.Status)
             {
-                _login.RequestedStatus = null;   // polcore gives up after 100 secs
+                _login.RequestedStatus = null;   // polcore gives up after 100s
                 StatusNote = HookFailures.Friends.StatusNoAnswer;
             }
         }

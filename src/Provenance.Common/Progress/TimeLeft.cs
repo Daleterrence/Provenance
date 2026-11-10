@@ -1,6 +1,6 @@
 namespace Provenance.Common.Progress;
 
-// "About 3 minutes left" under a progress bar. Blank until it's seen 10 s of steady progress, then a smoothed countdown
+// "About 3 minutes left" under a progress bar. Blank until it's seen 10s of steady progress, then a smoothed countdown
 public sealed class TimeLeft
 {
     private const long SettleMs = 10_000, WindowMs = 30_000, StallMs = 10_000, SampleMs = 250;

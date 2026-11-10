@@ -87,7 +87,7 @@ public sealed class HookLog
     public static List<HookEvent> EventsOfThisRun(string path) =>
         ThisRun(path).Text.Split('\n').Select(Parse).OfType<HookEvent>().ToList();
 
-    // one string search, it's polled every 100 ms. IO errors are left to the caller
+    // one string search, it's polled every 100ms. IO errors are left to the caller
     public static bool PrestartReadyInThisRun(string path) =>
         ThisRun(path).Text.Contains(HookContract.LogLines.PrestartReady, StringComparison.Ordinal);
 

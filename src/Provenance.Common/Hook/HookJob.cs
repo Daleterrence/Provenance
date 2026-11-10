@@ -57,7 +57,7 @@ public sealed class HookJobWatch
 // the only place the app's waits are written. Each is built from the limit it sits past
 public static class HookLimits
 {
-    // polcore fails any job 100 s after its slot started
+    // polcore fails any job 100s after its slot started
     public static readonly TimeSpan PolcoreJob = TimeSpan.FromSeconds(100);
     // JOB_TIMEOUT_MS
     public static readonly TimeSpan HookSlotWait = TimeSpan.FromSeconds(120);

@@ -101,7 +101,7 @@ public static class AdminLock
 
     public static IDisposable AcquireFile(string lockPath, TimeSpan timeout) =>
         TryAcquireFile(lockPath, timeout) ??
-        throw new IOException($"Another copy of Provenance held {Path.GetFileName(lockPath)} for {timeout.TotalSeconds:0.#} s.");
+        throw new IOException($"Another copy of Provenance held {Path.GetFileName(lockPath)} for {timeout.TotalSeconds:0.#}s.");
 
     // the last dispose closes the file, from any thread (so after an await is fine)
     private sealed class Handle(string path, Holder holder) : IDisposable

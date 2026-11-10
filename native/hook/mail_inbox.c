@@ -239,7 +239,7 @@ static void mail_inbox_list_done(int r)
     int found = 0, added = 0;
     if (r != 1) {
         if (g_mail_fails++ == 0) {
-            base_log("mail: list failed %d - retry once in 30 s\r\n", r);
+            base_log("mail: list failed %d - retry once in 30s\r\n", r);
             g_s.mail_retry_at = GetTickCount64() + 30000;
             g_s.mail_refresh = 1;
         } else {
@@ -290,7 +290,7 @@ static int mail_inbox_lane_busy(int kind, int idx)
     return 0;
 }
 /* list or read, -0x100 (no free polcore slot, refused locally) tries again next turn. Only the list waits out the
-   30 s after a failed one, reads still go */
+   30s after a failed one, reads still go */
 static void mail_inbox_fetch_start(BYTE *b, int lane)
 {
     int i, t;
@@ -372,7 +372,7 @@ static void mail_inbox_pump(BYTE *b)
     }
     g_s.push_n = 0;
     mail_inbox_recheck(b);
-    /* never cancelled here, polcore fails a stuck job at 100 s itself and svc 0x520 stalls every job poll 10 s */
+    /* never cancelled here, polcore fails a stuck job at 100s itself and svc 0x520 stalls every job poll 10s */
     for (i = 0; i < FETCH_LANES; i++)
         if (g_s.mail_lanes[i].job >= 0 &&
             (r = g_s.mail_lanes[i].kind == 1 ? pc_mail_list_check(b, g_s.mail_lanes[i].job) : pc_mail_read_check(b, g_s.mail_lanes[i].job)) != 0) {

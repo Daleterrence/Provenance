@@ -2,7 +2,7 @@ using Provenance.Common.Hook;
 
 namespace Provenance.Common.Social;
 
-// one lookup at a time, 3 s apart like the hook, for an uncached character someone's just turned up on. A failed one
+// one lookup at a time, 3s apart like the hook, for an uncached character someone's just turned up on. A failed one
 // waits for that friend's next presence change, never a timer
 public sealed class CharacterLookups(CharacterNames names)
 {

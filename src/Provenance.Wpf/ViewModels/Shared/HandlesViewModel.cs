@@ -116,7 +116,7 @@ public partial class HandlesViewModel : ObservableObject
         Rebuild();
     }
 
-    // polcore gives up on a job after 100 secs
+    // polcore gives up on a job after 100s
     private void Settle()
     {
         if (!_watch.Running) return;

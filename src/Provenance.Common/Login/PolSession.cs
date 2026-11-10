@@ -70,12 +70,12 @@ public sealed class PolSession : IDisposable
     internal HoldViewerFiles HoldViewer { get; init; } = SignedBuilds.Hold;
     internal Action<string, CancellationToken> FindBuild { get; init; } = SignedBuilds.FetchIfUnknown;
     internal Action ScreenSaverBack { get; init; } = ScreenSaver.PutBack;
-    // quiet this long and the login's stuck. polcore fails a list load or a login step at 100 s by itself, apart from
-    // state 23, which it sits in for 400 s
+    // quiet this long and the login's stuck. polcore fails a list load or a login step at 100s by itself, apart from
+    // state 23, which it sits in for 400s
     internal TimeSpan StallLimit { get; init; } = TimeSpan.FromSeconds(260);
     internal WindowerStart Windower { get; }
     internal ThirdPartyHookTracker HookTracker { get; } = new();
-    // the hook only looks for the stop file every 150 ms, then gives writes under way 5 s before it logs out
+    // the hook only looks for the stop file every 150ms, then gives writes under way 5s before it logs out
     internal static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(6);
 
     public event Action<PolSocialSnapshot>? SnapshotUpdated;
@@ -404,7 +404,7 @@ public sealed class PolSession : IDisposable
                 try { HookFiles.RequestStop(pid); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
                 if (stamp is { } game && _pol.End(game, (int)StopGrace.TotalMilliseconds, afterMs: 2000))
-                    Log.Warning("pol.exe {Pid} hadn't logged out {Seconds} s after its stop file, so it was ended", pid,
+                    Log.Warning("pol.exe {Pid} hadn't logged out {Seconds}s after its stop file, so it was ended", pid,
                                 (int)StopGrace.TotalSeconds);
                 HookFiles.ClearFor(pid);
                 Credentials.DropChatPassword();
@@ -507,7 +507,7 @@ public sealed class PolSession : IDisposable
             // a held pol.exe never exits by itself, so without this the wait would never end
             if (DateTime.UtcNow >= until)
             {
-                Log.Error("No answer from the hook to Play within {Seconds} s (pol.exe {Pid}): the game did not start; ending the session",
+                Log.Error("No answer from the hook to Play within {Seconds}s (pol.exe {Pid}): the game did not start; ending the session",
                           timeout.TotalSeconds, pid);
                 EndUnstartedPlay();
                 return HookExitText.PlayUnreadableText;

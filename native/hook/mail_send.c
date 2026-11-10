@@ -68,9 +68,9 @@ static void mail_send_paced(int r, ULONGLONG ms)
     if (g_s.pace.stopped) {
         if (!was) base_log("mail: send failed %d - no more sends this session\r\n", r);
     } else if (r != 1) {
-        base_log("mail: send failed %d - sends wait %d s\r\n", r, g_s.pace.fails == 1 ? 10 : 60);
+        base_log("mail: send failed %d - sends wait %ds\r\n", r, g_s.pace.fails == 1 ? 10 : 60);
     } else if (ms > 5000) {
-        base_log("mail: slow send (%u ms) - the next one waits 5 s\r\n", (unsigned)ms);
+        base_log("mail: slow send (%ums) - the next one waits 5s\r\n", (unsigned)ms);
     }
 }
 /* a message that can't go this session or this hour is refused, not kept waiting */
@@ -250,7 +250,7 @@ static void mail_send_pump(BYTE *b)
         mail_send_result(s->token, st, s->msg);
         if (r == 1) mail_send_sent_record(b, s->msg);
         ms = GetTickCount64() - s->started;
-        base_log("mail: send done -> %d (%u ms)\r\n", r, (unsigned)ms);
+        base_log("mail: send done -> %d (%ums)\r\n", r, (unsigned)ms);
         mail_send_paced(r, ms);
         mail_send_drop(i--);   /* only now, the upload read it during the polls */
     }

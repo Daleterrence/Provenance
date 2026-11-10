@@ -72,7 +72,7 @@ public partial class AccountsViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(snap.MyHandle) || SessionProfileId is null) return;
         if (Profiles.FirstOrDefault(p => p.Id == SessionProfileId) is not { } prof) return;
         var key = snap.Handles.FirstOrDefault(h => h.Active)?.Key;
-        // no profile picture (-1) says nothing, comparing it anyway would rewrite settings.json every 2 s
+        // no profile picture (-1) says nothing, comparing it anyway would rewrite settings.json every 2s
         if (prof.DisplayName == snap.MyHandle && prof.HandleName == snap.MyHandle &&
             (snap.MyProfilePictureId < 0 || prof.ProfilePictureId == snap.MyProfilePictureId) &&
             (string.IsNullOrEmpty(key) || prof.HandleKey == key)) return;

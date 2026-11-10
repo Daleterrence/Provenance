@@ -163,7 +163,7 @@ static int my_profile_pic_save(BYTE *b, int slot, unsigned pic, int no_write)   
         if (r == 0) return FS_PENDING;
         g_fs.job = -1;
         /* the viewer shits itself after 18000 polls and calls the save done anyway regardless (luv me POL innit), for
-           me polcore's own fail at 100 s is an error */
+           me polcore's own fail at 100s is an error */
         if (r < 0) return my_profile_pic_fail(r, "profile update (svc 0x4d8)");
         r = my_profile_pic_apply_local(b, g_fs.slot, g_fs.pic, g_fs.hid);
         if (r < 0) DB_LOG("pic: server updated, local handle apply failed %d\r\n", r);

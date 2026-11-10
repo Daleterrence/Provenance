@@ -110,7 +110,7 @@ public static class OtpReuse
     // removes one copy, so the same code recorded by another copy stays
     internal static void Unmark(string line) => Rewrite(remove: line);
 
-    // the next code's due every 30 secs, plus 2 of slack so a second fetch lands after it changes
+    // the next code's due every 30s, plus 2 of slack so a second fetch lands after it changes
     public static int SecondsToNextCode() => 30 - (int)(Now % 30) + 2;
 
     // older or unreadable lines get cleaned out of the file on the way

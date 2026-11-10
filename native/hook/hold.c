@@ -141,7 +141,7 @@ static void hold_turn(BYTE *b, int ctl)
 }
 
 /* Play: only writes hold it, ms at most. An inbox read or delete is cancelled after the wait: a cancel stalls job polls
-   10 s, which FFXI's start-up sits out */
+   10s, which FFXI's start-up sits out */
 static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
 {
     ULONGLONG until = GetTickCount64() + ms;
@@ -172,7 +172,7 @@ static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
     message_store_drop();
 }
 
-/* writes under way get 5 s to finish, then the viewer's sign-out */
+/* writes under way get 5s to finish, then the viewer's sign-out */
 #define SIGN_OUT_DRAIN_MS 5000
 static void hold_sign_out(BYTE *b, const char *spath)
 {
@@ -189,8 +189,8 @@ static void hold_sign_out(BYTE *b, const char *spath)
     base_end_pol(0);
 }
 
-/* read only: polcore stamps conn+0x39d4 on every send, on a quiet hold just the PONG to the ~125 s PING. The session
-   drops as -250 400 s on, so this logs the server going quiet */
+/* read only: polcore stamps conn+0x39d4 on every send, on a quiet hold just the PONG to the ~125s PING. The session
+   drops as -250 400s on, so this logs the server going quiet */
 #define LINK_LOG_MS 600000
 static DWORD g_link_sent;
 static ULONGLONG g_link_sent_at, g_link_logged_at;
@@ -259,7 +259,7 @@ static void hold_run(BYTE *b)
         if (idle < 0 || reason < 0 || *pc_session_alive(b) == 0) {
             why = idle < 0 ? idle : reason < 0 ? reason : (int)*pc_auth_error(b);
             if (g_link_sent_at)
-                base_log("hold: SESSION LOST reason=%d - signed out (last answered the server %lu s before)\r\n", why,
+                base_log("hold: SESSION LOST reason=%d - signed out (last answered the server %lus before)\r\n", why,
                    (DWORD)((GetTickCount64() - g_link_sent_at) / 1000));
             else base_log("hold: SESSION LOST reason=%d - signed out\r\n", why);
             DeleteFileA(spath);

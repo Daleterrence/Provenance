@@ -112,7 +112,7 @@ static int pc_has(BYTE *b, unsigned off) { return pc_slot(b, off) != NULL; }
 #define FRIEND_LIST_FULL (-7188)     /* 200 friends already */
 #define ACCOUNT_REFUSED_TOP (-0x1450)      /* a load answered in this range turns the account away: suspended, */
 #define ACCOUNT_REFUSED_BOTTOM (-0x154f)   /* IP restricted, password changed and so on */
-#define JOB_TIMEOUT_MS 120000        /* how long the hook waits on one polcore job (polcore's own gives up at 100 s) */
+#define JOB_TIMEOUT_MS 120000        /* how long the hook waits on one polcore job (polcore's own gives up at 100s) */
 
 /* the mark polcore puts in for a character the other set hasn't got, for wide_to_sjis and sjis_to_wide */
 #define SJIS_GETA 0x81ac
@@ -222,9 +222,9 @@ PC_SVC1(int, pc_groups_check, SV_GROUPS_CHECK, int, job)
 PC_SVC0(int, pc_handles_save, SV_HANDLES_SAVE)
 #define SV_HANDLES_SAVE_CHECK 0x1034
 PC_SVC1(int, pc_handles_save_check, SV_HANDLES_SAVE_CHECK, int, job)
-#define SV_CANCEL_JOB              0x520   /* frees a job slot, but stalls every job poll for 10 s */
+#define SV_CANCEL_JOB              0x520   /* frees a job slot, but stalls every job poll for 10s */
 PC_SVC1(int, pc_cancel_job, SV_CANCEL_JOB, int, job)
-#define SV_FREE_JOB                0x4dc   /* frees a job slot and makes every job poll return 0 for the next 10 s */
+#define SV_FREE_JOB                0x4dc   /* frees a job slot and makes every job poll return 0 for the next 10s */
 PC_SVC1_V(void, pc_free_job, SV_FREE_JOB, int, job)
 
 /* Handles and Content IDs */
