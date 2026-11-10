@@ -188,16 +188,19 @@ public static partial class SvgIcons
     private static Drawing? SmallerLetters(Drawing? art)
     {
         if (art is null || Parts(art).Letters is not { } l) return art;
-        var group = new DrawingGroup();
-        void Add(Drawing d)
+        var scale = new ScaleTransform(RoundLetterScale, RoundLetterScale, l.X + l.Width / 2, l.Y + l.Height / 2);
+        // the groups keep their own transform, clip and opacity, only the letters inside them shrink
+        Drawing Shrink(Drawing d)
         {
-            if (d is DrawingGroup g) { foreach (var child in g.Children) Add(child); return; }
-            if (d is GeometryDrawing { Brush: SolidColorBrush } gd)
-                d = new DrawingGroup { Transform = new ScaleTransform(RoundLetterScale, RoundLetterScale, l.X + l.Width / 2, l.Y + l.Height / 2), Children = { gd } };
-            group.Children.Add(d);
+            if (d is DrawingGroup g)
+            {
+                var copy = new DrawingGroup { Transform = g.Transform, ClipGeometry = g.ClipGeometry, Opacity = g.Opacity, OpacityMask = g.OpacityMask };
+                foreach (var child in g.Children) copy.Children.Add(Shrink(child));
+                return copy;
+            }
+            return d is GeometryDrawing { Brush: SolidColorBrush } ? new DrawingGroup { Transform = scale, Children = { d } } : d;
         }
-        Add(art);
-        return group;
+        return Shrink(art);
     }
 
     private static (Rect? Body, Rect? Letters) Parts(Drawing art)

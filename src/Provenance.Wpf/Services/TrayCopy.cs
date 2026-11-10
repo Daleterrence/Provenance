@@ -15,17 +15,16 @@ internal static class TrayCopy
     private const uint AbortIfHung = 0x2;
     private const int TimeoutMs = 2000, TotalMs = 5000;
 
-    internal static bool Reusable(bool inTray, bool hidden, bool loggedIn, bool loggingIn, bool multiRun) =>
-        inTray && hidden && !loggedIn && !loggingIn && !multiRun;
+    internal static bool Reusable(bool inTray, bool hidden, bool idle) => inTray && hidden && idle;
 
-    internal static IEnumerable<(int Pid, string? Image)> Running(string name) =>
+    internal static IReadOnlyList<(int Pid, string? Image)> Running(string name) =>
         Process.GetProcessesByName(name).Select(p =>
         {
             using (p) return (p.Id, ProcessTree.ImagePath(p.Id));
         }).ToList();
 
     // only the same exe, a copy of it somewhere else is somebody else's
-    internal static IEnumerable<int> OtherCopies(IEnumerable<(int Pid, string? Image)> running, int ownPid, string ownImage) =>
+    internal static IReadOnlyList<int> OtherCopies(IEnumerable<(int Pid, string? Image)> running, int ownPid, string ownImage) =>
         running.Where(r => r.Pid != ownPid && r.Image is { } image && SamePath(image, ownImage)).Select(r => r.Pid).ToList();
 
     private static bool SamePath(string a, string b) =>
@@ -60,7 +59,7 @@ internal static class TrayCopy
         try
         {
             if (Environment.ProcessPath is not { } own) return false;
-            var others = OtherCopies(Running(Path.GetFileNameWithoutExtension(own)), Environment.ProcessId, own).ToList();
+            var others = OtherCopies(Running(Path.GetFileNameWithoutExtension(own)), Environment.ProcessId, own);
             if (!AskCopies(others)) return false;
             Log.Information("A copy of Provenance in the tray came back, so this one isn't opening");
             return true;

@@ -47,6 +47,9 @@ public sealed class SessionState(PolSession? pol = null)
 
     public bool InMultiRun => _phase is SessionPhase.MultiRun or SessionPhase.MultiStopping;
 
+    // nobody logged in, nothing starting and no multi-account run, so a second copy can take over this one
+    public bool IdleForReuse => !LoggedIn && !Launching && !InMultiRun;
+
     public bool PolInUse => Launching || LoggedIn || Pid is not null;
 
     public string? LargeAddressAwareBlocked() =>

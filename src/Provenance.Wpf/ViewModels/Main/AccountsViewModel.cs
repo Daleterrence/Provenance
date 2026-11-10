@@ -253,10 +253,12 @@ public partial class AccountsViewModel : ObservableObject
             _dialogs.Error("Remove account", RemoveFailedText, offerLogs: true);
             return;
         }
+        // the account list clears the selection when its item goes, so this has to be asked first
+        bool wasSelected = profile == SelectedProfile;
         Profiles.Remove(profile);
         PersistProfileList();
         KeePassXc.ForgetIfUnused(Profiles);
-        if (profile == SelectedProfile) SelectedProfile = Profiles.FirstOrDefault();
+        if (wasSelected) SelectedProfile = Profiles.FirstOrDefault();
         Log.Information("Removed account {Id}", profile.Id);
     }
 

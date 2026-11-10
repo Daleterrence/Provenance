@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Windows.Input;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -72,6 +73,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     public ImageSource? Avatar => _social.Avatar;
     public bool ProfilePictureSaving => _social.ProfilePictureSaving;
+
+    public ICommand ChangeProfilePictureCommand => _social.ChangeProfilePictureCommand;
 
     public ObservableCollection<ProfileCard> Cards { get; } = new();
 

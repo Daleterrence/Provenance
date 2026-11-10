@@ -13,9 +13,9 @@ public sealed partial class OtpPromptViewModel : ObservableObject
     private string? _code;
     private bool _closed;
     // the latest fetch or install, so an older one can tell it's been replaced
-    private CancellationTokenSource? _fetch;
+    private readonly LatestOnly _fetch = new();
     private OtpFix _fix;
-    private string? _installTool;
+    private string? _installTool, _problemLabel;
     // a typed check, or a fetched code being recorded
     private Task _inFlight = Task.CompletedTask;
 
@@ -35,16 +35,19 @@ public sealed partial class OtpPromptViewModel : ObservableObject
     public event Action? FocusMaster;
     public event Action<string>? Finished;
 
-    [ObservableProperty] private OtpStep _step;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(PanelVisible), nameof(MasterVisible), nameof(RetryLabel))] private OtpStep _step;
     [ObservableProperty] private string _sourceText = "";
     [ObservableProperty] private bool _spinnerVisible;
-    [ObservableProperty] private bool _panelVisible;
-    [ObservableProperty] private bool _masterVisible;
-    [ObservableProperty] private string? _retryLabel;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanSubmit))] private bool _checking;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ErrorVisible))] private string? _errorText;
 
     public bool CanSubmit => !Checking;
+
+    public bool PanelVisible => Step != OtpStep.Typing;
+
+    public bool MasterVisible => Step == OtpStep.NeedsPassword;
+
+    public string? RetryLabel => Step == OtpStep.Problem ? _problemLabel : null;
 
     public bool ErrorVisible => ErrorText is not null;
 
@@ -65,7 +68,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
 
     private static bool IsSixDigits(string? s) => s is { Length: 6 } && s.All(char.IsAsciiDigit);
 
-    // when the window's loaded: a source gets one fetch straight away
     public void Start()
     {
         if (_source.Length > 0) _ = FetchAsync(null);
@@ -130,7 +132,7 @@ public sealed partial class OtpPromptViewModel : ObservableObject
     public void Close()
     {
         _closed = true;
-        _fetch?.Cancel();
+        _fetch.Cancel();
     }
 
     // if cancel got there first nothing's sent, and the record comes off again so a retry isn't called used
@@ -153,34 +155,30 @@ public sealed partial class OtpPromptViewModel : ObservableObject
     {
         var name = OtpSources.Name(_source);
         Step = OtpStep.Fetching;
-        PanelVisible = true;
         SpinnerVisible = true;
-        MasterVisible = false;
-        RetryLabel = null;
         _installTool = null;
         SourceText = _source == OtpSources.OnePassword ? OnePassword.WaitText : $"Getting the code from {name}...";
-        _fetch?.Cancel();
-        var mine = _fetch = new CancellationTokenSource();
-        var r = await Fetch(masterPassword, mine.Token);
+        var mine = _fetch.Begin();
+        var r = await Fetch(masterPassword, mine);
         // same code as the account before (one authenticator), so wait for the next one
         for (int tries = 0; r.Code is { } used && _reuseKey.Length > 0 && await WasUsed(_reuseKey, used) && tries < 3; tries++)
         {
-            if (!_isShowing() || mine != _fetch || mine.IsCancellationRequested) return;
+            if (!_isShowing() || mine.IsCancellationRequested) return;
             Step = OtpStep.WaitingForNextCode;
             SourceText = $"The code from {name} was just used for another account. Waiting for the next code...";
-            try { await WaitForNextCode(OtpReuse.SecondsToNextCode(), mine.Token); }
+            try { await WaitForNextCode(OtpReuse.SecondsToNextCode(), mine); }
             catch (OperationCanceledException) { return; }
-            r = await Fetch(null, mine.Token);
+            r = await Fetch(null, mine);
         }
         if (!_isShowing() || _code != null) return;
-        if (mine != _fetch || mine.IsCancellationRequested) return;   // a newer attempt owns the screen
+        if (mine.IsCancellationRequested) return;   // a newer attempt owns the screen
         SpinnerVisible = false;
         if (r.Code is { } code && !(_reuseKey.Length > 0 && await WasUsed(_reuseKey, code)))
         {
             // a typed code already on its way goes first
-            try { await _inFlight.WaitAsync(mine.Token); }
+            try { await _inFlight.WaitAsync(mine); }
             catch (OperationCanceledException) { return; }
-            if (!_isShowing() || _closed || _code != null || mine != _fetch) return;
+            if (!_isShowing() || _closed || _code != null || mine.IsCancellationRequested) return;
             Fill?.Invoke(code);
             SourceText = $"Got the code from {name}.";
             Step = OtpStep.Accepting;
@@ -195,22 +193,19 @@ public sealed partial class OtpPromptViewModel : ObservableObject
     // one plain line and the button that fixes it. The boxes stay open for typing whatever it says
     internal void ShowProblem(string text, OtpFix fix, string? tool = null, string? label = null)
     {
-        PanelVisible = true;
         SpinnerVisible = false;
-        MasterVisible = false;
         SourceText = text;
         _fix = fix;
         _installTool = tool;
         if (fix == OtpFix.MasterPassword)
         {
             Step = OtpStep.NeedsPassword;
-            RetryLabel = null;
-            MasterVisible = true;
             if (_isShowing()) FocusMaster?.Invoke();
             return;
         }
+        _problemLabel = label ?? ToolFix.Label(fix);
         Step = OtpStep.Problem;
-        RetryLabel = label ?? ToolFix.Label(fix);
+        OnPropertyChanged(nameof(RetryLabel));
     }
 
     // the fix button: whatever the line asked for, or another go
@@ -226,7 +221,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
                 ShowProblem(OpenSettings() ?? SourceText, OtpFix.TryAgain);
                 break;
             case OtpFix.TypeInstead:
-                PanelVisible = false;
                 Step = OtpStep.Typing;
                 FocusFirstBox?.Invoke();
                 break;
@@ -245,16 +239,14 @@ public sealed partial class OtpPromptViewModel : ObservableObject
     // a fresh copy goes straight on to the code. Closing the dialog stops the download
     private async Task InstallAsync(string tool)
     {
-        _fetch?.Cancel();
-        var mine = _fetch = new CancellationTokenSource();
+        var mine = _fetch.Begin();
         Step = OtpStep.Installing;
-        RetryLabel = null;
         SpinnerVisible = true;
         SourceText = ToolTexts.Downloading(tool);
         ToolInstall r;
-        try { r = await Install(tool, mine.Token); }
+        try { r = await Install(tool, mine); }
         catch (OperationCanceledException) { return; }
-        if (!_isShowing() || _code != null || mine != _fetch || mine.IsCancellationRequested) return;
+        if (!_isShowing() || _code != null || mine.IsCancellationRequested) return;
         if (r == ToolInstall.Installed)
         {
             _ = FetchAsync(null);

@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
@@ -11,14 +12,13 @@ namespace Provenance.Wpf.Views.Main;
 
 public partial class MainWindow : AppWindow
 {
-    private readonly TrayMode _tray;
     private bool _exiting, _asking, _cancellingLogIn;
     private readonly ReopenGuard _worldsGuard = new();
 
     public MainWindow()
     {
         InitializeComponent();
-        _tray = new TrayMode(this, ExitApp, () => _asking);
+        Tray = new TrayMode(this, ExitApp, () => _asking);
         DataContextChanged += OnDataContextChanged;
         IsVisibleChanged += (_, _) => ReportShown();
         StateChanged += (_, _) => ReportShown();
@@ -34,7 +34,7 @@ public partial class MainWindow : AppWindow
 
     private MainViewModel? Vm => DataContext as MainViewModel;
 
-    internal TrayMode Tray => _tray;
+    internal TrayMode Tray { get; }
 
     internal bool Exiting => _exiting;
 
@@ -43,7 +43,8 @@ public partial class MainWindow : AppWindow
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle)?.AddHook(OnWindowMessage);
+        var handle = new WindowInteropHelper(this).Handle;
+        HwndSource.FromHwnd(handle)?.AddHook(OnWindowMessage);
     }
 
     // a second copy asking: 1 when this one was in the tray with nobody logged in and has come back for it
@@ -51,7 +52,7 @@ public partial class MainWindow : AppWindow
     {
         if ((uint)msg != TrayCopy.Message) return IntPtr.Zero;
         handled = true;
-        return _tray.TryReuse(Vm) ? 1 : 0;
+        return Tray.TryReuse(Vm) ? 1 : 0;
     }
 
     // fixed design size, so on a small or scaled screen (1366x768 at 125%, say) the whole thing scales down
@@ -108,7 +109,7 @@ public partial class MainWindow : AppWindow
     // snapshot that raised this hasn't counted the new message yet
     private void OnRequestAttention(bool tip) => Dispatcher.InvokeAsync(() =>
     {
-        if (tip && Vm?.Notice.Current is { } notice && _tray.ShowNotice(notice.Text)) return;
+        if (tip && Vm?.Notice.Current is { } notice && Tray.ShowNotice(notice.Text)) return;
         if (IsActive || !IsVisible || Vm is not { WantsAttention: true }) return;
         TaskbarFlash.Start(this);
     });
@@ -121,7 +122,7 @@ public partial class MainWindow : AppWindow
 
     private void OnRequestHide() => Hide();
 
-    private void OnRequestShow() => _tray.ShowWindow();
+    private void OnRequestShow() => Tray.ShowWindow();
 
     // the same exit as the tray's, which logs a held session out, then the app starts again once it's gone
     private void OnRequestRestart()
@@ -137,7 +138,7 @@ public partial class MainWindow : AppWindow
     {
         if (Vm is { MinimizeGoesToTray: true } vm)
         {
-            _tray.HideWindow(vm, vm.LoggedIn);
+            Tray.HideWindow(vm, vm.LoggedIn);
             return;
         }
         WindowState = WindowState.Minimized;
@@ -147,7 +148,7 @@ public partial class MainWindow : AppWindow
     {
         if (GoToTray(e) || WaitForLogInCancel(e) || WaitForAnswer(e) || StopMultiRun(e) || ConfirmDropProfile(e)) return;
         Vm?.Social.Messages.SettleSends(SessionEnd.LogOut);
-        _tray.Dispose();
+        Tray.Dispose();
         base.OnClosing(e);
     }
 
@@ -156,8 +157,8 @@ public partial class MainWindow : AppWindow
     {
         if (_exiting || Vm is not { KeepInTrayOnClose: true } vm) return false;
         e.Cancel = true;
-        _tray.HideWindow(vm, true);
-        _tray.ShowFirstCloseTip(vm);
+        Tray.HideWindow(vm, true);
+        Tray.ShowFirstCloseTip(vm);
         return true;
     }
 
@@ -183,11 +184,7 @@ public partial class MainWindow : AppWindow
         e.Cancel = true;
         _exiting = false;
         if (run.Stopping) { run.StopAllAccountsAndExit(); return true; }
-        bool stop;
-        _asking = true;
-        try { stop = run.ConfirmStopAccounts(); }
-        finally { _asking = false; }
-        if (!stop)
+        if (!Ask(run.ConfirmStopAccounts))
         {
             StayOpen();
             return true;
@@ -207,14 +204,17 @@ public partial class MainWindow : AppWindow
 
     private bool ConfirmDropProfile(System.ComponentModel.CancelEventArgs e)
     {
-        bool go;
-        _asking = true;
-        try { go = Vm?.ConfirmExit() ?? true; }
-        finally { _asking = false; }
-        if (go) return false;
+        if (Ask(() => Vm?.ConfirmExit() ?? true)) return false;
         e.Cancel = true;
         StayOpen();
         return true;
+    }
+
+    private bool Ask(Func<bool> question)
+    {
+        _asking = true;
+        try { return question(); }
+        finally { _asking = false; }
     }
 
     private void StayOpen()
@@ -226,7 +226,7 @@ public partial class MainWindow : AppWindow
     // a shutdown closes the window whatever OnClosing says, so the icon can't be left behind
     protected override void OnClosed(EventArgs e)
     {
-        _tray.Dispose();
+        Tray.Dispose();
         base.OnClosed(e);
     }
 

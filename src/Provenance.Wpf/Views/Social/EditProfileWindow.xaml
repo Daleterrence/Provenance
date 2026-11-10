@@ -141,7 +141,7 @@
                 <Grid ColumnDefinitions="Auto,*">
                     <!-- a button so the keyboard can reach it, drawn as just the picture -->
                     <Button VerticalAlignment="Top" Cursor="Hand" ToolTip="Change your profile picture" AutomationProperties.Name="Change your profile picture"
-                            Click="OnProfilePictureClick" Foreground="{DynamicResource Text.1}">
+                            Command="{Binding ChangeProfilePictureCommand}" Foreground="{DynamicResource Text.1}">
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Background" Value="Transparent" />

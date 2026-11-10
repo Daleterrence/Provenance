@@ -18,7 +18,7 @@ using Provenance.Wpf.ViewModels.Shared;
 namespace Provenance.Wpf.ViewModels.Settings;
 
 // Every change saves straight away. The install region's detected, not picked, but news can come from any region's site
-public partial class SettingsViewModel : ObservableObject
+public partial class SettingsViewModel : ObservableObject, IDisposable
 {
     private static readonly string[] FeedRegionCodes = ["auto", "na", "eu", "jp"];
 
@@ -32,7 +32,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private readonly FeedService? _feeds;
     private readonly SettingsContext _context;
-    private readonly SessionState? _session;
+    private readonly SessionState _session;
     private readonly Func<IDisposable>? _holdPrestarts;
     private readonly Func<bool, RegistryKey?>? _gameKey;
     private bool _gameReady;
@@ -42,8 +42,8 @@ public partial class SettingsViewModel : ObservableObject
                              HandlesViewModel? handles = null, Func<bool>? gameRunning = null,
                              Func<string, string, WindowerUpdater>? windowerUpdater = null)
     {
-        _session = session;
-        _context = new SettingsContext(() => session?.InMultiRun ?? false, () => session?.PolInUse ?? false, gameRunning ?? PolUpdates.GameRunning);
+        _session = session ??= new SessionState();
+        _context = new SettingsContext(() => session.InMultiRun, () => session.PolInUse, gameRunning ?? PolUpdates.GameRunning);
         _dialogs = dialogs;
         Handles = handles ?? new HandlesViewModel(dialogs, () => null);
         _gameKey = gameKey;
@@ -102,11 +102,9 @@ public partial class SettingsViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(AddonsPluginsViewModel.SameListForEveryProfile)) OnPropertyChanged(nameof(ShowProfileSwitcher));
         };
-        if (session is not null)
-        {
-            session.PhaseChanged += OnPhaseChanged;
-            session.RunChanged += MultiRunChanged;
-        }
+        _blockedWas = session.LargeAddressAwareBlocked();
+        session.PhaseChanged += OnPhaseChanged;
+        session.RunChanged += MultiRunChanged;
     }
 
     public HookSettings Hooks { get; }
@@ -202,7 +200,7 @@ public partial class SettingsViewModel : ObservableObject
     internal Task LargeAddressAwareChange { get; private set; } = Task.CompletedTask;
 
     private LargeAddressAwareSwitch.Target LargeAddressAwareTarget() =>
-        LargeAddressAwareTargetForTest ?? LargeAddressAwareSwitch.For(_settings.DetectedRegion, _session is { } s ? s.LargeAddressAwareBlocked : null);
+        LargeAddressAwareTargetForTest ?? LargeAddressAwareSwitch.For(_settings.DetectedRegion, _session.LargeAddressAwareBlocked);
 
     // hashes pol.exe and polcore.dll, so it's off the UI thread. A newer read or a change drops an older one
     public async Task ReadLargeAddressAwareAsync()
@@ -269,11 +267,19 @@ public partial class SettingsViewModel : ObservableObject
             ? LargeAddressAwareSwitch.DeniedText : after.Note ?? "";
     }
 
-    private void OnPhaseChanged() => _ = ReadLargeAddressAwareAsync();
-
-    public void Detach()
+    // the phases inside one login or play all read the same, so the files only get read again when the answer moves
+    private void OnPhaseChanged()
     {
-        if (_session is null) return;
+        var blocked = _session.LargeAddressAwareBlocked();
+        if (blocked == _blockedWas) return;
+        _blockedWas = blocked;
+        _ = ReadLargeAddressAwareAsync();
+    }
+
+    private string? _blockedWas;
+
+    public void Dispose()
+    {
         _session.PhaseChanged -= OnPhaseChanged;
         _session.RunChanged -= MultiRunChanged;
     }

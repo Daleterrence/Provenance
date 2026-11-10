@@ -70,7 +70,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             Note.Show(SocialViewModel.GameRunningNote);
             return;
         }
-        // the same profile again within 5 mins shows the copy already here, no second request for a page just read
+        // the same profile again within 5min shows the copy already here, no second request for a page just read
         if (f.Key.Length > 0 && _login.ProfileCache.TryGetValue(f.Key, out var hit) &&
             _social.Now - hit.At < TimeSpan.FromMinutes(5))
         {

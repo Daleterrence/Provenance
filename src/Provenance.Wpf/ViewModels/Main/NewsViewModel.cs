@@ -25,7 +25,7 @@ public partial class NewsViewModel : ObservableObject
         _openLink = openLink;
         _slideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
         _slideTimer.Tick += (_, _) => AdvanceNews(+1);
-        // POL only rewrites world status every 5 mins anyway
+        // POL only rewrites world status every 5min anyway
         _worldsTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
         _worldsTimer.Tick += async (_, _) => { if (WindowShown) await RefreshIfStaleAsync(); };
         _feeds.RegionChanged += (_, _) => ui.Post(async () =>

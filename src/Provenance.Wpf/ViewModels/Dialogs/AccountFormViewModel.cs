@@ -20,7 +20,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
     private readonly string _savedAccount;
     // null until op's listed them, or when it couldn't
     private IReadOnlyList<OnePasswordAccount>? _accounts;
-    private CancellationTokenSource? _toolWork;
+    private readonly LatestOnly _toolWork = new();
     private string? _tool;
     private ToolView _view;
 
@@ -99,8 +99,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
     // the first look for the source's tool, and what it says. Called once the view's ready for it
     internal void Start() => _ = LookForToolAsync();
 
-    // the work stops with the window
-    public void Close() => _toolWork?.Cancel();
+    public void Close() => _toolWork.Cancel();
 
     partial void OnOtpSourceChanged(string value)
     {
@@ -133,13 +132,13 @@ public sealed partial class AccountFormViewModel : ObservableObject
     // a copy found here gets checked again before each use, this is only so the dialog can offer to install one
     internal async Task LookForToolAsync()
     {
-        _toolWork?.Cancel();
+        _toolWork.Cancel();
         _accounts = null;
         AccountPickVisible = false;
         _tool = ToolFacts.ForSource(OtpSource);
         ShowTool(ToolView.Hidden);
         if (_tool is not { } tool) return;
-        var mine = _toolWork = new CancellationTokenSource();
+        var mine = _toolWork.Begin();
         ToolFind found;
         try { found = await Task.Run(() => FindTool(tool)); }
         catch (Exception ex)
@@ -158,7 +157,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
             ShowTool(ToolView.Ready);
             if (tool != ToolFacts.OnePassword) return;
             IReadOnlyList<OnePasswordAccount>? list;
-            try { list = await ListAccounts(path, mine.Token); }
+            try { list = await ListAccounts(path, mine); }
             catch (OperationCanceledException) { return; }
             if (mine.IsCancellationRequested) return;
             ShowAccounts(list);
@@ -216,11 +215,10 @@ public sealed partial class AccountFormViewModel : ObservableObject
     // only stops watching when the dialog closes or the source changes, the login itself carries on and locks after
     private async Task WatchLoginAsync(Task<BitwardenLogin> login)
     {
-        _toolWork?.Cancel();
-        var mine = _toolWork = new CancellationTokenSource();
+        var mine = _toolWork.Begin();
         ShowLoginWaiting(true);
         BitwardenLogin r;
-        try { r = await login.WaitAsync(mine.Token); }
+        try { r = await login.WaitAsync(mine); }
         catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
@@ -255,8 +253,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
     private async Task InstallAsync()
     {
         if (_tool is not { } tool) return;
-        _toolWork?.Cancel();
-        var mine = _toolWork = new CancellationTokenSource();
+        var mine = _toolWork.Begin();
         ShowTool(ToolView.Installing);
         var progress = new Progress<double>(f =>
         {
@@ -265,7 +262,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
             ToolProgress = f * 100;
         });
         ToolInstall r;
-        try { r = await Install(tool, progress, mine.Token); }
+        try { r = await Install(tool, progress, mine); }
         catch (OperationCanceledException) { return; }
         if (mine.IsCancellationRequested) return;
         if (r == ToolInstall.Installed) await LookForToolAsync();

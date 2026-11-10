@@ -814,7 +814,7 @@ public partial class MainViewModel : ObservableObject
         try { _windows.ShowSettings(vm, tab); }
         finally
         {
-            vm.Detach();
+            vm.Dispose();
             Handles.Closed();
         }
         if (vm.Hooks.RestartWanted)

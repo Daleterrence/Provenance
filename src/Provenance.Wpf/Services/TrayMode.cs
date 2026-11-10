@@ -43,8 +43,8 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
 
     public void ShowFirstCloseTip(MainViewModel vm)
     {
-        if (vm.TrayTipShown) return;
-        Icon!.ShowTip("Provenance is still running",
+        if (vm.TrayTipShown || Icon is not { } icon) return;
+        icon.ShowTip("Provenance is still running",
             "You're still logged in to PlayOnline, so your friends and messages stay up to date. Right-click this icon to exit.");
         vm.MarkTrayTipShown();
     }
@@ -58,7 +58,7 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
 
     public bool TryReuse(MainViewModel? vm)
     {
-        if (questionUp() || vm is null || !TrayCopy.Reusable(InTray, !window.IsVisible, vm.Session.LoggedIn, vm.Session.Launching, vm.Session.InMultiRun))
+        if (questionUp() || vm is null || !TrayCopy.Reusable(InTray, !window.IsVisible, vm.Session.IdleForReuse))
             return false;
         // queued, the other copy's stuck inside SendMessage until this returns and COM calls fail while it is
         window.Dispatcher.InvokeAsync(ShowWindow);

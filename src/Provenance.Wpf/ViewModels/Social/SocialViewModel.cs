@@ -217,6 +217,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     // why nothing can be written right now, null when it can
     string? ISocialSession.LeavingGroupId => Groups.LeavingGroupId;
+    System.Windows.Input.ICommand ISocialSession.ChangeProfilePictureCommand => ChangeProfilePictureCommand;
 
     public string? WriteBlockedNote => GameRunning ? GameRunningNote : HandleSwitching ? SwitchingNote : null;
 
@@ -318,9 +319,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     // a new login, maybe on another account, so nothing from the last one can show under this one
     public void Start(string profileId, string? storeRoot = null)
     {
-        _login = new SocialSession { Chat = new ChatStore(profileId, storeRoot) };
+        var chat = new ChatStore(profileId, storeRoot);
+        _login = new SocialSession { Chat = chat };
         GroupChat.SetLog(new GroupChatLog(profileId, storeRoot));
-        _login.Chat!.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
+        chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
         StatusPending = false;
         StatusNote = "";
         _lookups?.Reset();
