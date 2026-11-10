@@ -21,9 +21,6 @@ internal sealed record MultiRunLinks(
     Action<SessionPhase> SetPhase,
     Func<bool> EnsureMemberAgreement,
     Func<string?> PromptHandleName,
-    Func<(string Ffxi, string Viewer, PolRegion Region)?> GameFolders,
-    Func<PolRegion> PlayRegion,
-    Action<string?> WritePolOptions,
     Func<string?, Action<string>?, Task> BackUpGameSettings);
 
 public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
@@ -35,13 +32,14 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
     private readonly UiThread _ui;
     private readonly AccountsViewModel _accounts;
     private readonly SessionState _session;
+    private readonly GameLaunch _launch;
     private readonly MultiRunLinks _links;
 
     public event Action? RequestShow;
     public event Action? RequestExit;
 
     internal MultiRunViewModel(IDialogs dialogs, ISettingsService settings, ICredentialService credentials,
-                               PolSession pol, UiThread ui, AccountsViewModel accounts, SessionState session, MultiRunLinks links)
+                               PolSession pol, UiThread ui, AccountsViewModel accounts, SessionState session, GameLaunch launch, MultiRunLinks links)
     {
         _dialogs = dialogs;
         _settings = settings;
@@ -50,6 +48,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         _ui = ui;
         _accounts = accounts;
         _session = session;
+        _launch = launch;
         _links = links;
         session.PhaseChanged += OnPhaseChanged;
     }
@@ -286,22 +285,19 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         if (details.Problem is { } problem) return new(AccountFailureKind.Account, problem);
         var (pol, squareEnix) = (details.Pol!, details.SquareEnix!);
 
-        if (!_pol.Records.TryClaimAccount(profile.Id, out var claimProblem))
-            return new(AccountFailureKind.Account, claimProblem ?? "This account is in use in another copy of Provenance.");
-
         // outside the no-progress guard, it waits for the user
-        string otp = "";
-        if (profile.UseOtp)
+        var claim = _launch.Claim(profile, () =>
         {
             var code = _accounts.AskOtp(profile, squareEnix);
-            if (code is null || ct.IsCancellationRequested)
-            {
-                _pol.Records.ReleaseClaim();
-                ct.ThrowIfCancellationRequested();
-                return new(AccountFailureKind.Account, "The one-time password was cancelled.");
-            }
-            otp = code;
+            return ct.IsCancellationRequested ? null : code;
+        });
+        if (claim.InUse is { } inUse) return new(AccountFailureKind.Account, inUse);
+        if (claim.OtpCancelled)
+        {
+            ct.ThrowIfCancellationRequested();
+            return new(AccountFailureKind.Account, "The one-time password was cancelled.");
         }
+        string otp = claim.Otp!;
 
         using var guard = CancellationTokenSource.CreateLinkedTokenSource(ct);
         void Kick() { try { guard.CancelAfter(NoProgressLimit); } catch (ObjectDisposedException) { } }
@@ -335,24 +331,19 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             finally { Kick(); }
         }
         RunSnapshot = null;
-        int logIn;
+        LogInResult logIn;
         try
         {
-            logIn = await _pol.ConnectAsync(new LoginRequest(pol, squareEnix, otp)
-            {
-                ProfileId = profile.Id,
-                Progress = progress,
-                AskHandleName = AskHandleName,
-                Options = new SessionOptions(Lean: true, ThirdPartyHookProfile: hookProfile, HomeSlot: _accounts.EnsureHomeSlot(profile)),
-            }, token);
+            logIn = await _launch.LogInAsync(new LaunchLogin(profile, pol, squareEnix, otp, _accounts.EnsureHomeSlot(profile), true, hookProfile,
+                                                             progress, AskHandleName), token);
         }
         catch (Exception) when (token.IsCancellationRequested) { return await Stopped(); }
-        if (logIn != 0)
+        if (logIn.Code != 0)
         {
             await LetGoOfAccountAsync();
-            if (logIn == LoginCodes.Cancelled && token.IsCancellationRequested) return await Stopped();
-            var kind = AccountFailures.Classify(logIn, _pol.LastRefusalReason, profile.UseOtp);
-            return new(kind, lastFailure ?? $"The login didn't finish (code {logIn}).");
+            if (logIn.Code == LoginCodes.Cancelled && token.IsCancellationRequested) return await Stopped();
+            var kind = AccountFailures.Classify(logIn.Code, logIn.Refusal, profile.UseOtp);
+            return new(kind, lastFailure ?? $"The login didn't finish (code {logIn.Code}).");
         }
         SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
 
@@ -360,7 +351,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         if (AccountRules.PlayGateFailure(snap) is { } gate) return await LetGo(gate.Kind, gate.Text);
         if (token.IsCancellationRequested) return await Stopped();
 
-        if (_links.GameFolders() is { } dirs)
+        if (_launch.GameFolders() is not null)
         {
             string eta = "";
             var left = new PhaseTimeLeft(text => eta = text);   // UI thread only, like the status
@@ -377,35 +368,35 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
                     SetRunStatus($"Updating FINAL FANTASY XI {step}{what}" + (eta.Length > 0 ? $". {eta}." : "."));
                 });
             });
-            try { await Task.Run(() => PolUpdates.UpdateFfxi(dirs.Ffxi, dirs.Viewer, dirs.Region, patch, token), token); }
-            catch (Exception) when (token.IsCancellationRequested) { return await Stopped(); }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Multi-account mode: FINAL FANTASY XI update failed");
-                return await LetGo(AccountFailureKind.Install,
-                                   ErrorText.Of(ex, "The FINAL FANTASY XI update didn't finish."));
-            }
+            GameUpdateResult update;
+            try { update = await _launch.UpdateGameAsync(patch, token); }
             finally { left.Clear(); }
+            if (!update.Done)
+            {
+                if (token.IsCancellationRequested) return await Stopped();
+                Log.Error(update.Error, "Multi-account mode: FINAL FANTASY XI update failed");
+                return await LetGo(AccountFailureKind.Install,
+                                   ErrorText.Of(update.Error!, "The FINAL FANTASY XI update didn't finish."));
+            }
             SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
         }
         if (token.IsCancellationRequested) return await Stopped();
 
-        FfxiSettings.WriteFirstStartSettings(_links.PlayRegion());
-        _links.WritePolOptions(account.ProfileId);
+        _launch.WriteOptions(account.ProfileId);
         if (await BackUpForRunAsync(hookProfile))
         {
             if (token.IsCancellationRequested) return await Stopped();
             SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
         }
-        try { _pol.SignalPlay(); }
-        catch (Exception ex)
+        var signal = _launch.SignalPlay();
+        if (!signal.Sent)
         {
-            Log.Error(ex, "Multi-account mode: could not signal Play for {Account}", account.ProfileId);
-            return ex is CredentialKeyUnavailableException
-                ? await LetGo(AccountFailureKind.Install, ex.Message)
+            Log.Error(signal.Error, "Multi-account mode: could not signal Play for {Account}", account.ProfileId);
+            return signal.KeyProblem is { } keyProblem
+                ? await LetGo(AccountFailureKind.Install, keyProblem)
                 : await LetGo(AccountFailureKind.Account, "Provenance couldn't tell PlayOnline to start the game.");
         }
-        if (await _pol.WaitForPlayAnswerAsync(MainViewModel.PlayAnswerTimeout) is { } playFailed)
+        if (await _launch.WaitForPlayAnswerAsync() is { } playFailed)
         {
             Log.Error("Multi-account mode: the game did not start for {Account}: {Why}", account.ProfileId, playFailed);
             return await LetGo(AccountRules.PlayFailureKind(playFailed), playFailed);

@@ -1,0 +1,152 @@
+using Serilog;
+using Provenance.Common.Credentials;
+using Provenance.Common.Game;
+using Provenance.Common.Install;
+using Provenance.Common.Patcher;
+using Provenance.Common.PolFormat;
+using Provenance.Common.Settings;
+using Provenance.Common.Social;
+
+namespace Provenance.Common.Login;
+
+public sealed record ClaimResult(string? Otp, string? InUse, bool OtpCancelled);
+
+public sealed record LaunchLogin(Account Account, PolAccount Pol, SquareEnixAccount SquareEnix, string Otp, int HomeSlot, bool Lean,
+                                 string? ThirdPartyHookProfile, IProgress<LaunchProgress>? Progress, Func<string?>? AskHandleName);
+
+public sealed record LogInResult(int Code, int? Refusal);
+
+public sealed record GameUpdateResult(bool Done, bool Cancelled, Exception? Error);
+
+public sealed record PlaySignal(bool Sent, string? KeyProblem, Exception? Error = null);
+
+public sealed class GameLaunch(PolSession pol, ISettingsService settings)
+{
+    public static readonly TimeSpan PlayAnswerTimeout = TimeSpan.FromSeconds(15);
+
+    internal Func<(string Ffxi, string Viewer, PolRegion Region)?>? FolderSeam { get; init; }
+    internal Func<string, string, PolRegion, IProgress<PatchProgress>?, CancellationToken, PatchResult>? UpdateSeam { get; init; }
+    internal Action? SignalPlaySeam { get; init; }
+
+    // claimed before the code's asked, so no other copy logs this account in meanwhile
+    public ClaimResult Claim(Account p, Func<string?> askOtp)
+    {
+        if (!pol.Records.TryClaimAccount(p.Id, out var problem))
+            return new(null, problem ?? "This account is in use in another copy of Provenance.", false);
+        if (!p.UseOtp) return new("", null, false);
+        if (askOtp() is not { } otp)
+        {
+            pol.Records.ReleaseClaim();
+            return new(null, null, true);
+        }
+        return new(otp, null, false);
+    }
+
+    public async Task<LogInResult> LogInAsync(LaunchLogin l, CancellationToken ct)
+    {
+        int code = await pol.ConnectAsync(new LoginRequest(l.Pol, l.SquareEnix, l.Otp)
+        {
+            ProfileId = l.Account.Id,
+            Progress = l.Progress,
+            AskHandleName = l.AskHandleName,
+            Options = new SessionOptions(l.Lean, l.ThirdPartyHookProfile, l.HomeSlot, HandleKey: l.Account.HandleKey),
+        }, ct);
+        return new(code, pol.LastRefusalReason);
+    }
+
+    public (string Ffxi, string Viewer, PolRegion Region)? GameFolders() =>
+        FolderSeam is { } seam ? seam()
+        : PolPaths.TryGetInstallFolder(settings.RegionOrDefault, GameProduct.Game) is { } ffxi
+          && PolPaths.TryGetInstallFolder(settings.RegionOrDefault, GameProduct.Viewer) is { } viewer
+            ? (ffxi, viewer, settings.RegionOrDefault) : null;
+
+    public async Task<GameUpdateResult> UpdateGameAsync(IProgress<PatchProgress>? progress, CancellationToken ct)
+    {
+        if (GameFolders() is not { } dirs) return new(true, false, null);
+        var update = UpdateSeam ?? PolUpdates.UpdateFfxi;
+        try
+        {
+            await Task.Run(() => update(dirs.Ffxi, dirs.Viewer, dirs.Region, progress, ct), ct);
+            return new(true, false, null);
+        }
+        catch (OperationCanceledException ex) { return new(false, true, ex); }
+        catch (Exception ex) { return new(false, false, ex); }
+    }
+
+    // where the viewer does it, after the update and right before the game starts
+    public Task<PreLaunchResult> LinkAsync(Func<string, bool> ask, Action<string> failed, Action<string> saying, Func<string?> pageWaiting,
+                                           Func<int, bool>? alive, Func<int, PolSocialSnapshot?> read) =>
+        new PreLaunchLink
+        {
+            Pid = () => pol.Pid,
+            Ask = ask,
+            Failed = failed,
+            Saying = saying,
+            PageWaiting = pageWaiting,
+            Alive = alive ?? ProcessStamp.PidRunning,
+            Read = read,
+        }.RunAsync();
+
+    // SE's installer only writes 3 of the game settings
+    public void WriteOptions(string? profileId)
+    {
+        FfxiSettings.WriteFirstStartSettings(settings.RegionOrDefault);
+        WritePolOptions(profileId);
+    }
+
+    // the game reads these from the account's option.bin when it starts, so they go in before every start
+    public void WritePolOptions(string? profileId)
+    {
+        if (PolPaths.TryGetInstallFolder(settings.RegionOrDefault, GameProduct.Viewer) is { } viewer) WritePolOptions(profileId, viewer);
+    }
+
+    public void WritePolOptions(string? profileId, string viewer)
+    {
+        try
+        {
+            if (settings.Current.Profiles.FirstOrDefault(p => p.Id == profileId) is not { } profile)
+            {
+                Log.Warning("The session's account is gone, its POL settings aren't written");
+                return;
+            }
+            var s = settings.Current;
+            using (settings.HoldLock())
+            {
+                // another copy may have changed them since this one read settings.json
+                if (settings.ReadSaved() is { } saved)
+                {
+                    s.ChatLanguageFilter = saved.ChatLanguageFilter ?? s.ChatLanguageFilter;
+                    s.AutoDisconnectMinutes = saved.AutoDisconnectMinutes ?? s.AutoDisconnectMinutes;
+                }
+            }
+            PolOptions.Apply(s, viewer, PolOptions.SlotInUse(viewer, profile.HomeSlot), settings.RegionOrDefault);
+        }
+        catch (Exception e) { Log.Warning(e, "Could not write the POL settings before the game start"); }
+    }
+
+    // right before the game starts. However it goes the game still starts, a failed one only gets a problem to show
+    public async Task<string?> BackUpAsync(string? accountBoot, Action<string>? saying, Func<LauncherSettings, string?, BackupSources?>? sources = null)
+    {
+        var s = settings.ReadSaved() ?? settings.Current;
+        if (!s.BackupGameSettings) return null;
+        saying?.Invoke(GameBackupPolicy.WorkingText);
+        var region = settings.RegionOrDefault;
+        var pick = sources ?? ((cfg, boot) => GameBackupPolicy.SourcesFor(cfg, region, boot));
+        return await Task.Run(() => GameBackupPolicy.BeforePlay(s, () => pick(s, accountBoot)));
+    }
+
+    public PlaySignal SignalPlay()
+    {
+        try
+        {
+            (SignalPlaySeam ?? pol.SignalPlay)();
+            return new(true, null);
+        }
+        catch (Exception ex)
+        {
+            return new(false, ex is CredentialKeyUnavailableException ? ex.Message : null, ex);
+        }
+    }
+
+    public Task<string?> WaitForPlayAnswerAsync() => pol.WaitForPlayAnswerAsync(PlayAnswerTimeout);
+}

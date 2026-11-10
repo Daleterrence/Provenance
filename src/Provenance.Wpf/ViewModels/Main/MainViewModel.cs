@@ -36,6 +36,7 @@ public partial class MainViewModel : ObservableObject
     private readonly PolSession _pol;
     private readonly AvatarService _avatars;
     private readonly FeedService _feeds;
+    private readonly GameLaunch _launch;
     private readonly DispatcherTimer _socialPoll, _elapsedTimer;
 
     public event Action? RequestHide;
@@ -59,6 +60,7 @@ public partial class MainViewModel : ObservableObject
             _ui.Post(() => _dialogs.Info("Settings reset", loadProblem));
         _pol = pol;
         Session = new SessionState(pol);
+        _launch = new GameLaunch(pol, settings);
         _avatars = avatars;
         _feeds = feeds;
         _timeLeft = new PhaseTimeLeft(text => TimeLeftText = text);
@@ -66,9 +68,8 @@ public partial class MainViewModel : ObservableObject
         Accounts = new AccountsViewModel(dialogs, credentials, settings, avatars);
         _socialPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _socialPoll.Tick += (_, _) => _pol.Poll();
-        Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session,
-            new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, GameFolders,
-                              () => _settings.RegionOrDefault, WritePolOptions, BackUpGameSettingsAsync));
+        Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session, _launch,
+            new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, BackUpGameSettingsAsync));
         Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, Session, () => News.WindowShown, RefreshInstallState);
         _pol.SnapshotUpdated += OnSnapshot;
         _pol.PidChanged += () => _ui.Post(() =>
@@ -328,15 +329,10 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
-    internal Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount squareEnix, string otp,
-                                           IProgress<LaunchProgress>? progress, CancellationToken token) =>
-        _pol.ConnectAsync(new LoginRequest(pol, squareEnix, otp)
-        {
-            ProfileId = p.Id,
-            Progress = progress,
-            AskHandleName = PromptHandleName,
-            Options = new SessionOptions(false, null, Accounts.EnsureHomeSlot(p), HandleKey: p.HandleKey),
-        }, token);
+    internal async Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount squareEnix, string otp,
+                                                 IProgress<LaunchProgress>? progress, CancellationToken token) =>
+        (await _launch.LogInAsync(new LaunchLogin(p, pol, squareEnix, otp, Accounts.EnsureHomeSlot(p), false, null, progress, PromptHandleName),
+                                  token)).Code;
 
     private bool CanLogin() => !IsLaunching && !Multi.Running;
 
@@ -541,18 +537,13 @@ public partial class MainViewModel : ObservableObject
         // a one-time code counts as used once typed, so the details dialog has to come first
         if (Accounts.LoadForLogIn(profile) is not { } details) return;
         var (pol, squareEnix) = details;
-        // claimed before the code's asked, so no other copy signs this account in meanwhile
-        if (!_pol.Records.TryClaimAccount(profile.Id, out var claimProblem))
+        var claim = _launch.Claim(profile, () => Accounts.AskOtp(profile, squareEnix));
+        if (claim.InUse is { } inUse)
         {
-            _dialogs.Error("Account in use", claimProblem ?? "This account is in use in another copy of Provenance.");
+            _dialogs.Error("Account in use", inUse);
             return;
         }
-        var otp = profile.UseOtp ? Accounts.AskOtp(profile, squareEnix) : "";
-        if (otp is null)
-        {
-            _pol.Records.ReleaseClaim();
-            return;
-        }
+        if (claim.Otp is not { } otp) return;
         Social.Start(profile.Id);
         Accounts.SessionProfileId = profile.Id;
         SetPhase(SessionPhase.LoggingIn);
@@ -667,24 +658,21 @@ public partial class MainViewModel : ObservableObject
             if (linked == PreLaunchResult.ShowHandles) OpenSettingsAt(SettingsTab.Handles);
             return;
         }
-        // SE's installer only writes 3 of the game settings
-        FfxiSettings.WriteFirstStartSettings(_settings.RegionOrDefault);
-        WritePolOptions(Accounts.SessionProfileId);
+        _launch.WriteOptions(Accounts.SessionProfileId);
         ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         await BackUpGameSettingsAsync(null, text => ProgressText = text);
         OnProgress(new LaunchProgress("Starting game", "Starting FINAL FANTASY XI...", 0.5));
-        try { _pol.SignalPlay(); }
-        catch (Exception ex)
+        var signal = _launch.SignalPlay();
+        if (!signal.Sent)
         {
-            Log.Error(ex, "Could not signal Play");
+            Log.Error(signal.Error, "Could not signal Play");
             SetPhase(SessionPhase.LoggedIn);
             _dialogs.Error("Can't start FINAL FANTASY XI",
-                ex is CredentialKeyUnavailableException ? ex.Message : "Provenance couldn't tell PlayOnline to start the game. Try again.",
-                offerLogs: true);
+                signal.KeyProblem ?? "Provenance couldn't tell PlayOnline to start the game. Try again.", offerLogs: true);
             return;
         }
         SetPhase(SessionPhase.InGame);
-        if (await _pol.WaitForPlayAnswerAsync(PlayAnswerTimeout) is { } failed)
+        if (await _launch.WaitForPlayAnswerAsync() is { } failed)
         {
             SetPhase(SessionPhase.LoggedOut);
             _pol.Prestarter.Prestart();
@@ -708,29 +696,23 @@ public partial class MainViewModel : ObservableObject
         if (ended is not null) _dialogs.Error("Can't start FINAL FANTASY XI", ended, offerLogs: true);
     }
 
-    internal static readonly TimeSpan PlayAnswerTimeout = TimeSpan.FromSeconds(15);
-
     // a test says whether its made-up session is still there
     internal Func<int, bool>? SessionAliveForTest { get; set; }
 
-    // where the viewer does it, after the update and right before the game starts
     internal Task<PreLaunchResult> LinkBeforePlayAsync()
     {
         ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
-        return new PreLaunchLink
-        {
-            Pid = () => _pol.Pid,
-            Ask = text => Asking(() => _dialogs.YesNo(PreLaunchLink.Title, text), text),
-            Failed = text => Asking(() =>
+        return _launch.LinkAsync(
+            ask: text => Asking(() => _dialogs.YesNo(PreLaunchLink.Title, text), text),
+            failed: text => Asking(() =>
             {
                 _dialogs.Error(PreLaunchLink.Title, text);
                 return true;
             }, text),
-            Saying = text => ProgressText = text,
-            PageWaiting = () => Handles.Busy ? Handles.Note.Text : null,
-            Alive = SessionAliveForTest ?? ProcessStamp.PidRunning,
-            Read = _ => Social.Last,
-        }.RunAsync();
+            saying: text => ProgressText = text,
+            pageWaiting: () => Handles.Busy ? Handles.Note.Text : null,
+            alive: SessionAliveForTest,
+            read: _ => Social.Last);
     }
 
     // the footer's "has to wait till the game's closed" isn't true while the answer can still stop it starting
@@ -742,73 +724,33 @@ public partial class MainViewModel : ObservableObject
         finally { if (Social.StatusNote == "") Social.StatusNote = note; }
     }
 
-    // the game reads these from the account's option.bin when it starts, so they go in before every start
-    private void WritePolOptions(string? profileId)
-    {
-        if (PolPaths.TryGetInstallFolder(_settings.RegionOrDefault, GameProduct.Viewer) is { } viewer) WritePolOptions(profileId, viewer);
-    }
-
-    internal void WritePolOptions(string? profileId, string viewer)
-    {
-        try
-        {
-            if (Accounts.Profiles.FirstOrDefault(p => p.Id == profileId) is not { } profile)
-            {
-                Log.Warning("The session's account is gone, its POL settings aren't written");
-                return;
-            }
-            var s = _settings.Current;
-            using (_settings.HoldLock())
-            {
-                // another copy may have changed them since this one read settings.json
-                if (_settings.ReadSaved() is { } saved)
-                {
-                    s.ChatLanguageFilter = saved.ChatLanguageFilter ?? s.ChatLanguageFilter;
-                    s.AutoDisconnectMinutes = saved.AutoDisconnectMinutes ?? s.AutoDisconnectMinutes;
-                }
-            }
-            PolOptions.Apply(s, viewer, PolOptions.SlotInUse(viewer, profile.HomeSlot), _settings.RegionOrDefault);
-        }
-        catch (Exception e) { Log.Warning(e, "Could not write the POL settings before the game start"); }
-    }
+    internal void WritePolOptions(string? profileId, string viewer) => _launch.WritePolOptions(profileId, viewer);
 
     // a test points it at made-up folders
     internal Func<LauncherSettings, string?, BackupSources?>? GameBackupSourcesForTest { get; set; }
 
-    // right before the game starts. However it goes the game still starts, a failed one only gets a notice
+    // however it goes the game still starts, a failed backup only gets a notice
     internal async Task BackUpGameSettingsAsync(string? accountBoot, Action<string>? saying = null)
     {
-        var s = _settings.ReadSaved() ?? _settings.Current;
-        if (!s.BackupGameSettings) return;
-        saying?.Invoke(GameBackupPolicy.WorkingText);
-        var region = _settings.RegionOrDefault;
-        var sources = GameBackupSourcesForTest ?? ((settings, boot) => GameBackupPolicy.SourcesFor(settings, region, boot));
-        if (await Task.Run(() => GameBackupPolicy.BeforePlay(s, () => sources(s, accountBoot))) is { } problem)
+        if (await _launch.BackUpAsync(accountBoot, saying, GameBackupSourcesForTest) is { } problem)
             Notice.Show(problem, "AlertCircleOutline", stays: true);
     }
 
-    private (string Ffxi, string Viewer, PolRegion Region)? GameFolders() =>
-        PolPaths.TryGetInstallFolder(_settings.RegionOrDefault, GameProduct.Game) is { } ffxi
-        && PolPaths.TryGetInstallFolder(_settings.RegionOrDefault, GameProduct.Viewer) is { } viewer
-            ? (ffxi, viewer, _settings.RegionOrDefault) : null;
-
     internal async Task<bool> UpdateGameAsync()
     {
-        if (GameFolders() is not { } dirs) return true;
+        if (_launch.GameFolders() is null) return true;
         var ct = BeginCancellable("Updating FINAL FANTASY XI", "Checking for FINAL FANTASY XI updates...");
         var progress = new Progress<PatchProgress>(p => OnProgress(LaunchProgress.Updating("Updating", p, 0.01, 0.99)));
         try
         {
-            await Task.Run(() => PolUpdates.UpdateFfxi(dirs.Ffxi, dirs.Viewer, dirs.Region, progress, ct), ct);
-            return true;
-        }
-        catch (OperationCanceledException)
-        {
-            Notice.Show("The FINAL FANTASY XI update was stopped. Press Play to continue it.", "InformationOutline");
-            return false;
-        }
-        catch (Exception ex)
-        {
+            var result = await _launch.UpdateGameAsync(progress, ct);
+            if (result.Done) return true;
+            if (result.Cancelled)
+            {
+                Notice.Show("The FINAL FANTASY XI update was stopped. Press Play to continue it.", "InformationOutline");
+                return false;
+            }
+            var ex = result.Error!;
             Log.Error(ex, "FINAL FANTASY XI update failed");
             bool inUse = ex is UnauthorizedAccessException || ex.HResult is unchecked((int)0x80070020) or unchecked((int)0x80070021);
             _dialogs.Error("Couldn't update FINAL FANTASY XI",
