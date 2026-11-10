@@ -41,6 +41,12 @@ public partial class App : Application
         // before the first window, the update one included, so nothing opens in the other theme first
         AppTheme.Apply(AppTheme.FromSettingsFile(SettingsService.DefaultPath));
 
+        if (!args.AfterUpdate && TrayCopy.ReuseRunning())
+        {
+            Shutdown(0);
+            return;
+        }
+
         // first, so an update can restart the app straight away. Closing the update window or the error card mustn't end the app
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         if (await SelfUpdate.RunAsync(args, noAutoLogin: shiftAtStart))

@@ -33,6 +33,29 @@ public partial class MainWindow : AppWindow
 
     private MainViewModel? Vm => DataContext as MainViewModel;
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle)?.AddHook(OnWindowMessage);
+    }
+
+    // a second copy asking: 1 when this one was in the tray with nobody logged in and has come back for it
+    private IntPtr OnWindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if ((uint)msg != TrayCopy.Message) return IntPtr.Zero;
+        handled = true;
+        return TryReuseFromTray() ? 1 : 0;
+    }
+
+    private bool TryReuseFromTray()
+    {
+        if (Vm is not { } vm || !TrayCopy.Reusable(_tray is { Visible: true }, !IsVisible, vm.LoggedIn, vm.IsLaunching || vm.LoggingIn, vm.Multi.Running))
+            return false;
+        // queued, the other copy's stuck inside SendMessage until this returns and COM calls fail while it is
+        Dispatcher.InvokeAsync(ShowFromTray);
+        return true;
+    }
+
     // fixed design size, so on a small or scaled screen (1366x768 at 125%, say) the whole thing scales down
     private void FitWorkArea()
     {

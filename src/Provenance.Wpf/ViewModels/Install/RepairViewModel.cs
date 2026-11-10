@@ -34,7 +34,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
     private volatile bool _fixing;     // as the registry pass or DXSETUP starts
     internal bool _started;
     private DownloadMeter? _meter;
-    private GameProduct? _product;     // the one GameRepair's last said it's working on
+    private GameProduct _product = GameProduct.Viewer;   // the one GameRepair's last said it's working on, the viewer goes first
     private bool _repairing;           // the stage has moved from checking to repairing
 
     // Enter and Esc both answer no, the yes takes DAT mods away for good
@@ -52,7 +52,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
 
     public bool Finished => !Running && _started;
 
-    [ObservableProperty] private string _stage = StageText(null, false);
+    [ObservableProperty] private string _stage = StageText(GameProduct.Viewer, false);
     [ObservableProperty] private string _status = CheckingText;
     [ObservableProperty] private bool _failed;
     [ObservableProperty] private bool _succeeded;
@@ -81,8 +81,8 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
     [RelayCommand]
     private void ToggleDetails() => ShowDetails = !ShowDetails;
 
-    internal static string StageText(GameProduct? product, bool repairing) =>
-        $"{(repairing ? "Repairing" : "Checking")} your {(product is null ? "game" : product.Name)} files...";
+    internal static string StageText(GameProduct product, bool repairing) =>
+        $"{(repairing ? "Repairing" : "Checking")} your {product.Name} files...";
 
     // a stop has put its own words up, a product starting after it mustn't take them back
     internal void ShowProduct(GameProduct product)

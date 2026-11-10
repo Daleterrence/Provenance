@@ -61,7 +61,7 @@ public sealed class SessionRecords
                 // multi-account mode lets go of its games, so a game's record might have no live copy
                 problem = GameRunningFor(profileId)
                     ? "FINAL FANTASY XI is already running on this account. Log in again once you've closed that game."
-                    : "Another copy of Provenance is already logged in to this account, or logging in. Use that copy, or log out there first.";
+                    : "You're already logged in to this account in another copy of Provenance. If its window is closed, you can reopen it from the tray icon.";
                 return false;
             }
             ReleaseClaim();
