@@ -73,13 +73,11 @@ static int group_chat_joined(BYTE *b)
     return pc_has(b, SV_GCHAT_CHANNEL) && pc_gchat_channel(b, ch) == 0;
 }
 static void group_chat_force_leave(BYTE *b) { if (pc_has(b, SV_GCHAT_FORCE_LEAVE)) pc_gchat_force_leave(b); }
-/* polcore's one waiting line (its base64), cleared once polcore's sent it or given up on it */
 static int group_chat_line_held(BYTE *b)
 {
     return !IsBadReadPtr(pc_gchat_line_held(b), 1) && *pc_gchat_line_held(b) != 0;
 }
 
-/* my row in the group, -1 when polcore hasn't got one for me */
 static int group_chat_my_row(BYTE *b, DWORD lo, DWORD hi, grp_mem *m)
 {
     for (int i = 0; i < 64; i++)
@@ -268,8 +266,8 @@ static void group_chat_send_pump(BYTE *b)
         return;
     }
     if (g_gc_send != GS_QUEUED) return;
-    /* NOTICE never gets an answer, so my own copy coming back is the only sign it went. polcore echoes as it lets go
-       of the line, so gone with no echo means not sent */
+    /* NOTICE never gets an answer, so my own copy coming back is the only sign it went.
+       polcore echoes as it lets go, so gone with no echo means not sent */
     if (g_gc_echo) { g_gc_send = GS_NONE; group_chat_send_state("sent"); }
     /* with no row for me in the group polcore can't echo (it looks me up first), so gone is all there is to go on,
        and the app shows the line itself */
@@ -279,7 +277,6 @@ static void group_chat_send_pump(BYTE *b)
     }
 }
 
-/* every hold loop turn. Requests on control turns only */
 static void group_chat_pump(BYTE *b, int ctl)
 {
     if (g_s.draining) return;
@@ -374,7 +371,6 @@ static void group_chat_group_going(BYTE *b, DWORD lo, DWORD hi)
         group_chat_out("gone");
     } else group_chat_end_by(b, "gone", 0, until);
 }
-/* the sign-out's svc 0x6c8 has already dropped it */
 static void group_chat_signed_out(void)
 {
     if (g_gc_st != GC_OUT) group_chat_out("lost");

@@ -11,7 +11,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// The Windower side of the Windower/Ashita page: the picked profile's console key and Windows key, and the branch
 public partial class WindowerCard : ObservableObject
 {
     private readonly IProfileHost _hook;
@@ -127,8 +126,8 @@ public partial class WindowerCard : ObservableObject
 
     public void CancelConsoleKey() => WaitingForConsoleKey = false;
 
-    // a key in DirectInput's numbering. Esc gives up, one Windower can't use as its console key is ignored and the
-    // wait goes on, and any other becomes the key and saves straight away
+    // a key in DirectInput's numbering. Esc gives up, one Windower can't use as its console key is ignored and the wait goes on,
+    // any other becomes the key and saves
     public void PressConsoleKey(int code)
     {
         if (!WaitingForConsoleKey) return;

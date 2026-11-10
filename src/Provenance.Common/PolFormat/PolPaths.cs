@@ -10,7 +10,6 @@ public static class PolPaths
 {
     private static readonly PolRegion[] Order = [PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan];
 
-    // the regions Provenance logs in and plays on
     public static bool Supported(PolRegion? region) => region is PolRegion.UnitedStates or PolRegion.Europe or PolRegion.Japan;
 
     // Japan keeps its settings under SQUARE, the others under SquareEnix
@@ -28,7 +27,6 @@ public static class PolPaths
         _ => throw new ArgumentOutOfRangeException(nameof(region)),
     };
 
-    // how the text on screen names each version
     public static string VersionName(PolRegion region) => region switch
     {
         PolRegion.Europe => "European",
@@ -36,7 +34,6 @@ public static class PolPaths
         _ => "North American",
     };
 
-    // the installer's region list names places, everywhere else names versions
     public static string RegionName(PolRegion region) => region switch
     {
         PolRegion.Europe => "Europe",

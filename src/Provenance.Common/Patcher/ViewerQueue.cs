@@ -5,7 +5,6 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Patcher;
 
-// what startpol.exe does on the viewer's next start, for files a running viewer had open when they updated
 public static class ViewerQueue
 {
     // SE's writer, in the ANSI code page like startpol.exe's reader

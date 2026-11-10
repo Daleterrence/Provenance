@@ -1,6 +1,6 @@
-/* uninstall.c - the Add/Remove Programs uninstaller for the POL and FFXI installs Provenance applies itself (no
-   Windows Installer, so no MsiExec /X). Built twice, once per product with FFXI_UNINSTALL for the game's, so the
-   UAC prompt names the right one. Run as <this exe> "<install>\Uninstall\{ProductCode}.txt" [/quiet] [/all]
+/* the Add/Remove Programs uninstaller for the POL and FFXI installs Provenance applies itself (no Windows Installer).
+   Built twice, once per product with FFXI_UNINSTALL for the game's, so the UAC prompt names the right one.
+   Run as <this exe> "<install>\Uninstall\{ProductCode}.txt" [/quiet] [/all]
    It asks whether to keep the player's own settings (the product folder's USER or usr, and the K key), Yes by
    default. /quiet asks nothing and keeps them, /all removes them too.
    The .txt is UTF-16LE, one item per line:
@@ -20,14 +20,14 @@
                                         in there goes as a link, its target stays
      D <folder>                         removed when empty, deepest first
      L <key>                            one of the three region keys, HKLM, 32-bit view. Removed with its subkeys by the
-                                        last product out, and only once its InstallFolder names no other product. With
-                                        settings kept, its SquareEnix (SQUARE on Japanese installs) settings stay. The I
-                                        folder goes too once it's empty. Removing everything still leaves the other
-                                        product's settings when they were kept at its own uninstall: its record's gone,
-                                        and its settings key and its usr or USER folder are both still there
-   The .txt can sit somewhere anyone can write to, so I, R, K and L only count when this product's own InstallFolder
-   value under the L key (HKLM, admins only) names the R folder exactly. And nothing runs at all unless only
-   Administrators and SYSTEM own or can change the .txt and its folder */
+                                        last product out, once its InstallFolder names no other product. With settings
+                                        kept, its SquareEnix (SQUARE on Japanese installs) settings stay, and so does
+                                        the I folder until it's empty. Removing everything still leaves the other
+                                        product's settings if they were kept at its own uninstall (its record's gone,
+                                        its settings key and usr or USER folder are both still there)
+   The .txt can sit somewhere anyone can write, so I, R, K and L only count when this product's InstallFolder under
+   the L key (HKLM, admins only) names the R folder exactly. Nothing runs unless only Administrators and SYSTEM own
+   or can change the .txt and its folder */
 #define UNICODE
 #define _UNICODE
 #include <windows.h>
@@ -114,7 +114,6 @@ static int shared_root(const wchar_t *key)
            !_wcsicmp(key, L"SOFTWARE\\Classes\\CLSID");
 }
 
-/* deletes a key with no values and no subkeys, then its parent the same way */
 static void prune(HKEY root, wchar_t *key)
 {
     for (;;) {
@@ -207,8 +206,8 @@ static int delete_open(HANDLE h)
     return SetFileInformationByHandle(h, FileDispositionInfo, &yes, sizeof yes);
 }
 
-/* in use, so it goes at the next restart, renamed aside first or a reinstall meanwhile loses its fresh copy. Into
-   dir's real path, as a rename relative to its handle is denied */
+/* in use, so it goes at the next restart, renamed aside first so a reinstall doesn't lose its fresh copy.
+   Into dir's real path, a handle-relative rename is denied */
 static void later(HANDLE dir, HANDLE h)
 {
     struct { FILE_RENAME_INFO i; wchar_t more[MAX_PATH * 2 + 64]; } r;
@@ -261,7 +260,6 @@ static void empty_folder(HANDLE h)
     }
 }
 
-/* a file, a link (never what it points at) or a folder with everything in it */
 static void remove_entry(HANDLE dir, const wchar_t *name, size_t len, int folder)
 {
     size_t at = wcslen(g_path) + 1;
@@ -291,8 +289,8 @@ static void remove_entry(HANDLE dir, const wchar_t *name, size_t len, int folder
     g_path[at - 1] = 0;
 }
 
-/* an R line. The root has to be a real folder at the path the I line gives (not reached through a link or a SUBST
-   drive), and the target strictly inside it */
+/* an R line. The root must be a real folder at the I line's path (no link or SUBST drive),
+   and the target strictly inside it */
 static void remove_tree(const wchar_t *target)
 {
     wchar_t full[MAX_PATH * 2], real[MAX_PATH * 2 + 8], want[MAX_PATH * 2 + 8];
@@ -365,8 +363,8 @@ static void clear_but(HKEY k, const wchar_t *only)
     }
 }
 
-/* the other product's settings it kept: its record's gone (this is the last one out), its key and its kept folder are
-   both still there. A link in place of the folder doesn't count */
+/* the other product's kept settings: record gone (we're the last out), key and kept folder both still there.
+   A link in place of the folder doesn't count */
 static int other_kept(const wchar_t *region)
 {
     wchar_t key[600], folder[MAX_PATH * 2];
@@ -409,7 +407,6 @@ static void clear_except_settings(HKEY k, const wchar_t *only)
     }
 }
 
-/* settings stay, keys with nothing in them go. Says whether anything's left */
 static int keep_settings(HKEY k)
 {
     wchar_t name[256];
@@ -451,7 +448,6 @@ static void remove_region(const wchar_t *key)
     }
 }
 
-/* an X:\ path made full, no trailing \ */
 static int full_path(const wchar_t *in, wchar_t *out, DWORD size)
 {
     DWORD n = local_path(in) ? GetFullPathNameW(in, size, out, NULL) : 0;
@@ -469,7 +465,6 @@ static cursor lines_of(wchar_t *text, DWORD chars)
     return c;
 }
 
-/* the next "<kind> <argument>" line, the argument running up to *eol */
 static int next_line(cursor *c, wchar_t *kind, wchar_t **arg, wchar_t **eol)
 {
     while (c->p < c->end) {
@@ -699,7 +694,6 @@ static void run(wchar_t *text, DWORD chars, wchar_t kind)
     }
 }
 
-/* dir is the Uninstall folder this program's in */
 static void remove_all(wchar_t *text, DWORD chars, const wchar_t *record, const wchar_t *dir)
 {
     wchar_t pattern[MAX_PATH + 8];
@@ -754,7 +748,6 @@ static void options(int argc, wchar_t **argv, int *quiet)
     }
 }
 
-/* what the ending adds when the player's settings stayed */
 static void kept_text(wchar_t *out, size_t size)
 {
     size_t n;

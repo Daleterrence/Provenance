@@ -2,13 +2,12 @@ using System.Text;
 
 namespace Provenance.Common.PolFormat;
 
-// which profile pics a user can pick, by category, from their own install (proface0.txt categories, proface1.txt pics).
+// from the user's own install: proface0.txt categories, proface1.txt pics.
 // Both are XORed with their own file name as a repeating ASCII key (very sneaky, SE), then UTF-16LE
 public static class ProfilePictureCatalog
 {
     public sealed record Category(string Name, string Key, int RegionMask);
 
-    // Id is the sheet and cell (ProfilePictureSheets.IdOf), the id stored on the handle
     public sealed record ProfilePicture(int Id, string Name, string Artist, string CategoryKey);
 
     public sealed record Catalog(IReadOnlyList<Category> Categories, IReadOnlyList<ProfilePicture> ProfilePictures);

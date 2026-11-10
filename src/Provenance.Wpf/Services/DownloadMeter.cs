@@ -3,8 +3,8 @@ using Provenance.Common.Progress;
 
 namespace Provenance.Wpf.Services;
 
-// The bar and the text under it, UI thread only. Sampled every second so a stall shows the rate dropping and the time
-// left going away. The bar never goes back within a step, a retry that takes bytes back just holds it
+// UI thread only. Sampled every second so a stall shows.
+// The bar never goes back within a step, a retry that takes bytes back just holds it
 public sealed class DownloadMeter
 {
     private readonly TransferRate _rate = new(TimeSpan.FromSeconds(5));
@@ -32,9 +32,8 @@ public sealed class DownloadMeter
         };
     }
 
-    // fraction is what the bar shows, under 0 leaves the bar alone. A new step starts the bar and the pace over.
-    // download false is local work (checking, unpacking), which shows no rate. amount false leaves the bar text to
-    // whoever already shows the sizes and just keeps the time left
+    // fraction under 0 leaves the bar alone. download false is local work (checking, unpacking) with no rate,
+    // amount false leaves the bar text to whoever shows the sizes
     public void Update(long done, long total, double fraction, bool download = true, bool amount = true, object? step = null)
     {
         long now = Environment.TickCount64;
@@ -55,7 +54,6 @@ public sealed class DownloadMeter
         Show();
     }
 
-    // for a stage that has a fraction but no bytes
     public void Bar(double fraction, object? step = null)
     {
         bool newStep = NewStep(step);
@@ -79,7 +77,6 @@ public sealed class DownloadMeter
         _showTimeLeft?.Invoke("");
     }
 
-    // Clear, and the bar starts again from the left
     public void Restart()
     {
         Clear();

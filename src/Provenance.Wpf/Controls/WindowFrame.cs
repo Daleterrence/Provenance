@@ -71,7 +71,6 @@ internal static class WindowFrame
         var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         if (monitor == IntPtr.Zero || !User32.GetMonitorInfo(monitor, ref mi)) return IntPtr.Zero;
         var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
-        // the position's relative to the monitor
         mmi.ptMaxPosition.X = mi.rcWork.Left - mi.rcMonitor.Left;
         mmi.ptMaxPosition.Y = mi.rcWork.Top - mi.rcMonitor.Top;
         mmi.ptMaxSize.X = mi.rcWork.Right - mi.rcWork.Left;

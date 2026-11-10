@@ -4,7 +4,6 @@ using Provenance.Common.Game.Windower;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// what a scan found, so a Windower page and an Ashita one each take their own
 internal abstract record AddonsScan;
 
 internal sealed record WindowerScan(IReadOnlyList<WindowerPluginInfo> Plugins, IReadOnlyList<WindowerAddonInfo> Addons, WindowerAddonTree? Tree) : AddonsScan

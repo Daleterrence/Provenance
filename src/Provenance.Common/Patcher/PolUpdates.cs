@@ -6,7 +6,6 @@ using Serilog;
 
 namespace Provenance.Common.Patcher;
 
-// same two moments as the viewer: its own update at each sign-in and FFXI's when Play's pressed
 public static class PolUpdates
 {
     // freeFiles ends my waiting pol.exe before any file changes

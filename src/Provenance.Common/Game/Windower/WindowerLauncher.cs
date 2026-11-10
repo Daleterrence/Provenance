@@ -23,7 +23,6 @@ public sealed class WindowerLauncher : IDisposable
     internal const string LockName = @"Local\ProvenanceWindowerLaunch";
     public static readonly TimeSpan WatcherLimit = TimeSpan.FromSeconds(90);
     public static readonly TimeSpan UpdateLimit = TimeSpan.FromMinutes(2);
-    // a whole turn can be the update and then the watcher
     public static readonly TimeSpan TurnWait = UpdateLimit + WatcherLimit + TimeSpan.FromSeconds(30);
 
     public const string UpdateNoticeText = "Windower couldn't be fully updated this time, so the game starts with the files it already has.";

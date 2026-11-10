@@ -1,10 +1,9 @@
 namespace Provenance.Common.Game;
 
-// everything one launch started, by parent pid, with start times checked since a reused pid is always younger than its
-// child. Members are held open, so a child still counts once its parent's gone
+// everything one launch started, by parent pid. Start times are checked (a reused pid is younger than its child),
+// members held open so a child counts once its parent's gone
 public sealed class LaunchTree : IDisposable
 {
-    // Hold's null for one that's there but can't be opened
     public sealed record Opened(IDisposable? Hold, DateTime? StartUtc);
 
     private sealed record Member(DateTime Start, string ExeName, IDisposable? Hold);
@@ -39,7 +38,7 @@ public sealed class LaunchTree : IDisposable
             foreach (var e in snapshot)
             {
                 if (_members.ContainsKey(e.Pid) || e.ParentPid == e.Pid || !_members.TryGetValue(e.ParentPid, out var parent)) continue;
-                if (_open(e.Pid) is not { } opened) continue;   // gone already
+                if (_open(e.Pid) is not { } opened) continue;
                 if (opened is not { Hold: { } hold, StartUtc: { } start })
                 {
                     _unreadable.Add(e.ExeName);

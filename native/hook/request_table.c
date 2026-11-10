@@ -1,5 +1,5 @@
-/* every request the app can write, one row each: which lists it's in, where a refusal's token goes, and what the job it
-   starts is doing (JB_ bits). A row with none of that is in no list */
+/* every request the app can write, one row each: its lists, where a refusal's token goes,
+   and the JB_ bits of the job it starts */
 #define SWITCHING "failed:handle changing"
 
 enum { JB_DB = 1, JB_WRITE = 2, JB_WAIT = 4, JB_SWITCH = 8 };
@@ -104,8 +104,8 @@ static void requests_sweep(void)
         DeleteFileA(p);
     }
 }
-/* while a switch runs, a write is taken and answered as not done, it'd go from the new handle otherwise. A chat
-   enter waiting when the switch is taken is called off the same way */
+/* during a switch a write is taken and answered as not done, it'd go from the new handle otherwise.
+   A chat enter already waiting is called off the same way */
 static void handles_writes_refuse(void)
 {
     char buf[512], *p, *l1, *l2, *l3;

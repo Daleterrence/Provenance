@@ -1,7 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours">
-    <!-- a row that can be picked, the same hover and selection in every list -->
     <Style x:Key="RowItem" TargetType="ListBoxItem">
         <Setter Property="Padding" Value="0" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -55,7 +54,6 @@
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
     </Style>
 
-    <!-- a row of tabs, the open one underlined as well as coloured. State.IsCurrent is true on the open one -->
     <Style x:Key="UnderlineTab" TargetType="ButtonBase">
         <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
         <Setter Property="FontSize" Value="12" />
@@ -93,7 +91,6 @@
         </Style.Triggers>
     </Style>
 
-    <!-- a round button with no text, the open one ringed in the accent. State.IsCurrent is true on the open one -->
     <Style x:Key="RoundTab" TargetType="ButtonBase">
         <Setter Property="Padding" Value="3" />
         <Setter Property="Margin" Value="0,0,8,0" />

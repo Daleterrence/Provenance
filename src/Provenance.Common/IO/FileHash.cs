@@ -16,7 +16,6 @@ public static class FileHash
         return sha;
     }
 
-    // from the start of the stream, wherever it's got to
     public static string Sha256(Stream s)
     {
         if (s.CanSeek) s.Position = 0;

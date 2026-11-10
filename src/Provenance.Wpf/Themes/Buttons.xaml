@@ -134,7 +134,6 @@
         </Style.Resources>
     </Style>
 
-    <!-- the big log in and cancel buttons -->
     <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource PolButton}">
         <Setter Property="Effect" Value="{DynamicResource Btn.Shadow}" />
         <Style.Triggers>
@@ -152,7 +151,6 @@
         </Style.Triggers>
     </Style>
 
-    <!-- a folder box's button, in the column after it -->
     <Style x:Key="BrowseButton" TargetType="Button" BasedOn="{StaticResource PolButton}">
         <Setter Property="Grid.Column" Value="1" />
         <Setter Property="Margin" Value="8,0,0,0" />
@@ -195,7 +193,6 @@
         </Style.Triggers>
     </Style>
 
-    <!-- icons with no text: no fill till they're hovered -->
     <Style x:Key="IconButton" TargetType="ButtonBase">
         <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
         <Setter Property="Background" Value="Transparent" />
@@ -254,7 +251,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- only on the signed-out cards, a signed-in pol.exe keeps the files a repair replaces open -->
     <Style x:Key="RepairButton" TargetType="Button" BasedOn="{StaticResource PolButton}">
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="Height" Value="28" />

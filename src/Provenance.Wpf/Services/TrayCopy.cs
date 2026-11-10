@@ -6,7 +6,7 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// A second Provenance asks the copies already running whether one of them is sitting in the tray with nobody logged in,
+// a second Provenance asks the running copies if one's in the tray with nobody logged in,
 // and if so that one comes back and the second just closes
 internal static class TrayCopy
 {

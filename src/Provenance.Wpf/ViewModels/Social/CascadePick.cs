@@ -35,7 +35,6 @@ public sealed partial class CascadePick : ObservableObject
 
     public bool IsSet => Top is { } t && t != _notSet;
 
-    // 0 for Not set, a table code, or null while the pick's half done
     public long? Code => !_touched ? _initial : !IsSet ? 0 : Leaf?.Code;
 
     public void Set(long code)

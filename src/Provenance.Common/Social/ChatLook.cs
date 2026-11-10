@@ -37,8 +37,8 @@ public static class ChatLook
         _ => "",
     } : "";
 
-    // the hook builds a room's IRC name as a #, its language in 2 hex, its use and kind letters, then its index. Kind U
-    // is a room a user made, any other is one of SE's
+    // the hook builds a room's IRC name as #, language in 2 hex, use and kind letters, then index.
+    // Kind U is a room a user made, any other is SE's
     private const int KindAt = 4;
     public static bool Official(string irc) => irc.Length > KindAt && irc[KindAt] != 'U';
 }

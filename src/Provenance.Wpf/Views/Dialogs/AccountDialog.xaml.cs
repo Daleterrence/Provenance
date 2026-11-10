@@ -6,7 +6,7 @@ using Provenance.Wpf.ViewModels.Dialogs;
 
 namespace Provenance.Wpf.Views.Dialogs;
 
-// The only place the IDs and passwords get typed, they stay off screen everywhere else
+// The only place the IDs and passwords get typed
 public partial class AccountDialog : AppWindow
 {
     public AccountDialogResult? Result { get; private set; }

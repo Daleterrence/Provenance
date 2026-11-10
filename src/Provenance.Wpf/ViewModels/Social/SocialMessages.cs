@@ -215,11 +215,9 @@ public sealed partial class SocialMessages : ObservableObject
     public static string ClearConversationQuestion(string name) =>
         $"Delete every message with {name} that Provenance has kept on this PC? This can't be undone.";
 
-    // a line's own menu (Copy is the view's), delete is this PC's copy of it
     public IReadOnlyList<MenuAction> LineMenu(ChatEntry entry) =>
         [new("Delete message", ChatStore.CanDelete(entry), () => DeleteLine(entry))];
 
-    // the friends window's conversation header shows the friend's menu too, so everything's reachable from a conversation
     public IReadOnlyList<MenuAction> ConversationMenu(FriendItem f, Action<FriendItem>? openConversation = null)
     {
         var menu = _social.FriendMenu(f, openConversation).ToList();

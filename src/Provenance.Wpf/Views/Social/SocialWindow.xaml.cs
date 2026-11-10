@@ -281,7 +281,6 @@ public partial class SocialWindow : AppWindow
         Menus.ShowBelow(menu, button);
     }
 
-    // a line's own menu: copy, or delete this PC's copy of it
     private void OnLineMenu(object sender, ContextMenuEventArgs e)
     {
         if (Vm is not { } vm || sender is not TextBox { DataContext: ChatEntry entry, ContextMenu: { } menu } box)

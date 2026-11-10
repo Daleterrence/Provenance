@@ -96,7 +96,6 @@ public sealed partial class AccountFormViewModel : ObservableObject
         _tool = ToolFacts.ForSource(_otpSource);
     }
 
-    // the first look for the source's tool, and what it says. Called once the view's ready for it
     internal void Start() => _ = LookForToolAsync();
 
     public void Close() => _toolWork.Cancel();
@@ -242,7 +241,6 @@ public sealed partial class AccountFormViewModel : ObservableObject
         };
     }
 
-    // the tool's own button: install, or once it's ready 1Password's settings
     public Task PressToolButton()
     {
         if (_view != ToolView.Ready) return InstallAsync();

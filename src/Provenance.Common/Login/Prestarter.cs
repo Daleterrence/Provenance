@@ -37,7 +37,7 @@ public sealed class Prestarter
     private readonly Func<Prestarted?> _start;
     private volatile bool _closed;
     private Task<Prestarted?>? _prestart;
-    private int _prestartHolds;   // under _gate
+    private int _prestartHolds;
 
     // the gate is the session's, so a pre-start and a session starting can't miss each other
     internal Prestarter(ISettingsService settings, Watcher watcher, OurPol pol, Func<bool> sessionActive, object gate, Seams? seams = null)
@@ -68,7 +68,6 @@ public sealed class Prestarter
         }
     }
 
-    // under _gate
     private bool MayPrestart() =>
         _prestart == null && !_sessionActive() && _prestartHolds == 0
         && _settings.Current.ThirdPartyHookPlatform is not (ThirdPartyHook.Ashita or ThirdPartyHook.Windower)
@@ -128,8 +127,8 @@ public sealed class Prestarter
     private static bool GameInstalled(PolRegion region) =>
         PolPaths.TryGetInstallFolder(region, GameProduct.Game) is { } ffxi && File.Exists(Path.Combine(ffxi, GameProduct.Game.KeyFile));
 
-    // nothing's sent till the go file's written, so a cancel before then leaves it waiting, hidden, for the next login.
-    // Only a live one goes back, a dead one would block a fresh Prestart
+    // nothing's sent till the go file's written, so an earlier cancel leaves it waiting, hidden, for the next login.
+    // Only a live one goes back (a dead one would block a Prestart)
     internal int? TakePrestarted(ProcessStartInfo psi, CancellationToken ct)
     {
         if (TakePrestart(ct) is not { } pre) return null;
@@ -236,8 +235,8 @@ public sealed class Prestarter
         EndWaitingPrestarts();
     }
 
-    // other copies' waiting pre-starts hold the viewer's files too (their next login just starts another). One already
-    // being handed to a login has lost its record by the time this has the lock
+    // other copies' waiting pre-starts hold the viewer's files too (their next login just starts another).
+    // One being handed to a login has already lost its record by then
     internal void EndWaitingPrestarts()
     {
         var ending = new List<ProcessStamp>();

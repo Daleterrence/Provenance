@@ -6,8 +6,8 @@ namespace Provenance.Common.Hook;
 
 public sealed record WatcherRun(int ExitCode, string Out, string Err);
 
-// Provenance Watcher starts or attaches to pol.exe and puts pol_hook.dll in it. Each launch path builds the same
-// process, waits for it the same way and asks the same questions when Windows refuses it
+// Watcher starts or attaches to pol.exe and puts pol_hook.dll in it.
+// Each launch path builds, waits and handles Windows refusing it the same way
 public static class WatcherProcess
 {
     public static string HookDllPath => Path.Combine(HookFiles.NativeDir, HookFiles.HookDll);

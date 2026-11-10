@@ -1,4 +1,3 @@
-/* how much of each string the snapshot has room for */
 enum { SNAPSHOT_NAME_CAP = 64, SNAPSHOT_STATE_CAP = 110, SNAPSHOT_GROUP_CAP = 96, SNAPSHOT_TEXT_CAP = 96,
        SNAPSHOT_COMMENT_CAP = 0x33 * 3 + 8 };
 

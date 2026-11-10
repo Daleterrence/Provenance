@@ -92,7 +92,6 @@ public sealed partial class AshitaScript
     private static IOException SaveFailed(string full, Exception e) =>
         Shown.Mark(new IOException($"Provenance couldn't save the Ashita script {Path.GetFileName(full)}.", e));
 
-    // the highest folder FoldersTo checks
     private string Top(string dir) => scriptsDir is not null && PathInside.Contains(scriptsDir, dir) ? scriptsDir : Path.GetDirectoryName(dir) ?? dir;
 
     private List<string> FoldersTo(string full)
@@ -149,7 +148,6 @@ public sealed partial class AshitaScript
         return false;
     }
 
-    // makes scripts\<bootname>.txt from the current script and hands back its name for the boot config
     public static string CopyFor(string ashitaDir, string? script, string bootName)
     {
         var stem = SafeStem(bootName);

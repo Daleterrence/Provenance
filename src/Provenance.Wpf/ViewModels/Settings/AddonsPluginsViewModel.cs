@@ -56,7 +56,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     public ObservableCollection<string> Tabs { get; } = ["Addons", "Plugins"];
 
-    // the same order as AddonKind
     public int Tab
     {
         get => _tab;
@@ -93,8 +92,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
     partial void OnNoAddonsChanged(string? value) => _addonsHeading.Note = value;
     partial void OnNoPluginsChanged(string? value) => _pluginsHeading.Note = value;
 
-    // Ashita's POL plugins tab goes with it, but not while a page is loading, so another boot config keeps it
-    // picked. Addons gets picked before it goes, or the strip would be left with nothing
+    // Ashita's POL plugins tab goes with it, but not while a page loads, so another boot config keeps it picked.
+    // Addons is picked first or the strip would be left empty
     private void SyncTabs(AddonsPage page)
     {
         if (page.Message is not null) return;
@@ -122,7 +121,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
         if (visible) Refreshing = RefreshAsync();
     }
 
-    // the Windower/Ashita tab picked another folder or profile
     internal void TargetChanged()
     {
         if (_visible) Refreshing = RefreshAsync();

@@ -1,5 +1,4 @@
-/* addresses.c - where each of polcore.h's addresses is in the current pol.exe/polcore build, the bytes of some code
-   that uses it, and the resolver that finds them all again before anything's read or patched. */
+/* where each polcore.h address is in the current pol.exe and polcore build, the bytes of code that uses it, and the resolver that finds them */
 #define IN_EXE 0
 #define IN_POLCORE 1
 #define IS_DATA 0
@@ -10,8 +9,8 @@
 
 /* the list stamps' setter, which picks the server's or mine by its argument */
 #define SIG_STAMPS "8b 44 24 04 85 c0 b8 ?? ?? ?? ?? 75 05 b8 ?? ?? ?? ?? 8b 4c 24 08 85 c9 74 02 89 08"
-/* CreateDialogParamW(hinst, 0x67, NULL, splash proc, 0). hInstance now comes off a global instead of a register, so
-   there's an extra "ff 35" load before the call than there was in 1.18.15e */
+/* CreateDialogParamW(hinst, 0x67, NULL, splash proc, 0). hInstance comes off a global, so there's an extra "ff 35" load
+       before the call */
 #define SIG_SPLASH "6a 00 68 ?? ?? ?? ?? 6a 00 6a 67 ff 35 ?? ?? ?? ?? ff 15 ?? ?? ?? ??"
 
 static struct hook_addr g_addr[ADDRESS_COUNT] = {
@@ -20,10 +19,8 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .usual = 0x27030, .sig_at = 0x27030, .operand = ADDR_MATCH,
         .sig = "55 8b ec 6a ff 68 ?? ?? ?? ?? 64 a1 00 00 00 00 50 81 ec 88 08 00 00 a1 ?? ?? ?? ?? 33 c5 89 45 f0 "
             "56 57 50 8d 45 f4 64 a3 00 00 00 00 8b f1 80 7e 21 01" },
-    /* the other content launchers are the same code bar their addresses, so this starts at the GUID the right one
-       asks FFXiEntry for and checks the bytes that address points at. The call at the end has to be the do-nothing
-       trace function the hook takes over - usual now points straight at that call (pol_hook.c patches it directly),
-       not at the vtable call 9 bytes before it like it used to */
+    /* other launchers share this code bar addresses, so it starts at the GUID the right one asks FFXiEntry for.
+       The last call is the do-nothing trace the hook takes over */
     [AT_GAME_RETURN] = { .name = "game return", .module = IN_EXE, .code = IS_CODE, .required = REQUIRED,
         .usual = 0x20c58, .sig_at = 0x20bf4, .operand = ADDR_MATCH,
         .sig = "51 68 ?? ?? ?? ?? 6a 17 6a 00 50 ff 15 ?? ?? ?? ?? 85 c0 0f 88 ?? ?? ?? ?? "
@@ -52,8 +49,7 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .usual = 0x5cd90, .sig_at = 0x697c, .operand = 2,
         .sig = "8b 0d ?? ?? ?? ?? 8b c1 83 e8 00 74 ?? 83 e8 01 74 ??" },
 
-    /* the COM getter that hands the service table over. Picked up an EBP frame and its argument moved from
-       [esp+8] to [ebp+0xc], same as the other sites that grew a frame this build */
+    /* the COM getter that hands the service table over. Starts on its EBP frame, the argument's at [ebp+0xc] */
     [AT_SERVICES] = { .name = "service table", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
         .usual = 0xc4180, .sig_at = 0x51f85, .operand = 8,
         .sig = "55 8b ec 8b 45 0c c7 00 ?? ?? ?? ?? 33 c0 5d c2 08 00" },
@@ -148,8 +144,8 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .sig = "8d 44 24 18 8d 54 09 08 52 68 ?? ?? ?? ??" },
 };
 
-/* a module as the resolver sees it: its image, what the addresses in its code are relative to (its base at run time,
-   the file's ImageBase for a copy that isn't relocated), its .text as offsets and its section table */
+/* a module as the resolver sees it: image, what its code addresses are relative to (run-time base, or ImageBase for an
+   unrelocated copy), .text offsets and sections */
 typedef struct {
     BYTE *image;
     DWORD opbase, text, text_end, size;
@@ -269,8 +265,8 @@ static int addr_scan(const struct hook_addr *e, const addr_module *m, DWORD *fir
     return hits;
 }
 
-/* where it always was if it fits there, else the one place in .text it fits, else nowhere (at 0). hits is how many
-   places it fitted in, so 1 and 0 at means the address it gave was no good */
+/* tries the old address, then the one place in .text it fits, else 0. hits counts the places it fitted,
+   so 1 with 0 at means the old address was bad */
 static void addr_find(struct hook_addr *e, const addr_module *m)
 {
     DWORD off = e->sig_at;
@@ -279,7 +275,6 @@ static void addr_find(struct hook_addr *e, const addr_module *m)
     e->at = e->hits == 1 ? addr_from(e, m, off) : 0;
 }
 
-/* why an entry that didn't resolve didn't, for the log and the report */
 static const char *addr_why(const struct hook_addr *e)
 {
     return e->hits > 1 ? "more than one match" : e->hits ? "its address makes no sense" : "no match";

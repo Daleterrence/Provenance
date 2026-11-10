@@ -83,7 +83,6 @@ public partial class FriendsList : UserControl
         if (List.SelectedItem is FriendItem f) Activate(f);
     }
 
-    // a request or invitation gets the viewer's answer window (Ignore lives on the right-click menu)
     internal void Activate(FriendItem f)
     {
         if (!f.IsRequest && !f.IsGroupInvite)

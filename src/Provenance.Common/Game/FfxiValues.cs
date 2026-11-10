@@ -7,7 +7,6 @@ public abstract class FfxiValue
     public bool Windower { get; init; }
 }
 
-// a DWORD behind a field of FfxiSettings
 public class IntValue : FfxiValue
 {
     public required Func<FfxiSettings, int> Get { get; init; }
@@ -24,7 +23,6 @@ public class IntValue : FfxiValue
     public int AshitaClamp(int v) => (AshitaRange ?? Range)(v);
 }
 
-// a float's bits in a DWORD
 public sealed class BrightnessValue : IntValue;
 
 // no setting behind it, the tool's default is all it gets
@@ -39,15 +37,13 @@ public sealed class TextValue : FfxiValue
     public required Action<FfxiSettings, string> Set { get; init; }
 }
 
-// padmode000, six numbers in a string
 public sealed class PadValue : FfxiValue;
 
 // not ours to edit, Ashita gives the game a blank for it
 public sealed class OpaqueValue : FfxiValue;
 
-// FFXI's numbered registry values, once. 0001/0002, 0003/0004 and 0037/0038 are pairs, 0028 is float bits. 0030
-// (3D LCD) and 0041 are legacy-tool only, the rest of the Fixed ones have no UI. All get the tool's defaults
-// (0031 is 0.006f). 0044 and 0045 aren't among the values Ashita fakes, so they stay registry only
+// pairs: 0001/0002, 0003/0004, 0037/0038. 0028 is float bits, 0031 is 0.006f. Legacy-tool only: 0030 (3D LCD), 0041.
+// Registry only, Ashita doesn't fake them: 0044, 0045
 public static class FfxiValues
 {
     private static Func<int, int> Clamp(int min, int max) => v => Math.Clamp(v, min, max);

@@ -8,7 +8,7 @@ public sealed class MailSendQueue
 {
     public const int AtOnce = 2;
     private readonly Queue<(int Row, string Name, string Token, string Text)> _queue = new();
-    // the pol.exe each went to, and what the hook last said about it and when ("sending" once its PUT's started)
+    // HookState is the hook's last word on it ("sending" once its PUT's started), HookSaid when
     private readonly record struct SendOut(string Token, DateTime At, int Pid, string HookState = "",
                                            DateTime HookSaid = default);
     private readonly List<SendOut> _inFlight = new();
@@ -40,7 +40,6 @@ public sealed class MailSendQueue
         return keep;
     }
 
-    // true when a line in the log changed state
     public bool Add(ChatStore chat, int row, string name, string key, string text, int? pid, bool blocked)
     {
         var token = HookFiles.NewToken();
@@ -49,7 +48,6 @@ public sealed class MailSendQueue
         return Pump(chat, pid, blocked);
     }
 
-    // blocked is the game running or a handle switch. True when a line in the log changed state
     public bool Pump(ChatStore? chat, int? pid, bool blocked)
     {
         bool changed = false;

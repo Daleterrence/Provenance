@@ -15,9 +15,7 @@ public interface IDialogs
     void Info(string title, string body);
     void Error(string title, string body, bool offerLogs = false);
     bool Confirm(string title, string body, string ok, ConfirmStyle style = ConfirmStyle.Normal, string? cancel = null);
-    // 0 or 1 for the choice, null when cancelled
     int? Choose(string title, string body, string ok, string first, string second, ConfirmStyle style = ConfirmStyle.Normal);
-    // validate gives the problem shown under the box, null when it's fine
     string? Ask(string title, string prompt, string initial = "", int maxLength = 64, bool allowEmpty = false,
                 Func<string, string?>? validate = null);
     string? AskSecret(string title, string prompt, int maxLength = 64, Func<string, string?>? validate = null);

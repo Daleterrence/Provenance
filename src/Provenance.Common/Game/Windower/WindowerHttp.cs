@@ -13,7 +13,6 @@ public sealed record WindowerServers(Uri Files, Uri Res, Uri GitHubApi, Uri GitH
         new Uri("https://api.github.com/repos/Windower/Lua/"), new Uri("https://github.com/Windower/Lua/archive/"));
 }
 
-// HostOffline: that host didn't answer earlier in the run, so nothing was sent
 public enum WindowerFetchOutcome { Downloaded, NotModified, HttpError, Unreachable, HostOffline, Broken }
 
 public readonly record struct WindowerFetch(WindowerFetchOutcome Outcome, string Host, int Status = 0)

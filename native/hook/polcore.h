@@ -1,6 +1,5 @@
-/* polcore.h - what the hook knows about polcore's insides, and the few places in pol.exe it uses, each address and
-   record layout written once. The layouts are 1.18.15e's, which US, EU and JP share. b is always the polcore module's
-   base. */
+/* polcore's insides and the few places in pol.exe the hook uses, each written once.
+   Layouts are 1.18.15e's, shared by US, EU and JP. b is always polcore's base */
 #ifndef POLCORE_H
 #define POLCORE_H
 #include <stddef.h>
@@ -10,7 +9,6 @@
 /* every fixed address the hook uses. addresses.c has where each one is in 1.18.15e and finds them all again before
    any gets used, in case a POL update's moved them */
 enum hook_address {
-    /* pol.exe */
     AT_MENU_SESSION,        /* the menu session, jumped over to the hook's own */
     AT_GAME_RETURN,         /* the content launcher's GameStart call, the trace call after it gets the hook's thunk */
     AT_CREATE_MUTEX_SLOT,   /* WinMain's MSLU slots, hooked while they still point at MSLU's own stub */
@@ -19,7 +17,6 @@ enum hook_address {
     AT_SPLASH_PROC,         /* the startup splash's dialog proc, only ever compared */
     AT_SPLASH_CLOSE,        /* destroys the splash on the thread that made it */
     AT_REGION_INDEX,        /* int, 0 JP, 1 US, 2 EU, set from env.dat before a polcore loads */
-    /* polcore */
     AT_SERVICES,            /* the service table, function pointers indexed by byte offset */
     AT_SHA1_INIT,           /* polcore's own SHA-1, the secret hash uses it */
     AT_SHA1_UPDATE,
@@ -120,7 +117,6 @@ static int pc_has(BYTE *b, unsigned off) { return pc_slot(b, off) != NULL; }
 
 #include "polcore_records.h"
 
-/* Session, text and misc */
 #define SV_SJIS_TO_WIDE            0xa38   /* POL's Shift-JIS (EU's Latin extension too) to UTF-16, no bound on src */
 PC_SVC3(int, pc_sjis_to_wide, SV_SJIS_TO_WIDE, WCHAR *, dst, const char *, src, int, repl)
 #define SV_WIDE_TO_SJIS            0xa40   /* UTF-16 to Shift-JIS, a NULL dst measures. Never fails, repl goes in for what SJIS hasn't got */
@@ -157,7 +153,6 @@ static int pc_my_status_or(BYTE *b, int none) { return pc_has(b, SV_MY_STATUS) ?
 PC_SVC0(int, pc_current_handle, SV_CURRENT_HANDLE)
 static int pc_current_handle_or(BYTE *b, int none) { return pc_has(b, SV_CURRENT_HANDLE) ? pc_current_handle(b) : none; }
 
-/* Login */
 #define SV_CLEAR_ERROR     0xd10
 PC_SVC0(int, pc_clear_error, SV_CLEAR_ERROR)
 #define SV_NOTICE_STATUS           0xd20   /* the account notice code from the login result */
@@ -197,7 +192,6 @@ static BYTE *pc_option_record(BYTE *b, const char *name)
 #define SV_SET_IDLE_TIMEOUT        0x11d4   /* polcore's idle disconnect, in ms */
 PC_SVC1_V(void, pc_set_idle_timeout, SV_SET_IDLE_TIMEOUT, int, ms)
 
-/* Loads and their polls (one start and one check each, a job ticket in between) */
 #define SV_STATUS_LOAD     0x5d8
 PC_SVC0(int, pc_status_load, SV_STATUS_LOAD)
 #define SV_STATUS_CHECK    0x5dc
@@ -227,7 +221,6 @@ PC_SVC1(int, pc_cancel_job, SV_CANCEL_JOB, int, job)
 #define SV_FREE_JOB                0x4dc   /* frees a job slot and makes every job poll return 0 for the next 10s */
 PC_SVC1_V(void, pc_free_job, SV_FREE_JOB, int, job)
 
-/* Handles and Content IDs */
 #define SV_GET_HANDLE      0x2b4
 PC_SVC2(int, pc_get_handle, SV_GET_HANDLE, unsigned, slot, pol_handle *, out)
 #define SV_SET_HANDLE      0x2b8
@@ -253,7 +246,6 @@ PC_SVC0(int, pc_links_save, SV_LINKS_SAVE)
 #define SV_LINKS_SAVE_CHECK 0x103c
 PC_SVC1(int, pc_links_save_check, SV_LINKS_SAVE_CHECK, int, job)
 
-/* Friends, ignore list, comment */
 #define SV_IGNORE_COPY     0x2a4
 PC_SVC2(int, pc_ignore_copy, SV_IGNORE_COPY, int, row, void *, out)
 #define SV_FRIEND_COPY     0x5cc
@@ -281,7 +273,6 @@ PC_SVC1(int, pc_in_chat_refresh, SV_IN_CHAT_REFRESH, int, a)
 #define SV_MY_COMMENT      0x688
 PC_SVC2(int, pc_my_comment, SV_MY_COMMENT, int, who, WCHAR *, out)
 
-/* Messages */
 #define SV_MAIL_LIST               0x524   /* starts the inbox list into an 8-aligned array of headers */
 PC_SVC2(int, pc_mail_list, SV_MAIL_LIST, void *, out, int, max)
 #define SV_MAIL_LIST_CHECK 0x528
@@ -318,7 +309,6 @@ PC_SVC0(int, pc_new_mail_flag, SV_NEW_MAIL_FLAG)
 #define SV_SET_NEW_MAIL_FLAG 0x1464
 PC_SVC1_V(void, pc_set_new_mail_flag, SV_SET_NEW_MAIL_FLAG, int, flag)
 
-/* Profile databases (the .pib and .pfb files) */
 #define SV_PIB_LOAD                0x494   /* turns a loaded .pib's offsets into pointers in place */
 static pdb_schema *pc_pib_load(BYTE *b, void *pib_file)
 {
@@ -370,7 +360,6 @@ static int pc_away_text(BYTE *b, void *pib, void *pfb, void *rec, int row, char 
     return ((int (__cdecl *)(void *, void *, void *, int, char *, int, char *, int))pc_slot(b, SV_AWAY_TEXT))(pib, pfb, rec, row, text, text_cap, from, from_cap);
 }
 
-/* Friend groups */
 #define SV_GROUP_CREATE    0x608
 PC_SVC2(int, pc_group_create, SV_GROUP_CREATE, const char *, name, int, slot)
 #define SV_GROUP_CREATE_CHECK      0x60c   /* poll of group_create, the new group's id */
@@ -394,7 +383,6 @@ PC_SVC1(int, pc_group_comment_check, SV_GROUP_COMMENT_CHECK, int, job)
 #define SV_GROUP_IDS       0x648
 PC_SVC1(int, pc_group_ids, SV_GROUP_IDS, DWORD *, ids)
 
-/* Group chat */
 #define SV_GCHAT_START             0x6a8   /* starts joining a group's chat, 0 when polcore's busy */
 static int pc_gchat_start(BYTE *b, DWORD lo, DWORD hi, const WCHAR *a, const WCHAR *b_, const WCHAR *c, void *callback, int d, int e, int f, int g, int h)
 {
@@ -415,7 +403,6 @@ PC_SVC0_V(void, pc_gchat_sign_out, SV_GCHAT_SIGN_OUT)
 #define SV_GCHAT_CHANNEL           0x6cc   /* 0 when I'm in a group chat, its channel in out */
 PC_SVC1(int, pc_gchat_channel, SV_GCHAT_CHANNEL, char *, out)
 
-/* Chat rooms (the IRC link) */
 #define SV_CHAT_SESSION            0xcd0   /* the link's session, below 0 without one */
 PC_SVC0(int, pc_chat_session, SV_CHAT_SESSION)
 #define SV_CHAT_UNIQUE_TEXT        0x224   /* text unique to now and this login */
@@ -480,10 +467,10 @@ PC_SVC0(int, pc_file_init, SV_FILE_INIT)
 #define SV_SET_USER_SLOT           0xd98   /* SET_USER_SLOT, the pub\homeNN folder */
 PC_SVC1(int, pc_set_user_slot, SV_SET_USER_SLOT, int, slot)
 
-/* a handle record is in use when bit 0 of lo is set. The Handle ID is bits 1-44 of lo and hi together, and bits 13-18 of
-   hi are the slot it's in. handle_get is 0 for a slot that has none, and fills h either way */
+/* in use when bit 0 of lo is set. Handle ID is bits 1-44 of lo and hi together, slot is bits 13-18 of hi */
 static unsigned __int64 hid_of(DWORD lo, DWORD hi) { return (((unsigned __int64)hi << 32 | lo) >> 1) & 0xfffffffffffULL; }
 static unsigned __int64 handle_hid(const pol_handle *h) { return hid_of(h->lo, h->hi); }
+/* 0 for a slot that has none, and fills h either way */
 static int handle_get(BYTE *b, int slot, pol_handle *h)
 {
     memset(h, 0, sizeof *h);

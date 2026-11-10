@@ -3,7 +3,6 @@ using System.Text;
 
 namespace Provenance.Common.Game.ThirdParty;
 
-// what a row on the Addons and plugins page shows. Each platform's own bits sit next to it, not in it
 public sealed record AddonListing(string Key, string Name, string? Version, string? Author, string? Description, string? Location)
 {
     public static AddonListing Named(string key) => new(key, key, null, null, null, null);

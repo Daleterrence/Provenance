@@ -45,7 +45,6 @@ public sealed class WindowerProfile
         return c;
     }
 
-    // the names settings.xml uses, anything else (Auto included) is no region
     private static readonly (PolRegion Region, string Name)[] RegionNames =
         [(PolRegion.Japan, "JP"), (PolRegion.UnitedStates, "US"), (PolRegion.Europe, "EU")];
 

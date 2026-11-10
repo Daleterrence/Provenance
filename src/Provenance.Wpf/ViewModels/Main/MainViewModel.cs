@@ -46,7 +46,6 @@ public partial class MainViewModel : ObservableObject
     public event Action? RequestShow;
     public event Action? RequestRestart;
     public event Action? RequestExit;
-    // true when there's a notice to show as a tray tip, false for the taskbar alone
     public event Action<bool>? RequestAttention;
     public event Action? AttentionCleared;
 
@@ -467,7 +466,6 @@ public partial class MainViewModel : ObservableObject
         else OpenSocial();
     }
 
-    // the window OpenSocial brings up, where requests and invitations are answered
     internal string FriendsWindowTitle => _windows.FriendsTitle;
 
     [RelayCommand]
@@ -478,7 +476,6 @@ public partial class MainViewModel : ObservableObject
         _windows.ShowFriends(Social);
     }
 
-    // groups live on the friends side's Groups tab
     [RelayCommand]
     private void OpenGroups()
     {
@@ -487,7 +484,6 @@ public partial class MainViewModel : ObservableObject
         _windows.ShowFriends(Social);
     }
 
-    // split, that's the Messages window on its own
     [RelayCommand]
     private void OpenMessages()
     {
@@ -900,8 +896,8 @@ public partial class MainViewModel : ObservableObject
             if (!string.IsNullOrWhiteSpace(url)) Log.Warning("Not opening a link that is not a web link: {Url}", url);
             return;
         }
-        // the app runs elevated, so a browser started from here would be too. explorer.exe (full path, a bare name's
-        // looked for in the app folder first) hands it to the user's own shell.
+        // elevated, so a browser started from here would be too. explorer.exe (full path, a bare name's looked for in the
+        // app folder first) hands it to the user's shell
         try
         {
             var psi = new ProcessStartInfo(AppPaths.ExplorerExe) { UseShellExecute = false };

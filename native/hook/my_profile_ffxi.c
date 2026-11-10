@@ -1,4 +1,3 @@
-/* my FFXI character's privacy, the second half of my_profile.c */
 /* my characters' tabs on the viewer's editor (app.dll 0x10228190), read only */
 static unsigned __int64 g_xi_ctid;
 static DWORD g_xi_ctsid;
@@ -74,7 +73,6 @@ static void my_profile_xi_request(BYTE *b)
     g_xi.t0 = GetTickCount64();
     my_profile_xi_load_start(b, &g_xi);
 }
-/* the answer's members, name and wn already quoted */
 static void my_profile_xi_build(const char *nm, const char *wn)
 {
     jw w = {0};

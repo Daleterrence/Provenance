@@ -21,7 +21,6 @@ public sealed class AshitaIniFile
         ("ashita.boot", "file", 259), ("ashita.boot", "command", 1023), ("import", "import", 255),
     ];
 
-    // as Settings labels them
     private static readonly (string Section, string Key, string Label)[] Labels =
     [
         ("ashita.launcher", "name", "The name"), ("ashita.boot", "script", "The script"),

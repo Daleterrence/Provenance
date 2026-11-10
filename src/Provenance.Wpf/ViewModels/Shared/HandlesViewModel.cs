@@ -84,7 +84,6 @@ public partial class HandlesViewModel : ObservableObject
     // why a switch can't go right now (something open that's bound to the active handle), or null
     public Func<string?>? SwitchBlocked { get; set; }
 
-    // a multi-account run's lean sessions take no requests
     public void Refresh()
     {
         if (_session is not { } session || _snapshot is null) return;
@@ -93,7 +92,6 @@ public partial class HandlesViewModel : ObservableObject
                session.GameRunning ? HandleList.ReadOnlyText : session.InMultiRun ? HandleList.MultiRunText : null);
     }
 
-    // readOnly is the line saying why, null when changes can be made
     public void Update(PolSocialSnapshot? snap, bool loggedIn, string? readOnly)
     {
         LoggedIn = loggedIn && snap != null;
@@ -164,7 +162,6 @@ public partial class HandlesViewModel : ObservableObject
         LinkTargets(c).Select(to => new MenuAction(to.Name, !to.Full, () => Link(c, to)) { Detail = to.Full ? HandleList.LimitText : "" })
                       .ToList();
 
-    // the handles a character could go to, with the full ones greyed
     public IReadOnlyList<HandleRow> LinkTargets(HandleCharacterRow c) =>
         c.Character.Orphan ? [] : Rows.Where(r => r.Handle.Slot != c.Handle?.Slot).ToList();
 

@@ -21,7 +21,6 @@ public static class Menus
         foreach (var action in actions) menu.Items.Add(Build(action));
     }
 
-    // Copy first, then the line's own actions
     public static void FillLine(ContextMenu menu, TextBox? box, IEnumerable<MenuAction> actions)
     {
         Fill(menu, actions);

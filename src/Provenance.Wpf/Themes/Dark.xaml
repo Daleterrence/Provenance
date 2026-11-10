@@ -2,7 +2,6 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime"
                     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes">
-    <!-- Light.xaml has the same keys, AppTheme swaps one for the other -->
     <Color x:Key="Theme.MaterialPrimary">#6A9BD8</Color>
 
     <SolidColorBrush x:Key="Bg.Base"        Color="#0A0E14" />
@@ -11,13 +10,11 @@
     <Color x:Key="Surface.2.Color">#18202E</Color>
     <SolidColorBrush x:Key="Surface.2"      Color="{StaticResource Surface.2.Color}" />
     <SolidColorBrush x:Key="Surface.3"      Color="#222C3D" />
-    <!-- the crystal shows whole on dark, Light.xaml fades its glow -->
     <RadialGradientBrush x:Key="Logo.Mask">
         <GradientStop Color="Black" Offset="0" />
         <GradientStop Color="Black" Offset="1" />
     </RadialGradientBrush>
     <sys:Double x:Key="Field.HintOpacity">0.56</sys:Double>
-    <!-- TitleBar.xaml has the colours for what's on the title strips -->
     <SolidColorBrush x:Key="Title.Bg"       Color="#121824" />
     <SolidColorBrush x:Key="Title.Edge"     Color="#263041" />
     <SolidColorBrush x:Key="Title.FieldText" Color="#ECF1F7" />

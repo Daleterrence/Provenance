@@ -12,7 +12,6 @@ using Velopack.Locators;
 
 namespace Provenance.Wpf.Services;
 
-// Provenance's own updates, from updates.provenancexi.app, checked once at start-up before anything else runs
 public static class SelfUpdate
 {
     public const string UpdateServer = "https://updates.provenancexi.app/";
@@ -185,8 +184,8 @@ public static class SelfUpdate
 
     internal static void QueueHandOver(Action start, string[] restartArgs) => _handOver = new HandOver(start, restartArgs);
 
-    // Update.exe starts at the end of the exit with no wait, told to wait on our pid it gets "Access is denied" opening
-    // the elevated process. False if it won't start, restartArgs is then what to start the app again with
+    // Update.exe starts at the end of the exit with no wait (told to wait on our pid it gets "Access is denied" on the
+    // elevated process). False if it won't start
     internal static bool HandOverAfterExit(out string[] restartArgs)
     {
         restartArgs = [];

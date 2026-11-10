@@ -48,7 +48,6 @@ public static class GameFilesLock
         return gate is not null;
     }
 
-    // null when another update or repair still held it after the timeout
     internal static IDisposable? TryLock(Job job, TimeSpan timeout, CancellationToken ct = default) =>
         AdminLock.TryAcquire("update", timeout, ct) is { } gate ? new Holding(gate, job) : null;
 

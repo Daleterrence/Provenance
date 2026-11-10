@@ -5,9 +5,8 @@ using Serilog;
 
 namespace Provenance.Common.Game.Windower;
 
-// One update run's hold on the Windower folder. Windower's way of replacing a file: the old one's renamed into
-// updates\temp\<guid> (that works on a loaded DLL or EXE too) and the new one moved in. Guard runs right before every
-// move, and throws when a folder on the way has turned into a link
+// Windower's way of replacing a file: old one renamed into updates\temp\<guid> (works on a loaded DLL or EXE),
+// new one moved in. Throws on a link in the way
 internal sealed class WindowerUpdateFolder : IDisposable
 {
     // ERROR_REPARSE_POINT_ENCOUNTERED, so a refusal isn't retried like a sharing violation
@@ -50,8 +49,8 @@ internal sealed class WindowerUpdateFolder : IDisposable
         return Path.Combine(TempDir, Guid.NewGuid().ToString());
     }
 
-    // Downloads into a fresh temp file. Temp is null when nothing usable came down, and why is in Errors. Whatever's
-    // left in updates	emp is Cleanup's. Fetch says how it went either way, a 304 isn't an error
+    // Downloads into a fresh temp file, null when nothing usable came down (why's in Errors). Whatever's left in updates\temp
+    // is Cleanup's, and a 304 isn't an error
     public async Task<(WindowerFetch Fetch, string? Temp)> FetchToTemp(Uri site, string url, DateTime? since, string what,
                                                                        Func<string, bool>? usable = null, string? unusable = null)
     {

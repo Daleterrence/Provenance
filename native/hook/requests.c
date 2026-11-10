@@ -74,8 +74,8 @@ static int requests_take_ex(const char *ext, char *buf, int cap, char **grown, D
         n = requests_read_taken(taken, buf, cap, grown, most);
     } else {
         if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) return -1;
-        /* rename first, so anything written after is next turn's file, never one deleted unread. One a scanner holds
-           waits (i am vry gud with computer and this was easy to find, honest! :X) */
+        /* rename first, so anything written after is next turn's file, never deleted unread.
+           One a scanner holds waits (i am vry gud with computer, honest! :X) */
         if (!MoveFileExA(path, taken, MOVEFILE_REPLACE_EXISTING)) return -1;
         n = requests_read_taken(taken, buf, cap, grown, most);
     }

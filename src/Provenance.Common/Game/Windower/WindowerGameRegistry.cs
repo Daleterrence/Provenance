@@ -11,7 +11,6 @@ public static class WindowerGameRegistry
 {
     private const string DefaultPadMode = "0,0,0,0,0,0";
 
-    // the rows FfxiValues flags as Windower's, in its order, each one from the profile
     public static IReadOnlyList<WindowerRegistryValue> Values(WindowerProfile profile, int width, int height, object? padMode = null)
     {
         var s = WindowerSizes.For(profile.UIScale, width, height);

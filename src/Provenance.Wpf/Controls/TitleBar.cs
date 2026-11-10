@@ -47,9 +47,7 @@ public class TitleBar : ContentControl
     private static DependencyProperty Register(string name, Type type, object? value) =>
         DependencyProperty.Register(name, type, typeof(TitleBar), new PropertyMetadata(value));
 
-    // the window's own title when none's set
     public string? Title { get => (string?)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
-    // the crystal unless IconContent has something else
     public ImageSource? Icon { get => (ImageSource?)GetValue(IconProperty); set => SetValue(IconProperty, value); }
     public object? IconContent { get => GetValue(IconContentProperty); set => SetValue(IconContentProperty, value); }
     public double TitleSize { get => (double)GetValue(TitleSizeProperty); set => SetValue(TitleSizeProperty, value); }

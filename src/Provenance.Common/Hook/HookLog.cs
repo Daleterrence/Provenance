@@ -4,8 +4,6 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Hook;
 
-// reads pol_hook's log and turns each line into a HookEvent. What it looks for are the lg() lines in pol_hook.c, named
-// in HookContract.LogLines
 public sealed class HookLog
 {
     private static readonly Regex Language = new(Regex.Escape(HookContract.LogLines.ViewerLang) + @"(\d+)", RegexOptions.Compiled);
@@ -71,11 +69,12 @@ public sealed class HookLog
         return lines;
     }
 
-    // the hook only appends, so a reused pid's log starts with an older pol.exe's lines. DllMain's first line opens
-    // each run, so the last one's this pol.exe's. Latin1 keeps one char per byte, so Start is a byte offset too
+    // the hook only appends, so a reused pid's log starts with older pol.exe runs.
+    // DllMain's first line opens each run, so the last is this pol.exe's
     private static (string Text, long Start) ThisRun(string path)
     {
         using var fs = SharedFile.OpenRead(path);
+        // Latin1 is one char per byte, so Start is a byte offset
         using var sr = new StreamReader(fs, Encoding.Latin1, detectEncodingFromByteOrderMarks: false);
         var text = sr.ReadToEnd();
         int at = text.LastIndexOf(HookContract.LogLines.FirstLine, StringComparison.Ordinal);
@@ -126,7 +125,6 @@ public sealed class HookLog
         return null;
     }
 
-    // Provenance Watcher.exe's output, null if it didn't say it started a pol.exe
     public static int? StartedPid(string watcherOutput) =>
         WatcherPid.Match(watcherOutput) is { Success: true } m && int.TryParse(m.Groups[1].Value, out var pid) ? pid : null;
 

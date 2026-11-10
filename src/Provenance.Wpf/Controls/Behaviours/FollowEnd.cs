@@ -6,8 +6,8 @@ using System.Windows.Threading;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// A chat log's scroll viewer follows new lines, but only if the reader was already at the end, so scrolling back in a
-// busy room doesn't get undone. Pin picks the changes that always come into view (a line you just sent, say)
+// follows new lines only if the reader was already at the end, so scrolling back isn't undone.
+// Pin picks the changes that always come into view (a line you just sent)
 public static class FollowEnd
 {
     // how close to the end still counts as being there

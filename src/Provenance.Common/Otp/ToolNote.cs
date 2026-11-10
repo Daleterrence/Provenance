@@ -3,7 +3,6 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Otp;
 
-// what's kept next to each tool: the version it said it was when it went in, and when an update was last looked for
 internal sealed record ToolNote(string Version, DateTime Checked)
 {
     private static readonly TimeSpan CheckEvery = TimeSpan.FromDays(1);

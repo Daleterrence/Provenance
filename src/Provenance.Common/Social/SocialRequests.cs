@@ -2,7 +2,6 @@ using Provenance.Common.Hook;
 
 namespace Provenance.Common.Social;
 
-// the hook's per-session requests, each one a list of its fields in the order the hook reads them
 public static class SocialRequests
 {
     public static bool SetStatus(int pid, PolStatus status) =>
@@ -71,7 +70,6 @@ public static class SocialRequests
     public static bool LeaveGroup(int pid, string token, string groupId) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "leave", token, groupId, "", "", "", "");
 
-    // memberKey is the member's, so a changed list gets refused
     public static bool SetMemberRole(int pid, string token, string groupId, int memberIndex, GroupRole role, string memberKey) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "class", token, groupId, memberIndex, (int)role, "", memberKey);
 
@@ -82,18 +80,15 @@ public static class SocialRequests
     public static bool InviteToGroup(int pid, string token, string groupId, int friendRow, string subject, string text, string friendKey) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "invite", token, groupId, friendRow, subject, text, friendKey);
 
-    // messageId is the invitation's, subject what's sent back
     public static bool AnswerGroupInvite(int pid, string token, bool accept, int messageId, string subject) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, accept ? "accept" : "decline", token, "", messageId, subject, "", "");
 
     public static bool SetComment(int pid, string token, string text) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Comment, token, text);
 
-    // the hook only looks it up while a friend's on that character
     public static bool RequestCharacter(int pid, string token, CharacterId id) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Character, token, id.Ctsid, (uint)id.Ctid, (uint)(id.Ctid >> 32));
 
-    // which of the friend's game slots, the hook takes the character's ids from the slot itself
     public static bool RequestFfxiProfile(int pid, string token, int friendRow, string friendKey, int slot) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.FfxiProfile, token, friendRow, friendKey, slot);
 

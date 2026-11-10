@@ -8,8 +8,8 @@ namespace Provenance.Common.Social;
 // Name is empty when there's none to show, Why says which: "private" or "not found"
 public sealed record KnownCharacter(string Name, string Why = "");
 
-// FFXI characters already looked up, keyed "ctsid:ctid", so each one's only asked for once ever. A Private record and
-// no record at all are kept too, they won't answer any differently next time
+// keyed "ctsid:ctid", so each character's only asked for once.
+// A Private record and no record at all are kept too, they won't answer any differently
 public sealed class CharacterNames
 {
     // bump it if what gets kept ever turns out wrong, older files then load as empty
@@ -45,7 +45,6 @@ public sealed class CharacterNames
         Save();
     }
 
-    // picks up what another copy of Provenance saved since, only reading the file when it's changed
     public void Refresh()
     {
         if (_path is null) return;
@@ -56,8 +55,8 @@ public sealed class CharacterNames
         foreach (var (key, c) in Read(_path)) _known.TryAdd(key, c);
     }
 
-    // what's worth keeping from the hook's answer, null for anything that might go differently next time. Other error
-    // codes and an empty name aren't kept, nobody's seen what those mean for an FFXI profile yet
+    // null for anything that might go differently next time.
+    // Other error codes and an empty name aren't kept, nobody's seen what those mean for an FFXI profile yet
     public static KnownCharacter? FromAnswer(string state, PolCharacterLookup? r) => state switch
     {
         "done" when r is { NameState: ProfileFieldState.Shown, Name.Length: > 0 } => new(r.Name),
@@ -68,8 +67,8 @@ public sealed class CharacterNames
         _ => null,
     };
 
-    // a profile tab's read: whatever name it shows, so an old one never outlives a record gone private. A shown record
-    // with no name isn't kept (nobody knows what that means yet), like FromAnswer
+    // whatever name the tab shows, so an old one never outlives a record gone private.
+    // A shown record with no name isn't kept (nobody knows what that means yet)
     public static KnownCharacter? FromProfile(PolFfxiProfile r) =>
         r is { NameState: ProfileFieldState.Shown, Name.Length: > 0 } ? new(r.Name)
         : r.NameState == ProfileFieldState.Private ? new("", "private") : null;

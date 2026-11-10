@@ -1,4 +1,3 @@
-/* chat room master jobs: kick, designate and a password change, from chat_room.c */
 /* the room master's kick, designate and password change (app.dll 0x1009ba31). Each step is one command or one frame,
    and each waits for the last */
 static void chat_room_master_next(void)

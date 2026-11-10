@@ -53,7 +53,6 @@ public partial class GroupChatWindow : AppWindow
         return true;
     }
 
-    // the session's going, the chat's already dropped with it
     public void CloseQuietly()
     {
         _quiet = true;

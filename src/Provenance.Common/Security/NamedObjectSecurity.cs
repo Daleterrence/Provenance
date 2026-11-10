@@ -6,7 +6,6 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Security;
 
-// the security for the app's named objects: the Windower handover's mapping and event, and the uninstaller's close event
 public sealed class NamedObjectSecurity : IDisposable
 {
     private IntPtr _descriptor;

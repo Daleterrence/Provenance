@@ -102,7 +102,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
         finally { SetChecking(false); }
     }
 
-    // a code the manager gave, filled in and sent
     private async Task AcceptFetchedAsync(string code)
     {
         SetChecking(true);
@@ -208,7 +207,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
         OnPropertyChanged(nameof(RetryLabel));
     }
 
-    // the fix button: whatever the line asked for, or another go
     public void Retry()
     {
         switch (_fix)
@@ -230,7 +228,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
         }
     }
 
-    // the master password goes to the one fetch and isn't kept
     public void Unlock(string masterPassword)
     {
         if (masterPassword.Length > 0) _ = FetchAsync(masterPassword);

@@ -20,7 +20,6 @@ public static class PolStatusText
         _ => "Appear offline",
     };
 
-    // the digit the hook's status file wants
     public static int Code(PolStatus s) =>
         s switch { PolStatus.Online => 0, PolStatus.Away => 1, PolStatus.Busy => 2, _ => 4 };
 }

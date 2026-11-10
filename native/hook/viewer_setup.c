@@ -1,5 +1,5 @@
-/* each region as its app.dll sets polcore up. svc 0x17dc(1) swaps in the JP half of polcore's conversion table, and
-   svc 0x690's language is what FFXI reads back through 0x694 as its area code */
+/* each region as its app.dll sets polcore up. svc 0x17dc(1) swaps in the JP conversion table half,
+   and 0x690's language is what FFXI reads back via 0x694 as its area code */
 static const struct pol_region {
     const char *name, *polcore, *hive, *maker, *strings;
     int selector, jp_table, lang;   /* lang: JP 0 always, -1 Settings\Language or 1, -2 it or the UI language */
@@ -139,8 +139,8 @@ static int viewer_table_text(const BYTE *raw, DWORD n, int id, WCHAR *out, int c
     return 0;
 }
 
-/* message #i (0-9 titles, 10-19 texts) as app.dll (0x10057900) makes it: the table's string, CRs dropped from the
-   texts, through svc 0xa40. english falls back to the US table's bytes. Its length, or -1 */
+/* message #i (0-9 titles, 10-19 texts) as app.dll (0x10057900) makes it: table string, CRs dropped from texts,
+   via svc 0xa40. english falls back to the US table. Length or -1 */
 static int viewer_message_bytes(BYTE *b, const BYTE *raw, DWORD n, int i, int english, char out[0x100])
 {
     static const WORD ids[20] = { 0x46c9, 0x46d0, 0x46d1, 0x46d2, 0x46d3, 0x46d4, 0x46d6, 0x46d8, 0x46dc, 0x46da,

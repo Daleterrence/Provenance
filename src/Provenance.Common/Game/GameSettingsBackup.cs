@@ -8,12 +8,10 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Game;
 
-// <FFXI>\USER, the VirtualStore copy of it, and <0042>\ffxiuser. Any of them can be missing
 public sealed record BackupSources(string? User, string? VirtualStoreUser, string? FfxiUser);
 
 public enum BackupOutcome { Made, Unchanged, NothingThere }
 
-// LeftOut is for the log: each file that didn't go in, and why
 public sealed record BackupResult(BackupOutcome Outcome, string? Zip, IReadOnlyList<string> LeftOut);
 
 public sealed record BackupInfo(string Path, DateTime CreatedUtc, int Characters, int Files)
@@ -263,8 +261,8 @@ public static partial class GameSettingsBackup
         return me.User;
     }
 
-    // elevated, so whether the player can open or delete the file would be down to the folder. The file says so
-    // itself, set on its handle so it can't be swapped for a link first
+    // elevated, so the folder would decide who can open or delete it. Permissions are set on the file's handle
+    // so it can't be swapped for a link first
     private static FileStream CreateForUser(string path)
     {
         var fs = new FileInfo(path).Create(FileMode.CreateNew, FileSystemRights.Read | FileSystemRights.Write | FileSystemRights.ReadPermissions
@@ -510,8 +508,8 @@ public static partial class GameSettingsBackup
         public void Dispose() => pins.Dispose();
     }
 
-    // made from the nearest folder there, never through a link at or below the place. With its parent missing too
-    // (0042 can be anything), the folder it starts from can't be behind one either
+    // made from the nearest folder there, never through a link. With the parent missing too (0042 can be anything),
+    // the starting folder can't be behind one either
     private static PinnedDir Pin(string root, string sub)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
@@ -528,8 +526,8 @@ public static partial class GameSettingsBackup
     private static IOException Linked(string dir) =>
         Shown.Mark(new IOException($"Nothing was restored, because {dir} goes through a link to somewhere else."));
 
-    // a new name each time, never opened over one that's there, so a planted link can't catch it. Its write time goes
-    // back too, or the next backup would see every restore as a change
+    // a new name each time, never opened over one that's there, so a planted link can't catch it.
+    // Write time is restored too, or the next backup sees a change
     private static void Put(FolderPins pins, string dir, string name, byte[] data, DateTime? written)
     {
         SafeWrite.Replace(pins, dir, Path.Combine(dir, name), fs =>

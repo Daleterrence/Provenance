@@ -1,5 +1,5 @@
-/* pol_cred.h - reads a Provenance credential from Credential Manager and unwraps it. Static only, so more than one
- * file can include it (link advapi32.lib and crypt32.lib). */
+/* reads a Provenance credential from Credential Manager and unwraps it. Static only, so more than one
+ * file can include it (link advapi32.lib and crypt32.lib) */
 #ifndef POL_CRED_H
 #define POL_CRED_H
 

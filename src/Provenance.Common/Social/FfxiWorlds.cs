@@ -2,7 +2,6 @@ namespace Provenance.Common.Social;
 
 public static class FfxiWorlds
 {
-    // the game's own world list, ids 98 to 131
     private static readonly string[] Names =
     [
         "Undine", "Atomos", "Bahamut", "Shiva", "Titan", "Ramuh", "Phoenix", "Carbuncle", "Fenrir", "Sylph", "Valefor",

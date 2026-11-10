@@ -22,7 +22,6 @@ internal sealed class WindowerStart
 
     internal void Forget() => Volatile.Write(ref _play, null);
 
-    // null once progress has said why
     internal int? Start(ProcessStartInfo psi, string polExe, string launchId, SessionOptions options, IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         WindowerLauncher windower;

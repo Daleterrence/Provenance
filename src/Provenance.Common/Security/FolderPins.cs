@@ -23,11 +23,10 @@ public sealed class FolderPins : IDisposable
 
     public string Root => _root;
 
-    // null if root or a folder on the way is a link or the root's a file, and a file in the way below it throws. Either
-    // way whatever was held already is let go
+    // null if root or a folder on the way is a link or the root's a file, a file below it throws.
+    // Either way what was held is let go
     public static FolderPins? HoldExact(string root, string dir) => Pinned(new FolderPins(root), dir);
 
-    // HoldExact that throws message instead
     public static FolderPins HoldExactOrThrow(string root, string dir, string message) =>
         HoldExact(root, dir) ?? throw Shown.Mark(new IOException(message));
 
@@ -116,7 +115,6 @@ public sealed class FolderPins : IDisposable
         LinkCheck.Refuse(files);
     }
 
-    // so the folder itself can be deleted
     public void Release(string dir)
     {
         if (_held.Remove(Rebase(dir), out var h)) h.Dispose();
@@ -149,8 +147,8 @@ public sealed class FolderPins : IDisposable
         return Kernel32.SetFileInformationByHandle(h, FileDispositionInfo, ref yes, 1);
     }
 
-    // Pin's root test without holding anything: a folder that's a link, or is reached through one (a junctioned parent,
-    // a SUBST drive), isn't where its path says. Something that won't open isn't counted
+    // Pin's root test without holding anything: a folder that's a link, or reached through one (junctioned parent, SUBST drive),
+    // isn't where its path says. Won't open isn't counted
     public static bool ThroughLink(string root)
     {
         var given = LongName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)));

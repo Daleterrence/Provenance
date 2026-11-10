@@ -5,8 +5,8 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Common.Game.ThirdParty;
 
-// what Play starts the game through. Profile is the Windower profile (trimmed, "" is the unnamed one) or the Ashita boot
-// config file, and it's the saved pick even when that's gone, so whoever shows it can say so
+// Profile is the Windower profile (trimmed, "" is the unnamed one) or the Ashita boot config file,
+// kept even when it's gone so whoever shows it can say so
 public sealed record PlayTarget(ThirdPartyHook Platform, string? Dir, string Profile, bool FromAccount)
 {
     public static PlayTarget For(LauncherSettings s, string? accountProfile) => For(s, accountProfile, s.ThirdPartyHookPlatform);

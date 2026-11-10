@@ -17,7 +17,6 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- the ones that can't be dragged bigger -->
     <Style x:Key="AppWindow.Fixed" TargetType="controls:AppWindow" BasedOn="{StaticResource AppWindow}">
         <Setter Property="shell:WindowChrome.WindowChrome">
             <Setter.Value>

@@ -1,6 +1,5 @@
 namespace Provenance.Common.Otp;
 
-// what's known about each command-line tool. "op" and "bw" are the file names, the source ids are what's saved with an account
 public static class ToolFacts
 {
     public const string OnePassword = "op", Bitwarden = "bw";

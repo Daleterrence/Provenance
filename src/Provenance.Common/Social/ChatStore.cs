@@ -144,7 +144,6 @@ public sealed class ChatStore
 
     public bool Delete(string key) => DeleteWhere(e => e.Key == key) > 0;
 
-    // every line with one person, bar any still going
     public int Clear(string peer, string key = "") => DeleteWhere(e => e.IsWith(peer, key));
 
     // just these, so lines that land while a Clear's being confirmed aren't taken with it
@@ -188,7 +187,6 @@ public sealed class ChatStore
         return gone.Count;
     }
 
-    // tried again with every save of the log till it lands
     private void SaveDeleted()
     {
         if (_deletedFile?.Save(_deleted) == true) _deletedDirty = false;

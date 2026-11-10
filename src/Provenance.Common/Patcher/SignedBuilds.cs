@@ -6,8 +6,8 @@ using Serilog;
 
 namespace Provenance.Common.Patcher;
 
-// The builds the mirror has signed off on. The file's kept as the mirror sent it and checked again on every load, so
-// nothing in the app's folder is trusted just for being there.
+// The file's kept as the mirror sent it and checked again on every load,
+// so nothing in the app's folder is trusted just for being there
 internal static class SignedBuilds
 {
     private static readonly object Gate = new();

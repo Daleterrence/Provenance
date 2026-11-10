@@ -1,5 +1,5 @@
-/* POL chat rooms: the zone and room lists are database searches, a room is IRC on the link polcore already holds.
-   One command in flight and every step waits for the last, like the viewer */
+/* POL chat rooms: zone and room lists are database searches, a room is IRC on polcore's link.
+   One command in flight, each step waits for the last like the viewer */
 
 static int chat_room_new_key_ok(const char *k);
 static int group_chat_busy(void);
@@ -77,8 +77,8 @@ static int chat_room_part(BYTE *b)
     if (r > 0) g_s.cr_joined = g_s.cr_open = 0;
     return r;
 }
-/* MODE: 0xb 'n', 8 'k' (arg the password), 9 'l' (arg the limit as text), 4 'b' and 0xc 'o' on a member (lo, hi).
-   polcore answers one that'd change nothing straight away */
+/* MODE: 0xb 'n', 8 'k' (arg password), 9 'l' (arg limit as text), 4 'b' and 0xc 'o' on a member (lo, hi).
+   polcore answers a no-change one at once */
 static int chat_room_mode(BYTE *b, int mode, DWORD lo, DWORD hi, const char *arg, int on)
 {
     int s = chat_frame_session(b);
@@ -233,7 +233,6 @@ static int chat_room_privmsg(BYTE *b, const char *frame)
     return pc_chat_privmsg(b, s, 0, 0, g_cr_room, frame);
 }
 
-/* one PRIVMSG in flight */
 static int chat_room_msg_ready(void)
 {
     return (g_s.cr_st == CR_IN || g_s.cr_st == CR_SETTOPIC) && g_s.cr_wait == CRW_NONE && !g_s.cr_leave;
@@ -357,8 +356,8 @@ static int chat_room_key_ok(const char *s)
     for (int i = 0; i < n; i++) if ((BYTE)s[i] <= 0x20 || (BYTE)s[i] >= 0x7f || s[i] == ',') return 0;
     return 1;
 }
-/* the room password is the one-shot POL_CRED_CHAT entry (user = the join's token), wrapped like the account details,
-   so it never touches a file. 0 when it isn't there or isn't this join's */
+/* room password is the one-shot POL_CRED_CHAT entry (user = the join's token), wrapped like the account details
+   so it never touches a file. 0 if missing or not this join's */
 static int chat_room_password(const char *tok, char *key, int cap)
 {
     WCHAR tbuf[256];
@@ -386,7 +385,6 @@ static int chat_room_called_off(const char *tok)
     g_cr_cancel_tok[0] = 0;
     return off;
 }
-/* the start of an enter or a create, once g_cr_room's set */
 static void chat_room_enter(BYTE *b)
 {
     /* a line the hook renamed but never read belongs to the last room, it never goes into this one */
@@ -531,8 +529,6 @@ static void chat_room_leave_request(BYTE *b)
     g_s.cr_leave = 1;
 }
 
-/* the in-room side, every turn: callbacks' lines, the member list when polcore says something came in, then the one
-   step that's due */
 static void chat_room_in_room_pump(BYTE *b, int ctl)
 {
     int s, r;
@@ -704,8 +700,8 @@ static void chat_room_end(BYTE *b)
     if (g_s.cr_st == CR_OUT) return;
     if (s >= 0 && g_s.cr_wait != CRW_NONE) pc_chat_command_forget(b, s);
     g_s.cr_wait = CRW_NONE;
-    /* a JOIN with no answer yet still gets there, so it's PARTed like a room. The group chat can have the link's one
-       command out, so the PART's tried again till it goes */
+    /* a JOIN with no answer yet still gets there, so it's PARTed like a room. Group chat can have the link's one
+       command out, so the PART retries till it goes */
     while ((r = chat_room_part(b)) == 0 && GetTickCount64() < until) {
         pc_pump_once(b);
         Sleep(16);

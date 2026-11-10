@@ -619,7 +619,7 @@ static void my_profile_pump(BYTE *b, int ctl)
     }
 }
 
-/* the viewer's profile pic save: load my record, UPDATE z_ficon (and z_utime) like a profile save, then SetHandle locally.
+/* the viewer's pic save: load my record, UPDATE z_ficon and z_utime, then SetHandle locally.
    1 load waits for a slot, 2 load job, 3 update waits, 4 update job */
 static int g_pic_slot;
 static unsigned g_pic_pic;   /* sheet * 8 + cell */
@@ -671,7 +671,6 @@ static void my_profile_pic_load_start(BYTE *b, db_job *j)
         DB_LOG("pic: loading profile of slot %d (hid 0x%08x%08x), job %d\r\n", g_pic_slot,
                (unsigned)(g_pic_hid >> 32), (unsigned)g_pic_hid, r);
 }
-/* the one-field save, where a drain stops the write */
 static void my_profile_pic_update_start(BYTE *b, db_job *j)
 {
     pe_req q;
@@ -691,7 +690,6 @@ static void my_profile_pic_go(BYTE *b, db_job *j)
 {
     if (j->step == 3) my_profile_pic_update_start(b, j); else my_profile_pic_load_start(b, j);
 }
-/* the first turn of a save, on the slot my profile's on */
 static void my_profile_pic_begin(BYTE *b)
 {
     pol_handle h;
@@ -731,8 +729,8 @@ static void my_profile_pic_loaded(BYTE *b)
     g_pic.step = 3;
     my_profile_pic_update_start(b, &g_pic);
 }
-/* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for the next 10s (why tho?????),
-   so it's only for shutdown. The state and what's wanted are left as they were */
+/* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for 10s (why tho?????),
+   so it's only for shutdown */
 static void my_profile_pic_cancel(BYTE *b)
 {
     if (g_pic.job >= 0) {

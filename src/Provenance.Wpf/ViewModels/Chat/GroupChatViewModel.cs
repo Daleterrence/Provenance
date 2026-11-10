@@ -15,7 +15,6 @@ namespace Provenance.Wpf.ViewModels.Chat;
 // Text is what's shown (filtered, unless it's mine), the log keeps what came in
 public sealed record GroupChatLineItem(string Id, string Name, string Text, bool Me, DateTimeOffset When)
 {
-    // the viewer's own log line, "<handle>: <text>"
     public string Display => $"{Name}: {Text}";
     public string TimeText => When.ToString("t", CultureInfo.CurrentCulture);
 }
@@ -62,7 +61,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public ObservableCollection<GroupChatLineItem> Lines { get; } = new();
     public ObservableCollection<GroupChatMemberItem> Members { get; } = new();
 
-    // the group's id as the snapshot has it, its name and the handle I'm in it with
     [ObservableProperty] private string _groupId = "";
     [ObservableProperty] private string _groupName = "";
     [ObservableProperty] private string _myHandle = "";
@@ -77,7 +75,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public bool Joining => Current == Phase.Joining;
     public bool Open => Current != Phase.Out;
 
-    // the window's on screen and in front, so new lines are read as they land
     public bool WindowActive { get; set; }
 
     public bool FlashWanted => _flashWanted();

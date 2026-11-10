@@ -118,8 +118,8 @@ static int login_notice_blocks(unsigned st)
     for (int i = 0; i < (int)sizeof block; i++) if (block[i] == st) return 1;
     return 0;
 }
-/* LM-02's text has a day count in it. The viewer only asks svc 0xd24 for it on that row (polcore 0x10046100: days
-   from now to the date in the login result, today included) */
+/* LM-02's text has a day count. The viewer only asks svc 0xd24 for it on that row
+   (polcore 0x10046100: days from now to the login result's date, today included) */
 static void login_notice_read(BYTE *b)
 {
     if (!pc_has(b, SV_NOTICE_STATUS)) return;
@@ -553,8 +553,8 @@ static void fake_session(void)
         base_log("viewer_init: user slot %d (pub\\home%02d)\r\n", g_home, g_home);
 }
 
-/* gate 7 (FFXiMain.dll 0x04245cb0) decodes patch.ver from the current directory. Real POL boots content from the
-   FFXI folder, the hook would inherit POL's and bail silently. silently being the key word, my lord */
+/* gate 7 (FFXiMain.dll 0x04245cb0) decodes patch.ver from the current directory. Real POL boots from the FFXI folder,
+   the hook would inherit POL's and bail silently (silently being the key word) */
 static void login_set_cwd_ffxi(void)
 {
     HKEY k;

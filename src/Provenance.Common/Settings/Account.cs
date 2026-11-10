@@ -3,7 +3,7 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Settings;
 
-// Id is the Credential Manager key so it can't change. DisplayName is the handle, the POL and SE IDs stay off screen
+// Id is the Credential Manager key so it can't change. DisplayName is the handle
 public sealed class Account
 {
     public string Id { get; set; } = ShortId.New(8);
@@ -18,7 +18,6 @@ public sealed class Account
     [JsonPropertyName("FaceId")]
     public int ProfilePictureId { get; set; }
 
-    // the code itself is asked for at every sign-in and never stored
     public bool UseOtp { get; set; }
 
     // "" (typed in each time), "bitwarden", "1password" or "keepassxc"
@@ -30,6 +29,5 @@ public sealed class Account
     // the viewer folder's pub\homeNN this account's POL files go in, 0 till it's given one
     public int HomeSlot { get; set; }
 
-    // the 1Password account that holds the item, "" lets op pick
     public string OtpAccount { get; set; } = "";
 }

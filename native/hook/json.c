@@ -30,8 +30,8 @@ static int json_text(char *out, int cap, const char *s)
     out[o] = 0;
     return o;
 }
-/* the longest prefix of w (n characters) whose converted length is at most max, for a cut at whole characters. len(k) is how
-   long its first k come out, and only ever grows with k */
+/* the longest prefix of w (n chars) whose converted length is at most max.
+   len(k) is how long its first k come out, and only ever grows with k */
 static int json_cut(WCHAR *w, int n, int max, int (*len)(WCHAR *w, int k, BYTE *b), BYTE *b)
 {
     int lo = 0, hi = n;
@@ -49,8 +49,8 @@ static int json_utf8_len(WCHAR *w, int k, BYTE *b)
     (void)b;
     return k > 0 ? WideCharToMultiByte(CP_UTF8, 0, w, k, NULL, 0, NULL, NULL) : 0;
 }
-/* POL's Shift-JIS (the EU Latin extension too) to UTF-8, svc 0xa38 doing it. Cut at whole characters to cap. Names and
-   the 0x180 byte mail body fit the stack buffers, anything longer goes to the heap */
+/* POL's Shift-JIS (EU Latin extension too) to UTF-8 via svc 0xa38. Names and the 0x180 byte mail body fit the stack buffers,
+   anything longer goes to the heap */
 static void pol_utf8(BYTE *b, const char *src, int len, char *out, int cap)
 {
     char stk[0x182], *tmp = stk;
@@ -77,7 +77,6 @@ static void pol_utf8(BYTE *b, const char *src, int len, char *out, int cap)
     if (tmp && tmp != stk) HeapFree(GetProcessHeap(), 0, tmp);
     if (w && w != wstk) HeapFree(GetProcessHeap(), 0, w);
 }
-/* plants a NUL at k for the call and puts the character back */
 static int json_sjis_len(WCHAR *w, int k, BYTE *b)
 {
     WCHAR keep = w[k];
@@ -108,7 +107,6 @@ static int pol_sjis(BYTE *b, const char *src, char *out, int cap)
     HeapFree(GetProcessHeap(), 0, w);
     return m > 0 ? m : 0;
 }
-/* a name as a JSON string, control characters turned to spaces */
 static void json_sjis(BYTE *b, char *out, int cap, const BYTE *src, int srcMax)
 {
     char sj[64], u[192];
@@ -118,7 +116,6 @@ static void json_sjis(BYTE *b, char *out, int cap, const BYTE *src, int srcMax)
     pol_utf8(b, sj, i, u, sizeof u);
     json_str(out, cap, u);
 }
-/* cut at whole SJIS characters, never between a lead byte and its trail */
 static void json_sjis_copy(char *out, const char *src, int cap)
 {
     int i = 0, n;
@@ -150,8 +147,8 @@ static void json_pol(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
     json_text(js, jscap, u8);
 }
 
-/* a JSON writer over a growing buffer, compact, commas and quotes handled. A level never opened with jw_obj or jw_arr is
-   a bare list of members, which is how the pieces spliced into a bigger object get built */
+/* compact JSON writer over a growing buffer. A level never opened with jw_obj or jw_arr is a bare list of members,
+   which is how pieces spliced into a bigger object are built */
 #define JW_DEPTH 12
 #define JW_MAX 0x4000000
 typedef struct {
@@ -242,7 +239,6 @@ static void jw_bool(jw *w, const char *key, int v)
     jw_key(w, key);
     jw_put(w, v ? "true" : "false", v ? 4 : 5);
 }
-/* s between quotes as it is, for the hook's own words and hex keys that can't need escaping */
 static void jw_lit(jw *w, const char *key, const char *s)
 {
     jw_key(w, key);
@@ -250,7 +246,6 @@ static void jw_lit(jw *w, const char *key, const char *s)
     jw_put(w, s, lstrlenA(s));
     jw_put(w, "\"", 1);
 }
-/* s is JSON already (a value someone else quoted) */
 static void jw_raw(jw *w, const char *key, const char *s)
 {
     jw_key(w, key);
@@ -273,7 +268,6 @@ static void jw_str(jw *w, const char *key, const char *s, int cap)
     json_str(o, cap, s);
     w->n += lstrlenA(o);
 }
-/* like jw_str with newlines kept, as long as the string needs */
 static void jw_text(jw *w, const char *key, const char *s)
 {
     int cap = 2 * lstrlenA(s) + 3;
@@ -298,8 +292,8 @@ static void jw_pol(jw *w, const char *key, BYTE *b, const char *sj, int u8cap, i
     json_pol(b, sj, u8cap, o, cap);
     w->n += lstrlenA(o);
 }
-/* the finished build copied into a fixed buffer. One that failed or doesn't fit leaves the buffer empty and says so in the
-   log, so a cut-off member can't get spliced into the snapshot */
+/* copies the finished build into a fixed buffer. One that failed or doesn't fit leaves it empty and logs it,
+   so a cut-off member can't get spliced into the snapshot */
 static int jw_fit(const jw *w, char *dst, int cap, const char *what)
 {
     dst[0] = 0;

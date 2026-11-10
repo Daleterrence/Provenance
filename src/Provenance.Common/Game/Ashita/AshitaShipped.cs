@@ -1,6 +1,5 @@
 namespace Provenance.Common.Game.Ashita;
 
-// what comes with Ashita v4 itself: a folder each in addons, a DLL each in plugins and polplugins
 public static class AshitaShipped
 {
     private static readonly HashSet<string> Addons = new(StringComparer.OrdinalIgnoreCase)

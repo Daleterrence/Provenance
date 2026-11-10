@@ -16,8 +16,8 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// The official FFXI Config tool's options, saved to the registry, or to the Windower profile or Ashita boot
-// configuration the store's for. Changes wait for Save, and only the changed values get written
+// the FFXI Config tool's options, saved to the registry or the Windower profile or Ashita boot config the store's for.
+// Changes wait for Save, only changed values are written
 public partial class GameSettingsViewModel : ObservableObject
 {
     private readonly IDialogs _dialogs;

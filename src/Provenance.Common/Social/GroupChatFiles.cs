@@ -11,8 +11,8 @@ public sealed record GroupChatLines(string Group, IReadOnlyList<GroupChatLine> L
     public List<GroupChatLine> After(long seq) => Lines.Where(l => l.Seq > seq).OrderBy(l => l.Seq).ToList();
 }
 
-// the snapshot's "groupChat". States run "joining" -> "in" -> "leaving" -> "left", or "failed:...", "left:handle" (a
-// handle switch took it out), "gone" (the group went), "removed" (I was taken out of it) or "lost"
+// the snapshot's "groupChat". States: "joining" -> "in" -> "leaving" -> "left", or "failed:...", "lost",
+// "left:handle" (a handle switch took it out), "gone", "removed" (I was taken out of it)
 public sealed record GroupChatSnapshot(HookJob Job, string Group, long LineSeq, HookJob SendJob)
 {
     public static GroupChatSnapshot? Read(JsonElement g)
@@ -22,7 +22,6 @@ public sealed record GroupChatSnapshot(HookJob Job, string Group, long LineSeq, 
     }
 }
 
-// the hook's group chat files, one group's chat at a time like the viewer
 public static class GroupChatFiles
 {
     // the IRC line polcore builds has to fit 0x200 bytes, past this it drops the line without a word

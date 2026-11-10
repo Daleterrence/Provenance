@@ -69,7 +69,6 @@ public sealed class GameRepair(MirrorClient client, string region)
     // runs on worker threads
     public Action<string>? Status { get; init; }
 
-    // once, right before the first game file changes
     public Action? Changing { get; init; }
 
     // once the registry pass has put something right (it can't be stopped half way, so this comes after it), and before
@@ -78,7 +77,6 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     public Action? Fixing { get; init; }
 
-    // as each step that belongs to one product starts, steps with none (DirectX) don't say
     public Action<GameProduct>? Working { get; init; }
 
     public string? MissingVersion { get; private set; }
@@ -286,8 +284,8 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     private sealed record Package(string Name, string Msi, Dictionary<string, string> Properties, MsiPackage.UninstallSetup Uninstall);
 
-    // the install data (both packages, and the DirectX redist only when the runtime's missing), unless Windows Installer
-    // owns both products and DirectX is in place, then nothing would use it. Writes only to the staging folder
+    // the install data (both packages, and the DirectX redist only when the runtime's missing), skipped when Windows Installer
+    // owns both products and DirectX is there. Writes only to staging
     private async Task<(List<Package> Packages, bool InstallDirectX)> PrepareAsync(RepairPlan plan, PatchProduct[] products,
         string installRoot, IProgress<ByteProgress>? progress, CancellationToken ct)
     {

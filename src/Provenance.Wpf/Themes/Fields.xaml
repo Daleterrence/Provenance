@@ -27,7 +27,6 @@
         </Setter>
     </Style>
 
-    <!-- MaterialDesign's fields, with a placeholder strength each theme picks -->
     <Style x:Key="OutlinedField" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
         <Setter Property="materialDesign:HintAssist.HintOpacity" Value="{DynamicResource Field.HintOpacity}" />
     </Style>
@@ -38,7 +37,6 @@
         <Setter Property="materialDesign:HintAssist.HintOpacity" Value="{DynamicResource Field.HintOpacity}" />
     </Style>
 
-    <!-- labels go beside or above, never a floating hint -->
     <Style x:Key="FieldText" TargetType="TextBox" BasedOn="{StaticResource OutlinedField}">
         <Setter Property="Padding" Value="12,8" />
         <Setter Property="FontSize" Value="13" />

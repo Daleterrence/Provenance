@@ -105,8 +105,8 @@ public partial class MainWindow : AppWindow
         }
     }
 
-    // a tray tip only for a notice that's just been shown, never an old one again for a flash on its own. Queued, the
-    // snapshot that raised this hasn't counted the new message yet
+    // a tray tip only for a notice that's just been shown, never an old one again for a flash.
+    // Queued, the snapshot behind this hasn't counted the new message yet
     private void OnRequestAttention(bool tip) => Dispatcher.InvokeAsync(() =>
     {
         if (tip && Vm?.Notice.Current is { } notice && Tray.ShowNotice(notice.Text)) return;

@@ -1,7 +1,6 @@
-/* messages: list and reads on two lanes, delete on a third, polled once a turn:
-     list  svc 0x524(out, max), poll 0x528 (1 = done) into a zeroed 8-aligned array, stride 0x50, valid entries
-           have MAIL_VALID set in flags
-     read  svc 0x518, poll 0x51c on a copy of the entry (first 0x48 bytes = the server key), body at +0x4c
+/* mail: list and read on two lanes, delete on a third, polled once a turn
+     list  svc 0x524(out, max), poll 0x528 (1 = done), zeroed 8-aligned array, stride 0x50, valid = MAIL_VALID in flags
+     read  svc 0x518, poll 0x51c on a copy of the entry (first 0x48 bytes = server key), body at +0x4c
      push  svc 0xd9c registers evt(0, H) for a stored message, raw(H) for a real-time one (body at H+0x4c) */
 #define MAIL_MAX 64
 #define MAIL_SEEN 256
@@ -90,7 +89,6 @@ static int mail_inbox_held(const mailrec *m)
     }
     return 0;
 }
-/* the oldest saved one whose delete hasn't started */
 static int mail_inbox_saved_spare(void)
 {
     for (int i = mail_inbox_next(0, 1 << 4); i >= 0; i = mail_inbox_next(g_mail[i].mid, 1 << 4))
@@ -185,7 +183,7 @@ static int mail_inbox_polid_ok(BYTE *b, DWORD lo, DWORD hi)
     return lstrlenA(id) == 8;
 }
 /* an echo of mine: a line this session sent to another POL ID (same time, seq and slot), or a handle writing to itself.
-   Anything else from my POL ID is a real message */
+   Anything else from my ID is real */
 static int mail_inbox_echo(BYTE *b, const BYTE *h)
 {
     DWORD lo = MAIL(h)->to_lo, hi = MAIL(h)->to_hi;
@@ -208,14 +206,13 @@ static void mail_inbox_returned(const BYTE *h)
     if (g_s.returned_n < RETURNED_MAX) g_s.returned_n++;
     g_snap_dirty = 1;
 }
-/* a line of mine can't be told from an echo while a send of mine is still going, so it waits, unread and out of the
-   snapshot's bodies, till they've all been answered */
+/* a line of mine can't be told from an echo while a send is still going, so it waits unread,
+   out of the snapshot's bodies, till they're all answered */
 static int mail_send_going(void);
 static int mail_inbox_undecided(BYTE *b, const mailrec *m)
 {
     return mail_send_going() && (m->state == 0 || m->state == 3) && mail_inbox_mine(b, m->hdr);
 }
-/* looked at again whenever a line lands and whenever a send's answer comes in */
 static void mail_inbox_recheck(BYTE *b)
 {
     if (!g_mail_raw_new) return;
@@ -366,7 +363,6 @@ static void mail_inbox_delete_start(BYTE *b)
         return;
     }
 }
-/* reads first, two at once, then deletes on a lane of their own */
 static void mail_inbox_pump(BYTE *b)
 {
     int i, r, done = 0;

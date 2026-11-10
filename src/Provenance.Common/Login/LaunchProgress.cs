@@ -4,7 +4,6 @@ namespace Provenance.Common.Login;
 
 public enum LaunchProgressKind { Progress, Notice, Failed, Stopped }
 
-// Patch is an update's own progress, mapped into its share of the bar
 public sealed record LaunchProgress(string Stage, string Detail, double Fraction = -1, PatchProgress? Patch = null,
                                     LaunchProgressKind Kind = LaunchProgressKind.Progress)
 {

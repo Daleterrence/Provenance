@@ -72,7 +72,6 @@ public sealed class CharacterLookups(CharacterNames names)
         return true;
     }
 
-    // the request file couldn't be written
     public void Failed() => Asking = null;
 
     // the give-up clock only starts once the hook's taken it, it waits while the hook's busy with another read

@@ -53,8 +53,8 @@ public static class PolAccountNotices
         N(252, false, "The credit card registered for your payment method will expire at the end of the month. Please update the credit card information before it expires. You can do so from \"Register/Update Payment Method\" within the Square Enix Account Management System."),
     }.ToDictionary(n => n.Status);
 
-    // the EU block points LM-01 and LM-14 at messages of their own (0x6ee6, 0x5730), and the EU table words LM-17, LM-19
-    // and LM-31 its own way. Every other row is the US one
+    // EU points LM-01 and LM-14 at their own messages (0x6ee6, 0x5730) and words LM-17, LM-19 and LM-31 its own way.
+    // Every other row is the US one
     private static readonly Dictionary<int, Notice> Europe = new[]
     {
         N(221, true, "Your account is closed due to unpaid fees."),
@@ -95,8 +95,8 @@ public static class PolAccountNotices
         _ => $"Network Connection Error (code {reason}).",
     };
 
-    // env.dat's POL_JAIL_USER_LOGIN_URL with app.dll's language tag for %s ({ja-JP, en-US, en-GB, ...}[language] at
-    // 0x104b34a0). JP is always 0, US always 1, EU reads its Settings\Language (the MSI writes 1), so only EU's 2 is en-GB
+    // env.dat's POL_JAIL_USER_LOGIN_URL with app.dll's language tag for %s ({ja-JP, en-US, en-GB, ...}[language] at 0x104b34a0).
+    // JP is always 0, US 1, EU reads Settings\Language (MSI writes 1), so only 2 is en-GB
     public static string JailUrl(PolRegion region, int? language) =>
         $"http://info.playonline.com/snews/{region switch
         {
@@ -105,7 +105,6 @@ public static class PolAccountNotices
             _ => "en-US",
         }}/jail.pml";
 
-    // the server let it in but the account gates refused, so the session got signed out before anything started
     public static string Blocked(string what, PolRegion region = PolRegion.UnitedStates, int? language = null)
     {
         if (what.StartsWith("LM-", StringComparison.Ordinal) && int.TryParse(what[3..], out var lm) &&

@@ -18,7 +18,6 @@ public sealed class WindowerManifest
         Plugins = plugins;
     }
 
-    // 0.0 when the manifest doesn't say
     public Version LauncherVersion { get; }
     public Version HookVersion { get; }
     public IReadOnlyList<WindowerPlugin> Plugins { get; }

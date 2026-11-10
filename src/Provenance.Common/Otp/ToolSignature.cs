@@ -149,7 +149,6 @@ internal static class ToolSignature
         return (built && endsAtPin, links);
     }
 
-    // the signer, its chain and its timestamp exactly as WinVerifyTrust checked them, read through the handle that's held
     internal sealed record Signature(int Result, X509Certificate2Collection Chain, DateTime? StampedAt, X509Certificate2Collection StampChain) : IDisposable
     {
         public void Dispose()

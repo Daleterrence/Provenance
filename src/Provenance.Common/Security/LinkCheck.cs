@@ -3,8 +3,8 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Security;
 
-// Provenance runs as admin, so a junction or symlink where a standard user can write would send its writes elsewhere.
-// OneDrive, Dev Drive and the like use reparse points too, but they don't redirect
+// Provenance runs as admin, so a junction or symlink a standard user can write would send its writes elsewhere.
+// OneDrive, Dev Drive and the like use reparse points but don't redirect
 public static class LinkCheck
 {
     private const uint MountPoint = 0xA0000003, Symlink = 0xA000000C;

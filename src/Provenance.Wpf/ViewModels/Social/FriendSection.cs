@@ -1,6 +1,5 @@
 namespace Provenance.Wpf.ViewModels.Social;
 
-// the friend list's groups, in the order they sit down the list
 public enum FriendSection { FriendRequests, GroupInvitations, Online, Offline, RequestsSent, Others }
 
 public static class FriendSections

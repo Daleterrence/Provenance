@@ -5,7 +5,6 @@ static int peers_get_chr(BYTE *b, int i, pol_chr *rec)
     memset(rec, 0, sizeof *rec);
     return pc_has(b, SV_GET_CONTENT_ID) && pc_get_content_id(b, (unsigned)i, rec) == 0 && pc_chr_valid(rec);
 }
-/* a Handle ID as the key the app knows it by */
 static void peers_hid_key(unsigned __int64 hid, char k[17])
 {
     wsprintfA(k, "%03x%08x", (unsigned)(hid >> 32), (unsigned)hid);
@@ -130,7 +129,6 @@ static int peers_secret_name(WCHAR *out, int cap)
     LocalFree(sid);
     return ok;
 }
-/* kept in the admin-only POL_IPC_DIR */
 static int peers_secret(void)
 {
     WCHAR path[MAX_PATH + 256], name[256];

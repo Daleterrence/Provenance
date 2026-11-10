@@ -1,6 +1,5 @@
 namespace Provenance.Wpf;
 
-// every command-line switch the app reads
 public sealed class LaunchArgs
 {
     public const string NoAutoLoginSwitch = "--noautologin";

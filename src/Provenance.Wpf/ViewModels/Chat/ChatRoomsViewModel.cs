@@ -255,7 +255,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                                              nick, form.Name.Trim()));
     }
 
-    // the create form's question, in the viewer's words (0x4eef/0x4ef0)
     public static string CreateQuestion(string zone, int occupancy, bool password, string members, string purpose, string language) =>
         $"Create chat room with these settings?\n\nZone: {zone}\nOccupancy: {occupancy}\nPassword: {(password ? "ON" : "Off")}\n" +
         $"Category 1: {members}\nCategory 2: {purpose}\nCategory 3: {language}";
@@ -292,7 +291,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         SendMaster(op, job, m.Key, m.Name, null);
     }
 
-    // a new password, or none to take it off
     public void ChangePassword(bool remove)
     {
         if (!CanMaster) { ShowError(_social.HandleSwitching ? SocialViewModel.SwitchingNote : HookFailures.ChatRooms.MasterOnly); return; }
@@ -382,8 +380,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         RoomsNote = "Room entry cancelled.";
     }
 
-    // Exit, Cancel, the game starting and closing the window. A send not taken yet never goes, and an enter not taken
-    // yet is withdrawn, or called off by the leave when it couldn't be
+    // on Exit, Cancel, the game starting or the window closing. A send not taken never goes,
+    // an enter not taken is withdrawn, or called off by the leave if that fails
     public void Leave()
     {
         if (Pid is { } pid)

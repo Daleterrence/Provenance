@@ -2,14 +2,14 @@ using System.Text;
 
 namespace Provenance.Common.PolFormat;
 
-// what POL's Shift-JIS can carry. SE's table is cp932 bar a few odd spots, which is near enough to keep emoji and the
-// like out before the hook turns them into geta marks
+// SE's table is cp932 bar a few odd spots, near enough to keep emoji and the like out
+// before the hook turns them into geta marks
 public static class ShiftJis
 {
     private static readonly Encoding Cp932 = Encoding.GetEncoding(932);
 
-    // the hook turns what Shift-JIS hasn't got into '?', so 2 a char never lets one through. The fallback's per UTF-16
-    // unit, so an emoji counts 4 in case polcore stands in for each half
+    // unmapped chars become '?', so 2 a char never lets one through. The fallback's per UTF-16 unit,
+    // so an emoji counts 4 in case polcore stands in for each half
     private static readonly Encoding Counting = Encoding.GetEncoding(932, new EncoderReplacementFallback("??"), DecoderFallback.ReplacementFallback);
     private static readonly Encoding Strict = Encoding.GetEncoding(932, new EncoderReplacementFallback(""), DecoderFallback.ReplacementFallback);
 
@@ -19,7 +19,6 @@ public static class ShiftJis
     public static bool HasDoubleByte(string text) =>
         text.Any(c => !char.IsSurrogate(c) && Strict.GetByteCount(new[] { c }) == 2);
 
-    // never half a surrogate pair
     public static string Fit(string text, int bytes)
     {
         int used = 0, i = 0;

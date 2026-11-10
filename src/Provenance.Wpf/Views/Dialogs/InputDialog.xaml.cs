@@ -44,7 +44,6 @@ public partial class InputDialog : AppWindow
         finally { dlg.SecretBox.Clear(); }
     }
 
-    // set up but not shown yet
     internal static InputDialog ForSecret(string title, string prompt, int maxLength, Func<string, string?>? validate)
     {
         var dlg = new InputDialog { Title = title, _secret = true };

@@ -67,7 +67,6 @@
                     Visibility="{Binding CanRetry, Converter={StaticResource BoolToVis}}" />
         </StackPanel>
 
-        <!-- the zone picker and the room list -->
         <Grid x:Name="LobbyPart" Grid.Row="1">
             <Grid.Style>
                 <Style TargetType="Grid">
@@ -182,7 +181,6 @@
             </Grid>
         </Grid>
 
-        <!-- in a room: the log on the left, who's there on the right -->
         <Grid x:Name="RoomPart" Grid.Row="1" RowDefinitions="Auto,*,Auto">
             <Grid.Style>
                 <Style TargetType="Grid">
@@ -280,7 +278,6 @@
             </Border>
         </Grid>
 
-        <!-- entering: the viewer's own words while the steps run -->
         <Border Grid.Row="1" Background="{DynamicResource Bg.Base}" Opacity="0.94"
                 Visibility="{Binding Busy, Converter={StaticResource BoolToVis}}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">

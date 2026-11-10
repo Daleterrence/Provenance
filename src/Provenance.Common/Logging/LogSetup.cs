@@ -7,7 +7,6 @@ public static class LogSetup
 {
     public const string AppTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
 
-    // <name>-<date>.log in the folder, one file a day. No template means Serilog's own
     public static void ToDailyFile(string folder, string name, int keepFiles, LogEventLevel minimum = LogEventLevel.Information,
                                    string? outputTemplate = null)
     {

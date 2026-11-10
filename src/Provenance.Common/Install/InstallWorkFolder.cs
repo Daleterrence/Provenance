@@ -24,8 +24,8 @@ public static class InstallWorkFolder
         }
     }
 
-    // DXSETUP and the MSIs run as admin from here, so after the check nothing goes by name, NTFS won't rename a held
-    // folder or one above it. Null when every ffxi-download there is someone else's
+    // DXSETUP and the MSIs run as admin from here, so it's held (NTFS won't rename a held folder or one above it).
+    // Null when every ffxi-download there is someone else's
     public static WorkFolder? HoldWorkFolder(string chosen, IReadOnlyCollection<string> ownNames, Func<string, string?> problem)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(chosen));
@@ -75,7 +75,6 @@ public static class InstallWorkFolder
         }
     }
 
-    // where the handle really is, with every link on the way followed, in the form GetFullPath gives
     private static string? RealPath(SafeFileHandle h) =>
         FinalPath(h, allowUnc: false) is { } path ? Path.TrimEndingDirectorySeparator(path) : null;
 }

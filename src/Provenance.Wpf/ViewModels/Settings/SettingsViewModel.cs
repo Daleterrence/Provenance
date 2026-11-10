@@ -290,7 +290,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         Hooks.NotifyProfilesChanged();
     }
 
-    // the Settings tab that's showing, ShowTab moves it
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private SettingsTab _shownTab;
 
     public void ShowTab(SettingsTab tab)

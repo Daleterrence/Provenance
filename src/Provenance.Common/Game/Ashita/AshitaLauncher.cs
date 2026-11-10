@@ -170,8 +170,6 @@ public static class AshitaLauncher
         return Fail($"{name} started, but Provenance couldn't log in through it. Check {name} starts the game without Provenance, then try again.");
     }
 
-    // how long a third-party launch gets: to start a pol.exe, to report once one's up, to start one after closing
-    // itself, and when the slow-start line shows
     internal sealed record LaunchLimits(TimeSpan Start, TimeSpan Report, TimeSpan HookGone, TimeSpan SlowNote)
     {
         public static readonly LaunchLimits Default =

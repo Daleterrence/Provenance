@@ -66,7 +66,6 @@ public static class CredentialKey
         lock (InUseGate) return _wrapped ??= new WindowsCredentialStore(Prefix, InUse());
     }
 
-    // on a worker, so the key file's lock wait never lands on the UI thread
     public static Task<WindowsCredentialStore> WrappedAsync() => Task.Run(Wrapped);
 
     // so the first load or save on the UI thread never sits waiting on the key file's lock

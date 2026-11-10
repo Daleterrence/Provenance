@@ -8,7 +8,6 @@ public static class PolEnv
 {
     private static readonly byte[] Key = [0xfd, 0x31, 0x42, 0x53, 0x64, 0x75, 0x86, 0x97];
 
-    // null when the file can't be read or decoded, or has no such line
     public static string? Value(string path, string name)
     {
         try { return Value(File.ReadAllBytes(path), name); }

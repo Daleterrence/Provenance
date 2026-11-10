@@ -17,7 +17,6 @@
     <CornerRadius x:Key="Radius.Panel">6</CornerRadius>
     <CornerRadius x:Key="Radius.Dialog">8</CornerRadius>
 
-    <!-- the bar along the bottom of a window, and the gap between the buttons on it -->
     <Style x:Key="FooterBar" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Surface.1}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Pane}" />
@@ -26,7 +25,6 @@
     </Style>
     <Thickness x:Key="Footer.Gap">8,0,0,0</Thickness>
 
-    <!-- the line under a title bar. Last in the bar, so it draws over the buttons' hover -->
     <Style x:Key="TitleEdge" TargetType="Border">
         <Setter Property="Height" Value="1" />
         <Setter Property="VerticalAlignment" Value="Bottom" />
@@ -185,7 +183,6 @@
     <conv:InvertBoolConverter x:Key="InvertBool" />
     <conv:UpperCaseConverter x:Key="UpperCase" />
 
-    <!-- State.IsError is the error flag, every window binds its own -->
     <Style x:Key="StatusText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
         <Style.Triggers>
@@ -230,7 +227,6 @@
         <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
     </Style>
 
-    <!-- read-only text you can still select and copy -->
     <Style x:Key="SelectableText" TargetType="TextBox">
         <Setter Property="IsReadOnly" Value="True" />
         <Setter Property="TextWrapping" Value="Wrap" />
@@ -248,7 +244,6 @@
         <Setter Property="Value" Value="0" />
     </Style>
 
-    <!-- the strip across the top of a pane -->
     <Style x:Key="PaneHeader" TargetType="Border">
         <Setter Property="Padding" Value="16,10" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Pane}" />
@@ -256,7 +251,6 @@
         <Setter Property="Background" Value="{DynamicResource Surface.1}" />
     </Style>
 
-    <!-- the pill with a count in it, and the white one that sits on a button -->
     <Style x:Key="CountBadge" TargetType="Border">
         <Setter Property="MinWidth" Value="20" />
         <Setter Property="Height" Value="20" />

@@ -4,7 +4,6 @@ public sealed record WindowerKey(string Name, int ScanCode, string InternalName)
 
 public static class WindowerKeys
 {
-    // settings.xml name, DirectInput scan code, the name the hook wants
     private static readonly (string Name, int Code, string Internal)[] Table =
     [
         ("Escape", 1, "escape"), ("Enter", 28, "enter"), ("Insert", 210, "insert"), ("Delete", 211, "delete"),

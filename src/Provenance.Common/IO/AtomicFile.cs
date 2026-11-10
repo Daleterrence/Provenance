@@ -3,7 +3,7 @@ using System.Text;
 namespace Provenance.Common.IO;
 
 // Writes go to a temp file beside the target and get moved over it, so a reader never sees half a file and a crash
-// leaves the old one. The temp name is new every time, so two writers at once can't trip over each other.
+// leaves the old one
 public static class AtomicFile
 {
     public static string TempFor(string path) => $"{path}.{Guid.NewGuid():N}.tmp";
@@ -82,7 +82,6 @@ public static class AtomicFile
         if (attrs.HasFlag(FileAttributes.ReadOnly)) File.SetAttributes(target, attrs);
     }
 
-    // never opened over anything that's already there
     internal static void WriteNew(string tmp, byte[] bytes, bool flushToDisk = false)
     {
         using var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None);

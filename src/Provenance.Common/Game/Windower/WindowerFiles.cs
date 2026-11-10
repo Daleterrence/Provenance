@@ -5,7 +5,6 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Windower;
 
-// checks on the files an update looks at, before it touches them
 internal static class WindowerFiles
 {
     public static Version FileVersion(string file) =>

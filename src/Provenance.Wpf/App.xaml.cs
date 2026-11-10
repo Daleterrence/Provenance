@@ -101,7 +101,6 @@ public partial class App : Application
         if (swept > 0) Log.Information("Removed {Count} old hook file(s)", swept);
     }
 
-    // every key's read on a worker now, so the first use on the UI thread finds it ready
     private static void WarmKeys()
     {
         _ = CredentialKey.WarmUp();
@@ -148,8 +147,8 @@ public partial class App : Application
         // after the view model's listening for a failed save, before its start-up clears the records of gone pol.exes or
         // pre-starts one
         ScreenSaver.Note(settings);
-        // Windows logging off cancels a log in and WPF would close the window ignoring its Cancel, so it closes the normal
-        // way first. A held session gets logged out and nothing goes to the tray
+        // Windows logging off cancels a log in, and WPF would close the window ignoring its Cancel, so it closes normally first.
+        // A held session is logged out, nothing goes to tray
         SessionEnding += (_, e) =>
         {
             if (LogOff(mainVm, mainWindow)) e.Cancel = true;
@@ -167,7 +166,6 @@ public partial class App : Application
     {
         Log.Information("Windows session ending");
         _ = mainVm.CancelLogInAsync();
-        // a question that's up can't be closed under, so Windows is told no
         bool refuse = mainWindow.ExitWaitsForAnswer;
         mainWindow.ExitWithoutAsking();
         return refuse;

@@ -2,7 +2,6 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Feeds;
 
-// POL's site addresses and URL checks
 public static class PlayOnlineSite
 {
     private static string RegionToken(PolRegion r) =>

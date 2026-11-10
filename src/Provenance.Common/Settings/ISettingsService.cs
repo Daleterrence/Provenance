@@ -3,7 +3,6 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Settings;
 
-// %APPDATA%\Provenance\settings.json
 public interface ISettingsService
 {
     LauncherSettings Current { get; }

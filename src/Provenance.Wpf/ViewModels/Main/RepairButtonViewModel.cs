@@ -53,7 +53,6 @@ public partial class RepairButtonViewModel : ObservableObject
         session.PhaseChanged += Refresh;
     }
 
-    // while the repair window's up
     [ObservableProperty] private bool _repairing;
 
     [ObservableProperty]
@@ -111,8 +110,8 @@ public partial class RepairButtonViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanStart))]
     private void Start()
     {
-        // pre-starts are held off for the whole repair, so no background Prestart lands a pol.exe on top of it
-        // still held, so a pol.exe the repair replaced gets it back before anything pre-starts
+        // pre-starts are held off for the whole repair, so none lands a pol.exe on top of it.
+        // Still held when a replaced pol.exe gets its LAA back
         var vm = new RepairViewModel(_dialogs, _settings.DetectedRegion, _pol.Prestarter.HoldPrestarts,
                                      () => LargeAddressAwareSwitch.Apply(_settings, "after the repair"));
         Repairing = true;

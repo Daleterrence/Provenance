@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
-// Handle Profile (Slot -1) or one of the handle's FFXI characters
 public sealed partial class ProfileTab(int slot, string characterKey, string label) : ObservableObject
 {
     public int Slot { get; } = slot;

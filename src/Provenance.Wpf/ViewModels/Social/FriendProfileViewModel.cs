@@ -15,7 +15,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
 
     public FriendProfileViewModel(SocialViewModel social) => _social = social;
 
-    // the viewer's own popups over the profile window
     public event Action<string>? Popup;
 
     public sealed record RowItem(string Label, string Value, ImageSource? Picture);
@@ -119,7 +118,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         _ => _social.Viewer.Text(0x4a81, "Not set"),
     };
 
-    // "name (category)" like the viewer's Portrait row
     private string ProfilePictureText(int picId)
     {
         var catalog = _social.Viewer.Pictures;

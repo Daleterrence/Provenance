@@ -73,7 +73,6 @@ static void mail_send_paced(int r, ULONGLONG ms)
         base_log("mail: slow send (%ums) - the next one waits 5s\r\n", (unsigned)ms);
     }
 }
-/* a message that can't go this session or this hour is refused, not kept waiting */
 static const char *mail_send_pace_refusal(void)
 {
     int why = mail_send_pace_check(&g_s.pace, GetTickCount64());
@@ -96,7 +95,6 @@ static void mail_send_sent_record(BYTE *b, const BYTE *hdr)
     if (g_s.sent_ids_n < SENT_IDS) g_s.sent_ids_n++;
     g_mail_raw_new = 1;
 }
-/* hdr is the message that went, its header time and seq let the app put my line where the friend sees it */
 static void mail_send_result(const char *token, const char *state, const BYTE *hdr)
 {
     mail_send_note(token, state);

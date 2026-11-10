@@ -134,7 +134,7 @@ public partial class AccountsViewModel : ObservableObject
     {
         if (SelectedProfile is not { } p) return;
         var idx = Profiles.IndexOf(p);
-        if (idx >= 0) Profiles[idx] = p;   // redraws the switcher's text after an in-place rename
+        if (idx >= 0) Profiles[idx] = p;
         SelectedProfile = p;
         OnPropertyChanged(nameof(ProfileTitle));
         OnPropertyChanged(nameof(ProfilePicture));
@@ -147,7 +147,7 @@ public partial class AccountsViewModel : ObservableObject
     {
         var r = _dialogs.AskAccount(null, false, edit: false);
         if (r == null) return false;
-        // one POL ID twice would be two cards for one account, and the message names the card, never the ID
+        // one POL ID twice would be two cards for one account
         if (ProfileWithPolId(r.PolId) is { } same)
         {
             _dialogs.Info("Account already added",

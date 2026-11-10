@@ -1,6 +1,5 @@
 namespace Provenance.Common.Hook;
 
-// what the app says for each way a hook job can fail
 public static class HookFailures
 {
     public const string ChatCommError = "Chat communication error.";

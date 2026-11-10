@@ -1,4 +1,4 @@
-#pragma warning disable RS0030 // app-level lookups live in the services
+#pragma warning disable RS0030
 using System.Windows;
 using System.Windows.Media;
 using Provenance.Common.PolFormat;
@@ -17,7 +17,6 @@ namespace Provenance.Wpf.Services;
 public interface IWindowManager
 {
     bool ProfileEditorOpen { get; }
-    // "Friends", or "Friends and messages" while they're merged
     string FriendsTitle { get; }
 
     void ShowFriends(SocialViewModel social);

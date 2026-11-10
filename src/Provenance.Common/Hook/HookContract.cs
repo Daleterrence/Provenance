@@ -18,8 +18,7 @@ public enum HookExit
     AddressesNotFound = 18,     // ADDRESSES_EXIT
 }
 
-// what the app and the hook have to agree on, the same names as native/hook/hook_contract.h. Change one side and you
-// change the other, and the hook-contract test checks they match
+// the same names as native/hook/hook_contract.h, and the hook-contract test checks they match
 public static class HookContract
 {
     public static class Env
@@ -92,7 +91,6 @@ public static class HookContract
         ];
     }
 
-    // the other files in the hook's folder, each pol_hook.<pid>.<name>
     public static class Files
     {
         public const string Log = "log";

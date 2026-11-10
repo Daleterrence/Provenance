@@ -25,7 +25,6 @@ public sealed class LauncherSettings
 
     public bool SocialSplit { get; set; }
 
-    // "dark" or "light"
     public string Theme { get; set; } = "dark";
 
     public bool MinimizeToTray { get; set; }
@@ -46,7 +45,6 @@ public sealed class LauncherSettings
     public string AshitaPath { get; set; } = "";
     public string AshitaBootConfig { get; set; } = "";
     public string WindowerPath { get; set; } = "";
-    // "" is Windower's default profile
     public string WindowerProfile { get; set; } = "";
     // by Windower profile name, and no entry means the shared list
     public Dictionary<string, WindowerAddonList> WindowerAddonLists { get; set; } = [];
@@ -72,7 +70,6 @@ public sealed class LauncherSettings
     // (or set off by a new install)
     public bool? ChatLanguageFilter { get; set; }
 
-    // -1 is off
     public int? AutoDisconnectMinutes { get; set; }
 
     // the last read with no pol.exe running, since a running one has it switched off

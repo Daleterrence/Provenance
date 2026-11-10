@@ -179,8 +179,8 @@ static int chat_list_db_load(BYTE *b, int rooms)
         const pfb_tab *t = chat_list_tab_of(g_cr_cpfb, 0);
         int lang = pc_viewer_language_or(b, 0), row = 0;
         for (int i = 0; i < t->n && g_cr_zone_n < CR_ZONES; i++) {
-            /* the viewer lists a group's name (part 0) and the zone (part 2), leaving out rows 5-8, or 6-8 in Japanese
-               (app.dll 0x100a12bd, by svc 0xf18). By row, not by name, same as it does */
+            /* like the viewer (app.dll 0x100a12bd, svc 0xf18): a group's name (part 0) and the zone (part 2), no rows 5-8
+               (6-8 in Japanese). By row, not by name */
             if (chat_list_part_there(t, i, 0)) row++;
             if (!chat_list_part_there(t, i, 2)) continue;
             if (row < (lang == 0 ? 6 : 5) || row > 8) g_cr_zone[g_cr_zone_n++].code = (WORD)t->e[i].code;

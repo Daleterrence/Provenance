@@ -93,7 +93,7 @@ public static class PathSafety
     // removable drive can be swapped
     internal static bool OnLocalFixedDrive(string fullPath, Func<string, DriveType> driveType)
     {
-        if (fullPath.StartsWith(@"\\", StringComparison.Ordinal)) return false;   // UNC, and \\?\ and \\.\ paths
+        if (fullPath.StartsWith(@"\\", StringComparison.Ordinal)) return false;
         var root = Path.GetPathRoot(fullPath);
         return root is { Length: 3 } && root[1] == ':' && root[2] == '\\' && driveType(root) == DriveType.Fixed;
     }

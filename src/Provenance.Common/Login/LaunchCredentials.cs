@@ -162,8 +162,8 @@ public sealed class LaunchCredentials
         keys.Clear();
     }
 
-    // the room password goes to the hook as a one-shot entry like the account details, the hook deletes it once read.
-    // User is the enter's token, so it only ever works for that one
+    // the room password goes to the hook as a one-shot entry like the account details, deleted once read.
+    // User is the enter's token, so it only works for that one
     public bool SaveChatPassword(string token, string password)
     {
         if (LaunchId is not { } id) return false;

@@ -30,7 +30,6 @@ public sealed partial class GroupsViewModel : ObservableObject
         // the viewer's picker only offers groups I'm a member, sub-master or master of
         public bool CanChat => MyRole is GroupRole.Member or GroupRole.SubMaster or GroupRole.Master;
         public string Summary => $"{Members.Count} {(Members.Count == 1 ? "member" : "members")}, {OnlineCount} online";
-        // group chat lines that came in with its window hidden or behind
         public int Unread { get; init; }
         public bool HasUnread => Unread > 0;
     }
@@ -196,7 +195,6 @@ public sealed partial class GroupsViewModel : ObservableObject
                    $"Invitation to \"{g.Name}\" sent to {f.Name}.", bySend: true);
     }
 
-    // an invitation (kind 0xe) gets a kind 0xf or 0x10 message back
     public void AnswerInvite(FriendItem invite, bool accept)
     {
         if (!invite.IsGroupInvite || !_social.CanEdit) return;   // refused before the viewer's string table gets read
@@ -272,7 +270,6 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     public GroupItem? GroupOf(GroupMemberItem m) => Items.FirstOrDefault(g => g.Members.Any(x => ReferenceEquals(x, m)));
 
-    // a group row's own menu, or a member's (never my own row), null when there isn't one
     public IReadOnlyList<MenuAction>? RowMenu(object? row) => row switch
     {
         GroupItem g => GroupMenu(g),

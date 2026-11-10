@@ -421,8 +421,8 @@ static void profiles_profile_pump(BYTE *b, int ctl)
     profiles_profile_done("done");
 }
 
-/* prof_001 (title 1) by z_ctsid and z_ctid together: a friend's FFXI character, the way the viewer's profile tab finds it,
-   for one that's on right now, and for one of a friend's tabs. Same where, same load, a builder each */
+/* prof_001 (title 1) by z_ctsid and z_ctid: a friend's FFXI character, found like the viewer's profile tab does,
+   for one online now and one of a friend's tabs */
 typedef struct ffxi_read {
     db_job j;
     const char *prefix;
@@ -437,7 +437,6 @@ static DWORD g_fp_ctsid, g_fp_lo, g_fp_hi;
 static int g_fp_slot = -1;
 static char g_fp_token[48], g_fp_state[32] = "", g_fp_json[0x400];
 
-/* the record's string field, empty when it isn't there */
 static void profiles_character_text(BYTE *b, pdb_rec *rec, const char *name, char *js, int cap, BYTE *level)
 {
     pdb_item *it = profile_db_get(b, g_ch_pib, name, rec);
@@ -447,8 +446,8 @@ static void profiles_character_text(BYTE *b, pdb_rec *rec, const char *name, cha
         json_sjis_copy(raw, it->v.str, sizeof raw);
     json_pol(b, raw, 0x80, js, cap);
 }
-/* nameState 0 shown, 1 withheld, 2 empty. Like the viewer with a header field (and prof_pol's z_name), only the record
-   level says whether the name's visible, z_name's own level just goes in the log */
+/* nameState 0 shown, 1 withheld, 2 empty. Like the viewer, only the record level says whether the name's visible,
+   z_name's own level just goes in the log */
 static void profiles_character_build(BYTE *b, pdb_rec *rec)
 {
     char nm[0x100], wn[0x100];

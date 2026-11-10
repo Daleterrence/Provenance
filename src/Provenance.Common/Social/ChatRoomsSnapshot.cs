@@ -4,21 +4,21 @@ using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Social;
 
-// a zone in the chat room picker. Group is the zone group it's listed under, People is everyone in its rooms
 public sealed record ChatZone(int Code, string Group, string Name, int Rooms, int People);
 
-// a room category from the room list's own table: Group is "Target Members", "Purpose" or "Main Language"
+// Group is "Target Members", "Purpose" or "Main Language"
 public sealed record ChatCategory(int Code, string Group, string Name);
 
-// one row of the room list. Irc is the name the hook joins, Name what people see, Created is Unix seconds
+// Irc is the name the hook joins, Created is Unix seconds
 public sealed record ChatRoomEntry(string Irc, string Name, bool Locked, int People, int Capacity,
                                    IReadOnlyList<int> Categories, long Created);
 
 // Key only means something inside the one room, the hook never hands out ids
 public sealed record ChatMember(int Key, string Name, bool Me, bool Master, bool Away);
 
-// the snapshot's "chat", there once chat's been used this session. States run "searching" -> "done" or "failed:...",
-// and the room's "entering" -> "in" -> "left", or "failed:...", "kicked", "gone" (the room went without a kick) or "lost"
+// the snapshot's "chat", once chat's been used. States:
+//   search  "searching" -> "done" or "failed:..."
+//   room    "entering" -> "in" -> "left", or "failed:...", "kicked", "gone" (went without a kick), "lost"
 public sealed record ChatRoomsSnapshot(long LineSeq,
                                        HookJob ZonesJob, IReadOnlyList<ChatZone> Zones,
                                        IReadOnlyList<ChatCategory> Categories,

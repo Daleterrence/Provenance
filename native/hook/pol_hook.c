@@ -1,5 +1,3 @@
-/* pol_hook.c - signs in from inside the real pol.exe, then its own FFXiEntry boots the game (Windower and Ashita
-   never notice) */
 #include <windows.h>
 #include <wincred.h>
 #include <string.h>
@@ -39,8 +37,8 @@
 #include "snapshot.c"
 #include "hold.c"
 
-/* add-ons and game plugins already unloaded in FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins and
-   finish its log, so it gets a clean one, the rest just get more places to crash */
+/* add-ons and game plugins are already unloaded in FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins
+   and finish its log, so it gets a clean one */
 NORETURN static void pol_hook_game_over(UINT code)
 {
     if (GetModuleHandleW(L"Ashita.dll")) {

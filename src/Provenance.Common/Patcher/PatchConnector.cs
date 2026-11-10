@@ -3,7 +3,6 @@ using System.Net.Sockets;
 
 namespace Provenance.Common.Patcher;
 
-// Pinned skips the lookup, Optional means no address is a null rather than an error
 public sealed record PatchTarget(string Host, int Port, IPAddress? Pinned = null, bool Optional = false);
 
 public sealed record PatchConnection(PatchServerLink Link, IPAddress Address);

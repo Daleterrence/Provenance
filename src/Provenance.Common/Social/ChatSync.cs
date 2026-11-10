@@ -4,7 +4,7 @@ public enum ChatNewsKind { Message, Notice, FriendRequest, GroupInvite }
 
 public sealed record ChatNews(ChatNewsKind Kind, string From, string Text = "", int Mid = 0);
 
-// Kept is false when the log didn't save. ToAck are the mids to ack once it did, Unack puts them back if that fails
+// ToAck are the mids to ack once the log saved (Kept), Unack puts them back if that fails
 public sealed record ChatSyncResult(bool Changed, bool SendsChanged, bool Kept, IReadOnlyList<int> ToAck,
                                     IReadOnlyList<ChatNews> News);
 
@@ -23,7 +23,7 @@ public sealed class ChatSync(MailSendQueue sends)
         foreach (var mid in mids) _acked.Remove(mid);   // again next snapshot
     }
 
-    // new mail and send results into the log. POL's copy of a message only goes once mine's saved, like the viewer.
+    // POL's copy of a message only goes once mine's saved, like the viewer.
     // open is the conversation on screen, blocked the game running or a handle switch
     public ChatSyncResult Merge(ChatStore chat, PolSocialSnapshot snap, int? pid, bool blocked,
                                 (string Name, string Key)? open, Func<PolMessage, string?> noticeText,
@@ -67,8 +67,8 @@ public sealed class ChatSync(MailSendQueue sends)
                 news.Add(new(ChatNewsKind.GroupInvite, m.From, Mid: m.Mid));
             if (m.HasBody && m.Kind == PolMessage.KindFriendRequest && m.Mid > 0 && _seenRequests.Add(m.Mid))
                 news.Add(new(ChatNewsKind.FriendRequest, m.From, Mid: m.Mid));
-            // my line to another POL ID coming back wasn't received, so it goes from the server like any read line. An
-            // unmatched one waits while a send of mine could still be it
+            // my line to another POL ID coming back wasn't received, so it goes from the server like any read line.
+            // An unmatched one waits for a send that could be it
             if (Echo(snap, m, chat))
             {
                 changed |= chat.MarkReturned(m.Time, m.Seq, m.FromSlot);
@@ -101,12 +101,11 @@ public sealed class ChatSync(MailSendQueue sends)
         return new(changed, sendsChanged, kept, saved, news);
     }
 
-    // sent by this handle, or another handle on my own POL ID
     internal static bool Mine(PolSocialSnapshot snap, PolMessage m) =>
         m.IsMe || (snap.MyKey.Length > 0 && m.FromKey == snap.MyKey);
 
-    // only a certain echo: the log has my line to another POL ID with the same time, seq and slot, or it's a handle to
-    // itself. Anything else from my POL ID gets shown
+    // a certain echo only: my line to another POL ID in the log with the same time, seq and slot, or a handle to itself.
+    // Anything else from my ID gets shown
     internal static bool Echo(PolSocialSnapshot snap, PolMessage m, ChatStore chat) =>
         m.IsChat && Mine(snap, m) &&
         ((m.ToMe && m.ToKey.Length > 0 && m.ToKey == m.FromKey) || chat.SentAt(m.Time, m.Seq, m.FromSlot));

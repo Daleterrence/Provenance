@@ -8,8 +8,8 @@ using static Provenance.Common.IO.FileHandles;
 
 namespace Provenance.Common.Install;
 
-// <root>\Uninstall holds what an elevated uninstall runs, and the root may be anyone's to write. So it gets its own
-// permissions, set through a handle that's never a link, and is held while written
+// <root>\Uninstall holds what an elevated uninstall runs and the root may be anyone's to write,
+// so it gets its own permissions, set through a handle that's never a link
 public sealed class UninstallFolder : IDisposable
 {
     // tests only: they don't run as admin, so nothing they make can be Administrators'
@@ -69,8 +69,8 @@ public sealed class UninstallFolder : IDisposable
         }
     }
 
-    // a file just written in the held folder: Administrators' whatever this PC's policy says about new files. Only the
-    // owner's read and written, a fresh FileSecurity would write an empty DACL and lock Administrators out
+    // a file just written in the held folder: Administrators' own it whatever this PC's policy says.
+    // Only the owner's read and written, a fresh FileSecurity would write an empty DACL
     public static void Own(string path)
     {
         var file = new FileInfo(path);

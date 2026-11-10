@@ -10,7 +10,6 @@ namespace Provenance.Common.Otp;
 
 public enum ToolInstall { Installed, DownloadFailed, CheckFailed, CantCheck, TooOld, NotSupported }
 
-// downloads the tool from its maker into the tools folder and keeps it up to date. Nothing goes in without passing the signature check
 public static class ToolInstaller
 {
     private const string OnePasswordVersionUrl = "https://app-updates.agilebits.com/check/1/0/CLI2/en/2.0.0/N";

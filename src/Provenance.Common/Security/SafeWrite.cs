@@ -2,8 +2,8 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Security;
 
-// Provenance runs as admin, so a write into a folder a standard user could own has to hold every folder down to the
-// file, refuse links, and check again right before the move. Callers say what happens to a backup.
+// Provenance runs as admin, so a write into a folder a standard user could own holds every folder down to the file,
+// refuses links and checks again right before the move
 public static class SafeWrite
 {
     public enum Backup { None, Keep, DropOld }

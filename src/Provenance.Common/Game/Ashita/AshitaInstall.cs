@@ -30,7 +30,7 @@ public static class AshitaInstall
             {
                 using var fs = SharedFile.OpenRead(f.FullName);
                 using var sr = new StreamReader(fs);
-                var buf = new char[16384];   // the header's at the top
+                var buf = new char[16384];
                 var head = new string(buf, 0, sr.Read(buf, 0, buf.Length));
                 var m = re.Match(head);
                 // one that's been renamed or deleted since would only fail the launch

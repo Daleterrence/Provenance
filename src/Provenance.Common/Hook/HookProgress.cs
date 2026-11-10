@@ -2,7 +2,6 @@ using Provenance.Common.Login;
 
 namespace Provenance.Common.Hook;
 
-// turns the hook's events into the login's progress bar, each step once
 public sealed class HookProgress
 {
     private readonly HashSet<string> _seen = new();

@@ -34,8 +34,8 @@ static int profile_db_check_schema(BYTE *b, pdb_schema *s)
     return 1;
 }
 
-/* data\db\<file> read into a zeroed heap block with slack spare bytes, path getting where it came from. NULL when it's not
-   there or its size is outside min..max, the caller owns the block */
+/* data\db\<file> read into a zeroed heap block with slack spare bytes, path getting where it came from.
+   NULL when missing or outside min..max size, the caller owns the block */
 static BYTE *profile_db_file_read(BYTE *b, const WCHAR *file, WCHAR path[0x200 + 32], DWORD min, DWORD max, DWORD slack,
                                   int log_open, DWORD *size)
 {
@@ -120,7 +120,6 @@ static pdb_cond *db_where_character(BYTE *b, pdb_schema *s, DWORD *ctsid, unsign
     return pc_pdb_where(b, 2, &c[0], &c[1]);
 }
 
-/* what t, a start call's answer, does to the job. A failure is left to the caller */
 static void db_job_started(db_job *j, int phase, int t)
 {
     if (t == NO_SLOT) { j->step = 1 + 2 * phase; return; }
@@ -160,8 +159,8 @@ static int db_job_pending(BYTE *b, db_job *j, int r, int cancel_on_drain)
     return 1;
 }
 
-/* searches, profiles (friends', FFXI and my own), character lookups and picture saves all go to the profile server, so
-   they share the 3s gap and go one at a time like the viewer */
+/* searches, profiles (friends', FFXI and my own), character lookups and picture saves all hit the profile server,
+   so they share the 3s gap and go one at a time */
 
 static int hold_db_free(void);
 

@@ -10,6 +10,5 @@ internal sealed record RowData(AddonKind Kind, AddonListing Listing)
     public bool CanInstall { get; init; }
     public bool Incompatible { get; init; }
     public IReadOnlyList<AddonBadge> Badges { get; init; } = [];
-    // the team that makes it, when it comes with Windower or Ashita
     public string? Team { get; init; }
 }

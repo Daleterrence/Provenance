@@ -42,7 +42,6 @@ public static class ViewerBuild
 
     internal static readonly Builds Known = new(PolExes, Polcores);
 
-    // a pol.exe (with or without Large Address Aware) and polcore Provenance ships with, for a region
     public static bool IsBuiltIn(PolRegion region, string polExeSha256, string polcoreSha256) =>
         Fits(Known, region, polExeSha256, () => polcoreSha256);
 

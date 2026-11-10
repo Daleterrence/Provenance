@@ -7,8 +7,6 @@ namespace Provenance.Common.Patcher;
 
 public static class GameUpdate
 {
-    // One POL version check, then the patch mirror. POL serves whatever the mirror can't, and beforeChange runs once
-    // at most.
     internal static PatchResult Run(PatchProduct product, PolRegion installed, IProgress<PatchProgress>? progress,
                                     Action beforeChange, CancellationToken ct)
     {

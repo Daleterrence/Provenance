@@ -1,4 +1,4 @@
-#pragma warning disable RS0030 // app-level lookups live in the services
+#pragma warning disable RS0030
 using System.Windows;
 using System.Windows.Media;
 
@@ -13,8 +13,8 @@ internal static class ChatColours
         [.. new[] { "Bg.Base", "Surface.1", "Surface.2" }
             .Select(k => Application.Current?.TryFindResource(k) as SolidColorBrush).OfType<SolidColorBrush>().Select(b => b.Color)];
 
-    // the viewer's colours are for its light window. On a dark one they're lifted to the same hue at a lightness that
-    // reads, on a light one only the few too pale get darkened
+    // the viewer's colours are for its light window. On dark they're lifted to the same hue at a lightness that reads,
+    // on light only the too pale get darkened
     internal static SolidColorBrush LineBrush(uint argb, IReadOnlyList<Color> grounds)
     {
         bool light = grounds.Count > 0 && grounds.Average(c => (c.R + c.G + c.B) / 765.0) > 0.5;

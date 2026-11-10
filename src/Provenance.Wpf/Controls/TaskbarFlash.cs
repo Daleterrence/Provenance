@@ -9,7 +9,7 @@ namespace Provenance.Wpf.Controls;
 // button stays highlighted otherwise
 internal static class TaskbarFlash
 {
-    internal static Action<Window, bool>? Seen;   // tests watch the calls, nothing else sets it
+    internal static Action<Window, bool>? Seen;
 
     private static readonly HashSet<Window> Flashing = new();
 

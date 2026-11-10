@@ -14,7 +14,6 @@ public partial class MessageDialog : AppWindow
         InitializeComponent();
     }
 
-    // an error or a notice, set up but not shown yet
     internal static MessageDialog ForNotice(string title, string body, bool offerLogs = false) => Create(title, body, notice: true, offerLogs);
 
     internal static int? Choose(Window? owner, string title, string body, string ok, string first, string second, ConfirmStyle style)
@@ -24,7 +23,6 @@ public partial class MessageDialog : AppWindow
         return dlg.ChoiceB.IsChecked == true ? 1 : 0;
     }
 
-    // set up but not shown yet
     internal static MessageDialog ForConfirm(string title, string body, string ok, ConfirmStyle style = ConfirmStyle.Normal,
                                              string? cancelLabel = null, string? choiceA = null, string? choiceB = null)
     {

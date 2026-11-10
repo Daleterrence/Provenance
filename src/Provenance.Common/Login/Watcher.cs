@@ -92,8 +92,8 @@ internal sealed class Watcher
         }
     }
 
-    // the attempt has to leave nothing behind for the next one to trip over. Only the wait is reported from here. An
-    // attempt that says Refused itself (checkLog false) isn't looked up in the log again
+    // each attempt has to leave nothing behind for the next. Only the wait is reported from here.
+    // One that says Refused itself (checkLog false) isn't looked up in the log
     internal (LaunchOutcome Outcome, T? Value, string Text) Retrying<T>(Func<(LaunchOutcome Outcome, T? Value, string Failure)> attempt,
                                                                       IProgress<LaunchProgress>? progress, CancellationToken ct, bool checkLog = true)
     {
@@ -119,7 +119,6 @@ internal sealed class Watcher
 
     private const string NotPickedUp = "Provenance couldn't start logging in to PlayOnline. Try again.";
 
-    // loads the hook into a pol.exe that something else started
     internal (LaunchOutcome Outcome, string Failure) Attach(int pid)
     {
         var psi = StartInfo(Path.Combine(HookFiles.NativeDir, HookFiles.WatcherExe), ["--attach", pid.ToString(), WatcherProcess.HookDllPath]);

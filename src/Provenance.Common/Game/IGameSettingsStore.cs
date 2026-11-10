@@ -12,7 +12,6 @@ public interface IGameSettingsStore
     string? ProfileName { get; }
     string? ProfileDisplay { get; }
     bool SameShapeRenderSizes { get; }
-    // shown, but never saved to
     bool ReadOnly { get; }
 
     // throws when there's nothing to load, Shown with the reason

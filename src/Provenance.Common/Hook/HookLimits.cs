@@ -1,6 +1,5 @@
 namespace Provenance.Common.Hook;
 
-// the only place the app's waits are written. Each is built from the limit it sits past
 public static class HookLimits
 {
     // polcore fails any job 100s after its slot started

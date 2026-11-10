@@ -4,8 +4,8 @@ namespace Provenance.Wpf.ViewModels.Shared;
 
 public static class CollectionPatch
 {
-    // brings list to match next in place rather than clearing it, so a list keeps its scroll position and selection and only
-    // the rows that changed get redrawn. sameRow says two items are one row, equal that nothing about it changed
+    // brings list to match next in place rather than clearing it, so it keeps its scroll position and selection. sameRow says
+    // two items are one row, equal that nothing about it changed
     public static void Patch<T>(this ObservableCollection<T> list, IReadOnlyList<T> next, Func<T, T, bool> sameRow,
                                 Func<T, T, bool> equal, Action<int, T>? replace = null)
     {

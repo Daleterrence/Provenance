@@ -2,7 +2,6 @@ using Provenance.Common.Hook;
 
 namespace Provenance.Common.Social;
 
-// the app's half of the hook's send rule: one line in flight
 public sealed class ChatSendGate(TimeSpan giveUp)
 {
     private readonly HookJobWatch _watch = new();

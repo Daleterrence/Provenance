@@ -41,7 +41,6 @@ public sealed class ViewerResources
         return _table != null && _table.TryGetValue(id, out var s) && s.Length > 0 ? s : fallback;
     }
 
-    // the whole table, read afresh each time
     public IReadOnlyDictionary<int, string>? Strings() => Folder is { } viewer ? _strings(viewer) : null;
 
     public bool FilterOn => PolOptions.ChatFilter(_settings.Current);

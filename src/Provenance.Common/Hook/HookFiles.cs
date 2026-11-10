@@ -28,7 +28,6 @@ public static class HookFiles
     public static string PathFor(int pid, string name) =>
         Path.Combine(RequiredDir, string.Format(CultureInfo.InvariantCulture, HookContract.Files.Name, pid, name));
 
-    // a request and the .taking the hook renames it to while it reads it
     public static string[] RequestPaths(int pid, string ext)
     {
         var path = PathFor(pid, ext);
@@ -67,8 +66,8 @@ public static class HookFiles
         FileDelete.Try(PathFor(pid, name));
     }
 
-    // what an old process with this pid left that its pol.exe's snapshots and chat rooms would otherwise start from,
-    // and every request it never took. Not the stop, ended and go files, those are a session's own
+    // leftovers of an old process with this pid: snapshots and chat rooms a new pol.exe would start from, and untaken requests.
+    // Not the stop, ended or go files (a session's own)
     public static void ClearFor(int pid)
     {
         foreach (var name in new[] { HookContract.Files.Social, HookContract.Files.Store, HookContract.Files.ChatRoom,
@@ -81,7 +80,6 @@ public static class HookFiles
     // log out and exit, or exit having sent nothing. Throws when the file can't be written
     public static void RequestStop(int pid) => File.WriteAllText(PathFor(pid, HookContract.Files.Stop), "stop");
 
-    // what a request carries so a snapshot can say which job it answers
     public static string NewToken() => ShortId.New(12);
 
     // free text for the last field of a request, the one place line breaks survive. Everything else is one line
@@ -89,8 +87,8 @@ public static class HookFiles
 
     public static RequestBody Body(string text) => new(Clean(text, keepLineBreaks: true));
 
-    // one line per field, in the order the hook reads them. A field's control characters (tabs and line breaks too)
-    // become spaces, so it can't split into two. Written whole, false when it couldn't be
+    // one line per field, in the order the hook reads them. Control characters (tabs, line breaks) become spaces
+    // so a field can't split in two. False if not written
     public static bool WriteRequest(int pid, string name, params object[] fields)
     {
         try
@@ -111,8 +109,8 @@ public static class HookFiles
     private static string Clean(string s, bool keepLineBreaks) =>
         new(s.Replace("\r", "").Select(c => c < ' ' && !(keepLineBreaks && c == '\n') ? ' ' : c).ToArray());
 
-    // the most of each of the hook's JSON files a reader takes, so one gone wrong is never read whole. The hook caps the
-    // store at 3 MB and writes the others well under these
+    // the most of each hook JSON file a reader takes, so one gone wrong is never read whole.
+    // The hook caps the store at 3MB, the others are well under
     public static class MaxBytes
     {
         public const int Social = 4 * 1024 * 1024;

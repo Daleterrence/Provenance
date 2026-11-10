@@ -87,8 +87,8 @@ public static class Bitwarden
     }
 
     private static readonly object LoginGate = new();
-    private static Task<BitwardenLogin>? _login;   // under LoginGate
-    private static Process? _loginWindow;          // under LoginGate
+    private static Task<BitwardenLogin>? _login;
+    private static Process? _loginWindow;
 
     // the login that's still going, if there is one. Edit account watches it rather than starting another
     public static Task<BitwardenLogin>? LoginRunning

@@ -12,7 +12,6 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
-// only changed fields get sent, and a rename goes after the save
 public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 {
     private enum Job { None, Load, Save, Rename, LoadXi }
@@ -208,7 +207,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         return "";
     }
 
-    // the fields that differ from POL's copy, as the hook's name=value lines
     private List<KeyValuePair<string, string>> ChangedFields()
     {
         (string Field, long? Value)[] nums =
@@ -302,7 +300,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _ => null,
     };
 
-    // withdraws a request the hook hasn't taken yet, so it never runs later
     private void Abandon(string text)
     {
         if (JobExt is { } ext && _pid != 0) HookFiles.Discard(_pid, ext);

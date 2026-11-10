@@ -24,8 +24,8 @@ public sealed class WindowerAddonList
     private static List<string> Merge(List<string> names, List<string>? extras) =>
         [.. names, .. Clean(extras).Where(n => !names.Contains(n, StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase)];
 
-    // a profile renamed outside Provenance has no entry any more, so it's back on the global list. settings.json can
-    // hold a null for any of it, so nothing here trusts it not to
+    // a profile renamed outside Provenance has no entry any more, so it's back on the global list.
+    // settings.json can hold a null for anything, so nothing here trusts it
     public static WindowerAddonList Effective(WindowerSettingsFile settings, IReadOnlyDictionary<string, WindowerAddonList>? lists, string profileName,
                                               WindowerAddonList? extras = null) =>
         lists is not null && lists.TryGetValue(profileName, out var own) && own is { UseGlobal: false } ? own.Copy() : Global(settings, extras);

@@ -14,10 +14,8 @@ public sealed record ChatLine(long Seq, long Time, string Kind, int From, bool M
     public int Emote { get; init; }
 }
 
-// pol_hook.<pid>.chatroom.json, the open room's last 256 lines
 public sealed record ChatRoomLines(string Room, IReadOnlyList<ChatLine> Lines);
 
-// the hook's chat room requests and its lines file. Requests are written whole like the others
 public static class ChatRoomFiles
 {
     // the hook's limits: chat name 15 Shift-JIS bytes, password 23 chars, text 400 (the viewer's box). The viewer's new
@@ -25,8 +23,10 @@ public static class ChatRoomFiles
     public const int MaxNameBytes = 15, MaxPasswordLength = 23, MaxTextLength = 400, PageSize = 100;
     public const int MaxRoomName = 30, MaxNewPassword = 16, MinOccupancy = 2, MaxOccupancy = 20, DefaultOccupancy = 10;
 
-    // polcore's line is 0x200 bytes. Around the text goes "PRIVMSG <room> :" and the checksum and line end (20 and the
-    // room's name), then the 6 bytes of type, face and colour, the chat name and a tab and the language (3), as Shift-JIS
+    // polcore's line is 0x200 bytes, minus what goes around the text (as Shift-JIS):
+    //   "PRIVMSG <room> :", checksum and line end   20 + the room's name
+    //   type, face and colour                       6
+    //   chat name, a tab and the language           name + 3
     public static int MaxTextBytes(string room, string chatName) =>
         0x200 - (20 + room.Length) - (9 + ShiftJis.ByteCount(chatName));
 
@@ -44,7 +44,6 @@ public static class ChatRoomFiles
     public static bool Send(int pid, string token, string text, int colour = -1, int emote = 0) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.ChatSend, token, text, colour, emote);
 
-    // a new room. The password goes the same way an enter's does, never in here
     public static bool Create(int pid, string token, bool hasPassword, int zone, int occupancy, int members, int purpose,
                               int language, string chatName, string roomName) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.ChatCreate, token, hasPassword ? "1" : "", zone, occupancy, members,
@@ -52,7 +51,6 @@ public static class ChatRoomFiles
 
     public enum MasterOp { Kick, Master, Password }
 
-    // the room master's: kick or designate a member (by the room's key), or a new password (none turns it off)
     public static bool Master(int pid, string token, MasterOp op, int memberKey = 0, bool hasPassword = false) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.ChatMaster, token, hasPassword ? "1" : "",
                                op switch { MasterOp.Kick => "kick", MasterOp.Master => "master", _ => "password" }, memberKey);

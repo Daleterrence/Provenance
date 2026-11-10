@@ -18,11 +18,9 @@ public static class LargeAddressAware
     // US and Europe share a pol.exe, so that pair is only in once
     internal static readonly (string Off, string On)[] Known = ViewerBuild.Known.PolExes.Select(p => (p.Off, p.On)).Distinct().ToArray();
 
-    // the built-in pairs and the ones the mirror's signed list adds
     internal static IEnumerable<(string Off, string On)> Pairs() =>
         Known.Concat(SignedBuilds.Entries().Select(b => (b.PolExe, b.PolExeLaa))).Distinct();
 
-    // the hashes of a pol.exe's bytes with the bit off and with it on, null when it isn't a PE file
     public static (string Off, string On)? Pair(byte[] pol)
     {
         if (PeFile.CharacteristicsAt(pol) is not { } at) return null;
@@ -33,7 +31,6 @@ public static class LargeAddressAware
         return (FileHash.Sha256(off), FileHash.Sha256(on));
     }
 
-    // null when the file can't be read or isn't a PE file
     public static bool? Read(string path)
     {
         try
@@ -44,7 +41,6 @@ public static class LargeAddressAware
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    // SE's pol.exe, with or without the bit
     public static bool IsKnownBuild(string path) => Pairs().Any(pair => IsKnownBuild(path, pair));
 
     internal static bool IsKnownBuild(string path, (string Off, string On) known)

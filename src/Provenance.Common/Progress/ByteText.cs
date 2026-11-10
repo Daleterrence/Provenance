@@ -13,8 +13,8 @@ public static class ByteText
 
     public static string GbNumber(long bytes, int decimals = 1) => Number(bytes / GB, decimals);
 
-    // GB from a gigabyte up, MB below that, and KB only when asked for (a small file's size shouldn't read "0.0 MB"). KB
-    // rounds up, with nothing under 1 KB shown as a number
+    // GB from a gigabyte up, MB below that, KB only when asked for (a small file shouldn't read "0.0 MB").
+    // KB rounds up, nothing under 1 KB shown as a number
     public static string Size(long bytes, int gbDecimals = 1, int mbDecimals = 1, bool kb = false) =>
         bytes >= GB ? Number(bytes / GB, gbDecimals) + " GB"
         : bytes >= MB || !kb ? Number(bytes / MB, mbDecimals) + " MB"

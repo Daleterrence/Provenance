@@ -43,7 +43,6 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource State.Warn}" />
     </Style>
-    <!-- a row's name in a form, beside its field -->
     <Style x:Key="FormLabel" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource Text.2}" />

@@ -9,7 +9,6 @@ internal sealed class WindowerUpdateMutex : IDisposable
 
     private WindowerUpdateMutex() { }
 
-    // null when it's still held elsewhere after wait
     public static Task<WindowerUpdateMutex?> AcquireAsync(string name, TimeSpan wait, CancellationToken ct)
     {
         var hold = new WindowerUpdateMutex();

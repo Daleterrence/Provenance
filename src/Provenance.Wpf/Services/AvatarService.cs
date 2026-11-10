@@ -37,7 +37,6 @@ public sealed class AvatarService(ISettingsService settings)
         }
     }
 
-    // POL's own "no profile picture" (sheet hnf000, cell 0)
     public ImageSource? NoProfilePicture => Load(0);
 
     public ImageSource? ProfilePicture(int picId) => (picId > 0 ? Load(picId) : null) ?? NoProfilePicture;

@@ -26,8 +26,8 @@ static void handles_switch_start(BYTE *b)
     if (t < 0) { handles_done(requests_failed(t)); return; }
     g_s.handle_job = t;
 }
-/* polcore links into a handle's first free slot of 8, not where it was, so it's put back by hand in the records
-   (Content IDs at polcore.dll 0x10403080, handles 0x10405800) on this thread */
+/* polcore links into the first free slot of 8, not where it was, so it's put back by hand in the records
+   (Content IDs polcore.dll 0x10403080, handles 0x10405800) */
 static void handles_place(BYTE *b, int idx, int slot, int pos)
 {
     BYTE *hs = pc_handle_record(b, slot)->chars;
@@ -101,11 +101,10 @@ static void handles_switched(BYTE *b)
     base_log("handles: active handle now slot %d\r\n", g_my_slot);
 }
 
-/* written by the app for the handle that's active now, but not taken yet */
 static int handles_writes_asked(void) { return requests_listed(RQ_ASKED); }
 
-/* the viewer's link before it starts a game (app.dll 0x100235d5): unlinked ones go on the active handle, all in one
-   PutChrList. The app only sends what fits, so it's all or nothing here */
+/* the viewer's link before a game (app.dll 0x100235d5): unlinked ones go on the active handle in one PutChrList.
+   The app only sends what fits, so it's all or nothing */
 static void handles_linkall(BYTE *b, int slot, const pol_handle *h, char *ix, char *ck, char *p)
 {
     char k[17];
@@ -201,8 +200,8 @@ static void handles_request(BYTE *b)
     if (kind == HOP_LINK) {
         if ((f & CHR_LINKED) && (int)CHR_HANDLE(f) == slot) { handle_fail("failed:already linked"); return; }
         if (peers_handle_used(&h) >= 8) { handle_fail("failed:handle full"); return; }
-        /* polcore won't link one that's linked anywhere, so a move's an unlink first, like the viewer's. One linked to
-           a slot with no handle can't be unlinked either (-0x1c04), so it's left as it is */
+        /* polcore won't link one that's linked anywhere, so a move's an unlink first. One linked to a slot with no handle
+           can't be unlinked (-0x1c04), so it's left */
         if (f & CHR_LINKED) {
             pol_handle oh;
             old = (int)CHR_HANDLE(f);

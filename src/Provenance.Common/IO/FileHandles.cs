@@ -3,7 +3,6 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.IO;
 
-// The handle-level file calls the folder locks and the link checks share
 internal static class FileHandles
 {
     internal const uint ListDirectory = 0x1, ReadAttributes = 0x80, WriteAttributes = 0x100, Delete = 0x10000;
@@ -27,13 +26,11 @@ internal static class FileHandles
         return full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full[2..] : @"\\?\" + full;
     }
 
-    // a link is opened as itself, not followed
     internal static SafeFileHandle OpenLinkItself(string path, uint access, uint share) => Open(path, access, share, LinkItself);
 
     internal static bool TryInfo(SafeFileHandle h, out ByHandleFileInformation info) => Kernel32.GetFileInformationByHandle(h, out info);
 
-    // where the handle really is, every link on the way followed, with the \\?\ prefix off. A UNC path is null when
-    // allowUnc is false, otherwise it comes back as \\server\share
+    // where the handle really is, every link followed, \\?\ prefix off. A UNC path is null unless allowUnc, then \\server\share
     internal static string? FinalPath(SafeFileHandle h, bool allowUnc)
     {
         var buf = new char[1024];

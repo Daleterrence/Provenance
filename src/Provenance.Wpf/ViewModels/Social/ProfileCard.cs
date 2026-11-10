@@ -4,7 +4,6 @@ using Provenance.Common.Social;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
-// a card along the top of the editor: my handle's profile, or one of my FFXI characters (read only)
 public sealed partial class ProfileCard : ObservableObject
 {
     private readonly Func<PrivacyLevel, string> _help;

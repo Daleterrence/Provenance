@@ -4,7 +4,6 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Feeds;
 
-// banner pictures from POL's site, kept on disk so a picture is only fetched once
 public static class BannerImages
 {
     private const int MaxImageBytes = 8 * 1024 * 1024;

@@ -1,6 +1,6 @@
-/* "Provenance Watcher.exe" <pol.exe> <hook dll>: pol.exe starts suspended, gets the hook, then resumes.
-   --attach <pid> <hook dll> is for a pol.exe Windower or Ashita started, which it never ends.
-   --windower <Hook.dll> <pol.exe> <hook dll> puts Windower's Hook.dll in before the hook, the way Windower.exe does */
+/* "Provenance Watcher.exe" <pol.exe> <hook dll>: pol.exe starts suspended, gets the hook, then resumes
+   --attach <pid> <hook dll>: for a pol.exe Windower or Ashita started, never ended here
+   --windower <Hook.dll> <pol.exe> <hook dll>: Windower's Hook.dll goes in before the hook, as Windower.exe does */
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -134,9 +134,8 @@ static WCHAR *full_path(const WCHAR *path, const char *what)
     return full;
 }
 
-/* pol.exe suspended, in its own folder. FFXiEntry resolves the install paths from the cwd, and kiyaku=true skips the EULA
-   (no /game means the hook hands back content code 1). pol.exe inherits the error mode, so it gets the same no-boxes
-   rule as attach. Gives back the error mode to put back in it once the hook's in */
+/* pol.exe suspended, in its own folder (FFXiEntry resolves the install paths from the cwd).
+   kiyaku=true skips the EULA, no /game means the hook hands back content code 1 */
 static UINT start_suspended(const WCHAR *pol, PROCESS_INFORMATION *pi)
 {
     STARTUPINFOW si = { sizeof si };
@@ -154,6 +153,7 @@ static UINT start_suspended(const WCHAR *pol, PROCESS_INFORMATION *pi)
     cmd[0] = L'"';
     lstrcpyW(cmd + 1, pol);
     lstrcatW(cmd, L"\" kiyaku=true");
+    /* pol.exe inherits the error mode, so it gets attach's no-boxes rule. The old mode goes back once the hook's in */
     errmode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     SetErrorMode(errmode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     if (!CreateProcessW(pol, cmd, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, slash ? cwd : NULL, &si, pi))
@@ -218,8 +218,8 @@ static int windower(int argc, WCHAR **arg)
     if (n == WAIT_OBJECT_0 + 1) die("pol.exe ended before Windower's hook reported in");
     if (n != WAIT_OBJECT_0) die("Windower's hook didn't report in");
     printf("watcher: windower hook reported in\n");
-    /* Windower's Hook.dll detours kernel32's LoadLibraryA to refuse anything named like it, and pol_hook.dll only
-       gets past on a quirk in its check (not one I'd bet on lasting). KernelBase's export goes round the detour */
+    /* Windower's Hook.dll detours LoadLibraryA to refuse anything named like it, and pol_hook.dll only gets past on a quirk
+       (not one I'd bet on lasting). KernelBase's export goes round the detour */
     kernelbase = GetModuleHandleA("kernelbase.dll");
     if (kernelbase) load_library = GetProcAddress(kernelbase, "LoadLibraryA");
     if (!load_library) load_library = k32_proc("LoadLibraryA");

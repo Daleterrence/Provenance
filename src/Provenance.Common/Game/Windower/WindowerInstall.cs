@@ -15,7 +15,6 @@ public static class WindowerInstall
     public const string LinkedText =
         "Provenance can't use a Windower folder that's reached through a link. Choose the real folder the link points to in Settings, under Windower/Ashita.";
 
-    // the user's own profiles in file order, "" for the unnamed one
     public static IReadOnlyList<string> Profiles(string? windowerDir)
     {
         if (windowerDir is null) return [];

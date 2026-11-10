@@ -58,7 +58,6 @@ static int hold_writes_pending(void)
 {
     return (requests_busy() & JB_WRITE) != 0;
 }
-/* writes that are due but haven't got a job slot yet, or an answer's message still to come */
 static int hold_writes_waiting(void)
 {
     return (requests_busy() & JB_WAIT) != 0;
@@ -79,8 +78,8 @@ static void hold_drain_turn(BYTE *b, int mail)
     Sleep(16);
 }
 
-/* the viewer sets polcore's idle timeout from option.bin's GOPN1_AO at login, and FFXI only switches the timer on, so
-   session init's 0 would never fire. It stays off till FFXI turns it on */
+/* the viewer sets the idle timeout from option.bin's GOPN1_AO at login and FFXI only turns the timer on,
+   so session init's 0 would never fire. Left off till then */
 static int hold_idle_timeout_for_game(BYTE *b)
 {
     BYTE *rec = NULL;
@@ -186,8 +185,8 @@ static void hold_sign_out(BYTE *b, const char *spath)
     base_end_pol(0);
 }
 
-/* read only: polcore stamps conn+0x39d4 on every send, on a quiet hold just the PONG to the ~125s PING. The session
-   drops as -250 400s on, so this logs the server going quiet */
+/* read only: polcore stamps conn+0x39d4 on every send (on a quiet hold, the PONG to the ~125s PING).
+   The session drops as -250 at 400s */
 #define LINK_LOG_MS 600000
 static DWORD g_link_sent;
 static ULONGLONG g_link_sent_at, g_link_logged_at;

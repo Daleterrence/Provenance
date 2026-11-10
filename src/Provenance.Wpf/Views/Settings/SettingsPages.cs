@@ -9,7 +9,6 @@ public record MaterialIcon(string Kind);
 
 public record SettingsPage(SettingsTab Tab, string Title, object Icon, Func<SettingsViewModel, FrameworkElement> Create);
 
-// the nav list, in SettingsTab order
 public static class SettingsPages
 {
     public static IReadOnlyList<SettingsPage> All { get; } =

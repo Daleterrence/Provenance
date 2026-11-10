@@ -218,8 +218,8 @@ public partial class InstallViewModel : ObservableObject
         return _dialogs.Confirm("Stop the install?", what, "STOP", ConfirmStyle.Destructive);
     }
 
-    // its files run as admin, so it's an admin-only ffxi-download folder in a folder only admins can change, both held
-    // until the install ends. A stranger's folder with the same name gets skipped
+    // its files run as admin, so it's an admin-only ffxi-download folder in an admin-only folder, both held till the install ends.
+    // A stranger's folder with the same name is skipped
     private InstallWorkFolder.WorkFolder LockWorkFolder(IEnumerable<string> ownNames)
     {
         var chosen = Path.TrimEndingDirectorySeparator(Path.GetFullPath(DownloadFolder));
@@ -269,7 +269,6 @@ public partial class InstallViewModel : ObservableObject
         });
     }
 
-    // next is null when everything's already up to date
     private void Finished(string? next, IReadOnlyList<string> warnings)
     {
         CurrentStep = 3;
@@ -503,8 +502,8 @@ public partial class InstallViewModel : ObservableObject
         "PlayOnline updates itself the first time you log in, and the game updates the first time you press Play" +
         (gameUpdateBytes is long b && b > 0 ? $" ({ByteText.Size(b, kb: true)} to download)." : ".");
 
-    // the way the first Play picks its files, reusing the mirror's game index. Null when that could come from POL (no
-    // version from POL, or the mirror hasn't got it) or the mirror's unreachable
+    // how the first Play picks its files, reusing the mirror's game index. Null when that could come from POL
+    // (no version, or not on the mirror) or the mirror's unreachable
     private async Task<long?> FirstUpdateSizeAsync(CancellationToken ct)
     {
         if (MirrorLayout.UpdateFolder(_region, GameProduct.Game.Slug) is not { } mirrorRegion || _mirror?.GameIndex is not { } index

@@ -1,5 +1,5 @@
-/* what the app and the hook have to agree on, kept in step with Provenance.Common/Hook/HookContract.cs.
-   The app parses the LOG_ lines below out of the hook's log, so don't reword one without changing the other side */
+/* kept in step with Provenance.Common/Hook/HookContract.cs. The app parses the LOG_ lines below out of the hook's log,
+   so don't reword one without changing the other side */
 #ifndef HOOK_CONTRACT_H
 #define HOOK_CONTRACT_H
 
@@ -23,7 +23,6 @@
 #define ENV_HANDLE "POL_HANDLE"
 #define ENV_LAUNCH_ID "PROVENANCE_LAUNCH_ID"
 
-/* pol.exe's exit codes, 0 is a clean end */
 #define AUTH_REFUSED_EXIT 3
 #define NO_HANDLE_EXIT 4
 #define HANDLE_REFUSED_EXIT 5
@@ -67,7 +66,6 @@
 #define REQ_GROUPCHATSEND "groupchatsend"
 #define REQ_GROUPCHATLEAVE "groupchatleave"
 
-/* the other files in the same folder, and the names they and the requests go by */
 #define IPC_LOG "log"
 #define IPC_SOCIAL "social.json"
 #define IPC_STORE "store.json"
@@ -81,7 +79,6 @@
 #define IPC_NAME "pol_hook.%u.%s"
 #define IPC_PID_FILE "provenance.%s.pid"
 
-/* log lines the app reads, each a piece of the line that starts it or is all of it */
 #define LOG_FIRST_LINE "pol_hook: highest user address"
 #define LOG_VIEWER_LANG "viewer_init: lang="
 #define LOG_REAL_AUTH "phase_c: REAL auth"

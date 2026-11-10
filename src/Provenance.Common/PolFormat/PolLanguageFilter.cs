@@ -3,8 +3,8 @@ using System.Text;
 
 namespace Provenance.Common.PolFormat;
 
-// POL's chat language filter: the viewer's own word list (data\dic\vulgar2.dic) run the way polcore runs it (svc 0x5a8
-// builds it, svc 0x1660 masks). Matching is on the Shift-JIS bytes, a masked character shows as one '?'
+// the viewer's own word list (data\dic\vulgar2.dic) run the way polcore runs it (svc 0x5a8 builds, svc 0x1660 masks).
+// Matching is on Shift-JIS bytes, a masked character shows as '?'
 public sealed class PolLanguageFilter
 {
     private const byte Mask = (byte)'?';
@@ -256,8 +256,8 @@ public sealed class PolLanguageFilter
 
     private static readonly Lazy<Dictionary<char, ushort>> Sjis = new(() =>
     {
-        // the default (best fit) decoder, which is the only way .NET gives the NEC row's copies of nine maths symbols.
-        // Anything it hasn't got comes out as U+30FB, which is only real at 0x8145
+        // the default (best fit) decoder, the only way .NET gives the NEC row's copies of nine maths symbols.
+        // Anything it hasn't got comes out as U+30FB, only real at 0x8145
         var cp932 = Encoding.GetEncoding(932);
         var cp1252 = Encoding.GetEncoding(1252, EncoderFallback.ReplacementFallback, new DecoderReplacementFallback("\uffff"));
         var map = new Dictionary<char, ushort>();

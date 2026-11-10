@@ -10,7 +10,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// General's backups card. Like the rest of the page every change saves straight away
 public partial class BackupSettings : ObservableObject
 {
     private readonly IDialogs _dialogs;

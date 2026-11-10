@@ -46,10 +46,8 @@ public static class HookExitText
         _ => "Your PlayOnline session has closed. Log in again to see your friends and messages.",
     };
 
-    // what to tell the player once the game's pol.exe has ended, null for a normal end
     public static string? GameEndedText(int? exitCode) => exitCode == (int)HookExit.GameStartFailed ? GameStartFailedText : null;
 
-    // null for a line that doesn't end the login
     internal static (int Code, string Text)? LoginEnd(HookEvent? e, PolRegion region, int? viewerLanguage) => e switch
     {
         DetailsUnreadable => (LoginCodes.DetailsUnreadable, DetailsAgainText),

@@ -3,8 +3,8 @@ namespace Provenance.Common.Security;
 // names off the network or out of a zip get used as admin, so none of them may leave their folder
 public static class PathInside
 {
-    // the full path of relative under root, or null when it's rooted, has a drive or stream colon, a NUL, an empty, "."
-    // or ".." part, or still lands outside root (a device name like "nul" does that)
+    // full path under root, or null if relative is rooted, has a drive or stream colon, a NUL, an empty, "." or ".." part,
+    // or lands outside root (e.g. "nul")
     public static string? Resolve(string root, string relative)
     {
         var rel = relative.Replace('/', '\\');
@@ -27,14 +27,12 @@ public static class PathInside
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
     }
 
-    // below root, not root itself
     public static bool IsUnder(string root, string path)
     {
         var top = Top(root);
         return Below(top, Full(path));
     }
 
-    // root itself or below it
     public static bool Contains(string root, string path)
     {
         var top = Top(root);
@@ -42,7 +40,6 @@ public static class PathInside
         return string.Equals(full, Path.TrimEndingDirectorySeparator(top), StringComparison.OrdinalIgnoreCase) || Below(top, full);
     }
 
-    // either one is the other or inside it
     public static bool Overlaps(string a, string b) => Contains(a, b) || Contains(b, a);
 
     private static bool Below(string top, string full) => full.StartsWith(top, StringComparison.OrdinalIgnoreCase) && full.Length > top.Length;

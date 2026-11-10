@@ -68,7 +68,6 @@ public sealed class FfxiSettings
         return s;
     }
 
-    // SE's installer only writes 3 of the game's settings, and the game just closes without the rest
     public static void WriteFirstStartSettings(PolRegion region)
     {
         try

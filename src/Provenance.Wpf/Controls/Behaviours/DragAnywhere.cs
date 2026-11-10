@@ -6,7 +6,6 @@ using System.Windows.Media;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// Drag the window from anywhere on it except text you might want to select or type in
 public static class DragAnywhere
 {
     public static readonly DependencyProperty EnabledProperty = DependencyProperty.RegisterAttached(

@@ -4,11 +4,9 @@ namespace Provenance.Common.Install;
 
 public sealed record GameProduct
 {
-    // the name the mirror lays the product out under
     public required string Slug { get; init; }
     public required string Name { get; init; }
     public required string ShortName { get; init; }
-    // the folder under <install>\SquareEnix
     public required string FolderName { get; init; }
     public required string KeyFile { get; init; }
     // POL's own id for it, and the name of its value under InstallFolder

@@ -3,7 +3,6 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// what the Windower and Ashita cards need of the page they sit on: the folders, the picked profile and a status line
 public interface IProfileHost
 {
     bool IsWindower { get; }

@@ -1,6 +1,3 @@
-/* session.h - the jobs the hook has in flight and what each one waits on, for the files that share them. The rest of
-   their state sits in globals next to the code that owns it */
-
 #define FETCH_LANES 2
 #define SEND_HIST 8
 typedef struct { int job, kind, idx; char *body; } fetch_lane;   /* a mail list or read in flight */
@@ -34,10 +31,8 @@ typedef struct db_job {
 } db_job;
 
 typedef struct hook_session {
-    /* general */
     int draining;
     ULONGLONG db_last;
-    /* chat rooms */
     int cr_st;
     int cr_wait;
     int cr_tries;
@@ -46,7 +41,6 @@ typedef struct hook_session {
     int cr_hello;
     int cr_replies;
     int cr_joined;   /* a JOIN's gone and no PART since: the server might have me in the room */
-    /* friend edits, answers and my comment */
     int answer_kind;
     char edit_token[48];
     char edit_state[48];
@@ -54,12 +48,10 @@ typedef struct hook_session {
     int edit_upload_want;
     int comment_wanted;
     int answer_wait;
-    /* friend groups */
     int grp_job;
     int grp_poll;
     char grp_token[48];
     char grp_state[32];
-    /* handles */
     int handle_op;
     int handle_job;
     int handle_want;
@@ -70,11 +62,9 @@ typedef struct hook_session {
     int handle_reload;
     char handle_token[48];
     char handle_state[48];
-    /* presence */
     int status_job;
     int status_want;
     int status_loc;
-    /* the inbox */
     int mail_n;
     int mail_mid;
     int mail_seen_n;
@@ -89,14 +79,12 @@ typedef struct hook_session {
     int sent_ids_next;
     int returned_n;
     int returned_next;
-    /* sending */
     char send_token[48];   /* the snapshot's "send", the newest message and its state */
     char send_state[48];
     int send_queue_n;
     send_pace pace;
     send_hist send_hist[SEND_HIST];
     int send_hist_next;
-    /* my profile and picture */
     char me_token[48];
     char me_state[32];
     int pic_want;
@@ -106,7 +94,6 @@ typedef struct hook_session {
     char ffxi_state[32];
     char ffxi_json[0x200];
     char ffxi_key[25];
-    /* searches and profile reads */
     int search_n;
     int search_kind;
     int search_total;

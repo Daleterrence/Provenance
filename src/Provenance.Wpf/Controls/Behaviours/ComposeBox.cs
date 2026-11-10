@@ -5,7 +5,6 @@ using Provenance.Common.Social;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// Enter sends, and what's typed or pasted stops at the rules' limit (a paste goes in up to what fits)
 public static class ComposeBox
 {
     public static readonly DependencyProperty SendProperty = DependencyProperty.RegisterAttached(

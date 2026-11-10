@@ -15,8 +15,8 @@ public sealed class TrayIcon : IDisposable
 
     internal static int Warmed;
 
-    // a cold menu takes about a second on the UI thread, so one's built and thrown away on a worker first. MTA, or a
-    // dead STA thread ends up owning WinForms' system events window
+    // a cold menu takes about a second on the UI thread, so one's built and dropped on a worker first.
+    // MTA, or a dead STA thread owns WinForms' system events window
     public static void Warm()
     {
         if (Interlocked.Exchange(ref Warmed, 1) != 0) return;

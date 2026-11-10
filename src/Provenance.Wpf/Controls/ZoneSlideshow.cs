@@ -9,7 +9,6 @@ using Serilog;
 
 namespace Provenance.Wpf.Controls;
 
-// the installer's zone pictures, cross-faded in a random order with their edges faded out
 public sealed class ZoneSlideshow : Grid
 {
     private static readonly TimeSpan Hold = TimeSpan.FromSeconds(8), Fade = TimeSpan.FromSeconds(1.5);

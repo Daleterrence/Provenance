@@ -2,8 +2,6 @@ using System.Net;
 
 namespace Provenance.Common.Patcher;
 
-// the steps of a patch conversation over whatever the connector opens.
-// No sockets, clock or retries in here, the caller sets the order
 public sealed class PatchSession(PatchProduct product, IPatchConnector connector, string serverName = "update server", IPAddress? pinned = null)
 {
     public const long KeepAliveMs = 60_000;

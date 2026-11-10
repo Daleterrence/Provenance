@@ -5,8 +5,8 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Game;
 
-// reads a DLL's sections, exports and version straight off the disk. Nothing gets loaded, not even as a datafile, so a
-// plugin's code never runs. Anyone can drop a file in a plugin folder, so every read is bounds-checked
+// reads a DLL's sections, exports and version off the disk, nothing loaded so a plugin's code never runs.
+// Anyone can drop a file in a plugin folder, so reads are bounds-checked
 internal sealed class PeFile
 {
     public const ushort MachineI386 = 0x014C;
@@ -42,7 +42,6 @@ internal sealed class PeFile
         this.resourceRva = resourceRva;
     }
 
-    // export name -> the function's RVA
     public IReadOnlyDictionary<string, uint> Exports => exports ??= ReadExports();
 
     public Version? FileVersion
@@ -73,8 +72,8 @@ internal sealed class PeFile
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    // where the low byte of Characteristics is (0x146 in pol.exe): "MZ", e_lfanew at 0x3c, "PE" and two zero bytes there, and the
-    // field 22 bytes on. Null when it isn't a PE file
+    // where the low byte of Characteristics is (0x146 in pol.exe): "MZ", e_lfanew at 0x3c, "PE" and two zero bytes there,
+    // then the field 22 bytes on. Null if not PE
     public static long? CharacteristicsAt(byte[] d) => PeAt(d) is { } pe ? pe + 22 : null;
 
     private static long? PeAt(byte[] d)

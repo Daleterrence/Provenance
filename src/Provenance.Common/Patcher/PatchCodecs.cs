@@ -36,8 +36,8 @@ public static class PatchCodecs
     public static void Lzss(Stream src, Stream dst, CancellationToken ct, long maxLength = long.MaxValue) =>
         Decode(new BitReader(src), new Window(dst, maxLength), null, ct);
 
-    // app.dll 0x102ae777, the same but a 1 flag is followed by 0 for the output copy, or 1 + signed 16-bit offset +
-    // 8-bit length to copy from the base at (output position + offset)
+    // app.dll 0x102ae777, same but a 1 flag is followed by 0 (output copy) or 1 + s16 offset + u8 length
+    // (copy from base at output position + offset)
     public static void ApplyOlc(string delta, string baseFile, string output, long maxLength, CancellationToken ct)
     {
         using var src = new FileStream(delta, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan);

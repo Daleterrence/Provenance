@@ -25,7 +25,6 @@ public sealed class ThirdPartyHookJson : JsonConverter<ThirdPartyHook>
         writer.WriteStringValue(ThirdPartyHooks.Word(value));
 }
 
-// what Windower and Ashita share. Nothing of mine goes in the viewer folder
 public static class ThirdPartyHooks
 {
     public static ThirdPartyHook Parse(string? word) => word?.Trim().ToLowerInvariant() switch

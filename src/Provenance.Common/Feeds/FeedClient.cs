@@ -6,7 +6,6 @@ using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Feeds;
 
-// the feed worker's JSON, with the last answer it gave kept for when it can't be reached
 public sealed class FeedClient
 {
     private readonly HttpClient _http;

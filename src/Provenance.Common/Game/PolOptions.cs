@@ -6,7 +6,6 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Game;
 
-// POL's chat language filter and auto-disconnect, which FFXI reads from the account's own option.bin when it starts
 public static class PolOptions
 {
     public static readonly int[] AutoDisconnectChoices = [-1, 10, 20, 30, 40, 50, 60];
@@ -41,7 +40,6 @@ public static class PolOptions
         catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException) { return null; }
     }
 
-    // where the viewer copies a new member's option.bin from
     internal static string Template(string viewerDir, PolRegion region)
     {
         var eu = Path.Combine(viewerDir, "EU", "EN", "option.bin");

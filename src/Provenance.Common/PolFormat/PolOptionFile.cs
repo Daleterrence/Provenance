@@ -2,8 +2,8 @@ using System.Buffers.Binary;
 
 namespace Provenance.Common.PolFormat;
 
-// pub\homeNN\option.bin: POL's file cipher with an all-zero key, the trailer value is the data length.
-// Records from +8, 0x20 each: name, type at +0xa (0 is a number), min/max at +0xc/+0x10, value at +0x18
+// pub\homeNN\option.bin: POL's file cipher, all-zero key, trailer is the data length.
+// Records from +8, 0x20 each: name, type +0xa (0 is a number), min/max +0xc/+0x10, value +0x18
 public static class PolOptionFile
 {
     // 0 is on, 1 off

@@ -90,7 +90,6 @@
                     <Setter TargetName="Retry" Property="Visibility" Value="Visible" />
                     <Setter TargetName="RemoveLine" Property="Visibility" Value="Visible" />
                 </DataTrigger>
-                <!-- a POL notice or something I did: a quiet line in the middle -->
                 <DataTrigger Binding="{Binding State}" Value="notice">
                     <Setter TargetName="Line" Property="HorizontalAlignment" Value="Center" />
                     <Setter TargetName="TheirProfilePicture" Property="Visibility" Value="Collapsed" />
@@ -314,7 +313,6 @@
                                                         </Grid.ContextMenu>
                                                         <controls:ProfilePictureCircle Diameter="30" Margin="0,0,10,0"
                                                                                        Source="{Binding Avatar}" />
-                                                        <!-- no menu on my own row -->
                                                         <Button Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
                                                                 Foreground="{DynamicResource Text.3}" ToolTip="Member actions" AutomationProperties.Name="Member actions" Click="OnRowMenuButton">
                                                             <Button.Style>

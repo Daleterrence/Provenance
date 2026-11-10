@@ -2,7 +2,6 @@ namespace Provenance.Common.Otp;
 
 public enum ToolView { Hidden, Missing, CantCheck, TooOld, Installing, Ready, DownloadFailed, CheckFailed, DownloadCantCheck, DownloadTooOld, NotSupported }
 
-// the line and the button for a command-line tool that's missing or broken, so Edit account and the code box say the same
 public static class ToolFix
 {
     public static string? Label(OtpFix fix) => fix switch

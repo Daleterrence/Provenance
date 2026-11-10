@@ -1,6 +1,5 @@
 namespace Provenance.Common.Game.Windower;
 
-// Windower's console keys as people know them, from the names settings.xml uses
 public static class WindowerKeyNames
 {
     private static readonly Dictionary<string, string> Named = new()

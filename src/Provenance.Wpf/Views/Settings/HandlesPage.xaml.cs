@@ -9,7 +9,6 @@ public partial class HandlesPage : UserControl
 {
     public HandlesPage() => InitializeComponent();
 
-    // the other handles to pick from, a full one greyed out with the limit under its name
     private void OnLinkCharacter(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { DataContext: HandleCharacterRow c } button ||

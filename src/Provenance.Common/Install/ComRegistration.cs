@@ -91,7 +91,6 @@ internal static class ComRegistration
         return k?.GetValue("") is string named && SamePath(Unquote(named), server) && File.Exists(Unquote(named));
     }
 
-    // registered, and at this file
     private static bool TypeLibIntact(string path)
     {
         if (ReadTypeLib(path) is not { } a) return false;

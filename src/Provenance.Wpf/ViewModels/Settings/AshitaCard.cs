@@ -9,7 +9,6 @@ using BootConfig = Provenance.Common.Game.Ashita.AshitaBootConfig;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// The Ashita side of the Windower/Ashita page: the picked boot configuration's own name and script
 public partial class AshitaCard : ObservableObject
 {
     private const string NoScript = "None";

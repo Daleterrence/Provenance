@@ -12,7 +12,6 @@ using static Provenance.Common.IO.FileHandles;
 
 namespace Provenance.Common.Security;
 
-// the permissions, handles and owner checks a locked folder's made of
 internal static class LockedFolder
 {
     internal static readonly SecurityIdentifier Admins = new(WellKnownSidType.BuiltinAdministratorsSid, null);
@@ -88,7 +87,6 @@ internal static class LockedFolder
         }
     }
 
-    // a listing handle on the bin, which renames can go into
     private static SafeFileHandle OpenBin(string bin)
     {
         using var held = Hold(bin, usersMayRead: false, bin: null).Held!;

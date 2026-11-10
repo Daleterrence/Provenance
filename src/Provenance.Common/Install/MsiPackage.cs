@@ -174,8 +174,8 @@ public sealed class MsiPackage : IDisposable
         // POL folds the Interface values into the patch.ver key, and nothing under HKCR is anybody's setting
         Keep How(int root, string key, string value) => key.EndsWith(@"\Interface", StringComparison.OrdinalIgnoreCase) ? Keep.Exact
             : NamesPath(value) ? Keep.Path : root == 0 ? Keep.Exact : Keep.Kind;
-        // SE's viewer package writes some values twice from two components (its patchfiles copies of app.dll and
-        // polcore.dll, then the real ones). A full apply leaves the last, so that's the only one a repair checks
+        // SE's viewer package writes some values twice (patchfiles copies of app.dll and polcore.dll, then the real ones).
+        // A full apply leaves the last, so a repair checks only that
         IEnumerable<(int Root, string Key, string Name, string Value)> Final(List<(int Root, string Key, string Name, string Value)> list) =>
             !keepExisting ? list
             : list.Select((r, i) => (r, i))

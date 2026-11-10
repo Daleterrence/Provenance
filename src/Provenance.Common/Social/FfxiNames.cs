@@ -1,6 +1,5 @@
 namespace Provenance.Common.Social;
 
-// what the numbers in an FFXI profile mean, the game's own names
 public static class FfxiNames
 {
     private static readonly string[] Nations = ["San d'Oria", "Bastok", "Windurst"];

@@ -13,7 +13,6 @@ namespace Provenance.Wpf.Services;
 
 public enum IconState { Idle, Selected, Transition, Active }
 
-// the SVG icons built in from the assets folder, drawn as vectors so they stay sharp at any scale
 public static partial class SvgIcons
 {
     public static readonly string[] Glyphs =
@@ -30,7 +29,6 @@ public static partial class SvgIcons
     private static readonly Dictionary<string, Rect> GlyphFrames = new();
     private static readonly Dictionary<string, (Vector[] Shift, Rect Frame)> ButtonFits = new();
 
-    // every file there should be, for the tests
     public static IEnumerable<string> Files =>
         Enumerable.Range(1, ChatLook.Emotes).Select(EmoteFile)
             .Concat(Glyphs.SelectMany(g => new[] { $"status-{g}.svg" }.Concat(Enum.GetValues<IconState>().Select(s => GlyphFile(g, s)))))
@@ -58,8 +56,8 @@ public static partial class SvgIcons
     public static ImageSource? Tinted(string glyph, Color colour) =>
         Cached($"status-{glyph}.svg#{colour}", () => Frame(Load($"status-{glyph}.svg", colour), GlyphFrame(glyph)));
 
-    // for a button, which draws its own disc: POL's green or blue disc comes out and the outline goes back to idle. POL
-    // nudges its icons a pixel per state, so each gets centred instead
+    // for a button's own disc: POL's green or blue disc comes out, outline back to idle.
+    // POL nudges its icons a pixel per state, so each gets centred
     public static ImageSource? ButtonGlyph(string glyph, IconState state) =>
         Cached(GlyphFile(glyph, state) + "#button", () =>
         {
@@ -70,8 +68,8 @@ public static partial class SvgIcons
             return Frame(moved, frame);
         });
 
-    // on a button every glyph draws at one scale, so the discs (r 10 round 16,16) all match. One that pokes further out
-    // of its disc spills past its box instead of shrinking
+    // every glyph draws at one scale on a button, so the discs (r 10 round 16,16) all match.
+    // One poking out of its disc spills past its box instead of shrinking
     public const double ButtonBox = 20;
     public const double DiscShare = 20 / ButtonBox;
     public static double ButtonScale(string glyph) => ButtonFit(glyph).Frame.Width / ButtonBox;
@@ -178,9 +176,8 @@ public static partial class SvgIcons
 
     public static ImageSource? XiBadge => Cached(XiBadgeFile, () => Framed(XiBadgeFile));
 
-    // the badge cropped square round its letters, for a circle to fill. The crop's as tall as the body so the circle has no
-    // gaps, and it's worked out from the image so a re-exported badge stays centred. The letters are drawn smaller so the X's
-    // tips clear the edge
+    // the badge cropped square round its letters for a circle to fill, from the image so a re-export stays centred.
+    // Letters are smaller so the X's tips clear the edge
     public static ImageSource? XiBadgeRound => Cached(XiBadgeFile + "#round", () => Frame(SmallerLetters(Load(XiBadgeFile)), RoundFrame()));
 
     private const double RoundLetterScale = 0.86;
@@ -224,7 +221,6 @@ public static partial class SvgIcons
         return new Rect(lt.X + lt.Width / 2 - bd.Height / 2, bd.Y, bd.Height, bd.Height);
     }
 
-    // POL's exclamation mark, for errors and notices
     public static ImageSource? Notice => Cached(NoticeFile, () => Framed(NoticeFile));
 
     private static DrawingImage? Cached(string key, Func<Drawing?> make)
@@ -281,8 +277,8 @@ public static partial class SvgIcons
             if (Text(file) is not { } svg) return null;
             if (currentColour is { } c) svg = svg.Replace("currentColor", $"#{c.R:X2}{c.G:X2}{c.B:X2}", StringComparison.Ordinal);
             if (edit is not null) svg = edit(svg);
-            // left to itself the renderer shifts a drawing so its top left sits on the viewBox's, and search has a
-            // (clipped) rectangle out at -8 that it then shoves 8 units down and right
+            // left alone the renderer shifts a drawing's top left onto the viewBox's, and search has a (clipped) rectangle
+            // at -8 that it shoves 8 units down and right
             var settings = new WpfDrawingSettings
             {
                 IncludeRuntime = false,

@@ -59,7 +59,6 @@ public partial class CreateRoomDialog : AppWindow
     private int Code(System.Windows.Controls.ComboBox box) => (box.SelectedItem as Choice<int>)?.Code ?? 0;
     private string Text(System.Windows.Controls.ComboBox box) => (box.SelectedItem as Choice<int>)?.Text ?? "Not set";
 
-    // the viewer's own checks, in its order
     internal string? Problem()
     {
         bool on = PasswordOn.IsChecked == true;
@@ -75,7 +74,6 @@ public partial class CreateRoomDialog : AppWindow
         if (TryCreate()) DialogResult = true;
     }
 
-    // the checks, then the viewer's question, then the form. False leaves the dialog up
     internal bool TryCreate()
     {
         if (Problem() is { } problem)

@@ -7,7 +7,6 @@
     </UserControl.Resources>
 
     <Grid Margin="24" RowDefinitions="3*,Auto,1.1*">
-        <!-- laid out like POL's own topic cards: the 415x100 banner, then title, local date and summary -->
         <Border CornerRadius="{StaticResource Radius.Panel}" Padding="16,16,16,10" Background="{DynamicResource Surface.2}"
                 BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1" Effect="{DynamicResource Shadow.Card}">
             <Grid ClipToBounds="True" Background="Transparent" MouseEnter="OnNewsHover" MouseLeave="OnNewsLeave"

@@ -3,8 +3,8 @@
 #define CR_PEOPLE 128
 
 #define CR_REPLIES 8
-/* the viewer's give-ups (app.dll 0x10095141, 0x10097c61): 18000 frames for an answer, 6 min at 50 a second. A try is a
-   hold loop turn polcore wouldn't take the command on, with another one out */
+/* the viewer's give-ups (app.dll 0x10095141, 0x10097c61): 18000 frames (6min at 50 a second) for an answer.
+   A try is a hold loop turn polcore refused the command on (another one out) */
 #define CR_WAIT_MS 360000
 #define CR_TRIES_ENTER 3600   /* entering's AWAY and JOIN, and the PART, which the viewer never gives up on */
 #define CR_TRIES 5            /* any other command, and the typed line */
@@ -22,7 +22,6 @@ static const char *const g_cr_kind[] = { "say", "entered", "left", "away", "back
 /* in-room steps: AWAY (back), JOIN, WHO+MODE, TOPIC, then in. PART on the way out. A new room sets its TOPIC and
    MODEs after the WHO instead of asking for the TOPIC */
 enum { CR_OUT, CR_AWAY, CR_JOIN, CR_WHO, CR_TOPIC, CR_IN, CR_PART, CR_SETTOPIC, CR_MODE_N, CR_MODE_K, CR_MODE_L };
-/* what's in flight */
 enum { CRW_NONE, CRW_CMD, CRW_MSG };
 /* PRIVMSG kinds, the frame's type where there is one */
 enum { CRM_SAY, CRM_HELLO = 2, CRM_REPLY = 3, CRM_KEY = 7, CRM_MASTER = 10, CRM_KICK = 11 };
@@ -304,8 +303,8 @@ static void chat_frame_hello(BYTE *b, int type, WCHAR *w)
     lstrcpynW(w + 104, g_cr_nick, CR_NAME_MAX + 1);
     (void)b;
 }
-/* a 0: type, emoticon page and face as space-padded %2x, colour char, name, tab, language, text. A colour's char is 5
-   on from its place in the viewer's list (app.dll 0x100984df), '0' for none */
+/* a 0: type, emoticon page and face (space-padded %2x), colour char, name, tab, language, text.
+   Colour char is its list place + 5 (app.dll 0x100984df), '0' for none */
 static void chat_frame_say(BYTE *b, const WCHAR *text, WCHAR *w, int cap)
 {
     static const WCHAR cc[] = L"0123456789abcdefghijklmn";

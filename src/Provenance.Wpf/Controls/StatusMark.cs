@@ -7,7 +7,6 @@ using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Controls;
 
-// POL's online badges, a coloured dot if they ever fail to load
 public sealed class StatusMark : ContentControl
 {
     public static readonly DependencyProperty StatusProperty = DependencyProperty.Register(

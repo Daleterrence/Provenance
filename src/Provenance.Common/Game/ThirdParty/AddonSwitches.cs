@@ -5,8 +5,6 @@ using Serilog;
 
 namespace Provenance.Common.Game.ThirdParty;
 
-// The writes behind an addon or plugin switch: Windower's settings.xml and Provenance's own lists, or an Ashita boot
-// configuration and its script
 public static class AddonSwitches
 {
     private const string SettingsNotSaved = "Provenance couldn't save your settings, so your changes will only last until Provenance closes.";

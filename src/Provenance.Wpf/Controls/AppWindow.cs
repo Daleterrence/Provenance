@@ -16,7 +16,6 @@ public class AppWindow : Window
     // the see-through margin round a dialog card, which is where its shadow falls
     public Thickness CardMargin { get => (Thickness)GetValue(CardMarginProperty); set => SetValue(CardMarginProperty, value); }
 
-    // the bigger shadow the install and repair windows have
     public bool WideShadow { get => (bool)GetValue(WideShadowProperty); set => SetValue(WideShadowProperty, value); }
 
     // Esc closes unless a window turns it off (the dialogs have a cancel button for it) or answers it itself
@@ -56,7 +55,6 @@ public class AppWindow : Window
         return true;
     }
 
-    // over the owner if it's up, otherwise the middle of the screen
     public bool? ShowDialogOver(Window? owner)
     {
         if (owner is { IsVisible: true }) Owner = owner;

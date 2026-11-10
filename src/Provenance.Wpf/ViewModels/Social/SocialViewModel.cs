@@ -200,7 +200,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     // more than one account running means lean sessions, which have no chat at all
     public bool CanGroupChat => LoggedIn && WriteBlockedNote is null && !_session.InMultiRun;
 
-    // the Groups tab's Group Chat button. The main window asks the handle question and opens the window
     public event Action<GroupsViewModel.GroupItem>? GroupChatRequested;
 
     [RelayCommand]
@@ -235,7 +234,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public bool IsWaiting(int mid) => mid > 0 && Friends.Any(f => f.RequestMid == mid);
 
-    // the windows say when a friend list is on screen, like ConversationVisible
     public bool FriendsListVisible
     {
         get => _friendsListVisible;

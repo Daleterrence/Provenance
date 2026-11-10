@@ -9,8 +9,6 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game;
 
-// the automatic backup of the game's own settings (USER, its VirtualStore copy and the term filter lists), made right
-// before the game starts
 public static class GameBackupPolicy
 {
     internal static TimeSpan PlayWait = TimeSpan.FromSeconds(5);

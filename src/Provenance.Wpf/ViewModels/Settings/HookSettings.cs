@@ -38,7 +38,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
         _gameFollows = gameFollows;
     }
 
-    // settings.json saved with what's on screen
     internal event Action? Saved;
     internal event Action? ListsRefreshed;
     // true when the player switched platform, false for the first load
@@ -48,7 +47,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
     public event Action? ProfilesChanged;
     // whether the change worked, and the profile's old name after a rename
     internal event Action<bool, string?>? ProfileEdited;
-    // the window closes itself, which is how a restart gets going
     internal event Action? CloseRequested;
 
     public IReadOnlyList<Choice<ThirdPartyHook>> ThirdPartyHookChoices { get; } =

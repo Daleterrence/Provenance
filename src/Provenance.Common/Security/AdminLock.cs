@@ -25,7 +25,7 @@ public static class AdminLock
     private const int LockViolation = unchecked((int)0x80070021);
 
     private static readonly object Gate = new();
-    private static readonly Dictionary<string, Holder> Held = new(StringComparer.OrdinalIgnoreCase);   // under Gate
+    private static readonly Dictionary<string, Holder> Held = new(StringComparer.OrdinalIgnoreCase);
 
     private sealed class Holder(FileStream stream, int threadId, bool reentrant)
     {

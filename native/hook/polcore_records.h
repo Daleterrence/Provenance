@@ -1,9 +1,6 @@
-/* polcore_records.h - the records polcore hands over, the same layouts it keeps, and a check on every field the code
-   reads. Included by polcore.h */
 #ifndef POLCORE_RECORDS_H
 #define POLCORE_RECORDS_H
 
-/* records polcore hands over, the same layouts it keeps */
 #pragma pack(push, 1)
 
 typedef struct pdb_field {

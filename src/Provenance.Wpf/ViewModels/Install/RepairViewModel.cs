@@ -15,8 +15,7 @@ using Provenance.Wpf.ViewModels.Main;
 
 namespace Provenance.Wpf.ViewModels.Install;
 
-// Checks every file against the mirror's signed index and only replaces game files after a yes. The pol.exe callbacks
-// stop my pre-started pol.exe (it holds viewer files) and keep it off until the repair's done
+// the pol.exe callbacks stop my pre-started pol.exe (it holds viewer files) and keep it off until the repair's done
 public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<IDisposable>? stopWaitingPol = null, Action? beforeRelease = null) : ObservableObject
 {
     internal const string CheckingText = "This may take a while.";
@@ -115,9 +114,8 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
         return string.Join(Environment.NewLine, lines);
     }
 
-    // an update that's out but not in yet shows up as changed files too, so then they're "damaged or out of date". With
-    // no file different there are no DAT changes to lose
-    // the DAT warning only when one of the files is the game's
+    // a pending update shows as changed files too, so they're "damaged or out of date".
+    // The DAT warning only shows when one of the files is the game's
     internal static string Question(int files, long bytes, bool outOfDate, int ffxiFiles)
     {
         var size = ByteText.Size(bytes, kb: true);
@@ -331,7 +329,6 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
         : _fixed ? "Some fixes might already have been made. Run the repair again to finish."
         : "Nothing was changed.";
 
-    // the result on its own, no heading over it
     internal void Done(string text, string details = "")
     {
         End("", text, failed: false);

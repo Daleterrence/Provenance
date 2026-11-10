@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 
 namespace Provenance.Common.IO;
 
-// a file's other name (hard link) can sit in a folder someone else controls
 public static class FileLinks
 {
     // attributes only and no link following, so it works while another handle holds the file. Null when it isn't there
