@@ -65,7 +65,7 @@ public static class LargeAddressAwareSwitch
         }
     }
 
-    public static Outcome Change(Target t, bool on, Action? holdPrestarts, Action? releasePrestarts)
+    public static Outcome Change(Target t, bool on, Func<IDisposable>? holdPrestarts)
     {
         if (t.ViewerDir is not { } dir || !File.Exists(Path.Combine(dir, GameProduct.Viewer.KeyFile))) return Outcome.Done;
         var polExe = Path.Combine(dir, GameProduct.Viewer.KeyFile);
@@ -80,7 +80,7 @@ public static class LargeAddressAwareSwitch
             // again under the lock, a login starting now would want my waiting pol.exe
             if (gate is null || t.Blocked() is not null) return Outcome.NextStart;
             if (LargeAddressAware.Read(polExe) == on) return Outcome.Done;
-            var result = TryWrite(t, on, holdPrestarts, releasePrestarts, retryInUse: false);
+            var result = TryWrite(t, on, holdPrestarts, retryInUse: false);
             Log.Information("Large Address Aware {Done} {State} in pol.exe: {Result}", result == LargeAddressAware.Result.Done ? "turned" : "not turned",
                             on ? "on" : "off", result?.ToString() ?? "a pol.exe was running");
             return result switch
@@ -97,15 +97,15 @@ public static class LargeAddressAwareSwitch
         }
     }
 
-    public static void Apply(ISettingsService settings, string when, Action? holdPrestarts = null, Action? releasePrestarts = null,
+    public static void Apply(ISettingsService settings, string when, Func<IDisposable>? holdPrestarts = null,
                              Func<string?>? blocked = null)
     {
         if (PolPaths.Supported(settings.DetectedRegion))
-            Apply(settings, For(settings.DetectedRegion, blocked), when, holdPrestarts, releasePrestarts);
+            Apply(settings, For(settings.DetectedRegion, blocked), when, holdPrestarts);
     }
 
     // anything in the way gets logged and the start carries on without it
-    internal static void Apply(ISettingsService settings, Target t, string when, Action? holdPrestarts = null, Action? releasePrestarts = null)
+    internal static void Apply(ISettingsService settings, Target t, string when, Func<IDisposable>? holdPrestarts = null)
     {
         try
         {
@@ -127,7 +127,7 @@ public static class LargeAddressAwareSwitch
                 return;
             }
             if (t.Blocked() is { } blocked) { Log.Information("Large Address Aware not applied {When}: {Reason}", when, blocked); return; }
-            var result = TryWrite(t, on, holdPrestarts, releasePrestarts, retryInUse: true);
+            var result = TryWrite(t, on, holdPrestarts, retryInUse: true);
             if (result is LargeAddressAware.Result.UnknownBuild or LargeAddressAware.Result.NotPe)
                 Log.Information("Large Address Aware not applied {When}: pol.exe is a build Provenance doesn't know, so it was left alone", when);
             else
@@ -140,15 +140,14 @@ public static class LargeAddressAwareSwitch
     }
 
     // a fresh pol.exe from an update tends to get a look from the AV straight away, so a start retries while it's in use
-    private static LargeAddressAware.Result? TryWrite(Target t, bool on, Action? hold, Action? release, bool retryInUse)
+    private static LargeAddressAware.Result? TryWrite(Target t, bool on, Func<IDisposable>? hold, bool retryInUse)
     {
-        bool held = false;
+        IDisposable? held = null;
         try
         {
             if (hold is not null)
             {
-                held = true;
-                hold();
+                held = hold();
                 for (int i = 0; i < 10 && t.PolRunning(); i++) Thread.Sleep(300);
             }
             if (t.PolRunning()) return null;
@@ -165,9 +164,9 @@ public static class LargeAddressAwareSwitch
         }
         finally
         {
-            if (held && release is not null)
+            if (held is not null)
             {
-                try { release(); }
+                try { held.Dispose(); }
                 catch (Exception e) { Log.Warning(e, "Could not let pre-starts go again after Large Address Aware"); }
             }
         }

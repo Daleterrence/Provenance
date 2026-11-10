@@ -32,12 +32,12 @@ public partial class SettingsViewModel : ObservableObject
     private readonly FeedService? _feeds;
     private readonly SettingsContext _context;
     private readonly Func<string?>? _largeAddressAwareBlocked;
-    private readonly Action? _holdPrestarts, _releasePrestarts;
+    private readonly Func<IDisposable>? _holdPrestarts;
     private readonly Func<bool, RegistryKey?>? _gameKey;
     private bool _gameReady;
 
     public SettingsViewModel(IDialogs dialogs, ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
-                             Action? holdPrestarts = null, Action? releasePrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
+                             Func<IDisposable>? holdPrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
                              Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null, Func<bool>? loggedIn = null,
                              HandlesViewModel? handles = null, Func<bool>? gameRunning = null,
                              Func<string, string, WindowerUpdater>? windowerUpdater = null)
@@ -56,8 +56,7 @@ public partial class SettingsViewModel : ObservableObject
         Ashita.Renamed += AshitaRenamed;
         _largeAddressAwareBlocked = largeAddressAwareBlocked;
         _holdPrestarts = holdPrestarts;
-        _releasePrestarts = releasePrestarts;
-        _feeds = feeds ?? AppFeedService();
+        _feeds = feeds;
         _feedRegionIndex = Math.Max(0, Array.IndexOf(FeedRegionCodes,
             (settings.Current.FeedRegion ?? "auto").Trim().ToLowerInvariant()));
         var region = settings.DetectedRegion;
@@ -250,7 +249,7 @@ public partial class SettingsViewModel : ObservableObject
         LargeAddressAwareStatus = LargeAddressAwareSwitch.WaitText;
         var target = LargeAddressAwareTarget();
         LargeAddressAwareSwitch.Outcome outcome;
-        try { outcome = await Task.Run(() => LargeAddressAwareSwitch.Change(target, on, _holdPrestarts, _releasePrestarts)); }
+        try { outcome = await Task.Run(() => LargeAddressAwareSwitch.Change(target, on, _holdPrestarts)); }
         catch (Exception ex)
         {
             Log.Error(ex, "Large Address Aware change failed");
@@ -263,12 +262,6 @@ public partial class SettingsViewModel : ObservableObject
         LargeAddressAwareAvailable = after.Available;
         LargeAddressAwareStatus = after.Available && outcome == LargeAddressAwareSwitch.Outcome.Denied
             ? LargeAddressAwareSwitch.DeniedText : after.Note ?? "";
-    }
-
-    private static FeedService? AppFeedService()
-    {
-        try { return (System.Windows.Application.Current as App)?.Services.GetService(typeof(FeedService)) as FeedService; }
-        catch (InvalidOperationException) { return null; }   // host not started (design time)
     }
 
     public void MultiRunChanged()

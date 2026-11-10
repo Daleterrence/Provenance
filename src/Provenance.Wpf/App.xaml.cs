@@ -25,7 +25,7 @@ public partial class App : Application
     private IHost? _host;
     private bool _showingError;   // an error inside the card mustn't stack more cards
 
-    public IServiceProvider Services => _host?.Services ?? throw new InvalidOperationException("Host not started");
+    private IServiceProvider Services => _host?.Services ?? throw new InvalidOperationException("Host not started");
 
     internal static bool RestartOnExit { get; set; }
 

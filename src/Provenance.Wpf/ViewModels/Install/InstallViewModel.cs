@@ -36,13 +36,13 @@ public partial class InstallViewModel : ObservableObject
     internal PolRegion _region;
     private readonly PolRegion _autoRegion;
     private readonly IDialogs _dialogs;
-    private readonly Action? _holdPrestarts, _releasePrestarts;
+    private readonly Func<IDisposable>? _holdPrestarts;
     private readonly GameInstaller _installer = new();
     private readonly DownloadMeter _meter;
     private CancellationTokenSource? _cts;
     private InstallFromMirror? _mirror;
 
-    public InstallViewModel(IDialogs dialogs, PolRegion? region, Action? holdPrestarts = null, Action? releasePrestarts = null)
+    public InstallViewModel(IDialogs dialogs, PolRegion? region, Func<IDisposable>? holdPrestarts = null)
     {
         _dialogs = dialogs;
         // a viewer that's already there decides, otherwise it's the player's pick
@@ -53,7 +53,6 @@ public partial class InstallViewModel : ObservableObject
         RegionChoices = [$"Auto ({PolPaths.RegionName(_autoRegion)})", .. RegionValues.Select(PolPaths.RegionName)];
         _region = ShowRegionChoice ? _autoRegion : region!.Value;
         _holdPrestarts = holdPrestarts;
-        _releasePrestarts = releasePrestarts;
         _meter = new DownloadMeter(text => DownloadText = text, text => TimeLeftText = text, fraction => DownloadFraction = fraction);
         // the MSIs' own default INSTALLDIR for these 32-bit packages
         InstallFolder = Path.Combine(AppPaths.ProgramFilesX86, "PlayOnline");
@@ -292,7 +291,7 @@ public partial class InstallViewModel : ObservableObject
         var ct = _cts.Token;
         // the download takes hours on a slow line, and Windows mustn't sleep in the middle of it
         KeepAwake.Hold();
-        bool held = false;
+        IDisposable? hold = null;
         InstallWorkFolder.WorkFolder? workFolder = null;
         try
         {
@@ -303,10 +302,9 @@ public partial class InstallViewModel : ObservableObject
             // my own waiting pol.exe would fail the check below, and none may start while the files go in
             if (_holdPrestarts is not null)
             {
-                held = true;
                 await Task.Run(() =>
                 {
-                    _holdPrestarts();
+                    hold = _holdPrestarts();
                     for (int i = 0; i < 10 && PolUpdates.ViewerRunning(); i++) Thread.Sleep(300);
                 });
             }
@@ -393,9 +391,9 @@ public partial class InstallViewModel : ObservableObject
         }
         finally
         {
-            if (held && _releasePrestarts is not null)
+            if (hold is not null)
             {
-                try { _releasePrestarts(); }
+                try { hold.Dispose(); }
                 catch (Exception e) { Log.Warning(e, "Could not let pre-starts go again after the install"); }
             }
             workFolder?.Dispose();

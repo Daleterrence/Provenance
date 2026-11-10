@@ -17,7 +17,7 @@ namespace Provenance.Wpf.ViewModels.Install;
 
 // Checks every file against the mirror's signed index and only replaces game files after a yes. The pol.exe callbacks
 // stop my pre-started pol.exe (it holds viewer files) and keep it off until the repair's done
-public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action? stopWaitingPol = null, Action? restartWaitingPol = null) : ObservableObject
+public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<IDisposable>? stopWaitingPol = null, Action? beforeRelease = null) : ObservableObject
 {
     internal const string CheckingText = "This may take a while.";
     internal const string NoIssuesText = "No issues were found with your FINAL FANTASY XI or PlayOnline Viewer installation data.";
@@ -146,6 +146,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         bool stoppedPol = false;
+        IDisposable? hold = null;
         try
         {
             var installed = region ?? PolRegion.UnitedStates;
@@ -195,7 +196,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
                 if (stopWaitingPol is not null)
                 {
                     stoppedPol = true;
-                    stopWaitingPol();
+                    hold = stopWaitingPol();
                     // a killed pol.exe can hang about in the process list for a moment
                     for (int i = 0; i < 10 && PolUpdates.ViewerRunning(); i++) ct.WaitHandle.WaitOne(300);
                 }
@@ -289,9 +290,16 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Action
         }
         finally
         {
-            if (stoppedPol && restartWaitingPol is not null)
+            if (stoppedPol)
             {
-                try { await Task.Run(restartWaitingPol); }
+                try
+                {
+                    await Task.Run(() =>
+                    {
+                        try { beforeRelease?.Invoke(); }
+                        finally { hold?.Dispose(); }
+                    });
+                }
                 catch (Exception e) { Log.Warning(e, "Could not start the waiting pol.exe again after the repair"); }
             }
             Running = false;

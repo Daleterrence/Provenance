@@ -207,10 +207,27 @@ public sealed class Prestarter
 
     // a repair, an install or a Large Address Aware write changes viewer files, so nothing pre-starts pol.exe until
     // every hold's let go (a sign-out's own Prestart included). They nest
-    public void HoldPrestarts()
+    public IDisposable HoldPrestarts()
     {
         lock (_gate) _prestartHolds++;
-        FreeViewerFiles();
+        var hold = new Hold(this);
+        try { FreeViewerFiles(); }
+        catch
+        {
+            hold.Dispose();
+            throw;
+        }
+        return hold;
+    }
+
+    private sealed class Hold(Prestarter owner) : IDisposable
+    {
+        private int _released;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _released, 1) == 0) owner.Release();
+        }
     }
 
     internal void FreeViewerFiles()
@@ -264,7 +281,7 @@ public sealed class Prestarter
         }
     }
 
-    public void ReleasePrestarts()
+    private void Release()
     {
         if (LetGoPrestarts()) Prestart();
     }

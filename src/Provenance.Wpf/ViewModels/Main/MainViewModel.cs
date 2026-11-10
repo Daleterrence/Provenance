@@ -35,6 +35,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private readonly PolSession _pol;
     private readonly AvatarService _avatars;
+    private readonly FeedService _feeds;
     private readonly DispatcherTimer _socialPoll, _elapsedTimer;
 
     public event Action? RequestHide;
@@ -58,6 +59,7 @@ public partial class MainViewModel : ObservableObject
             _ui.Post(() => _dialogs.Info("Settings reset", loadProblem));
         _pol = pol;
         _avatars = avatars;
+        _feeds = feeds;
         _timeLeft = new PhaseTimeLeft(text => TimeLeftText = text);
         News = new NewsViewModel(feeds, _ui, OpenLink);
         Accounts = new AccountsViewModel(dialogs, credentials, settings, avatars);
@@ -403,13 +405,13 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void DownloadInstall()
     {
-        var vm = new InstallViewModel(_dialogs, _settings.DetectedRegion, _pol.Prestarter.HoldPrestarts, _pol.Prestarter.ReleasePrestarts);
+        var vm = new InstallViewModel(_dialogs, _settings.DetectedRegion, _pol.Prestarter.HoldPrestarts);
         vm.Installed += () => _ui.Run(() =>
         {
             _settings.RedetectRegion();
             _settings.SaveChange(PolOptions.NewInstall);
             RefreshInstallState();
-            Task.Run(() => LargeAddressAwareSwitch.Apply(_settings, "after the install", _pol.Prestarter.HoldPrestarts, _pol.Prestarter.ReleasePrestarts,
+            Task.Run(() => LargeAddressAwareSwitch.Apply(_settings, "after the install", _pol.Prestarter.HoldPrestarts,
                                                           LargeAddressAwareBlocked));
         });
         _windows.ShowInstall(vm);
@@ -889,11 +891,11 @@ public partial class MainViewModel : ObservableObject
     {
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
         ShowHandles();
-        var vm = new SettingsViewModel(_dialogs, _settings, multiRunning: () => Multi.Running,
-                                       holdPrestarts: _pol.Prestarter.HoldPrestarts, releasePrestarts: _pol.Prestarter.ReleasePrestarts,
+        var vm = new SettingsViewModel(_dialogs, _settings, _feeds, multiRunning: () => Multi.Running,
+                                       holdPrestarts: _pol.Prestarter.HoldPrestarts,
                                        largeAddressAwareBlocked: LargeAddressAwareBlocked,
                                        stopPrestart: () => Task.Run(_pol.Prestarter.StopPrestart),
-                                       loggedIn: () => IsLaunching || LoggedIn || _pol.Pid is not null,
+                                       loggedIn: PolInUse,
                                        handles: Handles);
         vm.Hooks.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(HookSettings.Hook)) PlatformChanged(); };
         _openSettings = vm;
@@ -975,8 +977,10 @@ public partial class MainViewModel : ObservableObject
     }
 
     // the Repair button's own checks, in its order. The lock comes from the switch's copy of its probe
-    private string? LargeAddressAwareBlocked() =>
-        IsLaunching || LoggedIn || _pol.Pid is not null || Repair.SessionEnding ? LargeAddressAwareSwitch.LoggedInText
+    internal bool PolInUse() => IsLaunching || LoggedIn || _pol.Pid is not null;
+
+    internal string? LargeAddressAwareBlocked() =>
+        PolInUse() || Repair.SessionEnding ? LargeAddressAwareSwitch.LoggedInText
         : Multi.Running ? LargeAddressAwareSwitch.MultiRunText
         : null;
 

@@ -118,12 +118,9 @@ public partial class RepairButtonViewModel : ObservableObject
     private void Start()
     {
         // pre-starts are held off for the whole repair, so no background Prestart lands a pol.exe on top of it
-        var vm = new RepairViewModel(_dialogs, _settings.DetectedRegion, _pol.Prestarter.HoldPrestarts, () =>
-        {
-            // still held, so a pol.exe the repair replaced gets it back before anything pre-starts
-            try { LargeAddressAwareSwitch.Apply(_settings, "after the repair"); }
-            finally { _pol.Prestarter.ReleasePrestarts(); }
-        });
+        // still held, so a pol.exe the repair replaced gets it back before anything pre-starts
+        var vm = new RepairViewModel(_dialogs, _settings.DetectedRegion, _pol.Prestarter.HoldPrestarts,
+                                     () => LargeAddressAwareSwitch.Apply(_settings, "after the repair"));
         Repairing = true;
         StartCommand.NotifyCanExecuteChanged();
         try { _windows.ShowRepair(vm); }
