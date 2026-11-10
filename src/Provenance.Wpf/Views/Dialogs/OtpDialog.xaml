@@ -19,18 +19,21 @@
                    TextWrapping="Wrap" Margin="0,0,0,14"
                    Text="Type the 6-digit code from your Square Enix authenticator. It's only used for this login and isn't kept." />
 
-        <StackPanel x:Name="SourcePanel" Visibility="Collapsed" Margin="0,0,0,14">
+        <StackPanel x:Name="SourcePanel" Visibility="{Binding PanelVisible, Converter={StaticResource BoolToVis}}" Margin="0,0,0,14">
             <StackPanel Orientation="Horizontal">
                 <ProgressBar x:Name="SourceSpinner" Width="16" Height="16" VerticalAlignment="Top"
-                             Margin="0,1,8,0" Style="{StaticResource Spinner}" />
-                <TextBlock x:Name="SourceText" FontSize="12" TextWrapping="Wrap" MaxWidth="290" Foreground="{DynamicResource Text.2}" />
+                             Margin="0,1,8,0" Style="{StaticResource Spinner}"
+                             Visibility="{Binding SpinnerVisible, Converter={StaticResource BoolToVis}}" />
+                <TextBlock x:Name="SourceText" FontSize="12" TextWrapping="Wrap" MaxWidth="290" Foreground="{DynamicResource Text.2}"
+                           Text="{Binding SourceText}" />
             </StackPanel>
-            <Grid x:Name="MasterPanel" Visibility="Collapsed" Margin="0,10,0,0" ColumnDefinitions="*,Auto">
+            <Grid x:Name="MasterPanel" Visibility="{Binding MasterVisible, Converter={StaticResource BoolToVis}}" Margin="0,10,0,0" ColumnDefinitions="*,Auto">
                 <PasswordBox x:Name="MasterBox" Style="{DynamicResource DialogPasswordBox}" Padding="10,6"
                              materialDesign:HintAssist.Hint="Bitwarden master password" KeyDown="OnMasterKey" />
                 <Button Grid.Column="1" Margin="8,0,0,0" Content="UNLOCK" Style="{StaticResource PolButton}" Click="OnUnlock" />
             </Grid>
-            <Button x:Name="RetryButton" Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,4,0,0"
+            <Button x:Name="RetryButton" Visibility="{Binding RetryLabel, Converter={StaticResource NullToVisibilityConverter}}"
+                    Content="{Binding RetryLabel}" HorizontalAlignment="Left" Margin="0,4,0,0"
                     Style="{StaticResource PolButton}" Click="OnRetry" />
         </StackPanel>
 
@@ -39,16 +42,16 @@
                      AutomationProperties.Name="One-time password, 6 digits" />
 
         <TextBlock x:Name="ErrorText" Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource State.Down}"
-                   Visibility="Collapsed" Text="Enter all 6 digits." />
+                   Visibility="{Binding ErrorVisible, Converter={StaticResource BoolToVis}}" Text="{Binding ErrorText}" />
         <TextBlock x:Name="BusyText" Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource Text.2}"
-                   Visibility="Collapsed" Text="Checking the code..." />
+                   Visibility="{Binding Checking, Converter={StaticResource BoolToVis}}" Text="Checking the code..." />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
             <Button Style="{StaticResource PolButton}" Content="PASTE"
                     Margin="0,0,8,0" Click="OnPaste" />
             <Button Style="{StaticResource RedButton}" Content="CANCEL"
                     Margin="0,0,8,0" IsCancel="True" Click="OnCancel" />
-            <Button x:Name="OkButton" Content="OK" MinWidth="72" IsDefault="True" Click="OnOk"
+            <Button x:Name="OkButton" Content="OK" MinWidth="72" IsDefault="True" Click="OnOk" IsEnabled="{Binding CanSubmit}"
                     Style="{StaticResource PolButton}" />
         </StackPanel>
     </StackPanel>
