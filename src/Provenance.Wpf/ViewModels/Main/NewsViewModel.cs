@@ -13,11 +13,14 @@ public partial class NewsViewModel : ObservableObject
 {
     private readonly FeedService _feeds;
     private readonly Action<string?> _openLink;
+    private readonly TimeProvider _time;
+    private DateTime Now => _time.GetUtcNow().UtcDateTime;
     private readonly DispatcherTimer _slideTimer, _worldsTimer;
     private int _slideFrom = -1;
 
-    public NewsViewModel(FeedService feeds, UiThread ui, Action<string?> openLink)
+    public NewsViewModel(FeedService feeds, UiThread ui, Action<string?> openLink, TimeProvider? time = null)
     {
+        _time = time ?? TimeProvider.System;
         _feeds = feeds;
         _openLink = openLink;
         _slideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
@@ -81,8 +84,8 @@ public partial class NewsViewModel : ObservableObject
 
     private async Task RefreshIfStaleAsync()
     {
-        if (DateTime.UtcNow - _worldsAt >= WorldsMaxAge) await LoadWorldsAsync();
-        if (DateTime.UtcNow - _feedsAt >= FeedsMaxAge) await LoadFeedsAsync();
+        if (Now - _worldsAt >= WorldsMaxAge) await LoadWorldsAsync();
+        if (Now - _feedsAt >= FeedsMaxAge) await LoadFeedsAsync();
     }
 
     public async Task LoadWorldsAsync()
@@ -100,7 +103,7 @@ public partial class NewsViewModel : ObservableObject
             return;
         }
         // only a good read counts, a saved copy's tried again on the next tick
-        if (!fetch.Stale) _worldsAt = DateTime.UtcNow;
+        if (!fetch.Stale) _worldsAt = Now;
         WorldsCheckedText = "Checked at " + fetch.At!.Value.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
         Worlds.Clear();
         foreach (var w in list) Worlds.Add(w);
@@ -127,7 +130,7 @@ public partial class NewsViewModel : ObservableObject
         try
         {
             var (news, status) = await _feeds.LoadAsync();
-            if (news.Items.Count + status.Items.Count > 0) _feedsAt = DateTime.UtcNow;
+            if (news.Items.Count + status.Items.Count > 0) _feedsAt = Now;
             var newNews = (await _feeds.WithLocalImagesAsync(news.Items.Take(5).ToList())).ToList();
             static string Sig(IEnumerable<FeedItem> items) =>
                 string.Join("\n", items.Select(i => $"{i.Url}|{i.Title}|{i.Date:O}|{i.Category}|{i.Badge}"));

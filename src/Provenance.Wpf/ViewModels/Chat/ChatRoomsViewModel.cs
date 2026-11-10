@@ -33,6 +33,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     // a little past the hook's 6 minute wait for a line's answer
     internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(365);
     private readonly ChatSendGate _gate = new(SendGiveUp);
+    private DateTime Now => _social.Time.GetUtcNow().UtcDateTime;
     private readonly System.Windows.Threading.DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private string? _zonesToken, _roomsToken, _joinToken;
     private string _roomIrc = "", _roomTitle = "";
@@ -64,7 +65,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _social.PropertyChanged += OnSocialChanged;
         ZonesView = CollectionViewSource.GetDefaultView(Zones);
         ZonesView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ChatZoneItem.Group)));
-        _tick.Tick += (_, _) => SendTick(DateTime.UtcNow);
+        _tick.Tick += (_, _) => SendTick(Now);
     }
 
     // Send's button only greys and ungreys when asked, so this keeps asking till a line can go again
@@ -321,7 +322,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _masterToken = token;
         _masterKind = kind;
         _masterName = name;
-        _masterSentAt = DateTime.UtcNow;
+        _masterSentAt = Now;
         MasterBusy = true;
         _tick.Start();
     }
@@ -456,7 +457,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (text.Length == 0 || Pid is not { } pid) return;
         var token = HookFiles.NewToken();
         if (!ChatRoomFiles.Send(pid, token, text, Colour, Emoticon)) { SendNote = HookFailures.ChatCommError; return; }
-        _gate.Sent(token, Compose, DateTime.UtcNow);
+        _gate.Sent(token, Compose, Now);
         Compose = "";
         Colour = -1;
         Emoticon = 0;
@@ -688,7 +689,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void ApplySend(ChatRoomsSnapshot chat)
     {
-        if (_gate.Settle(chat.SendToken, chat.SendState, DateTime.UtcNow) is { } done) FinishSend(done.State, done.Text);
+        if (_gate.Settle(chat.SendToken, chat.SendState, Now) is { } done) FinishSend(done.State, done.Text);
     }
 
     private void FinishSend(string done, string text)

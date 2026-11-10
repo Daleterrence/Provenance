@@ -57,7 +57,7 @@ public sealed partial class SocialSearch : ObservableObject
     public int MaxLength => Kind == FriendSearchKind.Hid ? PolLimits.HidSearch : PolLimits.HandleName;
 
     private string? _searchToken;
-    internal DateTime _searchAt;
+    private DateTime _searchAt;
     private FriendSearchKind _searchedKind;
     private string _searchedValue = "";
     private string? _requestToken;
@@ -110,7 +110,7 @@ public sealed partial class SocialSearch : ObservableObject
             return;
         }
         _searchToken = HookFiles.NewToken();
-        _searchAt = DateTime.UtcNow;
+        _searchAt = _social.Now;
         _searchedKind = kind;
         _searchedValue = value;
         Hits.Clear();
@@ -173,7 +173,7 @@ public sealed partial class SocialSearch : ObservableObject
         _requestName = hit.Name;
         _requestKey = hit.Key;
         _requestCharacter = hit.IsCharacter;
-        _requestAt = DateTime.UtcNow;
+        _requestAt = _social.Now;
         Note.Show($"Sending a friend request to {hit.Name}...");
         if (SocialRequests.SendFriendRequest(pid, token, hit.Index, hit.Key, _social.ViewerText(0x46c9, "Let's be friends!"),
                                              _social.ViewerText(0x46e6, "Would you like to be friends?"))) return;
@@ -205,7 +205,7 @@ public sealed partial class SocialSearch : ObservableObject
         _answerToken = token;
         _answerFor = f;
         _answerKind = answer;
-        _answerAt = DateTime.UtcNow;
+        _answerAt = _social.Now;
         var subject = answer == RequestAnswer.Accept
             ? _social.ViewerText(0x46d0, "Friend registration accepted")
             : _social.ViewerText(0x46d1, "Friend registration declined");
@@ -226,7 +226,7 @@ public sealed partial class SocialSearch : ObservableObject
     {
         if (_answerToken is null || _answerFor is not { } f) return;
         // a list upload and a send, each up to 100 secs
-        if (SocialViewModel.Settled(snap.SendStateFor(_answerToken), "sent", _answerAt, 250) is not { } st) return;
+        if (_social.Settled(snap.SendStateFor(_answerToken), "sent", _answerAt, 250) is not { } st) return;
         _answerToken = null;
         _answerFor = null;
         _social.EditBusy = false;
@@ -265,9 +265,9 @@ public sealed partial class SocialSearch : ObservableObject
     private void ApplySearchState(PolSocialSnapshot snap)
     {
         // two profile-server jobs, each up to polcore's 100 secs
-        SocialViewModel.WaitingTurn(ref _searchAt, _searchToken, snap.SearchJob.Token, snap);
+        _social.WaitingTurn(ref _searchAt, _searchToken, snap.SearchJob.Token, snap);
         if (_searchToken != null &&
-            SocialViewModel.Settled(snap.SearchJob.Token == _searchToken ? snap.SearchJob.State : null, "done", _searchAt, 250) is { } st)
+            _social.Settled(snap.SearchJob.Token == _searchToken ? snap.SearchJob.State : null, "done", _searchAt, 250) is { } st)
         {
             if (st == "timeout") _social.DiscardRequest(HookContract.Requests.Search);
             _searchToken = null;
@@ -312,7 +312,7 @@ public sealed partial class SocialSearch : ObservableObject
             });
         }
         if (_requestToken is null) return;
-        if (SocialViewModel.Settled(snap.SendStateFor(_requestToken), "sent", _requestAt, 250) is not { } rst) return;
+        if (_social.Settled(snap.SendStateFor(_requestToken), "sent", _requestAt, 250) is not { } rst) return;
         _requestToken = null;
         _social.EditBusy = false;
         if (rst != "sent")

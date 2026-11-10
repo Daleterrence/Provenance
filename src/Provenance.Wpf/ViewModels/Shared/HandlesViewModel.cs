@@ -37,9 +37,11 @@ public partial class HandlesViewModel : ObservableObject
     private readonly Func<int, ImageSource?>? _picture;
     private readonly SessionState? _session;
     private readonly Func<PolSocialSnapshot>? _snapshot;
+    private readonly TimeProvider _time;
     private PolSocialSnapshot _snap = PolSocialSnapshot.Empty;
     private string? _token;
-    internal DateTime _at;
+    private DateTime _at;
+    private DateTime Now => _time.GetUtcNow().UtcDateTime;
     private HandleChange _op;
     private string _doneText = "";
     private string _signature = "";
@@ -47,8 +49,9 @@ public partial class HandlesViewModel : ObservableObject
     private Action<string?>? _after;
 
     public HandlesViewModel(IDialogs dialogs, Func<int?> pid, Func<int, ImageSource?>? picture = null, SessionState? session = null,
-                            Func<PolSocialSnapshot>? snapshot = null)
+                            Func<PolSocialSnapshot>? snapshot = null, TimeProvider? time = null)
     {
+        _time = time ?? TimeProvider.System;
         _dialogs = dialogs;
         _pid = pid;
         _picture = picture;
@@ -107,7 +110,7 @@ public partial class HandlesViewModel : ObservableObject
             After(Note.Text);
         }
         // the wait doesn't count while the game's starting, nothing can be changed then
-        if (readOnly != null || _wasReadOnly) _at = DateTime.UtcNow;
+        if (readOnly != null || _wasReadOnly) _at = Now;
         _wasReadOnly = readOnly != null;
         Settle();
         Busy = _token != null;
@@ -122,7 +125,7 @@ public partial class HandlesViewModel : ObservableObject
         if (state != "saved" && !state.StartsWith("failed", StringComparison.Ordinal))
         {
             // once the hook's taken it, it's the hook's answer that ends it
-            if (state == "working" || DateTime.UtcNow - _at < TimeSpan.FromSeconds(110)) return;
+            if (state == "working" || Now - _at < TimeSpan.FromSeconds(110)) return;
             if (_pid() is { } pid) HookFiles.Discard(pid, HookContract.Requests.Handle);
             state = "timeout";
         }
@@ -272,7 +275,7 @@ public partial class HandlesViewModel : ObservableObject
             return;
         }
         _token = token;
-        _at = DateTime.UtcNow;
+        _at = Now;
         _op = op;
         _doneText = done;
         Note.Show(op == HandleChange.Switch ? "Updating online status..." : "Updating Content ID list...");

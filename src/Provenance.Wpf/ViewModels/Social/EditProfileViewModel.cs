@@ -21,7 +21,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private Job _job;
     private string? _token;
     private int _pid;
-    internal DateTime _at;
+    private DateTime _at;
     private string _noMail = "No Mail address";
     private string _savedHandle = "";
     private string _loadedKey = "";
@@ -260,7 +260,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _job = job;
         _token = HookFiles.NewToken();
         _pid = _social.SessionPid ?? 0;
-        _at = DateTime.UtcNow;
+        _at = _social.Now;
         if (job == Job.Load) LoadingText = "Loading your profile...";
         LoadingProfile = job is Job.Load or Job.LoadXi;
         Busy = true;
@@ -315,7 +315,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             Abandon(HookFailures.ProfileEditor.SessionEnded);
             return;
         }
-        if (DateTime.UtcNow - _at > TimeSpan.FromSeconds(_job == Job.Rename ? 260 : 250))
+        if (_social.Now - _at > TimeSpan.FromSeconds(_job == Job.Rename ? 260 : 250))
             Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : HookFailures.ProfileEditor.SaveUnconfirmed);
     }
 
@@ -457,7 +457,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         bool xi = _job == Job.LoadXi;
         var hook = xi ? snap.XiJob : snap.MeJob;
         // waiting its turn behind another profile server job in the hook, so its clock hasn't started
-        if (_job != Job.None && _token is not null && hook.Token != _token && snap.ProfileServerBusy) _at = DateTime.UtcNow;
+        if (_job != Job.None && _token is not null && hook.Token != _token && snap.ProfileServerBusy) _at = _social.Now;
         if (_job == Job.None || _token is null || hook.Token != _token) return;
         var state = hook.State;
         if (state.StartsWith("failed", StringComparison.Ordinal) || state == "cancelled")

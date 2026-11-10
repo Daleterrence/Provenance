@@ -48,7 +48,7 @@ public partial class MainViewModel : ObservableObject
     public event Action? AttentionCleared;
 
     public MainViewModel(IDialogs dialogs, IWindowManager windows, ICredentialService credentials, ISettingsService settings,
-                         FeedService feeds, PolSession pol, AvatarService avatars)
+                         FeedService feeds, PolSession pol, AvatarService avatars, TimeProvider? time = null)
     {
         _dialogs = dialogs;
         _windows = windows;
@@ -64,7 +64,7 @@ public partial class MainViewModel : ObservableObject
         _avatars = avatars;
         _feeds = feeds;
         _timeLeft = new PhaseTimeLeft(text => TimeLeftText = text);
-        News = new NewsViewModel(feeds, _ui, OpenLink);
+        News = new NewsViewModel(feeds, _ui, OpenLink, time);
         Accounts = new AccountsViewModel(dialogs, credentials, settings, avatars);
         _socialPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _socialPoll.Tick += (_, _) => _pol.Poll();
@@ -86,7 +86,7 @@ public partial class MainViewModel : ObservableObject
             _dialogs.Info("PlayOnline session ended", why);
             Log.Information("Session ended: the notice was closed");
         });
-        Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings, Session);
+        Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings, Session, time);
         Social.OpenChatRequested += OpenChatWith;
 
         Multi.RequestShow += () => RequestShow?.Invoke();
@@ -107,7 +107,7 @@ public partial class MainViewModel : ObservableObject
             if (!_settings.Current.NotifyFriendsOnline || Notice.Current is { Text.Length: > 0 }) return;
             Notice.Show($"{who} is online now.", "AccountCheckOutline", NoticeTarget.Chat, who);
         };
-        Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture, Session, () => Social.Last)
+        Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture, Session, () => Social.Last, time)
         {
             SwitchBlocked = () => _windows.ProfileEditorOpen
                 ? "Close the profile editor first. It's editing the active handle's profile." : Social.PendingWrite(),

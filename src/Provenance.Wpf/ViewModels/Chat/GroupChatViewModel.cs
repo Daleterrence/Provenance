@@ -39,6 +39,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     private readonly IDialogs _dialogs;
     private readonly Func<bool> _timesWanted, _flashWanted;
     private readonly ChatSendGate _gate = new(SendGiveUp);
+    private DateTime Now => _social.Time.GetUtcNow().UtcDateTime;
     private GroupChatLog? _log;
     private string? _token;
     private long _seenSeq;
@@ -137,7 +138,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         _log?.Flush();
         _token = token;
         _seenSeq = seen;
-        _joinAt = DateTime.UtcNow;
+        _joinAt = Now;
         _quietlyEnded = _goneQuietly = null;
         _gate.Reset();
         GroupId = group.Id;
@@ -178,14 +179,14 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         _tailGroup = GroupId;
         _tailSeen = _seenSeq;
-        _tailUntil = DateTime.UtcNow + TailFor;
+        _tailUntil = Now + TailFor;
     }
 
     // what the hook still has of a chat that's over goes in that group's kept lines, nothing on screen
     private void ReadTail()
     {
         if (_tailGroup is not { } group || _social.SessionPid is not { } pid) return;
-        if (DateTime.UtcNow > _tailUntil)
+        if (Now > _tailUntil)
         {
             _tailGroup = null;
             return;
@@ -282,7 +283,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
             ComposeNote = HookFailures.GroupChat.SendFailed;
             return;
         }
-        _gate.Sent(token, Compose, DateTime.UtcNow);
+        _gate.Sent(token, Compose, Now);
         _sentLine = text;
         Compose = "";
         ComposeNote = "";
@@ -422,7 +423,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void ApplySend(GroupChatSnapshot gc)
     {
-        if (_gate.Settle(gc.SendToken, gc.SendState, DateTime.UtcNow) is { } done) FinishSend(done.State, done.Text);
+        if (_gate.Settle(gc.SendToken, gc.SendState, Now) is { } done) FinishSend(done.State, done.Text);
     }
 
     private void FinishSend(string done, string text)

@@ -26,14 +26,16 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private readonly AvatarService _avatars;
     private readonly ISettingsService _settings;
     private readonly SessionState _session;
+    private readonly TimeProvider _time;
     private ChatStore? _chat;
     private PolSocialSnapshot _last = PolSocialSnapshot.Empty;
     private bool _friendsDirty = true;
 
     public SocialViewModel(IDialogs dialogs, IWindowManager windows, PolSession pol, AvatarService avatars, ISettingsService settings,
-                           SessionState session)
+                           SessionState session, TimeProvider? time = null)
     {
         _session = session;
+        _time = time ?? TimeProvider.System;
         _dialogs = dialogs;
         _windows = windows;
         _pol = pol;
@@ -132,14 +134,17 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             SaveProfilePicture(pic);
     }
 
+    internal DateTime Now => _time.GetUtcNow().UtcDateTime;
+    public TimeProvider Time => _time;
+
     internal IDialogs Dialogs => _dialogs;
     internal AvatarService Avatars => _avatars;
     internal ChatStore? Chat => _chat;
 
     // a job's last word (ok or "failed:..."), "timeout" once it's run past secs, or null while it's still going
-    internal static string? Settled(string? state, string ok, DateTime since, int secs) =>
+    internal string? Settled(string? state, string ok, DateTime since, int secs) =>
         state == ok || state?.StartsWith("failed", StringComparison.Ordinal) == true ? state
-        : DateTime.UtcNow - since > TimeSpan.FromSeconds(secs) ? "timeout" : null;
+        : Now - since > TimeSpan.FromSeconds(secs) ? "timeout" : null;
 
     // a request the hook hasn't taken yet never runs for nobody
     internal void DiscardRequest(string ext)
@@ -148,9 +153,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     }
 
     // profile server reads go one at a time in the hook, so a clock only starts once the hook's taken that read
-    internal static void WaitingTurn(ref DateTime since, string? token, string hookToken, PolSocialSnapshot snap)
+    internal void WaitingTurn(ref DateTime since, string? token, string hookToken, PolSocialSnapshot snap)
     {
-        if (token is not null && hookToken != token && snap.ProfileServerBusy) since = DateTime.UtcNow;
+        if (token is not null && hookToken != token && snap.ProfileServerBusy) since = Now;
     }
 
     internal string? ViewerFolder() =>
@@ -325,8 +330,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (!snap.FriendsLoaded) return;   // an empty list isn't "everyone went offline"
         var now = snap.Friends.Where(f => f.Online && !f.Pending).ToList();
         // everyone already online turns up in the first few secs, only later changes are news
-        _presenceQuietUntil ??= DateTime.UtcNow + TimeSpan.FromSeconds(30);
-        if (DateTime.UtcNow >= _presenceQuietUntil)
+        _presenceQuietUntil ??= Now + TimeSpan.FromSeconds(30);
+        if (Now >= _presenceQuietUntil)
             foreach (var f in now)
                 if (!_onlineFriends.Contains(Id(f))) FriendCameOnline?.Invoke(f.Name);
         _onlineFriends = now.Select(Id).ToHashSet();
@@ -423,12 +428,12 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 _requestedStatus = null;
                 StatusNote = "";
             }
-            else if (!snap.StatusBusy && DateTime.UtcNow - _requestedAt > TimeSpan.FromSeconds(5))
+            else if (!snap.StatusBusy && Now - _requestedAt > TimeSpan.FromSeconds(5))
             {
                 _requestedStatus = null;
                 StatusNote = "PlayOnline didn't accept the status change.";
             }
-            else if (DateTime.UtcNow - _requestedAt > TimeSpan.FromSeconds(110))
+            else if (Now - _requestedAt > TimeSpan.FromSeconds(110))
             {
                 _requestedStatus = null;   // polcore gives up after 100 secs
                 StatusNote = HookFailures.Friends.StatusNoAnswer;
@@ -595,7 +600,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         pid = _pol.Pid ?? 0;
         if (!CanEdit || pid == 0) return false;
         if (!followSend) _editToken = token;
-        _editAt = DateTime.UtcNow;
+        _editAt = Now;
         EditBusy = true;
         EditNote.Clear();
         return true;
@@ -694,7 +699,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     [NotifyPropertyChangedFor(nameof(EditNoteShown), nameof(Saving), nameof(EditStatus), nameof(EditStatusShown))]
     private bool _profilePictureSaving;
     private string? _picToken;
-    internal DateTime _picAt;
+    private DateTime _picAt;
 
     public void SaveProfilePicture(int picId)
     {
@@ -705,7 +710,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             return;
         }
         _picToken = HookFiles.NewToken();
-        _picAt = DateTime.UtcNow;
+        _picAt = Now;
         ProfilePictureSaving = true;
         EditNote.Clear();
         if (SocialRequests.SetProfilePicture(pid, picId, _picToken)) return;
@@ -740,7 +745,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (StatusPending) return;
         var want = StatusChoices[value];
         _requestedStatus = want;
-        _requestedAt = DateTime.UtcNow;
+        _requestedAt = Now;
         StatusPending = true;
         StatusNote = "";
         _settings.SaveChange(s => s.PlayOnlineStatus = PolStatusText.Code(want));
@@ -767,9 +772,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     {
         var lookups = Lookups;
         lookups.Answer(snap.CharacterJob.Token, snap.CharacterJob.State, snap.Character);
-        lookups.Waiting(snap.CharacterJob.Token, snap.ProfileServerBusy, DateTime.UtcNow);
+        lookups.Waiting(snap.CharacterJob.Token, snap.ProfileServerBusy, Now);
         if (snap.FriendsLoaded) lookups.Seen(snap.Friends);
-        if (GameRunning || _pol.Pid is not { } pid || lookups.Next(DateTime.UtcNow) is not { } game) return;
+        if (GameRunning || _pol.Pid is not { } pid || lookups.Next(Now) is not { } game) return;
         if (!SocialRequests.RequestCharacter(pid, lookups.Token, game.Character)) lookups.Failed();
     }
 

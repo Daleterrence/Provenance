@@ -39,12 +39,12 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     private string? _profileToken;
     private string _profileKey = "", _profileFor = "";
     private int _profileRow = -1;
-    internal DateTime _profileAt;
+    private DateTime _profileAt;
     // what's on screen: the handle's answer and the last character one that loaded, so going back never reads again
     private PolProfile? _handleProfile;
     private PolFfxiProfile? _characterShown;
     private string? _ffxiToken;
-    internal DateTime _ffxiAt;
+    private DateTime _ffxiAt;
     private ProfileTab? _ffxiFor, _ffxiFrom;
     private readonly Dictionary<string, (PolProfile Profile, DateTime At)> _profileCache = new();
     private ProfilePictureCatalog.Catalog? _picCatalog;
@@ -81,14 +81,14 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         }
         // the same profile again within 5 mins shows the copy already here, no second request for a page just read
         if (f.Key.Length > 0 && _profileCache.TryGetValue(f.Key, out var hit) &&
-            DateTime.UtcNow - hit.At < TimeSpan.FromMinutes(5))
+            _social.Now - hit.At < TimeSpan.FromMinutes(5))
         {
             Note.Clear();
             HandleProfileArrived(hit.Profile);
             return;
         }
         _profileToken = HookFiles.NewToken();
-        _profileAt = DateTime.UtcNow;
+        _profileAt = _social.Now;
         Loading = true;
         Note.Show("Loading the profile from PlayOnline...");
         if (SocialRequests.RequestProfile(pid, _profileToken, f.Row, f.Key)) return;
@@ -170,17 +170,17 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     private void ApplyProfileState(PolSocialSnapshot snap)
     {
         if (_profileToken is null) return;
-        SocialViewModel.WaitingTurn(ref _profileAt, _profileToken, snap.ProfileJob.Token, snap);
+        _social.WaitingTurn(ref _profileAt, _profileToken, snap.ProfileJob.Token, snap);
         // a "done" with no profile isn't an answer yet
         bool mine = snap.ProfileJob.Token == _profileToken && (snap.ProfileJob.State != "done" || snap.Profile != null);
-        if (SocialViewModel.Settled(mine ? snap.ProfileJob.State : null, "done", _profileAt, 130) is not { } st) return;
+        if (_social.Settled(mine ? snap.ProfileJob.State : null, "done", _profileAt, 130) is not { } st) return;
         if (st == "timeout") _social.DiscardRequest(HookContract.Requests.Profile);
         _profileToken = null;
         Loading = false;
         if (st == "done")
         {
             Note.Clear();
-            if (_profileKey.Length > 0) _profileCache[_profileKey] = (snap.Profile!, DateTime.UtcNow);
+            if (_profileKey.Length > 0) _profileCache[_profileKey] = (snap.Profile!, _social.Now);
             HandleProfileArrived(snap.Profile!);
             return;
         }
@@ -275,7 +275,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         MarkSelected(tab);
         ShowCharacterPage(null);
         _ffxiToken = HookFiles.NewToken();
-        _ffxiAt = DateTime.UtcNow;
+        _ffxiAt = _social.Now;
         _ffxiFor = tab;
         _ffxiFrom = from;
         Loading = true;
@@ -308,9 +308,9 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     private void ApplyFfxiProfileState(PolSocialSnapshot snap)
     {
         if (_ffxiToken is null) return;
-        SocialViewModel.WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileJob.Token, snap);
+        _social.WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileJob.Token, snap);
         bool mine = snap.FfxiProfileJob.Token == _ffxiToken && (snap.FfxiProfileJob.State != "done" || snap.FfxiProfile != null);
-        if (SocialViewModel.Settled(mine ? snap.FfxiProfileJob.State : null, "done", _ffxiAt, 130) is not { } st) return;
+        if (_social.Settled(mine ? snap.FfxiProfileJob.State : null, "done", _ffxiAt, 130) is not { } st) return;
         if (st == "timeout") _social.DiscardRequest(HookContract.Requests.FfxiProfile);
         _ffxiToken = null;
         Loading = false;

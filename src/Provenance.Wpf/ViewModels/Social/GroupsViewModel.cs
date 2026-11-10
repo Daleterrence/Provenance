@@ -113,7 +113,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         if (!_social.BeginEdit(out var pid, out var token, followSend: true)) return;
         _groupToken = token;
         _groupDone = doneText;
-        _groupAt = DateTime.UtcNow;
+        _groupAt = _social.Now;
         _groupBySend = bySend;
         _groupLeaving = leaving;
         _inviteFor = invite;   // only now, a refused click must never mark it answered
@@ -219,7 +219,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         else if (mine && snap.GroupJob.State.StartsWith("failed", StringComparison.Ordinal)) state = snap.GroupJob.State;
         else state = "";
         bool done = state is "sent" or "saved";
-        if (SocialViewModel.Settled(done ? "ok" : state, "ok", _groupAt, 130) is not { } st) return;
+        if (_social.Settled(done ? "ok" : state, "ok", _groupAt, 130) is not { } st) return;
         var invite = _inviteFor is { IsGroupInvite: true } inv ? inv : null;
         var left = _groupLeaving;
         _groupLeaving = null;
