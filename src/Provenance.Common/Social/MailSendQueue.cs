@@ -21,13 +21,6 @@ public sealed class MailSendQueue
     // one of mine still on its way to the hook or the server, so a line of mine coming in could be its echo
     public bool Going => _queue.Count > 0 || _inFlight.Count > 0;
 
-    public void Reset()
-    {
-        _queue.Clear();   // unsent lines stay in the log and expire as "not sent"
-        _inFlight.Clear();
-        _closed = false;
-    }
-
     public void Finished(string token) => _inFlight.RemoveAll(x => x.Token == token);
 
     public void HookSays(string token, string state)

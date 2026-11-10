@@ -132,8 +132,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             SaveProfilePicture(pic);
     }
 
-    internal DateTime Now => _time.GetUtcNow().UtcDateTime;
-    public TimeProvider Time => _time;
+    public DateTime Now => _time.GetUtcNow().UtcDateTime;
 
     internal IDialogs Dialogs => _dialogs;
     internal AvatarService Avatars => _avatars;

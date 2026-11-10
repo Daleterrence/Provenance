@@ -124,7 +124,7 @@ public partial class HandlesViewModel : ObservableObject
         if (state != "saved" && !state.StartsWith("failed", StringComparison.Ordinal))
         {
             // once the hook's taken it, it's the hook's answer that ends it
-            if (state == "working" || _watch.Elapsed(Now) < HookLimits.HandleUntaken) return;
+            if (state == "working" || !_watch.Reached(Now)) return;
             if (_pid() is { } pid) HookFiles.Discard(pid, HookContract.Requests.Handle);
             state = "timeout";
         }

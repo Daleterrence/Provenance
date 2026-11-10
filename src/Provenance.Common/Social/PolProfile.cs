@@ -16,7 +16,7 @@ public sealed record PolProfile(string Name, string Mail, ProfileFieldState Mail
 // one of the handle's game slots with an FFXI character in it. World is the game's world id
 public sealed record PolFfxiCharacter(int Slot, CharacterId Character, int World);
 
-// one of my own characters on the profile editor. Key is the character's
+// a character's card on the profile editor
 public sealed record XiProfile(string Key, PrivacyLevel Level, string Name, string WorldName)
 {
     public static readonly XiProfile None = new("", PrivacyLevel.Keep, "", "");

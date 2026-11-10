@@ -776,14 +776,13 @@ public partial class MainViewModel : ObservableObject
         return false;
     }
 
-    // fed every snapshot, so a change still going when Settings closes is answered all the same
-    // a new login, maybe on another account, so nothing from the last one can show under this one
     internal void StartSocial(string profileId, string? storeRoot = null)
     {
         Social.Start(profileId, storeRoot);
         Handles.NewLogin();
     }
 
+    // fed every snapshot, so a change still going when Settings closes is answered all the same
     internal HandlesViewModel Handles { get; }
     internal ViewerResources Viewer { get; }
 

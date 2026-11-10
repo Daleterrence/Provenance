@@ -16,7 +16,7 @@ internal interface ISocialSession : INotifyPropertyChanged
     bool GameRunning { get; }
     bool HandleSwitching { get; }
     string? WriteBlockedNote { get; }
-    TimeProvider Time { get; }
+    DateTime Now { get; }
     PolSocialSnapshot Last { get; }
     string? LeavingGroupId { get; }
     ViewerResources Viewer { get; }

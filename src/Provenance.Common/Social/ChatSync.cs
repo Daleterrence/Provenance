@@ -18,13 +18,6 @@ public sealed class ChatSync(MailSendQueue sends)
 
     public void MarkAcked(IEnumerable<int> mids) => _acked.UnionWith(mids);
 
-    public void Reset()
-    {
-        _acked.Clear();
-        _seenRequests.Clear();
-        _storeTaken = false;
-    }
-
     public void Unack(IEnumerable<int> mids)
     {
         foreach (var mid in mids) _acked.Remove(mid);   // again next snapshot

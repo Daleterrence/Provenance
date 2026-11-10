@@ -72,7 +72,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     public ImageSource? Avatar => _social.Avatar;
     public bool ProfilePictureSaving => _social.ProfilePictureSaving;
-    private DateTime Now => _social.Time.GetUtcNow().UtcDateTime;
 
     public ObservableCollection<ProfileCard> Cards { get; } = new();
 
@@ -265,7 +264,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private void Start(Job job, string note = "")
     {
         _job = job;
-        _watch.Begin(job == Job.Rename ? HookLimits.MyProfileRename : HookLimits.MyProfile, Now);
+        _watch.Begin(job == Job.Rename ? HookLimits.MyProfileRename : HookLimits.MyProfile, _social.Now);
         _pid = _social.Session.Pid ?? 0;
         if (job == Job.Load) LoadingText = "Loading your profile...";
         LoadingProfile = job is Job.Load or Job.LoadXi;
@@ -321,7 +320,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             Abandon(HookFailures.ProfileEditor.SessionEnded);
             return;
         }
-        if (_watch.Overdue(Now))
+        if (_watch.Overdue(_social.Now))
             Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : HookFailures.ProfileEditor.SaveUnconfirmed);
     }
 
@@ -463,7 +462,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         bool xi = _job == Job.LoadXi;
         var hook = xi ? snap.XiJob : snap.MeJob;
         // waiting its turn behind another profile server job in the hook, so its clock hasn't started
-        _watch.WaitingTurn(hook.Token, snap.ProfileServerBusy, Now);
+        _watch.WaitingTurn(hook.Token, snap.ProfileServerBusy, _social.Now);
         if (_job == Job.None || !_watch.Running || hook.Token != _watch.Token) return;
         var state = hook.State;
         if (state.StartsWith("failed", StringComparison.Ordinal) || state == "cancelled")

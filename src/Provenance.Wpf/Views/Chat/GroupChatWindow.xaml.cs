@@ -23,7 +23,7 @@ public partial class GroupChatWindow : AppWindow
         DataContext = _vm = vm;
         _vm.Ended += OnEnded;
         _vm.LineArrived += OnLineArrived;
-        _tick.Tick += (_, _) => _vm.Tick(DateTime.UtcNow);
+        _tick.Tick += (_, _) => _vm.Tick();
         _tick.Start();
         Activated += (_, _) =>
         {

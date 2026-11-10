@@ -3,7 +3,6 @@ using Provenance.Common.Social;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
-// what one login's friends side keeps. A new login gets a new one, so nothing can be missed when it starts
 internal sealed class SocialSession
 {
     public SocialSession()

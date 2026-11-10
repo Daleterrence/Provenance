@@ -4,7 +4,6 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Common.PolFormat;
 
-// the viewer's own strings, word filter and profile pictures, read from its install the first time they're asked for
 public sealed class ViewerResources
 {
     private readonly ISettingsService _settings;
@@ -17,10 +16,14 @@ public sealed class ViewerResources
     private ProfilePictureCatalog.Catalog? _catalog;
     private bool _tableTried, _wordFilterTried;
 
-    public ViewerResources(ISettingsService settings, Func<PolRegion, string?>? folder = null,
-                           Func<string, IReadOnlyDictionary<int, string>?>? strings = null,
-                           Func<string, PolLanguageFilter?>? filter = null,
-                           Func<string, ProfilePictureCatalog.Catalog?>? pictures = null)
+    public ViewerResources(ISettingsService settings) : this(settings, null)
+    {
+    }
+
+    internal ViewerResources(ISettingsService settings, Func<PolRegion, string?>? folder = null,
+                             Func<string, IReadOnlyDictionary<int, string>?>? strings = null,
+                             Func<string, PolLanguageFilter?>? filter = null,
+                             Func<string, ProfilePictureCatalog.Catalog?>? pictures = null)
     {
         _settings = settings;
         _folder = folder ?? ViewerFolder;

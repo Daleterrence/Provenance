@@ -17,7 +17,7 @@ public sealed class AvatarService(ISettingsService settings)
     private readonly Dictionary<int, ImageSource?> _cache = new();
     private readonly Dictionary<int, BitmapSource?> _sheets = new();
 
-    // pictures a check hands over, as if they'd been read from that folder
+    // pictures given straight in, as if they'd been read from that folder
     internal void UseStandIns(string viewerDir, IReadOnlyDictionary<int, ImageSource?> pictures)
     {
         _viewerDir = viewerDir;

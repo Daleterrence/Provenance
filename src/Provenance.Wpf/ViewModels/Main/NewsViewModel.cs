@@ -71,7 +71,7 @@ public partial class NewsViewModel : ObservableObject
     private DateTime _feedsAt = DateTime.MinValue;
     internal DateTime WorldsReadAt => _worldsAt;
 
-    // so a run that photographs the windows isn't changed by a read in the middle of it
+    // holds off the next feed and world reads for a day
     internal void KeepFeedsFresh() => _feedsAt = _worldsAt = Now.AddDays(1);
     private bool _worldsLoading, _feedsLoading, _feedsAgain;
     private static readonly TimeSpan WorldsMaxAge = TimeSpan.FromMinutes(10);

@@ -36,7 +36,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
     private readonly IDialogs _dialogs;
     private readonly Func<bool> _timesWanted, _flashWanted;
     private readonly ChatSendGate _gate = new(HookLimits.GroupChatLine);
-    private DateTime Now => _social.Time.GetUtcNow().UtcDateTime;
     private GroupChatLog? _log;
     private readonly HookJobWatch _join = new();
     private long _seenSeq;
@@ -137,7 +136,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         }
         _log?.Flush();
         _seenSeq = seen;
-        _join.Begin(token, HookLimits.GroupChatJoin, Now);
+        _join.Begin(token, HookLimits.GroupChatJoin, _social.Now);
         _quietlyEnded = _goneQuietly = null;
         _gate.Reset();
         GroupId = group.Id;
@@ -178,14 +177,14 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         _tailGroup = GroupId;
         _tailSeen = _seenSeq;
-        _tailUntil = Now + TailFor;
+        _tailUntil = _social.Now + TailFor;
     }
 
     // what the hook still has of a chat that's over goes in that group's kept lines, nothing on screen
     private void ReadTail()
     {
         if (_tailGroup is not { } group || _social.Session.Pid is not { } pid) return;
-        if (Now > _tailUntil)
+        if (_social.Now > _tailUntil)
         {
             _tailGroup = null;
             return;
@@ -282,7 +281,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
             ComposeNote = HookFailures.GroupChat.SendFailed;
             return;
         }
-        _gate.Sent(token, Compose, Now);
+        _gate.Sent(token, Compose, _social.Now);
         _sentLine = text;
         Compose = "";
         ComposeNote = "";
@@ -301,12 +300,13 @@ public sealed partial class GroupChatViewModel : ObservableObject
     }
 
     // the window's half-second tick: Send's button, a join or a line that never got an answer, and the log's save
-    public void Tick(DateTime now)
+    public void Tick()
     {
+        var now = _social.Now;
         SendCommand.NotifyCanExecuteChanged();
         _log?.SaveIfDue(now);
         if (_gate.Expire(now) is { } done) FinishSend(done.State, done.Text);
-        if (Current != Phase.Joining || _join.Elapsed(now) < HookLimits.GroupChatJoin) return;
+        if (Current != Phase.Joining || !_join.Reached(now)) return;
         CallOff();
         End(_social.Viewer.Text(0x3eb8, HookFailures.GroupChat.Busy));
     }
@@ -422,7 +422,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void ApplySend(GroupChatSnapshot gc)
     {
-        if (_gate.Settle(gc.SendJob.Token, gc.SendJob.State, Now) is { } done) FinishSend(done.State, done.Text);
+        if (_gate.Settle(gc.SendJob.Token, gc.SendJob.State, _social.Now) is { } done) FinishSend(done.State, done.Text);
     }
 
     private void FinishSend(string done, string text)

@@ -53,7 +53,7 @@ public sealed class PreLaunchLink
         while (PageWaiting() is { } note)
         {
             if (!Alive(pid)) return PreLaunchResult.Play;
-            if (page.Elapsed(Now()) >= HookLimits.HandleUntaken)
+            if (page.Reached(Now()))
             {
                 if (Read(pid) is not { } now || For(now) is null) return PreLaunchResult.Play;
                 Failed(FailedText(PageGaveUpText));
@@ -107,7 +107,7 @@ public sealed class PreLaunchLink
             {
                 if (Now() - t >= HookLimits.HandleWorking) return (false, Failure("timeout"));
             }
-            else if (untaken.Elapsed(Now()) >= HookLimits.HandleUntaken)
+            else if (untaken.Reached(Now()))
             {
                 if (HookFiles.Withdraw(pid, HookContract.Requests.Handle) == Withdrawal.Withdrawn) return (false, Failure("timeout"));
                 taken = Now();

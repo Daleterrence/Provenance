@@ -1,6 +1,5 @@
 namespace Provenance.Common.Hook;
 
-// the token the app gave the hook for a job and the state the hook has it in. Both are empty when the hook has none
 public sealed record HookJob(string Token, string State)
 {
     public static readonly HookJob None = new("", "");
@@ -42,6 +41,8 @@ public sealed class HookJobWatch
     public TimeSpan Elapsed(DateTime now) => now - _since;
 
     public bool Overdue(DateTime now) => Elapsed(now) > _limit;
+
+    public bool Reached(DateTime now) => Elapsed(now) >= _limit;
 
     // the job's last word (ok or "failed:..."), "timeout" once it's overdue, or null while it's still going
     public string? Settle(string? state, string ok, DateTime now)

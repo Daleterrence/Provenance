@@ -31,7 +31,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private readonly Func<string, string, bool> _savePassword;
     private readonly Action _dropPassword;
     private readonly ChatSendGate _gate = new(HookLimits.ChatLine);
-    private DateTime Now => _social.Time.GetUtcNow().UtcDateTime;
     private readonly System.Windows.Threading.DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private string? _zonesToken, _roomsToken, _joinToken;
     private string _roomIrc = "", _roomTitle = "";
@@ -64,7 +63,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _social.PropertyChanged += OnSocialChanged;
         ZonesView = CollectionViewSource.GetDefaultView(Zones);
         ZonesView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ChatZoneItem.Group)));
-        _tick.Tick += (_, _) => SendTick(Now);
+        _tick.Tick += (_, _) => SendTick(_social.Now);
     }
 
     // Send's button only greys and ungreys when asked, so this keeps asking till a line can go again
@@ -318,7 +317,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             ShowError(HookFailures.ChatCommError);
             return;
         }
-        _master.Begin(token, HookLimits.ChatMaster, Now);
+        _master.Begin(token, HookLimits.ChatMaster, _social.Now);
         _masterKind = kind;
         _masterName = name;
         MasterBusy = true;
@@ -327,7 +326,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     internal void MasterTick(DateTime now)
     {
-        if (!_master.Running || _master.Elapsed(now) < HookLimits.ChatMaster || Pid is not { } pid) return;
+        if (!_master.Running || !_master.Reached(now) || Pid is not { } pid) return;
         HookFiles.Withdraw(pid, HookContract.Requests.ChatMaster);
         if (_masterKind == MasterJob.Password) _dropPassword();
         _master.Forget();
@@ -451,7 +450,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (text.Length == 0 || Pid is not { } pid) return;
         var token = HookFiles.NewToken();
         if (!ChatRoomFiles.Send(pid, token, text, Colour, Emoticon)) { SendNote = HookFailures.ChatCommError; return; }
-        _gate.Sent(token, Compose, Now);
+        _gate.Sent(token, Compose, _social.Now);
         Compose = "";
         Colour = -1;
         Emoticon = 0;
@@ -683,7 +682,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void ApplySend(ChatRoomsSnapshot chat)
     {
-        if (_gate.Settle(chat.SendJob.Token, chat.SendJob.State, Now) is { } done) FinishSend(done.State, done.Text);
+        if (_gate.Settle(chat.SendJob.Token, chat.SendJob.State, _social.Now) is { } done) FinishSend(done.State, done.Text);
     }
 
     private void FinishSend(string done, string text)
