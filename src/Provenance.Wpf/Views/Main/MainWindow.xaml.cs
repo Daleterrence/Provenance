@@ -36,6 +36,10 @@ public partial class MainWindow : AppWindow
 
     internal TrayMode Tray => _tray;
 
+    internal bool Exiting => _exiting;
+
+    internal bool ExitWaitsForAnswer => _asking && Vm?.Multi is not { Running: true };
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -126,7 +130,8 @@ public partial class MainWindow : AppWindow
         ExitApp();
     }
 
-    private void OnRequestExit() => ExitWithoutAsking();
+    // not from inside Closing, Close throws in there
+    private void OnRequestExit() => Dispatcher.InvokeAsync(ExitWithoutAsking);
 
     internal void OnMinimize(object sender, RoutedEventArgs e)
     {
@@ -238,7 +243,7 @@ public partial class MainWindow : AppWindow
         ExitApp();
     }
 
-    private void ExitApp()
+    internal void ExitApp()
     {
         _exiting = true;
         // inside OnClosing with a question up, Close would throw. The answer decides

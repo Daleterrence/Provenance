@@ -126,9 +126,9 @@ public partial class RepairButtonViewModel : ObservableObject
         }
     }
 
-    // when the window comes forward, and every few seconds while a signed-out card's up
     internal void StopProbing() => _repairProbe.Stop();
 
+    // when the window comes forward, and every few seconds while a signed-out card's up
     public async Task ProbeAsync()
     {
         // a multi-account run holds the update lock in this copy, which isn't "another copy"

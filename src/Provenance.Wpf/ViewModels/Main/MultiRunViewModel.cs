@@ -202,6 +202,10 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         _cts.Cancel();
     }
 
+    internal void HoldRun(CancellationTokenSource cts) => _cts = cts;
+    internal bool ExitsAfterStop => _exitAfterStop;
+    internal void RaiseExit() => RequestExit?.Invoke();
+
     internal bool ConfirmStopAccounts() => _dialogs.Confirm("Multi-account mode",
         "Your accounts are still starting. Stop them and close Provenance?", "STOP AND CLOSE", ConfirmStyle.Destructive);
 

@@ -152,11 +152,9 @@ public partial class App : Application
         ScreenSaver.Note(settings);
         // Windows logging off cancels a log in and WPF would close the window ignoring its Cancel, so it closes the normal
         // way first. A held session gets logged out and nothing goes to the tray
-        SessionEnding += (_, _) =>
+        SessionEnding += (_, e) =>
         {
-            Log.Information("Windows session ending");
-            _ = mainVm.CancelLogInAsync();
-            mainWindow.ExitWithoutAsking();
+            if (LogOff(mainVm, mainWindow)) e.Cancel = true;
         };
         mainWindow.DataContext = mainVm;
         MainWindow = mainWindow;
@@ -165,6 +163,16 @@ public partial class App : Application
         // this one really is off the UI thread, the wait's on the pool
         if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));
         return mainVm;
+    }
+
+    internal static bool LogOff(MainViewModel mainVm, MainWindow mainWindow)
+    {
+        Log.Information("Windows session ending");
+        _ = mainVm.CancelLogInAsync();
+        // a question that's up can't be closed under, so Windows is told no
+        bool refuse = mainWindow.ExitWaitsForAnswer;
+        mainWindow.ExitWithoutAsking();
+        return refuse;
     }
 
     private static void StartMainViewModel(MainViewModel mainVm, bool suppressed)

@@ -58,7 +58,7 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
 
     public bool TryReuse(MainViewModel? vm)
     {
-        if (vm is null || !TrayCopy.Reusable(InTray, !window.IsVisible, vm.Session.LoggedIn, vm.Session.Launching, vm.Session.InMultiRun))
+        if (questionUp() || vm is null || !TrayCopy.Reusable(InTray, !window.IsVisible, vm.Session.LoggedIn, vm.Session.Launching, vm.Session.InMultiRun))
             return false;
         // queued, the other copy's stuck inside SendMessage until this returns and COM calls fail while it is
         window.Dispatcher.InvokeAsync(ShowWindow);

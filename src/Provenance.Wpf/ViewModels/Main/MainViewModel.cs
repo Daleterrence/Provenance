@@ -340,6 +340,14 @@ public partial class MainViewModel : ObservableObject
 
     private Task? _connectTask;
 
+    internal void HoldLogIn(CancellationTokenSource cts, Task done)
+    {
+        _launchCts = cts;
+        _connectTask = done;
+    }
+
+    internal void RaiseExit() => RequestExit?.Invoke();
+
     public bool LoggingIn => _launchCts != null && _connectTask is { IsCompleted: false };
 
     public async Task CancelLogInAsync()

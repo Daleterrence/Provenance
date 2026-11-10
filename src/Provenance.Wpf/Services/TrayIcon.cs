@@ -69,6 +69,11 @@ public sealed class TrayIcon : IDisposable
     }
 
     internal string FriendsItemText => _friends.Text ?? "";
+    internal bool FriendsItemShown => _friends.Available;
+    internal bool SignOutItemShown => _signOut.Available;
+    internal string ExitItemText => _exit.Text ?? "";
+    internal void ClickOpen() => OpenRequested?.Invoke();
+    internal void ClickExit() => ExitRequested?.Invoke();
 
     public void ShowTip(string title, string text) =>
         _icon.ShowBalloonTip(5000, title, text, System.Windows.Forms.ToolTipIcon.None);
