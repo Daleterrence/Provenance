@@ -67,15 +67,12 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 
     public bool Stopping => _session.Phase == SessionPhase.MultiStopping;
 
-    private bool _runningShown, _stoppingShown;
+    private LastRaised _runningShown, _stoppingShown;
 
     private void OnPhaseChanged()
     {
-        bool running = Running, stopping = Stopping;
-        if (running == _runningShown && stopping == _stoppingShown) return;
-        bool runningChanged = running != _runningShown, stoppingChanged = stopping != _stoppingShown;
-        _runningShown = running;
-        _stoppingShown = stopping;
+        bool runningChanged = _runningShown.Changed(Running), stoppingChanged = _stoppingShown.Changed(Stopping);
+        if (!runningChanged && !stoppingChanged) return;
         if (runningChanged) OnPropertyChanged(nameof(Running));
         if (stoppingChanged) OnPropertyChanged(nameof(Stopping));
         OnPropertyChanged(nameof(StartAllText));

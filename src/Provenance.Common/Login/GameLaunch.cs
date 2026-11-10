@@ -27,6 +27,8 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
     internal Func<(string Ffxi, string Viewer, PolRegion Region)?>? FolderSeam { get; init; }
     internal Func<string, string, PolRegion, IProgress<PatchProgress>?, CancellationToken, PatchResult>? UpdateSeam { get; init; }
     internal Action? SignalPlaySeam { get; init; }
+    internal Action<string?>? WriteOptionsSeam { get; init; }
+    internal Func<LaunchLogin, CancellationToken, Task<int>>? LogInSeam { get; init; }
 
     // claimed before the code's asked, so no other copy logs this account in meanwhile
     public ClaimResult Claim(Account p, Func<string?> askOtp)
@@ -44,7 +46,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
 
     public async Task<LogInResult> LogInAsync(LaunchLogin l, CancellationToken ct)
     {
-        int code = await pol.ConnectAsync(new LoginRequest(l.Pol, l.SquareEnix, l.Otp)
+        int code = LogInSeam is { } seam ? await seam(l, ct) : await pol.ConnectAsync(new LoginRequest(l.Pol, l.SquareEnix, l.Otp)
         {
             ProfileId = l.Account.Id,
             Progress = l.Progress,
@@ -90,6 +92,11 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
     // SE's installer only writes 3 of the game settings
     public void WriteOptions(string? profileId)
     {
+        if (WriteOptionsSeam is { } seam)
+        {
+            seam(profileId);
+            return;
+        }
         FfxiSettings.WriteFirstStartSettings(settings.RegionOrDefault);
         WritePolOptions(profileId);
     }
@@ -100,7 +107,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         if (PolPaths.TryGetInstallFolder(settings.RegionOrDefault, GameProduct.Viewer) is { } viewer) WritePolOptions(profileId, viewer);
     }
 
-    public void WritePolOptions(string? profileId, string viewer)
+    internal void WritePolOptions(string? profileId, string viewer)
     {
         try
         {

@@ -86,11 +86,6 @@ public partial class SettingsViewModel : ObservableObject
         Backups = new BackupSettings(dialogs, settings, _context);
         Hooks.Load();
         Multi.Load();
-        if (session is not null)
-        {
-            session.PhaseChanged += OnPhaseChanged;
-            session.RunChanged += MultiRunChanged;
-        }
         Game = new GameSettingsViewModel(dialogs, region, GameStoreForSelection(), _context.GameRunning);
         _gameReady = true;
         Addons = new AddonsPluginsViewModel(settings, Hooks.PickedAddonsTarget);
@@ -107,6 +102,11 @@ public partial class SettingsViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(AddonsPluginsViewModel.SameListForEveryProfile)) OnPropertyChanged(nameof(ShowProfileSwitcher));
         };
+        if (session is not null)
+        {
+            session.PhaseChanged += OnPhaseChanged;
+            session.RunChanged += MultiRunChanged;
+        }
     }
 
     public HookSettings Hooks { get; }

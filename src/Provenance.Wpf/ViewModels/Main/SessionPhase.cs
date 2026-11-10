@@ -22,6 +22,7 @@ public sealed class SessionState(PolSession? pol = null)
         (SessionPhase.LoggedIn, SessionPhase.LoggingOut),
         (SessionPhase.LoggingOut, SessionPhase.LoggedOut),
         (SessionPhase.LoggedOut, SessionPhase.MultiRun),
+        (SessionPhase.LoggingOut, SessionPhase.MultiRun),
         (SessionPhase.MultiRun, SessionPhase.MultiStopping),
         (SessionPhase.MultiRun, SessionPhase.LoggedOut),
         (SessionPhase.MultiStopping, SessionPhase.LoggedOut),
@@ -62,4 +63,16 @@ public sealed class SessionState(PolSession? pol = null)
     internal void NoteRunChanged() => RunChanged?.Invoke();
 
     internal static bool IsAllowed(SessionPhase from, SessionPhase to) => Moves.Contains((from, to));
+}
+
+internal struct LastRaised
+{
+    private bool _last;
+
+    public bool Changed(bool now)
+    {
+        if (now == _last) return false;
+        _last = now;
+        return true;
+    }
 }

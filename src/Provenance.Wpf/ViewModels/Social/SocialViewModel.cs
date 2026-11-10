@@ -180,22 +180,23 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public bool GameRunning => _session.GameRunning;
     public const string GameRunningNote = "That has to wait till FINAL FANTASY XI is closed.";
 
-    private bool _gameRunningShown;
+    private LastRaised _gameRunningShown;
 
     private void OnPhaseChanged()
     {
         OnPropertyChanged(nameof(LoggedIn));
-        OnPropertyChanged(nameof(CanEdit));
-        OnPropertyChanged(nameof(CanGroupChat));
+        OnPropertyChanged(nameof(NoFriends));
+        OnPropertyChanged(nameof(NothingSelected));
         bool running = _session.GameRunning;
-        if (running == _gameRunningShown) return;
-        _gameRunningShown = running;
-        StatusNote = running ? GameRunningNote : "";
+        if (_gameRunningShown.Changed(running))
+        {
+            StatusNote = running ? GameRunningNote : "";
+            Messages.StateChanged();
+            OnPropertyChanged(nameof(GameRunning));
+            OnPropertyChanged(nameof(StatusEditable));
+        }
         OnPropertyChanged(nameof(CanGroupChat));
-        Messages.StateChanged();
-        OnPropertyChanged(nameof(GameRunning));
         OnPropertyChanged(nameof(CanEdit));
-        OnPropertyChanged(nameof(StatusEditable));
     }
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowFriends), nameof(FriendsTabVisible), nameof(GroupsTabVisible))]

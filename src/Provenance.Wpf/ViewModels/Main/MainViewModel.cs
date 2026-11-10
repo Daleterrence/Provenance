@@ -141,7 +141,7 @@ public partial class MainViewModel : ObservableObject
 
     public bool IsLaunching => Session.Launching;
 
-    private bool _loggedInShown, _launchingShown;
+    private LastRaised _loggedInShown, _launchingShown;
 
     internal void SetPhase(SessionPhase next)
     {
@@ -162,8 +162,8 @@ public partial class MainViewModel : ObservableObject
                 Social.Messages.SettleSends(SessionEnd.Play);
                 break;
             case SessionPhase.LoggedOut:
-                _elapsedTimer.Stop();
                 if (from == SessionPhase.InGame) _windows.CloseSessionWindows();
+                _elapsedTimer.Stop();
                 if (from is SessionPhase.MultiRun or SessionPhase.MultiStopping) _ = Repair.ProbeAsync();
                 break;
         }
@@ -172,9 +172,7 @@ public partial class MainViewModel : ObservableObject
     private void OnPhaseChanged()
     {
         bool loggedIn = Session.LoggedIn, launching = Session.Launching;
-        bool loggedInChanged = loggedIn != _loggedInShown, launchingChanged = launching != _launchingShown;
-        _loggedInShown = loggedIn;
-        _launchingShown = launching;
+        bool loggedInChanged = _loggedInShown.Changed(loggedIn), launchingChanged = _launchingShown.Changed(launching);
         if (loggedInChanged)
         {
             OnPropertyChanged(nameof(CloseTooltip));
@@ -723,8 +721,6 @@ public partial class MainViewModel : ObservableObject
         try { return dialog(); }
         finally { if (Social.StatusNote == "") Social.StatusNote = note; }
     }
-
-    internal void WritePolOptions(string? profileId, string viewer) => _launch.WritePolOptions(profileId, viewer);
 
     // a test points it at made-up folders
     internal Func<LauncherSettings, string?, BackupSources?>? GameBackupSourcesForTest { get; set; }
