@@ -13,11 +13,13 @@ public static class ByteText
 
     public static string GbNumber(long bytes, int decimals = 1) => Number(bytes / GB, decimals);
 
-    // GB from a gigabyte up, MB below that, and KB only when asked for (a small file's size shouldn't read "0.0 MB")
+    // GB from a gigabyte up, MB below that, and KB only when asked for (a small file's size shouldn't read "0.0 MB"). KB
+    // rounds up, with nothing under 1 KB shown as a number
     public static string Size(long bytes, int gbDecimals = 1, int mbDecimals = 1, bool kb = false) =>
         bytes >= GB ? Number(bytes / GB, gbDecimals) + " GB"
         : bytes >= MB || !kb ? Number(bytes / MB, mbDecimals) + " MB"
-        : Invariant($"{Math.Max(1, bytes / 1024)} KB");
+        : bytes < KB ? "less than 1 KB"
+        : Invariant($"{(bytes + 1023) / 1024} KB");
 
     private static string Number(double value, int decimals) => value.ToString("F" + decimals, CultureInfo.InvariantCulture);
 }

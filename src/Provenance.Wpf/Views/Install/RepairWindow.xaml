@@ -13,7 +13,7 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Style="{StaticResource DialogCard}" CardMargin="12" WideShadow="True">
 
-    <Grid Margin="28,22" RowDefinitions="Auto,*,Auto">
+    <Grid Margin="28,22" RowDefinitions="Auto,*,Auto,Auto">
         <controls:DialogHeader Title="Repair game files" />
 
         <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,24,0,20">
@@ -48,12 +48,24 @@
                        Margin="0,2,0,0" Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
         </StackPanel>
 
-        <Grid Grid.Row="2">
+        <Border Grid.Row="2" x:Name="DetailsArea" Height="220" Margin="0,0,0,16" BorderThickness="1" CornerRadius="4"
+                BorderBrush="{DynamicResource Border.Hair}" Background="{DynamicResource Surface.1}"
+                Visibility="{Binding ShowDetails, Converter={StaticResource BoolToVis}}">
+            <ScrollViewer x:Name="DetailsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12,8">
+                <TextBlock Text="{Binding Details}" FontSize="12" TextWrapping="NoWrap" Foreground="{DynamicResource Text.1}" />
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="3">
             <Button HorizontalAlignment="Left" Width="120" Height="40" Content="CANCEL" Style="{StaticResource RedButton}" Command="{Binding CancelCommand}"
                     Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
-            <Button HorizontalAlignment="Right" Width="120" Height="40" Content="CLOSE"
-                    Style="{StaticResource PolButton}" Click="OnClose"
-                    Visibility="{Binding Finished, Converter={StaticResource BoolToVis}}" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                        Visibility="{Binding Finished, Converter={StaticResource BoolToVis}}">
+                <Button Width="150" Height="40" Margin="0,0,12,0" Content="{Binding DetailsButtonText}" Style="{StaticResource PolButton}"
+                        Command="{Binding ToggleDetailsCommand}"
+                        Visibility="{Binding ShowDetailsButton, Converter={StaticResource BoolToVis}}" />
+                <Button Width="120" Height="40" Content="CLOSE" Style="{StaticResource PolButton}" Click="OnClose" />
+            </StackPanel>
         </Grid>
     </Grid>
 </controls:AppWindow>
