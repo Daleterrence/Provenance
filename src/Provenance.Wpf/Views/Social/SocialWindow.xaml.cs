@@ -51,12 +51,16 @@ public partial class SocialWindow : AppWindow
         };
         IsVisibleChanged += (_, _) => ReportVisible();
         StateChanged += (_, _) => ReportVisible();
+#pragma warning disable RS0030 // a view, not a view model
         if (Application.Current is { } app) app.Activated += OnAppActivated;
+#pragma warning restore RS0030
         // the view model outlives the window, so let go or a closed window keeps scrolling in the background
         Closed += (_, _) =>
         {
             if (Vm is { } vm) Detach(vm);
+#pragma warning disable RS0030 // a view, not a view model
             if (Application.Current is { } a) a.Activated -= OnAppActivated;
+#pragma warning restore RS0030
         };
     }
 

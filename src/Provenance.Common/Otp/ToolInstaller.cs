@@ -110,8 +110,10 @@ public static class ToolInstaller
 
     private static HttpClient Client(bool follow)
     {
+#pragma warning disable RS0030 // ToolInstaller owns its clients
         var c = _handlerForTest is { } h ? new HttpClient(h, disposeHandler: false)
               : new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = follow });
+#pragma warning restore RS0030
         c.Timeout = TimeSpan.FromSeconds(60);
         c.DefaultRequestHeaders.UserAgent.ParseAdd("Provenance");
         return c;

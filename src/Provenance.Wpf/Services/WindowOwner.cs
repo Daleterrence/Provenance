@@ -1,3 +1,4 @@
+#pragma warning disable RS0030 // app-level lookups live in the services
 using System.Windows;
 
 namespace Provenance.Wpf.Services;

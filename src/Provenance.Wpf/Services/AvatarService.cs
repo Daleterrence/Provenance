@@ -54,11 +54,11 @@ public sealed class AvatarService(ISettingsService settings)
                 foreach (var s in sheets)
                 {
                     try { LoadSheet(s); }
-                    catch { }
+                    catch { }   // a sheet that fails is skipped
                 }
             });
         }
-        catch { }
+        catch { }   // warming up is only a head start
     }
 
     private ImageSource? Load(int picId)
@@ -77,7 +77,7 @@ public sealed class AvatarService(ISettingsService settings)
                 img = crop;
             }
         }
-        catch { }
+        catch { }   // no picture, the caller shows the default
         lock (_lock) _cache[picId] = img;
         return img;
     }
@@ -92,7 +92,7 @@ public sealed class AvatarService(ISettingsService settings)
         {
             if (ProfilePictureSheets.SheetPath(dir, sheetIndex) is { } sheetPath) img = DecodeSheet(sheetPath);
         }
-        catch { }
+        catch { }   // a sheet that won't decode stays null
         lock (_lock)
         {
             if (_sheets.TryGetValue(sheetIndex, out var won)) return won;

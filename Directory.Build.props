@@ -23,6 +23,22 @@
   <ItemGroup>
     <GlobalAnalyzerConfigFiles Include="$(ProvenanceGlobalConfig)" />
   </ItemGroup>
+  <!-- CI sets ProvenanceCI, so a new warning fails the build there and stays a warning on your own machine. NuGet's
+       advisory warnings stay warnings, a package getting an advisory shouldn't break a build on its own -->
+  <PropertyGroup Condition="'$(ProvenanceCI)' == 'true'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <!-- BannedSymbols.txt is checked by an analyzer, nothing from the package ships. Projects that use these on
+       purpose turn it off -->
+  <PropertyGroup>
+    <EnableHouseRules Condition="'$(EnableHouseRules)' == ''">true</EnableHouseRules>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(EnableHouseRules)' == 'true'">
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
   <!-- without it everything still builds, just with none of the C# rules checked -->
   <Target Name="RequireStyleRules" BeforeTargets="CoreCompile">
     <Error Condition="!Exists('$(ProvenanceGlobalConfig)')" Text="$(ProvenanceGlobalConfig) is missing, so none of the C# rules would be checked." />

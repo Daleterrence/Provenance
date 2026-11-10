@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Provenance.Launcher.Win32;
 using Velopack;
 using Velopack.Locators;
 using Velopack.Logging;
@@ -61,7 +62,7 @@ internal static class Program
             using (p)
             {
                 var name = CloseRequestName.For(AppContext.BaseDirectory, p.Id);
-                var h = OpenEventW(EventModifyState | Synchronize, false, name);
+                var h = Kernel32.OpenEventW(EventModifyState | Synchronize, false, name);
                 if (h == IntPtr.Zero)
                 {
                     // denied means mine but run as another account (an admin's password at the UAC prompt), so it
@@ -69,8 +70,8 @@ internal static class Program
                     if (Marshal.GetLastWin32Error() == ErrorAccessDenied) unreachable = true;
                     continue;
                 }
-                SetEvent(h);
-                CloseHandle(h);
+                Kernel32.SetEvent(h);
+                Kernel32.CloseHandle(h);
                 asked.Add(name);
             }
         }
@@ -100,9 +101,9 @@ internal static class Program
             bool open = false;
             foreach (var name in names)
             {
-                var h = OpenEventW(Synchronize, false, name);
+                var h = Kernel32.OpenEventW(Synchronize, false, name);
                 if (h == IntPtr.Zero) continue;
-                CloseHandle(h);
+                Kernel32.CloseHandle(h);
                 open = true;
             }
             if (!open) return true;
@@ -112,7 +113,7 @@ internal static class Program
     }
 
     private static void Message(string text, uint icon) =>
-        MessageBoxW(IntPtr.Zero, text, "Provenance", MbOk | icon | MbTopmost | MbSetForeground);
+        User32.MessageBoxW(IntPtr.Zero, text, "Provenance", MbOk | icon | MbTopmost | MbSetForeground);
 
     // lands in Velopack's own log (%LocalAppData%\velopack), there's nowhere else to put it
     private static void Note(string what, Exception ex)
@@ -121,22 +122,10 @@ internal static class Program
         {
             if (VelopackLocator.IsCurrentSet) VelopackLocator.Current.Log.Warn(ex, what);
         }
-        catch { }
+        catch { }   // the log is a courtesy, never worth failing over
     }
 
     private const int ErrorCancelled = 1223, ErrorAccessDenied = 5;
     private const uint EventModifyState = 0x0002, Synchronize = 0x00100000;
     private const uint MbOk = 0x0, MbIconError = 0x10, MbIconWarning = 0x30, MbTopmost = 0x40000, MbSetForeground = 0x10000;
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern IntPtr OpenEventW(uint access, bool inherit, string name);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetEvent(IntPtr handle);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CloseHandle(IntPtr handle);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int MessageBoxW(IntPtr owner, string text, string caption, uint type);
 }

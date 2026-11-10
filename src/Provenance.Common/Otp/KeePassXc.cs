@@ -92,7 +92,11 @@ public static class KeePassXc
     // reads on the proxy's pipe ignore cancellation, so the limit (or a cancel) kills the proxy instead
     private sealed class ProxyCalls(Process proxy, CancellationToken ct)
     {
-        public void Stop() { try { if (!proxy.HasExited) proxy.Kill(); } catch { } }
+        public void Stop()
+        {
+            try { if (!proxy.HasExited) proxy.Kill(); }
+            catch { }   // already gone
+        }
 
         public async Task<T> Call<T>(Func<CancellationToken, Task<T>> work, TimeSpan limit, string message = NoAnswer)
         {

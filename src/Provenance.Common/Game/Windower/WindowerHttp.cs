@@ -40,12 +40,14 @@ public sealed class WindowerHttp : IDisposable
 
     public WindowerHttp(HttpMessageHandler? handler = null)
     {
+#pragma warning disable RS0030 // WindowerHttp owns its client
         _client = new HttpClient(handler ?? CreateHandler())
         {
             Timeout = Timeout.InfiniteTimeSpan,
             DefaultRequestVersion = HttpVersion.Version11,
             DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
         };
+#pragma warning restore RS0030
     }
 
     public string UserAgent { get; set; } = UserAgentFor(DefaultLauncher);

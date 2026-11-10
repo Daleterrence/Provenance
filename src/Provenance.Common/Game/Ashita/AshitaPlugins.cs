@@ -24,9 +24,8 @@ public static class AshitaPlugins
             foreach (var (name, dll) in Dlls(Path.Combine(ashitaDir, folder)))
             {
                 if (!seen.Add(name)) continue;
-                // one odd file never takes the whole list down with it
                 try { if (Read(dll, name, core) is { } plugin) list.Add(plugin); }
-                catch (Exception) { }
+                catch (Exception) { }   // one odd file never takes the whole list down with it
             }
         }
         return list.OrderBy(p => p.Kind).ThenBy(p => p.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
@@ -40,7 +39,7 @@ public static class AshitaPlugins
             var core = AshitaPluginMetadata.Load(Path.Combine(ashitaDir, "Ashita.dll"), MaxDll);
             if (core is not null && core.Exports.TryGetValue("GetInterfaceVersion", out var rva) && core.ExportedDouble(rva) is { } v) return v;
         }
-        catch (Exception) { }
+        catch (Exception) { }   // can't read the core, so go with the version we expect
         return ExpectedInterfaceVersion;
     }
 

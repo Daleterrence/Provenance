@@ -1,0 +1,7 @@
+M:System.Environment.GetFolderPath(System.Environment.SpecialFolder);Ask AppPaths
+M:System.Environment.GetFolderPath(System.Environment.SpecialFolder,System.Environment.SpecialFolderOption);Ask AppPaths
+T:System.Windows.MessageBox;The app has its own dialogs
+M:System.Net.Http.HttpClient.#ctor;Use the HttpClient the owning class already has
+P:System.Windows.Application.Current;View models don't reach for the Application
+T:System.Runtime.InteropServices.DllImportAttribute;P/Invoke goes in a Win32 folder
+T:System.Runtime.InteropServices.LibraryImportAttribute;P/Invoke goes in a Win32 folder

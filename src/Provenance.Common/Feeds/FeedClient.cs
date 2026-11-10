@@ -13,7 +13,9 @@ public sealed class FeedClient
 
     public FeedClient(HttpClient? http = null)
     {
+#pragma warning disable RS0030 // FeedClient owns its client
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+#pragma warning restore RS0030
         HttpAgent.Set(_http);
     }
 

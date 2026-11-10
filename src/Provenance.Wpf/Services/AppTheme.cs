@@ -1,3 +1,4 @@
+#pragma warning disable RS0030 // app-level lookups live in the services
 using System.IO;
 using System.Text.Json;
 using System.Windows;

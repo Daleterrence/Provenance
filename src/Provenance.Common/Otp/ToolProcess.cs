@@ -50,7 +50,7 @@ internal static class ToolProcess
         try { await p.WaitForExitAsync(cts.Token); }
         catch (OperationCanceledException)
         {
-            try { p.Kill(entireProcessTree: true); } catch { }
+            try { p.Kill(entireProcessTree: true); } catch { }   // already gone
             if (ct.IsCancellationRequested) throw;
             throw new TimeoutException($"{Path.GetFileNameWithoutExtension(exe)} didn't answer within {timeout.TotalSeconds:0} seconds.");
         }

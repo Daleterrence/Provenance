@@ -12,7 +12,9 @@ public static class StartupErrors
         catch (Exception ex)
         {
             Log.Error(ex, "The start-up error card could not be shown");
+            #pragma warning disable RS0030 // the app's dialogs are what just failed
             MessageBox.Show(boxText ?? text, "Provenance", MessageBoxButton.OK, MessageBoxImage.Error);
+            #pragma warning restore RS0030
         }
     }
 }

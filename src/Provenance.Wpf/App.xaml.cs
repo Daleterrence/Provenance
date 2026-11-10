@@ -205,7 +205,7 @@ public partial class App : Application
         try
         {
             Log.Information("Provenance exiting (code {Code})", e.ApplicationExitCode);
-            try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }
+            try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }   // exit goes ahead without it
             if (_pol is { } pol) EndSession(pol);
             if (RestartOnExit) StartAgain();
             else if (!SelfUpdate.HandOverAfterExit(out var restartArgs)) StartAgain(restartArgs);

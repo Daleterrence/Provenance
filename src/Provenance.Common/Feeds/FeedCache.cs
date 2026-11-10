@@ -45,7 +45,7 @@ public static class FeedCache
         {
             if (CachePath(url) is { } path && File.Exists(path)) File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
         }
-        catch { }
+        catch { }   // the cache is only a shortcut, the worst case is one more fetch
     }
 
     public static void Write(string url, string body, string? etag, string? lastModified)
@@ -56,6 +56,6 @@ public static class FeedCache
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             AtomicFile.Write(path, $"ETag: {etag}\nLast-Modified: {lastModified}\n\n{body}");
         }
-        catch { }
+        catch { }   // not saved just means it's fetched again
     }
 }

@@ -30,7 +30,7 @@ public static class MirrorKeys
             key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(spkiBase64), out _);
             if (key.KeySize == 256 && key.ExportParameters(false).Curve.Oid?.Value == "1.2.840.10045.3.1.7") return key;
         }
-        catch (Exception) { }
+        catch (Exception) { }   // a key that won't import is no key
         key?.Dispose();
         return null;
     }

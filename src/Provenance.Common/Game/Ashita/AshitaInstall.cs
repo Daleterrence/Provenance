@@ -39,7 +39,7 @@ public static class AshitaInstall
                     return m.Groups["n"].Value;
             }
         }
-        catch { }
+        catch { }   // a folder that won't read has no launch copy to find
         return null;
     }
 

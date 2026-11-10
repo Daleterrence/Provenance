@@ -15,6 +15,9 @@ jobs:
   build:
     if: github.event_name != 'release'
     runs-on: windows-latest
+    # any new warning fails the build, see Directory.Build.props
+    env:
+      ProvenanceCI: 'true'
     steps:
       - uses: actions/checkout@v4
 

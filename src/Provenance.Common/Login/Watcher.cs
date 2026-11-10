@@ -129,7 +129,7 @@ internal sealed class Watcher
             using var p = StartProcess(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
             if (WatcherProcess.Wait(p, AttachLimit) is not { } run)
             {
-                try { p.Kill(); } catch { }
+                try { p.Kill(); } catch { }   // already gone
                 return (LaunchOutcome.Failed, "Provenance couldn't start logging in to PlayOnline in time. Try again.");
             }
             if (run.ExitCode == 0 && HookLog.Attached(run.Out)) return (LaunchOutcome.Started, "");

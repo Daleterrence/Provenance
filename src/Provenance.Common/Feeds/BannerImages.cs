@@ -78,7 +78,7 @@ public static class BannerImages
             if (localPath is null || FeedCache.Folder("images") is not { } dir) return;
             if (PathInside.IsUnder(dir, localPath)) File.Delete(Path.GetFullPath(localPath));
         }
-        catch { }
+        catch { }   // a leftover image just gets pruned later
     }
 
     public static void Prune(TimeSpan maxAge)
@@ -90,6 +90,6 @@ public static class BannerImages
             foreach (var f in Directory.EnumerateFiles(dir))
                 if (File.GetLastWriteTimeUtc(f) < cutoff) { FileDelete.Try(f); }
         }
-        catch { }
+        catch { }   // it runs again next time
     }
 }

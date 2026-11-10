@@ -87,8 +87,10 @@ public sealed class GameInstaller
 
     public GameInstaller(HttpClient? http = null)
     {
+#pragma warning disable RS0030 // GameInstaller owns its client
         _http = http ?? new HttpClient(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.None })
             { Timeout = Timeout.InfiniteTimeSpan };
+#pragma warning restore RS0030
         HttpAgent.Set(_http);
     }
 

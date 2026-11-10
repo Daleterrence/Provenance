@@ -18,10 +18,10 @@ public sealed class EncryptedJsonFile<T>(string path, byte[] entropy, string log
             var plain = Dpapi.Unprotect(File.ReadAllBytes(path), entropy);
             if (plain != null && JsonSerializer.Deserialize<T>(plain) is { } loaded) return loaded;
         }
-        catch { }
+        catch { }   // falls through to setting it aside
         if (setAsideUnreadable)
         {
-            try { File.Move(path, path + "." + DateTime.Now.ToString("yyyyMMddHHmmss") + ".unreadable"); } catch { }
+            try { File.Move(path, path + "." + DateTime.Now.ToString("yyyyMMddHHmmss") + ".unreadable"); } catch { }   // left where it is, the next save overwrites it
         }
         return null;
     }
