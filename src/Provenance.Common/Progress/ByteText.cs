@@ -21,5 +21,7 @@ public static class ByteText
         : bytes < KB ? "less than 1 KB"
         : Invariant($"{(bytes + 1023) / 1024} KB");
 
+    public static string Mb(long bytes, string format) => (bytes / MB).ToString(format, CultureInfo.InvariantCulture);
+
     private static string Number(double value, int decimals) => value.ToString("F" + decimals, CultureInfo.InvariantCulture);
 }

@@ -14,7 +14,7 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
         if (Icon == null)
         {
             Icon = new TrayIcon(() => vm.FriendsWindowTitle);
-            Icon.OpenRequested += ShowWindow;
+            Icon.OpenRequested += () => { if (!questionUp()) ShowWindow(); };
             Icon.FriendsRequested += () =>
             {
                 ShowWindow();
@@ -34,7 +34,6 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
 
     public void ShowWindow()
     {
-        if (questionUp()) return;
         if (Icon != null) Icon.Visible = false;
         window.Show();
         window.WindowState = WindowState.Normal;

@@ -69,7 +69,7 @@ public sealed class Prestarter
     }
 
     private bool MayPrestart() =>
-        _prestart == null && !_sessionActive() && _prestartHolds == 0
+        !_closed && _prestart == null && !_sessionActive() && _prestartHolds == 0
         && _settings.Current.ThirdPartyHookPlatform is not (ThirdPartyHook.Ashita or ThirdPartyHook.Windower)
         && PolPaths.Supported(_settings.DetectedRegion);
 
@@ -178,7 +178,7 @@ public sealed class Prestarter
     {
         lock (_gate)
         {
-            if (!_closed && MayPrestart())
+            if (MayPrestart())
             {
                 _prestart = task;
                 return;

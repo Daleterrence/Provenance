@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+# the one Velopack version, the build checks it against the package the app uses
+env:
+  VELOPACK_VERSION: '1.2.161'
+
 jobs:
   build:
     if: github.event_name != 'release'
@@ -37,7 +41,10 @@ jobs:
         shell: pwsh
         run: |
           . ./tools/build-common.ps1
-          dotnet tool install -g vpk --version (Get-VelopackVersion)
+          if ((Get-VelopackVersion) -cne $env:VELOPACK_VERSION) {
+            throw "The app uses Velopack $(Get-VelopackVersion), but VELOPACK_VERSION in this workflow is $env:VELOPACK_VERSION."
+          }
+          dotnet tool install -g vpk --version $env:VELOPACK_VERSION
 
       - name: Pack
         id: pack
@@ -91,18 +98,13 @@ jobs:
       group: update-server-${{ contains(github.event.release.tag_name, '-') && 'beta' || 'stable' }}
       cancel-in-progress: false
     steps:
-      # only for Velopack's version, as of the tag being published
-      - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
       - name: Install vpk
         shell: pwsh
-        run: |
-          . ./tools/build-common.ps1
-          dotnet tool install -g vpk --version (Get-VelopackVersion)
+        run: dotnet tool install -g vpk --version $env:VELOPACK_VERSION
 
       - name: Upload to R2
         shell: pwsh

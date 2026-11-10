@@ -7,6 +7,7 @@ using Provenance.Common.Game;
 using Provenance.Common.IO;
 using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Progress;
 using Provenance.Common.Security;
 
 namespace Provenance.Common.Patcher;
@@ -102,7 +103,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             long need = total + work.Sum(f => f.Last.Sig.Length) + (64L << 20);
             long free = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(Dir))!).AvailableFreeSpace;
             if (free < need)
-                throw Shown.Mark(new IOException($"The {product.Name} update needs about {need / 1048576.0:N0} MB of free space on the drive, but there's only {free / 1048576.0:N0} MB free. Free up some space, then try again."));
+                throw Shown.Mark(new IOException($"The {product.Name} update needs about {ByteText.Mb(need, "N0")} MB of free space on the drive, but there's only {ByteText.Mb(free, "N0")} MB free. Free up some space, then try again."));
             Download(session, workIdx.Select(i => (manifest[i], decisions[i].Bytes)).ToList(), local, total, progress, ct);
         }
 
@@ -253,7 +254,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
                     if (!force && done < total && Environment.TickCount64 - lastReport < 250) return;
                     lastReport = Environment.TickCount64;
                     progress?.Report(new PatchProgress(PatchPhase.Download,
-                        $"Downloading {productName}: {done / 1048576.0:0.0} of {total / 1048576.0:0.0} MB", total > 0 ? Math.Clamp((double)done / total, 0, 1) : -1));
+                        $"Downloading {productName}: {ByteText.Mb(done, "0.0")} of {ByteText.Mb(total, "0.0")} MB", total > 0 ? Math.Clamp((double)done / total, 0, 1) : -1));
                 }
             }
             void Fail(Exception e)
