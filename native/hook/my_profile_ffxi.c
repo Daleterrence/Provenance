@@ -42,9 +42,9 @@ static void my_profile_xi_request(BYTE *b)
     char buf[256], *p, *hk, *ck, now[17];
     me_chr c;
     pol_handle h;
-    if (GetTickCount64() - g_s.ffxi_last < 3000 || !hold_db_free()) return;
+    if (!hold_db_free()) return;
     if (requests_take(REQ_XIPROFILE, buf, sizeof buf) < 0) return;
-    g_s.ffxi_last = g_s.db_last = GetTickCount64();
+    g_s.db_last = GetTickCount64();
     p = buf;
     lstrcpynA(g_s.ffxi_token, requests_line(&p), sizeof g_s.ffxi_token);
     hk = requests_line(&p);
@@ -111,10 +111,10 @@ static void my_profile_xi_pump(BYTE *b, int ctl)
     case 2:
         r = pc_pdb_load_check(b, g_s.ffxi_job);
         if (r == 0) {
-            if (GetTickCount64() - g_s.ffxi_t0 >= JOB_TIMEOUT_MS || g_s.draining) {
+            if (g_s.draining) {
                 pc_free_job(b, g_s.ffxi_job);
                 g_xi_rec = NULL;   /* a cancelled read can still write, so never freed */
-                my_profile_xi_done(g_s.draining ? "cancelled" : "failed:timeout");
+                my_profile_xi_done("cancelled");
             }
             return;
         }

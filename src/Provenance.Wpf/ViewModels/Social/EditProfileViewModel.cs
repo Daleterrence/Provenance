@@ -554,7 +554,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                                               : HookFailures.ProfileEditor.MismatchHandle,
         "failed:no character" => HookFailures.ProfileEditor.CharacterGone,
         "failed:write" => HookFailures.ProfileEditor.WriteFailed,
-        "failed:timeout" => job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : HookFailures.ProfileEditor.SaveUnconfirmed,
+        "failed:timeout" => HookFailures.ProfileEditor.SaveUnconfirmed,
         _ => job switch
         {
             Job.Load => HookFailures.ProfileEditor.LoadFailed(Why(state)),

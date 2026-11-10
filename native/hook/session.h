@@ -94,7 +94,6 @@ typedef struct hook_session {
     char ffxi_json[0x200];
     char ffxi_key[25];
     ULONGLONG ffxi_t0;
-    ULONGLONG ffxi_last;
     /* searches and profile reads */
     int search_step;   /* 0 idle, 1 start waits, 2 search job, 3 fetch waits, 4 fetch job */
     int prof_step;   /* 0 idle, 1 load running, 2 start waits for a slot */
