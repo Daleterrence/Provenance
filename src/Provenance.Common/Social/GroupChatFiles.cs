@@ -18,7 +18,7 @@ public sealed record GroupChatSnapshot(HookJob Job, string Group, long LineSeq, 
     public static GroupChatSnapshot? Read(JsonElement g)
     {
         if (g.ValueKind != JsonValueKind.Object) return null;
-        return new GroupChatSnapshot(new HookJob(Str(g, "token"), Str(g, "state")), Str(g, "group"), Long(g, "lineSeq"), JsonFields.Job(g, "send"));
+        return new GroupChatSnapshot(HookJob.Read(g), Str(g, "group"), Long(g, "lineSeq"), JsonFields.Job(g, "send"));
     }
 }
 

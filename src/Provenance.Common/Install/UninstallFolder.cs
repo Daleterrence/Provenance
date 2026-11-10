@@ -93,8 +93,8 @@ public sealed class UninstallFolder : IDisposable
 
     internal static bool Trusted(IdentityReference? owner) => owner is SecurityIdentifier s && (s == Owner || LockedFolder.IsAdminOrSystem(s));
 
-    // anyone but the owner, Administrators and SYSTEM can do more than read it
-    // one file, and it has to line up with what the uninstaller refuses
+    // anyone but the owner, Administrators and SYSTEM can do more than read it. Inherit-only rules don't count here, the
+    // record is a file
     internal static bool Weak(DirectorySecurity sd)
     {
         const FileSystemRights read = FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize;

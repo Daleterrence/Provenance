@@ -386,9 +386,8 @@ internal static class LockedFolder
     internal static bool Trusted(string path, SecurityIdentifier? owner) =>
         TrustedForTest is { } fake ? fake(path) : owner is not null && IsAdminOrSystem(owner);
 
-    // anyone but Administrators, SYSTEM and the owner can do more than read it, so a program may already have it
-    // open to write
-    // inherit-only rules count, they're what its files get
+    // anyone but Administrators, SYSTEM and the owner can do more than read it, so a program may already have it open
+    // to write. Inherit-only rules count, they're what its files get
     internal static bool Weak(byte[]? sd)
     {
         if (sd is null) return true;

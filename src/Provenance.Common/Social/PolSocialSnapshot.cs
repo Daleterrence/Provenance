@@ -63,13 +63,12 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public HookJob FfxiProfileJob { get; init; } = HookJob.None;
     public PolFfxiProfile? FfxiProfile { get; init; }
     // the hook runs one profile server job at a time, so while one's going any other just waits its turn
-    public bool ProfileServerBusy => Going(SearchJob, "searching") || Going(ProfileJob, "loading") || Going(CharacterJob, "loading") ||
-                                     Going(FfxiProfileJob, "loading") || Going(MeJob, "loading", "saving") || Going(XiJob, "loading") ||
-                                     Going(PictureJob, "saving") ||
+    public bool ProfileServerBusy => SearchJob.State == "searching" || ProfileJob.State == "loading" || CharacterJob.State == "loading" ||
+                                     FfxiProfileJob.State == "loading" || MeJob.State is "loading" or "saving" || XiJob.State == "loading" ||
+                                     PictureJob.State == "saving" ||
                                      Chat is { ZonesJob.State: "searching" } or { RoomsJob.State: "searching" } ||
-                                     (Going(HandleJob, "working") && HandleOp == "switch");
+                                     (HandleJob.State == "working" && HandleOp == "switch");
 
-    private static bool Going(HookJob job, string state, string? orState = null) => job.State == state || job.State == orState;
     // the game's message store, read once at login (pol_hook.<pid>.store.json), null when there's none
     public PolStoredLines? Stored { get; init; }
     public IReadOnlyList<PolHandle> Handles { get; init; } = [];

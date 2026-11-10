@@ -70,11 +70,11 @@ public static class CredentialKey
     public static Task<WindowsCredentialStore> WrappedAsync() => Task.Run(Wrapped);
 
     // so the first load or save on the UI thread never sits waiting on the key file's lock
-    public static Task WarmUp() => Task.Run(() =>
+    public static async Task WarmUp()
     {
-        try { _ = Wrapped(); }
+        try { await WrappedAsync().ConfigureAwait(false); }
         catch (CredentialKeyUnavailableException) { }
-    });
+    }
 
     // a copy of the key in use, read from the file on first use. Wiping it leaves the key itself alone
     internal static byte[] InUse()

@@ -57,10 +57,8 @@ public sealed class PatchSession(PatchProduct product, IPatchConnector connector
     }
 
     // POL's keep-alive, a version request with no local version once the connection's been quiet for over a minute
-    public bool KeepAliveIfIdle(PatchServerLink link, long now, CancellationToken ct)
+    public void KeepAliveIfIdle(PatchServerLink link, long now, CancellationToken ct)
     {
-        if (now - link.LastRequestTicks <= KeepAliveMs) return false;
-        AskVersion(link, "", ct);
-        return true;
+        if (now - link.LastRequestTicks > KeepAliveMs) AskVersion(link, "", ct);
     }
 }

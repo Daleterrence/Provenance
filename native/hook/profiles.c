@@ -526,14 +526,13 @@ static void ffxi_read_done(ffxi_read *r, const char *state)
 }
 static void ffxi_read_start(BYTE *b, db_job *j)
 {
-    ffxi_read *r = (ffxi_read *)j;
+    ffxi_read *r = CONTAINING_RECORD(j, ffxi_read, j);
     int t = pc_pdb_load_start(b, g_ch_pib, j->where, (pdb_rec *)j->rec);
     if (t != NO_SLOT) base_log("%s: load -> %d\r\n", r->prefix, t);
     if (t < 0 && t != NO_SLOT) { j->done(requests_failed(t)); return; }
     db_job_started(j, 0, t);
 }
-/* note is a line for the log once the where's built, or NULL */
-static void ffxi_read_go(BYTE *b, ffxi_read *r, const char *note)
+static void ffxi_read_go(BYTE *b, ffxi_read *r)
 {
     db_job *j = &r->j;
     j->rec = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_ch_pib->rec_size + 8);
@@ -541,7 +540,6 @@ static void ffxi_read_go(BYTE *b, ffxi_read *r, const char *note)
     r->ctid = (unsigned __int64)*r->hi << 32 | *r->lo;
     j->where = db_where_character(b, g_ch_pib, r->ctsid, &r->ctid, j->cond);
     if (!j->where) { j->done("failed:schema"); return; }
-    if (note) base_log("%s", note);
     lstrcpyA(j->state, "loading");
     g_snap_dirty = 1;
     ffxi_read_start(b, j);
@@ -596,7 +594,7 @@ static void profiles_character_request(BYTE *b)
         profiles_character_done("failed:not playing"); return;
     }
     if (!profiles_character_load_pib(b)) { profiles_character_done("failed:no schema"); return; }
-    ffxi_read_go(b, &g_ch_read, NULL);
+    ffxi_read_go(b, &g_ch_read);
 }
 static void profiles_character_pump(BYTE *b, int ctl) { ffxi_read_pump(b, &g_ch_read, ctl, profiles_character_request); }
 
@@ -639,11 +637,8 @@ static void profiles_ffxiprofile_request(BYTE *b)
     if (!profiles_character_load_pib(b) || !profiles_ffxiprofile_check_schema(b, g_ch_pib)) {
         profiles_ffxiprofile_done("failed:no schema"); return;
     }
-    {
-        char note[48];
-        wsprintfA(note, "ffxiprofile: row %d slot %d\r\n", row, n);
-        ffxi_read_go(b, &g_fp_read, note);
-    }
+    base_log("ffxiprofile: row %d slot %d\r\n", row, n);
+    ffxi_read_go(b, &g_fp_read);
 }
 static void profiles_ffxiprofile_pump(BYTE *b, int ctl) { ffxi_read_pump(b, &g_fp_read, ctl, profiles_ffxiprofile_request); }
 

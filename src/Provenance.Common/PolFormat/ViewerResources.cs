@@ -16,25 +16,17 @@ public sealed class ViewerResources
     private ProfilePictureCatalog.Catalog? _catalog;
     private bool _tableTried, _wordFilterTried;
 
-    public ViewerResources(ISettingsService settings) : this(settings, null)
-    {
-    }
-
-    internal ViewerResources(ISettingsService settings, Func<PolRegion, string?>? folder = null,
+    public ViewerResources(ISettingsService settings, Func<PolRegion, string?>? folder = null,
                              Func<string, IReadOnlyDictionary<int, string>?>? strings = null,
                              Func<string, PolLanguageFilter?>? filter = null,
                              Func<string, ProfilePictureCatalog.Catalog?>? pictures = null)
     {
         _settings = settings;
-        _folder = folder ?? ViewerFolder;
+        _folder = folder ?? (region => PolPaths.TryGetInstallFolder(region, GameProduct.Viewer));
         _strings = strings ?? PolStringTable.Load;
         _filter = filter ?? PolLanguageFilter.Load;
-        _pictures = pictures ?? LoadPictures;
+        _pictures = pictures ?? (dir => ProfilePictureCatalog.Load(dir));
     }
-
-    private static string? ViewerFolder(PolRegion region) => PolPaths.TryGetInstallFolder(region, GameProduct.Viewer);
-
-    private static ProfilePictureCatalog.Catalog? LoadPictures(string viewerDir) => ProfilePictureCatalog.Load(viewerDir);
 
     public string? Folder => _settings.DetectedRegion is { } r ? _folder(r) : null;
 

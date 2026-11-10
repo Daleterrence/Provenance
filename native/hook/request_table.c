@@ -1,5 +1,5 @@
 /* every request the app can write, one row each: which lists it's in, where a refusal's token goes, and what the job it
-   starts is doing (JB_ bits) */
+   starts is doing (JB_ bits). A row with none of that is in no list */
 #define SWITCHING "failed:handle changing"
 
 enum { JB_DB = 1, JB_WRITE = 2, JB_WAIT = 4, JB_SWITCH = 8 };

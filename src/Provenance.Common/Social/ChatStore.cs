@@ -1,4 +1,5 @@
 using System.Text;
+using Provenance.Common.Hook;
 using Provenance.Common.IO;
 
 namespace Provenance.Common.Social;
@@ -224,9 +225,9 @@ public sealed class ChatStore
         return true;
     }
 
-    // the hook takes 40 lines a minute, so each one queued behind gets 1.5s on top of the 3 mins
+    // the hook takes 40 lines a minute, so each one queued behind gets 1.5s on top of the 3 minutes
     public static TimeSpan SendExpiry(int queued) =>
-        TimeSpan.FromMinutes(3) + TimeSpan.FromMilliseconds(1500 * Math.Max(0, queued));
+        HookLimits.MailInFlight + TimeSpan.FromMilliseconds(1500 * Math.Max(0, queued));
 
     // still sending after maxAge means the hook never answered (the session ended, say)
     public bool ExpireSending(TimeSpan maxAge, IReadOnlySet<string>? keep = null)

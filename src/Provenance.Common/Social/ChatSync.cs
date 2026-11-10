@@ -87,7 +87,7 @@ public sealed class ChatSync(MailSendQueue sends)
         foreach (var (time, seq, fromSlot) in snap.Returned) changed |= chat.MarkReturned(time, seq, fromSlot);
         foreach (var (token, state) in snap.SendQueue) sends.HookSays(token, state);
         bool sendsChanged = sends.Pump(chat, pid, blocked);
-        // a stored send finishes well inside 2 mins, so nothing says "Sending..." for ever
+        // a stored send finishes well inside 2 minutes, so nothing says "Sending..." for ever
         changed |= chat.ExpireSending(ChatStore.SendExpiry(sends.Queued), sends.StillPending());
         if (changed && open is { } o && chat.UnreadFrom(o.Name, o.Key) > 0)
             chat.MarkRead(o.Name, o.Key);

@@ -7,7 +7,7 @@ using Serilog;
 
 namespace Provenance.Common.Otp;
 
-// Codes sent in the last 2 mins. Accounts sharing an authenticator get the same code and SE refuses a reused one,
+// Codes sent in the last 2 minutes. Accounts sharing an authenticator get the same code and SE refuses a reused one,
 // so I keep salted HMACs of them
 public static class OtpReuse
 {

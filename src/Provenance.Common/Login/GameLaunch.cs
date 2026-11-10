@@ -98,15 +98,10 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
             return;
         }
         FfxiSettings.WriteFirstStartSettings(settings.RegionOrDefault);
-        WritePolOptions(profileId);
-    }
-
-    // the game reads these from the account's option.bin when it starts, so they go in before every start
-    public void WritePolOptions(string? profileId)
-    {
         if (PolPaths.TryGetInstallFolder(settings.RegionOrDefault, GameProduct.Viewer) is { } viewer) WritePolOptions(profileId, viewer);
     }
 
+    // the game reads these from the account's option.bin when it starts, so they go in before every start
     internal void WritePolOptions(string? profileId, string viewer)
     {
         try

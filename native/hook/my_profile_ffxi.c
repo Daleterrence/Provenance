@@ -22,7 +22,6 @@ static void my_profile_xi_load_start(BYTE *b, db_job *j)
     if (t != NO_SLOT) base_log("ffxi profile edit: load -> %d\r\n", t);
     if (t < 0 && t != NO_SLOT) { my_profile_xi_done(requests_failed(t)); return; }
     db_job_started(j, 0, t);
-    if (t >= 0) j->t0 = GetTickCount64();
 }
 /* only a character from the loaded profile's own list, the ids are never the app's */
 static int my_profile_xi_find(BYTE *b, const char *key, me_chr *out)

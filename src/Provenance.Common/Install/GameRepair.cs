@@ -26,8 +26,8 @@ public sealed record RepairPlan(IReadOnlyDictionary<string, IReadOnlyList<Mirror
 
 public sealed record RepairedFiles(string Product, IReadOnlyList<string> Files);
 
-// FilesReplaced counts game files, OtherFixes the rest (registry, COM, the uninstall entry, shortcuts, DirectX, patch.ver,
-// the queue). Replaced and Fixes say which, one line each
+// FilesReplaced counts game files, OtherFixes is the number of lines in Fixes (registry, COM, the uninstall entry,
+// shortcuts, DirectX, patch.ver, the queue)
 public sealed record RepairResult(int FilesReplaced, int OtherFixes)
 {
     public IReadOnlyList<RepairedFiles> Replaced { get; init; } = [];
@@ -147,10 +147,15 @@ public sealed class GameRepair(MirrorClient client, string region)
         var (packages, installDirectX) = skipInstallData ? ([], false) : await PrepareAsync(plan, products, installRoot, dataProgress, ct);
 
         // a stale queue (.tmp2) goes first, or it'd overwrite a repaired file at the next launch
-        bool queued = ApplyViewerQueue(viewerDir);
-        int other = queued ? 1 : 0;
         var fixes = new List<string>();
-        if (queued) fixes.Add($"Finished the last {GameProduct.Viewer.Name} update.");
+        bool queued = false;
+        void FinishQueue()
+        {
+            if (!ApplyViewerQueue(viewerDir) || queued) return;
+            queued = true;
+            fixes.Add($"Finished the last {GameProduct.Viewer.Name} update.");
+        }
+        FinishQueue();
 
         var replaced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var failed = new List<string>();
@@ -168,7 +173,7 @@ public sealed class GameRepair(MirrorClient client, string region)
 
         // the viewer's patchfiles copies might have been among them, and whatever the queue changed has to match the
         // index too before patch.ver claims the version
-        if (ApplyViewerQueue(viewerDir) && !queued) { queued = true; other++; fixes.Add($"Finished the last {GameProduct.Viewer.Name} update."); }
+        FinishQueue();
         if (queued)
         {
             Status?.Invoke($"Checking the {GameProduct.Viewer.Name} files again...");
@@ -191,13 +196,12 @@ public sealed class GameRepair(MirrorClient client, string region)
             Say($"{p.Name} put back what was missing or wrong: {r.RegistryValues} registry values, {r.Classes} COM classes, " +
                         $"{r.ProgIds} ProgIDs, {r.TypeLibs} type libraries, uninstall entry: {r.Uninstall}");
             if (r.Written > 0) Fixed?.Invoke();
-            other += r.Written;
             if (r.RegistryValues + r.Classes + r.TypeLibs + r.ProgIds > 0) fixes.Add($"Put back {p.Name}'s registry entries and COM classes.");
             if (r.Uninstall) fixes.Add($"Put back {p.Name}'s entry in Windows' installed programs.");
             if (r.Shortcuts > 0) fixes.Add($"Put back {p.Name}'s shortcuts.");
         }
 
-        other += WriteVersions(plan, products, fixes);
+        WriteVersions(plan, products, fixes);
 
         // last, the game files are right by now and a failure here has its own message
         if (installDirectX)
@@ -220,7 +224,6 @@ public sealed class GameRepair(MirrorClient client, string region)
                 Say("the DirectX runtime is still missing after DXSETUP");
                 throw Shown.Mark(new InvalidOperationException(DirectXFailed));
             }
-            other++;
             fixes.Add("Installed the DirectX runtime.");
         }
         var files = products.Select(p => new RepairedFiles(p.Name, replaced
@@ -228,7 +231,7 @@ public sealed class GameRepair(MirrorClient client, string region)
                 .Select(r => r[(p.Game.Slug.Length + 1)..].Replace('/', '\\'))
                 .Order(StringComparer.OrdinalIgnoreCase).ToList()))
             .Where(f => f.Files.Count > 0).ToList();
-        return new RepairResult(replaced.Count, other) { Replaced = files, Fixes = fixes };
+        return new RepairResult(replaced.Count, fixes.Count) { Replaced = files, Fixes = fixes };
     }
 
     private static IEnumerable<string> OwnedPaths(RepairPlan plan, PatchProduct product) =>
@@ -246,19 +249,16 @@ public sealed class GameRepair(MirrorClient client, string region)
     }
 
     // only where it isn't already right, DownloadAsync dropped it for a product it touched
-    private int WriteVersions(RepairPlan plan, PatchProduct[] products, List<string> fixes)
+    private void WriteVersions(RepairPlan plan, PatchProduct[] products, List<string> fixes)
     {
-        int written = 0;
         foreach (var product in products)
         {
             var slug = product.Game.Slug;
             if (VersionRight(product, plan.Indexes[slug].Version)) continue;
             ChangingNow();
             PatchVer.Write(product, plan.Indexes[slug].Version);
-            written++;
             fixes.Add($"Updated the {product.Name} version file (patch.ver).");
         }
-        return written;
     }
 
     // drops patch.ver first so a stopped repair never claims a version

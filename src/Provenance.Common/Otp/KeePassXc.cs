@@ -17,15 +17,12 @@ public static class KeePassXc
         catch (CredentialUnreadableException) { return null; }
     }
 
-    // wrapped with the saved accounts' key, and opened on a worker so the lock wait never lands on the UI thread
-    internal static Task<WindowsCredentialStore> AssociationStoreAsync() => CredentialKey.WrappedAsync();
-
     internal static async Task<OtpFetchResult> FetchAsync(string url, string squareEnixId, CancellationToken ct)
     {
         var proxy = FindProxy();
         if (proxy is null)
             return OtpSources.Problem("not installed", "Provenance needs KeePassXC installed with its installer.", OtpFix.TypeInstead);
-        var store = await AssociationStoreAsync().WaitAsync(ct);
+        var store = await CredentialKey.WrappedAsync().WaitAsync(ct);
         using var p = Process.Start(ToolProcess.StartInfo(proxy, [])) ?? throw new InvalidOperationException("keepassxc-proxy did not start.");
         _ = p.StandardError.ReadToEndAsync(ct);
         var calls = new ProxyCalls(p, ct);

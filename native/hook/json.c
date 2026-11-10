@@ -32,33 +32,40 @@ static int json_text(char *out, int cap, const char *s)
 }
 /* the longest prefix of w (n characters) whose converted length is at most max, for a cut at whole characters. len(k) is how
    long its first k come out, and only ever grows with k */
-static int json_cut(const WCHAR *w, int n, int max, int (*len)(const WCHAR *w, int k, void *ctx), void *ctx)
+static int json_cut(WCHAR *w, int n, int max, int (*len)(WCHAR *w, int k, BYTE *b), BYTE *b)
 {
     int lo = 0, hi = n;
-    if (len(w, n, ctx) <= max) return n;
+    if (len(w, n, b) <= max) return n;
     while (lo < hi) {
         int mid = (lo + hi + 1) / 2;
-        if (len(w, mid, ctx) <= max) lo = mid; else hi = mid - 1;
+        if (len(w, mid, b) <= max) lo = mid; else hi = mid - 1;
     }
     /* never between the halves of a surrogate pair */
     if (lo > 0 && lo < n && w[lo - 1] >= 0xd800 && w[lo - 1] < 0xdc00 && w[lo] >= 0xdc00 && w[lo] < 0xe000) lo--;
     return lo;
 }
-static int json_utf8_len(const WCHAR *w, int k, void *ctx)
+static int json_utf8_len(WCHAR *w, int k, BYTE *b)
 {
-    (void)ctx;
+    (void)b;
     return k > 0 ? WideCharToMultiByte(CP_UTF8, 0, w, k, NULL, 0, NULL, NULL) : 0;
 }
-/* POL's Shift-JIS (the EU Latin extension too) to UTF-8, svc 0xa38 doing it. Cut at whole characters to cap */
+/* POL's Shift-JIS (the EU Latin extension too) to UTF-8, svc 0xa38 doing it. Cut at whole characters to cap. Names and
+   the 0x180 byte mail body fit the stack buffers, anything longer goes to the heap */
 static void pol_utf8(BYTE *b, const char *src, int len, char *out, int cap)
 {
-    WCHAR *w;
-    char *tmp;
+    char stk[0x182], *tmp = stk;
+    WCHAR wstk[0x182], *w = wstk;
     int n, m;
     out[0] = 0;
     if (!src || len <= 0 || cap < 1) return;
-    tmp = (char *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)len + 2);
-    w = (WCHAR *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ((SIZE_T)len + 2) * sizeof(WCHAR));
+    if (len + 2 > (int)(sizeof stk / sizeof stk[0])) {
+        tmp = (char *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)len + 2);
+        w = (WCHAR *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ((SIZE_T)len + 2) * sizeof(WCHAR));
+    }
+    else {
+        memset(stk, 0, (size_t)len + 2);
+        memset(wstk, 0, ((size_t)len + 2) * sizeof(WCHAR));
+    }
     if (tmp && w) {
         memcpy(tmp, src, (size_t)len);                  /* svc 0xa38 has no bound, so the copy ends in two NULs */
         pc_sjis_to_wide(b, w, tmp, WIDE_GETA);
@@ -67,16 +74,17 @@ static void pol_utf8(BYTE *b, const char *src, int len, char *out, int cap)
         m = n > 0 ? WideCharToMultiByte(CP_UTF8, 0, w, n, out, cap - 1, NULL, NULL) : 0;
         out[m > 0 ? m : 0] = 0;
     }
-    if (tmp) HeapFree(GetProcessHeap(), 0, tmp);
-    if (w) HeapFree(GetProcessHeap(), 0, w);
+    if (tmp && tmp != stk) HeapFree(GetProcessHeap(), 0, tmp);
+    if (w && w != wstk) HeapFree(GetProcessHeap(), 0, w);
 }
-static int json_sjis_len(const WCHAR *w, int k, void *ctx)
+/* plants a NUL at k for the call and puts the character back */
+static int json_sjis_len(WCHAR *w, int k, BYTE *b)
 {
-    WCHAR keep = w[k], *at = (WCHAR *)&w[k];
+    WCHAR keep = w[k];
     int n;
-    *at = 0;
-    n = pc_wide_to_sjis((BYTE *)ctx, NULL, w, SJIS_GETA);
-    *at = keep;
+    w[k] = 0;
+    n = pc_wide_to_sjis(b, NULL, w, SJIS_GETA);
+    w[k] = keep;
     return n;
 }
 /* UTF-8 to POL's Shift-JIS through svc 0xa40, cut at whole characters to cap. Gives back how many bytes it came to, 0 when

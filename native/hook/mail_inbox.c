@@ -125,7 +125,7 @@ static mailrec *mail_inbox_add(const BYTE *hdr)
 }
 static void mail_inbox_log_hdr(const char *what, const BYTE *h)
 {
-    base_log("mail: %s from=%.15s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what, MAIL(h)->name,
+    base_log("mail: %s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what,
        MAIL(h)->from_slot, (unsigned)pc_mail_kind(h), MAIL(h)->len,
        MAIL(h)->seq, MAIL(h)->time, MAIL(h)->flags, MAIL(h)->seen);
 }
@@ -380,6 +380,8 @@ static void mail_inbox_pump(BYTE *b)
         if (g_mail[i].raw_pending) {
             mail_inbox_parse(b, &g_mail[i], (const char *)g_mail[i].raw, g_mail[i].raw_len);
             g_mail[i].raw_pending = 0;
+            g_mail[i].raw_len = 0;
+            SecureZeroMemory(g_mail[i].raw, sizeof g_mail[i].raw);
             g_snap_dirty = 1;
         }
     mail_inbox_recheck(b);
@@ -427,6 +429,8 @@ static void mail_inbox_ack_request(void)
             if (m && (m->state == 1 || m->state == 3)) {
                 m->state = m->state == 1 ? 4 : 5;
                 m->text[0] = 0; m->subj[0] = 0;
+                m->raw_pending = 0; m->raw_len = 0;
+                SecureZeroMemory(m->raw, sizeof m->raw);
                 g_snap_dirty = 1;
             }
             v = -1;

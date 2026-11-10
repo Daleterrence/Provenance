@@ -63,16 +63,6 @@ static int hold_writes_waiting(void)
 {
     return (requests_busy() & JB_WAIT) != 0;
 }
-/* every job idle again, for a test that starts from a fresh login */
-static void db_jobs_reset(void)
-{
-    db_job *all[] = { &g_search, &g_prof, &g_ch_read.j, &g_fp_read.j, &g_me, &g_xi, &g_cr, &g_pic };
-    for (int i = 0; i < (int)(sizeof all / sizeof all[0]); i++) {
-        all[i]->step = 0;
-        all[i]->job = -1;
-        all[i]->rec = NULL;
-    }
-}
 static void hold_drain_turn(BYTE *b, int mail)
 {
     pc_pump_once(b);

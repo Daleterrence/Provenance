@@ -32,7 +32,7 @@ internal static class JsonFields
         Has(e, n, out var o) && o.ValueKind == JsonValueKind.Object ? o : default;
 
     public static HookJob Job(JsonElement e, string n) =>
-        Obj(e, n) is { ValueKind: JsonValueKind.Object } o ? new HookJob(Str(o, "token"), Str(o, "state")) : HookJob.None;
+        Obj(e, n) is { ValueKind: JsonValueKind.Object } o ? HookJob.Read(o) : HookJob.None;
 
     public static List<T> Arr<T>(JsonElement e, string n, Func<JsonElement, T> item) =>
         Has(e, n, out var a) && a.ValueKind == JsonValueKind.Array
