@@ -8,6 +8,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="provenance-cli" />
     <InternalsVisibleTo Include="provenance-app-tests" />
+    <InternalsVisibleTo Include="provenance-publisher-tests" />
     <PackageReference Include="NaCl.Net" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.File" />

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Sockets;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -30,7 +29,8 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     public PatchProduct Product => product;
 
     public const int DefaultConnections = 4;   // SE rate-limits when there are too many
-    private const long KeepAliveMs = 60_000;
+    internal Func<long> Clock { get; init; } = () => Environment.TickCount64;
+    internal IPatchConnector Connector { get; init; } = DirectPatchConnector.Instance;
     private string Dir => product.Folder;
 
     // the app keeps Windower's Large Address Aware pol.exe, the publisher's copy has to stay SE's to the byte
@@ -47,12 +47,20 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     public VersionCheck Check(string local, CancellationToken ct)
     {
         product.CheckStream();
-        var ep = Resolve(ct);
-        var link = PatchServerLink.Connect(ep, ct);
+        var session = new PatchSession(product, Connector);
+        var a = session.Connect(ct);
+        var link = a.Link;
+        var ep = new IPEndPoint(a.Address, product.Port);
         try
         {
-            var server = CheckVersion(ref link, ref ep, local, ct);
-            return new VersionCheck(local, server, ep);
+            var r = session.AskVersion(link, local, ct);
+            if (session.Screen(r, a.Address) == RedirectDecision.Reconnect && session.Follow(r, link, ct) is { } next)
+            {
+                link = next.Link;
+                ep = new IPEndPoint(next.Address, product.Port);
+            }
+            if (r.Server.Length == 0) throw new InvalidDataException("PlayOnline's update server sent no version.");
+            return new VersionCheck(local, r.Server, ep);
         }
         finally { link.Dispose(); }
     }
@@ -71,9 +79,10 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         beforeChange?.Invoke();
 
         // like POL, the manifest gets its own connection (mode 200), the downloads theirs (300) and apply (400) none
-        using var link = PatchServerLink.Connect(ep, ct);
+        var session = new PatchSession(product, Connector, pinned: ep.Address);
+        using var link = session.Connect(ct).Link;
         progress?.Report(new PatchProgress(PatchPhase.Manifest, $"Getting the list of {product.Name} files...", -1));
-        var manifest = FetchManifest(link, ct);
+        var manifest = FetchManifest(session, link, ct);
         if (only != null) manifest = manifest.Where(f => only(f.Name)).ToList();
         var decisions = Scan(manifest, manifestScan: true, local, progress, ct);
         var workIdx = Enumerable.Range(0, manifest.Count)
@@ -94,18 +103,11 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             long free = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(Dir))!).AvailableFreeSpace;
             if (free < need)
                 throw Shown.Mark(new IOException($"The {product.Name} update needs about {need / 1048576.0:N0} MB of free space on the drive, but there's only {free / 1048576.0:N0} MB free. Free up some space, then try again."));
-            Download(workIdx.Select(i => (manifest[i], decisions[i].Bytes)).ToList(), ep, local, total, progress, ct);
+            Download(session, workIdx.Select(i => (manifest[i], decisions[i].Bytes)).ToList(), local, total, progress, ct);
         }
 
         progress?.Report(new PatchProgress(PatchPhase.Apply, $"Updating {product.Name}...", -1));
         return Apply(manifest, local, server);
-    }
-
-    private IPEndPoint Resolve(CancellationToken ct)
-    {
-        var ip = Dns.GetHostAddressesAsync(product.Host, AddressFamily.InterNetwork, ct).GetAwaiter().GetResult().FirstOrDefault()
-                 ?? throw Shown.Mark(new IOException("Couldn't find PlayOnline's update server. Check your internet connection, then try again."));
-        return new IPEndPoint(ip, product.Port);
     }
 
     public static bool IsPolHost(string host)
@@ -124,36 +126,15 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         return s1 == current.ToString() || IsPolHost(s1) ? RedirectDecision.Reconnect : RedirectDecision.Refuse;
     }
 
-    private string CheckVersion(ref PatchServerLink link, ref IPEndPoint ep, string local, CancellationToken ct)
+    private List<PatchFile> FetchManifest(PatchSession session, PatchServerLink link, CancellationToken ct)
     {
-        var r = PatchProtocol.ParseVersion(link.Exchange(PatchProtocol.VersionRequest(product.TagWire, product.ProductId, local), ct));
-        if (r.S0 == "unknown") throw new InvalidDataException($"PlayOnline's update server does not know {product.Name}.");
-        var redirect = DecideRedirect(r.S1, ep.Address);
-        if (redirect == RedirectDecision.Refuse) throw new InvalidDataException("PlayOnline's update server named an unexpected host.");
-        if (redirect == RedirectDecision.Reconnect &&
-            Dns.GetHostAddressesAsync(r.S1, AddressFamily.InterNetwork, ct).GetAwaiter().GetResult().FirstOrDefault() is { } other &&
-            !other.Equals(IPAddress.Any))
-        {
-            ep = new IPEndPoint(other, product.Port);
-            link.Dispose();
-            link = PatchServerLink.Connect(ep, ct);
-        }
-        if (r.Server.Length == 0) throw new InvalidDataException("PlayOnline's update server sent no version.");
-        return r.Server;
-    }
-
-    private void KeepAlive(PatchServerLink link, CancellationToken ct) =>
-        PatchProtocol.ParseVersion(link.Exchange(PatchProtocol.VersionRequest(product.TagWire, product.ProductId, ""), ct));
-
-    private List<PatchFile> FetchManifest(PatchServerLink link, CancellationToken ct)
-    {
-        var body = PatchProtocol.ParseManifest(link.Exchange(PatchProtocol.ManifestRequest(product.TagWire, product.ProductId), ct));
+        var body = session.FileList(link, ct);
         var tmp1 = Path.Combine(Dir, "patch.cfg.tmp1");
         var tmp2 = Path.Combine(Dir, "patch.cfg.tmp2");
         File.WriteAllBytes(tmp1, body.ToArray());
         using (var src = File.OpenRead(tmp1))
         using (var dst = new FileStream(tmp2, FileMode.Create, FileAccess.Write))
-            PatchCodecs.Lzss(src, dst, ct, 256L << 20);   // the biggest manifest is about 6 MB
+            PatchSession.UnpackFileList(src, dst, ct);
         File.Delete(tmp1);
         Replace(tmp2, Path.Combine(Dir, "patch.cfg"));
         AtomicFile.DeleteReadOnly(Path.Combine(Dir, "patch2.cfg"));
@@ -225,7 +206,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
     private static Decision DirectOf(PatchFile f) => new(Kind.Direct, 0, f.Last.SlcLen, false);
 
-    private void Download(List<(PatchFile File, long Bytes)> work, IPEndPoint ep, string local, long total,
+    private void Download(PatchSession session, List<(PatchFile File, long Bytes)> work, string local, long total,
                           IProgress<PatchProgress>? progress, CancellationToken ct)
     {
         // workers can't share a target or its .tmp files, and Windows folds case and drops trailing dots, so full paths
@@ -237,23 +218,23 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
                 throw new InvalidDataException($"The {product.Name} file list names {f.Name} twice or as a temporary file.");
         }
 
-        var workers = new DownloadWorkers(ep, connections, product.Name, total, progress,
-            (link, f, moved, kept, token) => FetchOne(link, f, local, moved, kept, token));
+        var workers = new DownloadWorkers(session, connections, product.Name, total, progress,
+            (link, f, moved, kept, token) => FetchOne(session, link, f, local, moved, kept, token));
         // biggest files first
         workers.Run(work.OrderByDescending(w => w.Bytes).Select(w => w.File), ct);
     }
 
-    private void FetchOne(PatchServerLink link, PatchFile f, string local, Action<long> moved, Action kept, CancellationToken ct)
+    private void FetchOne(PatchSession session, PatchServerLink link, PatchFile f, string local, Action<long> moved, Action kept, CancellationToken ct)
     {
-        if (Environment.TickCount64 - link.LastRequestTicks > KeepAliveMs) KeepAlive(link, ct);
+        session.KeepAliveIfIdle(link, Clock(), ct);
         var d = Decide(f, manifestScan: false, local, ct);
-        if (d.Kind == Kind.Direct) Direct(link, f, moved, ct);
-        else if (d.Kind == Kind.Indirect) Indirect(link, f, d.From, d.FromTmp2, moved, kept, ct);
+        if (d.Kind == Kind.Direct) Direct(session, link, f, moved, ct);
+        else if (d.Kind == Kind.Indirect) Indirect(session, link, f, d.From, d.FromTmp2, moved, kept, ct);
     }
 
     // A broken connection gets replaced and its file restarted (three goes max), a refused one
     // hands its file back, and whatever's left gets one single-connection round.
-    private sealed class DownloadWorkers(IPEndPoint ep, int connections, string productName, long total, IProgress<PatchProgress>? progress,
+    private sealed class DownloadWorkers(PatchSession session, int connections, string productName, long total, IProgress<PatchProgress>? progress,
                                          Action<PatchServerLink, PatchFile, Action<long>, Action, CancellationToken> fetch)
     {
         public void Run(IEnumerable<PatchFile> files, CancellationToken ct)
@@ -293,7 +274,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
                         bool connecting = link is null;
                         try
                         {
-                            link ??= PatchServerLink.Connect(ep, stop.Token);
+                            link ??= session.Connect(stop.Token).Link;
                             connecting = false;
                             fetch(link, f, Moved, Kept, stop.Token);
                         }
@@ -344,42 +325,31 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         }
     }
 
-    private byte Fetch(PatchServerLink link, string path, long size, string tmp, bool typeByte, Action<long> moved, CancellationToken ct)
+    private static byte Fetch(PatchSession session, PatchServerLink link, string path, long size, string tmp, bool typeByte, Action<long> moved, CancellationToken ct)
     {
-        byte type = 0;
         using var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16);
-        for (long got = 0; got < size;)
-        {
-            ct.ThrowIfCancellationRequested();
-            int len = (int)Math.Min(size - got, PatchProtocol.MaxRange);
-            var data = PatchProtocol.ParseRange(link.Exchange(PatchProtocol.RangeRequest(got, len, product.TagWire, product.ProductId, path), ct), len).Span;
-            if (got == 0 && typeByte) { type = data[0]; data = data[1..]; }
-            fs.Write(data);
-            got += len;
-            moved(len);
-        }
-        return type;
+        return session.Download(link, path, size, fs, typeByte, moved, ct);
     }
 
-    private void Direct(PatchServerLink link, PatchFile f, Action<long> moved, CancellationToken ct)
+    private void Direct(PatchSession session, PatchServerLink link, PatchFile f, Action<long> moved, CancellationToken ct)
     {
         var target = Local(f.Name);
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         string tmp = target + ".tmp", tmp2 = target + ".tmp2";
-        byte type = Fetch(link, f.Last.SlcPath, f.Last.SlcLen, tmp, typeByte: true, moved, ct);
+        byte type = Fetch(session, link, f.Last.SlcPath, f.Last.SlcLen, tmp, typeByte: true, moved, ct);
         PatchCodecs.DecodeSlc(type, tmp, tmp2, f.Last.Sig.Length, ct);
         File.Delete(tmp);
         Verify(tmp2, f.Last.Sig, $"{f.Name} failed its check after download.", ct);
     }
 
-    private void Indirect(PatchServerLink link, PatchFile f, int from, bool baseIsTmp2, Action<long> moved, Action stepKept, CancellationToken ct)
+    private void Indirect(PatchSession session, PatchServerLink link, PatchFile f, int from, bool baseIsTmp2, Action<long> moved, Action stepKept, CancellationToken ct)
     {
         var target = Local(f.Name);
         string tmp = target + ".tmp", tmp2 = target + ".tmp2", tmp3 = target + ".tmp3";
         for (int i = from; i < f.Lines.Count; i++)
         {
             var line = f.Lines[i];
-            Fetch(link, line.OlcPath!, line.OlcLen, tmp, typeByte: false, moved, ct);
+            Fetch(session, link, line.OlcPath!, line.OlcLen, tmp, typeByte: false, moved, ct);
             PatchCodecs.ApplyOlc(tmp, i == from && !baseIsTmp2 ? target : tmp2, tmp3, line.Sig.Length, ct);
             File.Delete(tmp);
             File.Move(tmp3, tmp2, overwrite: true);
