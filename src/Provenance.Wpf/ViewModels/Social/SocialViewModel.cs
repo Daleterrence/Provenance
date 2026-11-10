@@ -141,21 +141,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     internal AvatarService Avatars => _avatars;
     internal ChatStore? Chat => _chat;
 
-    // a job's last word (ok or "failed:..."), "timeout" once it's run past secs, or null while it's still going
-    internal string? Settled(string? state, string ok, DateTime since, int secs) =>
-        state == ok || state?.StartsWith("failed", StringComparison.Ordinal) == true ? state
-        : Now - since > TimeSpan.FromSeconds(secs) ? "timeout" : null;
-
     // a request the hook hasn't taken yet never runs for nobody
     internal void DiscardRequest(string ext)
     {
         if (_pol.Pid is { } pid) HookFiles.Discard(pid, ext);
-    }
-
-    // profile server reads go one at a time in the hook, so a clock only starts once the hook's taken that read
-    internal void WaitingTurn(ref DateTime since, string? token, string hookToken, PolSocialSnapshot snap)
-    {
-        if (token is not null && hookToken != token && snap.ProfileServerBusy) since = Now;
     }
 
     internal string? ViewerFolder() =>
@@ -355,7 +344,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _onlineFriends.Clear();
         _presenceQuietUntil = null;
         _lookups?.Reset();
-        _editToken = _picToken = null;
+        _edit.Forget();
+        _picture.Forget();
         Profile.Reset();
         Search.Reset();
         Messages.Reset();
@@ -428,12 +418,12 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 _requestedStatus = null;
                 StatusNote = "";
             }
-            else if (!snap.StatusBusy && Now - _requestedAt > TimeSpan.FromSeconds(5))
+            else if (!snap.StatusBusy && Now - _requestedAt > HookLimits.StatusRefused)
             {
                 _requestedStatus = null;
                 StatusNote = "PlayOnline didn't accept the status change.";
             }
-            else if (Now - _requestedAt > TimeSpan.FromSeconds(110))
+            else if (Now - _requestedAt > HookLimits.Status)
             {
                 _requestedStatus = null;   // polcore gives up after 100 secs
                 StatusNote = HookFailures.Friends.StatusNoAnswer;
@@ -497,10 +487,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     // what's still on its way under the active handle. A switch waits for it, it'd go from the new one otherwise
     internal string? PendingWrite() =>
         Messages.Sends.Going ? "Wait for your messages to finish sending first."
-        : _editToken != null ? "Wait for your friend list change to finish first."
+        : _edit.Running ? "Wait for your friend list change to finish first."
         : Search.Writing ? "Wait for your friend request to finish first."
         : Groups.Writing ? "Wait for your friend group change to finish first."
-        : _picToken != null ? "Wait for your profile picture to finish saving first."
+        : _picture.Running ? "Wait for your profile picture to finish saving first."
         : StatusPending ? "Wait for your status change to finish first."
         : null;
 
@@ -579,8 +569,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote.Text);
     public bool CanEdit => LoggedIn && !EditBusy && _pol.Pid != null && WriteBlockedNote is null;
 
-    private string? _editToken;
-    private DateTime _editAt;
+    private readonly HookJobWatch _edit = new();
 
     [RelayCommand]
     private void DismissEditNote() => EditNote.Clear();
@@ -588,7 +577,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     internal void WriteOrFail(bool written)
     {
         if (written) return;
-        _editToken = null;
+        _edit.Forget();
         EditBusy = false;
         EditNote.Fail(HookFailures.RequestWriteFailed);
     }
@@ -599,8 +588,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         token = HookFiles.NewToken();
         pid = _pol.Pid ?? 0;
         if (!CanEdit || pid == 0) return false;
-        if (!followSend) _editToken = token;
-        _editAt = Now;
+        if (!followSend) _edit.Begin(token, HookLimits.FriendEdit, Now);
         EditBusy = true;
         EditNote.Clear();
         return true;
@@ -638,10 +626,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     private void ApplyEditState(PolSocialSnapshot snap)
     {
-        if (_editToken is null) return;
-        // polcore gives up after 100 secs
-        if (Settled(snap.EditJob.Token == _editToken ? snap.EditJob.State : null, "saved", _editAt, 110) is not { } st) return;
-        _editToken = null;
+        if (!_edit.Running) return;
+        if (_edit.Settle(snap.EditJob.StateFor(_edit.Token), "saved", Now) is not { } st) return;
         EditBusy = false;
         if (st != "saved") EditNote.Fail(EditFailureText(st));
     }
@@ -698,8 +684,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EditNoteShown), nameof(Saving), nameof(EditStatus), nameof(EditStatusShown))]
     private bool _profilePictureSaving;
-    private string? _picToken;
-    private DateTime _picAt;
+    private readonly HookJobWatch _picture = new();
 
     public void SaveProfilePicture(int picId)
     {
@@ -709,25 +694,21 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             EditNote.Fail(blocked);
             return;
         }
-        _picToken = HookFiles.NewToken();
-        _picAt = Now;
+        var token = _picture.Begin(HookLimits.Picture, Now);
         ProfilePictureSaving = true;
         EditNote.Clear();
-        if (SocialRequests.SetProfilePicture(pid, picId, _picToken)) return;
-        _picToken = null;
+        if (SocialRequests.SetProfilePicture(pid, picId, token)) return;
+        _picture.Forget();
         ProfilePictureSaving = false;
         EditNote.Fail(HookFailures.RequestWriteFailed);
     }
 
     private void ApplyProfilePictureState(PolSocialSnapshot snap)
     {
-        if (_picToken is null) return;
-        WaitingTurn(ref _picAt, _picToken, snap.PictureJob.Token, snap);
-        // two jobs, each up to 100 secs in polcore
-        if (Settled(snap.PictureJob.Token == _picToken ? snap.PictureJob.State : null, "saved", _picAt, 250)
-            is not { } st) return;
+        if (!_picture.Running) return;
+        _picture.WaitingTurn(snap.PictureJob.Token, snap.ProfileServerBusy, Now);
+        if (_picture.Settle(snap.PictureJob.StateFor(_picture.Token), "saved", Now) is not { } st) return;
         if (st == "timeout") DiscardRequest(HookContract.Requests.Pic);
-        _picToken = null;
         ProfilePictureSaving = false;
         if (st == "saved") return;
         EditNote.Fail(st switch

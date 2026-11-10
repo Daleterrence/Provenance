@@ -1,19 +1,20 @@
+using Provenance.Common.Hook;
+
 namespace Provenance.Common.Social;
 
 // the app's half of the hook's send rule: one line in flight
 public sealed class ChatSendGate(TimeSpan giveUp)
 {
-    private DateTime? _sentAt;
+    private readonly HookJobWatch _watch = new();
     private string _text = "";
-    public string? Token { get; private set; }
+    public string? Token => _watch.Token;
 
-    public bool CanSend => Token == null;
+    public bool CanSend => !_watch.Running;
 
     public void Sent(string token, string text, DateTime now)
     {
-        Token = token;
+        _watch.Begin(token, giveUp, now);
         _text = text;
-        _sentAt = now;
     }
 
     // the hook's state for my token with the line as it was typed, or null while it's still going
@@ -27,7 +28,7 @@ public sealed class ChatSendGate(TimeSpan giveUp)
 
     // a token the hook never took or never answered counts as gone after the give-up, snapshot or not
     public (string State, string Text)? Expire(DateTime now) =>
-        Token == null || _sentAt is not { } at || now - at <= giveUp ? null : Done("failed:timeout");
+        !_watch.Running || !_watch.Overdue(now) ? null : Done("failed:timeout");
 
     private (string State, string Text) Done(string state)
     {
@@ -38,8 +39,7 @@ public sealed class ChatSendGate(TimeSpan giveUp)
 
     public void Reset()
     {
-        Token = null;
+        _watch.Forget();
         _text = "";
-        _sentAt = null;
     }
 }

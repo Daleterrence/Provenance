@@ -39,8 +39,7 @@ public partial class HandlesViewModel : ObservableObject
     private readonly Func<PolSocialSnapshot>? _snapshot;
     private readonly TimeProvider _time;
     private PolSocialSnapshot _snap = PolSocialSnapshot.Empty;
-    private string? _token;
-    private DateTime _at;
+    private readonly HookJobWatch _watch = new();
     private DateTime Now => _time.GetUtcNow().UtcDateTime;
     private HandleChange _op;
     private string _doneText = "";
@@ -77,7 +76,7 @@ public partial class HandlesViewModel : ObservableObject
     public string AutoSwitchText => HandleList.AutoSwitchText;
     public string LimitText => HandleList.LimitText;
     public string NoCharactersText => HandleList.NoCharactersText;
-    public bool InChatRoom => _snap.Chat is { RoomState: "in" or "entering" };
+    public bool InChatRoom => _snap.Chat is { RoomJob.State: "in" or "entering" };
     // mine, or one the hook's still running (it can take mine after the page has given up on it)
     public bool Switching => (Busy && _op == HandleChange.Switch) ||
                              (LoggedIn && _snap is { HandleOp: "switch", HandleJob.State: "working" });
@@ -101,35 +100,35 @@ public partial class HandlesViewModel : ObservableObject
         ReadOnlyText = readOnly;
         // logged out, the last account's handles go with it
         _snap = LoggedIn ? snap! : PolSocialSnapshot.Empty;
-        if (!LoggedIn && _token != null)
+        if (!LoggedIn && _watch.Running)
         {
             // the session that had it is gone, and so is anything that could say how it went
-            _token = null;
+            _watch.Forget();
             Note.Fail(_op == HandleChange.Switch ? "The PlayOnline session ended before Provenance could confirm the switch."
                                                  : "The PlayOnline session ended before Provenance could confirm the change.");
             After(Note.Text);
         }
         // the wait doesn't count while the game's starting, nothing can be changed then
-        if (readOnly != null || _wasReadOnly) _at = Now;
+        if (readOnly != null || _wasReadOnly) _watch.Restart(Now);
         _wasReadOnly = readOnly != null;
         Settle();
-        Busy = _token != null;
+        Busy = _watch.Running;
         Rebuild();
     }
 
     // polcore gives up on a job after 100 secs
     private void Settle()
     {
-        if (_token is null) return;
-        var state = _snap.HandleJob.Token == _token ? _snap.HandleJob.State : "";
+        if (!_watch.Running) return;
+        var state = _snap.HandleJob.StateFor(_watch.Token) ?? "";
         if (state != "saved" && !state.StartsWith("failed", StringComparison.Ordinal))
         {
             // once the hook's taken it, it's the hook's answer that ends it
-            if (state == "working" || Now - _at < TimeSpan.FromSeconds(110)) return;
+            if (state == "working" || _watch.Elapsed(Now) < HookLimits.HandleUntaken) return;
             if (_pid() is { } pid) HookFiles.Discard(pid, HookContract.Requests.Handle);
             state = "timeout";
         }
-        _token = null;
+        _watch.Forget();
         Note.Set(state == "saved" ? _doneText : HandleList.Failed(_op, state), state != "saved");
         After(state == "saved" ? null : Note.Text);
     }
@@ -173,8 +172,8 @@ public partial class HandlesViewModel : ObservableObject
     // snapshot, so all that's known is that it wasn't confirmed here
     public void GameStarted()
     {
-        if (_token is null) return;
-        _token = null;
+        if (!_watch.Running) return;
+        _watch.Forget();
         Busy = false;
         Note.Fail(HandleList.GameStartedText);
         After(Note.Text);
@@ -238,7 +237,7 @@ public partial class HandlesViewModel : ObservableObject
         if (!_dialogs.YesNo(GroupHandleCheck.Title, check.Question)) return;
         Send(HandleChange.Switch, (pid, token) => SocialRequests.SwitchHandle(pid, token, check.To!),
              HandleList.Done(HandleChange.Switch, check.To!.Name, ""));
-        if (_token is null) tell(Note.Text);
+        if (!_watch.Running) tell(Note.Text);
         else _after = failed => { if (failed is null) open(); else tell(failed); };
     }
 
@@ -274,8 +273,7 @@ public partial class HandlesViewModel : ObservableObject
             Note.Fail("Provenance couldn't pass the change to PlayOnline.");
             return;
         }
-        _token = token;
-        _at = Now;
+        _watch.Begin(token, HookLimits.HandleUntaken, Now);
         _op = op;
         _doneText = done;
         Note.Show(op == HandleChange.Switch ? "Updating online status..." : "Updating Content ID list...");

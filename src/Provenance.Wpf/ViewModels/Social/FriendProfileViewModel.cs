@@ -36,15 +36,13 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     [ObservableProperty] private string _away = "";
     [ObservableProperty] private string _awayFrom = "";
     [ObservableProperty] private ImageSource? _picture;
-    private string? _profileToken;
+    private readonly HookJobWatch _profile = new();
     private string _profileKey = "", _profileFor = "";
     private int _profileRow = -1;
-    private DateTime _profileAt;
     // what's on screen: the handle's answer and the last character one that loaded, so going back never reads again
     private PolProfile? _handleProfile;
     private PolFfxiProfile? _characterShown;
-    private string? _ffxiToken;
-    private DateTime _ffxiAt;
+    private readonly HookJobWatch _ffxi = new();
     private ProfileTab? _ffxiFor, _ffxiFrom;
     private readonly Dictionary<string, (PolProfile Profile, DateTime At)> _profileCache = new();
     private ProfilePictureCatalog.Catalog? _picCatalog;
@@ -63,7 +61,8 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         HasTabs = false;
         _handleProfile = null;
         _characterShown = null;
-        _profileToken = _ffxiToken = null;
+        _profile.Forget();
+        _ffxi.Forget();
         Loading = false;
         _profileFor = f.Name;
         _profileRow = f.Row;
@@ -87,12 +86,11 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             HandleProfileArrived(hit.Profile);
             return;
         }
-        _profileToken = HookFiles.NewToken();
-        _profileAt = _social.Now;
+        var token = _profile.Begin(HookLimits.Profile, _social.Now);
         Loading = true;
         Note.Show("Loading the profile from PlayOnline...");
-        if (SocialRequests.RequestProfile(pid, _profileToken, f.Row, f.Key)) return;
-        _profileToken = null;
+        if (SocialRequests.RequestProfile(pid, token, f.Row, f.Key)) return;
+        _profile.Forget();
         Loading = false;
         Note.Fail(HookFailures.RequestWriteFailed);
     }
@@ -116,7 +114,8 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         HasTabs = false;
         _handleProfile = null;
         _characterShown = null;
-        _profileToken = _ffxiToken = null;
+        _profile.Forget();
+        _ffxi.Forget();
         Loading = false;
         Note.Soften();
     }
@@ -151,7 +150,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         Popup?.Invoke(text);
     }
 
-    internal bool Waiting => _profileToken is not null || _ffxiToken is not null;
+    internal bool Waiting => _profile.Running || _ffxi.Running;
 
     internal void Apply(PolSocialSnapshot snap)
     {
@@ -169,13 +168,12 @@ public sealed partial class FriendProfileViewModel : ObservableObject
 
     private void ApplyProfileState(PolSocialSnapshot snap)
     {
-        if (_profileToken is null) return;
-        _social.WaitingTurn(ref _profileAt, _profileToken, snap.ProfileJob.Token, snap);
+        if (!_profile.Running) return;
+        _profile.WaitingTurn(snap.ProfileJob.Token, snap.ProfileServerBusy, _social.Now);
         // a "done" with no profile isn't an answer yet
-        bool mine = snap.ProfileJob.Token == _profileToken && (snap.ProfileJob.State != "done" || snap.Profile != null);
-        if (_social.Settled(mine ? snap.ProfileJob.State : null, "done", _profileAt, 130) is not { } st) return;
+        bool mine = snap.ProfileJob.Token == _profile.Token && (snap.ProfileJob.State != "done" || snap.Profile != null);
+        if (_profile.Settle(mine ? snap.ProfileJob.State : null, "done", _social.Now) is not { } st) return;
         if (st == "timeout") _social.DiscardRequest(HookContract.Requests.Profile);
-        _profileToken = null;
         Loading = false;
         if (st == "done")
         {
@@ -246,7 +244,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     [RelayCommand]
     private void SelectTab(ProfileTab? tab)
     {
-        if (tab is null || !tab.Clickable || _ffxiToken is not null || Loading || !Tabs.Contains(tab)) return;
+        if (tab is null || !tab.Clickable || _ffxi.Running || Loading || !Tabs.Contains(tab)) return;
         if (tab.IsHandle)
         {
             if (_handleProfile is null) return;
@@ -274,14 +272,13 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         var from = Tabs.FirstOrDefault(t => t.IsSelected && !t.Failed) ?? _ffxiFrom;
         MarkSelected(tab);
         ShowCharacterPage(null);
-        _ffxiToken = HookFiles.NewToken();
-        _ffxiAt = _social.Now;
+        var token = _ffxi.Begin(HookLimits.FfxiProfile, _social.Now);
         _ffxiFor = tab;
         _ffxiFrom = from;
         Loading = true;
         Note.Show(_social.ViewerText(0x4a82, "Retrieving profile data..."));
-        if (SocialRequests.RequestFfxiProfile(pid, _ffxiToken, _profileRow, _profileKey, tab.Slot)) return;
-        _ffxiToken = null;
+        if (SocialRequests.RequestFfxiProfile(pid, token, _profileRow, _profileKey, tab.Slot)) return;
+        _ffxi.Forget();
         Loading = false;
         ShowTabAgain(from);
         Note.Fail(HookFailures.RequestWriteFailed);
@@ -307,12 +304,11 @@ public sealed partial class FriendProfileViewModel : ObservableObject
 
     private void ApplyFfxiProfileState(PolSocialSnapshot snap)
     {
-        if (_ffxiToken is null) return;
-        _social.WaitingTurn(ref _ffxiAt, _ffxiToken, snap.FfxiProfileJob.Token, snap);
-        bool mine = snap.FfxiProfileJob.Token == _ffxiToken && (snap.FfxiProfileJob.State != "done" || snap.FfxiProfile != null);
-        if (_social.Settled(mine ? snap.FfxiProfileJob.State : null, "done", _ffxiAt, 130) is not { } st) return;
+        if (!_ffxi.Running) return;
+        _ffxi.WaitingTurn(snap.FfxiProfileJob.Token, snap.ProfileServerBusy, _social.Now);
+        bool mine = snap.FfxiProfileJob.Token == _ffxi.Token && (snap.FfxiProfileJob.State != "done" || snap.FfxiProfile != null);
+        if (_ffxi.Settle(mine ? snap.FfxiProfileJob.State : null, "done", _social.Now) is not { } st) return;
         if (st == "timeout") _social.DiscardRequest(HookContract.Requests.FfxiProfile);
-        _ffxiToken = null;
         Loading = false;
         var tab = _ffxiFor!;
         // the hook read whatever's in that slot now, which has to be the character the tab's for

@@ -40,22 +40,22 @@ public sealed partial class GroupsViewModel : ObservableObject
     public bool NoGroups => !HasGroups;
 
     private bool _dirty = true;
-    internal string? _groupToken;
+    private readonly HookJobWatch _group = new();
+    internal string? _groupToken => _group.Token;
     private string _groupDone = "";
     private string? _groupLeaving;
     internal string? LeavingGroupId => _groupLeaving;
-    private DateTime _groupAt;
     private bool _groupBySend;
     private FriendItem? _inviteFor;
 
-    internal bool Writing => _groupToken != null;
+    internal bool Writing => _group.Running;
 
     internal void MarkDirty() => _dirty = true;
 
     internal void Reset()
     {
         _dirty = true;
-        _groupToken = null;
+        _group.Forget();
         _inviteFor = null;
         Items.Clear();
         HasGroups = false;
@@ -111,14 +111,13 @@ public sealed partial class GroupsViewModel : ObservableObject
                             FriendItem? invite = null)
     {
         if (!_social.BeginEdit(out var pid, out var token, followSend: true)) return;
-        _groupToken = token;
+        _group.Begin(token, HookLimits.Group, _social.Now);
         _groupDone = doneText;
-        _groupAt = _social.Now;
         _groupBySend = bySend;
         _groupLeaving = leaving;
         _inviteFor = invite;   // only now, a refused click must never mark it answered
         if (write(pid, token)) return;
-        _groupToken = null;
+        _group.Forget();
         _inviteFor = null;
         _social.WriteOrFail(false);
     }
@@ -210,20 +209,19 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     internal void Apply(PolSocialSnapshot snap)
     {
-        if (_groupToken is null) return;
-        bool mine = snap.GroupJob.Token == _groupToken;
+        if (!_group.Running) return;
+        bool mine = snap.GroupJob.Token == _group.Token;
         string state;
         if (!_groupBySend) state = mine ? snap.GroupJob.State : "";
-        else if (snap.SendStateFor(_groupToken) is { } sent) state = sent;
+        else if (snap.SendStateFor(_group.Token) is { } sent) state = sent;
         // a send refused before it went out reports in the group slot
         else if (mine && snap.GroupJob.State.StartsWith("failed", StringComparison.Ordinal)) state = snap.GroupJob.State;
         else state = "";
         bool done = state is "sent" or "saved";
-        if (_social.Settled(done ? "ok" : state, "ok", _groupAt, 130) is not { } st) return;
+        if (_group.Settle(done ? "ok" : state, "ok", _social.Now) is not { } st) return;
         var invite = _inviteFor is { IsGroupInvite: true } inv ? inv : null;
         var left = _groupLeaving;
         _groupLeaving = null;
-        _groupToken = null;
         _inviteFor = null;
         _social.EditBusy = false;
         // a timed-out answer leaves the list for this session too, so it can't be answered twice

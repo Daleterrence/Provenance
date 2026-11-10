@@ -13,15 +13,12 @@ public sealed record GroupChatLines(string Group, IReadOnlyList<GroupChatLine> L
 
 // the snapshot's "groupChat". States run "joining" -> "in" -> "leaving" -> "left", or "failed:...", "left:handle" (a
 // handle switch took it out), "gone" (the group went), "removed" (I was taken out of it) or "lost"
-public sealed record GroupChatSnapshot(string Token, string State, string Group, long LineSeq, string SendToken, string SendState)
+public sealed record GroupChatSnapshot(HookJob Job, string Group, long LineSeq, HookJob SendJob)
 {
     public static GroupChatSnapshot? Read(JsonElement g)
     {
         if (g.ValueKind != JsonValueKind.Object) return null;
-        var s = Obj(g, "send");
-        bool hasSend = s.ValueKind == JsonValueKind.Object;
-        return new GroupChatSnapshot(Str(g, "token"), Str(g, "state"), Str(g, "group"), Long(g, "lineSeq"),
-                                     hasSend ? Str(s, "token") : "", hasSend ? Str(s, "state") : "");
+        return new GroupChatSnapshot(new HookJob(Str(g, "token"), Str(g, "state")), Str(g, "group"), Long(g, "lineSeq"), JsonFields.Job(g, "send"));
     }
 }
 

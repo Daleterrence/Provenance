@@ -26,4 +26,10 @@ public sealed record PolSearchHit(int Index, string Name, int ProfilePictureId, 
     public string World { get; init; } = "";
 }
 
+// what a friend search came back with. Total is how many POL found, which can be more than came back
+public sealed record SearchResult(FriendSearchKind Kind, int Total, bool TooMany, IReadOnlyList<PolSearchHit> Hits)
+{
+    public static readonly SearchResult None = new(FriendSearchKind.Handle, 0, false, []);
+}
+
 public sealed record PolBlocked(int Index, string Name, string Key, bool AllHandles);

@@ -19,9 +19,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private readonly IDialogs _dialogs;
     private readonly System.Windows.Threading.DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private Job _job;
-    private string? _token;
+    private readonly HookJobWatch _watch = new();
     private int _pid;
-    private DateTime _at;
     private string _noMail = "No Mail address";
     private string _savedHandle = "";
     private string _loadedKey = "";
@@ -222,7 +221,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     {
         if (!Ready(out var pid)) return;
         Start(Job.Load);
-        if (!SocialRequests.RequestMyProfile(pid, _token!)) Fail(HookFailures.RequestWriteFailed);
+        if (!SocialRequests.RequestMyProfile(pid, _watch.Token!)) Fail(HookFailures.RequestWriteFailed);
     }
 
     private void LoadXi(ProfileCard card)
@@ -231,7 +230,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _xiCard = card;
         LoadingText = $"Loading {card.Title}'s profile...";
         Start(Job.LoadXi);
-        if (!SocialRequests.RequestXiProfile(pid, _token!, _loadedKey, card.Key)) Fail(HookFailures.RequestWriteFailed);
+        if (!SocialRequests.RequestXiProfile(pid, _watch.Token!, _loadedKey, card.Key)) Fail(HookFailures.RequestWriteFailed);
     }
 
     // a closed session and a waiting game or handle switch each have their own note, and callers differ on which comes first
@@ -258,9 +257,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private void Start(Job job, string note = "")
     {
         _job = job;
-        _token = HookFiles.NewToken();
+        _watch.Begin(job == Job.Rename ? HookLimits.MyProfileRename : HookLimits.MyProfile, _social.Now);
         _pid = _social.SessionPid ?? 0;
-        _at = _social.Now;
         if (job == Job.Load) LoadingText = "Loading your profile...";
         LoadingProfile = job is Job.Load or Job.LoadXi;
         Busy = true;
@@ -273,7 +271,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     {
         _timer.Stop();
         _job = Job.None;
-        _token = null;
+        _watch.Forget();
         LoadingProfile = false;
         Busy = false;
     }
@@ -315,7 +313,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             Abandon(HookFailures.ProfileEditor.SessionEnded);
             return;
         }
-        if (_social.Now - _at > TimeSpan.FromSeconds(_job == Job.Rename ? 260 : 250))
+        if (_watch.Overdue(_social.Now))
             Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : HookFailures.ProfileEditor.SaveUnconfirmed);
     }
 
@@ -442,14 +440,14 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         var noMail = fields.Any(f => f.Key == "z_mail" && f.Value == _noMail) ? _noMail : "";
         // level 0 keeps the profile's own, only a level that was picked gets sent
         var level = Level != _savedLevel ? Level : PrivacyLevel.Keep;
-        if (!SocialRequests.SaveMyProfile(pid, _token!, level, fields, noMail)) Fail(HookFailures.RequestWriteFailed);
+        if (!SocialRequests.SaveMyProfile(pid, _watch.Token!, level, fields, noMail)) Fail(HookFailures.RequestWriteFailed);
     }
 
     private void StartRename(int pid)
     {
         _renameAfterSave = false;
         Start(Job.Rename, "Renaming your handle...");
-        if (!SocialRequests.RenameHandle(pid, _token!, HandleName.Trim(), _loadedKey)) Fail(HookFailures.RequestWriteFailed);
+        if (!SocialRequests.RenameHandle(pid, _watch.Token!, HandleName.Trim(), _loadedKey)) Fail(HookFailures.RequestWriteFailed);
     }
 
     private void OnSnapshot(PolSocialSnapshot snap)
@@ -457,8 +455,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         bool xi = _job == Job.LoadXi;
         var hook = xi ? snap.XiJob : snap.MeJob;
         // waiting its turn behind another profile server job in the hook, so its clock hasn't started
-        if (_job != Job.None && _token is not null && hook.Token != _token && snap.ProfileServerBusy) _at = _social.Now;
-        if (_job == Job.None || _token is null || hook.Token != _token) return;
+        _watch.WaitingTurn(hook.Token, snap.ProfileServerBusy, _social.Now);
+        if (_job == Job.None || !_watch.Running || hook.Token != _watch.Token) return;
         var state = hook.State;
         if (state.StartsWith("failed", StringComparison.Ordinal) || state == "cancelled")
         {
@@ -472,7 +470,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         {
             case Job.Load when state == "ready":
                 var p = MyProfile.TryRead(_pid);
-                if (p is null || p.Token != _token)
+                if (p is null || p.Token != _watch.Token)
                 {
                     Fail("Provenance couldn't read the profile PlayOnline sent.");
                     return;
@@ -506,7 +504,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                 Done("Your profile is saved.");
                 break;
             case Job.LoadXi when state == "ready":
-                if (_xiCard is not { } card || snap.XiKey != card.Key)
+                if (_xiCard is not { } card || snap.Xi.Key != card.Key)
                 {
                     Fail("Provenance couldn't read the profile PlayOnline sent.");
                     return;
@@ -514,8 +512,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                 EndJob();
                 Note.Clear();
                 card.Loaded = true;
-                card.Level = snap.XiLevel is >= PrivacyLevel.Private and <= PrivacyLevel.Everyone ? snap.XiLevel : PrivacyLevel.Keep;
-                if (card.Character is { Name.Length: 0 } && snap.XiName.Trim().Length > 0) card.Title = snap.XiName.Trim();
+                card.Level = snap.Xi.Level is >= PrivacyLevel.Private and <= PrivacyLevel.Everyone ? snap.Xi.Level : PrivacyLevel.Keep;
+                if (card.Character is { Name.Length: 0 } && snap.Xi.Name.Trim().Length > 0) card.Title = snap.Xi.Name.Trim();
                 break;
         }
     }

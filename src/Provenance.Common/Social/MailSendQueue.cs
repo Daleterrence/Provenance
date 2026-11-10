@@ -40,7 +40,7 @@ public sealed class MailSendQueue
     public HashSet<string> StillPending()
     {
         var keep = new HashSet<string>();
-        var live = _inFlight.Where(x => Now() - x.At < TimeSpan.FromMinutes(3)).ToList();
+        var live = _inFlight.Where(x => Now() - x.At < HookLimits.MailInFlight).ToList();
         if (live.Count == 0) return keep;
         foreach (var x in live) keep.Add("out:" + x.Token);
         foreach (var q in _queue) keep.Add("out:" + q.Token);
@@ -64,7 +64,7 @@ public sealed class MailSendQueue
         for (int i = newest; i >= 0; i--)
         {
             var x = _inFlight[i];
-            if (Now() - x.At <= TimeSpan.FromMinutes(3)) continue;
+            if (Now() - x.At <= HookLimits.MailInFlight) continue;
             // never answered. Untaken it's withdrawn (only the newest can be), but once the hook has it, it might still
             // go, so it's not re-sent
             bool withdrawn = i == newest &&

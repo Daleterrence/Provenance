@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Provenance.Common.Hook;
 
 namespace Provenance.Common;
 
@@ -29,6 +30,9 @@ internal static class JsonFields
 
     public static JsonElement Obj(JsonElement e, string n) =>
         Has(e, n, out var o) && o.ValueKind == JsonValueKind.Object ? o : default;
+
+    public static HookJob Job(JsonElement e, string n) =>
+        Obj(e, n) is { ValueKind: JsonValueKind.Object } o ? new HookJob(Str(o, "token"), Str(o, "state")) : HookJob.None;
 
     public static List<T> Arr<T>(JsonElement e, string n, Func<JsonElement, T> item) =>
         Has(e, n, out var a) && a.ValueKind == JsonValueKind.Array

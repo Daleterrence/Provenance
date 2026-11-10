@@ -42,20 +42,18 @@ public sealed class PreLaunchLink
     public Func<TimeSpan, Task> Delay { get; init; } = t => Task.Delay(t);
     public Func<DateTime> Now { get; init; } = () => DateTime.UtcNow;
 
-    public static readonly TimeSpan Untaken = TimeSpan.FromSeconds(110);
-    // polcore gives up on a job after 100 secs, so a hook that's said nothing by now isn't going to
-    public static readonly TimeSpan Working = TimeSpan.FromSeconds(150);
     private static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(250);
 
     // a session that's gone just lets Play go on: its answer says what happened better than anything here could
     public async Task<PreLaunchResult> RunAsync()
     {
         if (Pid() is not { } pid) return PreLaunchResult.Play;
-        var since = Now();
+        var page = new HookJobWatch();
+        page.Begin(HookLimits.HandleUntaken, Now());
         while (PageWaiting() is { } note)
         {
             if (!Alive(pid)) return PreLaunchResult.Play;
-            if (Now() - since >= Untaken)
+            if (page.Elapsed(Now()) >= HookLimits.HandleUntaken)
             {
                 if (Read(pid) is not { } now || For(now) is null) return PreLaunchResult.Play;
                 Failed(FailedText(PageGaveUpText));
@@ -93,7 +91,8 @@ public sealed class PreLaunchLink
         var token = HookFiles.NewToken();
         if (!SocialRequests.LinkAll(pid, token, plan.Active, plan.Fit)) return (false, "Provenance couldn't pass the change to PlayOnline.");
         Saying?.Invoke(SavingText);
-        var at = Now();
+        var untaken = new HookJobWatch();
+        untaken.Begin(token, HookLimits.HandleUntaken, Now());
         DateTime? taken = null;
         while (true)
         {
@@ -106,9 +105,9 @@ public sealed class PreLaunchLink
             if (state == "working") taken ??= Now();
             if (taken is { } t)
             {
-                if (Now() - t >= Working) return (false, Failure("timeout"));
+                if (Now() - t >= HookLimits.HandleWorking) return (false, Failure("timeout"));
             }
-            else if (Now() - at >= Untaken)
+            else if (untaken.Elapsed(Now()) >= HookLimits.HandleUntaken)
             {
                 if (HookFiles.Withdraw(pid, HookContract.Requests.Handle) == Withdrawal.Withdrawn) return (false, Failure("timeout"));
                 taken = Now();

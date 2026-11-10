@@ -30,9 +30,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private readonly IDialogs _dialogs;
     private readonly Func<string, string, bool> _savePassword;
     private readonly Action _dropPassword;
-    // a little past the hook's 6 minute wait for a line's answer
-    internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(365);
-    private readonly ChatSendGate _gate = new(SendGiveUp);
+    private readonly ChatSendGate _gate = new(HookLimits.ChatLine);
     private DateTime Now => _social.Time.GetUtcNow().UtcDateTime;
     private readonly System.Windows.Threading.DispatcherTimer _tick = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private string? _zonesToken, _roomsToken, _joinToken;
@@ -42,7 +40,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private bool _restoringZone, _quiet, _disposed, _joinLocked;
     private readonly Dictionary<int, string> _categories = new();
     private readonly Func<int, ImageSource?>? _emote;
-    private string? _masterToken, _masterName;
+    private readonly HookJobWatch _master = new();
+    private string? _masterName;
     private MasterJob _masterKind;
     private enum MasterJob { Kick, Master, Password }
 
@@ -74,7 +73,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         SendCommand.NotifyCanExecuteChanged();
         if (_gate.Expire(now) is { } done) FinishSend(done.State, done.Text);
         MasterTick(now);
-        if (_gate.CanSend && _masterToken is null) _tick.Stop();
+        if (_gate.CanSend && !_master.Running) _tick.Stop();
     }
 
     internal bool SendTicking => _tick.IsEnabled;
@@ -319,42 +318,37 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             ShowError(HookFailures.ChatCommError);
             return;
         }
-        _masterToken = token;
+        _master.Begin(token, HookLimits.ChatMaster, Now);
         _masterKind = kind;
         _masterName = name;
-        _masterSentAt = Now;
         MasterBusy = true;
         _tick.Start();
     }
 
-    private DateTime _masterSentAt;
-    // a little past the hook's own 6 minutes, for a job it never took or never answered
-    internal static readonly TimeSpan MasterGiveUp = TimeSpan.FromSeconds(370);
-
     internal void MasterTick(DateTime now)
     {
-        if (_masterToken is null || now - _masterSentAt < MasterGiveUp || Pid is not { } pid) return;
+        if (!_master.Running || _master.Elapsed(now) < HookLimits.ChatMaster || Pid is not { } pid) return;
         HookFiles.Withdraw(pid, HookContract.Requests.ChatMaster);
         if (_masterKind == MasterJob.Password) _dropPassword();
-        _masterToken = null;
+        _master.Forget();
         MasterBusy = false;
         ShowError(HookFailures.ChatCommError);
     }
 
     private void ApplyMaster(ChatRoomsSnapshot chat)
     {
-        if (_masterToken is null || chat.MasterToken != _masterToken || chat.MasterState is "" or "working") return;
-        _masterToken = null;
+        if (!_master.Running || chat.MasterJob.Token != _master.Token || chat.MasterJob.State is "" or "working") return;
+        _master.Forget();
         MasterBusy = false;
         var name = _masterName ?? "";
-        if (chat.MasterState == "done")
+        if (chat.MasterJob.State == "done")
         {
             if (_masterKind == MasterJob.Kick) _dialogs.Info(DialogTitle, "Kicked.");
             else if (_masterKind == MasterJob.Master) _dialogs.Info(DialogTitle, "New room master designated.");
             return;
         }
         if (_masterKind == MasterJob.Password) _dropPassword();
-        ShowError(chat.MasterState switch
+        ShowError(chat.MasterJob.State switch
         {
             "failed:left" => HookFailures.ChatRooms.AlreadyLeft(name),
             "failed:not master" => HookFailures.ChatRooms.MasterOnly,
@@ -423,7 +417,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _gate.Reset();
         _tick.Stop();
         SendNote = "";
-        _masterToken = null;
+        _master.Forget();
         MasterBusy = false;
         IsMaster = false;
         OnPropertyChanged(nameof(CanMaster));
@@ -510,11 +504,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void ApplyZones(ChatRoomsSnapshot chat)
     {
-        if (_zonesToken is null || chat.ZonesToken != _zonesToken) return;
-        if (chat.ZonesState == "searching") return;
+        if (_zonesToken is null || chat.ZonesJob.Token != _zonesToken) return;
+        if (chat.ZonesJob.State == "searching") return;
         _zonesToken = null;
         ZonesNote = "";
-        if (chat.ZonesState != "done")
+        if (chat.ZonesJob.State != "done")
         {
             Unavailable = HookFailures.ChatRooms.NotNow;
             return;
@@ -535,14 +529,14 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void ApplyRooms(ChatRoomsSnapshot chat)
     {
-        if (_roomsToken is null || chat.RoomsToken != _roomsToken || chat.RoomsState == "searching") return;
+        if (_roomsToken is null || chat.RoomsJob.Token != _roomsToken || chat.RoomsJob.State == "searching") return;
         _roomsToken = null;
         Searching = false;
         Rooms.Clear();
-        if (chat.RoomsState == "failed:no chat") { Unavailable = HookFailures.ChatRooms.NotNow; return; }
-        if (chat.RoomsState != "done")
+        if (chat.RoomsJob.State == "failed:no chat") { Unavailable = HookFailures.ChatRooms.NotNow; return; }
+        if (chat.RoomsJob.State != "done")
         {
-            RoomsNote = HookFailures.ChatRooms.RoomListFailed(SocialRequests.FailReason(chat.RoomsState));
+            RoomsNote = HookFailures.ChatRooms.RoomListFailed(SocialRequests.FailReason(chat.RoomsJob.State));
             return;
         }
         Offset = chat.Offset;
@@ -558,9 +552,9 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void ApplyRoom(ChatRoomsSnapshot chat)
     {
-        if (_joinToken is null || chat.RoomToken != _joinToken) return;
+        if (_joinToken is null || chat.RoomJob.Token != _joinToken) return;
         var title = _roomTitle;
-        switch (chat.RoomState)
+        switch (chat.RoomJob.State)
         {
             case "entering":
                 return;
@@ -613,10 +607,10 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 BackToLobby();
                 return;
         }
-        if (!chat.RoomState.StartsWith("failed", StringComparison.Ordinal)) return;
+        if (!chat.RoomJob.State.StartsWith("failed", StringComparison.Ordinal)) return;
         // the hook deletes the password entry once it knows there's one, this is in case it never got that far
         if (_joinLocked) _dropPassword();
-        var why = chat.RoomState switch
+        var why = chat.RoomJob.State switch
         {
             "failed:refused" => HookFailures.ChatRooms.Refused,
             "failed:password" => HookFailures.ChatRooms.WrongPassword,
@@ -629,7 +623,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
             _ => HookFailures.ChatCommError,
         };
         BackToLobby();
-        if (chat.RoomState == "failed:no chat") Unavailable = HookFailures.ChatRooms.NotNow;
+        if (chat.RoomJob.State == "failed:no chat") Unavailable = HookFailures.ChatRooms.NotNow;
         ShowError(why);
     }
 
@@ -689,7 +683,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private void ApplySend(ChatRoomsSnapshot chat)
     {
-        if (_gate.Settle(chat.SendToken, chat.SendState, Now) is { } done) FinishSend(done.State, done.Text);
+        if (_gate.Settle(chat.SendJob.Token, chat.SendJob.State, Now) is { } done) FinishSend(done.State, done.Text);
     }
 
     private void FinishSend(string done, string text)

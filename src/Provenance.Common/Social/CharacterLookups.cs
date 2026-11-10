@@ -6,18 +6,15 @@ namespace Provenance.Common.Social;
 // waits for that friend's next presence change, never a timer
 public sealed class CharacterLookups(CharacterNames names)
 {
-    public static readonly TimeSpan Gap = TimeSpan.FromSeconds(3);
-    // polcore fails a read at 100 secs
-    public static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(130);
-
     private Dictionary<string, string> _seen = new(StringComparer.Ordinal);
     private readonly List<PolFriendGame> _queue = new();
     // ones given up on, in case the hook took them late and still answers
     private readonly List<(string Token, PolFriendGame Game)> _late = new();
-    private DateTime _last = DateTime.MinValue, _askedAt;
+    private readonly HookJobWatch _watch = new();
+    private DateTime _last = DateTime.MinValue;
 
     public PolFriendGame? Asking { get; private set; }
-    public string Token { get; private set; } = "";
+    public string Token => _watch.Token ?? "";
     public int Queued => _queue.Count;
 
     // an empty list says nothing about who's on what (the hook hasn't loaded it yet), so it changes nothing
@@ -42,20 +39,20 @@ public sealed class CharacterLookups(CharacterNames names)
     // the one to ask the hook for now, if any. Anyone who's left that character meanwhile drops out of the queue
     public PolFriendGame? Next(DateTime now)
     {
-        if (Asking is { } stuck && now - _askedAt > GiveUp)
+        if (Asking is { } stuck && _watch.Overdue(now))
         {
             _late.Add((Token, stuck));
             if (_late.Count > 8) _late.RemoveAt(0);
             Asking = null;
         }
-        if (Asking is not null || now - _last < Gap) return null;
+        if (Asking is not null || now - _last < HookLimits.ProfileServerGap) return null;
         names.Refresh();
         _queue.RemoveAll(q => names.Get(q.Character.Key) is not null || !_seen.ContainsValue(q.Character.Key));
         if (_queue.Count == 0) return null;
         Asking = _queue[0];
         _queue.RemoveAt(0);
-        Token = HookFiles.NewToken();
-        _askedAt = _last = now;
+        _watch.Begin(HookLimits.CharacterLookup, now);
+        _last = now;
         return Asking;
     }
 
@@ -81,7 +78,7 @@ public sealed class CharacterLookups(CharacterNames names)
     // the give-up clock only starts once the hook's taken it, it waits while the hook's busy with another read
     public void Waiting(string hookToken, bool hookBusy, DateTime now)
     {
-        if (Asking is not null && hookToken != Token && hookBusy) _askedAt = now;
+        if (Asking is not null) _watch.WaitingTurn(hookToken, hookBusy, now);
     }
 
     // a new session. Who's on what carries over, so a failed one still waits for a real change
@@ -90,6 +87,6 @@ public sealed class CharacterLookups(CharacterNames names)
         _queue.Clear();
         _late.Clear();
         Asking = null;
-        Token = "";
+        _watch.Forget();
     }
 }

@@ -48,22 +48,20 @@ public static class SocialSnapshotFiles
                     new PolBlocked((int)Long(x, "index"), Str(x, "name"), Str(x, "key"), Bool(x, "allHandles"))),
                 PictureJob = Job(root, "pic"),
                 SearchJob = Job(root, "search"),
-                SearchResults = Arr(search, "results", h => new PolSearchHit((int)Long(h, "index"),
-                    Str(h, "name"), (int)Long(h, "pic"), Str(h, "key"), Bool(h, "friend"))
-                    { IsMe = Bool(h, "me"), Handle = Str(h, "handle"), World = Str(h, "world") }),
-                SearchKind = searched ? FriendSearch.FromWire(Str(search, "kind")) : FriendSearchKind.Handle,
-                SearchTotal = searched ? Int(search, "total", 0) : 0,
-                SearchTooMany = searched && Bool(search, "tooMany"),
+                Search = new SearchResult(searched ? FriendSearch.FromWire(Str(search, "kind")) : FriendSearchKind.Handle,
+                    searched ? Int(search, "total", 0) : 0, searched && Bool(search, "tooMany"),
+                    Arr(search, "results", h => new PolSearchHit((int)Long(h, "index"),
+                        Str(h, "name"), (int)Long(h, "pic"), Str(h, "key"), Bool(h, "friend"))
+                        { IsMe = Bool(h, "me"), Handle = Str(h, "handle"), World = Str(h, "world") })),
                 ProfileJob = profileJob,
                 Profile = profileJob.State == "done" ? ReadProfile(Obj(root, "profile")) : null,
                 GroupList = Arr(root, "groupList", ReadGroup),
                 GroupJob = Job(root, "group"),
                 MeJob = Job(root, "me"),
                 XiJob = Job(root, "xi"),
-                XiKey = xi.ValueKind == JsonValueKind.Object ? Str(xi, "key") : "",
-                XiLevel = xi.ValueKind == JsonValueKind.Object ? (PrivacyLevel)Int(xi, "level", 0) : PrivacyLevel.Keep,
-                XiName = xi.ValueKind == JsonValueKind.Object ? Str(xi, "name") : "",
-                XiWorldName = xi.ValueKind == JsonValueKind.Object ? Str(xi, "worldName") : "",
+                Xi = xi.ValueKind == JsonValueKind.Object
+                    ? new XiProfile(Str(xi, "key"), (PrivacyLevel)Int(xi, "level", 0), Str(xi, "name"), Str(xi, "worldName"))
+                    : XiProfile.None,
                 CharacterJob = Job(root, "character"),
                 Character = ReadCharacter(Obj(root, "character")),
                 FfxiProfileJob = ffxiJob,
@@ -144,9 +142,6 @@ public static class SocialSnapshotFiles
             ? new PolCharacterLookup(ReadCharacterId(c), Str(c, "name").Trim(),
                                      FieldState(c, "nameState"), (PrivacyLevel)Long(c, "level"), Str(c, "worldName"))
             : null;
-
-    private static HookJob Job(JsonElement e, string n) =>
-        Obj(e, n) is { ValueKind: JsonValueKind.Object } o ? new HookJob(Str(o, "token"), Str(o, "state")) : HookJob.None;
 
     public static PolStoredLines? ParseStore(string json)
     {

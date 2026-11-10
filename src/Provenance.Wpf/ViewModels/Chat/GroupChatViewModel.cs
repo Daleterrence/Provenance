@@ -31,19 +31,15 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public const string DialogTitle = "Group Chat";
     public const string ExitQuestion = "Exit Group Chat?";
     public const string FilteredNote = "Group chat can't send some of those characters, so they were left out.";
-    // a little past the hook's own 30 s, for a join or a line it never answered
-    internal static readonly TimeSpan JoinGiveUp = TimeSpan.FromSeconds(35);
-    internal static readonly TimeSpan SendGiveUp = TimeSpan.FromSeconds(35);
 
     private readonly ISocialSession _social;
     private readonly IDialogs _dialogs;
     private readonly Func<bool> _timesWanted, _flashWanted;
-    private readonly ChatSendGate _gate = new(SendGiveUp);
+    private readonly ChatSendGate _gate = new(HookLimits.GroupChatLine);
     private DateTime Now => _social.Time.GetUtcNow().UtcDateTime;
     private GroupChatLog? _log;
-    private string? _token;
+    private readonly HookJobWatch _join = new();
     private long _seenSeq;
-    private DateTime _joinAt;
     private string? _sentLine;
     private string? _quietlyEnded, _goneQuietly;
     // a chat that's ended or been switched away from: its last lines can still land in the hook's file after that
@@ -136,9 +132,8 @@ public sealed partial class GroupChatViewModel : ObservableObject
             _tailGroup = null;
         }
         _log?.Flush();
-        _token = token;
         _seenSeq = seen;
-        _joinAt = Now;
+        _join.Begin(token, HookLimits.GroupChatJoin, Now);
         _quietlyEnded = _goneQuietly = null;
         _gate.Reset();
         GroupId = group.Id;
@@ -204,7 +199,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         if (_social.SessionPid is not { } pid) return;
         bool withdrawn = Current == Phase.Joining &&
                          HookFiles.Withdraw(pid, HookContract.Requests.GroupChatJoin) == Withdrawal.Withdrawn;
-        if (!withdrawn) GroupChatFiles.Leave(pid, HookFiles.NewToken(), Current == Phase.Joining ? _token ?? "" : "");
+        if (!withdrawn) GroupChatFiles.Leave(pid, HookFiles.NewToken(), Current == Phase.Joining ? _join.Token ?? "" : "");
     }
 
     // the session's over (logged out, POL closed), nothing to send
@@ -243,7 +238,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
             _quietlyEnded = null;
             return true;
         }
-        if (!Open || !SameGroup(groupId) || snap.GroupChat is not { State: "gone" } gc || gc.Token != _token) return false;
+        if (!Open || !SameGroup(groupId) || snap.GroupChat is not { Job.State: "gone" } gc || gc.Job.Token != _join.Token) return false;
         _goneQuietly = groupId;
         return true;
     }
@@ -251,7 +246,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     private void End(string? message)
     {
         _log?.Flush();
-        _token = null;
+        _join.Forget();
         _gate.Reset();
         _sentLine = null;
         Current = Phase.Out;
@@ -307,7 +302,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         SendCommand.NotifyCanExecuteChanged();
         _log?.SaveIfDue(now);
         if (_gate.Expire(now) is { } done) FinishSend(done.State, done.Text);
-        if (Current != Phase.Joining || now - _joinAt < JoinGiveUp) return;
+        if (Current != Phase.Joining || _join.Elapsed(now) < HookLimits.GroupChatJoin) return;
         CallOff();
         End(_social.ViewerText(0x3eb8, HookFailures.GroupChat.Busy));
     }
@@ -349,12 +344,12 @@ public sealed partial class GroupChatViewModel : ObservableObject
     private void OnSnapshot(PolSocialSnapshot snap)
     {
         ReadTail();
-        if (snap.GroupChat is not { } gc || _token is null || gc.Token != _token)
+        if (snap.GroupChat is not { } gc || !_join.Running || gc.Job.Token != _join.Token)
         {
             if (Open && snap.GroupList.FirstOrDefault(g => SameGroup(g.Id)) is { } still) RefreshMembers(still);
             return;
         }
-        switch (gc.State)
+        switch (gc.Job.State)
         {
             case "joining":
                 break;
@@ -382,13 +377,13 @@ public sealed partial class GroupChatViewModel : ObservableObject
                     End(null);
                     return;
                 }
-                End(gc.State == "gone"
+                End(gc.Job.State == "gone"
                     ? _social.ViewerText(0x3ebb, "You are not a member of the group \"%s.\" Exiting Group Chat.").Replace("%s", GroupName)
                     : _social.ViewerText(0x3ebc, "You have been removed from the group \"%s.\" Exiting Group Chat.").Replace("%s", GroupName));
                 return;
             default:
-                if (!gc.State.StartsWith("failed", StringComparison.Ordinal)) break;
-                End(gc.State switch
+                if (!gc.Job.State.StartsWith("failed", StringComparison.Ordinal)) break;
+                End(gc.Job.State switch
                 {
                     "failed:busy" => _social.ViewerText(0x3eb8, HookFailures.GroupChat.Busy),
                     "failed:not a member" or "failed:no such group" => _social.ViewerText(0x3eb7, HookFailures.GroupChat.NotMember),
@@ -423,7 +418,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void ApplySend(GroupChatSnapshot gc)
     {
-        if (_gate.Settle(gc.SendToken, gc.SendState, Now) is { } done) FinishSend(done.State, done.Text);
+        if (_gate.Settle(gc.SendJob.Token, gc.SendJob.State, Now) is { } done) FinishSend(done.State, done.Text);
     }
 
     private void FinishSend(string done, string text)
