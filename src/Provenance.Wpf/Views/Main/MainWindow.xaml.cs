@@ -49,7 +49,7 @@ public partial class MainWindow : AppWindow
 
     private bool TryReuseFromTray()
     {
-        if (Vm is not { } vm || !TrayCopy.Reusable(_tray is { Visible: true }, !IsVisible, vm.LoggedIn, vm.IsLaunching || vm.LoggingIn, vm.Multi.Running))
+        if (Vm is not { } vm || !TrayCopy.Reusable(_tray is { Visible: true }, !IsVisible, vm.Session.LoggedIn, vm.Session.Launching, vm.Session.InMultiRun))
             return false;
         // queued, the other copy's stuck inside SendMessage until this returns and COM calls fail while it is
         Dispatcher.InvokeAsync(ShowFromTray);

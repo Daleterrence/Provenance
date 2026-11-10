@@ -6,6 +6,7 @@ using Provenance.Common.Hook;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Chat;
+using Provenance.Wpf.ViewModels.Main;
 
 namespace Provenance.Wpf.ViewModels.Shared;
 
@@ -34,6 +35,8 @@ public partial class HandlesViewModel : ObservableObject
     private readonly IDialogs _dialogs;
     private readonly Func<int?> _pid;
     private readonly Func<int, ImageSource?>? _picture;
+    private readonly SessionState? _session;
+    private readonly Func<PolSocialSnapshot>? _snapshot;
     private PolSocialSnapshot _snap = PolSocialSnapshot.Empty;
     private string? _token;
     internal DateTime _at;
@@ -43,11 +46,15 @@ public partial class HandlesViewModel : ObservableObject
     private bool _wasReadOnly;
     private Action<string?>? _after;
 
-    public HandlesViewModel(IDialogs dialogs, Func<int?> pid, Func<int, ImageSource?>? picture = null)
+    public HandlesViewModel(IDialogs dialogs, Func<int?> pid, Func<int, ImageSource?>? picture = null, SessionState? session = null,
+                            Func<PolSocialSnapshot>? snapshot = null)
     {
         _dialogs = dialogs;
         _pid = pid;
         _picture = picture;
+        _session = session;
+        _snapshot = snapshot;
+        if (session is not null) session.PhaseChanged += Refresh;
         Note.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(StatusLine.Text)) _noteSeen = _open; };
     }
 
@@ -74,6 +81,15 @@ public partial class HandlesViewModel : ObservableObject
 
     // why a switch can't go right now (something open that's bound to the active handle), or null
     public Func<string?>? SwitchBlocked { get; set; }
+
+    // a multi-account run's lean sessions take no requests
+    public void Refresh()
+    {
+        if (_session is not { } session || _snapshot is null) return;
+        bool on = session.LoggedIn && session.Pid is not null;
+        Update(on ? _snapshot() : null, on,
+               session.GameRunning ? HandleList.ReadOnlyText : session.InMultiRun ? HandleList.MultiRunText : null);
+    }
 
     // readOnly is the line saying why, null when changes can be made
     public void Update(PolSocialSnapshot? snap, bool loggedIn, string? readOnly)

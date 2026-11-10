@@ -179,7 +179,7 @@
                             <Grid ColumnDefinitions="Auto,*">
                                 <TextBlock Text="{Binding AccountName}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center" />
-                                <local:EditProfileButton Grid.Column="1" HorizontalAlignment="Left" Margin="6,0,0,0" IsEnabled="{Binding Connected}" />
+                                <local:EditProfileButton Grid.Column="1" HorizontalAlignment="Left" Margin="6,0,0,0" IsEnabled="{Binding LoggedIn}" />
                             </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
                                 <ComboBox Style="{StaticResource StatusPicker}" VerticalAlignment="Center"

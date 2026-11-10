@@ -18,8 +18,7 @@ namespace Provenance.Wpf.ViewModels.Main;
 
 // what a run needs from the main window's own login and Play code
 internal sealed record MultiRunLinks(
-    Func<bool> LoggedInOrLaunching,
-    Action StopSocialPoll,
+    Action<SessionPhase> SetPhase,
     Func<bool> EnsureMemberAgreement,
     Func<string?> PromptHandleName,
     Func<(string Ffxi, string Viewer, PolRegion Region)?> GameFolders,
@@ -30,30 +29,29 @@ internal sealed record MultiRunLinks(
 public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 {
     private readonly IDialogs _dialogs;
-    private readonly IWindowManager _windows;
     private readonly ISettingsService _settings;
     private readonly ICredentialService _credentials;
     private readonly PolSession _pol;
     private readonly UiThread _ui;
     private readonly AccountsViewModel _accounts;
+    private readonly SessionState _session;
     private readonly MultiRunLinks _links;
 
     public event Action? RequestShow;
     public event Action? RequestExit;
-    // the accounts list or a run's state changed, for an open Settings page
-    public event Action? Changed;
 
-    internal MultiRunViewModel(IDialogs dialogs, IWindowManager windows, ISettingsService settings, ICredentialService credentials,
-                               PolSession pol, UiThread ui, AccountsViewModel accounts, MultiRunLinks links)
+    internal MultiRunViewModel(IDialogs dialogs, ISettingsService settings, ICredentialService credentials,
+                               PolSession pol, UiThread ui, AccountsViewModel accounts, SessionState session, MultiRunLinks links)
     {
         _dialogs = dialogs;
-        _windows = windows;
         _settings = settings;
         _credentials = credentials;
         _pol = pol;
         _ui = ui;
         _accounts = accounts;
+        _session = session;
         _links = links;
+        session.PhaseChanged += OnPhaseChanged;
     }
 
     // each progress report restarts the clock, so the first account can download an update of any size
@@ -66,15 +64,25 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
     public bool HasAccounts => Running || (AccountCount > 0 && MultiPlatformChosen());
     public string StartAllText => Stopping ? "STOPPING..." : Running ? "STOP ALL ACCOUNTS" : $"START ALL ACCOUNTS ({AccountCount})";
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StartAllText), nameof(HasAccounts))]
-    [NotifyCanExecuteChangedFor(nameof(StartAllAccountsCommand))]
-    private bool _running;
+    public bool Running => _session.InMultiRun;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StartAllText))]
-    [NotifyCanExecuteChangedFor(nameof(StartAllAccountsCommand))]
-    private bool _stopping;
+    public bool Stopping => _session.Phase == SessionPhase.MultiStopping;
+
+    private bool _runningShown, _stoppingShown;
+
+    private void OnPhaseChanged()
+    {
+        bool running = Running, stopping = Stopping;
+        if (running == _runningShown && stopping == _stoppingShown) return;
+        bool runningChanged = running != _runningShown, stoppingChanged = stopping != _stoppingShown;
+        _runningShown = running;
+        _stoppingShown = stopping;
+        if (runningChanged) OnPropertyChanged(nameof(Running));
+        if (stoppingChanged) OnPropertyChanged(nameof(Stopping));
+        OnPropertyChanged(nameof(StartAllText));
+        OnPropertyChanged(nameof(HasAccounts));
+        StartAllAccountsCommand.NotifyCanExecuteChanged();
+    }
 
     [ObservableProperty] private string _status = "";
 
@@ -99,14 +107,14 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
     private bool MultiPlatformChosen() =>
         _pol.Platform is ThirdPartyHook.Windower or ThirdPartyHook.Ashita;
 
-    private bool CanStartOrStop() => Running ? !Stopping : !_links.LoggedInOrLaunching() && _pol.Pid is null;
+    private bool CanStartOrStop() => Running ? !Stopping : !_session.Launching && !_session.LoggedIn && _pol.Pid is null;
 
     // concurrent, so the same button stays clickable as the stop while a run goes
     [RelayCommand(CanExecute = nameof(CanStartOrStop), AllowConcurrentExecutions = true)]
     private async Task StartAllAccountsAsync()
     {
         if (Running) { StopAllAccounts(); return; }
-        if (_links.LoggedInOrLaunching() || _pol.Pid is not null) return;
+        if (_session.Launching || _session.LoggedIn || _pol.Pid is not null) return;
         if (!MultiPlatformChosen())
         {
             Log.Warning("Multi-account mode: not started, Windower or Ashita is not chosen");
@@ -131,10 +139,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         _exitAfterStop = false;
         _runBackedUp = false;
         _lateGameFailures.Clear();
-        // a friends window left open mustn't write requests to the run's lean sessions
-        _links.StopSocialPoll();
-        _windows.CloseSessionWindows();
-        Running = true;
+        _links.SetPhase(SessionPhase.MultiRun);
         _cts = new CancellationTokenSource();
         var options = new MultiRunOptions(_settings.Current.MultiContinueOnError, _settings.Current.MultiCloseWhenFinished);
         var status = new Progress<string>(SetRunStatus);
@@ -149,8 +154,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         }
         finally
         {
-            Running = false;
-            Stopping = false;
+            _links.SetPhase(SessionPhase.LoggedOut);
             Status = "";
             _cts.Dispose();
             _cts = null;
@@ -158,7 +162,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             _runAccounts = [];
             _runHookProfiles = new();
             _runPlatform = ThirdPartyHook.None;
-            Changed?.Invoke();
+            _session.NoteRunChanged();
         }
         var failures = result?.Failures ?? [];
         Log.Information("Multi-account mode: finished, {Failures} failure(s), stopped {Stopped}", failures.Count, result?.Stopped);
@@ -190,14 +194,14 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             if (failure.Kind == AccountFailureKind.Credential) e.CredentialsRefused = true;
         });
         Refresh();
-        Changed?.Invoke();
+        _session.NoteRunChanged();
     }
 
     public void StopAllAccounts()
     {
         if (!Running || Stopping || _cts is null) return;
         Log.Warning("Multi-account mode: stop");
-        Stopping = true;
+        _links.SetPhase(SessionPhase.MultiStopping);
         Status = "Stopping...";
         _cts.Cancel();
     }

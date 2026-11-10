@@ -88,7 +88,7 @@ public sealed partial class SocialSearch : ObservableObject
     {
         var value = text.Trim();
         var kind = Kind;
-        if (Busy || !_social.Connected || _social.SessionPid is not { } pid) return;
+        if (Busy || !_social.LoggedIn || _social.SessionPid is not { } pid) return;
         if (_social.GameRunning)
         {
             Note.Fail(SocialViewModel.GameRunningNote);

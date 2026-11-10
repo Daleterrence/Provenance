@@ -12,6 +12,7 @@ using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Common.PolFormat;
 using Provenance.Wpf.Services;
+using Provenance.Wpf.ViewModels.Main;
 using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Settings;
@@ -31,18 +32,18 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private readonly FeedService? _feeds;
     private readonly SettingsContext _context;
-    private readonly Func<string?>? _largeAddressAwareBlocked;
+    private readonly SessionState? _session;
     private readonly Func<IDisposable>? _holdPrestarts;
     private readonly Func<bool, RegistryKey?>? _gameKey;
     private bool _gameReady;
 
-    public SettingsViewModel(IDialogs dialogs, ISettingsService settings, FeedService? feeds = null, Func<bool>? multiRunning = null,
-                             Func<IDisposable>? holdPrestarts = null, Func<string?>? largeAddressAwareBlocked = null,
-                             Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null, Func<bool>? loggedIn = null,
+    public SettingsViewModel(IDialogs dialogs, ISettingsService settings, FeedService? feeds = null, SessionState? session = null,
+                             Func<IDisposable>? holdPrestarts = null, Func<bool, RegistryKey?>? gameKey = null, Action? stopPrestart = null,
                              HandlesViewModel? handles = null, Func<bool>? gameRunning = null,
                              Func<string, string, WindowerUpdater>? windowerUpdater = null)
     {
-        _context = new SettingsContext(multiRunning ?? (() => false), loggedIn ?? (() => false), gameRunning ?? PolUpdates.GameRunning);
+        _session = session;
+        _context = new SettingsContext(() => session?.InMultiRun ?? false, () => session?.PolInUse ?? false, gameRunning ?? PolUpdates.GameRunning);
         _dialogs = dialogs;
         Handles = handles ?? new HandlesViewModel(dialogs, () => null);
         _gameKey = gameKey;
@@ -54,7 +55,6 @@ public partial class SettingsViewModel : ObservableObject
         Hooks.Saved += SyncGame;
         Hooks.ProfileEdited += RetargetGameAfterEdit;
         Ashita.Renamed += AshitaRenamed;
-        _largeAddressAwareBlocked = largeAddressAwareBlocked;
         _holdPrestarts = holdPrestarts;
         _feeds = feeds;
         _feedRegionIndex = Math.Max(0, Array.IndexOf(FeedRegionCodes,
@@ -86,6 +86,11 @@ public partial class SettingsViewModel : ObservableObject
         Backups = new BackupSettings(dialogs, settings, _context);
         Hooks.Load();
         Multi.Load();
+        if (session is not null)
+        {
+            session.PhaseChanged += OnPhaseChanged;
+            session.RunChanged += MultiRunChanged;
+        }
         Game = new GameSettingsViewModel(dialogs, region, GameStoreForSelection(), _context.GameRunning);
         _gameReady = true;
         Addons = new AddonsPluginsViewModel(settings, Hooks.PickedAddonsTarget);
@@ -197,7 +202,7 @@ public partial class SettingsViewModel : ObservableObject
     internal Task LargeAddressAwareChange { get; private set; } = Task.CompletedTask;
 
     private LargeAddressAwareSwitch.Target LargeAddressAwareTarget() =>
-        LargeAddressAwareTargetForTest ?? LargeAddressAwareSwitch.For(_settings.DetectedRegion, _largeAddressAwareBlocked);
+        LargeAddressAwareTargetForTest ?? LargeAddressAwareSwitch.For(_settings.DetectedRegion, _session is { } s ? s.LargeAddressAwareBlocked : null);
 
     // hashes pol.exe and polcore.dll, so it's off the UI thread. A newer read or a change drops an older one
     public async Task ReadLargeAddressAwareAsync()
@@ -262,6 +267,15 @@ public partial class SettingsViewModel : ObservableObject
         LargeAddressAwareAvailable = after.Available;
         LargeAddressAwareStatus = after.Available && outcome == LargeAddressAwareSwitch.Outcome.Denied
             ? LargeAddressAwareSwitch.DeniedText : after.Note ?? "";
+    }
+
+    private void OnPhaseChanged() => _ = ReadLargeAddressAwareAsync();
+
+    public void Detach()
+    {
+        if (_session is null) return;
+        _session.PhaseChanged -= OnPhaseChanged;
+        _session.RunChanged -= MultiRunChanged;
     }
 
     public void MultiRunChanged()

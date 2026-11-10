@@ -13,6 +13,7 @@ using Provenance.Common.Settings;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Chat;
+using Provenance.Wpf.ViewModels.Main;
 using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
@@ -24,12 +25,15 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private readonly PolSession _pol;
     private readonly AvatarService _avatars;
     private readonly ISettingsService _settings;
+    private readonly SessionState _session;
     private ChatStore? _chat;
     private PolSocialSnapshot _last = PolSocialSnapshot.Empty;
     private bool _friendsDirty = true;
 
-    public SocialViewModel(IDialogs dialogs, IWindowManager windows, PolSession pol, AvatarService avatars, ISettingsService settings)
+    public SocialViewModel(IDialogs dialogs, IWindowManager windows, PolSession pol, AvatarService avatars, ISettingsService settings,
+                           SessionState session)
     {
+        _session = session;
         _dialogs = dialogs;
         _windows = windows;
         _pol = pol;
@@ -56,6 +60,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             Groups.Rebuild(_last);
             OnPropertyChanged(nameof(GroupChatUnread));
         };
+        session.PhaseChanged += OnPhaseChanged;
     }
 
     public SocialSearch Search { get; }
@@ -75,7 +80,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     [ObservableProperty] private string _myComment = "";
     [ObservableProperty] private bool _hasBlocked;
     [ObservableProperty] private string? _accountNotice;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanEdit))] private bool _connected;
     [ObservableProperty] private bool _messagesUnavailable;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanPlay))] private string? _playBlockedReason;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasUnread))]
@@ -91,7 +95,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public bool HasPendingAnswers => PendingAnswers > 0;
     public bool CanPlay => PlayBlockedReason is null;
     public string Summary => OnlineCount switch { 0 => "No friends online", 1 => "1 friend online", var n => $"{n} friends online" };
-    public bool NoFriends => Connected && Friends.Count == 0;
+    public bool NoFriends => LoggedIn && Friends.Count == 0;
+    public bool LoggedIn => _session.LoggedIn;
     public string NothingSelected => NoFriends ? NoFriendsText
                                                : "Select a friend to see your messages.";
     private const string NoFriendsText = "You don't have any friends on this PlayOnline account yet.";
@@ -172,16 +177,25 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public bool NoSelection => SelectedFriend == null;
 
     // from the Play press till the game closes nothing new goes to the hook, answers already asked for still land
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanEdit), nameof(StatusEditable))]
-    private bool _gameRunning;
+    public bool GameRunning => _session.GameRunning;
     public const string GameRunningNote = "That has to wait till FINAL FANTASY XI is closed.";
 
-    partial void OnGameRunningChanged(bool value)
+    private bool _gameRunningShown;
+
+    private void OnPhaseChanged()
     {
-        StatusNote = value ? GameRunningNote : "";
+        OnPropertyChanged(nameof(LoggedIn));
+        OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(CanGroupChat));
+        bool running = _session.GameRunning;
+        if (running == _gameRunningShown) return;
+        _gameRunningShown = running;
+        StatusNote = running ? GameRunningNote : "";
         OnPropertyChanged(nameof(CanGroupChat));
         Messages.StateChanged();
+        OnPropertyChanged(nameof(GameRunning));
+        OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(StatusEditable));
     }
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowFriends), nameof(FriendsTabVisible), nameof(GroupsTabVisible))]
@@ -194,10 +208,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     [RelayCommand] private void ShowGroupsTab() => ShowGroups = true;
 
     // more than one account running means lean sessions, which have no chat at all
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanGroupChat))] private bool _groupChatBlocked;
-    public bool CanGroupChat => Connected && WriteBlockedNote is null && !GroupChatBlocked;
-
-    partial void OnConnectedChanged(bool value) => OnPropertyChanged(nameof(CanGroupChat));
+    public bool CanGroupChat => LoggedIn && WriteBlockedNote is null && !_session.InMultiRun;
 
     // the Groups tab's Group Chat button. The main window asks the handle question and opens the window
     public event Action<GroupsViewModel.GroupItem>? GroupChatRequested;
@@ -343,8 +354,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         Search.Reset();
         Messages.Reset();
         Groups.Reset();
-        Connected = false;
-        GameRunning = false;
         EditBusy = false;
         ProfilePictureSaving = false;
         EditNote.Clear();
@@ -445,7 +454,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         PlayBlockedReason = PolAccountNotices.PlayBlockedReason(snap);
         AccountNotice = snap.BadPassword ? PolAccountNotices.BadPassword
                       : notice is { Blocks: false } ? $"{notice.Text} ({notice.Code})" : null;
-        Connected = true;
         MyComment = snap.MyComment;
         static string BlockedId(PolBlocked x) => $"{x.Index}/{x.Key}/{x.Name}";
         if (!Blocked.Select(BlockedId).SequenceEqual(snap.Blocked.Select(BlockedId)))
@@ -563,7 +571,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public string EditStatus => EditBusy ? "Saving the change to PlayOnline..."
                               : ProfilePictureSaving ? "Saving your profile picture to PlayOnline..." : EditNote.Text;
     public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote.Text);
-    public bool CanEdit => Connected && !EditBusy && _pol.Pid != null && WriteBlockedNote is null;
+    public bool CanEdit => LoggedIn && !EditBusy && _pol.Pid != null && WriteBlockedNote is null;
 
     private string? _editToken;
     private DateTime _editAt;
@@ -689,7 +697,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public void SaveProfilePicture(int picId)
     {
-        if (ProfilePictureSaving || !Connected || _pol.Pid is not { } pid) return;
+        if (ProfilePictureSaving || !LoggedIn || _pol.Pid is not { } pid) return;
         if (WriteBlockedNote is { } blocked)
         {
             EditNote.Fail(blocked);

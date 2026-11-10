@@ -44,7 +44,21 @@ public sealed class PolSession : IDisposable
         Records = new SessionRecords(_pol);
     }
 
-    public int? Pid { get; internal set; }
+    private int? _pid;
+
+    public int? Pid
+    {
+        get => _pid;
+        internal set
+        {
+            if (_pid == value) return;
+            _pid = value;
+            PidChanged?.Invoke();
+        }
+    }
+
+    // raised on whichever thread changed it, often under the session's lock, so a handler just hands the work on
+    public event Action? PidChanged;
 
     public SessionRecords Records { get; }
 

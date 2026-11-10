@@ -30,32 +30,27 @@ public partial class RepairButtonViewModel : ObservableObject
     private readonly IWindowManager _windows;
     private readonly ISettingsService _settings;
     private readonly PolSession _pol;
+    private readonly SessionState _session;
     private readonly Func<bool> _windowShown;
-    private readonly Func<bool> _loggedInOrLaunching;
-    private readonly Func<bool> _multiRunning;
     private readonly Action _installChanged;
-    private readonly Action _largeAddressAwareChanged;
 
     internal DispatcherTimer? _repairProbe;
-    internal bool SessionEnding { get; set; }
     private bool _probing;
 
     public RepairButtonViewModel(IDialogs dialogs, IWindowManager windows, ISettingsService settings, PolSession pol,
-                                 Func<bool> windowShown, Func<bool> loggedInOrLaunching, Func<bool> multiRunning,
-                                 Action installChanged, Action largeAddressAwareChanged)
+                                 SessionState session, Func<bool> windowShown, Action installChanged)
     {
         _dialogs = dialogs;
         _windows = windows;
         _settings = settings;
         _pol = pol;
+        _session = session;
         _windowShown = windowShown;
-        _loggedInOrLaunching = loggedInOrLaunching;
-        _multiRunning = multiRunning;
         _installChanged = installChanged;
-        _largeAddressAwareChanged = largeAddressAwareChanged;
         _repairProbe = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _repairProbe.Tick += async (_, _) => await ProbeAsync();
         _repairProbe.Start();
+        session.PhaseChanged += Refresh;
     }
 
     // while the repair window's up
@@ -81,8 +76,8 @@ public partial class RepairButtonViewModel : ObservableObject
     public string? BlockedReason =>
         !Available ? null
         : NotYet is { } notYet ? notYet
-        : _pol.Pid is not null || SessionEnding ? "Repair can start once you're logged out of PlayOnline."
-        : _multiRunning() ? "Repair can start once Provenance has finished starting your accounts."
+        : _session.InMultiRun ? "Repair can start once Provenance has finished starting your accounts."
+        : _pol.Pid is not null || _session.Phase == SessionPhase.LoggingOut ? "Repair can start once you're logged out of PlayOnline."
         : BusyReason;
 
     public string Tooltip => BlockedReason ?? Hint;
@@ -109,10 +104,9 @@ public partial class RepairButtonViewModel : ObservableObject
         OnPropertyChanged(nameof(BlockedReason));
         OnPropertyChanged(nameof(Tooltip));
         StartCommand.NotifyCanExecuteChanged();
-        _largeAddressAwareChanged();
     }
 
-    private bool CanStart() => Available && !Repairing && !_loggedInOrLaunching() && BlockedReason is null;
+    private bool CanStart() => Available && !Repairing && !_session.Launching && !_session.LoggedIn && BlockedReason is null;
 
     [RelayCommand(CanExecute = nameof(CanStart))]
     private void Start()
@@ -136,7 +130,7 @@ public partial class RepairButtonViewModel : ObservableObject
     public async Task ProbeAsync()
     {
         // a multi-account run holds the update lock in this copy, which isn't "another copy"
-        if (_probing || Repairing || !_windowShown() || !Available || NotYet is not null || _loggedInOrLaunching() || _multiRunning()) return;
+        if (_probing || Repairing || !_windowShown() || !Available || NotYet is not null || _session.LoggedIn || _session.Launching || _session.InMultiRun) return;
         _probing = true;
         try { BusyReason = await Task.Run(Busy); }
         finally { _probing = false; }

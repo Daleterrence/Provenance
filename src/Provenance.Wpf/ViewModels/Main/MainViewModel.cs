@@ -58,6 +58,7 @@ public partial class MainViewModel : ObservableObject
         if (_settings.LoadProblem is { } loadProblem)
             _ui.Post(() => _dialogs.Info("Settings reset", loadProblem));
         _pol = pol;
+        Session = new SessionState(pol);
         _avatars = avatars;
         _feeds = feeds;
         _timeLeft = new PhaseTimeLeft(text => TimeLeftText = text);
@@ -65,37 +66,30 @@ public partial class MainViewModel : ObservableObject
         Accounts = new AccountsViewModel(dialogs, credentials, settings, avatars);
         _socialPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _socialPoll.Tick += (_, _) => _pol.Poll();
-        Multi = new MultiRunViewModel(dialogs, windows, settings, credentials, pol, _ui, Accounts,
-            new MultiRunLinks(LoggedInOrLaunching, _socialPoll.Stop, EnsureMemberAgreement, PromptHandleName, GameFolders,
+        Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session,
+            new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, GameFolders,
                               () => _settings.RegionOrDefault, WritePolOptions, BackUpGameSettingsAsync));
-        Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, () => News.WindowShown, LoggedInOrLaunching, () => Multi.Running,
-                                           RefreshInstallState, RefreshLargeAddressAware);
+        Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, Session, () => News.WindowShown, RefreshInstallState);
         _pol.SnapshotUpdated += OnSnapshot;
+        _pol.PidChanged += () => _ui.Post(() =>
+        {
+            Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
+            Repair.Refresh();
+        });
         _pol.SessionEnded += why => _ui.Run(() =>
         {
             Log.Information("Session ended: {Why} (signed in here: {Connected})", why, LoggedIn);
-            Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
             if (!LoggedIn) return;
             EndSession(SessionEnd.Dropped);   // no question asked, the session's gone so the editor couldn't save anyway
             RequestShow?.Invoke();
             _dialogs.Info("PlayOnline session ended", why);
             Log.Information("Session ended: the notice was closed");
         });
-        Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings);
+        Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings, Session);
         Social.OpenChatRequested += OpenChatWith;
 
         Multi.RequestShow += () => RequestShow?.Invoke();
         Multi.RequestExit += () => RequestExit?.Invoke();
-        Multi.Changed += () => _openSettings?.MultiRunChanged();
-        Multi.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName != nameof(MultiRunViewModel.Running)) return;
-            Social.GroupChatBlocked = Multi.Running;
-            Repair.Refresh();
-            if (!Multi.Running) _ = Repair.ProbeAsync();
-            LogInCommand.NotifyCanExecuteChanged();
-            ShowHandles();
-        };
         Social.MessageReceived += (from, text) => Alert(from, $"New message from {from}: {TextBits.Preview(text, 60)}");
         Social.FriendRequestReceived += (who, mid) =>
             Alert(null, $"{who} sent you a friend request. Open {FriendsWindowTitle} to answer it.", "AccountPlusOutline",
@@ -112,7 +106,7 @@ public partial class MainViewModel : ObservableObject
             if (!_settings.Current.NotifyFriendsOnline || Notice.Current is { Text.Length: > 0 }) return;
             Notice.Show($"{who} is online now.", "AccountCheckOutline", NoticeTarget.Chat, who);
         };
-        Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture)
+        Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture, Session, () => Social.Last)
         {
             SwitchBlocked = () => _windows.ProfileEditorOpen
                 ? "Close the profile editor first. It's editing the active handle's profile." : Social.PendingWrite(),
@@ -124,23 +118,12 @@ public partial class MainViewModel : ObservableObject
         };
         Social.PropertyChanged += (_, e) =>
         {
-            switch (e.PropertyName)
-            {
-                case nameof(SocialViewModel.UnseenCount) or nameof(SocialViewModel.GroupChatUnread):
-                    if (!WantsAttention) AttentionCleared?.Invoke();
-                    break;
-                case nameof(SocialViewModel.GameRunning):
-                    ShowHandles();
-                    break;
-            }
+            if (e.PropertyName is nameof(SocialViewModel.UnseenCount) or nameof(SocialViewModel.GroupChatUnread) && !WantsAttention)
+                AttentionCleared?.Invoke();
         };
         Handles.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(HandlesViewModel.Busy)) Social.HandleSwitching = Handles.Switching;
-        };
-        PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(LoggedIn)) ShowHandles();
         };
         RefreshInstallState();
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -148,6 +131,67 @@ public partial class MainViewModel : ObservableObject
         {
             ElapsedText = TextBits.Seconds(DateTime.UtcNow - _launchStarted);
         };
+        Session.PhaseChanged += OnPhaseChanged;
+    }
+
+    public SessionState Session { get; }
+
+    public bool LoggedIn => Session.LoggedIn;
+
+    public bool IsLaunching => Session.Launching;
+
+    private bool _loggedInShown, _launchingShown;
+
+    internal void SetPhase(SessionPhase next)
+    {
+        if (!SessionState.IsAllowed(Session.Phase, next))
+            Log.Warning("Session phase: {From} to {To} isn't a move the app makes", Session.Phase, next);
+        var from = Session.Phase;
+        if (next is SessionPhase.UpdatingGame or SessionPhase.LoggingOut or SessionPhase.MultiRun) _socialPoll.Stop();
+        if (next is SessionPhase.LoggingOut or SessionPhase.MultiRun) _windows.CloseSessionWindows();
+        if (next == SessionPhase.LoggingOut) Social.GroupChat.CloseQuietly();
+        Session.Set(next);
+        switch (next)
+        {
+            case SessionPhase.LoggedIn:
+                _socialPoll.Start();
+                _elapsedTimer.Stop();
+                break;
+            case SessionPhase.InGame:
+                Social.Messages.SettleSends(SessionEnd.Play);
+                break;
+            case SessionPhase.LoggedOut:
+                _elapsedTimer.Stop();
+                if (from == SessionPhase.InGame) _windows.CloseSessionWindows();
+                if (from is SessionPhase.MultiRun or SessionPhase.MultiStopping) _ = Repair.ProbeAsync();
+                break;
+        }
+    }
+
+    private void OnPhaseChanged()
+    {
+        bool loggedIn = Session.LoggedIn, launching = Session.Launching;
+        bool loggedInChanged = loggedIn != _loggedInShown, launchingChanged = launching != _launchingShown;
+        _loggedInShown = loggedIn;
+        _launchingShown = launching;
+        if (loggedInChanged)
+        {
+            OnPropertyChanged(nameof(CloseTooltip));
+            if (loggedIn && (_settings.Current.KeepSignedInInTray || _settings.Current.MinimizeToTray)) TrayIcon.Warm();
+            // the hook numbers mail per session, so a request's notice can't outlive it
+            if (!loggedIn) Notice.DropRequest();
+        }
+        Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
+        LogInCommand.NotifyCanExecuteChanged();
+        Social.HandleSwitching = Handles.Switching;
+        if (launchingChanged) OnPropertyChanged(nameof(IsLaunching));
+        if (loggedInChanged) OnPropertyChanged(nameof(LoggedIn));
+        if (loggedInChanged || launchingChanged)
+        {
+            OnPropertyChanged(nameof(ShowInstallCard));
+            OnPropertyChanged(nameof(ShowLogInCard));
+            OnPropertyChanged(nameof(ShowFriendsCard));
+        }
     }
 
     [ObservableProperty] private string _progressText = string.Empty;
@@ -234,50 +278,13 @@ public partial class MainViewModel : ObservableObject
         cts.Cancel();
     }
 
-    private bool _gameRunning;
-    private SettingsViewModel? _openSettings;
-
-    public bool MinimizeGoesToTray => _settings.Current.MinimizeToTray && !_gameRunning;
+    public bool MinimizeGoesToTray => _settings.Current.MinimizeToTray && Session.Phase != SessionPhase.InGame;
 
     public bool KeepInTrayOnClose => LoggedIn && _settings.Current.KeepSignedInInTray;
 
     public string CloseTooltip => !LoggedIn ? "Close"
         : KeepInTrayOnClose ? "Close to the tray (you'll stay logged in to PlayOnline)"
         : "Close and log out of PlayOnline";
-    partial void OnLoggedInChanged(bool value)
-    {
-        OnPropertyChanged(nameof(CloseTooltip));
-        RefreshStartButtons();
-        if (value && (_settings.Current.KeepSignedInInTray || _settings.Current.MinimizeToTray)) TrayIcon.Warm();
-        RefreshLargeAddressAware();
-        // the hook numbers mail per session, so a request's notice can't outlive it
-        if (!value) Notice.DropRequest();
-    }
-
-    partial void OnIsLaunchingChanged(bool value)
-    {
-        RefreshStartButtons();
-        RefreshLargeAddressAware();
-    }
-
-    private bool LoggedInOrLaunching() => IsLaunching || LoggedIn;
-
-    private void RefreshStartButtons()
-    {
-        Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
-        Repair.StartCommand.NotifyCanExecuteChanged();
-    }
-
-    // Pid has no change notice, so this gets called wherever it changes (any thread)
-    private void RefreshStartAll() =>
-        _ui.Post(() =>
-        {
-            Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
-            Repair.Refresh();
-        });
-
-    // an open Settings page's Large Address Aware row goes by the same sign-in and run state as Repair
-    private void RefreshLargeAddressAware() => _ = _openSettings?.ReadLargeAddressAwareAsync();
     public bool TrayTipShown => _settings.Current.TrayTipShown;
 
     public void MarkTrayTipShown() => _settings.SaveChange(s => s.TrayTipShown = true);
@@ -331,11 +338,6 @@ public partial class MainViewModel : ObservableObject
             Options = new SessionOptions(false, null, Accounts.EnsureHomeSlot(p), HandleKey: p.HandleKey),
         }, token);
 
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(LogInCommand))]
-    [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowLogInCard), nameof(ShowFriendsCard))]
-    private bool _isLaunching;
-
     private bool CanLogin() => !IsLaunching && !Multi.Running;
 
     [RelayCommand(CanExecute = nameof(CanLogin))]
@@ -343,17 +345,13 @@ public partial class MainViewModel : ObservableObject
 
     private Task? _connectTask;
 
-    public bool LoggingIn => _launchCts != null && !_gameRunning && _connectTask is { IsCompleted: false };
+    public bool LoggingIn => _launchCts != null && _connectTask is { IsCompleted: false };
 
     public async Task CancelLogInAsync()
     {
         _launchCts?.Cancel();
         if (_connectTask is { } t) await Task.WhenAny(t, Task.Delay(TimeSpan.FromSeconds(15)));
     }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowLogInCard), nameof(ShowFriendsCard))]
-    private bool _loggedIn;
 
     public NewsViewModel News { get; }
 
@@ -412,7 +410,7 @@ public partial class MainViewModel : ObservableObject
             _settings.SaveChange(PolOptions.NewInstall);
             RefreshInstallState();
             Task.Run(() => LargeAddressAwareSwitch.Apply(_settings, "after the install", _pol.Prestarter.HoldPrestarts,
-                                                          LargeAddressAwareBlocked));
+                                                          Session.LargeAddressAwareBlocked));
         });
         _windows.ShowInstall(vm);
     }
@@ -438,7 +436,6 @@ public partial class MainViewModel : ObservableObject
                 Social.AccountName = Accounts.SelectedProfile?.DisplayName ?? "PlayOnline";
                 Social.Apply(snap);
                 Accounts.LearnIdentity(snap);
-                if (!LoggedIn) { LoggedIn = true; _socialPoll.Start(); }
             }
             catch (Exception ex)
             {
@@ -522,20 +519,15 @@ public partial class MainViewModel : ObservableObject
     private void EndSession(SessionEnd end)
     {
         Social.Messages.SettleSends(end);
-        _socialPoll.Stop();
-        _windows.CloseSessionWindows();
-        Social.GroupChat.CloseQuietly();
-        Repair.SessionEnding = true;   // before LoggedIn, so the Repair button never shows enabled in between
-        LoggedIn = false;
+        SetPhase(SessionPhase.LoggingOut);
         Task.Run(() =>
         {
             try
             {
                 _pol.StopHold();    // the kill waits a few seconds, so keep it off the UI thread
-                RefreshStartAll();
                 _pol.Prestarter.Prestart();
             }
-            finally { _ui.Post(() => { Repair.SessionEnding = false; Repair.Refresh(); }); }
+            finally { _ui.Post(() => { if (Session.Phase == SessionPhase.LoggingOut) SetPhase(SessionPhase.LoggedOut); }); }
         });
     }
 
@@ -563,10 +555,10 @@ public partial class MainViewModel : ObservableObject
         }
         Social.Start(profile.Id);
         Accounts.SessionProfileId = profile.Id;
-        IsLaunching = true;
+        SetPhase(SessionPhase.LoggingIn);
         var token = BeginCancellable(Accounts.ProfileTitle.StartsWith("New account", StringComparison.Ordinal)
             ? "Logging in to PlayOnline" : "Logging in to " + Accounts.ProfileTitle, "Starting PlayOnline...");
-        bool startAfter = false;
+        bool startAfter = false, loggedIn = false;
         string? lastFailure = null;
         var progress = new Progress<LaunchProgress>(p =>
         {
@@ -580,9 +572,7 @@ public partial class MainViewModel : ObservableObject
             if (code == 0)
             {
                 ProgressFraction = 1.0;
-                _elapsedTimer.Stop();
-                LoggedIn = true;
-                _socialPoll.Start();
+                loggedIn = true;
                 startAfter = Accounts.StartGameImmediately;
             }
             else
@@ -611,7 +601,7 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             EndCancellable();
-            IsLaunching = false;
+            SetPhase(loggedIn ? SessionPhase.LoggedIn : SessionPhase.LoggedOut);
         }
         if (startAfter && PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null);
     }
@@ -662,24 +652,18 @@ public partial class MainViewModel : ObservableObject
             _dialogs.Error("Can't start FINAL FANTASY XI", why);
             return;
         }
-        _socialPoll.Stop();
         // nothing new goes to the hook from here, the game update still applies its answers
-        Social.GameRunning = true;
-        IsLaunching = true;
+        SetPhase(SessionPhase.UpdatingGame);
         // like the viewer, the game update comes after the sign-in with the session held meanwhile
         if (!await UpdateGameAsync())
         {
-            Social.GameRunning = false;
-            IsLaunching = false;
-            _socialPoll.Start();
+            SetPhase(SessionPhase.LoggedIn);
             return;
         }
+        SetPhase(SessionPhase.StartingGame);
         if (await LinkBeforePlayAsync() is var linked and not PreLaunchResult.Play)
         {
-            Social.GameRunning = false;
-            _elapsedTimer.Stop();
-            IsLaunching = false;
-            _socialPoll.Start();
+            SetPhase(SessionPhase.LoggedIn);
             if (linked == PreLaunchResult.ShowHandles) OpenSettingsAt(SettingsTab.Handles);
             return;
         }
@@ -693,26 +677,16 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.Error(ex, "Could not signal Play");
-            Social.GameRunning = false;
-            _elapsedTimer.Stop();
-            IsLaunching = false;
-            _socialPoll.Start();
+            SetPhase(SessionPhase.LoggedIn);
             _dialogs.Error("Can't start FINAL FANTASY XI",
                 ex is CredentialKeyUnavailableException ? ex.Message : "Provenance couldn't tell PlayOnline to start the game. Try again.",
                 offerLogs: true);
             return;
         }
-        Social.Messages.SettleSends(SessionEnd.Play);
-        _gameRunning = true;
+        SetPhase(SessionPhase.InGame);
         if (await _pol.WaitForPlayAnswerAsync(PlayAnswerTimeout) is { } failed)
         {
-            _gameRunning = false;
-            Social.GameRunning = false;
-            _elapsedTimer.Stop();
-            IsLaunching = false;
-            _windows.CloseSessionWindows();
-            LoggedIn = false;
-            RefreshStartAll();
+            SetPhase(SessionPhase.LoggedOut);
             _pol.Prestarter.Prestart();
             _dialogs.Error("Can't start FINAL FANTASY XI", failed);
             return;
@@ -724,15 +698,11 @@ public partial class MainViewModel : ObservableObject
         RequestHide?.Invoke();
         _elapsedTimer.Stop();
         var exit = await _pol.WaitForExitAsync();
-        _gameRunning = false;
-        Social.GameRunning = false;
         _pol.GameExited();
         var ended = HookExitText.GameEndedText(exit);
         if (ended is not null) Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);
         else if (_settings.Current.ExitAfterGameExits) { RequestExit?.Invoke(); return; }
-        IsLaunching = false;
-        _windows.CloseSessionWindows();
-        LoggedIn = false;
+        SetPhase(SessionPhase.LoggedOut);
         RequestShow?.Invoke();
         _pol.Prestarter.Prestart();
         if (ended is not null) _dialogs.Error("Can't start FINAL FANTASY XI", ended, offerLogs: true);
@@ -875,12 +845,9 @@ public partial class MainViewModel : ObservableObject
     // fed every snapshot, so a change still going when Settings closes is answered all the same
     internal HandlesViewModel Handles { get; }
 
-    // a multi-account run's lean sessions take no requests
     private void ShowHandles()
     {
-        bool on = LoggedIn && _pol.Pid is not null;
-        Handles.Update(on ? Social.Last : null, on,
-                       Social.GameRunning ? HandleList.ReadOnlyText : Multi.Running ? HandleList.MultiRunText : null);
+        Handles.Refresh();
         Social.HandleSwitching = Handles.Switching;
     }
 
@@ -891,19 +858,14 @@ public partial class MainViewModel : ObservableObject
     {
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
         ShowHandles();
-        var vm = new SettingsViewModel(_dialogs, _settings, _feeds, multiRunning: () => Multi.Running,
-                                       holdPrestarts: _pol.Prestarter.HoldPrestarts,
-                                       largeAddressAwareBlocked: LargeAddressAwareBlocked,
-                                       stopPrestart: () => Task.Run(_pol.Prestarter.StopPrestart),
-                                       loggedIn: PolInUse,
-                                       handles: Handles);
+        var vm = new SettingsViewModel(_dialogs, _settings, _feeds, Session, holdPrestarts: _pol.Prestarter.HoldPrestarts,
+                                       stopPrestart: () => Task.Run(_pol.Prestarter.StopPrestart), handles: Handles);
         vm.Hooks.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(HookSettings.Hook)) PlatformChanged(); };
-        _openSettings = vm;
         Handles.Opened();
         try { _windows.ShowSettings(vm, tab); }
         finally
         {
-            _openSettings = null;
+            vm.Detach();
             Handles.Closed();
         }
         if (vm.Hooks.RestartWanted)
@@ -975,14 +937,6 @@ public partial class MainViewModel : ObservableObject
             else s.WindowerProfile = name;
         });
     }
-
-    // the Repair button's own checks, in its order. The lock comes from the switch's copy of its probe
-    internal bool PolInUse() => IsLaunching || LoggedIn || _pol.Pid is not null;
-
-    internal string? LargeAddressAwareBlocked() =>
-        PolInUse() || Repair.SessionEnding ? LargeAddressAwareSwitch.LoggedInText
-        : Multi.Running ? LargeAddressAwareSwitch.MultiRunText
-        : null;
 
     // the URL comes from a feed, and ShellExecute would happily run a program, a network path or another protocol
     [RelayCommand]
