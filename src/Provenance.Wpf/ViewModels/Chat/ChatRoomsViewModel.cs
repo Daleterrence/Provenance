@@ -155,7 +155,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         if (value != null && Available && !_restoringZone) RequestRooms(0);
     }
 
-    private int? Pid => _social.SessionPid;
+    private int? Pid => _social.Session.Pid;
 
     // the zone list, the viewer's first search when chat opens and Try again's. Nothing else starts one
     [RelayCommand]
@@ -518,7 +518,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         try
         {
             Zones.Clear();
-            foreach (var z in chat.Zones) Zones.Add(new ChatZoneItem(z with { Name = _social.Filtered(z.Name) }));
+            foreach (var z in chat.Zones) Zones.Add(new ChatZoneItem(z with { Name = _social.Viewer.Filtered(z.Name) }));
             if (Zones.Count == 0) { Unavailable = HookFailures.ChatRooms.NotNow; return; }
             ZonesNote = "Select zone.";
             CreateRoomCommand.NotifyCanExecuteChanged();
@@ -541,7 +541,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         }
         Offset = chat.Offset;
         Total = chat.Total;
-        foreach (var r in chat.Rooms) Rooms.Add(new ChatRoomItem(r, _social.Filtered(r.Name), CategoryText(r.Categories)));
+        foreach (var r in chat.Rooms) Rooms.Add(new ChatRoomItem(r, _social.Viewer.Filtered(r.Name), CategoryText(r.Categories)));
         RoomsNote = Total == 0 ? "No chat rooms found in this zone." : $"Rooms: {Total}";
         int pages = (Total + ChatRoomFiles.PageSize - 1) / ChatRoomFiles.PageSize;
         PageText = pages > 1 ? $"Page {Offset / ChatRoomFiles.PageSize + 1}/{pages}" : "";
@@ -576,7 +576,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 // like the viewer, only members whose hello's given a name are listed or counted
                 var now = chat.Members.Where(m => m.Me || m.Name.Length > 0)
                     .OrderByDescending(x => x.Master).ThenByDescending(x => x.Me)
-                    .Select(m => new ChatMemberItem(m.Me ? m.Name : _social.Filtered(m.Name), m.Me, m.Master, m.Away, m.Key)).ToList();
+                    .Select(m => new ChatMemberItem(m.Me ? m.Name : _social.Viewer.Filtered(m.Name), m.Me, m.Master, m.Away, m.Key)).ToList();
                 if (!Members.SequenceEqual(now))
                 {
                     Members.Clear();
@@ -652,7 +652,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     // the viewer's own words for every line, and its one stand-in when a name never came through
     internal (string Text, string Style) LineText(ChatLine l)
     {
-        string name = l.Me ? l.Name : _social.Filtered(l.Name), text = l.Me ? l.Text : _social.Filtered(l.Text);
+        string name = l.Me ? l.Name : _social.Viewer.Filtered(l.Name), text = l.Me ? l.Text : _social.Viewer.Filtered(l.Text);
         if (name.Length == 0) return (CouldNotGetName, l.Kind == "say" ? "say" : "notice");
         return l.Kind switch
         {

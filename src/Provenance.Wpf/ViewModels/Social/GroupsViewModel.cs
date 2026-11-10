@@ -39,24 +39,26 @@ public sealed partial class GroupsViewModel : ObservableObject
     [ObservableProperty, NotifyPropertyChangedFor(nameof(NoGroups))] private bool _hasGroups;
     public bool NoGroups => !HasGroups;
 
-    private bool _dirty = true;
-    private readonly HookJobWatch _group = new();
-    internal string? _groupToken => _group.Token;
-    private string _groupDone = "";
-    private string? _groupLeaving;
-    internal string? LeavingGroupId => _groupLeaving;
-    private bool _groupBySend;
-    private FriendItem? _inviteFor;
+    private sealed class PerLogin
+    {
+        public bool Dirty = true;
+        public readonly HookJobWatch Group = new();
+        public string Done = "";
+        public string? Leaving;
+        public bool BySend;
+        public FriendItem? InviteFor;
+    }
 
-    internal bool Writing => _group.Running;
+    private PerLogin _login = new();
+    internal string? LeavingGroupId => _login.Leaving;
 
-    internal void MarkDirty() => _dirty = true;
+    internal bool Writing => _login.Group.Running;
+
+    internal void MarkDirty() => _login.Dirty = true;
 
     internal void Reset()
     {
-        _dirty = true;
-        _group.Forget();
-        _inviteFor = null;
+        _login = new();
         Items.Clear();
         HasGroups = false;
     }
@@ -88,14 +90,14 @@ public sealed partial class GroupsViewModel : ObservableObject
                 .ThenBy(m => m.Name, StringComparer.CurrentCultureIgnoreCase)
                 .Select(m => new GroupMemberItem(m.Index, m.Name, m.Key, _social.Avatars.ProfilePicture(m.ProfilePictureId),
                                                  m.Role, RoleText(m.Role), StatusText(m), m.Online, m.Me,
-                                                 m.Me ? m.Comment : _social.Filtered(m.Comment))   // mine fills its edit box
+                                                 m.Me ? m.Comment : _social.Viewer.Filtered(m.Comment))   // mine fills its edit box
                     { Status = m.Status.ToPolStatus() })
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
             return new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members) { Unread = _social.GroupChat.UnreadFor(g.Id) };
         }).ToList();
-        if (!_dirty && groups.Count == Items.Count && groups.Zip(Items).All(p => SameGroup(p.First, p.Second))) return;
-        _dirty = false;
+        if (!_login.Dirty && groups.Count == Items.Count && groups.Zip(Items).All(p => SameGroup(p.First, p.Second))) return;
+        _login.Dirty = false;
         // a group that didn't change keeps its row (and an open menu on it)
         Items.Patch(groups, (a, b) => a.Id == b.Id, SameGroup);
         HasGroups = Items.Count > 0;
@@ -111,14 +113,14 @@ public sealed partial class GroupsViewModel : ObservableObject
                             FriendItem? invite = null)
     {
         if (!_social.BeginEdit(out var pid, out var token, followSend: true)) return;
-        _group.Begin(token, HookLimits.Group, _social.Now);
-        _groupDone = doneText;
-        _groupBySend = bySend;
-        _groupLeaving = leaving;
-        _inviteFor = invite;   // only now, a refused click must never mark it answered
+        _login.Group.Begin(token, HookLimits.Group, _social.Now);
+        _login.Done = doneText;
+        _login.BySend = bySend;
+        _login.Leaving = leaving;
+        _login.InviteFor = invite;   // only now, a refused click must never mark it answered
         if (write(pid, token)) return;
-        _group.Forget();
-        _inviteFor = null;
+        _login.Group.Forget();
+        _login.InviteFor = null;
         _social.WriteOrFail(false);
     }
 
@@ -148,7 +150,7 @@ public sealed partial class GroupsViewModel : ObservableObject
     {
         if (g.MyRole is not (< GroupRole.Member or GroupRole.Master))
             BeginGroup((pid, token) => SocialRequests.LeaveGroup(pid, token, g.Id),
-                       _social.ViewerText(0x3eab, "You have left the group \"%s.\"").Replace("%s", g.Name), leaving: g.Id);
+                       _social.Viewer.Text(0x3eab, "You have left the group \"%s.\"").Replace("%s", g.Name), leaving: g.Id);
     }
 
     // masters and sub-masters remove non-masters and relieve sub-masters (back to Member), only the master promotes to
@@ -188,8 +190,8 @@ public sealed partial class GroupsViewModel : ObservableObject
             _social.EditNote.Fail(HookFailures.Groups.Full);
             return;
         }
-        var text = _social.ViewerText(0x46d5, "Would you like to join the group \"%s\"?").Replace("%s", g.Name);
-        var subject = _social.ViewerText(0x46d4, "Would you like to join a friend group?");
+        var text = _social.Viewer.Text(0x46d5, "Would you like to join the group \"%s\"?").Replace("%s", g.Name);
+        var subject = _social.Viewer.Text(0x46d4, "Would you like to join a friend group?");
         BeginGroup((pid, token) => SocialRequests.InviteToGroup(pid, token, g.Id, f.Row, subject, text, f.Key),
                    $"Invitation to \"{g.Name}\" sent to {f.Name}.", bySend: true);
     }
@@ -198,8 +200,8 @@ public sealed partial class GroupsViewModel : ObservableObject
     public void AnswerInvite(FriendItem invite, bool accept)
     {
         if (!invite.IsGroupInvite || !_social.CanEdit) return;   // refused before the viewer's string table gets read
-        var subject = accept ? _social.ViewerText(0x46d6, "Group registration accepted")
-                             : _social.ViewerText(0x46d1, "Friend registration declined");
+        var subject = accept ? _social.Viewer.Text(0x46d6, "Group registration accepted")
+                             : _social.Viewer.Text(0x46d1, "Friend registration declined");
         BeginGroup((pid, token) => SocialRequests.AnswerGroupInvite(pid, token, accept, invite.RequestMid, subject),
                    accept ? "You accepted the group invitation." : "You declined the group invitation.",
                    bySend: true, invite: invite);
@@ -209,28 +211,28 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     internal void Apply(PolSocialSnapshot snap)
     {
-        if (!_group.Running) return;
-        bool mine = snap.GroupJob.Token == _group.Token;
+        if (!_login.Group.Running) return;
+        bool mine = snap.GroupJob.Token == _login.Group.Token;
         string state;
-        if (!_groupBySend) state = mine ? snap.GroupJob.State : "";
-        else if (snap.SendStateFor(_group.Token) is { } sent) state = sent;
+        if (!_login.BySend) state = mine ? snap.GroupJob.State : "";
+        else if (snap.SendStateFor(_login.Group.Token) is { } sent) state = sent;
         // a send refused before it went out reports in the group slot
         else if (mine && snap.GroupJob.State.StartsWith("failed", StringComparison.Ordinal)) state = snap.GroupJob.State;
         else state = "";
         bool done = state is "sent" or "saved";
-        if (_group.Settle(done ? "ok" : state, "ok", _social.Now) is not { } st) return;
-        var invite = _inviteFor is { IsGroupInvite: true } inv ? inv : null;
-        var left = _groupLeaving;
-        _groupLeaving = null;
-        _inviteFor = null;
+        if (_login.Group.Settle(done ? "ok" : state, "ok", _social.Now) is not { } st) return;
+        var invite = _login.InviteFor is { IsGroupInvite: true } inv ? inv : null;
+        var left = _login.Leaving;
+        _login.Leaving = null;
+        _login.InviteFor = null;
         _social.EditBusy = false;
         // a timed-out answer leaves the list for this session too, so it can't be answered twice
         if (invite != null && st is "ok" or "timeout") _social.Answered(invite.RequestMid, ack: st == "ok");
         if (st == "ok")
         {
             // with its chat open, the chat says it (and only once), and the lines kept for it go either way
-            if (left != null && _social.GroupChat.GroupLeft(left, _groupDone)) return;
-            _social.EditNote.Show(_groupDone, TimeSpan.FromSeconds(12));
+            if (left != null && _social.GroupChat.GroupLeft(left, _login.Done)) return;
+            _social.EditNote.Show(_login.Done, TimeSpan.FromSeconds(12));
             return;
         }
         _social.EditNote.Fail(st switch

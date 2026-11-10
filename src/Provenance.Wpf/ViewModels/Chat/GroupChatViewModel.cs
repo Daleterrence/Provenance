@@ -105,6 +105,10 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         _log = log;
         ClearUnread();
+        Lines.Clear();
+        GroupId = GroupName = MyHandle = "";
+        _tailGroup = null;
+        _quietlyEnded = _goneQuietly = null;
     }
 
     private void ClearUnread()
@@ -118,7 +122,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     // just has its window shown again, like the viewer
     public bool Join(PolGroup group)
     {
-        if (_social.SessionPid is not { } pid) return false;
+        if (_social.Session.Pid is not { } pid) return false;
         if (Joining || (Open && SameGroup(group.Id))) return true;
         var mine = group.Members.FirstOrDefault(m => m.Mine);
         var token = HookFiles.NewToken();
@@ -148,7 +152,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     }
 
     private GroupChatLineItem Item(GroupChatEntry e) =>
-        new(e.Id, e.Name, e.Me ? e.Text : _social.Filtered(e.Text), e.Me, e.When);
+        new(e.Id, e.Name, e.Me ? e.Text : _social.Viewer.Filtered(e.Text), e.Me, e.When);
 
     private void LoadHistory()
     {
@@ -180,7 +184,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     // what the hook still has of a chat that's over goes in that group's kept lines, nothing on screen
     private void ReadTail()
     {
-        if (_tailGroup is not { } group || _social.SessionPid is not { } pid) return;
+        if (_tailGroup is not { } group || _social.Session.Pid is not { } pid) return;
         if (Now > _tailUntil)
         {
             _tailGroup = null;
@@ -196,7 +200,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void CallOff()
     {
-        if (_social.SessionPid is not { } pid) return;
+        if (_social.Session.Pid is not { } pid) return;
         bool withdrawn = Current == Phase.Joining &&
                          HookFiles.Withdraw(pid, HookContract.Requests.GroupChatJoin) == Withdrawal.Withdrawn;
         if (!withdrawn) GroupChatFiles.Leave(pid, HookFiles.NewToken(), Current == Phase.Joining ? _join.Token ?? "" : "");
@@ -270,7 +274,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     private void Send()
     {
         var text = ShiftJis.Filter(Compose.Trim().Replace("\r", "").Replace('\n', ' '), out _);
-        if (text.Length == 0 || _social.SessionPid is not { } pid) return;
+        if (text.Length == 0 || _social.Session.Pid is not { } pid) return;
         if (text.Length > GroupChatFiles.MaxText) text = text[..GroupChatFiles.MaxText];
         var token = HookFiles.NewToken();
         if (!GroupChatFiles.Send(pid, token, text))
@@ -304,7 +308,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         if (_gate.Expire(now) is { } done) FinishSend(done.State, done.Text);
         if (Current != Phase.Joining || _join.Elapsed(now) < HookLimits.GroupChatJoin) return;
         CallOff();
-        End(_social.ViewerText(0x3eb8, HookFailures.GroupChat.Busy));
+        End(_social.Viewer.Text(0x3eb8, HookFailures.GroupChat.Busy));
     }
 
     public static string ClearQuestion(string group) =>
@@ -378,18 +382,18 @@ public sealed partial class GroupChatViewModel : ObservableObject
                     return;
                 }
                 End(gc.Job.State == "gone"
-                    ? _social.ViewerText(0x3ebb, "You are not a member of the group \"%s.\" Exiting Group Chat.").Replace("%s", GroupName)
-                    : _social.ViewerText(0x3ebc, "You have been removed from the group \"%s.\" Exiting Group Chat.").Replace("%s", GroupName));
+                    ? _social.Viewer.Text(0x3ebb, "You are not a member of the group \"%s.\" Exiting Group Chat.").Replace("%s", GroupName)
+                    : _social.Viewer.Text(0x3ebc, "You have been removed from the group \"%s.\" Exiting Group Chat.").Replace("%s", GroupName));
                 return;
             default:
                 if (!gc.Job.State.StartsWith("failed", StringComparison.Ordinal)) break;
                 End(gc.Job.State switch
                 {
-                    "failed:busy" => _social.ViewerText(0x3eb8, HookFailures.GroupChat.Busy),
-                    "failed:not a member" or "failed:no such group" => _social.ViewerText(0x3eb7, HookFailures.GroupChat.NotMember),
+                    "failed:busy" => _social.Viewer.Text(0x3eb8, HookFailures.GroupChat.Busy),
+                    "failed:not a member" or "failed:no such group" => _social.Viewer.Text(0x3eb7, HookFailures.GroupChat.NotMember),
                     "failed:handle changing" => HookFailures.GroupChat.JoinHandleChanging,
                     "failed:handle" or "failed:list changed" => HookFailures.GroupChat.HandlesChanged,
-                    _ => _social.ViewerText(0x3eb9, HookFailures.GroupChat.JoinFailed),
+                    _ => _social.Viewer.Text(0x3eb9, HookFailures.GroupChat.JoinFailed),
                 });
                 return;
         }
@@ -400,7 +404,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void ReadLines(GroupChatSnapshot gc)
     {
-        if (gc.LineSeq <= _seenSeq || _social.SessionPid is not { } pid) return;
+        if (gc.LineSeq <= _seenSeq || _social.Session.Pid is not { } pid) return;
         if (GroupChatFiles.TryReadLines(pid) is not { } file || !SameGroup(file.Group)) return;
         var fresh = file.After(_seenSeq);
         if (fresh.Count == 0) return;
@@ -433,7 +437,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         else if (done != "sent")
         {
             ComposeNote = done == "failed:characters" ? HookFailures.GroupChat.Characters
-                : HookFailures.ForChatLine(done) ?? _social.ViewerText(0x3eba, HookFailures.GroupChat.SendFailed);
+                : HookFailures.ForChatLine(done) ?? _social.Viewer.Text(0x3eba, HookFailures.GroupChat.SendFailed);
             // the line goes back in the box, like the viewer keeps it till it's gone
             if (Compose.Length == 0) Compose = text;
         }

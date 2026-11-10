@@ -36,39 +36,31 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     [ObservableProperty] private string _away = "";
     [ObservableProperty] private string _awayFrom = "";
     [ObservableProperty] private ImageSource? _picture;
-    private readonly HookJobWatch _profile = new();
-    private string _profileKey = "", _profileFor = "";
-    private int _profileRow = -1;
-    // what's on screen: the handle's answer and the last character one that loaded, so going back never reads again
-    private PolProfile? _handleProfile;
-    private PolFfxiProfile? _characterShown;
-    private readonly HookJobWatch _ffxi = new();
-    private ProfileTab? _ffxiFor, _ffxiFrom;
-    private readonly Dictionary<string, (PolProfile Profile, DateTime At)> _profileCache = new();
-    private ProfilePictureCatalog.Catalog? _picCatalog;
-    private bool _picCatalogTried;
-    private string? _popupAfterApply;
+    private sealed class PerLogin
+    {
+        public readonly HookJobWatch Profile = new(), Ffxi = new();
+        public string ProfileKey = "", ProfileFor = "";
+        public int ProfileRow = -1;
+        // what's on screen: the handle's answer and the last character one that loaded, so going back never reads again
+        public PolProfile? HandleProfile;
+        public PolFfxiProfile? CharacterShown;
+        public ProfileTab? FfxiFor, FfxiFrom;
+        public readonly Dictionary<string, (PolProfile Profile, DateTime At)> ProfileCache = new();
+        public string? PopupAfterApply;
+    }
+
+    private PerLogin _login = new();
 
     // nothing from the friend row goes in the header, a Private profile hides the name and picture too
     public void Request(FriendItem f)
     {
-        Rows.Clear();
-        Name = Hid = Mail = Updated = Privacy = Away = AwayFrom = "";
-        GameLine = "";
-        Picture = _social.Avatars.NoProfilePicture;
+        Clear();
         ShowsPicture = true;
-        Tabs.Clear();
-        HasTabs = false;
-        _handleProfile = null;
-        _characterShown = null;
-        _profile.Forget();
-        _ffxi.Forget();
-        Loading = false;
-        _profileFor = f.Name;
-        _profileRow = f.Row;
-        _profileKey = f.Key;
+        _login.ProfileFor = f.Name;
+        _login.ProfileRow = f.Row;
+        _login.ProfileKey = f.Key;
         // a request with no answer yet has no profile to show (the viewer greys it out)
-        if (!f.IsFriend || f.Pending || _social.SessionPid is not { } pid)
+        if (!f.IsFriend || f.Pending || _social.Session.Pid is not { } pid)
         {
             Note.Show(HookFailures.Profile.FriendsOnly);
             return;
@@ -79,18 +71,18 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             return;
         }
         // the same profile again within 5 mins shows the copy already here, no second request for a page just read
-        if (f.Key.Length > 0 && _profileCache.TryGetValue(f.Key, out var hit) &&
+        if (f.Key.Length > 0 && _login.ProfileCache.TryGetValue(f.Key, out var hit) &&
             _social.Now - hit.At < TimeSpan.FromMinutes(5))
         {
             Note.Clear();
             HandleProfileArrived(hit.Profile);
             return;
         }
-        var token = _profile.Begin(HookLimits.Profile, _social.Now);
+        var token = _login.Profile.Begin(HookLimits.Profile, _social.Now);
         Loading = true;
         Note.Show("Loading the profile from PlayOnline...");
         if (SocialRequests.RequestProfile(pid, token, f.Row, f.Key)) return;
-        _profile.Forget();
+        _login.Profile.Forget();
         Loading = false;
         Note.Fail(HookFailures.RequestWriteFailed);
     }
@@ -98,8 +90,8 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     // after a switch: nothing read under the old handle stays on screen or in the cache
     internal void Forget()
     {
-        _profileCache.Clear();
-        if (_profileFor.Length == 0) return;
+        _login.ProfileCache.Clear();
+        if (_login.ProfileFor.Length == 0) return;
         Clear();
         Note.Show("Your active handle changed. Open the profile again to see it from this handle.");
     }
@@ -112,45 +104,40 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         Picture = _social.Avatars.NoProfilePicture;
         Tabs.Clear();
         HasTabs = false;
-        _handleProfile = null;
-        _characterShown = null;
-        _profile.Forget();
-        _ffxi.Forget();
+        _login.HandleProfile = null;
+        _login.CharacterShown = null;
+        _login.Profile.Forget();
+        _login.Ffxi.Forget();
         Loading = false;
         Note.Soften();
     }
 
     private string StateText(ProfileFieldState state) => state switch
     {
-        ProfileFieldState.Private => _social.ViewerText(0x4a73, "Private"),
-        ProfileFieldState.UnderTen => _social.ViewerText(0x4a75, "Under age ten"),
-        _ => _social.ViewerText(0x4a81, "Not set"),
+        ProfileFieldState.Private => _social.Viewer.Text(0x4a73, "Private"),
+        ProfileFieldState.UnderTen => _social.Viewer.Text(0x4a75, "Under age ten"),
+        _ => _social.Viewer.Text(0x4a81, "Not set"),
     };
 
     // "name (category)" like the viewer's Portrait row
     private string ProfilePictureText(int picId)
     {
-        if (!_picCatalogTried)
-        {
-            _picCatalogTried = true;
-            var viewer = _social.ViewerFolder();
-            _picCatalog = viewer is null ? null : ProfilePictureCatalog.Load(viewer);
-        }
-        var pic = _picCatalog?.ProfilePictures.FirstOrDefault(x => x.Id == picId);
-        if (pic is null) return _social.ViewerText(0x4a73, "Private");
-        var cat = _picCatalog!.Categories.FirstOrDefault(c => c.Key == pic.CategoryKey)?.Name ?? "";
+        var catalog = _social.Viewer.Pictures;
+        var pic = catalog?.ProfilePictures.FirstOrDefault(x => x.Id == picId);
+        if (pic is null) return _social.Viewer.Text(0x4a73, "Private");
+        var cat = catalog!.Categories.FirstOrDefault(c => c.Key == pic.CategoryKey)?.Name ?? "";
         return cat.Length > 0 ? $"{pic.Name} ({cat})" : pic.Name;
     }
 
     // a popup's modal loop lets the next snapshot in, so it waits till the snapshot's all applied
     internal void RaisePopup()
     {
-        if (_popupAfterApply is not { } text) return;
-        _popupAfterApply = null;
+        if (_login.PopupAfterApply is not { } text) return;
+        _login.PopupAfterApply = null;
         Popup?.Invoke(text);
     }
 
-    internal bool Waiting => _profile.Running || _ffxi.Running;
+    internal bool Waiting => _login.Profile.Running || _login.Ffxi.Running;
 
     internal void Apply(PolSocialSnapshot snap)
     {
@@ -161,24 +148,25 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     // a new login, so nothing from the last one stays up
     internal void Reset()
     {
-        if (Waiting) Note.Clear();   // nothing's coming for those
-        _profileCache.Clear();   // a new hook has none of the slots the cached profiles' tabs read
+        _login = new();   // a new hook has none of the slots the cached profiles' tabs read
+        Note.Clear();
         Clear();
+        ShowsPicture = true;
     }
 
     private void ApplyProfileState(PolSocialSnapshot snap)
     {
-        if (!_profile.Running) return;
-        _profile.WaitingTurn(snap.ProfileJob.Token, snap.ProfileServerBusy, _social.Now);
+        if (!_login.Profile.Running) return;
+        _login.Profile.WaitingTurn(snap.ProfileJob.Token, snap.ProfileServerBusy, _social.Now);
         // a "done" with no profile isn't an answer yet
-        bool mine = snap.ProfileJob.Token == _profile.Token && (snap.ProfileJob.State != "done" || snap.Profile != null);
-        if (_profile.Settle(mine ? snap.ProfileJob.State : null, "done", _social.Now) is not { } st) return;
+        bool mine = snap.ProfileJob.Token == _login.Profile.Token && (snap.ProfileJob.State != "done" || snap.Profile != null);
+        if (_login.Profile.Settle(mine ? snap.ProfileJob.State : null, "done", _social.Now) is not { } st) return;
         if (st == "timeout") _social.DiscardRequest(HookContract.Requests.Profile);
         Loading = false;
         if (st == "done")
         {
             Note.Clear();
-            if (_profileKey.Length > 0) _profileCache[_profileKey] = (snap.Profile!, _social.Now);
+            if (_login.ProfileKey.Length > 0) _login.ProfileCache[_login.ProfileKey] = (snap.Profile!, _social.Now);
             HandleProfileArrived(snap.Profile!);
             return;
         }
@@ -186,7 +174,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         {
             "failed:no profile" => HookFailures.Profile.None,
             // -0x14cc, which the viewer calls a hidden profile
-            "failed:-5324" => _social.ViewerText(0x4ab4, "Profile of %s's handle is hidden.").Replace("%s", _social.Filtered(_profileFor)),
+            "failed:-5324" => _social.Viewer.Text(0x4ab4, "Profile of %s's handle is hidden.").Replace("%s", _social.Viewer.Filtered(_login.ProfileFor)),
             _ => ProfileFailText(st),
         }, st is not ("failed:no profile" or "failed:-5324"));
     }
@@ -208,21 +196,21 @@ public sealed partial class FriendProfileViewModel : ObservableObject
 
     private string PrivacyText(PrivacyLevel level) => level switch
     {
-        PrivacyLevel.Private => _social.ViewerText(0x4a7d, "Private"),
-        PrivacyLevel.FriendsOnly => _social.ViewerText(0x4a7e, "Show to friends"),
-        PrivacyLevel.Everyone => _social.ViewerText(0x4a7c, "Show to all"),
+        PrivacyLevel.Private => _social.Viewer.Text(0x4a7d, "Private"),
+        PrivacyLevel.FriendsOnly => _social.Viewer.Text(0x4a7e, "Show to friends"),
+        PrivacyLevel.Everyone => _social.Viewer.Text(0x4a7c, "Show to all"),
         _ => "",
     };
 
     // the tabs only show when there's a character to put in them
     private void HandleProfileArrived(PolProfile p)
     {
-        _handleProfile = p;
-        _characterShown = null;
+        _login.HandleProfile = p;
+        _login.CharacterShown = null;
         Tabs.Clear();
         if (p.Characters.Count > 0)
         {
-            Tabs.Add(new ProfileTab(-1, "", _social.ViewerText(0x4abe, "Handle Profile"))
+            Tabs.Add(new ProfileTab(-1, "", _social.Viewer.Text(0x4abe, "Handle Profile"))
             {
                 IsSelected = true,
                 Picture = HandlePicture(p),
@@ -238,19 +226,19 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             ? _social.Avatars.ProfilePicture(row.ProfilePictureId) : _social.Avatars.NoProfilePicture;
 
     private string TabLabel(string characterKey) =>
-        _social.CharacterNames.Get(characterKey) is { Name.Length: > 0 } known ? _social.Filtered(known.Name) : FfxiProfileText.Title;
+        _social.CharacterNames.Get(characterKey) is { Name.Length: > 0 } known ? _social.Viewer.Filtered(known.Name) : FfxiProfileText.Title;
 
     // one read per click, never for the tab that's already up or while one's out. Handle Profile shows the answer it had
     [RelayCommand]
     private void SelectTab(ProfileTab? tab)
     {
-        if (tab is null || !tab.Clickable || _ffxi.Running || Loading || !Tabs.Contains(tab)) return;
+        if (tab is null || !tab.Clickable || _login.Ffxi.Running || Loading || !Tabs.Contains(tab)) return;
         if (tab.IsHandle)
         {
-            if (_handleProfile is null) return;
+            if (_login.HandleProfile is null) return;
             MarkSelected(tab);
             Note.Clear();
-            ShowProfile(_handleProfile);
+            ShowProfile(_login.HandleProfile);
             return;
         }
         if (_social.GameRunning)
@@ -258,27 +246,27 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             Note.Show(SocialViewModel.GameRunningNote);
             return;
         }
-        if (_social.SessionPid is not { } pid) return;
+        if (_social.Session.Pid is not { } pid) return;
         // the row from the latest friend list, a friend added or removed above this one moves it
-        if (_profileKey.Length > 0 && _social.Last.FriendsLoaded)
+        if (_login.ProfileKey.Length > 0 && _social.Last.FriendsLoaded)
         {
-            if (_social.Last.Friends.FirstOrDefault(x => x.Key == _profileKey && x.Row >= 0) is not { Pending: false } now)
+            if (_social.Last.Friends.FirstOrDefault(x => x.Key == _login.ProfileKey && x.Row >= 0) is not { Pending: false } now)
             {
                 Note.Show(HookFailures.Profile.FriendsOnly);
                 return;
             }
-            _profileRow = now.Row;
+            _login.ProfileRow = now.Row;
         }
-        var from = Tabs.FirstOrDefault(t => t.IsSelected && !t.Failed) ?? _ffxiFrom;
+        var from = Tabs.FirstOrDefault(t => t.IsSelected && !t.Failed) ?? _login.FfxiFrom;
         MarkSelected(tab);
         ShowCharacterPage(null);
-        var token = _ffxi.Begin(HookLimits.FfxiProfile, _social.Now);
-        _ffxiFor = tab;
-        _ffxiFrom = from;
+        var token = _login.Ffxi.Begin(HookLimits.FfxiProfile, _social.Now);
+        _login.FfxiFor = tab;
+        _login.FfxiFrom = from;
         Loading = true;
-        Note.Show(_social.ViewerText(0x4a82, "Retrieving profile data..."));
-        if (SocialRequests.RequestFfxiProfile(pid, token, _profileRow, _profileKey, tab.Slot)) return;
-        _ffxi.Forget();
+        Note.Show(_social.Viewer.Text(0x4a82, "Retrieving profile data..."));
+        if (SocialRequests.RequestFfxiProfile(pid, token, _login.ProfileRow, _login.ProfileKey, tab.Slot)) return;
+        _login.Ffxi.Forget();
         Loading = false;
         ShowTabAgain(from);
         Note.Fail(HookFailures.RequestWriteFailed);
@@ -298,19 +286,19 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     {
         if (tab is null) return;
         MarkSelected(tab);
-        if (tab.IsHandle && _handleProfile is not null) ShowProfile(_handleProfile);
-        else ShowCharacterPage(_characterShown?.Slot == tab.Slot ? _characterShown : null);
+        if (tab.IsHandle && _login.HandleProfile is not null) ShowProfile(_login.HandleProfile);
+        else ShowCharacterPage(_login.CharacterShown?.Slot == tab.Slot ? _login.CharacterShown : null);
     }
 
     private void ApplyFfxiProfileState(PolSocialSnapshot snap)
     {
-        if (!_ffxi.Running) return;
-        _ffxi.WaitingTurn(snap.FfxiProfileJob.Token, snap.ProfileServerBusy, _social.Now);
-        bool mine = snap.FfxiProfileJob.Token == _ffxi.Token && (snap.FfxiProfileJob.State != "done" || snap.FfxiProfile != null);
-        if (_ffxi.Settle(mine ? snap.FfxiProfileJob.State : null, "done", _social.Now) is not { } st) return;
+        if (!_login.Ffxi.Running) return;
+        _login.Ffxi.WaitingTurn(snap.FfxiProfileJob.Token, snap.ProfileServerBusy, _social.Now);
+        bool mine = snap.FfxiProfileJob.Token == _login.Ffxi.Token && (snap.FfxiProfileJob.State != "done" || snap.FfxiProfile != null);
+        if (_login.Ffxi.Settle(mine ? snap.FfxiProfileJob.State : null, "done", _social.Now) is not { } st) return;
         if (st == "timeout") _social.DiscardRequest(HookContract.Requests.FfxiProfile);
         Loading = false;
-        var tab = _ffxiFor!;
+        var tab = _login.FfxiFor!;
         // the hook read whatever's in that slot now, which has to be the character the tab's for
         if (st == "done" && snap.FfxiProfile!.Character.Key != tab.CharacterKey) st = NoCharacter;
         if (st == "done")
@@ -320,20 +308,20 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             var known = CharacterNames.FromProfile(r);
             if (known is not null && _social.CharacterNames.Get(tab.CharacterKey) != known) _social.CharacterNames.Remember(tab.CharacterKey, known);
             tab.Label = TabLabel(tab.CharacterKey);
-            _characterShown = r with { Slot = tab.Slot };
-            ShowCharacterPage(_characterShown);
+            _login.CharacterShown = r with { Slot = tab.Slot };
+            ShowCharacterPage(_login.CharacterShown);
             return;
         }
         if (st == "failed:hidden")
         {
-            ShowTabAgain(_ffxiFrom);
+            ShowTabAgain(_login.FfxiFrom);
             Note.Clear();
-            _popupAfterApply = _social.ViewerText(0x4ab6, "Selected profile is hidden.");
+            _login.PopupAfterApply = _social.Viewer.Text(0x4ab6, "Selected profile is hidden.");
             return;
         }
         // a profile shown again from the copy has slots the hook's lost, so opening it again reads it afresh
-        if (st == NoCharacter) _profileCache.Remove(_profileKey);
-        Note.Set(st == "failed:no profile" ? _social.ViewerText(0x4a83, "No profile data found.") : ProfileFailText(st), st != "failed:no profile");
+        if (st == NoCharacter) _login.ProfileCache.Remove(_login.ProfileKey);
+        Note.Set(st == "failed:no profile" ? _social.Viewer.Text(0x4a83, "No profile data found.") : ProfileFailText(st), st != "failed:no profile");
         tab.Failed = Note.IsError;
     }
 
@@ -350,9 +338,9 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             GameLine = FfxiProfileText.Title;
             return;
         }
-        Name = r.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : _social.Filtered(r.Name);
+        Name = r.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : _social.Viewer.Filtered(r.Name);
         GameLine = FfxiProfileText.Line(PrivacyText(r.Level));
-        foreach (var (label, value) in FfxiProfileText.Rows(r, StateText(ProfileFieldState.Private), StateText(ProfileFieldState.NotSet), _social.Filtered))
+        foreach (var (label, value) in FfxiProfileText.Rows(r, StateText(ProfileFieldState.Private), StateText(ProfileFieldState.NotSet), _social.Viewer.Filtered))
             Rows.Add(new RowItem(label, value, null));
     }
 
@@ -360,11 +348,11 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     {
         ShowsPicture = true;
         GameLine = "";
-        Name = p.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : _social.Filtered(p.Name);
+        Name = p.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : _social.Viewer.Filtered(p.Name);
         Picture = HandlePicture(p);
         Hid = p.Hid.Length > 0 ? "H-ID " + p.Hid : "";
         Mail = p.MailState != ProfileFieldState.Shown || p.Mail.Length == 0 ||
-                      p.Mail == _social.ViewerText(0x4a7f, "No Mail address") ? "" : _social.Filtered(p.Mail);
+                      p.Mail == _social.Viewer.Text(0x4a7f, "No Mail address") ? "" : _social.Viewer.Filtered(p.Mail);
         Updated = p.Updated is > 0 and < 253402300800   // FromUnixTimeSeconds throws past the year 9999
             ? "Updated " + DateTimeOffset.FromUnixTimeSeconds(p.Updated).ToLocalTime().ToString("d MMM yyyy") : "";
         Privacy = PrivacyText(p.Level);
@@ -379,7 +367,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
                                                    shown ? _social.Avatars.ProfilePicture(r.ProfilePictureId) : null));
                 continue;
             }
-            var lines = r.Lines.Where(l => l.Length > 0).Select(_social.Filtered).ToList();
+            var lines = r.Lines.Where(l => l.Length > 0).Select(_social.Viewer.Filtered).ToList();
             Rows.Add(new RowItem(r.Label, shown && lines.Count > 0
                 ? string.Join("\n", lines) : StateText(shown ? ProfileFieldState.NotSet : r.State), null));
         }

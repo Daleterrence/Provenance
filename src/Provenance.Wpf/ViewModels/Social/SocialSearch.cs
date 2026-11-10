@@ -56,29 +56,26 @@ public sealed partial class SocialSearch : ObservableObject
     };
     public int MaxLength => Kind == FriendSearchKind.Hid ? PolLimits.HidSearch : PolLimits.HandleName;
 
-    private readonly HookJobWatch _search = new();
-    private FriendSearchKind _searchedKind;
-    private string _searchedValue = "";
-    private readonly HookJobWatch _request = new();
-    private string _requestName = "";
-    private string _requestKey = "";
-    private bool _requestCharacter;
+    private sealed class PerLogin
+    {
+        public readonly HookJobWatch Search = new(), Request = new(), Answer = new();
+        public FriendSearchKind SearchedKind;
+        public string SearchedValue = "", RequestName = "", RequestKey = "";
+        public bool RequestCharacter;
+        public FriendItem? AnswerFor;
+        public RequestAnswer AnswerKind;
+    }
+
+    private PerLogin _login = new();
     private const int SearchPage = 100;   // the hook fetches the first 100, like the viewer
     private const string TooManyResults = "Too many results. Please narrow your search.";
 
-    private readonly HookJobWatch _answer = new();
-    internal string? _answerToken => _answer.Token;
-    private FriendItem? _answerFor;
-    private RequestAnswer _answerKind;
 
-    internal bool Writing => _answer.Running || _request.Running;
+    internal bool Writing => _login.Answer.Running || _login.Request.Running;
 
     internal void Reset()
     {
-        _answer.Forget();
-        _search.Forget();
-        _request.Forget();
-        _answerFor = null;
+        _login = new();
         Busy = false;
         Note.Clear();
         Hits.Clear();
@@ -88,7 +85,7 @@ public sealed partial class SocialSearch : ObservableObject
     {
         var value = text.Trim();
         var kind = Kind;
-        if (Busy || !_social.LoggedIn || _social.SessionPid is not { } pid) return;
+        if (Busy || !_social.LoggedIn || _social.Session.Pid is not { } pid) return;
         if (_social.GameRunning)
         {
             Note.Fail(SocialViewModel.GameRunningNote);
@@ -109,14 +106,14 @@ public sealed partial class SocialSearch : ObservableObject
             Note.Fail(HookFailures.Friends.QuoteInName);
             return;
         }
-        var token = _search.Begin(HookLimits.Search, _social.Now);
-        _searchedKind = kind;
-        _searchedValue = value;
+        var token = _login.Search.Begin(HookLimits.Search, _social.Now);
+        _login.SearchedKind = kind;
+        _login.SearchedValue = value;
         Hits.Clear();
         Busy = true;
         Note.Show("Searching PlayOnline...");
         if (SocialRequests.Search(pid, token, kind, value)) return;
-        _search.Forget();
+        _login.Search.Forget();
         Busy = false;
         Note.Fail(HookFailures.RequestWriteFailed);
     }
@@ -124,9 +121,9 @@ public sealed partial class SocialSearch : ObservableObject
     // a search nobody's waiting on any more: withdrawn if the hook hasn't taken it yet, and its answer's ignored
     public void Cancel()
     {
-        if (!_search.Running) return;
+        if (!_login.Search.Running) return;
         _social.DiscardRequest(HookContract.Requests.Search);
-        _search.Forget();
+        _login.Search.Forget();
         Busy = false;
         Note.Clear();
         Hits.Clear();
@@ -167,15 +164,15 @@ public sealed partial class SocialSearch : ObservableObject
             Note.Fail(HookFailures.Friends.RequestSelf);
             return;
         }
-        if (hit.IsFriend || hit.RequestSent || _request.Running || !_social.BeginEdit(out var pid, out var token, followSend: true)) return;
-        _request.Begin(token, HookLimits.FriendRequest, _social.Now);
-        _requestName = hit.Name;
-        _requestKey = hit.Key;
-        _requestCharacter = hit.IsCharacter;
+        if (hit.IsFriend || hit.RequestSent || _login.Request.Running || !_social.BeginEdit(out var pid, out var token, followSend: true)) return;
+        _login.Request.Begin(token, HookLimits.FriendRequest, _social.Now);
+        _login.RequestName = hit.Name;
+        _login.RequestKey = hit.Key;
+        _login.RequestCharacter = hit.IsCharacter;
         Note.Show($"Sending a friend request to {hit.Name}...");
-        if (SocialRequests.SendFriendRequest(pid, token, hit.Index, hit.Key, _social.ViewerText(0x46c9, "Let's be friends!"),
-                                             _social.ViewerText(0x46e6, "Would you like to be friends?"))) return;
-        _request.Forget();
+        if (SocialRequests.SendFriendRequest(pid, token, hit.Index, hit.Key, _social.Viewer.Text(0x46c9, "Let's be friends!"),
+                                             _social.Viewer.Text(0x46e6, "Would you like to be friends?"))) return;
+        _login.Request.Forget();
         _social.EditBusy = false;
         Note.Fail(HookFailures.RequestWriteFailed);
     }
@@ -200,16 +197,16 @@ public sealed partial class SocialSearch : ObservableObject
             return;
         }
         if (!_social.BeginEdit(out var pid, out var token, followSend: true)) return;
-        _answer.Begin(token, HookLimits.Answer, _social.Now);
-        _answerFor = f;
-        _answerKind = answer;
+        _login.Answer.Begin(token, HookLimits.Answer, _social.Now);
+        _login.AnswerFor = f;
+        _login.AnswerKind = answer;
         var subject = answer == RequestAnswer.Accept
-            ? _social.ViewerText(0x46d0, "Friend registration accepted")
-            : _social.ViewerText(0x46d1, "Friend registration declined");
+            ? _social.Viewer.Text(0x46d0, "Friend registration accepted")
+            : _social.Viewer.Text(0x46d1, "Friend registration declined");
         // ignoring from a request only ever covers this handle, same as the viewer
         if (SocialRequests.AnswerRequest(pid, answer, token, f.RequestMid, subject, allHandles: false)) return;
-        _answer.Forget();
-        _answerFor = null;
+        _login.Answer.Forget();
+        _login.AnswerFor = null;
         _social.WriteOrFail(false);
     }
 
@@ -221,14 +218,14 @@ public sealed partial class SocialSearch : ObservableObject
 
     private void ApplyAnswerState(PolSocialSnapshot snap)
     {
-        if (!_answer.Running || _answerFor is not { } f) return;
-        if (_answer.Settle(snap.SendStateFor(_answer.Token), "sent", _social.Now) is not { } st) return;
-        _answerFor = null;
+        if (!_login.Answer.Running || _login.AnswerFor is not { } f) return;
+        if (_login.Answer.Settle(snap.SendStateFor(_login.Answer.Token), "sent", _social.Now) is not { } st) return;
+        _login.AnswerFor = null;
         _social.EditBusy = false;
         if (st == "sent")
         {
             _social.Answered(f.RequestMid, ack: true);
-            _social.Chat?.AddNote(f.Name, f.Key, _answerKind switch
+            _social.Chat?.AddNote(f.Name, f.Key, _login.AnswerKind switch
             {
                 RequestAnswer.Accept => "You accepted the friend request.",
                 RequestAnswer.Decline => "You declined the friend request.",
@@ -259,12 +256,12 @@ public sealed partial class SocialSearch : ObservableObject
 
     private void ApplySearchState(PolSocialSnapshot snap)
     {
-        _search.WaitingTurn(snap.SearchJob.Token, snap.ProfileServerBusy, _social.Now);
-        if (_search.Running && _search.Settle(snap.SearchJob.StateFor(_search.Token), "done", _social.Now) is { } st)
+        _login.Search.WaitingTurn(snap.SearchJob.Token, snap.ProfileServerBusy, _social.Now);
+        if (_login.Search.Running && _login.Search.Settle(snap.SearchJob.StateFor(_login.Search.Token), "done", _social.Now) is { } st)
         {
             if (st == "timeout") _social.DiscardRequest(HookContract.Requests.Search);
             Busy = false;
-            var characters = _searchedKind == FriendSearchKind.Character;
+            var characters = _login.SearchedKind == FriendSearchKind.Character;
             if (st == "done" && snap.Search.TooMany) Note.Fail(TooManyResults);
             else if (st == "done")
             {
@@ -272,7 +269,7 @@ public sealed partial class SocialSearch : ObservableObject
                 foreach (var h in snap.Search.Hits)
                 {
                     // the search matched INITCAP of what was typed, so a hit with no name in it is still called that
-                    var name = characters && h.Name.Length == 0 ? FriendSearch.InitCap(_searchedValue) : h.Name;
+                    var name = characters && h.Name.Length == 0 ? FriendSearch.InitCap(_login.SearchedValue) : h.Name;
                     Hits.Add(new SearchHitItem(h.Index, name, _social.Avatars.ProfilePicture(characters ? 0 : h.ProfilePictureId),
                                                h.IsFriend, h.Key, IsMe: h.IsMe)
                              { IsCharacter = characters, World = characters ? h.World : "" });
@@ -280,7 +277,7 @@ public sealed partial class SocialSearch : ObservableObject
                 var what = characters ? "character" : "handle";
                 // only past the first page were there more than came back, the hook drops a hit with nothing in it
                 var total = snap.Search.Total > SearchPage ? snap.Search.Total : Hits.Count;
-                Note.Show(Hits.Count == 0 ? _searchedKind switch
+                Note.Show(Hits.Count == 0 ? _login.SearchedKind switch
                           {
                               FriendSearchKind.Hid => HookFailures.Friends.NoHidHit,
                               FriendSearchKind.Character => HookFailures.Friends.NoCharacterHit,
@@ -303,8 +300,8 @@ public sealed partial class SocialSearch : ObservableObject
                 _ => HookFailures.Friends.SearchRejected(SocialRequests.FailReason(st)),
             });
         }
-        if (!_request.Running) return;
-        if (_request.Settle(snap.SendStateFor(_request.Token), "sent", _social.Now) is not { } rst) return;
+        if (!_login.Request.Running) return;
+        if (_login.Request.Settle(snap.SendStateFor(_login.Request.Token), "sent", _social.Now) is not { } rst) return;
         _social.EditBusy = false;
         if (rst != "sent")
         {
@@ -312,12 +309,12 @@ public sealed partial class SocialSearch : ObservableObject
             {
                 "timeout" => HookFailures.Friends.RequestNoAnswer,
                 "failed:busy" => HookFailures.Busy,
-                "failed:already a friend" => HookFailures.Friends.AlreadyFriend(_requestName),
+                "failed:already a friend" => HookFailures.Friends.AlreadyFriend(_login.RequestName),
                 "failed:self" => HookFailures.Friends.RequestSelf,
-                "failed:-7181" => HookFailures.Friends.IgnoredFirst(_requestName),
+                "failed:-7181" => HookFailures.Friends.IgnoredFirst(_login.RequestName),
                 "failed:-7188" or "failed:-516" => HookFailures.FriendListFull,
                 "failed:no such result" => HookFailures.Friends.NoSuchResult,
-                "failed:no such friend" => HookFailures.Friends.FriendListChangedFor(_requestName),
+                "failed:no such friend" => HookFailures.Friends.FriendListChangedFor(_login.RequestName),
                 "failed:stopped" => HookFailures.Friends.RequestStopped,
                 "failed:hourly limit" => HookFailures.Friends.RequestHourlyLimit,
                 var s when s.StartsWith("failed:list", StringComparison.Ordinal) =>
@@ -326,9 +323,9 @@ public sealed partial class SocialSearch : ObservableObject
             });
             return;
         }
-        Note.Show($"Friend request sent to {_requestName}. They'll show on your list{(_requestCharacter ? " under their PlayOnline handle," : "")} as \"Friend request sent\" until they accept.");
+        Note.Show($"Friend request sent to {_login.RequestName}. They'll show on your list{(_login.RequestCharacter ? " under their PlayOnline handle," : "")} as \"Friend request sent\" until they accept.");
         for (int i = 0; i < Hits.Count; i++)
-            if (Hits[i].Name == _requestName && Hits[i].Key == _requestKey)
+            if (Hits[i].Name == _login.RequestName && Hits[i].Key == _login.RequestKey)
                 Hits[i] = Hits[i] with { RequestSent = true };
     }
 }

@@ -200,6 +200,13 @@ public partial class HandlesViewModel : ObservableObject
              HandleList.Done(HandleChange.Switch, row.Name, ""));
     }
 
+    // a note from the last login's change doesn't show under the next one
+    public void NewLogin()
+    {
+        Note.Clear();
+        _noteSeen = false;
+    }
+
     // Settings is opening: an answer that came in while it was shut shows this once, one already seen there goes
     public void Opened()
     {

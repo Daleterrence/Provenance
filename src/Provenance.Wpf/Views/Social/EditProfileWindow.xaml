@@ -159,10 +159,10 @@
                             </Style>
                         </Button.Style>
                         <Grid>
-                            <controls:ProfilePictureCircle Diameter="76" Source="{Binding Social.Avatar}" />
+                            <controls:ProfilePictureCircle Diameter="76" Source="{Binding Avatar}" />
                             <ProgressBar Width="76" Height="76" IsHitTestVisible="False"
                                          Style="{StaticResource Spinner}"
-                                         Visibility="{Binding Social.ProfilePictureSaving, Converter={StaticResource BoolToVis}}" />
+                                         Visibility="{Binding ProfilePictureSaving, Converter={StaticResource BoolToVis}}" />
                             <Border Width="24" Height="24" CornerRadius="12" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                     Background="{DynamicResource Surface.3}" BorderBrush="{DynamicResource Bg.Base}" BorderThickness="2">
                                 <controls:SvgIcon Glyph="edit" Flat="True" Width="12" Height="12" HorizontalAlignment="Center"

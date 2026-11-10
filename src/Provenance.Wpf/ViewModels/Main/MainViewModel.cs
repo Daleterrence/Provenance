@@ -86,7 +86,8 @@ public partial class MainViewModel : ObservableObject
             _dialogs.Info("PlayOnline session ended", why);
             Log.Information("Session ended: the notice was closed");
         });
-        Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings, Session, time);
+        Viewer = new ViewerResources(settings);
+        Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings, Session, Viewer, time);
         Social.OpenChatRequested += OpenChatWith;
 
         Multi.RequestShow += () => RequestShow?.Invoke();
@@ -367,9 +368,6 @@ public partial class MainViewModel : ObservableObject
     public bool ShowLogInCard => GameInstalled && !IsLaunching && !LoggedIn;
     public bool ShowFriendsCard => LoggedIn && !IsLaunching;
 
-    private static string? ViewerFolder(PolRegion? region) =>
-        region is { } r ? PolPaths.TryGetInstallFolder(r, GameProduct.Viewer) : null;
-
     private void RefreshInstallState()
     {
         var region = _settings.DetectedRegion;
@@ -542,7 +540,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         if (claim.Otp is not { } otp) return;
-        Social.Start(profile.Id);
+        StartSocial(profile.Id);
         Accounts.SessionProfileId = profile.Id;
         SetPhase(SessionPhase.LoggingIn);
         var token = BeginCancellable(Accounts.ProfileTitle.StartsWith("New account", StringComparison.Ordinal)
@@ -600,9 +598,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (_settings.Current.AcceptedMemberAgreement) return true;
         if (!PolPaths.Supported(_settings.DetectedRegion)) return true;
-        var viewer = ViewerFolder(_settings.DetectedRegion);
-        var strings = viewer is null ? null : PolStringTable.Load(viewer);
-        if (!_dialogs.AskAgreement(strings))
+        if (!_dialogs.AskAgreement(Viewer.Strings()))
         {
             Log.Information("Member Agreement declined: not signing in");
             Notice.Show("You're not logged in, because you didn't accept the PlayOnline Member Agreement.", "InformationOutline");
@@ -781,7 +777,15 @@ public partial class MainViewModel : ObservableObject
     }
 
     // fed every snapshot, so a change still going when Settings closes is answered all the same
+    // a new login, maybe on another account, so nothing from the last one can show under this one
+    internal void StartSocial(string profileId, string? storeRoot = null)
+    {
+        Social.Start(profileId, storeRoot);
+        Handles.NewLogin();
+    }
+
     internal HandlesViewModel Handles { get; }
+    internal ViewerResources Viewer { get; }
 
     private void ShowHandles()
     {

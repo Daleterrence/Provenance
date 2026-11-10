@@ -16,7 +16,7 @@ public sealed partial class SocialMessages : ObservableObject
     public SocialMessages(SocialViewModel social) => _social = social;
 
     public ObservableCollection<ChatEntry> Conversation { get; } = new();
-    internal MailSendQueue Sends { get; } = new();
+    internal MailSendQueue Sends => _social.Login.Sends;
 
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(SendCommand))]
     [NotifyPropertyChangedFor(nameof(ComposeBytes), nameof(ComposeCount), nameof(ComposeCountShown), nameof(ComposeNote))]
@@ -32,9 +32,14 @@ public sealed partial class SocialMessages : ObservableObject
     public bool CanCompose => _social.SelectedFriend is { CanMessage: true } && !_social.GameRunning && !_social.HandleSwitching;
 
     // a draft per conversation, so it never goes to the next person picked (POL mail can't be called back)
-    private readonly Dictionary<string, string> _drafts = new();
-    private string? _draftFor;
-    private FriendItem? _draftPerson;
+    private sealed class PerLogin
+    {
+        public readonly Dictionary<string, string> Drafts = new();
+        public string? DraftFor;
+        public FriendItem? DraftPerson;
+    }
+
+    private PerLogin _login = new();
     // keyless people can share a name, so the row's in there too
     private static string DraftKey(FriendItem f) =>
         f.Key.Length > 0 ? "k:" + f.Key : $"n:{f.Name.ToUpperInvariant()}:{f.Row}";
@@ -71,11 +76,8 @@ public sealed partial class SocialMessages : ObservableObject
 
     internal void Reset()
     {
-        _drafts.Clear();
-        _draftFor = null;
-        _draftPerson = null;
+        _login = new();
         Compose = "";
-        Sends.Reset();
         Conversation.Clear();
     }
 
@@ -99,21 +101,21 @@ public sealed partial class SocialMessages : ObservableObject
         OnPropertyChanged(nameof(ComposeNote));
         var key = value is null ? null : DraftKey(value);
         // a presence update gives the same person a new row and the text goes with them. Keyless needs the same row too
-        bool samePerson = value != null && _draftPerson != null && value.Is(_draftPerson) &&
-                          (value.Key.Length > 0 || _draftPerson.Key.Length > 0 || key == _draftFor);
+        bool samePerson = value != null && _login.DraftPerson != null && value.Is(_login.DraftPerson) &&
+                          (value.Key.Length > 0 || _login.DraftPerson.Key.Length > 0 || key == _login.DraftFor);
         if (samePerson)
         {
-            if (_draftFor != null && key != _draftFor && _drafts.Remove(_draftFor, out var moved))
-                _drafts[key!] = moved;
+            if (_login.DraftFor != null && key != _login.DraftFor && _login.Drafts.Remove(_login.DraftFor, out var moved))
+                _login.Drafts[key!] = moved;
         }
-        else if (_draftFor != null)
+        else if (_login.DraftFor != null)
         {
-            if (string.IsNullOrWhiteSpace(Compose)) _drafts.Remove(_draftFor);
-            else _drafts[_draftFor] = Compose;
+            if (string.IsNullOrWhiteSpace(Compose)) _login.Drafts.Remove(_login.DraftFor);
+            else _login.Drafts[_login.DraftFor] = Compose;
         }
-        _draftPerson = value;
-        _draftFor = key;
-        if (!samePerson) Compose = key != null && _drafts.TryGetValue(key, out var draft) ? draft : "";
+        _login.DraftPerson = value;
+        _login.DraftFor = key;
+        if (!samePerson) Compose = key != null && _login.Drafts.TryGetValue(key, out var draft) ? draft : "";
         // picking someone in the main window shows nothing, so it stays unread until the friends window shows it
         if (value != null && _social.Chat != null && value.Unread > 0 && ConversationVisible)
             ReadConversation(value, rebuild: !_social.ApplyingSnapshot);
@@ -131,7 +133,7 @@ public sealed partial class SocialMessages : ObservableObject
         foreach (var line in chat.With(f.Name, f.Key))
         {
             var e = line.Outgoing || line.State == "notice" ? line
-                  : line with { Subject = _social.Filtered(line.Subject), Text = _social.Filtered(line.Text) };
+                  : line with { Subject = _social.Viewer.Filtered(line.Subject), Text = _social.Viewer.Filtered(line.Text) };
             var d = e.When.Date;
             Conversation.Add(d == day ? e : e with { DayBreak = DayLabel(d) });
             day = d;
@@ -148,7 +150,7 @@ public sealed partial class SocialMessages : ObservableObject
     }
 
     private bool CanSend() =>
-        CanCompose && !string.IsNullOrWhiteSpace(Compose) && ComposeBytes <= PolMessage.MaxTextBytes && _social.SessionPid != null;
+        CanCompose && !string.IsNullOrWhiteSpace(Compose) && ComposeBytes <= PolMessage.MaxTextBytes && _social.Session.Pid != null;
 
     // POL mail (the viewer's stored send), so it reaches them offline too
     [RelayCommand(CanExecute = nameof(CanSend))]
@@ -191,7 +193,7 @@ public sealed partial class SocialMessages : ObservableObject
 
     public void Resend(ChatEntry e)
     {
-        if (!e.Failed || _social.Chat is not { } chat || !CanCompose || _social.SelectedFriend is not { } f || _social.SessionPid is null) return;
+        if (!e.Failed || _social.Chat is not { } chat || !CanCompose || _social.SelectedFriend is not { } f || _social.Session.Pid is null) return;
         if (!chat.RemoveFailed(e.Key)) return;
         Queue(f, e.Text);
         Refresh();
@@ -199,7 +201,7 @@ public sealed partial class SocialMessages : ObservableObject
 
     private void Queue(FriendItem f, string text)
     {
-        if (Sends.Add(_social.Chat!, f.Row, f.Name, f.Key, text, _social.SessionPid, _social.GameRunning || _social.HandleSwitching))
+        if (Sends.Add(_social.Chat!, f.Row, f.Name, f.Key, text, _social.Session.Pid, _social.GameRunning || _social.HandleSwitching))
             Refresh();
     }
 

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
@@ -15,7 +16,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 {
     private enum Job { None, Load, Save, Rename, LoadXi }
 
-    private readonly SocialViewModel _social;
+    private readonly ISocialSession _social;
     private readonly IDialogs _dialogs;
     private readonly System.Windows.Threading.DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private Job _job;
@@ -33,17 +34,17 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private ProfileCard? _xiCard;
     private readonly ProfileCard _handleCard;
 
-    public EditProfileViewModel(SocialViewModel social, IDialogs dialogs)
+    internal EditProfileViewModel(ISocialSession social, IDialogs dialogs)
     {
         _social = social;
         _dialogs = dialogs;
         _social.SnapshotApplied += OnSnapshot;
         _timer.Tick += (_, _) => CheckTimeout();
-        NotSet = social.ViewerText(0x4a81, "Not set");
+        NotSet = social.Viewer.Text(0x4a81, "Not set");
         _handleCard = new ProfileCard(null, HelpFor)
         {
             Title = social.AccountName,
-            Subtitle = social.ViewerText(0x4abe, "Handle Profile"),
+            Subtitle = social.Viewer.Text(0x4abe, "Handle Profile"),
             Picture = social.Avatar,
             IsSelected = true,
         };
@@ -60,11 +61,18 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SocialViewModel.Avatar)) _handleCard.Picture = _social.Avatar;
-        if (e.PropertyName == nameof(SocialViewModel.AccountName) && !IsLoaded) _handleCard.Title = _social.AccountName;
+        if (e.PropertyName == nameof(ISocialSession.Avatar))
+        {
+            _handleCard.Picture = _social.Avatar;
+            OnPropertyChanged(nameof(Avatar));
+        }
+        if (e.PropertyName == nameof(ISocialSession.ProfilePictureSaving)) OnPropertyChanged(nameof(ProfilePictureSaving));
+        if (e.PropertyName == nameof(ISocialSession.AccountName) && !IsLoaded) _handleCard.Title = _social.AccountName;
     }
 
-    public SocialViewModel Social => _social;
+    public ImageSource? Avatar => _social.Avatar;
+    public bool ProfilePictureSaving => _social.ProfilePictureSaving;
+    private DateTime Now => _social.Time.GetUtcNow().UtcDateTime;
 
     public ObservableCollection<ProfileCard> Cards { get; } = new();
 
@@ -134,9 +142,9 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private string HelpFor(PrivacyLevel level) => level switch
     {
-        PrivacyLevel.Everyone => _social.ViewerText(0x2c5f, "Show profile to all PlayOnline members."),
-        PrivacyLevel.FriendsOnly => _social.ViewerText(0x2c60, "Show profile to friends and group friends only."),
-        PrivacyLevel.Private => _social.ViewerText(0x2c61, "Hide profile from all PlayOnline members."),
+        PrivacyLevel.Everyone => _social.Viewer.Text(0x2c5f, "Show profile to all PlayOnline members."),
+        PrivacyLevel.FriendsOnly => _social.Viewer.Text(0x2c60, "Show profile to friends and group friends only."),
+        PrivacyLevel.Private => _social.Viewer.Text(0x2c61, "Hide profile from all PlayOnline members."),
         _ => "",
     };
     [ObservableProperty] private string _handleName = "";
@@ -238,7 +246,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     {
         pid = 0;
         if (gameFirst && Waiting()) return false;
-        if (_social.SessionPid is not { } session)
+        if (_social.Session.Pid is not { } session)
         {
             Fail("Log in to edit your profile.");
             return false;
@@ -257,8 +265,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private void Start(Job job, string note = "")
     {
         _job = job;
-        _watch.Begin(job == Job.Rename ? HookLimits.MyProfileRename : HookLimits.MyProfile, _social.Now);
-        _pid = _social.SessionPid ?? 0;
+        _watch.Begin(job == Job.Rename ? HookLimits.MyProfileRename : HookLimits.MyProfile, Now);
+        _pid = _social.Session.Pid ?? 0;
         if (job == Job.Load) LoadingText = "Loading your profile...";
         LoadingProfile = job is Job.Load or Job.LoadXi;
         Busy = true;
@@ -308,12 +316,12 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             _timer.Stop();
             return;
         }
-        if (_social.SessionPid != _pid)
+        if (_social.Session.Pid != _pid)
         {
             Abandon(HookFailures.ProfileEditor.SessionEnded);
             return;
         }
-        if (_watch.Overdue(_social.Now))
+        if (_watch.Overdue(Now))
             Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : HookFailures.ProfileEditor.SaveUnconfirmed);
     }
 
@@ -323,7 +331,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _loadingValues = true;
         try
         {
-            _noMail = _social.ViewerText(0x4a7f, "No Mail address");
+            _noMail = _social.Viewer.Text(0x4a7f, "No Mail address");
             IReadOnlyList<MyProfileChoice> T(string n) => p.Tables.TryGetValue(n, out var t) ? t : [];
             List<Choice<long>> One(string n) =>
                 [new(0, NotSet), .. T(n).Select(r => new Choice<long>(r.Code, r.Parts.LastOrDefault()?.Trim() ?? ""))];
@@ -455,7 +463,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         bool xi = _job == Job.LoadXi;
         var hook = xi ? snap.XiJob : snap.MeJob;
         // waiting its turn behind another profile server job in the hook, so its clock hasn't started
-        _watch.WaitingTurn(hook.Token, snap.ProfileServerBusy, _social.Now);
+        _watch.WaitingTurn(hook.Token, snap.ProfileServerBusy, Now);
         if (_job == Job.None || !_watch.Running || hook.Token != _watch.Token) return;
         var state = hook.State;
         if (state.StartsWith("failed", StringComparison.Ordinal) || state == "cancelled")

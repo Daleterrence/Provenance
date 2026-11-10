@@ -67,8 +67,12 @@ public partial class NewsViewModel : ObservableObject
     [ObservableProperty] private string _worldsState = "";
     [ObservableProperty] private string _worldsCheckedText = "";
 
-    internal DateTime _worldsAt = DateTime.MinValue;
-    internal DateTime _feedsAt = DateTime.MinValue;
+    private DateTime _worldsAt = DateTime.MinValue;
+    private DateTime _feedsAt = DateTime.MinValue;
+    internal DateTime WorldsReadAt => _worldsAt;
+
+    // so a run that photographs the windows isn't changed by a read in the middle of it
+    internal void KeepFeedsFresh() => _feedsAt = _worldsAt = Now.AddDays(1);
     private bool _worldsLoading, _feedsLoading, _feedsAgain;
     private static readonly TimeSpan WorldsMaxAge = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan FeedsMaxAge = TimeSpan.FromMinutes(30);

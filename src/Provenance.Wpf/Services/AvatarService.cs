@@ -12,10 +12,18 @@ namespace Provenance.Wpf.Services;
 // the viewer folder's looked for until it exists, the app can start before POL's installed
 public sealed class AvatarService(ISettingsService settings)
 {
-    internal string? _viewerDir;
+    private string? _viewerDir;
     private readonly object _lock = new();
-    internal readonly Dictionary<int, ImageSource?> _cache = new();
+    private readonly Dictionary<int, ImageSource?> _cache = new();
     private readonly Dictionary<int, BitmapSource?> _sheets = new();
+
+    // pictures a check hands over, as if they'd been read from that folder
+    internal void UseStandIns(string viewerDir, IReadOnlyDictionary<int, ImageSource?> pictures)
+    {
+        _viewerDir = viewerDir;
+        lock (_lock)
+            foreach (var (id, picture) in pictures) _cache[id] = picture;
+    }
 
     private string? ViewerDir
     {

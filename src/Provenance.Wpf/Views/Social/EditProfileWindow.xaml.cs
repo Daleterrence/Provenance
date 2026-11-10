@@ -9,11 +9,13 @@ namespace Provenance.Wpf.Views.Social;
 public partial class EditProfileWindow : AppWindow
 {
     private readonly EditProfileViewModel _vm;
+    private readonly SocialViewModel _social;
     private bool _closeQuietly;
 
     public EditProfileWindow(SocialViewModel social, IDialogs dialogs)
     {
         InitializeComponent();
+        _social = social;
         DataContext = _vm = new EditProfileViewModel(social, dialogs);
         // 1366x768, or 1080p with scaling, is shorter than 780
         MaxHeight = SystemParameters.WorkArea.Height;
@@ -41,8 +43,8 @@ public partial class EditProfileWindow : AppWindow
 
     private void OnProfilePictureClick(object sender, RoutedEventArgs e)
     {
-        if (_vm.Social.ChangeProfilePictureCommand.CanExecute(null))
-            _vm.Social.ChangeProfilePictureCommand.Execute(null);
+        if (_social.ChangeProfilePictureCommand.CanExecute(null))
+            _social.ChangeProfilePictureCommand.Execute(null);
     }
 
     private void OnDigitsOnly(object sender, TextCompositionEventArgs e) => e.Handled = !e.Text.All(char.IsAsciiDigit);
