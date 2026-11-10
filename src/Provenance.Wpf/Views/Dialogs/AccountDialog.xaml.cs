@@ -59,28 +59,12 @@ public partial class AccountDialog : AppWindow
         var polPw = PolPasswordBox.Password;
         var squareEnixPassword = SquareEnixPasswordBox.Password;
 
-        (string Text, Control Field)? problem = null;
-        if ((_required || polId.Length > 0) && (polId.Length != 8 || !polId.All(char.IsAsciiLetterOrDigit)))
-            problem = ("A PlayOnline ID is 8 letters and numbers.", PolIdBox);
-        else if (_required && polPw.Length == 0) problem = ("Enter your PlayOnline password.", PolPasswordBox);
-        else if (polPw.Length > HookExitText.MaxPolPasswordLength)
-            problem = ("A PlayOnline password can't be longer than 16 characters.", PolPasswordBox);
-        else if (AccountRules.PasswordProblem(polPw) is { } polPwProblem) problem = (polPwProblem, PolPasswordBox);
-        else if (_required && squareEnixId.Length == 0) problem = ("Enter your Square Enix ID.", SquareEnixIdBox);
-        else if (squareEnixId.Contains('@')) problem = ("Use your Square Enix ID here, not your email address.", SquareEnixIdBox);
-        else if (AccountRules.SquareEnixIdProblem(squareEnixId) is { } squareEnixIdProblem) problem = (squareEnixIdProblem, SquareEnixIdBox);
-        else if (_required && squareEnixPassword.Length == 0) problem = ("Enter your Square Enix password.", SquareEnixPasswordBox);
-        else if (AccountRules.PasswordProblem(squareEnixPassword) is { } squareEnixPasswordProblem) problem = (squareEnixPasswordProblem, SquareEnixPasswordBox);
-        else if (OtpBox.IsChecked == true && OtpSource.Length > 0 && OtpItemBox.Text.Trim().Length == 0)
-            problem = ("Enter the item that holds the authenticator, or choose to type the code in.", OtpItemBox);
-        else if (OtpBox.IsChecked == true && ToolFacts.ForSource(OtpSource) is not null && OtpSources.StartsWithDash(OtpItemBox.Text))
-            problem = (OtpSources.DashText, OtpItemBox);
-
-        if (problem is { } p)
+        if (AccountRules.CheckForm(_required, polId, polPw, squareEnixId, squareEnixPassword, OtpBox.IsChecked == true, OtpSource,
+                                   OtpItemBox.Text) is { } problem)
         {
-            ErrorText.Text = p.Text;
+            ErrorText.Text = problem.Text;
             ErrorText.Visibility = Visibility.Visible;
-            p.Field.Focus();
+            FieldBox(problem.Field).Focus();
             return;
         }
 
@@ -90,6 +74,15 @@ public partial class AccountDialog : AppWindow
         SquareEnixPasswordBox.Clear();
         DialogResult = true;
     }
+
+    private Control FieldBox(AccountField field) => field switch
+    {
+        AccountField.PolId => PolIdBox,
+        AccountField.PolPassword => PolPasswordBox,
+        AccountField.SquareEnixId => SquareEnixIdBox,
+        AccountField.SquareEnixPassword => SquareEnixPasswordBox,
+        _ => OtpItemBox,
+    };
 
     private string OtpSource => (OtpSourceBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
 

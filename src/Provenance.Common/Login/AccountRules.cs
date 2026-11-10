@@ -1,7 +1,12 @@
 using Provenance.Common.Credentials;
+using Provenance.Common.Otp;
 using Provenance.Common.Social;
 
 namespace Provenance.Common.Login;
+
+public enum AccountField { PolId, PolPassword, SquareEnixId, SquareEnixPassword, OtpItem }
+
+public sealed record FormProblem(string Text, AccountField Field);
 
 public static class AccountRules
 {
@@ -33,6 +38,29 @@ public static class AccountRules
 
     public static AccountDialogResult WithoutPasswords(AccountDialogResult typed) =>
         typed with { PolPassword = "", SeaPassword = "" };
+
+    // Edit account's checks, in the order the form shows them. The IDs come in trimmed (and the PlayOnline one in capitals),
+    // the item as typed. required is adding, or details that can't be used any more
+    public static FormProblem? CheckForm(bool required, string polId, string polPassword, string squareEnixId, string squareEnixPassword,
+                                         bool useOtp, string otpSource, string otpItem)
+    {
+        if ((required || polId.Length > 0) && (polId.Length != 8 || !polId.All(char.IsAsciiLetterOrDigit)))
+            return new("A PlayOnline ID is 8 letters and numbers.", AccountField.PolId);
+        if (required && polPassword.Length == 0) return new("Enter your PlayOnline password.", AccountField.PolPassword);
+        if (polPassword.Length > HookExitText.MaxPolPasswordLength)
+            return new("A PlayOnline password can't be longer than 16 characters.", AccountField.PolPassword);
+        if (PasswordProblem(polPassword) is { } polPasswordProblem) return new(polPasswordProblem, AccountField.PolPassword);
+        if (required && squareEnixId.Length == 0) return new("Enter your Square Enix ID.", AccountField.SquareEnixId);
+        if (squareEnixId.Contains('@')) return new("Use your Square Enix ID here, not your email address.", AccountField.SquareEnixId);
+        if (SquareEnixIdProblem(squareEnixId) is { } squareEnixIdProblem) return new(squareEnixIdProblem, AccountField.SquareEnixId);
+        if (required && squareEnixPassword.Length == 0) return new("Enter your Square Enix password.", AccountField.SquareEnixPassword);
+        if (PasswordProblem(squareEnixPassword) is { } squareEnixPasswordProblem) return new(squareEnixPasswordProblem, AccountField.SquareEnixPassword);
+        if (useOtp && otpSource.Length > 0 && otpItem.Trim().Length == 0)
+            return new("Enter the item that holds the authenticator, or choose to type the code in.", AccountField.OtpItem);
+        if (useOtp && ToolFacts.ForSource(otpSource) is not null && OtpSources.StartsWithDash(otpItem))
+            return new(OtpSources.DashText, AccountField.OtpItem);
+        return null;
+    }
 
     private static string? ValidateDetails(string polId, string polPassword, string squareEnixId, string squareEnixPassword)
     {
