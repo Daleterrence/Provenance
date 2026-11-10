@@ -298,7 +298,7 @@ public sealed class WindowerLauncher : IDisposable
         try
         {
             var sid = new SecurityIdentifier(owner);
-            return sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid) || sid.IsWellKnown(WellKnownSidType.LocalSystemSid);
+            return LockedFolder.IsAdminOrSystem(sid);
         }
         finally { Kernel32.LocalFree(sd); }
     }

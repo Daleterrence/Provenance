@@ -98,8 +98,7 @@ public static class PathSafety
         return root is { Length: 3 } && root[1] == ':' && root[2] == '\\' && driveType(root) == DriveType.Fixed;
     }
 
-    private static bool IsTrusted(SecurityIdentifier sid) =>
-        sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid) ||
-        sid.IsWellKnown(WellKnownSidType.LocalSystemSid) ||
+    internal static bool IsTrusted(SecurityIdentifier sid) =>
+        LockedFolder.IsAdminOrSystem(sid) ||
         sid.Value == "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";   // TrustedInstaller
 }

@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 using Serilog;
 using static Provenance.Common.IO.FileHandles;
-using static Provenance.Common.Security.ProtectedFolders;
+using static Provenance.Common.Security.LockedFolder;
 
 namespace Provenance.Common.Install;
 
