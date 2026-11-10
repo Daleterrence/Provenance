@@ -127,6 +127,7 @@ public partial class RepairButtonViewModel : ObservableObject
     }
 
     internal void StopProbing() => _repairProbe.Stop();
+    internal bool Probing => _probing;
 
     // when the window comes forward, and every few seconds while a signed-out card's up
     public async Task ProbeAsync()

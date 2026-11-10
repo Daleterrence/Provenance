@@ -6,8 +6,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="provenance-cli" />
-    <InternalsVisibleTo Include="provenance-app-tests" />
+    <InternalsVisibleTo Include="provenance-common-tests" />
+    <InternalsVisibleTo Include="provenance-wpf-tests" />
+    <InternalsVisibleTo Include="provenance-screens" />
     <InternalsVisibleTo Include="provenance-publisher-tests" />
     <PackageReference Include="NaCl.Net" />
     <PackageReference Include="Serilog" />

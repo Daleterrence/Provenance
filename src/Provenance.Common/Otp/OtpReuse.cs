@@ -111,7 +111,9 @@ public static class OtpReuse
     internal static void Unmark(string line) => Rewrite(remove: line);
 
     // the next code's due every 30s, plus 2 of slack so a second fetch lands after it changes
-    public static int SecondsToNextCode() => 30 - (int)(Now % 30) + 2;
+    public static int SecondsToNextCode() => SecondsToNextCode(Now);
+
+    internal static int SecondsToNextCode(long now) => 30 - (int)(now % 30) + 2;
 
     // older or unreadable lines get cleaned out of the file on the way
     internal static List<(long At, string Hash)> Read()

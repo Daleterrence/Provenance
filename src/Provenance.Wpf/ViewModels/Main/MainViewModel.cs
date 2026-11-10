@@ -39,6 +39,9 @@ public partial class MainViewModel : ObservableObject
     private readonly GameLaunch _launch;
     private readonly DispatcherTimer _socialPoll, _elapsedTimer;
 
+    internal bool SocialPolling { get => _socialPoll.IsEnabled; set => _socialPoll.IsEnabled = value; }
+    internal bool ClockRunning { get => _elapsedTimer.IsEnabled; set => _elapsedTimer.IsEnabled = value; }
+
     public event Action? RequestHide;
     public event Action? RequestShow;
     public event Action? RequestRestart;
@@ -48,7 +51,7 @@ public partial class MainViewModel : ObservableObject
     public event Action? AttentionCleared;
 
     public MainViewModel(IDialogs dialogs, IWindowManager windows, ICredentialService credentials, ISettingsService settings,
-                         FeedService feeds, PolSession pol, AvatarService avatars, TimeProvider? time = null)
+                         FeedService feeds, PolSession pol, AvatarService avatars, TimeProvider? time = null, GameLaunch? launch = null)
     {
         _dialogs = dialogs;
         _windows = windows;
@@ -60,7 +63,7 @@ public partial class MainViewModel : ObservableObject
             _ui.Post(() => _dialogs.Info("Settings reset", loadProblem));
         _pol = pol;
         Session = new SessionState(pol);
-        _launch = new GameLaunch(pol, settings);
+        _launch = launch ?? new GameLaunch(pol, settings);
         _avatars = avatars;
         _feeds = feeds;
         _timeLeft = new PhaseTimeLeft(text => TimeLeftText = text);
@@ -424,7 +427,7 @@ public partial class MainViewModel : ObservableObject
         LogInCommand.Execute(null);
     }
 
-    private void OnSnapshot(PolSocialSnapshot snap)
+    internal void OnSnapshot(PolSocialSnapshot snap)
     {
         _ui.Run(() =>
         {

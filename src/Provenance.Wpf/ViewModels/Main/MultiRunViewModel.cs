@@ -216,7 +216,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         StopAllAccounts();
     }
 
-    private void SetRunStatus(string text)
+    internal void SetRunStatus(string text)
     {
         if (Running && !Stopping) Status = text;
     }
