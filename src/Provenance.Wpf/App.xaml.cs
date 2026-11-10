@@ -1,8 +1,6 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Provenance.Common;
 using Provenance.Common.Credentials;
 using Provenance.Common.Feeds;
@@ -22,10 +20,8 @@ namespace Provenance.Wpf;
 
 public partial class App : Application
 {
-    private IHost? _host;
+    private PolSession? _pol;
     private bool _showingError;   // an error inside the card mustn't stack more cards
-
-    private IServiceProvider Services => _host?.Services ?? throw new InvalidOperationException("Host not started");
 
     internal static bool RestartOnExit { get; set; }
 
@@ -66,13 +62,17 @@ public partial class App : Application
         }
         SweepOldHookFiles();
 
-        BuildHost();
-        await _host!.StartAsync();
+        // taken here on the UI thread, since the settings are built lazily on whichever thread asks first
+        var uiThread = SynchronizationContext.Current;
+        if (uiThread is null) Log.Warning("The settings were built with no UI thread to hand changes to");
+        var credentials = new CredentialService();
+        var settings = new SettingsService(SettingsService.DefaultPath, uiThread);
+        var pol = _pol = new PolSession(settings);
 
-        WarmKeys();
+        WarmKeys(credentials, pol);
         CatchUnhandled();
 
-        var mainVm = ShowMainWindow();
+        var mainVm = ShowMainWindow(credentials, settings, pol);
         SelfUpdate.TellIfUpdateFailed(mainVm.Notice);
         StartMainViewModel(mainVm, shiftAtStart || ShiftDown() || args.NoAutoLogin);
     }
@@ -101,35 +101,11 @@ public partial class App : Application
         if (swept > 0) Log.Information("Removed {Count} old hook file(s)", swept);
     }
 
-    private void BuildHost()
-    {
-        // taken here on the UI thread, since the settings are built lazily on whichever thread asks first
-        var uiThread = SynchronizationContext.Current;
-        if (uiThread is null) Log.Warning("The settings were built with no UI thread to hand changes to");
-        _host = Host.CreateDefaultBuilder()
-            .UseSerilog()
-            .ConfigureServices((_, services) =>
-            {
-                // a factory, so DI never picks one of the other constructors
-                services.AddSingleton<ICredentialService>(_ => new CredentialService());
-                services.AddSingleton<ISettingsService>(_ => new SettingsService(SettingsService.DefaultPath, uiThread));
-                services.AddSingleton<FeedService>();
-                services.AddSingleton<PolSession>();
-                services.AddSingleton<AvatarService>();
-                // the same one the start-up errors use, as the host isn't built when they show
-                services.AddSingleton(WpfDialogs.Default);
-                services.AddSingleton<IWindowManager, WindowManager>();
-                services.AddSingleton<MainViewModel>();
-                services.AddSingleton<MainWindow>();
-            })
-            .Build();
-    }
-
     // every key's read on a worker now, so the first use on the UI thread finds it ready
-    private void WarmKeys()
+    private static void WarmKeys(CredentialService credentials, PolSession pol)
     {
-        _ = (Services.GetRequiredService<ICredentialService>() as CredentialService)?.OpenKeyInBackground();
-        _ = Services.GetRequiredService<PolSession>().Credentials.OpenKeyInBackground();
+        _ = credentials.OpenKeyInBackground();
+        _ = pol.Credentials.OpenKeyInBackground();
         _ = KeePassXc.OpenKeyInBackground();
         _ = OtpReuse.OpenKeyInBackground();
     }
@@ -164,15 +140,16 @@ public partial class App : Application
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Log.Information("Process exit");
     }
 
-    private MainViewModel ShowMainWindow()
+    private MainViewModel ShowMainWindow(CredentialService credentials, SettingsService settings, PolSession pol)
     {
         // the friends windows are unowned, so the app ends with the main window (the tray only hides it)
         ShutdownMode = ShutdownMode.OnMainWindowClose;
-        var mainWindow = Services.GetRequiredService<MainWindow>();
-        var mainVm = Services.GetRequiredService<MainViewModel>();
+        var mainWindow = new MainWindow();
+        var windows = new WindowManager(settings, WpfDialogs.Default);
+        var mainVm = new MainViewModel(WpfDialogs.Default, windows, credentials, settings, new FeedService(settings), pol, new AvatarService(settings));
         // after the view model's listening for a failed save, before its start-up clears the records of gone pol.exes or
         // pre-starts one
-        ScreenSaver.Note(Services.GetRequiredService<ISettingsService>());
+        ScreenSaver.Note(settings);
         // Windows logging off cancels a log in and WPF would close the window ignoring its Cancel, so it closes the normal
         // way first. A held session gets logged out and nothing goes to the tray
         SessionEnding += (_, _) =>
@@ -184,7 +161,7 @@ public partial class App : Application
         mainWindow.DataContext = mainVm;
         MainWindow = mainWindow;
         mainWindow.Show();
-        if (Services.GetRequiredService<ISettingsService>().Current.MinimizeToTray) TrayIcon.Warm();
+        if (settings.Current.MinimizeToTray) TrayIcon.Warm();
         // this one really is off the UI thread, the wait's on the pool
         if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));
         return mainVm;
@@ -223,7 +200,7 @@ public partial class App : Application
         {
             Log.Information("Provenance exiting (code {Code})", e.ApplicationExitCode);
             try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }
-            if (_host is { } host) EndHost(host);
+            if (_pol is { } pol) EndSession(pol);
             if (RestartOnExit) StartAgain();
             else if (!SelfUpdate.HandOverAfterExit(out var restartArgs)) StartAgain(restartArgs);
         }
@@ -234,7 +211,7 @@ public partial class App : Application
         }
     }
 
-    // after the host's gone, so a held session's already logged out by the time the new copy starts
+    // after the session's ended, so a held POL login is already logged out by the time the new copy starts
     private static void StartAgain(params string[] args)
     {
         try
@@ -247,11 +224,10 @@ public partial class App : Application
         catch (Exception ex) { Log.Error(ex, "Could not start Provenance again"); }
     }
 
-    internal static void EndHost(IHost host)
+    // every wait in Dispose has its own limit, cut it short and POL stays logged in
+    internal static void EndSession(IDisposable session)
     {
-        try { Task.Run(() => host.StopAsync(TimeSpan.FromSeconds(2))).Wait(TimeSpan.FromSeconds(3)); }
-        catch (Exception ex) { Log.Warning(ex, "Stopping the host failed"); }
-        try { host.Dispose(); }
-        catch (Exception ex) { Log.Warning(ex, "Disposing the host failed"); }
+        try { session.Dispose(); }
+        catch (Exception ex) { Log.Warning(ex, "Ending the PlayOnline session failed"); }
     }
 }

@@ -41,10 +41,7 @@
     <PackageReference Include="MaterialDesignThemes" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="SharpVectors.Wpf" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Serilog" />
-    <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Velopack" />
   </ItemGroup>
 
