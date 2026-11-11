@@ -22,6 +22,8 @@ public static partial class SvgIcons
         "left", "right", "up", "down", "settings", "accounts", "more", "download", "verified", "plugin", "gamepad", "profile-edit",
     ];
     public static readonly string[] OnlineKeys = ["online", "away", "invisible"];
+    // POL cuts these with its badge circle. Centred on a button's disc the cut ends up inside it, so they're drawn whole
+    private static readonly string[] WholeOnButton = ["smiley", "bubble", "ring", "mail", "folder", "key", "person"];
 
     private const string Root = "pack://application:,,,/Provenance;component/Assets/icons/";
     private static readonly object Gate = new();
@@ -76,7 +78,11 @@ public static partial class SvgIcons
     internal static Rect FrameOf(string glyph) => ButtonFit(glyph).Frame;
 
     private static Drawing? ButtonArt(string glyph, IconState state) =>
-        Load(GlyphFile(glyph, state), edit: state is IconState.Selected or IconState.Active ? svg => OnButton(glyph, svg) : null);
+        Load(GlyphFile(glyph, state), edit: svg =>
+        {
+            if (WholeOnButton.Contains(glyph)) svg = Whole(svg);
+            return state is IconState.Selected or IconState.Active ? OnButton(glyph, svg) : svg;
+        });
 
     private static (Vector[] Shift, Rect Frame) ButtonFit(string glyph)
     {
@@ -126,6 +132,9 @@ public static partial class SvgIcons
                 }
         return right < 0 ? Rect.Empty : new Rect((double)left / scale + from, (double)top / scale + from, (right - left + 1.0) / scale, (bottom - top + 1.0) / scale);
     }
+
+    internal static string Whole(string svg) =>
+        BadgeClip().Match(svg) is { Success: true } m ? svg.Replace($"clip-path=\"url(#{m.Groups[1].Value})\"", "", StringComparison.Ordinal) : svg;
 
     private const string HoverDisc = "#7CCB96", OpenDisc = "#7DC2F1";
 
@@ -326,6 +335,9 @@ public static partial class SvgIcons
 
     [GeneratedRegex(@"<circle cx=""16"" cy=""16"" r=""10"" fill=""#(?:7CCB96|7DC2F1)""\s*/>", RegexOptions.IgnoreCase)]
     private static partial Regex DiscCircle();
+
+    [GeneratedRegex(@"<clipPath id=""([^""]+)"">\s*<circle cx=""16"" cy=""16"" r=""10""\s*/>\s*</clipPath>")]
+    private static partial Regex BadgeClip();
 
     [GeneratedRegex(@"((?:fill|stroke|stop-color)="")(#[0-9A-Fa-f]{6})""")]
     private static partial Regex ColourAttr();
