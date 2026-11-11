@@ -9,6 +9,8 @@
     <SolidColorBrush x:Key="Platform.Ashita"   Color="#D45447" />
 
     <FontFamily x:Key="Font.Body">Segoe UI</FontFamily>
+    <!-- fixed width, for a readme's code blocks and tables -->
+    <FontFamily x:Key="Font.Mono">Consolas</FontFamily>
 
     <!-- lives here so the cards share one decode, near the size shown (the source is 1026x907) -->
     <BitmapImage x:Key="BgLogo" UriSource="/Assets/bg-logo.png" DecodePixelHeight="680" />

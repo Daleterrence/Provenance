@@ -6,7 +6,8 @@ namespace Provenance.Wpf.ViewModels.Settings;
 
 internal abstract record AddonsScan;
 
-internal sealed record WindowerScan(IReadOnlyList<WindowerPluginInfo> Plugins, IReadOnlyList<WindowerAddonInfo> Addons, WindowerAddonTree? Tree) : AddonsScan
+internal sealed record WindowerScan(IReadOnlyList<WindowerPluginInfo> Plugins, IReadOnlyList<WindowerAddonInfo> Addons, WindowerAddonTree? Tree,
+                                    IReadOnlyDictionary<string, WindowerAddonEntry> AddonsXml) : AddonsScan
 {
     // the name Windower.exe spells it with, null when it doesn't offer it
     public string? Offered(AddonKind kind, string key) => kind == AddonKind.Addon

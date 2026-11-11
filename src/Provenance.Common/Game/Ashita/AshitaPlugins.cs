@@ -14,8 +14,10 @@ public static class AshitaPlugins
 
     private const long MaxDll = 64L << 20;
 
-    public static IReadOnlyList<AshitaPlugin> Scan(string ashitaDir)
+    // a plugin's documentation is only looked for in docs\, a readme sat in plugins\ belongs to nobody
+    public static IReadOnlyList<AshitaPlugin> Scan(string ashitaDir, IReadOnlyDictionary<string, AddonDocs>? docs = null)
     {
+        docs ??= AshitaDocs.Scan(ashitaDir);
         double core = CoreInterfaceVersion(ashitaDir);
         var list = new List<AshitaPlugin>();
         foreach (var folder in (string[])["plugins", "polplugins"])
@@ -24,7 +26,7 @@ public static class AshitaPlugins
             foreach (var (name, dll) in Dlls(Path.Combine(ashitaDir, folder)))
             {
                 if (!seen.Add(name)) continue;
-                try { if (Read(dll, name, core) is { } plugin) list.Add(plugin); }
+                try { if (Read(dll, name, core) is { } plugin) list.Add(plugin with { Listing = plugin.Listing with { Docs = docs.GetValueOrDefault(name) } }); }
                 catch (Exception) { }   // one odd file never takes the whole list down with it
             }
         }

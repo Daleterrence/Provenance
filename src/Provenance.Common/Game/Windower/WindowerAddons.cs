@@ -6,23 +6,27 @@ namespace Provenance.Common.Game.Windower;
 
 public sealed record WindowerAddonInfo(AddonListing Listing, string MainFile);
 
+public sealed record WindowerAddonEntry(string? Author, string? Description);
+
 public static partial class WindowerAddons
 {
     // the _addon lines sit at the top, nobody needs the rest of a 200 KB addon for them
     private const int MaxRead = 64 * 1024;
     private const int RegexMs = 500;
 
-    public static IReadOnlyList<WindowerAddonInfo> Scan(string windowerDir)
+    // readmes looks in every addon's folder for one, which the launch has no use for
+    public static IReadOnlyList<WindowerAddonInfo> Scan(string windowerDir, IReadOnlyDictionary<string, WindowerAddonEntry>? addonsXml = null, bool readmes = false)
     {
         var addonsDir = Path.Combine(windowerDir, "addons");
         if (!Directory.Exists(addonsDir)) return [];
-        var listed = ReadAddonsXml(windowerDir);
+        var listed = addonsXml ?? AddonsXml(windowerDir);
         var list = new List<WindowerAddonInfo>();
         foreach (var (name, folder, main) in LuaAddonFolders.Walk(addonsDir, skipDotted: false))
         {
             var h = ReadHeader(TextFiles.ReadHead(main, MaxRead) ?? "");
             listed.TryGetValue(name, out var x);
-            list.Add(new WindowerAddonInfo(new AddonListing(name, h.Name ?? name, h.Version, h.Author ?? AddonListing.Clean(x?.Author), AddonListing.Clean(x?.Description), folder), main));
+            list.Add(new WindowerAddonInfo(new AddonListing(name, h.Name ?? name, h.Version, h.Author ?? x?.Author, x?.Description, folder)
+                                           { Docs = readmes ? ReadmeFiles.Find(folder) : null }, main));
         }
         return list.OrderBy(a => a.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
     }
@@ -75,19 +79,18 @@ public static partial class WindowerAddons
     [GeneratedRegex(@"^[0-9][0-9.]*$", RegexOptions.None, RegexMs)]
     private static partial Regex Number();
 
-    private sealed record Listed(string Author, string? Description);
-
-    // updates\addons.xml, out of the Lua repo. First entry for a name wins
-    private static Dictionary<string, Listed> ReadAddonsXml(string windowerDir)
+    // updates\addons.xml, out of the Lua repo, by name in any case. First entry for a name wins, and the text comes
+    // out cleaned
+    public static IReadOnlyDictionary<string, WindowerAddonEntry> AddonsXml(string windowerDir)
     {
-        var map = new Dictionary<string, Listed>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, WindowerAddonEntry>(StringComparer.OrdinalIgnoreCase);
         if (TextFiles.LoadXml(Path.Combine(windowerDir, "updates", "addons.xml")) is not { } doc) return map;
         foreach (var a in doc.Root?.Elements("addon") ?? [])
         {
             var name = ((string?)a.Element("name"))?.Trim();
             if (string.IsNullOrEmpty(name) || map.ContainsKey(name)) continue;
             var desc = (string?)a.Element("description");
-            map[name] = new Listed(((string?)a.Element("author"))?.Trim() ?? "", desc is null ? null : WindowerText.Spaces(desc));
+            map[name] = new WindowerAddonEntry(AddonListing.Clean((string?)a.Element("author")), desc is null ? null : AddonListing.Clean(WindowerText.Spaces(desc)));
         }
         return map;
     }

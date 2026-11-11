@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Input;
 using Provenance.Common.PolFormat;
 using Provenance.Wpf.Controls;
 
@@ -34,19 +33,4 @@ public partial class AgreementDialog : AppWindow
 
     private void OnAccept(object sender, RoutedEventArgs e) => DialogResult = true;
     private void OnDecline(object sender, RoutedEventArgs e) => DialogResult = false;
-
-    // a read-only text box only moves a hidden caret on these keys
-    private void OnBodyKey(object sender, KeyEventArgs e)
-    {
-        if (Keyboard.Modifiers != ModifierKeys.None) return;
-        switch (e.Key)
-        {
-            case Key.Down: BodyText.LineDown(); break;
-            case Key.Up: BodyText.LineUp(); break;
-            case Key.PageDown: BodyText.PageDown(); break;
-            case Key.PageUp: BodyText.PageUp(); break;
-            default: return;
-        }
-        e.Handled = true;
-    }
 }

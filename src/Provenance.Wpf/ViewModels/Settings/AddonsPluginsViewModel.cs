@@ -362,6 +362,35 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
     }
 
+    // tests swap these for ones that just note what they were handed
+    internal Action<AddonDocs> OpenDocsForTest { get; set; } = DocsOpener.Open;
+    internal Action<string, string> ShowReadmeForTest { get; set; } = DocsOpener.ShowText;
+
+    // a link or an .html file goes to the browser, a text file is read here and shown in a window
+    [RelayCommand]
+    private void OpenDocs(AddonRow? row)
+    {
+        if (row?.Docs is not { } docs) return;
+        if (docs.Kind != AddonDocsKind.Link && !File.Exists(docs.Target))
+        {
+            Status.Fail($"{row.Name}'s documentation isn't there any more.");
+            Refreshing = RefreshAsync();
+            return;
+        }
+        if (docs.Kind == AddonDocsKind.Text)
+        {
+            if (ReadmeFiles.ReadText(docs.Target) is { } text) ShowReadmeForTest($"{row.Name} documentation", text);
+            else Status.Fail($"Provenance couldn't read {row.Name}'s documentation.");
+            return;
+        }
+        try { OpenDocsForTest(docs); }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not open the documentation for {Name}", row.Key);
+            Status.Fail($"Windows couldn't open {row.Name}'s documentation.");
+        }
+    }
+
     private static Task<WindowerInstallResult> InstallFromWindower(string dir, string branch, AddonKind kind, string name)
     {
         var updater = new WindowerUpdater(dir, branch);

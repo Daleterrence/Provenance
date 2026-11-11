@@ -33,6 +33,7 @@ public sealed partial class AddonRow : ObservableObject
     [ObservableProperty] private string? _verifiedTip;
     [ObservableProperty] private string? _team;
     [ObservableProperty] private string? _location;
+    [ObservableProperty] private AddonDocs? _docs;
     private string? _author;
 
     public bool SwitchEnabled => CanChange && !Installing;
@@ -66,6 +67,7 @@ public sealed partial class AddonRow : ObservableObject
         Team = d.Team;
         VerifiedTip = d.Team is { } team ? $"This {(Kind == AddonKind.Addon ? "addon" : "plugin")} is provided and maintained by the {team} development team." : null;
         Location = l.Location;
+        Docs = l.Docs;
         if (_on != d.On)
         {
             _on = d.On;

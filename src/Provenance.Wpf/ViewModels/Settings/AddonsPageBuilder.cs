@@ -18,12 +18,22 @@ internal static class AddonsPageBuilder
 
     internal static AddonsScan? Scan(AddonsTarget target) => target switch
     {
-        { Platform: ThirdPartyHook.Windower, Folder: { } dir } when !FolderPins.Linked(dir) =>
-            new WindowerScan(WindowerPlugins.Scan(dir), WindowerAddons.Scan(dir), WindowerAddonTree.Load(WindowerAddonTree.CachePath(dir))),
-        { Platform: ThirdPartyHook.Ashita, Folder: { } dir } when !string.IsNullOrWhiteSpace(target.Profile) && File.Exists(AddonSwitches.BootPath(dir, target.Profile)) =>
-            new AshitaScan(AshitaAddons.Scan(dir), AshitaPlugins.Scan(dir)),
+        { Platform: ThirdPartyHook.Windower, Folder: { } dir } when !FolderPins.Linked(dir) => ScanWindower(dir),
+        { Platform: ThirdPartyHook.Ashita, Folder: { } dir } when !string.IsNullOrWhiteSpace(target.Profile) && File.Exists(AddonSwitches.BootPath(dir, target.Profile)) => ScanAshita(dir),
         _ => null,
     };
+
+    private static WindowerScan ScanWindower(string dir)
+    {
+        var addonsXml = WindowerAddons.AddonsXml(dir);
+        return new WindowerScan(WindowerPlugins.Scan(dir), WindowerAddons.Scan(dir, addonsXml, readmes: true), WindowerAddonTree.Load(WindowerAddonTree.CachePath(dir)), addonsXml);
+    }
+
+    private static AshitaScan ScanAshita(string dir)
+    {
+        var docs = AshitaDocs.Scan(dir);
+        return new AshitaScan(AshitaAddons.Scan(dir, docs), AshitaPlugins.Scan(dir, docs));
+    }
 
     internal static AddonsPage Build(AddonsTarget target, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras, AddonsScan? scan) => target switch
     {
@@ -107,11 +117,17 @@ internal static class AddonsPageBuilder
         }
 
         var repo = (scan.Tree?.Addons ?? []).Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        AddonListing Offered(WindowerAddon t) => scan.AddonsXml.TryGetValue(t.Name, out var x)
+            ? new AddonListing(t.Name, t.Name, null, x.Author, x.Description, null) : AddonListing.Named(t.Name);
+        // Windower.exe links the readme of an addon that's in both addons.xml and the tree. That beats a readme in its folder
+        AddonListing Linked(AddonListing l) =>
+            scan.AddonsXml.ContainsKey(l.Key) && scan.Tree?.Find(l.Key) is { } t && WindowerAddonTree.ReadmeLink(t, file.Branch) is { } link
+                ? l with { Docs = new AddonDocs(AddonDocsKind.Link, link) } : l;
         page.Plugins = plugins.Select(p => Row(AddonKind.Plugin, p.Listing, p.Installed, p.InManifest, p.IsWindowerPlugin, official: p.InManifest))
             .Concat(missingPlugins.Select(n => Row(AddonKind.Plugin, AddonListing.Named(n), false, false)))
             .OrderBy(r => r.Listing.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        page.Addons = scan.Addons.Select(a => Row(AddonKind.Addon, a.Listing, true, false, official: repo.Contains(a.Listing.Key)))
-            .Concat(notInstalled.Select(t => Row(AddonKind.Addon, AddonListing.Named(t.Name), false, true, official: true)))
+        page.Addons = scan.Addons.Select(a => Row(AddonKind.Addon, Linked(a.Listing), true, false, official: repo.Contains(a.Listing.Key)))
+            .Concat(notInstalled.Select(t => Row(AddonKind.Addon, Linked(Offered(t)), false, true, official: true)))
             .Concat(missingAddons.Select(n => Row(AddonKind.Addon, AddonListing.Named(n), false, false)))
             .OrderBy(r => r.Listing.Name, StringComparer.OrdinalIgnoreCase).ToList();
         page.NoAddons = $"No addons found in {Path.Combine(dir, "addons")}.";
@@ -149,7 +165,7 @@ internal static class AddonsPageBuilder
         var path = AddonSwitches.BootPath(dir, bootName);
         if (!File.Exists(path))
             return AddonsPage.Empty($"The boot configuration {bootName} isn't in Ashita's config\\boot folder any more. Choose another one under Windower/Ashita.");
-        scan ??= new AshitaScan(AshitaAddons.Scan(dir), AshitaPlugins.Scan(dir));
+        scan ??= ScanAshita(dir);
         var page = new AddonsPage
         {
             Platform = ThirdPartyHook.Ashita, Key = bootName, Display = AshitaBootFiles.ShownName(dir, bootName),

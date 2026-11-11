@@ -5,6 +5,8 @@ namespace Provenance.Common.Game.ThirdParty;
 
 public sealed record AddonListing(string Key, string Name, string? Version, string? Author, string? Description, string? Location)
 {
+    public AddonDocs? Docs { get; init; }
+
     public static AddonListing Named(string key) => new(key, key, null, null, null, null);
 
     // no control, format or line break characters, so a name can't bring a bidi override, a zero-width space or a tag

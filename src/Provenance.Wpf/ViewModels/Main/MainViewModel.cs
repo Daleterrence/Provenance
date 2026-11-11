@@ -900,14 +900,8 @@ public partial class MainViewModel : ObservableObject
             if (!string.IsNullOrWhiteSpace(url)) Log.Warning("Not opening a link that is not a web link: {Url}", url);
             return;
         }
-        // elevated, so a browser started from here would be too. explorer.exe (full path, a bare name's looked for in the
-        // app folder first) hands it to the user's shell
-        try
-        {
-            var psi = new ProcessStartInfo(AppPaths.ExplorerExe) { UseShellExecute = false };
-            psi.ArgumentList.Add(u.AbsoluteUri);
-            Process.Start(psi);
-        }
+        // elevated, so a browser started from here would be too. explorer.exe hands it to the user's shell
+        try { Explorer.OpenLink(u); }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not open {Url} through the shell; opening it directly", u.AbsoluteUri);

@@ -10,12 +10,16 @@ public static partial class AshitaAddons
 {
     private const int MaxMainFile = 4 << 20;
 
-    public static IReadOnlyList<AshitaAddon> Scan(string ashitaDir) =>
-        LuaAddonFolders.Walk(Path.Combine(ashitaDir, "addons"), skipDotted: true)
-            .Select(f => Read(f.Folder, f.Name, f.Main)).OfType<AshitaAddon>()
+    public static IReadOnlyList<AshitaAddon> Scan(string ashitaDir, IReadOnlyDictionary<string, AddonDocs>? docs = null)
+    {
+        docs ??= AshitaDocs.Scan(ashitaDir);
+        return LuaAddonFolders.Walk(Path.Combine(ashitaDir, "addons"), skipDotted: true)
+            .Select(f => Read(f.Folder, f.Name, f.Main, docs)).OfType<AshitaAddon>()
             .OrderBy(a => a.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
-    private static AshitaAddon? Read(string dir, string name, string main)
+    // a readme in the addon's own folder wins over one in docs\
+    private static AshitaAddon? Read(string dir, string name, string main, IReadOnlyDictionary<string, AddonDocs> docs)
     {
         if (TextFiles.ReadHead(main, MaxMainFile) is not { } text) return null;
 
@@ -38,7 +42,8 @@ public static partial class AshitaAddons
         }
         catch (RegexMatchTimeoutException) { }
         return new AshitaAddon(new AddonListing(name, fields.GetValueOrDefault("name") ?? name, fields.GetValueOrDefault("version"),
-                                                fields.GetValueOrDefault("author"), fields.GetValueOrDefault("desc"), dir), foreign);
+                                                fields.GetValueOrDefault("author"), fields.GetValueOrDefault("desc"), dir)
+                               { Docs = ReadmeFiles.Find(dir) ?? docs.GetValueOrDefault(name) }, foreign);
     }
 
     private static Dictionary<string, string> Locals(string text)
