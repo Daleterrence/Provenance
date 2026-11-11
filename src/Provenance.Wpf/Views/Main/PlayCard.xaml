@@ -3,12 +3,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
              xmlns:socialViews="clr-namespace:Provenance.Wpf.Views.Social">
-    <Grid Margin="14,14,14,18" RowDefinitions="Auto,*,Auto">
-        <TextBlock Margin="8,0,4,8" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
-            <Run Text="Friends" /><Run Text="   " /><Run Text="{Binding Social.Summary, Mode=OneWay}" FontSize="12" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
-        </TextBlock>
-        <socialViews:FriendsList Grid.Row="1" DataContext="{Binding Social}" OwnSelection="True" FriendActivated="OnFriendActivated" />
-        <StackPanel Grid.Row="2" Margin="8,10,8,0">
+    <Grid Margin="14,14,14,18" RowDefinitions="*,Auto">
+        <!-- nothing new comes in while the game's open, so the list is as it was at Play and can't be used -->
+        <DockPanel IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}" Style="{StaticResource DimWhenOff}">
+            <TextBlock DockPanel.Dock="Top" Margin="8,0,4,8" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
+                <Run Text="Friends" /><Run Text="   " /><Run Text="{Binding Social.Summary, Mode=OneWay}" FontSize="12" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
+            </TextBlock>
+            <socialViews:FriendsList DataContext="{Binding Social}" OwnSelection="True" FriendActivated="OnFriendActivated" />
+        </DockPanel>
+        <StackPanel Grid.Row="1" Margin="8,10,8,0">
             <!-- edge to edge of the card, so Play reads as its own thing and not part of the list -->
             <Border Height="1" Margin="-22,0,-22,16" Background="{DynamicResource Border.Pane}" />
             <TextBlock Margin="0,0,0,8" TextWrapping="Wrap" TextAlignment="Center" FontSize="12"
@@ -29,8 +32,8 @@
                     </Style>
                 </Border.Style>
                 <Grid ColumnDefinitions="*,Auto,Auto">
-                    <Button x:Name="PlayButton" Command="{Binding PlayCommand}" IsEnabled="{Binding Social.CanPlay}" IsDefault="True"
-                            Style="{StaticResource ActionSegment}" AutomationProperties.Name="Play">
+                    <Button x:Name="PlayButton" Command="{Binding PlayCommand}" IsEnabled="{Binding PlayEnabled}" IsDefault="True"
+                            Style="{StaticResource ActionSegment}" AutomationProperties.Name="{Binding PlayName}">
                         <!-- an invisible copy of the line above Play keeps Play in the middle, nudged up a touch -->
                         <StackPanel Margin="0,0,0,6">
                             <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0" Margin="0,0,0,-3"
@@ -38,7 +41,7 @@
                                        Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <controls:SvgIcon Glyph="sword" Width="20" Height="20" Margin="3,0,10,0" />
-                                <TextBlock Text="PLAY" FontSize="18" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding PlayText}" FontSize="18" VerticalAlignment="Center" />
                             </StackPanel>
                             <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0.8" Margin="0,-3,0,0"
                                        HorizontalAlignment="Center"
@@ -63,7 +66,7 @@
                         </Border.Style>
                         <Rectangle Margin="0,9" Fill="{DynamicResource Play.Divider}" />
                     </Border>
-                    <Button Grid.Column="2" Width="52" Click="OnPlayChoices" IsEnabled="{Binding Social.CanPlay}"
+                    <Button Grid.Column="2" Width="52" Click="OnPlayChoices" IsEnabled="{Binding PlayEnabled}"
                             Style="{StaticResource ActionSegment}"
                             ToolTip="{Binding PlayChoicesTitle}" AutomationProperties.Name="{Binding PlayChoicesTitle}"
                             Visibility="{Binding HasPlayChoices, Converter={StaticResource BoolToVis}}">

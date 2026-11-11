@@ -38,7 +38,7 @@ public interface IWindowManager
     // false when it isn't on screen, so the caller shows it. True even if the window then asks and stays open
     bool CloseIfShown(SecondWindow which);
     void AddFriend(SocialViewModel social, string? handleName = null, string? handleKey = null);
-    bool ConfirmDropProfileEditor(string action);
+    bool ConfirmDropProfileEditor(string action, bool leaveSaving = false);
     void CloseProfileEditor();
     // the session's going, so these go with it and say nothing
     void CloseSessionWindows();
@@ -227,9 +227,11 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     public void AddFriend(SocialViewModel social, string? handleName = null, string? handleKey = null) =>
         new AddFriendDialog(social, handleName, handleKey).ShowDialogOver(WindowOwner.Find());
 
-    public bool ConfirmDropProfileEditor(string action)
+    public bool ConfirmDropProfileEditor(string action, bool leaveSaving = false)
     {
         if (Find<EditProfileWindow>() is not { } ed) return true;
+        // Play keeps the session, so a save that's already out can still land and the editor stays up to say how it went
+        if (leaveSaving && ed.Editor.Saving) return true;
         if (ed.Editor.HasUnsavedWork)
         {
             BringBack(ed);
@@ -246,6 +248,8 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         CloseProfileEditor();
         Find<ChatRoomsWindow>()?.CloseQuietly();
         Find<GroupChatWindow>()?.CloseQuietly();
+        // one opened from the main window's list is the main window's, so it wouldn't go with the friends windows
+        Find<ProfileWindow>()?.Close();
         foreach (var w in SocialWindows()) w.Close();
     }
 

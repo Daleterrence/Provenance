@@ -11,7 +11,7 @@ public partial class SocialFooter : UserControl
 
     internal bool FillHandleMenu(ContextMenu menu)
     {
-        if (DataContext is not MainViewModel vm) return false;
+        if (DataContext is not MainViewModel { GameOpen: false } vm) return false;
         Menus.Fill(menu, vm.HandleMenu());
         return menu.Items.Count > 0;
     }

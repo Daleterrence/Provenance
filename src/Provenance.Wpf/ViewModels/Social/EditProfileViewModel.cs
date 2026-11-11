@@ -377,7 +377,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private bool CanSave() => IsLoaded && !Busy && HasChanges && Problem.Length == 0;
 
     // a load has nothing of theirs in it yet, closing just withdraws the request
-    private bool Saving => Busy && !LoadingProfile;
+    internal bool Saving => Busy && !LoadingProfile;
 
     internal bool HasUnsavedWork => Saving || HasChanges;
 

@@ -5,15 +5,18 @@
              xmlns:social="clr-namespace:Provenance.Wpf.Views.Social">
     <Border Height="44" Style="{StaticResource FooterBar}" Padding="16,0">
         <Grid ColumnDefinitions="Auto,*,Auto">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <social:MyProfilePicture x:Name="MyPicture" Diameter="32" Margin="0,0,10,0" DataContext="{Binding Social}"
-                                         ToolTip="Change your profile picture. Right-click to switch handle."
-                                         ContextMenuOpening="OnHandleMenu">
-                    <social:MyProfilePicture.ContextMenu>
-                        <ContextMenu />
-                    </social:MyProfilePicture.ContextMenu>
-                </social:MyProfilePicture>
-                <TextBlock Text="{Binding Social.AccountName}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}">
+                <!-- the button and the picker after these grey themselves, so only the picture and the name are dimmed here -->
+                <StackPanel Orientation="Horizontal" Style="{StaticResource DimWhenOff}">
+                    <social:MyProfilePicture x:Name="MyPicture" Diameter="32" Margin="0,0,10,0" DataContext="{Binding Social}"
+                                             ToolTip="Change your profile picture. Right-click to switch handle."
+                                             ContextMenuOpening="OnHandleMenu">
+                        <social:MyProfilePicture.ContextMenu>
+                            <ContextMenu />
+                        </social:MyProfilePicture.ContextMenu>
+                    </social:MyProfilePicture>
+                    <TextBlock Text="{Binding Social.AccountName}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                </StackPanel>
                 <social:EditProfileButton Margin="4,0,0,0" VerticalAlignment="Center" DataContext="{Binding Social}" />
                 <!-- locked with a spinner until POL confirms -->
                 <ComboBox Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource StatusPicker}"
@@ -21,7 +24,8 @@
                           ItemsSource="{Binding Social.StatusItems}" SelectedIndex="{Binding Social.MyStatusIndex}" />
             </StackPanel>
             <!-- left aligned, so the spinner sits right after the note and the note trims before it reaches the buttons -->
-            <Grid Grid.Column="1" ColumnDefinitions="*,Auto" HorizontalAlignment="Left" VerticalAlignment="Center">
+            <Grid Grid.Column="1" ColumnDefinitions="*,Auto" HorizontalAlignment="Left" VerticalAlignment="Center"
+                  Visibility="{Binding GameOpen, Converter={StaticResource InvertBoolToVis}}">
                 <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="11.5"
                            TextTrimming="CharacterEllipsis" Foreground="{DynamicResource State.Warn}"
                            Text="{Binding Social.StatusNote}" ToolTip="{Binding Social.StatusNote}"
@@ -33,7 +37,8 @@
             </Grid>
             <StackPanel x:Name="SocialButtons" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                 <!-- one row of equal cells, so all four are as wide as the widest -->
-                <UniformGrid x:Name="SocialSet" Rows="1" Margin="6,0,0,0" PreviewMouseLeftButtonDown="OnPress">
+                <UniformGrid x:Name="SocialSet" Rows="1" Margin="6,0,0,0" PreviewMouseLeftButtonDown="OnPress"
+                             IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}">
                     <UniformGrid.Resources>
                         <Style TargetType="Button" BasedOn="{StaticResource PolButton}">
                             <Setter Property="Padding" Value="5,0,8,0" />

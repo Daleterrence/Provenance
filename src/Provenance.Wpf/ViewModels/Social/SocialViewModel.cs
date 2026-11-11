@@ -721,6 +721,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     [RelayCommand]
     public void ToggleProfileEditor()
     {
+        if (_session.Phase == SessionPhase.InGame) return;
         if (!_windows.CloseIfShown(SecondWindow.ProfileEditor)) _windows.EditProfile(this);
     }
 

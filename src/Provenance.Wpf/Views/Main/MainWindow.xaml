@@ -20,8 +20,8 @@
         <BitmapImage x:Key="TitleIcon" UriSource="/Assets/provenance-256.png" DecodePixelWidth="64" />
     </Window.Resources>
 
-    <Grid RowDefinitions="40,*,Auto">
-        <Border Grid.Row="1" VerticalAlignment="Top" Height="160" IsHitTestVisible="False">
+    <Grid RowDefinitions="40,Auto,*,Auto">
+        <Border Grid.Row="2" VerticalAlignment="Top" Height="160" IsHitTestVisible="False">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                     <GradientStop Color="{DynamicResource Bg.Glow}" Offset="0" />
@@ -113,7 +113,18 @@
             </Border>
         </Popup>
 
-        <Grid Grid.Row="1" ColumnDefinitions="1.5*,400">
+        <Border Grid.Row="1" Padding="24,9" Background="{DynamicResource Surface.2}"
+                BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
+                Visibility="{Binding GameOpen, Converter={StaticResource BoolToVis}}">
+            <Grid ColumnDefinitions="Auto,*">
+                <materialDesign:PackIcon Kind="InformationOutline" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center"
+                                         Foreground="{DynamicResource State.Warn}" />
+                <TextBlock Grid.Column="1" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text.1}"
+                           Text="You cannot use any PlayOnline or social features of Provenance whilst logged into the game." />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" ColumnDefinitions="1.5*,400">
             <local:NewsCard />
 
             <Grid Grid.Column="1" Margin="0,24,24,24">
@@ -127,13 +138,13 @@
                         <local:AccountCard Visibility="{Binding ShowLogInCard, Converter={StaticResource BoolToVis}}" />
                         <local:SetupCard Visibility="{Binding ShowSetupCard, Converter={StaticResource BoolToVis}}" />
                         <local:PlayCard Visibility="{Binding ShowFriendsCard, Converter={StaticResource BoolToVis}}" />
-                        <local:LaunchCard Visibility="{Binding IsLaunching, Converter={StaticResource BoolToVis}}" />
+                        <local:LaunchCard Visibility="{Binding ShowLaunchCard, Converter={StaticResource BoolToVis}}" />
                     </Grid>
                 </Border>
             </Grid>
         </Grid>
 
-        <Border Grid.Row="1" Panel.ZIndex="10" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="24,0,0,18"
+        <Border Grid.Row="2" Panel.ZIndex="10" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="24,0,0,18"
                 MaxWidth="560" Padding="14,10" CornerRadius="{StaticResource Radius.Panel}"
                 Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Primary}" BorderThickness="1"
                 Visibility="{Binding Notice.Current, Converter={StaticResource NullToVisibilityConverter}}"
@@ -199,6 +210,6 @@
             </Grid>
         </Border>
 
-        <local:SocialFooter Grid.Row="2" Visibility="{Binding LoggedIn, Converter={StaticResource BoolToVis}}" />
+        <local:SocialFooter Grid.Row="3" Visibility="{Binding LoggedIn, Converter={StaticResource BoolToVis}}" />
     </Grid>
 </controls:AppWindow>

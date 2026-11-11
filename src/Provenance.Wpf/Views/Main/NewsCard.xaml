@@ -6,7 +6,13 @@
         <BitmapImage x:Key="NoImage" UriSource="/Assets/no-image.jpg" />
     </UserControl.Resources>
 
-    <Grid Margin="24" RowDefinitions="3*,Auto,1.1*">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="3*" />
+            <RowDefinition Height="Auto" />
+            <!-- room for the four status rows, so the game open banner's strip comes off the article and not the last row -->
+            <RowDefinition Height="1.1*" MinHeight="128" />
+        </Grid.RowDefinitions>
         <Border CornerRadius="{StaticResource Radius.Panel}" Padding="16,16,16,10" Background="{DynamicResource Surface.2}"
                 BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1" Effect="{DynamicResource Shadow.Card}">
             <Grid ClipToBounds="True" Background="Transparent" MouseEnter="OnNewsHover" MouseLeave="OnNewsLeave"

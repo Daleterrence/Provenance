@@ -110,7 +110,7 @@ public partial class MainViewModel : ObservableObject
         // a quiet one, no taskbar flash, and it never covers a message notice
         Social.FriendCameOnline += who =>
         {
-            if (!_settings.Current.NotifyFriendsOnline || Notice.Current is { Text.Length: > 0 }) return;
+            if (GameOpen || !_settings.Current.NotifyFriendsOnline || Notice.Current is { Text.Length: > 0 }) return;
             Notice.Show($"{who} is online now.", "AccountCheckOutline", NoticeTarget.Chat, who);
         };
         Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture, Session, () => Social.Last, time, Viewer.TextOutsideJapan)
@@ -127,6 +127,7 @@ public partial class MainViewModel : ObservableObject
         {
             if (e.PropertyName is nameof(SocialViewModel.UnseenCount) or nameof(SocialViewModel.GroupChatUnread) && !WantsAttention)
                 AttentionCleared?.Invoke();
+            if (e.PropertyName == nameof(SocialViewModel.CanPlay)) OnPropertyChanged(nameof(PlayEnabled));
         };
         Handles.PropertyChanged += (_, e) =>
         {
@@ -169,6 +170,9 @@ public partial class MainViewModel : ObservableObject
                 break;
             case SessionPhase.InGame:
                 Social.Messages.SettleSends(SessionEnd.Play);
+                // nothing they do works in game. Here and not at the Play press, so an update that fails closes nothing
+                _windows.CloseSessionWindows();
+                if (Notice.Current is { Opens: true }) Notice.Take();
                 // the window hides to the tray once the game's up, whatever the tray settings say
                 TrayIcon.Warm();
                 break;
@@ -184,8 +188,10 @@ public partial class MainViewModel : ObservableObject
     {
         bool loggedIn = Session.LoggedIn, launching = Session.Launching;
         bool loggedInChanged = _loggedInShown.Changed(loggedIn), launchingChanged = _launchingShown.Changed(launching);
+        bool gameOpenChanged = _inGameShown.Changed(GameOpen);
         // going into the game changes what X does without changing logged in
-        if (_inGameShown.Changed(Session.Phase == SessionPhase.InGame) || loggedInChanged) OnPropertyChanged(nameof(CloseTooltip));
+        if (gameOpenChanged || loggedInChanged) OnPropertyChanged(nameof(CloseTooltip));
+        if (!GameOpen) GameUp = false;
         if (loggedInChanged)
         {
             if (loggedIn && (_settings.Current.KeepSignedInInTray || _settings.Current.MinimizeToTray)) TrayIcon.Warm();
@@ -194,6 +200,7 @@ public partial class MainViewModel : ObservableObject
         }
         Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
         LogInCommand.NotifyCanExecuteChanged();
+        SignOutCommand.NotifyCanExecuteChanged();
         OpenAccountsCommand.NotifyCanExecuteChanged();
         Social.HandleSwitching = Handles.Switching;
         if (launchingChanged) OnPropertyChanged(nameof(IsLaunching));
@@ -203,7 +210,10 @@ public partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(ShowInstallCard));
             RefreshSetupCard();
             OnPropertyChanged(nameof(ShowFriendsCard));
+            OnPropertyChanged(nameof(ShowLaunchCard));
         }
+        if (gameOpenChanged)
+            foreach (var name in new[] { nameof(GameOpen), nameof(PlayText), nameof(PlayName), nameof(PlayEnabled) }) OnPropertyChanged(name);
     }
 
     [ObservableProperty] private string _progressText = string.Empty;
@@ -304,6 +314,7 @@ public partial class MainViewModel : ObservableObject
 
     private void Alert(string? sender, string text, string icon = "mail", bool stays = false, int request = 0)
     {
+        if (GameOpen) return;   // a snapshot read already under way when Play's sent still lands, with the game open
         Notice.Show(text, icon, sender is null ? NoticeTarget.Friends : NoticeTarget.Chat, sender, request, stays);
         RequestAttention?.Invoke(true);
     }
@@ -326,7 +337,7 @@ public partial class MainViewModel : ObservableObject
     // the Groups tab's Group Chat: the viewer's handle question (0x3eb0) first when it's needed, then the window
     private void OpenGroupChat(GroupsViewModel.GroupItem g)
     {
-        if (Multi.Running || Social.Last.GroupList.FirstOrDefault(x => x.Id == g.Id) is not { } group) return;
+        if (Multi.Running || GameOpen || Social.Last.GroupList.FirstOrDefault(x => x.Id == g.Id) is not { } group) return;
         if (Social.GroupChat.Open && string.Equals(Social.GroupChat.GroupId, group.Id, StringComparison.OrdinalIgnoreCase))
         {
             _windows.ShowGroupChat(Social.GroupChat);
@@ -391,7 +402,17 @@ public partial class MainViewModel : ObservableObject
     public bool ShowInstallCard => !GameInstalled && !IsLaunching && !LoggedIn;
     public bool ShowSetupCard => Setup.Pending && GameInstalled && Accounts.HasProfile && !IsLaunching && !LoggedIn;
     public bool ShowLogInCard => GameInstalled && !IsLaunching && !LoggedIn && !ShowSetupCard;
-    public bool ShowFriendsCard => LoggedIn && !IsLaunching;
+    public bool ShowFriendsCard => LoggedIn && (!IsLaunching || GameUp);
+    public bool ShowLaunchCard => IsLaunching && !GameUp;
+
+    // only this copy's own game. A multi-account run lets go of its games, and another copy's never gets here
+    public bool GameOpen => Session.Phase == SessionPhase.InGame;
+    public string PlayText => GameOpen ? "GAME OPEN" : "PLAY";
+    public string PlayName => GameOpen ? "Game open" : "Play";
+    public bool PlayEnabled => Social.CanPlay && !GameOpen;
+
+    // the Launch card stays till the wait for the game's window is over, so a Play the hook refuses never shows game open
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowLaunchCard), nameof(ShowFriendsCard))] private bool _gameUp;
 
     public SetupViewModel Setup { get; }
 
@@ -491,7 +512,7 @@ public partial class MainViewModel : ObservableObject
 
     public void OpenChatWith(FriendItem friend)
     {
-        if (Multi.Running) return;
+        if (Multi.Running || GameOpen) return;
         Social.SelectedFriend = Social.Friends.FirstOrDefault(f => f.Is(friend)) ?? friend;
         _windows.ShowMessages(Social);
     }
@@ -512,21 +533,21 @@ public partial class MainViewModel : ObservableObject
 
     internal void OpenSocial()
     {
-        if (Multi.Running) return;
+        if (Multi.Running || GameOpen) return;
         Social.ShowGroups = false;
         _windows.ShowFriends(Social);
     }
 
     internal void OpenGroups()
     {
-        if (Multi.Running) return;
+        if (Multi.Running || GameOpen) return;
         Social.ShowGroups = true;
         _windows.ShowFriends(Social);
     }
 
     internal void OpenMessages()
     {
-        if (Multi.Running) return;
+        if (Multi.Running || GameOpen) return;
         _windows.ShowMessages(Social);
     }
 
@@ -538,7 +559,7 @@ public partial class MainViewModel : ObservableObject
     // one window with two tabs, so the other tab's button just switches to its own
     private void ToggleFriendsTab(bool groups)
     {
-        if (Multi.Running) return;
+        if (Multi.Running || GameOpen) return;
         if (Social.ShowGroups == groups && _windows.CloseIfShown(SecondWindow.Friends)) return;
         if (groups) OpenGroups();
         else OpenSocial();
@@ -547,14 +568,14 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ToggleMessages()
     {
-        if (Multi.Running) return;
+        if (Multi.Running || GameOpen) return;
         if (!_windows.CloseIfShown(SecondWindow.Messages)) OpenMessages();
     }
 
     [RelayCommand]
     private void ToggleChatRooms()
     {
-        if (Multi.Running) return;
+        if (Multi.Running || GameOpen) return;
         if (!_windows.CloseIfShown(SecondWindow.ChatRooms)) OpenChatRooms();
     }
 
@@ -562,7 +583,7 @@ public partial class MainViewModel : ObservableObject
 
     internal void OpenChatRooms()
     {
-        if (Multi.Running) return;
+        if (Multi.Running || GameOpen) return;
         _windows.ShowChatRooms(Social, _pol.Credentials.SaveChatPassword, _pol.Credentials.DropChatPassword, SvgIcons.Emote, () => ChatRoomsOpen = false);
         ChatRoomsOpen = true;
     }
@@ -572,7 +593,9 @@ public partial class MainViewModel : ObservableObject
 
     internal void CloseProfileEditor() => _windows.CloseProfileEditor();
 
-    [RelayCommand]
+    private bool CanSignOut() => Session.Phase == SessionPhase.LoggedIn;
+
+    [RelayCommand(CanExecute = nameof(CanSignOut))]
     private void SignOut()
     {
         // Play's game update needs the session it's holding
@@ -708,6 +731,7 @@ public partial class MainViewModel : ObservableObject
             _dialogs.Error("Can't start FINAL FANTASY XI", why);
             return;
         }
+        if (!_windows.ConfirmDropProfileEditor("Play", leaveSaving: true)) return;
         // nothing new goes to the hook from here, the game update still applies its answers
         SetPhase(SessionPhase.UpdatingGame);
         // like the viewer, the game update comes after the login with the session held meanwhile
@@ -748,6 +772,7 @@ public partial class MainViewModel : ObservableObject
         try { up = await BringGameForwardAsync(); }
         catch (Exception ex) { Log.Warning(ex, "Could not bring the game window to the front"); }
         if (up) Handles.GameStarted();
+        GameUp = true;
         RequestHide?.Invoke();
         _elapsedTimer.Stop();
         var exit = await _pol.WaitForExitAsync();
@@ -865,7 +890,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     // a run reads each account's details as its turn comes, so nothing's edited or removed under it
-    private bool CanOpenAccounts() => !Multi.Running;
+    private bool CanOpenAccounts() => !Multi.Running && !GameOpen;
 
     [RelayCommand(CanExecute = nameof(CanOpenAccounts))]
     private void OpenAccounts()
