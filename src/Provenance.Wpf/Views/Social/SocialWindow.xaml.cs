@@ -261,28 +261,25 @@ public partial class SocialWindow : AppWindow
         if (!string.IsNullOrWhiteSpace(name)) vm.Groups.Create(name);
     }
 
-    private readonly ReopenGuard _menuGuard = new();
-
     private void OnRowMenuButton(object sender, RoutedEventArgs e)
     {
-        if (_menuGuard.JustClosed || sender is not FrameworkElement button) return;
+        if (sender is not FrameworkElement button) return;
         FrameworkElement? row = null;
         for (var p = VisualTreeHelper.GetParent(button); p != null && row is null; p = VisualTreeHelper.GetParent(p))
             if (p is FrameworkElement { ContextMenu: not null } el) row = el;
-        if (row?.ContextMenu is not { } menu) return;
-        menu.Closed -= _menuGuard.OnClosed;
-        menu.Closed += _menuGuard.OnClosed;
-        if (!BuildRowMenu(row)) return;
-        Menus.ShowBelow(menu, button);
+        if (row is null) return;
+        Menus.Toggle(button, () => BuildRowMenu(row) ? row.ContextMenu : null);
     }
 
     private void OnConversationMenu(object sender, RoutedEventArgs e)
     {
-        if (_menuGuard.JustClosed || sender is not FrameworkElement button || Vm is not { SelectedFriend: { } f } vm) return;
-        var menu = new ContextMenu();
-        menu.Closed += _menuGuard.OnClosed;
-        Menus.Fill(menu, vm.Messages.ConversationMenu(f, FriendList.OpenConversation));
-        Menus.ShowBelow(menu, button);
+        if (sender is not FrameworkElement button || Vm is not { SelectedFriend: { } f } vm) return;
+        Menus.Toggle(button, () =>
+        {
+            var menu = new ContextMenu();
+            Menus.Fill(menu, vm.Messages.ConversationMenu(f, FriendList.OpenConversation));
+            return menu;
+        });
     }
 
     private void OnLineMenu(object sender, ContextMenuEventArgs e)

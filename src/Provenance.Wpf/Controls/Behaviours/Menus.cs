@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.Controls.Behaviours;
@@ -27,13 +29,91 @@ public static class Menus
         menu.Items.Insert(0, new MenuItem { Header = "Copy", Command = ApplicationCommands.Copy, CommandTarget = box });
     }
 
-    public static void ShowBelow(ContextMenu menu, FrameworkElement button) => Show(menu, button, PlacementMode.Bottom);
+    // one button's menu at a time: the button, what it opened, and the button whose press has just shut one
+    private static FrameworkElement? _from, _shutBy;
+    private static DependencyObject? _open;
 
-    public static void Show(ContextMenu menu, FrameworkElement target, PlacementMode placement)
+    // a field so a test can stand in for a real press
+    internal static Func<FrameworkElement, bool> PressIsOn = Pressed;
+
+    internal static bool OpenFrom(FrameworkElement button) =>
+        ReferenceEquals(_from, button) && _open is { } open && (bool)open.GetValue(Popup.IsOpenProperty);
+
+    // clicked with its menu up, the button closes it. The press that shut the menu by landing on the button opens nothing
+    public static void Toggle(FrameworkElement button, Func<ContextMenu?> build, PlacementMode placement = PlacementMode.Bottom) =>
+        Flip(button, () =>
+        {
+            if (build() is not { } menu) return null;
+            menu.PlacementTarget = button;
+            menu.Placement = placement;
+            return menu;
+        });
+
+    public static void Toggle(FrameworkElement button, Func<Popup?> build) => Flip(button, build);
+
+    private static void Flip(FrameworkElement button, Func<DependencyObject?> build)
     {
-        menu.PlacementTarget = target;
-        menu.Placement = placement;
-        menu.IsOpen = true;
+        if (ReferenceEquals(_shutBy, button))
+        {
+            _shutBy = null;
+            return;
+        }
+        bool mine = OpenFrom(button);
+        // a popup doesn't take the keyboard, so another button can be reached with one still up
+        _open?.SetValue(Popup.IsOpenProperty, false);
+        _shutBy = null;
+        if (mine || build() is not { } menu) return;
+        menu.SetValue(Popup.IsOpenProperty, true);
+        if (!(bool)menu.GetValue(Popup.IsOpenProperty)) return;
+        _from = button;
+        _open = menu;
+        var isOpen = DependencyPropertyDescriptor.FromProperty(Popup.IsOpenProperty, menu.GetType());
+        EventHandler? changed = null;
+        changed = (_, _) =>
+        {
+            if ((bool)menu.GetValue(Popup.IsOpenProperty)) return;
+            isOpen.RemoveValueChanged(menu, changed!);
+            if (ReferenceEquals(_open, menu) && ReferenceEquals(_from, button)) _open = _from = null;
+            if (PressIsOn(button)) ShutBy(button);
+        };
+        isOpen.AddValueChanged(menu, changed);
+    }
+
+    // only kept for as long as the press. Dropped below input priority, so the click that ends the press still sees it
+    private static void ShutBy(FrameworkElement button)
+    {
+        void Forget()
+        {
+            if (ReferenceEquals(_shutBy, button)) _shutBy = null;
+        }
+        _shutBy = button;
+        button.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (!button.IsMouseCaptured)
+            {
+                Forget();
+                return;
+            }
+            MouseEventHandler? lost = null;
+            lost = (_, _) =>
+            {
+                button.LostMouseCapture -= lost;
+                button.Dispatcher.BeginInvoke(DispatcherPriority.Background, Forget);
+            };
+            button.LostMouseCapture += lost;
+        });
+    }
+
+    // a mouse press inside the button, or Space, which has the button down before a popup notices it's lost the mouse
+    private static bool Pressed(FrameworkElement button) =>
+        button is ButtonBase { IsPressed: true } || (Mouse.LeftButton == MouseButtonState.Pressed && Under(button));
+
+    internal static bool Under(FrameworkElement button)
+    {
+        // the pointer reads as 0,0 on a button that's out of its window, which would count as inside
+        if (PresentationSource.FromVisual(button) is null) return false;
+        var at = Mouse.GetPosition(button);
+        return at.X >= 0 && at.Y >= 0 && at.X < button.ActualWidth && at.Y < button.ActualHeight;
     }
 
     private static object Build(MenuAction action)

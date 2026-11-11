@@ -13,7 +13,6 @@ namespace Provenance.Wpf.Views.Main;
 public partial class MainWindow : AppWindow
 {
     private bool _exiting, _asking, _cancellingLogIn;
-    private readonly ReopenGuard _worldsGuard = new();
 
     public MainWindow()
     {
@@ -66,17 +65,7 @@ public partial class MainWindow : AppWindow
         Height *= scale;
     }
 
-    // the list closes on any click outside it, chip included, and that click must only close it
-    private void OnWorldsPopupClosed(object? sender, EventArgs e)
-    {
-        _worldsGuard.MarkClosed();
-        WorldsChip.IsChecked = false;
-    }
-
-    private void OnWorldsChipMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (_worldsGuard.JustClosed) e.Handled = true;
-    }
+    private void OnWorldsChip(object sender, RoutedEventArgs e) => Menus.Toggle(WorldsChip, () => WorldsPopup);
 
     private void OnNoticeHover(object sender, MouseEventArgs e) => Vm?.Notice.Hold(true);
     private void OnNoticeLeave(object sender, MouseEventArgs e) => Vm?.Notice.Hold(false);

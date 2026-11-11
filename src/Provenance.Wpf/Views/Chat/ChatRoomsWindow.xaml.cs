@@ -59,15 +59,19 @@ public partial class ChatRoomsWindow : AppWindow
     private void OnPasswordMenu(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement button) return;
-        var menu = new ContextMenu();
-        Menus.Fill(menu, _vm.PasswordMenu());
-        Menus.ShowBelow(menu, button);
+        Menus.Toggle(button, () =>
+        {
+            var menu = new ContextMenu();
+            Menus.Fill(menu, _vm.PasswordMenu());
+            return menu;
+        });
     }
 
     // the viewer's 12 text colours, and none
     private void OnColourMenu(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement button) ColourMenu(button).IsOpen = true;
+        if (sender is not FrameworkElement button) return;
+        Menus.Toggle(button, () => ColourMenu(button), System.Windows.Controls.Primitives.PlacementMode.Top);
     }
 
     internal ContextMenu ColourMenu(FrameworkElement button)
@@ -88,7 +92,7 @@ public partial class ChatRoomsWindow : AppWindow
     // the viewer's face palette, its first page of 23
     private void OnEmoteMenu(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement button) EmotePopup(button).IsOpen = true;
+        if (sender is FrameworkElement button) Menus.Toggle(button, () => EmotePopup(button));
     }
 
     internal System.Windows.Controls.Primitives.Popup EmotePopup(FrameworkElement button)

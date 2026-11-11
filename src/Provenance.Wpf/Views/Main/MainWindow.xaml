@@ -39,20 +39,20 @@
         <controls:TitleBar Title="PROVENANCE" Icon="{StaticResource TitleIcon}" TitleSize="13" DimTitle="True" GlyphSize="17"
                            CloseToolTip="{Binding CloseTooltip}" CloseName="{Binding CloseTooltip}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <ToggleButton x:Name="WorldsChip" Style="{x:Null}" VerticalAlignment="Center"
-                              Margin="0,0,6,0" Cursor="Hand" Padding="0" KeyboardNavigation.AcceptsReturn="True"
-                              shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                              PreviewMouseLeftButtonDown="OnWorldsChipMouseDown"
-                              ToolTip="FINAL FANTASY XI world status (PlayOnline Server Status)"
-                              AutomationProperties.Name="FINAL FANTASY XI world status (PlayOnline Server Status)">
-                    <ToggleButton.Template>
-                        <ControlTemplate TargetType="ToggleButton">
+                <Button x:Name="WorldsChip" Style="{x:Null}" VerticalAlignment="Center"
+                        Margin="0,0,6,0" Cursor="Hand" Padding="0"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                        Click="OnWorldsChip"
+                        ToolTip="FINAL FANTASY XI world status (PlayOnline Server Status)"
+                        AutomationProperties.Name="FINAL FANTASY XI world status (PlayOnline Server Status)">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
                             <Border CornerRadius="11" Padding="10,3" Background="{DynamicResource Surface.2}"
                                     BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                                 <ContentPresenter />
                             </Border>
                         </ControlTemplate>
-                    </ToggleButton.Template>
+                    </Button.Template>
                     <StackPanel Orientation="Horizontal">
                         <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
                                  Style="{StaticResource WorldDot}" behaviours:State.Status="{Binding News.WorldsState}" />
@@ -60,7 +60,7 @@
                         <controls:SvgIcon Glyph="down" Flat="True" Width="14" Height="14" Margin="6,0,0,0"
                                           VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" />
                     </StackPanel>
-                </ToggleButton>
+                </Button>
                 <Button Width="44" Height="40" Padding="0"
                         Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True"
@@ -77,8 +77,7 @@
         </controls:TitleBar>
 
         <!-- out of the title bar, which has its own colours for what sits on it -->
-        <Popup x:Name="WorldsPopup" IsOpen="{Binding IsChecked, ElementName=WorldsChip}" StaysOpen="False"
-               Closed="OnWorldsPopupClosed" PlacementTarget="{Binding ElementName=WorldsChip}"
+        <Popup x:Name="WorldsPopup" StaysOpen="False" PlacementTarget="{Binding ElementName=WorldsChip}"
                Placement="Bottom" VerticalOffset="4" AllowsTransparency="True" PopupAnimation="Fade">
             <Border CornerRadius="{StaticResource Radius.Panel}" Padding="14,10" Background="{DynamicResource Surface.2}" MinWidth="240"
                     BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">

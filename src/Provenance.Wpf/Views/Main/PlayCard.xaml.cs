@@ -18,10 +18,14 @@ public partial class PlayCard : UserControl
     private void OnPlayChoices(object sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm || sender is not FrameworkElement cog) return;
-        var menu = new ContextMenu();
-        Menus.Fill(menu, vm.PlayChoicesMenu());
-        PlayChoicesIcon.IsOpen = true;
-        menu.Closed += (_, _) => PlayChoicesIcon.IsOpen = false;
-        Menus.ShowBelow(menu, cog);
+        Menus.Toggle(cog, () =>
+        {
+            var menu = new ContextMenu();
+            Menus.Fill(menu, vm.PlayChoicesMenu());
+            PlayChoicesIcon.IsOpen = true;
+            // Closed comes late, a newer menu can be up by then
+            menu.Closed += (_, _) => PlayChoicesIcon.IsOpen = Menus.OpenFrom(cog);
+            return menu;
+        });
     }
 }

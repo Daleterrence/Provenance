@@ -13,9 +13,13 @@ public partial class HandlesPage : UserControl
     {
         if (sender is not Button { DataContext: HandleCharacterRow c } button ||
             DataContext is not HandlesViewModel handles) return;
-        var menu = new ContextMenu();
-        Menus.Fill(menu, handles.LinkMenu(c));
-        if (menu.Items.Count > 0) Menus.ShowBelow(menu, button);
-        else handles.NoTarget();
+        Menus.Toggle(button, () =>
+        {
+            var menu = new ContextMenu();
+            Menus.Fill(menu, handles.LinkMenu(c));
+            if (menu.Items.Count > 0) return menu;
+            handles.NoTarget();
+            return null;
+        });
     }
 }

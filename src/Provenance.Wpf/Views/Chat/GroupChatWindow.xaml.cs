@@ -81,12 +81,12 @@ public partial class GroupChatWindow : AppWindow
         if (_vm.ConfirmExit()) _vm.Exit();
     }
 
-    private void OnMore(object sender, RoutedEventArgs e)
+    private void OnMore(object sender, RoutedEventArgs e) => Menus.Toggle(MoreButton, () =>
     {
         var menu = new ContextMenu();
         Menus.Fill(menu, _vm.MoreMenu());
-        Menus.ShowBelow(menu, MoreButton);
-    }
+        return menu;
+    });
 
     private void OnLineMenu(object sender, ContextMenuEventArgs e)
     {
