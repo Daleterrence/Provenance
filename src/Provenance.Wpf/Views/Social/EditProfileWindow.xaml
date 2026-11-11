@@ -131,7 +131,7 @@
                 <TextBlock Text="{Binding SelectedCard.Title}" FontSize="17" FontWeight="SemiBold" Margin="0,4,0,0" />
                 <TextBlock Text="{Binding SelectedCard.Subtitle}" FontSize="12.5" Foreground="{DynamicResource Text.3}" Margin="0,2,0,0" />
                 <TextBlock Style="{StaticResource ProfileHelp}" Margin="0,14,0,0"
-                           Text="A character's profile is visible unless the character is /anon in FINAL FANTASY XI. It can't be changed from PlayOnline." />
+                           Text="A character profile is visible unless that character is set as anonymous (/anon) within FINAL FANTASY XI." />
             </StackPanel>
             <StackPanel IsEnabled="{Binding CanEditFields}" Visibility="{Binding IsHandleCard, Converter={StaticResource BoolToVis}}">
                 <Grid ColumnDefinitions="Auto,*">

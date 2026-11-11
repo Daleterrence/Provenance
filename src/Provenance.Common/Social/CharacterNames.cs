@@ -8,8 +8,8 @@ namespace Provenance.Common.Social;
 // Name is empty when there's none to show, Why says which: "private" or "not found"
 public sealed record KnownCharacter(string Name, string Why = "");
 
-// keyed "ctsid:ctid", so each character's only asked for once.
-// A Private record and no record at all are kept too, they won't answer any differently
+// keyed "ctsid:ctid", so a character with a name's only asked for once. No record at all is kept the same way.
+// A Private record's kept too, but CharacterLookups asks about that one again
 public sealed class CharacterNames
 {
     // bump it if what gets kept ever turns out wrong, older files then load as empty

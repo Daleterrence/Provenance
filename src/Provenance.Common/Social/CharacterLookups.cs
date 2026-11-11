@@ -7,7 +7,9 @@ namespace Provenance.Common.Social;
 public sealed class CharacterLookups(CharacterNames names)
 {
     private Dictionary<string, string> _seen = new(StringComparer.Ordinal);
-    private readonly List<PolFriendGame> _queue = new();
+    private readonly List<(PolFriendGame Game, string Friend)> _queue = new();
+    // friends asked about this login. A character hidden last time may be shown by now, so its friend gets one more ask
+    private readonly HashSet<string> _asked = new(StringComparer.Ordinal);
     // ones given up on, in case the hook took them late and still answers
     private readonly List<(string Token, PolFriendGame Game)> _late = new();
     private readonly HookJobWatch _watch = new();
@@ -29,12 +31,15 @@ public sealed class CharacterLookups(CharacterNames names)
             var game = f.Online && !f.Pending ? f.Game : null;
             var key = game?.Character.Key ?? "";
             now[id] = key;
-            if (game is null || (_seen.TryGetValue(id, out var was) && was == key)) continue;
-            if (names.Get(key) is not null || Asking?.Character.Key == key || _queue.Exists(q => q.Character.Key == key)) continue;
-            _queue.Add(game);
+            if (game is null) continue;
+            bool wanted = names.Get(key) is null ? !_seen.TryGetValue(id, out var was) || was != key : AskAgain(key, id);
+            if (!wanted || Asking?.Character.Key == key || _queue.Exists(q => q.Game.Character.Key == key)) continue;
+            _queue.Add((game, id));
         }
         _seen = now;
     }
+
+    private bool AskAgain(string key, string friend) => names.Get(key) is { Why: "private" } && !_asked.Contains(friend);
 
     // the one to ask the hook for now, if any. Anyone who's left that character meanwhile drops out of the queue
     public PolFriendGame? Next(DateTime now)
@@ -47,10 +52,12 @@ public sealed class CharacterLookups(CharacterNames names)
         }
         if (Asking is not null || now - _last < HookLimits.ProfileServerGap) return null;
         names.Refresh();
-        _queue.RemoveAll(q => names.Get(q.Character.Key) is not null || !_seen.ContainsValue(q.Character.Key));
+        _queue.RemoveAll(q => (names.Get(q.Game.Character.Key) is not null && !AskAgain(q.Game.Character.Key, q.Friend))
+                              || !_seen.ContainsValue(q.Game.Character.Key));
         if (_queue.Count == 0) return null;
-        Asking = _queue[0];
+        (Asking, var friend) = _queue[0];
         _queue.RemoveAt(0);
+        _asked.Add(friend);
         _watch.Begin(HookLimits.CharacterLookup, now);
         _last = now;
         return Asking;
@@ -84,6 +91,7 @@ public sealed class CharacterLookups(CharacterNames names)
     public void Reset()
     {
         _queue.Clear();
+        _asked.Clear();
         _late.Clear();
         Asking = null;
         _watch.Forget();
