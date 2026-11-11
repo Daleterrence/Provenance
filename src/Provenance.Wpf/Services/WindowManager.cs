@@ -45,7 +45,11 @@ public interface IWindowManager
 
 public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) : IWindowManager
 {
-    private const double FriendsWidth = 340, MessagesMinWidth = 420, BothMinWidth = 720, Gap = 8;
+    private const double Gap = 8;
+
+    // swapped in tests, a real screen can't be made too narrow for them
+    internal static Func<(double Left, double Right)> ScreenEdges { get; set; } = () =>
+        (SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth);
 
     private static T? Find<T>() where T : Window => Application.Current?.Windows.OfType<T>().FirstOrDefault();
 
@@ -92,8 +96,8 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         if (place is null && part == SocialPart.Messages
             && SocialWindows().FirstOrDefault(x => x.Part == SocialPart.Friends) is { IsVisible: true } fw)
         {
-            double left = fw.Left + fw.ActualWidth + Gap;
-            if (left + w.Width > SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth) left = fw.Left - w.Width - Gap;
+            var (screenLeft, screenRight) = ScreenEdges();
+            double left = LeftBeside(fw.Left, fw.ActualWidth, w.Width, screenLeft, screenRight);
             place = new Rect(left, fw.Top, w.Width, fw.ActualHeight);
         }
         if (place is { } r)
@@ -103,6 +107,19 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         }
         else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         w.Show();
+    }
+
+    // right of the Friends window, or left of it when that'd run off the screen. With room on neither side it
+    // goes to whichever end of the screen covers less of Friends, the right if there's nothing in it
+    internal static double LeftBeside(double friendsLeft, double friendsWidth, double width, double screenLeft, double screenRight)
+    {
+        double right = friendsLeft + friendsWidth + Gap;
+        if (right + width <= screenRight) return right;
+        double left = friendsLeft - width - Gap;
+        if (left >= screenLeft) return left;
+        double farRight = Math.Max(screenLeft, screenRight - width);
+        double Covered(double at) => Math.Max(0, Math.Min(at + width, friendsLeft + friendsWidth) - Math.Max(at, friendsLeft));
+        return Covered(screenLeft) < Covered(farRight) ? screenLeft : farRight;
     }
 
     public void Split(SocialViewModel social) => SetSplit(social, true);
@@ -121,14 +138,14 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         if (split)
         {
             bool conversation = social.SelectedFriend != null;
+            double friendsWidth = SocialPart.Friends.Widths().Open;
             ShowSocial(social, SocialPart.Friends, activate: !conversation,
-                       area is { } a ? new Rect(a.Left, a.Top, FriendsWidth, a.Height) : null);
-            if (conversation)
-                ShowSocial(social, SocialPart.Messages, activate: true,
-                           area is { } b ? new Rect(b.Left + FriendsWidth + Gap, b.Top, Math.Max(MessagesMinWidth, b.Width - FriendsWidth - Gap), b.Height) : null);
+                       area is { } a ? new Rect(a.Left, a.Top, friendsWidth, a.Height) : null);
+            ShowSocial(social, SocialPart.Messages, activate: conversation,
+                       area is { } b ? new Rect(b.Left + friendsWidth + Gap, b.Top, Math.Max(SocialPart.Messages.Widths().Min, b.Width - friendsWidth - Gap), b.Height) : null);
         }
         else
-            ShowSocial(social, SocialPart.Both, activate: true, area is { } a ? new Rect(a.Left, a.Top, Math.Max(BothMinWidth, a.Width), a.Height) : null);
+            ShowSocial(social, SocialPart.Both, activate: true, area is { } a ? new Rect(a.Left, a.Top, Math.Max(SocialPart.Both.Widths().Min, a.Width), a.Height) : null);
     }
 
     public void ShowChatRooms(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword,

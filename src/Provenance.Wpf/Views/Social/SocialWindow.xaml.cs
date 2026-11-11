@@ -21,6 +21,14 @@ public static class SocialParts
         SocialPart.Messages => "Messages",
         _ => "Friends and messages",
     };
+
+    public static (double Min, double Open) Widths(this SocialPart part) => part switch
+    {
+        // any narrower than 360 and the add a friend button sits on top of the title
+        SocialPart.Friends => (360, 400),
+        SocialPart.Messages => (420, 640),
+        _ => (720, 900),
+    };
 }
 
 // split, it's two windows on one view model, neither owned by the main window so each lives its own life
@@ -130,12 +138,8 @@ public partial class SocialWindow : AppWindow
             SplitterColumn.Width = new GridLength(0);
             MessagesColumn.Width = HasMessages ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         }
-        (TitleIcon.Glyph, MinWidth, Width) = Part switch
-        {
-            SocialPart.Friends => ("smiley", 300.0, 360.0),
-            SocialPart.Messages => ("chat", 420.0, 640.0),
-            _ => ("smiley", 720.0, 900.0),
-        };
+        (MinWidth, Width) = Part.Widths();
+        TitleIcon.Glyph = Part == SocialPart.Messages ? "chat" : "smiley";
         Bar.Title = Title = Part.Title();
         LayoutIcon.Kind = Part == SocialPart.Both ? PackIconKind.ArrowSplitVertical
                                                   : PackIconKind.ArrowCollapseHorizontal;
