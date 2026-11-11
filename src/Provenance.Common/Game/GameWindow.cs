@@ -18,15 +18,22 @@ public static class GameWindow
         return User32.SetForegroundWindow(h);
     }
 
-    private static List<IntPtr> WindowsOf(int pid)
-    {
-        var list = new List<IntPtr>();
+    // every top-level window with its process id, until the callback returns false
+    public static void ForEachWindow(Func<IntPtr, int, bool> visit) =>
         User32.EnumWindows((h, _) =>
         {
             User32.GetWindowThreadProcessId(h, out var owner);
-            if (owner == (uint)pid) list.Add(h);
-            return true;
+            return visit(h, (int)owner);
         }, IntPtr.Zero);
+
+    private static List<IntPtr> WindowsOf(int pid)
+    {
+        var list = new List<IntPtr>();
+        ForEachWindow((h, owner) =>
+        {
+            if (owner == pid) list.Add(h);
+            return true;
+        });
         return list;
     }
 

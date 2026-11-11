@@ -74,7 +74,7 @@ internal static class HookEnvironment
     internal static void WriteGoFile(int pid, IDictionary<string, string?> env) =>
         AtomicFile.Write(HookFiles.PathFor(pid, HookContract.Files.Go), string.Join("\n", GoFileEntries(env)));
 
-    // nothing POL_ or PROVENANCE_ from the user's environment, every POL_ value of this sign-in, plus the launch marker
+    // nothing POL_ or PROVENANCE_ from the user's environment, every POL_ value of this login, plus the launch marker
     // and id. Never PROVENANCE_HOOK, the watcher's --attach loads the hook
     internal static void ApplyContract(IDictionary<string, string?> target, IDictionary<string, string?> launchEnv, string launchId)
     {

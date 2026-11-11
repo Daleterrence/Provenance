@@ -80,7 +80,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
     {
         _required = !edit || requireAll;
         _savedAccount = otpAccount;
-        // before its first sign-in the name's a placeholder ("New account"), which reads badly after "Edit"
+        // before its first login the name's a placeholder ("New account"), which reads badly after "Edit"
         Header = !edit ? "Add account"
                : string.IsNullOrWhiteSpace(accountName) || accountName.StartsWith("New account", StringComparison.Ordinal)
                    ? "Edit account" : $"Edit {accountName}";

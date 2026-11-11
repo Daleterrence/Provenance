@@ -63,7 +63,7 @@ public static class WindowerGameRegistry
     // same as Windower
     public static IReadOnlyList<string> Apply(WindowerProfile profile, PolRegion region, int width, int height, RegistryKey? root = null)
     {
-        var path = PolPaths.SettingsKey(region);
+        var path = PolPaths.VendorKey(region);
         var written = new List<string>();
         var hklm = root is null ? RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32) : null;
         try

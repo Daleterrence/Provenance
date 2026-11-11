@@ -91,7 +91,7 @@ public sealed class Prestarter
         try
         {
             var (viewerDir, polExe, launcherExe) = _watcher.FindFiles();
-            // no network here, the sign-in does the version check. With no game there's no sign-in card to use it, and
+            // no network here, the login does the version check. With no game there's no login card to use it, and
             // the install would take it for POL running
             if (polExe is null || !_gameIsInstalled() || SignedBuilds.Check(viewerDir!) != ViewerBuild.State.Supported) return null;
             // a queued update is the login's job, pol.exe would act on it itself (patch.ini goes to startpol.exe

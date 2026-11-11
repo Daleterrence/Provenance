@@ -152,7 +152,7 @@ public partial class MainWindow : AppWindow
         base.OnClosing(e);
     }
 
-    // closing while signed in (with the setting on) keeps POL signed in from the tray, like an open viewer
+    // closing while logged in (with the setting on) keeps POL logged in from the tray, like an open viewer
     private bool GoToTray(System.ComponentModel.CancelEventArgs e)
     {
         if (_exiting || Vm is not { KeepInTrayOnClose: true } vm) return false;

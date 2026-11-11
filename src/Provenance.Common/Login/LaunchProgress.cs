@@ -7,7 +7,7 @@ public enum LaunchProgressKind { Progress, Notice, Failed, Stopped }
 public sealed record LaunchProgress(string Stage, string Detail, double Fraction = -1, PatchProgress? Patch = null,
                                     LaunchProgressKind Kind = LaunchProgressKind.Progress)
 {
-    // a viewer update at sign-in gets the bar up to here, and the sign-in's own steps the rest
+    // a viewer update at login gets the bar up to here, and the login's own steps the rest
     public const double LogInUpdateEnd = 0.5;
 
     public static LaunchProgress Updating(string stage, PatchProgress p, double from, double to) =>

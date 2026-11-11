@@ -72,7 +72,7 @@ public sealed class SessionRecords
         }
         catch (Exception ex)
         {
-            // can't check means not safe, a sign-in here could take another copy's session over
+            // can't check means not safe, a login here could take another copy's session over
             Log.Warning(ex, "Could not claim account {Account}", profileId);
             problem = "Provenance couldn't check whether another copy of Provenance is using this account. Try again in a moment.";
             return false;

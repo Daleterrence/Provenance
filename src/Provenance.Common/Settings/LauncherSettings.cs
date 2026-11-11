@@ -9,7 +9,7 @@ public sealed class LauncherSettings
 
     public string ActiveProfileId { get; set; } = "default";
 
-    // shift at start-up or --noautologin skips it, and a rejected sign-in turns it off
+    // shift at start-up or --noautologin skips it, and a rejected login turns it off
     public bool AutoLogin { get; set; }
 
     public bool ExitAfterGameExits { get; set; } = true;

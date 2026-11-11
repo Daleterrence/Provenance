@@ -165,7 +165,7 @@ public static class AshitaLauncher
             FileDelete.Try(pidFile);
             return (Watcher.LaunchOutcome.Cancelled, (0, closed), "");
         }
-        // never reported, so nothing it started stays (a hooked one would be half signed in)
+        // never reported, so nothing it started stays (a hooked one would be half logged in)
         EndLaunch(hookProc, tree);
         return Fail($"{name} started, but Provenance couldn't log in through it. Check {name} starts the game without Provenance, then try again.");
     }

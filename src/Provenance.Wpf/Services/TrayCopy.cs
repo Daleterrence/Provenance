@@ -40,16 +40,15 @@ internal static class TrayCopy
         if (pids.Count == 0) return false;
         bool taken = false;
         var clock = Stopwatch.StartNew();
-        User32.EnumWindows((window, _) =>
+        GameWindow.ForEachWindow((window, pid) =>
         {
             if (clock.ElapsedMilliseconds > TotalMs) return false;
-            User32.GetWindowThreadProcessId(window, out var pid);
-            if (!pids.Contains((int)pid)) return true;
+            if (!pids.Contains(pid)) return true;
             // this is the process the player just started, so the other copy only gets to the front if we let it
-            User32.AllowSetForegroundWindow(pid);
+            GameWindow.AllowForeground(pid);
             taken = AskWindow(window, TimeoutMs);
             return !taken;
-        }, IntPtr.Zero);
+        });
         return taken;
     }
 

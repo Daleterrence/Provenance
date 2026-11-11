@@ -4,12 +4,12 @@ namespace Provenance.Common.Credentials;
 // key and throw CredentialKeyUnavailableException (user text) when it won't open
 public interface ICredentialService
 {
-    // decrypts the password, so only for a sign-in or a save, never just to test it
+    // decrypts the password, so only for a login or a save, never just to test it
     PolAccount? LoadPolAccount(string profileId);
 
     SquareEnixAccount? LoadSquareEnixAccount(string profileId);
 
-    // header test only, so an entry wrapped with a lost key still counts (its load gives null at sign-in)
+    // header test only, so an entry wrapped with a lost key still counts (its load gives null at login)
     bool HasUsableDetails(string profileId);
 
     (string? PolId, string? SeaId) ReadIds(string profileId);

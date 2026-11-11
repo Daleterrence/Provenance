@@ -372,7 +372,7 @@ public partial class InstallViewModel : ObservableObject
             Detail = "Removing the installer files...";
             await Task.Run(() => InstallParts.RemoveParts(work, _region), CancellationToken.None);
 
-            // SE's files are from 2019, so the first sign-in updates POL and the first Play the game
+            // SE's files are from 2019, so the first login updates POL and the first Play the game
             var updateBytes = await FirstUpdateSizeAsync(ct);
             Log.Information("Install finished in {Folder}; warnings: {Warnings}", InstallFolder, warnings);
             Finished(PartsNextText(updateBytes), warnings);

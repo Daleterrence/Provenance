@@ -533,7 +533,7 @@ public partial class MainViewModel : ObservableObject
     private async Task ConnectSocialAsync()
     {
         if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount()) return;
-        // one account for the whole sign-in, so switching mid-way can't mix two up
+        // one account for the whole login, so switching mid-way can't mix two up
         if (Accounts.SelectedProfile is not { } profile) return;
         if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(requireAll: true)) return;
         if (!EnsureMemberAgreement()) return;
@@ -638,7 +638,7 @@ public partial class MainViewModel : ObservableObject
     private async Task PlayAsync()
     {
         if (Multi.Running) return;
-        // POL's own Play gate, and it only asks for each list at sign-in so there's no reload here either
+        // POL's own Play gate, and it only asks for each list at login so there's no reload here either
         if (Social.PlayBlockedReason is { } why)
         {
             _dialogs.Error("Can't start FINAL FANTASY XI", why);
@@ -646,7 +646,7 @@ public partial class MainViewModel : ObservableObject
         }
         // nothing new goes to the hook from here, the game update still applies its answers
         SetPhase(SessionPhase.UpdatingGame);
-        // like the viewer, the game update comes after the sign-in with the session held meanwhile
+        // like the viewer, the game update comes after the login with the session held meanwhile
         if (!await UpdateGameAsync())
         {
             SetPhase(SessionPhase.LoggedIn);

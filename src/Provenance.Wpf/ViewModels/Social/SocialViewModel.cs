@@ -108,7 +108,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public event Action<string, string>? NoticeReceived;
     public event Action<string, int>? FriendRequestReceived;
     public event Action<string, int>? GroupInviteReceived;
-    public event Action<string>? FriendCameOnline;          // never for the presence that lands at sign-in
+    public event Action<string>? FriendCameOnline;          // never for the presence that lands at login
     public event Action<PolSocialSnapshot>? SnapshotApplied;
 
     public void RequestChat(FriendItem friend) => OpenChatRequested?.Invoke(friend);

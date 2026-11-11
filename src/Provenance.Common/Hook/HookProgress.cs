@@ -8,7 +8,7 @@ public sealed class HookProgress
     private bool _ready;
     private int _loadsDone;
 
-    // polcore's sign-in state machine (the fractions only keep the bar moving, don't read much into them)
+    // polcore's login state machine (the fractions only keep the bar moving, don't read much into them)
     public static (string Text, double Fraction) AuthStateText(int state) => state switch
     {
         18 or 19 or 20 or 21 or 22 => ("Connecting to PlayOnline...", 0.10),

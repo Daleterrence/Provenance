@@ -154,7 +154,7 @@ public sealed class PolSession : IDisposable
             return LoginCodes.Cancelled;
         }
         _watcher.BeforeStart(viewerDir!, "before the login");
-        // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the sign-in ends
+        // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the login ends
         using var viewerHold = HoldViewer(viewerDir!, ct, out var buildProblem);
         if (buildProblem != null)
         {
@@ -186,7 +186,7 @@ public sealed class PolSession : IDisposable
             return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
         AdoptPid(pid, request.ProfileId);
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.04));
-        // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its sign-in from it
+        // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its login from it
         HookFiles.ClearFor(pid);
         Credentials.DropChatPassword();
         HookFiles.Delete(pid, HookContract.Files.Stop);
@@ -237,12 +237,12 @@ public sealed class PolSession : IDisposable
         lock (_gate)
         {
             Pid = pid;
-            // kept so the exit code still says why if it dies mid sign-in
+            // kept so the exit code still says why if it dies mid login
             _polProc?.Dispose();
             try { _polProc = Process.GetProcessById(pid); _ = _polProc.Handle; _polStamp = ProcessStamp.Of(pid); }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException or Win32Exception) { _polProc = null; _polStamp = null; }
         }
-        // saved now, if this copy dies mid sign-in the next start ends this pol.exe
+        // saved now, if this copy dies mid login the next start ends this pol.exe
         SaveSession(profileId);
         Log.Information("Hold session: pol.exe pid {Pid}", pid);
     }
@@ -355,7 +355,7 @@ public sealed class PolSession : IDisposable
         finally { Monitor.Exit(_gate); }
         _snapshots.Stop();
         Records.Clear();
-        // taken now so one that a new sign-in starts meanwhile is left alone
+        // taken now so one that a new login starts meanwhile is left alone
         var hook = HookTracker.Take();
         Task.Run(() => ThirdPartyHookTracker.End(hook));
         SessionEnded?.Invoke(LostSessionText(pid) ?? HookExitText.SessionClosedText(exit));

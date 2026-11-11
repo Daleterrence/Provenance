@@ -13,11 +13,11 @@ public static class PolPaths
     public static bool Supported(PolRegion? region) => region is PolRegion.UnitedStates or PolRegion.Europe or PolRegion.Japan;
 
     // Japan keeps its settings under SQUARE, the others under SquareEnix
-    public static string SettingsKey(PolRegion region) => Hive(region) + @"\" + (region == PolRegion.Japan ? "SQUARE" : "SquareEnix");
+    public static string VendorKey(PolRegion region) => Hive(region) + @"\" + (region == PolRegion.Japan ? "SQUARE" : "SquareEnix");
 
-    public static string ViewerKey(PolRegion region) => SettingsKey(region) + @"\PlayOnlineViewer";
+    public static string ViewerKey(PolRegion region) => VendorKey(region) + @"\PlayOnlineViewer";
 
-    public static string FfxiKey(PolRegion region) => SettingsKey(region) + @"\FinalFantasyXI";
+    public static string FfxiKey(PolRegion region) => VendorKey(region) + @"\FinalFantasyXI";
 
     public static string Hive(PolRegion region) => region switch
     {
