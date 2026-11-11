@@ -24,7 +24,7 @@ public static class AccountRules
 
     // a key that's gone still passes the header test, so the run's details-again text is what tells
     public static bool NeedsAllDetails(bool usable, string? multiProblem) =>
-        !usable || multiProblem == HookExitText.DetailsAgainText;
+        !usable || multiProblem?.StartsWith(HookExitText.DetailsAgainLead, StringComparison.Ordinal) == true;
 
     public static bool FillFailed(SideEdit polEdit, PolAccount? pol, SideEdit squareEnixEdit, SquareEnixAccount? squareEnix) =>
         (polEdit == SideEdit.Fill && pol is null) || (squareEnixEdit == SideEdit.Fill && squareEnix is null);
@@ -85,7 +85,7 @@ public static class AccountRules
         var squareEnix = credentials.LoadSquareEnixAccount(profileId);
         if (pol is null || squareEnix is null) return new(null, null, null);
         if (ValidateDetails(pol.PolId, pol.Password, squareEnix.Username, squareEnix.Password) is { } problem)
-            return new(null, null, problem + " Press Edit account to fix it.");
+            return new(null, null, problem + " Press Accounts and edit this account to fix it.");
         return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SquareEnixAccount(squareEnix.Username.Trim(), squareEnix.Password), null);
     }
 
@@ -93,7 +93,7 @@ public static class AccountRules
     private static bool BothIds((string? PolId, string? SeaId) ids) => !string.IsNullOrEmpty(ids.PolId) && !string.IsNullOrEmpty(ids.SeaId);
 
     public static string MissingDetailsText((string? PolId, string? SeaId) ids) =>
-        BothIds(ids) ? HookExitText.DetailsAgainText : "This account's login details are missing. Press Edit account to add them.";
+        BothIds(ids) ? HookExitText.DetailsAgainText : "This account's login details are missing. Press Accounts and edit this account to add them.";
 
     // both entries there but unusable is a Credential failure, so it stays off until edited (like hook exit 11)
     public static AccountFailure MissingDetailsFailure((string? PolId, string? SeaId) ids) =>
@@ -133,7 +133,7 @@ public static class AccountRules
                            or LoginCodes.DetailsUnreadable && autoLogin;
         var why = detail ?? $"Provenance couldn't log in to PlayOnline (code {code}).";
         if (code == LoginCodes.AuthFailed)
-            why += "\n\nIf your password has changed, press Edit account to update it, then log in again.";
+            why += "\n\nIf your password has changed, press Accounts and edit this account to update it, then log in again.";
         if (autoOff)
             why += "\n\nProvenance has turned off Log in automatically, so it won't try this account again by itself.";
         return (TitleFor(code), why, autoOff,

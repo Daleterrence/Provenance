@@ -37,16 +37,8 @@
                     </ComboBox>
                 </StackPanel>
             </Grid>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
-                <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12"
-                        Command="{Binding Accounts.EditAccountCommand}" Content="EDIT ACCOUNT" />
-                <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12" Margin="6,0,0,0"
-                        Command="{Binding Accounts.AddAccountCommand}" Content="ADD ACCOUNT" />
-                <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12" Margin="6,0,0,0"
-                        Command="{Binding Accounts.RemoveAccountCommand}" Content="REMOVE"
-                        ToolTip="Remove this account and its saved passwords from this PC"
-                        AutomationProperties.Name="Remove this account and its saved passwords from this PC" />
-            </StackPanel>
+            <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12" HorizontalAlignment="Right" Margin="0,0,0,10"
+                    Command="{Binding OpenAccountsCommand}" Content="ACCOUNTS" />
 
             <CheckBox Content="This account uses a one-time password" FontSize="13" Margin="0,0,0,10"
                       Foreground="{DynamicResource Text.2}" IsChecked="{Binding Accounts.UseOtp}"

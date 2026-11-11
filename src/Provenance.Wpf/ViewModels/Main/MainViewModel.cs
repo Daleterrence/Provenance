@@ -190,6 +190,7 @@ public partial class MainViewModel : ObservableObject
         }
         Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
         LogInCommand.NotifyCanExecuteChanged();
+        OpenAccountsCommand.NotifyCanExecuteChanged();
         Social.HandleSwitching = Handles.Switching;
         if (launchingChanged) OnPropertyChanged(nameof(IsLaunching));
         if (loggedInChanged) OnPropertyChanged(nameof(LoggedIn));
@@ -541,7 +542,7 @@ public partial class MainViewModel : ObservableObject
         if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount()) return;
         // one account for the whole login, so switching mid-way can't mix two up
         if (Accounts.SelectedProfile is not { } profile) return;
-        if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(requireAll: true)) return;
+        if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(profile, requireAll: true)) return;
         if (!EnsureMemberAgreement()) return;
         // a one-time code counts as used once typed, so the details dialog has to come first
         if (Accounts.LoadForLogIn(profile) is not { } details) return;
@@ -804,6 +805,16 @@ public partial class MainViewModel : ObservableObject
     {
         Handles.Refresh();
         Social.HandleSwitching = Handles.Switching;
+    }
+
+    // a run reads each account's details as its turn comes, so nothing's edited or removed under it
+    private bool CanOpenAccounts() => !Multi.Running;
+
+    [RelayCommand(CanExecute = nameof(CanOpenAccounts))]
+    private void OpenAccounts()
+    {
+        _windows.ShowAccounts(Accounts);
+        Multi.Refresh();
     }
 
     [RelayCommand]

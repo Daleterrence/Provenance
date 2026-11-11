@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Login;
 using Provenance.Common.Settings;
 
 namespace Provenance.Wpf.ViewModels.Settings;
@@ -76,7 +77,7 @@ public partial class MultiAccountSettings : ObservableObject
                 ProfileId = id,
                 Name = string.IsNullOrWhiteSpace(p.HandleName) ? p.DisplayName : p.HandleName!,
                 Enabled = entry?.Enabled ?? false,
-                Problem = entry?.Problem,
+                Problem = HookExitText.Current(entry?.Problem),
                 CredentialsRefused = entry?.CredentialsRefused ?? false,
                 ThirdPartyHookProfile = ToChoice(entry?.ThirdPartyHookProfile),
             };
@@ -155,10 +156,10 @@ public partial class MultiAccountSettings : ObservableObject
                     (now.CredentialsRefused || (!now.Enabled && _multiEnabledAsKnown.GetValueOrDefault(r.ProfileId))))
                 {
                     entry.Enabled = false;
-                    entry.Problem = now.Problem;
+                    entry.Problem = HookExitText.Current(now.Problem);
                     entry.CredentialsRefused = now.CredentialsRefused;
                     r.Enabled = false;
-                    r.Problem = now.Problem;
+                    r.Problem = entry.Problem;
                     r.CredentialsRefused = now.CredentialsRefused;
                 }
                 saved.Add(entry);

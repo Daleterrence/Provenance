@@ -4,11 +4,13 @@ using System.Windows.Media;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Settings;
 using Provenance.Wpf.ViewModels.Install;
+using Provenance.Wpf.ViewModels.Main;
 using Provenance.Wpf.ViewModels.Settings;
 using Provenance.Wpf.ViewModels.Social;
 using Provenance.Wpf.ViewModels.Chat;
 using Provenance.Wpf.Views.Chat;
 using Provenance.Wpf.Views.Install;
+using Provenance.Wpf.Views.Main;
 using Provenance.Wpf.Views.Settings;
 using Provenance.Wpf.Views.Social;
 
@@ -36,10 +38,11 @@ public interface IWindowManager
     void CloseProfileEditor();
     // the session's going, so these go with it and say nothing
     void CloseSessionWindows();
-    // these three hold the caller till the window closes
+    // these four hold the caller till the window closes
     void ShowInstall(InstallViewModel vm);
     void ShowSettings(SettingsViewModel vm, SettingsTab tab);
     void ShowRepair(RepairViewModel vm);
+    void ShowAccounts(AccountsViewModel accounts);
     int? PickProfilePicture(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int current);
 }
 
@@ -242,6 +245,8 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     }
 
     public void ShowRepair(RepairViewModel vm) => new RepairWindow(vm).ShowDialogOver(WindowOwner.Find());
+
+    public void ShowAccounts(AccountsViewModel accounts) => new AccountsWindow { DataContext = accounts }.ShowDialogOver(WindowOwner.Find());
 
     public int? PickProfilePicture(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int current)
     {

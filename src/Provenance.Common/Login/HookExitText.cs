@@ -5,12 +5,22 @@ namespace Provenance.Common.Login;
 
 public static class HookExitText
 {
-    public const string DetailsAgainText = "Provenance needs this account's login details again. Press Edit account to add them.";
+    // a run saves the whole line with the account it turns off, so only this much of it is ever matched
+    public const string DetailsAgainLead = "Provenance needs this account's login details again.";
+    public const string DetailsAgainText = DetailsAgainLead + " Press Accounts and edit this account to add them.";
 
     // POL's password box stops at 16 and polcore has no room for more, a longer one gets refused before pol.exe sees it
     public const int MaxPolPasswordLength = 16;
-    public const string PolPasswordTooLongText =
-        "Your saved PlayOnline password is longer than 16 characters, which PlayOnline doesn't allow. Press Edit account and enter it again.";
+    private const string PolPasswordTooLongLead = "Your saved PlayOnline password is longer than 16 characters, which PlayOnline doesn't allow.";
+    public const string PolPasswordTooLongText = PolPasswordTooLongLead + " Press Accounts, edit this account and enter it again.";
+
+    // settings.json can hold either line the way an older version ended it, naming a button that's gone
+    public static string? Current(string? saved) =>
+        saved is null ? null
+        : saved.StartsWith(DetailsAgainLead, StringComparison.Ordinal) ? DetailsAgainText
+        : saved.StartsWith(PolPasswordTooLongLead, StringComparison.Ordinal) ? PolPasswordTooLongText
+        : saved;
+
     public const string PlayUnreadableText = "Provenance couldn't start the game. Close Provenance and open it again.";
     public const string PlayRefusedText = "PlayOnline didn't let the game start. Log in again and try once more.";
     public const string PlaySessionClosedText = "Your PlayOnline session closed before the game could start. Log in again and try once more.";

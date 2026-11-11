@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Credentials;
@@ -53,6 +54,47 @@ public partial class AccountsViewModel : ObservableObject
     }
 
     public ObservableCollection<Account> Profiles { get; }
+
+    private ObservableCollection<AccountRow>? _rows;
+
+    // made on first read, as each picture's cut out of its sheet on the calling thread
+    public ObservableCollection<AccountRow> Rows
+    {
+        get
+        {
+            if (_rows is null)
+            {
+                _rows = new(Profiles.Select(RowOf));
+                Profiles.CollectionChanged += OnProfilesChanged;
+            }
+            return _rows;
+        }
+    }
+
+    private AccountRow RowOf(Account p) => new(p, p.DisplayName, _avatars.ProfilePicture(p.ProfilePictureId));
+
+    // a row that'd come out the same stays, so an edit doesn't hand the list a new one to redraw
+    private void OnProfilesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        var rows = _rows!;
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                rows.Insert(e.NewStartingIndex, RowOf((Account)e.NewItems![0]!));
+                break;
+            case NotifyCollectionChangedAction.Remove:
+                rows.RemoveAt(e.OldStartingIndex);
+                break;
+            case NotifyCollectionChangedAction.Replace:
+                var row = RowOf((Account)e.NewItems![0]!);
+                if (rows[e.NewStartingIndex] != row) rows[e.NewStartingIndex] = row;
+                break;
+            default:
+                rows.Clear();
+                foreach (var p in Profiles) rows.Add(RowOf(p));
+                break;
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProfile), nameof(ProfileTitle), nameof(ProfilePicture))]
@@ -151,7 +193,7 @@ public partial class AccountsViewModel : ObservableObject
         if (ProfileWithPolId(r.PolId) is { } same)
         {
             _dialogs.Info("Account already added",
-                $"This PlayOnline ID is already saved as {same.DisplayName}. Press Edit account if you want to change its details.");
+                $"This PlayOnline ID is already saved as {same.DisplayName}. Press Edit next to it if you want to change its details.");
             SelectedProfile = same;
             return false;
         }
@@ -175,11 +217,11 @@ public partial class AccountsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void EditAccount() => EditAccount(requireAll: false);
+    private void EditAccount(Account? profile) => EditAccount(profile ?? SelectedProfile, requireAll: false);
 
-    internal bool EditAccount(bool requireAll, AccountDialogResult? typed = null)
+    internal bool EditAccount(Account? p, bool requireAll, AccountDialogResult? typed = null)
     {
-        if (SelectedProfile is not { } p) return false;
+        if (p is null) return false;
         requireAll |= AccountRules.NeedsAllDetails(_credentials.HasUsableDetails(p.Id),
                                       _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id)?.Problem);
         var r = _dialogs.AskAccount(p.DisplayName, typed?.UseOtp ?? p.UseOtp, edit: true,
@@ -197,7 +239,7 @@ public partial class AccountsViewModel : ObservableObject
         var pol = polEdit == AccountRules.SideEdit.Fill ? _credentials.LoadPolAccount(p.Id) : null;
         var squareEnix = squareEnixEdit == AccountRules.SideEdit.Fill ? _credentials.LoadSquareEnixAccount(p.Id) : null;
         if (AccountRules.FillFailed(polEdit, pol, squareEnixEdit, squareEnix))
-            return EditAccount(requireAll: true, typed: AccountRules.WithoutPasswords(r));
+            return EditAccount(p, requireAll: true, typed: AccountRules.WithoutPasswords(r));
         // read before anything's saved, so the typed details get compared with the saved ones
         var blocked = _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id && e.CredentialsRefused);
         bool cures = blocked is not null && AccountRules.ChangesLogIn(r, _credentials.ReadIds(p.Id), p.UseOtp, p.OtpSource, p.OtpItem, p.OtpAccount);
@@ -227,8 +269,12 @@ public partial class AccountsViewModel : ObservableObject
         }
         else if (blocked is not null)
             _dialogs.Info("Edit account", NothingChangedText);
-        LoadCredentialsForProfile(p);
-        RefreshProfileDisplay();
+        // loading another account's one-time password setting here would write it onto the picked one
+        if (p == SelectedProfile)
+        {
+            LoadCredentialsForProfile(p);
+            RefreshProfileDisplay();
+        }
         return true;
     }
 
@@ -280,7 +326,7 @@ public partial class AccountsViewModel : ObservableObject
         var details = AccountRules.PrepareLogIn(_credentials, profile.Id);
         if (details.Missing)
         {
-            if (!EditAccount(requireAll: true)) return null;
+            if (!EditAccount(profile, requireAll: true)) return null;
             details = AccountRules.PrepareLogIn(_credentials, profile.Id);
             if (details.Missing)
             {
