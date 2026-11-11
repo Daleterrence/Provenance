@@ -466,6 +466,7 @@ static int my_profile_field_ok(const char *n)
     for (int i = 0; i < ME_EDITABLE; i++) if (!strcmp(g_me_fields[i], n)) return i + 1;
     return 0;
 }
+static int handles_list_edit(void);
 static void my_profile_request(BYTE *b)
 {
     char buf[2048], *p, *tok, *lvl, *line, *name, nomail[0x80], jp[MAX_PATH + 64];
@@ -480,6 +481,9 @@ static void my_profile_request(BYTE *b)
     p = buf;
     tok = requests_line(&p);
     lstrcpynA(g_s.me_token, tok, sizeof g_s.me_token);
+    /* a rename uploads the handle list too, so it'd carry a create or delete's change with it */
+    if (kind == 3 && handles_list_edit()) { my_profile_done("failed:busy"); return; }
+    if (kind == 3 && g_s.handle_unconfirmed) { my_profile_done("failed:unconfirmed"); return; }
     if (!profile_db_load_pib(b) || !profile_db_load_pfb(b)) { my_profile_done("failed:no schema"); return; }
     g_me.t0 = GetTickCount64();
     if (kind == 1) {

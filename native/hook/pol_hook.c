@@ -33,6 +33,7 @@
 #include "request_table.c"
 #include "login.c"
 #include "handles.c"
+#include "handle_edits.c"
 #include "snapshot.c"
 #include "hold.c"
 

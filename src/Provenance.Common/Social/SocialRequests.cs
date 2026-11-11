@@ -127,5 +127,20 @@ public static class SocialRequests
     public static bool LinkCharacter(int pid, string token, PolHandle handle, PolContentId content) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "link", token, handle.Slot, handle.Key, content.Index, content.Key);
 
+    public static bool CreateHandle(int pid, string token, string name) =>
+        HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "create", token, name);
+
+    public static bool DeleteHandle(int pid, string token, PolHandle handle) =>
+        HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "delete", token, handle.Slot, handle.Key);
+
+    // only the records whose order byte changes, each with its key like any other handle request
+    public static bool ReorderContentIds(int pid, string token, IReadOnlyList<ContentIdOrder> changes)
+    {
+        if (changes.Count is 0 or > HandleList.MaxContentIdRecords) return false;
+        var lines = new List<object> { "order", token };
+        foreach (var c in changes) lines.AddRange([c.Record.Index, c.Record.Key, c.Order]);
+        return HookFiles.WriteRequest(pid, HookContract.Requests.Handle, [.. lines]);
+    }
+
     public static bool SendPending(int pid) => HookFiles.RequestPaths(pid, HookContract.Requests.Send).Any(File.Exists);
 }

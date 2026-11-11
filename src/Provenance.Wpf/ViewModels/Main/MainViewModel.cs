@@ -113,7 +113,7 @@ public partial class MainViewModel : ObservableObject
             if (!_settings.Current.NotifyFriendsOnline || Notice.Current is { Text.Length: > 0 }) return;
             Notice.Show($"{who} is online now.", "AccountCheckOutline", NoticeTarget.Chat, who);
         };
-        Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture, Session, () => Social.Last, time)
+        Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture, Session, () => Social.Last, time, Viewer.TextOutsideJapan)
         {
             SwitchBlocked = () => _windows.ProfileEditorOpen
                 ? "Close the profile editor first. It's editing the active handle's profile." : Social.PendingWrite(),
@@ -690,11 +690,7 @@ public partial class MainViewModel : ObservableObject
                 "This PlayOnline account doesn't have a handle yet, and FINAL FANTASY XI needs one to log in.\n\n" +
                 "A handle is your name on PlayOnline, and other players can see it. You can rename it later.\n\n" +
                 "Enter 1 to 15 English letters, numbers or symbols:",
-                maxLength: PolLimits.HandleName,
-                // the viewer's and polcore's rule, plain ASCII and not just spaces
-                validate: name => name.Any(c => c < 0x20 || c > 0x7e)
-                    ? "Use English letters, numbers and symbols only."
-                    : string.IsNullOrWhiteSpace(name) ? "Type a handle name." : null);
+                maxLength: PolLimits.HandleName, validate: HandleList.NameProblem);
             if (name is null) return null;
             // a handle's public straight away, so one last look first
             return _dialogs.Confirm("Create PlayOnline handle",

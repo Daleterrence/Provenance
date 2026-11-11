@@ -14,6 +14,9 @@ public sealed record HandleCharacterRow(HandleCharacter Character, PolHandle? Ha
 {
     public string Label => Character.Label;
     public bool CanLink => Editable && !Character.Orphan;
+    public bool ShowMoves { get; init; }
+    public bool CanMoveUp { get; init; }
+    public bool CanMoveDown { get; init; }
 }
 
 public sealed record HandleRow(HandleGroup Group, ImageSource? Picture, IReadOnlyList<HandleCharacterRow> Characters,
@@ -23,6 +26,7 @@ public sealed record HandleRow(HandleGroup Group, ImageSource? Picture, IReadOnl
     public string Name => Handle.Name;
     public bool Active => Handle.Active;
     public bool CanSwitch => Editable && !Handle.Active;
+    public bool CanDelete { get; init; }
     public bool Full => Group.Full;
     public bool NoCharacters => Characters.Count == 0;
 }
@@ -37,6 +41,7 @@ public partial class HandlesViewModel : ObservableObject
     private readonly SessionState? _session;
     private readonly Func<PolSocialSnapshot>? _snapshot;
     private readonly TimeProvider _time;
+    private readonly Func<int, string, string>? _text;
     private PolSocialSnapshot _snap = PolSocialSnapshot.Empty;
     private readonly HookJobWatch _watch = new();
     private DateTime Now => _time.GetUtcNow().UtcDateTime;
@@ -45,11 +50,16 @@ public partial class HandlesViewModel : ObservableObject
     private string _signature = "";
     private bool _wasReadOnly;
     private Action<string?>? _after;
+    // every FFXI Content ID's key in the order the page shows, while that isn't the order PlayOnline has
+    private List<string>? _draft;
+    private string _draftFrom = "";
 
     public HandlesViewModel(IDialogs dialogs, Func<int?> pid, Func<int, ImageSource?>? picture = null, SessionState? session = null,
-                            Func<PolSocialSnapshot>? snapshot = null, TimeProvider? time = null)
+                            Func<PolSocialSnapshot>? snapshot = null, TimeProvider? time = null,
+                            Func<int, string, string>? text = null)
     {
         _time = time ?? TimeProvider.System;
+        _text = text;
         _dialogs = dialogs;
         _pid = pid;
         _picture = picture;
@@ -62,15 +72,20 @@ public partial class HandlesViewModel : ObservableObject
     public ObservableCollection<HandleRow> Rows { get; } = new();
     public ObservableCollection<HandleCharacterRow> Unlinked { get; } = new();
 
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable))] private bool _loggedIn;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ReadOnly), nameof(Editable))] private string? _readOnlyText;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable))] private bool _busy;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable), nameof(CanCreate))] private bool _loggedIn;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ReadOnly), nameof(Editable), nameof(CanCreate))] private string? _readOnlyText;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable), nameof(CanCreate), nameof(Ordering))] private bool _busy;
     public StatusLine Note { get; } = new();
     private bool _open, _noteSeen;
     [ObservableProperty] private bool _hasUnlinked;
 
     public bool ReadOnly => ReadOnlyText != null;
     public bool Editable => LoggedIn && !ReadOnly && !Busy;
+    private bool CanChange => Editable && _draft is null;
+    public bool CanCreate => CanChange;
+    // once it's been sent the new order stays on the page till the answer's in, without its buttons
+    public bool Ordering => _draft is not null && !(Busy && _op == HandleChange.Reorder);
+    public string OrderChangedText => HandleList.OrderChangedText;
     public string LoggedOutText => HandleList.LoggedOutText;
     public string AutoSwitchText => HandleList.AutoSwitchText;
     public string LimitText => HandleList.LimitText;
@@ -105,6 +120,12 @@ public partial class HandlesViewModel : ObservableObject
                                                  : "The PlayOnline session ended before Provenance could confirm the change.");
             After(Note.Text);
         }
+        if (_draft is not null && (!LoggedIn || readOnly != null)) ClearDraft();
+        else if (Ordering && Characters(_snap) != _draftFrom)
+        {
+            ClearDraft();
+            Note.Fail(HookFailures.Handles.ListChanged);
+        }
         // the wait doesn't count while the game's starting, nothing can be changed then
         if (readOnly != null || _wasReadOnly) _watch.Restart(Now);
         _wasReadOnly = readOnly != null;
@@ -126,7 +147,8 @@ public partial class HandlesViewModel : ObservableObject
             state = "timeout";
         }
         _watch.Forget();
-        Note.Set(state == "saved" ? _doneText : HandleList.Failed(_op, state), state != "saved");
+        if (_op == HandleChange.Reorder) ClearDraft();
+        Note.Set(state == "saved" ? _doneText : HandleList.Failed(_op, state, _text), state != "saved");
         After(state == "saved" ? null : Note.Text);
     }
 
@@ -139,9 +161,11 @@ public partial class HandlesViewModel : ObservableObject
 
     private void Rebuild()
     {
-        var (groups, unlinked) = HandleList.Build(_snap);
-        bool edit = Editable;
-        var sig = $"{edit}|" + string.Join("|", groups.Select(g =>
+        var (groups, unlinked) = HandleList.Build(_snap, _draft);
+        bool edit = CanChange, move = Editable;
+        // straight after a login no handle's marked active yet, and the one in use mustn't look like it can go
+        bool delete = edit && groups.Any(g => g.Handle.Active);
+        var sig = $"{edit}/{move}|" + string.Join("|", groups.Select(g =>
                       $"{g.Handle.Slot}/{g.Handle.Name}/{g.Handle.Key}/{g.Handle.ProfilePictureId}/{g.Handle.Active}/{g.Full}/" +
                       string.Join(",", g.Characters.Select(c => c.Record.Key + ":" + c.Label)))) +
                   "|u:" + string.Join(",", unlinked.Select(c => c.Record.Key + ":" + c.Label + ":" + c.Orphan));
@@ -149,8 +173,16 @@ public partial class HandlesViewModel : ObservableObject
         _signature = sig;
         Rows.Clear();
         foreach (var g in groups)
-            Rows.Add(new HandleRow(g, _picture?.Invoke(g.Handle.ProfilePictureId),
-                                   g.Characters.Select(c => new HandleCharacterRow(c, g.Handle, edit)).ToList(), edit));
+        {
+            // the arrows are for a handle with two or more characters that have a name, and step over any that haven't
+            var named = g.Characters.Where(c => c.Named).ToList();
+            HandleCharacterRow Character(HandleCharacter c)
+            {
+                int at = named.Count > 1 ? named.IndexOf(c) : -1;
+                return new(c, g.Handle, edit) { ShowMoves = at >= 0, CanMoveUp = move && at > 0, CanMoveDown = move && at >= 0 && at < named.Count - 1 };
+            }
+            Rows.Add(new HandleRow(g, _picture?.Invoke(g.Handle.ProfilePictureId), g.Characters.Select(Character).ToList(), edit) { CanDelete = delete });
+        }
         Unlinked.Clear();
         foreach (var c in unlinked) Unlinked.Add(new HandleCharacterRow(c, null, edit));
         HasUnlinked = Unlinked.Count > 0;
@@ -170,6 +202,7 @@ public partial class HandlesViewModel : ObservableObject
     {
         if (!_watch.Running) return;
         _watch.Forget();
+        if (_draft is not null) ClearDraft();
         Busy = false;
         Note.Fail(HandleList.GameStartedText);
         After(Note.Text);
@@ -182,10 +215,71 @@ public partial class HandlesViewModel : ObservableObject
         Note.Show(HandleList.NoTargetText);
     }
 
+    private static IEnumerable<PolContentId> Ffxi(PolSocialSnapshot snap) =>
+        HandleOrder.Listed(snap.ContentIds).Where(c => c.Type == ContentIdType.Ffxi);
+
+    private static string Characters(PolSocialSnapshot snap) => string.Join(",", Ffxi(snap).Select(c => $"{c.Key}:{c.Handle}:{c.Order}"));
+
+    private void ClearDraft()
+    {
+        _draft = null;
+        OnPropertyChanged(nameof(Ordering));
+        OnPropertyChanged(nameof(CanCreate));
+    }
+
+    [RelayCommand]
+    public void MoveUp(HandleCharacterRow c) => Move(c, -1);
+
+    [RelayCommand]
+    public void MoveDown(HandleCharacterRow c) => Move(c, 1);
+
+    // swaps it with the next one on its handle that has a name. Only on the page, nothing's sent till SAVE ORDER
+    private void Move(HandleCharacterRow c, int by)
+    {
+        if (!Editable || Rows.FirstOrDefault(r => r.Handle.Slot == c.Handle?.Slot) is not { } row) return;
+        var named = row.Characters.Where(x => x.ShowMoves).Select(x => x.Character.Record.Key).ToList();
+        int at = named.IndexOf(c.Character.Record.Key);
+        if (at < 0 || at + by < 0 || at + by >= named.Count) return;
+        var saved = Ffxi(_snap).Select(x => x.Key).ToList();
+        var keys = new List<string>(_draft ?? saved);
+        int from = keys.IndexOf(named[at]), to = keys.IndexOf(named[at + by]);
+        if (from < 0 || to < 0) return;
+        (keys[from], keys[to]) = (keys[to], keys[from]);
+        if (_draft is null) _draftFrom = Characters(_snap);
+        _draft = keys.SequenceEqual(saved) ? null : keys;
+        OnPropertyChanged(nameof(Ordering));
+        OnPropertyChanged(nameof(CanCreate));
+        Rebuild();
+    }
+
+    [RelayCommand]
+    public void SaveOrder()
+    {
+        if (!Editable || _draft is not { } draft) return;
+        var changes = HandleOrder.Changes(_snap.ContentIds, draft);
+        if (changes.Count > 0)
+        {
+            Send(HandleChange.Reorder, (pid, token) => SocialRequests.ReorderContentIds(pid, token, changes),
+                 HandleList.Done(HandleChange.Reorder, "", ""));
+            OnPropertyChanged(nameof(Ordering));
+            return;
+        }
+        ClearDraft();
+        Rebuild();
+    }
+
+    [RelayCommand]
+    public void CancelOrder()
+    {
+        if (_draft is null || !Ordering) return;
+        ClearDraft();
+        Rebuild();
+    }
+
     [RelayCommand]
     public void Switch(HandleRow row)
     {
-        if (!Editable || row.Active) return;
+        if (!CanChange || row.Active) return;
         if (SwitchBlocked?.Invoke() is { } why)
         {
             Note.Fail(why);
@@ -251,7 +345,14 @@ public partial class HandlesViewModel : ObservableObject
         _noteSeen = true;
     }
 
-    public void Closed() => _open = false;
+    // the page's gone, and an order nobody saved would keep every other button off the next time it opened
+    public void Closed()
+    {
+        _open = false;
+        if (!Ordering) return;
+        ClearDraft();
+        Rebuild();
+    }
 
     // a group's chat only opens under the handle I joined it with
     public void OpenGroup(PolGroup group, Action open)
@@ -283,7 +384,7 @@ public partial class HandlesViewModel : ObservableObject
 
     public void Link(HandleCharacterRow c, HandleRow to)
     {
-        if (!c.CanLink || !Editable || c.Handle?.Slot == to.Handle.Slot) return;
+        if (!c.CanLink || !CanChange || c.Handle?.Slot == to.Handle.Slot) return;
         if (to.Full)
         {
             Note.Fail(HandleList.LimitText);
@@ -293,6 +394,58 @@ public partial class HandlesViewModel : ObservableObject
         if (!_dialogs.Confirm("Link", question, "LINK")) return;
         Send(HandleChange.Link, (pid, token) => SocialRequests.LinkCharacter(pid, token, to.Handle, c.Character.Record),
              HandleList.Done(HandleChange.Link, to.Name, c.Label));
+    }
+
+    // the viewer's own steps: the name box, its question, then the one upload. Only the server can say a name's taken
+    [RelayCommand]
+    public void Create()
+    {
+        if (!CanCreate) return;
+        if (_snap.Handles.Count >= HandleList.MaxHandles)
+        {
+            Note.Fail(HandleList.Say(HandleList.HandlesFull, _text));
+            return;
+        }
+        var title = HandleList.Say(HandleList.CreateTitle, _text);
+        var name = _dialogs.Ask(title, HandleList.Say(HandleList.EnterName, _text) + "\n\n" + HandleList.CreateHelpText,
+                                maxLength: PolLimits.HandleName, validate: HandleList.NameProblem);
+        if (name is null || HandleList.NameProblem(name) is not null) return;
+        if (!_dialogs.Confirm(title, HandleList.RegisterQuestion(name, _text), "REGISTER") || !CanCreate) return;
+        Send(HandleChange.Create, (pid, token) => SocialRequests.CreateHandle(pid, token, name), HandleList.Done(HandleChange.Create, name, ""));
+    }
+
+    // can't be taken back, so nothing's sent without both steps: the red question, then the handle's name typed out
+    [RelayCommand]
+    public void Delete(HandleRow row)
+    {
+        HandleRow? Current() => Rows.FirstOrDefault(r => r.Handle.Slot == row.Handle.Slot && r.Handle.Key == row.Handle.Key);
+        // deleting unlinks whatever's on the handle, and only FFXI's characters can be moved off it from here
+        bool Linked(HandleRow r) =>
+            r.Characters.Count > 0 || r.Handle.ContentIds.Count > 0 || _snap.ContentIds.Any(c => c.Handle == r.Handle.Slot);
+        if (!CanChange || Current() is not { CanDelete: true } now) return;
+        if (now.Active)
+        {
+            Note.Fail(HandleList.Say(HandleList.DeleteActive, _text));
+            return;
+        }
+        if (Linked(now))
+        {
+            Note.Fail(now.Characters.Count > 0 ? HandleList.MoveFirstText : HandleList.OtherContentText);
+            return;
+        }
+        var name = now.Name.Trim();
+        var question = HandleList.DeleteQuestion(now.Handle, HandleList.InGroup(_snap, now.Handle), _text);
+        if (!_dialogs.Confirm(HandleList.DeleteTitle, question, "DELETE", ConfirmStyle.Destructive)) return;
+        string? Wrong(string typed) => typed.Trim() == name ? null : HandleList.WrongNameText;
+        var typed = _dialogs.Ask(HandleList.DeleteTitle, HandleList.TypeNamePrompt(name), maxLength: PolLimits.HandleName, validate: Wrong);
+        if (typed is null || Wrong(typed) is not null || !CanChange) return;
+        // the questions can sit open a while, so the handle's looked at again before anything's sent
+        if (Current() is not { CanDelete: true, Active: false } still || still.Name != now.Name || Linked(still))
+        {
+            Note.Fail(HookFailures.Handles.ListChanged);
+            return;
+        }
+        Send(HandleChange.Delete, (pid, token) => SocialRequests.DeleteHandle(pid, token, now.Handle), HandleList.Done(HandleChange.Delete, name, ""));
     }
 
     private void Send(HandleChange op, Func<int, string, bool> write, string done)
@@ -307,7 +460,9 @@ public partial class HandlesViewModel : ObservableObject
         _watch.Begin(token, HookLimits.HandleUntaken, Now);
         _op = op;
         _doneText = done;
-        Note.Show(op == HandleChange.Switch ? "Updating online status..." : "Updating Content ID list...");
+        Note.Show(op == HandleChange.Switch ? "Updating online status..."
+                  : op is HandleChange.Create or HandleChange.Delete ? HandleList.Say(HandleList.UpdatingText, _text)
+                  : "Updating Content ID list...");
         Busy = true;
         Rebuild();
     }

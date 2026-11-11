@@ -60,6 +60,7 @@ typedef struct hook_session {
     int handle_from;
     int handle_pos;
     int handle_reload;
+    int handle_unconfirmed;   /* a create or delete ended with no answer, so its slot's still marked changed in polcore */
     char handle_token[48];
     char handle_state[48];
     int status_job;

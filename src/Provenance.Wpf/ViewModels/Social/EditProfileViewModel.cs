@@ -499,6 +499,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         "failed:-261" or "failed:-5429" => HookFailures.ProfileEditor.NameRejected,
         "failed:reloaded" => HookFailures.ProfileEditor.NameNotKept,
         "failed:busy" => HookFailures.Busy,
+        "failed:unconfirmed" => HookFailures.Handles.Unconfirmed,
         "failed:mismatch" => HookFailures.ProfileEditor.MismatchHandle,
         "failed:write" => HookFailures.ProfileEditor.WriteFailed,
         "failed:timeout" => HookFailures.ProfileEditor.SaveUnconfirmed,

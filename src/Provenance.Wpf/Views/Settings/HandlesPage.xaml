@@ -5,9 +5,24 @@
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
     <UserControl.Resources>
         <DataTemplate x:Key="HandleCharacter">
-            <Grid ColumnDefinitions="*,Auto" MinHeight="32">
+            <Grid ColumnDefinitions="*,Auto,Auto" MinHeight="32">
                 <TextBlock Text="{Binding Label}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <Button Grid.Column="1" Content="LINK TO..." FontSize="12" Height="30" Padding="10,0" Margin="8,0,0,0"
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center"
+                            Visibility="{Binding ShowMoves, Converter={StaticResource BoolToVis}}">
+                    <Button Width="30" Height="30" Padding="0" Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                            IsEnabled="{Binding CanMoveUp}" ToolTip="Move up"
+                            Command="{Binding DataContext.MoveUpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                            AutomationProperties.Name="{Binding Label, StringFormat=Move {0} up}">
+                        <controls:SvgIcon Glyph="up" Width="18" Height="18" />
+                    </Button>
+                    <Button Width="30" Height="30" Padding="0" Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                            IsEnabled="{Binding CanMoveDown}" ToolTip="Move down"
+                            Command="{Binding DataContext.MoveDownCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                            AutomationProperties.Name="{Binding Label, StringFormat=Move {0} down}">
+                        <controls:SvgIcon Glyph="down" Width="18" Height="18" />
+                    </Button>
+                </StackPanel>
+                <Button Grid.Column="2" Content="LINK TO..." FontSize="12" Height="30" Padding="10,0" Margin="8,0,0,0"
                         Style="{StaticResource PolButton}" IsEnabled="{Binding CanLink}" Click="OnLinkCharacter"
                         AutomationProperties.Name="{Binding Label, StringFormat=Link {0} to a handle}" />
             </Grid>
@@ -23,12 +38,22 @@
                 <TextBlock Style="{StaticResource WarnText}" Text="{Binding ReadOnlyText}" Margin="0,0,0,12"
                            Visibility="{Binding ReadOnly, Converter={StaticResource BoolToVis}}" />
                 <TextBlock Text="{Binding Note.Text}" behaviours:State.IsError="{Binding Note.IsError}" Style="{StaticResource ProfileStatusText}" />
+                <Border Style="{StaticResource Card}" Padding="16,10" Margin="0,0,0,12"
+                        Visibility="{Binding Ordering, Converter={StaticResource BoolToVis}}">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        <TextBlock Text="{Binding OrderChangedText}" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        <Button Grid.Column="1" Content="CANCEL" FontSize="12" Margin="8,0,0,0" Style="{StaticResource RedButton}"
+                                Command="{Binding CancelOrderCommand}" />
+                        <Button Grid.Column="2" Content="SAVE ORDER" FontSize="12" Margin="4,0,0,0" Style="{StaticResource PolButton}"
+                                Command="{Binding SaveOrderCommand}" />
+                    </Grid>
+                </Border>
                 <ItemsControl ItemsSource="{Binding Rows}" Focusable="False">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Style="{StaticResource Card}" Padding="16,12" Margin="0,0,0,12">
                                 <StackPanel>
-                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                                         <controls:ProfilePictureCircle Diameter="40" Margin="0,0,12,0" VerticalAlignment="Center"
                                                                        Source="{Binding Picture}" />
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -44,6 +69,10 @@
                                                 Style="{StaticResource PolButton}" IsEnabled="{Binding CanSwitch}"
                                                 Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name, StringFormat=Make {0} active}" />
+                                        <Button Grid.Column="3" Content="DELETE" FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0"
+                                                Style="{StaticResource PolButton}" IsEnabled="{Binding CanDelete}"
+                                                Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name, StringFormat=Delete {0}}" />
                                     </Grid>
                                     <TextBlock Text="{Binding DataContext.NoCharactersText, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                Style="{StaticResource Help}" Margin="52,8,0,0"
@@ -55,6 +84,9 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <Button Content="CREATE NEW HANDLE" FontSize="12" HorizontalAlignment="Left" Margin="0,0,0,12"
+                        Style="{StaticResource PolButton}" IsEnabled="{Binding CanCreate}" Command="{Binding CreateCommand}"
+                        AutomationProperties.Name="Create a new handle" />
                 <Border Style="{StaticResource Card}" Padding="16,12" Margin="0,0,0,12"
                         Visibility="{Binding HasUnlinked, Converter={StaticResource BoolToVis}}">
                     <StackPanel>

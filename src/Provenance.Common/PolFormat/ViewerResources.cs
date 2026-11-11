@@ -41,6 +41,9 @@ public sealed class ViewerResources
         return _table != null && _table.TryGetValue(id, out var s) && s.Length > 0 ? s : fallback;
     }
 
+    // the JP table is 100 entries shorter than the US one, so an ID nobody's read there gets the US words
+    public string TextOutsideJapan(int id, string us) => _settings.DetectedRegion == PolRegion.Japan ? us : Text(id, us);
+
     public IReadOnlyDictionary<int, string>? Strings() => Folder is { } viewer ? _strings(viewer) : null;
 
     public bool FilterOn => PolOptions.ChatFilter(_settings.Current);

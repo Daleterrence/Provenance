@@ -1,11 +1,18 @@
 /* handles and Content IDs, listed from memory (svc 0x2b4/0x2c4). A switch is the viewer's one ChangeMyStatus (app.dll
    0x10040c9e), a link a local 0x2dc (0x2e0 first for a move) and then one PutChrList (0x1038) */
-enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_LINKALL };
+enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_LINKALL, HOP_CREATE, HOP_DELETE, HOP_ORDER };
 static int g_hall[8], g_hall_n;
 static int g_in_hold;
 static int hold_writes_pending(void);
+static void handle_create(BYTE *b, char *p);
+static void handle_delete(BYTE *b, int slot, const pol_handle *h);
+static void handle_order(BYTE *b, char *p);
+static void handle_list_put_start(BYTE *b);
+static void handle_edit_undo(BYTE *b);
+static void handle_edit_done(BYTE *b, int r);
 
 static int handles_switching(void) { return g_s.handle_op == HOP_SWITCH; }
+static int handles_list_edit(void) { return g_s.handle_op == HOP_CREATE || g_s.handle_op == HOP_DELETE; }
 
 #define handle_fail(why) requests_refuse(g_s.handle_state, sizeof g_s.handle_state, "handles: refused - %s\r\n", why)
 static void handles_done(const char *state)
@@ -48,6 +55,8 @@ static void handles_undo(BYTE *b)
     } else if (g_s.handle_op == HOP_LINK) {
         pc_unlink_content(b, g_s.handle_idx, g_s.handle_slot);
         if (g_s.handle_from >= 0 && pc_link_content(b, g_s.handle_idx, g_s.handle_from) >= 0) handles_place(b, g_s.handle_idx, g_s.handle_from, g_s.handle_pos);
+    } else {
+        handle_edit_undo(b);
     }
 }
 /* the put only goes when polcore's stamps say the server's list isn't newer, else it quietly loads instead and
@@ -141,33 +150,38 @@ static void handles_linkall(BYTE *b, int slot, const pol_handle *h, char *ix, ch
     handles_put_start(b);
 }
 
-/* <op> switch|link|linkall, token, slot, handle key, then index/key pairs. The keys are the snapshot's, so a
-   request never lands on a record that changed */
+/* <op>, token, then the op's own lines: create has a name, order has index/key/order for each record, the rest a
+   slot, its handle key and index/key pairs. The keys are the snapshot's, so a request never lands on a record that changed */
 static void handles_request(BYTE *b)
 {
-    char buf[512], *p, *op, *tok, *sl, *hk, *ix, *ck, k[17];
+    char buf[2048], *p, *op, *tok, *sl, *hk, *ix, *ck, k[17];
     pol_handle h;
     pol_chr c;
-    int slot, idx = -1, kind, cur, old = -1, r;
+    int slot, idx = -1, kind, cur, old = -1, r, n;
     DWORD f;
     /* a background character lookup finishes first, rather than the switch being turned away as busy */
     if (g_ch_read.j.step) return;
-    if (requests_take(REQ_HANDLE, buf, sizeof buf) < 0) return;
+    if ((n = requests_take(REQ_HANDLE, buf, sizeof buf)) < 0) return;
     p = buf;
-    op = requests_line(&p); tok = requests_line(&p); sl = requests_line(&p); hk = requests_line(&p);
-    ix = requests_line(&p); ck = requests_line(&p);
+    op = requests_line(&p); tok = requests_line(&p);
     lstrcpynA(g_s.handle_token, tok, sizeof g_s.handle_token);
-    kind = !lstrcmpA(op, "switch") ? HOP_SWITCH : !lstrcmpA(op, "link") ? HOP_LINK : !lstrcmpA(op, "linkall") ? HOP_LINKALL : 0;
-    if (!kind || !tok[0] || !requests_parse_num(sl, 2, &slot) || slot > 63 ||
-        (kind != HOP_SWITCH && kind != HOP_LINKALL && (!requests_parse_num(ix, 2, &idx) || idx > 63))) {
+    kind = !lstrcmpA(op, "switch") ? HOP_SWITCH : !lstrcmpA(op, "link") ? HOP_LINK : !lstrcmpA(op, "linkall") ? HOP_LINKALL
+         : !lstrcmpA(op, "create") ? HOP_CREATE : !lstrcmpA(op, "delete") ? HOP_DELETE : !lstrcmpA(op, "order") ? HOP_ORDER : 0;
+    /* one that fills the buffer was cut short on the way in, and its last line can't be trusted */
+    if (!kind || !tok[0] || n >= (int)sizeof buf - 1) { handle_fail("failed:bad request"); return; }
+    if (!g_in_hold) { handle_fail("failed:not in hold"); return; }
+    if (g_s.draining) { handle_fail("failed:draining"); return; }
+    if (kind == HOP_CREATE) { handle_create(b, p); return; }
+    if (kind == HOP_ORDER) { handle_order(b, p); return; }
+    sl = requests_line(&p); hk = requests_line(&p); ix = requests_line(&p); ck = requests_line(&p);
+    if (!requests_parse_num(sl, 2, &slot) || slot > 63 || (kind == HOP_LINK && (!requests_parse_num(ix, 2, &idx) || idx > 63))) {
         handle_fail("failed:bad request");
         return;
     }
-    if (!g_in_hold) { handle_fail("failed:not in hold"); return; }
-    if (g_s.draining) { handle_fail("failed:draining"); return; }
     if (!handle_get(b, slot, &h)) { handle_fail("failed:list changed"); return; }
     peers_hid_key(handle_hid(&h), k);
     if (lstrcmpA(k, hk) != 0) { handle_fail("failed:list changed"); return; }
+    if (kind == HOP_DELETE) { handle_delete(b, slot, &h); return; }
     if (kind == HOP_SWITCH) {
         cur = pc_current_handle(b);
         if (slot == cur) { handle_fail("failed:already active"); return; }
@@ -232,13 +246,16 @@ static void handles_pump(BYTE *b, int ctl)
         /* a switch still waiting for a slot isn't worth starting once the game or a log out is on its way */
         if (g_s.handle_op == HOP_SWITCH && g_s.draining) handles_done("failed:draining");
         else if (g_s.handle_op == HOP_SWITCH) handles_switch_start(b);
+        else if (handles_list_edit()) handle_list_put_start(b);
         else handles_put_start(b);   /* applied locally already, so it still goes in a drain */
         return;
     }
     if (g_s.handle_job < 0) return;
-    r = g_s.handle_op == HOP_SWITCH ? pc_change_my_status_check(b, g_s.handle_job) : pc_links_save_check(b, g_s.handle_job);
+    r = g_s.handle_op == HOP_SWITCH ? pc_change_my_status_check(b, g_s.handle_job)
+      : handles_list_edit() ? pc_handles_save_check(b, g_s.handle_job) : pc_links_save_check(b, g_s.handle_job);
     if (r == 0) return;
     g_s.handle_job = -1;
+    if (handles_list_edit() || g_s.handle_op == HOP_ORDER) { handle_edit_done(b, r); return; }
     if (g_s.handle_op != HOP_SWITCH) { handles_put_done(b, r); return; }
     if (r == 1) {
         handles_switched(b);
@@ -253,6 +270,7 @@ static void handles_abandon(BYTE *b)
 {
     if (g_s.handle_op == HOP_NONE) return;
     if (g_s.handle_job >= 0) pc_cancel_job(b, g_s.handle_job);
+    if (handles_list_edit()) g_s.handle_unconfirmed = 1;
     if (g_s.handle_op != HOP_SWITCH) handles_undo(b);
     handles_done("failed:cancelled");
 }
@@ -268,6 +286,9 @@ static void handles_json(BYTE *b, jw *w)
     if (g_s.handle_op == HOP_SWITCH) jw_lit(w, "op", "switch");
     else if (g_s.handle_op == HOP_LINK) jw_lit(w, "op", "link");
     else if (g_s.handle_op == HOP_LINKALL) jw_lit(w, "op", "linkall");
+    else if (g_s.handle_op == HOP_CREATE) jw_lit(w, "op", "create");
+    else if (g_s.handle_op == HOP_DELETE) jw_lit(w, "op", "delete");
+    else if (g_s.handle_op == HOP_ORDER) jw_lit(w, "op", "order");
     jw_end(w);
     jw_arr(w, "handles");
     for (i = 0; i < 64; i++) {

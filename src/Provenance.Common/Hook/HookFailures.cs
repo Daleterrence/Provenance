@@ -56,6 +56,13 @@ public static class HookFailures
         public const string SwitchNoAnswer = "PlayOnline didn't answer, so your active handle may not have changed.";
         public const string ChangeNoAnswer = "PlayOnline didn't answer, so the change may not have been saved.";
         public const string PreLaunchAlreadyLinked = "Not saved: one of the characters is already linked to a handle.";
+        public const string HandleListReloaded = "Not saved: PlayOnline had a newer handle list, so Provenance loaded that instead. Try again.";
+        public const string Unconfirmed =
+            "An earlier handle change wasn't confirmed, so handles can't be created, deleted or renamed until you log in again.";
+        public const string CreateUnconfirmed =
+            "PlayOnline didn't confirm it, so the handle may have been created anyway. Log out and back in to see your handles as PlayOnline has them.";
+        public const string DeleteUnconfirmed =
+            "PlayOnline didn't confirm it, so the handle may still be there. Log out and back in to see your handles as PlayOnline has them.";
         public static string SwitchRejected(string reason) => $"Provenance couldn't confirm the switch ({reason}).";
         public static string ChangeRejected(string reason) => $"Not saved: PlayOnline didn't accept the change ({reason}).";
     }
