@@ -13,6 +13,7 @@ public sealed class SessionState(PolSession? pol = null)
         (SessionPhase.LoggingOut, SessionPhase.LoggingIn),
         (SessionPhase.LoggingIn, SessionPhase.LoggedIn),
         (SessionPhase.LoggingIn, SessionPhase.LoggedOut),
+        (SessionPhase.LoggingIn, SessionPhase.StartingGame),
         (SessionPhase.LoggedIn, SessionPhase.UpdatingGame),
         (SessionPhase.UpdatingGame, SessionPhase.StartingGame),
         (SessionPhase.UpdatingGame, SessionPhase.LoggedIn),

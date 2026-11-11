@@ -74,6 +74,9 @@ public partial class MainViewModel : ObservableObject
         Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session, _launch,
             new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, BackUpGameSettingsAsync));
         Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, Session, () => News.WindowShown, RefreshInstallState);
+        Lean = new LeanStartViewModel(dialogs, windows, settings, pol, _ui, Accounts, _launch, this,
+            new LeanStartLinks(() => GameInstalled, SetPhase, OnProgress, ResetProgress, EndCancellable, BackUpGameSettingsAsync, id => StartSocial(id),
+                               OnSnapshot, PlayWithAsync, () => RequestShow?.Invoke(), () => RequestExit?.Invoke()));
         _pol.SnapshotUpdated += OnSnapshot;
         _pol.PidChanged += () => _ui.Post(() =>
         {
@@ -358,10 +361,11 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
+    // stillLean makes it a lean login, which asks it once before any pol.exe's used
     internal async Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount squareEnix, string otp,
-                                                 IProgress<LaunchProgress>? progress, CancellationToken token) =>
-        (await _launch.LogInAsync(new LaunchLogin(p, pol, squareEnix, otp, Accounts.EnsureHomeSlot(p), false, null, progress, PromptHandleName),
-                                  token)).Code;
+                                                 IProgress<LaunchProgress>? progress, CancellationToken token, Func<bool>? stillLean = null) =>
+        (await _launch.LogInAsync(new LaunchLogin(p, pol, squareEnix, otp, Accounts.EnsureHomeSlot(p), stillLean is not null, null, progress,
+                                                  PromptHandleName, stillLean), token)).Code;
 
     private bool CanLogin() => !IsLaunching && !Multi.Running;
 
@@ -391,6 +395,8 @@ public partial class MainViewModel : ObservableObject
     public AccountsViewModel Accounts { get; }
 
     public MultiRunViewModel Multi { get; }
+
+    internal LeanStartViewModel Lean { get; }
 
     public NoticeBanner Notice { get; } = new();
 
@@ -486,11 +492,16 @@ public partial class MainViewModel : ObservableObject
         _windows.ShowInstall(vm);
     }
 
+    private bool LogsInAtStart(bool suppressed) => Accounts.AutoLogin && !suppressed && Accounts.HasSavedCredentials;
+
+    // the app opens on the small window, with the full one made but never shown
+    internal bool StartsLean(bool suppressed) => LogsInAtStart(suppressed) && Accounts.SelectedProfile is not null && !ShowSetupCard && Lean.Wanted;
+
     public void Startup(bool autoLoginSuppressed)
     {
         _pol.Records.EndOrphans();
         _pol.Prestarter.Prestart();
-        if (!Accounts.AutoLogin || autoLoginSuppressed || !Accounts.HasSavedCredentials) return;
+        if (!LogsInAtStart(autoLoginSuppressed)) return;
         Log.Information("Auto sign-in for {Account}", Accounts.SelectedProfile?.Id);
         LogInCommand.Execute(null);
     }
@@ -502,6 +513,7 @@ public partial class MainViewModel : ObservableObject
             if (_pol.Pid is null) return;   // read just before a sign-out
             // a run's lean session has no social side and nothing here may write a request to its hook
             if (Multi.Running) { Multi.RunSnapshot = snap; return; }
+            if (Lean.Hold(snap)) return;
             try
             {
                 Social.AccountName = Accounts.SelectedProfile?.DisplayName ?? "PlayOnline";
@@ -632,24 +644,19 @@ public partial class MainViewModel : ObservableObject
         if (ShowSetupCard) return;
         // one account for the whole login, so switching mid-way can't mix two up
         if (Accounts.SelectedProfile is not { } profile) return;
-        if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(profile, requireAll: true)) return;
-        if (!EnsureMemberAgreement()) return;
-        // a one-time code counts as used once typed, so the details dialog has to come first
-        if (Accounts.LoadForLogIn(profile) is not { } details) return;
-        var (pol, squareEnix) = details;
-        var claim = _launch.Claim(profile, () => Accounts.AskOtp(profile, squareEnix));
-        if (claim.InUse is { } inUse)
-        {
-            _dialogs.Error("Account in use", inUse);
-            return;
-        }
-        if (claim.Otp is not { } otp) return;
-        StartSocial(profile.Id);
+        // the small window goes up first, so the questions before a login open over it
+        bool lean = Lean.Open();
+        (PolAccount Pol, SquareEnixAccount SquareEnix, string Otp)? details = null;
+        try { details = LogInDetails(profile); }
+        finally { if (details is null) Lean.Finish(); }
+        if (details is not var (pol, squareEnix, otp)) return;
+        if (lean) DropHandleNotice();
+        else StartSocial(profile.Id);
         Accounts.SessionProfileId = profile.Id;
         SetPhase(SessionPhase.LoggingIn);
         var token = BeginCancellable(Accounts.ProfileTitle.StartsWith("New account", StringComparison.Ordinal)
             ? "Logging in to PlayOnline" : "Logging in to " + Accounts.ProfileTitle, "Starting PlayOnline...");
-        bool startAfter = false, loggedIn = false;
+        bool startAfter = false, loggedIn = false, gameRan = false;
         string? lastFailure = null;
         var progress = new Progress<LaunchProgress>(p =>
         {
@@ -658,17 +665,21 @@ public partial class MainViewModel : ObservableObject
         });
         try
         {
-            int code = await ConnectProfileAsync(profile, pol, squareEnix, otp, progress, token);
+            int code = await ConnectProfileAsync(profile, pol, squareEnix, otp, progress, token, Lean.BeforePol(profile.Id, token));
             await _ui.Flush();   // queued progress reports have to land first (yes, really)
+            // still lean, so the game starts from here and this only comes back once it's over or the session's full
+            if (code == 0 && Lean.Running) (code, lastFailure, gameRan) = await Lean.AfterLogInAsync(profile.Id, token);
+            if (gameRan) return;
             if (code == 0)
             {
                 ProgressFraction = 1.0;
                 loggedIn = true;
-                startAfter = Accounts.StartGameImmediately;
+                startAfter = !lean && Accounts.StartGameImmediately;
             }
             else
             {
                 CanCancel = false;
+                Lean.Finish();
                 await Task.Run(() =>
                 {
                     _pol.StopHold();
@@ -685,6 +696,7 @@ public partial class MainViewModel : ObservableObject
         {
             Log.Error(ex, "Social connect failed");
             await Task.Run(() => _pol.StopHold());
+            Lean.Finish();
             _dialogs.Error("Couldn't log in",
                 ErrorText.Of(ex, "Provenance ran into a problem while logging in. Try again, and if it keeps happening, press Open logs to see what went wrong."),
                 offerLogs: true);
@@ -692,9 +704,31 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             EndCancellable();
-            SetPhase(loggedIn ? SessionPhase.LoggedIn : SessionPhase.LoggedOut);
+            if (!gameRan) SetPhase(loggedIn ? SessionPhase.LoggedIn : SessionPhase.LoggedOut);
+            Lean.Finish();
         }
         if (startAfter && PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null);
+        if (lean && loggedIn) await Lean.FollowUpAsync();
+    }
+
+    // null when there's nothing to log in with. A one-time code counts as used once typed, so the details dialog comes first
+    private (PolAccount Pol, SquareEnixAccount SquareEnix, string Otp)? LogInDetails(Account profile)
+    {
+        if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(profile, requireAll: true)) return null;
+        if (!EnsureMemberAgreement() || Accounts.LoadForLogIn(profile) is not var (pol, squareEnix)) return null;
+        var claim = _launch.Claim(profile, () => Accounts.AskOtp(profile, squareEnix));
+        if (claim.InUse is { } inUse) _dialogs.Error("Account in use", inUse);
+        return claim.Otp is { } otp && claim.InUse is null ? (pol, squareEnix, otp) : null;
+    }
+
+    // the game update Play runs is handed the check a lean start already made, and nothing else ever is
+    private GameCheck? _knownCheck;
+
+    private async Task PlayWithAsync(GameCheck? known)
+    {
+        _knownCheck = known;
+        try { if (PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null); }
+        finally { _knownCheck = null; }
     }
 
     // the US viewer asks once per POL ID, here it's once per install
@@ -715,6 +749,7 @@ public partial class MainViewModel : ObservableObject
     private string? PromptHandleName() =>
         _ui.Run(() =>
         {
+            Lean.HandleAsked();
             var name = _dialogs.Ask("Create PlayOnline handle",
                 "This PlayOnline account doesn't have a handle yet, and FINAL FANTASY XI needs one to log in.\n\n" +
                 "A handle is your name on PlayOnline, and other players can see it. You can rename it later.\n\n" +
@@ -775,7 +810,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         bool up = false;
-        try { up = await BringGameForwardAsync(); }
+        try { up = _pol.Pid is { } game && await GameWindow.BringForwardWhenUpAsync(game); }
         catch (Exception ex) { Log.Warning(ex, "Could not bring the game window to the front"); }
         if (up) Handles.GameStarted();
         GameUp = true;
@@ -833,11 +868,13 @@ public partial class MainViewModel : ObservableObject
     internal async Task<bool> UpdateGameAsync()
     {
         if (_launch.GameFolders() is null) return true;
+        var known = _knownCheck;
+        _knownCheck = null;
         var ct = BeginCancellable("Updating FINAL FANTASY XI", "Checking for FINAL FANTASY XI updates...");
         var progress = new Progress<PatchProgress>(p => OnProgress(LaunchProgress.Updating("Updating", p, 0.01, 0.99)));
         try
         {
-            var result = await _launch.UpdateGameAsync(progress, ct);
+            var result = await _launch.UpdateGameAsync(progress, ct, known);
             if (result.Done) return true;
             if (result.Cancelled)
             {
@@ -854,28 +891,6 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
         finally { EndCancellable(); }
-    }
-
-    // true once the game's window is up. Windows only hands focus to the last program used, which is the app at the
-    // Play click, so pol.exe gets leave to take it first
-    private async Task<bool> BringGameForwardAsync()
-    {
-        if (_pol.Pid is not { } pid) return false;
-        GameWindow.AllowForeground(pid);
-        var until = DateTime.UtcNow.AddSeconds(90);
-        while (DateTime.UtcNow < until)
-        {
-            if (!ProcessStamp.PidRunning(pid)) return false;
-            if (GameWindow.Find(pid) is var h && h != IntPtr.Zero)
-            {
-                bool front = GameWindow.BringToFront(h);
-                Log.Information("Game window is up (pol.exe {Pid}); brought to the front: {Front}", pid, front);
-                return true;
-            }
-            await Task.Delay(250);
-        }
-        Log.Warning("No game window from pol.exe {Pid} after 90s", pid);
-        return false;
     }
 
     internal void StartSocial(string profileId, string? storeRoot = null)

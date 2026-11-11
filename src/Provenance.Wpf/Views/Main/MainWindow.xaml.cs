@@ -119,7 +119,11 @@ public partial class MainWindow : AppWindow
         Tray.HideWindow(vm);
     }
 
-    private void OnRequestShow() => Tray.ShowWindow();
+    // a window that's closed can't be shown again, and a login that ends as the app's going still asks
+    private void OnRequestShow()
+    {
+        if (!_closed) Tray.ShowWindow();
+    }
 
     // the same exit as the tray's, which logs a held session out, then the app starts again once it's gone
     private void OnRequestRestart()

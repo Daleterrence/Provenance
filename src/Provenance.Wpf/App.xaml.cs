@@ -72,9 +72,10 @@ public partial class App : Application
         WarmKeys();
         CatchUnhandled();
 
-        var mainVm = ShowMainWindow(credentials, settings, pol);
+        bool noAutoLogin = shiftAtStart || ShiftDown() || args.NoAutoLogin;
+        var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin);
         SelfUpdate.TellIfUpdateFailed(mainVm.Notice);
-        StartMainViewModel(mainVm, shiftAtStart || ShiftDown() || args.NoAutoLogin);
+        StartMainViewModel(mainVm, noAutoLogin);
     }
 
     private static bool PrepareProtectedFolders()
@@ -137,7 +138,7 @@ public partial class App : Application
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Log.Information("Process exit");
     }
 
-    private MainViewModel ShowMainWindow(CredentialService credentials, SettingsService settings, PolSession pol)
+    private MainViewModel ShowMainWindow(CredentialService credentials, SettingsService settings, PolSession pol, bool noAutoLogin)
     {
         // the friends windows are unowned, so the app ends with the main window (the tray only hides it)
         ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -155,11 +156,25 @@ public partial class App : Application
         };
         mainWindow.DataContext = mainVm;
         MainWindow = mainWindow;
-        mainWindow.Show();
+        OpenMainWindow(mainWindow, mainVm, noAutoLogin);
         if (settings.Current.MinimizeToTray) TrayIcon.Warm();
         // this one really is off the UI thread, the wait's on the pool
         if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));
         return mainVm;
+    }
+
+    // a login that starts the game itself opens on its own small window, and this one only shows if it's needed.
+    // Told it's hidden, so its first real show loads the news
+    internal static void OpenMainWindow(Window mainWindow, MainViewModel mainVm, bool noAutoLogin)
+    {
+        if (mainVm.StartsLean(noAutoLogin)) mainVm.News.SetWindowShown(false);
+        else mainWindow.Show();
+    }
+
+    // for a main window that's never been shown: with no login going nothing else would ever put a window up
+    internal static void ShowIfNothingStarted(Window mainWindow, MainViewModel mainVm)
+    {
+        if (!mainWindow.IsVisible && !mainWindow.IsLoaded && !mainVm.IsLaunching) mainWindow.Show();
     }
 
     internal static bool LogOff(MainViewModel mainVm, MainWindow mainWindow)
@@ -171,12 +186,16 @@ public partial class App : Application
         return refuse;
     }
 
-    private static void StartMainViewModel(MainViewModel mainVm, bool suppressed)
+    private void StartMainViewModel(MainViewModel mainVm, bool suppressed)
     {
         _ = Task.Run(() => Provenance.Common.Feeds.BannerImages.Prune(TimeSpan.FromDays(60)));
-        _ = mainVm.News.LoadFeedsAsync();
-        _ = mainVm.News.LoadWorldsAsync();
+        if (mainVm.News.WindowShown)
+        {
+            _ = mainVm.News.LoadFeedsAsync();
+            _ = mainVm.News.LoadWorldsAsync();
+        }
         mainVm.Startup(suppressed);
+        if (MainWindow is { } mainWindow) ShowIfNothingStarted(mainWindow, mainVm);
     }
 
     private const string UnexpectedText =

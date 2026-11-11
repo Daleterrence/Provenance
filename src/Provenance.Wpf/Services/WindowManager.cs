@@ -48,6 +48,9 @@ public interface IWindowManager
     void ShowRepair(RepairViewModel vm);
     void ShowAccounts(AccountsViewModel accounts);
     int? PickProfilePicture(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int current);
+    // the small window of a login that starts the game itself, up in place of the main window
+    void ShowLeanStart(MainViewModel main);
+    void CloseLeanStart();
 }
 
 public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) : IWindowManager
@@ -277,6 +280,20 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     public void ShowRepair(RepairViewModel vm) => new RepairWindow(vm).ShowDialogOver(WindowOwner.Find());
 
     public void ShowAccounts(AccountsViewModel accounts) => new AccountsWindow { DataContext = accounts }.ShowDialogOver(WindowOwner.Find());
+
+    // a plain hide, so the main window doesn't go to the tray for it. It comes back when the model asks to be shown
+    public void ShowLeanStart(MainViewModel main)
+    {
+        if (Find<LeanStartWindow>() is { } up)
+        {
+            BringBack(up);
+            return;
+        }
+        Application.Current.MainWindow?.Hide();
+        new LeanStartWindow { DataContext = main }.Show();
+    }
+
+    public void CloseLeanStart() => Find<LeanStartWindow>()?.CloseNow();
 
     public int? PickProfilePicture(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int current)
     {
