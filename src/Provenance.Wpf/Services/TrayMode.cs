@@ -1,15 +1,30 @@
 using System.Windows;
+using System.Windows.Interop;
 using Provenance.Wpf.ViewModels.Main;
+using Provenance.Wpf.Win32;
+using Serilog;
 
 namespace Provenance.Wpf.Services;
 
 internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp) : IDisposable
 {
+    public static readonly uint TaskbarCreated = User32.RegisterWindowMessageW("TaskbarCreated");
+
+    private const uint Allow = 1;
+
+    private Action? _unfollow;
+    private bool _listening;
+
     internal TrayIcon? Icon { get; private set; }
 
     public bool InTray => Icon is { Visible: true };
 
-    public void HideWindow(MainViewModel vm, bool loggedIn)
+    private static TrayState StateOf(MainViewModel vm) =>
+        vm.Session.Phase == SessionPhase.InGame ? TrayState.GameOpen
+        : vm.LoggedIn ? TrayState.LoggedIn
+        : TrayState.LoggedOut;
+
+    public void HideWindow(MainViewModel vm)
     {
         if (Icon == null)
         {
@@ -26,14 +41,46 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
                 ShowWindow();
             };
             Icon.ExitRequested += exit;
+            // the session can move on while this sits in the tray, a game starting or a Play that's refused
+            void Follow()
+            {
+                if (InTray) Icon.SetState(StateOf(vm));
+            }
+            vm.Session.PhaseChanged += Follow;
+            _unfollow = () => vm.Session.PhaseChanged -= Follow;
         }
-        Icon.SetLoggedIn(loggedIn);
+        ListenForTaskbar();
+        var state = StateOf(vm);
+        Icon.SetState(state);
         Icon.Visible = true;
         window.Hide();   // the friends windows are their own windows and stay as they are
+        Log.Information("Hidden to the tray ({State})", state.ToString());   // as text, or the log puts it in quotes
+    }
+
+    // Explorer isn't elevated and Provenance is, so Windows drops Explorer's message unless it's let through.
+    // WinForms never asks for its own window, so the icon's put back from this one
+    private void ListenForTaskbar()
+    {
+        if (_listening || PresentationSource.FromVisual(window) is not HwndSource source) return;
+        _listening = true;
+        if (!User32.ChangeWindowMessageFilterEx(source.Handle, TaskbarCreated, Allow, IntPtr.Zero))
+            Log.Warning("Couldn't ask Windows for the taskbar's rebuild message");
+        source.AddHook(OnWindowMessage);
+    }
+
+    private IntPtr OnWindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if ((uint)msg == TaskbarCreated && InTray)
+        {
+            Icon!.PutBack();
+            Log.Information("Windows asked for the tray icons again, put ours back");
+        }
+        return IntPtr.Zero;
     }
 
     public void ShowWindow()
     {
+        if (InTray) Log.Information("Back from the tray");
         if (Icon != null) Icon.Visible = false;
         window.Show();
         window.WindowState = WindowState.Normal;
@@ -66,6 +113,8 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
 
     public void Dispose()
     {
+        _unfollow?.Invoke();
+        _unfollow = null;
         Icon?.Dispose();
         Icon = null;
     }

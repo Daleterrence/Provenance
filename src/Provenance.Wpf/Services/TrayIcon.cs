@@ -1,6 +1,10 @@
+using System.IO;
 using System.Windows;
+using Serilog;
 
 namespace Provenance.Wpf.Services;
+
+internal enum TrayState { LoggedOut, LoggedIn, GameOpen }
 
 public sealed class TrayIcon : IDisposable
 {
@@ -32,16 +36,41 @@ public sealed class TrayIcon : IDisposable
         }) { IsBackground = true, Name = "Tray warm-up" }.Start();
     }
 
+    internal static Stream? AppIcon() => Application.GetResourceStream(new Uri("pack://application:,,,/Assets/provenance.ico"))?.Stream;
+
+    // WinForms has no default picture. With none it never adds the icon at all, and still says it's visible
+    internal static System.Drawing.Icon LoadIcon(Func<Stream?> open)
+    {
+        Exception? why = null;
+        try
+        {
+            using var stream = open();
+            if (stream is not null) return new System.Drawing.Icon(stream);
+        }
+        catch (Exception ex)
+        {
+            why = ex;
+        }
+        try
+        {
+            if (Environment.ProcessPath is { } exe && System.Drawing.Icon.ExtractAssociatedIcon(exe) is { } own)
+            {
+                Log.Warning(why, "Couldn't load the tray icon, using the program's own");
+                return own;
+            }
+        }
+        catch (Exception ex)
+        {
+            why ??= ex;
+        }
+        Log.Warning(why, "Couldn't load the tray icon or the program's own, using Windows' default one");
+        return System.Drawing.SystemIcons.Application;
+    }
+
     public TrayIcon(Func<string> friendsTitle)
     {
         _friendsTitle = friendsTitle;
-        _icon = new System.Windows.Forms.NotifyIcon { Text = "Provenance (logged in to PlayOnline)", Visible = false };
-        try
-        {
-            var res = Application.GetResourceStream(new Uri("pack://application:,,,/Assets/provenance.ico"));
-            if (res != null) _icon.Icon = new System.Drawing.Icon(res.Stream);
-        }
-        catch { }   // the tray still works with the default icon
+        _icon = new System.Windows.Forms.NotifyIcon { Text = "Provenance (logged in to PlayOnline)", Visible = false, Icon = LoadIcon(AppIcon) };
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Open Provenance", null, (_, _) => OpenRequested?.Invoke());
         _friends = menu.Items.Add("", null, (_, _) => FriendsRequested?.Invoke());
@@ -55,11 +84,18 @@ public sealed class TrayIcon : IDisposable
         _icon.BalloonTipClicked += (_, _) => OpenRequested?.Invoke();
     }
 
-    public void SetLoggedIn(bool loggedIn)
+    // in game Exit leaves the game and its session alone, so it doesn't say it logs out
+    internal void SetState(TrayState state)
     {
+        bool loggedIn = state == TrayState.LoggedIn;
         _friends.Visible = _signOut.Visible = loggedIn;
         _exit.Text = loggedIn ? "Exit and log out" : "Exit";
-        _icon.Text = loggedIn ? "Provenance (logged in to PlayOnline)" : "Provenance";
+        _icon.Text = state switch
+        {
+            TrayState.LoggedIn => "Provenance (logged in to PlayOnline)",
+            TrayState.GameOpen => "Provenance (FINAL FANTASY XI is open)",
+            _ => "Provenance",
+        };
     }
 
     public bool Visible
@@ -68,6 +104,17 @@ public sealed class TrayIcon : IDisposable
         set => _icon.Visible = value;
     }
 
+    internal int PutBacks, Tips;
+
+    // off and on again, so WinForms adds the icon afresh and doesn't just update one Windows no longer has
+    internal void PutBack()
+    {
+        _icon.Visible = false;
+        _icon.Visible = true;
+        PutBacks++;
+    }
+
+    internal string TipText => _icon.Text ?? "";
     internal string FriendsItemText => _friends.Text ?? "";
     internal bool FriendsItemShown => _friends.Available;
     internal bool SignOutItemShown => _signOut.Available;
@@ -75,8 +122,11 @@ public sealed class TrayIcon : IDisposable
     internal void ClickOpen() => OpenRequested?.Invoke();
     internal void ClickExit() => ExitRequested?.Invoke();
 
-    public void ShowTip(string title, string text) =>
+    public void ShowTip(string title, string text)
+    {
         _icon.ShowBalloonTip(5000, title, text, System.Windows.Forms.ToolTipIcon.None);
+        Tips++;
+    }
 
     public void Dispose()
     {

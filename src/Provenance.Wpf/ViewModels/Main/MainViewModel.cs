@@ -144,7 +144,7 @@ public partial class MainViewModel : ObservableObject
 
     public bool IsLaunching => Session.Launching;
 
-    private LastRaised _loggedInShown, _launchingShown;
+    private LastRaised _loggedInShown, _launchingShown, _inGameShown;
 
     internal void SetPhase(SessionPhase next)
     {
@@ -163,6 +163,8 @@ public partial class MainViewModel : ObservableObject
                 break;
             case SessionPhase.InGame:
                 Social.Messages.SettleSends(SessionEnd.Play);
+                // the window hides to the tray once the game's up, whatever the tray settings say
+                TrayIcon.Warm();
                 break;
             case SessionPhase.LoggedOut:
                 if (from == SessionPhase.InGame) _windows.CloseSessionWindows();
@@ -176,9 +178,10 @@ public partial class MainViewModel : ObservableObject
     {
         bool loggedIn = Session.LoggedIn, launching = Session.Launching;
         bool loggedInChanged = _loggedInShown.Changed(loggedIn), launchingChanged = _launchingShown.Changed(launching);
+        // going into the game changes what X does without changing logged in
+        if (_inGameShown.Changed(Session.Phase == SessionPhase.InGame) || loggedInChanged) OnPropertyChanged(nameof(CloseTooltip));
         if (loggedInChanged)
         {
-            OnPropertyChanged(nameof(CloseTooltip));
             if (loggedIn && (_settings.Current.KeepSignedInInTray || _settings.Current.MinimizeToTray)) TrayIcon.Warm();
             // the hook numbers mail per session, so a request's notice can't outlive it
             if (!loggedIn) Notice.DropRequest();
@@ -286,6 +289,7 @@ public partial class MainViewModel : ObservableObject
 
     public string CloseTooltip => !LoggedIn ? "Close"
         : KeepInTrayOnClose ? "Close to the tray (you'll stay logged in to PlayOnline)"
+        : Session.Phase == SessionPhase.InGame ? "Close"
         : "Close and log out of PlayOnline";
     public bool TrayTipShown => _settings.Current.TrayTipShown;
 

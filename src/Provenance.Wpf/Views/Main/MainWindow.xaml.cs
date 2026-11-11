@@ -12,7 +12,7 @@ namespace Provenance.Wpf.Views.Main;
 
 public partial class MainWindow : AppWindow
 {
-    private bool _exiting, _asking, _cancellingLogIn;
+    private bool _exiting, _closed, _asking, _cancellingLogIn;
 
     public MainWindow()
     {
@@ -109,7 +109,12 @@ public partial class MainWindow : AppWindow
 
     private void OnOpenNotice(object sender, RoutedEventArgs e) => Vm?.OpenNotice();
 
-    private void OnRequestHide() => Hide();
+    // a hide that lands once the window's going or gone would put up an icon nothing takes down
+    internal void OnRequestHide()
+    {
+        if (_exiting || _closed || Vm is not { } vm) return;
+        Tray.HideWindow(vm);
+    }
 
     private void OnRequestShow() => Tray.ShowWindow();
 
@@ -127,7 +132,7 @@ public partial class MainWindow : AppWindow
     {
         if (Vm is { MinimizeGoesToTray: true } vm)
         {
-            Tray.HideWindow(vm, vm.LoggedIn);
+            Tray.HideWindow(vm);
             return;
         }
         WindowState = WindowState.Minimized;
@@ -146,8 +151,9 @@ public partial class MainWindow : AppWindow
     {
         if (_exiting || Vm is not { KeepInTrayOnClose: true } vm) return false;
         e.Cancel = true;
-        Tray.HideWindow(vm, true);
-        Tray.ShowFirstCloseTip(vm);
+        Tray.HideWindow(vm);
+        // the tip's about friends and messages staying up to date, and in game they don't
+        if (vm.Session.Phase != SessionPhase.InGame) Tray.ShowFirstCloseTip(vm);
         return true;
     }
 
@@ -215,6 +221,7 @@ public partial class MainWindow : AppWindow
     // a shutdown closes the window whatever OnClosing says, so the icon can't be left behind
     protected override void OnClosed(EventArgs e)
     {
+        _closed = true;
         Tray.Dispose();
         base.OnClosed(e);
     }
