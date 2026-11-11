@@ -51,7 +51,6 @@ static void hold_db_reads_abandon(BYTE *b)
     if (g_ch_read.j.step != 0) profiles_character_abandon(b);
     if (g_fp_read.j.step != 0) profiles_ffxiprofile_abandon(b);
     if (g_search.step != 0) profiles_search_abandon(b);
-    if (g_xi.step != 0) my_profile_xi_abandon(b);
 }
 
 static int hold_writes_pending(void)
@@ -73,7 +72,6 @@ static void hold_drain_turn(BYTE *b, int mail)
     groups_pump(b, 0);
     mail_send_answer_pump(b, 0);
     my_profile_pump(b, 0);
-    my_profile_xi_pump(b, 0);
     handles_pump(b, 0);
     Sleep(16);
 }
@@ -121,7 +119,6 @@ static void hold_turn(BYTE *b, int ctl)
     profiles_ffxiprofile_pump(b, wctl);
     groups_pump(b, wctl);
     my_profile_pump(b, wctl);
-    my_profile_xi_pump(b, wctl);
     mail_send_answer_pump(b, wctl);
     my_profile_pic_pump(b, wctl);
     if (!g_lean && !handles_switching()) chat_room_pump(b, wctl);

@@ -25,7 +25,6 @@
 #include "mail_send.c"
 #include "groups.c"
 #include "my_profile.c"
-#include "my_profile_ffxi.c"
 #include "chat_frames.c"
 #include "chat_lists.c"
 #include "chat_room.c"

@@ -323,21 +323,20 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         tab.Failed = Note.IsError;
     }
 
-    // the handle's H-ID and mail stay, there's no picture and the record level goes after the game's name
+    // the handle's H-ID and mail stay, and there's no picture
     private void ShowCharacterPage(PolFfxiProfile? r)
     {
         ShowsPicture = false;
         Picture = _social.Avatars.NoProfilePicture;
         Updated = Privacy = Away = AwayFrom = "";
         Rows.Clear();
+        GameLine = FfxiProfileText.Title;
         if (r is null)
         {
             Name = "";
-            GameLine = FfxiProfileText.Title;
             return;
         }
         Name = r.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : _social.Viewer.Filtered(r.Name);
-        GameLine = FfxiProfileText.Line(PrivacyText(r.Level));
         foreach (var (label, value) in FfxiProfileText.Rows(r, StateText(ProfileFieldState.Private), StateText(ProfileFieldState.NotSet), _social.Viewer.Filtered))
             Rows.Add(new RowItem(label, value, null));
     }

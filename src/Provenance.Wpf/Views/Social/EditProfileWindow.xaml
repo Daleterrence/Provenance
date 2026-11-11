@@ -127,15 +127,11 @@
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="20,12,20,18"
                       IsEnabled="{Binding LoadingProfile, Converter={StaticResource InvertBool}}">
             <Grid>
-            <StackPanel IsEnabled="False" Visibility="{Binding IsXiCard, Converter={StaticResource BoolToVis}}">
+            <StackPanel Visibility="{Binding IsXiCard, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="{Binding SelectedCard.Title}" FontSize="17" FontWeight="SemiBold" Margin="0,4,0,0" />
                 <TextBlock Text="{Binding SelectedCard.Subtitle}" FontSize="12.5" Foreground="{DynamicResource Text.3}" Margin="0,2,0,0" />
-                <TextBlock Text="Who can see this character's profile" Style="{StaticResource ProfileSection}" />
-                <ListBox Style="{StaticResource Pills}" ItemsSource="{Binding VisibilityChoices}"
-                         SelectedValue="{Binding SelectedCard.Level}" AutomationProperties.Name="Who can see this character's profile" />
-                <TextBlock Style="{StaticResource ProfileHelp}" Margin="0" Text="{Binding SelectedCard.VisibilityHelp}" />
                 <TextBlock Style="{StaticResource ProfileHelp}" Margin="0,14,0,0"
-                           Text="Provenance can't change a character's privacy yet. This is what PlayOnline has it set to." />
+                           Text="A character's profile is visible unless the character is /anon in FINAL FANTASY XI. It can't be changed from PlayOnline." />
             </StackPanel>
             <StackPanel IsEnabled="{Binding CanEditFields}" Visibility="{Binding IsHandleCard, Converter={StaticResource BoolToVis}}">
                 <Grid ColumnDefinitions="Auto,*">
@@ -319,7 +315,7 @@
                 <StackPanel Orientation="Horizontal">
                     <ProgressBar Width="20" Height="20" Foreground="{DynamicResource Primary}"
                                  Style="{StaticResource Spinner}" />
-                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="14" Text="{Binding LoadingText}" />
+                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="14" Text="Loading your profile..." />
                 </StackPanel>
             </Border>
         </Grid>

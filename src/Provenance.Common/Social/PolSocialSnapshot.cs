@@ -53,15 +53,13 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public IReadOnlyList<PolGroup> GroupList { get; init; } = [];
     public HookJob GroupJob { get; init; } = HookJob.None;
     public HookJob MeJob { get; init; } = HookJob.None;
-    public HookJob XiJob { get; init; } = HookJob.None;
-    public XiProfile Xi { get; init; } = XiProfile.None;
     public HookJob CharacterJob { get; init; } = HookJob.None;
     public PolCharacterLookup? Character { get; init; }
     public HookJob FfxiProfileJob { get; init; } = HookJob.None;
     public PolFfxiProfile? FfxiProfile { get; init; }
     // the hook runs one profile server job at a time, so while one's going any other just waits its turn
     public bool ProfileServerBusy => SearchJob.State == "searching" || ProfileJob.State == "loading" || CharacterJob.State == "loading" ||
-                                     FfxiProfileJob.State == "loading" || MeJob.State is "loading" or "saving" || XiJob.State == "loading" ||
+                                     FfxiProfileJob.State == "loading" || MeJob.State is "loading" or "saving" ||
                                      PictureJob.State == "saving" ||
                                      Chat is { ZonesJob.State: "searching" } or { RoomsJob.State: "searching" } ||
                                      (HandleJob.State == "working" && HandleOp == "switch");

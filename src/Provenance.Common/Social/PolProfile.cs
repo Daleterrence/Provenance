@@ -15,11 +15,6 @@ public sealed record PolProfile(string Name, string Mail, ProfileFieldState Mail
 // one of the handle's game slots with an FFXI character in it. World is the game's world id
 public sealed record PolFfxiCharacter(int Slot, CharacterId Character, int World);
 
-public sealed record XiProfile(string Key, PrivacyLevel Level, string Name, string WorldName)
-{
-    public static readonly XiProfile None = new("", PrivacyLevel.Keep, "", "");
-}
-
 // a character's FFXI profile as the hook reads it, raw numbers with a field state each
 public sealed record PolFfxiProfile(int Slot, PrivacyLevel Level, string Name, ProfileFieldState NameState, string WorldName,
                                     ProfileFieldState WorldNameState)

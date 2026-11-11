@@ -90,10 +90,6 @@ typedef struct hook_session {
     int pic_want;
     char pic_state[32];
     char pic_token[48];
-    char ffxi_token[48];
-    char ffxi_state[32];
-    char ffxi_json[0x200];
-    char ffxi_key[25];
     int search_n;
     int search_kind;
     int search_total;

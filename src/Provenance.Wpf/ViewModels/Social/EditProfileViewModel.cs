@@ -14,7 +14,7 @@ namespace Provenance.Wpf.ViewModels.Social;
 
 public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 {
-    private enum Job { None, Load, Save, Rename, LoadXi }
+    private enum Job { None, Load, Save, Rename }
 
     private readonly ISocialSession _social;
     private readonly IDialogs _dialogs;
@@ -31,7 +31,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private bool _renameAfterSave;
     private bool _loadingValues;
     private bool _handleChanges;
-    private ProfileCard? _xiCard;
     private readonly ProfileCard _handleCard;
 
     internal EditProfileViewModel(ISocialSession social, IDialogs dialogs)
@@ -41,7 +40,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _social.SnapshotApplied += OnSnapshot;
         _timer.Tick += (_, _) => CheckTimeout();
         NotSet = social.Viewer.Text(0x4a81, "Not set");
-        _handleCard = new ProfileCard(null, HelpFor)
+        _handleCard = new ProfileCard(null)
         {
             Title = social.AccountName,
             Subtitle = social.Viewer.Text(0x4abe, "Handle Profile"),
@@ -78,14 +77,12 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     public ObservableCollection<ProfileCard> Cards { get; } = new();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsHandleCard), nameof(IsXiCard), nameof(CanRetryLoad))]
+    [NotifyPropertyChangedFor(nameof(IsHandleCard), nameof(IsXiCard))]
     private ProfileCard _selectedCard = null!;
 
     public bool IsHandleCard => SelectedCard.IsHandle;
     public bool IsXiCard => !SelectedCard.IsHandle;
     public bool CanSelectCard => !Busy;
-
-    [ObservableProperty] private string _loadingText = "Loading your profile...";
 
     // edits stay with each card, so picking another one never loses any
     [RelayCommand]
@@ -96,7 +93,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         card.IsSelected = true;
         SelectedCard = card;
         if (Note.IsError) Note.Clear();
-        if (!card.IsHandle && !card.Loaded) LoadXi(card);
     }
 
     public string NotSet { get; }
@@ -126,19 +122,15 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     public string FooterText => !Busy && Problem.Length > 0 ? Problem : Note.Text;
     public bool FooterIsError => !Busy && Problem.Length > 0 || Note.IsError;
     public bool CanEditFields => IsLoaded && !Busy;
-    public bool CanRetryLoad => !Busy && Note.IsError && (IsHandleCard ? !IsLoaded : !SelectedCard.Loaded);
+    public bool CanRetryLoad => !Busy && Note.IsError && !IsLoaded;
 
     [RelayCommand]
-    private void RetryLoad()
-    {
-        if (IsHandleCard) Load();
-        else LoadXi(SelectedCard);
-    }
+    private void RetryLoad() => Load();
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(VisibilityHelp))]
     private PrivacyLevel _level;   // Keep if it loaded as none of the others
 
-    // the viewer's own help for each choice, the same window sets a character's
+    // the viewer's own help for each choice
     public string VisibilityHelp => HelpFor(Level);
 
     private string HelpFor(PrivacyLevel level) => level switch
@@ -232,15 +224,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         if (!SocialRequests.RequestMyProfile(pid, _watch.Token!)) Fail(HookFailures.RequestWriteFailed);
     }
 
-    private void LoadXi(ProfileCard card)
-    {
-        if (!Ready(out var pid)) return;
-        _xiCard = card;
-        LoadingText = $"Loading {card.Title}'s profile...";
-        Start(Job.LoadXi);
-        if (!SocialRequests.RequestXiProfile(pid, _watch.Token!, _loadedKey, card.Key)) Fail(HookFailures.RequestWriteFailed);
-    }
-
     // a closed session and a waiting game or handle switch each have their own note, and callers differ on which comes first
     private bool Ready(out int pid, bool gameFirst = false)
     {
@@ -267,8 +250,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _job = job;
         _watch.Begin(job == Job.Rename ? HookLimits.MyProfileRename : HookLimits.MyProfile, _social.Now);
         _pid = _social.Session.Pid ?? 0;
-        if (job == Job.Load) LoadingText = "Loading your profile...";
-        LoadingProfile = job is Job.Load or Job.LoadXi;
+        LoadingProfile = job == Job.Load;
         Busy = true;
         Note.Show(note);
         _timer.Start();
@@ -296,7 +278,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Job.Load => HookContract.Requests.MyProfile,
         Job.Save => HookContract.Requests.SaveProfile,
         Job.Rename => HookContract.Requests.Rename,
-        Job.LoadXi => HookContract.Requests.XiProfile,
         _ => null,
     };
 
@@ -321,7 +302,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             return;
         }
         if (_watch.Overdue(_social.Now))
-            Abandon(_job is Job.Load or Job.LoadXi ? HookFailures.ProfileEditor.LoadNoAnswer : HookFailures.ProfileEditor.SaveUnconfirmed);
+            Abandon(_job == Job.Load ? HookFailures.ProfileEditor.LoadNoAnswer : HookFailures.ProfileEditor.SaveUnconfirmed);
     }
 
     private void Fill(MyProfile p)
@@ -379,14 +360,10 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Dirty();
     }
 
-    // a reload starts the characters over, they're read again when picked
+    // a reload starts the characters over
     private void FillCards(IReadOnlyList<MyProfileCharacter> characters)
     {
-        foreach (var c in Cards.Where(c => !c.IsHandle).ToList())
-        {
-            c.PropertyChanged -= OnCardChanged;
-            Cards.Remove(c);
-        }
+        foreach (var c in Cards.Where(c => !c.IsHandle).ToList()) Cards.Remove(c);
         if (!SelectedCard.IsHandle)
         {
             SelectedCard.IsSelected = false;
@@ -394,20 +371,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             SelectedCard = _handleCard;
         }
         foreach (var c in characters)
-        {
-            var card = new ProfileCard(c, HelpFor)
-            {
-                Title = c.Name.Length > 0 ? c.Name : "Content ID",
-                Subtitle = c.WorldName ?? "",
-            };
-            card.PropertyChanged += OnCardChanged;
-            Cards.Add(card);
-        }
-    }
-
-    private void OnCardChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(ProfileCard.Loaded) && sender == SelectedCard) OnPropertyChanged(nameof(CanRetryLoad));
+            Cards.Add(new ProfileCard(c) { Title = c.Name.Length > 0 ? c.Name : "Content ID", Subtitle = c.WorldName ?? "" });
     }
 
     private bool CanSave() => IsLoaded && !Busy && HasChanges && Problem.Length == 0;
@@ -459,8 +423,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private void OnSnapshot(PolSocialSnapshot snap)
     {
-        bool xi = _job == Job.LoadXi;
-        var hook = xi ? snap.XiJob : snap.MeJob;
+        var hook = snap.MeJob;
         // waiting its turn behind another profile server job in the hook, so its clock hasn't started
         _watch.WaitingTurn(hook.Token, snap.ProfileServerBusy, _social.Now);
         if (_job == Job.None || !_watch.Running || hook.Token != _watch.Token) return;
@@ -510,25 +473,12 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                 _handleCard.Title = _savedHandle;
                 Done("Your profile is saved.");
                 break;
-            case Job.LoadXi when state == "ready":
-                if (_xiCard is not { } card || snap.Xi.Key != card.Key)
-                {
-                    Fail("Provenance couldn't read the profile PlayOnline sent.");
-                    return;
-                }
-                EndJob();
-                Note.Clear();
-                card.Loaded = true;
-                card.Level = snap.Xi.Level is >= PrivacyLevel.Private and <= PrivacyLevel.Everyone ? snap.Xi.Level : PrivacyLevel.Keep;
-                if (card.Character is { Name.Length: 0 } && snap.Xi.Name.Trim().Length > 0) card.Title = snap.Xi.Name.Trim();
-                break;
         }
     }
 
     private void Done(string text)
     {
         EndJob();
-        _xiCard = null;
         Dirty();
         Note.Show(text);   // after Dirty, which clears it
     }
@@ -549,15 +499,12 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         "failed:-261" or "failed:-5429" => HookFailures.ProfileEditor.NameRejected,
         "failed:reloaded" => HookFailures.ProfileEditor.NameNotKept,
         "failed:busy" => HookFailures.Busy,
-        "failed:mismatch" => job == Job.LoadXi ? HookFailures.ProfileEditor.MismatchCharacter
-                                              : HookFailures.ProfileEditor.MismatchHandle,
-        "failed:no character" => HookFailures.ProfileEditor.CharacterGone,
+        "failed:mismatch" => HookFailures.ProfileEditor.MismatchHandle,
         "failed:write" => HookFailures.ProfileEditor.WriteFailed,
         "failed:timeout" => HookFailures.ProfileEditor.SaveUnconfirmed,
         _ => job switch
         {
             Job.Load => HookFailures.ProfileEditor.LoadFailed(Why(state)),
-            Job.LoadXi => HookFailures.ProfileEditor.LoadCharacterFailed(Why(state)),
             Job.Rename => HookFailures.ProfileEditor.RenameFailed(Why(state)),
             _ => HookFailures.ProfileEditor.SaveFailed(Why(state)),
         },

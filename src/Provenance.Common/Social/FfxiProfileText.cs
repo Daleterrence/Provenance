@@ -23,7 +23,4 @@ public static class FfxiProfileText
             ("Race", Of(p.Race, FfxiNames.Race)),
         ];
     }
-
-    // "FINAL FANTASY XI (Show to friends)", the record level's word in brackets when there is one
-    public static string Line(string privacy) => privacy.Length > 0 ? $"{Title} ({privacy})" : Title;
 }

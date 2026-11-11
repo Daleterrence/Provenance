@@ -94,11 +94,6 @@ public static class SocialRequests
 
     public static bool RequestMyProfile(int pid, string token) => HookFiles.WriteRequest(pid, HookContract.Requests.MyProfile, token);
 
-    // one of the characters from the loaded profile, by its key there. handleKey is the profile's, so neither ever
-    // lands on a handle that's become active since
-    public static bool RequestXiProfile(int pid, string token, string handleKey, string characterKey) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.XiProfile, token, handleKey, characterKey);
-
     // load first, the save keeps each field's own level
     public static bool SaveMyProfile(int pid, string token, PrivacyLevel level, IEnumerable<KeyValuePair<string, string>> fields,
                                      string noMailText = "")

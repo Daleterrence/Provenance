@@ -68,7 +68,6 @@ public static class HookContract
         public const string MyProfile = "myprofile";
         public const string SaveProfile = "saveprofile";
         public const string Rename = "rename";
-        public const string XiProfile = "xiprofile";
         public const string Character = "character";
         public const string FfxiProfile = "ffxiprofile";
         public const string ChatZones = "chatzones";
@@ -86,8 +85,8 @@ public static class HookContract
         public static readonly string[] All =
         [
             Send, Status, Ack, Comment, Pic, Friend, Answer, Search, Profile, Group, MyProfile, SaveProfile, Rename,
-            XiProfile, Character, FfxiProfile, ChatZones, ChatRooms, ChatJoin, ChatSend, ChatLeave, ChatCreate,
-            ChatMaster, Handle, GroupChatJoin, GroupChatSend, GroupChatLeave,
+            Character, FfxiProfile, ChatZones, ChatRooms, ChatJoin, ChatSend, ChatLeave, ChatCreate, ChatMaster,
+            Handle, GroupChatJoin, GroupChatSend, GroupChatLeave,
         ];
     }
 

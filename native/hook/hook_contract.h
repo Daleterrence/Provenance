@@ -51,7 +51,6 @@
 #define REQ_MYPROFILE "myprofile"
 #define REQ_SAVEPROFILE "saveprofile"
 #define REQ_RENAME "rename"
-#define REQ_XIPROFILE "xiprofile"
 #define REQ_CHARACTER "character"
 #define REQ_FFXIPROFILE "ffxiprofile"
 #define REQ_CHATZONES "chatzones"

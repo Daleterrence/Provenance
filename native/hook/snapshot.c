@@ -96,9 +96,6 @@ static void snapshot_social(BYTE *b)
     jw_end(&w);
     jw_job(&w, "me", g_s.me_token, g_s.me_state);
     jw_end(&w);
-    jw_job(&w, "xi", g_s.ffxi_token, g_s.ffxi_state);
-    if (g_s.ffxi_json[0] && !lstrcmpA(g_s.ffxi_state, "ready")) jw_splice(&w, g_s.ffxi_json, lstrlenA(g_s.ffxi_json));
-    jw_end(&w);
     jw_job(&w, "group", g_s.grp_token, g_s.grp_state);
     jw_end(&w);
     jw_job(&w, "profile", g_s.prof_token, g_s.prof_state);

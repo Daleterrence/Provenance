@@ -24,7 +24,6 @@ public static class SocialSnapshotFiles
             var search = Obj(root, "search");
             var searched = search.ValueKind == JsonValueKind.Object;
             var profileJob = Job(root, "profile");
-            var xi = Obj(root, "xi");
             var ffxiJob = Job(root, "ffxiprofile");
             return new PolSocialSnapshot(PolStatusText.Parse(Str(root, "myStatus")),
                                          Str(root, "myHandle"), Int(root, "myPic", -1), friends, messages,
@@ -58,10 +57,6 @@ public static class SocialSnapshotFiles
                 GroupList = Arr(root, "groupList", ReadGroup),
                 GroupJob = Job(root, "group"),
                 MeJob = Job(root, "me"),
-                XiJob = Job(root, "xi"),
-                Xi = xi.ValueKind == JsonValueKind.Object
-                    ? new XiProfile(Str(xi, "key"), (PrivacyLevel)Int(xi, "level", 0), Str(xi, "name"), Str(xi, "worldName"))
-                    : XiProfile.None,
                 CharacterJob = Job(root, "character"),
                 Character = ReadCharacter(Obj(root, "character")),
                 FfxiProfileJob = ffxiJob,

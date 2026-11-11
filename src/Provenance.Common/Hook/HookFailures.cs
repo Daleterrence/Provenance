@@ -186,15 +186,12 @@ public static class HookFailures
         public const string BadWord = "That handle name has a word in it that PlayOnline doesn't allow. Choose a different name.";
         public const string NameRejected = "The entered name could not be registered. Please register with a different name.";
         public const string NameNotKept = "PlayOnline didn't keep the new handle name. Try again later.";
-        public const string MismatchCharacter = "PlayOnline sent a profile that isn't this character's, so nothing was changed.";
         public const string MismatchHandle = "PlayOnline sent a profile that isn't this handle's, so nothing was changed.";
-        public const string CharacterGone = "That character isn't on your profile any more. Open the profile again.";
         public const string WriteFailed = "Provenance couldn't keep the profile PlayOnline sent. Try again.";
         public const string SaveUnconfirmed = "PlayOnline didn't confirm the save. Open your profile again to see what it kept.";
         public const string SessionEnded = "Your PlayOnline session ended, so the request stopped.";
         public const string NotAllowed = "PlayOnline said this account isn't allowed to make that change.";
         public static string LoadFailed(string why) => $"PlayOnline didn't send your profile{why}";
-        public static string LoadCharacterFailed(string why) => $"PlayOnline didn't send the character's profile{why}";
         public static string RenameFailed(string why) => $"PlayOnline didn't rename the handle{why}";
         public static string SaveFailed(string why) => $"PlayOnline didn't save your profile{why}";
     }

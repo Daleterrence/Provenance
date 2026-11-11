@@ -51,7 +51,7 @@ public sealed partial class SocialSearch : ObservableObject
     public string Intro => Kind switch
     {
         FriendSearchKind.Hid => "Search PlayOnline for a handle by its H-ID. Every handle has its own, shown in its profile.",
-        FriendSearchKind.Character => "Search for a FINAL FANTASY XI character by name. The same name can be on more than one world, so check the world (a private profile doesn't show it).",
+        FriendSearchKind.Character => "Search for a FINAL FANTASY XI character by name. The same name can be on more than one world, so check the world.",
         _ => "Search PlayOnline for a handle name. Many people can share one name, so check the picture.",
     };
     public int MaxLength => Kind == FriendSearchKind.Hid ? PolLimits.HidSearch : PolLimits.HandleName;

@@ -38,7 +38,6 @@ static int busy_search(void) { return busy_read(&g_search); }
 static int busy_profile(void) { return busy_read(&g_prof); }
 static int busy_tab(void) { return busy_read(&g_fp_read.j); }
 static int busy_lists(void) { return busy_read(&g_cr); }
-static int busy_card(void) { return busy_read(&g_xi); }
 static int busy_character(void) { return g_ch_read.j.step ? JB_DB : 0; }
 static int busy_me(void)
 {
@@ -65,7 +64,6 @@ static const req_row g_requests[] = {
     { REQ_CHATMASTER, RQ_REFUSE | RQ_SWEPT, NULL, 0, 0, NULL, request_refuse_chatmaster },
     { REQ_GROUPCHATJOIN, RQ_REFUSE | RQ_SWEPT, NULL, 0, 0, NULL, request_refuse_gjoin },
     { REQ_GROUPCHATSEND, RQ_REFUSE | RQ_SWEPT, NULL, 0, 0, NULL, request_refuse_gsend },
-    { REQ_XIPROFILE, RQ_REFUSE | RQ_USER, TOKEN(ffxi_token), 1, my_profile_xi_done, NULL, busy_card },
     { REQ_ACK },
     { REQ_SEARCH, RQ_USER, NULL, 0, 0, NULL, NULL, busy_search },
     { REQ_PROFILE, RQ_USER, NULL, 0, 0, NULL, NULL, busy_profile },
