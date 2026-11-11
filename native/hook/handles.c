@@ -1,6 +1,6 @@
 /* handles and Content IDs, listed from memory (svc 0x2b4/0x2c4). A switch is the viewer's one ChangeMyStatus (app.dll
-   0x10040c9e), a link or unlink a local 0x2dc/0x2e0 and then one PutChrList (0x1038) */
-enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_UNLINK, HOP_LINKALL };
+   0x10040c9e), a link a local 0x2dc (0x2e0 first for a move) and then one PutChrList (0x1038) */
+enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_LINKALL };
 static int g_hall[8], g_hall_n;
 static int g_in_hold;
 static int hold_writes_pending(void);
@@ -48,15 +48,13 @@ static void handles_undo(BYTE *b)
     } else if (g_s.handle_op == HOP_LINK) {
         pc_unlink_content(b, g_s.handle_idx, g_s.handle_slot);
         if (g_s.handle_from >= 0 && pc_link_content(b, g_s.handle_idx, g_s.handle_from) >= 0) handles_place(b, g_s.handle_idx, g_s.handle_from, g_s.handle_pos);
-    } else if (pc_link_content(b, g_s.handle_idx, g_s.handle_slot) >= 0) {
-        handles_place(b, g_s.handle_idx, g_s.handle_slot, g_s.handle_pos);
     }
 }
 /* the put only goes when polcore's stamps say the server's list isn't newer, else it quietly loads instead and
    still says 1 (polcore.dll 0x10023350) */
 static void handles_put_start(BYTE *b)
 {
-    int reload = pc_handles_server_newer(b);
+    int reload = pc_links_server_newer(b);
     int t = pc_links_save(b);
     g_s.handle_want = t == NO_SLOT;
     if (g_s.handle_want) return;
@@ -87,7 +85,7 @@ static void handles_put_done(BYTE *b, int r)
         if (!(f & CHR_LINKED) || (int)CHR_HANDLE(f) != g_s.handle_slot) linked = 0;
     }
     if (g_s.handle_reload) handles_done("failed:reloaded");
-    else if (linked != (g_s.handle_op != HOP_UNLINK)) handles_done("failed:not saved");
+    else if (!linked) handles_done("failed:not saved");
     else handles_done("saved");
 }
 /* my profile's the handle's, so a loaded one's the old handle's now */
@@ -143,7 +141,7 @@ static void handles_linkall(BYTE *b, int slot, const pol_handle *h, char *ix, ch
     handles_put_start(b);
 }
 
-/* <op> switch|link|unlink|linkall, token, slot, handle key, then index/key pairs. The keys are the snapshot's, so a
+/* <op> switch|link|linkall, token, slot, handle key, then index/key pairs. The keys are the snapshot's, so a
    request never lands on a record that changed */
 static void handles_request(BYTE *b)
 {
@@ -159,8 +157,7 @@ static void handles_request(BYTE *b)
     op = requests_line(&p); tok = requests_line(&p); sl = requests_line(&p); hk = requests_line(&p);
     ix = requests_line(&p); ck = requests_line(&p);
     lstrcpynA(g_s.handle_token, tok, sizeof g_s.handle_token);
-    kind = !lstrcmpA(op, "switch") ? HOP_SWITCH : !lstrcmpA(op, "link") ? HOP_LINK : !lstrcmpA(op, "unlink") ? HOP_UNLINK
-         : !lstrcmpA(op, "linkall") ? HOP_LINKALL : 0;
+    kind = !lstrcmpA(op, "switch") ? HOP_SWITCH : !lstrcmpA(op, "link") ? HOP_LINK : !lstrcmpA(op, "linkall") ? HOP_LINKALL : 0;
     if (!kind || !tok[0] || !requests_parse_num(sl, 2, &slot) || slot > 63 ||
         (kind != HOP_SWITCH && kind != HOP_LINKALL && (!requests_parse_num(ix, 2, &idx) || idx > 63))) {
         handle_fail("failed:bad request");
@@ -197,37 +194,30 @@ static void handles_request(BYTE *b)
     peers_chr_key(&c, k);
     if (lstrcmpA(k, ck) != 0) { handle_fail("failed:list changed"); return; }
     f = c.link;
-    if (kind == HOP_LINK) {
-        if ((f & CHR_LINKED) && (int)CHR_HANDLE(f) == slot) { handle_fail("failed:already linked"); return; }
-        if (peers_handle_used(&h) >= 8) { handle_fail("failed:handle full"); return; }
-        /* polcore won't link one that's linked anywhere, so a move's an unlink first. One linked to a slot with no handle
-           can't be unlinked (-0x1c04), so it's left */
-        if (f & CHR_LINKED) {
-            pol_handle oh;
-            old = (int)CHR_HANDLE(f);
-            if (!handle_get(b, old, &oh)) { handle_fail("failed:orphan"); return; }
-            r = pc_unlink_content(b, idx, old);
-            if (r < 0) { handle_fail(requests_failed(r)); return; }
-        }
-        r = pc_link_content(b, idx, slot);
-        if (r < 0) {
-            if (old >= 0) pc_link_content(b, idx, old);
-            handle_fail(requests_failed(r));
-            return;
-        }
-    } else {
-        if (!(f & CHR_LINKED) || (int)CHR_HANDLE(f) != slot) { handle_fail("failed:not linked"); return; }
-        r = pc_unlink_content(b, idx, slot);
+    if ((f & CHR_LINKED) && (int)CHR_HANDLE(f) == slot) { handle_fail("failed:already linked"); return; }
+    if (peers_handle_used(&h) >= 8) { handle_fail("failed:handle full"); return; }
+    /* polcore won't link one that's linked anywhere, so a move's an unlink first. One linked to a slot with no handle
+       can't be unlinked (-0x1c04), so it's left */
+    if (f & CHR_LINKED) {
+        pol_handle oh;
+        old = (int)CHR_HANDLE(f);
+        if (!handle_get(b, old, &oh)) { handle_fail("failed:orphan"); return; }
+        r = pc_unlink_content(b, idx, old);
         if (r < 0) { handle_fail(requests_failed(r)); return; }
     }
-    g_s.handle_op = kind;
+    r = pc_link_content(b, idx, slot);
+    if (r < 0) {
+        if (old >= 0) pc_link_content(b, idx, old);
+        handle_fail(requests_failed(r));
+        return;
+    }
+    g_s.handle_op = HOP_LINK;
     g_s.handle_slot = slot;
     g_s.handle_idx = idx;
     g_s.handle_from = old;
     g_s.handle_pos = (f & CHR_LINKED) ? (int)((f >> 22) & 7) : -1;
     lstrcpyA(g_s.handle_state, "working");
-    base_log("handles: %s content index %d %s slot %d%s\r\n", kind == HOP_LINK ? "link" : "unlink", idx,
-       kind == HOP_LINK ? "to" : "from", slot, old >= 0 ? " (moved)" : "");
+    base_log("handles: link content index %d to slot %d%s\r\n", idx, slot, old >= 0 ? " (moved)" : "");
     g_snap_dirty = 1;
     handles_put_start(b);
 }
@@ -277,7 +267,6 @@ static void handles_json(BYTE *b, jw *w)
     jw_job(w, "handleJob", g_s.handle_token, g_s.handle_state);
     if (g_s.handle_op == HOP_SWITCH) jw_lit(w, "op", "switch");
     else if (g_s.handle_op == HOP_LINK) jw_lit(w, "op", "link");
-    else if (g_s.handle_op == HOP_UNLINK) jw_lit(w, "op", "unlink");
     else if (g_s.handle_op == HOP_LINKALL) jw_lit(w, "op", "linkall");
     jw_end(w);
     jw_arr(w, "handles");

@@ -1,3 +1,3 @@
 namespace Provenance.Common.Social;
 
-public enum HandleChange { Switch, Link, Unlink }
+public enum HandleChange { Switch, Link }

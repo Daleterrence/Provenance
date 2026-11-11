@@ -127,8 +127,5 @@ public static class SocialRequests
     public static bool LinkCharacter(int pid, string token, PolHandle handle, PolContentId content) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "link", token, handle.Slot, handle.Key, content.Index, content.Key);
 
-    public static bool UnlinkCharacter(int pid, string token, PolHandle handle, PolContentId content) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "unlink", token, handle.Slot, handle.Key, content.Index, content.Key);
-
     public static bool SendPending(int pid) => HookFiles.RequestPaths(pid, HookContract.Requests.Send).Any(File.Exists);
 }

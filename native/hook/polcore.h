@@ -227,6 +227,8 @@ PC_SVC2(int, pc_get_handle, SV_GET_HANDLE, unsigned, slot, pol_handle *, out)
 PC_SVC2(int, pc_set_handle, SV_SET_HANDLE, unsigned, slot, const pol_handle *, in)
 #define SV_GET_CONTENT_ID  0x2c4
 PC_SVC2(int, pc_get_content_id, SV_GET_CONTENT_ID, unsigned, idx, void *, out)
+#define SV_SET_CONTENT_ID          0x2c8   /* takes the order byte, name and text from the record, nothing else */
+PC_SVC2(int, pc_set_content_id, SV_SET_CONTENT_ID, unsigned, idx, const void *, in)
 #define SV_LINK_CONTENT    0x2dc
 PC_SVC2(int, pc_link_content, SV_LINK_CONTENT, int, idx, int, slot)
 #define SV_UNLINK_CONTENT  0x2e0
@@ -482,7 +484,8 @@ static int handle_get(BYTE *b, int slot, pol_handle *h)
 #define POLCORE_STATUS_STRIDE     0x338
 /* which of the stamps is which list's */
 #define STAMP_FRIENDS 0
-#define STAMP_HANDLES 2
+#define STAMP_HANDLE_LIST 1
+#define STAMP_CONTENT_IDS 2
 
 #define AUTH_START      0x12
 #define AUTH_IN         30
@@ -518,7 +521,8 @@ static pol_chr *pc_content_record(BYTE *b, int idx) { return (pol_chr *)pc_addr_
 static pol_handle *pc_handle_record(BYTE *b, int slot) { return (pol_handle *)pc_addr_of(b, AT_HANDLES) + slot; }
 /* the list's reload test: the server's stamp is newer than mine, so an upload turns into a load */
 static int pc_friends_server_newer(BYTE *b) { return *pc_server_stamp(b, STAMP_FRIENDS) > *pc_local_stamp(b, STAMP_FRIENDS); }
-static int pc_handles_server_newer(BYTE *b) { return *pc_server_stamp(b, STAMP_HANDLES) > *pc_local_stamp(b, STAMP_HANDLES); }
+static int pc_handle_list_server_newer(BYTE *b) { return *pc_server_stamp(b, STAMP_HANDLE_LIST) > *pc_local_stamp(b, STAMP_HANDLE_LIST); }
+static int pc_links_server_newer(BYTE *b) { return *pc_server_stamp(b, STAMP_CONTENT_IDS) > *pc_local_stamp(b, STAMP_CONTENT_IDS); }
 
 static int pc_friend_valid(const pol_friend *f) { return (f->hid_lo & 1) != 0; }
 static unsigned __int64 pc_friend_hid(const pol_friend *f) { return hid_of(f->hid_lo, f->hid_hi); }

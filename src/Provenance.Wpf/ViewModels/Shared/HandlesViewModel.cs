@@ -14,7 +14,6 @@ public sealed record HandleCharacterRow(HandleCharacter Character, PolHandle? Ha
 {
     public string Label => Character.Label;
     public bool CanLink => Editable && !Character.Orphan;
-    public bool CanUnlink => Editable && Handle != null;
 }
 
 public sealed record HandleRow(HandleGroup Group, ImageSource? Picture, IReadOnlyList<HandleCharacterRow> Characters,
@@ -294,15 +293,6 @@ public partial class HandlesViewModel : ObservableObject
         if (!_dialogs.Confirm("Link", question, "LINK")) return;
         Send(HandleChange.Link, (pid, token) => SocialRequests.LinkCharacter(pid, token, to.Handle, c.Character.Record),
              HandleList.Done(HandleChange.Link, to.Name, c.Label));
-    }
-
-    [RelayCommand]
-    public void Unlink(HandleCharacterRow c)
-    {
-        if (!Editable || c.Handle is not { } from) return;
-        if (!_dialogs.Confirm("Unlink", HandleList.UnlinkQuestion(c.Character, from), "UNLINK")) return;
-        Send(HandleChange.Unlink, (pid, token) => SocialRequests.UnlinkCharacter(pid, token, from, c.Character.Record),
-             HandleList.Done(HandleChange.Unlink, from.Name, c.Label));
     }
 
     private void Send(HandleChange op, Func<int, string, bool> write, string done)

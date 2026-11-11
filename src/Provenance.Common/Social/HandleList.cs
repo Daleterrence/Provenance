@@ -55,13 +55,10 @@ public static class HandleList
             ? $"{c.Label} is linked to the handle {from.Name}. Link to the handle {to.Name} instead?"
             : $"Link {c.Label} to the handle {to.Name}?";
 
-    public static string UnlinkQuestion(HandleCharacter c, PolHandle from) => $"Unlink {c.Label} from the handle {from.Name}?";
-
     public static string Done(HandleChange op, string handle, string character) => op switch
     {
         HandleChange.Switch => $"{handle} is now your active handle.",
-        HandleChange.Link => $"{character} is now linked to the handle {handle}.",
-        _ => $"{character} is no longer linked to the handle {handle}.",
+        _ => $"{character} is now linked to the handle {handle}.",
     };
 
     // "timeout" is the app's own, the rest are the hook's. Codes are polcore's
