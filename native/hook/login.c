@@ -400,11 +400,12 @@ static void login_ffxi_gate_read(BYTE *b)
     base_log("phase_c: " LOG_CONTENT_IDS "%d valid, %d FFXI\r\n", any, ffxi);
 }
 
-/* status, friends, handles, characters, groups. A lean session only loads handles and characters */
+/* status, friends, handles, characters, groups. A lean session skips status and groups, but FFXI reads the
+   friend list and never loads it */
 static struct pending_load *login_set(struct pending_load *all, int *n)
 {
-    *n = g_lean ? 2 : 5;
-    return g_lean ? all + 2 : all;
+    *n = g_lean ? 3 : 5;
+    return g_lean ? all + 1 : all;
 }
 /* the viewer loads my status on its own and starts the lists from its OnSuccess (app.dll 0x10040822, 0x10040650) */
 static void login_loads(BYTE *b, struct pending_load *run, int n)

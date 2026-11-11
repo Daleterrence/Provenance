@@ -109,6 +109,34 @@ static void friends_edit_request(BYTE *b)
     g_snap_dirty = 1;
     friends_upload_start(b);
 }
+static struct { DWORD hid_lo, hid_hi; pol_game games[8]; } g_slots_kept[200];
+static void friends_slots_keep(BYTE *b)
+{
+    for (int i = 0; i < 200; i++) {
+        const pol_friend *f = pc_friend_row(b, i);
+        g_slots_kept[i].hid_lo = f->hid_lo;
+        g_slots_kept[i].hid_hi = f->hid_hi;
+        memcpy(g_slots_kept[i].games, f->games, sizeof f->games);
+    }
+}
+/* the upload's answer writes the list's game slots over rows presence has filled in, which polcore's own list load
+   never does. So a row that's still the same handle gets back what it had */
+static void friends_slots_put_back(BYTE *b)
+{
+    int n = 0;
+    for (int i = 0; i < 200; i++) {
+        pol_friend *f = pc_friend_row(b, i);
+        if (!pc_friend_valid(f) || !(g_slots_kept[i].hid_lo & 1)) continue;
+        if (pc_friend_hid(f) != hid_of(g_slots_kept[i].hid_lo, g_slots_kept[i].hid_hi)) continue;
+        if (!(f->stamp_lo | f->stamp_hi) && !(f->flags & 0x10000)) continue;
+        if (!memcmp(f->games, g_slots_kept[i].games, sizeof f->games)) continue;
+        memcpy(f->games, g_slots_kept[i].games, sizeof f->games);
+        n++;
+    }
+    if (!n) return;
+    base_log("friends: %d row(s) kept their game slots after the upload\r\n", n);
+    g_snap_dirty = 1;
+}
 static void friends_edit_pump(BYTE *b, int ctl)
 {
     if (g_s.edit_job < 0) {
@@ -117,8 +145,12 @@ static void friends_edit_pump(BYTE *b, int ctl)
         else if (ctl && !g_s.draining) friends_edit_request(b);
         return;
     }
+    int upload = g_edit_kind == 1, r;
+    /* polcore takes the upload's answer inside the poll. A reload is its own list load, which looks after the slots */
+    if (upload) friends_slots_keep(b);
     /* a comment (svc 0x67c) is polled with 0x684. Not 0x680, however much it looks like it should be */
-    int r = g_edit_kind == 2 ? pc_comment_save_check(b, g_s.edit_job) : pc_friends_save_check(b, g_s.edit_job);
+    r = g_edit_kind == 2 ? pc_comment_save_check(b, g_s.edit_job) : pc_friends_save_check(b, g_s.edit_job);
+    if (upload) friends_slots_put_back(b);
     if (r == 0) return;
     g_s.edit_job = -1;
     if (r == 1) lstrcpyA(g_s.edit_state, g_edit_kind == 3 ? "failed:reloaded" : "saved");

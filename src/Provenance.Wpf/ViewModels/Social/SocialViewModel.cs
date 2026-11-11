@@ -746,11 +746,18 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             Search.AnswerRequest(f, pick == 0 ? RequestAnswer.Accept : RequestAnswer.Decline);
     }
 
+    public static string IgnoreQuestion(string name) =>
+        $"PlayOnline will take {name} off your friend list, and their messages won't reach you any more. " +
+        "You can stop ignoring them later, but that won't put them back on your friend list. " +
+        "You'd have to send them a new friend request.";
+
+    public static string StopIgnoringQuestion(string name) =>
+        $"Take {name} off your ignore list? Their messages will reach you again. " +
+        "This doesn't add them to your friend list, you'd have to send them a friend request for that.";
+
     public void AskUnignore(PolBlocked b)
     {
-        if (_dialogs.Confirm("Stop ignoring " + b.Name,
-                $"Take {b.Name} off your ignore list? Their messages will reach you again. " +
-                "This doesn't add them back to your friend list.", "STOP IGNORING"))
+        if (_dialogs.Confirm("Stop ignoring " + b.Name, StopIgnoringQuestion(b.Name), "STOP IGNORING"))
             Unignore(b);
     }
 
@@ -816,9 +823,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         }));
         menu.Add(new("Ignore...", edit && !f.Pending && !f.IsMe, () =>
         {
-            var pick = _dialogs.Choose("Ignore " + f.Name,
-                $"PlayOnline will take {f.Name} off your friend list, and their messages won't reach you any more. " +
-                "You can stop ignoring them later, but that won't put them back on your friend list.", "IGNORE",
+            var pick = _dialogs.Choose("Ignore " + f.Name, IgnoreQuestion(f.Name), "IGNORE",
                 "Ignore this handle only", "Ignore every handle of this PlayOnline ID", ConfirmStyle.Destructive);
             if (pick is { } which) IgnoreFriend(f, which == 1);
         }));

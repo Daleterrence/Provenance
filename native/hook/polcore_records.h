@@ -97,7 +97,8 @@ typedef struct pol_friend {
     DWORD    id_lo, id_hi;   /* POL ID */
     DWORD    flags;          /* bits 13-15 status + 1 (1 online, 2 away, 3 busy, 0 offline), 0x800 online, 0x10000 a game
                                 slot's in use, bits 17-19 which one, 0x10000000 pending request, 3 on an ignore row for all handles */
-    BYTE     r0c[12];
+    BYTE     r0c[4];
+    DWORD    stamp_lo, stamp_hi;   /* presence sets these, and a list load leaves the game slots alone once they're set */
     pol_game games[8];
     DWORD    hid_lo;         /* bit 0 valid, the H-ID is bits 1-44 of hid_lo and hid_hi */
     DWORD    hid_hi;         /* bits 13-18 the handle's slot */
@@ -157,6 +158,8 @@ PC_AT(pol_handle, flags, 0x18);
 PC_AT(pol_handle, pic, 0x1c);
 PC_AT(pol_handle, chars, 0x20);
 PC_AT(pol_friend, flags, 0x08);
+PC_AT(pol_friend, stamp_lo, 0x10);
+PC_AT(pol_friend, stamp_hi, 0x14);
 PC_AT(pol_friend, games, 0x18);
 PC_AT(pol_friend, hid_lo, 0x98);
 PC_AT(pol_friend, hid_hi, 0x9c);
