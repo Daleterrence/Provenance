@@ -39,19 +39,19 @@
         <controls:TitleBar Title="PROVENANCE" Icon="{StaticResource TitleIcon}" TitleSize="13" DimTitle="True" GlyphSize="17"
                            CloseToolTip="{Binding CloseTooltip}" CloseName="{Binding CloseName}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button x:Name="WorldsChip" Style="{x:Null}" VerticalAlignment="Center"
-                        Margin="0,0,6,0" Cursor="Hand" Padding="0"
-                        shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                        Click="OnWorldsChip"
-                        AutomationProperties.Name="FINAL FANTASY XI world status (PlayOnline Server Status)">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
+                <controls:PopupToggle x:Name="WorldsChip" Style="{x:Null}" VerticalAlignment="Center"
+                                      Margin="0,0,6,0" Cursor="Hand" Padding="0" KeyboardNavigation.AcceptsReturn="True"
+                                      shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                                      Click="OnWorldsChip" IsChecked="{Binding IsOpen, ElementName=WorldsPopup, Mode=OneWay}"
+                                      AutomationProperties.Name="FINAL FANTASY XI world status (PlayOnline Server Status)">
+                    <controls:PopupToggle.Template>
+                        <ControlTemplate TargetType="controls:PopupToggle">
                             <Border CornerRadius="11" Padding="10,3" Background="{DynamicResource Surface.2}"
                                     BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                                 <ContentPresenter />
                             </Border>
                         </ControlTemplate>
-                    </Button.Template>
+                    </controls:PopupToggle.Template>
                     <StackPanel Orientation="Horizontal">
                         <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
                                  Style="{StaticResource WorldDot}" behaviours:State.Status="{Binding News.WorldsState}" />
@@ -59,7 +59,7 @@
                         <controls:SvgIcon Glyph="down" Flat="True" Width="14" Height="14" Margin="6,0,0,0"
                                           VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" />
                     </StackPanel>
-                </Button>
+                </controls:PopupToggle>
                 <Button Width="44" Height="40" Padding="0"
                         Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True"
@@ -119,6 +119,7 @@
                 <materialDesign:PackIcon Kind="InformationOutline" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center"
                                          Foreground="{DynamicResource State.Warn}" />
                 <TextBlock Grid.Column="1" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text.1}"
+                           behaviours:Announce.WhenShown="True"
                            Text="You cannot use any PlayOnline or social features of Provenance whilst logged into the game." />
             </Grid>
         </Border>
