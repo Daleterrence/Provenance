@@ -1,7 +1,4 @@
 using System.Runtime.ExceptionServices;
-using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.ComTypes;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using Provenance.Common.IO;
@@ -228,7 +225,7 @@ public sealed class MsiPackage : IDisposable
             var lnk = Path.Combine(dir, MsiDatabase.LongName(r[1]) + ".lnk");
             if (keepExisting && File.Exists(lnk)) continue;
             var wk = r[6].Length > 0 && dirs.TryGetValue(r[6], out var w) ? w.TrimEnd('\\') : "";
-            CreateShortcut(lnk, Format(r[3]), Format(r[4]), Format(r[5]), wk);
+            Shortcut.Create(lnk, Format(r[3]), Format(r[4]), Format(r[5]), wk);
             shortcuts++;
         }
 
@@ -369,45 +366,4 @@ public sealed class MsiPackage : IDisposable
     // how Windows compares paths, case aside and a trailing \ not mattering
     private static bool SameText(string a, string b) =>
         string.Equals(a.TrimEnd('\\'), b.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
-
-    private static void CreateShortcut(string lnk, string target, string args, string description, string workDir)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(lnk)!);
-        var link = (IShellLinkW)new ShellLink();
-        try
-        {
-            link.SetPath(target);
-            if (args.Length > 0) link.SetArguments(args);
-            if (description.Length > 0) link.SetDescription(description);
-            if (workDir.Length > 0) link.SetWorkingDirectory(workDir);
-            ((IPersistFile)link).Save(lnk, true);
-        }
-        finally { Marshal.ReleaseComObject(link); }
-    }
-
-    [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
-    private class ShellLink { }
-
-    [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid("000214F9-0000-0000-C000-000000000046")]
-    private interface IShellLinkW
-    {
-        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder file, int cch, IntPtr fd, uint flags);
-        void GetIDList(out IntPtr pidl);
-        void SetIDList(IntPtr pidl);
-        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder name, int cch);
-        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
-        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder dir, int cch);
-        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string dir);
-        void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder args, int cch);
-        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string args);
-        void GetHotkey(out short hotkey);
-        void SetHotkey(short hotkey);
-        void GetShowCmd(out int show);
-        void SetShowCmd(int show);
-        void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int cch, out int icon);
-        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string path, int icon);
-        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string rel, uint reserved);
-        void Resolve(IntPtr hwnd, uint flags);
-        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string file);
-    }
 }

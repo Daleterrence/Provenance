@@ -9,9 +9,17 @@ public static class WindowerInstall
     public static bool IsFolder(string? dir) =>
         !string.IsNullOrWhiteSpace(dir) && (File.Exists(Path.Combine(dir, "Windower.exe")) || File.Exists(Path.Combine(dir, "Hook.dll")));
 
-    public static string? Detect(string? configured) =>
-        Candidates(configured, @"C:\Windower", "Windower", "Windower4", "Windower 4").FirstOrDefault(IsFolder);
+    // a lone Windower.exe is a download nobody's run yet, and a lone Hook.dll could be some other program's
+    public static bool IsSetUp(string? dir) =>
+        !string.IsNullOrWhiteSpace(dir) && File.Exists(Path.Combine(dir, "Windower.exe")) && File.Exists(Path.Combine(dir, "Hook.dll"));
 
+    internal static readonly string[] ProgramFilesNames = ["Windower", "Windower4", "Windower 4"];
+
+    public static string? Detect(string? configured) =>
+        Candidates(configured, @"C:\Windower", ProgramFilesNames).FirstOrDefault(IsFolder);
+
+    public const string BrowseTitle = "Choose your Windower 4 folder";
+    public const string NotFoundText = "Couldn't find Windower 4 in that folder.";
     public const string LinkedText =
         "Provenance can't use a Windower folder that's reached through a link. Choose the real folder the link points to in Settings, under Windower/Ashita.";
 

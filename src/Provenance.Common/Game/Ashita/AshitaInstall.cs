@@ -9,9 +9,13 @@ public static class AshitaInstall
     public static bool IsFolder(string? dir) =>
         !string.IsNullOrWhiteSpace(dir) && File.Exists(Path.Combine(dir, "Ashita-cli.exe")) && File.Exists(Path.Combine(dir, "Ashita.dll"));
 
-    public static string? Detect(string? configured) =>
-        Candidates(configured, @"C:\Ashita", "Ashita", "Ashita v4", "Ashita4").FirstOrDefault(IsFolder);
+    internal static readonly string[] ProgramFilesNames = ["Ashita", "Ashita v4", "Ashita4"];
 
+    public static string? Detect(string? configured) =>
+        Candidates(configured, @"C:\Ashita", ProgramFilesNames).FirstOrDefault(IsFolder);
+
+    public const string BrowseTitle = "Choose your Ashita v4 folder";
+    public const string NotFoundText = "Couldn't find Ashita v4 in that folder.";
     public const string IncompatibleText = "Incompatible with Provenance";
     public const string IncompatibleNote = "The ones marked incompatible stay off whenever Provenance starts the game. Your Ashita settings aren't changed.";
 

@@ -68,6 +68,9 @@ public partial class MainViewModel : ObservableObject
         _timeLeft = new PhaseTimeLeft(text => TimeLeftText = text);
         News = new NewsViewModel(feeds, _ui, OpenLink, time);
         Accounts = new AccountsViewModel(dialogs, credentials, settings, avatars);
+        Setup = new SetupViewModel(dialogs, settings);
+        Setup.Finished += OnSetupFinished;
+        Accounts.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AccountsViewModel.HasProfile)) RefreshSetupCard(); };
         _socialPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _socialPoll.Tick += (_, _) => _pol.Poll();
         Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session, _launch,
@@ -138,6 +141,7 @@ public partial class MainViewModel : ObservableObject
             ElapsedText = TextBits.Seconds(DateTime.UtcNow - _launchStarted);
         };
         Session.PhaseChanged += OnPhaseChanged;
+        RefreshSetupCard();
     }
 
     public SessionState Session { get; }
@@ -197,7 +201,7 @@ public partial class MainViewModel : ObservableObject
         if (loggedInChanged || launchingChanged)
         {
             OnPropertyChanged(nameof(ShowInstallCard));
-            OnPropertyChanged(nameof(ShowLogInCard));
+            RefreshSetupCard();
             OnPropertyChanged(nameof(ShowFriendsCard));
         }
     }
@@ -378,12 +382,43 @@ public partial class MainViewModel : ObservableObject
     public SocialViewModel Social { get; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowInstallCard), nameof(ShowLogInCard))]
+    [NotifyPropertyChangedFor(nameof(ShowInstallCard))]
     private bool _gameInstalled = true;
 
+    partial void OnGameInstalledChanged(bool value) => RefreshSetupCard();
+
+    // a new install goes Install card, Welcome on the log-in card, the Windower/Ashita card, then the log-in card proper
     public bool ShowInstallCard => !GameInstalled && !IsLaunching && !LoggedIn;
-    public bool ShowLogInCard => GameInstalled && !IsLaunching && !LoggedIn;
+    public bool ShowSetupCard => Setup.Pending && GameInstalled && Accounts.HasProfile && !IsLaunching && !LoggedIn;
+    public bool ShowLogInCard => GameInstalled && !IsLaunching && !LoggedIn && !ShowSetupCard;
     public bool ShowFriendsCard => LoggedIn && !IsLaunching;
+
+    public SetupViewModel Setup { get; }
+
+    private void RefreshSetupCard()
+    {
+        OnPropertyChanged(nameof(ShowSetupCard));
+        OnPropertyChanged(nameof(ShowLogInCard));
+        if (ShowSetupCard) _ = Setup.Look();
+    }
+
+    private void OnSetupFinished(bool platformChanged)
+    {
+        PlatformChanged();
+        Multi.Refresh();
+        RefreshSetupCard();
+        if (platformChanged && !LoggedIn && !IsLaunching) RestartPrestart();
+    }
+
+    internal Task PrestartRestarted { get; private set; } = Task.CompletedTask;
+
+    // a pol.exe pre-started for a plain login has to go before Windower or Ashita start one of their own
+    private void RestartPrestart() =>
+        PrestartRestarted = Task.Run(() =>
+        {
+            _pol.Prestarter.StopPrestart();
+            _pol.Prestarter.Prestart();
+        });
 
     private void RefreshInstallState()
     {
@@ -564,6 +599,8 @@ public partial class MainViewModel : ObservableObject
     private async Task ConnectSocialAsync()
     {
         if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount()) return;
+        // a new install's Windower/Ashita question comes before its first login, however the login was asked for
+        if (ShowSetupCard) return;
         // one account for the whole login, so switching mid-way can't mix two up
         if (Accounts.SelectedProfile is not { } profile) return;
         if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(profile, requireAll: true)) return;
@@ -858,6 +895,8 @@ public partial class MainViewModel : ObservableObject
             vm.Dispose();
             Handles.Closed();
         }
+        // a platform picked here answers the new install's question too
+        if (_settings.Current.ThirdPartyHookPlatform != hookBefore) Setup.Done();
         if (vm.Hooks.RestartWanted)
         {
             RequestRestart?.Invoke();
@@ -865,8 +904,7 @@ public partial class MainViewModel : ObservableObject
         }
         OnPropertyChanged(nameof(CloseTooltip));
         Multi.Refresh();
-        if (_settings.Current.ThirdPartyHookPlatform != hookBefore && !LoggedIn && !IsLaunching)
-            Task.Run(() => { _pol.Prestarter.StopPrestart(); _pol.Prestarter.Prestart(); });
+        if (_settings.Current.ThirdPartyHookPlatform != hookBefore && !LoggedIn && !IsLaunching) RestartPrestart();
     }
 
     public string? PlaySubtitle => _pol.Platform switch

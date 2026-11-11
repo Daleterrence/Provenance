@@ -1,0 +1,160 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Provenance.Common.Game.Ashita;
+using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Game.Windower;
+using Provenance.Common.Security;
+using Provenance.Common.Settings;
+using Provenance.Wpf.Services;
+using Provenance.Wpf.ViewModels.Shared;
+using Serilog;
+
+namespace Provenance.Wpf.ViewModels.Main;
+
+// the one question a new install gets asked: Windower, Ashita or neither. Nothing's saved till a button's pressed
+public partial class SetupViewModel : ObservableObject
+{
+    internal const string LookingText = "Looking for Windower and Ashita...";
+    internal const string NotFoundText = "Not found. Press Browse to choose its folder.";
+
+    private readonly IDialogs _dialogs;
+    private readonly ISettingsService _settings;
+    private bool _looked;
+
+    public SetupViewModel(IDialogs dialogs, ISettingsService settings)
+    {
+        _dialogs = dialogs;
+        _settings = settings;
+    }
+
+    // true when the answer changed the platform
+    internal event Action<bool>? Finished;
+
+    public bool Pending => _settings.Current.SetupPending;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WindowerText), nameof(AshitaText))]
+    private bool _looking;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WindowerText))]
+    [NotifyCanExecuteChangedFor(nameof(UseWindowerCommand))]
+    private string? _windowerFolder;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AshitaText))]
+    [NotifyCanExecuteChangedFor(nameof(UseAshitaCommand))]
+    private string? _ashitaFolder;
+
+    public string WindowerText => WindowerFolder ?? (_looked ? NotFoundText : "");
+    public string AshitaText => AshitaFolder ?? (_looked ? NotFoundText : "");
+    public StatusLine Status { get; } = new();
+
+    internal Task? Looked { get; private set; }
+
+    internal Task Look() => Looked ??= LookAsync();
+
+    private async Task LookAsync()
+    {
+        Looking = true;
+        Status.Show(LookingText);
+        FoundHooks found;
+        try { found = await Task.Run(ThirdPartyHookFinder.Find); }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Looking for Windower and Ashita failed");
+            found = new([], []);
+        }
+        // a folder browsed to meanwhile stays, and one already in settings goes ahead of anything found
+        var s = _settings.Current;
+        WindowerFolder ??= WindowerProblem(s.WindowerPath) is null ? s.WindowerPath : found.Windower.FirstOrDefault();
+        AshitaFolder ??= AshitaProblem(s.AshitaPath) is null ? s.AshitaPath : found.Ashita.FirstOrDefault();
+        _looked = true;
+        Looking = false;
+        if (Status.Text == LookingText) Status.Clear();
+    }
+
+    private static string? WindowerProblem(string? dir) =>
+        !WindowerInstall.IsFolder(dir) ? WindowerInstall.NotFoundText
+        : FolderPins.Linked(dir!) ? WindowerInstall.LinkedText : null;
+
+    private static string? AshitaProblem(string? dir) => AshitaInstall.IsFolder(dir) ? null : AshitaInstall.NotFoundText;
+
+    [RelayCommand]
+    private void BrowseWindower()
+    {
+        if (Browsed(WindowerInstall.BrowseTitle, WindowerProblem) is { } dir) WindowerFolder = dir;
+    }
+
+    [RelayCommand]
+    private void BrowseAshita()
+    {
+        if (Browsed(AshitaInstall.BrowseTitle, AshitaProblem) is { } dir) AshitaFolder = dir;
+    }
+
+    private string? Browsed(string title, Func<string?, string?> problemWith)
+    {
+        if (_dialogs.PickFolder(title) is not { } dir) return null;
+        if (problemWith(dir) is { } problem)
+        {
+            Status.Fail(problem);
+            return null;
+        }
+        if (Status.IsError) Status.Clear();
+        return dir;
+    }
+
+    private bool CanUseWindower() => WindowerFolder is not null;
+
+    [RelayCommand(CanExecute = nameof(CanUseWindower))]
+    private void UseWindower() => Use(ThirdPartyHook.Windower, WindowerFolder, WindowerProblem);
+
+    private bool CanUseAshita() => AshitaFolder is not null;
+
+    [RelayCommand(CanExecute = nameof(CanUseAshita))]
+    private void UseAshita() => Use(ThirdPartyHook.Ashita, AshitaFolder, AshitaProblem);
+
+    [RelayCommand]
+    private void UseNeither() => Finish(s => s.ThirdPartyHookPlatform = ThirdPartyHook.None);
+
+    // the folder's checked once more, it can have gone since it was found
+    private void Use(ThirdPartyHook platform, string? dir, Func<string?, string?> problemWith)
+    {
+        if (dir is null) return;
+        if (problemWith(dir) is { } problem)
+        {
+            Status.Fail(problem);
+            return;
+        }
+        Finish(s =>
+        {
+            s.ThirdPartyHookPlatform = platform;
+            if (platform == ThirdPartyHook.Windower) s.WindowerPath = dir;
+            else s.AshitaPath = dir;
+        });
+    }
+
+    // the profile and boot configuration stay as they are, blank already means Windower's unnamed profile and the
+    // last boot configuration Ashita ran with
+    private void Finish(Action<LauncherSettings> pick)
+    {
+        var before = _settings.Current.ThirdPartyHookPlatform;
+        _settings.SaveChange(s =>
+        {
+            pick(s);
+            s.SetupPending = false;
+        });
+        Status.Clear();
+        OnPropertyChanged(nameof(Pending));
+        Finished?.Invoke(_settings.Current.ThirdPartyHookPlatform != before);
+    }
+
+    // answered somewhere else, like the Settings page
+    internal void Done()
+    {
+        if (!Pending) return;
+        _settings.SaveChange(s => s.SetupPending = false);
+        OnPropertyChanged(nameof(Pending));
+        Finished?.Invoke(false);
+    }
+}

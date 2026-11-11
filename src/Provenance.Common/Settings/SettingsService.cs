@@ -61,8 +61,8 @@ public sealed class SettingsService : ISettingsService
     {
         if (!File.Exists(_path))
         {
-            Log.Information("No settings.json, using defaults");
-            return new LauncherSettings();
+            Log.Information("No settings.json, starting as a new install");
+            return LauncherSettings.FirstStart();
         }
         try
         {
@@ -77,7 +77,7 @@ public sealed class SettingsService : ISettingsService
             try { File.Copy(_path, bad, overwrite: true); kept = true; } catch { kept = false; }
             LoadProblem = "Provenance couldn't read your settings file, so it started with the default settings. "
                         + (kept ? $"There's a copy of the old file at {bad}." : "Provenance couldn't keep a copy of it.");
-            return new LauncherSettings();
+            return LauncherSettings.FirstStart();
         }
     }
 

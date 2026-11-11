@@ -1,0 +1,42 @@
+<UserControl x:Class="Provenance.Wpf.Views.Main.SetupCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
+             xmlns:windower="clr-namespace:Provenance.Common.Game.Windower;assembly=Provenance.Common"
+             xmlns:ashita="clr-namespace:Provenance.Common.Game.Ashita;assembly=Provenance.Common">
+    <Grid Margin="28,22" VerticalAlignment="Center">
+        <StackPanel>
+            <TextBlock Text="Do you use Windower or Ashita?" FontSize="17" FontWeight="SemiBold"
+                       TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <TextBlock TextAlignment="Center" TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource Text.2}"
+                       Text="Start the game through Windower 4 or Ashita v4, so everything you've set up in them loads as usual. Provenance still logs you in." />
+
+            <!-- the whole path wraps, it's what the player's agreeing to -->
+            <TextBlock Text="Windower 4" FontSize="14" FontWeight="SemiBold" Margin="0,20,0,2" />
+            <TextBlock Text="{Binding Setup.WindowerText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" />
+            <Grid Margin="0,8,0,0" ColumnDefinitions="*,Auto">
+                <Button Height="38" FontSize="14" Style="{StaticResource PolButton}"
+                        Command="{Binding Setup.UseWindowerCommand}" Content="USE WINDOWER" />
+                <Button Style="{StaticResource BrowseButton}" Command="{Binding Setup.BrowseWindowerCommand}"
+                        AutomationProperties.Name="{x:Static windower:WindowerInstall.BrowseTitle}" />
+            </Grid>
+
+            <TextBlock Text="Ashita v4" FontSize="14" FontWeight="SemiBold" Margin="0,18,0,2" />
+            <TextBlock Text="{Binding Setup.AshitaText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" />
+            <Grid Margin="0,8,0,0" ColumnDefinitions="*,Auto">
+                <Button Height="38" FontSize="14" Style="{StaticResource PolButton}"
+                        Command="{Binding Setup.UseAshitaCommand}" Content="USE ASHITA" />
+                <Button Style="{StaticResource BrowseButton}" Command="{Binding Setup.BrowseAshitaCommand}"
+                        AutomationProperties.Name="{x:Static ashita:AshitaInstall.BrowseTitle}" />
+            </Grid>
+
+            <TextBlock Text="{Binding Setup.Status.Text}" behaviours:State.IsError="{Binding Setup.Status.IsError}"
+                       Style="{StaticResource StatusText}" TextWrapping="Wrap" TextAlignment="Center" FontSize="12" Margin="0,12,0,0"
+                       Visibility="{Binding Setup.Status.Text, Converter={StaticResource NullToVisibilityConverter}}" />
+            <Button Margin="0,18,0,0" Height="38" FontSize="14" Style="{StaticResource PolButton}"
+                    Command="{Binding Setup.UseNeitherCommand}" Content="CONTINUE WITHOUT EITHER" />
+            <TextBlock Margin="0,10,0,0" TextAlignment="Center" TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource Text.3}"
+                       Text="You can change this later in Settings, under Windower/Ashita." />
+        </StackPanel>
+    </Grid>
+</UserControl>

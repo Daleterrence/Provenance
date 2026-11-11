@@ -125,6 +125,7 @@
                     <Grid>
                         <local:InstallCard Visibility="{Binding ShowInstallCard, Converter={StaticResource BoolToVis}}" />
                         <local:AccountCard Visibility="{Binding ShowLogInCard, Converter={StaticResource BoolToVis}}" />
+                        <local:SetupCard Visibility="{Binding ShowSetupCard, Converter={StaticResource BoolToVis}}" />
                         <local:PlayCard Visibility="{Binding ShowFriendsCard, Converter={StaticResource BoolToVis}}" />
                         <local:LaunchCard Visibility="{Binding IsLaunching, Converter={StaticResource BoolToVis}}" />
                     </Grid>

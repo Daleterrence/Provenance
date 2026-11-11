@@ -9,6 +9,11 @@ public sealed class LauncherSettings
 
     public string ActiveProfileId { get; set; } = "default";
 
+    // on from a start with no settings.json till the Windower/Ashita question's answered
+    public bool SetupPending { get; set; }
+
+    public static LauncherSettings FirstStart() => new() { Profiles = [], ActiveProfileId = "", SetupPending = true };
+
     // shift at start-up or --noautologin skips it, and a rejected login turns it off
     public bool AutoLogin { get; set; }
 

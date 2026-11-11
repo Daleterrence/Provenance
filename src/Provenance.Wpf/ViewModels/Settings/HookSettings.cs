@@ -167,9 +167,9 @@ public partial class HookSettings : ObservableObject, IProfileHost
     {
         var (text, isError) = Hook switch
         {
-            ThirdPartyHook.Ashita when AshitaDir is null => ("Couldn't find Ashita v4 in that folder.", true),
+            ThirdPartyHook.Ashita when AshitaDir is null => (AshitaInstall.NotFoundText, true),
             ThirdPartyHook.Ashita => ("The game starts through Ashita with the boot configuration picked at the top.", false),
-            ThirdPartyHook.Windower when WindowerDir is null => ("Couldn't find Windower 4 in that folder.", true),
+            ThirdPartyHook.Windower when WindowerDir is null => (WindowerInstall.NotFoundText, true),
             ThirdPartyHook.Windower when FolderPins.Linked(WindowerDir) => (WindowerInstall.LinkedText, true),
             ThirdPartyHook.Windower => ("The game starts through Windower with the profile picked at the top.", false),
             _ => ("The game starts directly, without Windower or Ashita.", false),
@@ -285,10 +285,10 @@ public partial class HookSettings : ObservableObject, IProfileHost
     }
 
     [RelayCommand]
-    private void BrowseAshita() { if (_dialogs.PickFolder("Choose your Ashita v4 folder") is { } d) AshitaPath = d; }
+    private void BrowseAshita() { if (_dialogs.PickFolder(AshitaInstall.BrowseTitle) is { } d) AshitaPath = d; }
 
     [RelayCommand]
-    private void BrowseWindower() { if (_dialogs.PickFolder("Choose your Windower 4 folder") is { } d) WindowerPath = d; }
+    private void BrowseWindower() { if (_dialogs.PickFolder(WindowerInstall.BrowseTitle) is { } d) WindowerPath = d; }
 
     // the Windower card keeps this up to date
     public string? WindowerProblem { get; set; }
