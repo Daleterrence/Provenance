@@ -72,6 +72,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public IReadOnlyList<PolContentId> ContentIds { get; init; } = [];
     public HookJob HandleJob { get; init; } = HookJob.None;
     public string HandleOp { get; init; } = "";
+    // a create or delete ended with no answer from the server, true from then till the session's over
+    public bool HandleUnconfirmed { get; init; }
     // null till chat rooms get used this session
     public ChatRoomsSnapshot? Chat { get; init; }
     public GroupChatSnapshot? GroupChat { get; init; }

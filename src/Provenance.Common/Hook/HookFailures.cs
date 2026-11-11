@@ -63,6 +63,9 @@ public static class HookFailures
             "PlayOnline didn't confirm it, so the handle may have been created anyway. Log out and back in to see your handles as PlayOnline has them.";
         public const string DeleteUnconfirmed =
             "PlayOnline didn't confirm it, so the handle may still be there. Log out and back in to see your handles as PlayOnline has them.";
+        public const string PlayHeld =
+            "A handle change wasn't confirmed, and FINAL FANTASY XI could send it again when it starts. Log out and back in to play.";
+        public const string PlayWaits = "Your last handle change hasn't finished, so FINAL FANTASY XI wasn't started. Try again in a moment.";
         public static string SwitchRejected(string reason) => $"Provenance couldn't confirm the switch ({reason}).";
         public static string ChangeRejected(string reason) => $"Not saved: PlayOnline didn't accept the change ({reason}).";
     }

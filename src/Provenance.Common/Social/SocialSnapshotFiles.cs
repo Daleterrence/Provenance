@@ -69,6 +69,7 @@ public static class SocialSnapshotFiles
                     Str(c, "name"), Str(c, "text"), (int)Long(c, "order"), Int(c, "handle", -1), Str(c, "key"))),
                 HandleJob = Job(root, "handleJob"),
                 HandleOp = Obj(root, "handleJob") is { ValueKind: JsonValueKind.Object } hj ? Str(hj, "op") : "",
+                HandleUnconfirmed = Bool(Obj(root, "handleJob"), "unconfirmed"),
                 Chat = ChatRoomsSnapshot.Read(Obj(root, "chat")),
                 GroupChat = GroupChatSnapshot.Read(Obj(root, "groupChat")),
             };

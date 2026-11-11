@@ -71,12 +71,15 @@ public partial class MainViewModel : ObservableObject
         Accounts.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AccountsViewModel.HasProfile)) RefreshSetupCard(); };
         _socialPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _socialPoll.Tick += (_, _) => _pol.Poll();
+        GameStart = new GameStart(dialogs, windows, settings, pol, _launch, this,
+            new GameStartLinks(SetPhase, BeginCancellable, EndCancellable, ResetProgress, OnProgress, () => OpenSettingsAt(SettingsTab.Handles),
+                               () => RequestHide?.Invoke(), () => RequestShow?.Invoke(), () => RequestExit?.Invoke()));
         Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session, _launch,
-            new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, BackUpGameSettingsAsync));
+            new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, GameStart.BackUpGameSettingsAsync));
         Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, Session, () => News.WindowShown, RefreshInstallState);
         Lean = new LeanStartViewModel(dialogs, windows, settings, pol, _ui, Accounts, _launch, this,
-            new LeanStartLinks(() => GameInstalled, SetPhase, OnProgress, ResetProgress, EndCancellable, BackUpGameSettingsAsync, id => StartSocial(id),
-                               OnSnapshot, PlayWithAsync, () => RequestShow?.Invoke(), () => RequestExit?.Invoke()));
+            new LeanStartLinks(() => GameInstalled, SetPhase, OnProgress, ResetProgress, EndCancellable, GameStart.BackUpGameSettingsAsync, id => StartSocial(id),
+                               OnSnapshot, GameStart.PlayWithAsync, () => RequestShow?.Invoke(), () => RequestExit?.Invoke()));
         _pol.SnapshotUpdated += OnSnapshot;
         _pol.PidChanged += () => _ui.Post(() =>
         {
@@ -721,16 +724,6 @@ public partial class MainViewModel : ObservableObject
         return claim.Otp is { } otp && claim.InUse is null ? (pol, squareEnix, otp) : null;
     }
 
-    // the game update Play runs is handed the check a lean start already made, and nothing else ever is
-    private GameCheck? _knownCheck;
-
-    private async Task PlayWithAsync(GameCheck? known)
-    {
-        _knownCheck = known;
-        try { if (PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null); }
-        finally { _knownCheck = null; }
-    }
-
     // the US viewer asks once per POL ID, here it's once per install
     internal bool EnsureMemberAgreement()
     {
@@ -763,135 +756,9 @@ public partial class MainViewModel : ObservableObject
         });
 
     [RelayCommand]
-    private async Task PlayAsync()
-    {
-        if (Multi.Running) return;
-        // POL's own Play gate, and it only asks for each list at login so there's no reload here either
-        if (Social.PlayBlockedReason is { } why)
-        {
-            _dialogs.Error("Can't start FINAL FANTASY XI", why);
-            return;
-        }
-        if (!_windows.ConfirmDropProfileEditor("Play", leaveSaving: true)) return;
-        // nothing new goes to the hook from here, the game update still applies its answers
-        SetPhase(SessionPhase.UpdatingGame);
-        // like the viewer, the game update comes after the login with the session held meanwhile
-        if (!await UpdateGameAsync())
-        {
-            SetPhase(SessionPhase.LoggedIn);
-            return;
-        }
-        SetPhase(SessionPhase.StartingGame);
-        if (await LinkBeforePlayAsync() is var linked and not PreLaunchResult.Play)
-        {
-            SetPhase(SessionPhase.LoggedIn);
-            if (linked == PreLaunchResult.ShowHandles) OpenSettingsAt(SettingsTab.Handles);
-            return;
-        }
-        _launch.WriteOptions(Accounts.SessionProfileId);
-        ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
-        await BackUpGameSettingsAsync(null, text => ProgressText = text);
-        OnProgress(new LaunchProgress("Starting game", "Starting FINAL FANTASY XI...", 0.5));
-        var signal = _launch.SignalPlay();
-        if (!signal.Sent)
-        {
-            Log.Error(signal.Error, "Could not signal Play");
-            SetPhase(SessionPhase.LoggedIn);
-            _dialogs.Error("Can't start FINAL FANTASY XI",
-                signal.KeyProblem ?? "Provenance couldn't tell PlayOnline to start the game. Try again.", offerLogs: true);
-            return;
-        }
-        SetPhase(SessionPhase.InGame);
-        if (await _launch.WaitForPlayAnswerAsync() is { } failed)
-        {
-            SetPhase(SessionPhase.LoggedOut);
-            _pol.Prestarter.Prestart();
-            _dialogs.Error("Can't start FINAL FANTASY XI", failed);
-            return;
-        }
-        bool up = false;
-        try { up = _pol.Pid is { } game && await GameWindow.BringForwardWhenUpAsync(game); }
-        catch (Exception ex) { Log.Warning(ex, "Could not bring the game window to the front"); }
-        if (up) Handles.GameStarted();
-        GameUp = true;
-        RequestHide?.Invoke();
-        _elapsedTimer.Stop();
-        var exit = await _pol.WaitForExitAsync();
-        _pol.GameExited();
-        var ended = HookExitText.GameEndedText(exit);
-        if (ended is not null) Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);
-        else if (_settings.Current.ExitAfterGameExits) { RequestExit?.Invoke(); return; }
-        SetPhase(SessionPhase.LoggedOut);
-        RequestShow?.Invoke();
-        _pol.Prestarter.Prestart();
-        if (ended is not null) _dialogs.Error("Can't start FINAL FANTASY XI", ended, offerLogs: true);
-    }
+    private Task PlayAsync() => GameStart.PlayAsync();
 
-    // a test says whether its made-up session is still there
-    internal Func<int, bool>? SessionAliveForTest { get; set; }
-
-    internal Task<PreLaunchResult> LinkBeforePlayAsync()
-    {
-        ResetProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
-        return _launch.LinkAsync(
-            ask: text => Asking(() => _dialogs.YesNo(PreLaunchLink.Title, text), text),
-            failed: text => Asking(() =>
-            {
-                _dialogs.Error(PreLaunchLink.Title, text);
-                return true;
-            }, text),
-            saying: text => ProgressText = text,
-            pageWaiting: () => Handles.Busy ? Handles.Note.Text : null,
-            alive: SessionAliveForTest,
-            read: _ => Social.Last);
-    }
-
-    // the footer's "has to wait till the game's closed" isn't true while the answer can still stop it starting
-    private bool Asking(Func<bool> dialog, string text)
-    {
-        var note = Social.StatusNote;
-        Social.StatusNote = "";
-        try { return dialog(); }
-        finally { if (Social.StatusNote == "") Social.StatusNote = note; }
-    }
-
-    // a test points it at made-up folders
-    internal Func<LauncherSettings, string?, BackupSources?>? GameBackupSourcesForTest { get; set; }
-
-    // however it goes the game still starts, a failed backup only gets a notice
-    internal async Task BackUpGameSettingsAsync(string? accountBoot, Action<string>? saying = null)
-    {
-        if (await _launch.BackUpAsync(accountBoot, saying, GameBackupSourcesForTest) is { } problem)
-            Notice.Show(problem, "AlertCircleOutline", stays: true);
-    }
-
-    internal async Task<bool> UpdateGameAsync()
-    {
-        if (_launch.GameFolders() is null) return true;
-        var known = _knownCheck;
-        _knownCheck = null;
-        var ct = BeginCancellable("Updating FINAL FANTASY XI", "Checking for FINAL FANTASY XI updates...");
-        var progress = new Progress<PatchProgress>(p => OnProgress(LaunchProgress.Updating("Updating", p, 0.01, 0.99)));
-        try
-        {
-            var result = await _launch.UpdateGameAsync(progress, ct, known);
-            if (result.Done) return true;
-            if (result.Cancelled)
-            {
-                Notice.Show("The FINAL FANTASY XI update was stopped. Press Play to continue it.", "InformationOutline");
-                return false;
-            }
-            var ex = result.Error!;
-            Log.Error(ex, "FINAL FANTASY XI update failed");
-            bool inUse = ex is UnauthorizedAccessException || ex.HResult is unchecked((int)0x80070020) or unchecked((int)0x80070021);
-            _dialogs.Error("Couldn't update FINAL FANTASY XI",
-                inUse ? "One of the FINAL FANTASY XI files is in use, so it couldn't be updated. Close every FINAL FANTASY XI window, then press Play again."
-                      : ErrorText.Of(ex, "The FINAL FANTASY XI update didn't finish. Press Play to try again, and if it keeps happening, press Open logs to see what went wrong."),
-                offerLogs: !ErrorText.Ours(ex));
-            return false;
-        }
-        finally { EndCancellable(); }
-    }
+    internal GameStart GameStart { get; }
 
     internal void StartSocial(string profileId, string? storeRoot = null)
     {

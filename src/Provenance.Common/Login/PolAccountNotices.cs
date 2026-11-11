@@ -1,4 +1,5 @@
 using System.Globalization;
+using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 
@@ -67,7 +68,9 @@ public static class PolAccountNotices
     private static Notice N(int status, bool blocks, string text) =>
         new(status, $"LM-{status - 220:00}", blocks, text);
 
-    public static string? PlayBlockedReason(PolSocialSnapshot snap) => snap.FfxiService == "none" ? NoFfxiContentId : null;
+    // FFXI uploads the handle list itself as it starts, so a create or delete polcore still has marked would go up again
+    public static string? PlayBlockedReason(PolSocialSnapshot snap) =>
+        snap.FfxiService == "none" ? NoFfxiContentId : snap.HandleUnconfirmed ? HookFailures.Handles.PlayHeld : null;
 
     // status byte from svc 0xd20. 253..255 have no row, the viewer shows LM-01 for them. A refused login has no day count
     // for LM-02, so that one says it in words

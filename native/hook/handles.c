@@ -289,6 +289,7 @@ static void handles_json(BYTE *b, jw *w)
     else if (g_s.handle_op == HOP_CREATE) jw_lit(w, "op", "create");
     else if (g_s.handle_op == HOP_DELETE) jw_lit(w, "op", "delete");
     else if (g_s.handle_op == HOP_ORDER) jw_lit(w, "op", "order");
+    if (g_s.handle_unconfirmed) jw_bool(w, "unconfirmed", 1);
     jw_end(w);
     jw_arr(w, "handles");
     for (i = 0; i < 64; i++) {

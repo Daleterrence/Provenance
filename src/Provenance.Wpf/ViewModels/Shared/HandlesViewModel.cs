@@ -95,6 +95,10 @@ public partial class HandlesViewModel : ObservableObject
     public bool Switching => (Busy && _op == HandleChange.Switch) ||
                              (LoggedIn && _snap is { HandleOp: "switch", HandleJob.State: "working" });
 
+    // a create or delete with no answer yet, mine or one the hook's still running
+    public bool ListEditGoing => (Busy && _op is HandleChange.Create or HandleChange.Delete) ||
+                                 (LoggedIn && _snap is { HandleOp: "create" or "delete", HandleJob.State: "working" });
+
     // why a switch can't go right now (something open that's bound to the active handle), or null
     public Func<string?>? SwitchBlocked { get; set; }
 
