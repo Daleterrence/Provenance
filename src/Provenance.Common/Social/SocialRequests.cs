@@ -4,6 +4,9 @@ namespace Provenance.Common.Social;
 
 public static class SocialRequests
 {
+    // an empty request is one the hook takes and then reads as nothing, so this one has a line
+    public static bool GoFull(int pid) => HookFiles.WriteRequest(pid, HookContract.Requests.Full, 1);
+
     public static bool SetStatus(int pid, PolStatus status) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Status, PolStatusText.Code(status).ToString());
 

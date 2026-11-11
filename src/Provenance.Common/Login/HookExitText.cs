@@ -32,6 +32,7 @@ public static class HookExitText
     public const string NoPolHandleText = "This PlayOnline account doesn't have a handle, and none was created.";
 
     public const string UnfinishedText = "The PlayOnline login didn't finish. Try again.";
+    public const string StalledText = "PlayOnline stopped responding during the login. Try again in a moment.";
     private const string ClosedBeforeLogInText = "PlayOnline closed before the login finished.";
 
     internal static (int Code, string Text) EndedBeforeLogIn(int? exitCode) => (HookExit?)exitCode switch
@@ -63,6 +64,8 @@ public static class HookExitText
         DetailsUnreadable => (LoginCodes.DetailsUnreadable, DetailsAgainText),
         AuthRefused { Reason: { } reason } => (LoginCodes.AuthFailed, PolAccountNotices.LogInRefused(reason, region)),
         AuthRefused => (LoginCodes.AuthFailed, RefusedText),
+        // the hook can't tell an outage from a block, both come back in the account range
+        AccountBlocked blocked when PolAccountNotices.ServerProblem(blocked.Notice) is { } outage => (LoginCodes.Unfinished, outage),
         AccountBlocked blocked => (LoginCodes.AccountBlocked, PolAccountNotices.Blocked(blocked.Notice, region, viewerLanguage)),
         ListLoadFailed failed => (LoginCodes.Unfinished, LoadFailedText(failed.List)),
         NoHandle => (LoginCodes.NoPolHandle, NoPolHandleText),

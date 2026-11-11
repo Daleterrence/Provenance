@@ -32,6 +32,7 @@ public static class SocialSnapshotFiles
             {
                 SendJob = Job(root, "send"),
                 FriendsLoaded = Bool(root, "friendsLoaded"),
+                Lean = Bool(root, "lean"),
                 Mail = Str(root, "mail"),
                 StatusBusy = Bool(root, "statusBusy"),
                 NoticeDays = Int(root, "noticeDays", 0),

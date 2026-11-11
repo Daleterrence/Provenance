@@ -64,6 +64,7 @@
 #define REQ_GROUPCHATJOIN "groupchatjoin"
 #define REQ_GROUPCHATSEND "groupchatsend"
 #define REQ_GROUPCHATLEAVE "groupchatleave"
+#define REQ_FULL "full"
 
 #define IPC_LOG "log"
 #define IPC_SOCIAL "social.json"

@@ -350,7 +350,7 @@ static void login_prestart_wait(void)
 {
     static const char *allowed[] = { ENV_CRED_POL, ENV_CRED_SEA, ENV_CRED_ONESHOT, ENV_CRED_OTP,
                                      ENV_CRED_HANDLE, ENV_CRED_PLAY, ENV_CRED_CHAT, ENV_STATUS, ENV_HOME,
-                                     ENV_HANDLE };
+                                     ENV_HANDLE, ENV_LEAN };
     char gp[MAX_PATH + 64];
     if (!base_getenv_set(ENV_PRESTART)) return;
     base_ipc_file(gp, IPC_GO);
@@ -417,6 +417,28 @@ static void login_loads(BYTE *b, struct pending_load *run, int n)
     login_run_loads(b, run, 1);
     if (run[0].res == 1) login_run_loads(b, run + 1, n - 1);
 }
+/* a load refused with an account status (-0x1450 and down: suspended, IP restricted, password changed...) turns
+   the account away, any other failure signs out too, like the viewer */
+static void login_loads_check(BYTE *b, struct pending_load *run, int n)
+{
+    char what[48];
+    int i;
+    for (i = 0; i < n; i++)
+        if (run[i].res <= ACCOUNT_REFUSED_TOP && run[i].res >= ACCOUNT_REFUSED_BOTTOM) {
+            wsprintfA(what, "load:%s=%d", run[i].name, run[i].res);
+            login_account_blocked(b, what);
+        }
+    for (i = 0; i < n; i++)
+        if (run[i].res != 1) {
+            base_log(LOG_LOAD_FAILED "%s=%d - signed out, nothing started\r\n", run[i].name, run[i].res);
+            login_viewer_sign_out(b);
+            base_end_pol(LIST_LOAD_EXIT);
+        }
+    if (pc_has(b, SV_BAD_PASSWORD_FLAG) && (pc_bad_password_flag(b) & 0xff)) {
+        g_bad_password = 1;
+        base_log("phase_c: bad password flag set (Viewer message 0x7007)\r\n");
+    }
+}
 static void log_in(HMODULE pc)
 {
     BYTE *b = (BYTE *)pc;
@@ -433,7 +455,7 @@ static void log_in(HMODULE pc)
     };
     struct pending_load *run;
     unsigned sm, flags;
-    int r, i, rc, nrun, jail, last = -1;
+    int r, rc, nrun, jail, last = -1;
     login_prestart_wait();
     g_lean = base_getenv_set(ENV_LEAN);
     if (!cred_read_details(ENV_CRED_POL, "POL", id, sizeof id, pw, sizeof pw)) return;
@@ -512,23 +534,7 @@ static void log_in(HMODULE pc)
     run = login_set(all, &nrun);
     login_loads(b, run, nrun);
     g_friends_loaded = all[1].res == 1;
-    /* a load refused with an account status (-0x1450 and down: suspended, IP restricted, password changed...) turns
-       the account away, any other failure signs out too, like the viewer */
-    for (i = 0; i < nrun; i++)
-        if (run[i].res <= ACCOUNT_REFUSED_TOP && run[i].res >= ACCOUNT_REFUSED_BOTTOM) {
-            wsprintfA(what, "load:%s=%d", run[i].name, run[i].res);
-            login_account_blocked(b, what);
-        }
-    for (i = 0; i < nrun; i++)
-        if (run[i].res != 1) {
-            base_log(LOG_LOAD_FAILED "%s=%d - signed out, nothing started\r\n", run[i].name, run[i].res);
-            login_viewer_sign_out(b);
-            base_end_pol(LIST_LOAD_EXIT);
-        }
-    if (pc_has(b, SV_BAD_PASSWORD_FLAG) && (pc_bad_password_flag(b) & 0xff)) {
-        g_bad_password = 1;
-        base_log("phase_c: bad password flag set (Viewer message 0x7007)\r\n");
-    }
+    login_loads_check(b, run, nrun);
     login_ffxi_gate_read(b);
     rc = login_handle_bootstrap(b);
     if (rc) {

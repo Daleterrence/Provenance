@@ -49,7 +49,7 @@ public static class HookContract
 
         // a pre-started pol.exe's go file carries these, the hook drops any other key
         public static readonly string[] GoFile =
-            [CredPol, CredSea, CredOneshot, CredOtp, CredHandle, CredPlay, CredChat, Status, Home, Handle];
+            [CredPol, CredSea, CredOneshot, CredOtp, CredHandle, CredPlay, CredChat, Status, Home, Handle, Lean];
     }
 
     // a request file is pol_hook.<pid>.<name>, written by the app, and the hook renames it to .taking while it reads it
@@ -81,12 +81,13 @@ public static class HookContract
         public const string GroupChatJoin = "groupchatjoin";
         public const string GroupChatSend = "groupchatsend";
         public const string GroupChatLeave = "groupchatleave";
+        public const string Full = "full";
 
         public static readonly string[] All =
         [
             Send, Status, Ack, Comment, Pic, Friend, Answer, Search, Profile, Group, MyProfile, SaveProfile, Rename,
             Character, FfxiProfile, ChatZones, ChatRooms, ChatJoin, ChatSend, ChatLeave, ChatCreate, ChatMaster,
-            Handle, GroupChatJoin, GroupChatSend, GroupChatLeave,
+            Handle, GroupChatJoin, GroupChatSend, GroupChatLeave, Full,
         ];
     }
 

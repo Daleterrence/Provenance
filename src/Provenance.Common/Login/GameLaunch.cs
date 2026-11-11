@@ -12,11 +12,21 @@ namespace Provenance.Common.Login;
 public sealed record ClaimResult(string? Otp, string? InUse, bool OtpCancelled);
 
 public sealed record LaunchLogin(Account Account, PolAccount Pol, SquareEnixAccount SquareEnix, string Otp, int HomeSlot, bool Lean,
-                                 string? ThirdPartyHookProfile, IProgress<LaunchProgress>? Progress, Func<string?>? AskHandleName);
+                                 string? ThirdPartyHookProfile, IProgress<LaunchProgress>? Progress, Func<string?>? AskHandleName,
+                                 Func<bool>? BeforePol = null);
 
 public sealed record LogInResult(int Code, int? Refusal);
 
+// Code and Text are what a login gives, Snapshot the first one that's full and online
+public sealed record GoFullResult(int Code, string? Text, PolSocialSnapshot? Snapshot = null);
+
 public sealed record GameUpdateResult(bool Done, bool Cancelled, Exception? Error);
+
+// the game's version check, made once for a start: what the server said, or why it couldn't be asked
+public sealed record GameCheck(VersionCheck? Version, Exception? Error)
+{
+    public bool UpToDate => Version is { UpToDate: true };
+}
 
 public sealed record PlaySignal(bool Sent, string? KeyProblem, Exception? Error = null);
 
@@ -25,7 +35,9 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
     public static readonly TimeSpan PlayAnswerTimeout = TimeSpan.FromSeconds(15);
 
     internal Func<(string Ffxi, string Viewer, PolRegion Region)?>? FolderSeam { get; init; }
-    internal Func<string, string, PolRegion, IProgress<PatchProgress>?, CancellationToken, PatchResult>? UpdateSeam { get; init; }
+    internal Func<string, string, PolRegion, VersionCheck?, IProgress<PatchProgress>?, CancellationToken, PatchResult>? UpdateSeam { get; init; }
+    internal Func<string, string, PolRegion, IProgress<PatchProgress>?, CancellationToken, VersionCheck>? CheckSeam { get; init; }
+    internal Func<CancellationToken, Task<GoFullResult>>? GoFullSeam { get; init; }
     internal Action? SignalPlaySeam { get; init; }
     internal Action<string?>? WriteOptionsSeam { get; init; }
     internal Func<LaunchLogin, CancellationToken, Task<int>>? LogInSeam { get; init; }
@@ -51,6 +63,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
             ProfileId = l.Account.Id,
             Progress = l.Progress,
             AskHandleName = l.AskHandleName,
+            BeforePol = l.BeforePol,
             Options = new SessionOptions(l.Lean, l.ThirdPartyHookProfile, l.HomeSlot, HandleKey: l.Account.HandleKey),
         }, ct);
         return new(code, pol.LastRefusalReason);
@@ -62,18 +75,31 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
           && PolPaths.TryGetInstallFolder(settings.RegionOrDefault, GameProduct.Viewer) is { } viewer
             ? (ffxi, viewer, settings.RegionOrDefault) : null;
 
-    public async Task<GameUpdateResult> UpdateGameAsync(IProgress<PatchProgress>? progress, CancellationToken ct)
+    // known is this start's check, so SE's asked once. One that failed is the update's failure, with nothing asked again
+    public async Task<GameUpdateResult> UpdateGameAsync(IProgress<PatchProgress>? progress, CancellationToken ct, GameCheck? known = null)
     {
         if (GameFolders() is not { } dirs) return new(true, false, null);
+        if (known?.Error is { } failed) return new(false, false, failed);
         var update = UpdateSeam ?? PolUpdates.UpdateFfxi;
         try
         {
-            await Task.Run(() => update(dirs.Ffxi, dirs.Viewer, dirs.Region, progress, ct), ct);
+            await Task.Run(() => update(dirs.Ffxi, dirs.Viewer, dirs.Region, known?.Version, progress, ct), ct);
             return new(true, false, null);
         }
         catch (OperationCanceledException ex) { return new(false, true, ex); }
         catch (Exception ex) { return new(false, false, ex); }
     }
+
+    // on the caller's thread. Null with no game to check, or when it was cancelled
+    public GameCheck? CheckGame(IProgress<PatchProgress>? progress, CancellationToken ct)
+    {
+        if (GameFolders() is not { } dirs) return null;
+        try { return new((CheckSeam ?? PolUpdates.CheckFfxi)(dirs.Ffxi, dirs.Viewer, dirs.Region, progress, ct), null); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return null; }
+        catch (Exception ex) { return new(null, ex); }
+    }
+
+    public Task<GoFullResult> GoFullAsync(CancellationToken ct) => GoFullSeam is { } seam ? seam(ct) : pol.GoFullAsync(ct);
 
     // where the viewer does it, after the update and right before the game starts
     public Task<PreLaunchResult> LinkAsync(Func<string, bool> ask, Action<string> failed, Action<string> saying, Func<string?> pageWaiting,

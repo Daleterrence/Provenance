@@ -19,6 +19,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
 {
     public HookJob SendJob { get; init; } = HookJob.None;
     public bool FriendsLoaded { get; init; } = true;
+    // a login with no social side, nothing may write a request to its hook
+    public bool Lean { get; init; }
     public string Mail { get; init; } = "";   // "pending", "ok" or "failed"
     public bool StatusBusy { get; init; }
     // LM-02's day count (svc 0xd24), 0 when the hook didn't read one

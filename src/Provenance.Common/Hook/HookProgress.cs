@@ -2,8 +2,9 @@ using Provenance.Common.Login;
 
 namespace Provenance.Common.Hook;
 
-public sealed class HookProgress
+public sealed class HookProgress(bool lean = false)
 {
+    private readonly bool _lean = lean;
     private readonly HashSet<string> _seen = new();
     private bool _ready;
     private int _loadsDone;
@@ -46,7 +47,8 @@ public sealed class HookProgress
                 return Once("cids", "Signed in", "This account has no Content ID for FINAL FANTASY XI.", 0.9);
             case SessionHeld:
                 _ready = true;
-                return Once("held", "Connected", "Going online...", 0.95);
+                // a lean session never goes online, and it's too soon to say the game's starting
+                return _lean ? null : Once("held", "Connected", "Going online...", 0.95);
             case StopRequested:
                 return Once("stop", LaunchProgress.Cancelled(polClosed: true));
             default:

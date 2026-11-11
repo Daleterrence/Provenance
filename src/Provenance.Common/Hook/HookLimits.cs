@@ -34,4 +34,6 @@ public static class HookLimits
     public static readonly TimeSpan GroupChatLine = HookGroupChat + TimeSpan.FromSeconds(5);
     public static readonly TimeSpan GroupChatJoin = HookGroupChat + TimeSpan.FromSeconds(5);
     public static readonly TimeSpan MailInFlight = TimeSpan.FromMinutes(3);
+    // the status load, the groups load, then going online
+    public static readonly TimeSpan GoFull = 3 * PolcoreJob + TimeSpan.FromSeconds(30);
 }

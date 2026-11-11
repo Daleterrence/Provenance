@@ -24,6 +24,7 @@ static void snapshot_social(BYTE *b)
     jw_uint(&w, "noticeDays", g_notice_days);
     jw_lit(&w, "presence", g_presence);
     jw_bool(&w, "friendsLoaded", g_friends_loaded);
+    jw_bool(&w, "lean", g_lean);
     jw_lit(&w, "mail", g_mail_state);
     jw_bool(&w, "statusBusy", g_s.status_job >= 0 || g_s.status_want >= 0);
     jw_bool(&w, "badPassword", g_bad_password);

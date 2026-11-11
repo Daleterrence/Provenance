@@ -23,26 +23,46 @@ static int hold_login_handle(BYTE *b, const char **why)
         if (handle_get(b, i, &rec)) return i;
     return -1;
 }
-/* the hold counts on g_my_slot being a handle in use, and login_handle_bootstrap left the account one, so none by now
-   signs out */
-static void hold_handle(BYTE *b)
+/* the status the player picked for this login, online when there's none */
+static int hold_status_wanted(void)
 {
     char sv[8];
+    if (GetEnvironmentVariableA(ENV_STATUS, sv, sizeof sv) > 0 &&
+        (sv[0] == '0' || sv[0] == '1' || sv[0] == '4'))
+        return sv[0] - '0';
+    return 0;
+}
+/* the hold counts on g_my_slot being a handle in use, and login_handle_bootstrap left the account one, so none by now
+   signs out */
+static const char *hold_handle_pick(BYTE *b)
+{
     const char *why;
-    int want = 0;
     g_my_slot = hold_login_handle(b, &why);
     if (g_my_slot < 0) {
         base_log("hold: " LOG_NO_HANDLE " - signing out (exit %d)\r\n", NO_HANDLE_EXIT);
         login_viewer_sign_out(b);
         base_end_pol(NO_HANDLE_EXIT);
     }
-    if (g_lean) return;
-    if (GetEnvironmentVariableA(ENV_STATUS, sv, sizeof sv) > 0 &&
-        (sv[0] == '0' || sv[0] == '1' || sv[0] == '4'))
-        want = sv[0] - '0';
+    return why;
+}
+static void hold_go_online(BYTE *b, const char *why)
+{
     base_log("presence: going online on handle slot %d, %s (current handle %d)\r\n", g_my_slot, why,
        pc_current_handle(b));
-    login_status_start(b, g_my_slot, want, 1000);
+    login_status_start(b, g_my_slot, hold_status_wanted(), 1000);
+}
+static void hold_handle(BYTE *b)
+{
+    const char *why = hold_handle_pick(b);
+    if (!g_lean) hold_go_online(b, why);
+}
+static void hold_push_callbacks(BYTE *b)
+{
+    void *cb[6];
+    if (!pc_has(b, SV_SET_PUSH_CALLBACKS)) return;
+    chat_frame_push_callbacks(b, cb);
+    pc_set_push_callbacks(b, cb);
+    base_log("mail: push callbacks registered (svc 0xd9c)\r\n");
 }
 
 static void hold_db_reads_abandon(BYTE *b)
@@ -182,6 +202,37 @@ static void hold_sign_out(BYTE *b, const char *spath)
     base_end_pol(0);
 }
 
+/* a lean session made full where it is: what a full login sends after its lists, only later. Status then groups is
+   the viewer's order for those two */
+static void hold_go_full(BYTE *b, const char *spath)
+{
+    struct pending_load run[2] = {
+        { "status", pc_status_load, pc_status_check, 0, 0 },
+        { "groups", pc_groups_load, pc_groups_check, 0, 0 }
+    };
+    if (!g_lean) return;
+    base_log("hold: turning the lean session full\r\n");
+    if (pc_has(b, SV_MESSAGE_NOTICES)) pc_message_notices(b, 1);
+    login_loads(b, run, 2);
+    if (run[0].res != 1 || run[1].res != 1) {
+        DeleteFileA(spath);
+        message_store_drop();
+    }
+    login_loads_check(b, run, 2);
+    g_lean = 0;
+    hold_push_callbacks(b);
+    /* picked again, the status answer can have set polcore's handle */
+    hold_go_online(b, hold_handle_pick(b));
+    message_store_import(b);
+    base_log("hold: full session\r\n");
+    g_snap_dirty = 1;
+}
+static void hold_full_request(BYTE *b, const char *spath)
+{
+    char line[8];
+    if (requests_take(REQ_FULL, line, sizeof line) >= 0) hold_go_full(b, spath);
+}
+
 /* read only: polcore stamps conn+0x39d4 on every send (on a quiet hold, the PONG to the ~125s PING).
    The session drops as -250 at 400s */
 #define LINK_LOG_MS 600000
@@ -232,12 +283,7 @@ static void hold_run(BYTE *b)
     }
     base_log(LOG_HELD "; waiting for Play (POL_CRED_PLAY)\r\n");
     if (g_lean) base_log("hold: lean session (no social)\r\n");
-    if (!g_lean && pc_has(b, SV_SET_PUSH_CALLBACKS)) {
-        void *cb[6];
-        chat_frame_push_callbacks(b, cb);
-        pc_set_push_callbacks(b, cb);
-        base_log("mail: push callbacks registered (svc 0xd9c)\r\n");
-    }
+    if (!g_lean) hold_push_callbacks(b);
     hold_handle(b);
     if (!g_lean) message_store_import(b);
     g_in_hold = 1;
@@ -283,6 +329,7 @@ static void hold_run(BYTE *b)
         }
         if (ctl && !g_lean) mail_inbox_ack_request();
         if (!g_lean) mail_inbox_pump(b);
+        if (ctl) hold_full_request(b, spath);
         hold_turn(b, ctl);
         if (ctl && cred_play_signalled()) {
             if (!g_ffxi_service) {

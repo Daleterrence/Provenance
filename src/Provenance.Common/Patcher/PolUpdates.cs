@@ -35,8 +35,9 @@ public static class PolUpdates
             return r;
         });
 
-    public static PatchResult UpdateFfxi(string ffxiDir, string viewerDir, PolRegion region, IProgress<PatchProgress>? progress,
-                                         CancellationToken ct) =>
+    // known is a check already made for this start, so the server isn't asked twice
+    public static PatchResult UpdateFfxi(string ffxiDir, string viewerDir, PolRegion region, VersionCheck? known,
+                                         IProgress<PatchProgress>? progress, CancellationToken ct) =>
         GameFilesLock.Locked(GameFilesLock.Job.GameUpdate, ct, progress, () =>
         {
             var r = GameUpdate.Run(PatchProduct.Ffxi(ffxiDir, viewerDir, region), region, progress, () =>
@@ -44,9 +45,21 @@ public static class PolUpdates
                 if (GameRunning())
                     throw Shown.Mark(new InvalidOperationException(
                         "FINAL FANTASY XI needs an update, but the game is running. Close every FINAL FANTASY XI window, then press Play again."));
-            }, ct);
+            }, ct, known);
             Log.Information("{Product} update check: {Result}", GameProduct.Game.Name, r);
             return r;
+        });
+
+    // the version check on its own, under the update's lock so it waits its turn behind another copy's
+    public static VersionCheck CheckFfxi(string ffxiDir, string viewerDir, PolRegion region, IProgress<PatchProgress>? progress,
+                                         CancellationToken ct) =>
+        GameFilesLock.Locked(GameFilesLock.Job.GameUpdate, ct, progress, () =>
+        {
+            var product = PatchProduct.Ffxi(ffxiDir, viewerDir, region);
+            progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
+            var check = new PolUpdater(product).Check(ct);
+            Log.Information("{Product} version check: up to date {UpToDate}", product.Name, check.UpToDate);
+            return check;
         });
 
     // swapped in tests, a stand-in can't be at the installed viewer's path

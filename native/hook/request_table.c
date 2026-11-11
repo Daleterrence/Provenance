@@ -74,6 +74,7 @@ static const req_row g_requests[] = {
     { REQ_CHATLEAVE },
     { REQ_HANDLE, RQ_USER, NULL, 0, 0, NULL, NULL, busy_handle },
     { REQ_GROUPCHATLEAVE, RQ_SWEPT },
+    { REQ_FULL },
 };
 #define REQ_ROWS ((int)(sizeof g_requests / sizeof g_requests[0]))
 

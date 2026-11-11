@@ -113,7 +113,8 @@ public static class PolAccountNotices
         if (what == "disconnect-bit") return "PlayOnline disconnected this account as soon as it logged in.";
         if (what == "jail")
             return $"This PlayOnline account is restricted. See {JailUrl(region, language)} for details.";
-        if (what.StartsWith("load:", StringComparison.Ordinal) && int.TryParse(what[(what.IndexOf('=') + 1)..], out var code))
+        if (ServerProblem(what) is { } outage) return outage;
+        if (LoadCode(what) is { } code)
             return code switch
             {
                 -5434 => "Service for the specified PlayOnline ID has been suspended.",
@@ -121,11 +122,17 @@ public static class PolAccountNotices
                 -5332 => "Your PlayOnline password has been changed. Please log in again with the new password.",
                 -5441 or -5442 => "Unauthorized connection to server detected.",
                 >= -5433 and <= -5430 => ConnectionLost,
-                -5370 or -5371 or (>= -5438 and <= -5435) => "The server may be experiencing problems.",
                 _ => $"PlayOnline turned this account away (code {code}).",
             };
         return "PlayOnline turned this account away.";
     }
+
+    private static int? LoadCode(string what) =>
+        what.StartsWith("load:", StringComparison.Ordinal) && int.TryParse(what[(what.IndexOf('=') + 1)..], out var code) ? code : null;
+
+    // a load refused because POL's own servers are in trouble, which says nothing about the account
+    public static string? ServerProblem(string what) =>
+        LoadCode(what) is -5370 or -5371 or (>= -5438 and <= -5435) ? "The server may be experiencing problems." : null;
 
     // a dropped session, the viewer's way: its two disconnect texts, else msg 0x5654 with POL-nnnn (0x5a16) and
     // polerr's text. A -250 (no PING for 400s) only shares LM-30's number
