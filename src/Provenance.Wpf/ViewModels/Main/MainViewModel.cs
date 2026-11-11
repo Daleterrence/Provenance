@@ -127,7 +127,9 @@ public partial class MainViewModel : ObservableObject
         };
         Handles.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(HandlesViewModel.Busy)) Social.HandleSwitching = Handles.Switching;
+            if (e.PropertyName != nameof(HandlesViewModel.Busy)) return;
+            Social.HandleSwitching = Handles.Switching;
+            if (Handles.Busy) DropHandleNotice();
         };
         RefreshInstallState();
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -791,6 +793,7 @@ public partial class MainViewModel : ObservableObject
     {
         Social.Start(profileId, storeRoot);
         Handles.NewLogin();
+        DropHandleNotice();
     }
 
     // fed every snapshot, so a change still going when Settings closes is answered all the same
@@ -877,6 +880,26 @@ public partial class MainViewModel : ObservableObject
         if (choices.Count == 0) menu.Add(new(NoPlayChoicesText, false));
         foreach (var c in choices) menu.Add(new(c.Display, true, () => PickPlayChoice(c.Name)) { Checked = c.Current });
         return menu;
+    }
+
+    // a switch that fails says so in the notice, one that works just changes the footer's name and picture
+    public IReadOnlyList<MenuAction> HandleMenu()
+    {
+        ShowHandles();
+        return Handles.SwitchMenu(text =>
+        {
+            Notice.Show(text, "AlertCircleOutline", stays: true);
+            _handleNotice = Notice.Current;
+        });
+    }
+
+    private Notice? _handleNotice;
+
+    // what the menu last said went wrong isn't true any more once another change is going, or it's a new login
+    private void DropHandleNotice()
+    {
+        Notice.Drop(_handleNotice);
+        _handleNotice = null;
     }
 
     public void PickPlayChoice(string name)

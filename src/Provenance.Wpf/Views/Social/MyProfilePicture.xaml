@@ -1,8 +1,8 @@
 <UserControl x:Class="Provenance.Wpf.Views.Social.MyProfilePicture"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+             ToolTip="Change your profile picture">
     <controls:ProfilePictureCircle Diameter="{Binding Diameter, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                   Source="{Binding Avatar}" Cursor="Hand" ToolTip="Change your profile picture"
-                                   MouseLeftButtonUp="OnClick" />
+                                   Source="{Binding Avatar}" Cursor="Hand" MouseLeftButtonUp="OnClick" />
 </UserControl>

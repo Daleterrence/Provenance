@@ -30,6 +30,7 @@ public static class HandleList
     public const string NoCharactersText = "No characters linked to this handle.";
     public const string NotLoggedInText = "You're not logged in to PlayOnline.";
     public const string PageBusyText = "Another handle change is still going. Try again in a moment.";
+    public const string SwitchMenuTitle = "Active handle";
 
     // the viewer's own fallback for a record with no name
     public static string Label(PolContentId c) => string.IsNullOrWhiteSpace(c.Name) ? "Content ID" : c.Name.Trim();

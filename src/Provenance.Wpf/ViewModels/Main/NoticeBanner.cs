@@ -59,6 +59,12 @@ public partial class NoticeBanner : ObservableObject
         if (Current is { Request: not 0 }) Current = null;
     }
 
+    // only while it's still the one showing, whatever's replaced it stays
+    public void Drop(Notice? notice)
+    {
+        if (notice is not null && ReferenceEquals(Current, notice)) Current = null;
+    }
+
     // answered here, the request leaves the list and the notice goes with it
     public void DropIfAnswered(Func<int, bool> isWaiting)
     {

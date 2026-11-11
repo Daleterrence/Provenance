@@ -6,7 +6,13 @@
     <Border Height="44" Style="{StaticResource FooterBar}" Padding="16,0">
         <Grid ColumnDefinitions="Auto,*,Auto">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <social:MyProfilePicture Diameter="32" Margin="0,0,10,0" DataContext="{Binding Social}" />
+                <social:MyProfilePicture x:Name="MyPicture" Diameter="32" Margin="0,0,10,0" DataContext="{Binding Social}"
+                                         ToolTip="Change your profile picture. Right-click to switch handle."
+                                         ContextMenuOpening="OnHandleMenu">
+                    <social:MyProfilePicture.ContextMenu>
+                        <ContextMenu />
+                    </social:MyProfilePicture.ContextMenu>
+                </social:MyProfilePicture>
                 <TextBlock Text="{Binding Social.AccountName}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <social:EditProfileButton Margin="4,0,0,0" VerticalAlignment="Center" DataContext="{Binding Social}" />
                 <!-- locked with a spinner until POL confirms -->

@@ -192,9 +192,46 @@ public partial class HandlesViewModel : ObservableObject
             Note.Fail(why);
             return;
         }
-        if (!_dialogs.Confirm("Switch Handle", HandleList.SwitchQuestion(row.Handle, InChatRoom), "SWITCH")) return;
+        StartSwitch(row);
+    }
+
+    private bool StartSwitch(HandleRow row)
+    {
+        if (!_dialogs.Confirm("Switch Handle", HandleList.SwitchQuestion(row.Handle, InChatRoom), "SWITCH")) return false;
         Send(HandleChange.Switch, (pid, token) => SocialRequests.SwitchHandle(pid, token, row.Handle),
              HandleList.Done(HandleChange.Switch, row.Name, ""));
+        return true;
+    }
+
+    private string? SwitchRefusal() =>
+        ReadOnlyText ?? (Busy || Switching ? HandleList.PageBusyText : null) ?? SwitchBlocked?.Invoke();
+
+    public IReadOnlyList<MenuAction> SwitchMenu(Action<string> failed)
+    {
+        if (!LoggedIn || Rows.Count == 0) return [];
+        var why = SwitchRefusal();
+        var menu = new List<MenuAction> { new(HandleList.SwitchMenuTitle, false) { Detail = why ?? "" }, MenuAction.Separator };
+        foreach (var row in Rows)
+        {
+            int slot = row.Handle.Slot;
+            // Detail makes the name a text block, a plain header would lose an underscore to the access keys
+            menu.Add(new(row.Name, why is null, row.Active ? null : () => SwitchFromMenu(slot, failed)) { Checked = row.Active, Detail = "" });
+        }
+        return menu;
+    }
+
+    // the menu can be a few seconds old by the time something's picked, so it's all checked again
+    private void SwitchFromMenu(int slot, Action<string> failed)
+    {
+        if (!LoggedIn || Rows.FirstOrDefault(r => r.Handle.Slot == slot) is not { Active: false } row) return;
+        if (SwitchRefusal() is { } why)
+        {
+            failed(why);
+            return;
+        }
+        if (!StartSwitch(row)) return;
+        if (!_watch.Running) failed(Note.Text);
+        else _after = text => { if (text is not null) failed(text); };
     }
 
     // a note from the last login's change doesn't show under the next one
