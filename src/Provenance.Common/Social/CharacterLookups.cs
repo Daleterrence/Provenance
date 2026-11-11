@@ -10,6 +10,9 @@ public sealed class CharacterLookups(CharacterNames names)
     private readonly List<(PolFriendGame Game, string Friend)> _queue = new();
     // friends asked about this login. A character hidden last time may be shown by now, so its friend gets one more ask
     private readonly HashSet<string> _asked = new(StringComparer.Ordinal);
+    // ones whose request never got written. They get their ask back at their next presence change
+    private readonly HashSet<string> _unsent = new(StringComparer.Ordinal);
+    private string _askingFor = "";
     // ones given up on, in case the hook took them late and still answers
     private readonly List<(string Token, PolFriendGame Game)> _late = new();
     private readonly HookJobWatch _watch = new();
@@ -32,7 +35,9 @@ public sealed class CharacterLookups(CharacterNames names)
             var key = game?.Character.Key ?? "";
             now[id] = key;
             if (game is null) continue;
-            bool wanted = names.Get(key) is null ? !_seen.TryGetValue(id, out var was) || was != key : AskAgain(key, id);
+            bool moved = !_seen.TryGetValue(id, out var was) || was != key;
+            if (moved && _unsent.Remove(id)) _asked.Remove(id);
+            bool wanted = names.Get(key) is null ? moved : AskAgain(key, id);
             if (!wanted || Asking?.Character.Key == key || _queue.Exists(q => q.Game.Character.Key == key)) continue;
             _queue.Add((game, id));
         }
@@ -55,9 +60,9 @@ public sealed class CharacterLookups(CharacterNames names)
         _queue.RemoveAll(q => (names.Get(q.Game.Character.Key) is not null && !AskAgain(q.Game.Character.Key, q.Friend))
                               || !_seen.ContainsValue(q.Game.Character.Key));
         if (_queue.Count == 0) return null;
-        (Asking, var friend) = _queue[0];
+        (Asking, _askingFor) = _queue[0];
         _queue.RemoveAt(0);
-        _asked.Add(friend);
+        _asked.Add(_askingFor);
         _watch.Begin(HookLimits.CharacterLookup, now);
         _last = now;
         return Asking;
@@ -79,7 +84,11 @@ public sealed class CharacterLookups(CharacterNames names)
         return true;
     }
 
-    public void Failed() => Asking = null;
+    public void Failed()
+    {
+        if (Asking is not null) _unsent.Add(_askingFor);
+        Asking = null;
+    }
 
     // the give-up clock only starts once the hook's taken it, it waits while the hook's busy with another read
     public void Waiting(string hookToken, bool hookBusy, DateTime now)
@@ -92,6 +101,7 @@ public sealed class CharacterLookups(CharacterNames names)
     {
         _queue.Clear();
         _asked.Clear();
+        _unsent.Clear();
         _late.Clear();
         Asking = null;
         _watch.Forget();

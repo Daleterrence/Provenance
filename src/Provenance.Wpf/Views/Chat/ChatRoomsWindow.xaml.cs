@@ -17,7 +17,7 @@ namespace Provenance.Wpf.Views.Chat;
 public partial class ChatRoomsWindow : AppWindow
 {
     private readonly ChatRoomsViewModel _vm;
-    private bool _quiet, _asking;
+    private bool _quiet, _asking, _leaving, _closed;
 
     public ChatRoomsWindow(SocialViewModel social, IDialogs dialogs, Func<string, string, bool> savePassword, Action dropPassword,
                            Func<int, ImageSource?>? emote = null)
@@ -25,7 +25,11 @@ public partial class ChatRoomsWindow : AppWindow
         InitializeComponent();
         DataContext = _vm = new ChatRoomsViewModel(social, dialogs, savePassword, dropPassword, emote);
         Loaded += (_, _) => _vm.Start();
-        Closed += (_, _) => _vm.Dispose();
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            _vm.Dispose();
+        };
     }
 
     // Esc in a room is for the room
@@ -36,28 +40,38 @@ public partial class ChatRoomsWindow : AppWindow
     {
         _quiet = true;
         _vm.CloseQuietly();
-        // with the leave question up this is inside Closing, where Close throws. Its answer lets the window go
-        if (!_asking) Close();
+        Close();
     }
 
-    // closing leaves the room, so in one it asks first. Once the app's going there's nobody to answer
+    // in a room a close is turned down and the question asked after it, as a window stuck inside Closing can't be closed by the app exiting
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (_asking || (_vm.InRoom && !_quiet && !WindowOwner.AppClosing && !ConfirmLeave()))
+        if (_vm.InRoom && !_quiet && !_leaving && !WindowOwner.AppClosing)
         {
             e.Cancel = true;
+            if (_asking) return;
+            _asking = true;
+            Dispatcher.BeginInvoke(AskToLeave);
             return;
         }
         base.OnClosing(e);
     }
 
-    private bool ConfirmLeave()
+    private void AskToLeave()
     {
-        // closed from the taskbar it can be minimised or behind something, and the question goes over the active window
-        WindowManager.BringBack(this);
-        _asking = true;
-        try { return _vm.ConfirmLeave() || _quiet; }
+        try
+        {
+            if (_closed) return;
+            // closed from the taskbar it can be minimised or behind something, and the question goes over the active window
+            WindowManager.BringBack(this);
+            if (_vm.InRoom && !_vm.ConfirmLeave()) return;
+        }
         finally { _asking = false; }
+        // the app or the session can have taken the window while the question was up
+        if (_closed) return;
+        _leaving = true;
+        try { Close(); }
+        finally { _leaving = false; }
     }
 
     private void OnRoomDoubleClick(object sender, MouseButtonEventArgs e)

@@ -143,8 +143,8 @@ public sealed class TrayIcon : IDisposable
     private static readonly FieldInfo? IconWindow = typeof(System.Windows.Forms.NotifyIcon).GetField("_window", Hidden),
                                        IconId = typeof(System.Windows.Forms.NotifyIcon).GetField("_id", Hidden);
 
-    // WinForms can only give a notice one of Windows' stock pictures or none, so the large frame goes to Windows directly.
-    // It wants the icon's window and id for that, and WinForms keeps those to itself
+    // WinForms only does Windows' stock pictures on a notice, so this one goes to Windows directly.
+    // That needs the icon's window and id, which WinForms keeps private
     private bool ShowWithPicture(string title, string text)
     {
         if (IconWindow?.GetValue(_icon) is not System.Windows.Forms.NativeWindow { Handle: var window } || window == IntPtr.Zero
