@@ -18,7 +18,7 @@
                        Visibility="{Binding MultiRunGoing, Converter={StaticResource BoolToVis}}" />
             <StackPanel IsEnabled="{Binding MultiEditable}" Style="{StaticResource DimWhenOff}">
                 <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding MultiContinueOnError}" Margin="0,0,0,4">
-                    <TextBlock Text="Continue multi-account process on error" TextWrapping="Wrap" />
+                    <TextBlock Text="Continue multi-login process on error" TextWrapping="Wrap" />
                 </CheckBox>
                 <TextBlock Style="{StaticResource Help}" Margin="26,0,0,10"
                            Text="If one of the accounts fails to log in due to an incorrect password, no subscription, or other problem, carry on logging in the other accounts. Disabling this option will make Provenance stop if there's an error logging in to an account. Some problems, like a failed game update, always stop the run." />
