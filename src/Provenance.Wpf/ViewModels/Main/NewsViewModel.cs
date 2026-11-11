@@ -103,13 +103,17 @@ public partial class NewsViewModel : ObservableObject
         if (list.Count == 0)
         {
             if (Worlds.Count == 0) { WorldsSummary = "World status isn't available"; WorldsState = ""; }
+            // nothing new came back, so the counts on show would only get older
+            for (int i = 0; i < Worlds.Count; i++)
+                if (Worlds[i].Online != null) Worlds[i] = Worlds[i] with { Online = null };
             return;
         }
         // only a good read counts, a saved copy's tried again on the next tick
         if (!fetch.Stale) _worldsAt = Now;
         WorldsCheckedText = "Checked at " + fetch.At!.Value.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
         Worlds.Clear();
-        foreach (var w in list) Worlds.Add(w);
+        // a saved copy can be hours old, which is fine for a status and no good for a count
+        foreach (var w in list) Worlds.Add(fetch.Stale ? w with { Online = null } : w);
         var notUp = list.Where(w => !w.IsUp).ToList();
         bool onlyMaintenance = notUp.All(w => w.Status is "maintenance" or "partial-maintenance");
         WorldsSummary = notUp.Count switch

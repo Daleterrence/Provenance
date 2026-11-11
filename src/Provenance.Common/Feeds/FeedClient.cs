@@ -81,9 +81,16 @@ public sealed class FeedClient
             foreach (var w in arr.EnumerateArray())
                 if (w.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String)
                     list.Add(new WorldStatus(n.GetString() ?? "",
-                        w.TryGetProperty("status", out var st) && st.ValueKind == JsonValueKind.String ? st.GetString() ?? "unknown" : "unknown"));
+                        w.TryGetProperty("status", out var st) && st.ValueKind == JsonValueKind.String ? st.GetString() ?? "unknown" : "unknown",
+                        OnlineCount(w)));
         return list;
     }
+
+    // the kind's checked first, TryGetInt32 throws on the null a world with no count carries
+    private static int? OnlineCount(JsonElement world) =>
+        world.TryGetProperty("online", out var n) && n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out int count) && count >= 0
+            ? count
+            : null;
 
     private async Task<FeedFetch<T>> FetchAsync<T>(string url, Func<string, IReadOnlyList<T>> parse, CancellationToken ct)
     {

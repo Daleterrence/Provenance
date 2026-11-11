@@ -1,3 +1,4 @@
+using System.Globalization;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Feeds;
@@ -41,7 +42,7 @@ public enum InfoCategory { None, Important, Maintenance, General, Events, Update
 
 public enum InfoBadge { None, Outage, Maintenance, Recovery, FollowUp }
 
-public sealed record WorldStatus(string Name, string Status)
+public sealed record WorldStatus(string Name, string Status, int? Online = null)
 {
     public string Label => Status switch
     {
@@ -54,4 +55,7 @@ public sealed record WorldStatus(string Name, string Status)
     };
 
     public bool IsUp => Status == "up";
+
+    // invariant, so the separator's a comma whatever the PC's set to
+    public string OnlineText => Online is { } n ? n.ToString("N0", CultureInfo.InvariantCulture) + " online" : "";
 }
