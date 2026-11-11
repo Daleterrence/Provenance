@@ -64,7 +64,7 @@
                             </TextBox>
                         </Border>
                         <TextBlock x:Name="Meta" FontSize="10.5" Margin="6,2,6,0" Foreground="{DynamicResource Text.3}"
-                                   Text="{Binding TimeText}" ToolTip="{Binding WhenText}" />
+                                   Text="{Binding TimeText}" />
                         <StackPanel x:Name="SendState" Orientation="Horizontal" Margin="6,0" HorizontalAlignment="Right"
                                     Visibility="Collapsed">
                             <TextBlock x:Name="SendStateText" FontSize="10.5" Foreground="{DynamicResource Text.3}" Text="{Binding StateText}" />
@@ -113,7 +113,7 @@
             </controls:TitleBar.IconContent>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="AddFriendButton" Height="28" Margin="0,0,8,0" Padding="6,0,10,0" Style="{StaticResource PolButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                        IsEnabled="{Binding CanEdit}" Click="OnAddFriend" ToolTip="Search PlayOnline and send a friend request" AutomationProperties.Name="Search PlayOnline and send a friend request">
+                        IsEnabled="{Binding CanEdit}" Click="OnAddFriend" AutomationProperties.Name="Search PlayOnline and send a friend request">
                     <StackPanel Orientation="Horizontal">
                         <controls:SvgIcon Glyph="search" />
                         <TextBlock Text="ADD A FRIEND" Margin="6,0,0,0" FontSize="12" VerticalAlignment="Center" />
@@ -221,7 +221,7 @@
                                              KeyDown="OnCommentKey" GotKeyboardFocus="OnCommentFocus" LostKeyboardFocus="OnCommentLostFocus" />
                                     <controls:SvgIcon Grid.Column="1" Glyph="edit" Flat="True" Width="12" Height="12" Margin="4,0,2,0"
                                                       VerticalAlignment="Center" Foreground="{DynamicResource Text.3}" Cursor="Hand"
-                                                      Background="Transparent" ToolTip="Edit your comment" MouseLeftButtonUp="OnCommentPencil">
+                                                      Background="Transparent" MouseLeftButtonUp="OnCommentPencil">
                                         <controls:SvgIcon.Style>
                                             <Style TargetType="controls:SvgIcon">
                                                 <Style.Triggers>
@@ -271,7 +271,7 @@
                                     <StackPanel Margin="0,0,0,6">
                                         <!-- the menu's filled as it opens, the dots button opens the same one -->
                                         <Border Padding="12,6,8,6" Background="Transparent"
-                                                ContextMenuOpening="OnRowMenu" ToolTip="Right-click for group options">
+                                                ContextMenuOpening="OnRowMenu">
                                             <Border.ContextMenu>
                                                 <ContextMenu />
                                             </Border.ContextMenu>
@@ -283,7 +283,7 @@
                                                     <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="{DynamicResource Text.3}" />
                                                 </StackPanel>
                                                 <Border Grid.Column="1" Style="{StaticResource CountBadge}"
-                                                        Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}" ToolTip="New group chat lines">
+                                                        Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}">
                                                     <TextBlock Text="{Binding Unread}" Style="{StaticResource CountBadgeText}" />
                                                 </Border>
                                                 <Button x:Name="GroupChatButton" Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
@@ -297,7 +297,7 @@
                                                 </Button>
                                                 <Button Grid.Column="3" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
                                                         Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
-                                                        ToolTip="Group actions" AutomationProperties.Name="Group actions" Click="OnRowMenuButton">
+                                                        AutomationProperties.Name="Group actions" Click="OnRowMenuButton">
                                                     <controls:SvgIcon Glyph="more" Width="20" Height="20" />
                                                 </Button>
                                             </Grid>
@@ -314,7 +314,7 @@
                                                         <controls:ProfilePictureCircle Diameter="30" Margin="0,0,10,0"
                                                                                        Source="{Binding Avatar}" />
                                                         <Button Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
-                                                                Foreground="{DynamicResource Text.3}" ToolTip="Member actions" AutomationProperties.Name="Member actions" Click="OnRowMenuButton">
+                                                                Foreground="{DynamicResource Text.3}" AutomationProperties.Name="Member actions" Click="OnRowMenuButton">
                                                             <Button.Style>
                                                                 <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
                                                                     <Style.Triggers>
@@ -349,7 +349,7 @@
                 </Grid>
             </Grid>
 
-            <GridSplitter x:Name="PartSplitter" Grid.Column="1" Style="{StaticResource PaneSplitter}" ToolTip="Drag to resize" />
+            <GridSplitter x:Name="PartSplitter" Grid.Column="1" Style="{StaticResource PaneSplitter}" AutomationProperties.HelpText="Drag to resize" />
 
             <Grid x:Name="MessagesPart" Grid.Column="2" Background="{DynamicResource Bg.Base}">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24"
@@ -373,7 +373,7 @@
                         <Grid>
                             <Button HorizontalAlignment="Right" VerticalAlignment="Center" Width="32" Height="32" Padding="0"
                                     Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
-                                    ToolTip="Actions for this person" AutomationProperties.Name="Actions for this person" Click="OnConversationMenu">
+                                    AutomationProperties.Name="Actions for this person" Click="OnConversationMenu">
                                 <controls:SvgIcon Glyph="more" Width="20" Height="20" />
                             </Button>
                             <Grid Margin="0,0,40,0" ColumnDefinitions="Auto,*">

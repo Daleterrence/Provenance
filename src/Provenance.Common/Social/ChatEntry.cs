@@ -19,19 +19,6 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
 
     public DateTimeOffset When => DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime();
 
-    public string WhenText
-    {
-        get
-        {
-            var w = When;
-            var now = DateTimeOffset.Now;
-            var t = w.ToString("t", CultureInfo.CurrentCulture);
-            if (w.Date == now.Date) return t;
-            if (w.Date == now.Date.AddDays(-1)) return "Yesterday " + t;
-            return w.Year == now.Year ? $"{w:d MMM} {t}" : $"{w:d MMM yyyy} {t}";
-        }
-    }
-
     public string TimeText => When.ToString("t", CultureInfo.CurrentCulture);
 
     // never saved, it depends on the lines round it and today's date

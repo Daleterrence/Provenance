@@ -22,7 +22,7 @@ public class TitleBar : ContentControl
     public static readonly DependencyProperty GlyphSizeProperty = Register(nameof(GlyphSize), typeof(double), 18.0);
     public static readonly DependencyProperty ShowMaximiseProperty = Register(nameof(ShowMaximise), typeof(bool), false);
     public static readonly DependencyProperty ShowCloseProperty = Register(nameof(ShowClose), typeof(bool), true);
-    public static readonly DependencyProperty CloseToolTipProperty = Register(nameof(CloseToolTip), typeof(string), "Close");
+    public static readonly DependencyProperty CloseToolTipProperty = Register(nameof(CloseToolTip), typeof(string), null);
     public static readonly DependencyProperty CloseNameProperty = Register(nameof(CloseName), typeof(string), "Close");
 
     private static readonly DependencyPropertyKey IsMaximisedKey = DependencyProperty.RegisterReadOnly(
@@ -55,7 +55,7 @@ public class TitleBar : ContentControl
     public double GlyphSize { get => (double)GetValue(GlyphSizeProperty); set => SetValue(GlyphSizeProperty, value); }
     public bool ShowMaximise { get => (bool)GetValue(ShowMaximiseProperty); set => SetValue(ShowMaximiseProperty, value); }
     public bool ShowClose { get => (bool)GetValue(ShowCloseProperty); set => SetValue(ShowCloseProperty, value); }
-    public string CloseToolTip { get => (string)GetValue(CloseToolTipProperty); set => SetValue(CloseToolTipProperty, value); }
+    public string? CloseToolTip { get => (string?)GetValue(CloseToolTipProperty); set => SetValue(CloseToolTipProperty, value); }
     public string CloseName { get => (string)GetValue(CloseNameProperty); set => SetValue(CloseNameProperty, value); }
     public bool IsMaximised => (bool)GetValue(IsMaximisedProperty);
 

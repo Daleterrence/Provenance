@@ -96,22 +96,22 @@
                 <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="6,0,2,0" VerticalAlignment="Center"
                             Visibility="{Binding ShowProfileTools, Converter={StaticResource BoolToVis}}">
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding Hooks.AddProfileCommand}" IsEnabled="{Binding Hooks.CanManageProfiles}"
-                            ToolTip="{Binding Hooks.ProfileNoun, StringFormat='Add a {0}'}"
+                            ToolTip="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource Self}}"
                             AutomationProperties.Name="{Binding Hooks.ProfileNoun, StringFormat='Add a {0}'}">
                         <controls:SvgIcon Glyph="add" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding Hooks.DuplicateProfileCommand}" IsEnabled="{Binding Hooks.CanCopyProfile}"
-                            ToolTip="{Binding Hooks.ProfileNoun, StringFormat='Duplicate this {0}'}"
+                            ToolTip="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource Self}}"
                             AutomationProperties.Name="{Binding Hooks.ProfileNoun, StringFormat='Duplicate this {0}'}">
                         <controls:SvgIcon Glyph="copy" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding Hooks.RenameProfileCommand}" IsEnabled="{Binding Hooks.CanChangeProfile}"
-                            ToolTip="{Binding Hooks.ProfileNoun, StringFormat='Rename this {0}'}"
+                            ToolTip="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource Self}}"
                             AutomationProperties.Name="{Binding Hooks.ProfileNoun, StringFormat='Rename this {0}'}">
                         <controls:SvgIcon Glyph="edit" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource ProfileTool}" Command="{Binding Hooks.DeleteProfileCommand}" IsEnabled="{Binding Hooks.CanChangeProfile}"
-                            ToolTip="{Binding Hooks.ProfileNoun, StringFormat='Delete this {0}'}"
+                            ToolTip="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource Self}}"
                             AutomationProperties.Name="{Binding Hooks.ProfileNoun, StringFormat='Delete this {0}'}">
                         <controls:SvgIcon Glyph="delete" Width="20" Height="20" />
                     </Button>

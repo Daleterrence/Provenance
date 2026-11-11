@@ -55,6 +55,9 @@ public sealed class FitText : FrameworkElement
 
     public string Shown => _text.Text;
 
+    // showing the short form, or not even all of that
+    public bool IsCut => Shown != (Long ?? "") || TextWidth(Shown) > ActualWidth + 0.5;
+
     protected override int VisualChildrenCount => 1;
 
     protected override Visual GetVisualChild(int index) =>

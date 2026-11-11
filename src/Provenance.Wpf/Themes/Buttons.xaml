@@ -258,7 +258,7 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Command" Value="{Binding Repair.StartCommand}" />
         <Setter Property="Visibility" Value="{Binding Repair.Available, Converter={StaticResource BoolToVis}}" />
-        <Setter Property="ToolTip" Value="{Binding Repair.Tooltip}" />
+        <Setter Property="ToolTip" Value="Checks every game file and replaces any that are damaged. It'll ask you before it replaces anything." />
         <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
         <Setter Property="AutomationProperties.Name" Value="Repair game files" />
         <Setter Property="ContentTemplate">

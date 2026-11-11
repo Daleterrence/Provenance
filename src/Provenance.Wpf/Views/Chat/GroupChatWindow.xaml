@@ -50,7 +50,7 @@
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="MoreButton" Width="32" Height="32" Padding="0" Style="{StaticResource IconButton}"
-                            Foreground="{DynamicResource Text.3}" ToolTip="More" AutomationProperties.Name="More" Click="OnMore">
+                            Foreground="{DynamicResource Text.3}" AutomationProperties.Name="More" Click="OnMore">
                         <controls:SvgIcon Glyph="more" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource PolButton}" FontSize="12" Content="CLOSE" Click="OnHide"
@@ -97,7 +97,7 @@
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" IsEnabled="{Binding InChat}"
                          behaviours:ComposeBox.Send="{Binding SendCommand}" behaviours:ComposeBox.Rules="{Binding ComposeRules}" />
                 <Button Grid.Column="1" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom" Style="{StaticResource PolButton}"
-                        Command="{Binding SendCommand}" Content="SEND" ToolTip="Send the message entered into the text area." />
+                        Command="{Binding SendCommand}" Content="SEND" />
                 <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource State.Warn}"
                            Text="{Binding ComposeNote}" Visibility="{Binding ComposeNote, Converter={StaticResource NullToVisibilityConverter}}" />
             </Grid>

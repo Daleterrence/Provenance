@@ -18,7 +18,6 @@ namespace Provenance.Wpf.ViewModels.Main;
 // ending it would sign the account out
 public partial class RepairButtonViewModel : ObservableObject
 {
-    private const string Hint = "Checks every game file and replaces any that are damaged. It'll ask you before it replaces anything.";
     internal static string LockedText(GameFilesLock.Job? holder) =>
         $"Another copy of Provenance is {GameFilesLock.Doing(holder)}. Repair can start once it's finished.";
     internal const string GameRunningText = "FINAL FANTASY XI is running. Close it to repair the game files.";
@@ -56,19 +55,19 @@ public partial class RepairButtonViewModel : ObservableObject
     [ObservableProperty] private bool _repairing;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(BlockedReason), nameof(Tooltip))]
+    [NotifyPropertyChangedFor(nameof(BlockedReason))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private bool _available;
 
     // the region's text when the mirror has no copy to repair it from (Japan for now)
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(BlockedReason), nameof(Tooltip))]
+    [NotifyPropertyChangedFor(nameof(BlockedReason))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private string? _notYet;
 
     // what the probe last saw: another copy holding the update lock, or the game running
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(BlockedReason), nameof(Tooltip))]
+    [NotifyPropertyChangedFor(nameof(BlockedReason))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private string? _busyReason;
 
@@ -78,8 +77,6 @@ public partial class RepairButtonViewModel : ObservableObject
         : _session.InMultiRun ? "Repair can start once Provenance has finished starting your accounts."
         : _pol.Pid is not null || _session.Phase == SessionPhase.LoggingOut ? "Repair can start once you're logged out of PlayOnline."
         : BusyReason;
-
-    public string Tooltip => BlockedReason ?? Hint;
 
     // A broken install can have lost FFXiMain.dll, so it only needs both folders registered. A region the mirror has no
     // copy of is shown but off
@@ -101,7 +98,6 @@ public partial class RepairButtonViewModel : ObservableObject
     internal void Refresh()
     {
         OnPropertyChanged(nameof(BlockedReason));
-        OnPropertyChanged(nameof(Tooltip));
         StartCommand.NotifyCanExecuteChanged();
     }
 

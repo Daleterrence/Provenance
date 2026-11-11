@@ -76,7 +76,7 @@
                             <TextBlock Text="{TemplateBinding Title}" FontSize="19" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" />
                         </StackPanel>
                         <Button x:Name="PART_Close" HorizontalAlignment="Right" VerticalAlignment="Top" Width="30" Height="30" Padding="0"
-                                Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}" ToolTip="Close" AutomationProperties.Name="Close">
+                                Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}" AutomationProperties.Name="Close">
                             <controls:SvgIcon Glyph="close" Flat="True" Width="16" Height="16" />
                         </Button>
                     </Grid>
@@ -109,7 +109,7 @@
                                 <controls:SvgIcon Glyph="close" Flat="True" Width="{TemplateBinding GlyphSize}" Height="{TemplateBinding GlyphSize}" />
                             </Button>
                             <Button x:Name="PART_Maximise" DockPanel.Dock="Right" Width="44" Height="40" Padding="0" Visibility="Collapsed"
-                                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}" ToolTip="Maximise"
+                                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}" AutomationProperties.Name="Maximise"
                                     shell:WindowChrome.IsHitTestVisibleInChrome="True">
                                 <materialDesign:PackIcon x:Name="MaximiseIcon" Kind="WindowMaximize"
                                                          Width="{TemplateBinding GlyphSize}" Height="{TemplateBinding GlyphSize}" />
@@ -132,7 +132,7 @@
                             <Setter TargetName="PART_Close" Property="Visibility" Value="Collapsed" />
                         </Trigger>
                         <Trigger Property="IsMaximised" Value="True">
-                            <Setter TargetName="PART_Maximise" Property="ToolTip" Value="Restore down" />
+                            <Setter TargetName="PART_Maximise" Property="AutomationProperties.Name" Value="Restore down" />
                             <Setter TargetName="MaximiseIcon" Property="Kind" Value="WindowRestore" />
                         </Trigger>
                     </ControlTemplate.Triggers>

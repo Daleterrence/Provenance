@@ -188,7 +188,7 @@ public partial class MainViewModel : ObservableObject
         bool loggedInChanged = _loggedInShown.Changed(loggedIn), launchingChanged = _launchingShown.Changed(launching);
         bool gameOpenChanged = _inGameShown.Changed(GameOpen);
         // going into the game changes what X does without changing logged in
-        if (gameOpenChanged || loggedInChanged) OnPropertyChanged(nameof(CloseTooltip));
+        if (gameOpenChanged || loggedInChanged) CloseChanged();
         if (!GameOpen) GameUp = false;
         if (loggedInChanged)
         {
@@ -302,10 +302,18 @@ public partial class MainViewModel : ObservableObject
 
     public bool KeepInTrayOnClose => LoggedIn && _settings.Current.KeepSignedInInTray;
 
-    public string CloseTooltip => !LoggedIn ? "Close"
-        : KeepInTrayOnClose ? "Close to the tray (you'll stay logged in to PlayOnline)"
-        : Session.Phase == SessionPhase.InGame ? "Close"
-        : "Close and log out of PlayOnline";
+    // none for a plain close: logged out, or in game with the tray setting off, where the game keeps its session
+    public string? CloseTooltip => KeepInTrayOnClose ? "Close to the tray (you'll stay logged in to PlayOnline)"
+        : LoggedIn && Session.Phase != SessionPhase.InGame ? "Close and log out of PlayOnline"
+        : null;
+    public string CloseName => CloseTooltip ?? "Close";
+
+    private void CloseChanged()
+    {
+        OnPropertyChanged(nameof(CloseTooltip));
+        OnPropertyChanged(nameof(CloseName));
+    }
+
     public bool TrayTipShown => _settings.Current.TrayTipShown;
 
     public void MarkTrayTipShown() => _settings.SaveChange(s => s.TrayTipShown = true);
@@ -921,7 +929,7 @@ public partial class MainViewModel : ObservableObject
             RequestRestart?.Invoke();
             return;
         }
-        OnPropertyChanged(nameof(CloseTooltip));
+        CloseChanged();
         Multi.Refresh();
         if (_settings.Current.ThirdPartyHookPlatform != hookBefore && !LoggedIn && !IsLaunching) RestartPrestart();
     }

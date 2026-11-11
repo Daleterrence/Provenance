@@ -37,13 +37,12 @@
         </Border>
 
         <controls:TitleBar Title="PROVENANCE" Icon="{StaticResource TitleIcon}" TitleSize="13" DimTitle="True" GlyphSize="17"
-                           CloseToolTip="{Binding CloseTooltip}" CloseName="{Binding CloseTooltip}">
+                           CloseToolTip="{Binding CloseTooltip}" CloseName="{Binding CloseName}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="WorldsChip" Style="{x:Null}" VerticalAlignment="Center"
                         Margin="0,0,6,0" Cursor="Hand" Padding="0"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True"
                         Click="OnWorldsChip"
-                        ToolTip="FINAL FANTASY XI world status (PlayOnline Server Status)"
                         AutomationProperties.Name="FINAL FANTASY XI world status (PlayOnline Server Status)">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
@@ -70,7 +69,7 @@
                 <Button Width="44" Height="40" Padding="0"
                         Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                        Click="OnMinimize" ToolTip="Minimise" AutomationProperties.Name="Minimise">
+                        Click="OnMinimize" AutomationProperties.Name="Minimise">
                     <materialDesign:PackIcon Kind="WindowMinimize" Width="17" Height="17" />
                 </Button>
             </StackPanel>
@@ -204,7 +203,7 @@
                 </Button>
                 <Button Grid.Column="2" Width="26" Height="26" Padding="0" Margin="10,0,0,0"
                         Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
-                        Command="{Binding Notice.DismissCommand}" ToolTip="Dismiss" AutomationProperties.Name="Dismiss">
+                        Command="{Binding Notice.DismissCommand}" AutomationProperties.Name="Dismiss">
                     <controls:SvgIcon Glyph="dismiss" Width="14" Height="14" />
                 </Button>
             </Grid>

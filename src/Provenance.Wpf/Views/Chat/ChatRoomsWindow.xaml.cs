@@ -83,7 +83,7 @@ public partial class ChatRoomsWindow : AppWindow
         foreach (var c in _vm.ColourChoices)
         {
             var swatch = new System.Windows.Shapes.Rectangle { Width = 90, Height = 14, Fill = c.Swatch, RadiusX = 3, RadiusY = 3 };
-            var item = new MenuItem { Header = swatch, IsChecked = _vm.Colour == c.Pick, ToolTip = c.Name };
+            var item = new MenuItem { Header = swatch, IsChecked = _vm.Colour == c.Pick };
             System.Windows.Automation.AutomationProperties.SetName(item, c.Name);
             item.Click += (_, _) => _vm.Colour = c.Pick;
             menu.Items.Add(item);
@@ -119,7 +119,7 @@ public partial class ChatRoomsWindow : AppWindow
             var b = new Button
             {
                 Content = new Image { Source = f.Image, Width = 32, Height = 32 }, Width = 34, Height = 34, Margin = new Thickness(2),
-                Padding = new Thickness(0), Style = (Style)FindResource("IconButton"), ToolTip = f.Name,
+                Padding = new Thickness(0), Style = (Style)FindResource("IconButton"),
             };
             System.Windows.Automation.AutomationProperties.SetName(b, f.Name);
             b.Click += (_, _) => { _vm.Emoticon = f.Index; popup.IsOpen = false; };

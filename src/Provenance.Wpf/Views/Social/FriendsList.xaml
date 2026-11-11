@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
              xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Social"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialViewModel}">
@@ -15,7 +16,7 @@
                                                Source="{Binding Avatar}" InGame="{Binding InGame}" />
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <!-- docked, the name's measured against the whole width so it still trims, and the Playing line gets what's left -->
-                    <DockPanel Background="Transparent">
+                    <DockPanel Background="Transparent" behaviours:TrimTip.OnlyWhenCut="True">
                         <DockPanel.ToolTip>
                             <TextBlock><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding Playing, Mode=OneWay}" /></TextBlock>
                         </DockPanel.ToolTip>
@@ -27,7 +28,7 @@
                     <!-- docked, so a long comment trims to the row instead of running off it -->
                     <DockPanel Margin="0,2,0,0">
                         <controls:StatusMark DockPanel.Dock="Left" Status="{Binding Status}" Online="{Binding Online}" Shown="{Binding HasStatus}" Margin="0,0,6,0" />
-                        <TextBlock FontSize="12" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Text.3}">
+                        <TextBlock FontSize="12" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Text.3}" behaviours:TrimTip.OnlyWhenCut="True">
                             <TextBlock.ToolTip>
                                 <TextBlock MaxWidth="320" TextWrapping="Wrap"><Run Text="{Binding StatusLabel, Mode=OneWay}" /><Run Text="{Binding Comment, Mode=OneWay, StringFormat={}   {0}}" /></TextBlock>
                             </TextBlock.ToolTip>
@@ -36,7 +37,7 @@
                     </DockPanel>
                 </StackPanel>
                 <Border Grid.Column="2" Style="{StaticResource CountBadge}"
-                        Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}" ToolTip="New messages">
+                        Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="{Binding Unread}" Style="{StaticResource CountBadgeText}" />
                 </Border>
             </Grid>
@@ -72,7 +73,7 @@
                        Text="You don't have any friends on this PlayOnline account yet." />
             <Button Margin="0,8,0,0" Padding="6,0,10,0" Height="28" HorizontalAlignment="Left" Style="{StaticResource PolButton}"
                     FontSize="12" IsEnabled="{Binding CanEdit}" Click="OnAddFriend"
-                    ToolTip="Search PlayOnline and send a friend request" AutomationProperties.Name="Search PlayOnline and send a friend request">
+                    AutomationProperties.Name="Search PlayOnline and send a friend request">
                 <StackPanel Orientation="Horizontal">
                     <controls:SvgIcon Glyph="search" />
                     <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="ADD A FRIEND" />
@@ -91,7 +92,7 @@
                 <!-- only success notes go by themselves -->
                 <Button Width="22" Height="22" Padding="0" Margin="8,0,0,0" VerticalAlignment="Top"
                         Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
-                        Command="{Binding DismissEditNoteCommand}" ToolTip="Dismiss" AutomationProperties.Name="Dismiss"
+                        Command="{Binding DismissEditNoteCommand}" AutomationProperties.Name="Dismiss"
                         Visibility="{Binding EditNoteShown, Converter={StaticResource BoolToVis}}">
                     <controls:SvgIcon Glyph="dismiss" Width="12" Height="12" />
                 </Button>
