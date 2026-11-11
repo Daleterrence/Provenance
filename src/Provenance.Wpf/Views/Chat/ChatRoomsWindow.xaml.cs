@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,6 +17,7 @@ namespace Provenance.Wpf.Views.Chat;
 public partial class ChatRoomsWindow : AppWindow
 {
     private readonly ChatRoomsViewModel _vm;
+    private bool _quiet, _asking;
 
     public ChatRoomsWindow(SocialViewModel social, IDialogs dialogs, Func<string, string, bool> savePassword, Action dropPassword,
                            Func<int, ImageSource?>? emote = null)
@@ -26,16 +28,36 @@ public partial class ChatRoomsWindow : AppWindow
         Closed += (_, _) => _vm.Dispose();
     }
 
-    internal ChatRoomsViewModel Rooms => _vm;
-
     // Esc in a room is for the room
     protected override bool OnEscape() => !_vm.InRoom && base.OnEscape();
 
     // the session's going, so the room goes with it and no PART is sent
     public void CloseQuietly()
     {
+        _quiet = true;
         _vm.CloseQuietly();
-        Close();
+        // with the leave question up this is inside Closing, where Close throws. Its answer lets the window go
+        if (!_asking) Close();
+    }
+
+    // closing leaves the room, so in one it asks first. Once the app's going there's nobody to answer
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (_asking || (_vm.InRoom && !_quiet && !WindowOwner.AppClosing && !ConfirmLeave()))
+        {
+            e.Cancel = true;
+            return;
+        }
+        base.OnClosing(e);
+    }
+
+    private bool ConfirmLeave()
+    {
+        // closed from the taskbar it can be minimised or behind something, and the question goes over the active window
+        WindowManager.BringBack(this);
+        _asking = true;
+        try { return _vm.ConfirmLeave() || _quiet; }
+        finally { _asking = false; }
     }
 
     private void OnRoomDoubleClick(object sender, MouseButtonEventArgs e)

@@ -217,12 +217,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         if (w is not { IsVisible: true } || w.WindowState == WindowState.Minimized) return false;
         // its unsaved changes question goes over whichever window's active, and that's the main one after a press there
         if (w is EditProfileWindow { Editor.HasUnsavedWork: true }) BringBack(w);
-        // closing leaves the room, and the window's own X never asks
-        if (w is ChatRoomsWindow { Rooms: { InRoom: true } rooms })
-        {
-            BringBack(w);
-            if (!rooms.ConfirmLeave()) return true;
-        }
         w.Close();
         return true;
     }

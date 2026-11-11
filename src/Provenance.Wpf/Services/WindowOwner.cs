@@ -11,4 +11,7 @@ internal static class WindowOwner
     public static Window? Find() => Find(Active());
 
     public static Window? Find(Window? active) => active ?? (Application.Current?.MainWindow is { IsVisible: true } main ? main : null);
+
+    // the app ends with its main window, and WPF then closes whatever's left without waiting on its Closing
+    public static bool AppClosing => Application.Current?.MainWindow is null;
 }
