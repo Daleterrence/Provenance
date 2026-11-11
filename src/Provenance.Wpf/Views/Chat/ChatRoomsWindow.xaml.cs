@@ -99,7 +99,8 @@ public partial class ChatRoomsWindow : AppWindow
 
     internal System.Windows.Controls.Primitives.Popup EmotePopup(FrameworkElement button)
     {
-        var panel = new WrapPanel { Width = 8 * 38 };
+        // a set width only fits 8 across until a scaled screen rounds the buttons up
+        var panel = new System.Windows.Controls.Primitives.UniformGrid { Columns = 8 };
         var none = new Button { Content = "NO", Width = 34, Height = 34, Margin = new Thickness(2), Padding = new Thickness(0),
                                 Style = (Style)FindResource("IconButton"), FontSize = 11 };
         System.Windows.Automation.AutomationProperties.SetName(none, "No emoticon");

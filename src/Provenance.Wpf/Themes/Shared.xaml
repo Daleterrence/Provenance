@@ -64,6 +64,7 @@
         <Setter Property="Padding" Value="4" />
         <Setter Property="MinWidth" Value="160" />
         <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="Grid.IsSharedSizeScope" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
@@ -227,6 +228,7 @@
         <Setter Property="Padding" Value="10,7" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
+        <Setter Property="UseLayoutRounding" Value="True" />
     </Style>
 
     <Style x:Key="SelectableText" TargetType="TextBox">

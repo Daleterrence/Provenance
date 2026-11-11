@@ -33,14 +33,14 @@
                             Style="{StaticResource ActionSegment}" AutomationProperties.Name="Play">
                         <!-- an invisible copy of the line above Play keeps Play in the middle, nudged up a touch -->
                         <StackPanel Margin="0,0,0,6">
-                            <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0" Margin="0,0,0,-4"
+                            <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0" Margin="0,0,0,-3"
                                        HorizontalAlignment="Center" AutomationProperties.Name=""
                                        Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <controls:SvgIcon Glyph="sword" Width="18" Height="18" Margin="3,0,10,0" />
+                                <controls:SvgIcon Glyph="sword" Width="20" Height="20" Margin="3,0,10,0" />
                                 <TextBlock Text="PLAY" FontSize="18" VerticalAlignment="Center" />
                             </StackPanel>
-                            <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0.8" Margin="0,-4,0,0"
+                            <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0.8" Margin="0,-3,0,0"
                                        HorizontalAlignment="Center"
                                        Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
                         </StackPanel>
@@ -67,7 +67,7 @@
                             Style="{StaticResource ActionSegment}"
                             ToolTip="{Binding PlayChoicesTitle}" AutomationProperties.Name="{Binding PlayChoicesTitle}"
                             Visibility="{Binding HasPlayChoices, Converter={StaticResource BoolToVis}}">
-                        <controls:SvgIcon x:Name="PlayChoicesIcon" Glyph="list" Width="22" Height="22" />
+                        <controls:SvgIcon x:Name="PlayChoicesIcon" Glyph="list" Width="20" Height="20" />
                     </Button>
                 </Grid>
             </Border>

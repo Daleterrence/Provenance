@@ -262,7 +262,7 @@
                         <Grid>
                             <materialDesign:PackIcon Kind="EmoticonOutline" Width="20" Height="20" Foreground="{DynamicResource Text.2}"
                                                      Visibility="{Binding PickedEmote, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=invert}" />
-                            <Image Source="{Binding PickedEmote}" Width="26" Height="26" />
+                            <Image Source="{Binding PickedEmote}" Width="24" Height="24" />
                         </Grid>
                     </Button>
                     <TextBox x:Name="ComposeBox" Grid.Column="2" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"

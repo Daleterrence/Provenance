@@ -162,7 +162,7 @@ public sealed class SvgIcon : Grid
             _art.Opacity = tint?.Opacity ?? 1;
         }
         else _art.Source = Glyph.Length == 0 ? null : _onButton ? SvgIcons.ButtonGlyph(Glyph, State) : SvgIcons.Glyph(Glyph, State);
-        double scale = _onButton && !Flat && Glyph.Length > 0 ? SvgIcons.ButtonScale(Glyph) : 1;
+        double scale = Flat || Glyph.Length == 0 ? 1 : _onButton ? SvgIcons.ButtonScale(Glyph) : SvgIcons.GlyphScale(Glyph);
         _art.RenderTransform = scale == 1 ? Transform.Identity : new ScaleTransform(scale, scale);
         var shown = _onButton && !Flat && Glyph.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         _disc.Visibility = _light.Visibility = _edge.Visibility = shown;

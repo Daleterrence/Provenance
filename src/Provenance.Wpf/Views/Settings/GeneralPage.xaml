@@ -80,7 +80,7 @@
                             <Button Grid.Column="2" Margin="6,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
                                     Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                                     Command="{Binding OpenBackupFolderCommand}" ToolTip="Open folder" AutomationProperties.Name="Open folder">
-                                <controls:SvgIcon Glyph="folder" Width="18" Height="18" />
+                                <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
                             </Button>
                         </Grid>
                         <TextBlock Text="{Binding BackupStatus.Text}" behaviours:State.IsError="{Binding BackupStatus.IsError}" Style="{StaticResource ProfileStatusText}" Margin="0,8,0,0" />

@@ -54,13 +54,16 @@ public partial class MainWindow : AppWindow
         return Tray.TryReuse(Vm) ? 1 : 0;
     }
 
+    private void FitWorkArea() => FitTo(SystemParameters.WorkArea.Size);
+
     // fixed design size, so on a small or scaled screen (1366x768 at 125%, say) the whole thing scales down
-    private void FitWorkArea()
+    internal void FitTo(Size area)
     {
-        var area = SystemParameters.WorkArea;
         double scale = Math.Min(1.0, Math.Min((area.Width - 16) / Width, (area.Height - 16) / Height));
         if (scale >= 1.0 || Content is not FrameworkElement root) return;
         root.LayoutTransform = new ScaleTransform(scale, scale);
+        // rounding happens before the scale, so it can't land anything on a pixel and leaves the bottom edge a fraction out
+        root.UseLayoutRounding = false;
         Width *= scale;
         Height *= scale;
     }

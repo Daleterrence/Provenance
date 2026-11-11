@@ -24,6 +24,9 @@ public static partial class SvgIcons
     public static readonly string[] OnlineKeys = ["online", "away", "invisible"];
     // POL cuts these with its badge circle. Centred on a button's disc the cut ends up inside it, so they're drawn whole
     private static readonly string[] WholeOnButton = ["smiley", "bubble", "ring", "mail", "folder", "key", "person"];
+    // drawn on POL's pixel grid, so they only get moved by whole units. Half a unit over and every upright line's
+    // smeared across two columns
+    private static readonly string[] OnGrid = ["add", "card", "copy", "folder", "key", "list", "mail"];
 
     private const string Root = "pack://application:,,,/Provenance;component/Assets/icons/";
     private static readonly object Gate = new();
@@ -75,7 +78,10 @@ public static partial class SvgIcons
     public const double ButtonBox = 20;
     public const double DiscShare = 20 / ButtonBox;
     public static double ButtonScale(string glyph) => ButtonFit(glyph).Frame.Width / ButtonBox;
+    // the same off a button, where the square's the one all four states of the file share
+    public static double GlyphScale(string glyph) => GlyphFrame(glyph) is { } frame ? frame.Width / ButtonBox : 1;
     internal static Rect FrameOf(string glyph) => ButtonFit(glyph).Frame;
+    internal static Vector ShiftOf(string glyph, IconState state) => ButtonFit(glyph).Shift[(int)state];
 
     private static Drawing? ButtonArt(string glyph, IconState state) =>
         Load(GlyphFile(glyph, state), edit: svg =>
@@ -96,9 +102,12 @@ public static partial class SvgIcons
             {
                 if (ButtonArt(glyph, state) is not { } art || Ink(art) is not { IsEmpty: false } ink) continue;
                 var shift = new Vector(centre - (ink.Left + ink.Right) / 2, centre - (ink.Top + ink.Bottom) / 2);
+                // a half always goes down. Math.Round sends it to the even number, which can leave two states two units apart
+                if (OnGrid.Contains(glyph)) shift = new Vector(Math.Ceiling(shift.X - 0.5), Math.Ceiling(shift.Y - 0.5));
                 shifts[(int)state] = shift;
+                ink.Offset(shift);
                 // a bit over, so the frame's clip never shaves the soft edge
-                half = Math.Max(half, Math.Max(ink.Width, ink.Height) / 2 + 0.5);
+                half = Math.Max(half, new[] { centre - ink.Left, ink.Right - centre, centre - ink.Top, ink.Bottom - centre }.Max() + 0.5);
             }
             var fit = (shifts, new Rect(centre - half, centre - half, half * 2, half * 2));
             ButtonFits[glyph] = fit;

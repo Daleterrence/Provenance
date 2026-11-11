@@ -45,7 +45,8 @@ public sealed class TrayIcon : IDisposable
         try
         {
             using var stream = open();
-            if (stream is not null) return new System.Drawing.Icon(stream);
+            // the frame drawn for the tray's size. Left to pick, it takes the big one and Windows squeezes it down
+            if (stream is not null) return new System.Drawing.Icon(stream, System.Windows.Forms.SystemInformation.SmallIconSize);
         }
         catch (Exception ex)
         {

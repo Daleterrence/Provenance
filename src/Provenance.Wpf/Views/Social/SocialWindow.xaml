@@ -109,7 +109,7 @@
     <Grid RowDefinitions="40,*">
         <controls:TitleBar x:Name="Bar" ShowMaximise="True">
             <controls:TitleBar.IconContent>
-                <controls:SvgIcon x:Name="TitleIcon" Glyph="smiley" Width="22" Height="22" Margin="0,0,10,0" />
+                <controls:SvgIcon x:Name="TitleIcon" Glyph="smiley" Width="20" Height="20" Margin="0,0,10,0" />
             </controls:TitleBar.IconContent>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="AddFriendButton" Height="28" Margin="0,0,8,0" Padding="6,0,10,0" Style="{StaticResource PolButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
@@ -298,7 +298,7 @@
                                                 <Button Grid.Column="3" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
                                                         Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
                                                         ToolTip="Group actions" AutomationProperties.Name="Group actions" Click="OnRowMenuButton">
-                                                    <controls:SvgIcon Glyph="more" Width="18" Height="18" />
+                                                    <controls:SvgIcon Glyph="more" Width="20" Height="20" />
                                                 </Button>
                                             </Grid>
                                         </Border>
@@ -324,7 +324,7 @@
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </Button.Style>
-                                                            <controls:SvgIcon Glyph="more" Width="18" Height="18" />
+                                                            <controls:SvgIcon Glyph="more" Width="20" Height="20" />
                                                         </Button>
                                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                             <TextBlock FontSize="13" TextTrimming="CharacterEllipsis">

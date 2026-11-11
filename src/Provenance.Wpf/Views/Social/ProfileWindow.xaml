@@ -19,7 +19,7 @@
     <Grid x:Name="Root" Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,Auto,*,Auto">
         <controls:TitleBar>
             <controls:TitleBar.IconContent>
-                <controls:SvgIcon Glyph="card" Width="22" Height="22" Margin="0,0,8,0" />
+                <controls:SvgIcon Glyph="card" Width="20" Height="20" Margin="0,0,8,0" />
             </controls:TitleBar.IconContent>
         </controls:TitleBar>
 

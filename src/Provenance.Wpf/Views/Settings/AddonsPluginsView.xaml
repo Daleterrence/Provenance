@@ -218,14 +218,14 @@
                             Command="{Binding DataContext.OpenDocsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding}" ToolTip="Open documentation" AutomationProperties.Name="Open documentation"
                             Visibility="{Binding Docs, Converter={StaticResource NullToVisibilityConverter}}">
-                        <controls:SvgIcon Glyph="help" Width="18" Height="18" />
+                        <controls:SvgIcon Glyph="help" Width="20" Height="20" />
                     </Button>
                     <Button Grid.Column="2" Margin="12,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
                             Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                             Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding}" ToolTip="Open folder" AutomationProperties.Name="Open folder"
                             Visibility="{Binding Location, Converter={StaticResource NullToVisibilityConverter}}">
-                        <controls:SvgIcon Glyph="folder" Width="18" Height="18" />
+                        <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
                     </Button>
                     <Button Grid.Column="3" Margin="16,0,0,0" Height="30" Padding="12,0" FontSize="12" VerticalAlignment="Center"
                             Command="{Binding DataContext.InstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"

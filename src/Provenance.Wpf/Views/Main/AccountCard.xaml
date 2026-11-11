@@ -53,7 +53,7 @@
             <Button Margin="0,18,0,0" Height="48" FontSize="16" Command="{Binding LogInCommand}"
                     Style="{StaticResource ActionButton}" IsDefault="True" AutomationProperties.Name="Log in">
                 <StackPanel Orientation="Horizontal">
-                    <controls:SvgIcon Glyph="key" Width="24" Height="24" IsOpen="{Binding IsLaunching}" />
+                    <controls:SvgIcon Glyph="key" Width="20" Height="20" IsOpen="{Binding IsLaunching}" />
                     <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Text="LOG IN" />
                 </StackPanel>
             </Button>
