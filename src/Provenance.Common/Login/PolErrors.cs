@@ -16,6 +16,8 @@ public static class PolErrors
         return null;
     }
 
+    // the payment ones (payment method, Webmoney, balance) aren't in use any more and never come up, they're only here
+    // so the table matches the viewer's
     private static readonly string[] Texts =
     [
         "An unexpected problem occurred. Persistent problems can be reported from Service & Support.",
@@ -120,7 +122,7 @@ public static class PolErrors
         "This room is already closed and cannot be entered.",
         "You cannot enter the chat room since you were kicked out.",
         "The chat room is already full. You cannot enter.",
-        "Due to either  a change in your connection settings or the detection of suspicious access to your account, login to your account has been temporarily restricted. Instructions for lifting this restriction have been sent to the email address registered to your Square Enix Account. For more information about the login restriction, please refer to the following page: http://support.na.square-enix.com/j/lbna",
+        "Due to either a change in your connection settings or the detection of suspicious access to your account, login to your account has been temporarily restricted. Instructions for lifting this restriction have been sent to the email address registered to your Square Enix Account. For more information about the login restriction, please refer to the following page: http://support.na.square-enix.com/j/lbna",
         "Due to a change in your connection settings or the detection of suspicious access to your account, login to your account has been temporarily restricted. For more information about the login restriction, please refer to the following page. http://support.eu.square-enix.com/j/lbgb",
         "The Square Enix ID, Square Enix password, or one-time password entered is incorrect.",
         "Because the gamer profile you are signed into Xbox Live with is linked to another PlayOnline ID, you will not be able to perform ID linking. Please sign in with a different gamer profile.",

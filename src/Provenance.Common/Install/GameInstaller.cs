@@ -91,7 +91,6 @@ public sealed class GameInstaller
         _http = http ?? new HttpClient(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.None })
             { Timeout = Timeout.InfiniteTimeSpan };
 #pragma warning restore RS0030
-        HttpAgent.Set(_http);
     }
 
     public static IReadOnlyList<GamePart> PartsFor(PolRegion region)

@@ -114,7 +114,7 @@ public static class ToolInstaller
               : new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = follow });
 #pragma warning restore RS0030
         c.Timeout = TimeSpan.FromSeconds(60);
-        c.DefaultRequestHeaders.UserAgent.ParseAdd("Provenance");
+        HttpAgent.Set(c);
         return c;
     }
 

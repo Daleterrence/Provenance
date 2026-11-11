@@ -14,8 +14,14 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
     internal const long MaxSignedBytes = 16 * 1024 * 1024;
 
 #pragma warning disable RS0030 // MirrorClient owns its client
-    public static MirrorClient Shared { get; } = new(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }, MirrorKeys.Trusted);
+    public static MirrorClient Shared { get; } = new(Named(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }), MirrorKeys.Trusted);
 #pragma warning restore RS0030
+
+    private static HttpClient Named(HttpClient http)
+    {
+        HttpAgent.Set(http);
+        return http;
+    }
 
     private readonly Uri _base = new(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
 
