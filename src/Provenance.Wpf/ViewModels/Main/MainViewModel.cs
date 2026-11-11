@@ -818,15 +818,18 @@ public partial class MainViewModel : ObservableObject
 
     public PlayPlatform PlayPlatform { get; }
 
-    // a switch that fails says so in the notice, one that works just changes the footer's name and picture
+    // a switch that fails says so in a notice that stays, one that works just changes the footer's name and picture.
+    // A pick turned away before anything's sent gets the usual few seconds
     public IReadOnlyList<MenuAction> HandleMenu()
     {
         ShowHandles();
-        return Handles.SwitchMenu(text =>
-        {
-            Notice.Show(text, "AlertCircleOutline", stays: true);
-            _handleNotice = Notice.Current;
-        });
+        return Handles.SwitchMenu(text => ShowHandleNotice(text, stays: true), text => ShowHandleNotice(text, stays: false));
+    }
+
+    private void ShowHandleNotice(string text, bool stays)
+    {
+        Notice.Show(text, "AlertCircleOutline", stays: stays);
+        _handleNotice = Notice.Current;
     }
 
     private Notice? _handleNotice;

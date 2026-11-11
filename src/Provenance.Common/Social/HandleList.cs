@@ -18,7 +18,7 @@ public sealed record HandleGroup(PolHandle Handle, IReadOnlyList<HandleCharacter
 // one of the viewer's own lines: where it is in its string table, and the US words for when that can't be read
 public readonly record struct ViewerLine(int Id, string Us);
 
-// the Handles page's lists and wording. The questions are the viewer's own
+// the Handles page's lists and wording
 public static class HandleList
 {
     public const int MaxContentIds = 8;
@@ -26,26 +26,22 @@ public static class HandleList
 
     public static readonly ViewerLine CreateTitle = new(0x3b4f, "Create New Handle");
     public static readonly ViewerLine EnterName = new(0x3ba9, "Enter new handle.");
-    public static readonly ViewerLine RegisterText = new(0x3b9f, "Register %s?");
     public static readonly ViewerLine UpdatingText = new(0x3b95, "Updating handle list...");
     public static readonly ViewerLine NameRefused = new(0x3bab, "Cannot register selected handle. Please try another.");
     public static readonly ViewerLine NameFailed = new(0x3ba4, "Handle registration failed. Please re-enter.");
     public static readonly ViewerLine NoWordList = new(0x3bb6, "Cannot register handle. Data may be corrupted.");
     public static readonly ViewerLine HandlesFull = new(0x3ba5, "Cannot register any more handles.");
     public static readonly ViewerLine DeleteActive = new(0x3ba8, "Cannot delete active handle.");
-    public static readonly ViewerLine DeleteText = new(0x3baa, "Delete specified handle?");
-    public static readonly ViewerLine DeleteInGroupText = new(0x6f32, "Leaving group. Delete handle?");
 
     public const string CreateHelpText =
         "A handle is a name on PlayOnline that other players can see. Use 1 to 15 English letters, numbers or symbols.";
     public const string DeleteTitle = "Delete Handle";
-    public const string MoveFirstText = "Move this handle's characters to another handle before you delete it.";
+    public const string DeleteQuestion = "Are you sure you want to delete this handle? It will unlink your FINAL FANTASY XI characters.";
     public const string OtherContentText =
         "This handle has a Content ID from another PlayOnline service linked to it, so Provenance can't delete it.";
-    public const string WrongNameText = "That isn't the handle's name.";
     public const string OrderChangedText = "Character order changed. Save it to keep it.";
 
-    // the viewer's 0x6f32 ends in a space
+    // some of the viewer's lines end in a space
     public static string Say(ViewerLine line, Func<int, string, string>? text = null) =>
         (text?.Invoke(line.Id, line.Us) ?? line.Us).Trim();
 
@@ -89,23 +85,10 @@ public static class HandleList
         : string.IsNullOrWhiteSpace(name) ? "Type a handle name."
         : name.Length > PolLimits.HandleName ? HookFailures.Friends.BadName : null;
 
-    public static string RegisterQuestion(string name, Func<int, string, string>? text = null) =>
-        Say(RegisterText, text).Replace("%s", name);
-
-    public static string DeleteWarning(string name) => $"{name} will be deleted from this PlayOnline account. This can't be undone.";
-
-    public static string DeleteQuestion(PolHandle handle, bool inGroup, Func<int, string, string>? text = null) =>
-        Say(inGroup ? DeleteInGroupText : DeleteText, text) + "\n\n" + DeleteWarning(handle.Name);
-
-    public static string TypeNamePrompt(string name) => $"Type {name} to delete this handle.";
-
-    // the viewer goes by the group header's slot bits. This is one of my rows having the slot and Handle ID,
-    // the same answer unless the groups didn't load
-    public static bool InGroup(PolSocialSnapshot snap, PolHandle handle) =>
-        snap.GroupList.Any(g => g.Members.Any(m => m.Mine && m.Slot == handle.Slot && m.Hid == handle.Key));
+    public static string CreateQuestion(string name) => $"Create {name}?";
 
     public static string SwitchQuestion(PolHandle h, bool inChatRoom = false) =>
-        inChatRoom ? $"Make {h.Name} active? You'll leave the chat room you're in." : $"Make {h.Name} active?";
+        inChatRoom ? $"Make {h.Name} your active handle? You'll leave the chat room you're in." : $"Make {h.Name} your active handle?";
 
     public static string LinkQuestion(HandleCharacter c, PolHandle to, IReadOnlyList<PolHandle> handles) =>
         handles.FirstOrDefault(h => h.Slot == c.Record.Handle && h.Slot != to.Slot) is { } from

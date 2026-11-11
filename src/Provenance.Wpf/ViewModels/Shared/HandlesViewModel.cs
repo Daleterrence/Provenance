@@ -303,7 +303,8 @@ public partial class HandlesViewModel : ObservableObject
     private string? SwitchRefusal() =>
         ReadOnlyText ?? (Busy || Switching ? HandleList.PageBusyText : null) ?? SwitchBlocked?.Invoke();
 
-    public IReadOnlyList<MenuAction> SwitchMenu(Action<string> failed)
+    // refused is for a pick turned away before anything's sent, failed for whatever goes wrong after
+    public IReadOnlyList<MenuAction> SwitchMenu(Action<string> failed, Action<string>? refused = null)
     {
         if (!LoggedIn || Rows.Count == 0) return [];
         var why = SwitchRefusal();
@@ -312,18 +313,18 @@ public partial class HandlesViewModel : ObservableObject
         {
             int slot = row.Handle.Slot;
             // Detail makes the name a text block, a plain header would lose an underscore to the access keys
-            menu.Add(new(row.Name, why is null, row.Active ? null : () => SwitchFromMenu(slot, failed)) { Checked = row.Active, Detail = "" });
+            menu.Add(new(row.Name, why is null, row.Active ? null : () => SwitchFromMenu(slot, failed, refused ?? failed)) { Checked = row.Active, Detail = "" });
         }
         return menu;
     }
 
     // the menu can be a few seconds old by the time something's picked, so it's all checked again
-    private void SwitchFromMenu(int slot, Action<string> failed)
+    private void SwitchFromMenu(int slot, Action<string> failed, Action<string> refused)
     {
         if (!LoggedIn || Rows.FirstOrDefault(r => r.Handle.Slot == slot) is not { Active: false } row) return;
         if (SwitchRefusal() is { } why)
         {
-            failed(why);
+            refused(why);
             return;
         }
         if (!StartSwitch(row)) return;
@@ -400,7 +401,7 @@ public partial class HandlesViewModel : ObservableObject
              HandleList.Done(HandleChange.Link, to.Name, c.Label));
     }
 
-    // the viewer's own steps: the name box, its question, then the one upload. Only the server can say a name's taken
+    // the viewer's own steps: the name box, a question, then the one upload. Only the server can say a name's taken
     [RelayCommand]
     public void Create()
     {
@@ -414,42 +415,38 @@ public partial class HandlesViewModel : ObservableObject
         var name = _dialogs.Ask(title, HandleList.Say(HandleList.EnterName, _text) + "\n\n" + HandleList.CreateHelpText,
                                 maxLength: PolLimits.HandleName, validate: HandleList.NameProblem);
         if (name is null || HandleList.NameProblem(name) is not null) return;
-        if (!_dialogs.Confirm(title, HandleList.RegisterQuestion(name, _text), "REGISTER") || !CanCreate) return;
+        if (!_dialogs.Confirm(title, HandleList.CreateQuestion(name), "CREATE") || !CanCreate) return;
         Send(HandleChange.Create, (pid, token) => SocialRequests.CreateHandle(pid, token, name), HandleList.Done(HandleChange.Create, name, ""));
     }
 
-    // can't be taken back, so nothing's sent without both steps: the red question, then the handle's name typed out
+    // one question, then the viewer's own delete, where polcore unlinks the handle's characters as it goes
     [RelayCommand]
     public void Delete(HandleRow row)
     {
         HandleRow? Current() => Rows.FirstOrDefault(r => r.Handle.Slot == row.Handle.Slot && r.Handle.Key == row.Handle.Key);
-        // deleting unlinks whatever's on the handle, and only FFXI's characters can be moved off it from here
-        bool Linked(HandleRow r) =>
-            r.Characters.Count > 0 || r.Handle.ContentIds.Count > 0 || _snap.ContentIds.Any(c => c.Handle == r.Handle.Slot);
+        // it'd be unlinked like the characters, and only an FFXI one can be linked again from here
+        bool OtherService(HandleRow r) =>
+            _snap.ContentIds.Any(c => c.Type != ContentIdType.Ffxi && (c.Handle == r.Handle.Slot || r.Handle.ContentIds.Contains(c.Index)));
         if (!CanChange || Current() is not { CanDelete: true } now) return;
         if (now.Active)
         {
             Note.Fail(HandleList.Say(HandleList.DeleteActive, _text));
             return;
         }
-        if (Linked(now))
+        if (OtherService(now))
         {
-            Note.Fail(now.Characters.Count > 0 ? HandleList.MoveFirstText : HandleList.OtherContentText);
+            Note.Fail(HandleList.OtherContentText);
             return;
         }
-        var name = now.Name.Trim();
-        var question = HandleList.DeleteQuestion(now.Handle, HandleList.InGroup(_snap, now.Handle), _text);
-        if (!_dialogs.Confirm(HandleList.DeleteTitle, question, "DELETE", ConfirmStyle.Destructive)) return;
-        string? Wrong(string typed) => typed.Trim() == name ? null : HandleList.WrongNameText;
-        var typed = _dialogs.Ask(HandleList.DeleteTitle, HandleList.TypeNamePrompt(name), maxLength: PolLimits.HandleName, validate: Wrong);
-        if (typed is null || Wrong(typed) is not null || !CanChange) return;
-        // the questions can sit open a while, so the handle's looked at again before anything's sent
-        if (Current() is not { CanDelete: true, Active: false } still || still.Name != now.Name || Linked(still))
+        if (!_dialogs.Confirm(HandleList.DeleteTitle, HandleList.DeleteQuestion, "DELETE", ConfirmStyle.Destructive) || !CanChange) return;
+        // the question can sit open a while, so the handle's looked at again before anything's sent
+        if (Current() is not { CanDelete: true, Active: false } still || still.Name != now.Name || OtherService(still))
         {
             Note.Fail(HookFailures.Handles.ListChanged);
             return;
         }
-        Send(HandleChange.Delete, (pid, token) => SocialRequests.DeleteHandle(pid, token, now.Handle), HandleList.Done(HandleChange.Delete, name, ""));
+        Send(HandleChange.Delete, (pid, token) => SocialRequests.DeleteHandle(pid, token, now.Handle),
+             HandleList.Done(HandleChange.Delete, now.Name.Trim(), ""));
     }
 
     private void Send(HandleChange op, Func<int, string, bool> write, string done)
