@@ -21,7 +21,7 @@ public partial class PlayCard : UserControl
         Menus.Toggle(cog, () =>
         {
             var menu = new ContextMenu();
-            Menus.Fill(menu, vm.PlayChoicesMenu());
+            Menus.Fill(menu, vm.PlayPlatform.ChoicesMenu());
             PlayChoicesIcon.IsOpen = true;
             // Closed comes late, a newer menu can be up by then
             menu.Closed += (_, _) => PlayChoicesIcon.IsOpen = Menus.OpenFrom(cog);

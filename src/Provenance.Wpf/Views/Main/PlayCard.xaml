@@ -36,20 +36,20 @@
                             Style="{StaticResource ActionSegment}" AutomationProperties.Name="{Binding PlayName}">
                         <!-- an invisible copy of the line above Play keeps Play in the middle, nudged up a touch -->
                         <StackPanel Margin="0,0,0,6">
-                            <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0" Margin="0,0,0,-3"
+                            <TextBlock Text="{Binding PlayPlatform.Subtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0" Margin="0,0,0,-3"
                                        HorizontalAlignment="Center" AutomationProperties.Name=""
-                                       Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
+                                       Visibility="{Binding PlayPlatform.Subtitle, Converter={StaticResource NullToVisibilityConverter}}" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <controls:SvgIcon Glyph="sword" Width="20" Height="20" Margin="3,0,10,0" />
                                 <TextBlock Text="{Binding PlayText}" FontSize="18" VerticalAlignment="Center" />
                             </StackPanel>
-                            <TextBlock Text="{Binding PlaySubtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0.8" Margin="0,-3,0,0"
+                            <TextBlock Text="{Binding PlayPlatform.Subtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0.8" Margin="0,-3,0,0"
                                        HorizontalAlignment="Center"
-                                       Visibility="{Binding PlaySubtitle, Converter={StaticResource NullToVisibilityConverter}}" />
+                                       Visibility="{Binding PlayPlatform.Subtitle, Converter={StaticResource NullToVisibilityConverter}}" />
                         </StackPanel>
                     </Button>
                     <Border Grid.Column="1" Width="1"
-                            Visibility="{Binding HasPlayChoices, Converter={StaticResource BoolToVis}}">
+                            Visibility="{Binding PlayPlatform.HasChoices, Converter={StaticResource BoolToVis}}">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background" Value="{DynamicResource Play.Fill}" />
@@ -68,8 +68,8 @@
                     </Border>
                     <Button Grid.Column="2" Width="52" Click="OnPlayChoices" IsEnabled="{Binding PlayEnabled}"
                             Style="{StaticResource ActionSegment}"
-                            ToolTip="{Binding PlayChoicesTitle}" AutomationProperties.Name="{Binding PlayChoicesTitle}"
-                            Visibility="{Binding HasPlayChoices, Converter={StaticResource BoolToVis}}">
+                            ToolTip="{Binding PlayPlatform.ChoicesTitle}" AutomationProperties.Name="{Binding PlayPlatform.ChoicesTitle}"
+                            Visibility="{Binding PlayPlatform.HasChoices, Converter={StaticResource BoolToVis}}">
                         <controls:SvgIcon x:Name="PlayChoicesIcon" Glyph="list" Width="20" Height="20" />
                     </Button>
                 </Grid>

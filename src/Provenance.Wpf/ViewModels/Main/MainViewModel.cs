@@ -5,14 +5,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common;
 using Provenance.Common.Credentials;
-using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Hook;
 using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;
-using Provenance.Common.Game.Windower;
-using Provenance.Common.Game.Ashita;
 using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
@@ -68,6 +65,7 @@ public partial class MainViewModel : ObservableObject
         _timeLeft = new PhaseTimeLeft(text => TimeLeftText = text);
         News = new NewsViewModel(feeds, _ui, OpenLink, time);
         Accounts = new AccountsViewModel(dialogs, credentials, settings, avatars);
+        PlayPlatform = new PlayPlatform(pol, settings);
         Setup = new SetupViewModel(dialogs, settings);
         Setup.Finished += OnSetupFinished;
         Accounts.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AccountsViewModel.HasProfile)) RefreshSetupCard(); };
@@ -425,7 +423,7 @@ public partial class MainViewModel : ObservableObject
 
     private void OnSetupFinished(bool platformChanged)
     {
-        PlatformChanged();
+        PlayPlatform.Changed();
         Multi.Refresh();
         RefreshSetupCard();
         if (platformChanged && !LoggedIn && !IsLaunching) RestartPrestart();
@@ -908,7 +906,7 @@ public partial class MainViewModel : ObservableObject
         ShowHandles();
         var vm = new SettingsViewModel(_dialogs, _settings, _feeds, Session, holdPrestarts: _pol.Prestarter.HoldPrestarts,
                                        stopPrestart: () => Task.Run(_pol.Prestarter.StopPrestart), handles: Handles);
-        vm.Hooks.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(HookSettings.Hook)) PlatformChanged(); };
+        vm.Hooks.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(HookSettings.Hook)) PlayPlatform.Changed(); };
         Handles.Opened();
         try { _windows.ShowSettings(vm, tab); }
         finally
@@ -928,53 +926,7 @@ public partial class MainViewModel : ObservableObject
         if (_settings.Current.ThirdPartyHookPlatform != hookBefore && !LoggedIn && !IsLaunching) RestartPrestart();
     }
 
-    public string? PlaySubtitle => _pol.Platform switch
-    {
-        ThirdPartyHook.Windower => "WINDOWER LOADED",
-        ThirdPartyHook.Ashita => "ASHITA LOADED",
-        _ => null,
-    };
-
-    internal void PlatformChanged()
-    {
-        OnPropertyChanged(nameof(PlaySubtitle));
-        OnPropertyChanged(nameof(HasPlayChoices));
-        OnPropertyChanged(nameof(PlayChoicesTitle));
-    }
-
-    public sealed record PlayChoice(string Name, string Display, bool Current);
-
-    public bool HasPlayChoices => _pol.Platform is ThirdPartyHook.Windower or ThirdPartyHook.Ashita;
-
-    public string PlayChoicesTitle => _pol.Platform == ThirdPartyHook.Ashita ? "Boot configuration" : "Windower profile";
-
-    public string NoPlayChoicesText => _pol.Platform == ThirdPartyHook.Ashita
-        ? "No boot configurations found" : "No Windower profiles found";
-
-    // the same pick Play uses: Ashita falls back to the last config Ashita ran with, Windower's "" is the unnamed one
-    public IReadOnlyList<PlayChoice> PlayChoices()
-    {
-        var target = PlayTarget.For(_settings.Current, null);
-        if (target.Platform == ThirdPartyHook.Ashita)
-            return AshitaBootFiles.Names(target.Dir)
-                .Select(n => new PlayChoice(n.File, n.Shown, target.Is(n.File))).ToList();
-        if (target.Platform == ThirdPartyHook.Windower)
-        {
-            var names = WindowerInstall.Profiles(target.Dir);
-            var picked = target.Picked(names);
-            return names.Select(n => new PlayChoice(n, WindowerInstall.DisplayName(n, names), n == picked)).ToList();
-        }
-        return [];
-    }
-
-    public IReadOnlyList<MenuAction> PlayChoicesMenu()
-    {
-        var menu = new List<MenuAction> { new(PlayChoicesTitle, false), MenuAction.Separator };
-        var choices = PlayChoices();
-        if (choices.Count == 0) menu.Add(new(NoPlayChoicesText, false));
-        foreach (var c in choices) menu.Add(new(c.Display, true, () => PickPlayChoice(c.Name)) { Checked = c.Current });
-        return menu;
-    }
+    public PlayPlatform PlayPlatform { get; }
 
     // a switch that fails says so in the notice, one that works just changes the footer's name and picture
     public IReadOnlyList<MenuAction> HandleMenu()
@@ -994,17 +946,6 @@ public partial class MainViewModel : ObservableObject
     {
         Notice.Drop(_handleNotice);
         _handleNotice = null;
-    }
-
-    public void PickPlayChoice(string name)
-    {
-        var platform = _pol.Platform;
-        if (platform is not (ThirdPartyHook.Ashita or ThirdPartyHook.Windower)) return;
-        _settings.SaveChange(s =>
-        {
-            if (platform == ThirdPartyHook.Ashita) s.AshitaBootConfig = name;
-            else s.WindowerProfile = name;
-        });
     }
 
     // the URL comes from a feed, and ShellExecute would happily run a program, a network path or another protocol

@@ -13,13 +13,13 @@
                             IsEnabled="{Binding CanMoveUp}" ToolTip="Move up"
                             Command="{Binding DataContext.MoveUpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
                             AutomationProperties.Name="{Binding Label, StringFormat=Move {0} up}">
-                        <controls:SvgIcon Glyph="up" Width="18" Height="18" />
+                        <controls:SvgIcon Glyph="up" Width="20" Height="20" />
                     </Button>
                     <Button Width="30" Height="30" Padding="0" Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
                             IsEnabled="{Binding CanMoveDown}" ToolTip="Move down"
                             Command="{Binding DataContext.MoveDownCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
                             AutomationProperties.Name="{Binding Label, StringFormat=Move {0} down}">
-                        <controls:SvgIcon Glyph="down" Width="18" Height="18" />
+                        <controls:SvgIcon Glyph="down" Width="20" Height="20" />
                     </Button>
                 </StackPanel>
                 <Button Grid.Column="2" Content="LINK TO..." FontSize="12" Height="30" Padding="10,0" Margin="8,0,0,0"
