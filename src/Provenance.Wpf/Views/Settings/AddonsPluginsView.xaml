@@ -143,12 +143,37 @@
             </StackPanel>
         </DataTemplate>
 
+        <!-- what init.txt, the init command or an Ashita script loads itself, with why its rows have no switch -->
+        <DataTemplate DataType="{x:Type vm:AddonsSection}">
+            <StackPanel Margin="28,2,28,8">
+                <ToggleButton IsChecked="{Binding IsOpen}" Style="{StaticResource IconButton}" HorizontalAlignment="Left" HorizontalContentAlignment="Left"
+                              Margin="-6,0,0,0" Padding="6,4,10,4" AutomationProperties.Name="{Binding Header}" AutomationProperties.HelpText="{Binding Group.Help}">
+                    <StackPanel Orientation="Horizontal">
+                        <controls:SvgIcon Flat="True" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center" Foreground="{DynamicResource Text.3}">
+                            <controls:SvgIcon.Style>
+                                <Style TargetType="controls:SvgIcon">
+                                    <Setter Property="Glyph" Value="right" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsOpen}" Value="True">
+                                            <Setter Property="Glyph" Value="down" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </controls:SvgIcon.Style>
+                        </controls:SvgIcon>
+                        <TextBlock Text="{Binding Header}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+                <TextBlock Text="{Binding Group.Help}" Style="{StaticResource Help}" Margin="0,2,0,0" />
+            </StackPanel>
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type vm:AddonRow}">
             <Border Margin="28,0,28,6" Padding="14,10">
                 <Border.Style>
                     <Style TargetType="Border" BasedOn="{StaticResource Card}">
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Incompatible}" Value="True">
+                            <DataTrigger Binding="{Binding Greyed}" Value="True">
                                 <Setter Property="Opacity" Value="0.55" />
                             </DataTrigger>
                         </Style.Triggers>

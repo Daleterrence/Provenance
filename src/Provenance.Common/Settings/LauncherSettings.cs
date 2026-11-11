@@ -25,6 +25,8 @@ public sealed class LauncherSettings
 
     public bool SocialSplit { get; set; }
 
+    public bool AddonSectionsFolded { get; set; }
+
     public string Theme { get; set; } = "dark";
 
     public bool MinimizeToTray { get; set; }

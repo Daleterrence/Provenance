@@ -26,7 +26,8 @@ public sealed partial class AddonRow : ObservableObject
     [ObservableProperty] private bool _hasSwitch;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _canChange;
     [ObservableProperty] private bool _canInstall;
-    [ObservableProperty] private bool _incompatible;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Greyed))] private bool _incompatible;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Greyed))] private AddonGroup? _group;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _installing;
     [ObservableProperty] private bool _visible = true;
     [ObservableProperty] private string? _verifiedTip;
@@ -35,6 +36,7 @@ public sealed partial class AddonRow : ObservableObject
     private string? _author;
 
     public bool SwitchEnabled => CanChange && !Installing;
+    public bool Greyed => Incompatible || Group is not null;
 
     // the page saves it and reads it all back, so a change that didn't save puts the switch back
     public bool On
@@ -60,6 +62,7 @@ public sealed partial class AddonRow : ObservableObject
         CanChange = d.CanChange;
         CanInstall = d.CanInstall;
         Incompatible = d.Incompatible;
+        Group = d.Group;
         Team = d.Team;
         VerifiedTip = d.Team is { } team ? $"This {(Kind == AddonKind.Addon ? "addon" : "plugin")} is provided and maintained by the {team} development team." : null;
         Location = l.Location;

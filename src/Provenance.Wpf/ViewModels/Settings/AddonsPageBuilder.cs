@@ -77,8 +77,8 @@ internal static class AddonsPageBuilder
         var missingAddons = Missing(effective.Addons, scan.Addons.Select(a => a.Listing.Key).Concat(notInstalled.Select(t => t.Name)));
         var addonNames = scan.Addons.Select(a => a.Listing.Key).Concat(notInstalled.Select(t => t.Name)).Concat(missingAddons).ToList();
 
-        var loadedPlugins = Reasons(dir, profile, scan, pluginNames, []);
-        var loadedAddons = Reasons(dir, profile, scan, [], addonNames);
+        var loadedPlugins = Reasons(dir, profile, scan, AddonKind.Plugin, pluginNames);
+        var loadedAddons = Reasons(dir, profile, scan, AddonKind.Addon, addonNames);
 
         RowData Row(AddonKind kind, AddonListing listing, bool isInstalled, bool installable, bool windowerPlugin = true, bool official = false)
         {
@@ -93,15 +93,16 @@ internal static class AddonsPageBuilder
                 canTurnOn = false;
             }
             var loaded = kind == AddonKind.Addon ? loadedAddons : loadedPlugins;
+            AddonGroup? group = null;
             if (loaded.TryGetValue(key, out var why) && why.StartsWith(LoadedBy, StringComparison.Ordinal))
             {
-                badges.Add(why.EndsWith("init.txt", StringComparison.Ordinal) ? Badges.InitTxt : Badges.InitCommand);
+                group = why.EndsWith("init.txt", StringComparison.Ordinal) ? Groups.InitTxt : Groups.InitCommand;
                 hasSwitch = false;
             }
             return new RowData(kind, listing)
             {
                 On = on, HasSwitch = hasSwitch, CanChange = !frozen && (canTurnOn || on), CanInstall = !isInstalled && installable, Badges = badges,
-                Team = official ? "Windower" : null,
+                Group = group, Team = official ? "Windower" : null,
             };
         }
 
@@ -124,11 +125,11 @@ internal static class AddonsPageBuilder
         return listed.Where(n => !string.IsNullOrWhiteSpace(n) && seen.Add(n)).ToList();
     }
 
-    // the launch's own skip reasons read back, so a badge never disagrees with what really loads. Bit cheeky, but
+    // the launch's own skip reasons read back, so the page never disagrees with what really loads. Bit cheeky, but
     // nothing else knows
-    private static Dictionary<string, string> Reasons(string dir, WindowerProfile profile, WindowerScan scan, List<string> plugins, List<string> addons)
+    private static Dictionary<string, string> Reasons(string dir, WindowerProfile profile, WindowerScan scan, AddonKind kind, List<string> names)
     {
-        var list = new WindowerAddonList { Plugins = plugins, Addons = addons };
+        var list = kind == AddonKind.Addon ? new WindowerAddonList { Addons = names } : new WindowerAddonList { Plugins = names };
         var reasons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var launch = WindowerAddonList.ForLaunch(dir, profile, list, scan.Plugins, scan.Addons);
         foreach (var s in launch.Skipped)
@@ -136,7 +137,9 @@ internal static class AddonsPageBuilder
             int at = s.LastIndexOf(" (", StringComparison.Ordinal);
             if (at > 0 && s.EndsWith(')')) reasons.TryAdd(s[..at], s[(at + 2)..^1]);
         }
-        foreach (var n in launch.InitCommandAddons) reasons.TryAdd(n, LoadedBy + "the profile's init command");
+        // these are addons, and a plugin can share an addon's name
+        if (kind == AddonKind.Addon)
+            foreach (var n in launch.InitCommandAddons) reasons.TryAdd(n, LoadedBy + "the profile's init command");
         return reasons;
     }
 
@@ -184,12 +187,11 @@ internal static class AddonsPageBuilder
             if (!installed) badges.Add(Badges.NotInAshita);
             if (problem is not null) badges.Add(problem);
             else if (installed && !AddonSwitches.Loadable(kind, key)) badges.Add(problem = Badges.BadName);
-            if (state == AshitaLoad.ByScript) badges.Add(Badges.ByScript);
-            bool on = state == AshitaLoad.On, canTurnOn = installed && problem is null;
+            bool on = state == AshitaLoad.On, canTurnOn = installed && problem is null, byScript = state == AshitaLoad.ByScript;
             return new RowData(kind, listing)
             {
-                On = on, HasSwitch = state != AshitaLoad.ByScript, CanChange = !readOnly && (canTurnOn || on), Badges = badges,
-                Team = AshitaTeam(kind, key),
+                On = on, HasSwitch = !byScript, CanChange = !readOnly && (canTurnOn || on), Badges = badges,
+                Group = byScript ? Groups.ByScript : null, Team = AshitaTeam(kind, key),
             };
         }
 
@@ -245,12 +247,6 @@ internal static class AddonsPageBuilder
         public static readonly AddonBadge NotInAshita = new("Not installed", "It's named in this boot configuration, but it isn't in your Ashita folder.");
         public static readonly AddonBadge NotAPlugin = new("Not a Windower plugin",
             "This file in Windower's plugins folder isn't a Windower 4 plugin, so it can't be turned on.", Warn: true);
-        public static readonly AddonBadge InitTxt = new("Loaded by your init.txt",
-            "Windower's scripts\\init.txt loads this itself, so it loads no matter what the list says.");
-        public static readonly AddonBadge InitCommand = new("Loaded by this profile's init command",
-            "This profile's init command loads it itself, so it loads no matter what the list says.");
-        public static readonly AddonBadge ByScript = new("Set by your script",
-            "Your Ashita script loads or unloads this in a way Provenance can't safely change, so it's left as it is.");
         public static readonly AddonBadge NotForV4 = new("Not for Ashita v4",
             "This addon was written for Windower or an older Ashita, so it won't run in Ashita v4.", Warn: true);
         public static readonly AddonBadge OtherAshita = new("Built for a different Ashita",
@@ -259,5 +255,18 @@ internal static class AddonsPageBuilder
             "Provenance keeps this off whenever it starts the game. Your Ashita settings aren't changed.", Warn: true);
         public static readonly AddonBadge BadName = new("Name Ashita can't load",
             "Ashita can't load a name like this one from a script or boot configuration. Rename it to plain letters and numbers to use it.", Warn: true);
+    }
+
+    // rows something other than the page's switches loads, top to bottom as the page shows them
+    internal static class Groups
+    {
+        public static readonly AddonGroup InitTxt = new("Loaded by your init.txt",
+            "Windower's scripts\\init.txt loads these itself, so they load no matter what the list says. "
+            + "To turn one on or off here instead, take its line out of init.txt.");
+        public static readonly AddonGroup InitCommand = new("Loaded by this profile's init command",
+            "This profile's init command loads these itself, so they load no matter what the list says.");
+        public static readonly AddonGroup ByScript = new("Set by your script",
+            "Your Ashita script loads or unloads these in a way Provenance can't safely change, so they're left as they are.");
+        public static readonly IReadOnlyList<AddonGroup> All = [InitTxt, InitCommand, ByScript];
     }
 }

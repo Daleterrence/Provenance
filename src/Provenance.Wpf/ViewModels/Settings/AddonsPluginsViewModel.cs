@@ -32,6 +32,8 @@ public partial class AddonsPluginsViewModel : ObservableObject
     private readonly WindowerInstaller _install;
     private readonly AddonsHeading _addonsHeading = new(), _pluginsHeading = new(),
         _polHeading = new("Plugins Ashita loads into PlayOnline before the game starts."), _end = new();
+    // one header per group for good, a new one each time would cost it the keyboard focus on every rebuild
+    private readonly List<AddonsSection> _sections;
     private AddonsTarget? _shown;
     private AddonsScan? _scan;
     private AddonsPage? _page;
@@ -43,6 +45,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         _settings = settings;
         _target = target;
         _install = install ?? InstallFromWindower;
+        _sections = AddonsPageBuilder.Groups.All.Select(g => new AddonsSection(this, g)).ToList();
         Items.Add(this);
     }
 
@@ -228,10 +231,30 @@ public partial class AddonsPluginsViewModel : ObservableObject
         {
             var (heading, rows) = Tab switch { 1 => (_pluginsHeading, Plugins), 2 => (_polHeading, PolPlugins), _ => (_addonsHeading, Addons) };
             items.Add(heading);
-            items.AddRange(rows.Where(r => r.Visible));
+            var shown = rows.Where(r => r.Visible).ToList();
+            foreach (var section in _sections)
+            {
+                var inside = shown.Where(r => r.Group == section.Group).ToList();
+                if (inside.Count == 0) continue;
+                section.Count = inside.Count;
+                items.Add(section);
+                if (SectionsOpen) items.AddRange(inside);
+            }
+            items.AddRange(shown.Where(r => r.Group is null));
             items.Add(_end);
         }
         Sync(Items, items);
+    }
+
+    // straight from the settings each time, so the headers and the saved fold can't disagree
+    internal bool SectionsOpen => !_settings.Current.AddonSectionsFolded;
+
+    internal void FoldSections(bool folded)
+    {
+        if (_settings.Current.AddonSectionsFolded == folded) return;
+        _settings.SaveChange(s => s.AddonSectionsFolded = folded);
+        foreach (var s in _sections) s.FoldChanged();
+        Filter();
     }
 
     private static void Sync(ObservableCollection<object> items, List<object> next)
