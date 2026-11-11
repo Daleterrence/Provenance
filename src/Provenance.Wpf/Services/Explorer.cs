@@ -18,7 +18,6 @@ internal static class Explorer
 
     public static void ShowFile(string file) => Start($"/select,\"{file}\"");
 
-    // opens in whatever the user has for that kind of file
     public static void OpenFile(string file) => Start($"\"{file}\"");
 
     // web links only, the shell would just as happily run a program, a network path or another protocol

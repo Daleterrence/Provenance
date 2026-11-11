@@ -21,7 +21,7 @@ public static class ReadmeFiles
         try { files = Directory.EnumerateFiles(folder, "readme*").ToList(); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
         foreach (var (name, kind) in Names)
-            if (files.FirstOrDefault(f => Path.GetFileName(f).Equals(name, StringComparison.OrdinalIgnoreCase)) is { } file && Small(file))
+            if (files.FirstOrDefault(f => Path.GetFileName(f).Equals(name, StringComparison.OrdinalIgnoreCase)) is { } file && SizeOk(file))
                 return new AddonDocs(kind, file);
         return null;
     }
@@ -39,9 +39,9 @@ public static class ReadmeFiles
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    private static bool Small(string file)
+    private static bool SizeOk(string file)
     {
-        try { return new FileInfo(file).Length <= MaxBytes; }
+        try { return new FileInfo(file).Length is > 0 and <= MaxBytes; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 }

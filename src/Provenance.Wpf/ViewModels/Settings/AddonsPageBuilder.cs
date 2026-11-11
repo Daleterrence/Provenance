@@ -119,7 +119,7 @@ internal static class AddonsPageBuilder
         var repo = (scan.Tree?.Addons ?? []).Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         AddonListing Offered(WindowerAddon t) => scan.AddonsXml.TryGetValue(t.Name, out var x)
             ? new AddonListing(t.Name, t.Name, null, x.Author, x.Description, null) : AddonListing.Named(t.Name);
-        // Windower.exe links the readme of an addon that's in both addons.xml and the tree. That beats a readme in its folder
+        // Windower.exe's own link, for an addon that's in both addons.xml and the tree. It beats a readme in the folder
         AddonListing Linked(AddonListing l) =>
             scan.AddonsXml.ContainsKey(l.Key) && scan.Tree?.Find(l.Key) is { } t && WindowerAddonTree.ReadmeLink(t, file.Branch) is { } link
                 ? l with { Docs = new AddonDocs(AddonDocsKind.Link, link) } : l;

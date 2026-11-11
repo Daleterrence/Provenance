@@ -14,7 +14,6 @@ public static partial class WindowerAddons
     private const int MaxRead = 64 * 1024;
     private const int RegexMs = 500;
 
-    // readmes looks in every addon's folder for one, which the launch has no use for
     public static IReadOnlyList<WindowerAddonInfo> Scan(string windowerDir, IReadOnlyDictionary<string, WindowerAddonEntry>? addonsXml = null, bool readmes = false)
     {
         var addonsDir = Path.Combine(windowerDir, "addons");

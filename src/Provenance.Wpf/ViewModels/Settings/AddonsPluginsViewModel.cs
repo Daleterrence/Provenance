@@ -366,7 +366,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
     internal Action<AddonDocs> OpenDocsForTest { get; set; } = DocsOpener.Open;
     internal Action<string, string> ShowReadmeForTest { get; set; } = DocsOpener.ShowText;
 
-    // a link or an .html file goes to the browser, a text file is read here and shown in a window
     [RelayCommand]
     private void OpenDocs(AddonRow? row)
     {
