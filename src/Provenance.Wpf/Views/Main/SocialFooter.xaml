@@ -33,7 +33,7 @@
             </Grid>
             <StackPanel x:Name="SocialButtons" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                 <!-- one row of equal cells, so all four are as wide as the widest -->
-                <UniformGrid x:Name="SocialSet" Rows="1" Margin="6,0,0,0">
+                <UniformGrid x:Name="SocialSet" Rows="1" Margin="6,0,0,0" PreviewMouseLeftButtonDown="OnPress">
                     <UniformGrid.Resources>
                         <Style TargetType="Button" BasedOn="{StaticResource PolButton}">
                             <Setter Property="Padding" Value="5,0,8,0" />
@@ -42,19 +42,19 @@
                             <Setter Property="FontSize" Value="12" />
                         </Style>
                     </UniformGrid.Resources>
-                    <Button Command="{Binding OpenChatRoomsCommand}" ToolTip="Open chat rooms" AutomationProperties.Name="Open chat rooms">
+                    <Button Command="{Binding ToggleChatRoomsCommand}" ToolTip="Open chat rooms" AutomationProperties.Name="Open chat rooms">
                         <StackPanel Orientation="Horizontal">
                             <controls:SvgIcon Glyph="bubble" IsOpen="{Binding ChatRoomsOpen}" />
                             <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="CHAT ROOMS" />
                         </StackPanel>
                     </Button>
-                    <Button Command="{Binding OpenGroupsCommand}" ToolTip="Open your friend groups" AutomationProperties.Name="Open your friend groups">
+                    <Button Command="{Binding ToggleGroupsCommand}" ToolTip="Open your friend groups" AutomationProperties.Name="Open your friend groups">
                         <StackPanel Orientation="Horizontal">
                             <controls:SvgIcon Glyph="groupchat2" IsOpen="{Binding Social.GroupsTabVisible}" />
                             <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="GROUP CHAT" />
                         </StackPanel>
                     </Button>
-                    <Button Command="{Binding OpenMessagesCommand}" ToolTip="Open messages" AutomationProperties.Name="Open messages">
+                    <Button Command="{Binding ToggleMessagesCommand}" ToolTip="Open messages" AutomationProperties.Name="Open messages">
                         <StackPanel Orientation="Horizontal">
                             <controls:SvgIcon Glyph="chat" IsOpen="{Binding Social.Messages.ConversationVisible}" />
                             <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="MESSAGES" />
@@ -65,7 +65,7 @@
                             </Border>
                         </StackPanel>
                     </Button>
-                    <Button Command="{Binding OpenSocialCommand}" ToolTip="Open friends" AutomationProperties.Name="Open friends">
+                    <Button Command="{Binding ToggleFriendsCommand}" ToolTip="Open friends" AutomationProperties.Name="Open friends">
                         <StackPanel Orientation="Horizontal">
                             <controls:SvgIcon Glyph="smiley" IsOpen="{Binding Social.FriendsTabVisible}" />
                             <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="FRIENDS" />

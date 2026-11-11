@@ -719,7 +719,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     internal void ShowProfile(FriendItem f) => _windows.ShowProfile(this, f);
 
     [RelayCommand]
-    public void EditProfile() => _windows.EditProfile(this);
+    public void ToggleProfileEditor()
+    {
+        if (!_windows.CloseIfShown(SecondWindow.ProfileEditor)) _windows.EditProfile(this);
+    }
 
     public void ShowMessagesAlongside(bool takeFocus) => _windows.ShowMessagesAlongside(this, takeFocus);
 

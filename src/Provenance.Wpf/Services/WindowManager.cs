@@ -16,6 +16,8 @@ using Provenance.Wpf.Views.Social;
 
 namespace Provenance.Wpf.Services;
 
+public enum SecondWindow { Friends, Messages, ChatRooms, ProfileEditor }
+
 public interface IWindowManager
 {
     bool ProfileEditorOpen { get; }
@@ -33,6 +35,8 @@ public interface IWindowManager
     void ShowGroupChat(GroupChatViewModel groupChat);
     void ShowProfile(SocialViewModel social, FriendItem friend);
     void EditProfile(SocialViewModel social);
+    // false when it isn't on screen, so the caller shows it. True even if the window then asks and stays open
+    bool CloseIfShown(SecondWindow which);
     void AddFriend(SocialViewModel social, string? handleName = null, string? handleKey = null);
     bool ConfirmDropProfileEditor(string action);
     void CloseProfileEditor();
@@ -196,6 +200,28 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         }
         else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         w.Show();
+    }
+
+    public bool CloseIfShown(SecondWindow which)
+    {
+        Window? w = which switch
+        {
+            SecondWindow.Friends => SocialWindows().FirstOrDefault(x => x.Part == Friends),
+            SecondWindow.Messages => SocialWindows().FirstOrDefault(x => x.Part == Messages),
+            SecondWindow.ChatRooms => Find<ChatRoomsWindow>(),
+            _ => Find<EditProfileWindow>(),
+        };
+        if (w is not { IsVisible: true } || w.WindowState == WindowState.Minimized) return false;
+        // its unsaved changes question goes over whichever window's active, and that's the main one after a press there
+        if (w is EditProfileWindow { Editor.HasUnsavedWork: true }) BringBack(w);
+        // closing leaves the room, and the window's own X never asks
+        if (w is ChatRoomsWindow { Rooms: { InRoom: true } rooms })
+        {
+            BringBack(w);
+            if (!rooms.ConfirmLeave()) return true;
+        }
+        w.Close();
+        return true;
     }
 
     public void AddFriend(SocialViewModel social, string? handleName = null, string? handleKey = null) =>

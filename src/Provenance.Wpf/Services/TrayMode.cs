@@ -33,7 +33,7 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
             Icon.FriendsRequested += () =>
             {
                 ShowWindow();
-                vm.OpenSocialCommand.Execute(null);
+                vm.OpenSocial();
             };
             Icon.SignOutRequested += () =>
             {

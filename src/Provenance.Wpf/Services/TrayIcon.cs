@@ -120,6 +120,7 @@ public sealed class TrayIcon : IDisposable
     internal bool SignOutItemShown => _signOut.Available;
     internal string ExitItemText => _exit.Text ?? "";
     internal void ClickOpen() => OpenRequested?.Invoke();
+    internal void ClickFriends() => FriendsRequested?.Invoke();
     internal void ClickExit() => ExitRequested?.Invoke();
 
     public void ShowTip(string title, string text)

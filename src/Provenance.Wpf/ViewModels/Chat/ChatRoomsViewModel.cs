@@ -368,9 +368,13 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanExit))]
     private void Exit()
     {
+        if (ConfirmLeave()) Leave();
+    }
+
+    internal bool ConfirmLeave()
+    {
         bool othersHere = Members.Count(m => !m.Me) > 0, master = Members.Any(m => m.Me && m.Master);
-        if (!_dialogs.Confirm(DialogTitle, master && othersHere ? LeaveAsMaster : LeaveQuestion, "LEAVE")) return;
-        Leave();
+        return _dialogs.Confirm(DialogTitle, master && othersHere ? LeaveAsMaster : LeaveQuestion, "LEAVE");
     }
 
     [RelayCommand(CanExecute = nameof(Entering))]

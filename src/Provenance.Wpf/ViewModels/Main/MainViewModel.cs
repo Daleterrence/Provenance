@@ -475,33 +475,57 @@ public partial class MainViewModel : ObservableObject
 
     internal string FriendsWindowTitle => _windows.FriendsTitle;
 
-    [RelayCommand]
-    private void OpenSocial()
+    internal void OpenSocial()
     {
         if (Multi.Running) return;
         Social.ShowGroups = false;
         _windows.ShowFriends(Social);
     }
 
-    [RelayCommand]
-    private void OpenGroups()
+    internal void OpenGroups()
     {
         if (Multi.Running) return;
         Social.ShowGroups = true;
         _windows.ShowFriends(Social);
     }
 
-    [RelayCommand]
-    private void OpenMessages()
+    internal void OpenMessages()
     {
         if (Multi.Running) return;
         _windows.ShowMessages(Social);
     }
 
-    [ObservableProperty] private bool _chatRoomsOpen;
+    // the bottom bar's buttons. Pressed with their own window on screen they close it, nothing else does
+    [RelayCommand] private void ToggleFriends() => ToggleFriendsTab(groups: false);
+
+    [RelayCommand] private void ToggleGroups() => ToggleFriendsTab(groups: true);
+
+    // one window with two tabs, so the other tab's button just switches to its own
+    private void ToggleFriendsTab(bool groups)
+    {
+        if (Multi.Running) return;
+        if (Social.ShowGroups == groups && _windows.CloseIfShown(SecondWindow.Friends)) return;
+        if (groups) OpenGroups();
+        else OpenSocial();
+    }
 
     [RelayCommand]
-    private void OpenChatRooms()
+    private void ToggleMessages()
+    {
+        if (Multi.Running) return;
+        if (!_windows.CloseIfShown(SecondWindow.Messages)) OpenMessages();
+    }
+
+    [RelayCommand]
+    private void ToggleChatRooms()
+    {
+        if (Multi.Running) return;
+        if (!_windows.CloseIfShown(SecondWindow.ChatRooms)) OpenChatRooms();
+    }
+
+    [ObservableProperty] private bool _chatRoomsOpen;
+
+    internal void OpenChatRooms()
     {
         if (Multi.Running) return;
         _windows.ShowChatRooms(Social, _pol.Credentials.SaveChatPassword, _pol.Credentials.DropChatPassword, SvgIcons.Emote, () => ChatRoomsOpen = false);

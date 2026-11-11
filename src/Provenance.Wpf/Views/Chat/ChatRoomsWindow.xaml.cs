@@ -26,6 +26,8 @@ public partial class ChatRoomsWindow : AppWindow
         Closed += (_, _) => _vm.Dispose();
     }
 
+    internal ChatRoomsViewModel Rooms => _vm;
+
     // Esc in a room is for the room
     protected override bool OnEscape() => !_vm.InRoom && base.OnEscape();
 
