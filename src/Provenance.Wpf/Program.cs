@@ -15,6 +15,7 @@ public static class Program
     [STAThread]
     public static void Main()
     {
+        AppCulture.Apply();
         ThreadStaticsFix.Apply();
         StartLogging(AppPaths.Logs);
         // before any window: it gives the windows the shortcuts' taskbar id, and UpdateManager can't find the install
