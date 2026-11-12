@@ -384,7 +384,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         }
         if (token.IsCancellationRequested) return await Stopped();
 
-        await _launch.FinishWindowerUpdateAsync(_ => SetRunStatus($"{WindowerLauncher.FinishingUpdateText} {step}"));
+        await _launch.FinishWindowerUpdateAsync(_ => SetRunStatus($"{WindowerLauncher.FinishingUpdateText} {step}"), token);
         if (token.IsCancellationRequested) return await Stopped();
         _launch.WriteOptions(account.ProfileId);
         if (await BackUpForRunAsync(hookProfile))

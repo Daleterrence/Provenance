@@ -138,6 +138,8 @@ public sealed class SettingsService : ISettingsService
             gate = HoldLock();
             AtomicFile.Write(_path, settings.ToJsonString(JsonOptions));
             Log.Debug("Settings saved to {Path}", _path);
+            SaveProblem = null;
+            _saveFailedRaised = false;
             return true;
         }
         catch (Exception ex)

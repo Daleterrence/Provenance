@@ -39,7 +39,9 @@ internal sealed class WindowerBackgroundUpdate
 
     internal async Task<bool> WaitAsync(CancellationToken ct = default)
     {
-        await Task.WhenAny(_task, Task.Delay(Left(), ct));
+        using var stopTimer = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        await Task.WhenAny(_task, Task.Delay(Left(), stopTimer.Token));
+        stopTimer.Cancel();
         ct.ThrowIfCancellationRequested();
         return _task.IsCompleted;
     }

@@ -37,7 +37,7 @@ public interface ISettingsService
 
     string? LoadProblem { get; }
 
-    // the first failed save, kept for a listener that wasn't there yet when SaveFailed was raised
+    // the last save's failure while it still stands, kept for a listener that wasn't there yet when SaveFailed was raised
     string? SaveProblem => null;
 
     // settings.json as it is now, another copy may have saved since

@@ -138,7 +138,7 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
             if (await StartGameAsync(profileId) is { } end) return end;
             ct = CancellationToken.None;
         }
-        links.Report(new LaunchProgress("Signed in", "Loading your friends and profile..."));
+        links.Report(new LaunchProgress("Logged in", "Loading your friends and profile..."));
         var full = await launch.GoFullAsync(ct);
         if (full.Code != 0)
         {

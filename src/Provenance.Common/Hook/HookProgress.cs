@@ -33,18 +33,18 @@ public sealed class HookProgress(bool lean = false)
             case ViewerStarted:
                 return Once("vi", "Starting", "Starting PlayOnline...", 0.06);
             case RealAuthStarted:
-                return Once("auth", "Signing in", "Connecting to PlayOnline...", 0.08);
+                return Once("auth", "Logging in", "Connecting to PlayOnline...", 0.08);
             case AuthStateChanged s when !_ready:
                 var (text, f) = AuthStateText(s.State);
-                return Once("st:" + text, "Signing in", text, f);
+                return Once("st:" + text, "Logging in", text, f);
             case AuthSucceeded:
-                return Once("ok", "Signed in", "Loading your friends and profile...", 0.68);
+                return Once("ok", "Logged in", "Loading your friends and profile...", 0.68);
             case ListLoaded when !_ready:
                 _loadsDone++;
-                return new LaunchProgress("Signed in", "Loading your friends and profile...",
+                return new LaunchProgress("Logged in", "Loading your friends and profile...",
                                           Math.Min(0.68 + 0.04 * _loadsDone, 0.88));
             case ContentIdsCounted { Ffxi: 0 }:
-                return Once("cids", "Signed in", "This account has no Content ID for FINAL FANTASY XI.", 0.9);
+                return Once("cids", "Logged in", "This account has no Content ID for FINAL FANTASY XI.", 0.9);
             case SessionHeld:
                 _ready = true;
                 // a lean session never goes online, and it's too soon to say the game's starting

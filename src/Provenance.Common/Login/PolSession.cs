@@ -359,6 +359,7 @@ public sealed partial class PolSession : IDisposable
                     if (Ending(HookLog.Parse(line)) is { } result) return result;
                 int? exit = null;
                 try { if (_polProc is { HasExited: true } ended) exit = ended.ExitCode; }
+                // the exit code is a nice to have
                 catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
                 ScreenSaver.PutBack();
                 LogEarlyExit(pid, exit, logPath);
@@ -416,6 +417,7 @@ public sealed partial class PolSession : IDisposable
     {
         int? exit = null;
         try { if (_polProc is { HasExited: true } gone && gone.Id == pid) exit = gone.ExitCode; }
+        // the exit code is a nice to have
         catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
         Log.Warning("Held PlayOnline session (pid {Pid}) ended on its own (exit code {Exit})", pid, exit);
         ScreenSaver.PutBack();
@@ -668,6 +670,7 @@ public sealed partial class PolSession : IDisposable
             await p.WaitForExitAsync();
             return p.ExitCode;
         }
+        // no process to wait on, so try the kept handle below
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
         // already gone, the handle kept from its start can still say how it ended. No gate, this can be the UI thread
         var kept = _polProc;

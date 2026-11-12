@@ -21,13 +21,13 @@ public partial class LeanStartWindow : AppWindow
     }
 
     // closed by hand it's cancel, and the start takes it down once that's gone through. With nothing left to cancel
-    // (the game's on its way) it just closes
+    // it stays, this is the only window until the start's over
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!_done && DataContext is MainViewModel { CanCancel: true } main)
+        if (!_done && DataContext is MainViewModel main)
         {
             e.Cancel = true;
-            main.CancelLaunchCommand.Execute(null);
+            if (main.CanCancel) main.CancelLaunchCommand.Execute(null);
         }
         base.OnClosing(e);
     }

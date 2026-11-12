@@ -12,7 +12,7 @@ internal enum TrayState { LoggedOut, LoggedIn, GameOpen }
 public sealed class TrayIcon : IDisposable
 {
     private readonly System.Windows.Forms.NotifyIcon _icon;
-    private readonly System.Drawing.Icon _noticePicture;
+    private readonly System.Drawing.Icon _noticePicture, _trayPicture;
     private readonly System.Windows.Forms.ToolStripItem _friends, _signOut, _exit;
     private readonly Func<string> _friendsTitle;
 
@@ -77,7 +77,8 @@ public sealed class TrayIcon : IDisposable
     public TrayIcon(Func<string> friendsTitle)
     {
         _friendsTitle = friendsTitle;
-        _icon = new System.Windows.Forms.NotifyIcon { Text = "Provenance (logged in to PlayOnline)", Visible = false, Icon = LoadIcon(AppIcon) };
+        _trayPicture = LoadIcon(AppIcon);
+        _icon = new System.Windows.Forms.NotifyIcon { Text = "Provenance (logged in to PlayOnline)", Visible = false, Icon = _trayPicture };
         _noticePicture = LoadIcon(AppIcon, large: true);
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Open Provenance", null, (_, _) => OpenRequested?.Invoke());
@@ -164,6 +165,7 @@ public sealed class TrayIcon : IDisposable
     {
         _icon.Visible = false;
         _icon.Dispose();
+        _trayPicture.Dispose();
         _noticePicture.Dispose();
     }
 }

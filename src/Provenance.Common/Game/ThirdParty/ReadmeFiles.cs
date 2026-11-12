@@ -45,6 +45,7 @@ public static class ReadmeFiles
     private static bool SizeOk(string file)
     {
         try { return new FileInfo(file).Length is > 0 and <= MaxBytes; }
+        // a file we can't stat is one we don't show
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 }

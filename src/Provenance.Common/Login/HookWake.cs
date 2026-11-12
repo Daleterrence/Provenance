@@ -41,6 +41,7 @@ internal sealed class HookWake : IDisposable
 
     private void Poke()
     {
+        // a watcher can fire after Dispose
         try { _changed.Set(); } catch (ObjectDisposedException) { }
     }
 

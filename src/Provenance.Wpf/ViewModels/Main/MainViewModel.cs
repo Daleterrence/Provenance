@@ -455,12 +455,22 @@ public partial class MainViewModel : ObservableObject
 
     internal Task PrestartRestarted { get; private set; } = Task.CompletedTask;
 
+    private void StopPrestartLogged()
+    {
+        try { _pol.Prestarter.StopPrestart(); }
+        catch (Exception ex) { Log.Warning(ex, "Stopping the pre-start failed"); }
+    }
+
     // a pol.exe pre-started for a plain login has to go before Windower or Ashita start one of their own
     private void RestartPrestart() =>
         PrestartRestarted = Task.Run(() =>
         {
-            _pol.Prestarter.StopPrestart();
-            _pol.Prestarter.Prestart();
+            try
+            {
+                _pol.Prestarter.StopPrestart();
+                _pol.Prestarter.Prestart();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Restarting the pre-start failed"); }
         });
 
     private void RefreshInstallState()
@@ -808,8 +818,14 @@ public partial class MainViewModel : ObservableObject
         var hookBefore = _settings.Current.ThirdPartyHookPlatform;
         ShowHandles();
         var vm = new SettingsViewModel(_dialogs, _settings, _feeds, Session, holdPrestarts: _pol.Prestarter.HoldPrestarts,
-                                       stopPrestart: () => Task.Run(_pol.Prestarter.StopPrestart), handles: Handles);
-        vm.Hooks.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(HookSettings.Hook)) PlayPlatform.Changed(); };
+                                       stopPrestart: () => Task.Run(StopPrestartLogged), handles: Handles);
+        bool platformPicked = false;
+        vm.Hooks.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(HookSettings.Hook)) return;
+            platformPicked = true;
+            PlayPlatform.Changed();
+        };
         Handles.Opened();
         try { _windows.ShowSettings(vm, tab); }
         finally
@@ -818,7 +834,7 @@ public partial class MainViewModel : ObservableObject
             Handles.Closed();
         }
         // a platform picked here answers the new install's question too
-        if (_settings.Current.ThirdPartyHookPlatform != hookBefore) Setup.Done();
+        if (platformPicked) Setup.Done();
         if (vm.Hooks.RestartWanted)
         {
             RequestRestart?.Invoke();
