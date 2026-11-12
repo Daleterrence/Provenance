@@ -62,35 +62,62 @@ public sealed class WindowerUpdater
 
     public async Task<WindowerUpdateResult> UpdateAsync(CancellationToken ct = default)
     {
+        using var run = await BeginAsync(ct);
+        return await run.FinishAsync();
+    }
+
+    // up to and including the core files, with the update lock and the folder's pins still held for FinishAsync
+    internal async Task<WindowerUpdateRun> BeginAsync(CancellationToken ct = default)
+    {
         var result = new WindowerUpdateResult(Branch);
         result.HookBefore = result.HookAfter = WindowerFiles.FileVersion(HookPath);
         result.LauncherBefore = result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath);
         var (hold, timedOut) = await TakeMutexAsync(result.Errors, ct);
-        using var held = hold;
         if (hold is null)
         {
             result.LockTimedOut = timedOut;
             result.HasManifest = WindowerManifest.LoadCached(Folder) is not null;
-            return result;
+            return new WindowerUpdateRun(result);
         }
-        using var job = Open(result.Errors, ct);
-        if (job is null) return result;
-        bool skip = OthersRunning();
-        if (skip)
+        WindowerUpdateFolder? job = null;
+        try
         {
-            result.Skipped = true;
-            result.SkipReason = "PlayOnline, xiloader or Windower is running, so Windower only got its resource files and anything missing.";
-        }
+            job = Open(result.Errors, ct);
+            if (job is null)
+            {
+                hold.Dispose();
+                return new WindowerUpdateRun(result);
+            }
+            bool skip = OthersRunning();
+            if (skip)
+            {
+                result.Skipped = true;
+                result.SkipReason = "PlayOnline, xiloader or Windower is running, so Windower only got its resource files and anything missing.";
+            }
 
-        var manifest = WindowerManifest.Empty;
-        await job.Step(async () => manifest = await ManifestAsync(job, skip, result));
-        await job.Step(() => CoreAsync(job, manifest, skip, result));
+            var manifest = WindowerManifest.Empty;
+            await job.Step(async () => manifest = await ManifestAsync(job, skip, result));
+            await job.Step(() => CoreAsync(job, manifest, skip, result));
+            return new WindowerUpdateRun(this, result, hold, job, manifest, skip);
+        }
+        catch
+        {
+            job?.Dispose();
+            hold.Dispose();
+            throw;
+        }
+    }
+
+    internal bool PluginsPending(WindowerUpdateFolder job, WindowerManifest manifest, bool skip) =>
+        new WindowerPluginUpdate(job, Servers, Branch).AnyToFetch(manifest, skip);
+
+    internal async Task RestAsync(WindowerUpdateFolder job, WindowerManifest manifest, bool skip, WindowerUpdateResult result)
+    {
         await job.Step(() => ResAsync(job, result));
         await job.Step(() => new WindowerPluginUpdate(job, Servers, Branch).UpdateAllAsync(manifest, skip, result));
         await job.Step(() => new WindowerAddonUpdate(job, Servers, Branch).UpdateAsync(skip, result));
         if (!skip) job.Cleanup();
         result.UnreachableHosts = job.Http.OfflineHosts.ToList();
-        return result;
     }
 
     // the DLL with its file's date (so normally the 1601 one), then the zip only if the DLL came down

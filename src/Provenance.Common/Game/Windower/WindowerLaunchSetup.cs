@@ -17,6 +17,7 @@ public sealed record WindowerLaunchSetup
     public RegistryKey? RegistryRoot { get; init; }
     public Func<string, string, WindowerUpdater>? NewUpdater { get; init; }
     public TimeSpan UpdateLimit { get; init; } = WindowerLauncher.UpdateLimit;
+    internal WindowerBackgroundUpdates Background { get; init; } = WindowerBackgroundUpdates.Shared;
     // the answer an earlier start of this login already got, so Windower isn't asked twice
     internal WindowerUpdateAnswer? KnownUpdate { get; init; }
 }

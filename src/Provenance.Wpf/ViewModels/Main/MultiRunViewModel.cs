@@ -5,6 +5,7 @@ using Provenance.Common.Credentials;
 using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Game.Windower;
 using Provenance.Common.Login;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
@@ -383,6 +384,8 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         }
         if (token.IsCancellationRequested) return await Stopped();
 
+        await _launch.FinishWindowerUpdateAsync(_ => SetRunStatus($"{WindowerLauncher.FinishingUpdateText} {step}"));
+        if (token.IsCancellationRequested) return await Stopped();
         _launch.WriteOptions(account.ProfileId);
         if (await BackUpForRunAsync(hookProfile))
         {

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Principal;
@@ -26,6 +27,8 @@ public sealed class WindowerLauncher : IDisposable
     public static readonly TimeSpan UpdateLimit = TimeSpan.FromMinutes(2);
     public static readonly TimeSpan TurnWait = UpdateLimit + WatcherLimit + TimeSpan.FromSeconds(30);
 
+    public const string FinishingUpdateText = "Finishing Windower's update...";
+
     public const string UpdateNoticeText = "Windower couldn't be fully updated this time, so the game starts with the files it already has.";
 
     // what Windower.exe writes when there's no init.txt, byte for byte
@@ -42,6 +45,8 @@ public sealed class WindowerLauncher : IDisposable
     private SafeMemoryMappedFileHandle? _mapping;
     private SafeWaitHandle? _ready;
     private string? _launchId;
+    private WindowerUpdateRun? _rest;
+    private TimeSpan _restLimit;
 
     private WindowerLauncher(WindowerLaunchSetup setup) => _setup = setup;
 
@@ -51,6 +56,7 @@ public sealed class WindowerLauncher : IDisposable
     public WindowerLaunchLists? Lists { get; private set; }
     public WindowerUpdateResult? Update { get; private set; }
     public string? UpdateNotice { get; private set; }
+    internal WindowerBackgroundUpdate? Background { get; private set; }
     internal WindowerUpdateAnswer UpdateAnswer => new(Update, UpdateNotice);
     public IReadOnlyList<string> RegistryWritten { get; private set; } = [];
     public bool HandoverOpen => _mapping is not null && _ready is not null;
@@ -93,10 +99,18 @@ public sealed class WindowerLauncher : IDisposable
         }
     }
 
+    public static void StopBackgroundUpdates(TimeSpan wait) => WindowerBackgroundUpdates.Shared.Stop(wait);
+
     internal static Dictionary<string, WindowerAddonList>? Snapshot(IReadOnlyDictionary<string, WindowerAddonList>? lists) =>
         lists?.Where(kv => kv.Value is not null).ToDictionary(kv => kv.Key, kv => kv.Value.Copy(), StringComparer.Ordinal);
 
     private void Steps(IProgress<LaunchProgress>? progress, CancellationToken ct)
+    {
+        try { RunSteps(progress, ct); }
+        finally { BeginBackground(); }
+    }
+
+    private void RunSteps(IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         var dir = _setup.WindowerDir;
         if (FolderPins.Linked(dir)) throw Shown.Mark(new IOException(WindowerInstall.LinkedText));
@@ -120,6 +134,14 @@ public sealed class WindowerLauncher : IDisposable
         timer.Lap("addon lists and hook block");
         OpenHandover();
         timer.Lap("hand-over");
+    }
+
+    // the launch has read what it needs from the folder by now, and whatever happens to it the rest of the update goes on
+    private void BeginBackground()
+    {
+        if (_rest is not { } run) return;
+        _rest = null;
+        Background = _setup.Background.Start(_setup.WindowerDir, run, _restLimit);
     }
 
     private void TakeTurn(IProgress<LaunchProgress>? progress, CancellationToken ct)
@@ -171,8 +193,17 @@ public sealed class WindowerLauncher : IDisposable
             : $"The Windower profile {name} isn't in Windower's settings any more. Choose another one in Settings, under Windower/Ashita."));
     }
 
+    private void WaitForBackground(IProgress<LaunchProgress>? progress, CancellationToken ct)
+    {
+        if (_setup.Background.Running(_setup.WindowerDir) is not { } running) return;
+        Log.Information("Windower's last update is still finishing, waiting for it before this launch touches the folder");
+        progress?.Report(new LaunchProgress("Starting", FinishingUpdateText));
+        if (!running.Wait(ct)) Log.Warning("Windower's last update is still going past its limit, the launch carries on");
+    }
+
     private void UpdateWindower(string branch, IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
+        WaitForBackground(progress, ct);
         if (_setup.KnownUpdate is { } known)
         {
             Update = known.Update;
@@ -181,10 +212,23 @@ public sealed class WindowerLauncher : IDisposable
         }
         progress?.Report(new LaunchProgress("Starting", "Checking for Windower updates..."));
         var updater = (_setup.NewUpdater ?? ((d, b) => new WindowerUpdater(d, b)))(_setup.WindowerDir, branch);
+        var clock = Stopwatch.StartNew();
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(_setup.UpdateLimit);
-        bool failed = false;
-        try { Update = updater.UpdateAsync(limit.Token).GetAwaiter().GetResult(); }
+        bool failed = false, split = false;
+        WindowerUpdateRun? run = null;
+        try
+        {
+            run = updater.BeginAsync(limit.Token).GetAwaiter().GetResult();
+            split = run.CanSplit && !ct.IsCancellationRequested;
+            if (split)
+            {
+                Update = run.Result;
+                _rest = run;
+                _restLimit = TimeSpan.FromTicks(Math.Max((_setup.UpdateLimit - clock.Elapsed).Ticks, TimeSpan.FromSeconds(1).Ticks));
+            }
+            else Update = run.FinishAsync().GetAwaiter().GetResult();
+        }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             Log.Warning("Windower's update took longer than {Limit}, the launch carries on without it", _setup.UpdateLimit);
@@ -195,17 +239,21 @@ public sealed class WindowerLauncher : IDisposable
             Log.Warning(e, "Windower's update failed");
             failed = true;
         }
+        finally { if (!split) run?.Dispose(); }
         ct.ThrowIfCancellationRequested();
-        if (Update is { } r)
-        {
-            foreach (var e in r.Errors) Log.Warning("Windower update: {Error}", e);
-            if (r.Skipped) Log.Information("Windower update: {Reason}", r.SkipReason);
-            Log.Information("Windower update ({Branch}): Hook.dll {Before} -> {After}, {Plugins} plugin(s), {Addons} addon(s)",
-                            r.Branch, r.HookBefore, r.HookAfter, r.PluginsUpdated.Count, r.AddonsUpdated.Count);
-        }
+        if (split) Log.Information("Windower update ({Branch}): core files done, the resources and addons carry on behind the login", Update!.Branch);
+        else if (Update is { } r) LogUpdate(r);
         if (!failed && Update is { Errors.Count: 0, LockTimedOut: false }) return;
         UpdateNotice = UpdateNoticeText;
         progress?.Report(LaunchProgress.Notice(UpdateNotice));
+    }
+
+    internal static void LogUpdate(WindowerUpdateResult r)
+    {
+        foreach (var e in r.Errors) Log.Warning("Windower update: {Error}", e);
+        if (r.Skipped) Log.Information("Windower update: {Reason}", r.SkipReason);
+        Log.Information("Windower update ({Branch}): Hook.dll {Before} -> {After}, {Plugins} plugin(s), {Addons} addon(s)",
+                        r.Branch, r.HookBefore, r.HookAfter, r.PluginsUpdated.Count, r.AddonsUpdated.Count);
     }
 
     private void ApplyRegistry()

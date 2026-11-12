@@ -17,7 +17,7 @@ internal sealed class WindowerUpdateFolder : IDisposable
     public readonly WindowerHttp Http;
     public readonly FolderPins Pins;
     public readonly List<string> Errors;
-    public readonly CancellationToken Ct;
+    public CancellationToken Ct { get; private set; }
 
     public WindowerUpdateFolder(string root, WindowerHttp http, FolderPins pins, List<string> errors, CancellationToken ct)
     {
@@ -27,6 +27,8 @@ internal sealed class WindowerUpdateFolder : IDisposable
         Errors = errors;
         Ct = ct;
     }
+
+    public void Retarget(CancellationToken ct) => Ct = ct;
 
     public static string TempDirOf(string windowerDir) => Path.Combine(windowerDir, "updates", "temp");
 

@@ -173,6 +173,8 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
     {
         // nothing's left to cancel, and a close or a Windows log-off mustn't wait on a login that's over
         links.EndCancellable();
+        var notice = await launch.FinishWindowerUpdateAsync(text => links.NewProgress("Starting FINAL FANTASY XI", text));
+        if (notice is not null) links.Report(LaunchProgress.Notice(notice));
         launch.WriteOptions(profileId);
         links.NewProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         await links.BackUpGameSettings(null, text => links.Report(new LaunchProgress("Starting game", text)));

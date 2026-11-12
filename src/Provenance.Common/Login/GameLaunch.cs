@@ -1,6 +1,8 @@
 using Serilog;
 using Provenance.Common.Credentials;
 using Provenance.Common.Game;
+using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Game.Windower;
 using Provenance.Common.Install;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
@@ -41,6 +43,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
     internal Action? SignalPlaySeam { get; init; }
     internal Action<string?>? WriteOptionsSeam { get; init; }
     internal Func<LaunchLogin, CancellationToken, Task<int>>? LogInSeam { get; init; }
+    internal Func<Action<string>?, CancellationToken, Task<string?>>? FinishWindowerUpdateSeam { get; init; }
 
     // claimed before the code's asked, so no other copy logs this account in meanwhile
     public ClaimResult Claim(Account p, Func<string?> askOtp)
@@ -97,6 +100,20 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         try { return new((CheckSeam ?? PolUpdates.CheckFfxi)(dirs.Ffxi, dirs.Viewer, dirs.Region, progress, ct), null); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { return null; }
         catch (Exception ex) { return new(null, ex); }
+    }
+
+    // the game mustn't start while Windower's update is still writing in its folder. Says what's going on only if it has
+    // to wait, and gives back the update's notice if it didn't all go in
+    public async Task<string?> FinishWindowerUpdateAsync(Action<string>? saying, CancellationToken ct = default)
+    {
+        if (FinishWindowerUpdateSeam is { } seam) return await seam(saying, ct);
+        if (pol.Platform != ThirdPartyHook.Windower || pol.Windower.Update is not { } update) return null;
+        if (!update.Finished)
+        {
+            saying?.Invoke(WindowerLauncher.FinishingUpdateText);
+            if (!await update.WaitAsync(ct)) Log.Warning("Windower's update is still going past its limit, the game starts anyway");
+        }
+        return update.TakeNotice();
     }
 
     public Task<GoFullResult> GoFullAsync(CancellationToken ct) => GoFullSeam is { } seam ? seam(ct) : pol.GoFullAsync(ct);

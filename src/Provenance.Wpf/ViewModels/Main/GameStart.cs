@@ -67,6 +67,7 @@ internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISetti
             dialogs.Error("Can't start FINAL FANTASY XI", held);
             return;
         }
+        await FinishWindowerUpdateAsync();
         launch.WriteOptions(main.Accounts.SessionProfileId);
         links.NewProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         await BackUpGameSettingsAsync(null, text => main.ProgressText = text);
@@ -104,6 +105,12 @@ internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISetti
         links.Show();
         pol.Prestarter.Prestart();
         if (ended is not null) dialogs.Error("Can't start FINAL FANTASY XI", ended, offerLogs: true);
+    }
+
+    private async Task FinishWindowerUpdateAsync()
+    {
+        var notice = await launch.FinishWindowerUpdateAsync(text => links.NewProgress("Starting FINAL FANTASY XI", text));
+        if (notice is not null) links.Report(LaunchProgress.Notice(notice));
     }
 
     // a test says whether its made-up session is still there

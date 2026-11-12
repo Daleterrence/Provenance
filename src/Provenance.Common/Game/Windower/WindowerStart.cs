@@ -13,6 +13,7 @@ internal sealed class WindowerStart
     private readonly Watcher _watcher;
     private readonly WindowerSetup _setup;
     private WindowerGameValues? _play;
+    private WindowerBackgroundUpdate? _update;
 
     public WindowerStart(ISettingsService settings, Watcher watcher, WindowerSetup? setup = null)
     {
@@ -20,7 +21,13 @@ internal sealed class WindowerStart
         _setup = setup ?? ((polExe, profile, lists, shared) => WindowerLauncher.SetupFor(settings, polExe, profile, lists, shared));
     }
 
-    internal void Forget() => Volatile.Write(ref _play, null);
+    internal WindowerBackgroundUpdate? Update => Volatile.Read(ref _update);
+
+    internal void Forget()
+    {
+        Volatile.Write(ref _play, null);
+        Volatile.Write(ref _update, null);
+    }
 
     internal int? Start(ProcessStartInfo psi, string polExe, string launchId, SessionOptions options, IProgress<LaunchProgress>? progress, CancellationToken ct,
                         WindowerUpdateAnswers? answers = null)
@@ -31,6 +38,7 @@ internal sealed class WindowerStart
             var setup = _setup(polExe, options.ThirdPartyHookProfile, options.WindowerLists, options.WindowerShared);
             windower = WindowerLauncher.Prepare(answers?.Value is { } known ? setup with { KnownUpdate = known } : setup, progress, ct);
             if (answers is not null) answers.Value ??= windower.UpdateAnswer;
+            Volatile.Write(ref _update, windower.Background);
         }
         catch (OperationCanceledException)
         {

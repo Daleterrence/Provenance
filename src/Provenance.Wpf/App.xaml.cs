@@ -5,6 +5,7 @@ using Provenance.Common;
 using Provenance.Common.Credentials;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;
+using Provenance.Common.Game.Windower;
 using Provenance.Common.Hook;
 using Provenance.Common.Logging;
 using Provenance.Common.Login;
@@ -239,6 +240,7 @@ public partial class App : Application
             Log.Information("Provenance exiting (code {Code})", e.ApplicationExitCode);
             try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }   // exit goes ahead without it
             if (_pol is { } pol) EndSession(pol);
+            WindowerLauncher.StopBackgroundUpdates(TimeSpan.FromSeconds(3));
             if (RestartOnExit) StartAgain();
             else if (!SelfUpdate.HandOverAfterExit(out var restartArgs)) StartAgain(restartArgs);
         }

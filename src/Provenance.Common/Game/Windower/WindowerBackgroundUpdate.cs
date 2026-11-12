@@ -1,0 +1,77 @@
+using Serilog;
+
+namespace Provenance.Common.Game.Windower;
+
+// the end of a Windower update (resources and addons), carried on after pol.exe's been started. A failed login or a
+// cancel doesn't stop it, only its time limit or the app closing does
+internal sealed class WindowerBackgroundUpdate
+{
+    private static readonly TimeSpan Grace = TimeSpan.FromSeconds(10);
+
+    private readonly CancellationTokenSource _cts;
+    private readonly CancellationToken _appEnd;
+    private readonly Task _task;
+    private readonly DateTime _giveUp;
+    private string? _notice;
+
+    internal WindowerBackgroundUpdate(string folder, WindowerUpdateRun run, CancellationToken appEnd, TimeSpan limit)
+    {
+        Folder = folder;
+        _appEnd = appEnd;
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(appEnd);
+        _cts.CancelAfter(limit);
+        run.Retarget(_cts.Token);
+        _giveUp = DateTime.UtcNow + limit + Grace;
+        _task = Task.Run(() => FinishAsync(run));
+    }
+
+    public string Folder { get; }
+
+    public bool Finished => _task.IsCompleted;
+
+    internal Task Done => _task;
+
+    // set once it's over if it didn't all go in, and handed out once
+    internal string? TakeNotice() => Interlocked.Exchange(ref _notice, null);
+
+    // on the launch's own thread. False when it's still going well past its limit
+    internal bool Wait(CancellationToken ct) => _task.Wait(Left(), ct);
+
+    internal async Task<bool> WaitAsync(CancellationToken ct = default)
+    {
+        await Task.WhenAny(_task, Task.Delay(Left(), ct));
+        ct.ThrowIfCancellationRequested();
+        return _task.IsCompleted;
+    }
+
+    private TimeSpan Left() => _giveUp > DateTime.UtcNow ? _giveUp - DateTime.UtcNow : TimeSpan.Zero;
+
+    private async Task FinishAsync(WindowerUpdateRun run)
+    {
+        try
+        {
+            var result = await run.FinishAsync();
+            WindowerLauncher.LogUpdate(result);
+            if (result.Errors.Count > 0) _notice = WindowerLauncher.UpdateNoticeText;
+        }
+        catch (OperationCanceledException) when (_appEnd.IsCancellationRequested)
+        {
+            Log.Information("Windower's update was stopped, Provenance is closing");
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Warning("Windower's update took longer than its limit, so it was stopped");
+            _notice = WindowerLauncher.UpdateNoticeText;
+        }
+        catch (Exception e)
+        {
+            Log.Warning(e, "Windower's update failed behind the login");
+            _notice = WindowerLauncher.UpdateNoticeText;
+        }
+        finally
+        {
+            run.Dispose();
+            _cts.Dispose();
+        }
+    }
+}

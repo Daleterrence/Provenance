@@ -19,14 +19,21 @@ internal sealed class WindowerPluginUpdate(WindowerUpdateFolder job, WindowerSer
                 job.Errors.Add($"The manifest names a plugin that isn't allowed ({p.Name}), so it was skipped.");
                 continue;
             }
-            var dll = DllPath(p.Name);
-            bool missing = !File.Exists(dll);
-            if (!p.Required && missing) continue;
-            if (skip && !(p.Required && missing)) continue;
-            if (WindowerFiles.FileVersion(dll) == p.Version) continue;
+            if (!Wants(p, skip)) continue;
             var written = new List<string>();
-            if (await FetchAsync(p, dll, install: false, written) == WindowerFetchOutcome.Downloaded) result.PluginsUpdated.Add(p.Name);
+            if (await FetchAsync(p, DllPath(p.Name), install: false, written) == WindowerFetchOutcome.Downloaded) result.PluginsUpdated.Add(p.Name);
         }
+    }
+
+    public bool AnyToFetch(WindowerManifest manifest, bool skip) => manifest.Plugins.Any(p => WindowerFiles.IsPlainName(p.Name) && Wants(p, skip));
+
+    private bool Wants(WindowerPlugin p, bool skip)
+    {
+        var dll = DllPath(p.Name);
+        bool missing = !File.Exists(dll);
+        if (!p.Required && missing) return false;
+        if (skip && !(p.Required && missing)) return false;
+        return WindowerFiles.FileVersion(dll) != p.Version;
     }
 
     // Zip first and the DLL last, once every file's in, so anything short gets tried again. Like Windower, an update
