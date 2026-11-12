@@ -123,14 +123,18 @@ static int hold_idle_timeout_for_game(BYTE *b)
     return mins;
 }
 
-/* the app sets this right after it writes the Play entry, so Play doesn't wait out the 150ms beat. It only wakes the
-   hold, cred_play_signalled still decides whether the game starts, and anything that made the name first just wakes it */
+/* the app sets this right after it writes the Play entry so Play skips the 150ms beat. The file still decides */
 static HANDLE g_play_event;
 static void hold_play_event_open(void)
 {
     char name[64];
     wsprintfA(name, IPC_PLAY_EVENT, GetCurrentProcessId());
     g_play_event = CreateEventA(NULL, FALSE, FALSE, name);
+}
+static void hold_play_event_close(void)
+{
+    if (g_play_event) CloseHandle(g_play_event);
+    g_play_event = NULL;
 }
 /* the 16ms the hold sleeps between turns, cut short by the app. 1 when it was */
 static int hold_beat(void)
@@ -225,6 +229,7 @@ static void hold_sign_out(BYTE *b, const char *spath)
     ULONGLONG until = GetTickCount64() + SIGN_OUT_DRAIN_MS;
     DeleteFileA(spath);
     message_store_drop();
+    hold_play_event_close();
     g_s.draining = 1;
     if (!g_lean) mail_inbox_ack_request();
     my_profile_abandon(b);
@@ -375,6 +380,7 @@ static void hold_run(BYTE *b)
                 /* the game keeps going whatever happens to Provenance */
                 if (g_owner) CloseHandle(g_owner);
                 g_owner = NULL;
+                hold_play_event_close();
                 base_log("hold: booting FFXI\r\n");
                 return;
             }

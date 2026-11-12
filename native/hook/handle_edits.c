@@ -2,7 +2,7 @@
    or delete is a local 0x314/0x318 and then one PutHandleList (0x1030), a reorder 0x2c8 a record and one PutChrList */
 static struct { int n, idx[64]; BYTE old[64], want[64]; } g_hord;
 
-/* 0x318 is the delete, so it only ever runs on the slot a create claimed: in use, and no Handle ID from the server yet */
+/* 0x318 is the delete, so it only runs on a slot a create claimed (in use, no Handle ID from the server yet) */
 static void handle_create_release(BYTE *b)
 {
     pol_handle h;
@@ -106,7 +106,10 @@ static void handle_create(BYTE *b, char *p)
     }
     if (used >= 64) { handle_fail("failed:handles full"); return; }
     memset(wname, 0, sizeof wname);
-    if (!name[0] || MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, 31) <= 0) { handle_fail("failed:bad name"); return; }
+    if (!name[0] || MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, 31) <= 0) {
+        handle_fail("failed:bad name");
+        return;
+    }
     len = pc_wide_to_sjis(b, NULL, wname, SJIS_GETA);
     if (len < 1 || len > 15) { handle_fail("failed:bad name"); return; }
     memset(sj, 0, sizeof sj);
@@ -141,7 +144,8 @@ static int handle_only_ffxi(BYTE *b, int slot, const pol_handle *h)
     for (int k = 0; k < 8; k++) {
         int idx = (h->chars[k] >> 1) & 0x3f;
         if (!(h->chars[k] & 1)) continue;
-        if (!peers_get_chr(b, idx, &c) || c.title != 1 || !(c.link & CHR_LINKED) || (int)CHR_HANDLE(c.link) != slot) return 0;
+        if (!peers_get_chr(b, idx, &c) || c.title != 1 || !(c.link & CHR_LINKED) ||
+            (int)CHR_HANDLE(c.link) != slot) return 0;
         mine[idx] = 1;
     }
     for (int i = 0; i < 64; i++)
@@ -187,7 +191,8 @@ static void handle_order(BYTE *b, char *p)
     }
     while (*(ix = requests_line(&p))) {
         ck = requests_line(&p); ov = requests_line(&p);
-        if (n == 64 || !requests_parse_num(ix, 2, &idx) || idx > 63 || named[idx] || !requests_parse_num(ov, 3, &val) || val > 255) {
+        if (n == 64 || !requests_parse_num(ix, 2, &idx) || idx > 63 || named[idx] ||
+            !requests_parse_num(ov, 3, &val) || val > 255) {
             handle_fail("failed:bad request");
             return;
         }

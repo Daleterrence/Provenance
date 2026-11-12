@@ -6,8 +6,8 @@
 
 #define NORETURN __declspec(noreturn)
 
-/* every fixed address the hook uses. addresses.c has where each one is in the current build and finds them all again before
-   any gets used, in case a POL update's moved them */
+/* every fixed address the hook uses. addresses.c has where each one is in this build and finds them all again
+   before any gets used, in case a POL update's moved them */
 enum hook_address {
     AT_MENU_SESSION,        /* the menu session, jumped over to the hook's own */
     AT_GAME_RETURN,         /* the content launcher's GameStart call, the trace call after it gets the hook's thunk */
@@ -532,8 +532,14 @@ static pol_chr *pc_content_record(BYTE *b, int idx) { return (pol_chr *)pc_addr_
 static pol_handle *pc_handle_record(BYTE *b, int slot) { return (pol_handle *)pc_addr_of(b, AT_HANDLES) + slot; }
 /* the list's reload test: the server's stamp is newer than mine, so an upload turns into a load */
 static int pc_friends_server_newer(BYTE *b) { return *pc_server_stamp(b, STAMP_FRIENDS) > *pc_local_stamp(b, STAMP_FRIENDS); }
-static int pc_handle_list_server_newer(BYTE *b) { return *pc_server_stamp(b, STAMP_HANDLE_LIST) > *pc_local_stamp(b, STAMP_HANDLE_LIST); }
-static int pc_links_server_newer(BYTE *b) { return *pc_server_stamp(b, STAMP_CONTENT_IDS) > *pc_local_stamp(b, STAMP_CONTENT_IDS); }
+static int pc_handle_list_server_newer(BYTE *b)
+{
+    return *pc_server_stamp(b, STAMP_HANDLE_LIST) > *pc_local_stamp(b, STAMP_HANDLE_LIST);
+}
+static int pc_links_server_newer(BYTE *b)
+{
+    return *pc_server_stamp(b, STAMP_CONTENT_IDS) > *pc_local_stamp(b, STAMP_CONTENT_IDS);
+}
 
 static int pc_friend_valid(const pol_friend *f) { return (f->hid_lo & 1) != 0; }
 static unsigned __int64 pc_friend_hid(const pol_friend *f) { return hid_of(f->hid_lo, f->hid_hi); }

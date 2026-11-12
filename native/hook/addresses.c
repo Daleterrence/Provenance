@@ -211,7 +211,7 @@ static int addr_sig_fits(const addr_module *m, DWORD off, const char *sig)
     return off >= m->text && off <= m->text_end && m->text_end - off >= n && addr_sig_at(m->image + off, sig);
 }
 
-/* a signature taken apart once for the search, with the first byte that counts (not always byte 0) tested before the rest */
+/* a signature taken apart once for the search, its first byte that counts (not always byte 0) tested first */
 #define ADDR_PAT_MAX 256
 typedef struct {
     BYTE want[ADDR_PAT_MAX], fixed[ADDR_PAT_MAX];

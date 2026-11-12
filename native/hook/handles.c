@@ -150,8 +150,8 @@ static void handles_linkall(BYTE *b, int slot, const pol_handle *h, char *ix, ch
     handles_put_start(b);
 }
 
-/* <op>, token, then the op's own lines: create has a name, order has index/key/order for each record, the rest a
-   slot, its handle key and index/key pairs. The keys are the snapshot's, so a request never lands on a record that changed */
+/* <op>, token, then lines each op reads for itself (see handle_create, handle_order and below).
+   The keys are the snapshot's, so a request can't land on a record that changed */
 static void handles_request(BYTE *b)
 {
     char buf[2048], *p, *op, *tok, *sl, *hk, *ix, *ck, k[17];
@@ -165,8 +165,12 @@ static void handles_request(BYTE *b)
     p = buf;
     op = requests_line(&p); tok = requests_line(&p);
     lstrcpynA(g_s.handle_token, tok, sizeof g_s.handle_token);
-    kind = !lstrcmpA(op, "switch") ? HOP_SWITCH : !lstrcmpA(op, "link") ? HOP_LINK : !lstrcmpA(op, "linkall") ? HOP_LINKALL
-         : !lstrcmpA(op, "create") ? HOP_CREATE : !lstrcmpA(op, "delete") ? HOP_DELETE : !lstrcmpA(op, "order") ? HOP_ORDER : 0;
+    kind = !lstrcmpA(op, "switch") ? HOP_SWITCH
+         : !lstrcmpA(op, "link") ? HOP_LINK
+         : !lstrcmpA(op, "linkall") ? HOP_LINKALL
+         : !lstrcmpA(op, "create") ? HOP_CREATE
+         : !lstrcmpA(op, "delete") ? HOP_DELETE
+         : !lstrcmpA(op, "order") ? HOP_ORDER : 0;
     /* one that fills the buffer was cut short on the way in, and its last line can't be trusted */
     if (!kind || !tok[0] || n >= (int)sizeof buf - 1) { handle_fail("failed:bad request"); return; }
     if (!g_in_hold) { handle_fail("failed:not in hold"); return; }
@@ -174,7 +178,8 @@ static void handles_request(BYTE *b)
     if (kind == HOP_CREATE) { handle_create(b, p); return; }
     if (kind == HOP_ORDER) { handle_order(b, p); return; }
     sl = requests_line(&p); hk = requests_line(&p); ix = requests_line(&p); ck = requests_line(&p);
-    if (!requests_parse_num(sl, 2, &slot) || slot > 63 || (kind == HOP_LINK && (!requests_parse_num(ix, 2, &idx) || idx > 63))) {
+    if (!requests_parse_num(sl, 2, &slot) || slot > 63 ||
+        (kind == HOP_LINK && (!requests_parse_num(ix, 2, &idx) || idx > 63))) {
         handle_fail("failed:bad request");
         return;
     }

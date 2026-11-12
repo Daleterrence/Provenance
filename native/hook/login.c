@@ -234,6 +234,12 @@ static void login_loads_stop(BYTE *b, struct pending_load *items, int n, const U
     base_log(LOG_STOP_REQUESTED " during profile load - signing out and exiting, FFXI NOT started\r\n");
     for (i = 0; i < n; i++)
         if (items[i].res == 0 && started[i]) pc_cancel_job(b, items[i].ticket);
+    {
+        char spath[MAX_PATH];
+        base_ipc_file(spath, IPC_SOCIAL);
+        DeleteFileA(spath);   /* a lean hold's snapshot, nothing there before the hold */
+        message_store_drop();
+    }
     login_viewer_sign_out(b);
     base_end_pol(STOPPED_EXIT);
 }
