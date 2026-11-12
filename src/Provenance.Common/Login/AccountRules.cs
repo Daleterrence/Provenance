@@ -135,7 +135,7 @@ public static class AccountRules
         if (code == LoginCodes.AuthFailed)
             why += "\n\nIf your password has changed, press Accounts and edit this account to update it, then log in again.";
         if (autoOff)
-            why += "\n\nProvenance has turned off Log in automatically, so it won't try this account again by itself.";
+            why += "\n\nProvenance has turned off Log In Automatically, so it won't try this account again by itself.";
         return (TitleFor(code), why, autoOff,
                 code is LoginCodes.Stalled or LoginCodes.LauncherFailed or LoginCodes.Unfinished
                 || TitleFor(code) == "Couldn't log in");

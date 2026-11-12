@@ -44,7 +44,7 @@
                       Foreground="{DynamicResource Text.2}" IsChecked="{Binding Accounts.UseOtp}"
                       ToolTip="Provenance asks for the code from your authenticator each time you log in to this account." />
             <TextBlock Text="All accounts" FontSize="11.5" Foreground="{DynamicResource Text.3}" Margin="0,0,0,4" />
-            <CheckBox Content="Log in automatically" FontSize="13" Margin="0,0,0,6"
+            <CheckBox Content="Log In Automatically" FontSize="13" Margin="0,0,0,6"
                       Foreground="{DynamicResource Text.2}" IsChecked="{Binding Accounts.AutoLogin}"
                       ToolTip="When Provenance opens, it logs in to the selected account. Hold Shift while it opens to skip this once." />
             <CheckBox Content="Start Game Automatically" FontSize="13"
