@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Services;
@@ -15,19 +16,35 @@ public partial class ReadmeWindow : AppWindow
         InitializeComponent();
         Title = title;
         Bar.Title = title;
-        if (markdown && Laid(text, openLink ?? DocsOpener.OpenReadmeLink) is { } page)
+        if (markdown && Markdown.Parse(text) is { } doc)
         {
-            Page.Document = page;
-            Page.Visibility = Visibility.Visible;
             BodyText.Visibility = Visibility.Collapsed;
-            FocusManager.SetFocusedElement(this, Page);
+            LoadingText.Visibility = Visibility.Visible;
+            Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, () => ShowPage(doc, text, openLink ?? DocsOpener.OpenReadmeLink));
         }
         else BodyText.Text = text;
     }
 
-    private static FlowDocument? Laid(string text, Action<Uri> openLink)
+    // the message has been painted by now, laying a big page out is what keeps the window busy
+    private void ShowPage(MarkdownDoc doc, string text, Action<Uri> openLink)
     {
-        if (Markdown.Parse(text) is not { } doc) return null;
+        if (!IsLoaded) return;
+        if (Laid(doc, openLink) is { } page)
+        {
+            Page.Document = page;
+            Page.Visibility = Visibility.Visible;
+            FocusManager.SetFocusedElement(this, Page);
+        }
+        else
+        {
+            BodyText.Text = text;
+            BodyText.Visibility = Visibility.Visible;
+        }
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => LoadingText.Visibility = Visibility.Collapsed);
+    }
+
+    private static FlowDocument? Laid(MarkdownDoc doc, Action<Uri> openLink)
+    {
         try { return ReadmeDocument.Build(doc, openLink); }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException)
         {

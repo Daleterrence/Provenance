@@ -23,6 +23,8 @@
                              BorderThickness="0" Background="Transparent" Padding="0" Foreground="{DynamicResource Text.1}"
                              CaretBrush="Transparent" SelectionBrush="{DynamicResource Primary}"
                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" behaviours:KeyScroll.Enabled="True" />
+                <TextBlock x:Name="LoadingText" Text="Loading..." Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontSize="16" Foreground="{DynamicResource Text.2}" />
             </Grid>
         </Border>
     </Grid>

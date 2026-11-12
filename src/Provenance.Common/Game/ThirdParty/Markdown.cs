@@ -6,7 +6,7 @@ namespace Provenance.Common.Game.ThirdParty;
 public static class Markdown
 {
     public const int MaxChars = 200_000;
-    internal const int MaxNodes = 6_000, MaxDepth = 8, MaxColumns = 32;
+    internal const int MaxNodes = 20_000, MaxDepth = 8, MaxColumns = 32;
 
     internal sealed class TooMuchException : Exception;
 
