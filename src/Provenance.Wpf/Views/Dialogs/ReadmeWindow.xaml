@@ -14,9 +14,16 @@
 
         <Border Grid.Row="1" Margin="18,14,18,18" CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.1}"
                 BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
-            <!-- the file as it is, never rendered. It scrolls itself, an outer ScrollViewer fights it for the wheel -->
-            <TextBox x:Name="BodyText" Style="{StaticResource SelectableText}" FontFamily="{DynamicResource Font.Mono}" FontSize="12.5" Padding="14,10"
-                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" behaviours:KeyScroll.Enabled="True" />
+            <Grid>
+                <!-- a readme that isn't Markdown, as it is. It scrolls itself, an outer ScrollViewer fights it for the wheel -->
+                <TextBox x:Name="BodyText" Style="{StaticResource SelectableText}" FontFamily="{DynamicResource Font.Mono}" FontSize="12.5" Padding="14,10"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" behaviours:KeyScroll.Enabled="True" />
+                <!-- read-only with the document switched on, which is what lets a link be pressed without Ctrl -->
+                <RichTextBox x:Name="Page" Visibility="Collapsed" IsReadOnly="True" IsDocumentEnabled="True" IsUndoEnabled="False" AllowDrop="False"
+                             BorderThickness="0" Background="Transparent" Padding="0" Foreground="{DynamicResource Text.1}"
+                             CaretBrush="Transparent" SelectionBrush="{DynamicResource Primary}"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" behaviours:KeyScroll.Enabled="True" />
+            </Grid>
         </Border>
     </Grid>
 </controls:AppWindow>

@@ -32,7 +32,7 @@ internal static class ScriptLoads
         if (TextFiles.ReadHead(path, MaxRead) is not { } text) return;
         var runs = new List<string>();
         Scan(text, InitTxt, plugins, addons, runs);
-        foreach (var next in runs) Run(scriptsDir, next, depth + 1, read, plugins, addons);
+        foreach (var next in runs.Distinct(StringComparer.OrdinalIgnoreCase)) Run(scriptsDir, next, depth + 1, read, plugins, addons);
     }
 
     // Hook.dll opens scripts\<name> as written, and only when that won't open tries it with .txt on the end
@@ -60,7 +60,7 @@ internal static class ScriptLoads
                 // in the init command only a plugin_load as typed: load is an echo by then, and the one in front is mine
                 if (runs is null ? words[0] == "plugin_load" : verb is "load" or "plugin_load") plugins.TryAdd(Name(1), where);
                 else if (verb == "lua" && words.Length >= 3 && words[1].ToLowerInvariant() is "load" or "l") addons.TryAdd(Name(2), where);
-                // one plain word only. I don't know what the hook makes of quotes, or of exec in capitals
+                // one plain word only, the hook's handling of quotes and of a capital Exec isn't documented
                 else if (runs is not null && words is [("exec" or "console_exec"), var name] && !name.Contains('"') && !name.Contains('\'')) runs.Add(name);
             }
         }

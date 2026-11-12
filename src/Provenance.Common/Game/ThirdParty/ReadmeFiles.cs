@@ -26,6 +26,9 @@ public static class ReadmeFiles
         return null;
     }
 
+    // only a .md gets laid out. A readme.txt is often hand-spaced columns, which Markdown would run together
+    public static bool IsMarkdown(string path) => Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase);
+
     // UTF-8 unless a BOM says UTF-16, which is what Notepad's Unicode writes. null when it can't be read
     public static string? ReadText(string path)
     {

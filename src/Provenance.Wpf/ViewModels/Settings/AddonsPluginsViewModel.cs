@@ -364,7 +364,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     // tests swap these for ones that just note what they were handed
     internal Action<AddonDocs> OpenDocsForTest { get; set; } = DocsOpener.Open;
-    internal Action<string, string> ShowReadmeForTest { get; set; } = DocsOpener.ShowText;
+    internal Action<string, string, bool> ShowReadmeForTest { get; set; } = DocsOpener.ShowText;
 
     [RelayCommand]
     private void OpenDocs(AddonRow? row)
@@ -378,7 +378,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
         if (docs.Kind == AddonDocsKind.Text)
         {
-            if (ReadmeFiles.ReadText(docs.Target) is { } text) ShowReadmeForTest($"{row.Name} documentation", text);
+            if (ReadmeFiles.ReadText(docs.Target) is { } text) ShowReadmeForTest($"{row.Name} documentation", text, ReadmeFiles.IsMarkdown(docs.Target));
             else Status.Fail($"Provenance couldn't read {row.Name}'s documentation.");
             return;
         }
