@@ -47,7 +47,7 @@
             <CheckBox Content="Log in automatically" FontSize="13" Margin="0,0,0,6"
                       Foreground="{DynamicResource Text.2}" IsChecked="{Binding Accounts.AutoLogin}"
                       ToolTip="When Provenance opens, it logs in to the selected account. Hold Shift while it opens to skip this once." />
-            <CheckBox Content="Start game after logging in" FontSize="13"
+            <CheckBox Content="Start Game Automatically" FontSize="13"
                       Foreground="{DynamicResource Text.2}" IsChecked="{Binding Accounts.StartGameImmediately}" />
 
             <Button Margin="0,18,0,0" Height="48" FontSize="16" Command="{Binding LogInCommand}"

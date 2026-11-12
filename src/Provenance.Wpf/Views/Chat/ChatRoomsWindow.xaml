@@ -249,7 +249,7 @@
                 <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,*,Auto">
                     <!-- the viewer's Text Color and Emoticon, both back to none after each line -->
                     <Button Height="40" Width="40" Padding="0" VerticalAlignment="Bottom" Style="{StaticResource IconButton}"
-                            x:Name="ColourButton" Click="OnColourMenu" ToolTip="Text Color" AutomationProperties.Name="Text Color">
+                            x:Name="ColourButton" Click="OnColourMenu" ToolTip="Text colour" AutomationProperties.Name="Text colour">
                         <Grid>
                             <materialDesign:PackIcon Kind="FormatColorText" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />
                             <Rectangle Width="20" Height="4" RadiusX="2" RadiusY="2" VerticalAlignment="Bottom" Margin="0,0,0,-4"

@@ -11,7 +11,7 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="AutomationProperties.HelpText" Value="Change your PlayOnline status" />
+        <Setter Property="ToolTip" Value="Change your PlayOnline status" />
         <Setter Property="TextSearch.TextPath" Value="Label" />
         <Setter Property="ItemTemplate">
             <Setter.Value>

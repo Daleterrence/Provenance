@@ -288,7 +288,7 @@
                                                 </Border>
                                                 <Button x:Name="GroupChatButton" Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
                                                         Style="{StaticResource IconButton}" Foreground="{DynamicResource Primary}"
-                                                        ToolTip="Display the group chat screen." AutomationProperties.Name="Group Chat"
+                                                        ToolTip="Open this group's chat" AutomationProperties.Name="Group Chat"
                                                         Command="{Binding DataContext.OpenGroupChatCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
                                                         IsEnabled="{Binding DataContext.CanGroupChat, RelativeSource={RelativeSource AncestorType=ItemsControl}}"

@@ -54,10 +54,10 @@
                             <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="CHAT ROOMS" />
                         </StackPanel>
                     </Button>
-                    <Button Command="{Binding ToggleGroupsCommand}" ToolTip="Displays your PlayOnline group chats" AutomationProperties.Name="Group chats">
+                    <Button Command="{Binding ToggleGroupsCommand}" ToolTip="Displays your PlayOnline group chats" AutomationProperties.Name="Groups">
                         <StackPanel Orientation="Horizontal">
                             <controls:SvgIcon Glyph="groupchat2" IsOpen="{Binding Social.GroupsTabVisible}" />
-                            <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="GROUP CHAT" />
+                            <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="GROUPS" />
                         </StackPanel>
                     </Button>
                     <Button Command="{Binding ToggleMessagesCommand}" ToolTip="Displays your PlayOnline messages" AutomationProperties.Name="Messages">

@@ -28,7 +28,7 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
                                          AccountsViewModel accounts, GameLaunch launch, MainViewModel main, LeanStartLinks links)
 {
     private const string CantStart = "Can't start FINAL FANTASY XI";
-    private const string NoticeTitle = "PlayOnline account notice";
+    private const string NoticeTitle = "PlayOnline Notification";
 
     private bool _lean, _shown, _madeHandle;
     private GameCheck? _check;

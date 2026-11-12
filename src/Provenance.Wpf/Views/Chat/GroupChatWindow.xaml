@@ -34,7 +34,7 @@
 
     <Grid RowDefinitions="40,Auto,*,Auto">
         <controls:TitleBar ShowMaximise="True"
-                           CloseToolTip="Close the group chat screen, and return to the previous page. The group chat screen will be hidden, but not terminated.">
+                           CloseToolTip="Hides the group chat window. You will continue to receive group chat notifications.">
             <controls:TitleBar.IconContent>
                 <materialDesign:PackIcon Kind="Forum" Width="18" Height="18" Margin="0,0,10,0" Foreground="{DynamicResource Primary}" />
             </controls:TitleBar.IconContent>
@@ -54,8 +54,8 @@
                         <controls:SvgIcon Glyph="more" Width="20" Height="20" />
                     </Button>
                     <Button Style="{StaticResource PolButton}" FontSize="12" Content="CLOSE" Click="OnHide"
-                            ToolTip="Close the group chat screen, and return to the previous page. The group chat screen will be hidden, but not terminated." />
-                    <Button Style="{StaticResource RedButton}" FontSize="12" Content="EXIT" Click="OnExit" ToolTip="Exiting group chat." />
+                            ToolTip="Hides the group chat window. You will continue to receive group chat notifications." />
+                    <Button Style="{StaticResource RedButton}" FontSize="12" Content="EXIT" Click="OnExit" ToolTip="Leaves this group chat session, you can rejoin at any time, but you will not receive any notifications for messages until you do." />
                 </StackPanel>
             </Grid>
         </Border>
