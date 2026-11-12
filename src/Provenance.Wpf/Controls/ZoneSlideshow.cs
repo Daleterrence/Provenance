@@ -11,7 +11,8 @@ namespace Provenance.Wpf.Controls;
 
 public sealed class ZoneSlideshow : Grid
 {
-    private static readonly TimeSpan Hold = TimeSpan.FromSeconds(8), Fade = TimeSpan.FromSeconds(1.5);
+    // the site's install shot plays the pictures at the same pace, its test reads these two
+    internal static readonly TimeSpan Hold = TimeSpan.FromSeconds(8), Fade = TimeSpan.FromSeconds(2.5);
     private readonly DispatcherTimer _timer = new() { Interval = Hold };
     private readonly ZoneOrder _order;
     private Image _front = Picture(), _back = Picture();
@@ -34,6 +35,7 @@ public sealed class ZoneSlideshow : Grid
     }
 
     internal int Pictures => _order.Count;
+    internal Image Showing => _front;
 
     private void Start()
     {
@@ -41,19 +43,34 @@ public sealed class ZoneSlideshow : Grid
         if (_front.Source is null && Load(_order.Next()) is { } first)
         {
             _front.Source = first;
-            _front.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, SystemParameters.ClientAreaAnimation ? Fade : TimeSpan.Zero));
+            FadeIn(_front, null);
         }
         _timer.Start();
     }
 
-    private void Next()
+    internal void Next()
     {
         if (Load(_order.Next()) is not { } next) return;
-        _back.Source = next;
-        var fade = SystemParameters.ClientAreaAnimation ? Fade : TimeSpan.Zero;
-        _back.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, fade));
-        _front.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, fade));
-        (_front, _back) = (_back, _front);
+        var (incoming, outgoing) = (_back, _front);
+        incoming.Source = next;
+        // in on top of the old one, which stays solid until it's covered, so the background never shows through halfway
+        SetZIndex(incoming, 1);
+        SetZIndex(outgoing, 0);
+        FadeIn(incoming, outgoing);
+        (_front, _back) = (incoming, outgoing);
+    }
+
+    // only opacity, so it fades with Windows' animation effects off too (a hard cut every few seconds is worse)
+    private static void FadeIn(Image incoming, Image? outgoing)
+    {
+        var fade = new DoubleAnimation(0, 1, Fade) { EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } };
+        if (outgoing != null)
+            fade.Completed += (_, _) =>
+            {
+                outgoing.BeginAnimation(OpacityProperty, null);
+                outgoing.Opacity = 0;
+            };
+        incoming.BeginAnimation(OpacityProperty, fade);
     }
 
     private static BitmapImage? Load(string? path)
