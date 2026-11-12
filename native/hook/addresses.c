@@ -33,7 +33,7 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .usual = 0xee734, .sig_at = 0x25c07, .operand = 8,
         .sig = "8b f1 6a 01 6a 00 ff 15 ?? ?? ?? ??" },
     [AT_OPEN_MUTEX_SLOT] = { .name = "OpenMutexW slot", .module = IN_EXE, .code = IS_DATA, .required = SKIPPABLE,
-        .usual = 0x5c834, .sig_at = 0x146b2, .operand = 9,
+        .usual = 0xee7b4, .sig_at = 0x35096, .operand = 9,
         .sig = "6a 01 68 01 00 1f 00 ff 15 ?? ?? ?? ?? 85 c0" },
     [AT_CREATE_DIALOG_SLOT] = { .name = "CreateDialogParamW slot", .module = IN_EXE, .code = IS_DATA, .required = SKIPPABLE,
         .usual = 0xee7e4, .sig_at = 0x2642a, .operand = 19,
@@ -46,101 +46,101 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .usual = 0x26a40, .sig_at = 0x26a40, .operand = ADDR_MATCH,
         .sig = "55 8b ec 83 ec 08 83 3d ?? ?? ?? ?? 00 74 ?? 6a 05 e8 ?? ?? ?? ?? 2b 05 ?? ?? ?? ?? 1b 15 ?? ?? ?? ??" },
     [AT_REGION_INDEX] = { .name = "region index", .module = IN_EXE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x5cd90, .sig_at = 0x697c, .operand = 2,
+        .usual = 0xf03dc, .sig_at = 0x263dd, .operand = 2,
         .sig = "8b 0d ?? ?? ?? ?? 8b c1 83 e8 00 74 ?? 83 e8 01 74 ??" },
 
     /* the COM getter that hands the service table over. Starts on its EBP frame, the argument's at [ebp+0xc] */
     [AT_SERVICES] = { .name = "service table", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0xc4180, .sig_at = 0x51f85, .operand = 8,
+        .usual = 0xc4180, .sig_at = 0x51385, .operand = 8,
         .sig = "55 8b ec 8b 45 0c c7 00 ?? ?? ?? ?? 33 c0 5d c2 08 00" },
     [AT_SHA1_INIT] = { .name = "SHA-1 init", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x2d6a0, .sig_at = 0x2d6a0, .operand = ADDR_MATCH,
+        .usual = 0x286a0, .sig_at = 0x286a0, .operand = ADDR_MATCH,
         .sig = "8b 44 24 04 33 c9 c7 00 01 23 45 67 c7 40 04 89 ab cd ef" },
     [AT_SHA1_UPDATE] = { .name = "SHA-1 update", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x2d6d0, .sig_at = 0x2d6d0, .operand = ADDR_MATCH,
+        .usual = 0x286d0, .sig_at = 0x286d0, .operand = ADDR_MATCH,
         .sig = "8b 54 24 0c 53 56 8b 74 24 0c 57 8b 4e 14 8b c1 c1 e8 03 8d 3c d1" },
     [AT_SHA1_FINAL] = { .name = "SHA-1 final", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x2dac0, .sig_at = 0x2dac0, .operand = ADDR_MATCH,
+        .usual = 0x28ac0, .sig_at = 0x28ac0, .operand = ADDR_MATCH,
         .sig = "53 55 8b 6c 24 10 56 57 55 e8 ?? ?? ?? ?? 8b 7c 24 18 83 c4 04" },
     [AT_SET_SEA_SECRET] = { .name = "SEA secret setter", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x1e4b0, .sig_at = 0x1e4b0, .operand = ADDR_MATCH,
+        .usual = 0x1a8e0, .sig_at = 0x1a8e0, .operand = ADDR_MATCH,
         .sig = "e8 ?? ?? ?? ?? 8b 4c 24 04 33 c0 3b c8 7c 0b 83 f9 02 7f 06" },
     [AT_SESSION_INIT] = { .name = "session init", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x44390, .sig_at = 0x44390, .operand = ADDR_MATCH,
+        .usual = 0x3f430, .sig_at = 0x3f430, .operand = ADDR_MATCH,
         .sig = "56 57 33 f6 a1 ?? ?? ?? ?? 3b c6 75 11 33 ff 57 e8 ?? ?? ?? ??" },
     [AT_INET_INIT] = { .name = "inet init", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0xfe20, .sig_at = 0xfe20, .operand = ADDR_MATCH,
+        .usual = 0xaa90, .sig_at = 0xaa90, .operand = ADDR_MATCH,
         .sig = "81 ec 90 01 00 00 a1 ?? ?? ?? ?? 85 c0 75 72 6a 00 e8 ?? ?? ?? ??" },
     [AT_CON_OPEN] = { .name = "POLCON_OPEN", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x448a0, .sig_at = 0x448a0, .operand = ADDR_MATCH,
+        .usual = 0x3f940, .sig_at = 0x3f940, .operand = ADDR_MATCH,
         .sig = "83 ec 14 53 33 db 57 53 e8 ?? ?? ?? ?? a1 ?? ?? ?? ?? 83 c4 04 83 f8 01" },
     [AT_CON_STEP] = { .name = "POLCON_STEP", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x44a50, .sig_at = 0x44a50, .operand = ADDR_MATCH,
+        .usual = 0x3faf0, .sig_at = 0x3faf0, .operand = ADDR_MATCH,
         .sig = "81 ec 78 01 00 00 53 55 56 57 33 ff 57 e8 ?? ?? ?? ?? 8b 0d ?? ?? ?? ??" },
     [AT_CON_IDLE] = { .name = "POLCON_IDLE", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x45480, .sig_at = 0x45480, .operand = ADDR_MATCH,
+        .usual = 0x40520, .sig_at = 0x40520, .operand = ADDR_MATCH,
         .sig = "51 57 33 ff a1 ?? ?? ?? ?? 3b c7 75 08 b8 01 00 00 00 5f 59 c3" },
     /* its decoding twin straight after is the same bytes bar the call, so this starts in the function before it */
     [AT_ENCODE_POLID] = { .name = "ENCODE_POLID", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
-        .usual = 0x46e70, .sig_at = 0x46e50, .operand = ADDR_MATCH,
+        .usual = 0x41f30, .sig_at = 0x41f10, .operand = ADDR_MATCH,
         .sig = "56 8b 74 24 08 57 b9 10 00 00 00 bf ?? ?? ?? ?? f3 a5 66 a5 5f 5e c3 90 90 90 90 90 90 90 90 90 "
             "8b 44 24 08 8b 4c 24 04 6a 08 50 51 e8 ?? ?? ?? ?? 83 c4 0c c3" },
     [AT_ENCODED_POLID] = { .name = "encoded POL ID", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x99280, .sig_at = 0x46d98, .operand = 9,
+        .usual = 0xed850, .sig_at = 0x41e58, .operand = 9,
         .sig = "8b 74 24 14 56 52 8b 06 a3 ?? ?? ?? ?? 8b 4e 04" },
     [AT_AUTH_STATE] = { .name = "auth state", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x99408, .sig_at = 0x44bdf, .operand = 2,
+        .usual = 0xed9d8, .sig_at = 0x3fc7f, .operand = 2,
         .sig = "c7 05 ?? ?? ?? ?? 14 00 00 00 8d 44 24 44" },
     [AT_AUTH_REASON] = { .name = "auth reason", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x9940c, .sig_at = 0x451ff, .operand = 2,
+        .usual = 0xed9dc, .sig_at = 0x4029f, .operand = 2,
         .sig = "c7 05 ?? ?? ?? ?? f4 fb ff ff 57 8b f1 e8 ?? ?? ?? ??" },
     [AT_AUTH_RESULT] = { .name = "auth result", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x996b4, .sig_at = 0x44c1e, .operand = 3,
+        .usual = 0xedc84, .sig_at = 0x3fcbe, .operand = 3,
         .sig = "3b c7 a3 ?? ?? ?? ?? 7c 15 b9 15 00 00 00" },
     [AT_AUTH_ERROR] = { .name = "auth error", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x9aa14, .sig_at = 0x45865, .operand = 14,
+        .usual = 0xeefe4, .sig_at = 0x40905, .operand = 14,
         .sig = "83 c4 08 c7 05 ?? ?? ?? ?? ff ff ff ff a3 ?? ?? ?? ??" },
     [AT_LOGIN_FLAGS] = { .name = "login flags", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x993f4, .sig_at = 0x44e3e, .operand = 7,
+        .usual = 0xed9c4, .sig_at = 0x3fede, .operand = 7,
         .sig = "51 e8 ?? ?? ?? ?? a0 ?? ?? ?? ?? 83 c4 10 84 c3 74 16" },
     [AT_LINK_INDEX] = { .name = "link index", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x99250, .sig_at = 0x45861, .operand = 9,
+        .usual = 0xed820, .sig_at = 0x40901, .operand = 9,
         .sig = "8b 44 24 0c 83 c4 08 c7 05 ?? ?? ?? ?? ff ff ff ff" },
     [AT_SESSION_READY] = { .name = "session ready", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x99254, .sig_at = 0x45902, .operand = 6,
+        .usual = 0xed824, .sig_at = 0x409a2, .operand = 6,
         .sig = "85 c0 74 0a c7 05 ?? ?? ?? ?? 00 00 00 00 6a 00" },
     [AT_SESSION_ALIVE] = { .name = "session alive", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x9924c, .sig_at = 0x4539d, .operand = 6,
+        .usual = 0xed81c, .sig_at = 0x4043d, .operand = 6,
         .sig = "be 01 00 00 00 a1 ?? ?? ?? ?? 3b c6 75 29" },
     [AT_LINKS] = { .name = "connection records", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x3e58a0, .sig_at = 0x147e6, .operand = 2,
+        .usual = 0x43c340, .sig_at = 0xeed6, .operand = 2,
         .sig = "81 c6 ?? ?? ?? ?? 56 e8 ?? ?? ?? ?? 8b be 18 02 00 00" },
     [AT_IGNORE_ROWS] = { .name = "ignore rows", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0xafc18, .sig_at = 0x239e8, .operand = 8,
+        .usual = 0x104dc8, .sig_at = 0x1b2a8, .operand = 8,
         .sig = "8d 3c 78 c1 e7 04 81 c7 ?? ?? ?? ?? 0b ca" },
     [AT_FRIENDS_A] = { .name = "friend rows", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0xb40d8, .sig_at = 0x23dc1, .operand = 8,
+        .usual = 0x109288, .sig_at = 0x1b681, .operand = 8,
         .sig = "8d 0c 47 c1 e1 04 81 c1 ?? ?? ?? ?? 51 56" },
     [AT_FRIENDS_B] = { .name = "friend extras", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x3fc920, .sig_at = 0x23ec3, .operand = 8,
+        .usual = 0x454de0, .sig_at = 0x1b783, .operand = 8,
         .sig = "89 46 08 89 56 0c 8b 97 ?? ?? ?? ?? 8d 87 ?? ?? ?? ??" },
     [AT_SERVER_STAMPS] = { .name = "server stamps", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x403040, .sig_at = 0x234f0, .operand = 7,
+        .usual = 0x45b500, .sig_at = 0x1ad60, .operand = 7,
         .sig = SIG_STAMPS },
     [AT_LOCAL_STAMPS] = { .name = "local stamps", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x40304c, .sig_at = 0x234f0, .operand = 14,
+        .usual = 0x45b50c, .sig_at = 0x1ad60, .operand = 14,
         .sig = SIG_STAMPS },
     [AT_CONTENT_IDS] = { .name = "Content ID records", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x403080, .sig_at = 0x224a0, .operand = 3,
+        .usual = 0x4533e0, .sig_at = 0x1d580, .operand = 3,
         .sig = "8d 34 cd ?? ?? ?? ?? 66 89 56 02 8b 47 04" },
     [AT_HANDLES] = { .name = "handle records", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x405800, .sig_at = 0x1c93b, .operand = 3,
+        .usual = 0x45b520, .sig_at = 0x18ccb, .operand = 3,
         .sig = "8b 04 c5 ?? ?? ?? ?? 83 e0 01 0b c1 75 0c" },
     [AT_STATUS_ANSWERS] = { .name = "status answers", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0x404df8, .sig_at = 0x29bba, .operand = 10,
+        .usual = 0x45c2b8, .sig_at = 0x2060a, .operand = 10,
         .sig = "57 8d 0c 40 8d 14 4e 8b 3c d5 ?? ?? ?? ??" },
     [AT_GCHAT_LINE_HELD] = { .name = "group chat line", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
-        .usual = 0xbdc30, .sig_at = 0x2b265, .operand = 10,
+        .usual = 0x112de0, .sig_at = 0x21cb5, .operand = 10,
         .sig = "8d 44 24 18 8d 54 09 08 52 68 ?? ?? ?? ??" },
 };
 
@@ -211,6 +211,31 @@ static int addr_sig_fits(const addr_module *m, DWORD off, const char *sig)
     return off >= m->text && off <= m->text_end && m->text_end - off >= n && addr_sig_at(m->image + off, sig);
 }
 
+/* a signature taken apart once for the search, with the first byte that counts (not always byte 0) tested before the rest */
+#define ADDR_PAT_MAX 256
+typedef struct {
+    BYTE want[ADDR_PAT_MAX], fixed[ADDR_PAT_MAX];
+    DWORD n, lead;
+} addr_pat;
+/* 0 when it's empty, all ??, or too long to hold, and the search takes those the long way */
+static int addr_pat_parse(addr_pat *p, const char *sig)
+{
+    DWORD k;
+    p->n = addr_sig_len(sig);
+    if (!p->n || p->n > ADDR_PAT_MAX) return 0;
+    addr_sig_bytes(sig, p->want, p->fixed);
+    for (k = 0; k < p->n && !p->fixed[k]; k++) {}
+    p->lead = k;
+    return k < p->n;
+}
+static int addr_pat_at(const addr_pat *p, const BYTE *img)
+{
+    DWORD k;
+    for (k = 0; k < p->n; k++)
+        if (p->fixed[k] && img[k] != p->want[k]) return 0;
+    return 1;
+}
+
 /* a writable, non-executable section with at least 4 bytes of it from a (packed polcore's .text and POL1 are
    writable too, but they're executable) */
 static int addr_in_data(const addr_module *m, DWORD a)
@@ -226,11 +251,10 @@ static int addr_in_data(const addr_module *m, DWORD a)
     return 0;
 }
 
-/* sig fits at off, and if the entry has bytes it shows or a call it makes, they're what the match points at */
-static int addr_matches(const struct hook_addr *e, const addr_module *m, DWORD off)
+/* a match of sig at off, and if the entry has bytes it shows or a call it makes, they're what the match points at */
+static int addr_extras(const struct hook_addr *e, const addr_module *m, DWORD off)
 {
     DWORD p;
-    if (!addr_sig_fits(m, off, e->sig)) return 0;
     if (e->shows) {
         p = *(DWORD *)(m->image + off + e->shows_op) - m->opbase;
         if (p >= m->size || m->size - p < addr_sig_len(e->shows) || !addr_sig_at(m->image + p, e->shows)) return 0;
@@ -240,6 +264,10 @@ static int addr_matches(const struct hook_addr *e, const addr_module *m, DWORD o
         if (!addr_sig_fits(m, p, e->calls)) return 0;
     }
     return 1;
+}
+static int addr_matches(const struct hook_addr *e, const addr_module *m, DWORD off)
+{
+    return addr_sig_fits(m, off, e->sig) && addr_extras(e, m, off);
 }
 
 /* e's address for a match at off, or 0 when it'd be somewhere that kind of thing can't be: code in .text, data in a
@@ -255,13 +283,20 @@ static DWORD addr_from(const struct hook_addr *e, const addr_module *m, DWORD of
 /* every place in .text the entry matches, whatever its address is, counted to 2, and where the first is */
 static int addr_scan(const struct hook_addr *e, const addr_module *m, DWORD *first)
 {
-    DWORD n = addr_sig_len(e->sig), off;
-    int hits = 0;
-    for (off = m->text; off + n <= m->text_end && hits < 2; off++)
-        if (addr_matches(e, m, off)) {
+    addr_pat pat;
+    int hits = 0, quick = addr_pat_parse(&pat, e->sig);
+    DWORD n = quick ? pat.n : addr_sig_len(e->sig), off, last;
+    if (m->text_end - m->text < n) return 0;
+    last = m->text_end - n;
+    for (off = m->text; ; off++) {
+        const BYTE *at = m->image + off;
+        if (quick ? at[pat.lead] == pat.want[pat.lead] && addr_pat_at(&pat, at) && addr_extras(e, m, off)
+                  : addr_matches(e, m, off)) {
             if (!hits) *first = off;
             hits++;
         }
+        if (off >= last || hits >= 2) break;
+    }
     return hits;
 }
 

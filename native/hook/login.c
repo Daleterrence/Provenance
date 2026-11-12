@@ -170,6 +170,16 @@ static void login_status_pump(BYTE *b)
     g_snap_dirty = 1;
 }
 
+/* the stop file is a file stat, so it's looked for on a beat and not every step */
+#define STOP_BEAT_MS 16
+static int login_stop_due(ULONGLONG *last)
+{
+    ULONGLONG now = GetTickCount64();
+    if (*last && now - *last < STOP_BEAT_MS) return 0;
+    *last = now;
+    return base_stop_requested();
+}
+
 struct pending_load { const char *name; int (*load)(BYTE *); int (*check)(BYTE *, int); int ticket, res, write; };
 /* read only. LOAD_MY_STATUS's answer, via the pointer at polcore.dll 0x10404df8 + job * 0x338: +0 handle slot, +6
    status + 1, at 0 polcore drops the slot */
@@ -184,50 +194,62 @@ static void login_status_reply_log(BYTE *b, int t)
        r[0], r[6], pc_current_handle_or(b, -1), pc_my_status_or(b, -1));
 }
 #define LOADS_IN_FLIGHT 4   /* polcore's job slots, the viewer's own peak */
+#define LOADS_BURST 4       /* passes between sleeps */
+/* every load's check, and the start of any that can go. How many are still waiting */
+static int login_loads_pass(BYTE *b, struct pending_load *items, int n, ULONGLONG *started)
+{
+    int i, pending = 0, active;
+    for (active = 0, i = 0; i < n; i++) if (started[i] && items[i].res == 0) active++;
+    for (i = 0; i < n; i++) {
+        int t;
+        if (items[i].res != 0) continue;
+        if (!started[i]) {
+            if (active >= LOADS_IN_FLIGHT) { pending++; continue; }
+            t = items[i].load(b);
+            if (t >= 0) active++;
+            if (t == NO_SLOT) { pending++; continue; }
+            items[i].ticket = t;
+            started[i] = GetTickCount64();
+            base_log(LOG_PROFILE "%s load -> ticket %d\r\n", items[i].name, t);
+            if (t < 0) {
+                items[i].res = t;   /* never retried, the viewer asks once and signs out */
+                continue;
+            }
+        }
+        items[i].res = items[i].check(b, items[i].ticket);
+        if (items[i].res == 0) { pending++; continue; }
+        base_log(LOG_PROFILE "%s -> %d after %ums\r\n", items[i].name, items[i].res,
+           (unsigned)(GetTickCount64() - started[i]));
+        if (items[i].load == pc_status_load && items[i].res == 1) login_status_reply_log(b, items[i].ticket);
+    }
+    login_status_pump(b);
+    return pending;
+}
+/* a running write (the handle save) ignores the stop file, the server may already have it */
+static void login_loads_stop(BYTE *b, struct pending_load *items, int n, const ULONGLONG *started, ULONGLONG *beat)
+{
+    int i;
+    for (i = 0; i < n; i++) if (items[i].write && started[i] && items[i].res == 0) return;
+    if (!login_stop_due(beat)) return;
+    base_log(LOG_STOP_REQUESTED " during profile load - signing out and exiting, FFXI NOT started\r\n");
+    for (i = 0; i < n; i++)
+        if (items[i].res == 0 && started[i]) pc_cancel_job(b, items[i].ticket);
+    login_viewer_sign_out(b);
+    base_end_pol(STOPPED_EXIT);
+}
 static void login_run_loads(BYTE *b, struct pending_load *items, int n)
 {
-    ULONGLONG started[8] = {0};
-    int i, pending, active, writing;
+    ULONGLONG started[8] = {0}, beat = 0;
+    int i, pass, done = 0;
     if (n > 8) n = 8;
     for (i = 0; i < n; i++) { items[i].ticket = -1; items[i].res = 0; }
-    for (;;) {
-        pending = 0;
-        for (active = 0, i = 0; i < n; i++) if (started[i] && items[i].res == 0) active++;
-        for (i = 0; i < n; i++) {
-            int t;
-            if (items[i].res != 0) continue;
-            if (!started[i]) {
-                if (active >= LOADS_IN_FLIGHT) { pending++; continue; }
-                t = items[i].load(b);
-                if (t >= 0) active++;
-                if (t == NO_SLOT) { pending++; continue; }
-                items[i].ticket = t;
-                started[i] = GetTickCount64();
-                base_log(LOG_PROFILE "%s load -> ticket %d\r\n", items[i].name, t);
-                if (t < 0) {
-                    items[i].res = t;   /* never retried, the viewer asks once and signs out */
-                    continue;
-                }
-            }
-            items[i].res = items[i].check(b, items[i].ticket);
-            if (items[i].res == 0) { pending++; continue; }
-            base_log(LOG_PROFILE "%s -> %d after %ums\r\n", items[i].name, items[i].res,
-               (unsigned)(GetTickCount64() - started[i]));
-            if (items[i].load == pc_status_load && items[i].res == 1) login_status_reply_log(b, items[i].ticket);
+    while (!done) {
+        for (pass = 0; pass < LOADS_BURST; pass++) {
+            if (!login_loads_pass(b, items, n, started)) { done = 1; break; }
+            if (pass == 0) login_loads_stop(b, items, n, started, &beat);
+            pc_pump_once(b);
         }
-        login_status_pump(b);
-        if (!pending) break;
-        /* a running write (the handle save) ignores the stop file, the server may already have it */
-        for (writing = 0, i = 0; i < n; i++) if (items[i].write && started[i] && items[i].res == 0) writing = 1;
-        if (!writing && base_stop_requested()) {
-            base_log(LOG_STOP_REQUESTED " during profile load - signing out and exiting, FFXI NOT started\r\n");
-            for (i = 0; i < n; i++)
-                if (items[i].res == 0 && started[i]) pc_cancel_job(b, items[i].ticket);
-            login_viewer_sign_out(b);
-            base_end_pol(STOPPED_EXIT);
-        }
-        pc_pump_once(b);
-        Sleep(1);
+        if (!done) Sleep(1);
     }
     for (i = 0; i < n; i++)
         if (items[i].res != 1)
@@ -439,6 +461,53 @@ static void login_loads_check(BYTE *b, struct pending_load *run, int n)
         base_log("phase_c: bad password flag set (Viewer message 0x7007)\r\n");
     }
 }
+#define AUTH_CHAT_LOGIN 23
+#define AUTH_BURST 4
+/* up to AUTH_BURST steps while the state holds. Until the chat connection's up a refused connect is retried each
+   step, so that stays at one step and Sleep(16) */
+static void login_auth_turn(BYTE *b, unsigned sm)
+{
+    for (int k = 0; k < AUTH_BURST; k++) {
+        pc_pump_once(b);
+        if (*pc_auth_state(b) != sm) return;
+        if (sm == AUTH_CHAT_LOGIN && !pc_link_connected(b)) {
+            Sleep(16);
+            return;
+        }
+    }
+    Sleep(1);
+}
+/* no give-up of my own, polcore fails a stuck step itself and Provenance ends a login that goes quiet */
+static void login_auth_run(BYTE *b)
+{
+    unsigned sm;
+    int last = -1;
+    ULONGLONG beat = 0;
+    for (;;) {
+        sm = *pc_auth_state(b);
+        if (sm != (unsigned)last) {
+            last = (int)sm;
+            base_log(LOG_AUTH_STATE "%u res=%d err=%08x\r\n", sm, *pc_auth_result(b), *pc_auth_error(b));
+        }
+        if (auth_settled(sm)) break;
+        if (login_stop_due(&beat)) {
+            base_log(LOG_STOP_REQUESTED " during sign-in - exiting, FFXI NOT started\r\n");
+            base_end_pol(STOPPED_EXIT);
+        }
+        if (base_owner_gone()) {
+            base_log("phase_c: Provenance ended during sign-in - exiting, FFXI NOT started\r\n");
+            base_end_pol(STOPPED_EXIT);
+        }
+        login_auth_turn(b, sm);
+    }
+    sm = *pc_auth_state(b);
+    if (sm != AUTH_IN) {
+        base_log(LOG_AUTH_FAILED " (state=%u res=%d err=%08x " LOG_REASON "%d) - exiting, FFXI NOT started\r\n",
+           sm, *pc_auth_result(b), *pc_auth_error(b), *pc_auth_reason(b));
+        base_end_pol(AUTH_REFUSED_EXIT);
+    }
+    base_log(LOG_AUTH_OK " (state 30) - session bound\r\n");
+}
 static void log_in(HMODULE pc)
 {
     BYTE *b = (BYTE *)pc;
@@ -454,8 +523,8 @@ static void log_in(HMODULE pc)
         { "groups",     pc_groups_load, pc_groups_check, 0, 0 }
     };
     struct pending_load *run;
-    unsigned sm, flags;
-    int r, rc, nrun, jail, last = -1;
+    unsigned flags;
+    int r, rc, nrun, jail;
     login_prestart_wait();
     g_lean = base_getenv_set(ENV_LEAN);
     if (!cred_read_details(ENV_CRED_POL, "POL", id, sizeof id, pw, sizeof pw)) return;
@@ -489,32 +558,7 @@ static void log_in(HMODULE pc)
     *pc_auth_error(b) = AUTH_NO_ERROR;
     if (*pc_auth_state(b) == 0)
         *pc_auth_state(b) = AUTH_START;
-    /* no give-up of my own, polcore fails a stuck step itself and Provenance ends a login that goes quiet */
-    for (;;) {
-        sm = *pc_auth_state(b);
-        if (sm != (unsigned)last) {
-            last = (int)sm;
-            base_log(LOG_AUTH_STATE "%u res=%d err=%08x\r\n", sm, *pc_auth_result(b), *pc_auth_error(b));
-        }
-        if (auth_settled(sm)) break;
-        if (base_stop_requested()) {
-            base_log(LOG_STOP_REQUESTED " during sign-in - exiting, FFXI NOT started\r\n");
-            base_end_pol(STOPPED_EXIT);
-        }
-        if (base_owner_gone()) {
-            base_log("phase_c: Provenance ended during sign-in - exiting, FFXI NOT started\r\n");
-            base_end_pol(STOPPED_EXIT);
-        }
-        pc_pump_once(b);
-        if (*pc_auth_state(b) == sm) Sleep(16);
-    }
-    sm = *pc_auth_state(b);
-    if (sm != AUTH_IN) {
-        base_log(LOG_AUTH_FAILED " (state=%u res=%d err=%08x " LOG_REASON "%d) - exiting, FFXI NOT started\r\n",
-           sm, *pc_auth_result(b), *pc_auth_error(b), *pc_auth_reason(b));
-        base_end_pol(AUTH_REFUSED_EXIT);
-    }
-    base_log(LOG_AUTH_OK " (state 30) - session bound\r\n");
+    login_auth_run(b);
     login_notice_read(b);
     /* stricter than the viewer on purpose, a blocked account stops here */
     flags = *pc_login_flags(b);

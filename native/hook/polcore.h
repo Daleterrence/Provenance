@@ -6,7 +6,7 @@
 
 #define NORETURN __declspec(noreturn)
 
-/* every fixed address the hook uses. addresses.c has where each one is in 1.18.15e and finds them all again before
+/* every fixed address the hook uses. addresses.c has where each one is in the current build and finds them all again before
    any gets used, in case a POL update's moved them */
 enum hook_address {
     AT_MENU_SESSION,        /* the menu session, jumped over to the hook's own */
@@ -52,7 +52,7 @@ enum hook_address {
 
 struct hook_addr {
     const char *name, *sig;   /* sig: hex bytes of code at or near it, ?? where a build can differ */
-    DWORD usual, sig_at;      /* the address in 1.18.15e, and where sig starts there */
+    DWORD usual, sig_at;      /* the address in the current build, and where sig starts there */
     int operand;              /* the match's byte holding the address (less the module's base), or ADDR_MATCH */
     BYTE module, code, required;
     DWORD at;                 /* what the hook uses once it's checked, 0 when it isn't there */
@@ -481,6 +481,8 @@ static int handle_get(BYTE *b, int slot, pol_handle *h)
 
 #define POLCORE_LINK_SIZE         0x3a00
 #define POLCORE_LINK_LAST_SEND    0x39d4    /* in a connection record, the tick polcore last sent something */
+#define POLCORE_LINK_STEP         0x208     /* in a connection record, the chat login's step (polcore.dll 0x100140e0) */
+#define POLCORE_LINK_CONNECTED    5         /* 1 to 4 are still making the connection, a refused one goes back to 3 */
 #define POLCORE_STATUS_STRIDE     0x338
 /* which of the stamps is which list's */
 #define STAMP_FRIENDS 0
@@ -504,6 +506,15 @@ static int *pc_session_alive(BYTE *b) { return (int *)pc_addr_of(b, AT_SESSION_A
 static DWORD *pc_link_last_send(BYTE *b, int link)
 {
     return (DWORD *)(pc_addr_of(b, AT_LINKS) + link * POLCORE_LINK_SIZE + POLCORE_LINK_LAST_SEND);
+}
+/* 0 while the chat connection's still being made, and when there's no record to look at */
+static int pc_link_connected(BYTE *b)
+{
+    int s = *pc_link_index(b);
+    BYTE *step;
+    if (s < 0 || s > 15) return 0;
+    step = pc_addr_of(b, AT_LINKS) + s * POLCORE_LINK_SIZE + POLCORE_LINK_STEP;
+    return !IsBadReadPtr(step, 1) && *step >= POLCORE_LINK_CONNECTED;
 }
 static BYTE *pc_gchat_line_held(BYTE *b) { return pc_addr_of(b, AT_GCHAT_LINE_HELD); }
 static BYTE *pc_status_answer(BYTE *b, int job)
