@@ -763,8 +763,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public static string IgnoreRequestQuestion(string name, bool onMyList) => onMyList
         ? $"Add {name} to your ignore list? This will remove {name} off your friends list, and decline any pending requests."
-        : $"Add {name} to your ignore list? PlayOnline will decline the request, and this handle's messages won't reach you any more. " +
-          "You can stop ignoring them later from your ignore list.";
+        : $"Add {name} to your ignore list? This will decline any pending requests.";
 
     public static string StopIgnoringQuestion(string name) =>
         $"Take {name} off your ignore list? Their messages will reach you again. " +
