@@ -139,7 +139,6 @@ public partial class SocialWindow : AppWindow
             MessagesColumn.Width = HasMessages ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         }
         (MinWidth, Width) = Part.Widths();
-        TitleIcon.Glyph = Part == SocialPart.Messages ? "chat" : "smiley";
         Bar.Title = Title = Part.Title();
         LayoutIcon.Kind = Part == SocialPart.Both ? PackIconKind.ArrowSplitVertical
                                                   : PackIconKind.ArrowCollapseHorizontal;

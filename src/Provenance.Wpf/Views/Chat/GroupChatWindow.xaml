@@ -34,11 +34,7 @@
 
     <Grid RowDefinitions="40,Auto,*,Auto">
         <controls:TitleBar ShowMaximise="True"
-                           CloseToolTip="Hides the group chat window. You will continue to receive group chat notifications.">
-            <controls:TitleBar.IconContent>
-                <materialDesign:PackIcon Kind="Forum" Width="18" Height="18" Margin="0,0,10,0" Foreground="{DynamicResource Primary}" />
-            </controls:TitleBar.IconContent>
-        </controls:TitleBar>
+                           CloseToolTip="Hides the group chat window. You will continue to receive group chat notifications." />
 
         <Border Grid.Row="1" Style="{StaticResource PaneHeader}">
             <Grid ColumnDefinitions="*,Auto">

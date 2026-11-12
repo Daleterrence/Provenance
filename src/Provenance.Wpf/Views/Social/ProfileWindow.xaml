@@ -17,11 +17,7 @@
     <!-- POL's View Profile: pic, name, H-ID, mail, last update, privacy, its rows in POL's order and the away message.
          Each FFXI character gets a tab that swaps in its page -->
     <Grid x:Name="Root" Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,Auto,*,Auto">
-        <controls:TitleBar>
-            <controls:TitleBar.IconContent>
-                <controls:SvgIcon Glyph="card" Width="20" Height="20" Margin="0,0,8,0" />
-            </controls:TitleBar.IconContent>
-        </controls:TitleBar>
+        <controls:TitleBar />
 
         <ItemsControl Grid.Row="1" Margin="18,8,12,0" ItemsSource="{Binding Tabs}"
                       Visibility="{Binding HasTabs, Converter={StaticResource BoolToVis}}">

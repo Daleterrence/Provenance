@@ -50,11 +50,7 @@
     </Window.Resources>
 
     <Grid RowDefinitions="40,*">
-        <controls:TitleBar ShowMaximise="True">
-            <controls:TitleBar.IconContent>
-                <materialDesign:PackIcon Kind="Forum" Width="18" Height="18" Margin="0,0,10,0" Foreground="{DynamicResource Primary}" />
-            </controls:TitleBar.IconContent>
-        </controls:TitleBar>
+        <controls:TitleBar ShowMaximise="True" />
 
         <!-- not available: logged out, the game's running, or POL's chat isn't answering -->
         <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24"

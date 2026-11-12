@@ -17,8 +17,8 @@
 
     <StackPanel Margin="22,20,22,16">
         <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-            <materialDesign:PackIcon Kind="ForumPlusOutline" Width="22" Height="22"
-                                     Foreground="{DynamicResource Primary}" VerticalAlignment="Center" />
+            <Image Source="/Assets/provenance-256.png" Width="22" Height="22" VerticalAlignment="Center"
+                   RenderOptions.BitmapScalingMode="HighQuality" />
             <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Text="Create Room" />
         </StackPanel>
 

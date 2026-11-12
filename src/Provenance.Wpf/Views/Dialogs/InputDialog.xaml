@@ -10,8 +10,8 @@
 
     <StackPanel Margin="22,20,22,16">
         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-            <controls:SvgIcon Glyph="edit" Flat="True" Width="22" Height="22"
-                              Foreground="{DynamicResource Primary}" VerticalAlignment="Center" />
+            <Image Source="/Assets/provenance-256.png" Width="22" Height="22" VerticalAlignment="Center"
+                   RenderOptions.BitmapScalingMode="HighQuality" />
             <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold"
                        TextWrapping="Wrap" MaxWidth="340"
                        Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}" />

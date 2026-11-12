@@ -26,7 +26,9 @@ public static partial class SvgIcons
     private static readonly string[] WholeOnButton = ["smiley", "bubble", "ring", "mail", "folder", "key", "person"];
     // drawn on POL's pixel grid, so they only get moved by whole units. Half a unit over and every upright line's
     // smeared across two columns
-    private static readonly string[] OnGrid = ["add", "card", "copy", "folder", "key", "list", "mail"];
+    private static readonly string[] OnGrid = ["add", "copy", "folder", "key", "list", "mail"];
+    // the card's corners touch the disc at full size
+    private const double CardScale = 0.85;
 
     private const string Root = "pack://application:,,,/Provenance;component/Assets/icons/";
     private static readonly object Gate = new();
@@ -83,12 +85,19 @@ public static partial class SvgIcons
     internal static Rect FrameOf(string glyph) => ButtonFit(glyph).Frame;
     internal static Vector ShiftOf(string glyph, IconState state) => ButtonFit(glyph).Shift[(int)state];
 
-    private static Drawing? ButtonArt(string glyph, IconState state) =>
-        Load(GlyphFile(glyph, state), edit: svg =>
+    private static Drawing? ButtonArt(string glyph, IconState state)
+    {
+        var art = Load(GlyphFile(glyph, state), edit: svg =>
         {
             if (WholeOnButton.Contains(glyph)) svg = Whole(svg);
             return state is IconState.Selected or IconState.Active ? OnButton(glyph, svg) : svg;
         });
+        if (glyph != "card" || art is null) return art;
+        var smaller = new DrawingGroup { Transform = new ScaleTransform(CardScale, CardScale, 16, 16) };
+        smaller.Children.Add(art);
+        smaller.Freeze();
+        return smaller;
+    }
 
     private static (Vector[] Shift, Rect Frame) ButtonFit(string glyph)
     {

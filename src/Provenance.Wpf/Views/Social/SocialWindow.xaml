@@ -108,9 +108,6 @@
 
     <Grid RowDefinitions="40,*">
         <controls:TitleBar x:Name="Bar" ShowMaximise="True">
-            <controls:TitleBar.IconContent>
-                <controls:SvgIcon x:Name="TitleIcon" Glyph="smiley" Width="20" Height="20" Margin="0,0,10,0" />
-            </controls:TitleBar.IconContent>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="AddFriendButton" Height="28" Margin="0,0,8,0" Padding="6,0,10,0" Style="{StaticResource PolButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
                         IsEnabled="{Binding CanEdit}" Click="OnAddFriend" AutomationProperties.Name="Search PlayOnline and send a friend request">
