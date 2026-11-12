@@ -66,6 +66,13 @@ public partial class NewsViewModel : ObservableObject
     [ObservableProperty] private string _worldsSummary = "Checking world status...";
     [ObservableProperty] private string _worldsState = "";
     [ObservableProperty] private string _worldsCheckedText = "";
+    [ObservableProperty] private string _worldsTotalText = "";
+
+    public static string TotalOnlineText(IEnumerable<WorldStatus> worlds)
+    {
+        var counts = worlds.Where(w => w.Online != null).Select(w => w.Online!.Value).ToList();
+        return counts.Count == 0 ? "" : "Total Online Now: " + counts.Sum().ToString("N0", CultureInfo.InvariantCulture);
+    }
 
     private DateTime _worldsAt = DateTime.MinValue;
     private DateTime _feedsAt = DateTime.MinValue;
@@ -106,6 +113,7 @@ public partial class NewsViewModel : ObservableObject
             // nothing new came back, so the counts on show would only get older
             for (int i = 0; i < Worlds.Count; i++)
                 if (Worlds[i].Online != null) Worlds[i] = Worlds[i] with { Online = null };
+            WorldsTotalText = "";
             return;
         }
         // only a good read counts, a saved copy's tried again on the next tick
@@ -114,6 +122,7 @@ public partial class NewsViewModel : ObservableObject
         Worlds.Clear();
         // a saved copy can be hours old, which is fine for a status and no good for a count
         foreach (var w in list) Worlds.Add(fetch.Stale ? w with { Online = null } : w);
+        WorldsTotalText = TotalOnlineText(Worlds);
         var notUp = list.Where(w => !w.IsUp).ToList();
         bool onlyMaintenance = notUp.All(w => w.Status is "maintenance" or "partial-maintenance");
         WorldsSummary = notUp.Count switch
