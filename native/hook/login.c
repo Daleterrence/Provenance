@@ -366,6 +366,31 @@ static int login_handle_bootstrap(BYTE *b)
     return 0;
 }
 
+/* a file name changing in the hook's folder is the cue to look for the go file. The 16ms wait stays as the beat for
+   the stop file and the owner */
+static HANDLE login_go_watch(void)
+{
+    char dir[MAX_PATH];
+    HANDLE h;
+    base_ipc_dir(dir);
+    h = FindFirstChangeNotificationA(dir, FALSE, FILE_NOTIFY_CHANGE_FILE_NAME);
+    return h ? h : INVALID_HANDLE_VALUE;
+}
+/* re-armed before the turn that follows, so a change in between isn't lost */
+static void login_go_nap(HANDLE *watch)
+{
+    DWORD r;
+    if (*watch == INVALID_HANDLE_VALUE) {
+        Sleep(16);
+        return;
+    }
+    r = WaitForSingleObject(*watch, 16);
+    if (r == WAIT_TIMEOUT || (r == WAIT_OBJECT_0 && FindNextChangeNotification(*watch))) return;
+    FindCloseChangeNotification(*watch);
+    *watch = INVALID_HANDLE_VALUE;
+    Sleep(16);
+}
+
 /* POL_PRESTART: pol.exe starts at app open with no credentials and waits here having sent nothing. A login writes
    the go file (allow-listed KEY=VALUE lines). */
 static void login_prestart_wait(void)
@@ -374,8 +399,10 @@ static void login_prestart_wait(void)
                                      ENV_CRED_HANDLE, ENV_CRED_PLAY, ENV_CRED_CHAT, ENV_STATUS, ENV_HOME,
                                      ENV_HANDLE, ENV_LEAN };
     char gp[MAX_PATH + 64];
+    HANDLE watch;
     if (!base_getenv_set(ENV_PRESTART)) return;
     base_ipc_file(gp, IPC_GO);
+    watch = login_go_watch();
     base_log(LOG_PRESTART_READY " - waiting for LOG IN (nothing sent yet)\r\n");
     for (;;) {
         if (base_stop_requested()) {
@@ -403,8 +430,9 @@ static void login_prestart_wait(void)
             }
             break;
         }
-        Sleep(16);
+        login_go_nap(&watch);
     }
+    if (watch != INVALID_HANDLE_VALUE) FindCloseChangeNotification(watch);
     base_log("prestart: go\r\n");
 }
 

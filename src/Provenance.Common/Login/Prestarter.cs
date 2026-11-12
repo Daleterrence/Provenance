@@ -16,7 +16,7 @@ public sealed class Prestarter
     private const string PrestartLock = "prestart";
     private static long _dnsWarmedAt;
 
-    internal sealed record Prestarted(int Pid, ProcessStamp? Stamp);
+    internal sealed record Prestarted(int Pid, ProcessStamp? Stamp, DateTime? Began = null);
 
     internal sealed record Seams
     {
@@ -24,6 +24,7 @@ public sealed class Prestarter
         public Func<Prestarted, bool>? PrestartAlive { get; init; }
         public Action? WarmDns { get; init; }
         public Func<Prestarted?>? Start { get; init; }
+        public TimeSpan? ReadyLimit { get; init; }
     }
 
     private readonly ISettingsService _settings;
@@ -35,6 +36,7 @@ public sealed class Prestarter
     private readonly Func<Prestarted, bool> _prestartAlive;
     private readonly Action _warmDns;
     private readonly Func<Prestarted?> _start;
+    private readonly TimeSpan? _readyLimit;
     private volatile bool _closed;
     private Task<Prestarted?>? _prestart;
     private int _prestartHolds;
@@ -52,6 +54,7 @@ public sealed class Prestarter
         _prestartAlive = seams?.PrestartAlive ?? (pre => pre.Stamp is { } stamp && _pol.Ours(stamp));
         _warmDns = seams?.WarmDns ?? ResolveDns;
         _start = seams?.Start ?? StartPrestarted;
+        _readyLimit = seams?.ReadyLimit;
     }
 
     internal void Close() => _closed = true;
@@ -102,6 +105,7 @@ public sealed class Prestarter
                 return null;
             }
             _watcher.BeforeStart(viewerDir!, "before the pre-start");
+            var began = DateTime.UtcNow;
             var psi = Watcher.LauncherStart(launcherExe, polExe);
             HookEnvironment.SetPrestart(psi.Environment);
             using var launcher = _watcher.StartProcess(psi);
@@ -115,7 +119,7 @@ public sealed class Prestarter
                 try { File.WriteAllText(HookFiles.PathFor(pid, HookContract.Files.Prestart), at.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the pre-started pol.exe for other copies"); }
             Log.Information("Pre-started pol.exe (pid {Pid}), waiting for LOG IN", pid);
-            return new Prestarted(pid, stamp);
+            return new Prestarted(pid, stamp, began);
         }
         catch (Exception ex)
         {
@@ -135,13 +139,18 @@ public sealed class Prestarter
         int pid = pre.Pid;
         try
         {
-            if (!_prestartAlive(pre)) return null;
-            if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
             var log = HookFiles.PathFor(pid, HookContract.Files.Log);
-            var until = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (DateTime.UtcNow < until && !PrestartIsReady(log) && !ct.IsCancellationRequested) Thread.Sleep(100);
+            // a slow PC gets the whole time a start is given, from when this one began
+            var until = (pre.Began ?? DateTime.UtcNow) + (_readyLimit ?? Watcher.Limit);
+            while (true)
+            {
+                if (!_prestartAlive(pre)) return null;
+                if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
+                if (PrestartIsReady(log)) break;
+                if (DateTime.UtcNow >= until) { EndPrestarted(pre); return null; }
+                Thread.Sleep(15);
+            }
             if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
-            if (!PrestartIsReady(log)) { EndPrestarted(pre); return null; }
             // under the lock another copy ends waiting pre-starts with, so it's either been stopped or it's mine to use
             using (var handOver = AdminLock.TryAcquire(PrestartLock, TimeSpan.FromSeconds(5)))
             {
