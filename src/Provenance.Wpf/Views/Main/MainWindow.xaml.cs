@@ -18,6 +18,10 @@ public partial class MainWindow : AppWindow
     {
         InitializeComponent();
         Tray = new TrayMode(this, ExitApp, () => _asking);
+        Tray.BackFromTray += async () =>
+        {
+            if (Vm is { } vm && await SelfUpdate.UpdateWaitingAsync()) SelfUpdate.ShowWaiting(vm.Notice);
+        };
         DataContextChanged += OnDataContextChanged;
         IsVisibleChanged += (_, _) => ReportShown();
         StateChanged += (_, _) => ReportShown();

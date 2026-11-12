@@ -19,6 +19,8 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
 
     public bool InTray => Icon is { Visible: true };
 
+    public event Action? BackFromTray;
+
     private static TrayState StateOf(MainViewModel vm) =>
         vm.Session.Phase == SessionPhase.InGame ? TrayState.GameOpen
         : vm.LoggedIn ? TrayState.LoggedIn
@@ -80,11 +82,13 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
 
     public void ShowWindow()
     {
-        if (InTray) Log.Information("Back from the tray");
+        bool back = InTray;
+        if (back) Log.Information("Back from the tray");
         if (Icon != null) Icon.Visible = false;
         window.Show();
         window.WindowState = WindowState.Normal;
         window.Activate();
+        if (back) BackFromTray?.Invoke();
     }
 
     public void ShowFirstCloseTip(MainViewModel vm)

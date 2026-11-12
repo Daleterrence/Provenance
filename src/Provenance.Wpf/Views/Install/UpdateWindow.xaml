@@ -7,20 +7,21 @@
         Style="{StaticResource DialogCard}">
 
     <StackPanel Margin="22,20,22,16">
-        <StackPanel Orientation="Horizontal">
-            <Image Source="/Assets/provenance-256.png" Width="28" Height="28" RenderOptions.BitmapScalingMode="HighQuality" />
-            <TextBlock x:Name="StageText" Text="Checking for Provenance updates..." Margin="12,0,0,0" VerticalAlignment="Center"
-                       FontSize="15" FontWeight="SemiBold" />
-        </StackPanel>
+        <Grid ColumnDefinitions="Auto,*">
+            <Image Source="/Assets/provenance-256.png" Width="28" Height="28" VerticalAlignment="Top" RenderOptions.BitmapScalingMode="HighQuality" />
+            <TextBlock x:Name="StageText" Grid.Column="1" Text="Checking for Provenance updates..." Margin="12,4,0,0"
+                       FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
+        </Grid>
 
         <ProgressBar x:Name="Bar" Margin="0,18,0,0" Height="6" Minimum="0" Maximum="100" IsIndeterminate="True"
                      Foreground="{DynamicResource Primary}" Background="{DynamicResource Surface.1}" />
 
-        <Grid Margin="0,8,0,0" MinHeight="36">
-            <TextBlock x:Name="DetailText" FontSize="12" Foreground="{DynamicResource Text.3}" VerticalAlignment="Center" />
-            <Button x:Name="SkipButton" HorizontalAlignment="Right" Content="SKIP" Click="OnSkip"
-                    Style="{StaticResource PolButton}"
-                    ToolTip="Start Provenance now. It'll check for updates again next time." />
-        </Grid>
+        <TextBlock x:Name="DetailText" Margin="0,8,0,0" MinHeight="36" FontSize="12" Foreground="{DynamicResource Text.3}"
+                   TextWrapping="Wrap" />
+
+        <StackPanel x:Name="Choices" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0" Visibility="Collapsed">
+            <Button x:Name="TryAgainButton" Style="{StaticResource PolButton}" Content="TRY AGAIN" Margin="0,0,8,0" Click="OnTryAgain" IsDefault="True" />
+            <Button x:Name="CloseButton" Style="{StaticResource PolButton}" Content="CLOSE" Click="OnClose" />
+        </StackPanel>
     </StackPanel>
 </controls:AppWindow>

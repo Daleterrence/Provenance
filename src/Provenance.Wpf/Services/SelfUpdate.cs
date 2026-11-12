@@ -1,8 +1,6 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using Provenance.Common.Security;
-using Provenance.Common;
 using Provenance.Common.Game;
 using Provenance.Wpf.ViewModels.Main;
 using Provenance.Wpf.Views.Install;
@@ -16,9 +14,13 @@ public static class SelfUpdate
 {
     public const string UpdateServer = "https://updates.provenancexi.app/";
 
-    private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(10);
+    internal const string WaitingText =
+        "Provenance needs to update, you can either restart the app to do it now, or it will happen the next time it's started.";
+
+    private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StallTimeout = TimeSpan.FromMinutes(2);
-    private static readonly TimeSpan FailedApplyPause = TimeSpan.FromHours(1);
+    // reopening from the tray over and over only asks the server once in this long
+    private static readonly TimeSpan QuietGap = TimeSpan.FromMinutes(10);
 
     // Update.exe kills everything running from the install folder before it swaps the files, and a pol.exe holding
     // pol_hook.dll stops the swap anyway
@@ -29,76 +31,80 @@ public static class SelfUpdate
         File.Exists(Path.Combine(AppContext.BaseDirectory, "sq.version")) &&
         File.Exists(Path.Combine(AppContext.BaseDirectory, "..", "Update.exe"));
 
-    // true when this copy should just close: Update.exe is installing an update and starts Provenance again itself
-    public static async Task<bool> RunAsync(LaunchArgs args, bool noAutoLogin)
-    {
-        if (!InstalledCopy)
-        {
-            Log.Information("Not an installed copy, so no update check");
-            return false;
-        }
+    internal sealed record Problem(string Title, string Detail);
 
-        UpdateManager updates;
-        string root;
+    private const string HasToUpdate = "Provenance has to be up to date before it can start. ";
+    internal static readonly Problem CantCheck = new("Provenance couldn't check for updates", HasToUpdate + "Check your internet connection and try again.");
+    internal static readonly Problem CantDownload = new("Provenance couldn't download the update", HasToUpdate + "Check your internet connection and try again.");
+    internal static readonly Problem CantInstall = new("Provenance couldn't install the update", HasToUpdate + "Restart your PC and try again.");
+    internal static readonly Problem CantStartCheck = new("Provenance couldn't check for updates",
+        HasToUpdate + "Try again, and if this keeps happening, reinstall Provenance.");
+
+    internal sealed class UpdateProblem(Problem problem) : Exception(problem.Title)
+    {
+        public Problem Problem { get; } = problem;
+    }
+
+    private enum Step { Start, Close, HandedOver }
+
+    // the start found an update it couldn't put in yet, or something running that it has to wait for
+    private static bool _waiting, _checkOnceUp;
+    private static long _lastQuiet = long.MinValue;
+
+    // true when this copy should close: an update's installing, or it couldn't be brought up to date
+    public static Task<bool> RunAsync(LaunchArgs args, bool noAutoLogin)
+    {
+        if (InstalledCopy) return RunAsync(args, noAutoLogin, Open, WindowManager.ShowUpdate);
+        Log.Information("Not an installed copy, so no update check");
+        return Task.FromResult(false);
+    }
+
+    internal static async Task<bool> RunAsync(LaunchArgs args, bool noAutoLogin, Func<(UpdateManager Updates, string Root)> open,
+                                              Func<UpdateWindow> newWindow)
+    {
+        UpdateWindow? window = null;
+        using var quit = new CancellationTokenSource();
+        void Quit(object? sender, EventArgs e) => quit.Cancel();
+        UpdateWindow Show()
+        {
+            if (window is null)
+            {
+                window = newWindow();
+                window.Closed += Quit;
+            }
+            window.ShowChecking();
+            return window;
+        }
+        bool handedOver = false, afterUpdate = args.AfterUpdate;
         try
         {
-            updates = new UpdateManager(new ChannelSource(UpdateServer, VelopackLocator.Current.CurrentlyInstalledVersion));
-            root = VelopackLocator.Current.RootAppDir ?? throw new InvalidOperationException("Velopack found no install folder.");
-            if (WhyNoCheck(args, updates, root) is { } why) return why.CloseThisCopy;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Update check could not start");
-            return false;
-        }
-
-        UpdateWindow? window = null;
-        using var skip = new CancellationTokenSource();
-        void Skip(object? sender, EventArgs e) => skip.Cancel();
-        bool handedOver = false;
-
-        async Task<bool> CheckAndInstall()
-        {
-            window = WindowManager.ShowUpdate();
-            window.Closed += Skip;
-            window.SkipClicked += Skip;
-
-            var update = await Check(updates, skip.Token, CheckTimeout);
-            if (update is null) return false;
-
-            var target = update.TargetFullRelease;
-            if (FailedRecently(target.Version))
+            while (true)
             {
-                Log.Information("Provenance {Version} failed to install less than an hour ago, not trying it again yet", target.Version);
-                return false;
+                Problem problem;
+                try
+                {
+                    var step = await Attempt(open, afterUpdate, args.ForRestart(noAutoLogin), Show, quit.Token);
+                    handedOver = step == Step.HandedOver;
+                    return step != Step.Start;
+                }
+                catch (UpdateProblem p) { problem = p.Problem; }
+                catch (OperationCanceledException) when (quit.IsCancellationRequested) { problem = CantCheck; }
+                // a try again goes the normal way, which installs a package that didn't go in again
+                afterUpdate = false;
+                if (quit.IsCancellationRequested || window is null || !await window.AskTryAgain(problem.Title, problem.Detail))
+                {
+                    Log.Information("Provenance isn't starting, it couldn't be brought up to date");
+                    return true;
+                }
+                Log.Information("Trying the update again");
             }
-            await Download(updates, update, window, skip.Token);
-
-            // again, a copy started during the download would get killed. The package stays, so the next start installs it
-            if (skip.IsCancellationRequested)
-            {
-                Log.Information("Update skipped");
-                return false;
-            }
-            if (FindRunning(root, InUseNames) is { } late)
-            {
-                Log.Information("Not installing {Version} yet, {Process} started from the install folder meanwhile", target.Version, late);
-                return false;
-            }
-
-            QueueInstall(window, target, args.ForRestart(noAutoLogin));
-            handedOver = true;
-            return true;
         }
-
-        try { return await CarryOnIfItFails(CheckAndInstall, skip.Token); }
         finally
         {
-            // a handed-over window stays up until the shutdown, and skip's gone by then
+            // a handed-over window stays up until the shutdown
             if (window is not null)
             {
-                window.Closed -= Skip;
-                window.SkipClicked -= Skip;
+                window.Closed -= Quit;
                 if (!handedOver)
                 {
                     try { window.Close(); }
@@ -108,48 +114,147 @@ public static class SelfUpdate
         }
     }
 
-    // a problem with the update never stops the app starting
-    internal static async Task<bool> CarryOnIfItFails(Func<Task<bool>> update, CancellationToken skip)
+    private static async Task<Step> Attempt(Func<(UpdateManager Updates, string Root)> open, bool afterUpdate, string[] restartArgs,
+                                            Func<UpdateWindow> show, CancellationToken quit)
     {
-        try { return await update(); }
-        catch (OperationCanceledException) when (skip.IsCancellationRequested)
+        UpdateManager updates;
+        string root;
+        try
         {
-            Log.Information("Update skipped");
-            return false;
-        }
-        catch (OperationCanceledException)
-        {
-            Log.Warning("Update download stalled for {Minutes} minutes, carrying on without it", StallTimeout.TotalMinutes);
-            _updateFailed = true;
-            return false;
+            (updates, root) = open();
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Update check failed, carrying on without it");
-            _updateFailed = true;
+            Log.Warning(ex, "Update check could not start");
+            show();
+            throw new UpdateProblem(CantStartCheck);
+        }
+        if (!updates.IsInstalled)
+        {
+            Log.Information("Not an installed copy, so no update check");
+            return Step.Start;
+        }
+        // a copy that starts while Update.exe swaps the files would only get killed by it
+        if (FindRunning(root, "Update") is { } updater)
+        {
+            Log.Information("{Updater} is installing an update and starts Provenance again afterwards, so this copy closes", updater);
+            return Step.Close;
+        }
+        if (FindRunning(root, InUseNames) is { } user)
+        {
+            Log.Information("{Process} is running from the install folder, so an update waits for a start without it", user);
+            _checkOnceUp = true;
+            return Step.Start;
+        }
+
+        var window = show();
+        // the package still waiting after the restart means Update.exe couldn't swap the files (something held one open)
+        if (afterUpdate && updates.UpdatePendingRestart?.Version is { } stuck)
+        {
+            Log.Warning("Provenance {Version} did not install, this is still {Current}", stuck, updates.CurrentVersion);
+            throw new UpdateProblem(CantInstall);
+        }
+        if (await Check(updates, quit, CheckTimeout) is not { } update) return Step.Start;
+
+        var target = update.TargetFullRelease;
+        try { await Download(updates, update, window, quit); }
+        catch (OperationCanceledException) when (quit.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "The download of Provenance {Version} failed", target.Version);
+            throw new UpdateProblem(CantDownload);
+        }
+        // again, a copy started during the download would get killed. The package stays, so the next start installs it
+        if (FindRunning(root, InUseNames) is { } late)
+        {
+            Log.Information("Not installing {Version} yet, {Process} started from the install folder meanwhile", target.Version, late);
+            _waiting = true;
+            return Step.Start;
+        }
+
+        QueueInstall(window, target, restartArgs);
+        return Step.HandedOver;
+    }
+
+    private static UpdateManager Manager() =>
+        new(new ChannelSource(UpdateServer, VelopackLocator.Current.CurrentlyInstalledVersion));
+
+    private static (UpdateManager, string) Open() =>
+        (Manager(), VelopackLocator.Current.RootAppDir ?? throw new InvalidOperationException("Velopack found no install folder."));
+
+    // null when it's up to date. Quitting throws OperationCanceledException, anything else that stops it an UpdateProblem
+    internal static async Task<UpdateInfo?> Check(UpdateManager updates, CancellationToken quit, TimeSpan timeout)
+    {
+        Log.Information("Checking for updates (version {Version})", updates.CurrentVersion);
+        var check = Task.Run(() => updates.CheckForUpdatesAsync());
+        if (await Task.WhenAny(check, Task.Delay(timeout, quit)) != check)
+        {
+            _ = check.ContinueWith(t => Log.Debug(t.Exception, "The abandoned update check failed"),
+                                   TaskContinuationOptions.OnlyOnFaulted);
+            quit.ThrowIfCancellationRequested();
+            Log.Warning("Update check took over {Seconds}s", timeout.TotalSeconds);
+            throw new UpdateProblem(CantCheck);
+        }
+        try
+        {
+            var update = await check;
+            if (update is null) Log.Information("Provenance is up to date");
+            return update;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Update check failed");
+            throw new UpdateProblem(CantCheck);
+        }
+    }
+
+    // for a copy that's running anyway (back from the tray, or started next to the game): true when there's an update
+    // waiting for the next start. One that fails says nothing, the next start's own check is the one that holds
+    internal static async Task<bool> UpdateWaitingAsync(Func<UpdateManager>? manager = null, TimeSpan? timeout = null)
+    {
+        if (_waiting) return true;
+        if (manager is null && !InstalledCopy) return false;
+        long now = Environment.TickCount64;
+        if (_lastQuiet != long.MinValue && now - _lastQuiet < QuietGap.TotalMilliseconds) return false;
+        _lastQuiet = now;
+        try
+        {
+            var updates = (manager ?? Manager)();
+            if (!updates.IsInstalled) return false;
+            var check = Task.Run(() => updates.CheckForUpdatesAsync());
+            if (await Task.WhenAny(check, Task.Delay(timeout ?? CheckTimeout)) != check)
+            {
+                _ = check.ContinueWith(t => Log.Debug(t.Exception, "The abandoned quiet update check failed"),
+                                       TaskContinuationOptions.OnlyOnFaulted);
+                Log.Information("The quiet update check took too long, leaving it for the next start");
+                return false;
+            }
+            if (await check is { } update)
+            {
+                Log.Information("Provenance {Version} is waiting for the next start", update.TargetFullRelease.Version);
+                _waiting = true;
+            }
+            return _waiting;
+        }
+        catch (Exception ex)
+        {
+            Log.Information(ex, "The quiet update check failed, leaving it for the next start");
             return false;
         }
     }
 
-    internal static async Task<UpdateInfo?> Check(UpdateManager updates, CancellationToken skip, TimeSpan timeout)
+    internal static void ShowWaiting(NoticeBanner notice) => notice.Show(WaitingText, "Update", stays: true);
+
+    internal static async Task TellIfUpdateWaiting(NoticeBanner notice)
     {
-        Log.Information("Checking for updates (version {Version})", updates.CurrentVersion);
-        var check = Task.Run(() => updates.CheckForUpdatesAsync());
-        if (await Task.WhenAny(check, Task.Delay(timeout, skip)) != check)
-        {
-            _ = check.ContinueWith(t => Log.Debug(t.Exception, "The abandoned update check failed"),
-                                   TaskContinuationOptions.OnlyOnFaulted);
-            if (skip.IsCancellationRequested) Log.Information("Update check skipped");
-            else
-            {
-                Log.Warning("Update check took over {Seconds}s, carrying on without it", timeout.TotalSeconds);
-                _updateFailed = true;
-            }
-            return null;
-        }
-        var update = await check;
-        if (update is null) Log.Information("Provenance is up to date");
-        return update;
+        if (!_checkOnceUp && !_waiting) return;
+        if (await UpdateWaitingAsync()) ShowWaiting(notice);
+    }
+
+    internal static void ForgetForTest()
+    {
+        _waiting = _checkOnceUp = false;
+        _lastQuiet = long.MinValue;
     }
 
     private static async Task Download(UpdateManager updates, UpdateInfo update, UpdateWindow window, CancellationToken skip)
@@ -204,40 +309,6 @@ public static class SelfUpdate
         }
     }
 
-    private readonly record struct NoCheck(bool CloseThisCopy);
-
-    // null when the check should go ahead. Logs why when it shouldn't
-    private static NoCheck? WhyNoCheck(LaunchArgs args, UpdateManager updates, string root)
-    {
-        if (!updates.IsInstalled)
-        {
-            Log.Information("Not an installed copy, so no update check");
-            return new NoCheck(false);
-        }
-        if (args.SkipUpdateCheck)
-        {
-            if (args.AfterUpdate)
-            {
-                Log.Information("Update check skipped, this start follows an update");
-                NoteApplyResult(updates);
-            }
-            else Log.Information("Update check skipped ({Arg})", LaunchArgs.SkipUpdateCheckSwitch);
-            return new NoCheck(false);
-        }
-        // a copy that starts while Update.exe swaps the files would only get killed by it
-        if (FindRunning(root, "Update") is { } updater)
-        {
-            Log.Information("{Updater} is installing an update and starts Provenance again afterwards, so this copy closes", updater);
-            return new NoCheck(true);
-        }
-        if (FindRunning(root, InUseNames) is { } user)
-        {
-            Log.Information("Update check skipped, {Process} is running from the install folder", user);
-            return new NoCheck(false);
-        }
-        return null;
-    }
-
     // the exe path for Provenance, the watcher and Update.exe, the loaded modules for pol.exe (it lives in the
     // viewer folder, the hook doesn't)
     private static string? FindRunning(string root, params string[] names)
@@ -262,53 +333,5 @@ public static class SelfUpdate
             }
         }
         return null;
-    }
-
-    private static string FailedApplyFile =>
-        Path.Combine(AppPaths.UserData ?? "Provenance", "failed-update.txt");
-
-    // the package still waiting after the restart means Update.exe couldn't swap the files (something held one open).
-    // Without a note every start would try again and fail the same way
-    private static void NoteApplyResult(UpdateManager updates)
-    {
-        try { NoteApplyResult(updates.UpdatePendingRestart?.Version, updates.CurrentVersion, FailedApplyFile); }
-        catch (Exception ex) { Log.Debug(ex, "Could not note how the update went"); }
-    }
-
-    private static bool _updateFailed;
-
-    internal static void NoteApplyResult(SemanticVersion? stuck, SemanticVersion? current, string noteFile)
-    {
-        // first, a note that can't be saved shouldn't cost the player the notice
-        _updateFailed = stuck is not null;
-        if (stuck is not null)
-        {
-            Log.Warning("Provenance {Version} did not install, this is still {Current}. It gets another try in an hour", stuck, current);
-            File.WriteAllText(noteFile, $"{stuck} {DateTime.UtcNow:O}");
-        }
-        else File.Delete(noteFile);
-    }
-
-    internal static void TellIfUpdateFailed(NoticeBanner notice)
-    {
-        if (_updateFailed)
-            notice.Show("Provenance could not be updated, this is normally a temporary problem, please try again later.", "AlertCircleOutline", stays: true);
-    }
-
-    private static bool FailedRecently(SemanticVersion version)
-    {
-        try { return File.Exists(FailedApplyFile) && HeldBack(File.ReadAllText(FailedApplyFile), version, DateTime.UtcNow); }
-        catch { return false; }
-    }
-
-    internal static bool HeldBack(string note, SemanticVersion version, DateTime utcNow)
-    {
-        var parts = note.Trim().Split(' ', 2);
-        if (parts.Length != 2 || parts[0] != version.ToString() ||
-            !DateTime.TryParse(parts[1], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at))
-            return false;
-        // a time in the future (a clock that was ahead) mustn't hold the update back until then
-        var ago = utcNow - at.ToUniversalTime();
-        return ago >= TimeSpan.Zero && ago < FailedApplyPause;
     }
 }

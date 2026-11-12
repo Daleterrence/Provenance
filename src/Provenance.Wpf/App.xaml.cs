@@ -77,7 +77,7 @@ public partial class App : Application
 
         bool noAutoLogin = shiftAtStart || ShiftDown() || args.NoAutoLogin;
         var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin);
-        SelfUpdate.TellIfUpdateFailed(mainVm.Notice);
+        _ = SelfUpdate.TellIfUpdateWaiting(mainVm.Notice);
         StartMainViewModel(mainVm, noAutoLogin);
     }
 
