@@ -87,8 +87,8 @@ public static class HookFiles
 
     public static RequestBody Body(string text) => new(Clean(text, keepLineBreaks: true));
 
-    // one line per field, in the order the hook reads them. Control characters (tabs, line breaks) become spaces
-    // so a field can't split in two. False if not written
+    // one line per field in the order the hook reads them, control characters (tabs, line breaks) become spaces so a
+    // field can't split in two. False if not written
     public static bool WriteRequest(int pid, string name, params object[] fields)
     {
         try

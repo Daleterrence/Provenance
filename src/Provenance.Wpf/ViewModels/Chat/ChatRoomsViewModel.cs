@@ -14,8 +14,7 @@ using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.ViewModels.Chat;
 
-// one chat rooms window: the zone picker and room list, then the room. Everything goes through the hook's files, bar
-// the room password, which goes as a one-shot Credential Manager entry
+// everything goes through the hook's files, bar the room password, which goes as a one-shot Credential Manager entry
 public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 {
     public enum Page { Lobby, Room }
@@ -277,7 +276,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         return menu;
     }
 
-    // the viewer's Kick and Designate, each with its own question first
     public void Kick(ChatMemberItem m) =>
         MasterAction(m, $"Kick {m.Name}\nfrom this chat room?", ChatRoomFiles.MasterOp.Kick, MasterJob.Kick);
 
@@ -384,8 +382,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         RoomsNote = "Room entry cancelled.";
     }
 
-    // on Exit, Cancel, the game starting or the window closing. A send not taken never goes,
-    // an enter not taken is withdrawn, or called off by the leave if that fails
+    // a send not taken never goes, an enter not taken is withdrawn, or called off by the leave if that fails
     public void Leave()
     {
         if (Pid is { } pid)

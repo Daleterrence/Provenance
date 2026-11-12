@@ -5,7 +5,7 @@ using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Controls;
 
-// a POL profile pic in a circle. The 64x96 portrait fills the width and sits a bit high, a fifth off the top
+// the 64x96 POL profile picture fills the width and sits a bit high, a fifth off the top
 public sealed class ProfilePictureCircle : ContentControl
 {
     public static readonly DependencyProperty SourceProperty = DependencyProperty.Register(

@@ -50,7 +50,7 @@ public partial class HandlesViewModel : ObservableObject
     private string _signature = "";
     private bool _wasReadOnly;
     private Action<string?>? _after;
-    // every FFXI Content ID's key in the order the page shows, while that isn't the order PlayOnline has
+    // every FFXI Content ID's key in the order the page shows, while that isn't the order POL has
     private List<string>? _draft;
     private string _draftFrom = "";
 
@@ -237,7 +237,7 @@ public partial class HandlesViewModel : ObservableObject
     [RelayCommand]
     public void MoveDown(HandleCharacterRow c) => Move(c, 1);
 
-    // swaps it with the next one on its handle that has a name. Only on the page, nothing's sent till SAVE ORDER
+    // swaps it with the next one on its handle that has a name. Only on the page, nothing's sent till Save order
     private void Move(HandleCharacterRow c, int by)
     {
         if (!Editable || Rows.FirstOrDefault(r => r.Handle.Slot == c.Handle?.Slot) is not { } row) return;

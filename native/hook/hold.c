@@ -33,7 +33,7 @@ static int hold_status_wanted(void)
     return 0;
 }
 /* the hold counts on g_my_slot being a handle in use, and login_handle_bootstrap left the account one, so none by now
-   signs out */
+   logs out */
 static const char *hold_handle_pick(BYTE *b)
 {
     const char *why;
@@ -124,7 +124,7 @@ static int hold_idle_timeout_for_game(BYTE *b)
 }
 
 /* the app sets this right after it writes the Play entry, so Play doesn't wait out the 150ms beat. It only wakes the
-   hold, cred_play_signalled still decides whether the game starts. Anything that made the name first just wakes us */
+   hold, cred_play_signalled still decides whether the game starts, and anything that made the name first just wakes it */
 static HANDLE g_play_event;
 static void hold_play_event_open(void)
 {
@@ -218,7 +218,7 @@ static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
     message_store_drop();
 }
 
-/* writes under way get 5s to finish, then the viewer's sign-out */
+/* writes under way get 5s to finish, then the viewer's log out */
 #define SIGN_OUT_DRAIN_MS 5000
 static void hold_sign_out(BYTE *b, const char *spath)
 {

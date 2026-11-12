@@ -21,7 +21,7 @@
 
         <!-- read-only so a line can be copied, arrivals and the like in the accent colour -->
         <DataTemplate x:Key="RoomLine" DataType="{x:Type vm:ChatLineItem}">
-            <!-- the face sits after the text so every line's text starts in the same place, like the viewer's log -->
+            <!-- the emoticon sits after the text so every line's text starts in the same place, like the viewer's log -->
             <Grid Margin="0,1" ColumnDefinitions="Auto,*,Auto">
                 <TextBlock Margin="0,1,10,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding TimeText}" />
                 <Image Grid.Column="2" Source="{Binding Emote}" Width="24" Height="24" Margin="6,-3,0,0" VerticalAlignment="Top"

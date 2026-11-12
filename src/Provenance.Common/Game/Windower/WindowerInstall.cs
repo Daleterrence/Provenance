@@ -5,7 +5,7 @@ namespace Provenance.Common.Game.Windower;
 
 public static class WindowerInstall
 {
-    // Hook.dll is the one that matters now, but a folder with only Windower.exe can still fetch it
+    // Hook.dll is the one that matters, but a folder with only Windower.exe can still fetch it
     public static bool IsFolder(string? dir) =>
         !string.IsNullOrWhiteSpace(dir) && (File.Exists(Path.Combine(dir, "Windower.exe")) || File.Exists(Path.Combine(dir, "Hook.dll")));
 

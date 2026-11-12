@@ -29,7 +29,7 @@ public partial class AccountsViewModel : ObservableObject
         int needDetails = Profiles.Count(p => !_credentials.HasUsableDetails(p.Id));
         if (needDetails > 0)
             Log.Information("{Count} account(s) need their sign-in details again", needDetails);
-        // a fresh settings file's "Default" and a never-signed-in "New account" get a proper name
+        // a fresh settings file's "Default" and a never-logged-in "New account" get a proper name
         int n = 0;
         bool changed = false;
         foreach (var p in Profiles)

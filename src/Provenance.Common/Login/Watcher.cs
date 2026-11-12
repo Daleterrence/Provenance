@@ -98,8 +98,8 @@ internal sealed class Watcher
         }
     }
 
-    // each attempt has to leave nothing behind for the next. Only the wait is reported from here.
-    // One that says Refused itself (checkLog false) isn't looked up in the log
+    // each attempt has to leave nothing behind for the next, and only the wait is reported from here. One that says
+    // Refused itself (checkLog false) isn't looked up in the log
     internal (LaunchOutcome Outcome, T? Value, string Text) Retrying<T>(Func<(LaunchOutcome Outcome, T? Value, string Failure)> attempt,
                                                                       IProgress<LaunchProgress>? progress, CancellationToken ct, bool checkLog = true)
     {

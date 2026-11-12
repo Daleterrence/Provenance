@@ -33,7 +33,6 @@ public partial class BackupSettings : ObservableObject
 
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RestoreBackupCommand))] private bool _restoringBackup;
 
-    // a test swaps this for one that just notes what it got
     internal Action<string> ShowBackupFolderForTest { get; set; } = Explorer.ShowFolder;
     internal Func<LauncherSettings, BackupSources?>? RestoreSourcesForTest { get; set; }
 

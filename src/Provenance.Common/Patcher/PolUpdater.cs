@@ -221,7 +221,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
 
         var workers = new DownloadWorkers(session, connections, product.Name, total, progress,
             (link, f, moved, kept, token) => FetchOne(session, link, f, local, moved, kept, token));
-        // biggest files first
         workers.Run(work.OrderByDescending(w => w.Bytes).Select(w => w.File), ct);
     }
 

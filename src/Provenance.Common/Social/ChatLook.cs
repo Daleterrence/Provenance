@@ -24,7 +24,7 @@ public static class ChatLook
 
     public static string ColourName(int pick) => pick >= 0 && pick < Names.Length ? Names[pick] : "No colour";
 
-    // the one a received line shows: the viewer only draws a face for 1 or more off its first sheet
+    // the one a received line shows: the viewer only draws an emoticon for 1 or more off its first sheet
     public static int Emote(int e) => e is >= 1 and <= Emotes ? e : 0;
 
     // the room list's badge, from the room's language category (the viewer's strings 0x4e90-0x4e93)

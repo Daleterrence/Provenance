@@ -10,8 +10,7 @@ public sealed record AccountFormOutcome(AccountDialogResult? Result, FormProblem
 
 public sealed record AccountChoice(string Id, string Label);
 
-// Edit account's fields and the password manager area under them. The passwords come in through TrySave and go straight
-// back out in the result, nothing here holds one
+// The passwords come in through TrySave and go straight back out in the result, nothing here holds one
 public sealed partial class AccountFormViewModel : ObservableObject
 {
     private static readonly string[] Sources = ["", OtpSources.Bitwarden, OtpSources.OnePassword, OtpSources.KeePassXC];

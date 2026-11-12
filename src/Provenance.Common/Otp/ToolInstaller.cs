@@ -79,7 +79,7 @@ public static class ToolInstaller
         finally { held?.Dispose(); }
     }
 
-    // once a day at most, and only after the tool's been used. Never on a timer
+    // once a day at most, and only after the tool's been used
     public static void UpdateInBackground(string tool) =>
         _ = Task.Run(async () =>
         {

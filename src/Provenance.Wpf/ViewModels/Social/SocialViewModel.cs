@@ -215,7 +215,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private bool _handleSwitching;
     public const string SwitchingNote = "Wait for the handle switch to finish.";
 
-    // why nothing can be written right now, null when it can
     string? ISocialSession.LeavingGroupId => Groups.LeavingGroupId;
     System.Windows.Input.ICommand ISocialSession.ChangeProfilePictureCommand => ChangeProfilePictureCommand;
 
@@ -230,7 +229,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         StatusNote = value ? SwitchingNote : StatusNote == SwitchingNote ? "" : StatusNote;
     }
 
-    // answered requests the hook may delete now, kept until the ack file's written so they can't come back as pending
     private bool _friendsListVisible, _mainWindowActive;
 
     public bool IsWaiting(int mid) => mid > 0 && Friends.Any(f => f.RequestMid == mid);

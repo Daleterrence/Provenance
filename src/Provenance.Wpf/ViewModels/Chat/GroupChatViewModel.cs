@@ -114,8 +114,8 @@ public sealed partial class GroupChatViewModel : ObservableObject
         UnreadChanged?.Invoke();
     }
 
-    // the handle question's already been asked by the time this runs (HandlesViewModel.OpenGroup). One still joining
-    // just has its window shown again, like the viewer
+    // the handle question's already been asked by the time this runs. One still joining just has its window shown
+    // again, like the viewer
     public bool Join(PolGroup group)
     {
         if (_social.Session.Pid is not { } pid) return false;
@@ -442,7 +442,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         SendCommand.NotifyCanExecuteChanged();
     }
 
-    // me first, then whoever's in the chat, the viewer's "in chat / members" count
+    // me first, then whoever's in the chat, the viewer's "in chat/members" count
     private void RefreshMembers(PolGroup group)
     {
         if (!Open) return;

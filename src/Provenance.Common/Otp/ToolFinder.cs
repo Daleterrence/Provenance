@@ -6,7 +6,7 @@ using Serilog;
 
 namespace Provenance.Common.Otp;
 
-// finds the tool's own copy and checks it before every use. Provenance only ever runs the copy it put in its own folder
+// Provenance only ever runs the copy it put in its own folder, and checks it before every use
 public static class ToolFinder
 {
     private static readonly Regex VersionText = new(@"^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$");

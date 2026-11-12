@@ -121,7 +121,7 @@ public sealed partial class AshitaScript
     public bool SetAddon(string name, bool on) => Set(true, name, on);
 
     // Ashita cuts the name at the first .txt (case and all) and puts .txt back, so "default" and "default.txt" are the
-    // same script but "Mine.TXT" is Mine.TXT.txt
+    // same script but "<name>.TXT" is <name>.TXT.txt
     public static string FileName(string script)
     {
         var s = script.Trim().Replace('/', '\\');

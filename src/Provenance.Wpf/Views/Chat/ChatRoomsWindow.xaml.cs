@@ -127,7 +127,7 @@ public partial class ChatRoomsWindow : AppWindow
         return menu;
     }
 
-    // the viewer's face palette, its first page of 23
+    // the viewer's emoticon palette, its first page of 23
     private void OnEmoteMenu(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement button) Menus.Toggle(button, () => EmotePopup(button));

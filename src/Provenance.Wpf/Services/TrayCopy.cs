@@ -44,7 +44,7 @@ internal static class TrayCopy
         {
             if (clock.ElapsedMilliseconds > TotalMs) return false;
             if (!pids.Contains(pid)) return true;
-            // this is the process the player just started, so the other copy only gets to the front if we let it
+            // this is the process the player just started, so the other copy only gets to the front if this one lets it
             GameWindow.AllowForeground(pid);
             taken = AskWindow(window, TimeoutMs);
             return !taken;

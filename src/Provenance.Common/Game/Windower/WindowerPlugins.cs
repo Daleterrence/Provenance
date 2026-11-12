@@ -27,7 +27,7 @@ public static class WindowerPlugins
         List<string> files;
         try { files = Directory.Exists(dir) ? Directory.EnumerateFiles(dir, "*.dll").ToList() : []; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { files = []; }
-        // a case-sensitive folder can hold Foo.dll and foo.dll, the first one wins
+        // a case-sensitive folder can hold two DLLs whose names only differ in case, the first one wins
         var dlls = files.Where(f => System.IO.Path.GetExtension(f).Equals(".dll", StringComparison.OrdinalIgnoreCase))
                         .GroupBy(f => System.IO.Path.GetFileNameWithoutExtension(f), StringComparer.OrdinalIgnoreCase)
                         .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);

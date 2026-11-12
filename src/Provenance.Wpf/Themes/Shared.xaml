@@ -35,7 +35,7 @@
         <Setter Property="Background" Value="{DynamicResource Title.Edge}" />
     </Style>
 
-    <!-- a splitter between two panes: a 1 px line on the side the panel's on, the rest shows the window behind -->
+    <!-- a 1px line on the side the panel's on, the rest shows the window behind -->
     <Style x:Key="PaneSplitter" TargetType="GridSplitter">
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -324,7 +324,7 @@
         </Setter>
     </Style>
 
-    <!-- a world's dot. State.Status is its status, and one we don't know is grey on the chip and in the list -->
+    <!-- State.Status is the world's status, and an unknown one is grey on the chip and in the list -->
     <Style x:Key="WorldDot" TargetType="Ellipse">
         <Setter Property="Fill" Value="{DynamicResource Text.3}" />
         <Style.Triggers>

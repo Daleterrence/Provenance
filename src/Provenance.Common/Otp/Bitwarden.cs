@@ -190,7 +190,7 @@ public static class Bitwarden
         catch (Exception ex) { Log.Warning(ex, "Locking Bitwarden failed"); }
     }
 
-    // "[ERROR] 2026/10/19 20:00:00 authorization prompt dismissed" -> "authorization prompt dismissed". bw's colours go too
+    // "[ERROR] <date> <time> <message>" -> "<message>". bw's colours go too
     private static string CleanError(string err)
     {
         var line = Regex.Replace(err, @"\x1b\[[0-9;]*m", "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";

@@ -173,8 +173,8 @@ public static partial class SvgIcons
     public static ImageSource? Emote(int index) =>
         index is >= 1 and <= ChatLook.Emotes ? Cached(EmoteFile(index), () => Framed(EmoteFile(index))) : null;
 
-    // busy shows as online and Appear offline as invisible, same as POL. Offline has no badge. Unfilled loses the pale
-    // disc inside the ring, for the statuses the picker isn't on
+    // busy shows as online and Appear offline as invisible, same as POL, and offline has no badge. Unfilled loses the
+    // pale disc inside the ring, for the statuses the picker isn't on
     public static ImageSource? Online(string key, bool filled = true)
     {
         if (key switch { "online" or "busy" => "online-online.svg", "away" => "online-away.svg", "invisible" => "online-invisible.svg", _ => null }

@@ -5,7 +5,7 @@ namespace Provenance.Common.Game.Ashita;
 
 public sealed class AshitaProfiles(ISettingsService settings, string dir, int playOnline) : ILaunchProfiles
 {
-    // "mychar" is taken to mean mychar.ini
+    // "<name>" is taken to mean <name>.ini
     public static string FileName(string name)
     {
         var n = name.Trim();

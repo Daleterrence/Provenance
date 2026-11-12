@@ -131,7 +131,7 @@ static void login_notice_read(BYTE *b)
     }
 }
 
-/* the viewer's sign-out (app.dll 0x101983fb). 0xcc4 runs once, it returns 0, not 7, for the hook's connection type */
+/* the viewer's log out (app.dll 0x101983fb). 0xcc4 runs once, it returns 0, not 7, for the hook's connection type */
 static void login_viewer_sign_out(BYTE *b)
 {
     if (pc_has(b, SV_SIGN_OUT_PREPARE)) pc_sign_out_prepare(b, 1);
@@ -212,7 +212,7 @@ static int login_loads_pass(BYTE *b, struct pending_load *items, int n, ULONGLON
             started[i] = GetTickCount64();
             base_log(LOG_PROFILE "%s load -> ticket %d\r\n", items[i].name, t);
             if (t < 0) {
-                items[i].res = t;   /* never retried, the viewer asks once and signs out */
+                items[i].res = t;   /* never retried, the viewer asks once and logs out */
                 continue;
             }
         }
@@ -468,7 +468,7 @@ static void login_loads(BYTE *b, struct pending_load *run, int n)
     if (run[0].res == 1) login_run_loads(b, run + 1, n - 1);
 }
 /* a load refused with an account status (-0x1450 and down: suspended, IP restricted, password changed...) turns
-   the account away, any other failure signs out too, like the viewer */
+   the account away, any other failure logs out too, like the viewer */
 static void login_loads_check(BYTE *b, struct pending_load *run, int n)
 {
     char what[48];
@@ -572,13 +572,13 @@ static void log_in(HMODULE pc)
        the password and host, so both go in after it. */
     r = pc_con_open(b, 3, &conn);
     base_log("phase_c: POLCON_OPEN(3) -> %d\r\n", r);
-    pc_encode_password(b, encpw, pw);   /* ENCODE_PASSWORD */
+    pc_encode_password(b, encpw, pw);
     SecureZeroMemory(pw, sizeof pw);
     /* SET_PASSWORD (polcore.dll 0x10046df0) copies the bytes into polcore, so mine get cleared */
     pc_set_password(b, encpw, 0);
     SecureZeroMemory(encpw, sizeof encpw);
-    pc_encode_host(b, hostbuf, "ci000.pol.com");   /* ENCODE_HOST */
-    pc_set_polcom_host(b, hostbuf);   /* SET_POLCOM_HOST */
+    pc_encode_host(b, hostbuf, "ci000.pol.com");
+    pc_set_polcom_host(b, hostbuf);
     /* ENCODE_POLID (polcore.dll 0x10046e70) scrambles the ID into polcore. It's reversible, so never logged. */
     pc_encode_polid(b, id);
     SecureZeroMemory(id, sizeof id);
@@ -602,7 +602,7 @@ static void log_in(HMODULE pc)
     /* MESSAGE_NOTICES(1), or polcore marks every message as lost. Lean mode reads no messages, so asks for none. */
     if (!g_lean)
         pc_message_notices(b, 1);
-    pc_clear_error(b);   /* POLCON_CLEAR_ERROR */
+    pc_clear_error(b);
     run = login_set(all, &nrun);
     login_loads(b, run, nrun);
     g_friends_loaded = all[1].res == 1;

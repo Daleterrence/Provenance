@@ -72,8 +72,8 @@ public static class PolAccountNotices
     public static string? PlayBlockedReason(PolSocialSnapshot snap) =>
         snap.FfxiService == "none" ? NoFfxiContentId : snap.HandleUnconfirmed ? HookFailures.Handles.PlayHeld : null;
 
-    // status byte from svc 0xd20. 253..255 have no row, the viewer shows LM-01 for them. A refused login has no day count
-    // for LM-02, so that one says it in words
+    // status byte from svc 0xd20, where 253..255 have no row and the viewer shows LM-01 for them. A refused login has
+    // no day count for LM-02, so that one says it in words
     public static Notice? For(int status, PolRegion region = PolRegion.UnitedStates, int days = 0)
     {
         if (status is >= 253 and <= 255) status = 221;

@@ -66,7 +66,8 @@ public partial class GroupChatWindow : AppWindow
         if (message != null) _vm.Tell(message);
     }
 
-    // hidden or behind: the taskbar button flashes if that's wanted, the notice is the main window's
+    // up but behind: the taskbar button flashes if that's wanted. A hidden window has no button, and the notice is the
+    // main window's
     private void OnLineArrived(string group, string who, string text, int count)
     {
         if (!_vm.FlashWanted || !IsVisible || IsActive) return;

@@ -4,8 +4,8 @@ using System.Windows.Threading;
 
 namespace Provenance.Wpf.Services;
 
-// The UI thread taken when this is made. Post, unless the caller needs the answer or needs it done by the time it
-// returns, then Run. Nothing runs once the app's gone
+// Post, unless the caller needs the answer or needs it done by the time it returns, then Run. Nothing runs once the
+// app's gone
 public sealed class UiThread
 {
     private readonly Dispatcher? _dispatcher = Application.Current?.Dispatcher;

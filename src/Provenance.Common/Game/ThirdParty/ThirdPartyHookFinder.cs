@@ -94,8 +94,8 @@ public static class ThirdPartyHookFinder
         new[] { AppPaths.ProgramFilesX86, AppPaths.ProgramFiles, ProgramFiles64 }.OfType<string>().Where(r => r.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
-    // Windows hands a 32-bit app the x86 Program Files for a shortcut into the 64-bit one (of course it does),
-    // so a target that isn't there gets tried in both
+    // Windows hands a 32-bit app the x86 Program Files for a shortcut into the 64-bit one, so a target that isn't there
+    // gets tried in both
     internal static IEnumerable<string> InEitherProgramFiles(string target, string x86, string? x64)
     {
         yield return target;

@@ -222,7 +222,7 @@ public sealed class Prestarter
     }
 
     // a repair, an install or a Large Address Aware write changes viewer files, so nothing pre-starts pol.exe until
-    // every hold's let go (a sign-out's own Prestart included). They nest
+    // every hold's let go (the Prestart after a log out included). They nest
     public IDisposable HoldPrestarts()
     {
         lock (_gate) _prestartHolds++;

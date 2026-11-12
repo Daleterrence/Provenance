@@ -25,7 +25,7 @@ public static class ChatRoomFiles
 
     // polcore's line is 0x200 bytes, minus what goes around the text (as Shift-JIS):
     //   "PRIVMSG <room> :", checksum and line end   20 + the room's name
-    //   type, face and colour                       6
+    //   type, emoticon and colour                   6
     //   chat name, a tab and the language           name + 3
     public static int MaxTextBytes(string room, string chatName) =>
         0x200 - (20 + room.Length) - (9 + ShiftJis.ByteCount(chatName));

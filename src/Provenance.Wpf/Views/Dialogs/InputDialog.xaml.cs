@@ -17,7 +17,7 @@ public partial class InputDialog : AppWindow
         InitializeComponent();
     }
 
-    // the trimmed text, or null when cancelled. validate returns the problem shown under the box, null when it's fine
+    // the trimmed text, or null when cancelled
     public static string? Prompt(Window? owner, string title, string prompt, string initialValue = "",
                                  int maxLength = 64, bool allowEmpty = false, Func<string, string?>? validate = null)
     {

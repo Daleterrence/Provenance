@@ -2,8 +2,7 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Social;
 
-// what a chat box takes: how much, counted in characters or in the bytes the line goes out as, one line or several,
-// and what's filtered out first
+// what a chat box takes. MaxBytes counts the line as the Shift-JIS it goes out as
 public sealed class ComposeRules
 {
     public bool SingleLine { get; init; }

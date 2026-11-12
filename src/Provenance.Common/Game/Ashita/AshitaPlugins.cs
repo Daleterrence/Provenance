@@ -41,7 +41,7 @@ public static class AshitaPlugins
             var core = AshitaPluginMetadata.Load(Path.Combine(ashitaDir, "Ashita.dll"), MaxDll);
             if (core is not null && core.Exports.TryGetValue("GetInterfaceVersion", out var rva) && core.ExportedDouble(rva) is { } v) return v;
         }
-        catch (Exception) { }   // can't read the core, so go with the version we expect
+        catch (Exception) { }   // can't read the core, so go with the expected version
         return ExpectedInterfaceVersion;
     }
 

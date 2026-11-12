@@ -8,8 +8,8 @@ using Provenance.Wpf.Win32;
 
 namespace Provenance.Wpf.Controls;
 
-// DWM rounds every window and draws a thin Border.Window line round it. Where it can't, WPF draws the line on square
-// corners. Either way the line goes while the window's maximised
+// DWM rounds every window and draws a thin Border.Window line round it, WPF draws the line on square corners where it
+// can't. The line goes while the window's maximised either way
 internal static class WindowFrame
 {
     public const double Radius = 8;   // DWM's own corner for a normal window, in DIPs

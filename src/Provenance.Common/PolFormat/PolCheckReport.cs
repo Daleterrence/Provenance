@@ -5,7 +5,7 @@ namespace Provenance.Common.PolFormat;
 // one entry line of the report: <same|moved|notfound> <module> <old> <new> <required|optional> <name> [| why]...
 public sealed record PolCheckEntry(string Status, string Module, int Old, int? New, bool Required, string Name, string[] Notes);
 
-// What pol_check printed, one line per fact with fields split by single spaces (the format is at the top of pol_check.c)
+// What pol_check printed, one line per fact with fields split by single spaces
 public sealed record PolCheckReport(
     IReadOnlyDictionary<string, string> Modules, IReadOnlyList<PolCheckEntry> Entries, IReadOnlyDictionary<string, int[]> Summaries,
     string Result, int RequiredNotFound)

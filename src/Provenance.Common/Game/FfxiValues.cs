@@ -39,7 +39,7 @@ public sealed class TextValue : FfxiValue
 
 public sealed class PadValue : FfxiValue;
 
-// not ours to edit, Ashita gives the game a blank for it
+// not mine to edit, Ashita gives the game a blank for it
 public sealed class OpaqueValue : FfxiValue;
 
 // pairs: 0001/0002, 0003/0004, 0037/0038. 0028 is float bits, 0031 is 0.006f. Legacy-tool only: 0030 (3D LCD), 0041.

@@ -57,8 +57,8 @@ public static class ViewerQueue
 
     public const string LiveFolder = "viewer/com/", BootCopyFolder = "patchfiles/PlayOnlineViewer/viewer/com/";
 
-    // pol.exe's boot list (wide strings at 0x453134) and its test (0x004073d0), which only compares write times (of
-    // course). A different time means a copy every start, failing if a DLL's held
+    // pol.exe's boot list (wide strings at 0x453134) and its test (0x004073d0), which only compares write times. A
+    // different time means a copy every start, failing if a DLL's held
     private static IEnumerable<(string Staged, string Live)> BootCopies(string viewerDir) =>
         from name in BootCopyNames
         let staged = Path.Combine(viewerDir, BootCopyFolder.Replace('/', Path.DirectorySeparatorChar), name)

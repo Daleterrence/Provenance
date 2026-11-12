@@ -1,8 +1,7 @@
 /* the Add/Remove Programs uninstaller for the POL and FFXI installs Provenance applies itself (no Windows Installer).
    Built twice, once per product with FFXI_UNINSTALL for the game's, so the UAC prompt names the right one.
-   Run as <this exe> "<install>\Uninstall\{ProductCode}.txt" [/quiet] [/all]
-   It asks whether to keep the player's own settings (the product folder's USER or usr, and the K key), Yes by
-   default. /quiet asks nothing and keeps them, /all removes them too.
+   Run as <this exe> "<install>\Uninstall\{ProductCode}.txt" [/quiet] [/all]. /quiet asks nothing and keeps the
+   player's settings (the product folder's USER or usr, and the K key), /all removes them too.
    The .txt is UTF-16LE, one item per line:
      N <display name>
      A <Uninstall key>                  HKLM, 32-bit view
@@ -20,11 +19,7 @@
                                         in there goes as a link, its target stays
      D <folder>                         removed when empty, deepest first
      L <key>                            one of the three region keys, HKLM, 32-bit view. Removed with its subkeys by the
-                                        last product out, once its InstallFolder names no other product. With settings
-                                        kept, its SquareEnix (SQUARE on Japanese installs) settings stay, and so does
-                                        the I folder until it's empty. Removing everything still leaves the other
-                                        product's settings if they were kept at its own uninstall (its record's gone,
-                                        its settings key and usr or USER folder are both still there)
+                                        last product out, bar any settings that were kept
    The .txt can sit somewhere anyone can write, so I, R, K and L only count when this product's InstallFolder under
    the L key (HKLM, admins only) names the R folder exactly. Nothing runs unless only Administrators and SYSTEM own
    or can change the .txt and its folder */
@@ -363,7 +358,7 @@ static void clear_but(HKEY k, const wchar_t *only)
     }
 }
 
-/* the other product's kept settings: record gone (we're the last out), key and kept folder both still there.
+/* the other product's kept settings: record gone (I'm the last out), key and kept folder both still there.
    A link in place of the folder doesn't count */
 static int other_kept(const wchar_t *region)
 {

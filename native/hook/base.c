@@ -50,7 +50,7 @@ NORETURN static void base_end_pol(UINT code)
     ExitProcess(code);   /* only if TerminateProcess somehow comes back */
 }
 
-/* Provenance's admin-only POL_IPC_DIR. Missing, too long or not a folder ends pol.exe so nothing lands anywhere
+/* Provenance's admin-only POL_IPC_DIR: missing, too long or not a folder ends pol.exe so nothing lands anywhere
    readable. No base_log() here, it'd recurse */
 static void base_ipc_dir(char out[MAX_PATH])
 {

@@ -1,6 +1,7 @@
-#define FETCH_LANES 2
+#define FETCH_LANES 2   /* two at once, like the viewer's fetch queue */
 #define SEND_HIST 8
-typedef struct { int job, kind, idx; char *body; } fetch_lane;   /* a mail list or read in flight */
+/* a mail list (kind 1, one at a time) or read (kind 2) in flight */
+typedef struct { int job, kind, idx; char *body; } fetch_lane;
 typedef struct { char token[48]; char state[48]; DWORD time, seq, to_lo, to_hi; int from_slot; } send_hist;
 
 #define PACE_PER_MIN 40

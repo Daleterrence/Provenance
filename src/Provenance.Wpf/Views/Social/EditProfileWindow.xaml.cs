@@ -25,7 +25,7 @@ public partial class EditProfileWindow : AppWindow
 
     internal EditProfileViewModel Editor => _vm;
 
-    // the caller already asked (sign-out, exit), or the session's gone and nothing can be saved
+    // the caller already asked (log out, exit), or the session's gone and nothing can be saved
     public void CloseQuietly()
     {
         _closeQuietly = true;

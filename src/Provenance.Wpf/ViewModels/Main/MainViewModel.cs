@@ -207,7 +207,6 @@ public partial class MainViewModel : ObservableObject
         if (loggedInChanged)
         {
             if (loggedIn && (_settings.Current.KeepSignedInInTray || _settings.Current.MinimizeToTray)) TrayIcon.Warm();
-            // the hook numbers mail per session, so a request's notice can't outlive it
             if (!loggedIn) Notice.DropRequest();
         }
         Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
@@ -523,7 +522,7 @@ public partial class MainViewModel : ObservableObject
         _ui.Run(() =>
         {
             timer?.Lap("wait for the UI thread");
-            if (_pol.Pid is null) return;   // read just before a sign-out
+            if (_pol.Pid is null) return;   // read just before a log out
             // a run's lean session has no social side and nothing here may write a request to its hook
             if (Multi.Running) { Multi.RunSnapshot = snap; return; }
             if (Lean.Hold(snap)) return;

@@ -45,7 +45,8 @@ public static class PatchVer
         return new PolFileCipher(key8).Encrypt(plain, PlainSize);
     }
 
-    // "" with no patch.ver. POL tries the product id alone when the Interface-seeded key doesn't open it, so we do too
+    // "" with no patch.ver. POL tries the product id alone when the Interface-seeded key doesn't open it,
+    // so this does too
     public static string Read(PatchProduct product)
     {
         var path = FileIn(product.Folder);

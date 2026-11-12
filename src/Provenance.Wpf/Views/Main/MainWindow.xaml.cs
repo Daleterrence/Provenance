@@ -250,6 +250,6 @@ public partial class MainWindow : AppWindow
     {
         _exiting = true;
         // inside OnClosing with a question up, Close would throw. The answer decides
-        if (!_asking) Close();   // the app's exit signs the held session out
+        if (!_asking) Close();   // the app's exit logs the held session out
     }
 }

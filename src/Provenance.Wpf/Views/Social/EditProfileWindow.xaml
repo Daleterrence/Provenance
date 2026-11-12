@@ -30,8 +30,8 @@
         <Style x:Key="ProfileCombo" TargetType="ComboBox" BasedOn="{StaticResource FieldCombo}">
             <Setter Property="MaxDropDownHeight" Value="360" />
         </Style>
-        <!-- the privacy choices as pills, with no ScrollViewer in the list. Its clip sat right on the first row's top
-             line and ate it on a scaled screen -->
+        <!-- the privacy choices as pills, with no ScrollViewer in the list. Its clip sits right on the first row's
+             top line and eats it on a scaled screen -->
         <Style x:Key="Pills" TargetType="ListBox">
             <Setter Property="SelectedValuePath" Value="Code" />
             <Setter Property="Background" Value="Transparent" />

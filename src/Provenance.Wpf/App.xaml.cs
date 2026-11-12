@@ -163,7 +163,7 @@ public partial class App : Application
         var windows = new WindowManager(settings, WpfDialogs.Default);
         var mainVm = new MainViewModel(WpfDialogs.Default, windows, credentials, settings, new FeedService(settings), pol, new AvatarService(settings));
         timer.Lap("view model built");
-        // Windows logging off cancels a log in, and WPF would close the window ignoring its Cancel, so it closes normally first.
+        // Windows logging off cancels a login, and WPF would close the window ignoring its Cancel, so it closes normally first.
         // A held session is logged out, nothing goes to tray
         SessionEnding += (_, e) =>
         {

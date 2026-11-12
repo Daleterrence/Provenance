@@ -204,7 +204,7 @@ public static partial class GameSettingsBackup
         catch (InvalidDataException) { throw new NotABackupException(); }
     }
 
-    // the current settings go in a backup first, so it can be undone. Nothing's ever deleted, like SE's own restore.
+    // the current settings go in a backup first so it can be undone, and nothing's ever deleted, like SE's own restore.
     // blocked gets asked again right before the first write
     public static RestoreResult Restore(string zipPath, BackupSources sources, string folder, Func<string?>? blocked = null)
     {

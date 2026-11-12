@@ -61,8 +61,7 @@ static FARPROC pol_exe_user32_proc(const char *name)
     if (!u) u = LoadLibraryW(L"user32.dll");
     return u ? GetProcAddress(u, name) : NULL;
 }
-/* pol.exe's splash (dialog 0x67, AT_SPLASH_PROC), made hidden so AT_SPLASH_CLOSE skips its 5s dwell. Took a fair few
-   attempts to scrap it */
+/* pol.exe's splash (dialog 0x67, AT_SPLASH_PROC), made hidden so AT_SPLASH_CLOSE skips its 5s dwell */
 typedef HWND (WINAPI *cdip_t)(HINSTANCE, LPCDLGTEMPLATEW, HWND, DLGPROC, LPARAM);
 static DWORD g_splash_tmpl[64];   /* DWORDs keep the DLGTEMPLATE copy aligned */
 static HWND pol_exe_hidden_splash(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
@@ -102,7 +101,7 @@ static HWND WINAPI pol_exe_my_CreateDialogParamW(HINSTANCE hInst, LPCWSTR tmpl, 
 }
 
 /* a slot MSLU hasn't filled in yet points at MSLU's stub for it in pol.exe
-   (push fallback; push [module]; push slot; push name; push dll; call loader) */
+   (push fallback, push [module], push slot, push name, push dll, call loader) */
 static int pol_exe_slot_unfilled(BYTE *exe, DWORD opbase, DWORD slot)
 {
     addr_module m;
@@ -149,7 +148,6 @@ static LONG WINAPI crash_filter(EXCEPTION_POINTERS *ep)
             base = (unsigned)(ULONG_PTR)mbi.AllocationBase;
             GetModuleFileNameA((HMODULE)mbi.AllocationBase, mod, sizeof mod);
         }
-        /* just the file name, the full viewer path ate the whole buffer and hid which dll it was */
         if ((slash = strrchr(mod, '\\')) != NULL) name = slash + 1;
         base_log(LOG_CRASH "%08x at %08x = %s+%05x\r\n", code, eip, name, eip - base);
     }

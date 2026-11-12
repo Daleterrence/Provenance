@@ -69,7 +69,7 @@ public sealed class UninstallFolder : IDisposable
         }
     }
 
-    // a file just written in the held folder: Administrators' own it whatever this PC's policy says.
+    // a file just written in the held folder: Administrators own it whatever this PC's policy says.
     // Only the owner's read and written, a fresh FileSecurity would write an empty DACL
     public static void Own(string path)
     {

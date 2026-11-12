@@ -14,8 +14,8 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-// Repair game files lives on the signed-out cards. A signed-in pol.exe holds the viewer and game files open, and
-// ending it would sign the account out
+// Repair game files lives on the logged-out cards. A logged-in pol.exe holds the viewer and game files open, and ending
+// it would log the account out
 public partial class RepairButtonViewModel : ObservableObject
 {
     internal static string LockedText(GameFilesLock.Job? holder) =>
@@ -94,7 +94,7 @@ public partial class RepairButtonViewModel : ObservableObject
         Available = available;
     }
 
-    // Pid and the end of a sign-out have no change notice of their own
+    // Pid and the end of a log out have no change notice of their own
     internal void Refresh()
     {
         OnPropertyChanged(nameof(BlockedReason));
@@ -124,7 +124,7 @@ public partial class RepairButtonViewModel : ObservableObject
     internal void StopProbing() => _repairProbe.Stop();
     internal bool Probing => _probing;
 
-    // when the window comes forward, and every few seconds while a signed-out card's up
+    // when the window comes forward, and every few seconds while a logged-out card's up
     public async Task ProbeAsync()
     {
         // a multi-account run holds the update lock in this copy, which isn't "another copy"

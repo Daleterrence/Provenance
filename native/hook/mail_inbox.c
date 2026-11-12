@@ -19,7 +19,6 @@ static mailrec g_mail[MAIL_MAX];
 /* identities of messages whose slot got reused, so a re-listed one isn't fetched again */
 static BYTE g_mail_seen[MAIL_SEEN][0x1a];
 static __declspec(align(8)) BYTE g_inbox[sizeof(pol_mail) * MAIL_MAX];
-/* two reads at once like the viewer's fetch queue, kind 1 list (one at a time), 2 read */
 static int g_mail_fresh;
 static char g_mail_state[16] = "pending";
 static volatile int g_mail_raw_new;

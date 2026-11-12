@@ -25,7 +25,7 @@ public sealed class SessionRecords
 
     internal void Save(ProcessStamp stamp, string? profileId) => Write(stamp, profileId, played: false);
 
-    // the record stays as the game's, so no copy signs this account in on top of it
+    // the record stays as the game's, so no copy logs this account in on top of it
     internal void MarkPlayed()
     {
         if (_stamp is { } stamp) Write(stamp, Profile, played: true);

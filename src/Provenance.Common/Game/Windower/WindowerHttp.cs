@@ -88,8 +88,8 @@ public sealed class WindowerHttp : IDisposable
         }
     }
 
-    // Windower/<major>.<minor> (Windows NT <os major>.<os minor>; WOW64). Windower.exe is always x86, so a 64-bit
-    // Windows always gets WOW64 whatever Provenance is built as. A launcher version that isn't known gets the default
+    // Windower/<major>.<minor> (Windows NT <os major>.<os minor>; WOW64), a launcher version that isn't known gets the
+    // default. Windower.exe is always x86, so a 64-bit Windows always gets WOW64 whatever Provenance is built as
     public static string UserAgentFor(Version launcher)
     {
         if (launcher.Major == 0) launcher = DefaultLauncher;

@@ -23,8 +23,8 @@ public sealed class NamedObjectSecurity : IDisposable
     public static string CloseRequestSddl(string userSid) =>
         $"D:(A;;0x100002;;;{userSid})(A;;GA;;;SY)(A;;GA;;;BA)S:(ML;;NW;;;ME)";
 
-    // elevated, only Administrators and SYSTEM, and nothing below high can open either. Not elevated (a dev run) the
-    // user too, or the launch couldn't open its own
+    // elevated, only Administrators and SYSTEM, and nothing below high can open either. Not elevated, the user too, or
+    // the launch couldn't open its own
     public static string HandoverSddl(bool elevated, string userSid) =>
         elevated ? "O:BAD:P(A;;GA;;;SY)(A;;GA;;;BA)S:(ML;;NWNRNX;;;HI)" : $"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{userSid})";
 

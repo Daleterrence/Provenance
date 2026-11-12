@@ -265,7 +265,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         return failure;
     }
 
-    // Null when the game started. Before Play a failure or stop signs the session out, after Play it's only released.
+    // Null when the game started. Before Play a failure or stop logs the session out, after Play it's only released.
     private async Task<AccountFailure?> RunOneAccountAsync(MultiRunAccount account, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();

@@ -4,7 +4,7 @@
                     xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
                     xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
                     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes">
-    <!-- the frame every full window shares: our own 40 high title bar, so the system's buttons stay off -->
+    <!-- the frame every full window shares: its own 40 high title bar, so the system's buttons stay off -->
     <Style x:Key="AppWindow" TargetType="controls:AppWindow">
         <Setter Property="WindowStyle" Value="None" />
         <!-- an icon that lands between two pixels gets smeared over both -->
@@ -85,8 +85,8 @@
         </Setter>
     </Style>
 
-    <!-- the bar across the top of a window: icon and title, then whatever the window puts in it, then maximise and close.
-         Only the buttons take clicks, the rest of the bar drags the window -->
+    <!-- icon and title, then whatever the window puts in the bar, then maximise and close. Only the buttons take
+         clicks, the rest drags the window -->
     <Style TargetType="controls:TitleBar">
         <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
         <Setter Property="IsTabStop" Value="False" />

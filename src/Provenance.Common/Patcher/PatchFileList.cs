@@ -7,7 +7,7 @@ namespace Provenance.Common.Patcher;
 public enum BlockAttribute { None, Reset, Reset2, Option, Select }
 
 // "<stamp> <len> <sum> <md5w> <stamp>/Direct/<p>.slc <slcLen> [<stamp>/Indirect/<p>.olc <olcLen>]". Paths can hold
-// spaces, POL's tokenizer keeps them.
+// spaces, POL's tokeniser keeps them.
 public sealed record PatchLine(string Stamp, FileSig Sig, string SlcPath, long SlcLen, string? OlcPath, long OlcLen)
 {
     public override string ToString() =>

@@ -11,7 +11,6 @@ internal static class Explorer
     // the full path, a bare name's looked for in the app folder first
     private static string Exe => AppPaths.ExplorerExe;
 
-    // a test swaps it for one that just notes what would have started
     internal static Func<ProcessStartInfo, Process?> StartForTest { get; set; } = Process.Start;
 
     public static void ShowFolder(string folder) => Start($"\"{folder.TrimEnd('\\')}\"");
@@ -20,7 +19,7 @@ internal static class Explorer
 
     public static void OpenFile(string file) => Start($"\"{file}\"");
 
-    // web links only, the shell would just as happily run a program, a network path or another protocol
+    // web links only, the shell will run a program, a network path or another protocol just the same
     public static void OpenLink(Uri link)
     {
         if (!link.IsAbsoluteUri || (link.Scheme != Uri.UriSchemeHttps && link.Scheme != Uri.UriSchemeHttp))

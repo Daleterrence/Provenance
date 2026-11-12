@@ -51,7 +51,7 @@ public sealed class FfxiSettings
         KeepAspect = 1, LegacySettings = 0, PadMode = [0, 1, 1, 1, 0, 0],
     };
 
-    // SE's installer only writes 3 values and the game won't start without the rest, thanks SE
+    // SE's installer only writes 3 values and the game won't start without the rest
     public static FfxiSettings FirstStart(int screenWidth, int screenHeight)
     {
         var s = Defaults();

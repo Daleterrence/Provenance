@@ -5,7 +5,7 @@ namespace Provenance.Wpf.ViewModels.Dialogs;
 
 public enum OtpStep { Typing, Fetching, WaitingForNextCode, Installing, Problem, NeedsPassword, Accepting }
 
-// The one-time code prompt. The six boxes and the clipboard stay in the window, the typed code comes in as an argument
+// The six boxes and the clipboard stay in the window, the typed code comes in as an argument
 public sealed partial class OtpPromptViewModel : ObservableObject
 {
     private readonly string _source, _reuseKey;

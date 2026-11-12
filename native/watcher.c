@@ -31,13 +31,13 @@ static const char *utf8(const WCHAR *w)
     return buf;
 }
 
-/* runs fn(arg) on a thread in p. A buffer arg points at gets freed if no thread starts, but not on a timeout (the thread
-   may still be reading it) */
 static FARPROC k32_proc(const char *name)
 {
     return GetProcAddress(GetModuleHandleA("kernel32.dll"), name);
 }
 
+/* runs fn(arg) on a thread in p. A buffer arg points at gets freed if no thread starts, but not on a timeout (the thread
+   may still be reading it) */
 static DWORD remote_run(HANDLE p, FARPROC fn, void *arg, void *buf, DWORD wait_ms, const char *create_msg,
                         const char *timeout_msg)
 {

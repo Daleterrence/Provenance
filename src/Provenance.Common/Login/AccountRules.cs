@@ -39,7 +39,7 @@ public static class AccountRules
     public static AccountDialogResult WithoutPasswords(AccountDialogResult typed) =>
         typed with { PolPassword = "", SeaPassword = "" };
 
-    // checked in the order the form shows them. IDs come in trimmed (POL's in capitals), the item as typed.
+    // checked in the order the form shows them, with IDs coming in trimmed (POL's in capitals) and the item as typed.
     // required means adding, or details that can't be used any more
     public static FormProblem? CheckForm(bool required, string polId, string polPassword, string squareEnixId, string squareEnixPassword,
                                          bool useOtp, string otpSource, string otpItem)

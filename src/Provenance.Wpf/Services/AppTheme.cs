@@ -9,7 +9,7 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// the app's two looks. The views use DynamicResource for every colour, so swapping the palette restyles open windows
+// the views use DynamicResource for every colour, so swapping the palette restyles open windows
 internal static class AppTheme
 {
     public const string Dark = "dark";

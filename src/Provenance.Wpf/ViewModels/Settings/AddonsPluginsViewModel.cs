@@ -113,7 +113,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     internal Task Refreshing { get; private set; } = Task.CompletedTask;
 
-    // the tests swap this for one that holds the scan back
     internal Func<Func<AddonsScan?>, Task<AddonsScan?>> RunScanForTest { get; set; } = work => Task.Run(work);
 
     partial void OnSearchChanged(string value) => Filter();
@@ -339,7 +338,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
         await Refreshing;
     }
 
-    // a test swaps it for one that just notes the path
     internal Action<string, bool> ShowInExplorerForTest { get; set; } = (path, isFile) => { if (isFile) Explorer.ShowFile(path); else Explorer.ShowFolder(path); };
 
     // an addon opens its own folder, a plugin its folder with the DLL picked
@@ -362,7 +360,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
     }
 
-    // tests swap these for ones that just note what they were handed
     internal Action<AddonDocs> OpenDocsForTest { get; set; } = DocsOpener.Open;
     internal Action<string, string, bool> ShowReadmeForTest { get; set; } = DocsOpener.ShowText;
 

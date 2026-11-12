@@ -16,8 +16,8 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// The Windower/Ashita page: the platform, its folder and the profiles. Like General, every change saves straight away.
-// The cards, the accounts and the Game page follow it through the events
+// Like General, every change saves straight away. The cards, the accounts and the Game page follow each one
+// through the events
 public partial class HookSettings : ObservableObject, IProfileHost
 {
     private readonly IDialogs _dialogs;

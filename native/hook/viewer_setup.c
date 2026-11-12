@@ -139,8 +139,8 @@ static int viewer_table_text(const BYTE *raw, DWORD n, int id, WCHAR *out, int c
     return 0;
 }
 
-/* message #i (0-9 titles, 10-19 texts) as app.dll (0x10057900) makes it: table string, CRs dropped from texts,
-   via svc 0xa40. english falls back to the US table. Length or -1 */
+/* message #i (0-9 titles, 10-19 texts) as app.dll (0x10057900) makes it: table string, CRs dropped from texts, via
+   svc 0xa40. Length or -1, and english falls back to the US table */
 static int viewer_message_bytes(BYTE *b, const BYTE *raw, DWORD n, int i, int english, char out[0x100])
 {
     static const WORD ids[20] = { 0x46c9, 0x46d0, 0x46d1, 0x46d2, 0x46d3, 0x46d4, 0x46d6, 0x46d8, 0x46dc, 0x46da,

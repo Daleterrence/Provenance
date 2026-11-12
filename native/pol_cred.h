@@ -124,4 +124,4 @@ done:
     return rc;
 }
 
-#endif /* POL_CRED_H */
+#endif

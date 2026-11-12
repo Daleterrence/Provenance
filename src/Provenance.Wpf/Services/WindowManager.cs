@@ -119,8 +119,8 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         w.Show();
     }
 
-    // right of the Friends window, or left of it when that'd run off the screen. With room on neither side it
-    // goes to whichever end of the screen covers less of Friends, the right if there's nothing in it
+    // right of Friends, or left when that'd run off the screen. With room on neither side it's whichever screen edge
+    // covers less of Friends, the right on a tie
     internal static double LeftBeside(double friendsLeft, double friendsWidth, double width, double screenLeft, double screenRight)
     {
         double right = friendsLeft + friendsWidth + Gap;

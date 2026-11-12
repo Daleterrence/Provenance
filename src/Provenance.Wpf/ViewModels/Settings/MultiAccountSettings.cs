@@ -7,7 +7,7 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// The multi-account page. The first profile choice is none, which an account that's turned on can't start with
+// The first profile choice is none, which an account that's turned on can't start with
 public partial class MultiAccountSettings : ObservableObject
 {
     private readonly HookSettings _hook;

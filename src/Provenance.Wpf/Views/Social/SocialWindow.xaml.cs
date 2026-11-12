@@ -62,7 +62,7 @@ public partial class SocialWindow : AppWindow
 #pragma warning disable RS0030 // a view, not a view model
         if (Application.Current is { } app) app.Activated += OnAppActivated;
 #pragma warning restore RS0030
-        // the view model outlives the window, so let go or a closed window keeps scrolling in the background
+        // the view model outlives the window, so a closed one lets go
         Closed += (_, _) =>
         {
             if (Vm is { } vm) Detach(vm);

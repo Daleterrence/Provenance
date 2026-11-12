@@ -177,7 +177,7 @@ public sealed class SvgIcon : Grid
             _ => "Btn.Fill",
         });
         _light.Opacity = State switch { IconState.Selected => 0.32, IconState.Transition => 0.26, IconState.Active => 0, _ => 0.2 };
-        // a light hairline round it, or the disc just looks like a tint on the face (a dark one got lost on the blue)
+        // a light hairline round it, or the disc just looks like a tint on the face (a dark one gets lost on the blue)
         _edge.Opacity = State switch { IconState.Selected => 0.65, IconState.Transition => 0.5, IconState.Active => 0.8, _ => 0.45 };
         SizeDisc();
     }

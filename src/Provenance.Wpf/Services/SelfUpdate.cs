@@ -184,7 +184,7 @@ public static class SelfUpdate
 
     internal static void QueueHandOver(Action start, string[] restartArgs) => _handOver = new HandOver(start, restartArgs);
 
-    // Update.exe starts at the end of the exit with no wait (told to wait on our pid it gets "Access is denied" on the
+    // Update.exe starts at the end of the exit with no wait (told to wait on this pid it gets "Access is denied" on the
     // elevated process). False if it won't start
     internal static bool HandOverAfterExit(out string[] restartArgs)
     {

@@ -98,8 +98,8 @@
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="behaviours:FocusCue.Track" Value="True" />
         <Setter Property="Template" Value="{StaticResource Btn.Template}" />
-        <!-- on the button, not the template, as content that's its own element (icon and label) takes the button's colour,
-             and so a style can swap the fills (the icon on it reads the same keys) -->
+        <!-- on the button, not the template, so content that's its own element (icon and label) takes the button's
+             colour and a style can swap the fills -->
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{DynamicResource Btn.Fill.Hover}" />
@@ -113,8 +113,8 @@
         </Style.Triggers>
     </Style>
 
-    <!-- cancel, log out and the rest of the back-out buttons, plus the OK on a confirm that deletes something. The
-         template looks its colours up by name, so these stand in for the blue ones -->
+    <!-- back-out buttons (cancel, log out) and the OK on a confirm that deletes something. The template looks its
+         colours up by name, so these stand in for the blue ones -->
     <Style x:Key="RedButton" TargetType="ButtonBase" BasedOn="{StaticResource PolButton}">
         <Style.Resources>
             <LinearGradientBrush x:Key="Btn.Fill" StartPoint="0,0" EndPoint="0,1">
@@ -168,9 +168,8 @@
         <Setter Property="Effect" Value="{DynamicResource Play.Shadow}" />
     </Style>
 
-    <!-- the segments are the button's own template with Play's brighter blue, and the ring and sheen drawn inside. The
-         hover and press are style triggers rather than Btn.Fill.Hover and Btn.Fill.Press resources, as an icon on it reads those
-         two for its disc -->
+    <!-- the button's template in Play's brighter blue, ring and sheen drawn inside. Hover and press are triggers,
+         not swapped Btn.Fill keys, as an icon on it reads those for its disc -->
     <Style x:Key="ActionSegment" TargetType="Button" BasedOn="{StaticResource PolButton}">
         <Setter Property="Background" Value="{DynamicResource Play.Fill}" />
         <Setter Property="BorderThickness" Value="0" />
@@ -239,7 +238,7 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Foreground" Value="{DynamicResource Primary}" />
         <Setter Property="HorizontalAlignment" Value="Left" />
-        <!-- Enter opens the link instead of falling through to sign in or play -->
+        <!-- Enter opens the link instead of falling through to log in or play -->
         <Setter Property="KeyboardNavigation.AcceptsReturn" Value="True" />
         <Setter Property="Template">
             <Setter.Value>

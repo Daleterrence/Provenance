@@ -3,8 +3,8 @@ using Provenance.Common.Progress;
 
 namespace Provenance.Wpf.Services;
 
-// UI thread only. Sampled every second so a stall shows.
-// The bar never goes back within a step, a retry that takes bytes back just holds it
+// UI thread only, sampled every second so a stall shows. The bar never goes back within a step, a retry that takes
+// bytes back just holds it
 public sealed class DownloadMeter
 {
     private readonly TransferRate _rate = new(TimeSpan.FromSeconds(5));

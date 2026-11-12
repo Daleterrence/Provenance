@@ -141,7 +141,7 @@ public static class MirrorDownloads
         TimeSpan idle, Action<long> add, CancellationToken token)
     {
         // HttpClient.Timeout only covers the headers, this covers every wait for data and each read resets it, or one
-        // stalled object holds up a whole phase for minutes (not fun)
+        // stalled object holds up a whole phase for minutes
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
         cts.CancelAfter(idle);
         int i = 0;

@@ -19,7 +19,7 @@ typedef struct { DWORD seq, time; int kind, me, from, colour, emote; WCHAR name[
 enum { CRK_SAY, CRK_ENTERED, CRK_LEFT, CRK_AWAY, CRK_BACK, CRK_MASTER, CRK_KICKED, CRK_WHISPER };
 static const char *const g_cr_kind[] = { "say", "entered", "left", "away", "back", "master", "kicked", "whisper" };
 
-/* in-room steps: AWAY (back), JOIN, WHO+MODE, TOPIC, then in. PART on the way out. A new room sets its TOPIC and
+/* in-room steps: AWAY (back), JOIN, WHO+MODE, TOPIC, then in, and PART on the way out. A new room sets its TOPIC and
    MODEs after the WHO instead of asking for the TOPIC */
 enum { CR_OUT, CR_AWAY, CR_JOIN, CR_WHO, CR_TOPIC, CR_IN, CR_PART, CR_SETTOPIC, CR_MODE_N, CR_MODE_K, CR_MODE_L };
 enum { CRW_NONE, CRW_CMD, CRW_MSG };

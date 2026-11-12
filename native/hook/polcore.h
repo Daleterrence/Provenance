@@ -1,5 +1,5 @@
-/* polcore's insides and the few places in pol.exe the hook uses, each written once.
-   Layouts are 1.18.15e's, shared by US, EU and JP. b is always polcore's base */
+/* polcore's insides and the few places in pol.exe the hook uses, each written once. Layouts are 1.18.15e's, shared
+   by US, EU and JP, and b is always polcore's base */
 #ifndef POLCORE_H
 #define POLCORE_H
 #include <stddef.h>
@@ -445,7 +445,7 @@ PC_SVC1(int, pc_chat_changed, SV_CHAT_CHANGED, int, s)
 
 /* slots whose value is polcore's own handler, kept when the hook has no better */
 #define SV_PUSH_DEFAULT            0x538   /* polcore's own handler for the push the list leaves to it */
-#define SV_ROOM_NOTICE             0x644   /* polcore's room NOTICE handler, ours asks it first */
+#define SV_ROOM_NOTICE             0x644   /* polcore's room NOTICE handler, mine asks it first */
 
 /* app.dll's region and viewer setup calls */
 #define SV_SET_REGION      0xf14

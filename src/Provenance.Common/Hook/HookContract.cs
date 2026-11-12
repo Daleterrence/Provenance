@@ -18,7 +18,7 @@ public enum HookExit
     AddressesNotFound = 18,     // ADDRESSES_EXIT
 }
 
-// the same names as native/hook/hook_contract.h, and the hook-contract test checks they match
+// the same names as native/hook/hook_contract.h, a change goes in both
 public static class HookContract
 {
     public static class Env
