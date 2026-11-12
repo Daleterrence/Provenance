@@ -101,14 +101,16 @@ static void hold_drain_turn(BYTE *b, int mail)
 static int hold_idle_timeout_for_game(BYTE *b)
 {
     BYTE *rec = NULL;
-    int r = 0, mins = -1;
+    int r = 0, mins = -1, looks = 0;
     ULONGLONG until;
     if (!pc_has(b, SV_OPTION_LOAD_START) || !pc_has(b, SV_OPTION_LOAD_DONE) || !pc_has(b, SV_OPTION_LOAD_END) ||
         !pc_has(b, SV_OPTION_RECORD) || !pc_has(b, SV_SET_IDLE_TIMEOUT))
         return -1;
+    base_log("hold: reading option.bin\r\n");
     pc_option_load_start(b);
     until = GetTickCount64() + 5000;
-    while ((r = pc_option_load_done(b)) == 0 && GetTickCount64() < until) Sleep(32);
+    /* a few looks straight away, the load's a local file and usually done by then */
+    while ((r = pc_option_load_done(b)) == 0 && GetTickCount64() < until) Sleep(looks++ < 16 ? 0 : 1);
     if (r > 0) rec = pc_option_record(b, "GOPN1_AO");
     if (rec) mins = *(int *)(rec + 0x18);
     pc_option_load_end(b);
@@ -119,6 +121,37 @@ static int hold_idle_timeout_for_game(BYTE *b)
     pc_set_idle_timeout(b, mins * 60000);
     base_log("hold: auto-disconnect after %d min in FFXI\r\n", mins);
     return mins;
+}
+
+/* the app sets this right after it writes the Play entry, so Play doesn't wait out the 150ms beat. It only wakes the
+   hold, cred_play_signalled still decides whether the game starts. Anything that made the name first just wakes us */
+static HANDLE g_play_event;
+static void hold_play_event_open(void)
+{
+    char name[64];
+    wsprintfA(name, IPC_PLAY_EVENT, GetCurrentProcessId());
+    g_play_event = CreateEventA(NULL, FALSE, FALSE, name);
+}
+/* the 16ms the hold sleeps between turns, cut short by the app. 1 when it was */
+static int hold_beat(void)
+{
+    DWORD r;
+    if (g_play_event) {
+        r = WaitForSingleObject(g_play_event, 16);
+        if (r == WAIT_OBJECT_0) return 1;
+        if (r == WAIT_TIMEOUT) return 0;
+        CloseHandle(g_play_event);
+        g_play_event = NULL;
+    }
+    Sleep(16);
+    return 0;
+}
+/* a control turn takes the requests and checks Play, every 150ms or as soon as the app nudges */
+static int hold_ctl_due(ULONGLONG now, ULONGLONG *last, int woke)
+{
+    if (!woke && now - *last < 150) return 0;
+    *last = now;
+    return 1;
 }
 
 /* one turn of the requests and jobs. Nothing new starts mid-switch, it'd go under whichever handle polcore has by then,
@@ -267,7 +300,7 @@ static void hold_run(BYTE *b)
     static ULONGLONG lastCtl;
     ULONGLONG lastSnap = 0;
     char spath[MAX_PATH + 64], path[MAX_PATH + 64], num[16];
-    int ctl, idle, reason, why;
+    int ctl, idle, reason, why, woke = 0;
     HANDLE ef;
     DWORD wn;
     if (!b) return;
@@ -287,10 +320,10 @@ static void hold_run(BYTE *b)
     hold_handle(b);
     if (!g_lean) message_store_import(b);
     g_in_hold = 1;
+    hold_play_event_open();
     snapshot_social(b);
     for (;;) {
-        ctl = GetTickCount64() - lastCtl >= 150;
-        if (ctl) lastCtl = GetTickCount64();
+        ctl = hold_ctl_due(GetTickCount64(), &lastCtl, woke);
         /* a dropped session (another login of this POL ID, KILL, a ban push, the server hanging up) ends the hold,
            so Play never boots FFXI on a dead one */
         idle = pc_pump_once(b);
@@ -362,6 +395,6 @@ static void hold_run(BYTE *b)
             snapshot_social(b);
             lastSnap = GetTickCount64();
         }
-        Sleep(16);
+        woke = hold_beat();
     }
 }

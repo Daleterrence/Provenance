@@ -24,9 +24,12 @@ internal sealed class Watcher
     {
         _settings = settings;
         FindFiles = () => LaunchFiles(_settings.RegionOrDefault);
+        LargeAddressAware = (viewerDir, when) =>
+            LargeAddressAwareSwitch.Apply(_settings, new LargeAddressAwareSwitch.Target(viewerDir, ViewerPolRunning, () => null, () => null), when);
     }
 
     internal Func<(string? ViewerDir, string? PolExe, string LauncherExe)> FindFiles { get; init; }
+    internal Action<string, string> LargeAddressAware { get; init; }
     internal Func<ProcessStartInfo, Process?> StartProcess { get; init; } = Process.Start;
     internal Func<bool> ViewerPolRunning { get; init; } = PolUpdates.ViewerRunning;
     internal Func<bool> AnyPolRunningNow { get; init; } = ScreenSaver.AnyPolRunning;
@@ -63,9 +66,12 @@ internal sealed class Watcher
     // Provenance can sit in the tray for days, so the screen saver's read again before every pol.exe start
     internal void BeforeStart(string viewerDir, string when)
     {
-        LargeAddressAwareSwitch.Apply(_settings, new LargeAddressAwareSwitch.Target(viewerDir, ViewerPolRunning, () => null, () => null), when);
+        ApplyLargeAddressAware(viewerDir, when);
         ScreenSaver.Note(_settings, AnyPolRunningNow, WindowsScreenSaver);
     }
+
+    internal void ApplyLargeAddressAware(string viewerDir, string when) =>
+        LargeAddressAware(viewerDir, when);
 
     internal static WatcherRun? RunLauncher(Process launcher, TimeSpan limit)
     {

@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common;
 using Provenance.Common.Credentials;
 using Provenance.Common.Hook;
+using Provenance.Common.Logging;
 using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Common.Feeds;
@@ -511,8 +512,10 @@ public partial class MainViewModel : ObservableObject
 
     internal void OnSnapshot(PolSocialSnapshot snap)
     {
+        var timer = ReferenceEquals(Social.Last, PolSocialSnapshot.Empty) ? new StepTimer("First snapshot") : null;
         _ui.Run(() =>
         {
+            timer?.Lap("wait for the UI thread");
             if (_pol.Pid is null) return;   // read just before a sign-out
             // a run's lean session has no social side and nothing here may write a request to its hook
             if (Multi.Running) { Multi.RunSnapshot = snap; return; }
@@ -521,7 +524,9 @@ public partial class MainViewModel : ObservableObject
             {
                 Social.AccountName = Accounts.SelectedProfile?.DisplayName ?? "PlayOnline";
                 Social.Apply(snap);
+                timer?.Lap("apply");
                 Accounts.LearnIdentity(snap);
+                timer?.Lap("learn identity");
             }
             catch (Exception ex)
             {
@@ -642,6 +647,7 @@ public partial class MainViewModel : ObservableObject
 
     private async Task ConnectSocialAsync()
     {
+        Log.Information("Log in pressed");
         if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount()) return;
         // a new install's Windower/Ashita question comes before its first login, however the login was asked for
         if (ShowSetupCard) return;
@@ -653,6 +659,7 @@ public partial class MainViewModel : ObservableObject
         try { details = LogInDetails(profile); }
         finally { if (details is null) Lean.Finish(); }
         if (details is not var (pol, squareEnix, otp)) return;
+        Log.Information("Log in details read for profile {Profile}", profile.Id);
         if (lean) DropHandleNotice();
         else StartSocial(profile.Id);
         Accounts.SessionProfileId = profile.Id;

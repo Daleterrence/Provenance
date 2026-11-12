@@ -49,11 +49,9 @@ internal static class SignedBuilds
         }
     }
 
-    public static IDisposable? Hold(string viewerDir, CancellationToken ct, out string? problem)
-    {
-        FetchIfUnknown(viewerDir, ct);
-        return ViewerBuild.Hold(viewerDir, ViewerBuild.RegionOf(viewerDir), Accepted(), out problem);
-    }
+    // never fetches, a caller that wants an unknown build looked up says so first
+    public static IDisposable? Hold(string viewerDir, out string? problem) =>
+        ViewerBuild.Hold(viewerDir, ViewerBuild.RegionOf(viewerDir), Accepted(), out problem);
 
     // a failed fetch leaves what's held alone, the built-in list works with no mirror at all
     public static async Task RefreshAsync(MirrorClient client, CancellationToken ct)

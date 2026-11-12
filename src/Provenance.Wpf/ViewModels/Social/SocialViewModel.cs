@@ -8,6 +8,7 @@ using Provenance.Common.Game;
 using Provenance.Common.Hook;
 using Provenance.Common.Install;
 using Provenance.Common.Login;
+using Provenance.Common.Logging;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Settings;
 using Provenance.Common.Social;
@@ -361,10 +362,12 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     private void ApplyCore(PolSocialSnapshot snap)
     {
+        var timer = ReferenceEquals(_login.Last, PolSocialSnapshot.Empty) ? new StepTimer("First snapshot apply") : null;
         // a friend's profile shows what they let this handle see, so ones read under another handle go
         if (_login.Last.MyKey.Length > 0 && snap.MyKey.Length > 0 && _login.Last.MyKey != snap.MyKey) Profile.Forget();
         _login.Last = snap;
         bool chatChanged = _login.Chat != null && MergeChat(_login.Chat, snap);
+        timer?.Lap("merge chat");
         if (_viewer.FilterOn != _filterWasOn)
         {
             _filterWasOn = _viewer.FilterOn;
@@ -380,9 +383,12 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         Profile.Apply(snap);
         Groups.Apply(snap);
         ApplyCharacters(snap);
+        timer?.Lap("jobs, profile and characters");
         Groups.Rebuild(snap);
+        timer?.Lap("groups");
         MessagesUnavailable = snap.Mail == "failed";
         RebuildFriends(snap);
+        timer?.Lap("friends");
         NoticeComingOnline(snap);
         OnlineCount = snap.Friends.Count(f => f.Online && !f.Pending);
         UnreadCount = _login.Chat?.Unread ?? 0;
@@ -422,7 +428,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             };
         }
         if (!string.IsNullOrWhiteSpace(snap.MyHandle)) AccountName = snap.MyHandle;
+        timer?.Lap("status");
         Avatar = _avatars.ProfilePicture(snap.MyProfilePictureId);
+        timer?.Lap("own picture");
         MyProfilePictureId = snap.MyProfilePictureId;
         var region = _settings.RegionOrDefault;
         var notice = PolAccountNotices.For(snap.Notice, region, snap.NoticeDays);

@@ -5,6 +5,7 @@ using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Hook;
+using Provenance.Common.Logging;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
@@ -14,7 +15,7 @@ using Serilog;
 
 namespace Provenance.Common.Login;
 
-internal delegate IDisposable? HoldViewerFiles(string viewerDir, CancellationToken ct, out string? problem);
+internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? problem);
 
 public sealed class PolSession : IDisposable
 {
@@ -149,13 +150,6 @@ public sealed class PolSession : IDisposable
             Log.Error(ex, "PlayOnline Viewer update failed");
             return Fail(ErrorText.Of(ex, "The PlayOnline Viewer couldn't be updated. Try logging in again in a moment."));
         }
-        // after the viewer's update and before the hold, which stops any write. A build only the mirror's list knows has to be on it first
-        FindBuild(viewerDir!, ct);
-        if (ct.IsCancellationRequested)
-        {
-            progress?.Report(LaunchProgress.Cancelled());
-            return LoginCodes.Cancelled;
-        }
         // after the viewer's own check and before any pol.exe's used, so it's one connection to SE at a time
         if (request.Options.Lean && request.BeforePol is { } stillLean && !stillLean())
             request = request with { Options = request.Options with { Lean = false } };
@@ -166,7 +160,12 @@ public sealed class PolSession : IDisposable
         }
         _watcher.BeforeStart(viewerDir!, "before the login");
         // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the login ends
-        using var viewerHold = HoldViewer(viewerDir!, ct, out var buildProblem);
+        using var viewerHold = HoldBuild(viewerDir!, ct, out var buildProblem);
+        if (ct.IsCancellationRequested)
+        {
+            progress?.Report(LaunchProgress.Cancelled());
+            return LoginCodes.Cancelled;
+        }
         if (buildProblem != null)
         {
             Log.Warning("Viewer build not supported: {Problem}", buildProblem);
@@ -184,6 +183,19 @@ public sealed class PolSession : IDisposable
         {
             Credentials.CleanupOneShots(keys);   // on every way out, so passwords never linger in Credential Manager
         }
+    }
+
+    // the files are only hashed once when the build's known. One only the mirror's list knows has to be on it first,
+    // and then Large Address Aware has a build to work with
+    private IDisposable? HoldBuild(string viewerDir, CancellationToken ct, out string? problem)
+    {
+        var held = HoldViewer(viewerDir, out problem);
+        if (problem is null) return held;
+        held?.Dispose();
+        FindBuild(viewerDir, ct);
+        if (ct.IsCancellationRequested) return null;
+        _watcher.ApplyLargeAddressAware(viewerDir, "before the login");
+        return HoldViewer(viewerDir, out problem);
     }
 
     private int ConnectHeld(LoginRequest request, string polExe, string launcherExe, string launchId, List<string> keys, CancellationToken ct)
@@ -268,6 +280,7 @@ public sealed class PolSession : IDisposable
         }
         var logPath = HookFiles.PathFor(pid, HookContract.Files.Log);
         var hookLog = _hookLog = HookLog.OfThisRun(logPath);
+        using var wake = HookWake.Of(logPath, SocialSnapshotFiles.PathForPid(pid));
         var progressOf = new HookProgress(request.Options.Lean);
         var lastActivity = DateTime.UtcNow;
         int? Ending(HookEvent? e)
@@ -292,12 +305,19 @@ public sealed class PolSession : IDisposable
                 lastActivity = DateTime.UtcNow;
             }
             if (ct.IsCancellationRequested) break;   // a cancel that lands with the first snapshot still wins
+            var timer = new StepTimer("First snapshot in");
             if (SocialSnapshotFiles.TryRead(pid) is { } snap)
             {
+                timer.Lap("read");
                 // the hook writes the store file before its first snapshot, so it's there now even if Play comes next
-                SnapshotUpdated?.Invoke(snap with { Stored = SocialSnapshotFiles.TryReadStore(pid) });
+                var stored = SocialSnapshotFiles.TryReadStore(pid);
+                timer.Lap("store read");
+                SnapshotUpdated?.Invoke(snap with { Stored = stored });
+                timer.Lap("handed to the window");
                 _snapshots.Start(pid);
+                timer.Lap("watcher start");
                 SaveSession(request.ProfileId);
+                timer.Lap("session saved");
                 progress?.Report(new LaunchProgress("Connected", "You're logged in.", 1.0));
                 return 0;
             }
@@ -316,7 +336,8 @@ public sealed class PolSession : IDisposable
             }
             if (DateTime.UtcNow - lastActivity > StallLimit)
                 return Fail(LoginCodes.Stalled, HookExitText.StalledText);
-            Thread.Sleep(250);
+            // the 250ms is the heartbeat, it's what notices a pol.exe that's gone without a word
+            wake.Wait(TimeSpan.FromMilliseconds(250), ct);
         }
         return Stopped(progress, polClosed: true);
     }
@@ -452,9 +473,24 @@ public sealed class PolSession : IDisposable
         Windower.PutValuesBack();
         // saved first, so a throw leaves the session held
         Credentials.SavePlay();
+        if (Pid is { } playing) NudgeHold(playing);
         _played = true;
         _snapshots.Stop();
         if (Pid is not null) Records.MarkPlayed();
+    }
+
+    // the hold finds the Play entry on its own beat anyway, this only gets it there sooner
+    private static void NudgeHold(int pid)
+    {
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(string.Format(System.Globalization.CultureInfo.InvariantCulture, HookContract.Files.PlayEvent, pid), out var hold))
+                using (hold) hold.Set();
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException or ArgumentException)
+        {
+            Log.Debug(e, "Couldn't nudge the hold for Play, it'll find it on its own beat");
+        }
     }
 
     public void StopHold()

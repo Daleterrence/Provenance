@@ -6,6 +6,7 @@ using Microsoft.Win32.SafeHandles;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Hook;
 using Provenance.Common.Install;
+using Provenance.Common.Logging;
 using Provenance.Common.Login;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
@@ -98,18 +99,26 @@ public sealed class WindowerLauncher : IDisposable
     {
         var dir = _setup.WindowerDir;
         if (FolderPins.Linked(dir)) throw Shown.Mark(new IOException(WindowerInstall.LinkedText));
+        var timer = new StepTimer("Windower launch");
         TakeTurn(progress, ct);
+        timer.Lap("turn");
         var file = LoadSettings(dir);
         Profile = FindProfile(file);
+        timer.Lap("settings");
         UpdateWindower(file.Branch, progress, ct);
+        timer.Lap("update check");
         if (!File.Exists(HookDll))
             throw Shown.Mark(new FileNotFoundException("Windower's Hook.dll is missing and couldn't be downloaded. Check your internet connection, then try again."));
         if (!File.Exists(Path.Combine(dir, "plugins", "LuaCore.dll")))
             throw Shown.Mark(new FileNotFoundException("Windower's LuaCore plugin is missing and couldn't be downloaded. Check your internet connection, then try again."));
         ApplyRegistry();
+        timer.Lap("game settings");
         MakeFolders(dir);
+        timer.Lap("folders");
         Build(file);
+        timer.Lap("addon lists and hook block");
         OpenHandover();
+        timer.Lap("hand-over");
     }
 
     private void TakeTurn(IProgress<LaunchProgress>? progress, CancellationToken ct)

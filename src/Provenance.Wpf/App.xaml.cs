@@ -6,6 +6,7 @@ using Provenance.Common.Credentials;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;
 using Provenance.Common.Hook;
+using Provenance.Common.Logging;
 using Provenance.Common.Login;
 using Provenance.Common.Otp;
 using Provenance.Common.Security;
@@ -142,9 +143,12 @@ public partial class App : Application
     {
         // the friends windows are unowned, so the app ends with the main window (the tray only hides it)
         ShutdownMode = ShutdownMode.OnMainWindowClose;
+        var timer = new StepTimer("Main window");
         var mainWindow = new MainWindow();
+        timer.Lap("window built");
         var windows = new WindowManager(settings, WpfDialogs.Default);
         var mainVm = new MainViewModel(WpfDialogs.Default, windows, credentials, settings, new FeedService(settings), pol, new AvatarService(settings));
+        timer.Lap("view model built");
         // after the view model's listening for a failed save, before its start-up clears the records of gone pol.exes or
         // pre-starts one
         ScreenSaver.Note(settings);
@@ -157,6 +161,7 @@ public partial class App : Application
         mainWindow.DataContext = mainVm;
         MainWindow = mainWindow;
         OpenMainWindow(mainWindow, mainVm, noAutoLogin);
+        timer.Lap("shown");
         if (settings.Current.MinimizeToTray) TrayIcon.Warm();
         // this one really is off the UI thread, the wait's on the pool
         if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));

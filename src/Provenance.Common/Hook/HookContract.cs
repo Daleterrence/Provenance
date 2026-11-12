@@ -108,6 +108,8 @@ public static class HookContract
         // the format of every file's name, pid then name, and of the pid file a Windower or Ashita launch gets (launch id)
         public const string Name = "pol_hook.{0}.{1}";
         public const string PidFile = "provenance.{0}.pid";
+        // the hold makes it and the app sets it after writing the Play entry, so Play doesn't wait for the hold's next look
+        public const string PlayEvent = "provenance_play.{0}";
     }
 
     // pieces of the hook's log lines (and the watcher's output) that the app looks for, so none of them get reworded

@@ -78,6 +78,7 @@
 #define IPC_TAKING ".taking"
 #define IPC_NAME "pol_hook.%u.%s"
 #define IPC_PID_FILE "provenance.%s.pid"
+#define IPC_PLAY_EVENT "provenance_play.%u"
 
 #define LOG_FIRST_LINE "pol_hook: highest user address"
 #define LOG_VIEWER_LANG "viewer_init: lang="
