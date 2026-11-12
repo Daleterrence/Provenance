@@ -13,7 +13,7 @@ namespace Provenance.Common.Login;
 
 public sealed class Prestarter
 {
-    private const string PrestartLock = "prestart";
+    internal const string PrestartLock = "prestart";
     private static long _dnsWarmedAt;
 
     internal sealed record Prestarted(int Pid, ProcessStamp? Stamp, DateTime? Began = null);
@@ -59,11 +59,19 @@ public sealed class Prestarter
 
     internal void Close() => _closed = true;
 
+    internal bool Holding { get { lock (_gate) return _prestartHolds > 0; } }
+
     // pol.exe and polcore take about 2s to start, so one starts with the app and waits for its go file. Not with
     // Windower/Ashita, it'd open them.
     public void Prestart()
     {
         _warmDns();
+        StartEarly();
+    }
+
+    // just the pol.exe, for before the window's built. Prestart's name lookup waits for where it's always been made
+    public void StartEarly()
+    {
         lock (_gate)
         {
             if (!MayPrestart()) return;

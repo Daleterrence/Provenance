@@ -72,11 +72,24 @@ public partial class App : Application
 
         WarmKeys();
         CatchUnhandled();
+        StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, pol.Prestarter.StartEarly);
 
         bool noAutoLogin = shiftAtStart || ShiftDown() || args.NoAutoLogin;
         var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin);
         SelfUpdate.TellIfUpdateFailed(mainVm.Notice);
         StartMainViewModel(mainVm, noAutoLogin);
+    }
+
+    // pol.exe takes a couple of secs to be ready, so it starts before the window's built. The screen saver's noted
+    // first and old sessions ended before it, and one step failing doesn't stop the window
+    internal static void StartPolEarly(Action noteScreenSaver, Action endOrphans, Action startPol)
+    {
+        noteScreenSaver();
+        foreach (var (what, step) in new[] { ("ending the sessions an earlier copy left", endOrphans), ("starting pol.exe", startPol) })
+        {
+            try { step(); }
+            catch (Exception ex) { Log.Warning(ex, "Start-up carried on after {Step} failed", what); }
+        }
     }
 
     private static bool PrepareProtectedFolders()
@@ -149,9 +162,6 @@ public partial class App : Application
         var windows = new WindowManager(settings, WpfDialogs.Default);
         var mainVm = new MainViewModel(WpfDialogs.Default, windows, credentials, settings, new FeedService(settings), pol, new AvatarService(settings));
         timer.Lap("view model built");
-        // after the view model's listening for a failed save, before its start-up clears the records of gone pol.exes or
-        // pre-starts one
-        ScreenSaver.Note(settings);
         // Windows logging off cancels a log in, and WPF would close the window ignoring its Cancel, so it closes normally first.
         // A held session is logged out, nothing goes to tray
         SessionEnding += (_, e) =>

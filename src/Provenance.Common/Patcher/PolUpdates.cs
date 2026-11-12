@@ -8,9 +8,15 @@ namespace Provenance.Common.Patcher;
 
 public static class PolUpdates
 {
-    // freeFiles ends my waiting pol.exe before any file changes
+    // freeFiles ends my waiting pol.exe before any file changes. afterQueued runs once the lock's held and queued work
+    // has been applied, before the version check, and is told whether there was none
     public static PatchResult UpdateViewer(string viewerDir, PolRegion region, IProgress<PatchProgress>? progress, Action freeFiles,
-                                           CancellationToken ct) =>
+                                           CancellationToken ct, Action<bool>? afterQueued = null) =>
+        UpdateViewer(viewerDir, progress, freeFiles, ct, afterQueued,
+                     beforeChange => GameUpdate.Run(PatchProduct.Viewer(viewerDir, region), region, progress, beforeChange, ct));
+
+    internal static PatchResult UpdateViewer(string viewerDir, IProgress<PatchProgress>? progress, Action freeFiles, CancellationToken ct,
+                                             Action<bool>? afterQueued, Func<Action, PatchResult> check) =>
         GameFilesLock.Locked(GameFilesLock.Job.ViewerUpdate, ct, progress, () =>
         {
             void BeforeChange()
@@ -27,8 +33,10 @@ public static class PolUpdates
                 ViewerQueue.ApplyQueued(viewerDir);
             }
             // a stale queue (.tmp2) mustn't overwrite what the mirror writes below
+            bool noneQueued = !ViewerQueue.QueuedWorkPending(viewerDir);
             ApplyQueued();
-            var r = GameUpdate.Run(PatchProduct.Viewer(viewerDir, region), region, progress, BeforeChange, ct);
+            afterQueued?.Invoke(noneQueued);
+            var r = check(BeforeChange);
             // up to date or not, an earlier run might've died between the update and these steps
             ApplyQueued();
             Log.Information("{Product} update check: {Result}", GameProduct.Viewer.Name, r);

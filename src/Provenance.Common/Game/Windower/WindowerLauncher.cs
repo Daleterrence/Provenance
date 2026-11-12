@@ -51,6 +51,7 @@ public sealed class WindowerLauncher : IDisposable
     public WindowerLaunchLists? Lists { get; private set; }
     public WindowerUpdateResult? Update { get; private set; }
     public string? UpdateNotice { get; private set; }
+    internal WindowerUpdateAnswer UpdateAnswer => new(Update, UpdateNotice);
     public IReadOnlyList<string> RegistryWritten { get; private set; } = [];
     public bool HandoverOpen => _mapping is not null && _ready is not null;
     public WindowerGameValues GameValues => new(Profile.Clone(), _setup.Region, _setup.RegistryRoot);
@@ -172,6 +173,12 @@ public sealed class WindowerLauncher : IDisposable
 
     private void UpdateWindower(string branch, IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
+        if (_setup.KnownUpdate is { } known)
+        {
+            Update = known.Update;
+            UpdateNotice = known.Notice;
+            return;
+        }
         progress?.Report(new LaunchProgress("Starting", "Checking for Windower updates..."));
         var updater = (_setup.NewUpdater ?? ((d, b) => new WindowerUpdater(d, b)))(_setup.WindowerDir, branch);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);

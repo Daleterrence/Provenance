@@ -33,6 +33,8 @@ public sealed class SettingsService : ISettingsService
 
     public string? LoadProblem { get; private set; }
 
+    public string? SaveProblem { get; private set; }
+
     // looked up again until it's found, so an install made while the app runs gets picked up
     public PolRegion? DetectedRegion => _region ??= PolPaths.TryAutoDetectRegion();
 
@@ -141,6 +143,7 @@ public sealed class SettingsService : ISettingsService
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not save settings.json");
+            SaveProblem ??= ex.Message;
             if (!_saveFailedRaised)
             {
                 _saveFailedRaised = true;

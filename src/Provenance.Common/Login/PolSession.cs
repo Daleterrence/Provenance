@@ -17,7 +17,7 @@ namespace Provenance.Common.Login;
 
 internal delegate IDisposable? HoldViewerFiles(string viewerDir, out string? problem);
 
-public sealed class PolSession : IDisposable
+public sealed partial class PolSession : IDisposable
 {
     private readonly ISettingsService _settings;
     private readonly Watcher _watcher;
@@ -40,7 +40,7 @@ public sealed class PolSession : IDisposable
         _watcher = watcher ?? new Watcher(settings);
         _pol = pol ?? new OurPol();
         Prestarter = new Prestarter(settings, _watcher, _pol, () => Pid is not null, _gate, prestart);
-        UpdateViewer = (dir, progress, freeFiles, ct) => PolUpdates.UpdateViewer(dir, _settings.RegionOrDefault, progress, freeFiles, ct);
+        UpdateViewer = (dir, progress, freeFiles, ct, afterQueued) => PolUpdates.UpdateViewer(dir, _settings.RegionOrDefault, progress, freeFiles, ct, afterQueued);
         Windower = new WindowerStart(settings, _watcher, windowerSetup);
         _snapshots = new SnapshotWatcher(() => Pid, snap => SnapshotUpdated?.Invoke(snap));
         Records = new SessionRecords(_pol);
@@ -68,7 +68,7 @@ public sealed class PolSession : IDisposable
 
     public Prestarter Prestarter { get; }
 
-    internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, PatchResult> UpdateViewer { get; init; }
+    internal Func<string, IProgress<PatchProgress>?, Action, CancellationToken, Action<bool>?, PatchResult> UpdateViewer { get; init; }
     internal HoldViewerFiles HoldViewer { get; init; } = SignedBuilds.Hold;
     internal Action<string, CancellationToken> FindBuild { get; init; } = SignedBuilds.FetchIfUnknown;
     internal Action ScreenSaverBack { get; init; } = ScreenSaver.PutBack;
@@ -116,10 +116,18 @@ public sealed class PolSession : IDisposable
     private int ConnectCore(LoginRequest request, CancellationToken ct)
     {
         var progress = request.Progress;
+        EarlyLogin? early = null;
         int Fail(string text, int code = LoginCodes.LauncherFailed)
         {
+            early?.Drop();
+            early?.End();
             progress?.Report(LaunchProgress.Failed(text));
             return code;
+        }
+        int Cancelled()
+        {
+            progress?.Report(LaunchProgress.Cancelled(early?.End() ?? false));
+            return LoginCodes.Cancelled;
         }
         _hookLog = null;
         _viewerLanguage = null;
@@ -133,56 +141,72 @@ public sealed class PolSession : IDisposable
         if (polExe is null)
             return Fail("Some of the files needed to start PlayOnline are missing. Check FINAL FANTASY XI is installed, and if it is, reinstall Provenance.");
         if (Credentials.KeyForLogIn() is { } keyProblem) return Fail(keyProblem);
-        // the viewer checks for its own update on every connect and always says yes
+        var launch = early = new EarlyLogin(this, request, viewerDir!, polExe, launcherExe, ct);
         try
         {
-            UpdateViewer(viewerDir!, new InlineProgress<PatchProgress>(
-                p => progress?.Report(LaunchProgress.Updating("Starting", p, 0.02, LaunchProgress.LogInUpdateEnd))),
-                Prestarter.FreeViewerFiles, ct);
-        }
-        catch (OperationCanceledException)
-        {
-            progress?.Report(LaunchProgress.Cancelled());
-            return LoginCodes.Cancelled;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "PlayOnline Viewer update failed");
-            return Fail(ErrorText.Of(ex, "The PlayOnline Viewer couldn't be updated. Try logging in again in a moment."));
-        }
-        // after the viewer's own check and before any pol.exe's used, so it's one connection to SE at a time
-        if (request.Options.Lean && request.BeforePol is { } stillLean && !stillLean())
-            request = request with { Options = request.Options with { Lean = false } };
-        if (ct.IsCancellationRequested)
-        {
-            progress?.Report(LaunchProgress.Cancelled());
-            return LoginCodes.Cancelled;
-        }
-        _watcher.BeforeStart(viewerDir!, "before the login");
-        // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the login ends
-        using var viewerHold = HoldBuild(viewerDir!, ct, out var buildProblem);
-        if (ct.IsCancellationRequested)
-        {
-            progress?.Report(LaunchProgress.Cancelled());
-            return LoginCodes.Cancelled;
-        }
-        if (buildProblem != null)
-        {
-            Log.Warning("Viewer build not supported: {Problem}", buildProblem);
-            return Fail(buildProblem);
-        }
-        // under the gate so a StopHold still running has dropped its chat entry before the id changes
-        string launchId;
-        lock (_gate) launchId = Credentials.NewLaunchId();
-        var keys = new List<string>();
-        try
-        {
-            return ConnectHeld(request, polExe, launcherExe, launchId, keys, ct);
+            launch.BeforeLock();
+            // the viewer checks for its own update on every connect and always says yes
+            try
+            {
+                UpdateViewer(viewerDir!, new InlineProgress<PatchProgress>(
+                    p => progress?.Report(LaunchProgress.Updating("Starting", p, 0.02, LaunchProgress.LogInUpdateEnd))),
+                    () => { launch.End(); Prestarter.FreeViewerFiles(); }, ct, launch.OnLocked);
+            }
+            catch (OperationCanceledException)
+            {
+                return Cancelled();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "PlayOnline Viewer update failed");
+                return Fail(ErrorText.Of(ex, "The PlayOnline Viewer couldn't be updated. Try logging in again in a moment."));
+            }
+            if (launch.Failed is { } startFailed) return Fail(startFailed);
+            launch.Release(withLine: launch.Active);
+            // after the viewer's own check and before any pol.exe's used, so it's one connection to SE at a time
+            if (request.Options.Lean && request.BeforePol is { } stillLean && !stillLean())
+                request = request with { Options = request.Options with { Lean = false } };
+            if (ct.IsCancellationRequested) return Cancelled();
+            // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the login ends
+            using var viewerHold = HoldForLogin(viewerDir!, launch, ct, out var buildProblem);
+            if (ct.IsCancellationRequested) return Cancelled();
+            if (buildProblem != null)
+            {
+                Log.Warning("Viewer build not supported: {Problem}", buildProblem);
+                return Fail(buildProblem);
+            }
+            // under the gate so a StopHold still running has dropped its chat entry before the id changes
+            string launchId;
+            lock (_gate) launchId = launch.Active ? launch.LaunchId! : Credentials.NewLaunchId();
+            var keys = new List<string>();
+            try
+            {
+                return ConnectHeld(request, polExe, launcherExe, launchId, keys, launch, ct);
+            }
+            finally
+            {
+                Credentials.CleanupOneShots(keys);   // on every way out, so passwords never linger in Credential Manager
+            }
         }
         finally
         {
-            Credentials.CleanupOneShots(keys);   // on every way out, so passwords never linger in Credential Manager
+            launch.Drop();
+            launch.End();
         }
+    }
+
+    // a pol.exe started early was started on the files as they were, so it only carries on if they hold as they are
+    private IDisposable? HoldForLogin(string viewerDir, EarlyLogin early, CancellationToken ct, out string? problem)
+    {
+        if (early.Active)
+        {
+            var held = HoldViewer(viewerDir, out problem);
+            if (problem is null) return held;
+            held?.Dispose();
+            early.End();
+        }
+        _watcher.BeforeStart(viewerDir, "before the login");
+        return HoldBuild(viewerDir, ct, out problem);
     }
 
     // the files are only hashed once when the build's known. One only the mirror's list knows has to be on it first,
@@ -198,14 +222,21 @@ public sealed class PolSession : IDisposable
         return HoldViewer(viewerDir, out problem);
     }
 
-    private int ConnectHeld(LoginRequest request, string polExe, string launcherExe, string launchId, List<string> keys, CancellationToken ct)
+    private int ConnectHeld(LoginRequest request, string polExe, string launcherExe, string launchId, List<string> keys, EarlyLogin early,
+                            CancellationToken ct)
     {
         var progress = request.Progress;
         var psi = BuildEnvironment(request, polExe, launcherExe, keys);
-        if (ct.IsCancellationRequested) return Stopped(progress);
+        if (ct.IsCancellationRequested) return Stopped(progress, early.End());
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.02));
-        Windower.Forget();
-        if (StartPol(request, psi, polExe, launchId, ct) is not { } pid)
+        int? started;
+        if (early.Active) started = early.Take(psi, ct);
+        else
+        {
+            Windower.Forget();
+            started = StartPol(request, psi, polExe, launchId, early.Answers, ct);
+        }
+        if (started is not { } pid)
             return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
         AdoptPid(pid, request.ProfileId);
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.04));
@@ -232,7 +263,7 @@ public sealed class PolSession : IDisposable
     }
 
     // null once progress has said why
-    private int? StartPol(LoginRequest request, ProcessStartInfo psi, string polExe, string launchId, CancellationToken ct)
+    private int? StartPol(LoginRequest request, ProcessStartInfo psi, string polExe, string launchId, WindowerUpdateAnswers answers, CancellationToken ct)
     {
         var progress = request.Progress;
         var options = request.Options;
@@ -243,7 +274,7 @@ public sealed class PolSession : IDisposable
                                                  progress, ct, hookStarted: HookTracker.Track);
         }
         if (platform == ThirdPartyHook.Windower)
-            return Windower.Start(psi, polExe, launchId, options, progress, ct);
+            return Windower.Start(psi, polExe, launchId, options, progress, ct, answers);
         if (Prestarter.TakePrestarted(psi, ct) is { } pre) return pre;
         // a cancel while the pre-start was being taken leaves it waiting, so nothing starts in its place
         if (ct.IsCancellationRequested)

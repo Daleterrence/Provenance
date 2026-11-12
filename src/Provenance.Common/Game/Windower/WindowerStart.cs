@@ -22,10 +22,16 @@ internal sealed class WindowerStart
 
     internal void Forget() => Volatile.Write(ref _play, null);
 
-    internal int? Start(ProcessStartInfo psi, string polExe, string launchId, SessionOptions options, IProgress<LaunchProgress>? progress, CancellationToken ct)
+    internal int? Start(ProcessStartInfo psi, string polExe, string launchId, SessionOptions options, IProgress<LaunchProgress>? progress, CancellationToken ct,
+                        WindowerUpdateAnswers? answers = null)
     {
         WindowerLauncher windower;
-        try { windower = WindowerLauncher.Prepare(_setup(polExe, options.ThirdPartyHookProfile, options.WindowerLists, options.WindowerShared), progress, ct); }
+        try
+        {
+            var setup = _setup(polExe, options.ThirdPartyHookProfile, options.WindowerLists, options.WindowerShared);
+            windower = WindowerLauncher.Prepare(answers?.Value is { } known ? setup with { KnownUpdate = known } : setup, progress, ct);
+            if (answers is not null) answers.Value ??= windower.UpdateAnswer;
+        }
         catch (OperationCanceledException)
         {
             progress?.Report(LaunchProgress.Cancelled());

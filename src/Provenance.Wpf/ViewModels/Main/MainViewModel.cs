@@ -53,9 +53,16 @@ public partial class MainViewModel : ObservableObject
         _dialogs = dialogs;
         _windows = windows;
         _settings = settings;
-        _settings.SaveFailed += why => _ui.Post(() =>
-            _dialogs.Error("Settings not saved",
-                "Provenance couldn't save your settings, so your changes will only last until Provenance closes.", offerLogs: true));
+        int saveNoticed = 0;
+        void SaveNotice()
+        {
+            if (Interlocked.Exchange(ref saveNoticed, 1) == 0)
+                _ui.Post(() => _dialogs.Error("Settings not saved",
+                    "Provenance couldn't save your settings, so your changes will only last until Provenance closes.", offerLogs: true));
+        }
+        _settings.SaveFailed += _ => SaveNotice();
+        // a save that failed before this was listening, start-up does a few
+        if (_settings.SaveProblem is not null) SaveNotice();
         if (_settings.LoadProblem is { } loadProblem)
             _ui.Post(() => _dialogs.Info("Settings reset", loadProblem));
         _pol = pol;
