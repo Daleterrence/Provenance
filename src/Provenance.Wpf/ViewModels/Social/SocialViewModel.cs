@@ -761,6 +761,11 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         "You can stop ignoring them later, but that won't put them back on your friend list. " +
         "You'd have to send them a new friend request.";
 
+    public static string IgnoreRequestQuestion(string name, bool onMyList) => onMyList
+        ? $"Add {name} to your ignore list? This will remove {name} off your friends list, and decline any pending requests."
+        : $"Add {name} to your ignore list? PlayOnline will decline the request, and this handle's messages won't reach you any more. " +
+          "You can stop ignoring them later from your ignore list.";
+
     public static string StopIgnoringQuestion(string name) =>
         $"Take {name} off your ignore list? Their messages will reach you again. " +
         "This doesn't add them to your friend list, you'd have to send them a friend request for that.";
@@ -792,7 +797,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                     new("Ignore...", CanEdit && !f.IsMe, () =>
                     {
                         if (ConfirmDestructive("Ignore " + f.Name,
-                                $"Add {f.Name} to your ignore list? PlayOnline will decline the request, and this handle's messages won't reach you any more. You can stop ignoring them later from your ignore list.",
+                                IgnoreRequestQuestion(f.Name, f.Key.Length > 0 && Friends.Any(x => x.IsFriend && !x.Pending && x.Key == f.Key)),
                                 "IGNORE"))
                             Search.AnswerRequest(f, RequestAnswer.Ignore);
                     })];
