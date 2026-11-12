@@ -68,7 +68,7 @@
                                         <Button Grid.Column="2" Content="SWITCH" FontSize="12" VerticalAlignment="Center"
                                                 Style="{StaticResource PolButton}" IsEnabled="{Binding CanSwitch}"
                                                 Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name, StringFormat=Make {0} active}" />
+                                                CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name, StringFormat=Make {0} your active handle}" />
                                         <Button Grid.Column="3" Content="DELETE" FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0"
                                                 Style="{StaticResource PolButton}" IsEnabled="{Binding CanDelete}"
                                                 Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"

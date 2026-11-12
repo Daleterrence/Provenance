@@ -119,7 +119,7 @@ public static class AccountRules
         LoginCodes.NoPolHandle => "PlayOnline handle needed",
         LoginCodes.HandleRejected => "Handle not accepted",
         LoginCodes.Stalled => "PlayOnline stopped responding",
-        LoginCodes.AccountBlocked => "PlayOnline account notice",
+        LoginCodes.AccountBlocked => "PlayOnline Notification",
         LoginCodes.LauncherFailed => "PlayOnline didn't start",
         LoginCodes.DetailsUnreadable => "Account details incomplete",
         _ => "Couldn't log in",

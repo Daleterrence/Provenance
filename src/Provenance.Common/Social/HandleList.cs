@@ -16,7 +16,7 @@ public sealed record HandleGroup(PolHandle Handle, IReadOnlyList<HandleCharacter
 }
 
 // one of the viewer's own lines: where it is in its string table, and the US words for when that can't be read
-public readonly record struct ViewerLine(int Id, string Us);
+public readonly record struct ViewerLine(int Id, string Us, bool OwnEnglish = false);
 
 // the Handles page's lists and wording
 public static class HandleList
@@ -27,10 +27,10 @@ public static class HandleList
     public static readonly ViewerLine CreateTitle = new(0x3b4f, "Create New Handle");
     public static readonly ViewerLine EnterName = new(0x3ba9, "Enter new handle.");
     public static readonly ViewerLine UpdatingText = new(0x3b95, "Updating handle list...");
-    public static readonly ViewerLine NameRefused = new(0x3bab, "Cannot register selected handle. Please try another.");
-    public static readonly ViewerLine NameFailed = new(0x3ba4, "Handle registration failed. Please re-enter.");
-    public static readonly ViewerLine NoWordList = new(0x3bb6, "Cannot register handle. Data may be corrupted.");
-    public static readonly ViewerLine HandlesFull = new(0x3ba5, "Cannot register any more handles.");
+    public static readonly ViewerLine NameRefused = new(0x3bab, "Cannot create selected handle. Please try another.", true);
+    public static readonly ViewerLine NameFailed = new(0x3ba4, "Handle creation failed. Please re-enter.", true);
+    public static readonly ViewerLine NoWordList = new(0x3bb6, "Cannot create handle. Data may be corrupted.", true);
+    public static readonly ViewerLine HandlesFull = new(0x3ba5, "Cannot create any more handles.", true);
     public static readonly ViewerLine DeleteActive = new(0x3ba8, "Cannot delete active handle.");
 
     public const string CreateHelpText =
@@ -40,8 +40,13 @@ public static class HandleList
     public const string OrderChangedText = "Character order changed. Save it to keep it.";
 
     // some of the viewer's lines end in a space
-    public static string Say(ViewerLine line, Func<int, string, string>? text = null) =>
-        (text?.Invoke(line.Id, line.Us) ?? line.Us).Trim();
+    public static string Say(ViewerLine line, Func<int, string, string>? text = null)
+    {
+        var said = text?.Invoke(line.Id, line.Us) ?? line.Us;
+        // the viewer's English says register on a create, a Japanese table's line is kept as it is
+        if (line.OwnEnglish && said.All(char.IsAscii)) said = line.Us;
+        return said.Trim();
+    }
 
     public const string LimitText = HookFailures.Handles.LimitText;
     public const string LoggedOutText = "You're not logged in. Log in to see your handles and the characters linked to them.";
