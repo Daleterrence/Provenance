@@ -153,9 +153,8 @@ internal static class AddonsPageBuilder
             int at = s.LastIndexOf(" (", StringComparison.Ordinal);
             if (at > 0 && s.EndsWith(')')) reasons.TryAdd(s[..at], s[(at + 2)..^1]);
         }
-        // these are addons, and a plugin can share an addon's name
-        if (kind == AddonKind.Addon)
-            foreach (var n in launch.InitCommandAddons) reasons.TryAdd(n, LoadedBy + "the profile's init command");
+        // each kind its own, a plugin can share an addon's name
+        foreach (var n in kind == AddonKind.Addon ? launch.InitCommandAddons : launch.InitCommandPlugins) reasons.TryAdd(n, LoadedBy + "the profile's init command");
         return reasons;
     }
 
@@ -277,8 +276,8 @@ internal static class AddonsPageBuilder
     internal static class Groups
     {
         public static readonly AddonGroup InitTxt = new("Loaded by your init.txt",
-            "Windower's scripts\\init.txt loads these itself, so they load no matter what the list says. "
-            + "To turn one on or off here instead, take its line out of init.txt.");
+            "Windower's scripts\\init.txt loads these itself, or runs a script that does, so they load no matter what the list says. "
+            + "To turn one on or off here instead, take its line out of the script that loads it.");
         public static readonly AddonGroup InitCommand = new("Loaded by this profile's init command",
             "This profile's init command loads these itself, so they load no matter what the list says.");
         public static readonly AddonGroup ByScript = new("Set by your script",

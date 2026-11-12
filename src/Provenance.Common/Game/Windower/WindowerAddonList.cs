@@ -4,6 +4,7 @@ public sealed record WindowerLaunchLists(IReadOnlyList<string> RequiredPlugins, 
                                          IReadOnlyList<string> Addons, IReadOnlyList<string> Skipped)
 {
     public IReadOnlyList<string> InitCommandAddons { get; init; } = [];
+    public IReadOnlyList<string> InitCommandPlugins { get; init; } = [];
 }
 
 // a profile's addons and plugins, kept in Provenance's own settings by Windower profile name. UseGlobal (and no entry
@@ -91,6 +92,10 @@ public sealed class WindowerAddonList
             if (Already(n, loads.Addons) is { } why) { sendAddons.Remove(n); skipped.Add(why); }
         var fromInit = addons.Where(a => loads.Addons.GetValueOrDefault(a.Listing.Key) == ScriptLoads.InitCommand).Select(a => a.Listing.Key).ToList();
         sendAddons.AddRange(fromInit.Where(n => !sendAddons.Contains(n, StringComparer.OrdinalIgnoreCase)));
-        return new WindowerLaunchLists(required, sendPlugins, sendAddons, skipped) { InitCommandAddons = fromInit };
+        // same for a plugin the init command loads, the hook says "Plugin already loaded." to the second one
+        var pluginsFromInit = plugins.Where(p => p is { Installed: true, IsWindowerPlugin: true, Required: false }
+                                                 && loads.Plugins.GetValueOrDefault(p.Listing.Key) == ScriptLoads.InitCommand).Select(p => p.Listing.Key).ToList();
+        sendPlugins = plugins.Select(p => p.Listing.Key).Where(n => sendPlugins.Contains(n) || pluginsFromInit.Contains(n)).ToList();
+        return new WindowerLaunchLists(required, sendPlugins, sendAddons, skipped) { InitCommandAddons = fromInit, InitCommandPlugins = pluginsFromInit };
     }
 }
