@@ -37,8 +37,6 @@ public static class HandleList
         "A handle is a name on PlayOnline that other players can see. Use 1 to 15 English letters, numbers or symbols.";
     public const string DeleteTitle = "Delete Handle";
     public const string DeleteQuestion = "Are you sure you want to delete this handle? It will unlink your FINAL FANTASY XI characters.";
-    public const string OtherContentText =
-        "This handle has a Content ID from another PlayOnline service linked to it, so Provenance can't delete it.";
     public const string OrderChangedText = "Character order changed. Save it to keep it.";
 
     // some of the viewer's lines end in a space
@@ -115,7 +113,6 @@ public static class HandleList
         (HandleChange.Create, "failed:no dictionary") => Say(NoWordList, text),
         (HandleChange.Create, "failed:handles full" or "failed:-7184") => Say(HandlesFull, text),
         (HandleChange.Delete, "failed:active") => Say(DeleteActive, text),
-        (_, "failed:has content ids") => HookFailures.Handles.ListChanged,
         (_, "failed:busy" or "failed:bad request" or "failed:list changed" or "failed:-7172" or "failed:draining" or "failed:not in hold"
             or "failed:cancelled" or "timeout") => null,
         _ => op == HandleChange.Create ? HookFailures.Handles.CreateUnconfirmed : HookFailures.Handles.DeleteUnconfirmed,

@@ -8,10 +8,10 @@ public sealed class CharacterLookups(CharacterNames names)
 {
     private Dictionary<string, string> _seen = new(StringComparer.Ordinal);
     private readonly List<(PolFriendGame Game, string Friend)> _queue = new();
-    // friends asked about this login. A character hidden last time may be shown by now, so its friend gets one more ask
+    // characters asked about this login. One hidden last time may be shown by now, so it gets one more ask
     private readonly HashSet<string> _asked = new(StringComparer.Ordinal);
-    // ones whose request never got written. They get their ask back at their next presence change
-    private readonly HashSet<string> _unsent = new(StringComparer.Ordinal);
+    // friends whose request never got written, with the character it was for. They get their ask back at their next presence change
+    private readonly Dictionary<string, string> _unsent = new(StringComparer.Ordinal);
     private string _askingFor = "";
     // ones given up on, in case the hook took them late and still answers
     private readonly List<(string Token, PolFriendGame Game)> _late = new();
@@ -36,15 +36,15 @@ public sealed class CharacterLookups(CharacterNames names)
             now[id] = key;
             if (game is null) continue;
             bool moved = !_seen.TryGetValue(id, out var was) || was != key;
-            if (moved && _unsent.Remove(id)) _asked.Remove(id);
-            bool wanted = names.Get(key) is null ? moved : AskAgain(key, id);
+            if (moved && _unsent.Remove(id, out var unsentKey)) _asked.Remove(unsentKey);
+            bool wanted = names.Get(key) is null ? moved : AskAgain(key);
             if (!wanted || Asking?.Character.Key == key || _queue.Exists(q => q.Game.Character.Key == key)) continue;
             _queue.Add((game, id));
         }
         _seen = now;
     }
 
-    private bool AskAgain(string key, string friend) => names.Get(key) is { Why: "private" } && !_asked.Contains(friend);
+    private bool AskAgain(string key) => names.Get(key) is { Why: "private" } && !_asked.Contains(key);
 
     // the one to ask the hook for now, if any. Anyone who's left that character meanwhile drops out of the queue
     public PolFriendGame? Next(DateTime now)
@@ -57,12 +57,12 @@ public sealed class CharacterLookups(CharacterNames names)
         }
         if (Asking is not null || now - _last < HookLimits.ProfileServerGap) return null;
         names.Refresh();
-        _queue.RemoveAll(q => (names.Get(q.Game.Character.Key) is not null && !AskAgain(q.Game.Character.Key, q.Friend))
+        _queue.RemoveAll(q => (names.Get(q.Game.Character.Key) is not null && !AskAgain(q.Game.Character.Key))
                               || !_seen.ContainsValue(q.Game.Character.Key));
         if (_queue.Count == 0) return null;
         (Asking, _askingFor) = _queue[0];
         _queue.RemoveAt(0);
-        _asked.Add(_askingFor);
+        _asked.Add(Asking.Character.Key);
         _watch.Begin(HookLimits.CharacterLookup, now);
         _last = now;
         return Asking;
@@ -86,7 +86,7 @@ public sealed class CharacterLookups(CharacterNames names)
 
     public void Failed()
     {
-        if (Asking is not null) _unsent.Add(_askingFor);
+        if (Asking is not null) _unsent[_askingFor] = Asking.Character.Key;
         Asking = null;
     }
 

@@ -424,23 +424,15 @@ public partial class HandlesViewModel : ObservableObject
     public void Delete(HandleRow row)
     {
         HandleRow? Current() => Rows.FirstOrDefault(r => r.Handle.Slot == row.Handle.Slot && r.Handle.Key == row.Handle.Key);
-        // it'd be unlinked like the characters, and only an FFXI one can be linked again from here
-        bool OtherService(HandleRow r) =>
-            _snap.ContentIds.Any(c => c.Type != ContentIdType.Ffxi && (c.Handle == r.Handle.Slot || r.Handle.ContentIds.Contains(c.Index)));
         if (!CanChange || Current() is not { CanDelete: true } now) return;
         if (now.Active)
         {
             Note.Fail(HandleList.Say(HandleList.DeleteActive, _text));
             return;
         }
-        if (OtherService(now))
-        {
-            Note.Fail(HandleList.OtherContentText);
-            return;
-        }
         if (!_dialogs.Confirm(HandleList.DeleteTitle, HandleList.DeleteQuestion, "DELETE", ConfirmStyle.Destructive) || !CanChange) return;
         // the question can sit open a while, so the handle's looked at again before anything's sent
-        if (Current() is not { CanDelete: true, Active: false } still || still.Name != now.Name || OtherService(still))
+        if (Current() is not { CanDelete: true, Active: false } still || still.Name != now.Name)
         {
             Note.Fail(HookFailures.Handles.ListChanged);
             return;

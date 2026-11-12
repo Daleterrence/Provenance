@@ -61,10 +61,15 @@ internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISetti
             return;
         }
         // the link waits for a create or delete that's going, which can come back not confirmed or not come back in time
-        if ((main.Social.PlayBlockedReason ?? (main.Handles.ListEditGoing ? HookFailures.Handles.PlayWaits : null)) is { } held)
+        if (main.Social.PlayBlockedReason is { } held)
         {
             links.SetPhase(SessionPhase.LoggedIn);
             dialogs.Error("Can't start FINAL FANTASY XI", held);
+            return;
+        }
+        if (main.Handles.ListEditGoing && !dialogs.Confirm("Start FINAL FANTASY XI", HookFailures.Handles.PlayDiscards, "CONTINUE"))
+        {
+            links.SetPhase(SessionPhase.LoggedIn);
             return;
         }
         await FinishWindowerUpdateAsync();

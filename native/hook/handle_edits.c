@@ -134,24 +134,6 @@ static void handle_create(BYTE *b, char *p)
     handle_list_put_start(b);
 }
 
-/* 0x318 unlinks the handle's own eight, as the viewer's delete does. Another service's couldn't be linked again from
-   here and one outside the eight would be left on a dead handle, so either is refused */
-static int handle_only_ffxi(BYTE *b, int slot, const pol_handle *h)
-{
-    pol_chr c;
-    char mine[64];
-    memset(mine, 0, sizeof mine);
-    for (int k = 0; k < 8; k++) {
-        int idx = (h->chars[k] >> 1) & 0x3f;
-        if (!(h->chars[k] & 1)) continue;
-        if (!peers_get_chr(b, idx, &c) || c.title != 1 || !(c.link & CHR_LINKED) ||
-            (int)CHR_HANDLE(c.link) != slot) return 0;
-        mine[idx] = 1;
-    }
-    for (int i = 0; i < 64; i++)
-        if (!mine[i] && peers_get_chr(b, i, &c) && (c.link & CHR_LINKED) && (int)CHR_HANDLE(c.link) == slot) return 0;
-    return 1;
-}
 /* the viewer's own steps (app.dll 0x10029a7a): 0x318, then the one PutHandleList. No PutChrList goes, the unlinks ride
    on the next one */
 static void handle_delete(BYTE *b, int slot, const pol_handle *h)
@@ -163,7 +145,6 @@ static void handle_delete(BYTE *b, int slot, const pol_handle *h)
     if (slot == pc_current_handle(b) || slot == g_my_slot) { handle_fail("failed:active"); return; }
     for (int i = 0; i < 64; i++) others += i != slot && handle_get(b, i, &o);
     if (!others) { handle_fail("failed:active"); return; }
-    if (!handle_only_ffxi(b, slot, h)) { handle_fail("failed:has content ids"); return; }
     if (handle_list_busy(b)) { handle_fail("failed:busy"); return; }
     memcpy(name, h->name, 15);
     name[15] = 0;
