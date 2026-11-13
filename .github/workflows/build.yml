@@ -23,16 +23,19 @@ jobs:
     env:
       ProvenanceCI: 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       # the icon, logo and background aren't in this repo, so they get checked out separately
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: Daleterrence/Provenance-assets
           ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
           path: assets
+          persist-credentials: false
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 10.0.x
 
@@ -66,7 +69,7 @@ jobs:
           "setup=$((Get-ChildItem -LiteralPath $out -Filter '*-Setup.exe').FullName)" >> $env:GITHUB_OUTPUT
 
       # just the installer on a plain push, the whole folder would eat the artifact storage. A tag's files go on the draft
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: github.ref_type != 'tag'
         with:
           name: Provenance-${{ steps.pack.outputs.version }}
@@ -98,7 +101,7 @@ jobs:
       group: update-server-${{ contains(github.event.release.tag_name, '-') && 'beta' || 'stable' }}
       cancel-in-progress: false
     steps:
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 10.0.x
 
