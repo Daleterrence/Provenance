@@ -30,7 +30,8 @@ Have a look at the [FAQ](https://provenancexi.app/faq).
 
 ## Licence
 
-Provenance is licensed under the GNU General Public License v3.0, see [LICENSE](LICENSE).
+Provenance is licensed under the GNU General Public License v3.0, see [LICENSE](LICENSE). The open source software it
+uses, and their licences, are listed in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
 
 Provenance is not affiliated with or endorsed by SQUARE ENIX CO., LTD, the Windower, or Ashita projects.
 
