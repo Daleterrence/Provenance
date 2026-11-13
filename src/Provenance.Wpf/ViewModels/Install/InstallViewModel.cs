@@ -49,7 +49,7 @@ public partial class InstallViewModel : ObservableObject
         _dialogs = dialogs;
         // a viewer that's already there decides, otherwise it's the player's pick
         ShowRegionChoice = region is not { } r || !RegionValues.Contains(r);
-        // a version that isn't offered yet (Japanese, for now) leaves Auto on the first one that is
+        // a version that isn't offered yet (Japanese while OfferJapanese is off) leaves Auto on the first one that is
         var local = LocaleRegionForTest();
         _autoRegion = RegionValues.Contains(local) ? local : RegionValues[0];
         RegionChoices = [$"Auto ({PolPaths.RegionName(_autoRegion)})", .. RegionValues.Select(PolPaths.RegionName)];

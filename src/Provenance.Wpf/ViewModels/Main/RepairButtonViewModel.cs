@@ -59,7 +59,7 @@ public partial class RepairButtonViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private bool _available;
 
-    // the region's text when the mirror has no copy to repair it from (Japan for now)
+    // the region's text when the mirror has no copy to repair it from (Japan)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BlockedReason))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]

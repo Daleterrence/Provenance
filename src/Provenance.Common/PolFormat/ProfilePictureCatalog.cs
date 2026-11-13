@@ -3,7 +3,7 @@ using System.Text;
 namespace Provenance.Common.PolFormat;
 
 // from the user's own install: proface0.txt categories, proface1.txt pics.
-// Both are XORed with their own file name as a repeating ASCII key (very sneaky, SE), then UTF-16LE
+// Both are XORed with their own file name as a repeating ASCII key, then UTF-16LE
 public static class ProfilePictureCatalog
 {
     public sealed record Category(string Name, string Key, int RegionMask);

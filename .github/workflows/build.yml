@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # the icon, logo and background live in their own private repo
+      # the icon, logo and background aren't in this repo, so they get checked out separately
       - uses: actions/checkout@v4
         with:
           repository: Daleterrence/Provenance-assets

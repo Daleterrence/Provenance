@@ -116,7 +116,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
 
         await FetchAsync(plans.Select(p => (p.Product.Product.Folder, p.Index, p.Name, true)).ToList(), progress, ct);
 
-        // pol.exe's boot step now, the downloads gave viewer\com\*.dll and their patchfiles copies different times
+        // run pol.exe's boot step here, the downloads gave viewer\com\*.dll and their patchfiles copies different times
         if (ViewerQueue.QueuedWorkPending(viewerDir)) ViewerQueue.ApplyQueued(viewerDir);
         Staged = plans.Select(p => p.Product).ToList();
         return stagingDir;

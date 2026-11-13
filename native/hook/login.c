@@ -147,7 +147,7 @@ NORETURN static void login_account_blocked(BYTE *b, const char *what)
 }
 
 /* presence only gets pushed once I'm in with a handle, the viewer's last login step is (-2,-1,1,-2,0,1000).
-   Handle -1 = signed off */
+   Handle -1 = none */
 static void login_status_start(BYTE *b, int handle, int status, int location)
 {
     int chr = location >= 0 ? -1 : -2;   /* a location clears the game, like the viewer's (app.dll 0x10041342) */

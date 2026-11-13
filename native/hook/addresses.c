@@ -19,8 +19,8 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .usual = 0x27030, .sig_at = 0x27030, .operand = ADDR_MATCH,
         .sig = "55 8b ec 6a ff 68 ?? ?? ?? ?? 64 a1 00 00 00 00 50 81 ec 88 08 00 00 a1 ?? ?? ?? ?? 33 c5 89 45 f0 "
             "56 57 50 8d 45 f4 64 a3 00 00 00 00 8b f1 80 7e 21 01" },
-    /* other launchers share this code bar addresses, so it starts at the GUID the right one asks FFXiEntry for.
-       The last call is the do-nothing trace the hook takes over */
+    /* pol.exe has more than one content launcher, sharing this code bar addresses. So it starts at the GUID the right one asks
+       FFXiEntry for. The last call is the do-nothing trace the hook takes over */
     [AT_GAME_RETURN] = { .name = "game return", .module = IN_EXE, .code = IS_CODE, .required = REQUIRED,
         .usual = 0x20c58, .sig_at = 0x20bf4, .operand = ADDR_MATCH,
         .sig = "51 68 ?? ?? ?? ?? 6a 17 6a 00 50 ff 15 ?? ?? ?? ?? 85 c0 0f 88 ?? ?? ?? ?? "

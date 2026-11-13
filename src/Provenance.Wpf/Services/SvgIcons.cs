@@ -304,7 +304,7 @@ public static partial class SvgIcons
             if (Text(file) is not { } svg) return null;
             if (currentColour is { } c) svg = svg.Replace("currentColor", $"#{c.R:X2}{c.G:X2}{c.B:X2}", StringComparison.Ordinal);
             if (edit is not null) svg = edit(svg);
-            // left alone the renderer shifts a drawing's top left onto the viewBox's, and search has a (clipped) rectangle
+            // left alone the renderer shifts a drawing's top left onto the viewBox's, and the search icon has a (clipped) rectangle
             // at -8 that it shoves 8 units down and right
             var settings = new WpfDrawingSettings
             {

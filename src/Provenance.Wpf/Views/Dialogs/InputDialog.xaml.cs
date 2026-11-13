@@ -4,7 +4,6 @@ using Provenance.Wpf.Controls;
 
 namespace Provenance.Wpf.Views.Dialogs;
 
-// WPF doesn't ship an InputBox, so here's a tiny one
 public partial class InputDialog : AppWindow
 {
     private Func<string, string?> _check = _ => null;

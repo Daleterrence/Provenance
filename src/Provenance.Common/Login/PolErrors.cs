@@ -16,7 +16,7 @@ public static class PolErrors
         return null;
     }
 
-    // the payment ones (payment method, Webmoney, balance) aren't in use any more and never come up, they're only here
+    // the payment ones (payment method, Webmoney, balance) are unused and never come up, they're only here
     // so the table matches the viewer's
     private static readonly string[] Texts =
     [

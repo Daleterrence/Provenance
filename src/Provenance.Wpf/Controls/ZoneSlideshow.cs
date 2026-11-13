@@ -11,7 +11,7 @@ namespace Provenance.Wpf.Controls;
 
 public sealed class ZoneSlideshow : Grid
 {
-    // the site's install shot plays the pictures at the same pace, its test reads these two
+    // the website's install shot plays the pictures at this same pace
     internal static readonly TimeSpan Hold = TimeSpan.FromSeconds(8), Fade = TimeSpan.FromSeconds(2.5);
     private readonly DispatcherTimer _timer = new() { Interval = Hold };
     private readonly ZoneOrder _order;
