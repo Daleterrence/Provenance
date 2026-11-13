@@ -5,8 +5,8 @@ Provenance is a launcher for FINAL FANTASY XI that replaces the PlayOnline Viewe
 - Saves your account details securely, logs in with one click, and provides integration for your one-time password from Bitwarden, 1Password or KeePassXC
 - Works alongside Windower 4 and Ashita v4
 - Your friend list, messages and profile, without opening POL
-- Installs, patches and repairs the game for you, speeding up the process on the whole.
-- Multi-account mode for multiboxers, making log in across many accounts easier than ever.
+- Installs, patches and repairs the game for you, speeding up the process on the whole
+- Multi-account mode for multiboxers, making logging in across many accounts easier than ever
 
 ## Installation
 
@@ -16,8 +16,8 @@ Download the Setup.exe file from the latest release on the [releases](https://gi
 
 You'll need the .NET 10 SDK and Visual Studio Build Tools with the x86 C++ compiler. Provenance's images aren't in
 this repo, so you'll also need an `assets` folder next to it (or `PROVENANCE_ASSETS` set to one) with
-`app\provenance.ico`, `app\provenance-256.png` and `app\bg-logo.png` in it, plus any installer pictures as `.jpg`
-files in `installer\zones`. Then:
+`app\provenance.ico`, `app\provenance-256.png`, `app\bg-logo.png`, `app\no-image.jpg` and the `app\icons` SVGs in
+it, plus any installer pictures as `.jpg` files in `installer\zones`. Then:
 
 ```
 pwsh native/build-native.ps1
