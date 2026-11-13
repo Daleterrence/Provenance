@@ -66,18 +66,9 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "prerelease=$(if ($committed.Suffix) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
           "out=$out" >> $env:GITHUB_OUTPUT
-          "setup=$((Get-ChildItem -LiteralPath $out -Filter '*-Setup.exe').FullName)" >> $env:GITHUB_OUTPUT
 
-      # just the installer on a plain push, the whole folder would eat the artifact storage. A tag's files go on the draft
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.ref_type != 'tag'
-        with:
-          name: Provenance-${{ steps.pack.outputs.version }}
-          path: ${{ steps.pack.outputs.setup }}
-          if-no-files-found: error
-          retention-days: 3
-
-      # a tag makes a draft, nothing goes out until it's published by hand
+      # a plain push only proves it builds and packs, nothing's kept. A tag makes a draft, and nothing goes out until
+      # that's published by hand
       - name: Draft release
         if: github.ref_type == 'tag'
         shell: pwsh
