@@ -21,7 +21,7 @@ public static class FeedCache
     {
         try
         {
-            if (CachePath(url) is not { } path || !File.Exists(path)) return null;
+            if (CachePath(url) is not { } path || !File.Exists(path) || new FileInfo(path).Length > FeedClient.MaxReplyBytes) return null;
             var text = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
             var split = text.IndexOf("\n\n", StringComparison.Ordinal);
             if (split < 0) return null;

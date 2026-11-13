@@ -30,7 +30,8 @@ internal sealed class WindowerAddonUpdate(WindowerUpdateFolder job, WindowerServ
             return;
         }
         if (cached?.Sha == head.Sha) return;
-        if (!Uri.TryCreate(head.Url + "?recursive=1", UriKind.Absolute, out var treeUri) || treeUri.Host != servers.GitHubApi.Host)
+        if (!Uri.TryCreate(head.Url + "?recursive=1", UriKind.Absolute, out var treeUri) || treeUri.Host != servers.GitHubApi.Host ||
+            treeUri.Scheme != servers.GitHubApi.Scheme)
         {
             job.Errors.Add("GitHub pointed the addon list somewhere unexpected, so it wasn't fetched.");
             return;

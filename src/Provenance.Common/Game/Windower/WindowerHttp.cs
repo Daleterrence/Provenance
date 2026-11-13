@@ -28,6 +28,9 @@ public sealed class WindowerHttp : IDisposable
     public static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(45);
     private const int MaxRedirects = 50;
 
+    internal long MaxBytes { get; set; } = 16 * 1024 * 1024;
+    internal long MaxDownloadBytes { get; set; } = 256 * 1024 * 1024;
+
     // what File.GetLastWriteTimeUtc gives for a file that isn't there, and Windower sends it as is
     public static readonly DateTime NoFile = DateTime.FromFileTimeUtc(0);
 
@@ -110,7 +113,7 @@ public sealed class WindowerHttp : IDisposable
         try
         {
             result = await FetchAsync(site, url, modified, () => output = new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None),
-                                      t => stamp = t, ct);
+                                      t => stamp = t, MaxDownloadBytes, ct);
             // on the handle, so the time can't land on something swapped in by name afterwards
             if (result.Ok && output is not null)
             {
@@ -132,12 +135,12 @@ public sealed class WindowerHttp : IDisposable
     public async Task<(WindowerFetch Fetch, byte[]? Body)> GetBytesAsync(Uri site, string url, DateTime? modified, CancellationToken ct)
     {
         var buffer = new MemoryStream();
-        var r = await FetchAsync(site, url, modified, () => buffer, _ => { }, ct);
+        var r = await FetchAsync(site, url, modified, () => buffer, _ => { }, MaxBytes, ct);
         return (r, r.Ok ? buffer.ToArray() : null);
     }
 
     private async Task<WindowerFetch> FetchAsync(Uri site, string url, DateTime? modified, Func<Stream> open, Action<DateTime?> lastModified,
-                                                 CancellationToken ct)
+                                                 long cap, CancellationToken ct)
     {
         var host = site.Host;
         var uri = new Uri(site, url);
@@ -185,6 +188,11 @@ public sealed class WindowerHttp : IDisposable
             if (status != 200) return new(WindowerFetchOutcome.HttpError, uri.Host, status);
             lastModified(resp.Content.Headers.LastModified?.UtcDateTime);
             var expected = resp.Content.Headers.ContentLength;
+            if (expected > cap)
+            {
+                Say($"200, {expected:N0} bytes is too big");
+                return new(WindowerFetchOutcome.Broken, uri.Host, status);
+            }
             long got = 0;
             await using var body = await resp.Content.ReadAsStreamAsync(ct);
             var output = open();
@@ -195,6 +203,11 @@ public sealed class WindowerHttp : IDisposable
                 read.CancelAfter(ReadTimeout);
                 int n = await body.ReadAsync(buf, read.Token);
                 if (n == 0) break;
+                if (got + n > cap)
+                {
+                    Say($"200, too big, stopped at {cap:N0} bytes");
+                    return new(WindowerFetchOutcome.Broken, uri.Host, status);
+                }
                 await output.WriteAsync(buf.AsMemory(0, n), ct);
                 got += n;
             }

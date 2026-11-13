@@ -8,6 +8,9 @@ namespace Provenance.Common.Feeds;
 
 public sealed class FeedClient
 {
+    internal const int MaxReplyBytes = 2 * 1024 * 1024;
+    private const int MaxItems = 50;
+
     private readonly HttpClient _http;
 
     public FeedClient(HttpClient? http = null)
@@ -47,7 +50,7 @@ public sealed class FeedClient
         using var doc = JsonDocument.Parse(json);
         var items = new List<FeedItem>();
         if (!doc.RootElement.TryGetProperty("items", out var arr)) return items;
-        foreach (var it in arr.EnumerateArray())
+        foreach (var it in arr.EnumerateArray().Take(MaxItems))
         {
             DateTimeOffset? date = DateTimeOffset.TryParse(Str(it, "date"), CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed) ? parsed : null;
@@ -100,7 +103,7 @@ public sealed class FeedClient
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             if (cached is { ETag: { Length: > 0 } etag }) req.Headers.TryAddWithoutValidation("If-None-Match", etag);
             if (cached is { LastModified: { Length: > 0 } lm }) req.Headers.TryAddWithoutValidation("If-Modified-Since", lm);
-            using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if (resp.StatusCode == HttpStatusCode.NotModified && cached != null)
             {
                 var items = parse(cached.Body);
@@ -108,6 +111,7 @@ public sealed class FeedClient
                 return new FeedFetch<T>(items, DateTime.UtcNow, false);
             }
             resp.EnsureSuccessStatusCode();
+            await resp.Content.LoadIntoBufferAsync(MaxReplyBytes, ct).ConfigureAwait(false);
             var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             var result = parse(body);
             FeedCache.Write(url, body, resp.Headers.ETag?.ToString(), resp.Content.Headers.LastModified?.ToString("R"));
