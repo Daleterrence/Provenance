@@ -33,6 +33,7 @@ Have a look at the [FAQ](https://provenancexi.app/faq).
 Provenance is licensed under the GNU General Public License v3.0, see [LICENSE](LICENSE). The open source software it
 uses, and their licences, are listed in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
 
-Provenance is not affiliated with or endorsed by SQUARE ENIX CO., LTD, the Windower, or Ashita projects.
+Provenance is not affiliated with or endorsed by SQUARE ENIX CO., LTD., or the Windower or Ashita projects.
 
-FINAL FANTASY, PlayOnline Viewer and FINAL FANTASY XI are registered trademarks of SQUARE ENIX CO., LTD.
+FINAL FANTASY and SQUARE ENIX are registered trademarks of Square Enix Holdings Co., Ltd. PLAYONLINE is a registered
+trademark of Square Enix Co., Ltd.
