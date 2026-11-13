@@ -380,8 +380,9 @@ public sealed partial class PolSession : IDisposable
         Log.Warning("pol.exe {Pid} ended before the login finished, exit code {Exit}", pid, exit is { } e ? $"0x{e:X8}" : "unknown");
         try
         {
+            // a crash is its address, the registers, the fault and up to 12 stack lines, so 16 keeps one whole
             var crashes = HookLog.EventsOfThisRun(hookLog).OfType<Crashed>();
-            foreach (var crash in crashes.TakeLast(3)) Log.Warning("pol_hook: {Line}", crash.Line.Trim());
+            foreach (var crash in crashes.Take(16)) Log.Warning("pol_hook: {Line}", crash.Line.Trim());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }

@@ -135,6 +135,49 @@ static int pol_exe_hook_slot(HMODULE exe, int id, void *hook, const char *what)
     return 1;
 }
 
+/* out needs 64 bytes, and gets ? for anything outside a loaded module */
+static void crash_where(unsigned addr, char *out)
+{
+    MEMORY_BASIC_INFORMATION mbi;
+    char mod[MAX_PATH] = "", *name = mod, *slash;
+    mbi.AllocationBase = 0;
+    if (VirtualQuery((void *)(ULONG_PTR)addr, &mbi, sizeof mbi) && mbi.Type == MEM_IMAGE && mbi.AllocationBase &&
+        GetModuleFileNameA((HMODULE)mbi.AllocationBase, mod, sizeof mod)) {
+        if ((slash = strrchr(mod, '\\')) != NULL) name = slash + 1;
+        wsprintfA(out, "%.40s+%05x", name, addr - (unsigned)(ULONG_PTR)mbi.AllocationBase);
+    } else {
+        lstrcpyA(out, "?");
+    }
+}
+
+/* Registers and a short stack walk, the crash address on its own doesn't say what actually went wrong */
+static void crash_context(EXCEPTION_POINTERS *ep)
+{
+    CONTEXT *c = ep->ContextRecord;
+    EXCEPTION_RECORD *r = ep->ExceptionRecord;
+    DWORD *sp;
+    char w[64];
+    int i, shown = 0;
+    if (!c) return;
+    base_log(LOG_CRASH "regs eax=%08x ebx=%08x ecx=%08x edx=%08x esi=%08x edi=%08x ebp=%08x esp=%08x\r\n",
+             c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi, c->Ebp, c->Esp);
+    if ((r->ExceptionCode == EXCEPTION_ACCESS_VIOLATION || r->ExceptionCode == EXCEPTION_IN_PAGE_ERROR) &&
+        r->NumberParameters >= 2) {
+        crash_where((unsigned)r->ExceptionInformation[1], w);
+        base_log(LOG_CRASH "fault %s %08x (%s)\r\n",
+                 r->ExceptionInformation[0] == 8 ? "executing" : r->ExceptionInformation[0] ? "writing" : "reading",
+                 (unsigned)r->ExceptionInformation[1], w);
+    }
+    sp = (DWORD *)(ULONG_PTR)c->Esp;
+    for (i = 0; i < 64 && shown < 12; i++) {
+        if (IsBadReadPtr(sp + i, 4)) break;
+        crash_where(sp[i], w);
+        if (w[0] == '?') continue;
+        base_log(LOG_CRASH "stack[%02x] %08x = %s\r\n", i * 4, sp[i], w);
+        shown++;
+    }
+}
+
 static LONG WINAPI crash_filter(EXCEPTION_POINTERS *ep)
 {
     unsigned eip = (unsigned)(ULONG_PTR)ep->ExceptionRecord->ExceptionAddress;
@@ -144,12 +187,14 @@ static LONG WINAPI crash_filter(EXCEPTION_POINTERS *ep)
     unsigned base = 0;
     if (code != 0x406d1388 && code != 0x80000004) {   /* thread naming, single step */
         mbi.AllocationBase = 0;
-        if (VirtualQuery((void *)(ULONG_PTR)eip, &mbi, sizeof mbi)) {
+        /* a null base would hand GetModuleFileNameA the exe's own name for a jump into nowhere */
+        if (VirtualQuery((void *)(ULONG_PTR)eip, &mbi, sizeof mbi) && mbi.AllocationBase) {
             base = (unsigned)(ULONG_PTR)mbi.AllocationBase;
             GetModuleFileNameA((HMODULE)mbi.AllocationBase, mod, sizeof mod);
         }
         if ((slash = strrchr(mod, '\\')) != NULL) name = slash + 1;
         base_log(LOG_CRASH "%08x at %08x = %s+%05x\r\n", code, eip, name, eip - base);
+        crash_context(ep);
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
