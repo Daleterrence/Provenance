@@ -12,7 +12,7 @@ public static class CredentialKey
 {
     public const int Length = 32;
     public const string SavedAccounts =
-        "the saved accounts and the KeePassXC connection: each account asks for its sign-in details again, " +
+        "the saved accounts and the KeePassXC connection: each account asks for its login details again, " +
         "and KeePassXC asks to allow Provenance again";
     public const string UnavailableText = "Provenance can't open the key that protects your saved login details. Restart Provenance and try again.";
     private const string FileName = "cred.key";

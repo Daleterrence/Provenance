@@ -28,7 +28,7 @@ public partial class AccountsViewModel : ObservableObject
         Profiles = new ObservableCollection<Account>(_settings.Current.Profiles);
         int needDetails = Profiles.Count(p => !_credentials.HasUsableDetails(p.Id));
         if (needDetails > 0)
-            Log.Information("{Count} account(s) need their sign-in details again", needDetails);
+            Log.Information("{Count} account(s) need their login details again", needDetails);
         // a fresh settings file's "Default" and a never-logged-in "New account" get a proper name
         int n = 0;
         bool changed = false;
