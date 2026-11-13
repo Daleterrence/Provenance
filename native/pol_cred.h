@@ -12,8 +12,8 @@
 
 #define PC_OK            0
 #define PC_NOT_FOUND     1
-#define PC_NOT_WRAPPED   2   /* a plain blob, never read */
-#define PC_UNWRAP_FAILED 3   /* key file missing or not 32 bytes, or DPAPI refused (wrong key, other target) */
+#define PC_NOT_WRAPPED   2   /* a plain blob or another header, never read */
+#define PC_UNWRAP_FAILED 3   /* key file missing or not 32 bytes, DPAPI refused (wrong key, other target), no NUL */
 #define PC_TOO_LONG      4
 
 /* the admin-only key file, 0 when it's missing or not exactly 32 bytes (Provenance replaces any other size) */
@@ -70,7 +70,7 @@ static int pc_cred_read(const WCHAR *target, const char *keyfile, char *user, in
     BYTE key[PC_WRAP_KEY_LEN];
     DATA_BLOB in, ent = { 0, NULL }, out = { 0, NULL };
     const WCHAR *w = NULL;
-    int wn = 0, rc = PC_OK;
+    int wn = 0, un = 0, rc = PC_OK;
 
     if (user && ucap > 0) user[0] = 0;
     if (secret && scap > 0) secret[0] = 0;
@@ -78,8 +78,9 @@ static int pc_cred_read(const WCHAR *target, const char *keyfile, char *user, in
     if (!CredReadW(target, CRED_TYPE_GENERIC, 0, &cred) || !cred)
         return PC_NOT_FOUND;
 
-    /* wrapped = "PVW1" + CryptProtectData of the UTF-16LE secret (the app's WindowsCredentialStore) */
-    if (cred->CredentialBlobSize <= 4 || !cred->CredentialBlob || memcmp(cred->CredentialBlob, "PVW1", 4) != 0) {
+    /* wrapped = "PVW2" + CryptProtectData of the UTF-16LE user name, a NUL and the secret (the app's
+     * WindowsCredentialStore). The entry's own UserName field is never read, anything can write it */
+    if (cred->CredentialBlobSize <= 4 || !cred->CredentialBlob || memcmp(cred->CredentialBlob, "PVW2", 4) != 0) {
         rc = PC_NOT_WRAPPED;
         goto done;
     }
@@ -95,13 +96,15 @@ static int pc_cred_read(const WCHAR *target, const char *keyfile, char *user, in
     }
     w = (const WCHAR *)out.pbData;
     wn = (int)(out.cbData / sizeof(WCHAR));
+    /* the first NUL ends the user name, a secret can hold more of them */
+    while (un < wn && w[un]) un++;
+    if ((out.cbData & 1) || un == wn) { rc = PC_UNWRAP_FAILED; goto done; }
 
     if (user && ucap > 0) {
-        int un = cred->UserName ? lstrlenW(cred->UserName) : 0;
-        if (pc_narrow(cred->UserName, un, user, ucap, 1)) { rc = PC_TOO_LONG; goto done; }
+        if (pc_narrow(w, un, user, ucap, 1)) { rc = PC_TOO_LONG; goto done; }
     }
     if (secret && scap > 0) {
-        if (pc_narrow(w, wn, secret, scap, 0)) { rc = PC_TOO_LONG; goto done; }
+        if (pc_narrow(w + un + 1, wn - un - 1, secret, scap, 0)) { rc = PC_TOO_LONG; goto done; }
     }
 
 done:

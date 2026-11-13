@@ -89,15 +89,13 @@ public static class AccountRules
         return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SquareEnixAccount(squareEnix.Username.Trim(), squareEnix.Password), null);
     }
 
-    // both IDs there means the entries exist but won't unwrap (a key that's gone, say)
-    private static bool BothIds((string? PolId, string? SeaId) ids) => !string.IsNullOrEmpty(ids.PolId) && !string.IsNullOrEmpty(ids.SeaId);
-
-    public static string MissingDetailsText((string? PolId, string? SeaId) ids) =>
-        BothIds(ids) ? HookExitText.DetailsAgainText : "This account's login details are missing. Press Accounts and edit this account to add them.";
+    // both entries there with no details means they won't unwrap (a key that's gone, say)
+    public static string MissingDetailsText(bool bothEntries) =>
+        bothEntries ? HookExitText.DetailsAgainText : "This account's login details are missing. Press Accounts and edit this account to add them.";
 
     // both entries there but unusable is a Credential failure, so it stays off until edited (like hook exit 11)
-    public static AccountFailure MissingDetailsFailure((string? PolId, string? SeaId) ids) =>
-        new(BothIds(ids) ? AccountFailureKind.Credential : AccountFailureKind.Account, MissingDetailsText(ids));
+    public static AccountFailure MissingDetailsFailure(bool bothEntries) =>
+        new(bothEntries ? AccountFailureKind.Credential : AccountFailureKind.Account, MissingDetailsText(bothEntries));
 
     // the login only finishes once the hook's written a snapshot, so a missing one is the file being gone or unreadable
     // since (the session ending, say), not anything POL did

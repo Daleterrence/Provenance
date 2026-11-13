@@ -2,8 +2,8 @@ using System.Runtime.ExceptionServices;
 
 namespace Provenance.Common.Credentials;
 
-// The wrap key's opened on first use, so a broken key file can't stop the app starting. Names, header tests and
-// deletes don't need it
+// The wrap key's opened on first use, so a broken key file can't stop the app starting. Header tests and deletes don't
+// need it, the IDs do as they're wrapped with the passwords
 public sealed class CredentialService : ICredentialService
 {
     private readonly WindowsCredentialStore _store;
@@ -40,10 +40,16 @@ public sealed class CredentialService : ICredentialService
         _store.HasWrappedSecret(KeyFor(CredentialTargets.Pol, profileId)) &&
         _store.HasWrappedSecret(KeyFor(CredentialTargets.Sea, profileId));
 
-    public (string? PolId, string? SeaId) ReadIds(string profileId) =>
-        (ReadPolId(profileId), _store.ReadUserName(KeyFor(CredentialTargets.Sea, profileId)));
+    public bool HasEntries(string profileId) =>
+        _store.Exists(KeyFor(CredentialTargets.Pol, profileId)) && _store.Exists(KeyFor(CredentialTargets.Sea, profileId));
 
-    public string? ReadPolId(string profileId) => _store.ReadUserName(KeyFor(CredentialTargets.Pol, profileId));
+    public (string? PolId, string? SeaId) ReadIds(string profileId) =>
+        (ReadPolId(profileId), ReadId(KeyFor(CredentialTargets.Sea, profileId)));
+
+    public string? ReadPolId(string profileId) => ReadId(KeyFor(CredentialTargets.Pol, profileId));
+
+    // no entry, no key needed
+    private string? ReadId(string key) => _store.Exists(key) ? ReadOrNull(key)?.UserName : null;
 
     public void SavePolAccount(string profileId, PolAccount account)
     {

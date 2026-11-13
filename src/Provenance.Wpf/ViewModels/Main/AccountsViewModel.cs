@@ -167,7 +167,7 @@ public partial class AccountsViewModel : ObservableObject
         return p.HomeSlot;
     }
 
-    // only the POL entries' user names get read, no password's decoded
+    // the IDs are wrapped with the passwords, so this unwraps every saved POL entry
     private Account? ProfileWithPolId(string polId, Account? except = null) =>
         Profiles.FirstOrDefault(p => p != except &&
                                      string.Equals(_credentials.ReadPolId(p.Id), polId, StringComparison.OrdinalIgnoreCase));
@@ -330,7 +330,7 @@ public partial class AccountsViewModel : ObservableObject
             details = AccountRules.PrepareLogIn(_credentials, profile.Id);
             if (details.Missing)
             {
-                _dialogs.Error("Account details incomplete", AccountRules.MissingDetailsText(_credentials.ReadIds(profile.Id)));
+                _dialogs.Error("Account details incomplete", AccountRules.MissingDetailsText(_credentials.HasEntries(profile.Id)));
                 return null;
             }
         }

@@ -281,9 +281,9 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             return new(AccountFailureKind.Account, AshitaLauncher.AccountBootFileProblem);
 
         var profile = _accounts.Profiles.FirstOrDefault(p => p.Id == account.ProfileId);
-        if (profile is null) return AccountRules.MissingDetailsFailure(default);
+        if (profile is null) return AccountRules.MissingDetailsFailure(false);
         var details = AccountRules.PrepareLogIn(_credentials, profile.Id);
-        if (details.Missing) return AccountRules.MissingDetailsFailure(_credentials.ReadIds(profile.Id));
+        if (details.Missing) return AccountRules.MissingDetailsFailure(_credentials.HasEntries(profile.Id));
         if (details.Problem is { } problem) return new(AccountFailureKind.Account, problem);
         var (pol, squareEnix) = (details.Pol!, details.SquareEnix!);
 

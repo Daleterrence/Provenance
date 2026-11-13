@@ -11,9 +11,9 @@ public sealed class WindowsCredentialStore
 {
     public const string DefaultPrefix = "Provenance";
 
-    // header of a wrapped blob, DPAPI output follows. Entropy is the wrap key plus the UTF-16LE target name so a blob
-    // moved to another target won't unwrap (native/pol_cred.h reads this too)
-    public const string WrapMagic = "PVW1";
+    // a wrapped blob is this, then DPAPI of the UTF-16LE user name, a NUL and the secret. Entropy is the wrap key plus
+    // the target name, so a moved blob won't unwrap (native/pol_cred.h reads it too)
+    public const string WrapMagic = "PVW2";
 
     private static readonly byte[] WrapMagicBytes = Encoding.ASCII.GetBytes(WrapMagic);
 
@@ -34,9 +34,10 @@ public sealed class WindowsCredentialStore
         if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("key required", nameof(key));
         if (userName == null) throw new ArgumentNullException(nameof(userName));
         if (secret == null) throw new ArgumentNullException(nameof(secret));
+        if (userName.Contains('\0')) throw new ArgumentException("user name can't contain a NUL", nameof(userName));
 
         var target = FormatTarget(key);
-        var plainBytes = Encoding.Unicode.GetBytes(secret);
+        var plainBytes = Pack(userName, secret);
         byte[] secretBytes = plainBytes;
         IntPtr pSecret = IntPtr.Zero;
         // one try round the wrap and the write, so the plain bytes get cleared even when the wrap throws
@@ -56,7 +57,8 @@ public sealed class WindowsCredentialStore
 
             pSecret = Marshal.AllocHGlobal(secretBytes.Length);
             Marshal.Copy(secretBytes, 0, pSecret, secretBytes.Length);
-            Write(target, userName, pSecret, (uint)secretBytes.Length,
+            // the open user name field is shown to anything that lists the entries, so it stays empty
+            Write(target, "", pSecret, (uint)secretBytes.Length,
                   sessionOnly ? CRED_PERSIST_SESSION : CRED_PERSIST_LOCAL_MACHINE);
         }
         finally
@@ -78,25 +80,20 @@ public sealed class WindowsCredentialStore
         var target = FormatTarget(key);
         return WithEntry<StoredCredential?>(target, null, cred =>
         {
-            var user = cred.UserName ?? string.Empty;
-            if (cred.CredentialBlobSize == 0 || cred.CredentialBlob == IntPtr.Zero)
-            {
-                if (_wrapKey != null) throw new CredentialUnreadableException(target);
-                return new StoredCredential(user, string.Empty);
-            }
+            if (cred.CredentialBlobSize == 0 || cred.CredentialBlob == IntPtr.Zero) throw new CredentialUnreadableException(target);
 
             var raw = new byte[cred.CredentialBlobSize];
             byte[]? plain = null;
             try
             {
                 Marshal.Copy(cred.CredentialBlob, raw, 0, raw.Length);
-                if (_wrapKey == null) return new StoredCredential(user, Encoding.Unicode.GetString(raw));
+                if (_wrapKey == null)
+                    return (StartsWithMagic(raw) ? null : Unpack(raw)) ?? throw new CredentialUnreadableException(target);
                 if (raw.Length <= WrapMagic.Length || !StartsWithMagic(raw)) throw new CredentialUnreadableException(target);
                 var entropy = WrapEntropy(_wrapKey, target);
                 try { plain = Dpapi.Unprotect(raw[WrapMagic.Length..], entropy); }
                 finally { CryptographicOperations.ZeroMemory(entropy); }
-                if (plain == null) throw new CredentialUnreadableException(target);
-                return new StoredCredential(user, Encoding.Unicode.GetString(plain));
+                return (plain == null ? null : Unpack(plain)) ?? throw new CredentialUnreadableException(target);
             }
             finally
             {
@@ -114,8 +111,8 @@ public sealed class WindowsCredentialStore
         return false;
     }
 
-    public string? ReadUserName(string key) =>
-        WithEntry<string?>(FormatTarget(key), null, cred => cred.UserName ?? string.Empty);
+    // the user name's wrapped with the secret, so this needs the key just like Read
+    public string? ReadUserName(string key) => Read(key)?.UserName;
 
     // only copies (then clears) the header and never decrypts, so an entry wrapped with another key passes too
     public bool HasWrappedSecret(string key) => WithEntry(FormatTarget(key), false, cred =>
@@ -164,11 +161,27 @@ public sealed class WindowsCredentialStore
         return removed;
     }
 
+    // never decrypts, so it needs no key
+    public bool Exists(string key) => WithEntry(FormatTarget(key), false, _ => true);
+
     internal bool CopyEntryForTest(string fromKey, string toKey) => WithEntry(FormatTarget(fromKey), false, src =>
     {
         Write(FormatTarget(toKey), src.UserName, src.CredentialBlob, src.CredentialBlobSize, CRED_PERSIST_SESSION);
         return true;
     });
+
+    internal void WriteRawForTest(string key, string userName, byte[] blob)
+    {
+        var p = Marshal.AllocHGlobal(blob.Length);
+        try
+        {
+            Marshal.Copy(blob, 0, p, blob.Length);
+            Write(FormatTarget(key), userName, p, (uint)blob.Length, CRED_PERSIST_SESSION);
+        }
+        finally { Marshal.FreeHGlobal(p); }
+    }
+
+    internal string? UserNameFieldForTest(string key) => WithEntry<string?>(FormatTarget(key), null, c => c.UserName ?? string.Empty);
 
     private string FormatTarget(string key) => $"{_prefix}:{key}";
 
@@ -214,6 +227,25 @@ public sealed class WindowsCredentialStore
     }
 
     private static bool StartsWithMagic(ReadOnlySpan<byte> blob) => blob.StartsWith(WrapMagicBytes);
+
+    private static byte[] Pack(string userName, string secret)
+    {
+        int at = Encoding.Unicode.GetByteCount(userName) + 2;
+        var bytes = new byte[at + Encoding.Unicode.GetByteCount(secret)];
+        Encoding.Unicode.GetBytes(userName, 0, userName.Length, bytes, 0);
+        Encoding.Unicode.GetBytes(secret, 0, secret.Length, bytes, at);
+        return bytes;
+    }
+
+    // the first NUL ends the user name, a secret can hold more of them
+    private static StoredCredential? Unpack(ReadOnlySpan<byte> plain)
+    {
+        if (plain.Length % 2 != 0) return null;
+        for (int i = 0; i < plain.Length; i += 2)
+            if (plain[i] == 0 && plain[i + 1] == 0)
+                return new StoredCredential(Encoding.Unicode.GetString(plain[..i]), Encoding.Unicode.GetString(plain[(i + 2)..]));
+        return null;
+    }
 
     private const uint CRED_TYPE_GENERIC          = 1;
     private const uint CRED_PERSIST_SESSION       = 1;

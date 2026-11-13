@@ -116,7 +116,12 @@ public sealed class LaunchCredentials
 
     internal static string Target(string key) => $"{WindowsCredentialStore.DefaultPrefix}:{key}";
 
-    private string? SavedUserName(string target) => _store.ReadUserName(target);
+    // one the key can't read never matches, so what was typed goes as one-shot copies instead
+    private string? SavedUserName(string key)
+    {
+        try { return Wrapped.ReadUserName(key); }
+        catch (CredentialUnreadableException) { return null; }
+    }
 
     private string SaveOneShot(string kind, string user, string secret, List<string> keys)
     {

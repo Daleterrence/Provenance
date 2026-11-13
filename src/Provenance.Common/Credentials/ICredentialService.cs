@@ -1,7 +1,7 @@
 namespace Provenance.Common.Credentials;
 
-// Provenance:POL:<profile id> and Provenance:SEA:<profile id> in Credential Manager. Loads and saves need the wrap
-// key and throw CredentialKeyUnavailableException (user text) when it won't open
+// Provenance:POL:<profile id> and Provenance:SEA:<profile id> in Credential Manager. Loads, saves and ID reads need the
+// wrap key and throw CredentialKeyUnavailableException (user text) when it won't open
 public interface ICredentialService
 {
     // decrypts the password, so only for a login or a save, never just to test it
@@ -11,6 +11,9 @@ public interface ICredentialService
 
     // header test only, so an entry wrapped with a lost key still counts (its load gives null at login)
     bool HasUsableDetails(string profileId);
+
+    // both entries there, readable or not, and no key needed
+    bool HasEntries(string profileId);
 
     (string? PolId, string? SeaId) ReadIds(string profileId);
 

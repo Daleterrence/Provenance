@@ -31,7 +31,12 @@ public static class Dpapi
         }
         finally
         {
-            if (outBlob.pbData != IntPtr.Zero) Kernel32.LocalFree(outBlob.pbData);
+            if (outBlob.pbData != IntPtr.Zero)
+            {
+                // an unprotect's output is the plain text, so it's wiped before the heap gets it back
+                for (int i = 0; i < outBlob.cbData; i++) Marshal.WriteByte(outBlob.pbData, i, 0);
+                Kernel32.LocalFree(outBlob.pbData);
+            }
             inHandle.Free();
             entHandle.Free();
         }
