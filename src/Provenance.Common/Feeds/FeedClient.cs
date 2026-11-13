@@ -111,7 +111,12 @@ public sealed class FeedClient
                 return new FeedFetch<T>(items, DateTime.UtcNow, false);
             }
             resp.EnsureSuccessStatusCode();
-            await resp.Content.LoadIntoBufferAsync(MaxReplyBytes, ct).ConfigureAwait(false);
+            // the client's timeout stops at the headers once they're read on their own, so the body gets its own
+            using (var read = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            {
+                read.CancelAfter(_http.Timeout);
+                await resp.Content.LoadIntoBufferAsync(MaxReplyBytes, read.Token).ConfigureAwait(false);
+            }
             var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             var result = parse(body);
             FeedCache.Write(url, body, resp.Headers.ETag?.ToString(), resp.Content.Headers.LastModified?.ToString("R"));
