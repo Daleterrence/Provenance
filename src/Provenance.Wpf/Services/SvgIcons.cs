@@ -68,10 +68,10 @@ public static partial class SvgIcons
     public static ImageSource? ButtonGlyph(string glyph, IconState state) =>
         Cached(GlyphFile(glyph, state) + "#button", () =>
         {
-            if (ButtonArt(glyph, state) is not { } art) return null;
+            if (AssetButton(glyph, state) is not { } assetButton) return null;
             var (shift, frame) = ButtonFit(glyph);
             var moved = new DrawingGroup { Transform = new TranslateTransform(shift[(int)state].X, shift[(int)state].Y) };
-            moved.Children.Add(art);
+            moved.Children.Add(assetButton);
             return Frame(moved, frame);
         });
 
@@ -85,16 +85,16 @@ public static partial class SvgIcons
     internal static Rect FrameOf(string glyph) => ButtonFit(glyph).Frame;
     internal static Vector ShiftOf(string glyph, IconState state) => ButtonFit(glyph).Shift[(int)state];
 
-    private static Drawing? ButtonArt(string glyph, IconState state)
+    private static Drawing? AssetButton(string glyph, IconState state)
     {
-        var art = Load(GlyphFile(glyph, state), edit: svg =>
+        var assetButton = Load(GlyphFile(glyph, state), edit: svg =>
         {
             if (WholeOnButton.Contains(glyph)) svg = Whole(svg);
             return state is IconState.Selected or IconState.Active ? OnButton(glyph, svg) : svg;
         });
-        if (glyph != "card" || art is null) return art;
+        if (glyph != "card" || assetButton is null) return assetButton;
         var smaller = new DrawingGroup { Transform = new ScaleTransform(CardScale, CardScale, 16, 16) };
-        smaller.Children.Add(art);
+        smaller.Children.Add(assetButton);
         smaller.Freeze();
         return smaller;
     }
@@ -109,7 +109,7 @@ public static partial class SvgIcons
             var shifts = new Vector[4];
             foreach (var state in Enum.GetValues<IconState>())
             {
-                if (ButtonArt(glyph, state) is not { } art || Ink(art) is not { IsEmpty: false } ink) continue;
+                if (AssetButton(glyph, state) is not { } assetButton || Ink(assetButton) is not { IsEmpty: false } ink) continue;
                 var shift = new Vector(centre - (ink.Left + ink.Right) / 2, centre - (ink.Top + ink.Bottom) / 2);
                 // a half always goes down. Math.Round sends it to the even number, which can leave two states two units apart
                 if (OnGrid.Contains(glyph)) shift = new Vector(Math.Ceiling(shift.X - 0.5), Math.Ceiling(shift.Y - 0.5));
@@ -209,9 +209,9 @@ public static partial class SvgIcons
 
     private const double RoundLetterScale = 0.86;
 
-    private static Drawing? SmallerLetters(Drawing? art)
+    private static Drawing? SmallerLetters(Drawing? assetBadge)
     {
-        if (art is null || Parts(art).Letters is not { } l) return art;
+        if (assetBadge is null || Parts(assetBadge).Letters is not { } l) return assetBadge;
         var scale = new ScaleTransform(RoundLetterScale, RoundLetterScale, l.X + l.Width / 2, l.Y + l.Height / 2);
         // the groups keep their own transform, clip and opacity, only the letters inside them shrink
         Drawing Shrink(Drawing d)
@@ -224,10 +224,10 @@ public static partial class SvgIcons
             }
             return d is GeometryDrawing { Brush: SolidColorBrush } ? new DrawingGroup { Transform = scale, Children = { d } } : d;
         }
-        return Shrink(art);
+        return Shrink(assetBadge);
     }
 
-    private static (Rect? Body, Rect? Letters) Parts(Drawing art)
+    private static (Rect? Body, Rect? Letters) Parts(Drawing assetBadge)
     {
         Rect? body = null, letters = null;
         void Walk(Drawing d)
@@ -238,13 +238,13 @@ public static partial class SvgIcons
             if (gd.Brush is SolidColorBrush) letters = letters is { } l ? Rect.Union(l, b) : b;
             else body = b;
         }
-        Walk(art);
+        Walk(assetBadge);
         return (body, letters);
     }
 
     internal static Rect? RoundFrame()
     {
-        if (Load(XiBadgeFile) is not { } art || Parts(art) is not (Rect bd, Rect lt)) return null;
+        if (Load(XiBadgeFile) is not { } assetBadge || Parts(assetBadge) is not (Rect bd, Rect lt)) return null;
         return new Rect(lt.X + lt.Width / 2 - bd.Height / 2, bd.Y, bd.Height, bd.Height);
     }
 

@@ -10,7 +10,7 @@
     <StackPanel Margin="22,20,22,16">
         <Grid ColumnDefinitions="Auto,*">
             <!-- errors, notices and warnings: about the height of the title and the first line -->
-            <Image x:Name="NoticeArt" Height="42" Margin="0,1,14,0" VerticalAlignment="Top" Stretch="Uniform" Visibility="Collapsed" />
+            <Image x:Name="AssetNotice" Height="42" Margin="0,1,14,0" VerticalAlignment="Top" Stretch="Uniform" Visibility="Collapsed" />
             <StackPanel Grid.Column="1">
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                     <controls:SvgIcon x:Name="KindIcon" Glyph="help" Flat="True" Width="24" Height="24"

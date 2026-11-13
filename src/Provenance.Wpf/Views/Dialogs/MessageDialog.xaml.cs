@@ -57,16 +57,16 @@ public partial class MessageDialog : AppWindow
         dlg.TitleText.Text = title;
         dlg.BodyText.Text = body;
         if (!offerLogs) dlg.LogsButton.Visibility = Visibility.Collapsed;
-        if (notice && SvgIcons.Notice is { } art)
+        if (notice && SvgIcons.Notice is { } assetNotice)
         {
-            dlg.NoticeArt.Source = art;
-            dlg.NoticeArt.Visibility = Visibility.Visible;
+            dlg.AssetNotice.Source = assetNotice;
+            dlg.AssetNotice.Visibility = Visibility.Visible;
             dlg.KindIcon.Visibility = Visibility.Collapsed;
         }
         return dlg;
     }
 
-    internal bool ShowsNotice => NoticeArt.Visibility == Visibility.Visible;
+    internal bool ShowsNotice => AssetNotice.Visibility == Visibility.Visible;
 
     private void OnOk(object sender, RoutedEventArgs e) => DialogResult = true;
 

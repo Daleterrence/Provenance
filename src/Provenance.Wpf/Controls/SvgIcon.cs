@@ -41,13 +41,13 @@ public sealed class SvgIcon : Grid
     private readonly DispatcherTimer _settle;
     private bool _settling, _onButton;
     private readonly Ellipse _disc = new(), _press = new() { Opacity = 0.5 }, _light = new() { Fill = Brushes.White }, _edge = new();
-    private readonly Image _art = new() { Stretch = Stretch.Uniform, RenderTransformOrigin = new Point(0.5, 0.5) };
+    private readonly Image _assetIcon = new() { Stretch = Stretch.Uniform, RenderTransformOrigin = new Point(0.5, 0.5) };
 
-    public ImageSource? Source => _art.Source;
+    public ImageSource? Source => _assetIcon.Source;
     internal bool HasDisc => _disc.Visibility == Visibility.Visible;
     internal Brush? DiscFill => _disc.Fill;
     internal double DiscSize => _disc.Width;
-    internal double ArtScale => _art.RenderTransform is ScaleTransform s ? s.ScaleX : 1;
+    internal double AssetIconScale => _assetIcon.RenderTransform is ScaleTransform s ? s.ScaleX : 1;
 
     public string Glyph
     {
@@ -95,7 +95,7 @@ public sealed class SvgIcon : Grid
             e.IsHitTestVisible = false;
             Children.Add(e);
         }
-        Children.Add(_art);
+        Children.Add(_assetIcon);
         SizeChanged += (_, _) => SizeDisc();
         _settle = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TransitionTime };
         _settle.Tick += (_, _) =>
@@ -154,16 +154,16 @@ public sealed class SvgIcon : Grid
     private void Refresh()
     {
         State = Resolve((bool)GetValue(HoverProperty) || (bool)GetValue(FocusedProperty), (bool)GetValue(PressedProperty), _settling, IsOpen);
-        _art.Opacity = 1;
+        _assetIcon.Opacity = 1;
         if (Flat)
         {
             var tint = Foreground as SolidColorBrush;
-            _art.Source = Glyph.Length == 0 ? null : SvgIcons.Tinted(Glyph, tint?.Color ?? Colors.Black);
-            _art.Opacity = tint?.Opacity ?? 1;
+            _assetIcon.Source = Glyph.Length == 0 ? null : SvgIcons.Tinted(Glyph, tint?.Color ?? Colors.Black);
+            _assetIcon.Opacity = tint?.Opacity ?? 1;
         }
-        else _art.Source = Glyph.Length == 0 ? null : _onButton ? SvgIcons.ButtonGlyph(Glyph, State) : SvgIcons.Glyph(Glyph, State);
+        else _assetIcon.Source = Glyph.Length == 0 ? null : _onButton ? SvgIcons.ButtonGlyph(Glyph, State) : SvgIcons.Glyph(Glyph, State);
         double scale = Flat || Glyph.Length == 0 ? 1 : _onButton ? SvgIcons.ButtonScale(Glyph) : SvgIcons.GlyphScale(Glyph);
-        _art.RenderTransform = scale == 1 ? Transform.Identity : new ScaleTransform(scale, scale);
+        _assetIcon.RenderTransform = scale == 1 ? Transform.Identity : new ScaleTransform(scale, scale);
         var shown = _onButton && !Flat && Glyph.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         _disc.Visibility = _light.Visibility = _edge.Visibility = shown;
         _press.Visibility = _onButton && !Flat && State == IconState.Transition ? Visibility.Visible : Visibility.Collapsed;
