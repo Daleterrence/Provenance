@@ -115,7 +115,7 @@ static void chat_frame_wide(BYTE *b, const char *sj, WCHAR *w, int cap)
 {
     static char tmp[0x201];
     memset(tmp, 0, sizeof tmp);
-    lstrcpynA(tmp, sj, sizeof tmp);
+    lstrcpynA(tmp, sj, sizeof tmp - 2);
     memset(w, 0, cap * sizeof(WCHAR));
     if (!tmp[0] || cap < 0x202) return;
     pc_sjis_to_wide(b, w, tmp, WIDE_GETA);

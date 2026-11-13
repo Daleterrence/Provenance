@@ -134,10 +134,10 @@ static void json_pol(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
 {
     static WCHAR w[0x420];
     static char u8[0x600];
-    char tmp[0x400];
+    char tmp[0x400] = {0};
     u8[0] = 0;
     if (sj && sj[0]) {
-        lstrcpynA(tmp, sj, sizeof tmp);                 /* svc 0xa38 has no bound, so the input gets capped */
+        lstrcpynA(tmp, sj, sizeof tmp - 2);             /* svc 0xa38 has no bound, so the input gets capped */
         memset(w, 0, sizeof w);
         pc_sjis_to_wide(b, w, tmp, WIDE_GETA);
         w[0x41f] = 0;

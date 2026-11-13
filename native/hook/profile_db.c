@@ -30,7 +30,7 @@ static int profile_db_check_schema(BYTE *b, pdb_schema *s)
         if (pc_pdb_field_index(b, s, want[i].n) != idx) return 0;
     }
     /* the decoder's worst case: items from (buf+0x17)&~7, nfields*16 bytes of them, then rec_raw, in rec_size + 8 */
-    if (0x17 + (DWORD)s->nfields * 0x10 + s->rec_raw > s->rec_size + 8) return 0;
+    if (0x17 + (unsigned __int64)s->nfields * 0x10 + s->rec_raw > (unsigned __int64)s->rec_size + 8) return 0;
     return 1;
 }
 
@@ -72,6 +72,7 @@ static pdb_schema *profile_db_load_file(BYTE *b, const WCHAR *file, const char *
     /* check the raw file before polcore relocates it, in 64 bits so a huge offset can't wrap past the check */
     s = (pdb_schema *)buf;
     if (memcmp(s->name, tag, lstrlenA(tag) + 1) != 0 || s->relocated != 0 || s->nfields == 0 ||
+        s->rec_size > 0x10000 || s->rec_raw > 0x10000 ||
         (DWORD)(ULONG_PTR)s->fields >= sz ||
         (unsigned __int64)(DWORD)(ULONG_PTR)s->fields + (unsigned __int64)s->nfields * 0x18 > sz ||
         (DWORD)(ULONG_PTR)s->p14 >= sz || (DWORD)(ULONG_PTR)s->p2c >= sz) {

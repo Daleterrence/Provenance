@@ -62,12 +62,12 @@ static int peers_friend_ffxi(const pol_friend *f, DWORD *ctsid, DWORD *ctLo, DWO
 
 /* ids are masked per session and names change, so conversations are keyed on HMAC-SHA256("<my POL ID>/<peer POL
    ID>/<slot>"), 8 bytes in hex. No POL ID ever leaves the hook. */
-static char g_my_polid[12];
+static char g_my_polid[64];
 static BYTE g_peer_secret[32];
 static int g_peer_secret_ok;
-static void peers_fmt_polid(BYTE *b, unsigned lo, unsigned hi, char out[12])
+static void peers_fmt_polid(BYTE *b, unsigned lo, unsigned hi, char out[64])
 {
-    memset(out, 0, 12);
+    memset(out, 0, 64);
     pc_format_polid(b, lo, hi, out);
     out[8] = 0;
 }
@@ -160,7 +160,7 @@ static int peers_secret(void)
 }
 static void peers_key(BYTE *b, unsigned lo, unsigned hi, unsigned slot, char out[17])
 {
-    char id[12], msg[40];
+    char id[64], msg[40];
     BYTE mac[32];
     out[0] = 0;
     if (!pc_has(b, SV_FORMAT_POLID) || !peers_secret()) return;
@@ -181,7 +181,7 @@ static void peers_key(BYTE *b, unsigned lo, unsigned hi, unsigned slot, char out
 }
 static int peers_is_me(BYTE *b, unsigned lo, unsigned hi)
 {
-    char id[12], mine[12];
+    char id[64], mine[64];
     if (!pc_has(b, SV_FORMAT_POLID)) return 0;
     unsigned __int64 me = pc_my_id(b);
     if (!me) return 0;

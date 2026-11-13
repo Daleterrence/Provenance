@@ -13,7 +13,7 @@ static int profiles_character_check_schema(BYTE *b, pdb_schema *s)
         if (!f || f->type != want[i].type || (want[i].size && f->size != want[i].size)) return 0;
         if (pc_pdb_field_index(b, s, want[i].n) != idx) return 0;
     }
-    if (0x17 + (DWORD)s->nfields * 0x10 + s->rec_raw > s->rec_size + 8) return 0;
+    if (0x17 + (unsigned __int64)s->nfields * 0x10 + s->rec_raw > (unsigned __int64)s->rec_size + 8) return 0;
     return 1;
 }
 static pdb_schema *profiles_character_load_pib(BYTE *b)

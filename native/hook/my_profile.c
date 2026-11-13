@@ -301,7 +301,7 @@ static void my_profile_mask_mail(const char *in, char *out, int cap)
     if (lead > at - in) lead = (int)(at - in);
     lstrcpynA(out, in, lead + 1);
     lstrcatA(out, "***");
-    lstrcatA(out, at);
+    lstrcpynA(out + lead + 3, at, cap - lead - 3);
 }
 
 /* my FFXI characters, the viewer's edit page tabs (app.dll 0x10224e5c): my record's z_phead slots when it's this

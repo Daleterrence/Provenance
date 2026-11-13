@@ -176,7 +176,7 @@ static int mail_inbox_sent_by_me(const BYTE *h)
 /* a zeroed or odd recipient field never counts as someone else's POL ID */
 static int mail_inbox_polid_ok(BYTE *b, DWORD lo, DWORD hi)
 {
-    char id[12];
+    char id[64];
     if (!lo && !hi) return 0;
     peers_fmt_polid(b, lo, hi, id);
     return lstrlenA(id) == 8;

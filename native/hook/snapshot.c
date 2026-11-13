@@ -5,7 +5,7 @@ static void snapshot_social(BYTE *b)
 {
     char sk[17], cu[0x33 * 3 + 1], u8[0x33 * 3 + 1], hk[17], id[17];
     WCHAR wc[0x34];
-    DWORD ids[8];
+    DWORD ids[64];
     int i, k, ng, st, held = 0, have_hn = 0;
     unsigned pic = 0;
     unsigned __int64 me;
@@ -167,6 +167,7 @@ static void snapshot_social(BYTE *b)
         wc[0x33] = 0;
         u8[0] = 0;
         WideCharToMultiByte(CP_UTF8, 0, wc, -1, u8, (int)sizeof u8 - 1, NULL, NULL);
+        u8[sizeof u8 - 1] = 0;
         jw_str(&w, "myComment", u8, 0x33 * 6 + 8);
     }
     jw_arr(&w, "blocked");

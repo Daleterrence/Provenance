@@ -37,7 +37,7 @@ static int chat_list_check_count(BYTE *b, pdb_schema *s)
     return s->table_id == 1002 && chat_list_check_field(b, s, "z_zone", 4, 2) &&
            chat_list_check_field(b, s, "z_count", 6, 4) &&
            chat_list_check_field(b, s, "z_spers", 5, 4) &&
-           0x17 + (DWORD)s->nfields * 0x10 + s->rec_raw <= s->rec_size + 8;
+           0x17 + (unsigned __int64)s->nfields * 0x10 + s->rec_raw <= (unsigned __int64)s->rec_size + 8;
 }
 static int chat_list_check_chan(BYTE *b, pdb_schema *s)
 {
@@ -49,7 +49,7 @@ static int chat_list_check_chan(BYTE *b, pdb_schema *s)
     if (s->table_id != 1001) return 0;
     for (int i = 0; i < (int)(sizeof want / sizeof want[0]); i++)
         if (!chat_list_check_field(b, s, want[i].n, want[i].type, want[i].size)) return 0;
-    return 0x17 + (DWORD)s->nfields * 0x10 + s->rec_raw <= s->rec_size + 8;
+    return 0x17 + (unsigned __int64)s->nfields * 0x10 + s->rec_raw <= (unsigned __int64)s->rec_size + 8;
 }
 static const pfb_tab *chat_list_tab_of(const pfb_hdr *p, int field)
 {
@@ -278,7 +278,7 @@ static void chat_list_db_pump(BYTE *b)
             if (g_cr_roff > count) g_cr_roff = 0;
         }
         if (!rooms && count > CR_ZONES) g_cr_count = count = CR_ZONES;
-        j->rec = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)s->rec_size * (count > 100 ? 100 : count) + 64);
+        j->rec = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)s->rec_size * 100 + 64);
         if (!j->rec) { chat_list_db_done("failed:alloc"); return; }
         chat_list_db_fetch(b, j);
         return;
