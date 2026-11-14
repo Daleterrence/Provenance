@@ -120,7 +120,7 @@
                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Hidden"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Grid>
-                            <ContentPresenter x:Name="Head" Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center" />
+                            <ContentPresenter x:Name="Head" Grid.Column="1" ContentSource="Header" RecognizesAccessKey="False" VerticalAlignment="Center" />
                             <TextBlock x:Name="Gesture" Grid.Column="2" Margin="24,0,0,0" Text="{TemplateBinding InputGestureText}"
                                        Foreground="{DynamicResource Text.3}" VerticalAlignment="Center" />
                             <Path x:Name="Arrow" Grid.Column="3" Margin="12,0,-6,0" Data="M0,0 L4,4 L0,8" Stroke="{DynamicResource Text.2}"
@@ -295,33 +295,38 @@
         <Setter Property="Foreground" Value="{DynamicResource Btn.Rim}" />
     </Style>
 
-    <!-- the ring round whatever has keyboard focus (and only for the keyboard), one per shape -->
-    <Style x:Key="FocusRing">
-        <Setter Property="Control.Template">
-            <Setter.Value>
-                <ControlTemplate>
-                    <Rectangle RadiusX="6" RadiusY="6" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <!-- focus rings, one per shape, built in code. They only show for keyboard focus and the box one's the default -->
+    <x:Static x:Key="FocusRing" Member="behaviours:FocusLook.RowRing" />
+    <x:Static x:Key="FocusRingBox" Member="behaviours:FocusLook.BoxRing" />
+    <x:Static x:Key="FocusRingPill" Member="behaviours:FocusLook.PillRing" />
+    <x:Static x:Key="FocusRingRound" Member="behaviours:FocusLook.RoundRing" />
+
+    <!-- MaterialDesign's controls draw a dotted focus line whatever moved the focus, so these take the
+         rings above instead -->
+    <Style TargetType="CheckBox" BasedOn="{StaticResource MaterialDesignCheckBox}">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
+        <Style.Triggers>
+            <Trigger Property="HasContent" Value="True">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
-    <Style x:Key="FocusRingPill">
-        <Setter Property="Control.Template">
-            <Setter.Value>
-                <ControlTemplate>
-                    <Rectangle Margin="-2,-2,6,4" RadiusX="18" RadiusY="18" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <Style TargetType="RadioButton" BasedOn="{StaticResource MaterialDesignRadioButton}">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
+        <Style.Triggers>
+            <Trigger Property="HasContent" Value="True">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
-    <Style x:Key="FocusRingRound">
-        <Setter Property="Control.Template">
-            <Setter.Value>
-                <ControlTemplate>
-                    <Rectangle Margin="-3" RadiusX="41" RadiusY="41" StrokeThickness="2" Stroke="{DynamicResource Primary}" />
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <Style TargetType="ListBoxItem" BasedOn="{StaticResource MaterialDesignListBoxItem}">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
+    </Style>
+    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
+    </Style>
+    <Style x:Key="ComboItem" TargetType="ComboBoxItem" BasedOn="{StaticResource MaterialDesignComboBoxItemStyle}">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     </Style>
 
     <!-- State.Status is the world's status, and an unknown one is grey on the chip and in the list -->

@@ -1,0 +1,52 @@
+<UserControl x:Class="Provenance.Wpf.Views.Main.PopCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             x:Name="Root" Visibility="Collapsed" Focusable="False" IsTabStop="False" Cursor="Arrow">
+    <Border x:Name="Card" Padding="14,10" CornerRadius="{StaticResource Radius.Panel}" BorderThickness="1"
+            Effect="{DynamicResource Shadow.Notice}">
+        <Border.RenderTransform>
+            <TranslateTransform />
+        </Border.RenderTransform>
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource Pop.Info.Fill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Pop.Info.Border}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsError, ElementName=Root}" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource Pop.Error.Fill}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Pop.Error.Border}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+        <StackPanel Orientation="Horizontal">
+            <materialDesign:PackIcon Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
+                <materialDesign:PackIcon.Style>
+                    <Style TargetType="materialDesign:PackIcon">
+                        <Setter Property="Kind" Value="InformationOutline" />
+                        <Setter Property="Foreground" Value="{DynamicResource Pop.Info.Icon}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsError, ElementName=Root}" Value="True">
+                                <Setter Property="Kind" Value="AlertCircleOutline" />
+                                <Setter Property="Foreground" Value="{DynamicResource Pop.Error.Icon}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </materialDesign:PackIcon.Style>
+            </materialDesign:PackIcon>
+            <TextBlock x:Name="Label" VerticalAlignment="Center" FontSize="13" AutomationProperties.LiveSetting="Polite">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Pop.Info.Text}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsError, ElementName=Root}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Pop.Error.Text}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </StackPanel>
+    </Border>
+</UserControl>

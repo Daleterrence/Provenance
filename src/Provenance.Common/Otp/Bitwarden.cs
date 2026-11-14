@@ -35,7 +35,7 @@ public static class Bitwarden
             if (_session is { } session) env["BW_SESSION"] = session;
             var status = await StatusAsync(bw, env, ct);
             if (status == "unauthenticated")
-                return OtpSources.Problem("not logged in", "Bitwarden needs logging in. Press Accounts and edit this account to log in to it.", OtpFix.TypeInstead);
+                return OtpSources.Problem("not logged in", "Bitwarden needs logging in. Press Manage Accounts and edit this account to log in to it.", OtpFix.TypeInstead);
             if (status == "locked")
             {
                 _session = null;

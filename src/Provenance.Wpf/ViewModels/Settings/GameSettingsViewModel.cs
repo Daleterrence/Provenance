@@ -296,21 +296,34 @@ public partial class GameSettingsViewModel : ObservableObject
         try
         {
             var saved = _store.Save(Collect(), _original);
-            _original = _store.Load();
-            ShowOriginal();
-            bool running = _gameRunning();
-            Status.Show(!saved.Wrote ? "You haven't changed anything, so there's nothing to save." :
-                        "Your changes are saved." + (running ? " If the game is running, it'll use them the next time it starts." : ""));
-            Log.Information("Saved {Count} FFXI settings values ({Store})", saved.Changed, _store.Key);
+            bool shown = true;
+            try
+            {
+                _original = _store.Load();
+                ShowOriginal();
+            }
+            catch (Exception ex)
+            {
+                shown = false;
+                Log.Warning(ex, "Could not read the FINAL FANTASY XI settings back after saving");
+                Status.Show("Your changes are saved. Close Settings and open it again to see them.");
+            }
+            if (shown)
+            {
+                bool running = _gameRunning();
+                Status.Show(!saved.Wrote ? "You haven't changed anything, so there's nothing to save." :
+                            "Your changes are saved." + (running ? " If the game is running, it'll use them the next time it starts." : ""));
+            }
+            Log.Information("Saved {Count} FINAL FANTASY XI settings values ({Store})", saved.Changed, _store.Key);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
         {
-            Log.Error(ex, "FFXI settings save refused");
+            Log.Error(ex, "FINAL FANTASY XI settings save refused");
             Status.Fail("Your changes couldn't be saved because Windows didn't let Provenance change the FINAL FANTASY XI settings.");
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "FFXI settings save failed");
+            Log.Error(ex, "FINAL FANTASY XI settings save failed");
             Status.Fail(ErrorText.Of(ex, "Provenance couldn't write the FINAL FANTASY XI settings, so your changes weren't saved."));
         }
     }
@@ -361,7 +374,13 @@ public partial class GameSettingsViewModel : ObservableObject
         var tools = _region switch { PolRegion.Europe => "ToolsEU", PolRegion.Japan => "Tools", _ => "ToolsUS" };
         var exe = ffxi is null ? null : Path.Combine(ffxi, tools, "FFXiPadConfig.exe");
         if (exe is null || !File.Exists(exe)) { Status.Fail("Provenance couldn't find the FINAL FANTASY XI gamepad tool in the game's folder."); return; }
-        Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe)! });
+        try { Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe)! }); }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not open the gamepad tool");
+            Status.Fail("Windows couldn't open the FINAL FANTASY XI gamepad tool.");
+            return;
+        }
         Status.Show("The gamepad tool is open. When you've finished with it, close these settings and open them again to see its changes.");
     }
 

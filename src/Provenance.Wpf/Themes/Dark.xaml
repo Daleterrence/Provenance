@@ -44,6 +44,25 @@
     <SolidColorBrush x:Key="Badge.Event"       Color="#1E3D66" />
     <SolidColorBrush x:Key="Badge.Update"      Color="#24452E" />
 
+    <!-- the status article chips, solid so they read on either background, and the same in both themes -->
+    <SolidColorBrush x:Key="Chip.Neutral"     Color="#5B6877" />
+    <SolidColorBrush x:Key="Chip.Alert"       Color="#C62828" />
+    <SolidColorBrush x:Key="Chip.Maintenance" Color="#F2B01E" />
+    <SolidColorBrush x:Key="Chip.Event"       Color="#1E66D0" />
+    <SolidColorBrush x:Key="Chip.Update"      Color="#1E7F43" />
+    <SolidColorBrush x:Key="Chip.Text"        Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Chip.Text.Dark"   Color="#1A1A1A" />
+
+    <!-- an arrow's own fill while it's hovered and held, and the small secondary buttons -->
+    <SolidColorBrush x:Key="Arrow.Hover"    Color="#8DB8EE" />
+    <SolidColorBrush x:Key="Arrow.Press"    Color="#5C8DCB" />
+    <SolidColorBrush x:Key="Small.Fill"       Color="#2C3A52" />
+    <SolidColorBrush x:Key="Small.Fill.Hover" Color="#3A4C6E" />
+    <SolidColorBrush x:Key="Small.Fill.Press" Color="#202B3E" />
+    <SolidColorBrush x:Key="Small.Line"       Color="#7C99C4" />
+    <SolidColorBrush x:Key="Small.Line.Hover" Color="#B4CFF3" />
+    <SolidColorBrush x:Key="Small.Text"       Color="#E4EDFA" />
+
     <SolidColorBrush x:Key="Hover.Fill"     Color="#A7B2C2" Opacity="0.12" />
     <SolidColorBrush x:Key="Press.Fill"     Color="#A7B2C2" Opacity="0.22" />
     <SolidColorBrush x:Key="Focus.Ring"     Color="#8DB8EE" />
@@ -66,6 +85,16 @@
     <DropShadowEffect x:Key="Shadow.Card"   BlurRadius="10" ShadowDepth="2" Opacity="0.4" Color="Black" />
     <DropShadowEffect x:Key="Shadow.Panel"  BlurRadius="48" ShadowDepth="16" Opacity="0.6" Color="Black" />
     <DropShadowEffect x:Key="Shadow.Notice" BlurRadius="24" ShadowDepth="6" Opacity="0.5" Color="Black" />
+
+    <!-- the card above the bottom bar: information in blue, a failure in red -->
+    <SolidColorBrush x:Key="Pop.Info.Fill"    Color="#1E3A57" />
+    <SolidColorBrush x:Key="Pop.Info.Border"  Color="#5B9BD5" />
+    <SolidColorBrush x:Key="Pop.Info.Text"    Color="#E3F0FC" />
+    <SolidColorBrush x:Key="Pop.Info.Icon"    Color="#8CC4F5" />
+    <SolidColorBrush x:Key="Pop.Error.Fill"   Color="#4A1F22" />
+    <SolidColorBrush x:Key="Pop.Error.Border" Color="#D9696D" />
+    <SolidColorBrush x:Key="Pop.Error.Text"   Color="#FBE4E4" />
+    <SolidColorBrush x:Key="Pop.Error.Icon"   Color="#FF8A8F" />
 
     <!-- MaterialDesign pads a floating hint with its own background brush, which leaves a chip round the label on the
          dialogs. These hand it Surface.2, and live here so each theme has its own -->

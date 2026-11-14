@@ -132,7 +132,7 @@ internal sealed class EarlyStart
         try { File.WriteAllText(HookFiles.PathFor(pid, HookContract.Files.Prestart), stamp.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the early pol.exe for other copies"); }
         _found(stamp);
-        Log.Information("Started pol.exe (pid {Pid}) ahead of the viewer check, waiting for the login", pid);
+        Log.Information("Started pol.exe (pid {Pid}) ahead of the PlayOnline Viewer check, waiting for the login", pid);
     }
 
     // false when the cancel came first

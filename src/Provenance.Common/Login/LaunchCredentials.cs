@@ -72,9 +72,9 @@ public sealed class LaunchCredentials
         try
         {
             int swept = _store.DeleteByPrefix(LaunchKeyPrefix, LeftoverAge);
-            if (swept > 0) Log.Warning("Removed {Count} leftover one-shot sign-in credential(s)", swept);
+            if (swept > 0) Log.Warning("Removed {Count} leftover one-shot login credential(s)", swept);
         }
-        catch (Exception ex) { Log.Warning(ex, "Sweep of leftover sign-in credentials failed"); }
+        catch (Exception ex) { Log.Warning(ex, "Sweep of leftover login credentials failed"); }
     }
 
     // no sweep touches the store once this returns
@@ -86,7 +86,7 @@ public sealed class LaunchCredentials
             using var sweepsDone = new ManualResetEvent(false);
             if (_sweepTimer.Dispose(sweepsDone)) sweepsDone.WaitOne();
         }
-        catch (Exception ex) { Log.Warning(ex, "Stopping the sweep of leftover sign-in credentials failed"); }
+        catch (Exception ex) { Log.Warning(ex, "Stopping the sweep of leftover login credentials failed"); }
     }
 
     internal string NewLaunchId()
@@ -106,7 +106,7 @@ public sealed class LaunchCredentials
         foreach (var id in ids)
         {
             try { _store.DeleteByPrefix($"{LaunchKeyPrefix}{id}:"); }
-            catch (Exception ex) { Log.Warning(ex, "Removing the one-shot sign-in credentials of a launch failed"); }
+            catch (Exception ex) { Log.Warning(ex, "Removing the one-shot login credentials of a launch failed"); }
         }
     }
 

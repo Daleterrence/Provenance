@@ -70,6 +70,7 @@ public static class HookContract
         public const string Rename = "rename";
         public const string Character = "character";
         public const string FfxiProfile = "ffxiprofile";
+        public const string MyFfxiProfile = "myffxiprofile";
         public const string ChatZones = "chatzones";
         public const string ChatRooms = "chatrooms";
         public const string ChatJoin = "chatjoin";
@@ -86,7 +87,7 @@ public static class HookContract
         public static readonly string[] All =
         [
             Send, Status, Ack, Comment, Pic, Friend, Answer, Search, Profile, Group, MyProfile, SaveProfile, Rename,
-            Character, FfxiProfile, ChatZones, ChatRooms, ChatJoin, ChatSend, ChatLeave, ChatCreate, ChatMaster,
+            Character, FfxiProfile, MyFfxiProfile, ChatZones, ChatRooms, ChatJoin, ChatSend, ChatLeave, ChatCreate, ChatMaster,
             Handle, GroupChatJoin, GroupChatSend, GroupChatLeave, Full,
         ];
     }
@@ -117,25 +118,25 @@ public static class HookContract
     {
         public const string FirstLine = "pol_hook: highest user address";
         public const string ViewerLang = "viewer_init: lang=";
-        public const string RealAuth = "phase_c: REAL auth";
-        public const string AuthState = "auth SM: state=";
-        public const string AuthOk = "phase_c: AUTH OK";
+        public const string RealAuth = "login: logging in";
+        public const string AuthState = "login: state=";
+        public const string AuthOk = "login: logged in";
         public const string Profile = "profile: ";
         public const string ContentIds = "content ids: ";
-        public const string Held = "hold: POL-only session held";
-        public const string StopRequested = "phase_c: stop requested";
-        public const string DetailsUnreadable = "phase_c: SAVED DETAILS UNREADABLE";
-        public const string AuthFailed = "phase_c: AUTH FAILED";
+        public const string Held = "hold: PlayOnline session held";
+        public const string StopRequested = "login: stop requested";
+        public const string DetailsUnreadable = "login: saved details unreadable";
+        public const string AuthFailed = "login: refused";
         public const string Reason = "reason=";
-        public const string AccountBlocked = "phase_c: ACCOUNT BLOCKED ";
-        public const string LoadFailed = "phase_c: LOAD FAILED ";
-        public const string NoSession = "hold: no signed-in session";
-        public const string HandleWanted = "phase_c: waiting for handle name";
-        public const string NoHandle = "NO POL HANDLE";
+        public const string AccountBlocked = "login: account turned away: ";
+        public const string LoadFailed = "login: couldn't load ";
+        public const string NoSession = "hold: no logged-in session";
+        public const string HandleWanted = "login: waiting for handle name";
+        public const string NoHandle = "no PlayOnline handle";
         public const string HandleRejected = "handle name rejected";
         public const string HandleClaimFailed = "handle claim failed";
         public const string HandleSaveFailed = "handle save failed";
-        public const string Crash = "CRASH ";
+        public const string Crash = "crash: ";
         public const string PlayStarted = "hold: Play signalled";
         public const string PlayUnreadable = "hold: Play entry unreadable";
         public const string PlayRefused = "hold: Play refused:";

@@ -254,7 +254,7 @@ internal static class LockedFolder
         }
         if (moved > 0)
             Log.Warning("{Count} item(s) in {Dir} weren't Provenance's and were moved to {Bin}{Note}", moved, topPath, bin,
-                        credKey ? " (the saved logins' key was one of them, so they need entering again)" : "");
+                        credKey ? " (the key for the saved login details was one of them, so they need entering again)" : "");
         if (failed.Count > 0)
         {
             var e = new IOException($"Provenance couldn't move {failed[0]}" + (failed.Count > 1 ? $" and {failed.Count - 1} more" : "") +
@@ -446,7 +446,6 @@ internal static class LockedFolder
     }
 
     private static bool Gone(uint status) => status is 0xC0000034 or 0xC000003A or 0xC0000056 or 0xC0000123;   // not found, path not found, delete pending, deleted
-
 
     internal record struct Seen(bool Read, bool IsDir, bool IsLink, int Links, (uint, uint, uint) Id, byte[]? Raw, DirectorySecurity? Security, SecurityIdentifier? Owner)
     {

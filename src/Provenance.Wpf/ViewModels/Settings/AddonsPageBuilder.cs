@@ -174,7 +174,7 @@ internal static class AddonsPageBuilder
         try { boot = AshitaBootConfig.Load(path); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Log.Warning(e, "Could not read the Ashita boot config {Boot}", bootName);
+            Log.Warning(e, "Could not read the Ashita boot configuration {Boot}", bootName);
             return AddonsPage.Empty($"Provenance couldn't read the boot configuration {bootName}. If it's open in another program, close it and come back to this page.");
         }
         bool readOnly = AshitaBootFiles.IsShippedExample(bootName);

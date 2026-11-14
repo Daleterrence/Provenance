@@ -110,7 +110,7 @@
             <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <HeaderedContentControl Header="Close Provenance when the game exits"
-                                            Tag="Starting the game with &quot;Start Game Automatically&quot; selected always closes Provenance when the game is closed.">
+                                            Tag="Starting the game with &quot;Start Game Automatically&quot; selected closes Provenance when the game is closed, whatever this is set to. If the main window had to open first (for a game update or a PlayOnline notice, for example), this setting applies instead.">
                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ExitAfterGameExits}"
                                       AutomationProperties.Name="Close Provenance when the game exits" />
                     </HeaderedContentControl>

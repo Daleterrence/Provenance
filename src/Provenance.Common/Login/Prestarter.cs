@@ -109,7 +109,7 @@ public sealed class Prestarter
             // /REPLACEPOLEXE, which starts a pol.exe that isn't mine)
             if (ViewerQueue.QueuedWorkPending(viewerDir!))
             {
-                Log.Information("Not pre-starting pol.exe: the viewer has update work queued, the next login finishes it first");
+                Log.Information("Not pre-starting pol.exe: the PlayOnline Viewer has update work queued, the next login finishes it first");
                 return null;
             }
             _watcher.BeforeStart(viewerDir!, "before the pre-start");
@@ -126,12 +126,12 @@ public sealed class Prestarter
             if (stamp is { } at)
                 try { File.WriteAllText(HookFiles.PathFor(pid, HookContract.Files.Prestart), at.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the pre-started pol.exe for other copies"); }
-            Log.Information("Pre-started pol.exe (pid {Pid}), waiting for LOG IN", pid);
+            Log.Information("Pre-started pol.exe (pid {Pid}), waiting for the login", pid);
             return new Prestarted(pid, stamp, began);
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Pre-start failed; LOG IN starts pol.exe itself");
+            Log.Warning(ex, "Pre-start failed; the login starts pol.exe itself");
             return null;
         }
     }
@@ -292,7 +292,7 @@ public sealed class Prestarter
         }
         foreach (var stamp in ending)
         {
-            Log.Information("Ending another copy's pre-started pol.exe (pid {Pid}): the viewer's files are about to change", stamp.Pid);
+            Log.Information("Ending another copy's pre-started pol.exe (pid {Pid}): the PlayOnline Viewer's files are about to change", stamp.Pid);
             _pol.End(stamp, graceMs: 3000);
         }
     }

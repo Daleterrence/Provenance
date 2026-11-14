@@ -1,0 +1,18 @@
+<UserControl x:Class="Provenance.Wpf.Controls.BusyCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
+             x:Name="Root" Focusable="False" Cursor="Arrow">
+    <Grid>
+        <Border Background="{DynamicResource Bg.Base}" Opacity="0.65" />
+        <Border HorizontalAlignment="Center" VerticalAlignment="Center" Padding="22,16" MaxWidth="360"
+                CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.2}"
+                BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1" Effect="{DynamicResource Shadow.Notice}">
+            <StackPanel Orientation="Horizontal">
+                <ProgressBar Width="20" Height="20" Margin="0,0,14,0" Style="{StaticResource Spinner}" />
+                <TextBlock VerticalAlignment="Center" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource Text.1}"
+                           Text="{Binding Text, ElementName=Root}" behaviours:Announce.WhenShown="True" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

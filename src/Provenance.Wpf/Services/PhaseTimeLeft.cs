@@ -4,8 +4,8 @@ using Provenance.Common.Progress;
 
 namespace Provenance.Wpf.Services;
 
-// The time left for an update that only reports a fraction, UI thread only. Each phase starts over, and a fraction that
-// goes back within a phase is held
+// The time left for an update that only reports a fraction, UI thread only. Each phase starts its estimate over (the
+// text on show keeps counting down meanwhile), and a fraction that goes back within a phase is held
 public sealed class PhaseTimeLeft
 {
     private const long Whole = 1_000_000;
@@ -43,7 +43,7 @@ public sealed class PhaseTimeLeft
     public void Clear()
     {
         _timer.Stop();
-        _left.Reset();
+        _left.Clear();
         _show("");
     }
 }

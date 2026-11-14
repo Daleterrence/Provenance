@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
@@ -157,7 +158,7 @@ internal static class UninstallRecord
         k.SetValue("DisplayName", p.GetValueOrDefault("ProductName", ""));
         k.SetValue("DisplayVersion", p.GetValueOrDefault("ProductVersion", ""));
         k.SetValue("Publisher", p.GetValueOrDefault("Manufacturer", ""));
-        k.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
+        k.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd", CultureInfo.InvariantCulture));
         k.SetValue("InstallSource", setup.InstallSource);
         k.SetValue("UninstallString", command, RegistryValueKind.ExpandString);
         k.SetValue("ModifyPath", command, RegistryValueKind.ExpandString);

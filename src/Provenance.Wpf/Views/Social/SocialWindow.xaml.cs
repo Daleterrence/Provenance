@@ -247,29 +247,6 @@ public partial class SocialWindow : AppWindow
         vm.SetComment(text);
     }
 
-    private void OnCreateGroup(object sender, RoutedEventArgs e)
-    {
-        if (Vm is not { } vm || !vm.CanEdit) return;
-        if (!vm.Groups.CanCreate)
-        {
-            vm.Groups.ShowLimit();
-            return;
-        }
-        string? name = null;
-        SvgIcon.OpenWhile(sender, () => name = vm.Groups.AskName());
-        if (!string.IsNullOrWhiteSpace(name)) vm.Groups.Create(name);
-    }
-
-    private void OnRowMenuButton(object sender, RoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement button) return;
-        FrameworkElement? row = null;
-        for (var p = VisualTreeHelper.GetParent(button); p != null && row is null; p = VisualTreeHelper.GetParent(p))
-            if (p is FrameworkElement { ContextMenu: not null } el) row = el;
-        if (row is null) return;
-        Menus.Toggle(button, () => BuildRowMenu(row) ? row.ContextMenu : null);
-    }
-
     private void OnConversationMenu(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement button || Vm is not { SelectedFriend: { } f } vm) return;
@@ -293,26 +270,6 @@ public partial class SocialWindow : AppWindow
 
     internal static void FillLineMenu(SocialViewModel vm, ContextMenu menu, TextBox? box, ChatEntry entry) =>
         Menus.FillLine(menu, box, vm.Messages.LineMenu(entry));
-
-    // a right-click opens it at the pointer again, after the dots button put it below itself
-    private void OnRowMenu(object sender, ContextMenuEventArgs e)
-    {
-        if (sender is not FrameworkElement row || !BuildRowMenu(row))
-        {
-            e.Handled = true;
-            return;
-        }
-        row.ContextMenu.ClearValue(ContextMenu.PlacementTargetProperty);
-        row.ContextMenu.ClearValue(ContextMenu.PlacementProperty);
-    }
-
-    private bool BuildRowMenu(FrameworkElement row)
-    {
-        if (Vm is not { } vm || row.ContextMenu is not { } menu || vm.Groups.RowMenu(row.DataContext) is not { } actions)
-            return false;
-        Menus.Fill(menu, actions);
-        return true;
-    }
 
     private void OnAddFriend(object sender, RoutedEventArgs e)
     {

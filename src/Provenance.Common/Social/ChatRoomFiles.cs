@@ -63,7 +63,7 @@ public static class ChatRoomFiles
     // what the hook would refuse anyway
     public static string? NameProblem(string name) =>
         string.IsNullOrWhiteSpace(name) ? "Enter chat name."
-        : name.Any(c => c < ' ' || c == '\t') ? "That chat name can't be used."
+        : name.Any(c => c < ' ') ? "That chat name can't be used."
         : ShiftJis.ByteCount(name) > MaxNameBytes ? "Chat names can be up to 15 characters (Japanese characters count as two)."
         : null;
 

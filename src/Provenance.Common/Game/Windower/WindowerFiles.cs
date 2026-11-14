@@ -32,7 +32,7 @@ internal static class WindowerFiles
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 
-    public static bool IsPlainName(string name) => FileNames.IsPlainFileName(name) && name.Trim() == name;
+    public static bool IsPlainName(string name) => FileNames.IsPlainFileName(name) && name.Trim() == name && !FileNames.IsDeviceName(name);
 
     // a OneDrive file has the reparse point attribute too, only a junction or symlink counts
     public static bool IsLinkOrFolder(string path)

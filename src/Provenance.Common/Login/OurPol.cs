@@ -17,7 +17,7 @@ internal sealed class OurPol
         bool NewPol(ProcessStamp pol) => pol.StartUtcTicks >= launcher.StartUtcTicks
             && string.Equals(Path.GetFileName(ProcessTree.ImagePath(pol.Pid)), GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase);
         if (ProcessStamp.Of(pid) is { } found && End(found, 0, 2000, NewPol))
-            Log.Information("Ended pol.exe (pid {Pid}): the sign-in was cancelled", pid);
+            Log.Information("Ended pol.exe (pid {Pid}): the login was cancelled", pid);
     }
 
     private static bool End(ProcessStamp stamp, int graceMs, int afterMs, Func<ProcessStamp, bool> alsoIf)

@@ -428,7 +428,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         ExitCommand.NotifyCanExecuteChanged();
     }
 
-    // the longest the hook allows is the room's name and mine away from full, so before there's a room it's the worst case
+    // the limit depends on the room's name and mine, so with no room yet it's the worst case of both
     public ComposeRules ComposeRules => _rules ??= new()
     {
         SingleLine = true,

@@ -60,7 +60,7 @@ public static class LargeAddressAwareSwitch
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Log.Warning(e, "Large Address Aware: could not read the viewer files");
+            Log.Warning(e, "Large Address Aware: could not read the PlayOnline Viewer files");
             return null;
         }
     }
@@ -133,7 +133,7 @@ public static class LargeAddressAwareSwitch
             else
                 Log.Information("Large Address Aware {Done} {State} in pol.exe {When}: {Result}",
                                 result == LargeAddressAware.Result.Done ? "turned" : "not turned", on ? "on" : "off", when,
-                                result?.ToString() ?? "a pol.exe from the viewer is running");
+                                result?.ToString() ?? "a pol.exe from the PlayOnline Viewer is running");
             if (result == LargeAddressAware.Result.Done && !on) ClearDone(settings);
         }
         catch (Exception e) { Log.Warning(e, "Large Address Aware not applied {When}", when); }

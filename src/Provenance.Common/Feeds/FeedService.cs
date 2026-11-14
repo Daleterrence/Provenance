@@ -29,7 +29,7 @@ public sealed class FeedService(ISettingsService settings, FeedClient? client = 
     {
         var region = Region;
         if (_loadedRegion == region) return;
-        Log.Information("Feed region changed to {Region}", FeedClient.Code(region).ToUpperInvariant());
+        Log.Information("News region changed to {Region}", FeedClient.Code(region).ToUpperInvariant());
         RegionChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -37,7 +37,7 @@ public sealed class FeedService(ISettingsService settings, FeedClient? client = 
     {
         var region = Region;
         _loadedRegion = region;
-        Log.Information("Loading feeds for {Region} from {Source}", FeedClient.Code(region).ToUpperInvariant(), Worker);
+        Log.Information("Loading news and status for {Region} from {Source}", FeedClient.Code(region).ToUpperInvariant(), Worker);
         var news = _client.GetAsync(region, FeedKind.News, Worker, ct);
         var status = _client.GetAsync(region, FeedKind.Status, Worker, ct);
         await Task.WhenAll(news, status);

@@ -16,7 +16,6 @@ static int g_cr_rooms_n, g_cr_rzone, g_cr_roff, g_cr_rtotal;
 static cr_sort g_cr_sortby[2];
 static DWORD g_cr_vzone, g_cr_vcapa;
 
-
 /* an IRC channel name as the room list builds it, nothing that'd change the JOIN line */
 static int chat_list_irc_ok(const char *s)
 {
@@ -91,7 +90,7 @@ static db_job g_cr = { .job = -1, .state = g_cr_zstate, .cap = 32, .done = chat_
 static void chat_list_db_done(const char *state)
 {
     db_job_done(&g_cr, state);
-    base_log("chat: %s %s\r\n", g_cr_room_list ? "room list" : "zone list", state);
+    base_log("chat rooms: %s %s\r\n", g_cr_room_list ? "room list" : "zone list", state);
     g_snap_dirty = 1;
 }
 static void chat_list_db_abandon(BYTE *b) { db_job_abandon(b, &g_cr); }
@@ -171,10 +170,10 @@ static int chat_list_part_there(const pfb_tab *t, int i, int k)
 static int chat_list_db_load(BYTE *b, int rooms)
 {
     if (!g_cr_cpib) g_cr_cpib = profile_db_load_file(b, L"ch_count.pib", "ch_count", chat_list_check_count);
-    if (!g_cr_cpfb) g_cr_cpfb = profile_db_pfb_load(b, L"ch_count.pfb", "chat: ");
+    if (!g_cr_cpfb) g_cr_cpfb = profile_db_pfb_load(b, L"ch_count.pfb", "chat rooms: ");
     if (!g_cr_cpib || !chat_list_tab_of(g_cr_cpfb, 0)) return 0;
     /* the room categories ride along with the zones, Create Room needs them before any room list */
-    if (!g_cr_rpfb) g_cr_rpfb = profile_db_pfb_load(b, L"c_chan.pfb", "chat: ");
+    if (!g_cr_rpfb) g_cr_rpfb = profile_db_pfb_load(b, L"c_chan.pfb", "chat rooms: ");
     if (!g_cr_zone_n) {
         const pfb_tab *t = chat_list_tab_of(g_cr_cpfb, 0);
         int lang = pc_viewer_language_or(b, 0), row = 0;
@@ -246,7 +245,7 @@ static void chat_list_rooms_request(BYTE *b)
     g_cr_sortby[1].order = 1;
     g_cr_sortby[1].field = (BYTE)pc_pdb_field_index(b, g_cr_rpib, "z_topic");
     g_cr_sortby[1].next = NULL;
-    base_log("chat: room list for zone %d from %d\r\n", zone, off);
+    base_log("chat rooms: room list for zone %d from %d\r\n", zone, off);
     lstrcpyA(g_cr_rstate, "searching");
     g_snap_dirty = 1;
     chat_list_db_start(b, &g_cr);

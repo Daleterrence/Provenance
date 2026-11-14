@@ -27,7 +27,8 @@ public static class ProfilePictureCatalog
         region ??= PolEnv.AreaIndex(ViewerBuild.RegionOf(viewerDir));
         // the US install has them under viewer\data\common, the EU one keeps per-language copies
         var dir = new[] { Path.Combine(viewerDir, "viewer", "data", "common"), Path.Combine(viewerDir, "data", "common") }
-                  .FirstOrDefault(d => File.Exists(Path.Combine(d, "proface0.txt"))) ?? "";
+                  .FirstOrDefault(d => File.Exists(Path.Combine(d, "proface0.txt")));
+        if (dir is null) return null;
         var p0 = Path.Combine(dir, "proface0.txt");
         var p1 = Path.Combine(dir, "proface1.txt");
         if (!File.Exists(p0) || !File.Exists(p1)) return null;

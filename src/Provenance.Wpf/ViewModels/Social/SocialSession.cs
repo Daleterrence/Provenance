@@ -16,6 +16,8 @@ internal sealed class SocialSession
     public bool FriendsDirty { get; set; } = true;
     public PolStatus? RequestedStatus { get; set; }
     public DateTime RequestedAt { get; set; }
+    public string? PopError { get; set; }
+    public DateTime PopErrorUntil { get; set; }
     public MailSendQueue Sends { get; }
     public ChatSync Sync { get; }
     public HashSet<int> AckPending { get; } = new();
@@ -25,4 +27,6 @@ internal sealed class SocialSession
     public DateTime? PresenceQuietUntil { get; set; }
     public HookJobWatch Edit { get; } = new();
     public HookJobWatch Picture { get; } = new();
+    // my own characters' profiles as Edit profile read them, by the hook's key
+    public Dictionary<string, PolFfxiProfile> OwnCharacterProfiles { get; } = new(StringComparer.Ordinal);
 }

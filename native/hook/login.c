@@ -124,10 +124,10 @@ static void login_notice_read(BYTE *b)
 {
     if (!pc_has(b, SV_NOTICE_STATUS)) return;
     g_notice = pc_notice_status(b);
-    base_log("phase_c: account notice status %u (LM-%02u)\r\n", g_notice, g_notice > 220 && g_notice <= 252 ? g_notice - 220 : 0);
+    base_log("login: account notice status %u (LM-%02u)\r\n", g_notice, g_notice > 220 && g_notice <= 252 ? g_notice - 220 : 0);
     if (g_notice == 222 && pc_has(b, SV_NOTICE_DAYS)) {
         g_notice_days = pc_notice_days(b);
-        base_log("phase_c: LM-02 days left %u\r\n", g_notice_days);
+        base_log("login: LM-02 days left %u\r\n", g_notice_days);
     }
 }
 
@@ -141,7 +141,7 @@ static void login_viewer_sign_out(BYTE *b)
 }
 NORETURN static void login_account_blocked(BYTE *b, const char *what)
 {
-    base_log(LOG_ACCOUNT_BLOCKED "%s - signed out, nothing started\r\n", what);
+    base_log(LOG_ACCOUNT_BLOCKED "%s - logged out, nothing started\r\n", what);
     login_viewer_sign_out(b);
     base_end_pol(TURNED_AWAY_EXIT);
 }
@@ -154,7 +154,7 @@ static void login_status_start(BYTE *b, int handle, int status, int location)
     int t = pc_change_my_status(b, handle, chr, 1, status, 0, location);
     if (t == NO_SLOT) { g_s.status_want = status; g_s.status_loc = location; return; }
     g_s.status_want = -1;
-    base_log("presence: ChangeMyStatus(%d,%d,1,%d,0,%d) -> ticket %d\r\n", handle, chr, status, location, t);
+    base_log("status: ChangeMyStatus(%d,%d,1,%d,0,%d) -> ticket %d\r\n", handle, chr, status, location, t);
     if (t >= 0) g_s.status_job = t;
     else lstrcpyA(g_presence, requests_failed(t));
 }
@@ -164,7 +164,7 @@ static void login_status_pump(BYTE *b)
     int r = pc_change_my_status_check(b, g_s.status_job);
     if (r == 0) return;
     g_s.status_job = -1;
-    base_log("presence: ChangeMyStatus done -> %d (current handle %d, my status %d)\r\n", r,
+    base_log("status: ChangeMyStatus done -> %d (current handle %d, my status %d)\r\n", r,
        pc_current_handle_or(b, -1), pc_my_status_or(b, -1));
     if (r == 1) lstrcpyA(g_presence, "online"); else lstrcpyA(g_presence, requests_failed(r));
     g_snap_dirty = 1;
@@ -231,7 +231,7 @@ static void login_loads_stop(BYTE *b, struct pending_load *items, int n, const U
     int i;
     for (i = 0; i < n; i++) if (items[i].write && started[i] && items[i].res == 0) return;
     if (!login_stop_due(beat)) return;
-    base_log(LOG_STOP_REQUESTED " during profile load - signing out and exiting, FFXI NOT started\r\n");
+    base_log(LOG_STOP_REQUESTED " during profile load - logging out and exiting, the game wasn't started\r\n");
     for (i = 0; i < n; i++)
         if (items[i].res == 0 && started[i]) pc_cancel_job(b, items[i].ticket);
     {
@@ -278,7 +278,7 @@ static int login_wait_handle_name(BYTE *b, char *name, int cap)
     int warned = 0;
     const WCHAR *t = cred_target(ENV_CRED_HANDLE, tbuf, 256);
     if (!t) return -2;
-    base_log(LOG_HANDLE_WANTED " from launcher\r\n");   /* Provenance watches for this line */
+    base_log(LOG_HANDLE_WANTED " from Provenance\r\n");   /* Provenance watches for this line */
     /* waits rather than exits, as exiting skips the QUIT and a stale session blocks the next login for a while */
     for (int ticks = 0; ticks < 10 * 60 * 5; ticks++) {
         int rc = cred_read(t, user, sizeof user, ans, sizeof ans);
@@ -294,23 +294,23 @@ static int login_wait_handle_name(BYTE *b, char *name, int cap)
         } else if (rc != PC_NOT_FOUND && !warned) {
             /* any program of the user can plant an unreadable entry, so it mustn't end the handle creation */
             warned = 1;
-            base_log("phase_c: handle answer unreadable (%s) - ignored, still waiting\r\n", cred_why(rc));
+            base_log("login: handle answer unreadable (%s) - ignored, still waiting\r\n", cred_why(rc));
         }
         if (base_stop_requested()) {
             base_log(LOG_STOP_REQUESTED
-                " while waiting for a handle name - signing out and exiting, FFXI NOT started\r\n");
+                " while waiting for a handle name - logging out and exiting, the game wasn't started\r\n");
             login_viewer_sign_out(b);
             base_end_pol(STOPPED_EXIT);
         }
         if (base_owner_gone()) {
-            base_log("phase_c: Provenance ended while waiting for a handle name - signing out and exiting\r\n");
+            base_log("login: Provenance ended while waiting for a handle name - logging out and exiting\r\n");
             login_viewer_sign_out(b);
             base_end_pol(STOPPED_EXIT);
         }
         pc_pump_once(b);
         Sleep(200);
     }
-    base_log("phase_c: no handle name within 10 minutes\r\n");
+    base_log("login: no handle name within 10 minutes\r\n");
     return -3;
 }
 /* a new account has no handle and FFXI's world login dies with POL-0001 (I'm a damn moron, forgot about the handle).
@@ -325,16 +325,16 @@ static int login_handle_bootstrap(BYTE *b)
     BYTE id[16];
     int n, w, idx, ng;
     n = login_count_handles(b);
-    base_log("phase_c: POL handles on account: %d\r\n", n);
+    base_log("login: PlayOnline handles on the account: %d\r\n", n);
     if (n > 0) return 0;
     w = login_wait_handle_name(b, name, sizeof name);
     if (w < 0) {
-        base_log("phase_c: " LOG_NO_HANDLE " - this account needs a PlayOnline handle before FFXI "
+        base_log("login: " LOG_NO_HANDLE " - this account needs a PlayOnline handle before the game "
            "can log in (%s)\r\n", w >= -3 ? why[-w - 1] : "unknown");
         return NO_HANDLE_EXIT;
     }
     if (!peers_ascii_name_ok(name)) {
-        base_log("phase_c: " LOG_HANDLE_REJECTED " locally (1-15 characters, not all spaces)\r\n");
+        base_log("login: " LOG_HANDLE_REJECTED " locally (1-15 characters, not all spaces)\r\n");
         return HANDLE_REFUSED_EXIT;
     }
     /* reload first, the save only goes through when the list stamps match (polcore.dll 0x10403050 >= 0x10403044) */
@@ -343,8 +343,8 @@ static int login_handle_bootstrap(BYTE *b)
     MultiByteToWideChar(CP_ACP, 0, name, -1, wname, 32);
     ng = my_profile_handle_ngword(b, wname);
     if (ng != 0) {
-        base_log(ng > 0 ? "phase_c: " LOG_HANDLE_REJECTED " (the Viewer's word list)\r\n"
-                  : "phase_c: " LOG_HANDLE_REJECTED " (the Viewer's word list could not be read)\r\n");
+        base_log(ng > 0 ? "login: " LOG_HANDLE_REJECTED " (the PlayOnline Viewer's word list)\r\n"
+                  : "login: " LOG_HANDLE_REJECTED " (the PlayOnline Viewer's word list could not be read)\r\n");
         return HANDLE_REFUSED_EXIT;
     }
     /* the viewer's first-login steps: name -> id (0xa40), claim a free slot (0x314), select it (0x1434), save */
@@ -352,23 +352,23 @@ static int login_handle_bootstrap(BYTE *b)
     pc_wide_to_sjis(b, (char *)id, wname, SJIS_GETA);
     idx = pc_claim_handle(b, -1, 1, id);
     if (idx < 0) {
-        base_log("phase_c: " LOG_HANDLE_CLAIM_FAILED " %d (0x%08x)\r\n", idx, (unsigned)idx);
+        base_log("login: " LOG_HANDLE_CLAIM_FAILED " %d (0x%08x)\r\n", idx, (unsigned)idx);
         return HANDLE_REFUSED_EXIT;
     }
     pc_select_handle(b, idx);
     login_run_loads(b, &put, 1);
     if (put.res != 1) {
-        base_log("phase_c: " LOG_HANDLE_SAVE_FAILED " %d - releasing slot %d\r\n", put.res, idx);
+        base_log("login: " LOG_HANDLE_SAVE_FAILED " %d - releasing slot %d\r\n", put.res, idx);
         pc_release_handle(b, idx);
         return HANDLE_REFUSED_EXIT;
     }
     /* the viewer goes on with polcore's own list here, the claimed slot's already in it */
     n = login_count_handles(b);
     if (n < 1) {
-        base_log("phase_c: handle save reported ok but the handle list is still empty\r\n");
+        base_log("login: handle save reported ok but the handle list is still empty\r\n");
         return HANDLE_REFUSED_EXIT;
     }
-    base_log("phase_c: POL HANDLE CREATED '%s' (slot %d), handles now %d\r\n", name, idx, n);
+    base_log("login: PlayOnline handle created '%s' (slot %d), handles now %d\r\n", name, idx, n);
     return 0;
 }
 
@@ -409,7 +409,7 @@ static void login_prestart_wait(void)
     if (!base_getenv_set(ENV_PRESTART)) return;
     base_ipc_file(gp, IPC_GO);
     watch = login_go_watch();
-    base_log(LOG_PRESTART_READY " - waiting for LOG IN (nothing sent yet)\r\n");
+    base_log(LOG_PRESTART_READY " - waiting for the login (nothing sent yet)\r\n");
     for (;;) {
         if (base_stop_requested()) {
             base_log("prestart: stop requested - exiting, nothing was sent\r\n"); base_end_pol(0);
@@ -453,7 +453,7 @@ static void login_ffxi_gate_read(BYTE *b)
             if (rec.title == 1) ffxi++;
         }
     g_ffxi_service = ffxi > 0;
-    base_log("phase_c: " LOG_CONTENT_IDS "%d valid, %d FFXI\r\n", any, ffxi);
+    base_log("login: " LOG_CONTENT_IDS "%d valid, %d FFXI\r\n", any, ffxi);
 }
 
 /* status, friends, handles, characters, groups. A lean session skips status and groups, but FFXI reads the
@@ -486,13 +486,13 @@ static void login_loads_check(BYTE *b, struct pending_load *run, int n)
         }
     for (i = 0; i < n; i++)
         if (run[i].res != 1) {
-            base_log(LOG_LOAD_FAILED "%s=%d - signed out, nothing started\r\n", run[i].name, run[i].res);
+            base_log(LOG_LOAD_FAILED "%s=%d - logged out, nothing started\r\n", run[i].name, run[i].res);
             login_viewer_sign_out(b);
             base_end_pol(LIST_LOAD_EXIT);
         }
     if (pc_has(b, SV_BAD_PASSWORD_FLAG) && (pc_bad_password_flag(b) & 0xff)) {
         g_bad_password = 1;
-        base_log("phase_c: bad password flag set (Viewer message 0x7007)\r\n");
+        base_log("login: bad password flag set (PlayOnline Viewer message 0x7007)\r\n");
     }
 }
 #define AUTH_CHAT_LOGIN 23
@@ -525,18 +525,18 @@ static void login_auth_run(BYTE *b)
         }
         if (auth_settled(sm)) break;
         if (login_stop_due(&beat)) {
-            base_log(LOG_STOP_REQUESTED " during sign-in - exiting, FFXI NOT started\r\n");
+            base_log(LOG_STOP_REQUESTED " during login - exiting, the game wasn't started\r\n");
             base_end_pol(STOPPED_EXIT);
         }
         if (base_owner_gone()) {
-            base_log("phase_c: Provenance ended during sign-in - exiting, FFXI NOT started\r\n");
+            base_log("login: Provenance ended during login - exiting, the game wasn't started\r\n");
             base_end_pol(STOPPED_EXIT);
         }
         login_auth_turn(b, sm);
     }
     sm = *pc_auth_state(b);
     if (sm != AUTH_IN) {
-        base_log(LOG_AUTH_FAILED " (state=%u res=%d err=%08x " LOG_REASON "%d) - exiting, FFXI NOT started\r\n",
+        base_log(LOG_AUTH_FAILED " (state=%u res=%d err=%08x " LOG_REASON "%d) - exiting, the game wasn't started\r\n",
            sm, *pc_auth_result(b), *pc_auth_error(b), *pc_auth_reason(b));
         base_end_pol(AUTH_REFUSED_EXIT);
     }
@@ -553,7 +553,7 @@ static void log_in(HMODULE pc)
         { "status",     pc_status_load, pc_status_check, 0, 0 },
         { "friends",    pc_friends_load, pc_friends_check, 0, 0 },
         { "handles",    pc_handles_load, pc_handles_check, 0, 0 },
-        { "characters", pc_characters_load, pc_characters_check, 0, 0 },
+        { "content_ids", pc_characters_load, pc_characters_check, 0, 0 },
         { "groups",     pc_groups_load, pc_groups_check, 0, 0 }
     };
     struct pending_load *run;
@@ -565,19 +565,19 @@ static void log_in(HMODULE pc)
     /* POL's own password box stops at 16, and polcore's copy of the encoded one has no room for more */
     if (lstrlenA(pw) > 16) {
         SecureZeroMemory(pw, sizeof pw);
-        base_log("phase_c: POL password longer than 16 characters - exiting, FFXI NOT started\r\n");
+        base_log("login: PlayOnline password longer than 16 characters - exiting, the game wasn't started\r\n");
         base_end_pol(DETAILS_UNREADABLE_EXIT);
     }
-    base_log(LOG_REAL_AUTH ": POL ID='%s'\r\n", cred_mask_id(id, m));
+    base_log(LOG_REAL_AUTH ", PlayOnline ID='%s'\r\n", cred_mask_id(id, m));
     pc_session_init(b);
     /* inet init (polcore.dll 0x1000fe20 sets the flag at 0x100a66d4, the connect helper returns -2071 without it).
        One piece of the POL-2071 hunt, which was a fucking nightmare honestly good lord */
     r = pc_inet_init(b);
-    base_log("phase_c: inet init -> %d\r\n", r);
+    base_log("login: inet init -> %d\r\n", r);
     /* POLCON_OPEN (polcore.dll 0x100448a0) type 3 = network, kind 1 + five zeroed dial-up buffers. It overwrites
        the password and host, so both go in after it. */
     r = pc_con_open(b, 3, &conn);
-    base_log("phase_c: POLCON_OPEN(3) -> %d\r\n", r);
+    base_log("login: POLCON_OPEN(3) -> %d\r\n", r);
     pc_encode_password(b, encpw, pw);
     SecureZeroMemory(pw, sizeof pw);
     /* SET_PASSWORD (polcore.dll 0x10046df0) copies the bytes into polcore, so mine get cleared */
@@ -597,7 +597,7 @@ static void log_in(HMODULE pc)
     /* stricter than the viewer on purpose, a blocked account stops here */
     flags = *pc_login_flags(b);
     jail = pc_jailed_or(b, 0);
-    base_log("phase_c: login result flags %04x notice %u jail %d\r\n", flags, g_notice, jail);
+    base_log("login: result flags %04x notice %u jail %d\r\n", flags, g_notice, jail);
     if (flags & 1) login_account_blocked(b, "disconnect-bit");
     if (login_notice_blocks(g_notice)) {
         wsprintfA(what, "LM-%02u", g_notice <= 252 ? g_notice - 220 : 1);
@@ -616,12 +616,12 @@ static void log_in(HMODULE pc)
     login_ffxi_gate_read(b);
     rc = login_handle_bootstrap(b);
     if (rc) {
-        base_log("phase_c: stopping before FFXI boots (exit %d) - signing out\r\n", rc);
+        base_log("login: stopping before the game boots (exit %d) - logging out\r\n", rc);
         login_viewer_sign_out(b);
         base_end_pol((UINT)rc);
     }
     *pc_session_ready(b) = 1;
-    base_log("phase_c: session shaped (notices+lists) - game can boot\r\n");
+    base_log("login: session ready (notices and lists loaded) - game can boot\r\n");
 }
 
 static void fake_session(void)
@@ -643,14 +643,14 @@ static void fake_session(void)
 static void login_set_cwd_ffxi(void)
 {
     HKEY k;
-    char path[MAX_PATH], cur[MAX_PATH], sub[64];
-    DWORD n = sizeof path, t = 0;
+    char path[MAX_PATH] = "", cur[MAX_PATH] = "", sub[64];
+    DWORD n = sizeof path - 1, t = 0;
     wsprintfA(sub, "SOFTWARE\\WOW6432Node\\%s\\InstallFolder", viewer_pol_hive());
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, sub, 0, KEY_READ, &k) != 0) {
         base_log("pol_hook: InstallFolder key open failed\r\n");
         return;
     }
-    if (RegQueryValueExA(k, "0001", 0, &t, (LPBYTE)path, &n) != 0 || !*path) {
+    if (RegQueryValueExA(k, "0001", 0, &t, (LPBYTE)path, &n) != 0 || t != REG_SZ || !*path) {
         base_log("pol_hook: InstallFolder\\0001 read failed\r\n");
         RegCloseKey(k);
         return;

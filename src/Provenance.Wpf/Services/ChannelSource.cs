@@ -26,7 +26,7 @@ internal sealed class ChannelSource(string url, SemanticVersion? installed, IFil
         return new VelopackAssetFeed { Assets = [.. feeds.SelectMany(f => f.Assets)] };
     }
 
-    // nothing goes on stable until 1.0.0. Any other missing feed means the server's wrong, so that fails the check
+    // the stable feed can be missing while there are only betas. Any other missing feed means the server's wrong, so that fails the check
     private async Task<VelopackAssetFeed> StableOrNothing(IVelopackLogger logger, string? appId, Guid? stagingId,
                                                           VelopackAsset? latestLocalRelease)
     {

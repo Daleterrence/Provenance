@@ -122,6 +122,19 @@ public sealed class GameInstaller
         if (have > part.Size) { File.Delete(partial); have = 0; }
 
         using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+        if (have == part.Size)
+        {
+            // already all there, so a range request from the end would only be refused
+            await using (var whole = new FileStream(partial, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, useAsync: true))
+            {
+                var chunk = new byte[1 << 20];
+                int read;
+                while ((read = await whole.ReadAsync(chunk, ct)) > 0) md5.AppendData(chunk, 0, read);
+            }
+            bytes?.Report(part.Size);
+            VerifyAndMove(part, md5, partial, dest);
+            return;
+        }
         // only armed while waiting on SE, re-hashing a resumed .part can take a while
         using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
@@ -153,6 +166,7 @@ public sealed class GameInstaller
                 await dst.WriteAsync(buf.AsMemory(0, n), ct);
                 md5.AppendData(buf, 0, n);
                 total += n;
+                if (total > part.Size) break;
                 bytes?.Report(total);
             }
         }
@@ -160,6 +174,11 @@ public sealed class GameInstaller
         {
             throw new TimeoutException($"{part.FileName} stopped downloading, nothing came for {IdleTimeout.TotalSeconds:0} seconds", ex);
         }
+        VerifyAndMove(part, md5, partial, dest);
+    }
+
+    private static void VerifyAndMove(GamePart part, IncrementalHash md5, string partial, string dest)
+    {
         if (!Convert.ToHexString(md5.GetHashAndReset()).Equals(part.Md5, StringComparison.OrdinalIgnoreCase))
         {
             File.Delete(partial);

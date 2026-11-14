@@ -94,7 +94,7 @@ public static class AddonSwitches
                     try { File.Delete(f); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             throw;
         }
-        Log.Information("Gave the Ashita boot config {Boot} its own script {Script}", bootName, copyName);
+        Log.Information("Gave the Ashita boot configuration {Boot} its own script {Script}", bootName, copyName);
         return string.IsNullOrWhiteSpace(name)
             ? $"This boot configuration now has its own script, {copyName}."
             : $"This boot configuration now has its own script, {copyName} (a copy of {AshitaScript.FileName(name)}), so {AshitaScript.FileName(name)} stays as it is.";

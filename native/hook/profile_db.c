@@ -165,7 +165,6 @@ static int db_job_pending(BYTE *b, db_job *j, int r, int cancel_on_drain)
 
 static int hold_db_free(void);
 
-
 static pfb_hdr *g_pfb;
 /* a .pfb by its file name, relocated by polcore, tag starting the log line */
 static pfb_hdr *profile_db_pfb_load(BYTE *b, const WCHAR *file, const char *tag)

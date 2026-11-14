@@ -48,6 +48,25 @@
     <SolidColorBrush x:Key="Badge.Event"       Color="#C9D6EA" />
     <SolidColorBrush x:Key="Badge.Update"      Color="#C4DDC9" />
 
+    <!-- the status article chips, solid so they read on either background, and the same in both themes -->
+    <SolidColorBrush x:Key="Chip.Neutral"     Color="#5B6877" />
+    <SolidColorBrush x:Key="Chip.Alert"       Color="#C62828" />
+    <SolidColorBrush x:Key="Chip.Maintenance" Color="#F2B01E" />
+    <SolidColorBrush x:Key="Chip.Event"       Color="#1E66D0" />
+    <SolidColorBrush x:Key="Chip.Update"      Color="#1E7F43" />
+    <SolidColorBrush x:Key="Chip.Text"        Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Chip.Text.Dark"   Color="#1A1A1A" />
+
+    <!-- an arrow's own fill while it's hovered and held, and the small secondary buttons -->
+    <SolidColorBrush x:Key="Arrow.Hover"    Color="#0B53A0" />
+    <SolidColorBrush x:Key="Arrow.Press"    Color="#073A72" />
+    <SolidColorBrush x:Key="Small.Fill"       Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Small.Fill.Hover" Color="#E6EEF8" />
+    <SolidColorBrush x:Key="Small.Fill.Press" Color="#C6D6EA" />
+    <SolidColorBrush x:Key="Small.Line"       Color="#4F6F98" />
+    <SolidColorBrush x:Key="Small.Line.Hover" Color="#0B53A0" />
+    <SolidColorBrush x:Key="Small.Text"       Color="#0B3E78" />
+
     <SolidColorBrush x:Key="Hover.Fill"     Color="#386497" Opacity="0.18" />
     <SolidColorBrush x:Key="Press.Fill"     Color="#386497" Opacity="0.32" />
     <SolidColorBrush x:Key="Focus.Ring"     Color="#0B53A0" />
@@ -69,6 +88,16 @@
     <DropShadowEffect x:Key="Shadow.Card"   BlurRadius="10" ShadowDepth="2" Opacity="0.16" Color="Black" />
     <DropShadowEffect x:Key="Shadow.Panel"  BlurRadius="40" ShadowDepth="10" Opacity="0.2" Color="Black" />
     <DropShadowEffect x:Key="Shadow.Notice" BlurRadius="24" ShadowDepth="6" Opacity="0.25" Color="Black" />
+
+    <!-- the card above the bottom bar: information in blue, a failure in red -->
+    <SolidColorBrush x:Key="Pop.Info.Fill"    Color="#DCEBFA" />
+    <SolidColorBrush x:Key="Pop.Info.Border"  Color="#7FB2E5" />
+    <SolidColorBrush x:Key="Pop.Info.Text"    Color="#0F2D4A" />
+    <SolidColorBrush x:Key="Pop.Info.Icon"    Color="#195FA8" />
+    <SolidColorBrush x:Key="Pop.Error.Fill"   Color="#FBE0E0" />
+    <SolidColorBrush x:Key="Pop.Error.Border" Color="#E08A8A" />
+    <SolidColorBrush x:Key="Pop.Error.Text"   Color="#5A0F0F" />
+    <SolidColorBrush x:Key="Pop.Error.Icon"   Color="#B3261E" />
 
     <Style x:Key="DialogTextBox" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
         <Setter Property="materialDesign:HintAssist.HintOpacity" Value="{StaticResource Field.HintOpacity}" />

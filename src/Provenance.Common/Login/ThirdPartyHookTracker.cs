@@ -34,7 +34,7 @@ internal sealed class ThirdPartyHookTracker
     internal static void End(ProcessStamp? hook)
     {
         if (hook is not { } stamp) return;
-        var name = Path.GetFileNameWithoutExtension(ProcessTree.ImagePath(stamp.Pid)) ?? "the third-party hook";
+        var name = Path.GetFileNameWithoutExtension(ProcessTree.ImagePath(stamp.Pid)) ?? "Windower or Ashita";
         if (stamp.EndIfStill(graceMs: 2000) == ProcessStamp.Ending.Ended)
             Log.Information("Ended {Name} (pid {Pid}): the game was not started", name, stamp.Pid);
     }

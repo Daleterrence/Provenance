@@ -85,13 +85,13 @@ public static class AccountRules
         var squareEnix = credentials.LoadSquareEnixAccount(profileId);
         if (pol is null || squareEnix is null) return new(null, null, null);
         if (ValidateDetails(pol.PolId, pol.Password, squareEnix.Username, squareEnix.Password) is { } problem)
-            return new(null, null, problem + " Press Accounts and edit this account to fix it.");
+            return new(null, null, problem + " Press Manage Accounts and edit this account to fix it.");
         return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SquareEnixAccount(squareEnix.Username.Trim(), squareEnix.Password), null);
     }
 
     // both entries there with no details means they won't unwrap (a key that's gone, say)
     public static string MissingDetailsText(bool bothEntries) =>
-        bothEntries ? HookExitText.DetailsAgainText : "This account's login details are missing. Press Accounts and edit this account to add them.";
+        bothEntries ? HookExitText.DetailsAgainText : "This account's login details are missing. Press Manage Accounts and edit this account to add them.";
 
     // both entries there but unusable is a Credential failure, so it stays off until edited (like hook exit 11)
     public static AccountFailure MissingDetailsFailure(bool bothEntries) =>

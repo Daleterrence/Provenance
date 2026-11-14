@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
@@ -32,11 +33,19 @@ public sealed partial class GroupsViewModel : ObservableObject
         public string Summary => $"{Members.Count} {(Members.Count == 1 ? "member" : "members")}, {OnlineCount} online";
         public int Unread { get; init; }
         public bool HasUnread => Unread > 0;
+        public bool Expanded { get; init; }
+        public string MyComment => Members.FirstOrDefault(m => m.Me)?.Comment ?? "";
+        public bool HasMyComment => MyComment.Length > 0;
+        public string OpenText => $"Open {Name}'s chat";
     }
 
     public ObservableCollection<GroupItem> Items { get; } = new();
     [ObservableProperty, NotifyPropertyChangedFor(nameof(NoGroups))] private bool _hasGroups;
     public bool NoGroups => !HasGroups;
+
+    // group invitations waiting for an answer, the same rows the friend list shows
+    public ObservableCollection<FriendItem> Invites { get; } = new();
+    [ObservableProperty] private bool _hasInvites;
 
     private sealed class PerLogin
     {
@@ -46,6 +55,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         public string? Leaving;
         public bool BySend;
         public FriendItem? InviteFor;
+        public readonly HashSet<string> Expanded = [];
     }
 
     private PerLogin _login = new();
@@ -60,6 +70,24 @@ public sealed partial class GroupsViewModel : ObservableObject
         _login = new();
         Items.Clear();
         HasGroups = false;
+        Invites.Clear();
+        HasInvites = false;
+    }
+
+    internal void SyncInvites(IEnumerable<FriendItem> friends)
+    {
+        Invites.Patch(friends.Where(f => f.IsGroupInvite).ToList(), (a, b) => a.RequestMid == b.RequestMid, (a, b) => a == b);
+        HasInvites = Invites.Count > 0;
+    }
+
+    [RelayCommand]
+    private void ToggleMembers(GroupItem? g)
+    {
+        int i = g is null ? -1 : Items.ToList().FindIndex(x => x.Id == g.Id);
+        if (i < 0) return;
+        bool open = _login.Expanded.Add(g!.Id);
+        if (!open) _login.Expanded.Remove(g.Id);
+        Items[i] = Items[i] with { Expanded = open };
     }
 
     private static string RoleText(GroupRole role) => role switch
@@ -93,7 +121,7 @@ public sealed partial class GroupsViewModel : ObservableObject
                     { Status = m.Status.ToPolStatus() })
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
-            return new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members) { Unread = _social.GroupChat.UnreadFor(g.Id) };
+            return new GroupItem(g.Id, g.Name, g.MyRole, RoleText(g.MyRole), online, members) { Unread = _social.GroupChat.UnreadFor(g.Id), Expanded = _login.Expanded.Contains(g.Id) };
         }).ToList();
         if (!_login.Dirty && groups.Count == Items.Count && groups.Zip(Items).All(p => SameGroup(p.First, p.Second))) return;
         _login.Dirty = false;
@@ -104,7 +132,7 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     // the members are a list, so the record's own == would only ever say they differ
     private static bool SameGroup(GroupItem a, GroupItem b) =>
-        a.Id == b.Id && a.Name == b.Name && a.MyRole == b.MyRole && a.OnlineCount == b.OnlineCount && a.Unread == b.Unread &&
+        a.Id == b.Id && a.Name == b.Name && a.MyRole == b.MyRole && a.OnlineCount == b.OnlineCount && a.Unread == b.Unread && a.Expanded == b.Expanded &&
         a.Members.SequenceEqual(b.Members);
 
     // bySend: an invitation or its answer, which report back as sends. leaving: the group this takes me out of
@@ -281,7 +309,7 @@ public sealed partial class GroupsViewModel : ObservableObject
     {
         // invitations get answered from their own row in the friend list, like the viewer, so two can't get mixed up
         if (g.IsInvited)
-            return [new("Answer it under Group invitations in your friend list", true, () => _social.ShowFriendsTabCommand.Execute(null))];
+            return [new("Answer it under Group invitations in your friend list", true, _social.ShowFriendsWindow)];
         bool can = _social.CanEdit;
         var menu = new List<MenuAction>();
         if (g.CanChat)
@@ -324,7 +352,11 @@ public sealed partial class GroupsViewModel : ObservableObject
         var friend = m.Key.Length > 0 ? _social.Friends.FirstOrDefault(f => f.IsFriend && f.Key == m.Key) : null;
         return
         [
-            new("Send message", friend is { CanMessage: true }, () => _social.SelectedFriend = friend),
+            new("Send message", friend is { CanMessage: true }, () =>
+            {
+                _social.SelectedFriend = friend;
+                _social.ShowMessagesWindow();
+            }),
             new("View profile", friend is { IsFriend: true, Pending: false }, () => _social.ShowProfile(friend!)),
             MenuAction.Separator,
             new("Make group master...", Can(GroupRole.Master), () =>

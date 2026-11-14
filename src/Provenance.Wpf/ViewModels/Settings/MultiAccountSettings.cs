@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Game.ThirdParty;
-using Provenance.Common.Login;
 using Provenance.Common.Settings;
 
 namespace Provenance.Wpf.ViewModels.Settings;
@@ -77,7 +76,7 @@ public partial class MultiAccountSettings : ObservableObject
                 ProfileId = id,
                 Name = string.IsNullOrWhiteSpace(p.HandleName) ? p.DisplayName : p.HandleName!,
                 Enabled = entry?.Enabled ?? false,
-                Problem = HookExitText.Current(entry?.Problem),
+                Problem = entry?.Problem,
                 CredentialsRefused = entry?.CredentialsRefused ?? false,
                 ThirdPartyHookProfile = ToChoice(entry?.ThirdPartyHookProfile),
             };
@@ -104,13 +103,16 @@ public partial class MultiAccountSettings : ObservableObject
     private void RefreshMultiChoices(bool platformChanged = false)
     {
         _loadingMulti = true;
-        var keep = MultiAccountRows.Select(r => r.ThirdPartyHookProfile).ToList();
         MultiProfileChoices.Clear();
         MultiProfileChoices.Add(ProfileDefaultChoice);
         foreach (var c in ChoiceItems ?? Enumerable.Empty<HookProfileItem>())
             MultiProfileChoices.Add(c.Display);
-        for (int i = 0; i < MultiAccountRows.Count; i++)
-            MultiAccountRows[i].ThirdPartyHookProfile = !platformChanged && MultiProfileChoices.Contains(keep[i]) ? keep[i] : ProfileDefaultChoice;
+        foreach (var row in MultiAccountRows)
+        {
+            string want = platformChanged ? ProfileDefaultChoice
+                : ToChoice(_settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == row.ProfileId)?.ThirdPartyHookProfile);
+            row.ThirdPartyHookProfile = MultiProfileChoices.Contains(want) ? want : ProfileDefaultChoice;
+        }
         _loadingMulti = false;
         if (platformChanged) ClearMultiProfiles();
         OnPropertyChanged(nameof(ProfileDefaultChoice));
@@ -156,7 +158,7 @@ public partial class MultiAccountSettings : ObservableObject
                     (now.CredentialsRefused || (!now.Enabled && _multiEnabledAsKnown.GetValueOrDefault(r.ProfileId))))
                 {
                     entry.Enabled = false;
-                    entry.Problem = HookExitText.Current(now.Problem);
+                    entry.Problem = now.Problem;
                     entry.CredentialsRefused = now.CredentialsRefused;
                     r.Enabled = false;
                     r.Problem = entry.Problem;

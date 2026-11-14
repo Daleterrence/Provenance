@@ -1,6 +1,5 @@
 using System.IO;
 using System.Windows;
-using System.Windows.Input;
 using Provenance.Common;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Services;

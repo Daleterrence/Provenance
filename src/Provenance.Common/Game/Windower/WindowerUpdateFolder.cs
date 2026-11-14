@@ -66,6 +66,7 @@ internal sealed class WindowerUpdateFolder : IDisposable
         if (usable is not null && !usable(temp))
         {
             Errors.Add(unusable!);
+            Delete(temp);
             return (f, null);
         }
         return (f, temp);

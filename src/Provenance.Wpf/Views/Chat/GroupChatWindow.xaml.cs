@@ -1,9 +1,5 @@
-using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
-using Provenance.Common.Settings;
-using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.ViewModels.Chat;

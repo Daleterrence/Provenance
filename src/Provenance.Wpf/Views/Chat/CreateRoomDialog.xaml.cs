@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Input;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.ViewModels.Chat;
@@ -22,7 +21,7 @@ public partial class CreateRoomDialog : AppWindow
         Loaded += (_, _) => NameBox.Focus();
     }
 
-    // set up but not shown, so a test or the screenshots can fill it in
+    // set up but not shown
     internal static CreateRoomDialog For(IReadOnlyList<ChatZone> zones, int zone, IReadOnlyList<ChatCategory> categories,
                                          Func<string, bool>? confirm)
     {

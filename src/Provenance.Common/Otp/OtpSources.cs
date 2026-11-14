@@ -11,6 +11,12 @@ public enum OtpFix { TryAgain, Install, OpenOnePasswordSettings, TypeInstead, Ma
 public sealed record OtpFetchResult(string? Code, string? Problem, OtpFix Fix = OtpFix.TryAgain, string? Tool = null)
 {
     internal string Outcome { get; init; } = "";
+
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("Code = ***");
+        return true;
+    }
 }
 
 // The code from a password manager that's unlocked on this PC, read at login, passed on once and never stored

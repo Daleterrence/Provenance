@@ -12,6 +12,13 @@ public sealed record MyProfileChoice(long Code, IReadOnlyList<string> Parts);
 public sealed record MyProfileCharacter(int Slot, string Key, int World, string Name)
 {
     public string? WorldName => FfxiWorlds.Name(World);
+
+    // the hook's key is the three ids as 8 hex digits each, Content ID then the character ID's two halves
+    public CharacterId? Id =>
+        Key.Length == 24 && uint.TryParse(Key.AsSpan(0, 8), System.Globalization.NumberStyles.AllowHexSpecifier, null, out var sid) &&
+        uint.TryParse(Key.AsSpan(8, 8), System.Globalization.NumberStyles.AllowHexSpecifier, null, out var lo) &&
+        uint.TryParse(Key.AsSpan(16, 8), System.Globalization.NumberStyles.AllowHexSpecifier, null, out var hi)
+            ? new CharacterId(sid, (ulong)hi << 32 | lo) : null;
 }
 
 // Tables are the viewer's value tables (prof_pol.pfb)

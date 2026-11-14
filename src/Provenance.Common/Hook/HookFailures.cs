@@ -134,7 +134,8 @@ public static class HookFailures
         public const string RequestListNotSaved = "PlayOnline didn't save the friend list, so your request wasn't sent. Try again.";
         public const string PictureNoAnswer = "PlayOnline didn't answer the profile picture change.";
         public const string PictureHandleChanging = "Your handle was changing, so the profile picture wasn't saved. Try again.";
-        public const string StatusNoAnswer = "PlayOnline didn't answer the status change.";
+        public static string StatusRefused(string status) => $"PlayOnline refused your request to change to {status}.";
+        public static string StatusNoAnswer(string status) => $"PlayOnline did not respond to your request to change to {status}.";
         public static string AnswerRejected(string reason) => $"PlayOnline didn't accept your answer ({reason}).";
         public static string SearchRejected(string reason) => $"PlayOnline couldn't run the search ({reason}).";
         public static string AlreadyFriend(string name) => $"{name} is already on your friend list.";
@@ -201,6 +202,7 @@ public static class HookFailures
         public const string SaveUnconfirmed = "PlayOnline didn't confirm the save. Open your profile again to see what it kept.";
         public const string SessionEnded = "Your PlayOnline session ended, so the request stopped.";
         public const string NotAllowed = "PlayOnline said this account isn't allowed to make that change.";
+        public const string CharacterNotFound = "Provenance couldn't find that character. Open your profile again.";
         public static string LoadFailed(string why) => $"PlayOnline didn't send your profile{why}";
         public static string RenameFailed(string why) => $"PlayOnline didn't rename the handle{why}";
         public static string SaveFailed(string why) => $"PlayOnline didn't save your profile{why}";

@@ -262,10 +262,10 @@ public sealed class WindowerLauncher : IDisposable
         try { RegistryWritten = GameValues.Apply(); }
         catch (Exception e) when (e is UnauthorizedAccessException or SecurityException or IOException)
         {
-            Log.Error(e, "Could not write Windower's FFXI settings");
+            Log.Error(e, "Could not write Windower's FINAL FANTASY XI settings");
             throw Shown.Mark(new InvalidOperationException("Provenance couldn't set the FINAL FANTASY XI settings for this Windower profile."));
         }
-        if (RegistryWritten.Count == 0) Log.Warning("No FFXI settings key for {Region}, the profile's game settings weren't applied", WindowerProfile.RegionName(region));
+        if (RegistryWritten.Count == 0) Log.Warning("No FINAL FANTASY XI settings key for {Region}, the Windower profile's game settings weren't applied", WindowerProfile.RegionName(region));
     }
 
     // the same folders Windower.exe makes, but never through a link, this runs as admin in a folder users can write to

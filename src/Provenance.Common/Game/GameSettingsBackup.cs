@@ -470,7 +470,7 @@ public static partial class GameSettingsBackup
             using var s = entry.Open();
             m = JsonSerializer.Deserialize<Manifest>(s);
         }
-        catch (JsonException) { return null; }
+        catch (Exception e) when (e is JsonException or InvalidDataException) { return null; }
         if (m is not { Format: ManifestFormat } || m.Files is null || m.Files.Any(f => f is null || !IsEntry(f.Name))) return null;
         long total = 0;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

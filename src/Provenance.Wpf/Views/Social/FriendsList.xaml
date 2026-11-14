@@ -6,10 +6,18 @@
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
              xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
              xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Social"
+             xmlns:local="clr-namespace:Provenance.Wpf.Views.Social"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialViewModel}">
 
     <UserControl.Resources>
+        <Style x:Key="FriendListBox" TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding FriendsUnavailable}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
         <DataTemplate x:Key="FriendRow" DataType="{x:Type vm:FriendItem}">
             <Grid Margin="6,4" Background="Transparent" ColumnDefinitions="Auto,*,Auto">
                 <controls:ProfilePictureCircle Diameter="40" Margin="0,0,12,0" VerticalAlignment="Center"
@@ -46,7 +54,7 @@
 
     <Grid>
         <ListBox x:Name="List" ItemsSource="{Binding FriendsView}" SelectedItem="{Binding SelectedFriend}"
-                 IsSynchronizedWithCurrentItem="False"
+                 IsSynchronizedWithCurrentItem="False" Style="{StaticResource FriendListBox}"
                  ItemTemplate="{StaticResource FriendRow}" HorizontalContentAlignment="Stretch" ItemContainerStyle="{StaticResource RowItem}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" BorderThickness="0" Background="Transparent"
                  MouseDoubleClick="OnDoubleClick" SelectionChanged="OnSelectionChanged" KeyDown="OnListKeyDown" ContextMenuOpening="OnContextMenuOpening">
@@ -67,8 +75,11 @@
             </ListBox.GroupStyle>
         </ListBox>
 
+        <local:OnlineFailedCard Margin="10,12" VerticalAlignment="Top"
+                                Visibility="{Binding FriendsUnavailable, Converter={StaticResource BoolToVis}}" />
+
         <StackPanel Margin="16,20" VerticalAlignment="Top"
-                    Visibility="{Binding NoFriends, Converter={StaticResource BoolToVis}}">
+                    Visibility="{Binding NoFriendsInList, Converter={StaticResource BoolToVis}}">
             <TextBlock FontSize="12" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
                        Text="You don't have any friends on this PlayOnline account yet." />
             <Button Margin="0,8,0,0" Padding="6,0,10,0" Height="28" HorizontalAlignment="Left" Style="{StaticResource PolButton}"

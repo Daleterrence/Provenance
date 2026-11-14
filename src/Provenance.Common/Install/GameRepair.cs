@@ -176,7 +176,7 @@ public sealed class GameRepair(MirrorClient client, string region)
         {
             Status?.Invoke($"Checking the {GameProduct.Viewer.Name} files again...");
             var again = await ScanAsync(GameProduct.Viewer.Slug, viewer.Folder, plan.Indexes[GameProduct.Viewer.Slug], null, ct);
-            if (again.Count > 0) Say($"the Viewer's queued update files changed {again.Count} file(s); they are downloaded again");
+            if (again.Count > 0) Say($"the PlayOnline Viewer's queued update files changed {again.Count} file(s); they are downloaded again");
             // no share of the bar for these, it'd have to start again from nothing
             ThrowIfFailed(await DownloadAsync(GameProduct.Viewer.Slug, viewer, again, null, replaced, ct));
         }

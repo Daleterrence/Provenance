@@ -21,10 +21,10 @@ internal static class DocsOpener
 
     public static void OpenReadmeLink(Uri link) => OpenReadmeLink(link, WpfDialogs.Default);
 
-    // explorer.exe reads a comma as the start of another switch, so they're escaped. No opening it from here if explorer won't, that would run as admin
+    // no opening it from here if explorer won't, that would run as admin
     internal static void OpenReadmeLink(Uri link, IDialogs dialogs)
     {
-        try { Explorer.OpenLink(new Uri(link.AbsoluteUri.Replace(",", "%2C", StringComparison.Ordinal))); }
+        try { Explorer.OpenLink(link); }
         catch (ArgumentException) { Log.Warning("Not opening a readme link that is not a web link: {Url}", link.OriginalString); }
         catch (Exception ex)
         {

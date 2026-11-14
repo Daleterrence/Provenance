@@ -80,14 +80,13 @@ jobs:
           if ('${{ steps.pack.outputs.prerelease }}' -eq 'true') { $a += '--prerelease' }
           gh release create @a
 
-  # publishing a release puts its files on the update server, updates.provenancexi.app
+  # publishing a release puts its files on the update server
   upload:
     if: github.event_name == 'release'
     runs-on: windows-latest
     permissions:
       contents: read
-    # vpk reads the channel's feed, adds the release and writes it back, so one upload per channel at a time. A run
-    # that gets cancelled while it waits just needs a re-run, those are safe
+    # one upload per channel at a time, a cancelled run just needs a re-run
     concurrency:
       group: update-server-${{ contains(github.event.release.tag_name, '-') && 'beta' || 'stable' }}
       cancel-in-progress: false

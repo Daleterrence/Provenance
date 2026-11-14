@@ -47,17 +47,17 @@ public static class GameUpdate
 
         if (!outcome.OnMirror)
         {
-            Log.Information("Update {Product}: mirror 0 files, fallback all", product.Name);
+            Log.Information("Update {Product}: mirror 0 files, all files from PlayOnline", product.Name);
             return updater.Run(progress, ct, Once, check);
         }
-        Log.Information("Update {Product}: mirror {Replaced} files, fallback {Count}", product.Name, outcome.Replaced, outcome.Failed.Count);
+        Log.Information("Update {Product}: mirror {Replaced} files, PlayOnline {Count}", product.Name, outcome.Replaced, outcome.Failed.Count);
         if (outcome.Failed.Count == 0) return outcome.Replaced > 0 ? PatchResult.Updated : PatchResult.UpToDate;
 
         var names = new HashSet<string>(outcome.Failed.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
         var failedList = MirrorDownloads.NameList(outcome.Failed.Select(f => f.Path).ToList());
         Log.Warning("Update {Product}: PlayOnline fallback for {Files}", product.Name, failedList);
         // the file list's in the log line above, so a failure goes up as it is, marked and with its HResult
-        var r = new PolUpdater(product, n => names.Contains(n.Replace('\\', '/'))) { KeepLargeAddressAware = true }.Run(progress, ct, Once, check);
+        var r = new PolUpdater(product, n => names.Contains(n.Replace('\\', '/'))) { KeepLargeAddressAware = true, Connector = connector ?? DirectPatchConnector.Instance }.Run(progress, ct, Once, check);
         // the mirror already replaced files, so it's an update even when POL had nothing left to do
         return r == PatchResult.UpToDate && outcome.Replaced > 0 ? PatchResult.Updated : r;
     }

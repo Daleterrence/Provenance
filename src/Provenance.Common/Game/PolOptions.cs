@@ -19,7 +19,7 @@ public static class PolOptions
     public static int AutoDisconnect(LauncherSettings s) => s.AutoDisconnectMinutes ?? -1;
 
     // there's no telling POL's defaults from someone's own choice, so an existing install's accounts are left alone
-    // till one's picked in Settings. Mine start with both off
+    // till one's picked in Settings. A new install starts with both off
     public static void NewInstall(LauncherSettings s)
     {
         s.ChatLanguageFilter ??= false;
@@ -63,14 +63,14 @@ public static class PolOptions
         // write through one
         if (FolderPins.Linked(viewerDir))
         {
-            Log.Warning("The viewer folder {Viewer} is reached through a link, POL settings not written for home{Slot:00}", viewerDir, slot);
+            Log.Warning("The PlayOnline Viewer folder {Viewer} is reached through a link, PlayOnline settings not written for home{Slot:00}", viewerDir, slot);
             return;
         }
         var dir = Path.Combine(viewerDir, "pub", $"home{slot:00}");
         var path = Path.Combine(dir, "option.bin");
         if (!FolderPins.Plain(viewerDir, path, lastIsFolder: false))
         {
-            Log.Warning("pub\\home{Slot:00} goes through a link, its POL settings are left alone", slot);
+            Log.Warning("pub\\home{Slot:00} goes through a link, its PlayOnline settings are left alone", slot);
             return;
         }
         bool fresh = false;
@@ -81,7 +81,7 @@ public static class PolOptions
             fresh = true;
             if (plain is null)
             {
-                Log.Warning("No readable option.bin template in {Viewer}, POL settings not written for home{Slot:00}", viewerDir, slot);
+                Log.Warning("No readable option.bin template in {Viewer}, PlayOnline settings not written for home{Slot:00}", viewerDir, slot);
                 return;
             }
         }
@@ -97,11 +97,11 @@ public static class PolOptions
         using var pins = FolderPins.HoldExact(viewerDir, dir);
         if (pins is null)
         {
-            Log.Warning("pub\\home{Slot:00} couldn't be held for the write, its POL settings are left alone", slot);
+            Log.Warning("pub\\home{Slot:00} couldn't be held for the write, its PlayOnline settings are left alone", slot);
             return;
         }
         SafeWrite.Replace(pins, dir, path, fs => fs.Write(PolOptionFile.Encrypt(plain)));
-        Log.Information("POL settings for home{Slot:00}{New}: chat language filter {Filter}, auto-disconnect {Minutes}",
+        Log.Information("PlayOnline settings for home{Slot:00}{New}: chat language filter {Filter}, auto-disconnect {Minutes}",
                         slot, fresh ? " (from the template)" : "", filter == 0, minutes);
     }
 }

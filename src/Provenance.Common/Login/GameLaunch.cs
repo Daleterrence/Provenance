@@ -11,11 +11,25 @@ using Provenance.Common.Social;
 
 namespace Provenance.Common.Login;
 
-public sealed record ClaimResult(string? Otp, string? InUse, bool OtpCancelled);
+public sealed record ClaimResult(string? Otp, string? InUse, bool OtpCancelled)
+{
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("Otp = ***");
+        return true;
+    }
+}
 
 public sealed record LaunchLogin(Account Account, PolAccount Pol, SquareEnixAccount SquareEnix, string Otp, int HomeSlot, bool Lean,
                                  string? ThirdPartyHookProfile, IProgress<LaunchProgress>? Progress, Func<string?>? AskHandleName,
-                                 Func<bool>? BeforePol = null);
+                                 Func<bool>? BeforePol = null)
+{
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("Otp = ***");
+        return true;
+    }
+}
 
 public sealed record LogInResult(int Code, int? Refusal);
 
@@ -151,7 +165,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         {
             if (settings.Current.Profiles.FirstOrDefault(p => p.Id == profileId) is not { } profile)
             {
-                Log.Warning("The session's account is gone, its POL settings aren't written");
+                Log.Warning("The session's account is gone, its PlayOnline settings aren't written");
                 return;
             }
             var s = settings.Current;
@@ -166,7 +180,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
             }
             PolOptions.Apply(s, viewer, PolOptions.SlotInUse(viewer, profile.HomeSlot), settings.RegionOrDefault);
         }
-        catch (Exception e) { Log.Warning(e, "Could not write the POL settings before the game start"); }
+        catch (Exception e) { Log.Warning(e, "Could not write the PlayOnline settings before the game starts"); }
     }
 
     // right before the game starts. However it goes the game still starts, a failed one only gets a problem to show

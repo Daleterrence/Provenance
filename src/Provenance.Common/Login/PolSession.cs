@@ -172,7 +172,7 @@ public sealed partial class PolSession : IDisposable
             if (ct.IsCancellationRequested) return Cancelled();
             if (buildProblem != null)
             {
-                Log.Warning("Viewer build not supported: {Problem}", buildProblem);
+                Log.Warning("PlayOnline Viewer build not supported: {Problem}", buildProblem);
                 return Fail(buildProblem);
             }
             // under the gate so a StopHold still running has dropped its chat entry before the id changes
@@ -336,7 +336,7 @@ public sealed partial class PolSession : IDisposable
                 lastActivity = DateTime.UtcNow;
             }
             if (ct.IsCancellationRequested) break;   // a cancel that lands with the first snapshot still wins
-            var timer = new StepTimer("First snapshot in");
+            var timer = new StepTimer("First friends and messages load in");
             if (SocialSnapshotFiles.TryRead(pid) is { } snap)
             {
                 timer.Lap("read");

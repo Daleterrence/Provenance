@@ -125,7 +125,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
                               .ToList();
         if (MultiAccountRules.WithoutProfile(entries) is { Count: > 0 } unpicked)
         {
-            Log.Warning("Multi-account mode: not started, {Count} account(s) have no profile picked", unpicked.Count);
+            Log.Warning("Multi-account mode: not started, {Count} account(s) have no Windower profile or Ashita boot configuration picked", unpicked.Count);
             var names = unpicked.Select(e => accounts.First(a => a.ProfileId == e.ProfileId).Name).ToList();
             _dialogs.Error("Multi-account mode", MultiAccountRules.NoProfileText(_pol.Platform, names));
             return;
@@ -364,10 +364,9 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
                 _ui.Post(() =>
                 {
                     if (p.Fraction >= 0) left.Update(p.Fraction, p.Phase);
-                    else left.Clear();
                     // the apply line just says "Updating FINAL FANTASY XI..." again
                     var what = p.Phase == PatchPhase.Apply ? "" : $". {p.Text.TrimEnd('.')}";
-                    SetRunStatus($"Updating FINAL FANTASY XI {step}{what}" + (eta.Length > 0 ? $". {eta}." : "."));
+                    SetRunStatus($"Updating FINAL FANTASY XI {step}{what}" + (eta.Length == 0 ? "." : eta.EndsWith("...", StringComparison.Ordinal) ? $". {eta}" : $". {eta}."));
                 });
             });
             GameUpdateResult update;

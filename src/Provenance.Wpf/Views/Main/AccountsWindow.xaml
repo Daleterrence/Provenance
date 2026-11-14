@@ -41,7 +41,11 @@
 
         <Border Grid.Row="2" Style="{StaticResource FooterBar}">
             <Grid>
-                <Button HorizontalAlignment="Left" Style="{StaticResource PolButton}" Content="ADD ACCOUNT" Command="{Binding AddAccountCommand}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Button Style="{StaticResource PolButton}" Content="ADD ACCOUNT" Command="{Binding AddAccountCommand}" />
+                    <Button Margin="{StaticResource Footer.Gap}" Style="{StaticResource PolButton}" Content="ORDER"
+                            IsEnabled="{Binding CanOrder}" Click="OnOrder" />
+                </StackPanel>
                 <Button HorizontalAlignment="Right" Style="{StaticResource PolButton}" Content="CLOSE" Click="OnClose" />
             </Grid>
         </Border>

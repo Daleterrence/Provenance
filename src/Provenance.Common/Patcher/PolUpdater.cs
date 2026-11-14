@@ -34,7 +34,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     internal IPatchConnector Connector { get; init; } = DirectPatchConnector.Instance;
     private string Dir => product.Folder;
 
-    // the app keeps Windower's Large Address Aware pol.exe, the publisher's copy has to stay SE's to the byte
+    // the app keeps Windower's Large Address Aware pol.exe, any other copy has to stay SE's to the byte
     public bool KeepLargeAddressAware { get; init; }
 
     // the manifest's off the network and this runs as admin, so nothing gets to leave the product folder

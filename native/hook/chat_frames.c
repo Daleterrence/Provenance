@@ -249,6 +249,7 @@ static void chat_frame_parse(const WCHAR *w, DWORD lo, DWORD hi, int whisper)
             char k[32];
             int m = WideCharToMultiByte(CP_ACP, 0, w + 8, -1, k, sizeof k, NULL, NULL);
             if (m > 1 && chat_room_key_ok(k)) lstrcpynA(g_cr_key, k, sizeof g_cr_key);
+            SecureZeroMemory(k, sizeof k);
         }
         return;
     case L'2':

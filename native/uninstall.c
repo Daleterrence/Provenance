@@ -131,6 +131,9 @@ static void prune(HKEY root, wchar_t *key)
 static void delete_key(const wchar_t *key)
 {
     HKEY k;
+    size_t n = wcslen(key);
+    /* an empty or cut-short key would open the one above it */
+    if (!n || key[n - 1] == L'\\' || shared_root(key)) return;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, key, 0, KEY_ALL_ACCESS | KEY_WOW64_32KEY, &k) != ERROR_SUCCESS) return;
     RegDeleteTreeW(k, NULL);
     RegCloseKey(k);

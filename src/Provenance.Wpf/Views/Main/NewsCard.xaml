@@ -67,16 +67,13 @@
 
                 <Grid Grid.Row="4" Margin="0,8,0,0" ColumnDefinitions="*,Auto,Auto,Auto"
                       Visibility="{Binding News.CurrentNews, Converter={StaticResource NullToVisibilityConverter}}">
-                    <Button VerticalAlignment="Center" Margin="2,0,0,0" FontSize="13"
-                            Style="{StaticResource LinkButton}" Command="{Binding News.OpenCurrentNewsCommand}"
+                    <Button VerticalAlignment="Center" Margin="2,0,0,0"
+                            Style="{StaticResource SmallButton}" Command="{Binding News.OpenCurrentNewsCommand}"
                             AutomationProperties.Name="Read on PlayOnline">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Read on PlayOnline" VerticalAlignment="Center" />
-                            <controls:SvgIcon Glyph="right" Flat="True" Width="16" Height="16" VerticalAlignment="Center" />
-                        </StackPanel>
+                        <TextBlock Text="Read on PlayOnline" VerticalAlignment="Center" />
                     </Button>
                     <Button Grid.Column="1" Width="28" Height="28" Padding="0"
-                            Style="{StaticResource IconButton}"
+                            Style="{StaticResource ArrowButton}"
                             Foreground="{DynamicResource Text.2}" AutomationProperties.Name="Previous"
                             Command="{Binding News.PrevNewsCommand}">
                         <controls:SvgIcon Glyph="left" Flat="True" Width="20" Height="20" />
@@ -93,6 +90,7 @@
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="Cursor" Value="Hand" />
+                                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
@@ -116,7 +114,7 @@
                         </ListBox.ItemContainerStyle>
                     </ListBox>
                     <Button Grid.Column="3" Width="28" Height="28" Padding="0"
-                            Style="{StaticResource IconButton}"
+                            Style="{StaticResource ArrowButton}"
                             Foreground="{DynamicResource Text.2}" AutomationProperties.Name="Next"
                             Command="{Binding News.NextNewsCommand}">
                         <controls:SvgIcon Glyph="right" Flat="True" Width="20" Height="20" />
@@ -146,9 +144,7 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <Button Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                            CommandParameter="{Binding Url}" Cursor="Hand"
-                            HorizontalContentAlignment="Stretch" BorderThickness="0" Padding="6,8"
-                            Background="Transparent" Foreground="{DynamicResource Text.1}">
+                            CommandParameter="{Binding Url}" Style="{StaticResource RowButton}">
                         <Grid ColumnDefinitions="Auto,*,Auto">
                             <!-- the post's category on POL's Information page, or a dot when there's none -->
                             <Ellipse Width="7" Height="7" Margin="0,0,10,0"
@@ -158,32 +154,35 @@
                                     MinWidth="76" Visibility="{Binding HasCategory, Converter={StaticResource BoolToVis}}">
                                 <Border.Style>
                                     <Style TargetType="Border">
-                                        <Setter Property="Background" Value="{DynamicResource Badge.Neutral}" />
+                                        <Setter Property="Background" Value="{DynamicResource Chip.Neutral}" />
+                                        <Setter Property="TextElement.Foreground" Value="{DynamicResource Chip.Text}" />
                                         <Setter Property="ToolTip" Value="{Binding BadgeLabel}" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding Badge}" Value="None">
                                                 <Setter Property="ToolTip" Value="{x:Null}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Category}" Value="Important">
-                                                <Setter Property="Background" Value="{DynamicResource Badge.Alert}" />
+                                                <Setter Property="Background" Value="{DynamicResource Chip.Alert}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Category}" Value="Maintenance">
-                                                <Setter Property="Background" Value="{DynamicResource Badge.Maintenance}" />
+                                                <Setter Property="Background" Value="{DynamicResource Chip.Maintenance}" />
+                                                <Setter Property="TextElement.Foreground" Value="{DynamicResource Chip.Text.Dark}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Category}" Value="Events">
-                                                <Setter Property="Background" Value="{DynamicResource Badge.Event}" />
+                                                <Setter Property="Background" Value="{DynamicResource Chip.Event}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Category}" Value="Updates">
-                                                <Setter Property="Background" Value="{DynamicResource Badge.Update}" />
+                                                <Setter Property="Background" Value="{DynamicResource Chip.Update}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Badge}" Value="Outage">
-                                                <Setter Property="Background" Value="{DynamicResource Badge.Alert}" />
+                                                <Setter Property="Background" Value="{DynamicResource Chip.Alert}" />
+                                                <Setter Property="TextElement.Foreground" Value="{DynamicResource Chip.Text}" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
                                 <TextBlock Text="{Binding CategoryLabel}" FontSize="10.5" FontWeight="SemiBold"
-                                           HorizontalAlignment="Center" Foreground="{DynamicResource Text.1}" />
+                                           HorizontalAlignment="Center" />
                             </Border>
                             <TextBlock Grid.Column="1" Text="{Binding Title, Converter={StaticResource ArticleTimesConverter}}" TextTrimming="CharacterEllipsis"
                                        Foreground="{DynamicResource Text.1}" FontSize="13" VerticalAlignment="Center" />

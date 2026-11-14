@@ -67,6 +67,12 @@ public sealed class ChatSync(MailSendQueue sends)
                 news.Add(new(ChatNewsKind.GroupInvite, m.From, Mid: m.Mid));
             if (m.HasBody && m.Kind == PolMessage.KindFriendRequest && m.Mid > 0 && _seenRequests.Add(m.Mid))
                 news.Add(new(ChatNewsKind.FriendRequest, m.From, Mid: m.Mid));
+            // chat from someone I ignore gets binned unread. The hook only catches listed mail, not a push
+            if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey))
+            {
+                if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
+                continue;
+            }
             // my line to another POL ID coming back wasn't received, so it goes from the server like any read line.
             // An unmatched one waits for a send that could be it
             if (Echo(snap, m, chat))

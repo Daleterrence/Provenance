@@ -27,16 +27,23 @@ public static class BannerImages
             }
             if (!resp.IsSuccessStatusCode || resp.Content.Headers.ContentLength > MaxImageBytes) return null;
             // read in pieces and stop past the cap, so a reply with no length header never gets buffered whole
-            await using var body = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            using var ms = new MemoryStream();
-            var chunk = new byte[81920];
-            int n;
-            while ((n = await body.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
+            // the client's timeout stops at the headers, so the body gets its own
+            using var read = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            read.CancelAfter(ImageHttp.Timeout);
+            try
             {
-                if (ms.Length + n > MaxImageBytes) return null;
-                ms.Write(chunk, 0, n);
+                await using var body = await resp.Content.ReadAsStreamAsync(read.Token).ConfigureAwait(false);
+                using var ms = new MemoryStream();
+                var chunk = new byte[81920];
+                int n;
+                while ((n = await body.ReadAsync(chunk, read.Token).ConfigureAwait(false)) > 0)
+                {
+                    if (ms.Length + n > MaxImageBytes) return null;
+                    ms.Write(chunk, 0, n);
+                }
+                return ms.ToArray();
             }
-            return ms.ToArray();
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; }
         }
         return null;
     }

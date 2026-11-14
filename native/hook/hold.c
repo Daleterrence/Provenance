@@ -39,7 +39,7 @@ static const char *hold_handle_pick(BYTE *b)
     const char *why;
     g_my_slot = hold_login_handle(b, &why);
     if (g_my_slot < 0) {
-        base_log("hold: " LOG_NO_HANDLE " - signing out (exit %d)\r\n", NO_HANDLE_EXIT);
+        base_log("hold: " LOG_NO_HANDLE " - logging out (exit %d)\r\n", NO_HANDLE_EXIT);
         login_viewer_sign_out(b);
         base_end_pol(NO_HANDLE_EXIT);
     }
@@ -47,7 +47,7 @@ static const char *hold_handle_pick(BYTE *b)
 }
 static void hold_go_online(BYTE *b, const char *why)
 {
-    base_log("presence: going online on handle slot %d, %s (current handle %d)\r\n", g_my_slot, why,
+    base_log("status: going online on handle slot %d, %s (current handle %d)\r\n", g_my_slot, why,
        pc_current_handle(b));
     login_status_start(b, g_my_slot, hold_status_wanted(), 1000);
 }
@@ -62,7 +62,7 @@ static void hold_push_callbacks(BYTE *b)
     if (!pc_has(b, SV_SET_PUSH_CALLBACKS)) return;
     chat_frame_push_callbacks(b, cb);
     pc_set_push_callbacks(b, cb);
-    base_log("mail: push callbacks registered (svc 0xd9c)\r\n");
+    base_log("messages: push callbacks registered (svc 0xd9c)\r\n");
 }
 
 static void hold_db_reads_abandon(BYTE *b)
@@ -236,7 +236,7 @@ static void hold_sign_out(BYTE *b, const char *spath)
     while (hold_writes_pending() && GetTickCount64() < until)
         hold_drain_turn(b, !g_lean);
     login_viewer_sign_out(b);
-    base_log("hold: signed out\r\n");
+    base_log("hold: logged out\r\n");
     base_end_pol(0);
 }
 
@@ -249,7 +249,7 @@ static void hold_go_full(BYTE *b, const char *spath)
         { "groups", pc_groups_load, pc_groups_check, 0, 0 }
     };
     if (!g_lean) return;
-    base_log("hold: turning the lean session full\r\n");
+    base_log("hold: adding friends and messages to this session\r\n");
     if (pc_has(b, SV_MESSAGE_NOTICES)) pc_message_notices(b, 1);
     login_loads(b, run, 2);
     if (run[0].res != 1 || run[1].res != 1) {
@@ -262,7 +262,7 @@ static void hold_go_full(BYTE *b, const char *spath)
     /* picked again, the status answer can have set polcore's handle */
     hold_go_online(b, hold_handle_pick(b));
     message_store_import(b);
-    base_log("hold: full session\r\n");
+    base_log("hold: friends and messages added\r\n");
     g_snap_dirty = 1;
 }
 static void hold_full_request(BYTE *b, const char *spath)
@@ -310,17 +310,17 @@ static void hold_run(BYTE *b)
     DWORD wn;
     if (!b) return;
     if (*pc_auth_state(b) != AUTH_IN) {
-        base_log(LOG_NO_SESSION " (auth state %u) - exiting, FFXI NOT started\r\n", *pc_auth_state(b));
+        base_log(LOG_NO_SESSION " (auth state %u) - exiting, the game wasn't started\r\n", *pc_auth_state(b));
         base_end_pol(AUTH_REFUSED_EXIT);
     }
     base_ipc_file(spath, IPC_SOCIAL);
     /* a login that finished after its Provenance went never gets held */
     if (base_owner_gone()) {
-        base_log("hold: Provenance ended during the login - signing out and exiting\r\n");
+        base_log("hold: Provenance ended during the login - logging out and exiting\r\n");
         hold_sign_out(b, spath);
     }
     base_log(LOG_HELD "; waiting for Play (POL_CRED_PLAY)\r\n");
-    if (g_lean) base_log("hold: lean session (no social)\r\n");
+    if (g_lean) base_log("hold: no friends or messages for this session\r\n");
     if (!g_lean) hold_push_callbacks(b);
     hold_handle(b);
     if (!g_lean) message_store_import(b);
@@ -336,9 +336,9 @@ static void hold_run(BYTE *b)
         if (idle < 0 || reason < 0 || *pc_session_alive(b) == 0) {
             why = idle < 0 ? idle : reason < 0 ? reason : (int)*pc_auth_error(b);
             if (g_link_sent_at)
-                base_log("hold: SESSION LOST reason=%d - signed out (last answered the server %lus before)\r\n", why,
+                base_log("hold: session lost, reason=%d - logged out (last answered the server %lus before)\r\n", why,
                    (DWORD)((GetTickCount64() - g_link_sent_at) / 1000));
-            else base_log("hold: SESSION LOST reason=%d - signed out\r\n", why);
+            else base_log("hold: session lost, reason=%d - logged out\r\n", why);
             DeleteFileA(spath);
             message_store_drop();
             base_ipc_file(path, IPC_ENDED);
@@ -362,7 +362,7 @@ static void hold_run(BYTE *b)
         /* the new-mail flag (svc 0x1460, set by a push), cleared with 0x1464(0) like the viewer (app.dll 0x1019fef3) */
         if (!g_lean && pc_has(b, SV_NEW_MAIL_FLAG) && pc_new_mail_flag(b)) {
             pc_set_new_mail_flag(b, 0);
-            base_log("mail: new-mail flag set - listing the inbox\r\n");
+            base_log("messages: new messages flag set - listing the inbox\r\n");
             g_s.mail_refresh = 1;
         }
         if (ctl && !g_lean) mail_inbox_ack_request();
@@ -388,12 +388,12 @@ static void hold_run(BYTE *b)
         /* only an admin can write in Provenance's folder, so a stop file there really is Provenance asking */
         base_ipc_file(path, IPC_STOP);
         if (ctl && GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) {
-            base_log("hold: stop file seen - signing out and exiting\r\n");
+            base_log("hold: stop file seen - logging out and exiting\r\n");
             DeleteFileA(path);
             hold_sign_out(b, spath);
         }
         if (ctl && base_owner_gone()) {
-            base_log("hold: Provenance ended - signing out and exiting\r\n");
+            base_log("hold: Provenance ended - logging out and exiting\r\n");
             hold_sign_out(b, spath);
         }
         if ((g_snap_dirty && GetTickCount64() - lastSnap >= 250) || GetTickCount64() - lastSnap > 2000) {

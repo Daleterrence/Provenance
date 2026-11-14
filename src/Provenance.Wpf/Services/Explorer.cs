@@ -25,7 +25,7 @@ internal static class Explorer
         if (!link.IsAbsoluteUri || (link.Scheme != Uri.UriSchemeHttps && link.Scheme != Uri.UriSchemeHttp))
             throw new ArgumentException("Not a web link.", nameof(link));
         var psi = new ProcessStartInfo(Exe) { UseShellExecute = false };
-        psi.ArgumentList.Add(link.AbsoluteUri);
+        psi.ArgumentList.Add(link.AbsoluteUri.Replace(",", "%2C", StringComparison.Ordinal));
         using var p = StartForTest(psi);
     }
 

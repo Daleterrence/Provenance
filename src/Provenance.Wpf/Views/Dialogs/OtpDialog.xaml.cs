@@ -44,7 +44,10 @@ public partial class OtpDialog : AppWindow
             {
                 e.CancelCommand();
                 if (e.DataObject.GetDataPresent(DataFormats.UnicodeText))
-                    Fill((string)e.DataObject.GetData(DataFormats.UnicodeText), (int)box.Tag);
+                {
+                    var text = (string)e.DataObject.GetData(DataFormats.UnicodeText);
+                    Fill(text, text.Count(char.IsAsciiDigit) == 6 ? 0 : (int)box.Tag);
+                }
             });
             _boxes[i] = box;
             Digits.Children.Add(box);

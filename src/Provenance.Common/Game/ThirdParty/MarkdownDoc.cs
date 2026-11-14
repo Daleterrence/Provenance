@@ -1,6 +1,6 @@
 namespace Provenance.Common.Game.ThirdParty;
 
-public sealed record MarkdownDoc(IReadOnlyList<MdBlock> Blocks);
+public sealed record MarkdownDoc(IReadOnlyList<MdBlock> Blocks, bool Truncated = false);
 
 public abstract record MdBlock;
 

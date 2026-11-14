@@ -110,6 +110,7 @@ public sealed class WindowerHttp : IDisposable
         FileStream? output = null;
         DateTime? stamp = null;
         WindowerFetch result;
+        bool kept = false;
         try
         {
             result = await FetchAsync(site, url, modified, () => output = new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None),
@@ -120,14 +121,15 @@ public sealed class WindowerHttp : IDisposable
                 try { File.SetLastWriteTimeUtc(output.SafeFileHandle, stamp ?? DateTime.UtcNow); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
             }
+            kept = result.Ok;
         }
         finally
         {
-            if (output is not null) await output.DisposeAsync();
-        }
-        if (!result.Ok && output is not null)
-        {
-            FileDelete.Try(file);
+            if (output is not null)
+            {
+                await output.DisposeAsync();
+                if (!kept) FileDelete.Try(file);
+            }
         }
         return result;
     }

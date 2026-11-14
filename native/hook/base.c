@@ -1,7 +1,6 @@
 static CRITICAL_SECTION g_lgcs;
 static int g_lgcs_ready;
 
-
 static int base_getenv_set(const char *name) { return GetEnvironmentVariableA(name, NULL, 0) > 0; }
 
 /* pol.exe turns the screen saver off at start and only puts it back in its own cleanup, which base_end_pol skips. The

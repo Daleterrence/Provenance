@@ -52,8 +52,7 @@ static void profiles_search_start(BYTE *b, db_job *j)
 }
 static void profiles_search_fetch(BYTE *b, db_job *j)
 {
-    int r = pc_pdb_search_fetch(b, (int)g_srch_set, g_srch_pib, 0,
-                                                                        (int)g_srch_want, j->rec);
+    int r = pc_pdb_search_fetch(b, (int)g_srch_set, g_srch_pib, 0, (int)g_srch_want, j->rec);
     if (r != NO_SLOT) base_log("friends: search fetching %u -> %d\r\n", g_srch_want, r);
     if (r < 0 && r != NO_SLOT) { j->done(requests_failed(r)); return; }
     db_job_started(j, 1, r);
@@ -639,7 +638,14 @@ static void profiles_ffxiprofile_request(BYTE *b)
     base_log("ffxiprofile: row %d slot %d\r\n", row, n);
     ffxi_read_go(b, &g_fp_read);
 }
-static void profiles_ffxiprofile_pump(BYTE *b, int ctl) { ffxi_read_pump(b, &g_fp_read, ctl, profiles_ffxiprofile_request); }
+/* a friend's tab or one of my own cards, same read and job */
+static void my_profile_ffxi_request(BYTE *b);
+static void profiles_ffxiprofile_next(BYTE *b)
+{
+    profiles_ffxiprofile_request(b);
+    if (g_fp_read.j.step == 0) my_profile_ffxi_request(b);
+}
+static void profiles_ffxiprofile_pump(BYTE *b, int ctl) { ffxi_read_pump(b, &g_fp_read, ctl, profiles_ffxiprofile_next); }
 
 /* a cheap look at who's on the friend list, so the hits' marks only get worked out again when it changes */
 static DWORD profiles_friends_sig(BYTE *b)

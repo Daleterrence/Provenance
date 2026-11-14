@@ -61,6 +61,7 @@
 
     <!-- the other controls fill their column, so this puts a switch against the right edge like them -->
     <Style x:Key="Switch" TargetType="ToggleButton" BasedOn="{StaticResource MaterialDesignSwitchToggleButton}">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
         <Setter Property="HorizontalAlignment" Value="Right" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>

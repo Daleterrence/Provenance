@@ -20,16 +20,19 @@
             <controls:SvgIcon Glyph="ok" Flat="True" Width="44" Height="44" Margin="0,0,0,14" HorizontalAlignment="Center"
                               Foreground="{DynamicResource Primary}"
                               Visibility="{Binding Succeeded, Converter={StaticResource BoolToVis}}" />
-            <TextBlock Text="{Binding Stage}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"
-                       TextAlignment="Center" TextWrapping="Wrap"
-                       Visibility="{Binding Stage, Converter={StaticResource NullToVisibilityConverter}}" />
+            <controls:BalancedText Message="{Binding Stage}" FontSize="20" FontWeight="SemiBold"
+                                   Visibility="{Binding Stage, Converter={StaticResource NullToVisibilityConverter}}" />
             <!-- a result with no heading reads as the main line -->
-            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" behaviours:State.IsError="{Binding Failed}">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatusText}">
+            <controls:BalancedText Message="{Binding Status}" behaviours:State.IsError="{Binding Failed}">
+                <controls:BalancedText.Style>
+                    <Style TargetType="controls:BalancedText">
+                        <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
                         <Setter Property="FontSize" Value="13" />
                         <Setter Property="Margin" Value="0,8,0,0" />
                         <Style.Triggers>
+                            <Trigger Property="behaviours:State.IsError" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource State.Down}" />
+                            </Trigger>
                             <DataTrigger Binding="{Binding Succeeded}" Value="True">
                                 <Setter Property="FontSize" Value="15" />
                                 <Setter Property="Margin" Value="12,0" />
@@ -37,8 +40,8 @@
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
-                </TextBlock.Style>
-            </TextBlock>
+                </controls:BalancedText.Style>
+            </controls:BalancedText>
             <ProgressBar Margin="0,20,0,4" Height="8" Minimum="0" Maximum="1" Value="{Binding Fraction}" IsIndeterminate="{Binding Indeterminate}"
                          Foreground="{DynamicResource Primary}" Background="{DynamicResource Surface.1}"
                          Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />

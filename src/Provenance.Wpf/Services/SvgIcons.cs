@@ -27,8 +27,8 @@ public static partial class SvgIcons
     // drawn on POL's pixel grid, so they only get moved by whole units. Half a unit over and every upright line's
     // smeared across two columns
     private static readonly string[] OnGrid = ["add", "copy", "folder", "key", "list", "mail"];
-    // the card's corners touch the disc at full size
-    private const double CardScale = 0.85;
+    // the card runs off the disc's left edge and stops just short of its right
+    private const double CardScale = 0.9, CardShift = 1.2;
 
     private const string Root = "pack://application:,,,/Provenance;component/Assets/icons/";
     private static readonly object Gate = new();
@@ -60,8 +60,21 @@ public static partial class SvgIcons
 
     // the single-colour file in one colour, no disc, for small marks and anything sat on a dark surface where the idle
     // icon's black outline gets lost
-    public static ImageSource? Tinted(string glyph, Color colour) =>
-        Cached($"status-{glyph}.svg#{colour}", () => Frame(Load($"status-{glyph}.svg", colour), GlyphFrame(glyph)));
+    public static ImageSource? Tinted(string glyph, Color colour, bool filled = false) =>
+        Cached($"status-{glyph}.svg#{colour}{(filled ? "#filled" : "")}", () => WholeOnButton.Contains(glyph)
+            ? AroundInk(Load($"status-{glyph}.svg", colour, Whole))
+            : Frame(Load($"status-{glyph}.svg", colour, filled ? Solid(colour) : null), GlyphFrame(glyph)));
+
+    private static Func<string, string> Solid(Color colour) =>
+        svg => svg.Replace("fill=\"none\"", $"fill=\"#{colour.R:X2}{colour.G:X2}{colour.B:X2}\"", StringComparison.Ordinal);
+
+    // drawn without POL's badge circle, so the frame goes round what's actually inked
+    private static Drawing? AroundInk(Drawing? drawing)
+    {
+        if (drawing is null || Ink(drawing) is not { IsEmpty: false } ink) return drawing;
+        double half = Math.Max(ink.Width, ink.Height) / 2 + 0.5;
+        return Frame(drawing, new Rect(ink.X + ink.Width / 2 - half, ink.Y + ink.Height / 2 - half, half * 2, half * 2));
+    }
 
     // for a button's own disc: POL's green or blue disc comes out, outline back to idle.
     // POL nudges its icons a pixel per state, so each gets centred
@@ -89,14 +102,16 @@ public static partial class SvgIcons
     {
         var assetButton = Load(GlyphFile(glyph, state), edit: svg =>
         {
-            if (WholeOnButton.Contains(glyph)) svg = Whole(svg);
+            if (WholeOnButton.Contains(glyph) || glyph == "card") svg = Whole(svg);
             return state is IconState.Selected or IconState.Active ? OnButton(glyph, svg) : svg;
         });
         if (glyph != "card" || assetButton is null) return assetButton;
-        var smaller = new DrawingGroup { Transform = new ScaleTransform(CardScale, CardScale, 16, 16) };
-        smaller.Children.Add(assetButton);
-        smaller.Freeze();
-        return smaller;
+        var moved = new DrawingGroup { Transform = new MatrixTransform(CardScale, 0, 0, CardScale, 16 - 16 * CardScale + CardShift, 16 - 16 * CardScale) };
+        moved.Children.Add(assetButton);
+        var cut = new DrawingGroup { ClipGeometry = new EllipseGeometry(new Point(16, 16), 10, 10) };
+        cut.Children.Add(moved);
+        cut.Freeze();
+        return cut;
     }
 
     private static (Vector[] Shift, Rect Frame) ButtonFit(string glyph)
@@ -110,7 +125,8 @@ public static partial class SvgIcons
             foreach (var state in Enum.GetValues<IconState>())
             {
                 if (AssetButton(glyph, state) is not { } assetButton || Ink(assetButton) is not { IsEmpty: false } ink) continue;
-                var shift = new Vector(centre - (ink.Left + ink.Right) / 2, centre - (ink.Top + ink.Bottom) / 2);
+                // the card's placed by hand, centring what's left of it would undo the cut
+                var shift = glyph == "card" ? new Vector() : new Vector(centre - (ink.Left + ink.Right) / 2, centre - (ink.Top + ink.Bottom) / 2);
                 // a half always goes down. Math.Round sends it to the even number, which can leave two states two units apart
                 if (OnGrid.Contains(glyph)) shift = new Vector(Math.Ceiling(shift.X - 0.5), Math.Ceiling(shift.Y - 0.5));
                 shifts[(int)state] = shift;

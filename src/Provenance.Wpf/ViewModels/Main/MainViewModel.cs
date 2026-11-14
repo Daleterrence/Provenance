@@ -96,7 +96,7 @@ public partial class MainViewModel : ObservableObject
         });
         _pol.SessionEnded += why => _ui.Run(() =>
         {
-            Log.Information("Session ended: {Why} (signed in here: {Connected})", why, LoggedIn);
+            Log.Information("Session ended: {Why} (logged in here: {Connected})", why, LoggedIn);
             if (!LoggedIn) return;
             EndSession(SessionEnd.Dropped);   // no question asked, the session's gone so the editor couldn't save anyway
             RequestShow?.Invoke();
@@ -140,6 +140,7 @@ public partial class MainViewModel : ObservableObject
             if (e.PropertyName is nameof(SocialViewModel.UnseenCount) or nameof(SocialViewModel.GroupChatUnread) && !WantsAttention)
                 AttentionCleared?.Invoke();
             if (e.PropertyName == nameof(SocialViewModel.CanPlay)) OnPropertyChanged(nameof(PlayEnabled));
+            if (e.PropertyName == nameof(SocialViewModel.HandleSwitching)) _windows.SetBusy(Social.HandleSwitching ? HandleSwitchingText : null);
         };
         Handles.PropertyChanged += (_, e) =>
         {
@@ -298,8 +299,8 @@ public partial class MainViewModel : ObservableObject
     // each phase gets its own, a check's pace says nothing about the download after it
     private void TrackTimeLeft(PatchProgress? patch)
     {
-        if (patch is not { Fraction: >= 0 } p) _timeLeft.Clear();
-        else _timeLeft.Update(p.Fraction, p.Phase);
+        if (patch is null) _timeLeft.Clear();
+        else if (patch.Fraction >= 0) _timeLeft.Update(patch.Fraction, patch.Phase);
     }
 
     [RelayCommand(CanExecute = nameof(CanCancel))]
@@ -522,13 +523,13 @@ public partial class MainViewModel : ObservableObject
         _pol.Records.EndOrphans();
         _pol.Prestarter.Prestart();
         if (!LogsInAtStart(autoLoginSuppressed)) return;
-        Log.Information("Auto sign-in for {Account}", Accounts.SelectedProfile?.Id);
+        Log.Information("Logging in to {Account} automatically", Accounts.SelectedProfile?.Id);
         LogInCommand.Execute(null);
     }
 
     internal void OnSnapshot(PolSocialSnapshot snap)
     {
-        var timer = ReferenceEquals(Social.Last, PolSocialSnapshot.Empty) ? new StepTimer("First snapshot") : null;
+        var timer = ReferenceEquals(Social.Last, PolSocialSnapshot.Empty) ? new StepTimer("First friends and messages load") : null;
         _ui.Run(() =>
         {
             timer?.Lap("wait for the UI thread");
@@ -547,7 +548,7 @@ public partial class MainViewModel : ObservableObject
             catch (Exception ex)
             {
                 // this runs for the watcher's thread, where a throw would end the process
-                Log.Error(ex, "Applying a social snapshot failed");
+                Log.Error(ex, "Updating friends and messages failed");
             }
         });
     }
@@ -576,15 +577,13 @@ public partial class MainViewModel : ObservableObject
     internal void OpenSocial()
     {
         if (Multi.Running || GameOpen) return;
-        Social.ShowGroups = false;
         _windows.ShowFriends(Social);
     }
 
     internal void OpenGroups()
     {
         if (Multi.Running || GameOpen) return;
-        Social.ShowGroups = true;
-        _windows.ShowFriends(Social);
+        _windows.ShowGroups(Social);
     }
 
     internal void OpenMessages()
@@ -594,17 +593,18 @@ public partial class MainViewModel : ObservableObject
     }
 
     // the bottom bar's buttons. Pressed with their own window on screen they close it, nothing else does
-    [RelayCommand] private void ToggleFriends() => ToggleFriendsTab(groups: false);
-
-    [RelayCommand] private void ToggleGroups() => ToggleFriendsTab(groups: true);
-
-    // one window with two tabs, so the other tab's button just switches to its own
-    private void ToggleFriendsTab(bool groups)
+    [RelayCommand]
+    private void ToggleFriends()
     {
         if (Multi.Running || GameOpen) return;
-        if (Social.ShowGroups == groups && _windows.CloseIfShown(SecondWindow.Friends)) return;
-        if (groups) OpenGroups();
-        else OpenSocial();
+        if (!_windows.CloseIfShown(SecondWindow.Friends)) OpenSocial();
+    }
+
+    [RelayCommand]
+    private void ToggleGroups()
+    {
+        if (Multi.Running || GameOpen) return;
+        if (!_windows.CloseIfShown(SecondWindow.Groups)) OpenGroups();
     }
 
     [RelayCommand]
@@ -675,7 +675,7 @@ public partial class MainViewModel : ObservableObject
         try { details = LogInDetails(profile); }
         finally { if (details is null) Lean.Finish(); }
         if (details is not var (pol, squareEnix, otp)) return;
-        Log.Information("Log in details read for profile {Profile}", profile.Id);
+        Log.Information("Login details read for account {Profile}", profile.Id);
         if (lean) DropHandleNotice();
         else StartSocial(profile.Id);
         Accounts.SessionProfileId = profile.Id;
@@ -717,11 +717,22 @@ public partial class MainViewModel : ObservableObject
                     _dialogs.Error(failure.Title, failure.Text, offerLogs: failure.OfferLogs);
             }
         }
-        catch (OperationCanceledException) { await Task.Run(() => _pol.StopHold()); }
+        catch (OperationCanceledException)
+        {
+            await Task.Run(() =>
+            {
+                _pol.StopHold();
+                _pol.Prestarter.Prestart();
+            });
+        }
         catch (Exception ex)
         {
-            Log.Error(ex, "Social connect failed");
-            await Task.Run(() => _pol.StopHold());
+            Log.Error(ex, "The login failed");
+            await Task.Run(() =>
+            {
+                _pol.StopHold();
+                _pol.Prestarter.Prestart();
+            });
             Lean.Finish();
             _dialogs.Error("Couldn't log in",
                 ErrorText.Of(ex, "Provenance ran into a problem while logging in. Try again, and if it keeps happening, press Open logs to see what went wrong."),
@@ -754,7 +765,7 @@ public partial class MainViewModel : ObservableObject
         if (!PolPaths.Supported(_settings.DetectedRegion)) return true;
         if (!_dialogs.AskAgreement(Viewer.Strings()))
         {
-            Log.Information("Member Agreement declined: not signing in");
+            Log.Information("Member Agreement declined: not logging in");
             Notice.Show("You're not logged in, because you didn't accept the PlayOnline Member Agreement.", "InformationOutline");
             return false;
         }
@@ -792,6 +803,7 @@ public partial class MainViewModel : ObservableObject
 
     // fed every snapshot, so a change still going when Settings closes is answered all the same
     internal HandlesViewModel Handles { get; }
+    internal const string HandleSwitchingText = "Switching your handle, please wait...";
     internal ViewerResources Viewer { get; }
 
     private void ShowHandles()

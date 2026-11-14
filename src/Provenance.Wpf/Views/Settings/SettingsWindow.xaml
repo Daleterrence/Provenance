@@ -7,7 +7,7 @@
         xmlns:local="clr-namespace:Provenance.Wpf.Views.Settings"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         Title="Provenance settings" Icon="/Assets/provenance.ico"
-        Width="760" Height="600" MinWidth="720" MinHeight="480" ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
+        Width="860" Height="680" MinWidth="800" MinHeight="540" ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
         Style="{StaticResource AppWindow}">
 
     <Window.Resources>

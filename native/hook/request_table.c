@@ -69,6 +69,7 @@ static const req_row g_requests[] = {
     { REQ_PROFILE, RQ_USER, NULL, 0, 0, NULL, NULL, busy_profile },
     { REQ_CHARACTER, 0, NULL, 0, 0, NULL, NULL, busy_character },
     { REQ_FFXIPROFILE, RQ_USER, NULL, 0, 0, NULL, NULL, busy_tab },
+    { REQ_MYFFXIPROFILE, RQ_USER, NULL, 0, 0, NULL, NULL, busy_tab },
     { REQ_CHATZONES, RQ_USER, NULL, 0, 0, NULL, NULL, busy_lists },
     { REQ_CHATROOMS, RQ_USER, NULL, 0, 0, NULL, NULL, busy_lists },
     { REQ_CHATLEAVE },

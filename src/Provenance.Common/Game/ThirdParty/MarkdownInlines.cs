@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 
@@ -329,7 +330,7 @@ internal sealed class MarkdownInlines(Markdown.Budget budget, Dictionary<string,
             int end = text.AsSpan(_i, Math.Min(34, text.Length - _i)).IndexOf(';');
             var named = end > 1 ? text.Substring(_i, end + 1) : "";
             var decoded = named.Length > 0 && named.AsSpan(1, named.Length - 2).IndexOfAny(' ', '&', '\n') < 0 ? WebUtility.HtmlDecode(named) : named;
-            if (decoded == named || decoded.Any(c => char.IsControl(c) || c is >= (char)0x202A and <= (char)0x202E or >= (char)0x2066 and <= (char)0x2069))
+            if (decoded == named || decoded.Any(c => char.IsControl(c) || c is >= (char)0x202A and <= (char)0x202E or >= (char)0x2066 and <= (char)0x2069 || char.GetUnicodeCategory(c) == UnicodeCategory.Format))
             {
                 Take(1);
                 return;

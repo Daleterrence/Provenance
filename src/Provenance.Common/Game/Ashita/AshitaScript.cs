@@ -108,7 +108,7 @@ public sealed partial class AshitaScript
         return folders;
     }
 
-    
+
     public IReadOnlyList<AshitaScriptLoad> Plugins => Listed(false);
     public IReadOnlyList<AshitaScriptLoad> Addons => Listed(true);
 

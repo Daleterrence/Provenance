@@ -125,25 +125,12 @@ internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISetti
     {
         links.NewProgress("Starting FINAL FANTASY XI", "Starting FINAL FANTASY XI...");
         return launch.LinkAsync(
-            ask: text => Asking(() => dialogs.YesNo(PreLaunchLink.Title, text)),
-            failed: text => Asking(() =>
-            {
-                dialogs.Error(PreLaunchLink.Title, text);
-                return true;
-            }),
+            ask: text => dialogs.YesNo(PreLaunchLink.Title, text),
+            failed: text => dialogs.Error(PreLaunchLink.Title, text),
             saying: text => main.ProgressText = text,
             pageWaiting: () => main.Handles.Busy ? main.Handles.Note.Text : null,
             alive: SessionAliveForTest,
             read: _ => main.Social.Last);
-    }
-
-    // the footer's "has to wait till the game's closed" isn't true while the answer can still stop it starting
-    private bool Asking(Func<bool> dialog)
-    {
-        var note = main.Social.StatusNote;
-        main.Social.StatusNote = "";
-        try { return dialog(); }
-        finally { if (main.Social.StatusNote == "") main.Social.StatusNote = note; }
     }
 
     // a test points it at made-up folders

@@ -90,8 +90,6 @@ public static class AshitaBootFiles
         return null;
     }
 
-
-
     private static string BootFolder(string ashitaDir)
     {
         var config = Path.GetFullPath(Path.Combine(ashitaDir, "config"));

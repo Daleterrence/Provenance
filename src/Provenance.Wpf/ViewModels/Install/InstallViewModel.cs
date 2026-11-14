@@ -24,7 +24,7 @@ public partial class InstallViewModel : ObservableObject
     private const long DownloadDriveBytes = 15_500_000_000;   // the parts and their unpacked copy
     private const string MirrorFolder = "mirror";
 
-    // Japanese installs work, but stay out of the list until a JP login has been seen working
+    // Japanese isn't offered in the list yet
     private const bool OfferJapanese = false;
 
     // the versions the installer offers, North American first, only ones Provenance can log in with
@@ -467,7 +467,7 @@ public partial class InstallViewModel : ObservableObject
 
             CurrentStep = 2;
             Stage = "Installing";
-            _meter.Clear();
+            _meter.End();
             try
             {
                 warnings = await _installer.RunInstallAsync(staged, InstallFolder, Path.Combine(work, "logs"), _region, InstallStepProgress(), ct, payloadInPlace: true);

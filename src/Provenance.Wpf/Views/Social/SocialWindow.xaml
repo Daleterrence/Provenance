@@ -31,7 +31,7 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Label" Property="TextDecorations" Value="Underline" />
                             </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Trigger Property="behaviours:FocusCue.Shown" Value="True">
                                 <Setter TargetName="Label" Property="TextDecorations" Value="Underline" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -54,7 +54,7 @@
                                                    VerticalAlignment="Top" Visibility="Collapsed"
                                                    Source="{Binding DataContext.Avatar, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
                     <StackPanel x:Name="Line" Grid.Column="1" Margin="0,4" HorizontalAlignment="Left">
-                        <Border x:Name="Bubble" MaxWidth="420" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}"
+                        <Border x:Name="Bubble" MaxWidth="420" HorizontalAlignment="Left" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}"
                                 Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
                             <!-- read-only so it can be copied, no Tab stop so Tab goes on to the compose box -->
                             <TextBox x:Name="Body" Style="{StaticResource SelectableText}" Text="{Binding Display, Mode=OneWay}" FontSize="13" IsTabStop="False" ContextMenuOpening="OnLineMenu">
@@ -82,6 +82,7 @@
                     <Setter TargetName="TheirProfilePicture" Property="Visibility" Value="Collapsed" />
                     <Setter TargetName="MyProfilePicture" Property="Visibility" Value="Visible" />
                     <Setter TargetName="Bubble" Property="Background" Value="{DynamicResource Primary.Muted}" />
+                    <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right" />
                     <Setter TargetName="Meta" Property="HorizontalAlignment" Value="Right" />
                     <Setter TargetName="SendState" Property="Visibility" Value="Visible" />
                 </DataTrigger>
@@ -183,7 +184,7 @@
                                           ItemsSource="{Binding StatusItems}" SelectedIndex="{Binding MyStatusIndex}" />
                                 <ProgressBar Width="12" Height="12" Margin="6,0,0,0"
                                              Style="{StaticResource Spinner}"
-                                             ToolTip="Waiting for PlayOnline to confirm"
+                                             ToolTip="{Binding StatusPendingText}" AutomationProperties.Name="{Binding StatusPendingText}"
                                              Visibility="{Binding StatusPending, Converter={StaticResource BoolToVis}}" />
                                 <TextBlock Text="{Binding Summary}" Margin="10,0,0,0" FontSize="12" VerticalAlignment="Center"
                                            Foreground="{DynamicResource Text.3}" />
@@ -236,114 +237,9 @@
                             </Border>
                         </StackPanel>
                     </Grid>
-                    <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
-                               Text="{Binding StatusNote}"
-                               Visibility="{Binding StatusNote, Converter={StaticResource NullToVisibilityConverter}}" />
-                    <StackPanel Orientation="Horizontal" Margin="-6,8,0,0">
-                        <Button Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding ShowFriends}" Content="FRIENDS"
-                                Command="{Binding ShowFriendsTabCommand}" Height="28" />
-                        <Button Style="{StaticResource UnderlineTab}" behaviours:State.IsCurrent="{Binding ShowGroups}" Content="GROUPS"
-                                Command="{Binding ShowGroupsTabCommand}" Height="28" />
-                    </StackPanel>
                 </StackPanel>
 
-                <local:FriendsList x:Name="FriendList" Grid.Row="1" Visibility="{Binding ShowFriends, Converter={StaticResource BoolToVis}}" />
-
-                <Grid Grid.Row="1" RowDefinitions="Auto,*"
-                      Visibility="{Binding ShowGroups, Converter={StaticResource BoolToVis}}">
-                    <Button HorizontalAlignment="Left" Margin="10,4,0,4" Padding="6,0,10,0" Style="{StaticResource PolButton}"
-                            FontSize="12" IsEnabled="{Binding CanEdit}" Click="OnCreateGroup" AutomationProperties.Name="Create group">
-                        <StackPanel Orientation="Horizontal">
-                            <controls:SvgIcon Glyph="groupchat2" />
-                            <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="CREATE GROUP" />
-                        </StackPanel>
-                    </Button>
-                    <TextBlock Grid.Row="1" Margin="16,8" FontSize="12" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
-                               Text="You're not in any friend groups yet. A group lets up to 64 friends see each other."
-                               Visibility="{Binding Groups.NoGroups, Converter={StaticResource BoolToVis}}" />
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding Groups.Items}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Margin="0,0,0,6">
-                                        <!-- the menu's filled as it opens, the dots button opens the same one -->
-                                        <Border Padding="12,6,8,6" Background="Transparent"
-                                                ContextMenuOpening="OnRowMenu">
-                                            <Border.ContextMenu>
-                                                <ContextMenu />
-                                            </Border.ContextMenu>
-                                            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-                                                <StackPanel VerticalAlignment="Center">
-                                                    <TextBlock FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
-                                                        <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding RoleText, Mode=OneWay}" FontSize="11" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
-                                                    </TextBlock>
-                                                    <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="{DynamicResource Text.3}" />
-                                                </StackPanel>
-                                                <Border Grid.Column="1" Style="{StaticResource CountBadge}"
-                                                        Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}">
-                                                    <TextBlock Text="{Binding Unread}" Style="{StaticResource CountBadgeText}" />
-                                                </Border>
-                                                <Button x:Name="GroupChatButton" Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
-                                                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Primary}"
-                                                        ToolTip="Open this group's chat" AutomationProperties.Name="Group Chat"
-                                                        Command="{Binding DataContext.OpenGroupChatCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                        CommandParameter="{Binding}"
-                                                        IsEnabled="{Binding DataContext.CanGroupChat, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                        Visibility="{Binding CanChat, Converter={StaticResource BoolToVis}}">
-                                                    <materialDesign:PackIcon Kind="ForumOutline" Width="18" Height="18" />
-                                                </Button>
-                                                <Button Grid.Column="3" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
-                                                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
-                                                        AutomationProperties.Name="Group actions" Click="OnRowMenuButton">
-                                                    <controls:SvgIcon Glyph="more" Width="20" Height="20" />
-                                                </Button>
-                                            </Grid>
-                                        </Border>
-                                        <ItemsControl ItemsSource="{Binding Members}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Grid Margin="16,3,8,3" Background="Transparent"
-                                                          ColumnDefinitions="Auto,*,Auto"
-                                                          ContextMenuOpening="OnRowMenu">
-                                                        <Grid.ContextMenu>
-                                                            <ContextMenu />
-                                                        </Grid.ContextMenu>
-                                                        <controls:ProfilePictureCircle Diameter="30" Margin="0,0,10,0"
-                                                                                       Source="{Binding Avatar}" />
-                                                        <Button Grid.Column="2" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
-                                                                Foreground="{DynamicResource Text.3}" AutomationProperties.Name="Member actions" Click="OnRowMenuButton">
-                                                            <Button.Style>
-                                                                <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding Me}" Value="True">
-                                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Button.Style>
-                                                            <controls:SvgIcon Glyph="more" Width="20" Height="20" />
-                                                        </Button>
-                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                            <TextBlock FontSize="13" TextTrimming="CharacterEllipsis">
-                                                                <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="   " /><Run Text="{Binding RoleText, Mode=OneWay}" FontSize="11" Foreground="{DynamicResource Text.3}" />
-                                                            </TextBlock>
-                                                            <DockPanel>
-                                                                <controls:StatusMark DockPanel.Dock="Left" Status="{Binding Status}" Online="{Binding ShowsStatus}" Margin="0,0,6,0" />
-                                                                <TextBlock FontSize="11" Foreground="{DynamicResource Text.3}" TextTrimming="CharacterEllipsis">
-                                                                    <Run Text="{Binding StatusLabel, Mode=OneWay}" /><Run Text="{Binding Comment, Mode=OneWay, StringFormat={}   {0}}" />
-                                                                </TextBlock>
-                                                            </DockPanel>
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Grid>
+                <local:FriendsList x:Name="FriendList" Grid.Row="1" />
             </Grid>
 
             <GridSplitter x:Name="PartSplitter" Grid.Column="1" Style="{StaticResource PaneSplitter}" AutomationProperties.HelpText="Drag to resize" />

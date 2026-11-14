@@ -16,40 +16,35 @@ public partial class ReadmeWindow : AppWindow
         InitializeComponent();
         Title = title;
         Bar.Title = title;
-        if (markdown && Markdown.Parse(text) is { } doc)
+        if (markdown)
         {
             BodyText.Visibility = Visibility.Collapsed;
             LoadingText.Visibility = Visibility.Visible;
-            Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, () => ShowPage(doc, text, openLink ?? DocsOpener.OpenReadmeLink));
+            var cancel = new CancellationTokenSource();
+            Closed += (_, _) => cancel.Cancel();
+            Loaded += (_, _) => _ = ShowPageAsync(text, openLink ?? DocsOpener.OpenReadmeLink, cancel.Token);
         }
         else BodyText.Text = text;
     }
 
-    // the message has been painted by now, laying a big page out is what keeps the window busy
-    private void ShowPage(MarkdownDoc doc, string text, Action<Uri> openLink)
+    // the window's up with Loading... in it first. The reading happens off the UI thread, the building in slices on it
+    private async Task ShowPageAsync(string text, Action<Uri> openLink, CancellationToken cancel)
     {
-        if (!IsLoaded) return;
-        if (Laid(doc, openLink) is { } page)
+        try
         {
+            var doc = await Task.Run(() => Markdown.Parse(text), cancel);
+            var page = await ReadmeDocument.BuildAsync(doc, openLink, cancel);
             Page.Document = page;
             Page.Visibility = Visibility.Visible;
             FocusManager.SetFocusedElement(this, Page);
+            await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+            LoadingText.Visibility = Visibility.Collapsed;
         }
-        else
+        catch (OperationCanceledException) { }
+        catch (Exception e)
         {
-            BodyText.Text = text;
-            BodyText.Visibility = Visibility.Visible;
-        }
-        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => LoadingText.Visibility = Visibility.Collapsed);
-    }
-
-    private static FlowDocument? Laid(MarkdownDoc doc, Action<Uri> openLink)
-    {
-        try { return ReadmeDocument.Build(doc, openLink); }
-        catch (Exception e) when (e is ArgumentException or InvalidOperationException)
-        {
-            Log.Warning(e, "Could not lay a readme out, showing it as text");
-            return null;
+            Log.Error(e, "Could not lay a readme out");
+            LoadingText.Text = "Couldn't show this file.";
         }
     }
 

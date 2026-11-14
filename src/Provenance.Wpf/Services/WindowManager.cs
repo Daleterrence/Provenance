@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Settings;
+using Provenance.Wpf.Controls;
 using Provenance.Wpf.ViewModels.Install;
 using Provenance.Wpf.ViewModels.Main;
 using Provenance.Wpf.ViewModels.Settings;
@@ -16,7 +17,7 @@ using Provenance.Wpf.Views.Social;
 
 namespace Provenance.Wpf.Services;
 
-public enum SecondWindow { Friends, Messages, ChatRooms, ProfileEditor }
+public enum SecondWindow { Friends, Messages, Groups, ChatRooms, ProfileEditor }
 
 public interface IWindowManager
 {
@@ -25,6 +26,7 @@ public interface IWindowManager
 
     void ShowFriends(SocialViewModel social);
     void ShowMessages(SocialViewModel social);
+    void ShowGroups(SocialViewModel social);
     // only with the windows split. Without takeFocus it only opens one that isn't up yet
     void ShowMessagesAlongside(SocialViewModel social, bool takeFocus);
     void Split(SocialViewModel social);
@@ -51,11 +53,19 @@ public interface IWindowManager
     // the small window of a login that starts the game itself, up in place of the main window
     void ShowLeanStart(MainViewModel main);
     void CloseLeanStart();
+    void SetBusy(string? text);
 }
 
 public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) : IWindowManager
 {
     private const double Gap = 8;
+
+    static WindowManager() => BusyCover.Install(Covered);
+
+    internal static bool Covered(Window w) =>
+        w is MainWindow or SocialWindow or GroupsWindow or ChatRoomsWindow or GroupChatWindow or SettingsWindow or EditProfileWindow or ProfileWindow;
+
+    public void SetBusy(string? text) => BusyCover.Set(text);
 
     // swapped in tests, a real screen can't be made too narrow for them
     internal static Func<(double Left, double Right)> ScreenEdges { get; set; } = () =>
@@ -93,7 +103,7 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     }
 
     // unowned, so they stay up while the main window's minimised or in the tray
-    private static void ShowSocial(SocialViewModel social, SocialPart part, bool activate, Rect? place = null)
+    private void ShowSocial(SocialViewModel social, SocialPart part, bool activate, Rect? place = null)
     {
         var w = SocialWindows().FirstOrDefault(x => x.Part == part);
         if (w != null)
@@ -103,7 +113,9 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         }
         foreach (var old in SocialWindows().Where(x => (x.Part == SocialPart.Both) != (part == SocialPart.Both))) old.Close();
         w = new SocialWindow(part) { DataContext = social, ShowActivated = activate };
-        if (place is null && part == SocialPart.Messages
+        string key = part switch { SocialPart.Friends => "friends", SocialPart.Messages => "messages", _ => "friends-and-messages" };
+        bool saved = place is null && WindowPlaces.Restore(settings, w, key);
+        if (place is null && !saved && part == SocialPart.Messages
             && SocialWindows().FirstOrDefault(x => x.Part == SocialPart.Friends) is { IsVisible: true } fw)
         {
             var (screenLeft, screenRight) = ScreenEdges();
@@ -115,7 +127,8 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
             w.WindowStartupLocation = WindowStartupLocation.Manual;
             (w.Left, w.Top, w.Width, w.Height) = (r.Left, r.Top, r.Width, r.Height);
         }
-        else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        else if (!saved) w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        WindowPlaces.Track(settings, w, key);
         w.Show();
     }
 
@@ -158,6 +171,19 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
             ShowSocial(social, SocialPart.Both, activate: true, area is { } a ? new Rect(a.Left, a.Top, Math.Max(SocialPart.Both.Widths().Min, a.Width), a.Height) : null);
     }
 
+    public void ShowGroups(SocialViewModel social)
+    {
+        if (Find<GroupsWindow>() is { } open)
+        {
+            BringBack(open);
+            return;
+        }
+        var w = new GroupsWindow { DataContext = social };
+        WindowPlaces.Restore(settings, w, "groups");
+        WindowPlaces.Track(settings, w, "groups");
+        w.Show();
+    }
+
     public void ShowChatRooms(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword,
                               Func<int, ImageSource?> emote, Action closed)
     {
@@ -168,10 +194,21 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         }
         var w = new ChatRoomsWindow(social, dialogs, savePassword, dropPassword, emote);
         w.Closed += (_, _) => closed();
+        WindowPlaces.Restore(settings, w, "chat-rooms");
+        WindowPlaces.Track(settings, w, "chat-rooms");
         w.Show();
     }
 
-    public void ShowGroupChat(GroupChatViewModel groupChat) => BringBack(Find<GroupChatWindow>() ?? new GroupChatWindow(groupChat));
+    public void ShowGroupChat(GroupChatViewModel groupChat)
+    {
+        if (Find<GroupChatWindow>() is not { } w)
+        {
+            w = new GroupChatWindow(groupChat);
+            WindowPlaces.Restore(settings, w, "group-chat");
+            WindowPlaces.Track(settings, w, "group-chat");
+        }
+        BringBack(w);
+    }
 
     // the view model only holds one profile, so an open window gets reused
     public void ShowProfile(SocialViewModel social, FriendItem friend)
@@ -183,7 +220,10 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
             open.Activate();
             return;
         }
-        new ProfileWindow(social, dialogs, friend) { Owner = WindowOwner.Find() }.Show();
+        var w = new ProfileWindow(social, dialogs, friend) { Owner = WindowOwner.Find() };
+        WindowPlaces.Restore(settings, w, "profile");
+        WindowPlaces.Track(settings, w, "profile");
+        w.Show();
     }
 
     // never parented to the friends window, so closing that can't take unsaved changes down with it
@@ -195,13 +235,15 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
             return;
         }
         var w = new EditProfileWindow(social, dialogs);
-        if (WindowOwner.Active() is { IsVisible: true, WindowState: WindowState.Normal } near)
+        WindowPlaces.Track(settings, w, "edit-profile");
+        bool saved = WindowPlaces.Restore(settings, w, "edit-profile");
+        if (!saved && WindowOwner.Active() is { IsVisible: true, WindowState: WindowState.Normal } near)
         {
             w.WindowStartupLocation = WindowStartupLocation.Manual;
             w.Left = near.Left + (near.ActualWidth - w.Width) / 2;
             w.Top = Math.Max(SystemParameters.VirtualScreenTop, near.Top + (near.ActualHeight - w.Height) / 2);
         }
-        else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        else if (!saved) w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         w.Show();
     }
 
@@ -211,6 +253,7 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         {
             SecondWindow.Friends => SocialWindows().FirstOrDefault(x => x.Part == Friends),
             SecondWindow.Messages => SocialWindows().FirstOrDefault(x => x.Part == Messages),
+            SecondWindow.Groups => Find<GroupsWindow>(),
             SecondWindow.ChatRooms => Find<ChatRoomsWindow>(),
             _ => Find<EditProfileWindow>(),
         };
@@ -245,6 +288,7 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         CloseProfileEditor();
         Find<ChatRoomsWindow>()?.CloseQuietly();
         Find<GroupChatWindow>()?.CloseQuietly();
+        Find<GroupsWindow>()?.Close();
         // one opened from the main window's list is the main window's, so it wouldn't go with the friends windows
         Find<ProfileWindow>()?.Close();
         foreach (var w in SocialWindows()) w.Close();
@@ -268,7 +312,13 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     {
         var w = new SettingsWindow { DataContext = vm };
         w.SelectTab(tab);
-        w.ShowDialogOver(WindowOwner.Find());
+        WindowPlaces.Track(settings, w, "settings");
+        if (!WindowPlaces.Restore(settings, w, "settings")) w.ShowDialogOver(WindowOwner.Find());
+        else
+        {
+            if (WindowOwner.Find() is { IsVisible: true } owner) w.Owner = owner;
+            w.ShowDialog();
+        }
     }
 
     public void ShowRepair(RepairViewModel vm) => new RepairWindow(vm).ShowDialogOver(WindowOwner.Find());

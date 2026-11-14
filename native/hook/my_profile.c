@@ -373,6 +373,57 @@ static void my_profile_chars_json(BYTE *b, jw *w)
     jw_end(w);
     base_log("profile edit: %d FFXI characters (from %s)\r\n", n, from);
 }
+/* same read as a friend's tab, but the ids come from my_profile_chars for that slot, never the request.
+   The key only checks the card's still the same character */
+static void my_profile_ffxi_request(BYTE *b)
+{
+    char buf[128], *p, *tok, *key, *sl, want[25];
+    const char *from;
+    me_chr ch[8];
+    pol_handle h;
+    int n, count, i;
+    if (!hold_db_free()) return;
+    if (requests_take(REQ_MYFFXIPROFILE, buf, sizeof buf) < 0) return;
+    g_s.db_last = GetTickCount64();
+    p = buf;
+    tok = requests_line(&p);
+    key = requests_line(&p);
+    sl = requests_line(&p);
+    lstrcpynA(g_fp_token, tok, sizeof g_fp_token);
+    g_fp_json[0] = 0;
+    g_fp_slot = -1;
+    g_fp_ctsid = g_fp_lo = g_fp_hi = 0;
+    if (!requests_parse_num(sl, 2, &n) || n > 63) {
+        profiles_ffxiprofile_done("failed:bad request");
+        return;
+    }
+    g_fp_slot = n;
+    memset(&h, 0, sizeof h);
+    pc_get_handle(b, (unsigned)g_my_slot, &h);
+    /* the handle the editor loaded, so a card left open across a switch can't read the new handle's */
+    if (!g_me_hid || handle_hid(&h) != g_me_hid) {
+        profiles_ffxiprofile_done("failed:not loaded");
+        return;
+    }
+    count = my_profile_chars(b, ch, &from);
+    for (i = 0; i < count && i < 8; i++) {
+        my_profile_chr_key(&ch[i], want);
+        if (ch[i].slot == n && lstrcmpA(want, key) == 0) break;
+    }
+    if (i >= count || i >= 8) {
+        profiles_ffxiprofile_done("failed:no character");
+        return;
+    }
+    g_fp_ctsid = ch[i].ctsid;
+    g_fp_lo = ch[i].lo;
+    g_fp_hi = ch[i].hi;
+    if (!profiles_character_load_pib(b) || !profiles_ffxiprofile_check_schema(b, g_ch_pib)) {
+        profiles_ffxiprofile_done("failed:no schema");
+        return;
+    }
+    base_log("profile edit: FINAL FANTASY XI profile for the character in slot %d\r\n", n);
+    ffxi_read_go(b, &g_fp_read);
+}
 static int my_profile_write_json(BYTE *b)
 {
     static const struct { const char *name; int parts; } tabs[] = {
@@ -659,7 +710,7 @@ static void my_profile_pic_reset(void)
 }
 static void my_profile_pic_fail(int code, const char *what)
 {
-    DB_LOG("pic: %s -> %d (0x%x)\r\n", what, code, (unsigned)code);
+    DB_LOG("profile picture: %s -> %d (0x%x)\r\n", what, code, (unsigned)code);
     my_profile_pic_done(requests_failed(code));
 }
 static void my_profile_pic_load_start(BYTE *b, db_job *j)
@@ -672,7 +723,7 @@ static void my_profile_pic_load_start(BYTE *b, db_job *j)
     if (r < 0 && r != NO_SLOT) { my_profile_pic_fail(r, "profile load start (svc 0x4b4)"); return; }
     db_job_started(j, 0, r);
     if (r >= 0)
-        DB_LOG("pic: loading profile of slot %d (hid 0x%08x%08x), job %d\r\n", g_pic_slot,
+        DB_LOG("profile picture: loading profile of slot %d (hid 0x%08x%08x), job %d\r\n", g_pic_slot,
                (unsigned)(g_pic_hid >> 32), (unsigned)g_pic_hid, r);
 }
 static void my_profile_pic_update_start(BYTE *b, db_job *j)
@@ -688,7 +739,7 @@ static void my_profile_pic_update_start(BYTE *b, db_job *j)
     r = my_profile_edit_update_start(b, g_profile_db_pib, PIC_REC, g_pic_slot, &q);
     if (r < 0 && r != NO_SLOT) { my_profile_pic_fail(r, "profile update start (svc 0x4d4)"); return; }
     db_job_started(j, 1, r);
-    if (r >= 0) DB_LOG("pic: update z_ficon=%u, job %d\r\n", g_pic_pic, r);
+    if (r >= 0) DB_LOG("profile picture: update z_ficon=%u, job %d\r\n", g_pic_pic, r);
 }
 static void my_profile_pic_go(BYTE *b, db_job *j)
 {
@@ -729,7 +780,7 @@ static void my_profile_pic_loaded(BYTE *b)
         my_profile_pic_fail(FS_E_NOREC, "record lacks z_ficon / z_utime");
         return;
     }
-    DB_LOG("pic: profile loaded, record level %u\r\n", PIC_REC->level);
+    DB_LOG("profile picture: profile loaded, record level %u\r\n", PIC_REC->level);
     g_pic.step = 3;
     my_profile_pic_update_start(b, &g_pic);
 }
@@ -744,7 +795,7 @@ static void my_profile_pic_cancel(BYTE *b)
     my_profile_pic_reset();
 }
 
-#define pic_fail(why) requests_refuse(g_s.pic_state, sizeof g_s.pic_state, "pic: request refused - %s\r\n", why)
+#define pic_fail(why) requests_refuse(g_s.pic_state, sizeof g_s.pic_state, "profile picture: request refused - %s\r\n", why)
 static void my_profile_pic_pump(BYTE *b, int ctl)
 {
     db_job *j = &g_pic;
@@ -764,7 +815,7 @@ static void my_profile_pic_pump(BYTE *b, int ctl)
         if (!d || v > 9999 || (buf[i] && buf[i] != '\r' && buf[i] != '\n')) { pic_fail("failed:bad request"); return; }
         g_s.pic_want = v;
         lstrcpyA(g_s.pic_state, "saving");
-        base_log("pic: save pic %d on slot %d\r\n", v, g_my_slot);
+        base_log("profile picture: save pic %d on slot %d\r\n", v, g_my_slot);
         g_snap_dirty = 1;
         my_profile_pic_begin(b);
         return;
@@ -795,8 +846,8 @@ static void my_profile_pic_pump(BYTE *b, int ctl)
            me polcore's own fail at 100s is an error */
         if (r < 0) { my_profile_pic_fail(r, "profile update (svc 0x4d8)"); return; }
         r = my_profile_pic_apply_local(b, g_pic_slot, g_pic_pic, g_pic_hid);
-        if (r < 0) DB_LOG("pic: server updated, local handle apply failed %d\r\n", r);
-        else DB_LOG("pic: slot %d pic %u saved\r\n", g_pic_slot, g_pic_pic);
+        if (r < 0) DB_LOG("profile picture: server updated, local handle apply failed %d\r\n", r);
+        else DB_LOG("profile picture: slot %d pic %u saved\r\n", g_pic_slot, g_pic_pic);
         my_profile_pic_done("saved");
         return;
     }

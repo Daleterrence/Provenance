@@ -15,7 +15,7 @@ static void chat_room_raw_pump(BYTE *b)
     }
     g_cr_raw_n = 0;
     if (g_cr_raw_lost) {
-        base_log("chat: %d room line(s) dropped, too many at once\r\n", g_cr_raw_lost);
+        base_log("chat rooms: %d room line(s) dropped, too many at once\r\n", g_cr_raw_lost);
         g_cr_raw_lost = 0;
     }
 }
@@ -56,7 +56,7 @@ static void chat_room_clear(void)
 static void chat_room_state(const char *state)
 {
     lstrcpynA(g_cr_state, state, sizeof g_cr_state);
-    base_log("chat: room %s\r\n", state);
+    base_log("chat rooms: room %s\r\n", state);
     g_snap_dirty = 1;
 }
 static void chat_room_send_state(const char *state)
@@ -135,7 +135,7 @@ static void chat_room_master_end(const char *state)
         state = "failed:unlocked";
     }
     lstrcpynA(g_cr_mstate, state, sizeof g_cr_mstate);
-    base_log("chat: master job %d %s\r\n", g_cr_mop, state);
+    base_log("chat rooms: master job %d %s\r\n", g_cr_mop, state);
     g_cr_mop = MO_NONE;
     g_cr_mn = g_cr_mi = 0;
     SecureZeroMemory(g_cr_newkey, sizeof g_cr_newkey);
@@ -165,7 +165,7 @@ static void chat_room_step_done(BYTE *b, int r)
     g_s.cr_wait = CRW_NONE;
     if (st == CR_PART) { chat_room_left(g_cr_part_state[0] ? g_cr_part_state : "left"); return; }
     if (st == CR_AWAY) {
-        if (r < 0) base_log("chat: AWAY answered %d, entering anyway\r\n", r);
+        if (r < 0) base_log("chat rooms: AWAY answered %d, entering anyway\r\n", r);
         if (g_s.cr_leave) { chat_room_left("left"); return; }
         chat_room_go(CR_JOIN);
         return;
@@ -179,7 +179,7 @@ static void chat_room_step_done(BYTE *b, int r)
     if (st >= CR_SETTOPIC) {
         /* a room that didn't get its settings isn't the room that was asked for, so it's left */
         if (r < 0) {
-            base_log("chat: new room step %d answered %d, leaving it\r\n", st, r);
+            base_log("chat rooms: new room step %d answered %d, leaving it\r\n", st, r);
             wsprintfA(g_cr_part_state, "failed:create %d", r);
             chat_room_state(g_cr_part_state);
             g_s.cr_leave = 1;
@@ -192,7 +192,7 @@ static void chat_room_step_done(BYTE *b, int r)
         return;
     }
     if (st == CR_WHO) {
-        if (r < 0) base_log("chat: WHO answered %d\r\n", r);
+        if (r < 0) base_log("chat rooms: WHO answered %d\r\n", r);
         chat_room_members(b);
         if (g_cr_making) {
             /* the viewer's hello goes before the new room's settings (0x31, then 0x32 on) */
@@ -212,7 +212,7 @@ static void chat_room_step_done(BYTE *b, int r)
         }
         chat_room_go(g_s.cr_leave ? CR_PART : g_cr_skip_topic ? CR_IN : CR_TOPIC);
     } else if (st == CR_TOPIC) {
-        if (r < 0) base_log("chat: TOPIC answered %d\r\n", r);
+        if (r < 0) base_log("chat rooms: TOPIC answered %d\r\n", r);
         chat_room_go(g_s.cr_leave ? CR_PART : CR_IN);
     }
     if (g_s.cr_st == CR_IN) {
@@ -247,7 +247,7 @@ static void chat_room_msg_start(BYTE *b, int kind)
     g_s.cr_tries = 0;
     if (r < 0) {
         g_cr_msg_kind = -1;
-        base_log("chat: PRIVMSG (%d) refused %d\r\n", kind, r);
+        base_log("chat rooms: PRIVMSG (%d) refused %d\r\n", kind, r);
         if (kind == CRM_SAY) chat_room_send_state("failed:busy");
         if (kind >= CRM_KEY) chat_room_master_next();
         return;
@@ -272,7 +272,7 @@ static void chat_room_msg_done(int r, const char *why)
     g_s.cr_wait = CRW_NONE;
     g_cr_msg_kind = -1;
     if (kind == CRM_SAY) chat_room_send_state(why ? why : r > 0 ? "sent" : requests_failed(r));
-    else if (why || r < 0) base_log("chat: frame %d answered %d\r\n", kind, r);
+    else if (why || r < 0) base_log("chat rooms: frame %d answered %d\r\n", kind, r);
     /* like the viewer, a frame that didn't go doesn't stop the job */
     if (kind >= CRM_KEY) chat_room_master_next();
 }
@@ -311,7 +311,7 @@ static void chat_room_frame_out(BYTE *b, int type)
     static WCHAR w[0x100];
     chat_frame_hello(b, type, w);
     if (chat_frame_sjis(b, w, g_cr_frame, sizeof g_cr_frame) < 0) {
-        base_log("chat: frame %d doesn't convert\r\n", type); return;
+        base_log("chat rooms: frame %d doesn't convert\r\n", type); return;
     }
     g_s.cr_tries = 0;
     chat_room_msg_start(b, type);
@@ -325,7 +325,7 @@ static void chat_room_frame_tail(BYTE *b, int type, const WCHAR *tail)
     wsprintfW(w, L"%x00000%02x", type, lang & 0xff);
     lstrcpynW(w + 8, tail, 0x40);
     if (chat_frame_sjis(b, w, g_cr_frame, sizeof g_cr_frame) < 0) {
-        base_log("chat: frame %d doesn't convert\r\n", type);
+        base_log("chat rooms: frame %d doesn't convert\r\n", type);
         chat_room_master_next();
         return;
     }
@@ -370,7 +370,7 @@ static int chat_room_password(const char *tok, char *key, int cap)
     if (rc != PC_NOT_FOUND) CredDeleteW(t, CRED_TYPE_GENERIC, 0);
     if (rc == PC_OK && !lstrcmpA(user, tok)) return 1;
     SecureZeroMemory(key, cap);
-    if (rc != PC_NOT_FOUND) base_log("chat: room password entry unusable (%s)\r\n", rc == PC_OK ? "another enter's" : cred_why(rc));
+    if (rc != PC_NOT_FOUND) base_log("chat rooms: room password entry unusable (%s)\r\n", rc == PC_OK ? "another enter's" : cred_why(rc));
     return 0;
 }
 static void chat_room_join_refused(const char *state)
@@ -399,7 +399,7 @@ static void chat_room_enter(BYTE *b)
     g_cr_lines_dirty = 1;
     g_s.cr_leave = 0;
     g_cr_me = pc_has(b, SV_CHAT_MY_ID) ? pc_chat_my_id(b, chat_frame_session(b)) : 0;
-    base_log("chat: %s %s%s\r\n", g_cr_making ? "creating" : "entering", g_cr_room, g_cr_key[0] ? " (password)" : "");
+    base_log("chat rooms: %s %s%s\r\n", g_cr_making ? "creating" : "entering", g_cr_room, g_cr_key[0] ? " (password)" : "");
     chat_room_state("entering");
     chat_room_go(CR_AWAY);
 }
@@ -417,12 +417,12 @@ static void chat_room_join_request(BYTE *b)
     /* the password entry's read, and so deleted, before anything can turn the enter down */
     if (haskey[0]) pw = chat_room_password(tok, g_cr_key, sizeof g_cr_key);
     if (g_s.cr_st != CR_OUT) {
-        base_log("chat: enter ignored, already in or entering a room\r\n");
+        base_log("chat rooms: enter ignored, already in or entering a room\r\n");
         chat_room_join_refused(NULL);
         return;
     }
     if (chat_room_called_off(tok)) {
-        base_log("chat: enter called off before it was taken\r\n");
+        base_log("chat rooms: enter called off before it was taken\r\n");
         chat_room_join_refused(NULL);
         return;
     }
@@ -470,12 +470,12 @@ static void chat_room_create_request(BYTE *b)
     name = requests_line(&p);
     if (haskey[0]) pw = chat_room_password(tok, g_cr_key, sizeof g_cr_key);
     if (g_s.cr_st != CR_OUT) {
-        base_log("chat: create ignored, already in or entering a room\r\n");
+        base_log("chat rooms: create ignored, already in or entering a room\r\n");
         chat_room_join_refused(NULL);
         return;
     }
     if (chat_room_called_off(tok)) {
-        base_log("chat: create called off before it was taken\r\n");
+        base_log("chat rooms: create called off before it was taken\r\n");
         chat_room_join_refused(NULL);
         return;
     }
@@ -525,7 +525,7 @@ static void chat_room_leave_request(BYTE *b)
     /* the app couldn't withdraw its enter, so it's called off here instead, even with a PART still going */
     if (join[0] && lstrcmpA(join, g_cr_tok)) lstrcpynA(g_cr_cancel_tok, join, sizeof g_cr_cancel_tok);
     if (g_s.cr_st == CR_OUT || g_s.cr_leave) return;
-    base_log("chat: leaving %s\r\n", g_cr_room);
+    base_log("chat rooms: leaving %s\r\n", g_cr_room);
     g_s.cr_leave = 1;
 }
 
@@ -547,7 +547,7 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
         if (r == 0 && GetTickCount64() - g_cr_sent_at < CR_WAIT_MS) return;
         if (r == 0) {
             pc_chat_command_forget(b, s);   /* forget it, the viewer's own timeout. Never sent again without a new click */
-            base_log("chat: no answer in %us (step %d)\r\n", CR_WAIT_MS / 1000, g_s.cr_st);
+            base_log("chat rooms: no answer in %us (step %d)\r\n", CR_WAIT_MS / 1000, g_s.cr_st);
             if (g_s.cr_wait == CRW_MSG) { chat_room_msg_done(0, "failed:timeout"); return; }
             /* a JOIN that timed out but got there anyway counts */
             if (g_s.cr_st == CR_JOIN && chat_room_members(b)) { chat_room_step_done(b, 1); return; }
@@ -623,7 +623,7 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
         r = -1;
     }
     if (r < 0) {
-        if (r != CR_NOTHING_TO_LEAVE) base_log("chat: step %d couldn't be sent (%d)\r\n", g_s.cr_st, r);
+        if (r != CR_NOTHING_TO_LEAVE) base_log("chat rooms: step %d couldn't be sent (%d)\r\n", g_s.cr_st, r);
         if (g_s.cr_st == CR_PART) { chat_room_left(g_cr_part_state[0] ? g_cr_part_state : "left"); return; }
         if (g_s.cr_st == CR_AWAY) { chat_room_go(CR_JOIN); return; }
         if (g_s.cr_st == CR_JOIN) { chat_room_left(requests_failed(r)); return; }

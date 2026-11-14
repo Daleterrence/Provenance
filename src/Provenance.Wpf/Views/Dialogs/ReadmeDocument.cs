@@ -1,6 +1,9 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Documents;
+using System.Windows.Threading;
 using Provenance.Common.Game.ThirdParty;
+using Serilog;
 
 namespace Provenance.Wpf.Views.Dialogs;
 
@@ -11,11 +14,66 @@ internal static class ReadmeDocument
 
     public static FlowDocument Build(MarkdownDoc doc, Action<Uri> openLink)
     {
+        var page = NewPage();
+        bool whole = true;
+        foreach (var block in doc.Blocks)
+        {
+            if (!TryBlock(block, openLink, out var built)) { whole = false; break; }
+            page.Blocks.Add(built);
+        }
+        Finish(page, doc.Truncated || !whole);
+        return page;
+    }
+
+    // WPF's elements belong to the thread that makes them, so the building stays here and gives the window room to
+    // breathe between blocks instead
+    public static async Task<FlowDocument> BuildAsync(MarkdownDoc doc, Action<Uri> openLink, CancellationToken cancel)
+    {
+        var page = NewPage();
+        bool whole = true;
+        var clock = Stopwatch.StartNew();
+        foreach (var block in doc.Blocks)
+        {
+            if (!TryBlock(block, openLink, out var built)) { whole = false; break; }
+            page.Blocks.Add(built);
+            if (clock.ElapsedMilliseconds < 15) continue;
+            await Dispatcher.Yield(DispatcherPriority.Background);
+            cancel.ThrowIfCancellationRequested();
+            clock.Restart();
+        }
+        Finish(page, doc.Truncated || !whole);
+        return page;
+    }
+
+    private static FlowDocument NewPage()
+    {
         var page = new FlowDocument { PagePadding = new Thickness(18, 12, 18, 14), FontSize = 13, TextAlignment = TextAlignment.Left };
         page.SetResourceReference(FlowDocument.FontFamilyProperty, "Font.Body");
         page.SetResourceReference(FlowDocument.ForegroundProperty, "Text.1");
-        page.Blocks.AddRange(doc.Blocks.Select(b => ToBlock(b, BlockGap, openLink)));
         return page;
+    }
+
+    private static bool TryBlock(MdBlock block, Action<Uri> openLink, out Block built)
+    {
+        try
+        {
+            built = ToBlock(block, BlockGap, openLink);
+            return true;
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException)
+        {
+            Log.Warning(e, "Could not lay out part of a readme, leaving the rest out");
+            built = null!;
+            return false;
+        }
+    }
+
+    private static void Finish(FlowDocument page, bool leftOut)
+    {
+        if (!leftOut) return;
+        var note = new Paragraph(new Run("The rest of this file was left out.")) { FontStyle = FontStyles.Italic, Margin = new Thickness(0, 4, 0, 0) };
+        note.SetResourceReference(TextElement.ForegroundProperty, "Text.3");
+        page.Blocks.Add(note);
     }
 
     private static Block ToBlock(MdBlock block, Thickness gap, Action<Uri> openLink)

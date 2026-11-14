@@ -70,7 +70,6 @@ public sealed partial class SocialSearch : ObservableObject
     private const int SearchPage = 100;   // the hook fetches the first 100, like the viewer
     private const string TooManyResults = "Too many results. Please narrow your search.";
 
-
     internal bool Writing => _login.Answer.Running || _login.Request.Running;
 
     internal void Reset()

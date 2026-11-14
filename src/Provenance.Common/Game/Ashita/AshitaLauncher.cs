@@ -60,7 +60,7 @@ public static class AshitaLauncher
         try { bootFile = Path.GetFileName(AshitaInstall.WriteBoot(dir, boot, polExe)); }
         catch (Exception ex)
         {
-            Log.Error(ex, "Could not write the Ashita boot config");
+            Log.Error(ex, "Could not write the Ashita boot configuration");
             return Fail(ErrorText.Of(ex, "Provenance couldn't make its copy of your Ashita boot configuration."));
         }
         // no shell, so it inherits the environment below
@@ -82,6 +82,7 @@ public static class AshitaLauncher
         }
         catch (Exception ex)
         {
+            try { if (hookProc is { HasExited: false }) hookProc.Kill(true); } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
             hookProc?.Dispose();
             Log.Error(ex, "{Platform} did not start", name);
             return Fail($"Couldn't start {name}. Check its folder in Settings, under Windower/Ashita.");
@@ -177,7 +178,7 @@ public static class AshitaLauncher
     }
 
     // Ashita first so it can't start another, then everything left in its tree. A pol.exe without the hook carries on
-    // into the viewer's own menu, the one thing nobody's meant to see
+    // into the viewer's own menu
     internal static bool EndLaunch(Process hook, LaunchTree tree)
     {
         try
@@ -188,7 +189,7 @@ public static class AshitaLauncher
                 hook.WaitForExit(3000);
             }
         }
-        catch (Exception ex) { Log.Warning(ex, "Could not end the third-party hook (pid {Pid})", hook.Id); }
+        catch (Exception ex) { Log.Warning(ex, "Could not end Windower or Ashita (pid {Pid})", hook.Id); }
         bool viewer = false;
         // again till a look finds nothing, a pol.exe can start one of its own (Ashita's bootloader, say) meanwhile
         var until = DateTime.UtcNow + TimeSpan.FromSeconds(3);
@@ -205,7 +206,7 @@ public static class AshitaLauncher
                 if (stamp.EndIfStill(afterMs: 3000) != ProcessStamp.Ending.Ended) continue;
                 viewer |= isViewer;
                 again = true;
-                Log.Information("Ended {Exe} (pid {Pid}): the login through the third-party hook was stopped", exe, pid);
+                Log.Information("Ended {Exe} (pid {Pid}): the login through Windower or Ashita was stopped", exe, pid);
             }
         }
         return viewer;

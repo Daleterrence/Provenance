@@ -329,6 +329,12 @@ public sealed class WindowerUpdater
             return;
         }
         var names = WindowerManifest.ParseRes(doc);
+        if (names.Count == 0)
+        {
+            job.Delete(temp);
+            job.Errors.Add("Windower's resource list came back empty, so the resource files were left as they are.");
+            return;
+        }
         job.Backup(cache);
         if (!job.Pins.Intact(resDir))
         {

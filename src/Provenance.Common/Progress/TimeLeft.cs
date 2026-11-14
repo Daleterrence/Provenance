@@ -1,17 +1,21 @@
 namespace Provenance.Common.Progress;
 
-// "About 3 minutes left" under a progress bar. Blank until it's seen 10s of steady progress, then a smoothed countdown
+// "About 3 minutes left" under a progress bar. Says it's estimating until it's seen 10s of steady progress, then a
+// smoothed countdown that stays up and keeps counting until Clear, even when the pace goes strange
 public sealed class TimeLeft
 {
+    public const string Estimating = "Estimating remaining time...";
+
     private const long SettleMs = 10_000, WindowMs = 30_000, StallMs = 10_000, SampleMs = 250;
-    private const double SmoothMs = 10_000, LongestMs = 24 * 3_600_000.0;
+    private const double SmoothMs = 10_000;
 
     private readonly Queue<(long Ms, double Done)> _samples = new();
     private double _total, _done = double.NaN;
-    private long _startMs, _lastMs, _sampleMs, _movedMs;
-    private double? _left;
-    private bool _stalled;
+    private long _startMs, _lastMs, _sampleMs, _movedMs, _nowMs, _shownMs;
+    private double? _left, _shown;
+    private bool _stalled, _active;
 
+    // starts the estimate over, what's already on show carries on counting down meanwhile
     public void Reset()
     {
         _samples.Clear();
@@ -19,9 +23,19 @@ public sealed class TimeLeft
         _left = null;
     }
 
+    // the next job starts from estimating again
+    public void Clear()
+    {
+        Reset();
+        _shown = null;
+        _active = false;
+    }
+
     // done and total in any unit, bytes or a fraction. A new total or progress going backwards starts it over
     public void Add(long nowMs, double done, double total)
     {
+        _active = true;
+        _nowMs = nowMs;
         if (!double.IsFinite(done) || !double.IsFinite(total) || total <= 0) { Reset(); return; }
         // a stall or a sleep says nothing about the pace once it moves again, so it settles from scratch
         if (_samples.Count == 0 || total != _total || done < _done || nowMs - _sampleMs > WindowMs || (_stalled && done > _done))
@@ -55,12 +69,12 @@ public sealed class TimeLeft
             _left = counted + (1 - Math.Exp(-dt / SmoothMs)) * (raw - counted);
         }
         _lastMs = nowMs;
+        if (nowMs - _startMs >= SettleMs && double.IsFinite(_left.Value)) { _shown = _left; _shownMs = nowMs; }
     }
 
-    // nothing past a day, a guess that far out is just noise
+    // blank only before a job's first reading
     public string Text =>
-        _left is { } left && double.IsFinite(left) && left <= LongestMs && _lastMs - _startMs >= SettleMs && _done < _total
-            ? Describe(left) : "";
+        _shown is { } shown ? Describe(Math.Max(0, shown - (_nowMs - _shownMs))) : _active ? Estimating : "";
 
     private void Start(long nowMs, double done, double total)
     {

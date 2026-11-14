@@ -4,31 +4,34 @@ using System.Windows.Input;
 namespace Provenance.Wpf.Controls.Behaviours;
 
 // Shown is true while the focus came from the keyboard. A clicked button keeps keyboard focus too, so going off
-// IsKeyboardFocused would leave it lit up
+// IsKeyboardFocused would leave it lit up. Every element is tracked, so any focus ring can follow it
 public static class FocusCue
 {
-    public static readonly DependencyProperty TrackProperty = DependencyProperty.RegisterAttached(
-        "Track", typeof(bool), typeof(FocusCue), new PropertyMetadata(false, OnTrackChanged));
-
     public static readonly DependencyProperty ShownProperty = DependencyProperty.RegisterAttached(
         "Shown", typeof(bool), typeof(FocusCue), new PropertyMetadata(false));
 
-    public static bool GetTrack(DependencyObject d) => (bool)d.GetValue(TrackProperty);
-    public static void SetTrack(DependencyObject d, bool value) => d.SetValue(TrackProperty, value);
+    // set by the app's focus ring styles, so FocusLook can tell them from a dotted one
+    public static readonly DependencyProperty RingProperty = DependencyProperty.RegisterAttached(
+        "Ring", typeof(bool), typeof(FocusCue), new PropertyMetadata(false));
+
+    public static bool GetRing(DependencyObject d) => (bool)d.GetValue(RingProperty);
+    public static void SetRing(DependencyObject d, bool value) => d.SetValue(RingProperty, value);
+
+    public static bool IsRing(Style? style)
+    {
+        for (; style is not null; style = style.BasedOn)
+            if (style.Setters.OfType<Setter>().Any(s => s.Property == RingProperty)) return true;
+        return false;
+    }
+
+    static FocusCue()
+    {
+        EventManager.RegisterClassHandler(typeof(UIElement), Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnGot), true);
+        EventManager.RegisterClassHandler(typeof(UIElement), Keyboard.LostKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnLost), true);
+    }
+
     public static bool GetShown(DependencyObject d) => (bool)d.GetValue(ShownProperty);
     public static void SetShown(DependencyObject d, bool value) => d.SetValue(ShownProperty, value);
-
-    private static void OnTrackChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is not UIElement element) return;
-        element.GotKeyboardFocus -= OnGot;
-        element.LostKeyboardFocus -= OnLost;
-        if (e.NewValue is true)
-        {
-            element.GotKeyboardFocus += OnGot;
-            element.LostKeyboardFocus += OnLost;
-        }
-    }
 
     private static void OnGot(object sender, KeyboardFocusChangedEventArgs e)
     {

@@ -66,11 +66,11 @@ static void mail_send_paced(int r, ULONGLONG ms)
     int was = g_s.pace.stopped;
     mail_send_pace_done(&g_s.pace, GetTickCount64(), r, ms);
     if (g_s.pace.stopped) {
-        if (!was) base_log("mail: send failed %d - no more sends this session\r\n", r);
+        if (!was) base_log("messages: send failed %d - no more sends this session\r\n", r);
     } else if (r != 1) {
-        base_log("mail: send failed %d - sends wait %ds\r\n", r, g_s.pace.fails == 1 ? 10 : 60);
+        base_log("messages: send failed %d - sends wait %ds\r\n", r, g_s.pace.fails == 1 ? 10 : 60);
     } else if (ms > 5000) {
-        base_log("mail: slow send (%ums) - the next one waits 5s\r\n", (unsigned)ms);
+        base_log("messages: slow send (%ums) - the next one waits 5s\r\n", (unsigned)ms);
     }
 }
 static const char *mail_send_pace_refusal(void)
@@ -110,7 +110,7 @@ static void mail_send_result(const char *token, const char *state, const BYTE *h
 }
 static void mail_send_fail(const char *why)
 {
-    base_log("mail: send refused - %s\r\n", why);
+    base_log("messages: send refused - %s\r\n", why);
     mail_send_result(g_s.send_token, why, NULL);
 }
 static void mail_send_drop(int i)
@@ -131,7 +131,7 @@ static void mail_send_start(BYTE *b)
     if (i == g_s.send_queue_n) return;
     s = &g_sq[i];
     if (no) {
-        base_log("mail: send refused - %s\r\n", no);
+        base_log("messages: send refused - %s\r\n", no);
         mail_send_result(s->token, no, NULL);
         mail_send_drop(i);
         return;
@@ -141,7 +141,7 @@ static void mail_send_start(BYTE *b)
         ? pc_mail_send(b, s->msg)
         : NO_SLOT;
     if (t == NO_SLOT) { mail_send_note(s->token, "queued"); return; }
-    base_log("mail: send start -> %d\r\n", t);
+    base_log("messages: send start -> %d\r\n", t);
     if (t < 0) {
         lstrcpyA(st, requests_failed(t));
         mail_send_result(s->token, st, NULL);
@@ -229,7 +229,7 @@ static void mail_send_parse(BYTE *b, char *buf)
     n = mail_send_msg_build(b, 0, fr.f.id_lo, fr.f.id_hi, mySlot, pc_friend_slot(&fr.f), myName,
                   sj_subj, sj_text, NULL, 0);
     if (n < 0) { mail_send_fail("failed:alloc"); return; }
-    base_log("mail: send to row %d (my slot %d, body %d bytes)\r\n", row, mySlot, n);
+    base_log("messages: send to row %d (my slot %d, body %d bytes)\r\n", row, mySlot, n);
     mail_send_start(b);
 }
 static void mail_send_pump(BYTE *b)
@@ -248,7 +248,7 @@ static void mail_send_pump(BYTE *b)
         mail_send_result(s->token, st, s->msg);
         if (r == 1) mail_send_sent_record(b, s->msg);
         ms = GetTickCount64() - s->started;
-        base_log("mail: send done -> %d (%ums)\r\n", r, (unsigned)ms);
+        base_log("messages: send done -> %d (%ums)\r\n", r, (unsigned)ms);
         mail_send_paced(r, ms);
         mail_send_drop(i--);   /* only now, the upload read it during the polls */
     }
@@ -264,7 +264,7 @@ static void mail_send_pump(BYTE *b)
     why = mail_send_pace_check(&g_s.pace, GetTickCount64());
     if (why != PACE_OK && why != PACE_STOPPED && why != PACE_HOUR) {
         if (why == PACE_MIN && said != why)
-            base_log("mail: %d sends in a minute - the next chat line waits\r\n", PACE_PER_MIN);
+            base_log("messages: %d sends in a minute - the next chat line waits\r\n", PACE_PER_MIN);
         said = why;
         return;
     }

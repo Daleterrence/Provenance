@@ -257,6 +257,6 @@ static void snapshot_social(BYTE *b)
     jw_free(&w);
     if (g_mail_fresh && !held) {
         g_mail_fresh = 0;
-        base_log("mail: snapshot has the new message\r\n");
+        base_log("messages: snapshot has the new message\r\n");
     }
 }

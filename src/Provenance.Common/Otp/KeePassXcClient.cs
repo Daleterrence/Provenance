@@ -11,7 +11,14 @@ public sealed class KeePassXcException(int code, string message) : Exception(mes
     public const int DatabaseLocked = 1, NoPublicKey = 3, CannotDecrypt = 4, Denied = 6, NotAssociated = 8, NoLogins = 15, BadFrame = -1;
 }
 
-public sealed record KeePassXcEntry(string Name, string Login, string Uuid, string? Totp);
+public sealed record KeePassXcEntry(string Name, string Login, string Uuid, string? Totp)
+{
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("Totp = ***");
+        return true;
+    }
+}
 
 // KeePassXC's browser protocol (keepassxc-browser's keepassxc-protocol.md) over keepassxc-proxy's stdin/stdout. Each
 // frame is a 4-byte LE length plus ASCII JSON, and after change-public-keys the inner JSON is a NaCl box

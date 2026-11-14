@@ -177,7 +177,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         }, st is not ("failed:no profile" or "failed:-5324"));
     }
 
-    private static string ProfileFailText(string st) => st switch
+    internal static string ProfileFailText(string st) => st switch
     {
         "timeout" => HookFailures.Profile.NoAnswer,
         "failed:busy" => HookFailures.Busy,

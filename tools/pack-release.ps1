@@ -18,7 +18,7 @@
 .EXAMPLE
     pwsh tools/pack-release.ps1 -Version 1.0.0
 .EXAMPLE
-    pwsh tools/pack-release.ps1 -Version 1.0.1 -Out D:\Releases\1.0.1
+    pwsh tools/pack-release.ps1 -Version 1.0.1 -Out C:\Releases\1.0.1
 #>
 #Requires -Version 7
 [CmdletBinding()]

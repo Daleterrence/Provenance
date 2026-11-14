@@ -36,8 +36,8 @@ public sealed class ChatStore
             root = Path.Combine(userData, "messages");
         }
         var path = Path.Combine(root, profileId + ".dat");
-        _file = new(path, Entropy, "Chat log");
-        _deletedFile = new(path[..^4] + ".deleted.dat", DeletedEntropy, "Chat log", setAsideUnreadable: false);
+        _file = new(path, Entropy, "Messages");
+        _deletedFile = new(path[..^4] + ".deleted.dat", DeletedEntropy, "Messages", setAsideUnreadable: false);
         if (_deletedFile.Load() is { } keys)
             foreach (var (k, t) in keys) _deleted[k] = t;
         if (_file.Load() is not { } loaded) return;

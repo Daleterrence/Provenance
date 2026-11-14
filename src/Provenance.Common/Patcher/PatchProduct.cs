@@ -11,7 +11,7 @@ public sealed record PatchProduct(GameProduct Game, string Host, string TagWire,
     public string ProductId => Game.InstallValue;
     public int Port => 53000 + Id;
 
-    // null reads the Interface value from the registry like POL. It's the same on every PC, so the publisher pins it
+    // null reads the Interface value from the registry like POL. It's the same on every PC, so a caller can pin it
     public string? PatchVerInterface { get; init; }
 
     public PolRegion Region { get; init; } = PolRegion.UnitedStates;

@@ -98,6 +98,12 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public bool CanPlay => PlayBlockedReason is null;
     public string Summary => OnlineCount switch { 0 => "No friends online", 1 => "1 friend online", var n => $"{n} friends online" };
     public bool NoFriends => LoggedIn && Friends.Count == 0;
+    public bool NoFriendsInList => NoFriends && !FriendsUnavailable;
+
+    private bool _goingOnline;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(FriendsUnavailable), nameof(NoFriendsInList))] private bool _onlineFailed;
+    public bool PopShown => PopText.Length > 0 && LoggedIn && !GameRunning;
+    public bool FriendsUnavailable => OnlineFailed && LoggedIn;
     public bool LoggedIn => _session.LoggedIn;
     public string NothingSelected => NoFriends ? NoFriendsText
                                                : "Select a friend to see your messages.";
@@ -140,13 +146,15 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     internal ChatStore? Chat => _login.Chat;
     internal SocialSession Login => _login;
 
-    // a request the hook hasn't taken yet never runs for nobody
+    // nobody's waiting on it any more, so a request the hook hasn't taken yet doesn't run
     internal void DiscardRequest(string ext)
     {
         if (_pol.Pid is { } pid) HookFiles.Discard(pid, ext);
     }
 
     public ViewerResources Viewer => _viewer;
+
+    public IDictionary<string, PolFfxiProfile> OwnCharacterProfiles => _login.OwnCharacterProfiles;
 
     // the viewer's status menu has these three, only the viewer itself ever sets Busy
     private static readonly PolStatus[] StatusChoices = [PolStatus.Online, PolStatus.Away, PolStatus.AppearOffline];
@@ -156,7 +164,35 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     }
     public IReadOnlyList<StatusItem> StatusItems { get; } = StatusChoices.Select(s => new StatusItem(s, PolStatusText.Label(s))).ToList();
     [ObservableProperty] private int _myStatusIndex;
-    [ObservableProperty] private string _statusNote = "";
+    // one card above the bottom bar, the newest message wins and an error stays up for PopErrorTime
+    internal static readonly TimeSpan PopErrorTime = TimeSpan.FromSeconds(6);
+    private const string StatusWaiting = "Changing your online status...";
+    public static string StatusChanging(PolStatus status) => $"Changing your online status to {PolStatusText.Label(status)}...";
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(PopShown))] private string _popText = "";
+    [ObservableProperty] private bool _popIsError;
+    [ObservableProperty] private string _statusPendingText = StatusWaiting;
+
+    private void RefreshPop()
+    {
+        string text = "";
+        bool error = false;
+        if (_login.PopError is { } failed && Now < _login.PopErrorUntil) (text, error) = (failed, true);
+        else
+        {
+            _login.PopError = null;
+            if (_login.RequestedStatus is { } want) text = StatusChanging(want);
+            else if (_goingOnline) text = "Going online...";
+        }
+        PopText = text;
+        if (text.Length > 0) PopIsError = error;
+        StatusPendingText = _login.RequestedStatus is { } asked ? StatusChanging(asked) : StatusWaiting;
+    }
+
+    private void PopStatusError(string text)
+    {
+        _login.PopError = text;
+        _login.PopErrorUntil = Now + PopErrorTime;
+    }
     [ObservableProperty, NotifyPropertyChangedFor(nameof(StatusEditable))] private bool _statusPending;
     public bool StatusEditable => !StatusPending && WriteBlockedNote is null;
     private bool _applyingSnapshot;
@@ -176,11 +212,13 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     {
         OnPropertyChanged(nameof(LoggedIn));
         OnPropertyChanged(nameof(NoFriends));
+        OnPropertyChanged(nameof(NoFriendsInList));
+        OnPropertyChanged(nameof(FriendsUnavailable));
+        OnPropertyChanged(nameof(PopShown));
         OnPropertyChanged(nameof(NothingSelected));
         bool running = _session.GameRunning;
         if (_gameRunningShown.Changed(running))
         {
-            StatusNote = running ? GameRunningNote : "";
             Messages.StateChanged();
             OnPropertyChanged(nameof(GameRunning));
             OnPropertyChanged(nameof(StatusEditable));
@@ -189,14 +227,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         OnPropertyChanged(nameof(CanEdit));
     }
 
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowFriends), nameof(FriendsTabVisible), nameof(GroupsTabVisible))]
-    private bool _showGroups;
-    public bool ShowFriends => !ShowGroups;
-    public bool FriendsTabVisible => FriendsListVisible && !ShowGroups;
-    public bool GroupsTabVisible => FriendsListVisible && ShowGroups;
-
-    [RelayCommand] private void ShowFriendsTab() => ShowGroups = false;
-    [RelayCommand] private void ShowGroupsTab() => ShowGroups = true;
+    public bool FriendsTabVisible => FriendsListVisible;
 
     // more than one account running means lean sessions, which have no chat at all
     public bool CanGroupChat => LoggedIn && WriteBlockedNote is null && !_session.InMultiRun;
@@ -225,11 +256,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         OnPropertyChanged(nameof(CanGroupChat));
         Messages.StateChanged();
         if (!value && EditNote.Text == SwitchingNote) EditNote.Clear();
-        if (GameRunning) return;
-        StatusNote = value ? SwitchingNote : StatusNote == SwitchingNote ? "" : StatusNote;
     }
 
-    private bool _friendsListVisible, _mainWindowActive;
+    private bool _friendsListVisible, _groupsWindowVisible, _mainWindowActive;
 
     public bool IsWaiting(int mid) => mid > 0 && Friends.Any(f => f.RequestMid == mid);
 
@@ -244,8 +273,19 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             {
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(FriendsTabVisible));
-                OnPropertyChanged(nameof(GroupsTabVisible));
             }
+            RefreshUnseen();
+        }
+    }
+
+    public bool GroupsWindowVisible
+    {
+        get => _groupsWindowVisible;
+        set
+        {
+            bool changed = _groupsWindowVisible != value;
+            _groupsWindowVisible = value;
+            if (changed) OnPropertyChanged();
             RefreshUnseen();
         }
     }
@@ -264,6 +304,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     {
         var waiting = Friends.Where(f => f.RequestMid > 0).Select(f => f.RequestMid).ToList();
         if (_friendsListVisible || _mainWindowActive) _login.ShownRequests.UnionWith(waiting);
+        // the groups window only lists group invitations
+        else if (_groupsWindowVisible) _login.ShownRequests.UnionWith(Friends.Where(f => f.IsGroupInvite).Select(f => f.RequestMid));
         UnseenCount = UnreadCount + waiting.Count(m => !_login.ShownRequests.Contains(m));
     }
 
@@ -305,7 +347,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         static string Id(PolFriend f) => f.Key.Length > 0 ? f.Key : "n:" + f.Name;
         if (!snap.FriendsLoaded) return;   // an empty list isn't "everyone went offline"
         var now = snap.Friends.Where(f => f.Online && !f.Pending).ToList();
-        // everyone already online turns up in the first few secs, only later changes are news
+        // everyone already online turns up in the first 30s, only later changes are news
         _login.PresenceQuietUntil ??= Now + TimeSpan.FromSeconds(30);
         if (Now >= _login.PresenceQuietUntil)
             foreach (var f in now)
@@ -321,7 +363,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         GroupChat.SetLog(new GroupChatLog(profileId, storeRoot));
         chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
         StatusPending = false;
-        StatusNote = "";
+        _goingOnline = false;
+        OnlineFailed = false;
+        RefreshPop();
         _lookups?.Reset();
         Profile.Reset();
         Search.Reset();
@@ -340,10 +384,14 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         Avatar = null;
         AccountNotice = PlayBlockedReason = null;
         MessagesUnavailable = false;
-        ShowGroups = false;
+        _goingOnline = false;
+        OnlineFailed = false;
+        _login.PopError = null;
+        RefreshPop();
         RefreshUnseen();
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(NoFriends));
+        OnPropertyChanged(nameof(NoFriendsInList));
     }
 
     public void Apply(PolSocialSnapshot snap)
@@ -360,7 +408,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     private void ApplyCore(PolSocialSnapshot snap)
     {
-        var timer = ReferenceEquals(_login.Last, PolSocialSnapshot.Empty) ? new StepTimer("First snapshot apply") : null;
+        var timer = ReferenceEquals(_login.Last, PolSocialSnapshot.Empty) ? new StepTimer("First friends and messages apply") : null;
         // a friend's profile shows what they let this handle see, so ones read under another handle go
         if (_login.Last.MyKey.Length > 0 && snap.MyKey.Length > 0 && _login.Last.MyKey != snap.MyKey) Profile.Forget();
         _login.Last = snap;
@@ -399,17 +447,16 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             if (!snap.StatusBusy && snap.MyStatus == want)
             {
                 _login.RequestedStatus = null;
-                StatusNote = "";
             }
             else if (!snap.StatusBusy && Now - _login.RequestedAt > HookLimits.StatusRefused)
             {
                 _login.RequestedStatus = null;
-                StatusNote = "PlayOnline didn't accept the status change.";
+                PopStatusError(HookFailures.Friends.StatusRefused(PolStatusText.Label(want)));
             }
             else if (Now - _login.RequestedAt > HookLimits.Status)
             {
                 _login.RequestedStatus = null;   // polcore gives up after 100s
-                StatusNote = HookFailures.Friends.StatusNoAnswer;
+                PopStatusError(HookFailures.Friends.StatusNoAnswer(PolStatusText.Label(want)));
             }
         }
         StatusPending = _login.RequestedStatus != null || snap.StatusBusy;
@@ -417,14 +464,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         {
             var status = snap.MyStatus == PolStatus.Busy ? PolStatus.Online : snap.MyStatus;
             MyStatusIndex = Array.IndexOf(StatusChoices, status);
-            StatusNote = snap.Presence switch
-            {
-                "starting" => "Going online...",
-                var p when p.StartsWith("failed", StringComparison.Ordinal) =>
-                    "PlayOnline didn't let you go online, so your friends show as offline. Log out and back in again.",
-                _ => StatusNote is "Going online..." ? "" : StatusNote,
-            };
+            _goingOnline = snap.Presence == "starting";
+            OnlineFailed = snap.Presence.StartsWith("failed", StringComparison.Ordinal);
         }
+        RefreshPop();
         if (!string.IsNullOrWhiteSpace(snap.MyHandle)) AccountName = snap.MyHandle;
         timer?.Lap("status");
         Avatar = _avatars.ProfilePicture(snap.MyProfilePictureId);
@@ -447,6 +490,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (chatChanged) Messages.Refresh();
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(NoFriends));
+        OnPropertyChanged(nameof(NoFriendsInList));
         OnPropertyChanged(nameof(NothingSelected));
         SnapshotApplied?.Invoke(snap);
     }
@@ -529,6 +573,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         });
         if (keep != null && !Friends.Contains(SelectedFriend!))
             SelectedFriend = Friends.FirstOrDefault(i => i.Is(keep));
+        Groups.SyncInvites(Friends);
     }
 
     // online and offline count as one section (a presence change just moves the row), a request and a friend row don't
@@ -553,7 +598,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                               : ProfilePictureSaving ? "Saving your profile picture to PlayOnline..." : EditNote.Text;
     public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote.Text);
     public bool CanEdit => LoggedIn && !EditBusy && _pol.Pid != null && WriteBlockedNote is null;
-
 
     [RelayCommand]
     private void DismissEditNote() => EditNote.Clear();
@@ -634,7 +678,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     private bool _filterWasOn;
 
-
     // a pic save is two requests, in the viewer's order
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EditNoteShown), nameof(Saving), nameof(EditStatus), nameof(EditStatusShown))]
@@ -682,7 +725,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _login.RequestedStatus = want;
         _login.RequestedAt = Now;
         StatusPending = true;
-        StatusNote = "";
+        _login.PopError = null;
+        RefreshPop();
         _settings.SaveChange(s => s.PlayOnlineStatus = PolStatusText.Code(want));
         if (_pol.Pid is { } pid) SocialRequests.SetStatus(pid, want);
     }
@@ -730,6 +774,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (_session.Phase == SessionPhase.InGame) return;
         if (!_windows.CloseIfShown(SecondWindow.ProfileEditor)) _windows.EditProfile(this);
     }
+
+    internal void ShowFriendsWindow() => _windows.ShowFriends(this);
+
+    internal void ShowMessagesWindow() => _windows.ShowMessages(this);
 
     public void ShowMessagesAlongside(bool takeFocus) => _windows.ShowMessagesAlongside(this, takeFocus);
 

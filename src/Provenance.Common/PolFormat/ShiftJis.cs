@@ -8,7 +8,7 @@ public static class ShiftJis
 {
     private static readonly Encoding Cp932 = Encoding.GetEncoding(932);
 
-    // unmapped chars become '?', so 2 a char never lets one through. The fallback's per UTF-16 unit,
+    // an unmapped char counts as 2 bytes, so one never slips under the limit. The fallback's per UTF-16 unit,
     // so an emoji counts 4 in case polcore stands in for each half
     private static readonly Encoding Counting = Encoding.GetEncoding(932, new EncoderReplacementFallback("??"), DecoderFallback.ReplacementFallback);
     private static readonly Encoding Strict = Encoding.GetEncoding(932, new EncoderReplacementFallback(""), DecoderFallback.ReplacementFallback);

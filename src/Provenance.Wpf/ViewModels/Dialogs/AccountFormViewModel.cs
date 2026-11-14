@@ -17,7 +17,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
 
     private readonly bool _required;
     private readonly string _savedAccount;
-    // null until op's listed them, or when it couldn't
+    // null until 1Password's tool has listed them, or when it couldn't
     private IReadOnlyList<OnePasswordAccount>? _accounts;
     private readonly LatestOnly _toolWork = new();
     private string? _tool;
@@ -120,7 +120,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
                                            OtpSource.Length > 0 ? OtpItem.Trim() : "", ChosenAccount()), null);
     }
 
-    // with one account op's choice is the only one, and when op couldn't list them the saved choice stays
+    // with one account there's nothing to pick, and when they couldn't be listed the saved choice stays
     internal string ChosenAccount() =>
         OtpSource != OtpSources.OnePassword ? ""
         : _accounts is null ? _savedAccount

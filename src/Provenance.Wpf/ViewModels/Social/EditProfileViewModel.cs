@@ -32,6 +32,9 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private bool _loadingValues;
     private bool _handleChanges;
     private readonly ProfileCard _handleCard;
+    private readonly HookJobWatch _cardWatch = new();
+    private ProfileCard? _cardAsking, _cardFrom;
+    private int _cardPid;
 
     internal EditProfileViewModel(ISocialSession social, IDialogs dialogs)
     {
@@ -82,17 +85,118 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     public bool IsHandleCard => SelectedCard.IsHandle;
     public bool IsXiCard => !SelectedCard.IsHandle;
-    public bool CanSelectCard => !Busy;
+    public bool CanSelectCard => !Busy && !CardLoading;
+
+    // a character's profile is read when its card is opened, and the card strip waits while that's out
+    public StatusLine CardNote { get; } = new();
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanSelectCard))] private bool _cardLoading;
 
     // edits stay with each card, so picking another one never loses any
     [RelayCommand]
     private void SelectCard(ProfileCard? card)
     {
-        if (card is null || Busy || card == SelectedCard) return;
+        if (card is null || !CanSelectCard || card == SelectedCard && !card.ReadFailed) return;
+        var from = card == SelectedCard ? _cardFrom ?? card : SelectedCard;
         SelectedCard.IsSelected = false;
         card.IsSelected = true;
         SelectedCard = card;
         if (Note.IsError) Note.Clear();
+        CardNote.Clear();
+        if (card.Character is not null) ShowCharacter(card, from);
+    }
+
+    // one read per card per login. A card read before shows what it had, and nothing's sent while the game's running or
+    // the handle's switching
+    private void ShowCharacter(ProfileCard card, ProfileCard from)
+    {
+        card.ReadFailed = false;
+        if (_social.OwnCharacterProfiles.TryGetValue(card.Character!.Key, out var known))
+        {
+            ShowRows(card, known);
+            return;
+        }
+        card.Rows.Clear();
+        if (_social.WriteBlockedNote is { } blocked)
+        {
+            CardNote.Show(blocked);
+            card.ReadFailed = true;
+            return;
+        }
+        if (_social.Session.Pid is not { } pid)
+        {
+            CardNote.Fail(HookFailures.ProfileEditor.SessionEnded);
+            card.ReadFailed = true;
+            return;
+        }
+        var token = _cardWatch.Begin(HookLimits.FfxiProfile, _social.Now);
+        _cardAsking = card;
+        _cardFrom = from;
+        _cardPid = pid;
+        CardLoading = true;
+        CardNote.Show(_social.Viewer.Text(0x4a82, "Retrieving profile data..."));
+        if (SocialRequests.RequestMyFfxiProfile(pid, token, card.Character.Key, card.Character.Slot)) return;
+        EndCardRead();
+        card.ReadFailed = true;
+        CardNote.Fail(HookFailures.RequestWriteFailed);
+    }
+
+    private void EndCardRead()
+    {
+        _cardWatch.Forget();
+        _cardAsking = null;
+        CardLoading = false;
+    }
+
+    private void ShowRows(ProfileCard card, PolFfxiProfile r)
+    {
+        card.Rows.Clear();
+        foreach (var (label, value) in FfxiProfileText.Rows(r, _social.Viewer.Text(0x4a73, "Private"), NotSet, _social.Viewer.Filtered))
+            card.Rows.Add(new FriendProfileViewModel.RowItem(label, value, null));
+    }
+
+    private void OnCardSnapshot(PolSocialSnapshot snap)
+    {
+        if (!_cardWatch.Running || _cardAsking is not { } card) return;
+        var job = snap.FfxiProfileJob;
+        _cardWatch.WaitingTurn(job.Token, snap.ProfileServerBusy, _social.Now);
+        bool mine = job.Token == _cardWatch.Token && (job.State != "done" || snap.FfxiProfile != null);
+        var state = mine ? job.State : null;
+        if (state == "cancelled") state = "failed:cancelled";
+        if (_cardWatch.Settle(state, "done", _social.Now) is not { } st) return;
+        if (st == "timeout") HookFiles.Discard(_cardPid, HookContract.Requests.MyFfxiProfile);
+        var from = _cardFrom;
+        EndCardRead();
+        // the hook read whatever's under that slot, which has to be the character the card's for
+        if (st == "done" && snap.FfxiProfile!.Character != card.Character!.Id) st = "failed:no character";
+        if (st == "done")
+        {
+            var r = snap.FfxiProfile!;
+            CardNote.Clear();
+            _social.OwnCharacterProfiles[card.Character!.Key] = r;
+            if (card.Character.Name.Length == 0 && r.NameState == ProfileFieldState.Shown && r.Name.Length > 0)
+                card.Title = _social.Viewer.Filtered(r.Name);
+            ShowRows(card, r);
+            return;
+        }
+        card.ReadFailed = true;
+        if (st == "failed:hidden" && from is not null)
+        {
+            // back to the card it came from, like the friend pages go back to the tab before
+            card.ReadFailed = false;
+            card.IsSelected = false;
+            from.IsSelected = true;
+            SelectedCard = from;
+            CardNote.Clear();
+            _dialogs.Info("PlayOnline profile", _social.Viewer.Text(0x4ab6, "Selected profile is hidden."));
+            return;
+        }
+        CardNote.Set(st switch
+        {
+            "failed:no profile" => _social.Viewer.Text(0x4a83, "No profile data found."),
+            "failed:cancelled" => HookFailures.ProfileEditor.Cancelled,
+            "failed:no character" or "failed:not loaded" => HookFailures.ProfileEditor.CharacterNotFound,
+            _ => FriendProfileViewModel.ProfileFailText(st),
+        }, st != "failed:no profile");
     }
 
     public string NotSet { get; }
@@ -186,7 +290,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         if (name.Length > PolLimits.HandleName) return $"A handle name can be {PolLimits.HandleName} characters at most.";
         if (name.Any(c => c < 0x20 || c > 0x7e)) return "A handle name can only use English letters, numbers and symbols.";
         var age = AgeText.Trim();
-        if (age.Length > 0 && !(age.All(char.IsAsciiDigit) && age.Length <= 3)) return "Age is a number from 1 to 999.";
+        if (age.Length > 0 && !(age.All(char.IsAsciiDigit) && age.Length <= 3 && int.Parse(age, System.Globalization.CultureInfo.InvariantCulture) >= 1)) return "Age is a number from 1 to 999.";
         if (Mail.Trim().Length > PolLimits.Mail) return HookFailures.ProfileEditor.MailTooLong;
         // it loads masked, so an edited copy of the mask would save as the new address
         if (Mail.Trim() != _savedMail && Mail.Contains("***")) return "Type your whole mail address to change it.";
@@ -255,7 +359,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Note.Show(note);
         _timer.Start();
     }
-
 
     private void EndJob()
     {
@@ -363,6 +466,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     // a reload starts the characters over
     private void FillCards(IReadOnlyList<MyProfileCharacter> characters)
     {
+        EndCardRead();
+        CardNote.Clear();
         foreach (var c in Cards.Where(c => !c.IsHandle).ToList()) Cards.Remove(c);
         if (!SelectedCard.IsHandle)
         {
@@ -423,6 +528,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private void OnSnapshot(PolSocialSnapshot snap)
     {
+        OnCardSnapshot(snap);
         var hook = snap.MeJob;
         // waiting its turn behind another profile server job in the hook, so its clock hasn't started
         _watch.WaitingTurn(hook.Token, snap.ProfileServerBusy, _social.Now);
@@ -529,5 +635,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _timer.Stop();
         // closed mid-job: an untaken request is withdrawn, one the hook already took finishes there
         if (JobExt is { } ext && _pid != 0) HookFiles.Discard(_pid, ext);
+        if (_cardWatch.Running) HookFiles.Discard(_cardPid, HookContract.Requests.MyFfxiProfile);
     }
 }

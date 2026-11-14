@@ -112,7 +112,7 @@ static mailrec *mail_inbox_add(const BYTE *hdr)
         g_s.mail_seen_next = (g_s.mail_seen_next + 1) % MAIL_SEEN;
         if (g_s.mail_seen_n < MAIL_SEEN) g_s.mail_seen_n++;
     } else {
-        base_log("mail: cache full (%d) - message not kept this session (still on the server)\r\n", MAIL_MAX);
+        base_log("messages: cache full (%d) - message not kept this session (still on the server)\r\n", MAIL_MAX);
         return NULL;
     }
     memset(&g_mail[i], 0, sizeof g_mail[0]);
@@ -122,14 +122,14 @@ static mailrec *mail_inbox_add(const BYTE *hdr)
 }
 static void mail_inbox_log_hdr(const char *what, const BYTE *h)
 {
-    base_log("mail: %s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what,
+    base_log("messages: %s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what,
        MAIL(h)->from_slot, (unsigned)pc_mail_kind(h), MAIL(h)->len,
        MAIL(h)->seq, MAIL(h)->time, MAIL(h)->flags, MAIL(h)->seen);
 }
 /* push callbacks run inside polcore's IRC processing on the hold loop's thread, H on its stack, so copy and get out */
 static void __cdecl mail_inbox_evt(int code, void *arg)
 {
-    base_log("mail: evt code=%d arg=%p\r\n", code, arg);
+    base_log("messages: evt code=%d arg=%p\r\n", code, arg);
     /* 2 friend presence, 3 kind-9 notice, 4-6 groups: polcore already updated its arrays */
     if (code >= 2 && code <= 6) g_snap_dirty = 1;
     if (code == 0 && arg && !IsBadReadPtr(arg, MAIL_KEY_SIZE)) {
@@ -218,7 +218,7 @@ static void mail_inbox_recheck(BYTE *b)
     g_mail_raw_new = 0;
     for (int i = 0; i < g_s.mail_n; i++)
         if (g_mail[i].state == 3 && mail_inbox_echo(b, g_mail[i].hdr)) {
-            base_log("mail: a chat line I sent came back real-time - not shown\r\n");
+            base_log("messages: a chat line I sent came back real-time - not shown\r\n");
             mail_inbox_returned(g_mail[i].hdr);
             g_mail[i].state = 6;
         }
@@ -239,11 +239,11 @@ static void mail_inbox_list_done(int r)
     int found = 0, added = 0;
     if (r != 1) {
         if (g_mail_fails++ == 0) {
-            base_log("mail: list failed %d - retry once in 30s\r\n", r);
+            base_log("messages: list failed %d - retry once in 30s\r\n", r);
             g_s.mail_retry_at = GetTickCount64() + 30000;
             g_s.mail_refresh = 1;
         } else {
-            base_log("mail: list failed %d again - waiting for new mail\r\n", r);
+            base_log("messages: list failed %d again - waiting for new mail\r\n", r);
             if (lstrcmpA(g_mail_state, "ok") != 0) lstrcpyA(g_mail_state, "failed");
             g_snap_dirty = 1;
         }
@@ -259,7 +259,7 @@ static void mail_inbox_list_done(int r)
         mail_inbox_log_hdr("listed", e);
         if (mail_inbox_add(e)) added++;
     }
-    base_log("mail: list done, %d on server, %d new\r\n", found, added);
+    base_log("messages: list done, %d on server, %d new\r\n", found, added);
 }
 static void mail_inbox_read_done(BYTE *b, int lane, int r)
 {
@@ -268,10 +268,10 @@ static void mail_inbox_read_done(BYTE *b, int lane, int r)
         mail_inbox_parse(b, m, g_s.mail_lanes[lane].body, (int)MAIL(m->hdr)->len);
         m->state = 1;
         g_mail_fresh = 1;
-        base_log("mail: body read (%u bytes)\r\n", MAIL(m->hdr)->len);
+        base_log("messages: body read (%u bytes)\r\n", MAIL(m->hdr)->len);
     } else {
         m->state = 2;
-        base_log("mail: body read failed %d\r\n", r);
+        base_log("messages: body read failed %d\r\n", r);
     }
     MAIL(m->hdr)->body = NULL;
     HeapFree(GetProcessHeap(), 0, g_s.mail_lanes[lane].body);
@@ -299,7 +299,7 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
         memset(g_inbox, 0, sizeof g_inbox);
         t = pc_mail_list(b, g_inbox, MAIL_MAX);
         if (t == NO_SLOT) return;
-        base_log("mail: list start -> %d\r\n", t);
+        base_log("messages: list start -> %d\r\n", t);
         g_s.mail_refresh = 0;
         if (t < 0) { mail_inbox_list_done(t); return; }
         g_s.mail_lanes[lane].job = t; g_s.mail_lanes[lane].kind = 1;
@@ -312,14 +312,14 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
         if (mail_inbox_lane_busy(2, i)) continue;
         if (len == 0 || len > 0x101100) { m->state = 2; continue; }
         if (kd == 0 && mail_inbox_sender_ignored(b, m->hdr)) {
-            base_log("mail: chat message from an ignored sender - deleted unread\r\n");
+            base_log("messages: chat message from an ignored sender - deleted unread\r\n");
             m->state = 4;
             continue;
         }
         /* the viewer reads one like any other and deletes it once it's saved. A line I sent is never shown as
            received, so it's deleted unread like an ignored sender's */
         if (mail_inbox_echo(b, m->hdr)) {
-            base_log("mail: a chat line I sent came back - deleted unread\r\n");
+            base_log("messages: a chat line I sent came back - deleted unread\r\n");
             mail_inbox_returned(m->hdr);
             m->state = 4;
             continue;
@@ -328,7 +328,7 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
         /* chat 0, friend request 1, answers 9/10, group invitation 0xe and its notices, the rest stay unread */
         if (!(kd == 0 || kd == 1 || kd == 9 || kd == 10 || kd == 0xe || kd == 0xf || kd == 0x10 ||
               kd == 0x12 || kd == 0x13)) {
-            base_log("mail: kind %u is not shown by the launcher - not fetched\r\n", kd);
+            base_log("messages: kind %u is not shown by Provenance - not fetched\r\n", kd);
             m->state = 6;
             continue;
         }
@@ -336,7 +336,7 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
         if (!body) return;
         MAIL(m->hdr)->body = body;
         t = pc_mail_read(b, m->hdr);
-        if (t != NO_SLOT) base_log("mail: read start -> %d\r\n", t);
+        if (t != NO_SLOT) base_log("messages: read start -> %d\r\n", t);
         if (t < 0) {
             MAIL(m->hdr)->body = NULL;
             HeapFree(GetProcessHeap(), 0, body);
@@ -356,7 +356,7 @@ static void mail_inbox_delete_start(BYTE *b)
         BYTE *h = g_mail[i].hdr;
         t = pc_mail_delete(b, h);
         if (t == NO_SLOT) return;
-        base_log("mail: delete start -> %d (from slot %u to slot %u)\r\n", t, MAIL(h)->from_slot, MAIL(h)->to_slot);
+        base_log("messages: delete start -> %d (from slot %u to slot %u)\r\n", t, MAIL(h)->from_slot, MAIL(h)->to_slot);
         if (t < 0) { g_mail[i].state = 5; continue; }
         g_s.del_job = t; g_s.del_idx = i;
         return;
@@ -391,8 +391,8 @@ static void mail_inbox_pump(BYTE *b)
     if (g_s.del_job >= 0 && (r = pc_mail_delete_check(b, g_s.del_job)) != 0) {
         g_s.del_job = -1;
         g_mail[g_s.del_idx].state = 5;
-        if (r == 1) base_log("mail: deleted from the server after saving\r\n");
-        else base_log("mail: delete FAILED %d - the message stays on the server\r\n", r);
+        if (r == 1) base_log("messages: deleted from the server after saving\r\n");
+        else base_log("messages: delete failed %d - the message stays on the server\r\n", r);
         done = 1;
     }
     /* a freed lane waits a turn, so a waiting send gets it first */

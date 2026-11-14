@@ -57,7 +57,7 @@ static void chat_room_master_refused(const char *state)
 {
     SecureZeroMemory(g_cr_newkey, sizeof g_cr_newkey);
     lstrcpynA(g_cr_mstate, state, sizeof g_cr_mstate);
-    base_log("chat: master request refused - %s\r\n", state);
+    base_log("chat rooms: master request refused - %s\r\n", state);
     g_snap_dirty = 1;
 }
 static int chat_room_password(const char *tok, char *key, int cap);
@@ -74,7 +74,7 @@ static void chat_room_master_request(void)
     if (haskey[0]) pw = chat_room_password(tok, nk, sizeof nk);
     if (g_cr_mop) {
         SecureZeroMemory(nk, sizeof nk);
-        base_log("chat: master request ignored, one's still going\r\n");
+        base_log("chat rooms: master request ignored, one's still going\r\n");
         return;
     }
     lstrcpynA(g_cr_mtok, tok, sizeof g_cr_mtok);
@@ -124,6 +124,6 @@ static void chat_room_master_request(void)
     }
     g_s.cr_tries = 0;
     lstrcpyA(g_cr_mstate, "working");
-    base_log("chat: master job %d, %d step(s)\r\n", g_cr_mop, g_cr_mn);
+    base_log("chat rooms: master job %d, %d step(s)\r\n", g_cr_mop, g_cr_mn);
     g_snap_dirty = 1;
 }

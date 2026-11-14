@@ -19,7 +19,14 @@ internal static class ToolProcess
         }
     }
 
-    internal sealed record RunResult(int Exit, string Out, string Err);
+    internal sealed record RunResult(int Exit, string Out, string Err)
+    {
+        private bool PrintMembers(System.Text.StringBuilder builder)
+        {
+            builder.Append("Out = ***");
+            return true;
+        }
+    }
 
     // its own folder, never whatever folder the elevated app happens to be in. Hidden means no window and every stream redirected
     internal static ProcessStartInfo StartInfo(string exe, IEnumerable<string> args, bool hidden = true)

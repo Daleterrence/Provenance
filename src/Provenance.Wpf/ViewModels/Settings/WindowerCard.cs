@@ -119,15 +119,14 @@ public partial class WindowerCard : ObservableObject
         if (!_loadingCard && value is not null) SaveWindowerProfile(p => p.ConsoleKey = value.Key);
     }
 
-    public string ConsoleKeyText => WaitingForConsoleKey ? "Press Key Now, Esc to Cancel" : $"{(ConsoleKey ?? Choice(WindowerKeys.Insert)).Display} (Click to Edit)";
+    public string ConsoleKeyText => WaitingForConsoleKey ? "PRESS KEY NOW, ESC TO CANCEL" : $"{(ConsoleKey ?? Choice(WindowerKeys.Insert)).Display.ToUpperInvariant()} (CLICK TO EDIT)";
 
     [RelayCommand]
     private void EditConsoleKey() => WaitingForConsoleKey = !WaitingForConsoleKey && CardEnabled;
 
     public void CancelConsoleKey() => WaitingForConsoleKey = false;
 
-    // a key in DirectInput's numbering. Esc gives up, one Windower can't use as its console key is ignored and the wait goes on,
-    // any other becomes the key and saves
+    // a key in DirectInput's numbering. Esc gives up, one Windower can't use is ignored, any other becomes the key
     public void PressConsoleKey(int code)
     {
         if (!WaitingForConsoleKey) return;

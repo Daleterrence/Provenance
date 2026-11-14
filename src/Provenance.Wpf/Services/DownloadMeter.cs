@@ -67,11 +67,22 @@ public sealed class DownloadMeter
         return changed;
     }
 
+    // between steps of a job: the sizes go but the time left stays up and counts down
     public void Clear()
+    {
+        _rate.Reset();
+        _left.Reset();
+        _total = 0;
+        _amount = false;
+        _show("");
+        _showTimeLeft?.Invoke(_left.Text);
+    }
+
+    public void End()
     {
         _timer.Stop();
         _rate.Reset();
-        _left.Reset();
+        _left.Clear();
         _total = 0;
         _show("");
         _showTimeLeft?.Invoke("");

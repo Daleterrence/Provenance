@@ -5,6 +5,7 @@ static void cred_sha1(BYTE *b, const void *data, unsigned len, BYTE out[20])
     pc_sha1_init(b, ctx);
     pc_sha1_update(b, ctx, data, len);
     pc_sha1_final(b, out, ctx);
+    SecureZeroMemory(ctx, sizeof ctx);
 }
 
 /* NULL when it's missing, too long or won't convert */
@@ -14,7 +15,7 @@ static const WCHAR *cred_target(const char *env, WCHAR *buf, int n)
     DWORD k = GetEnvironmentVariableA(env, a, sizeof a);
     if (k == 0) return NULL;
     if (k >= sizeof a || !MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, a, -1, buf, n)) {
-        base_log("phase_c: %s target refused (too long or not convertible)\r\n", env);
+        base_log("login: %s target refused (too long or not convertible)\r\n", env);
         return NULL;
     }
     return buf;
@@ -34,7 +35,7 @@ static const char *cred_keyfile(char *buf, DWORD n)
     if (k > 0 && k < n) return buf;
     if (!warned) {
         warned = 1;
-        base_log("phase_c: POL_CRED_KEYFILE empty or too long - no key file, no saved entry is read\r\n");
+        base_log("login: POL_CRED_KEYFILE empty or too long - no key file, no saved entry is read\r\n");
     }
     return NULL;
 }
@@ -49,17 +50,22 @@ static const char *cred_why(int rc)
     static const char *const why[] = { "unknown", "not found", "not wrapped", "unwrap failed", "too long" };
     return rc >= PC_NOT_FOUND && rc <= PC_TOO_LONG ? why[rc] : why[0];
 }
+/* the name the screens use for a credential kind */
+static const char *cred_kind_name(const char *kind)
+{
+    return kind[0] == 'P' ? "PlayOnline ID" : "Square Enix ID";
+}
 static void cred_consume(const WCHAR *target, const char *kind)
 {
     char kinds[64];
     DWORD k = GetEnvironmentVariableA(ENV_CRED_ONESHOT, kinds, sizeof kinds);
     if (k == 0 || k >= sizeof kinds || !strstr(kinds, kind)) return;
     if (!cred_launch_target(target)) {
-        base_log("phase_c: one-shot %s target is not a launch entry - left in place\r\n", kind);
+        base_log("login: one-shot %s target is not a launch entry - left in place\r\n", cred_kind_name(kind));
         return;
     }
     if (!CredDeleteW(target, CRED_TYPE_GENERIC, 0))
-        base_log("phase_c: one-shot target '%ls' delete failed err=%u\r\n", target, GetLastError());
+        base_log("login: one-shot target '%ls' delete failed err=%u\r\n", target, GetLastError());
 }
 /* a failure ends pol.exe (exit 11) so Provenance asks for the details again */
 static int cred_read_details(const char *env, const char *kind, char *id, int idcap, char *pw, int pwcap)
@@ -71,15 +77,15 @@ static int cred_read_details(const char *env, const char *kind, char *id, int id
         rc = cred_read(t, id, idcap, pw, pwcap);
         if (rc != PC_NOT_FOUND) cred_consume(t, kind);
     }
-    if (!t) base_log("phase_c: no %s target - pol.exe ends\r\n", kind);
-    else if (rc == PC_NOT_FOUND) base_log("phase_c: no CredMan '%ls' creds - pol.exe ends\r\n", t);
-    else if (rc != PC_OK) base_log("phase_c: CredMan '%ls' %s - pol.exe ends\r\n", t, cred_why(rc));
+    if (!t) base_log("login: no %s target - pol.exe ends\r\n", cred_kind_name(kind));
+    else if (rc == PC_NOT_FOUND) base_log("login: no saved entry in Credential Manager for '%ls' - pol.exe ends\r\n", t);
+    else if (rc != PC_OK) base_log("login: Credential Manager entry '%ls' %s - pol.exe ends\r\n", t, cred_why(rc));
     else if (id[0] == 0 || pw[0] == 0) {
         SecureZeroMemory(id, idcap);
         SecureZeroMemory(pw, pwcap);
-        base_log("phase_c: bad %s cred shape (id/pw empty) - pol.exe ends\r\n", kind);
+        base_log("login: bad %s entry (ID or password empty) - pol.exe ends\r\n", cred_kind_name(kind));
     } else return 1;
-    base_log(LOG_DETAILS_UNREADABLE " (%s) - exiting, FFXI NOT started\r\n", kind);
+    base_log(LOG_DETAILS_UNREADABLE " (%s) - exiting, the game wasn't started\r\n", cred_kind_name(kind));
     base_end_pol(DETAILS_UNREADABLE_EXIT);
 }
 /* account IDs in the log: first 2 chars + length only (the log stays on disk) */
@@ -112,18 +118,19 @@ static void seed_account_login(BYTE *b)
     orc = totp ? cred_read(totp, NULL, 0, otp, sizeof otp) : PC_NOT_FOUND;
     if (orc != PC_NOT_FOUND) cred_consume(totp, "OTP");
     if (orc != PC_OK && orc != PC_NOT_FOUND)
-        base_log("phase_c: CredMan '%ls' %s - no OTP\r\n", totp, cred_why(orc));
+        base_log("login: Credential Manager entry '%ls' %s - no one-time password\r\n", totp, cred_why(orc));
     if (orc == PC_OK) {
         int ok = lstrlenA(otp) == 6;
         for (int k = 0; ok && k < 6; k++)
             if (otp[k] < '0' || otp[k] > '9') ok = 0;
         if (ok) mode = 2;
-        else { base_log("phase_c: POL-OTP malformed (need 6 digits) - ignoring\r\n"); otp[0] = 0; }
+        else { base_log("login: one-time password malformed (needs 6 digits) - ignoring\r\n"); otp[0] = 0; }
     }
     pc_set_sea_secret(b, mode, seid, secret, mode == 2 ? otp : NULL);
     SecureZeroMemory(otp, sizeof otp);
     SecureZeroMemory(secret, sizeof secret);
-    base_log("phase_c: SEA seeded mode %d (%s), SE ID='%s'\r\n", mode, mode == 2 ? "OTP" : "no-OTP",
+    base_log("login: Square Enix account set, mode %d (%s), Square Enix ID='%s'\r\n", mode,
+        mode == 2 ? "one-time password" : "no one-time password",
         cred_mask_id(seid, m));
     SecureZeroMemory(seid, sizeof seid);
 }

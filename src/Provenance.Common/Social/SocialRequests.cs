@@ -95,6 +95,10 @@ public static class SocialRequests
     public static bool RequestFfxiProfile(int pid, string token, int friendRow, string friendKey, int slot) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.FfxiProfile, token, friendRow, friendKey, slot);
 
+    // the hook takes the ids from its own list, not the request
+    public static bool RequestMyFfxiProfile(int pid, string token, string characterKey, int slot) =>
+        HookFiles.WriteRequest(pid, HookContract.Requests.MyFfxiProfile, token, characterKey, slot);
+
     public static bool RequestMyProfile(int pid, string token) => HookFiles.WriteRequest(pid, HookContract.Requests.MyProfile, token);
 
     // load first, the save keeps each field's own level

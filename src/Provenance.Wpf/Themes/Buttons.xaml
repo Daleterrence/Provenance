@@ -96,7 +96,6 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="behaviours:FocusCue.Track" Value="True" />
         <Setter Property="Template" Value="{StaticResource Btn.Template}" />
         <!-- on the button, not the template, so content that's its own element (icon and label) takes the button's
              colour and a style can swap the fills -->
@@ -192,6 +191,8 @@
         </Style.Triggers>
     </Style>
 
+    <!-- icon-only button: a round highlight sized to the button, a pill when it's wide.
+         Icons that draw their own disc skip it -->
     <Style x:Key="IconButton" TargetType="ButtonBase">
         <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
         <Setter Property="Background" Value="Transparent" />
@@ -203,27 +204,28 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="behaviours:FocusCue.Track" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ButtonBase">
-                    <Grid>
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" />
-                        <Border x:Name="Ring" BorderBrush="{DynamicResource Focus.Ring}" BorderThickness="1" Opacity="0" />
+                    <Grid Background="{TemplateBinding Background}">
+                        <Rectangle x:Name="Hl" Margin="2" RadiusX="999" RadiusY="999" Fill="Transparent" IsHitTestVisible="False"
+                                   Visibility="{Binding Content.Flat, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVis}, FallbackValue=Visible}" />
+                        <Rectangle x:Name="Ring" Margin="2" RadiusX="999" RadiusY="999" Stroke="{DynamicResource Focus.Ring}" StrokeThickness="1"
+                                   Visibility="Collapsed" IsHitTestVisible="False" />
                         <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" RecognizesAccessKey="True"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover.Fill}" />
+                            <Setter TargetName="Hl" Property="Fill" Value="{DynamicResource Hover.Fill}" />
                         </Trigger>
                         <Trigger Property="behaviours:FocusCue.Shown" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover.Fill}" />
-                            <Setter TargetName="Ring" Property="Opacity" Value="1" />
+                            <Setter TargetName="Hl" Property="Fill" Value="{DynamicResource Hover.Fill}" />
+                            <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Press.Fill}" />
+                            <Setter TargetName="Hl" Property="Fill" Value="{DynamicResource Press.Fill}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Content" Property="Opacity" Value="0.4" />
@@ -234,6 +236,138 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!-- an arrow has no highlight, the arrow itself takes the colour (a hover one, then a darker one held down) -->
+    <Style x:Key="ArrowButton" TargetType="ButtonBase" BasedOn="{StaticResource IconButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Grid Background="{TemplateBinding Background}">
+                        <Rectangle x:Name="Ring" Margin="2" RadiusX="4" RadiusY="4" Stroke="{DynamicResource Focus.Ring}" StrokeThickness="1"
+                                   Visibility="Collapsed" IsHitTestVisible="False" />
+                        <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" RecognizesAccessKey="True"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Content" Property="TextElement.Foreground" Value="{DynamicResource Arrow.Hover}" />
+                        </Trigger>
+                        <Trigger Property="behaviours:FocusCue.Shown" Value="True">
+                            <Setter TargetName="Content" Property="TextElement.Foreground" Value="{DynamicResource Arrow.Hover}" />
+                            <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Content" Property="TextElement.Foreground" Value="{DynamicResource Arrow.Press}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Content" Property="Opacity" Value="0.4" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- a row you click, like an article. The fill is on the button itself, so it's there as soon as the pointer is -->
+    <Style x:Key="RowButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="6,7" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="Bd" CornerRadius="4" Background="{TemplateBinding Background}" />
+                        <Border x:Name="Ring" CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource Focus.Ring}" Visibility="Collapsed" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}" RecognizesAccessKey="True"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover.Fill}" />
+                        </Trigger>
+                        <Trigger Property="behaviours:FocusCue.Shown" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Hover.Fill}" />
+                            <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Press.Fill}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- a small button for a side action: a solid face and a clear outline, but no gradient so it stays under the main ones -->
+    <ControlTemplate x:Key="Small.Template" TargetType="ButtonBase">
+        <Grid>
+            <Border x:Name="Bd" CornerRadius="13" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" />
+            <Border x:Name="Ring" Margin="-3" CornerRadius="16" BorderThickness="2" BorderBrush="{DynamicResource Focus.Ring}" Visibility="Collapsed" />
+            <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" RecognizesAccessKey="True"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="behaviours:FocusCue.Shown" Value="True">
+                <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="Bd" Property="Opacity" Value="0.5" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style x:Key="SmallButton" TargetType="ButtonBase">
+        <Setter Property="Foreground" Value="{DynamicResource Small.Text}" />
+        <Setter Property="Background" Value="{DynamicResource Small.Fill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Small.Line}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <!-- Enter opens it instead of falling through to log in or play -->
+        <Setter Property="KeyboardNavigation.AcceptsReturn" Value="True" />
+        <Setter Property="Template" Value="{StaticResource Small.Template}" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Small.Fill.Hover}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Small.Line.Hover}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Small.Fill.Press}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Small.Line.Hover}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource Btn.Disabled.Text}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <Style x:Key="LinkButton" TargetType="Button">
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Foreground" Value="{DynamicResource Primary}" />

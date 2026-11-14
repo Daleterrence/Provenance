@@ -84,6 +84,17 @@ public sealed class LauncherSettings
 
     public bool BackupGameSettings { get; set; }
 
+    // each extra window's last place and size, by window name
+    public Dictionary<string, WindowPlace> WindowPlaces { get; set; } = [];
+
     // "" is %APPDATA%\Provenance\Backups
     public string BackupFolder { get; set; } = "";
+}
+
+public sealed class WindowPlace
+{
+    public double Left { get; set; }
+    public double Top { get; set; }
+    public double Width { get; set; }
+    public double Height { get; set; }
 }

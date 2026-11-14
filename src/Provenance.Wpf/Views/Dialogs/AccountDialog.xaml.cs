@@ -19,7 +19,12 @@ public partial class AccountDialog : AppWindow
         InitializeComponent();
         Form = new AccountFormViewModel(accountName, useOtp, edit, otpSource, otpItem, requireAll, polId, squareEnixId, otpAccount);
         DataContext = Form;
-        Closed += (_, _) => Form.Close();
+        Closed += (_, _) =>
+        {
+            PolPasswordBox.Clear();
+            SquareEnixPasswordBox.Clear();
+            Form.Close();
+        };
         Form.FocusRequested += field => FieldBox(field).Focus();
         Form.BitwardenUrlFocusRequested += () => BwServerUrlBox.Focus();
         Loaded += (_, _) => (polId.Length == 0 ? (Control)PolIdBox : PolPasswordBox).Focus();

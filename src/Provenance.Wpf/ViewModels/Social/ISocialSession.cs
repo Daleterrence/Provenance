@@ -20,6 +20,7 @@ internal interface ISocialSession : INotifyPropertyChanged
     DateTime Now { get; }
     PolSocialSnapshot Last { get; }
     string? LeavingGroupId { get; }
+    IDictionary<string, PolFfxiProfile> OwnCharacterProfiles { get; }
     ViewerResources Viewer { get; }
     event Action<PolSocialSnapshot>? SnapshotApplied;
 }

@@ -32,6 +32,7 @@ public partial class MainWindow : AppWindow
             await vm.Repair.ProbeAsync();
         };
         Deactivated += (_, _) => { if (Vm is { } vm) vm.Social.MainWindowActive = false; };
+        PreviewMouseDown += (_, e) => Friends.DeselectUnlessIn(e.OriginalSource as DependencyObject);
         FitWorkArea();
     }
 
@@ -170,14 +171,14 @@ public partial class MainWindow : AppWindow
 
     private bool WaitForLogInCancel(System.ComponentModel.CancelEventArgs e)
     {
-        if (Vm is not { LoggingIn: true } signing) return false;
+        if (Vm is not { LoggingIn: true } loggingIn) return false;
         e.Cancel = true;
         if (_cancellingLogIn) return true;
         _cancellingLogIn = true;
         // not from inside Closing, Close throws in there
         Dispatcher.InvokeAsync(async () =>
         {
-            await signing.CancelLogInAsync();
+            await loggingIn.CancelLogInAsync();
             _cancellingLogIn = false;
             Close();
         });

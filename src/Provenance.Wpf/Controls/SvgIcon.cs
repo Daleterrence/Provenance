@@ -12,7 +12,7 @@ using Provenance.Wpf.Controls.Behaviours;
 namespace Provenance.Wpf.Controls;
 
 // a POL status glyph following its button (selected on hover or focus, faded on a press, active while held or IsOpen)
-// on a disc in its colours. Flat draws the single-colour file
+// on a disc in its colours. Flat draws the single-colour file, and Filled paints it solid
 public sealed class SvgIcon : Grid
 {
     public static readonly DependencyProperty GlyphProperty = DependencyProperty.Register(
@@ -23,6 +23,9 @@ public sealed class SvgIcon : Grid
 
     public static readonly DependencyProperty FlatProperty = DependencyProperty.Register(
         nameof(Flat), typeof(bool), typeof(SvgIcon), new PropertyMetadata(false, (d, _) => ((SvgIcon)d).Refresh()));
+
+    public static readonly DependencyProperty FilledProperty = DependencyProperty.Register(
+        nameof(Filled), typeof(bool), typeof(SvgIcon), new PropertyMetadata(false, (d, _) => ((SvgIcon)d).Refresh()));
 
     public static readonly DependencyProperty ForegroundProperty = TextElement.ForegroundProperty.AddOwner(typeof(SvgIcon),
         new FrameworkPropertyMetadata(SystemColors.ControlTextBrush, FrameworkPropertyMetadataOptions.Inherits, (d, _) => ((SvgIcon)d).Refresh()));
@@ -65,6 +68,12 @@ public sealed class SvgIcon : Grid
     {
         get => (bool)GetValue(FlatProperty);
         set => SetValue(FlatProperty, value);
+    }
+
+    public bool Filled
+    {
+        get => (bool)GetValue(FilledProperty);
+        set => SetValue(FilledProperty, value);
     }
 
     public Brush Foreground
@@ -158,7 +167,7 @@ public sealed class SvgIcon : Grid
         if (Flat)
         {
             var tint = Foreground as SolidColorBrush;
-            _assetIcon.Source = Glyph.Length == 0 ? null : SvgIcons.Tinted(Glyph, tint?.Color ?? Colors.Black);
+            _assetIcon.Source = Glyph.Length == 0 ? null : SvgIcons.Tinted(Glyph, tint?.Color ?? Colors.Black, Filled);
             _assetIcon.Opacity = tint?.Opacity ?? 1;
         }
         else _assetIcon.Source = Glyph.Length == 0 ? null : _onButton ? SvgIcons.ButtonGlyph(Glyph, State) : SvgIcons.Glyph(Glyph, State);

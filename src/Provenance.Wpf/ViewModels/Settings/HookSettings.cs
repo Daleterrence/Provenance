@@ -394,7 +394,7 @@ public partial class HookSettings : ObservableObject, IProfileHost
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Profile change failed");
+            Log.Warning(ex, "Changing the Windower profile or Ashita boot configuration failed");
             ProfileStatus.Fail(ErrorText.Of(ex, failed));
         }
         if (IsWindower) RefreshThirdPartyHookLists(windowerKeep: ok ? pick : null);

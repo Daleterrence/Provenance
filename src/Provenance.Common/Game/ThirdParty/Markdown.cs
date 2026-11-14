@@ -18,20 +18,34 @@ public static class Markdown
         {
             if ((_nodes += weight) > MaxNodes) throw new TooMuchException();
         }
+
+        public bool TrySpend()
+        {
+            if (_nodes >= MaxNodes) return false;
+            _nodes++;
+            return true;
+        }
     }
 
     private readonly record struct FenceMark(char Mark, int Count, int Indent);
 
     private readonly record struct ListMark(bool Ordered, int Start, int Content, bool Empty);
 
-    public static MarkdownDoc? Parse(string text)
+    // past the limits it keeps what fits and sets Truncated
+    public static MarkdownDoc Parse(string text)
     {
-        if (text.Length > MaxChars) return null;
+        bool cut = text.Length > MaxChars;
+        if (cut)
+        {
+            int end = text.LastIndexOf('\n', MaxChars - 1);
+            text = text[..(end > 0 ? end : char.IsHighSurrogate(text[MaxChars - 1]) ? MaxChars - 1 : MaxChars)];
+        }
         var lines = Clean(text).Split('\n').ToList();
         var inlines = new MarkdownInlines(new Budget(), LinkNames(lines));
-        try { return new MarkdownDoc(Blocks(lines, 0, inlines)); }
-        // more in it than any readme has, so the window shows the file as it is
-        catch (TooMuchException) { return null; }
+        var blocks = new List<MdBlock>();
+        try { Blocks(lines, 0, inlines, blocks); }
+        catch (TooMuchException) { cut = true; }
+        return new MarkdownDoc(blocks, cut);
     }
 
     private static string Clean(string text)
@@ -40,7 +54,7 @@ public static class Markdown
         foreach (char c in text.Replace("\r\n", "\n"))
         {
             if (c == '\t') sb.Append("    ");
-            else if (c is >= (char)0x202A and <= (char)0x202E or >= (char)0x2066 and <= (char)0x2069) continue;
+            else if (c is >= (char)0x202A and <= (char)0x202E or >= (char)0x2066 and <= (char)0x2069 || char.GetUnicodeCategory(c) == UnicodeCategory.Format) continue;
             else if (c is '\r' or (char)0x2028 or (char)0x2029) sb.Append('\n');
             else if (c == '\n' || !char.IsControl(c)) sb.Append(c);
         }
@@ -76,9 +90,9 @@ public static class Markdown
         return names;
     }
 
-    private static List<MdBlock> Blocks(List<string> lines, int depth, MarkdownInlines inlines)
+    private static List<MdBlock> Blocks(List<string> lines, int depth, MarkdownInlines inlines, List<MdBlock>? into = null)
     {
-        var blocks = new List<MdBlock>();
+        var blocks = into ?? [];
         int i = 0;
         while (i < lines.Count)
         {
@@ -92,13 +106,15 @@ public static class Markdown
             if (Fence(line) is { } fence)
             {
                 var code = new List<string>();
+                bool full = false;
                 for (i++; i < lines.Count && !Closes(lines[i], fence); i++)
                 {
-                    inlines.Budget.Spend();
+                    if (full = !inlines.Budget.TrySpend()) break;
                     code.Add(Outdent(lines[i], fence.Indent));
                 }
                 i++;
                 blocks.Add(new MdCode(string.Join('\n', code)));
+                if (full) throw new TooMuchException();
             }
             else if (Heading(line, loose: true) is { } heading)
             {
@@ -120,13 +136,15 @@ public static class Markdown
             else if (Indent(line) >= 4)
             {
                 var code = new List<string>();
+                bool full = false;
                 for (; i < lines.Count && (Indent(lines[i]) >= 4 || Blank(lines[i])); i++)
                 {
-                    inlines.Budget.Spend();
+                    if (full = !inlines.Budget.TrySpend()) break;
                     code.Add(Outdent(lines[i], 4));
                 }
-                while (Blank(code[^1])) code.RemoveAt(code.Count - 1);
-                blocks.Add(new MdCode(string.Join('\n', code)));
+                while (code.Count > 0 && Blank(code[^1])) code.RemoveAt(code.Count - 1);
+                if (code.Count > 0) blocks.Add(new MdCode(string.Join('\n', code)));
+                if (full) throw new TooMuchException();
             }
             else if (TableColumns(lines, i) is > 0 and var columns) blocks.Add(Table(lines, ref i, columns, inlines));
             else blocks.Add(Paragraph(lines, ref i, depth, inlines));

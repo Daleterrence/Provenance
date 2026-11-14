@@ -219,8 +219,8 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
                     };
                     var plan = repair.PlanAsync(viewerDir, ffxiDir, bytes, ct).GetAwaiter().GetResult();
                     if (plan is null) return new Outcome(Ending.NotOnMirror);
-                    Log.Information("Repair plan: {Count} files, {Bytes:N0} bytes, out-of-date patch.ver: {Stale}, viewer queue: {Queue}, " +
-                                    "DirectX missing: {DirectX} (Viewer {Viewer}: {ViewerCount}, FFXI {Ffxi}: {FfxiCount})",
+                    Log.Information("Repair plan: {Count} files, {Bytes:N0} bytes, out-of-date patch.ver: {Stale}, PlayOnline Viewer queue: {Queue}, " +
+                                    "DirectX missing: {DirectX} (PlayOnline Viewer {Viewer}: {ViewerCount}, FINAL FANTASY XI {Ffxi}: {FfxiCount})",
                                     plan.Count, plan.Bytes, plan.StaleVersions, plan.QueuePending, plan.DirectXMissing,
                                     plan.Indexes[GameProduct.Viewer.Slug].Version, plan.Work[GameProduct.Viewer.Slug].Count,
                                     plan.Indexes[GameProduct.Game.Slug].Version, plan.Work[GameProduct.Game.Slug].Count);
@@ -270,7 +270,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
         catch (RefusedException ex) { End("Repair can't start", ex.Message, failed: true); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            End("Repair stopped", Unchanged(), failed: false);
+            End("Repair Cancelled", Unchanged(), failed: false);
         }
         catch (MirrorUnusableException ex)
         {
@@ -342,6 +342,6 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
         Status = text;
         Failed = failed;
         Indeterminate = false;
-        Meter.Clear();
+        Meter.End();
     }
 }

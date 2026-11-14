@@ -13,9 +13,16 @@ public sealed class EncryptedJsonFile<T>(string path, byte[] entropy, string log
     public T? Load()
     {
         if (!File.Exists(path)) return null;
+        byte[] bytes;
+        try { bytes = File.ReadAllBytes(path); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning("{Log}: {Line}", logName, $"{Path.GetFileName(path)} couldn't be read ({e.GetType().Name}: {e.Message})");
+            return null;
+        }
         try
         {
-            var plain = Dpapi.Unprotect(File.ReadAllBytes(path), entropy);
+            var plain = Dpapi.Unprotect(bytes, entropy);
             if (plain != null && JsonSerializer.Deserialize<T>(plain) is { } loaded) return loaded;
         }
         catch { }   // falls through to setting it aside

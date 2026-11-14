@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Input;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.ViewModels.Install;
 

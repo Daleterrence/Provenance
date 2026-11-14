@@ -12,6 +12,7 @@ using Provenance.Common.Login;
 using Provenance.Common.Otp;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
+using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Win32;
 using Serilog;
 using Provenance.Wpf.Services;
@@ -22,6 +23,8 @@ namespace Provenance.Wpf;
 
 public partial class App : Application
 {
+    static App() => FocusLook.Install();
+
     private PolSession? _pol;
     private bool _showingError;   // an error inside the card mustn't stack more cards
 

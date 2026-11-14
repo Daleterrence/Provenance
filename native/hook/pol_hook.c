@@ -116,7 +116,7 @@ static void pol_hook_install(void)
     /* WinMain reaches CreateMutexW and OpenMutexW through pol.exe's MSLU slots, not the IAT. In a Windower or
        Ashita pol.exe they may already exist, and renaming would make later opens miss. */
     if (base_getenv_set(ENV_LAUNCH_ID)) {
-        base_log("pol_hook: attached to a third-party hook's pol.exe; mutex names left to it\r\n");
+        base_log("pol_hook: attached to a Windower/Ashita pol.exe; mutex names left to it\r\n");
     } else {
         HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
         g_pCreateMutexW = GetProcAddress(k32, "CreateMutexW");
@@ -169,7 +169,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, void *r)
     pol_hook_install();
     idn = GetEnvironmentVariableA(ENV_LAUNCH_ID, id, sizeof id);
     if (idn > 0 && !pol_hook_launch_id_ok(id, idn)) {
-        base_log("pol_hook: third-party hook launch id refused\r\n");
+        base_log("pol_hook: Windower/Ashita launch id refused\r\n");
     } else if (idn > 0) {
         base_ipc_dir(path);
         wsprintfA(path + lstrlenA(path), IPC_PID_FILE, id);
@@ -179,7 +179,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, void *r)
             WriteFile(f, num, lstrlenA(num), &n, NULL);
             CloseHandle(f);
         }
-        base_log("pol_hook: third-party hook launch %s (pid file written)\r\n", id);
+        base_log("pol_hook: Windower/Ashita launch %s (pid file written)\r\n", id);
     }
     return TRUE;
 }

@@ -8,10 +8,10 @@ public static class AtomicFile
 {
     public static string TempFor(string path) => $"{path}.{Guid.NewGuid():N}.tmp";
 
-    public static void Write(string path, byte[] bytes) => Build(path, tmp => File.WriteAllBytes(tmp, bytes));
+    public static void Write(string path, byte[] bytes) => Build(path, tmp => WriteNew(tmp, bytes, flushToDisk: true));
 
     public static void Write(string path, string text) =>
-        Build(path, tmp => File.WriteAllText(tmp, text, new UTF8Encoding(false)));
+        Build(path, tmp => WriteNew(tmp, new UTF8Encoding(false).GetBytes(text), flushToDisk: true));
 
     public static Task WriteAsync(string path, byte[] bytes, CancellationToken ct = default) =>
         BuildAsync(path, tmp => File.WriteAllBytesAsync(tmp, bytes, ct));

@@ -175,7 +175,7 @@ public partial class NewsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Feed load failed");
+            Log.Warning(ex, "Loading news and status failed");
             FeedsFailed = !FeedsLoaded;
         }
         finally

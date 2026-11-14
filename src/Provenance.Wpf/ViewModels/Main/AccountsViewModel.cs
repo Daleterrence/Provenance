@@ -51,6 +51,7 @@ public partial class AccountsViewModel : ObservableObject
         _autoLogin = _settings.Current.AutoLogin;
         if (active != null) LoadCredentialsForProfile(active);
         _startGameImmediately = _settings.Current.StartGameImmediately;
+        Profiles.CollectionChanged += (_, _) => OnPropertyChanged(nameof(CanOrder));
     }
 
     public ObservableCollection<Account> Profiles { get; }
@@ -85,6 +86,9 @@ public partial class AccountsViewModel : ObservableObject
             case NotifyCollectionChangedAction.Remove:
                 rows.RemoveAt(e.OldStartingIndex);
                 break;
+            case NotifyCollectionChangedAction.Move:
+                rows.Move(e.OldStartingIndex, e.NewStartingIndex);
+                break;
             case NotifyCollectionChangedAction.Replace:
                 var row = RowOf((Account)e.NewItems![0]!);
                 if (rows[e.NewStartingIndex] != row) rows[e.NewStartingIndex] = row;
@@ -94,6 +98,17 @@ public partial class AccountsViewModel : ObservableObject
                 foreach (var p in Profiles) rows.Add(RowOf(p));
                 break;
         }
+    }
+
+    public bool CanOrder => Profiles.Count > 1;
+
+    internal bool Move(Account p, int by)
+    {
+        int from = Profiles.IndexOf(p), to = from + by;
+        if (from < 0 || to < 0 || to >= Profiles.Count) return false;
+        Profiles.Move(from, to);
+        PersistProfileList();
+        return true;
     }
 
     [ObservableProperty]
@@ -197,8 +212,10 @@ public partial class AccountsViewModel : ObservableObject
             SelectedProfile = same;
             return false;
         }
-        int n = Profiles.Count(p => p.DisplayName.StartsWith("New account", StringComparison.Ordinal));
-        var profile = new Account { DisplayName = n == 0 ? "New account" : $"New account {n + 1}", UseOtp = r.UseOtp,
+        string name = "New account";
+        for (int n = 2; Profiles.Any(p => string.Equals(p.DisplayName, name, StringComparison.Ordinal)); n++)
+            name = $"New account {n}";
+        var profile = new Account { DisplayName = name, UseOtp = r.UseOtp,
                                     OtpSource = r.OtpSource, OtpItem = r.OtpItem, OtpAccount = r.OtpAccount };
         _credentials.SavePolAccount(profile.Id, new PolAccount(r.PolId, r.PolPassword));
         try { _credentials.SaveSquareEnixAccount(profile.Id, new SquareEnixAccount(r.SeaId, r.SeaPassword)); }
@@ -206,7 +223,7 @@ public partial class AccountsViewModel : ObservableObject
         {
             // the account isn't added, so its POL entry mustn't stay behind
             try { _credentials.DeletePolAccount(profile.Id); }
-            catch (Exception ex) { Log.Warning(ex, "Could not remove the POL entry of account {Id} after a failed save", profile.Id); }
+            catch (Exception ex) { Log.Warning(ex, "Could not remove the PlayOnline login details of account {Id} after a failed save", profile.Id); }
             throw;
         }
         Profiles.Add(profile);

@@ -184,7 +184,9 @@ static int windower(int argc, WCHAR **arg)
     /* full paths, so what gets checked here is what pol.exe loads from its own working folder */
     hook = full_path(arg[2], "Windower's Hook.dll path is no good");
     polhook = full_path(arg[4], "pol_hook.dll path is no good");
-    if (!WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, polhook, -1, dll, MAX_PATH, NULL, &lossy) || lossy)
+    /* a UTF-8 system code page takes neither the flag nor the lossy pointer, and can't lose anything anyway */
+    if (!WideCharToMultiByte(CP_ACP, GetACP() == CP_UTF8 ? 0 : WC_NO_BEST_FIT_CHARS, polhook, -1, dll, MAX_PATH, NULL,
+                             GetACP() == CP_UTF8 ? NULL : &lossy) || lossy)
         die("pol_hook.dll path won't go into ANSI");
     if (GetFileAttributesW(hook) == INVALID_FILE_ATTRIBUTES) die("Windower's Hook.dll not found");
     if (GetFileAttributesW(pol) == INVALID_FILE_ATTRIBUTES) die("pol.exe not found");

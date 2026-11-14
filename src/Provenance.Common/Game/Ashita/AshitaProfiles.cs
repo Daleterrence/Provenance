@@ -25,8 +25,9 @@ public sealed class AshitaProfiles(ISettingsService settings, string dir, int pl
 
     public string NewName()
     {
-        for (int i = 1; ; i++)
+        for (int i = 1; i <= 999; i++)
             if (NameProblem($"profile{i}.ini") is null) return $"profile{i}.ini";
+        return "profile1.ini";
     }
 
     public string CopyName(string name, string display)

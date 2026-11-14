@@ -46,10 +46,19 @@ public static class PatchFileList
                 }
                 var m = LineRx.Match(line);
                 if (!m.Success) throw new InvalidDataException($"patch.cfg: unreadable line in {name}: {line}");
-                lines!.Add(new PatchLine(m.Groups[1].Value,
-                    new FileSig(int.Parse(m.Groups[3].Value), int.Parse(m.Groups[4].Value), long.Parse(m.Groups[2].Value)),
-                    m.Groups[5].Value, long.Parse(m.Groups[6].Value),
-                    m.Groups[7].Success ? m.Groups[7].Value : null, m.Groups[8].Success ? long.Parse(m.Groups[8].Value) : 0));
+                PatchLine entry;
+                try
+                {
+                    entry = new PatchLine(m.Groups[1].Value,
+                        new FileSig(int.Parse(m.Groups[3].Value), int.Parse(m.Groups[4].Value), long.Parse(m.Groups[2].Value)),
+                        m.Groups[5].Value, long.Parse(m.Groups[6].Value),
+                        m.Groups[7].Success ? m.Groups[7].Value : null, m.Groups[8].Success ? long.Parse(m.Groups[8].Value) : 0);
+                }
+                catch (Exception e) when (e is OverflowException or FormatException)
+                {
+                    throw new InvalidDataException($"patch.cfg: unreadable number in {name}: {line}", e);
+                }
+                lines!.Add(entry);
                 continue;
             }
             if (line.StartsWith("file ", StringComparison.OrdinalIgnoreCase) && line.EndsWith('{'))
