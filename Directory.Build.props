@@ -3,7 +3,7 @@
        exe's file version keeps just the numbers (1.0.0.0) -->
   <PropertyGroup>
     <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix>beta.6</VersionSuffix>
+    <VersionSuffix>beta.6.1</VersionSuffix>
   </PropertyGroup>
 
   <!-- polcore.dll and FFXi.dll are 32-bit in-process COM servers, a 64-bit host only gets a flaky DCOM surrogate. The
