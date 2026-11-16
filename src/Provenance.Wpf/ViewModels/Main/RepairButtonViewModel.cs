@@ -4,7 +4,6 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Game;
 using Provenance.Common.Install;
 using Provenance.Common.Login;
-using Provenance.Common.Mirror;
 using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Settings;
@@ -21,9 +20,6 @@ public partial class RepairButtonViewModel : ObservableObject
     internal static string LockedText(GameFilesLock.Job? holder) =>
         $"Another copy of Provenance is {GameFilesLock.Doing(holder)}. Repair can start once it's finished.";
     internal const string GameRunningText = "FINAL FANTASY XI is running. Close it to repair the game files.";
-
-    internal static string NotYetText(PolRegion region) =>
-        $"Repair isn't available for the {PolPaths.VersionName(region)} version of PlayOnline yet.";
 
     private readonly IDialogs _dialogs;
     private readonly IWindowManager _windows;
@@ -59,12 +55,6 @@ public partial class RepairButtonViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private bool _available;
 
-    // the region's text when the mirror has no copy to repair it from (Japan)
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(BlockedReason))]
-    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
-    private string? _notYet;
-
     // what the probe last saw: another copy holding the update lock, or the game running
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BlockedReason))]
@@ -73,26 +63,18 @@ public partial class RepairButtonViewModel : ObservableObject
 
     public string? BlockedReason =>
         !Available ? null
-        : NotYet is { } notYet ? notYet
         : _session.InMultiRun ? "Repair can start once Provenance has finished starting your accounts."
         : _pol.Pid is not null || _session.Phase == SessionPhase.LoggingOut ? "Repair can start once you're logged out of PlayOnline."
         : BusyReason;
 
-    // A broken install can have lost FFXiMain.dll, so it only needs both folders registered. A region the mirror has no
-    // copy of is shown but off
-    internal static (bool Available, string? NotYet) State(PolRegion? region, Func<PolRegion, GameProduct, string?> folder)
+    // A broken install can have lost FFXiMain.dll, so it only needs both folders registered
+    internal static bool State(PolRegion? region, Func<PolRegion, GameProduct, string?> folder)
     {
         var r = region ?? PolRegion.UnitedStates;
-        bool available = folder(r, GameProduct.Viewer) is not null && folder(r, GameProduct.Game) is not null;
-        return (available, MirrorLayout.RegionFolder(r) is null ? NotYetText(r) : null);
+        return folder(r, GameProduct.Viewer) is not null && folder(r, GameProduct.Game) is not null;
     }
 
-    internal void SetRegion(PolRegion? region)
-    {
-        var (available, notYet) = State(region, PolPaths.TryGetInstallFolder);
-        NotYet = notYet;
-        Available = available;
-    }
+    internal void SetRegion(PolRegion? region) => Available = State(region, PolPaths.TryGetInstallFolder);
 
     // Pid and the end of a log out have no change notice of their own
     internal void Refresh()
@@ -128,7 +110,7 @@ public partial class RepairButtonViewModel : ObservableObject
     public async Task ProbeAsync()
     {
         // a multi-account run holds the update lock in this copy, which isn't "another copy"
-        if (_probing || Repairing || !_windowShown() || !Available || NotYet is not null || _session.LoggedIn || _session.Launching || _session.InMultiRun) return;
+        if (_probing || Repairing || !_windowShown() || !Available || _session.LoggedIn || _session.Launching || _session.InMultiRun) return;
         _probing = true;
         try { BusyReason = await Task.Run(Busy); }
         finally { _probing = false; }

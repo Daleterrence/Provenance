@@ -10,10 +10,10 @@ public sealed record MirrorOutcome(bool OnMirror, IReadOnlyList<MirrorEntry> Fai
 
 public static class MirrorUpdater
 {
-    // patch.ver goes last and only when nothing failed, POL is the caller's fallback. keep is never written
+    // patch.ver goes last and only when nothing failed, POL is the caller's fallback
     public static async Task<MirrorOutcome> UpdateAsync(MirrorClient client, string region, string product, string folder,
         PolUpdater updater, VersionCheck check, Action beforeChange, IProgress<PatchProgress>? progress, CancellationToken ct,
-        Action<string, bool>? log = null, IReadOnlySet<string>? keep = null)
+        Action<string, bool>? log = null)
     {
         var none = new MirrorOutcome(false, [], 0);
         var next = await client.GetIndexAsync(region, product, check.Server, ct);
@@ -22,7 +22,7 @@ public static class MirrorUpdater
         IReadOnlyList<MirrorEntry> work;
         try
         {
-            work = await WorkAsync(client, region, product, folder, next, check.Local, keep, Bytes(PatchPhase.Scan, "Checking your files...", progress), ct);
+            work = await WorkAsync(client, region, product, folder, next, check.Local, Bytes(PatchPhase.Scan, "Checking your files...", progress), ct);
         }
         catch (InvalidDataException ex)
         {
@@ -46,9 +46,8 @@ public static class MirrorUpdater
     // the change from the installed version's index when the mirror has it, otherwise whatever doesn't match on disk.
     // Every path in next is checked before anything's read or asked for
     private static async Task<IReadOnlyList<MirrorEntry>> WorkAsync(MirrorClient client, string region, string product, string folder,
-        MirrorIndex next, string local, IReadOnlySet<string>? keep, IProgress<ByteProgress>? scanned, CancellationToken ct)
+        MirrorIndex next, string local, IProgress<ByteProgress>? scanned, CancellationToken ct)
     {
-        if (keep is { Count: > 0 }) next = next with { Files = next.Files.Where(e => !keep.Contains(e.Path)).ToList() };
         if (MirrorDownloads.Unusable(folder, next) is { } why) throw new InvalidDataException(why);
         var old = local.Length > 0 ? await client.GetIndexAsync(region, product, local, ct) : null;
         IReadOnlyList<MirrorEntry> work;
@@ -64,9 +63,9 @@ public static class MirrorUpdater
     // the bytes UpdateAsync would download to reach next, which has to be POL's current version (the mirror's can lag,
     // then POL updates it). Null when next is unusable
     public static async Task<long?> DownloadSizeAsync(MirrorClient client, string region, string product, string folder, string local,
-        IReadOnlySet<string>? keep, MirrorIndex next, IProgress<ByteProgress>? scanned, CancellationToken ct)
+        MirrorIndex next, IProgress<ByteProgress>? scanned, CancellationToken ct)
     {
-        try { return MirrorDownloads.DownloadSize(await WorkAsync(client, region, product, folder, next, local, keep, scanned, ct)); }
+        try { return MirrorDownloads.DownloadSize(await WorkAsync(client, region, product, folder, next, local, scanned, ct)); }
         catch (InvalidDataException) { return null; }
     }
 

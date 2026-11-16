@@ -12,7 +12,7 @@ public static class GameUpdate
                                     MirrorCheck? mirror = null)
     {
         var slug = product.Game.Slug;
-        var mirrorRegion = MirrorLayout.UpdateFolder(installed, slug);
+        var mirrorRegion = MirrorLayout.RegionFolder(installed);
         var updater = new PolUpdater(product) { KeepLargeAddressAware = true, Connector = connector ?? DirectPatchConnector.Instance };
         if (known is null) progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
         var check = known ?? (mirror is null ? updater.Check(ct) : mirror.Check(updater, ct));
@@ -24,18 +24,12 @@ public static class GameUpdate
         MirrorOutcome outcome;
         try
         {
-            if (mirrorRegion is null)
-            {
-                Log.Information("Update {Product}: the patch mirror has no copy of it for this region; using PlayOnline", product.Name);
-                outcome = new MirrorOutcome(false, [], 0);
-            }
-            else
-                outcome = MirrorUpdater.UpdateAsync(MirrorClient.Shared, mirrorRegion, slug, product.Folder, updater, check, Once, progress, ct,
-                    (msg, isError) =>
-                    {
-                        if (isError) Log.Error("Update {Product}: {Message}", product.Name, msg);
-                        else Log.Warning("Update {Product}: {Message}", product.Name, msg);
-                    }, MirrorLayout.OwnFiles(installed, slug)).GetAwaiter().GetResult();
+            outcome = MirrorUpdater.UpdateAsync(MirrorClient.Shared, mirrorRegion, slug, product.Folder, updater, check, Once, progress, ct,
+                (msg, isError) =>
+                {
+                    if (isError) Log.Error("Update {Product}: {Message}", product.Name, msg);
+                    else Log.Warning("Update {Product}: {Message}", product.Name, msg);
+                }).GetAwaiter().GetResult();
         }
         catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {

@@ -24,12 +24,9 @@ public partial class InstallViewModel : ObservableObject
     private const long DownloadDriveBytes = 15_500_000_000;   // the parts and their unpacked copy
     private const string MirrorFolder = "mirror";
 
-    // Japanese isn't offered in the list yet
-    private const bool OfferJapanese = false;
-
     // the versions the installer offers, North American first, only ones Provenance can log in with
     private static readonly PolRegion[] RegionValues = new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan }
-        .Where(r => GameInstaller.CanInstall(r) && PolPaths.Supported(r) && (r != PolRegion.Japan || OfferJapanese)).ToArray();
+        .Where(r => GameInstaller.CanInstall(r) && PolPaths.Supported(r)).ToArray();
 
     internal static Func<PolRegion> LocaleRegionForTest { get; set; } = PolLocale.FromWindows;
 
@@ -49,7 +46,6 @@ public partial class InstallViewModel : ObservableObject
         _dialogs = dialogs;
         // a viewer that's already there decides, otherwise it's the player's pick
         ShowRegionChoice = region is not { } r || !RegionValues.Contains(r);
-        // a version that isn't offered yet (Japanese while OfferJapanese is off) leaves Auto on the first one that is
         var local = LocaleRegionForTest();
         _autoRegion = RegionValues.Contains(local) ? local : RegionValues[0];
         RegionChoices = [$"Auto ({PolPaths.RegionName(_autoRegion)})", .. RegionValues.Select(PolPaths.RegionName)];
@@ -410,11 +406,7 @@ public partial class InstallViewModel : ObservableObject
     internal async Task<bool> InstallFromMirrorAsync(string work, CancellationToken ct)
     {
         _mirror = null;
-        if (MirrorLayout.RegionFolder(_region) is not { } mirrorRegion)
-        {
-            Log.Information("Install source: Square Enix's parts (the Provenance mirror has no copy of region {Region})", _region);
-            return false;
-        }
+        var mirrorRegion = MirrorLayout.RegionFolder(_region);
         FromMirror = true;
         CurrentStep = 0;
         Stage = "Preparing";
@@ -506,7 +498,7 @@ public partial class InstallViewModel : ObservableObject
     // (no version, or not on the mirror) or the mirror's unreachable
     private async Task<long?> FirstUpdateSizeAsync(CancellationToken ct)
     {
-        if (MirrorLayout.UpdateFolder(_region, GameProduct.Game.Slug) is not { } mirrorRegion || _mirror?.GameIndex is not { } index
+        if (_mirror?.GameIndex is not { } index
             || PolPaths.TryGetInstallFolder(_region, GameProduct.Game) is not { } ffxiDir
             || PolPaths.TryGetInstallFolder(_region, GameProduct.Viewer) is not { } viewerDir)
             return null;
@@ -520,8 +512,8 @@ public partial class InstallViewModel : ObservableObject
         try
         {
             var local = PatchVer.Read(PatchProduct.Ffxi(ffxiDir, viewerDir, _region));
-            var bytes = await Task.Run(() => MirrorUpdater.DownloadSizeAsync(MirrorClient.Shared, mirrorRegion, GameProduct.Game.Slug,
-                ffxiDir, local, MirrorLayout.OwnFiles(_region, GameProduct.Game.Slug), index, scanned, ct), ct);
+            var bytes = await Task.Run(() => MirrorUpdater.DownloadSizeAsync(MirrorClient.Shared, MirrorLayout.RegionFolder(_region), GameProduct.Game.Slug,
+                ffxiDir, local, index, scanned, ct), ct);
             Log.Information("First game update size: {Size}", bytes is { } n ? $"{n:N0} bytes from the Provenance mirror" : "the mirror has no usable copy");
             return bytes;
         }

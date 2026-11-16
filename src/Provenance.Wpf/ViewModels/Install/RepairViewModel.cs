@@ -150,11 +150,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
         try
         {
             var installed = region ?? PolRegion.UnitedStates;
-            if (MirrorLayout.RegionFolder(installed) is not { } mirrorRegion)
-            {
-                End("Repair isn't available", RepairButtonViewModel.NotYetText(installed), failed: false);
-                return;
-            }
+            var mirrorRegion = MirrorLayout.RegionFolder(installed);
             var viewerDir = PolPaths.TryGetInstallFolder(installed, GameProduct.Viewer);
             var ffxiDir = PolPaths.TryGetInstallFolder(installed, GameProduct.Game);
             if (viewerDir is null || ffxiDir is null)

@@ -83,8 +83,7 @@ public static class ViewerBuild
         State.Outdated => $"Your PlayOnline Viewer is version {Version(viewerDir)}, and it needs updating to {CurrentVersion} first.",
         // version.dat's right, it's pol.exe or polcore that isn't the file that version came with
         _ when Version(viewerDir) == CurrentVersion =>
-            $"Your PlayOnline Viewer says it's version {CurrentVersion}, but its files don't match that version. " +
-            (region == PolRegion.Japan ? "Reinstall the PlayOnline Viewer to fix them." : "Press Repair game files to fix them."),
+            $"Your PlayOnline Viewer says it's version {CurrentVersion}, but its files don't match that version. Press Repair game files to fix them.",
         _ => UnsupportedText,
     };
 

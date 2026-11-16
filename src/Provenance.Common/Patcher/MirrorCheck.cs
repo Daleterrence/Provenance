@@ -39,7 +39,7 @@ public sealed class MirrorCheck
             try
             {
                 if (settings.DetectedRegion is not { } region || !PolPaths.Supported(region)) return;
-                if (MirrorLayout.RegionFolder(region) is { } folder) Shared.Fetching(folder);
+                Shared.Fetching(MirrorLayout.RegionFolder(region));
             }
             catch (Exception e) { Log.Warning(e, "The patch mirror's pointer couldn't be fetched at start"); }
         });
@@ -62,7 +62,8 @@ public sealed class MirrorCheck
 
     internal VersionCheck? Answer(PatchProduct product, string local, CancellationToken ct)
     {
-        if (local.Length == 0 || MirrorLayout.RegionFolder(product.Region) is not { } folder) return null;
+        if (local.Length == 0) return null;
+        var folder = MirrorLayout.RegionFolder(product.Region);
         var fetching = Fetching(folder);
         if (!fetching.Wait(WaitLimit, ct)) return null;
         var pointer = fetching.Result;

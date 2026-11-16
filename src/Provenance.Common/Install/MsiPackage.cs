@@ -246,6 +246,44 @@ public sealed class MsiPackage : IDisposable
             .ToList();
     }
 
+    // a file by its path under the folder that holds the product's key file, with the MD5 the package gives it
+    public (string Path, byte[]? Md5) ProductFile(string installDir, string keyFile, string rel)
+    {
+        var targets = Targets(installDir);
+        if (ProductFolder(targets.Select(t => t.Path), installDir, keyFile, out var folder) is { } problem)
+            throw new InvalidDataException($"The package {problem}.");
+        var want = Path.GetFullPath(Path.Combine(folder, rel.Replace('/', '\\')));
+        var found = targets.Where(t => Path.GetFullPath(t.Path).Equals(want, StringComparison.OrdinalIgnoreCase)).ToList();
+        return found.Count == 1 ? found[0] : throw new InvalidDataException($"The package doesn't list {rel} exactly once.");
+    }
+
+    // one file out of the package's cabinets, by the path Targets gave it. Only the cabinet that holds it is read
+    public void ExtractFile(string installDir, string path, string to, CancellationToken ct)
+    {
+        var props = new Dictionary<string, string> { ["INSTALLDIR"] = installDir.TrimEnd('\\') + "\\" };
+        var dirs = ResolveDirectories(props, null);
+        var comps = _db.Query("SELECT `Component`,`Directory_` FROM `Component`").ToDictionary(r => r[0], r => r[1]);
+        var want = Path.GetFullPath(path);
+        var rows = _db.Query("SELECT `File`,`Component_`,`FileName`,`Sequence` FROM `File`");
+        var found = rows.Where(r => Path.GetFullPath(Path.Combine(dirs[comps[r[1]]], MsiDatabase.LongName(r[2]))).Equals(want, StringComparison.OrdinalIgnoreCase)).ToList();
+        // the cabinet's names are matched to the key without its case, so no other key may differ only by that
+        if (found.Count != 1 || !int.TryParse(found[0][3], out var sequence) || rows.Count(r => r[0].Equals(found[0][0], StringComparison.OrdinalIgnoreCase)) != 1)
+            throw new InvalidDataException($"The package doesn't list {Path.GetFileName(path)} exactly once.");
+        var cab = _db.Query("SELECT `LastSequence`,`Cabinet` FROM `Media`")
+            .Where(r => r[1].Length > 0 && int.TryParse(r[0], out var last) && last >= sequence)
+            .OrderBy(r => int.Parse(r[0]))
+            .FirstOrDefault() ?? throw new InvalidDataException($"The package has no cabinet for {Path.GetFileName(path)}.");
+        var temps = new List<string>();
+        try
+        {
+            var cabPath = cab[1].StartsWith('#') ? _db.ExtractStream(cab[1][1..], temps) : Path.Combine(Path.GetDirectoryName(_db.Location)!, cab[1]);
+            var key = found[0][0];
+            CabExtractor.Extract(cabPath, name => name.Equals(key, StringComparison.OrdinalIgnoreCase) ? to : null, null, ct);
+        }
+        finally { foreach (var t in temps) FileDelete.Try(t); }
+        if (!File.Exists(to)) throw new InvalidDataException($"{Path.GetFileName(path)} was not in {cab[1]}.");
+    }
+
     private static bool Condition(string condition, IReadOnlyDictionary<string, string> props)
     {
         if (condition.Length == 0) return true;

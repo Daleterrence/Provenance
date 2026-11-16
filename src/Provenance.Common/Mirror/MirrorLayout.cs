@@ -1,4 +1,3 @@
-using Provenance.Common.Install;
 using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Mirror;
@@ -7,21 +6,10 @@ public static class MirrorLayout
 {
     public const string BaseUrl = "https://patch.provenancexi.app/";
 
-    // the regions the mirror has a copy of, by their folder in it. Japan has none (yet)
-    private static readonly (PolRegion Region, string Folder)[] Regions = [(PolRegion.UnitedStates, "us"), (PolRegion.Europe, "eu")];
+    private static readonly (PolRegion Region, string Folder)[] Regions =
+        [(PolRegion.UnitedStates, "us"), (PolRegion.Europe, "eu"), (PolRegion.Japan, "jp")];
 
-    public static string? RegionFolder(PolRegion region) => Regions.FirstOrDefault(r => r.Region == region).Folder;
-
-    private static readonly HashSet<string> JpFfxiOwn = new(["mov/mov999.pmv"], StringComparer.OrdinalIgnoreCase);
-
-    // JP's FFXI list is the US one byte for byte, so FFXI comes from us/ (bar mov999.pmv, which POL never patches) and
-    // its viewer from POL
-    public static string? UpdateFolder(PolRegion installed, string product) =>
-        RegionFolder(installed) ?? (installed == PolRegion.Japan && product == GameProduct.Game.Slug ? "us" : null);
-
-    // files an install keeps as they are when its updates come from another region's folder
-    public static IReadOnlySet<string> OwnFiles(PolRegion installed, string product) =>
-        installed == PolRegion.Japan && product == GameProduct.Game.Slug ? JpFfxiOwn : new HashSet<string>();
+    public static string RegionFolder(PolRegion region) => Regions.First(r => r.Region == region).Folder;
 
     public static PolRegion RegionOf(string folder) => Regions.FirstOrDefault(r => r.Folder == folder) is { Folder: not null } r
         ? r.Region
