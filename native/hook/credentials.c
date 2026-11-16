@@ -68,7 +68,7 @@ static void cred_consume(const WCHAR *target, const char *kind)
         base_log("login: one-shot target '%ls' delete failed err=%u\r\n", target, GetLastError());
 }
 /* a failure ends pol.exe (exit 11) so Provenance asks for the details again */
-static int cred_read_details(const char *env, const char *kind, char *id, int idcap, char *pw, int pwcap)
+static void cred_read_details(const char *env, const char *kind, char *id, int idcap, char *pw, int pwcap)
 {
     WCHAR tbuf[256];
     int rc = PC_OK;
@@ -84,7 +84,7 @@ static int cred_read_details(const char *env, const char *kind, char *id, int id
         SecureZeroMemory(id, idcap);
         SecureZeroMemory(pw, pwcap);
         base_log("login: bad %s entry (ID or password empty) - pol.exe ends\r\n", cred_kind_name(kind));
-    } else return 1;
+    } else return;
     base_log(LOG_DETAILS_UNREADABLE " (%s) - exiting, the game wasn't started\r\n", cred_kind_name(kind));
     base_end_pol(DETAILS_UNREADABLE_EXIT);
 }
@@ -104,7 +104,7 @@ static void seed_account_login(BYTE *b)
     BYTE h1[20], secret[20], material[64];
     WCHAR obuf[256];
     int mode = 1, orc;
-    if (!cred_read_details(ENV_CRED_SEA, "SEA", seid, sizeof seid, sepw, sizeof sepw)) return;
+    cred_read_details(ENV_CRED_SEA, "SEA", seid, sizeof seid, sepw, sizeof sepw);
     cred_sha1(b, sepw, lstrlenA(sepw), h1);
     for (int i = 0; i < 20; i++) wsprintfA(hex + i * 2, "%02x", h1[i]);
     lstrcpyA((char *)material, hex);

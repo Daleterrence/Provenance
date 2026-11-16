@@ -721,8 +721,6 @@ static void chat_room_write_lines(BYTE *b)
     ipc_json file;
     jw w = {0};
     (void)b;
-    g_cr_lines_dirty = 0;
-    g_cr_written_seq = g_cr_seq;
     g_cr_written_at = GetTickCount64();
     if (!base_ipc_json_open(IPC_CHATROOM, &file)) return;
     jw_obj(&w, NULL);
@@ -746,7 +744,10 @@ static void chat_room_write_lines(BYTE *b)
     }
     jw_end(&w);
     jw_end(&w);
-    base_ipc_json_commit(&file, !w.fail && base_ipc_json_write(&file, w.p, w.n));
+    if (base_ipc_json_commit(&file, !w.fail && base_ipc_json_write(&file, w.p, w.n))) {
+        g_cr_lines_dirty = 0;
+        g_cr_written_seq = g_cr_seq;
+    }
     jw_free(&w);
 }
 /* the snapshot's "chat", only once chat's been used so the rest of the snapshot stays as it was */

@@ -113,7 +113,7 @@ public static class HookFiles
     // The hook caps the store at 3MB, the others are well under
     public static class MaxBytes
     {
-        public const int Social = 4 * 1024 * 1024;
+        public const int Social = 8 * 1024 * 1024;
         public const int Store = 8 * 1024 * 1024;
         public const int ChatRoom = 4 * 1024 * 1024;
         public const int GroupChat = 4 * 1024 * 1024;

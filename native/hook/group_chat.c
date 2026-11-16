@@ -381,8 +381,6 @@ static void group_chat_write_lines(void)
     char id[17], u8[0x300];
     ipc_json file;
     jw w = {0};
-    g_gc_lines_dirty = 0;
-    g_gc_written_seq = g_gc_seq;
     g_gc_written_at = GetTickCount64();
     if (!base_ipc_json_open(IPC_GROUPCHAT, &file)) return;
     wsprintfA(id, "%08x%08x", g_gc_hi, g_gc_lo);
@@ -404,7 +402,10 @@ static void group_chat_write_lines(void)
     }
     jw_end(&w);
     jw_end(&w);
-    base_ipc_json_commit(&file, !w.fail && base_ipc_json_write(&file, w.p, w.n));
+    if (base_ipc_json_commit(&file, !w.fail && base_ipc_json_write(&file, w.p, w.n))) {
+        g_gc_lines_dirty = 0;
+        g_gc_written_seq = g_gc_seq;
+    }
     jw_free(&w);
 }
 static void group_chat_snapshot(BYTE *b, jw *w)

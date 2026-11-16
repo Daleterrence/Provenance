@@ -103,6 +103,7 @@ static int pc_has(BYTE *b, unsigned off) { return pc_slot(b, off) != NULL; }
 
 /* what a job's start or poll answers besides 0 (not done yet), 1 (done) and the server's own codes */
 #define NO_SLOT (-0x100)             /* polcore has no free job slot, try next turn */
+#define MAIL_SUSPENDED (-0x153a)     /* the POL ID service is suspended */
 #define NO_CHAT_LINK (-0x41f)        /* there's no chat link to send on */
 #define HANDLE_LIST_STALE (-0x105)   /* the server's handle list moved on, the viewer reloads it and reports this */
 #define NOTHING_FOUND (-0x14cc)      /* a search with no hits, or a profile the viewer isn't allowed to see */
