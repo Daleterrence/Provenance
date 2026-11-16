@@ -29,6 +29,11 @@ public sealed class NotABackupException() : IOException("That file isn't one of 
 
 public sealed class BackupBeforeRestoreException(Exception inner) : IOException("The current settings couldn't be backed up first.", inner);
 
+public sealed class RestoredPartlyException(BackupOutcome before, Exception inner) : IOException("Not all of the settings could be put back.", inner)
+{
+    public BackupOutcome Before { get; } = before;
+}
+
 // whole character folders rather than SE's patterns, a few KB more and it covers anything they add. The game rewrites
 // these in place unlocked, so each copy's checked for a write mid-read
 public static partial class GameSettingsBackup
@@ -125,6 +130,8 @@ public static partial class GameSettingsBackup
                 else leftOut.Add($"{f.Entry}: kept changing, so it's left out");
             }
         }
+
+        if (taken.Count == 0 && fallback.Count == 0) return new(BackupOutcome.NothingThere, null, leftOut);
 
         var tmp = Path.Combine(folder, $"{NameStart}{Guid.NewGuid():N}.tmp");
         try
@@ -246,6 +253,10 @@ public static partial class GameSettingsBackup
                         Put(pins.Pins, pins.Dir, e.Name, data, written.TryGetValue(e.FullName, out var at) ? at : null);
                         restored++;
                     }
+            }
+            catch (Exception e) when (e is not NotABackupException && !Shown.Is(e))
+            {
+                throw new RestoredPartlyException(before.Outcome, e);
             }
             finally
             {

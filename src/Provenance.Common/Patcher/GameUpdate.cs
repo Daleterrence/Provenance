@@ -9,8 +9,9 @@ public static class GameUpdate
 {
     internal static PatchResult Run(PatchProduct product, PolRegion installed, IProgress<PatchProgress>? progress,
                                     Action beforeChange, CancellationToken ct, VersionCheck? known = null, IPatchConnector? connector = null,
-                                    MirrorCheck? mirror = null)
+                                    MirrorCheck? mirror = null, MirrorClient? client = null)
     {
+        client ??= MirrorClient.Shared;
         var slug = product.Game.Slug;
         var mirrorRegion = MirrorLayout.RegionFolder(installed);
         var updater = new PolUpdater(product) { KeepLargeAddressAware = true, Connector = connector ?? DirectPatchConnector.Instance };
@@ -24,7 +25,7 @@ public static class GameUpdate
         MirrorOutcome outcome;
         try
         {
-            outcome = MirrorUpdater.UpdateAsync(MirrorClient.Shared, mirrorRegion, slug, product.Folder, updater, check, Once, progress, ct,
+            outcome = MirrorUpdater.UpdateAsync(client, mirrorRegion, slug, product.Folder, updater, check, Once, progress, ct,
                 (msg, isError) =>
                 {
                     if (isError) Log.Error("Update {Product}: {Message}", product.Name, msg);
@@ -38,7 +39,7 @@ public static class GameUpdate
         }
 
         // the list comes once the mirror's answered, so a dead one isn't waited on twice
-        if (outcome.OnMirror && product.Game == GameProduct.Viewer) SignedBuilds.RefreshAsync(MirrorClient.Shared, ct).GetAwaiter().GetResult();
+        if (outcome.OnMirror && product.Game == GameProduct.Viewer) SignedBuilds.RefreshAsync(client, ct).GetAwaiter().GetResult();
 
         if (!outcome.OnMirror)
         {
@@ -47,6 +48,13 @@ public static class GameUpdate
         }
         Log.Information("Update {Product}: mirror {Replaced} files, PlayOnline {Count}", product.Name, outcome.Replaced, outcome.Failed.Count);
         if (outcome.Failed.Count == 0) return outcome.Replaced > 0 ? PatchResult.Updated : PatchResult.UpToDate;
+
+        if (outcome.SomeLocal)
+        {
+            var files = outcome.Failed.Select(f => f.Path).ToList();
+            Log.Warning("Update {Product}: writes failed on this PC, not asking PlayOnline for {Files}", product.Name, MirrorDownloads.NameList(files));
+            throw Shown.Mark(new IOException($"Provenance couldn't write {files.Count} {(files.Count == 1 ? "file" : "files")} while updating: {MirrorDownloads.NameList(files)}. Free up some space or close whatever's using the files, then try again."));
+        }
 
         var names = new HashSet<string>(outcome.Failed.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
         var failedList = MirrorDownloads.NameList(outcome.Failed.Select(f => f.Path).ToList());

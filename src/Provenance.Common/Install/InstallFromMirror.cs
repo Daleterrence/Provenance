@@ -217,7 +217,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
                 var names = MirrorDownloads.NameList(files);
                 // a write that failed here (disk full, a locked file) is the PC's to fix, SE's parts would fail too
                 if (files.Any(f => reasons.TryGetValue(f, out var ex) && MirrorFailure.IsLocal(ex)))
-                    throw Shown.Mark(new IOException($"{files.Count} {name} {(files.Count == 1 ? "file" : "files")} couldn't be written: {names}. Free up some space or close whatever's using them, then press Try again."));
+                    throw Shown.Mark(new IOException($"{files.Count} {name} {(files.Count == 1 ? "file" : "files")} couldn't be written: {names}. Free up some space or close whatever's using them, then try again."));
                 throw new MirrorUnusableException($"{files.Count} {name} file(s) could not be downloaded: {names}.", files);
             }
         }

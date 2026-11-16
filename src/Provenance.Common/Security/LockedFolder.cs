@@ -331,7 +331,7 @@ internal static class LockedFolder
         for (bool progress = true; progress && budget > 0;)
         {
             progress = false;
-            var queue = new Queue<string>(List(held));
+            var queue = new Queue<string>(List(held, strict: true));
             if (queue.Count == 0) return 0;
             while (budget-- > 0 && queue.TryDequeue(out var name))
             {
@@ -362,7 +362,7 @@ internal static class LockedFolder
                 }
             }
         }
-        int left = List(held).Count;
+        int left = List(held, strict: true).Count;
         if (left > 0) Log.Information("{Count} item(s) in {Bin} couldn't be removed yet, so they're tried again at the next start", left, bin);
         return left;
     }
@@ -402,7 +402,8 @@ internal static class LockedFolder
         return false;
     }
 
-    private static List<string> List(SafeFileHandle dir)
+    // strict is for a caller that can't take a listing that failed for an empty folder
+    internal static List<string> List(SafeFileHandle dir, bool strict = false)
     {
         var names = new List<string>();
         var buf = new byte[64 * 1024];
@@ -418,6 +419,8 @@ internal static class LockedFolder
                 off += next;
             }
         }
+        // the walk ends on ERROR_NO_MORE_FILES
+        if (strict && Marshal.GetLastWin32Error() is not 18) throw new IOException($"{new Win32Exception().Message} (listing a folder)");
         return names;
     }
 

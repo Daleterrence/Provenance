@@ -114,7 +114,7 @@ public sealed class WindowerLauncher : IDisposable
         {
             var s = settings.Current;
             if (s.ThirdPartyHookPlatform != ThirdPartyHook.Windower) return;
-            var path = s.WindowerPath;
+            var path = ThirdPartyHooks.Usable(s.WindowerPath);
             var begun = WindowerChecks.Shared.Starting();
             _ = Task.Run(() =>
             {
@@ -137,6 +137,7 @@ public sealed class WindowerLauncher : IDisposable
     private void RunSteps(IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         var dir = _setup.WindowerDir;
+        ThirdPartyHooks.RequireDrive(dir);
         if (FolderPins.Linked(dir)) throw Shown.Mark(new IOException(WindowerInstall.LinkedText));
         var timer = new StepTimer("Windower launch");
         TakeTurn(progress, ct);
