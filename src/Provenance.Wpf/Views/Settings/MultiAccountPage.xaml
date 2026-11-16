@@ -27,7 +27,7 @@
                 </CheckBox>
                 <TextBlock Style="{StaticResource Help}" Margin="26,0,0,14"
                            Text="This will exit Provenance when all of your accounts are successfully logged in. If there is an error logging any account in, it will always stay open to tell you what went wrong and let you try again." />
-                <TextBlock Text="You haven't added any accounts yet. Add one on the main window."
+                <TextBlock Text="You haven't added any accounts yet. Press ADD ACCOUNT on the main window to add one."
                            Style="{StaticResource ShowWhenZero}" behaviours:State.Count="{Binding MultiAccountRows.Count}" />
                 <ItemsControl ItemsSource="{Binding MultiAccountRows}" Focusable="False">
                     <ItemsControl.ItemTemplate>

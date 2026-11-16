@@ -90,6 +90,18 @@ public partial class ChatRoomsWindow : AppWindow
         FillMemberMenu(menu, m);
     }
 
+    // the same Kick and Designate from the keyboard
+    private void OnMemberMenuButton(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: ChatMemberItem m } button || !_vm.CanKick(m)) return;
+        Menus.Toggle(button, () =>
+        {
+            var menu = new ContextMenu();
+            FillMemberMenu(menu, m);
+            return menu;
+        });
+    }
+
     internal void FillMemberMenu(ContextMenu menu, ChatMemberItem m) => Menus.Fill(menu, _vm.MemberMenu(m));
 
     private void OnPasswordMenu(object sender, RoutedEventArgs e)

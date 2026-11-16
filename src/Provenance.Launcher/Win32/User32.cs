@@ -6,4 +6,7 @@ internal static class User32
 {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     internal static extern int MessageBoxW(IntPtr owner, string text, string caption, uint type);
+
+    [DllImport("user32.dll")]
+    internal static extern short GetAsyncKeyState(int key);
 }

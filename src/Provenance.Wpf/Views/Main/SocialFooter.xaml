@@ -20,7 +20,7 @@
                 </StackPanel>
                 <social:EditProfileButton Margin="4,0,0,0" VerticalAlignment="Center" DataContext="{Binding Social}" />
                 <!-- locked with a spinner until POL confirms -->
-                <ComboBox Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource StatusPicker}"
+                <ComboBox AutomationProperties.Name="Status" Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource StatusPicker}"
                           IsEnabled="{Binding Social.StatusEditable}"
                           ItemsSource="{Binding Social.StatusItems}" SelectedIndex="{Binding Social.MyStatusIndex}" />
             </StackPanel>

@@ -12,6 +12,23 @@ internal static class AutoLoginAtOpen
     // off and saved, and it stays off until the player turns it back on
     internal static void TurnOffForShift(ISettingsService settings) => settings.SaveChange(s => s.AutoLogin = false);
 
+    // held when the app starts (or passed on by the launcher or an update's restart), or when this looks. Turns the
+    // setting off once it counts
+    internal static bool ShiftAtStart(bool heldAtStart, Func<bool> shiftDown, ISettingsService settings)
+    {
+        bool shift = heldAtStart || shiftDown();
+        if (shift) TurnOffForShift(settings);
+        return shift;
+    }
+
+    // a Shift pressed a moment later still counts, after the early start's begun
+    internal static bool ShiftLater(bool shift, Func<bool> shiftDown, ISettingsService settings)
+    {
+        if (shift || !shiftDown()) return shift;
+        TurnOffForShift(settings);
+        return true;
+    }
+
     internal static Account? Coming(ISettingsService settings, ICredentialService credentials, bool suppressed)
     {
         try

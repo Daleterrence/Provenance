@@ -13,53 +13,57 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Style="{StaticResource DialogCard}" CardMargin="12" WideShadow="True">
 
-    <Grid Margin="28,22" RowDefinitions="Auto,*,Auto,Auto">
-        <controls:DialogHeader Title="Repair game files" />
+    <Grid Margin="28,22" RowDefinitions="*,Auto">
+        <controls:BodyScroller>
+            <Grid RowDefinitions="Auto,*,Auto">
+                <controls:DialogHeader Title="Repair game files" />
 
-        <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,24,0,20">
-            <controls:SvgIcon Glyph="ok" Flat="True" Width="44" Height="44" Margin="0,0,0,14" HorizontalAlignment="Center"
-                              Foreground="{DynamicResource Primary}"
-                              Visibility="{Binding Succeeded, Converter={StaticResource BoolToVis}}" />
-            <controls:BalancedText Message="{Binding Stage}" FontSize="20" FontWeight="SemiBold"
-                                   Visibility="{Binding Stage, Converter={StaticResource NullToVisibilityConverter}}" />
-            <!-- a result with no heading reads as the main line -->
-            <controls:BalancedText Message="{Binding Status}" behaviours:State.IsError="{Binding Failed}">
-                <controls:BalancedText.Style>
-                    <Style TargetType="controls:BalancedText">
-                        <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
-                        <Setter Property="FontSize" Value="13" />
-                        <Setter Property="Margin" Value="0,8,0,0" />
-                        <Style.Triggers>
-                            <Trigger Property="behaviours:State.IsError" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource State.Down}" />
-                            </Trigger>
-                            <DataTrigger Binding="{Binding Succeeded}" Value="True">
-                                <Setter Property="FontSize" Value="15" />
-                                <Setter Property="Margin" Value="12,0" />
-                                <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </controls:BalancedText.Style>
-            </controls:BalancedText>
-            <ProgressBar Margin="0,20,0,4" Height="8" Minimum="0" Maximum="1" Value="{Binding Fraction}" IsIndeterminate="{Binding Indeterminate}"
-                         Foreground="{DynamicResource Primary}" Background="{DynamicResource Surface.1}"
-                         Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
-            <TextBlock Text="{Binding Amount}" FontSize="12" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
-                       Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
-            <TextBlock Text="{Binding TimeLeft}" FontSize="12" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
-                       Margin="0,2,0,0" Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
-        </StackPanel>
+                <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,24,0,20">
+                    <controls:SvgIcon Glyph="ok" Flat="True" Width="44" Height="44" Margin="0,0,0,14" HorizontalAlignment="Center"
+                                      Foreground="{DynamicResource Primary}"
+                                      Visibility="{Binding Succeeded, Converter={StaticResource BoolToVis}}" />
+                    <controls:BalancedText Message="{Binding Stage}" FontSize="20" FontWeight="SemiBold"
+                                           Visibility="{Binding Stage, Converter={StaticResource NullToVisibilityConverter}}" />
+                    <!-- a result with no heading reads as the main line -->
+                    <controls:BalancedText Message="{Binding Status}" behaviours:State.IsError="{Binding Failed}">
+                        <controls:BalancedText.Style>
+                            <Style TargetType="controls:BalancedText">
+                                <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
+                                <Setter Property="FontSize" Value="13" />
+                                <Setter Property="Margin" Value="0,8,0,0" />
+                                <Style.Triggers>
+                                    <Trigger Property="behaviours:State.IsError" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource State.Down}" />
+                                    </Trigger>
+                                    <DataTrigger Binding="{Binding Succeeded}" Value="True">
+                                        <Setter Property="FontSize" Value="15" />
+                                        <Setter Property="Margin" Value="12,0" />
+                                        <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </controls:BalancedText.Style>
+                    </controls:BalancedText>
+                    <ProgressBar Margin="0,20,0,4" Height="8" Minimum="0" Maximum="1" Value="{Binding Fraction}" IsIndeterminate="{Binding Indeterminate}"
+                                 Foreground="{DynamicResource Primary}" Background="{DynamicResource Surface.1}"
+                                 Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding Amount}" FontSize="12" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
+                               Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding TimeLeft}" FontSize="12" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
+                               Margin="0,2,0,0" Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
 
-        <Border Grid.Row="2" x:Name="DetailsArea" Height="220" Margin="0,0,0,16" BorderThickness="1" CornerRadius="4"
-                BorderBrush="{DynamicResource Border.Hair}" Background="{DynamicResource Surface.1}"
-                Visibility="{Binding ShowDetails, Converter={StaticResource BoolToVis}}">
-            <ScrollViewer x:Name="DetailsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12,8">
-                <TextBlock Text="{Binding Details}" FontSize="12" TextWrapping="NoWrap" Foreground="{DynamicResource Text.1}" />
-            </ScrollViewer>
-        </Border>
+                <Border Grid.Row="2" x:Name="DetailsArea" Height="220" Margin="0,0,0,16" BorderThickness="1" CornerRadius="4"
+                        BorderBrush="{DynamicResource Border.Hair}" Background="{DynamicResource Surface.1}"
+                        Visibility="{Binding ShowDetails, Converter={StaticResource BoolToVis}}">
+                    <ScrollViewer x:Name="DetailsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="12,8">
+                        <TextBlock Text="{Binding Details}" FontSize="12" TextWrapping="NoWrap" Foreground="{DynamicResource Text.1}" />
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+        </controls:BodyScroller>
 
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="1">
             <Button HorizontalAlignment="Left" Width="120" Height="40" Content="CANCEL" Style="{StaticResource RedButton}" Command="{Binding CancelCommand}"
                     Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"

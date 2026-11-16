@@ -53,8 +53,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
 
     public string? Code => _code;
 
-    internal bool IsClosed => _closed;
-
     internal OtpFix Fix => _fix;
 
     // reuseKey (the SE ID) names the authenticator, so one code never goes out twice

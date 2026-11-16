@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Provenance.Wpf.Win32;
 
-internal static partial class User32
+internal static class User32
 {
     [DllImport("user32.dll")]
     internal static extern bool ChangeWindowMessageFilterEx(IntPtr window, uint message, uint action, IntPtr changes);

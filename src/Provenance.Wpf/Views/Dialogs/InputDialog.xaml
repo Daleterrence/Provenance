@@ -20,10 +20,10 @@
         <TextBlock x:Name="PromptText" FontSize="13" LineHeight="19" Foreground="{DynamicResource Text.2}"
                    TextWrapping="Wrap" Margin="0,0,0,14" />
 
-        <TextBox x:Name="InputBox" Style="{StaticResource OutlinedField}" materialDesign:HintAssist.IsFloating="False"
+        <TextBox AutomationProperties.LabeledBy="{Binding ElementName=PromptText}" x:Name="InputBox" Style="{StaticResource OutlinedField}" materialDesign:HintAssist.IsFloating="False"
                  FontSize="13" Padding="12,8" MinHeight="42" VerticalContentAlignment="Center" KeyDown="OnInputKeyDown" />
         <!-- a password: dots, with the same show button as the account's -->
-        <PasswordBox x:Name="SecretBox" Style="{DynamicResource DialogRevealPasswordBox}" Visibility="Collapsed"
+        <PasswordBox AutomationProperties.LabeledBy="{Binding ElementName=PromptText}" x:Name="SecretBox" Style="{DynamicResource DialogRevealPasswordBox}" Visibility="Collapsed"
                      materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                      FontSize="13" Padding="12,8" MinHeight="42" VerticalContentAlignment="Center" KeyDown="OnInputKeyDown" />
 

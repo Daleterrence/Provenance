@@ -28,35 +28,35 @@
                 <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
             </Grid.RowDefinitions>
             <TextBlock Style="{StaticResource FormLabel}" Text="Room name" />
-            <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,5" MaxLength="{x:Static social:ChatRoomFiles.MaxRoomName}" FontSize="13" Padding="10,6"
+            <TextBox AutomationProperties.Name="Room name" x:Name="NameBox" Grid.Column="1" Margin="0,5" MaxLength="{x:Static social:ChatRoomFiles.MaxRoomName}" FontSize="13" Padding="10,6"
                      Style="{StaticResource OutlinedField}" materialDesign:HintAssist.IsFloating="False"
                      materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" TextChanged="OnChanged" />
 
             <TextBlock Grid.Row="1" Style="{StaticResource FormLabel}" Text="Zone" />
-            <ComboBox x:Name="ZoneBox" Grid.Row="1" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Text"
+            <ComboBox AutomationProperties.Name="Zone" x:Name="ZoneBox" Grid.Row="1" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Text"
                       SelectionChanged="OnChanged" />
 
             <TextBlock Grid.Row="2" Style="{StaticResource FormLabel}" Text="Occupancy" />
-            <ComboBox x:Name="OccupancyBox" Grid.Row="2" Grid.Column="1" Margin="0,5" FontSize="13" />
+            <ComboBox AutomationProperties.Name="Occupancy" x:Name="OccupancyBox" Grid.Row="2" Grid.Column="1" Margin="0,5" FontSize="13" />
 
             <TextBlock Grid.Row="3" Style="{StaticResource FormLabel}" Text="Password" />
             <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,5" Orientation="Horizontal">
                 <RadioButton x:Name="PasswordOn" Content="On" Margin="0,0,18,0" Checked="OnPasswordSwitch" />
                 <RadioButton x:Name="PasswordOff" Content="Off" IsChecked="True" Checked="OnPasswordSwitch" />
             </StackPanel>
-            <PasswordBox x:Name="PasswordBox" Grid.Row="4" Grid.Column="1" Margin="0,5" MaxLength="{x:Static social:ChatRoomFiles.MaxNewPassword}" FontSize="13" Padding="10,6"
+            <PasswordBox AutomationProperties.Name="Room password" x:Name="PasswordBox" Grid.Row="4" Grid.Column="1" Margin="0,5" MaxLength="{x:Static social:ChatRoomFiles.MaxNewPassword}" FontSize="13" Padding="10,6"
                          Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Enter room password"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
-            <PasswordBox x:Name="ConfirmBox" Grid.Row="5" Grid.Column="1" Margin="0,5" MaxLength="{x:Static social:ChatRoomFiles.MaxNewPassword}" FontSize="13" Padding="10,6"
+            <PasswordBox AutomationProperties.Name="Confirm room password" x:Name="ConfirmBox" Grid.Row="5" Grid.Column="1" Margin="0,5" MaxLength="{x:Static social:ChatRoomFiles.MaxNewPassword}" FontSize="13" Padding="10,6"
                          Style="{DynamicResource DialogRevealPasswordBox}" materialDesign:HintAssist.Hint="Confirm password"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" PasswordChanged="OnChanged" />
 
             <TextBlock Grid.Row="6" Style="{StaticResource FormLabel}" Text="Members" />
-            <ComboBox x:Name="MembersBox" Grid.Row="6" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Text" />
+            <ComboBox AutomationProperties.Name="Members" x:Name="MembersBox" Grid.Row="6" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Text" />
             <TextBlock Grid.Row="7" Style="{StaticResource FormLabel}" Text="Purpose" />
-            <ComboBox x:Name="PurposeBox" Grid.Row="7" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Text" />
+            <ComboBox AutomationProperties.Name="Purpose" x:Name="PurposeBox" Grid.Row="7" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Text" />
             <TextBlock Grid.Row="8" Style="{StaticResource FormLabel}" Text="Language" />
-            <ComboBox x:Name="LanguageBox" Grid.Row="8" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Text" />
+            <ComboBox AutomationProperties.Name="Language" x:Name="LanguageBox" Grid.Row="8" Grid.Column="1" Margin="0,5" FontSize="13" DisplayMemberPath="Text" />
         </Grid>
 
         <TextBlock x:Name="ErrorText" Margin="0,8,0,0" FontSize="12" Foreground="{DynamicResource State.Down}"

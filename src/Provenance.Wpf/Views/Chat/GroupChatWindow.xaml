@@ -87,7 +87,7 @@
 
         <Border Grid.Row="3" Style="{StaticResource FooterBar}">
             <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
-                <TextBox x:Name="ComposeBox" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
+                <TextBox AutomationProperties.Name="Message" x:Name="ComposeBox" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
                          TextWrapping="Wrap" MaxLength="{x:Static social:GroupChatFiles.MaxText}" Style="{StaticResource OutlinedField}" Padding="10,8"
                          materialDesign:HintAssist.Hint="Say something to the group (Enter sends)" materialDesign:HintAssist.IsFloating="False"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed" IsEnabled="{Binding InChat}"

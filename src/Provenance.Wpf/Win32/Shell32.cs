@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Provenance.Wpf.Win32;
 
-internal static partial class Shell32
+internal static class Shell32
 {
     [DllImport("shell32.dll")]
     internal static extern IntPtr SHAppBarMessage(uint message, ref APPBARDATA data);

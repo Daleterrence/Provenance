@@ -11,6 +11,16 @@
              mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialViewModel}">
 
     <UserControl.Resources>
+        <Style x:Key="FriendRowItem" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+            <Setter Property="AutomationProperties.Name">
+                <Setter.Value>
+                    <MultiBinding StringFormat="{}{0}, {1}">
+                        <Binding Path="Name" />
+                        <Binding Path="StatusLabel" />
+                    </MultiBinding>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="FriendListBox" TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
             <Style.Triggers>
                 <DataTrigger Binding="{Binding FriendsUnavailable}" Value="True">
@@ -55,7 +65,7 @@
     <Grid>
         <ListBox x:Name="List" ItemsSource="{Binding FriendsView}" SelectedItem="{Binding SelectedFriend}"
                  IsSynchronizedWithCurrentItem="False" Style="{StaticResource FriendListBox}"
-                 ItemTemplate="{StaticResource FriendRow}" HorizontalContentAlignment="Stretch" ItemContainerStyle="{StaticResource RowItem}"
+                 ItemTemplate="{StaticResource FriendRow}" HorizontalContentAlignment="Stretch" ItemContainerStyle="{StaticResource FriendRowItem}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" BorderThickness="0" Background="Transparent"
                  MouseDoubleClick="OnDoubleClick" SelectionChanged="OnSelectionChanged" KeyDown="OnListKeyDown" ContextMenuOpening="OnContextMenuOpening">
             <ListBox.ContextMenu>
