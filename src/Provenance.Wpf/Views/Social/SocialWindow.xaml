@@ -179,7 +179,7 @@
                                 <local:EditProfileButton Grid.Column="1" HorizontalAlignment="Left" Margin="6,0,0,0" IsEnabled="{Binding LoggedIn}" />
                             </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
-                                <ComboBox Style="{StaticResource StatusPicker}" VerticalAlignment="Center"
+                                <ComboBox AutomationProperties.Name="Status" Style="{StaticResource StatusPicker}" VerticalAlignment="Center"
                                           IsEnabled="{Binding StatusEditable}"
                                           ItemsSource="{Binding StatusItems}" SelectedIndex="{Binding MyStatusIndex}" />
                                 <ProgressBar Width="12" Height="12" Margin="6,0,0,0"
@@ -208,7 +208,7 @@
                                     </Style>
                                 </Border.Style>
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <TextBox x:Name="CommentBox" Padding="0,2" FontSize="12" FontStyle="Italic" MaxLength="{x:Static social:PolLimits.Comment}"
+                                    <TextBox AutomationProperties.Name="Comment" x:Name="CommentBox" Padding="0,2" FontSize="12" FontStyle="Italic" MaxLength="{x:Static social:PolLimits.Comment}"
                                              Style="{StaticResource PlainField}" BorderThickness="0"
                                              Foreground="{DynamicResource Text.2}"
                                              materialDesign:HintAssist.Hint="Add a comment" materialDesign:HintAssist.IsFloating="False"
@@ -286,9 +286,22 @@
                             </Grid>
                         </Grid>
                     </Border>
-                    <ScrollViewer Grid.Row="1" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
-                        <ItemsControl ItemsSource="{Binding Messages.Conversation}" ItemTemplate="{StaticResource ChatLine}" />
-                    </ScrollViewer>
+                    <!-- the lines are different heights, so it scrolls by the pixel and only the ones on show get a visual -->
+                    <ItemsControl Grid.Row="1" x:Name="ChatLines" ItemsSource="{Binding Messages.Conversation}" ItemTemplate="{StaticResource ChatLine}"
+                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer x:Name="PART_ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
                     <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" FontSize="12"
                                Foreground="{DynamicResource Text.3}" TextWrapping="Wrap" TextAlignment="Center"
                                Style="{StaticResource ShowWhenZero}" behaviours:State.Count="{Binding Messages.Conversation.Count}">
@@ -297,7 +310,7 @@
                     <Border Grid.Row="2" Style="{StaticResource FooterBar}">
                         <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
                             <!-- MaxLength's only a backstop, the real limit's 300 bytes -->
-                            <TextBox x:Name="ComposeBox" MinHeight="40" MaxHeight="120" FontSize="13"
+                            <TextBox AutomationProperties.Name="Message" x:Name="ComposeBox" MinHeight="40" MaxHeight="120" FontSize="13"
                                      Text="{Binding Messages.Compose, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
                                      TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="{x:Static social:PolMessage.MaxTextBytes}"
                                      Style="{StaticResource OutlinedField}" Padding="10,8"

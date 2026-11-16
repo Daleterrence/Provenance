@@ -7,7 +7,9 @@ public static class AppPaths
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) is { Length: > 0 } root
             ? Path.Combine(root, "Provenance") : null;
 
-    public static string Logs => Path.Combine(UserData ?? "Provenance", "logs");
+    public const string LogsFolder = "logs";
+
+    public static string Logs => Path.Combine(ProgramData, LogsFolder);
 
     public static string ProgramData =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Provenance");

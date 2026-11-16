@@ -101,10 +101,10 @@ public partial class HookSettings : ObservableObject, IProfileHost
     }
 
     // only the folder in the box, never one found somewhere else, since profiles get changed in it
-    public string? WindowerDir => WindowerInstall.IsFolder(WindowerPath) ? WindowerPath : null;
+    public string? WindowerDir => HookFolder.Usable(WindowerPath) is { } usable && WindowerInstall.IsFolder(usable) ? usable : null;
     // settings.xml's writer refuses one too, so nothing here offers to change it
     public bool WindowerLinked => WindowerDir is { } d && FolderPins.Linked(d);
-    public string? AshitaDir => AshitaInstall.IsFolder(AshitaPath) ? AshitaPath : null;
+    public string? AshitaDir => HookFolder.Usable(AshitaPath) is { } usable && AshitaInstall.IsFolder(usable) ? usable : null;
 
     internal void Load()
     {
@@ -167,9 +167,9 @@ public partial class HookSettings : ObservableObject, IProfileHost
     {
         var (text, isError) = Hook switch
         {
-            ThirdPartyHook.Ashita when AshitaDir is null => (AshitaInstall.NotFoundText, true),
+            ThirdPartyHook.Ashita when AshitaDir is null => (HookFolder.DriveProblem(AshitaPath) ?? AshitaInstall.NotFoundText, true),
             ThirdPartyHook.Ashita => ("The game starts through Ashita with the boot configuration picked at the top.", false),
-            ThirdPartyHook.Windower when WindowerDir is null => (WindowerInstall.NotFoundText, true),
+            ThirdPartyHook.Windower when WindowerDir is null => (HookFolder.DriveProblem(WindowerPath) ?? WindowerInstall.NotFoundText, true),
             ThirdPartyHook.Windower when FolderPins.Linked(WindowerDir) => (WindowerInstall.LinkedText, true),
             ThirdPartyHook.Windower => ("The game starts through Windower with the profile picked at the top.", false),
             _ => ("The game starts directly, without Windower or Ashita.", false),

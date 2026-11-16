@@ -27,6 +27,7 @@ public partial class App : Application
     static App() => FocusLook.Install();
 
     private PolSession? _pol;
+    private MainViewModel? _main;
     private bool _showingError;   // an error inside the card mustn't stack more cards
 
     internal static bool RestartOnExit { get; set; }
@@ -39,10 +40,9 @@ public partial class App : Application
         base.OnStartup(e);
         var args = new LaunchArgs(e.Args);
         // first thing: the update check (or a whole update) can outlast a held Shift
-        bool shiftAtStart = ShiftDown();
+        bool shiftAtStart = ShiftDown() || args.ShiftHeld;
+        CatchUnhandled();
         Log.Information("Provenance starting");
-        // before anything's written to ProgramData, so Provenance's own files never look planted to the folder check
-        if (!ProtectedFolders.OwnNewFilesAsAdministrators()) Log.Warning("New files won't be Administrators' if this PC's policy says otherwise");
         // before the first window, the update one included, so nothing opens in the other theme first
         AppTheme.Apply(AppTheme.FromSettingsFile(SettingsService.DefaultPath));
 
@@ -66,32 +66,23 @@ public partial class App : Application
             Shutdown(1);
             return;
         }
-        SweepOldHookFiles();
-
-        // taken here on the UI thread, since the settings are built lazily on whichever thread asks first
-        var uiThread = SynchronizationContext.Current;
-        if (uiThread is null) Log.Warning("The settings were built with no UI thread to hand changes to");
-        var credentials = new CredentialService();
-        var settings = new SettingsService(SettingsService.DefaultPath, uiThread);
-        var pol = _pol = new PolSession(settings);
+        if (!BuildServices(out var credentials, out var settings, out var pol))
+        {
+            Shutdown(1);
+            return;
+        }
 
         WarmKeys();
-        CatchUnhandled();
         // both done by the time anyone can press LOG IN
         MirrorCheck.StartAtOpen(settings);
         WindowerLauncher.CheckAtOpen(settings);
-        bool shift = shiftAtStart || ShiftDown() || args.ShiftHeld;
-        if (shift) AutoLoginAtOpen.TurnOffForShift(settings);
+        bool shift = AutoLoginAtOpen.ShiftAtStart(shiftAtStart, ShiftDown, settings);
         var autoLogin = AutoLoginAtOpen.Coming(settings, credentials, shift || args.NoAutoLogin);
         StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, () => pol.Prestarter.StartEarly(loginComing: autoLogin is not null));
         AutoLoginAtOpen.StartAhead(pol, autoLogin);
 
         // a Shift pressed a moment later still counts, and drops an early start that's already begun
-        if (!shift && ShiftDown())
-        {
-            shift = true;
-            AutoLoginAtOpen.TurnOffForShift(settings);
-        }
+        shift = AutoLoginAtOpen.ShiftLater(shift, ShiftDown, settings);
         bool noAutoLogin = shift || args.NoAutoLogin;
         var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin);
         _ = SelfUpdate.TellIfUpdateWaiting(mainVm.Notice);
@@ -123,6 +114,31 @@ public partial class App : Application
             Log.Fatal(ex, "Could not prepare the protected folder for the hook's files");
             StartupErrors.Show("Provenance can't start", "Provenance couldn't set up its folder in ProgramData. Close any program that's using that " +
                                "folder, then start Provenance again.", offerLogs: true);
+            return false;
+        }
+    }
+
+    private bool BuildServices(out CredentialService credentials, out SettingsService settings, out PolSession pol)
+    {
+        credentials = null!;
+        settings = null!;
+        pol = null!;
+        try
+        {
+            SweepOldHookFiles();
+            // taken here on the UI thread, since the settings are built lazily on whichever thread asks first
+            var uiThread = SynchronizationContext.Current;
+            if (uiThread is null) Log.Warning("The settings were built with no UI thread to hand changes to");
+            credentials = new CredentialService();
+            settings = new SettingsService(SettingsService.DefaultPath, uiThread);
+            pol = _pol = new PolSession(settings);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Could not set up Provenance's settings and services");
+            StartupErrors.Show("Provenance can't start", "Provenance ran into a problem while starting up. Press Open logs to see what went wrong, " +
+                               "then start Provenance again.", offerLogs: true);
             return false;
         }
     }
@@ -178,7 +194,7 @@ public partial class App : Application
         var mainWindow = new MainWindow();
         timer.Lap("window built");
         var windows = new WindowManager(settings, WpfDialogs.Default);
-        var mainVm = new MainViewModel(WpfDialogs.Default, windows, credentials, settings, new FeedService(settings), pol, new AvatarService(settings));
+        var mainVm = _main = new MainViewModel(WpfDialogs.Default, windows, credentials, settings, new FeedService(settings), pol, new AvatarService(settings));
         timer.Lap("view model built");
         // Windows logging off cancels a login, and WPF would close the window ignoring its Cancel, so it closes normally first.
         // A held session is logged out, nothing goes to tray
@@ -255,8 +271,9 @@ public partial class App : Application
         try
         {
             Log.Information("Provenance exiting (code {Code})", e.ApplicationExitCode);
-            try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }   // exit goes ahead without it
+            _main?.SaveMessages();
             if (_pol is { } pol) EndSession(pol);
+            try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }   // exit goes ahead without it
             WindowerLauncher.StopBackgroundUpdates(TimeSpan.FromSeconds(3));
             if (RestartOnExit) StartAgain();
             else if (!SelfUpdate.HandOverAfterExit(out var restartArgs)) StartAgain(restartArgs);

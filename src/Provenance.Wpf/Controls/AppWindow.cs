@@ -24,10 +24,23 @@ public class AppWindow : Window
     // the app's closing (tray Exit), so a question here would only leave a window up with the tray gone
     protected bool OwnerClosing { get; private set; }
 
+    internal static Func<double> WorkAreaHeight { get; set; } = () => SystemParameters.WorkArea.Height;
+
     public AppWindow()
     {
         Loaded += (_, _) => { if (Owner != null) Owner.Closing += OnOwnerClosing; };
         Closed += (_, _) => { if (Owner != null) Owner.Closing -= OnOwnerClosing; };
+    }
+
+    // 1366x768 at 125 to 150 percent is shorter than the windows are, and most can't be resized. Where a window has a
+    // body it scrolls, so its buttons stay on screen
+    protected override void OnInitialized(EventArgs e)
+    {
+        base.OnInitialized(e);
+        double room = WorkAreaHeight();
+        if (MinHeight > room) MinHeight = room;
+        if (MaxHeight > room) MaxHeight = room;
+        if (Height > room) Height = room;
     }
 
     public override void OnApplyTemplate()

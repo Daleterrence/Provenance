@@ -13,6 +13,8 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // first thing, a UAC prompt can outlast a held key
+        bool shift = (User32.GetAsyncKeyState(VkShift) & 0x8000) != 0;
         // the install, update and uninstall hooks exit in here, so none of them needs admin. Updates only get applied
         // from Provenance.exe, where the update window is
         try
@@ -31,6 +33,7 @@ internal static class Program
         // ShellExecute so Provenance.exe's manifest gets its UAC prompt, CreateProcess just fails with 740
         var psi = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "Provenance.exe")) { UseShellExecute = true };
         foreach (var arg in args) psi.ArgumentList.Add(arg);
+        if (shift && !args.Contains(ShiftHeldSwitch, StringComparer.OrdinalIgnoreCase)) psi.ArgumentList.Add(ShiftHeldSwitch);
         try
         {
             Process.Start(psi)?.Dispose();
@@ -125,7 +128,8 @@ internal static class Program
         catch { }   // the log is a courtesy, never worth failing over
     }
 
-    private const int ErrorCancelled = 1223, ErrorAccessDenied = 5;
+    private const string ShiftHeldSwitch = "--shift-held";
+    private const int ErrorCancelled = 1223, ErrorAccessDenied = 5, VkShift = 0x10;
     private const uint EventModifyState = 0x0002, Synchronize = 0x00100000;
     private const uint MbOk = 0x0, MbIconError = 0x10, MbIconWarning = 0x30, MbTopmost = 0x40000, MbSetForeground = 0x10000;
 }

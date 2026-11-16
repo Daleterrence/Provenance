@@ -12,19 +12,6 @@ internal static class ReadmeDocument
     private static readonly double[] HeadingSizes = [22, 18, 15.5, 14, 13, 13];
     private static readonly Thickness BlockGap = new(0, 0, 0, 10), ItemGap = new(0, 0, 0, 4);
 
-    public static FlowDocument Build(MarkdownDoc doc, Action<Uri> openLink)
-    {
-        var page = NewPage();
-        bool whole = true;
-        foreach (var block in doc.Blocks)
-        {
-            if (!TryBlock(block, openLink, out var built)) { whole = false; break; }
-            page.Blocks.Add(built);
-        }
-        Finish(page, doc.Truncated || !whole);
-        return page;
-    }
-
     // WPF's elements belong to the thread that makes them, so the building stays here and gives the window room to
     // breathe between blocks instead
     public static async Task<FlowDocument> BuildAsync(MarkdownDoc doc, Action<Uri> openLink, CancellationToken cancel)

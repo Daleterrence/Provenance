@@ -16,7 +16,6 @@ public class TitleBar : ContentControl
 
     public static readonly DependencyProperty TitleProperty = Register(nameof(Title), typeof(string), null);
     public static readonly DependencyProperty IconProperty = Register(nameof(Icon), typeof(ImageSource), null);
-    public static readonly DependencyProperty IconContentProperty = Register(nameof(IconContent), typeof(object), null);
     public static readonly DependencyProperty TitleSizeProperty = Register(nameof(TitleSize), typeof(double), 14.0);
     public static readonly DependencyProperty DimTitleProperty = Register(nameof(DimTitle), typeof(bool), false);
     public static readonly DependencyProperty GlyphSizeProperty = Register(nameof(GlyphSize), typeof(double), 18.0);
@@ -49,7 +48,6 @@ public class TitleBar : ContentControl
 
     public string? Title { get => (string?)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
     public ImageSource? Icon { get => (ImageSource?)GetValue(IconProperty); set => SetValue(IconProperty, value); }
-    public object? IconContent { get => GetValue(IconContentProperty); set => SetValue(IconContentProperty, value); }
     public double TitleSize { get => (double)GetValue(TitleSizeProperty); set => SetValue(TitleSizeProperty, value); }
     public bool DimTitle { get => (bool)GetValue(DimTitleProperty); set => SetValue(DimTitleProperty, value); }
     public double GlyphSize { get => (double)GetValue(GlyphSizeProperty); set => SetValue(GlyphSizeProperty, value); }

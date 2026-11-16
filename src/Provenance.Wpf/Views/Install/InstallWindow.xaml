@@ -13,59 +13,63 @@
         WindowStartupLocation="CenterOwner"
         Style="{StaticResource DialogCard}" CardMargin="12" WideShadow="True">
 
-    <Grid Margin="28,22" RowDefinitions="Auto,Auto,*,Auto">
-        <controls:DialogHeader Title="Install FINAL FANTASY XI" />
+    <Grid Margin="28,22" RowDefinitions="*,Auto">
+        <controls:BodyScroller Fills="True">
+            <Grid RowDefinitions="Auto,Auto,*">
+                <controls:DialogHeader Title="Install FINAL FANTASY XI" />
 
-        <!-- before a run, and after a stop or a failure so the folders can change -->
-        <StackPanel Grid.Row="1" Margin="0,18,0,0" Visibility="{Binding CanStart, Converter={StaticResource BoolToVis}}">
-            <TextBlock Text="This downloads the official game (about " Foreground="{DynamicResource Text.2}" FontSize="13" TextWrapping="Wrap">
-                <Run Text="{Binding TotalGb, Mode=OneWay}" /><Run Text=") and installs it the way Square Enix's own installer does." />
-            </TextBlock>
+                <!-- before a run, and after a stop or a failure so the folders can change -->
+                <StackPanel Grid.Row="1" Margin="0,18,0,0" Visibility="{Binding CanStart, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="This downloads the official game (about " Foreground="{DynamicResource Text.2}" FontSize="13" TextWrapping="Wrap">
+                        <Run Text="{Binding TotalGb, Mode=OneWay}" /><Run Text=") and installs it the way Square Enix's own installer does." />
+                    </TextBlock>
 
-            <StackPanel x:Name="RegionChoice" Visibility="{Binding ShowRegionChoice, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="Region" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
-                <ComboBox Width="260" HorizontalAlignment="Left"
-                          Style="{StaticResource FieldCombo}" AutomationProperties.Name="Region"
-                          ItemsSource="{Binding RegionChoices}" SelectedIndex="{Binding RegionIndex}" IsEnabled="{Binding CanChooseRegion}" />
-            </StackPanel>
+                    <StackPanel x:Name="RegionChoice" Visibility="{Binding ShowRegionChoice, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Region" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
+                        <ComboBox Width="260" HorizontalAlignment="Left"
+                                  Style="{StaticResource FieldCombo}" AutomationProperties.Name="Region"
+                                  ItemsSource="{Binding RegionChoices}" SelectedIndex="{Binding RegionIndex}" IsEnabled="{Binding CanChooseRegion}" />
+                    </StackPanel>
 
-            <TextBlock Text="Install to" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBox Text="{Binding InstallFolder}" Style="{StaticResource FieldText}" />
-                <Button Style="{StaticResource BrowseButton}"
-                        Command="{Binding BrowseInstallCommand}" />
+                    <TextBlock Text="Install to" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,14,0,2" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox AutomationProperties.Name="Install to" Text="{Binding InstallFolder}" Style="{StaticResource FieldText}" />
+                        <Button Style="{StaticResource BrowseButton}"
+                                Command="{Binding BrowseInstallCommand}" />
+                    </Grid>
+                    <TextBlock Text="{Binding GameFolderText}" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding FreeSpaceText}" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"
+                               behaviours:State.IsError="{Binding EnoughSpace, Converter={StaticResource InvertBool}}"
+                               Style="{StaticResource DimStatusText}" />
+
+                    <TextBlock Text="Download the installer to" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,12,0,2" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox AutomationProperties.Name="Download the installer to" Text="{Binding DownloadFolder}" Style="{StaticResource FieldText}" />
+                        <Button Style="{StaticResource BrowseButton}"
+                                Command="{Binding BrowseDownloadCommand}" />
+                    </Grid>
+                </StackPanel>
+
+                <controls:ZoneSlideshow Grid.Row="1" Margin="0,18,0,0" Height="224" AutomationProperties.Name="Zone pictures"
+                                        Visibility="{Binding CanStart, Converter={StaticResource InvertBoolToVis}}" />
+
+                <StackPanel Grid.Row="2" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding StepText}" FontSize="12" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
+                               Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding Stage}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,4,0,0" />
+                    <controls:BalancedText Message="{Binding Detail}" FontSize="14" Foreground="{DynamicResource Text.2}" Margin="0,6,0,0" />
+                    <ProgressBar Margin="0,24,0,4" Height="10" Minimum="0" Maximum="1" Value="{Binding DownloadFraction}" IsIndeterminate="{Binding StageIndeterminate}"
+                                 Foreground="{DynamicResource Primary}" Background="{DynamicResource Surface.1}"
+                                 Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding DownloadText}" FontSize="13" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
+                               Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding TimeLeftText}" FontSize="13" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
+                               Margin="0,2,0,0" Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
             </Grid>
-            <TextBlock Text="{Binding GameFolderText}" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,4,0,0" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding FreeSpaceText}" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"
-                       behaviours:State.IsError="{Binding EnoughSpace, Converter={StaticResource InvertBool}}"
-                       Style="{StaticResource DimStatusText}" />
+        </controls:BodyScroller>
 
-            <TextBlock Text="Download the installer to" FontSize="11" Foreground="{DynamicResource Text.3}" Margin="0,12,0,2" />
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBox Text="{Binding DownloadFolder}" Style="{StaticResource FieldText}" />
-                <Button Style="{StaticResource BrowseButton}"
-                        Command="{Binding BrowseDownloadCommand}" />
-            </Grid>
-        </StackPanel>
-
-        <controls:ZoneSlideshow Grid.Row="1" Margin="0,18,0,0" Height="224" AutomationProperties.Name="Zone pictures"
-                                Visibility="{Binding CanStart, Converter={StaticResource InvertBoolToVis}}" />
-
-        <StackPanel Grid.Row="2" VerticalAlignment="Center">
-            <TextBlock Text="{Binding StepText}" FontSize="12" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
-                       Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
-            <TextBlock Text="{Binding Stage}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,4,0,0" />
-            <controls:BalancedText Message="{Binding Detail}" FontSize="14" Foreground="{DynamicResource Text.2}" Margin="0,6,0,0" />
-            <ProgressBar Margin="0,24,0,4" Height="10" Minimum="0" Maximum="1" Value="{Binding DownloadFraction}" IsIndeterminate="{Binding StageIndeterminate}"
-                         Foreground="{DynamicResource Primary}" Background="{DynamicResource Surface.1}"
-                         Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
-            <TextBlock Text="{Binding DownloadText}" FontSize="13" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
-                       Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
-            <TextBlock Text="{Binding TimeLeftText}" FontSize="13" Foreground="{DynamicResource Text.3}" HorizontalAlignment="Center"
-                       Margin="0,2,0,0" Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
-        </StackPanel>
-
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="1">
             <Button HorizontalAlignment="Left" Width="120" Height="46" FontSize="15" Content="CANCEL" Style="{StaticResource RedButton}" Command="{Binding CancelCommand}"
                     Visibility="{Binding Running, Converter={StaticResource BoolToVis}}" />
             <Button HorizontalAlignment="Right" MinWidth="180" Padding="20,0" Height="46" FontSize="15" Content="{Binding StartLabel}"

@@ -284,6 +284,7 @@ public partial class InstallViewModel : ObservableObject
         if (Running) return;
         Running = true;
         Done = false;
+        _meter.Restart();
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         // the download takes hours on a slow line, and Windows mustn't sleep in the middle of it
@@ -311,7 +312,7 @@ public partial class InstallViewModel : ObservableObject
                 .ToList();
             running.ForEach(p => p.Dispose());
             if (running.Count > 0)
-                throw Shown.Mark(new InvalidOperationException("PlayOnline or FINAL FANTASY XI is running. Close it, then press Try again."));
+                throw Shown.Mark(new InvalidOperationException("PlayOnline or FINAL FANTASY XI is running, or another copy of Provenance has it open in the background. Close it or exit that copy of Provenance, then press Try again."));
             if (InstallFolderCheck.OtherVersionIn(InstallFolder, _region, PolPaths.TryGetInstallFolder) is { } clash)
                 throw Shown.Mark(new InvalidOperationException(clash));
             // only from here, a refused start leaves the choice open
@@ -395,7 +396,7 @@ public partial class InstallViewModel : ObservableObject
             }
             workFolder?.Dispose();
             KeepAwake.Release();
-            _meter.Clear();
+            _meter.End();
             StageIndeterminate = false;
             Running = false;
         }

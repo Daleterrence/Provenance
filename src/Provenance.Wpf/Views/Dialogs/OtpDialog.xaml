@@ -28,7 +28,7 @@
                            Text="{Binding SourceText}" />
             </StackPanel>
             <Grid x:Name="MasterPanel" Visibility="{Binding MasterVisible, Converter={StaticResource BoolToVis}}" Margin="0,10,0,0" ColumnDefinitions="*,Auto">
-                <PasswordBox x:Name="MasterBox" Style="{DynamicResource DialogPasswordBox}" Padding="10,6"
+                <PasswordBox AutomationProperties.Name="Bitwarden master password" x:Name="MasterBox" Style="{DynamicResource DialogPasswordBox}" Padding="10,6"
                              materialDesign:HintAssist.Hint="Bitwarden master password" KeyDown="OnMasterKey" />
                 <Button Grid.Column="1" Margin="8,0,0,0" Content="UNLOCK" Style="{StaticResource PolButton}" Click="OnUnlock" />
             </Grid>

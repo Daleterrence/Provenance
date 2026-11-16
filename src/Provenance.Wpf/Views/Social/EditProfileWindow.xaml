@@ -186,7 +186,7 @@
                     </Button>
                     <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="Handle name" Style="{StaticResource ProfileLabel}" />
-                        <TextBox Style="{StaticResource FieldText}" MaxLength="{x:Static social:PolLimits.HandleName}"
+                        <TextBox AutomationProperties.Name="Handle name" Style="{StaticResource FieldText}" MaxLength="{x:Static social:PolLimits.HandleName}"
                                  Text="{Binding HandleName, UpdateSourceTrigger=PropertyChanged}" />
                         <TextBlock Style="{StaticResource ProfileHelp}"
                                    Text="This is the name your friends see, up to 15 English letters, numbers and symbols. They'll see a new name the next time their friend list loads." />
@@ -203,7 +203,7 @@
                 <Grid ColumnDefinitions="*,14,*">
                     <StackPanel>
                         <TextBlock Text="Age" Style="{StaticResource ProfileLabel}" />
-                        <TextBox Style="{StaticResource FieldText}" MaxLength="3" materialDesign:HintAssist.Hint="{Binding NotSet}"
+                        <TextBox AutomationProperties.Name="Age" Style="{StaticResource FieldText}" MaxLength="3" materialDesign:HintAssist.Hint="{Binding NotSet}"
                                  Text="{Binding AgeText, UpdateSourceTrigger=PropertyChanged}" PreviewTextInput="OnDigitsOnly" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" VerticalAlignment="Bottom" Margin="0,0,0,6">
@@ -215,17 +215,17 @@
                 <Grid Margin="0,12,0,0" ColumnDefinitions="*,14,*">
                     <StackPanel>
                         <TextBlock Text="Sex" Style="{StaticResource ProfileLabel}" />
-                        <ComboBox Style="{StaticResource ProfileCombo}" ItemsSource="{Binding SexChoices}" DisplayMemberPath="Text"
+                        <ComboBox AutomationProperties.Name="Sex" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding SexChoices}" DisplayMemberPath="Text"
                                   SelectedValuePath="Code" SelectedValue="{Binding Sex}" />
                     </StackPanel>
                     <StackPanel Grid.Column="2">
                         <TextBlock Text="Job" Style="{StaticResource ProfileLabel}" />
-                        <ComboBox Style="{StaticResource ProfileCombo}" ItemsSource="{Binding JobChoices}" DisplayMemberPath="Text"
+                        <ComboBox AutomationProperties.Name="Job" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding JobChoices}" DisplayMemberPath="Text"
                                   SelectedValuePath="Code" SelectedValue="{Binding Job1}" />
                     </StackPanel>
                 </Grid>
                 <TextBlock Text="Mail address" Style="{StaticResource ProfileLabel}" Margin="0,12,0,4" />
-                <TextBox Style="{StaticResource FieldText}" MaxLength="319" materialDesign:HintAssist.Hint="No mail address"
+                <TextBox AutomationProperties.Name="Mail address" Style="{StaticResource FieldText}" MaxLength="319" materialDesign:HintAssist.Hint="No mail address"
                          Text="{Binding Mail, UpdateSourceTrigger=PropertyChanged}" />
                 <TextBlock Style="{StaticResource ProfileHelp}" Text="Leave it empty if you don't want to show a mail address." />
 
@@ -233,16 +233,16 @@
                 <Grid DataContext="{Binding Location}" ColumnDefinitions="*,10,*,10,*">
                     <StackPanel>
                         <TextBlock Text="Region" Style="{StaticResource ProfileLabel}" />
-                        <ComboBox Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Tops}" SelectedItem="{Binding Top}" />
+                        <ComboBox AutomationProperties.Name="Region" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Tops}" SelectedItem="{Binding Top}" />
                     </StackPanel>
                     <StackPanel Grid.Column="2">
                         <TextBlock Text="Country" Style="{StaticResource ProfileLabel}" />
-                        <ComboBox Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Mids}" SelectedItem="{Binding Mid}"
+                        <ComboBox AutomationProperties.Name="Country" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Mids}" SelectedItem="{Binding Mid}"
                                   IsEnabled="{Binding IsSet}" materialDesign:HintAssist.Hint="Choose" />
                     </StackPanel>
                     <StackPanel Grid.Column="4">
                         <TextBlock Text="Area" Style="{StaticResource ProfileLabel}" />
-                        <ComboBox Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Leaves}" SelectedItem="{Binding Leaf}"
+                        <ComboBox AutomationProperties.Name="Area" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Leaves}" SelectedItem="{Binding Leaf}"
                                   DisplayMemberPath="Text" IsEnabled="{Binding IsSet}" materialDesign:HintAssist.Hint="Choose" />
                     </StackPanel>
                 </Grid>
@@ -251,17 +251,17 @@
                 <Grid ColumnDefinitions="*,10,*,10,*">
                     <StackPanel>
                         <TextBlock Text="First" Style="{StaticResource ProfileLabel}" />
-                        <ComboBox Style="{StaticResource ProfileCombo}" ItemsSource="{Binding LanguageChoices}" DisplayMemberPath="Text"
+                        <ComboBox AutomationProperties.Name="First language" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding LanguageChoices}" DisplayMemberPath="Text"
                                   SelectedValuePath="Code" SelectedValue="{Binding Lang0}" />
                     </StackPanel>
                     <StackPanel Grid.Column="2">
                         <TextBlock Text="Second" Style="{StaticResource ProfileLabel}" />
-                        <ComboBox Style="{StaticResource ProfileCombo}" ItemsSource="{Binding LanguageChoices}" DisplayMemberPath="Text"
+                        <ComboBox AutomationProperties.Name="Second language" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding LanguageChoices}" DisplayMemberPath="Text"
                                   SelectedValuePath="Code" SelectedValue="{Binding Lang1}" />
                     </StackPanel>
                     <StackPanel Grid.Column="4">
                         <TextBlock Text="Third" Style="{StaticResource ProfileLabel}" />
-                        <ComboBox Style="{StaticResource ProfileCombo}" ItemsSource="{Binding LanguageChoices}" DisplayMemberPath="Text"
+                        <ComboBox AutomationProperties.Name="Third language" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding LanguageChoices}" DisplayMemberPath="Text"
                                   SelectedValuePath="Code" SelectedValue="{Binding Lang2}" />
                     </StackPanel>
                 </Grid>
@@ -271,8 +271,8 @@
                     <StackPanel.Resources>
                         <DataTemplate x:Key="InterestRow" DataType="{x:Type vm:CascadePick}">
                             <Grid Margin="0,0,0,10" ColumnDefinitions="*,10,*">
-                                <ComboBox Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Tops}" SelectedItem="{Binding Top}" />
-                                <ComboBox Grid.Column="2" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Leaves}"
+                                <ComboBox AutomationProperties.Name="Interest category" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Tops}" SelectedItem="{Binding Top}" />
+                                <ComboBox AutomationProperties.Name="Interest" Grid.Column="2" Style="{StaticResource ProfileCombo}" ItemsSource="{Binding Leaves}"
                                           SelectedItem="{Binding Leaf}" DisplayMemberPath="Text" IsEnabled="{Binding IsSet}"
                                           materialDesign:HintAssist.Hint="Choose" />
                             </Grid>

@@ -306,13 +306,15 @@ public partial class AccountsViewModel : ObservableObject
 
     internal const string RemoveFailedText = "Provenance couldn't remove this account's saved details.";
 
+    internal string? MessagesRoot { get; set; }
+
     [RelayCommand]
     private void RemoveAccount(Account? profile)
     {
         profile ??= SelectedProfile;
         if (profile == null) return;
         if (!_dialogs.Confirm("Remove account",
-                $"Remove {profile.DisplayName} and its saved passwords from this PC? Your PlayOnline account itself won't change.",
+                $"Remove {profile.DisplayName}, its saved passwords and its saved messages from this PC? Your PlayOnline account itself won't change.",
                 "REMOVE", ConfirmStyle.Destructive)) return;
         // the card stays when an entry couldn't go, so no saved password's left without a card that names it
         try { _credentials.DeleteProfile(profile.Id); }
@@ -322,6 +324,7 @@ public partial class AccountsViewModel : ObservableObject
             _dialogs.Error("Remove account", RemoveFailedText, offerLogs: true);
             return;
         }
+        AccountMessages.Delete(profile.Id, MessagesRoot);
         // the account list clears the selection when its item goes, so this has to be asked first
         bool wasSelected = profile == SelectedProfile;
         Profiles.Remove(profile);

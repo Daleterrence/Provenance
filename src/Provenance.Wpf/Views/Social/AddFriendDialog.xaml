@@ -13,6 +13,12 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Style="{StaticResource AppWindow.Fixed}">
 
+    <controls:AppWindow.Resources>
+        <Style x:Key="HitItem" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+            <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
+        </Style>
+    </controls:AppWindow.Resources>
+
     <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,*,Auto">
         <controls:TitleBar />
 
@@ -44,7 +50,7 @@
         </StackPanel>
 
         <ListBox x:Name="Hits" Grid.Row="2" Margin="10,4" ItemsSource="{Binding Hits}"
-                 HorizontalContentAlignment="Stretch" BorderThickness="0" Background="Transparent" ItemContainerStyle="{StaticResource RowItem}"
+                 HorizontalContentAlignment="Stretch" BorderThickness="0" Background="Transparent" ItemContainerStyle="{StaticResource HitItem}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
                 <DataTemplate>

@@ -17,6 +17,7 @@
         <Style x:Key="ListRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
             <Setter Property="Padding" Value="12,6" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
         </Style>
 
         <!-- read-only so a line can be copied, arrivals and the like in the accent colour -->
@@ -224,7 +225,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:ChatMemberItem}">
                                     <!-- the master's Kick and Designate, filled as the menu opens -->
-                                    <Grid Margin="14,3" ColumnDefinitions="18,*,Auto" Background="Transparent" ContextMenuOpening="OnMemberMenu">
+                                    <Grid Margin="14,3" ColumnDefinitions="18,*,Auto,Auto" Background="Transparent" ContextMenuOpening="OnMemberMenu">
                                         <Grid.ContextMenu>
                                             <ContextMenu />
                                         </Grid.ContextMenu>
@@ -234,6 +235,24 @@
                                         <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                         <TextBlock Grid.Column="2" Text="{Binding Note}" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
                                                    Foreground="{DynamicResource Text.3}" />
+                                        <Button Grid.Column="3" Width="28" Height="28" Padding="0" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                Foreground="{DynamicResource Text.3}" AutomationProperties.Name="Member actions" Click="OnMemberMenuButton">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding Me}" Value="False" />
+                                                                <Condition Binding="{Binding DataContext.CanMaster, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="True" />
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </MultiDataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <controls:SvgIcon Glyph="more" Width="20" Height="20" />
+                                        </Button>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -261,7 +280,7 @@
                             <Image Source="{Binding PickedEmote}" Width="24" Height="24" />
                         </Grid>
                     </Button>
-                    <TextBox x:Name="ComposeBox" Grid.Column="2" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox AutomationProperties.Name="Message" x:Name="ComposeBox" Grid.Column="2" MinHeight="40" FontSize="13" Text="{Binding Compose, UpdateSourceTrigger=PropertyChanged}"
                              TextWrapping="Wrap" MaxLength="{x:Static social:ChatRoomFiles.MaxTextLength}" Style="{StaticResource OutlinedField}" Padding="10,8"
                              materialDesign:HintAssist.Hint="Say something to the room (Enter sends)" materialDesign:HintAssist.IsFloating="False"
                              materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"

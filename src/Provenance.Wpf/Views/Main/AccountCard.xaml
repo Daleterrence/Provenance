@@ -25,7 +25,7 @@
                 <!-- a floating hint draws a grey strip MaterialDesign 5 won't recolour -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="Account" FontSize="11.5" Margin="0,0,0,4" Foreground="{DynamicResource Text.3}" />
-                    <ComboBox Style="{StaticResource OutlinedCombo}" FontSize="16"
+                    <ComboBox AutomationProperties.Name="Account" Style="{StaticResource OutlinedCombo}" FontSize="16"
                               Padding="14,10,10,10" materialDesign:HintAssist.IsFloating="False"
                               ItemsSource="{Binding Accounts.Profiles}" DisplayMemberPath="DisplayName"
                               SelectedItem="{Binding Accounts.SelectedProfile}">
@@ -53,7 +53,7 @@
             <Button Margin="0,18,0,0" Height="48" FontSize="16" Command="{Binding LogInCommand}"
                     Style="{StaticResource ActionButton}" IsDefault="True" AutomationProperties.Name="Log in">
                 <StackPanel Orientation="Horizontal">
-                    <controls:SvgIcon Glyph="key" Width="20" Height="20" IsOpen="{Binding IsLaunching}" />
+                    <controls:SvgIcon Glyph="key" Width="20" Height="20" />
                     <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Text="LOG IN" />
                 </StackPanel>
             </Button>

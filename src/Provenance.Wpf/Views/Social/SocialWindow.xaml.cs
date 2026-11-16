@@ -39,6 +39,21 @@ public partial class SocialWindow : AppWindow
     private bool HasFriends => Part != SocialPart.Messages;
     private SocialViewModel? Vm => DataContext as SocialViewModel;
 
+    private ScrollViewer? _chatScroll;
+
+    internal ScrollViewer ChatScroll
+    {
+        get
+        {
+            if (_chatScroll is null)
+            {
+                ChatLines.ApplyTemplate();
+                _chatScroll = (ScrollViewer)ChatLines.Template.FindName("PART_ChatScroll", ChatLines);
+            }
+            return _chatScroll;
+        }
+    }
+
     public SocialWindow(SocialPart part)
     {
         Part = part;

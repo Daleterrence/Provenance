@@ -6,6 +6,7 @@ using Provenance.Common.Game.Windower;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Provenance.Wpf.Services;
+using Provenance.Wpf.ViewModels.Settings;
 using Provenance.Wpf.ViewModels.Shared;
 using Serilog;
 
@@ -75,10 +76,11 @@ public partial class SetupViewModel : ObservableObject
     }
 
     private static string? WindowerProblem(string? dir) =>
-        !WindowerInstall.IsFolder(dir) ? WindowerInstall.NotFoundText
-        : FolderPins.Linked(dir!) ? WindowerInstall.LinkedText : null;
+        HookFolder.Usable(dir) is not { } usable || !WindowerInstall.IsFolder(usable) ? HookFolder.DriveProblem(dir) ?? WindowerInstall.NotFoundText
+        : FolderPins.Linked(usable) ? WindowerInstall.LinkedText : null;
 
-    private static string? AshitaProblem(string? dir) => AshitaInstall.IsFolder(dir) ? null : AshitaInstall.NotFoundText;
+    private static string? AshitaProblem(string? dir) =>
+        HookFolder.Usable(dir) is { } usable && AshitaInstall.IsFolder(usable) ? null : HookFolder.DriveProblem(dir) ?? AshitaInstall.NotFoundText;
 
     [RelayCommand]
     private void BrowseWindower()

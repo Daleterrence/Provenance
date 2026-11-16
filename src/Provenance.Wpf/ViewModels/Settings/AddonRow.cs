@@ -65,7 +65,7 @@ public sealed partial class AddonRow : ObservableObject
         Incompatible = d.Incompatible;
         Group = d.Group;
         Team = d.Team;
-        VerifiedTip = d.Team is { } team ? $"This {(Kind == AddonKind.Addon ? "addon" : "plugin")} is provided and maintained by the {team} development team." : null;
+        VerifiedTip = d.Team is { } team ? $"This {(Kind == AddonKind.Addon ? "addon" : "plugin")} is in {team}'s official list." : null;
         Location = l.Location;
         Docs = l.Docs;
         if (_on != d.On)

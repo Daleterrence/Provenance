@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -645,6 +644,16 @@ public partial class MainViewModel : ObservableObject
         ChatRoomsOpen = true;
     }
 
+    // a save that's still waiting when the app goes, Windows shutting down included
+    internal void SaveMessages()
+    {
+        try
+        {
+            if (Social.Chat is { Dirty: true } chat) chat.Save();
+        }
+        catch (Exception ex) { Log.Warning(ex, "The message log wasn't saved on the way out"); }
+    }
+
     // false when an open profile editor's unsaved changes were kept
     internal bool ConfirmExit() => _windows.ConfirmDropProfileEditor("Exit");
 
@@ -917,18 +926,13 @@ public partial class MainViewModel : ObservableObject
             if (!string.IsNullOrWhiteSpace(url)) Log.Warning("Not opening a link that is not a web link: {Url}", url);
             return;
         }
-        // elevated, so a browser started from here would be too. explorer.exe hands it to the user's shell
+        // elevated, so a browser started from here would be too. explorer.exe hands it to the user's shell, and if it won't
+        // there's no starting it directly
         try { Explorer.OpenLink(u); }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Could not open {Url} through the shell; opening it directly", u.AbsoluteUri);
-            try { Process.Start(new ProcessStartInfo(u.AbsoluteUri) { UseShellExecute = true }); }
-            catch (Exception ex2)
-            {
-                Log.Warning(ex2, "Could not open {Url}", u.AbsoluteUri);
-                _dialogs.Error("Couldn't open the link",
-                    $"Windows didn't open the link. You can copy it from here: {u.AbsoluteUri}");
-            }
+            Log.Warning(ex, "Could not open {Url}", u.AbsoluteUri);
+            _dialogs.Error("Couldn't open the link", $"Windows didn't open the link. You can copy it from here: {u.AbsoluteUri}");
         }
     }
 }

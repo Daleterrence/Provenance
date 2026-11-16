@@ -1,5 +1,6 @@
 using Provenance.Common;
 using Provenance.Common.Logging;
+using Provenance.Common.Security;
 using Provenance.Wpf.Services;
 using Serilog;
 using Serilog.Events;
@@ -17,7 +18,11 @@ public static class Program
     {
         AppCulture.Apply();
         ThreadStaticsFix.Apply();
-        StartLogging(AppPaths.Logs);
+        // before anything's written to ProgramData, so Provenance's own files never look planted to the folder check
+        bool ownsNewFiles = ProtectedFolders.OwnNewFilesAsAdministrators();
+        // never the player's own folders, a link there would be written through. No safe folder means no file log
+        if (LogSetup.ElevatedFolder() is { } logs) StartLogging(logs);
+        if (!ownsNewFiles) Log.Warning("New files won't be Administrators' if this PC's policy says otherwise");
         // before any window: it gives the windows the shortcuts' taskbar id, and UpdateManager can't find the install
         // without it. Updates only get applied from the update window, never here
         if (SelfUpdate.InstalledCopy)
