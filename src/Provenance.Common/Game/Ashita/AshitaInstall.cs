@@ -7,12 +7,12 @@ namespace Provenance.Common.Game.Ashita;
 public static class AshitaInstall
 {
     public static bool IsFolder(string? dir) =>
-        !string.IsNullOrWhiteSpace(dir) && File.Exists(Path.Combine(dir, "Ashita-cli.exe")) && File.Exists(Path.Combine(dir, "Ashita.dll"));
+        !string.IsNullOrWhiteSpace(dir) && Usable(dir) is { } d && File.Exists(Path.Combine(d, "Ashita-cli.exe")) && File.Exists(Path.Combine(d, "Ashita.dll"));
 
     internal static readonly string[] ProgramFilesNames = ["Ashita", "Ashita v4", "Ashita4"];
 
     public static string? Detect(string? configured) =>
-        Candidates(configured, @"C:\Ashita", ProgramFilesNames).FirstOrDefault(IsFolder);
+        Candidates(configured, @"C:\Ashita", ProgramFilesNames).Select(d => Usable(d)!).FirstOrDefault(IsFolder);
 
     public const string BrowseTitle = "Choose your Ashita v4 folder";
     public const string NotFoundText = "Couldn't find Ashita v4 in that folder.";

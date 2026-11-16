@@ -131,7 +131,7 @@ public static class AccountRules
                            or LoginCodes.DetailsUnreadable && autoLogin;
         var why = detail ?? $"Provenance couldn't log in to PlayOnline (code {code}).";
         if (code == LoginCodes.AuthFailed)
-            why += "\n\nIf your password has changed, press Accounts and edit this account to update it, then log in again.";
+            why += "\n\nIf your password has changed, press Manage Accounts and edit this account to update it, then log in again.";
         if (autoOff)
             why += "\n\nProvenance has turned off Log In Automatically, so it won't try this account again by itself.";
         return (TitleFor(code), why, autoOff,

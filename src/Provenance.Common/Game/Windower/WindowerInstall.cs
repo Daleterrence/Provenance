@@ -7,16 +7,16 @@ public static class WindowerInstall
 {
     // Hook.dll is the one that matters, but a folder with only Windower.exe can still fetch it
     public static bool IsFolder(string? dir) =>
-        !string.IsNullOrWhiteSpace(dir) && (File.Exists(Path.Combine(dir, "Windower.exe")) || File.Exists(Path.Combine(dir, "Hook.dll")));
+        !string.IsNullOrWhiteSpace(dir) && Usable(dir) is { } d && (File.Exists(Path.Combine(d, "Windower.exe")) || File.Exists(Path.Combine(d, "Hook.dll")));
 
     // a lone Windower.exe is a download nobody's run yet, and a lone Hook.dll could be some other program's
     public static bool IsSetUp(string? dir) =>
-        !string.IsNullOrWhiteSpace(dir) && File.Exists(Path.Combine(dir, "Windower.exe")) && File.Exists(Path.Combine(dir, "Hook.dll"));
+        !string.IsNullOrWhiteSpace(dir) && Usable(dir) is { } d && File.Exists(Path.Combine(d, "Windower.exe")) && File.Exists(Path.Combine(d, "Hook.dll"));
 
     internal static readonly string[] ProgramFilesNames = ["Windower", "Windower4", "Windower 4"];
 
     public static string? Detect(string? configured) =>
-        Candidates(configured, @"C:\Windower", ProgramFilesNames).FirstOrDefault(IsFolder);
+        Candidates(configured, @"C:\Windower", ProgramFilesNames).Select(d => Usable(d)!).FirstOrDefault(IsFolder);
 
     public const string BrowseTitle = "Choose your Windower 4 folder";
     public const string NotFoundText = "Couldn't find Windower 4 in that folder.";
@@ -29,7 +29,7 @@ public static class WindowerInstall
         try
         {
             var f = WindowerSettingsFile.Load(windowerDir);
-            return f.LoadError is null ? f.Profiles.Select(p => p.Name).Where(n => !WindowerSettingsFile.IsOldCopy(n)).ToList() : [];
+            return f.LoadError is null ? f.Profiles.Select(p => p.Name).ToList() : [];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

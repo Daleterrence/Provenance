@@ -13,7 +13,10 @@ public sealed class SettingsService : ISettingsService
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private readonly string _path;
+    private const int ReadTries = 5, ReadRetryDelay = 300;
     private bool _saveFailedRaised;
+    // the file's there but wouldn't open, so nothing may replace what's in it
+    private bool _unreadable;
     private PolRegion? _region;
     // this copy's settings as it last read or saved them, which is what tells its own changes from another copy's
     private JsonObject _known;
@@ -56,7 +59,6 @@ public sealed class SettingsService : ISettingsService
         _path = path;
         Current = Load();
         _known = Node(Current);
-        if (ThirdPartyProfiles.MapOldCopies(Current)) Write(Current);
     }
 
     private LauncherSettings Load()
@@ -66,20 +68,49 @@ public sealed class SettingsService : ISettingsService
             Log.Information("No settings.json, starting as a new install");
             return LauncherSettings.FirstStart();
         }
+        string text;
         try
         {
-            return JsonSerializer.Deserialize<LauncherSettings>(File.ReadAllText(_path)) ?? new LauncherSettings();
+            using var gate = HoldLock();
+            text = ReadText();
         }
-        catch (Exception ex)
+        catch (FileNotFoundException)
         {
-            Log.Warning(ex, "Could not parse settings.json, falling back to defaults");
-            // the next save replaces settings.json, account list and all
-            var bad = _path + ".bad";
-            bool kept;
-            try { File.Copy(_path, bad, overwrite: true); kept = true; } catch { kept = false; }
-            LoadProblem = "Provenance couldn't read your settings file, so it started with the default settings. "
-                        + (kept ? $"There's a copy of the old file at {bad}." : "Provenance couldn't keep a copy of it.");
             return LauncherSettings.FirstStart();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "Could not read settings.json, leaving it as it is");
+            _unreadable = true;
+            LoadProblem = $"Provenance couldn't read your settings file ({_path}), so it started with the default settings. "
+                        + "It won't save over the file, so changes you make this time won't be kept. Close anything else using it and start Provenance again.";
+            return LauncherSettings.FirstStart();
+        }
+        Exception? error = null;
+        try
+        {
+            if (JsonSerializer.Deserialize<LauncherSettings>(text) is { } loaded) return loaded;
+        }
+        catch (Exception ex) { error = ex; }
+        Log.Warning(error, "Could not parse settings.json, falling back to defaults");
+        // the next save replaces settings.json, account list and all
+        var bad = _path + ".bad";
+        bool kept;
+        try { File.Copy(_path, bad, overwrite: true); kept = true; } catch { kept = false; }
+        LoadProblem = "Provenance couldn't read your settings file, so it started with the default settings. "
+                    + (kept ? $"There's a copy of the old file at {bad}." : "Provenance couldn't keep a copy of it.");
+        return LauncherSettings.FirstStart();
+    }
+
+    private string ReadText()
+    {
+        for (int i = 1; ; i++)
+        {
+            try { return SharedFile.ReadAllText(_path); }
+            catch (Exception ex) when (i < ReadTries && ex is IOException and not FileNotFoundException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(ReadRetryDelay);
+            }
         }
     }
 
@@ -132,6 +163,7 @@ public sealed class SettingsService : ISettingsService
     // temp file then a move, a truncated settings.json would load as defaults and lose every account
     private bool WriteFile(JsonObject settings)
     {
+        if (_unreadable) return false;
         IDisposable? gate = null;
         try
         {

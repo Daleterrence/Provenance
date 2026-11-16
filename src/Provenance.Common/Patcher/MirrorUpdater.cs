@@ -1,3 +1,4 @@
+using Provenance.Common.Install;
 using Provenance.Common.Mirror;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
@@ -5,8 +6,8 @@ using Provenance.Common.Progress;
 namespace Provenance.Common.Patcher;
 
 // OnMirror false means the mirror can't serve this version and nothing changed. Otherwise Failed holds what didn't
-// download (and patch.ver stays put).
-public sealed record MirrorOutcome(bool OnMirror, IReadOnlyList<MirrorEntry> Failed, int Replaced);
+// download (and patch.ver stays put). SomeLocal is a failure that was this PC's (a full disk, a locked file).
+public sealed record MirrorOutcome(bool OnMirror, IReadOnlyList<MirrorEntry> Failed, int Replaced, bool SomeLocal = false);
 
 public static class MirrorUpdater
 {
@@ -31,16 +32,21 @@ public static class MirrorUpdater
         }
 
         IReadOnlyList<MirrorEntry> failed = [];
+        bool local = false;
         if (work.Count > 0)
         {
             beforeChange();
             progress?.Report(new PatchProgress(PatchPhase.Download, "Downloading updates...", 0));
             failed = await MirrorDownloads.DownloadAllAsync(client, region, folder, work, MirrorDownloads.DefaultParallel,
                 Bytes(PatchPhase.Download, "Downloading updates...", progress), ct,
-                (e, ex) => log?.Invoke($"mirror file {e.Path} failed: {ex.GetType().Name}: {ex.Message}", false));
+                (e, ex) =>
+                {
+                    local |= MirrorFailure.IsLocal(ex);
+                    log?.Invoke($"mirror file {e.Path} failed: {ex.GetType().Name}: {ex.Message}", false);
+                });
         }
         if (failed.Count == 0) PatchVer.Write(updater.Product, check.Server);
-        return new MirrorOutcome(true, failed, work.Count - failed.Count);
+        return new MirrorOutcome(true, failed, work.Count - failed.Count, local);
     }
 
     // the change from the installed version's index when the mirror has it, otherwise whatever doesn't match on disk.

@@ -68,6 +68,7 @@ public static class GameBackupPolicy
 
     public const string NotOursText = "That file isn't one of Provenance's game settings backups, or it's damaged, so nothing was restored.";
     internal const string BusyText = "Another copy of Provenance is backing up your game settings. Try again in a moment.";
+    internal const string PartlyNoBackupText = "Not all of the settings could be put back, and there were no settings to back up first.";
     internal const string PartlyText = "Not all of the settings could be put back. Your newest backup has them as they were before, so you can restore that one to undo this.";
 
     private static readonly CultureInfo British = CultureInfo.GetCultureInfo("en-GB");
@@ -96,11 +97,16 @@ public static class GameBackupPolicy
                 ? $"Your current game settings couldn't be backed up first, because {r.Why}, so nothing was restored. {r.Fix}"
                 : "Your current game settings couldn't be backed up first, so nothing was restored. Try again in a moment.");
         }
+        catch (RestoredPartlyException e)
+        {
+            Log.Error(e.InnerException, "Restore from {Zip} failed part way", zip);
+            return (false, e.Before == BackupOutcome.NothingThere ? PartlyNoBackupText : PartlyText);
+        }
         catch (Exception e) when (ErrorText.Ours(e)) { return (false, e.Message); }
         catch (Exception e)
         {
-            Log.Error(e, "Restore from {Zip} failed part way", zip);
-            return (false, PartlyText);
+            Log.Error(e, "Restore from {Zip} failed", zip);
+            return (false, "Your game settings couldn't be put back because of a problem Provenance didn't expect.");
         }
     }
 

@@ -92,6 +92,7 @@ public static class AshitaBootFiles
 
     private static string BootFolder(string ashitaDir)
     {
+        RequireDrive(ashitaDir);
         var config = Path.GetFullPath(Path.Combine(ashitaDir, "config"));
         var boot = Path.Combine(config, "boot");
         LinkCheck.Refuse(config, boot);
@@ -111,6 +112,7 @@ public static class AshitaBootFiles
 
     private static string Existing(string ashitaDir, string name, bool change)
     {
+        RequireDrive(ashitaDir);
         if (string.IsNullOrWhiteSpace(name) || !IsIniFileName(name) || IsLaunchCopy(name))
             throw Shown.Mark(new ArgumentException($"{name} isn't a boot configuration Provenance can change."));
         if (change && IsShippedExample(name))

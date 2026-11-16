@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Provenance.Common.Game;
+using Provenance.Common.Install;
 using Provenance.Common.Mirror;
 using Provenance.Common.Progress;
 using Provenance.Common.Security;
@@ -122,9 +123,10 @@ public static class MirrorDownloads
                 }
                 await Parallel.ForEachAsync(MirrorPacks.Plan(pending.Select(l => l.Entry)), opts, async (span, token) =>
                     await FetchSpanAsync(client, region, span, at, idle, n => Interlocked.Add(ref done, n), token));
-                pending = pending.Where(l => l.Last is not null).ToList();
+                // a write that failed here would fail again, only the mirror's own failures are worth another go
+                pending = pending.Where(l => l.Last is { } why && !MirrorFailure.IsLocal(why)).ToList();
             }
-            foreach (var l in pending) Interlocked.Add(ref done, l.Entry.CompressedSize);
+            foreach (var l in at.Values.Where(l => l.Last is not null)) Interlocked.Add(ref done, l.Entry.CompressedSize);
         }
         finally
         {

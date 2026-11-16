@@ -77,7 +77,7 @@ public sealed class FolderPins : IDisposable
         if (full.Equals(_root, StringComparison.OrdinalIgnoreCase)) return true;
         if (!PathInside.IsUnder(_root, full)) return false;
         var at = _root;
-        foreach (var part in full[(_root.Length + 1)..].Split('\\'))
+        foreach (var part in PartsBelow(_root, full))
         {
             at = Path.Combine(at, part);
             if (_held.ContainsKey(at))
@@ -100,7 +100,7 @@ public sealed class FolderPins : IDisposable
         var at = _root;
         if (!_held.ContainsKey(at) || !Fine(at)) return false;
         if (full.Length == _root.Length) return true;
-        foreach (var part in full[(_root.Length + 1)..].Split('\\'))
+        foreach (var part in PartsBelow(_root, full))
         {
             at = Path.Combine(at, part);
             if (!_held.ContainsKey(at) || !Fine(at)) return false;
@@ -127,7 +127,7 @@ public sealed class FolderPins : IDisposable
         var full = Rebase(path);
         var parent = Path.GetDirectoryName(full);
         if (parent is null || !_held.TryGetValue(parent, out var ph) || !Intact(parent)) return false;
-        using var h = FileHandles.OpenLinkItself(full, FileHandles.Delete | FileHandles.ReadAttributes | FileHandles.WriteAttributes, FileHandles.ShareAll);
+        using var h = FileHandles.OpenLinkItself(FileHandles.LongPath(full), FileHandles.Delete | FileHandles.ReadAttributes | FileHandles.WriteAttributes, FileHandles.ShareAll);
         if (h.IsInvalid) return false;
         var where = FileHandles.FinalPath(h, allowUnc: true);
         var folder = FileHandles.FinalPath(ph, allowUnc: true);
@@ -152,10 +152,10 @@ public sealed class FolderPins : IDisposable
     public static bool ThroughLink(string root)
     {
         var given = LongName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)));
-        using var h = FileHandles.OpenLinkItself(given, FileHandles.ReadAttributes, FileHandles.ShareAll);
+        using var h = FileHandles.OpenLinkItself(FileHandles.LongPath(given), FileHandles.ReadAttributes, FileHandles.ShareAll);
         if (h.IsInvalid) return false;
         if (Kernel32.GetFileInformationByHandleEx(h, AttributeTagInfo, out var tag, 8) && LinkCheck.IsRedirect(tag.Attributes, tag.ReparseTag)) return true;
-        return !string.Equals(FileHandles.FinalPath(h, allowUnc: true), given, StringComparison.OrdinalIgnoreCase);
+        return !SamePlace(FileHandles.FinalPath(h, allowUnc: true), Expected(given));
     }
 
     // ThroughLink for a folder out of settings, where a path that won't even parse just isn't a link. A third-party
@@ -165,6 +165,9 @@ public sealed class FolderPins : IDisposable
         try { return ThroughLink(dir); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; }
     }
+
+    // a drive letter that nothing's behind, as seen from here
+    public static bool DriveMissing(string dir) => DriveTargets.HasDriveLetter(dir) && !DriveTargets.Exists(dir[0]);
 
     // where a folder really is, every link on the way (its own too) followed. Null if it won't open
     public static string? RealPath(string dir)
@@ -195,6 +198,10 @@ public sealed class FolderPins : IDisposable
     }
 
     internal static IOException LinkError(string p) => Shown.Mark(new IOException($"Provenance won't write to {p}, it's a link to somewhere else."));
+
+    // a drive root already ends in a backslash, so there's none to skip
+    internal static string[] PartsBelow(string root, string full) =>
+        full[(Path.EndsInDirectorySeparator(root) ? root.Length : root.Length + 1)..].Split('\\');
 
     private string Rebase(string path)
     {
@@ -230,8 +237,18 @@ public sealed class FolderPins : IDisposable
             (tag.Attributes & (uint)FileAttributes.Directory) == 0 || LinkCheck.IsRedirect(tag.Attributes, tag.ReparseTag))
             return false;
         return !dir.Equals(_root, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(FileHandles.FinalPath(h, allowUnc: true), _root, StringComparison.OrdinalIgnoreCase);
+               SamePlace(FileHandles.FinalPath(h, allowUnc: true), Expected(_root));
     }
+
+    // where a handle on this path comes back as, which for a mapped or SUBST drive isn't the letter
+    private static string Expected(string path)
+    {
+        var real = DriveTargets.Real(path);
+        return real == path || real.StartsWith(@"\\", StringComparison.Ordinal) ? real : LongName(real);
+    }
+
+    private static bool SamePlace(string? a, string b) =>
+        a is not null && string.Equals(a.TrimEnd('\\'), b.TrimEnd('\\'),StringComparison.OrdinalIgnoreCase);
 
     // 8.3 names expanded, so the root can be compared with where its handle really is
     private static string LongName(string path)
