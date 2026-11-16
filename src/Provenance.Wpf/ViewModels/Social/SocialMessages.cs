@@ -12,6 +12,7 @@ public sealed partial class SocialMessages : ObservableObject
     private readonly SocialViewModel _social;
     private bool _conversationVisible;
     private DateTime _conversationDay;   // the day the "Today" headings were made on
+    private string? _listedFor;
 
     public SocialMessages(SocialViewModel social) => _social = social;
 
@@ -78,6 +79,7 @@ public sealed partial class SocialMessages : ObservableObject
     {
         _login = new();
         Compose = "";
+        _listedFor = null;
         Conversation.Clear();
     }
 
@@ -127,17 +129,30 @@ public sealed partial class SocialMessages : ObservableObject
     internal void Refresh()
     {
         _conversationDay = DateTime.Now.Date;
-        Conversation.Clear();
-        if (_social.SelectedFriend is not { } f || _social.Chat is not { } chat) return;
+        if (_social.SelectedFriend is not { } f || _social.Chat is not { } chat)
+        {
+            _listedFor = null;
+            Conversation.Clear();
+            return;
+        }
+        // a different person starts a fresh list (the window scrolls to its end), the same one is patched in place
+        var who = f.Key.Length > 0 ? "k:" + f.Key : "n:" + f.Name.ToUpperInvariant();
+        if (who != _listedFor)
+        {
+            _listedFor = who;
+            Conversation.Clear();
+        }
+        var next = new List<ChatEntry>();
         DateTime? day = null;
         foreach (var line in chat.With(f.Name, f.Key))
         {
             var e = line.Outgoing || line.State == "notice" ? line
                   : line with { Subject = _social.Viewer.Filtered(line.Subject), Text = _social.Viewer.Filtered(line.Text) };
             var d = e.When.Date;
-            Conversation.Add(d == day ? e : e with { DayBreak = DayLabel(d) });
+            next.Add(d == day ? e : e with { DayBreak = DayLabel(d) });
             day = d;
         }
+        Conversation.Patch(next, (a, b) => a.Key == b.Key, (a, b) => a == b);
     }
 
     private static string DayLabel(DateTime d)
@@ -209,6 +224,7 @@ public sealed partial class SocialMessages : ObservableObject
     public void SettleSends(SessionEnd end)
     {
         Sends.Settle(_social.Chat, end != SessionEnd.Dropped, end == SessionEnd.Play ? "failed:game" : "failed:session");
+        _social.Chat?.Flush();
         Refresh();
     }
 

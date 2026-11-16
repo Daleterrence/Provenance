@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
@@ -16,7 +15,7 @@ namespace Provenance.Wpf.ViewModels.Chat;
 public sealed record GroupChatLineItem(string Id, string Name, string Text, bool Me, DateTimeOffset When)
 {
     public string Display => $"{Name}: {Text}";
-    public string TimeText => When.ToString("t", CultureInfo.CurrentCulture);
+    public string TimeText => When.ToString("HH:mm");
 }
 
 public sealed record GroupChatMemberItem(string Name, bool Me, string Note);
@@ -92,6 +91,16 @@ public sealed partial class GroupChatViewModel : ObservableObject
     // the chat's over: null when there's nothing to say about it, otherwise the viewer's own words for why
     public event Action<string?>? Ended;
     public event Action? UnreadChanged;
+    // there's something for the window's tick to do
+    public event Action? TickNeeded;
+
+    // a chat that's open (a join to time out, a send to wait on), a send going, or lines not on disk yet
+    public bool NeedsTick => Open || !_gate.CanSend || _log is { Dirty: true };
+
+    private void WakeTick()
+    {
+        if (NeedsTick) TickNeeded?.Invoke();
+    }
 
     public int UnreadFor(string groupId) => _unread.GetValueOrDefault(groupId);
     public int UnreadTotal => _unread.Values.Sum();
@@ -144,6 +153,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         ComposeNote = "";
         LoadHistory();
         RefreshMembers(group);
+        WakeTick();
         return true;
     }
 
@@ -192,6 +202,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         _tailSeen = fresh[^1].Seq;
         _log?.Add(group, fresh.Select(GroupChatEntry.From));
         _log?.Flush();
+        WakeTick();
     }
 
     private void CallOff()
@@ -213,6 +224,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public bool GroupLeft(string groupId, string message)
     {
         _log?.Clear(groupId);
+        WakeTick();
         if (_unread.Remove(groupId)) UnreadChanged?.Invoke();
         // and the hook's last lines for it don't go back in a log that's just been cleared
         if (_tailGroup is { } t && string.Equals(t, groupId, StringComparison.OrdinalIgnoreCase)) _tailGroup = null;
@@ -279,6 +291,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
             return;
         }
         _gate.Sent(token, Compose, _social.Now);
+        WakeTick();
         _sentLine = text;
         Compose = "";
         ComposeNote = "";
@@ -323,6 +336,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public bool DeleteLine(GroupChatLineItem line)
     {
         if (_log is null || !_log.Delete(GroupId, line.Id)) return false;
+        WakeTick();
         Lines.Remove(line);
         return true;
     }
@@ -332,6 +346,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         var set = ids.ToHashSet(StringComparer.Ordinal);
         _log?.Delete(GroupId, set);
+        WakeTick();
         foreach (var l in Lines.Where(l => set.Contains(l.Id)).ToList()) Lines.Remove(l);
     }
 
@@ -408,6 +423,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         _seenSeq = fresh[^1].Seq;
         var entries = fresh.Select(GroupChatEntry.From).ToList();
         _log?.Add(GroupId, entries);
+        WakeTick();
         var shown = entries.Select(Item).ToList();
         foreach (var e in shown) Lines.Add(e);
         var theirs = shown.Where(e => !e.Me).ToList();
@@ -429,6 +445,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         {
             var e = GroupChatEntry.Mine(MyHandle, line);
             _log?.Add(GroupId, [e]);
+            WakeTick();
             Lines.Add(Item(e));
         }
         else if (done != "sent")

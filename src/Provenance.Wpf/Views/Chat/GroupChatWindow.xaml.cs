@@ -19,8 +19,13 @@ public partial class GroupChatWindow : AppWindow
         DataContext = _vm = vm;
         _vm.Ended += OnEnded;
         _vm.LineArrived += OnLineArrived;
-        _tick.Tick += (_, _) => _vm.Tick();
-        _tick.Start();
+        _tick.Tick += (_, _) =>
+        {
+            _vm.Tick();
+            if (!_vm.NeedsTick) _tick.Stop();
+        };
+        _vm.TickNeeded += OnTickNeeded;
+        if (_vm.NeedsTick) _tick.Start();
         Activated += (_, _) =>
         {
             _vm.WindowActivated();
@@ -38,9 +43,15 @@ public partial class GroupChatWindow : AppWindow
         Closed += (_, _) =>
         {
             _tick.Stop();
+            _vm.TickNeeded -= OnTickNeeded;
             _vm.Ended -= OnEnded;
             _vm.LineArrived -= OnLineArrived;
         };
+    }
+
+    private void OnTickNeeded()
+    {
+        if (!_tick.IsEnabled) _tick.Start();
     }
 
     protected override bool OnEscape()

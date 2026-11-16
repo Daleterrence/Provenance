@@ -97,8 +97,8 @@ public sealed class ChatSync(MailSendQueue sends)
         changed |= chat.ExpireSending(ChatStore.SendExpiry(sends.Queued), sends.StillPending());
         if (changed && open is { } o && chat.UnreadFrom(o.Name, o.Key) > 0)
             chat.MarkRead(o.Name, o.Key);
-        // Dirty rather than changed, a log whose last save failed isn't on disk either
-        bool kept = !chat.Dirty || chat.Save();
+        // dirty rather than changed, a log whose last save failed isn't on disk either
+        bool kept = chat.SaveIfDue(DateTime.UtcNow);
         if (takeStore && kept && pid is { } storePid)
         {
             SocialSnapshotFiles.DeleteStore(storePid);

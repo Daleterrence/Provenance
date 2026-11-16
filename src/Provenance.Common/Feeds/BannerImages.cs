@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using Provenance.Common.IO;
 using Provenance.Common.Security;
@@ -9,7 +10,7 @@ public static class BannerImages
     private const int MaxImageBytes = 8 * 1024 * 1024;
 
     // redirects by hand: one mustn't take a banner download off POL's site
-    private static readonly HttpClient ImageHttp =
+    internal static HttpClient ImageHttp { get; set; } =
         new(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(15) };
 
     internal static async Task<byte[]?> DownloadAsync(Uri u, CancellationToken ct)
@@ -48,9 +49,13 @@ public static class BannerImages
         return null;
     }
 
+    // addresses that failed this run, so a refresh never asks POL's site for one again
+    private static readonly ConcurrentDictionary<string, bool> Failed = new();
+
     // a topic's banner never changes, one already on disk needs no request
     public static async Task<string?> LocalAsync(string url, CancellationToken ct = default)
     {
+        string? address = null;
         try
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var u0) || PlayOnlineSite.UpgradeBannerUrl(u0) is not { } u) return null;
@@ -63,15 +68,26 @@ public static class BannerImages
                 try { File.SetLastWriteTimeUtc(path, DateTime.UtcNow); } catch { }   // still in use, so the prune keeps it
                 return path;
             }
+            address = u.AbsoluteUri;
+            if (Failed.ContainsKey(address)) return null;
             Directory.CreateDirectory(dir);
             var bytes = await DownloadAsync(u, ct).ConfigureAwait(false);
             if (bytes is null || bytes.Length == 0 || bytes.Length > MaxImageBytes || !LooksLikeImage(bytes))
+            {
+                Failed[address] = true;
                 return null;
+            }
             await AtomicFile.WriteAsync(path, bytes, ct).ConfigureAwait(false);
             return path;
         }
-        catch { return null; }
+        catch (Exception e)
+        {
+            if (address is not null && !(e is OperationCanceledException && ct.IsCancellationRequested)) Failed[address] = true;
+            return null;
+        }
     }
+
+    internal static void ForgetFailures() => Failed.Clear();
 
     internal static bool LooksLikeImage(byte[] b) =>
         b.Length >= 4 && ((b[0] == 0xFF && b[1] == 0xD8) || (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) ||
