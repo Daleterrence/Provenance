@@ -110,13 +110,14 @@
             <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <HeaderedContentControl Header="Close Provenance when the game exits"
-                                            Tag="Starting the game with &quot;Start Game Automatically&quot; selected closes Provenance when the game is closed, whatever this is set to. If the main window had to open first (for a game update or a PlayOnline notice, for example), this setting applies instead.">
+                                            Tag="On, closing FINAL FANTASY XI closes Provenance too. Off, Provenance comes back when the game closes, logged out. Logins that use &quot;Start Game Automatically&quot; always close Provenance with the game. If the main window had to open first (for a game update or a PlayOnline notice, for example), this setting applies instead.">
                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ExitAfterGameExits}"
                                       AutomationProperties.Name="Close Provenance when the game exits" />
                     </HeaderedContentControl>
-                    <HeaderedContentControl Header="Minimise Provenance to the tray instead of the taskbar">
+                    <HeaderedContentControl Header="Minimise to the tray"
+                                            Tag="The minimise button hides Provenance in the tray, next to the clock, instead of on the taskbar. Provenance goes to the tray by itself when FINAL FANTASY XI starts, whatever this is set to.">
                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding MinimizeToTray}"
-                                      AutomationProperties.Name="Minimise Provenance to the tray instead of the taskbar" />
+                                      AutomationProperties.Name="Minimise to the tray" />
                     </HeaderedContentControl>
                     <HeaderedContentControl Header="Keep me logged in to PlayOnline in the tray when I close the window"
                                             Tag="Your friends and messages stay up to date, and you won't need to log in again when you open Provenance. To log out, right-click the tray icon.">

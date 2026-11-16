@@ -9,6 +9,9 @@ namespace Provenance.Wpf.ViewModels.Main;
 // conditions as Startup's, which still has the last word
 internal static class AutoLoginAtOpen
 {
+    // off and saved, and it stays off until the player turns it back on
+    internal static void TurnOffForShift(ISettingsService settings) => settings.SaveChange(s => s.AutoLogin = false);
+
     internal static Account? Coming(ISettingsService settings, ICredentialService credentials, bool suppressed)
     {
         try

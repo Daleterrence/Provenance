@@ -80,11 +80,19 @@ public partial class App : Application
         // both done by the time anyone can press LOG IN
         MirrorCheck.StartAtOpen(settings);
         WindowerLauncher.CheckAtOpen(settings);
-        var autoLogin = AutoLoginAtOpen.Coming(settings, credentials, shiftAtStart || ShiftDown() || args.NoAutoLogin);
+        bool shift = shiftAtStart || ShiftDown() || args.ShiftHeld;
+        if (shift) AutoLoginAtOpen.TurnOffForShift(settings);
+        var autoLogin = AutoLoginAtOpen.Coming(settings, credentials, shift || args.NoAutoLogin);
         StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, () => pol.Prestarter.StartEarly(loginComing: autoLogin is not null));
         AutoLoginAtOpen.StartAhead(pol, autoLogin);
 
-        bool noAutoLogin = shiftAtStart || ShiftDown() || args.NoAutoLogin;
+        // a Shift pressed a moment later still counts, and drops an early start that's already begun
+        if (!shift && ShiftDown())
+        {
+            shift = true;
+            AutoLoginAtOpen.TurnOffForShift(settings);
+        }
+        bool noAutoLogin = shift || args.NoAutoLogin;
         var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin);
         _ = SelfUpdate.TellIfUpdateWaiting(mainVm.Notice);
         StartMainViewModel(mainVm, noAutoLogin);

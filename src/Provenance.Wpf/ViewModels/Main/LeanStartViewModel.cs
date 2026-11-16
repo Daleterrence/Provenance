@@ -39,6 +39,13 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
 
     internal bool Running => _lean;
 
+    internal const string AutoLoginTip = "Tip: Hold shift whilst starting the app to disable automatic log in!";
+
+    // set by the app opening on an automatic login, taken by the Open that follows
+    internal bool AtOpen { get; set; }
+
+    internal bool TipShown { get; set; }
+
     internal bool Open()
     {
         _madeHandle = false;
@@ -46,6 +53,7 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
         _held = null;
         _next = null;
         _lean = _shown = Wanted;
+        TipShown = _shown && AtOpen;
         if (!_shown) return false;
         // one that's only up for a few seconds was about something before this login, and would read as its own here
         if (main.Notice.Current is { Stays: false }) main.Notice.Take();

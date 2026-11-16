@@ -409,6 +409,10 @@ public partial class MainViewModel : ObservableObject
 
     internal LeanStartViewModel Lean { get; }
 
+    public bool LeanTipShown => Lean.TipShown;
+
+    public string LeanTipText => LeanStartViewModel.AutoLoginTip;
+
     public NoticeBanner Notice { get; } = new();
 
     public RepairButtonViewModel Repair { get; }
@@ -533,7 +537,9 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         Log.Information("Logging in to {Account} automatically", Accounts.SelectedProfile?.Id);
-        LogInCommand.Execute(null);
+        Lean.AtOpen = true;
+        try { LogInCommand.Execute(null); }
+        finally { Lean.AtOpen = false; }
     }
 
     internal void OnSnapshot(PolSocialSnapshot snap)
