@@ -1,6 +1,5 @@
-/* polcore's chat login opens with a connection to the redirector, which is sent nothing and answers with one short
-   line naming the chat server. When Provenance says a login's coming the hook asks that itself on its own thread as it
-   loads, and when polcore's login gets there the answer's handed over on loopback, once. */
+/* polcore's chat login connects to the redirector, which answers with one line naming the chat server. The hook asks
+   that itself while it loads and hands the answer to polcore's connect on loopback, once */
 #define REDIRECTOR_HOST "ci000.pol.com"
 #define REDIRECTOR_PORT 51240
 #define REDIRECTOR_ASK_MS 5000       /* connect and answer together */
@@ -73,6 +72,18 @@ static int redirector_wait(SOCKET s, int writing, ULONGLONG ms)
     FD_SET(s, &set);
     return g_ws.select(0, writing ? NULL : &set, writing ? &set : NULL, NULL, &tv) > 0;
 }
+/* 1 once a connect in progress has gone through. A refused one shows in the except set, not the write set, so it ends the
+   wait at once */
+static int redirector_connected(SOCKET s, ULONGLONG ms)
+{
+    fd_set w, e;
+    struct timeval tv = redirector_timeval(ms);
+    FD_ZERO(&w);
+    FD_ZERO(&e);
+    FD_SET(s, &w);
+    FD_SET(s, &e);
+    return g_ws.select(0, NULL, &w, &e, &tv) > 0 && w.fd_count == 1 && e.fd_count == 0;
+}
 static ULONGLONG redirector_left(ULONGLONG until)
 {
     ULONGLONG now = GetTickCount64();
@@ -101,7 +112,7 @@ static int redirector_ask(const char *host, unsigned short port, DWORD timeout_m
     memcpy(&sa.sin_addr, h->h_addr_list[0], 4);
     if (g_ws.ioctlsocket(s, FIONBIO, &nonblocking) != 0) goto fail;
     if (g_ws.connect(s, (struct sockaddr *)&sa, sizeof sa) != 0 && g_ws.last_error() != WSAEWOULDBLOCK) goto fail;
-    if (!redirector_wait(s, 1, redirector_left(until)) || g_ws.getpeername(s, (struct sockaddr *)&peer, &len) != 0) goto fail;
+    if (!redirector_connected(s, redirector_left(until)) || g_ws.getpeername(s, (struct sockaddr *)&peer, &len) != 0) goto fail;
     while (n < cap) {
         /* what comes after the first of it gets a moment, the line may be in two bits */
         if (!redirector_wait(s, 0, n ? 100 : redirector_left(until))) break;
@@ -136,9 +147,8 @@ static SOCKET redirector_listen(unsigned short *port)
     return s;
 }
 
-/* polcore's socket has been connected to the listener from port (network order). The connection that came from that
-   port gets the answer and is kept (*served), anything else that got there first is closed. 0 when it never came inside
-   wait_ms */
+/* the connection from polcore's port (network order) gets the answer and is kept in *served, anything else is closed.
+   0 when it never came inside wait_ms */
 static int redirector_serve(SOCKET listener, unsigned short port, const BYTE *answer, int n, DWORD wait_ms, SOCKET *served)
 {
     struct sockaddr_in peer;
@@ -271,9 +281,8 @@ static int redirector_aimed(const struct sockaddr *a, int n)
            in->sin_port == (unsigned short)(g_red.port >> 8 | g_red.port << 8);
 }
 
-/* polcore is connecting s to the redirector. 1 when s went to the early answer instead (*rc is what connect should
-   give back), 0 when polcore goes ahead on its own: nothing asked, it failed, it's too old or it's been used. Waits for
-   an ask that's still going, rather than let a second one out */
+/* polcore is connecting s to the redirector. 1 when s got the early answer (*rc is connect's result), 0 when polcore
+   goes ahead on its own. Waits for an ask still going rather than let a second one out */
 static int redirector_connect(SOCKET s, int (PASCAL *real)(SOCKET, const struct sockaddr *, int), int *rc)
 {
     struct sockaddr_in lo, me;

@@ -80,37 +80,6 @@ static int peers_secret_read(const WCHAR *path)
     CloseHandle(f);
     return g_peer_secret_ok;
 }
-/* an old %APPDATA%\Provenance\peerkey.bin is taken once so chat history keeps its keys. Links can be planted there, so
-   it's read and deleted through a handle that really is that file */
-static HANDLE peers_secret_old(void)
-{
-    WCHAR dir[MAX_PATH], path[MAX_PATH + 32], want[MAX_PATH + 32], got[MAX_PATH + 32];
-    BY_HANDLE_FILE_INFORMATION fi;
-    HANDLE f;
-    DWORD n = GetEnvironmentVariableW(L"APPDATA", dir, MAX_PATH);
-    if (!n || n >= MAX_PATH) return INVALID_HANDLE_VALUE;
-    f = CreateFileW(dir, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
-                    FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    if (f == INVALID_HANDLE_VALUE) return f;
-    n = GetFinalPathNameByHandleW(f, want, MAX_PATH, 0);
-    CloseHandle(f);
-    if (!n || n >= MAX_PATH) return INVALID_HANDLE_VALUE;
-    lstrcatW(want, L"\\Provenance\\peerkey.bin");
-    lstrcpyW(path, dir); lstrcatW(path, L"\\Provenance\\peerkey.bin");
-    /* delete sharing so two pol.exe starting together both get the same one */
-    f = CreateFileW(path, GENERIC_READ | DELETE, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
-                    FILE_FLAG_OPEN_REPARSE_POINT, NULL);
-    if (f == INVALID_HANDLE_VALUE) return f;
-    n = GetFinalPathNameByHandleW(f, got, MAX_PATH + 32, 0);
-    if (!n || n >= MAX_PATH + 32 || lstrcmpiW(got, want) || !GetFileInformationByHandle(f, &fi) ||
-        (fi.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) || fi.nNumberOfLinks != 1 ||
-        fi.nFileSizeHigh || fi.nFileSizeLow != sizeof g_peer_secret ||
-        !ReadFile(f, g_peer_secret, sizeof g_peer_secret, &n, NULL) || n != sizeof g_peer_secret) {
-        CloseHandle(f);
-        return INVALID_HANDLE_VALUE;
-    }
-    return f;
-}
 /* POL_IPC_DIR is one folder for the whole PC, so each Windows user gets their own file there, named by their SID */
 static int peers_secret_name(WCHAR *out, int cap)
 {
@@ -132,8 +101,7 @@ static int peers_secret_name(WCHAR *out, int cap)
 static int peers_secret(void)
 {
     WCHAR path[MAX_PATH + 256], name[256];
-    FILE_DISPOSITION_INFO gone = { TRUE };
-    HANDLE f, old;
+    HANDLE f;
     DWORD n = 0;
     int r;
     if (g_peer_secret_ok) return 1;
@@ -142,19 +110,13 @@ static int peers_secret(void)
     if (path[n - 1] != L'\\' && path[n - 1] != L'/') lstrcatW(path, L"\\");
     lstrcatW(path, name);
     if ((r = peers_secret_read(path)) >= 0) return r;
-    old = peers_secret_old();
-    if (old == INVALID_HANDLE_VALUE &&
-        BCryptGenRandom(NULL, g_peer_secret, sizeof g_peer_secret, BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) return 0;
+    if (BCryptGenRandom(NULL, g_peer_secret, sizeof g_peer_secret, BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) return 0;
     f = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) r = peers_secret_read(path) > 0;
     else {
         g_peer_secret_ok = WriteFile(f, g_peer_secret, sizeof g_peer_secret, &n, NULL) && n == sizeof g_peer_secret;
         CloseHandle(f);
         r = g_peer_secret_ok;
-    }
-    if (old != INVALID_HANDLE_VALUE) {
-        if (r) SetFileInformationByHandle(old, FileDispositionInfo, &gone, sizeof gone);
-        CloseHandle(old);
     }
     return r;
 }

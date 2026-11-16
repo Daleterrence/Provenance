@@ -7,7 +7,8 @@
 #include <wchar.h>
 #include "hook/hook_contract.h"
 
-/* the app reads this output and the exit codes, so they don't change */
+/* the app reads this output and the exit codes, so they don't change. 20 is the one path that can't be worked round */
+#define PATH_NOT_ANSI_EXIT 20
 static HANDLE g_child;   /* the suspended pol.exe, killed on any later failure */
 static void die(const char *m)
 {
@@ -165,6 +166,15 @@ static UINT start_suspended(const WCHAR *pol, PROCESS_INFORMATION *pi)
     return errmode;
 }
 
+/* LoadLibraryA takes the hook's path in the system code page. A UTF-8 one takes neither the flag nor the lossy pointer,
+   and can't lose anything anyway */
+static int ansi_path(const WCHAR *w, char out[MAX_PATH])
+{
+    BOOL lossy = FALSE, utf8 = GetACP() == CP_UTF8;
+    return WideCharToMultiByte(CP_ACP, utf8 ? 0 : WC_NO_BEST_FIT_CHARS, w, -1, out, MAX_PATH, NULL, utf8 ? NULL : &lossy) &&
+           !lossy;
+}
+
 /* the app makes Windower's mapping and event before it runs this. Hook.dll throws on its install thread when the
    mapping's missing, so that's refused before pol.exe even starts */
 static int windower(int argc, WCHAR **arg)
@@ -177,17 +187,24 @@ static int windower(int argc, WCHAR **arg)
     FARPROC load_library = NULL;
     DWORD code, n, wait_ms = 30000;
     UINT errmode;
-    BOOL lossy = FALSE;
 
     if (argc < 5) usage();
     pol = arg[3];
     /* full paths, so what gets checked here is what pol.exe loads from its own working folder */
     hook = full_path(arg[2], "Windower's Hook.dll path is no good");
     polhook = full_path(arg[4], "pol_hook.dll path is no good");
-    /* a UTF-8 system code page takes neither the flag nor the lossy pointer, and can't lose anything anyway */
-    if (!WideCharToMultiByte(CP_ACP, GetACP() == CP_UTF8 ? 0 : WC_NO_BEST_FIT_CHARS, polhook, -1, dll, MAX_PATH, NULL,
-                             GetACP() == CP_UTF8 ? NULL : &lossy) || lossy)
-        die("pol_hook.dll path won't go into ANSI");
+    if (!ansi_path(polhook, dll)) {
+        WCHAR short_path[MAX_PATH];
+        DWORD len;
+        if (GetFileAttributesW(polhook) == INVALID_FILE_ATTRIBUTES) die("pol_hook.dll not found");
+        /* the 8.3 name is plain ASCII when the volume makes them */
+        len = GetEnvironmentVariableA("PROVENANCE_WATCHER_NO_SHORT_PATH", wait_s, sizeof wait_s) ? 0 :
+              GetShortPathNameW(polhook, short_path, MAX_PATH);
+        if (!len || len >= MAX_PATH || !ansi_path(short_path, dll)) {
+            fprintf(stderr, "watcher: pol_hook.dll path won't go into ANSI, not even its short one\n");
+            exit(PATH_NOT_ANSI_EXIT);
+        }
+    }
     if (GetFileAttributesW(hook) == INVALID_FILE_ATTRIBUTES) die("Windower's Hook.dll not found");
     if (GetFileAttributesW(pol) == INVALID_FILE_ATTRIBUTES) die("pol.exe not found");
     if (GetFileAttributesA(dll) == INVALID_FILE_ATTRIBUTES) die("pol_hook.dll not found");

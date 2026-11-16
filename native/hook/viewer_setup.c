@@ -239,7 +239,7 @@ static int viewer_home_set(BYTE *b, int slot)
 }
 
 /* the viewer's init before content (REGISTRY_LANG, FFXI_LANG, REGISTRY_KEY, INSTALL_FOLDER, FILE_INIT), which the menu
-   detour skips, or character creation throws FFXI-3322 in Japanese. Took me a whole night... solid work on my part */
+   detour skips, or character creation throws FFXI-3322 in Japanese */
 static void viewer_init(BYTE *b)
 {
     DWORD lang = viewer_lang();

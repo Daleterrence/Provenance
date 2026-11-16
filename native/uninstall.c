@@ -63,6 +63,7 @@
 #define OTHER_KEPT L" The FINAL FANTASY XI settings and macros you kept when you removed the game are still in %s, and in Windows."
 #endif
 
+#define RUNNING L"PlayOnline or FINAL FANTASY XI is running, or Provenance has it open in the background. Exit Provenance and the game, then press Retry."
 #define UNPROTECTED L"The uninstall information for %s isn't protected, so to be safe nothing was removed.\n\nOpen Provenance and press Repair game files, which saves it again where only administrators can change it. Then try again."
 
 #define NOT_FOUND(st) ((st) == (NTSTATUS)0xC0000034L || (st) == (NTSTATUS)0xC000003AL)
@@ -778,21 +779,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
     int quiet;
     (void)prev; (void)cmd; (void)show;
     options(argc, argv, &quiet);
-    if (argc < 2 || !(text = load(argv[1], &chars))) {
+    if (argc < 2 || GetFileAttributesW(argv[1]) == INVALID_FILE_ATTRIBUTES) {
         MessageBoxW(NULL, L"The uninstall information was not found.", TITLE, MB_ICONERROR);
         return 1;
     }
-    run(text, chars, L'N');
+    /* nothing in the record is read before it's known only admins can change it */
     if (unprotected(argv[1])) {
         _snwprintf_s(ask, _countof(ask), _TRUNCATE, UNPROTECTED, g_name);
         if (!quiet) MessageBoxW(NULL, ask, TITLE, MB_ICONERROR);
         return 4;
     }
+    if (!(text = load(argv[1], &chars))) {
+        MessageBoxW(NULL, L"The uninstall information was not found.", TITLE, MB_ICONERROR);
+        return 1;
+    }
+    run(text, chars, L'N');
     _snwprintf_s(ask, _countof(ask), _TRUNCATE, ASK, g_name);
     if (!quiet && MessageBoxW(NULL, ask, TITLE, MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return 2;
     if (!quiet && g_keep) g_keep = MessageBoxW(NULL, KEEP_ASK, TITLE, MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON1) == IDYES;
     while (running(L"pol.exe") || running(L"polboot.exe")) {
-        if (quiet || MessageBoxW(NULL, L"PlayOnline or FINAL FANTASY XI is running. Close it, then press Retry.", TITLE,
+        if (quiet || MessageBoxW(NULL, RUNNING, TITLE,
                                  MB_RETRYCANCEL | MB_ICONWARNING) != IDRETRY) return 3;
     }
     CoInitialize(NULL);

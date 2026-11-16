@@ -16,85 +16,6 @@ static int login_home_from_env(void)
     if (n == 0 || n >= sizeof v || !requests_parse_num(v, 2, &s) || !login_home_slot_ok(s)) return -1;
     return s;
 }
-/* 1 copied, 0 nothing to do (no source, already there, too big), -1 failed. Never over a file, never through a link */
-static int login_copy_plain(const char *src, const char *dst)
-{
-    static char buf[0x10000];
-    LARGE_INTEGER size;
-    DWORD got, put;
-    int ok = 1;
-    HANDLE in, out;
-    if (GetFileAttributesA(src) == INVALID_FILE_ATTRIBUTES) return 0;
-    if ((in = message_store_open_plain(src)) == INVALID_HANDLE_VALUE) return -1;
-    if (!GetFileSizeEx(in, &size) || size.QuadPart > 0x200000) { CloseHandle(in); return 0; }
-    out = CreateFileA(dst, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (out == INVALID_HANDLE_VALUE) {
-        DWORD e = GetLastError();
-        CloseHandle(in);
-        return e == ERROR_FILE_EXISTS ? 0 : -1;
-    }
-    while (ok && ReadFile(in, buf, sizeof buf, &got, NULL) && got)
-        ok = WriteFile(out, buf, got, &put, NULL) && put == got;
-    CloseHandle(in);
-    CloseHandle(out);
-    if (!ok) DeleteFileA(dst);
-    return ok ? 1 : -1;
-}
-/* home84's option.bin (FFXI's POL settings) and this account's own messages, never over what's there. The messages go
-   once, FFXI moves and deletes them here after */
-static void login_home_copy(BYTE *b, int slot, unsigned __int64 me)
-{
-    char src[MAX_PATH + 160], dst[MAX_PATH + 160], mark[MAX_PATH + 64], done[8] = "";
-    storefile *v;
-    int s, i, k, r, copied = 0, failed = 0, opt = 0, had_o, had_m;
-    DWORD got = 0, wn;
-    HANDLE f;
-    wsprintfA(dst, "%s\\pub\\home%02d", g_viewer, slot);
-    if (!message_store_plain_path(dst)) return;
-    /* 'o' option.bin, 'm' the messages */
-    wsprintfA(mark, "%s\\provenance-copied", dst);
-    if ((f = message_store_open_plain(mark)) != INVALID_HANDLE_VALUE) {
-        if (!ReadFile(f, done, sizeof done - 1, &got, NULL)) got = 0;
-        CloseHandle(f);
-        done[got] = 0;
-    }
-    had_o = strchr(done, 'o') != NULL;
-    had_m = strchr(done, 'm') != NULL;
-    if (had_o && had_m) return;
-    if (!had_o) {
-        lstrcatA(dst, "\\option.bin");
-        wsprintfA(src, "%s\\pub\\home%02d\\option.bin", g_viewer, LEGACY_HOME);
-        opt = login_copy_plain(src, dst);
-    }
-    for (s = 0; s < 4 && me && !had_m; s++) {
-        message_store_dir(dst, slot, s);
-        if (!message_store_plain_path(dst)) { failed++; continue; }
-        k = message_store_list(b, LEGACY_HOME, s, me, 0, &v);
-        for (i = 0; i < k; i++) {
-            message_store_dir(src, LEGACY_HOME, s);
-            message_store_dir(dst, slot, s);
-            lstrcatA(src, "\\"); lstrcatA(src, v[i].name);
-            lstrcatA(dst, "\\"); lstrcatA(dst, v[i].name);
-            r = login_copy_plain(src, dst);
-            copied += r > 0;
-            failed += r < 0;
-        }
-        if (v) HeapFree(GetProcessHeap(), 0, v);
-    }
-    wsprintfA(done, "%s%s", had_o || opt >= 0 ? "o" : "", had_m || me ? "m" : "");
-    if (done[0]) {
-        DeleteFileA(mark);   /* a link someone left there goes, it's never written through */
-        f = CreateFileA(mark, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (f != INVALID_HANDLE_VALUE) {
-            WriteFile(f, done, (DWORD)lstrlenA(done), &wn, NULL);
-            CloseHandle(f);
-        }
-    }
-    base_log("home: copy from home%02d to home%02d - option.bin %s, %d message(s), %d not copied%s\r\n",
-       LEGACY_HOME, slot,
-       had_o ? "done before" : opt > 0 ? "copied" : opt < 0 ? "failed, tried again next time" : "not needed", copied,
-       failed, had_m ? " (messages done before)" : !me ? " (messages next time, no POL ID yet)" : "");
-}
 /* the account's own slot, or home84 when Provenance didn't send one (it's run out of slots) */
 static void login_home_pick(BYTE *b)
 {
@@ -105,7 +26,6 @@ static void login_home_pick(BYTE *b)
     }
     if (!viewer_home_set(b, slot)) return;
     base_log("home: user slot %d (pub\\home%02d)\r\n", slot, slot);
-    if (message_store_legacy_home_there()) login_home_copy(b, slot, pc_my_id_or(b, 0));
 }
 
 /* notices whose viewer screen only offers log out or a fix-it page (closed, suspended, banned...). The JP, US and EU
@@ -313,8 +233,8 @@ static int login_wait_handle_name(BYTE *b, char *name, int cap)
     base_log("login: no handle name within 10 minutes\r\n");
     return -3;
 }
-/* a new account has no handle and FFXI's world login dies with POL-0001 (I'm a damn moron, forgot about the handle).
-   Handles are permanent and public, so only the typed name's used */
+/* a new account has no handle and FFXI's world login dies with POL-0001. Handles are permanent and public, so only the
+   typed name's used */
 static int login_handle_bootstrap(BYTE *b)
 {
     static const char *const why[] = { "creation cancelled", "no launcher target", "no answer within 10 minutes" };
@@ -372,8 +292,7 @@ static int login_handle_bootstrap(BYTE *b)
     return 0;
 }
 
-/* a file name changing in the hook's folder is the cue to look for the go file. The 16ms wait stays as the beat for
-   the stop file and the owner */
+/* a file name changing in the hook's folder (the go or stop file turning up) wakes the wait */
 static HANDLE login_go_watch(void)
 {
     char dir[MAX_PATH];
@@ -382,16 +301,24 @@ static HANDLE login_go_watch(void)
     h = FindFirstChangeNotificationA(dir, FALSE, FILE_NOTIFY_CHANGE_FILE_NAME);
     return h ? h : INVALID_HANDLE_VALUE;
 }
-/* re-armed before the turn that follows, so a change in between isn't lost */
+/* the folder changing or Provenance ending wakes it, and it looks again every 400ms anyway. Without a change handle it
+   beats every 16ms. Re-armed before the turn that follows, so a change in between isn't lost */
 static void login_go_nap(HANDLE *watch)
 {
-    DWORD r;
+    HANDLE h[2];
+    DWORD n = 0, r;
     if (*watch == INVALID_HANDLE_VALUE) {
         Sleep(16);
         return;
     }
-    r = WaitForSingleObject(*watch, 16);
+    h[n++] = *watch;
+    if (g_owner && !g_owner_gone) h[n++] = g_owner;
+    r = WaitForMultipleObjects(n, h, FALSE, 400);
     if (r == WAIT_TIMEOUT || (r == WAIT_OBJECT_0 && FindNextChangeNotification(*watch))) return;
+    if (r == WAIT_OBJECT_0 + 1) {
+        g_owner_gone = 1;
+        return;
+    }
     FindCloseChangeNotification(*watch);
     *watch = INVALID_HANDLE_VALUE;
     Sleep(16);
@@ -599,8 +526,7 @@ static void login_session(BYTE *b, char *id, char *pw)
     int r, rc, nrun, jail;
     base_timer_begin();
     pc_session_init(b);
-    /* inet init (polcore.dll 0x1000fe20 sets the flag at 0x100a66d4, the connect helper returns -2071 without it).
-       One piece of the POL-2071 hunt, which was a fucking nightmare honestly good lord */
+    /* inet init (polcore.dll 0x1000fe20 sets the flag at 0x100a66d4, the connect helper returns -2071 without it) */
     r = pc_inet_init(b);
     base_log("login: inet init -> %d\r\n", r);
     /* POLCON_OPEN (polcore.dll 0x100448a0) with a kind 1 conn and five zeroed dial-up buffers. It overwrites the
@@ -662,7 +588,7 @@ static void log_in(HMODULE pc)
     char id[LOGIN_ID_SIZE] = {0}, pw[LOGIN_PW_SIZE] = {0}, m[24];
     login_prestart_wait();
     g_lean = base_getenv_set(ENV_LEAN);
-    if (!cred_read_details(ENV_CRED_POL, "POL", id, sizeof id, pw, sizeof pw)) return;
+    cred_read_details(ENV_CRED_POL, "POL", id, sizeof id, pw, sizeof pw);
     /* POL's own password box stops at 16, and polcore's copy of the encoded one has no room for more */
     if (lstrlenA(pw) > 16) {
         SecureZeroMemory(pw, sizeof pw);
@@ -678,8 +604,8 @@ static void fake_session(void)
     HMODULE pc = viewer_polcore_module();
     if (!pc) { base_log("pol_hook: polcore.dll not loaded at menu time?!\r\n"); return; }
     addr_require(IN_POLCORE, viewer_region()->polcore, (BYTE *)pc, (DWORD)(ULONG_PTR)pc);
-    /* before the login, so a crash during it gets a CRASH line too. Not a VEH, that'd catch IsBadReadPtr's
-       first-chance probes and recurse through base_log (yes, IsBadReadPtr, I know) */
+    /* before the login, so a crash during it gets a CRASH line too. Not a VEH, that'd catch IsBadReadPtr's first-chance
+       probes and recurse through base_log */
     SetUnhandledExceptionFilter(crash_filter);
     polcore_sockets_patch((BYTE *)pc);
     viewer_init((BYTE *)pc);

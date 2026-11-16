@@ -152,7 +152,7 @@ static int message_store_read(const char *path, char *buf, int cap)
     CloseHandle(h);
     return ok ? (int)got : -1;
 }
-/* the other home's copy of the same message if this one won't read */
+/* the same message's copy in the other folder if this one won't read */
 static int message_store_body(const storefile *f, char *buf, int cap)
 {
     char path[MAX_PATH + 160];
@@ -174,13 +174,6 @@ static int message_store_dir_exists(const char *p)
     DWORD a = GetFileAttributesA(p);
     return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
 }
-static int message_store_legacy_home_there(void)
-{
-    char p[MAX_PATH + 32];
-    wsprintfA(p, "%s\\pub\\home%02d", g_viewer, LEGACY_HOME);
-    return g_viewer[0] && message_store_dir_exists(p) && message_store_plain_path(p);
-}
-
 static void message_store_sent_json(BYTE *b, jw *w, const BYTE *e, int mid, const char *state, const char *subj,
                      const char *text)
 {
@@ -227,42 +220,39 @@ static void message_store_import(BYTE *b)
     unsigned __int64 me = pc_my_id(b);
     storefile *all = NULL, *v, *g;
     jw in = {0}, out = {0};
-    int homes[2], nh = 0, n = 0, cap = 0, k, i, j, h, s, got, nin = 0, nout = 0, left = 0;
+    int n = 0, cap = 0, k, i, j, s, got, nin = 0, nout = 0, left = 0;
     message_store_drop();
     if (!me || g_home < 0) return;
-    homes[nh++] = g_home;
-    if (g_home != LEGACY_HOME && message_store_legacy_home_there()) homes[nh++] = LEGACY_HOME;
-    for (h = 0; h < nh; h++)
-        for (s = 0; s < 4; s++) {   /* s\a before s\b, so a sent copy beats the outbox's */
-            k = message_store_list(b, homes[h], s, me, 1, &v);
-            for (i = 0; i < k; i++) {
-                for (j = 0; j < n; j++)
-                    if ((all[j].sub >= 2) == (s >= 2) && mail_inbox_same(all[j].hdr, v[i].hdr)) break;
-                if (j < n) {
-                    /* the same message twice: read if either copy is, sent if either went, the other's the spare */
-                    if (s < 2 && (s == 0 || (MAIL(v[i].hdr)->seen & 0x100)))
-                        MAIL(all[j].hdr)->seen |= 0x100;
-                    if (s == 2 && all[j].sub == 3) all[j] = v[i];
-                    else if (all[j].alt_home < 0) {
-                        all[j].alt_home = v[i].home;
-                        all[j].alt_sub = v[i].sub;
-                        lstrcpyA(all[j].alt, v[i].name);
-                    }
-                    continue;
+    for (s = 0; s < 4; s++) {   /* s\a before s\b, so a sent copy beats the outbox's */
+        k = message_store_list(b, g_home, s, me, 1, &v);
+        for (i = 0; i < k; i++) {
+            for (j = 0; j < n; j++)
+                if ((all[j].sub >= 2) == (s >= 2) && mail_inbox_same(all[j].hdr, v[i].hdr)) break;
+            if (j < n) {
+                /* the same message twice: read if either copy is, sent if either went, the other's the spare */
+                if (s < 2 && (s == 0 || (MAIL(v[i].hdr)->seen & 0x100)))
+                    MAIL(all[j].hdr)->seen |= 0x100;
+                if (s == 2 && all[j].sub == 3) all[j] = v[i];
+                else if (all[j].alt_home < 0) {
+                    all[j].alt_home = v[i].home;
+                    all[j].alt_sub = v[i].sub;
+                    lstrcpyA(all[j].alt, v[i].name);
                 }
-                if (n == cap) {
-                    cap = cap ? cap * 2 : 64;
-                    g = (storefile *)(all ? HeapReAlloc(GetProcessHeap(), 0, all, cap * sizeof *all)
-                                          : HeapAlloc(GetProcessHeap(), 0, cap * sizeof *all));
-                    if (!g) break;
-                    all = g;
-                }
-                all[n] = v[i];
-                if (s == 0) MAIL(all[n].hdr)->seen |= 0x100;
-                n++;
+                continue;
             }
-            if (v) HeapFree(GetProcessHeap(), 0, v);
+            if (n == cap) {
+                cap = cap ? cap * 2 : 64;
+                g = (storefile *)(all ? HeapReAlloc(GetProcessHeap(), 0, all, cap * sizeof *all)
+                                      : HeapAlloc(GetProcessHeap(), 0, cap * sizeof *all));
+                if (!g) break;
+                all = g;
+            }
+            all[n] = v[i];
+            if (s == 0) MAIL(all[n].hdr)->seen |= 0x100;
+            n++;
         }
+        if (v) HeapFree(GetProcessHeap(), 0, v);
+    }
     if (n > 1) qsort(all, n, sizeof *all, message_store_newer);
     for (i = 0; i < n; i++) {
         int sent = all[i].sub >= 2;
@@ -303,6 +293,6 @@ static void message_store_import(BYTE *b)
     }
     jw_free(&in);
     jw_free(&out);
-    base_log("store: %d received and %d sent line(s) from the message store (home%02d%s)%s\r\n", nin, nout, g_home,
-       nh > 1 ? " and home84" : "", left ? ", the oldest left out (too big)" : "");
+    base_log("store: %d received and %d sent line(s) from the message store (home%02d)%s\r\n", nin, nout, g_home,
+       left ? ", the oldest left out (too big)" : "");
 }

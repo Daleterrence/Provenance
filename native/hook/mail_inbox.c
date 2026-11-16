@@ -2,7 +2,7 @@
      list  svc 0x524(out, max), poll 0x528 (1 = done), zeroed 8-aligned array, stride 0x50, valid = MAIL_VALID in flags
      read  svc 0x518, poll 0x51c on a copy of the entry (first 0x48 bytes = server key), body at +0x4c
      push  svc 0xd9c registers evt(0, H) for a stored message, raw(H) for a real-time one (body at H+0x4c) */
-#define MAIL_MAX 64
+#define MAIL_MAX 200   /* the viewer lists 200 in one go */
 #define MAIL_SEEN 256
 typedef struct {
     __declspec(align(8)) BYTE hdr[sizeof(pol_mail)];   /* 8-aligned: 0x518 rejects anything else */
@@ -135,6 +135,7 @@ static void __cdecl mail_inbox_evt(int code, void *arg)
     if (code == 0 && arg && !IsBadReadPtr(arg, MAIL_KEY_SIZE)) {
         LONG n = g_s.push_n;
         if (n < 8) { memcpy(g_push_q[n], arg, MAIL_KEY_SIZE); g_s.push_n = n + 1; }
+        else base_log("messages: notice dropped, 8 are already waiting for the next turn\r\n");
     }
 }
 static void __cdecl mail_inbox_raw(void *arg)
@@ -238,7 +239,7 @@ static void mail_inbox_list_done(int r)
 {
     int found = 0, added = 0;
     if (r != 1) {
-        if (g_mail_fails++ == 0) {
+        if (r != MAIL_SUSPENDED && g_mail_fails++ == 0) {
             base_log("messages: list failed %d - retry once in 30s\r\n", r);
             g_s.mail_retry_at = GetTickCount64() + 30000;
             g_s.mail_refresh = 1;

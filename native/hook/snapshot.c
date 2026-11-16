@@ -1,6 +1,32 @@
 enum { SNAPSHOT_NAME_CAP = 64, SNAPSHOT_STATE_CAP = 110, SNAPSHOT_GROUP_CAP = 96, SNAPSHOT_TEXT_CAP = 96,
        SNAPSHOT_COMMENT_CAP = 0x33 * 3 + 8 };
 
+/* the bytes last written, so a snapshot that hasn't changed isn't written again */
+static char *g_snap_kept;
+static int g_snap_kept_n;
+static char g_snap_kept_path[MAX_PATH + 64];
+static void snapshot_write(const jw *w)
+{
+    char path[MAX_PATH + 64];
+    DWORD a;
+    ipc_json file;
+    base_ipc_file(path, IPC_SOCIAL);
+    a = GetFileAttributesA(path);
+    if (g_snap_kept && g_snap_kept_n == w->n && !lstrcmpA(g_snap_kept_path, path) && memcmp(g_snap_kept, w->p, (size_t)w->n) == 0 &&
+        a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY))
+        return;
+    if (g_snap_kept) HeapFree(GetProcessHeap(), 0, g_snap_kept);
+    g_snap_kept = NULL;
+    g_snap_kept_n = 0;
+    if (!base_ipc_json_open(IPC_SOCIAL, &file)) return;
+    if (!base_ipc_json_commit(&file, base_ipc_json_write(&file, w->p, w->n))) return;
+    g_snap_kept = (char *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)w->n + 1);
+    if (!g_snap_kept) return;
+    memcpy(g_snap_kept, w->p, (size_t)w->n);
+    g_snap_kept_n = w->n;
+    lstrcpyA(g_snap_kept_path, path);
+}
+
 static void snapshot_social(BYTE *b)
 {
     char sk[17], cu[0x33 * 3 + 1], u8[0x33 * 3 + 1], hk[17], id[17];
@@ -13,11 +39,9 @@ static void snapshot_social(BYTE *b)
     char hn[64];
     grp_hdr gh;
     grp_mem m;
-    ipc_json file;
     jw w = {0};
     if (!b) return;
     mail_inbox_recheck(b);
-    if (!base_ipc_json_open(IPC_SOCIAL, &file)) return;
     jw_obj(&w, NULL);
     jw_lit(&w, "ffxiService", g_ffxi_service ? "active" : "none");
     jw_uint(&w, "notice", g_notice);
@@ -69,7 +93,6 @@ static void snapshot_social(BYTE *b)
     jw_end(&w);
     jw_obj(&w, "pic");
     jw_str(&w, "token", g_s.pic_token, 100);
-    jw_int(&w, "want", g_s.pic_want);
     jw_lit(&w, "state", g_s.pic_state);
     jw_end(&w);
     profiles_search_mark(b);
@@ -214,7 +237,7 @@ static void snapshot_social(BYTE *b)
         DWORD cs, cl, chi;
         if (IsBadReadPtr(a, sizeof *a) || IsBadReadPtr(bn, sizeof *bn)) break;
         if (!pc_friend_valid(a)) continue;   /* polcore.dll 0x10024d30 */
-        /* the comment's UTF-16 while the names are SJIS (learnt that from a list of one-letter comments :D) */
+        /* the comment's UTF-16 while the names are SJIS */
         memcpy(fw, bn->comment, 0x32 * sizeof(WCHAR));
         WideCharToMultiByte(CP_UTF8, 0, fw, -1, combuf, (int)sizeof combuf - 1, NULL, NULL);
         peers_friend_key(b, a, sk);
@@ -253,7 +276,7 @@ static void snapshot_social(BYTE *b)
     }
     jw_end(&w);
     jw_end(&w);
-    base_ipc_json_commit(&file, !w.fail && base_ipc_json_write(&file, w.p, w.n));
+    if (!w.fail) snapshot_write(&w);
     jw_free(&w);
     if (g_mail_fresh && !held) {
         g_mail_fresh = 0;

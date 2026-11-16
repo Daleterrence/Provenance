@@ -135,6 +135,7 @@ static int my_profile_edit_update_start(BYTE *b, pdb_schema *s, pdb_rec *rec, in
     if (!(k.item.flags & 1)) return FS_E_ITEM;
     pc_pdb_cond_op(b, &k, 1);
     where = pc_pdb_where(b, 1, &k);
+    if (!where) return FS_E_ITEM;
     pc_pdb_rec_set(b, &set, (q->level >= 1 && q->level <= 3) ? q->level : rec->level, 0x40,
                            P8(sl, 0), P8(sl, 8), P8(sl, 16), P8(sl, 24),
                            P8(sl, 32), P8(sl, 40), P8(sl, 48), P8(sl, 56));
@@ -842,8 +843,7 @@ static void my_profile_pic_pump(BYTE *b, int ctl)
         r = pc_pdb_update_check(b, j->job);
         if (db_job_pending(b, j, r, 0)) return;
         j->job = -1;
-        /* the viewer shits itself after 18000 polls and calls the save done anyway regardless (luv me POL innit), for
-           me polcore's own fail at 100s is an error */
+        /* the viewer gives up after 18000 polls and calls the save done anyway, here polcore's own fail at 100s is an error */
         if (r < 0) { my_profile_pic_fail(r, "profile update (svc 0x4d8)"); return; }
         r = my_profile_pic_apply_local(b, g_pic_slot, g_pic_pic, g_pic_hid);
         if (r < 0) DB_LOG("profile picture: server updated, local handle apply failed %d\r\n", r);

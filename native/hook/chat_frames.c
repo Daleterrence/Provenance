@@ -141,9 +141,9 @@ static int chat_frame_sjis_exact(BYTE *b, const WCHAR *w, char *out, int cap)
 }
 static void chat_frame_u8(const WCHAR *w, char *out, int cap)
 {
-    int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, out, cap - 1, NULL, NULL);
-    out[n > 0 ? n - 1 : 0] = 0;
-    out[cap - 1] = 0;
+    int n = json_cut((WCHAR *)w, lstrlenW(w), cap - 1, json_utf8_len, NULL), m;
+    m = n > 0 ? WideCharToMultiByte(CP_UTF8, 0, w, n, out, cap - 1, NULL, NULL) : 0;
+    out[m > 0 ? m : 0] = 0;
 }
 static void chat_frame_copy(WCHAR *out, int cap, const WCHAR *src, int n)
 {

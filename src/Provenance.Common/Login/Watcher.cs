@@ -172,6 +172,11 @@ internal sealed class Watcher
                 return (LaunchOutcome.Cancelled, 0, "");
             }
             var stderr = run.Err.Trim();
+            if (run.ExitCode == PathNotAnsiExit)
+            {
+                Log.Error("Provenance Watcher can't pass the hook's path to Windower: {Error}", stderr);
+                return (LaunchOutcome.Failed, 0, WindowerPathText);
+            }
             if (run.ExitCode != 0 || startedPid is not { } pid)
             {
                 Log.Error("Provenance Watcher exited {Code}: {Error}", run.ExitCode, stderr.Length > 0 ? stderr : "no message");
@@ -193,6 +198,9 @@ internal sealed class Watcher
 
     internal const string PolDidNotStart = "PlayOnline didn't start. Try again in a moment.";
     internal const string WindowerDidNotStart = "PlayOnline didn't start with Windower. Try again in a moment.";
+    // PATH_NOT_ANSI_EXIT in native/watcher.c: the hook's path has characters the system code page can't spell, short name or not
+    internal const int PathNotAnsiExit = 20;
+    internal const string WindowerPathText = "PlayOnline couldn't start with Windower. The path to Provenance's folder has characters this PC's language settings don't support.";
 
     private static void EndStuckLauncher(Process launcher, TimeSpan limit)
     {
