@@ -33,11 +33,16 @@ public static class ThirdPartyHooks
     // network mapping becomes its share's path. Everything that reads or starts the folder has to use what this gives back
     public static string? Usable(string? dir) => dir is null ? null : DriveTargets.Resolve(dir);
 
+    // only the drive letter, nothing that could wait on a share, so a settings page can ask it
+    public static string? DriveProblem(string? dir) =>
+        Usable(dir) is { } real && FolderPins.DriveMissing(real)
+            ? $"Drive {char.ToUpperInvariant(real[0])}: isn't available to Provenance. If it's a SUBST drive, choose the folder by its real path instead."
+            : null;
+
     public static void RequireDrive(string? dir)
     {
         if (Usable(dir) is not { } real) return;
-        if (FolderPins.DriveMissing(real))
-            throw Shown.Mark(new IOException($"Drive {char.ToUpperInvariant(real[0])}: isn't available to Provenance. If it's a SUBST drive, choose the folder by its real path instead."));
+        if (DriveProblem(real) is { } missing) throw Shown.Mark(new IOException(missing));
         if (real.StartsWith(@"\\", StringComparison.Ordinal) && !Directory.Exists(real))
             throw Shown.Mark(new IOException($"Provenance can't open {real}, so it can't use the folder. Check the share is reachable and that this Windows account can open it, then try again."));
     }

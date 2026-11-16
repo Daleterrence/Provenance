@@ -649,7 +649,8 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            if (Social.Chat is { Dirty: true } chat) chat.Save();
+            Social.Chat?.Flush();
+            Social.GroupChat.FlushLog();
         }
         catch (Exception ex) { Log.Warning(ex, "The message log wasn't saved on the way out"); }
     }

@@ -29,6 +29,10 @@ public partial class App : Application
     private PolSession? _pol;
     private MainViewModel? _main;
     private bool _showingError;   // an error inside the card mustn't stack more cards
+    private bool _started;        // the main window's there, before it there's nothing left running to carry on with
+
+    internal const string StartupFailedText =
+        "Provenance ran into a problem while starting up. Press Open logs to see what went wrong, then start Provenance again.";
 
     internal static bool RestartOnExit { get; set; }
 
@@ -137,8 +141,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             Log.Fatal(ex, "Could not set up Provenance's settings and services");
-            StartupErrors.Show("Provenance can't start", "Provenance ran into a problem while starting up. Press Open logs to see what went wrong, " +
-                               "then start Provenance again.", offerLogs: true);
+            StartupErrors.Show("Provenance can't start", StartupFailedText, offerLogs: true);
             return false;
         }
     }
@@ -166,7 +169,13 @@ public partial class App : Application
             _showingError = true;
             try
             {
-                if (KeyUnavailable(args.Exception) is { } keyProblem)
+                if (!_started)
+                {
+                    Log.Fatal("Start-up ended on the exception above");
+                    StartupErrors.Show("Provenance can't start", StartupFailedText, offerLogs: true);
+                    Shutdown(1);
+                }
+                else if (KeyUnavailable(args.Exception) is { } keyProblem)
                     StartupErrors.Show("Can't open your saved login details", keyProblem.Message, offerLogs: true, UnexpectedText);
                 else
                     StartupErrors.Show("Provenance ran into a problem",
@@ -204,6 +213,7 @@ public partial class App : Application
         };
         mainWindow.DataContext = mainVm;
         MainWindow = mainWindow;
+        _started = true;
         OpenMainWindow(mainWindow, mainVm, noAutoLogin);
         timer.Lap("shown");
         if (settings.Current.MinimizeToTray) TrayIcon.Warm();

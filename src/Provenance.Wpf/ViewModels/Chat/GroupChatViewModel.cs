@@ -255,6 +255,8 @@ public sealed partial class GroupChatViewModel : ObservableObject
         return true;
     }
 
+    public void FlushLog() => _log?.Flush();
+
     private void End(string? message)
     {
         _log?.Flush();
