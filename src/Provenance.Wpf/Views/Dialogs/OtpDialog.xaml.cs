@@ -70,8 +70,6 @@ public partial class OtpDialog : AppWindow
 
     private string Code => string.Concat(_boxes.Select(b => b.Text));
 
-    private static bool IsSixDigits(string? s) => s is { Length: 6 } && s.All(char.IsAsciiDigit);
-
     internal static string DigitsFor(string text, int from) =>
         new(text.Where(char.IsAsciiDigit).Take(Math.Max(0, 6 - from)).ToArray());
 
@@ -83,6 +81,8 @@ public partial class OtpDialog : AppWindow
         _boxes[next].Focus();
         if (digits.Length == 0) Prompt.ShowError("There's no code on the clipboard.");
         else Prompt.ClearError();
+        // a whole code pasted in has no typing to get wrong, so it goes straight away
+        if (from == 0 && digits.Length == _boxes.Length) _ = Prompt.SubmitAsync(Code);
     }
 
     private void OnDigitInput(object sender, TextCompositionEventArgs e)
@@ -92,7 +92,6 @@ public partial class OtpDialog : AppWindow
         int i = (int)box.Tag;
         box.Text = e.Text[..1];
         if (i < _boxes.Length - 1) _boxes[i + 1].Focus();
-        else if (IsSixDigits(Code)) _ = Prompt.SubmitAsync(Code);
     }
 
     private void OnDigitKey(object sender, KeyEventArgs e)
@@ -145,7 +144,6 @@ public partial class OtpDialog : AppWindow
 
     private void OnCancel(object sender, RoutedEventArgs e) => DialogResult = false;
 
-    // fills the boxes but doesn't send, so the user sees the code first
     private void OnPaste(object sender, RoutedEventArgs e)
     {
         foreach (var b in _boxes) b.Text = "";
