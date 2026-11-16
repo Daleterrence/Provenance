@@ -88,7 +88,7 @@ public sealed class ChatStore
     {
         Add(new ChatEntry("note:" + ShortId.New(12), peer, true, "", text,
                           DateTimeOffset.UtcNow.ToUnixTimeSeconds(), true, "notice") { PeerKey = peerKey });
-        Changed();
+        Save();
     }
 
     public ChatEntry AddOutgoing(string peer, string peerKey, string text, string token)
@@ -96,7 +96,7 @@ public sealed class ChatStore
         var e = new ChatEntry("out:" + token, peer, true, "", text, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), true, "sending")
                 { PeerKey = peerKey };
         Add(e);
-        Changed();
+        Save();
         return e;
     }
 
@@ -111,7 +111,7 @@ public sealed class ChatStore
             Edit(i, e => e with { State = state });
             changed = true;
         }
-        if (changed) Changed();
+        if (changed) Save();
         return changed;
     }
 
@@ -182,8 +182,9 @@ public sealed class ChatStore
         _entries.RemoveAll(e => keys.Contains(e.Key) && CanDelete(e));
         foreach (var k in keys) if (!_entries.Any(e => e.Key == k)) _keys.Remove(k);
         _version++;
+        Dirty = true;
         SaveDeleted();
-        Changed();
+        Save();
         return gone.Count;
     }
 
@@ -381,16 +382,30 @@ public sealed class ChatStore
         return _stats = s;
     }
 
-    private void Changed()
+    private void Changed() => Dirty = true;
+
+    // a save encrypts the whole log, so a change only marks it dirty and the snapshot or a flush writes it
+    public static readonly TimeSpan SaveRetry = TimeSpan.FromSeconds(30);
+    private DateTime _failedAt;
+    internal int SaveCount { get; private set; }
+
+    // from the last try that failed, so a full disk isn't hit and logged on every snapshot
+    public bool SaveIfDue(DateTime now)
     {
-        Dirty = true;
-        Save();
+        if (!Dirty) return true;
+        if (now - _failedAt < SaveRetry) return false;
+        if (Save()) return true;
+        _failedAt = now;
+        return false;
     }
+
+    public bool Flush() => !Dirty || Save();
 
     public bool Save()
     {
         if (_file is null) return false;
         if (_deletedDirty) SaveDeleted();
+        SaveCount++;
         // history's a convenience, never worth breaking the session over
         if (!_file.Save(_entries)) return false;
         Dirty = false;

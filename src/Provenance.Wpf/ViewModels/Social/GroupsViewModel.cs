@@ -3,6 +3,7 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
+using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
@@ -294,7 +295,12 @@ public sealed partial class GroupsViewModel : ObservableObject
     public void ShowLimit() => _social.Dialogs.Info("Friend groups", LimitText);
 
     public string? AskName() => _social.Dialogs.Ask("Create a group",
-        "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", maxLength: PolLimits.GroupName);
+        "Give the new friend group a name (up to 20 English letters, or 10 Japanese characters).", maxLength: PolLimits.GroupName,
+        validate: NameProblem);
+
+    // the viewer counts the name in Shift-JIS bytes, a Japanese character's two
+    public static string? NameProblem(string name) =>
+        ShiftJis.ByteCount(name.Trim()) > PolLimits.GroupName ? "Group names can be up to 20 English letters, or 10 Japanese characters." : null;
 
     public GroupItem? GroupOf(GroupMemberItem m) => Items.FirstOrDefault(g => g.Members.Any(x => ReferenceEquals(x, m)));
 
@@ -307,9 +313,9 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     public IReadOnlyList<MenuAction> GroupMenu(GroupItem g)
     {
-        // invitations get answered from their own row in the friend list, like the viewer, so two can't get mixed up
+        // invitations get answered from their own row, like the viewer, so two can't get mixed up
         if (g.IsInvited)
-            return [new("Answer it under Group invitations in your friend list", true, _social.ShowFriendsWindow)];
+            return [new("Accept or decline it under Group invitations", false)];
         bool can = _social.CanEdit;
         var menu = new List<MenuAction>();
         if (g.CanChat)
@@ -361,7 +367,7 @@ public sealed partial class GroupsViewModel : ObservableObject
             MenuAction.Separator,
             new("Make group master...", Can(GroupRole.Master), () =>
             {
-                if (_social.ConfirmDestructive("Make group master", $"Make {m.Name} the master of \"{g.Name}\"? You'll become an ordinary member.", "MAKE MASTER"))
+                if (_social.ConfirmDestructive("Make group master", $"Make {m.Name} the master of \"{g.Name}\"?", "MAKE MASTER"))
                     SetMemberRole(g, m, GroupRole.Master);
             }),
             m.Role == GroupRole.SubMaster

@@ -10,27 +10,31 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
     // POL ID + handle, hashed by the hook. Entries without one match by name
     public string PeerKey { get; init; } = "";
 
-    // the message header's seq, which orders lines that share a second. Older logs don't have it
+    // the message header's seq, which orders lines that share a second
     public long Seq { get; init; }
 
     // for a line I sent: the handle slot it went from (-1 unknown) and whether it went to another POL ID (null unknown)
     public int FromSlot { get; init; } = -1;
     public bool? ToOther { get; init; }
 
+    [JsonIgnore]
     public DateTimeOffset When => DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime();
 
+    [JsonIgnore]
     public string TimeText => When.ToString("t", CultureInfo.CurrentCulture);
 
     // never saved, it depends on the lines round it and today's date
     [JsonIgnore]
     public string? DayBreak { get; init; }
 
-    // never the subject (FFXI's is always the same one), unless there's nothing else in the message. Worked out when
-    // it's read, so old logs show the same
+    // never the subject (FFXI's is always the same one), unless there's nothing else in the message
+    [JsonIgnore]
     public string Display => Text.Length > 0 ? Text : Subject;
 
+    [JsonIgnore]
     public bool Failed => Outgoing && State.StartsWith("failed", StringComparison.Ordinal);
 
+    [JsonIgnore]
     public string StateText => State switch
     {
         "sending" or "queued" => "Sending...",

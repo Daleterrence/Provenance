@@ -79,6 +79,8 @@ public static class ChatRoomFiles
         : password.Length > MaxNewPassword || !password.All(char.IsAsciiLetterOrDigit) ? "Room passwords are up to 16 letters and numbers."
         : null;
 
+    public const string ConfirmMismatch = "The password entered in Confirm password does not match.";
+
     public static string? PasswordProblem(string password) =>
         password.Length == 0 ? "Enter password."
         : password.Length > MaxPasswordLength ? "That password is too long."

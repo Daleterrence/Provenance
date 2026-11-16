@@ -11,12 +11,13 @@ public static class SocialSnapshotFiles
 
     public static string StorePathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.Store);
 
-    public static PolSocialSnapshot Parse(string json)
+    public static PolSocialSnapshot? Parse(string json)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
             var friends = Arr(root, "friends", f => new PolFriend(Str(f, "name"),
                 Str(f, "comment"), PolStatusText.Parse(Str(f, "status")), Bool(f, "online"), Bool(f, "pending"),
                 Int(f, "row", -1), Int(f, "pic", -1), Str(f, "key")) { IsMe = Bool(f, "me"), Game = ReadGame(Obj(f, "game")) });
@@ -74,10 +75,7 @@ public static class SocialSnapshotFiles
                 GroupChat = GroupChatSnapshot.Read(Obj(root, "groupChat")),
             };
         }
-        catch
-        {
-            return PolSocialSnapshot.Empty;
-        }
+        catch { return null; }
     }
 
     private static PolMessage ReadMessage(JsonElement m) =>

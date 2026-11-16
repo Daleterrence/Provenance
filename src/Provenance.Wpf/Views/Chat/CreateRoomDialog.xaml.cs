@@ -64,7 +64,7 @@ public partial class CreateRoomDialog : AppWindow
         if (ZoneBox.SelectedItem is null) return "No zone is selected.\nCannot create room.";
         if (ChatRoomFiles.RoomNameProblem(NameBox.Text) is { } name) return name;
         if (on && ChatRoomFiles.NewPasswordProblem(PasswordBox.Password) is { } pw) return pw;
-        if (on && PasswordBox.Password != ConfirmBox.Password) return "The password entered in Room Password(Confirm) does not match.";
+        if (on && PasswordBox.Password != ConfirmBox.Password) return ChatRoomFiles.ConfirmMismatch;
         return null;
     }
 

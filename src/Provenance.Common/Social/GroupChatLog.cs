@@ -77,6 +77,7 @@ public sealed class GroupChatLog
     public bool Delete(string group, IReadOnlyCollection<string> ids)
     {
         if (!_groups.TryGetValue(group, out var l) || l.RemoveAll(e => ids.Contains(e.Id)) == 0) return false;
+        Dirty = true;
         Save();
         return true;
     }
@@ -84,6 +85,7 @@ public sealed class GroupChatLog
     public bool Clear(string group)
     {
         if (!_groups.Remove(group)) return false;
+        Dirty = true;
         Save();
         return true;
     }

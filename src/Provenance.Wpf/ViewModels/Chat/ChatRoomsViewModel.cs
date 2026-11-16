@@ -111,7 +111,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         var again = _dialogs.AskSecret("Confirm password", "Enter password.", ChatRoomFiles.MaxNewPassword);
         if (again is null) return null;
         if (again == pw) return pw;
-        ShowError("The password entered in Room Password(Confirm) does not match.");
+        ShowError(ChatRoomFiles.ConfirmMismatch);
         return null;
     }
 

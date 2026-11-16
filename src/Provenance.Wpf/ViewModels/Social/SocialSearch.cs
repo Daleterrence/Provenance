@@ -147,10 +147,12 @@ public sealed partial class SocialSearch : ObservableObject
         : _social.EditBusy ? "Wait for your last change to finish first."
         : "Log in to send friend requests.";
 
+    private string FriendRequestSubject() => _social.Viewer.Text(0x46c9, "Let's be friends!");
+
     public void AskSendRequest(SearchHitItem hit)
     {
         if (_social.Dialogs.Confirm("Send friend request",
-                $"Send \"Let's be friends!\" to {hit.Name}? They'll show on your list" +
+                $"Send \"{FriendRequestSubject()}\" to {hit.Name}? They'll show on your list" +
                 (hit.IsCharacter ? " under their PlayOnline handle," : "") + " as \"Friend request sent\" until they accept.",
                 "SEND"))
             SendRequest(hit);
@@ -169,7 +171,7 @@ public sealed partial class SocialSearch : ObservableObject
         _login.RequestKey = hit.Key;
         _login.RequestCharacter = hit.IsCharacter;
         Note.Show($"Sending a friend request to {hit.Name}...");
-        if (SocialRequests.SendFriendRequest(pid, token, hit.Index, hit.Key, _social.Viewer.Text(0x46c9, "Let's be friends!"),
+        if (SocialRequests.SendFriendRequest(pid, token, hit.Index, hit.Key, FriendRequestSubject(),
                                              _social.Viewer.Text(0x46e6, "Would you like to be friends?"))) return;
         _login.Request.Forget();
         _social.EditBusy = false;

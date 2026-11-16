@@ -358,14 +358,12 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     // a new login, maybe on another account, so nothing from the last one can show under this one
     public void Start(string profileId, string? storeRoot = null)
     {
+        _login.Chat?.Flush();
         var chat = new ChatStore(profileId, storeRoot);
         _login = new SocialSession { Chat = chat };
         GroupChat.SetLog(new GroupChatLog(profileId, storeRoot));
         chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
         StatusPending = false;
-        _goingOnline = false;
-        OnlineFailed = false;
-        RefreshPop();
         _lookups?.Reset();
         Profile.Reset();
         Search.Reset();
@@ -386,7 +384,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         MessagesUnavailable = false;
         _goingOnline = false;
         OnlineFailed = false;
-        _login.PopError = null;
         RefreshPop();
         RefreshUnseen();
         OnPropertyChanged(nameof(Summary));
@@ -728,7 +725,15 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _login.PopError = null;
         RefreshPop();
         _settings.SaveChange(s => s.PlayOnlineStatus = PolStatusText.Code(want));
-        if (_pol.Pid is { } pid) SocialRequests.SetStatus(pid, want);
+        if (_pol.Pid is not { } pid || SocialRequests.SetStatus(pid, want)) return;
+        _login.RequestedStatus = null;
+        StatusPending = false;
+        PopStatusError(HookFailures.RequestWriteFailed);
+        RefreshPop();
+        var shown = _login.Last.MyStatus == PolStatus.Busy ? PolStatus.Online : _login.Last.MyStatus;
+        _applyingSnapshot = true;
+        try { MyStatusIndex = Array.IndexOf(StatusChoices, shown); }
+        finally { _applyingSnapshot = false; }
     }
 
     private CharacterNames? _characterNames;
@@ -774,8 +779,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (_session.Phase == SessionPhase.InGame) return;
         if (!_windows.CloseIfShown(SecondWindow.ProfileEditor)) _windows.EditProfile(this);
     }
-
-    internal void ShowFriendsWindow() => _windows.ShowFriends(this);
 
     internal void ShowMessagesWindow() => _windows.ShowMessages(this);
 
