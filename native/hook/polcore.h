@@ -17,6 +17,7 @@ enum hook_address {
     AT_SPLASH_PROC,         /* the startup splash's dialog proc, only ever compared */
     AT_SPLASH_CLOSE,        /* destroys the splash on the thread that made it */
     AT_REGION_INDEX,        /* int, 0 JP, 1 US, 2 EU, set from env.dat before a polcore loads */
+    AT_DX_CHECK,            /* the DirectX version gate before the splash, made to say yes without asking */
     AT_SERVICES,            /* the service table, function pointers indexed by byte offset */
     AT_SHA1_INIT,           /* polcore's own SHA-1, the secret hash uses it */
     AT_SHA1_UPDATE,
@@ -24,7 +25,7 @@ enum hook_address {
     AT_SET_SEA_SECRET,      /* also service 0x1778 */
     AT_SESSION_INIT,        /* also service 0xc90 */
     AT_INET_INIT,           /* sets the inet flag, connect fails with -2071 without it */
-    AT_CON_OPEN,            /* POLCON_OPEN, type 3 is the network */
+    AT_CON_OPEN,            /* POLCON_OPEN, CON_TYPE logs in with no bind */
     AT_CON_STEP,            /* POLCON_STEP, the auth state machine, one step */
     AT_CON_IDLE,            /* what has to run between steps, below 0 when the session's gone */
     AT_ENCODE_POLID,        /* scrambles the POL ID into polcore, reversible */
@@ -489,6 +490,8 @@ static int handle_get(BYTE *b, int slot, pol_handle *h)
 #define STAMP_HANDLE_LIST 1
 #define STAMP_CONTENT_IDS 2
 
+/* POLCON_OPEN's first argument. 3 adds a bind request (states 40 and 41) the viewer's own login doesn't make, 1 doesn't */
+#define CON_TYPE        1
 #define AUTH_START      0x12
 #define AUTH_IN         30
 #define AUTH_NO_ERROR   0xfffffbee

@@ -7,17 +7,26 @@ namespace Provenance.Common.Game.Windower;
 
 internal static class WindowerFiles
 {
-    public static Version FileVersion(string file) =>
-        File.Exists(file) ? PeFile.ReadFileVersion(file) ?? new Version(0, 0, 0, 0) : new Version();
+    // with a cache, a file that hasn't changed since it was last read isn't opened
+    public static Version FileVersion(string file, WindowerScanCache? cache = null) =>
+        File.Exists(file) ? (cache is null ? PeFile.ReadFileVersion(file) : cache.Pe(file)?.Version) ?? new Version(0, 0, 0, 0) : new Version();
 
     // Windower compares (and builds its User-Agent from) its assembly version. Only the metadata's read, nothing's loaded
-    public static Version LauncherVersion(string exe)
+    public static Version LauncherVersion(string exe, WindowerScanCache? cache = null)
     {
         if (!File.Exists(exe)) return new Version();
-        try { return AssemblyName.GetAssemblyName(exe).Version ?? FileVersion(exe); }
+        try
+        {
+            Version? Assembly()
+            {
+                try { return AssemblyName.GetAssemblyName(exe).Version; }
+                catch (Exception e) when (e is BadImageFormatException or FileLoadException) { return null; }
+            }
+            return (cache is null ? Assembly() : cache.Assembly(exe, Assembly)) ?? FileVersion(exe, cache);
+        }
         catch (Exception e) when (e is BadImageFormatException or FileLoadException or IOException or UnauthorizedAccessException or ArgumentException)
         {
-            return FileVersion(exe);
+            return FileVersion(exe, cache);
         }
     }
 

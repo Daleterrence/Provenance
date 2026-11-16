@@ -456,14 +456,15 @@ static void login_ffxi_gate_read(BYTE *b)
     base_log("login: " LOG_CONTENT_IDS "%d valid, %d FFXI\r\n", any, ffxi);
 }
 
-/* status, friends, handles, characters, groups. A lean session skips status and groups, but FFXI reads the
-   friend list and never loads it */
+/* status, friends, handles and characters, which polcore's four job slots take at once. A lean session skips the
+   status, but FFXI reads the friend list and never loads it. Groups come later, see login_groups_go */
 static struct pending_load *login_set(struct pending_load *all, int *n)
 {
-    *n = g_lean ? 3 : 5;
+    *n = g_lean ? 3 : 4;
     return g_lean ? all + 1 : all;
 }
-/* the viewer loads my status on its own and starts the lists from its OnSuccess (app.dll 0x10040822, 0x10040650) */
+/* the viewer loads my status on its own and starts the lists from its OnSuccess (app.dll 0x10040822, 0x10040650).
+   A lean session made full does the same, a full login starts the status with the lists */
 static void login_loads(BYTE *b, struct pending_load *run, int n)
 {
     if (run[0].load != pc_status_load) {
@@ -494,6 +495,41 @@ static void login_loads_check(BYTE *b, struct pending_load *run, int n)
         g_bad_password = 1;
         base_log("login: bad password flag set (PlayOnline Viewer message 0x7007)\r\n");
     }
+}
+
+/* a full login's groups load goes out once the hold has written its first snapshot, and the hold's own turns finish it */
+enum { GROUPS_NONE, GROUPS_HELD, GROUPS_RUNNING };
+static int g_groups_state;
+static struct pending_load g_groups_load = { "groups", pc_groups_load, pc_groups_check, 0, 0 };
+static ULONGLONG g_groups_started;
+static void login_groups_go(void)
+{
+    if (g_groups_state != GROUPS_HELD) return;
+    g_groups_load.ticket = -1;
+    g_groups_load.res = 0;
+    g_groups_started = 0;
+    g_groups_state = GROUPS_RUNNING;
+}
+/* a refused account is turned away and any other failure logs out, like the loads before it. The snapshot has friends'
+   messages in it, so a failure takes it away first */
+static void login_groups_pump(BYTE *b, const char *spath)
+{
+    if (g_groups_state != GROUPS_RUNNING) return;
+    if (login_loads_pass(b, &g_groups_load, 1, &g_groups_started)) return;
+    g_groups_state = GROUPS_NONE;
+    if (g_groups_load.res != 1) {
+        base_log(LOG_PROFILE "groups -> %d (FAILED)\r\n", g_groups_load.res);
+        DeleteFileA(spath);
+        message_store_drop();
+    }
+    login_loads_check(b, &g_groups_load, 1);
+    g_snap_dirty = 1;
+}
+static void login_groups_cancel(BYTE *b)
+{
+    if (g_groups_state == GROUPS_RUNNING && g_groups_started && g_groups_load.res == 0)
+        pc_cancel_job(b, g_groups_load.ticket);
+    g_groups_state = GROUPS_NONE;
 }
 #define AUTH_CHAT_LOGIN 23
 #define AUTH_BURST 4
@@ -542,10 +578,12 @@ static void login_auth_run(BYTE *b)
     }
     base_log(LOG_AUTH_OK " (state 30) - session bound\r\n");
 }
-static void log_in(HMODULE pc)
+/* id and pw are cleared on the way */
+#define LOGIN_ID_SIZE 16
+#define LOGIN_PW_SIZE 40
+static void login_session(BYTE *b, char *id, char *pw)
 {
-    BYTE *b = (BYTE *)pc;
-    char id[16] = {0}, pw[40] = {0}, m[24], what[48];
+    char what[48];
     static unsigned char zero[0x400];
     struct { int kind; void *dialup[5]; } conn = { 1, { zero, zero, zero, zero, zero } };
     unsigned char encpw[0x12], hostbuf[0x42];
@@ -559,27 +597,18 @@ static void log_in(HMODULE pc)
     struct pending_load *run;
     unsigned flags;
     int r, rc, nrun, jail;
-    login_prestart_wait();
-    g_lean = base_getenv_set(ENV_LEAN);
-    if (!cred_read_details(ENV_CRED_POL, "POL", id, sizeof id, pw, sizeof pw)) return;
-    /* POL's own password box stops at 16, and polcore's copy of the encoded one has no room for more */
-    if (lstrlenA(pw) > 16) {
-        SecureZeroMemory(pw, sizeof pw);
-        base_log("login: PlayOnline password longer than 16 characters - exiting, the game wasn't started\r\n");
-        base_end_pol(DETAILS_UNREADABLE_EXIT);
-    }
-    base_log(LOG_REAL_AUTH ", PlayOnline ID='%s'\r\n", cred_mask_id(id, m));
+    base_timer_begin();
     pc_session_init(b);
     /* inet init (polcore.dll 0x1000fe20 sets the flag at 0x100a66d4, the connect helper returns -2071 without it).
        One piece of the POL-2071 hunt, which was a fucking nightmare honestly good lord */
     r = pc_inet_init(b);
     base_log("login: inet init -> %d\r\n", r);
-    /* POLCON_OPEN (polcore.dll 0x100448a0) type 3 = network, kind 1 + five zeroed dial-up buffers. It overwrites
-       the password and host, so both go in after it. */
-    r = pc_con_open(b, 3, &conn);
-    base_log("login: POLCON_OPEN(3) -> %d\r\n", r);
+    /* POLCON_OPEN (polcore.dll 0x100448a0) with a kind 1 conn and five zeroed dial-up buffers. It overwrites the
+       password and host, so both go in after it. */
+    r = pc_con_open(b, CON_TYPE, &conn);
+    base_log("login: POLCON_OPEN(%d) -> %d\r\n", CON_TYPE, r);
     pc_encode_password(b, encpw, pw);
-    SecureZeroMemory(pw, sizeof pw);
+    SecureZeroMemory(pw, LOGIN_PW_SIZE);
     /* SET_PASSWORD (polcore.dll 0x10046df0) copies the bytes into polcore, so mine get cleared */
     pc_set_password(b, encpw, 0);
     SecureZeroMemory(encpw, sizeof encpw);
@@ -587,7 +616,7 @@ static void log_in(HMODULE pc)
     pc_set_polcom_host(b, hostbuf);
     /* ENCODE_POLID (polcore.dll 0x10046e70) scrambles the ID into polcore. It's reversible, so never logged. */
     pc_encode_polid(b, id);
-    SecureZeroMemory(id, sizeof id);
+    SecureZeroMemory(id, LOGIN_ID_SIZE);
     seed_account_login(b);
     *pc_auth_error(b) = AUTH_NO_ERROR;
     if (*pc_auth_state(b) == 0)
@@ -610,9 +639,13 @@ static void log_in(HMODULE pc)
         pc_message_notices(b, 1);
     pc_clear_error(b);
     run = login_set(all, &nrun);
-    login_loads(b, run, nrun);
+    login_run_loads(b, run, nrun);
     g_friends_loaded = all[1].res == 1;
     login_loads_check(b, run, nrun);
+    if (!g_lean) {
+        g_groups_state = GROUPS_HELD;
+        base_log("login: groups load waits for the first snapshot\r\n");
+    }
     login_ffxi_gate_read(b);
     rc = login_handle_bootstrap(b);
     if (rc) {
@@ -621,7 +654,23 @@ static void log_in(HMODULE pc)
         base_end_pol((UINT)rc);
     }
     *pc_session_ready(b) = 1;
+    base_timer_end();
     base_log("login: session ready (notices and lists loaded) - game can boot\r\n");
+}
+static void log_in(HMODULE pc)
+{
+    char id[LOGIN_ID_SIZE] = {0}, pw[LOGIN_PW_SIZE] = {0}, m[24];
+    login_prestart_wait();
+    g_lean = base_getenv_set(ENV_LEAN);
+    if (!cred_read_details(ENV_CRED_POL, "POL", id, sizeof id, pw, sizeof pw)) return;
+    /* POL's own password box stops at 16, and polcore's copy of the encoded one has no room for more */
+    if (lstrlenA(pw) > 16) {
+        SecureZeroMemory(pw, sizeof pw);
+        base_log("login: PlayOnline password longer than 16 characters - exiting, the game wasn't started\r\n");
+        base_end_pol(DETAILS_UNREADABLE_EXIT);
+    }
+    base_log(LOG_REAL_AUTH ", PlayOnline ID='%s'\r\n", cred_mask_id(id, m));
+    login_session((BYTE *)pc, id, pw);
 }
 
 static void fake_session(void)
@@ -632,6 +681,7 @@ static void fake_session(void)
     /* before the login, so a crash during it gets a CRASH line too. Not a VEH, that'd catch IsBadReadPtr's
        first-chance probes and recurse through base_log (yes, IsBadReadPtr, I know) */
     SetUnhandledExceptionFilter(crash_filter);
+    polcore_sockets_patch((BYTE *)pc);
     viewer_init((BYTE *)pc);
     log_in(pc);
     if (!g_home_made && viewer_home_set((BYTE *)pc, g_home))

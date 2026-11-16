@@ -24,6 +24,7 @@ public sealed class Prestarter
         public Func<Prestarted, bool>? PrestartAlive { get; init; }
         public Action? WarmDns { get; init; }
         public Func<Prestarted?>? Start { get; init; }
+        public Func<bool, Prestarted?>? StartFor { get; init; }
         public TimeSpan? ReadyLimit { get; init; }
     }
 
@@ -35,7 +36,7 @@ public sealed class Prestarter
     private readonly Func<bool> _gameIsInstalled;
     private readonly Func<Prestarted, bool> _prestartAlive;
     private readonly Action _warmDns;
-    private readonly Func<Prestarted?> _start;
+    private readonly Func<bool, Prestarted?> _start;
     private readonly TimeSpan? _readyLimit;
     private volatile bool _closed;
     private Task<Prestarted?>? _prestart;
@@ -53,7 +54,7 @@ public sealed class Prestarter
         // no recorded start time means no proof, so it's never mine (the user may run their own pol.exe on a reused pid)
         _prestartAlive = seams?.PrestartAlive ?? (pre => pre.Stamp is { } stamp && _pol.Ours(stamp));
         _warmDns = seams?.WarmDns ?? ResolveDns;
-        _start = seams?.Start ?? StartPrestarted;
+        _start = seams?.StartFor ?? (seams?.Start is { } plain ? _ => plain() : StartPrestarted);
         _readyLimit = seams?.ReadyLimit;
     }
 
@@ -63,19 +64,20 @@ public sealed class Prestarter
 
     // pol.exe and polcore take about 2s to start, so one starts with the app and waits for its go file. Not with
     // Windower/Ashita, it'd open them.
-    public void Prestart()
+    public void Prestart(bool loginComing = false)
     {
         _warmDns();
-        StartEarly();
+        StartEarly(loginComing);
     }
 
     // just the pol.exe, for before the window's built. Prestart's name lookup waits for where it's always been made
-    public void StartEarly()
+    // loginComing is for a start made because an automatic login's about to happen, the hook gets going on it sooner
+    public void StartEarly(bool loginComing = false)
     {
         lock (_gate)
         {
             if (!MayPrestart()) return;
-            _prestart = Task.Run(_start);
+            _prestart = Task.Run(() => _start(loginComing));
         }
     }
 
@@ -97,7 +99,7 @@ public sealed class Prestarter
         });
     }
 
-    internal Prestarted? StartPrestarted()
+    internal Prestarted? StartPrestarted(bool loginComing = false)
     {
         try
         {
@@ -115,7 +117,7 @@ public sealed class Prestarter
             _watcher.BeforeStart(viewerDir!, "before the pre-start");
             var began = DateTime.UtcNow;
             var psi = Watcher.LauncherStart(launcherExe, polExe);
-            HookEnvironment.SetPrestart(psi.Environment);
+            HookEnvironment.SetPrestart(psi.Environment, loginComing);
             using var launcher = _watcher.StartProcess(psi);
             if (launcher is null || Watcher.RunLauncher(launcher, Watcher.Limit) is not { } run) return null;
             if (run.ExitCode != 0 || HookLog.StartedPid(run.Out) is not { } pid) return null;

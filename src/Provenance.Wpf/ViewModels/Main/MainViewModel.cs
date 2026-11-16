@@ -423,7 +423,7 @@ public partial class MainViewModel : ObservableObject
 
     // a new install goes Install card, Welcome on the log-in card, the Windower/Ashita card, then the log-in card proper
     public bool ShowInstallCard => !GameInstalled && !IsLaunching && !LoggedIn;
-    public bool ShowSetupCard => Setup.Pending && GameInstalled && Accounts.HasProfile && !IsLaunching && !LoggedIn;
+    public bool ShowSetupCard => SetupCardWaits(Setup.Pending, GameInstalled, Accounts.HasProfile) && !IsLaunching && !LoggedIn;
     public bool ShowLogInCard => GameInstalled && !IsLaunching && !LoggedIn && !ShowSetupCard;
     public bool ShowFriendsCard => LoggedIn && (!IsLaunching || GameUp);
     public bool ShowLaunchCard => IsLaunching && !GameUp;
@@ -477,11 +477,12 @@ public partial class MainViewModel : ObservableObject
     private void RefreshInstallState()
     {
         var region = _settings.DetectedRegion;
-        GameInstalled = region is { } r &&
-                        PolPaths.TryGetInstallFolder(r, GameProduct.Game) is { } f &&
-                        File.Exists(Path.Combine(f, GameProduct.Game.KeyFile));
+        GameInstalled = GameInstalledIn(region);
         Repair.SetRegion(region);
     }
+
+    internal static bool GameInstalledIn(PolRegion? region) =>
+        region is { } r && PolPaths.TryGetInstallFolder(r, GameProduct.Game) is { } f && File.Exists(Path.Combine(f, GameProduct.Game.KeyFile));
 
     [RelayCommand]
     private void LocateInstall()
@@ -513,7 +514,11 @@ public partial class MainViewModel : ObservableObject
         _windows.ShowInstall(vm);
     }
 
-    private bool LogsInAtStart(bool suppressed) => Accounts.AutoLogin && !suppressed && Accounts.HasSavedCredentials;
+    private bool LogsInAtStart(bool suppressed) => LoginAtStart(Accounts.AutoLogin, suppressed, Accounts.HasSavedCredentials);
+
+    internal static bool LoginAtStart(bool autoLogin, bool suppressed, bool hasSavedCredentials) => autoLogin && !suppressed && hasSavedCredentials;
+
+    internal static bool SetupCardWaits(bool pending, bool gameInstalled, bool hasProfile) => pending && gameInstalled && hasProfile;
 
     // the app opens on the small window, with the full one made but never shown
     internal bool StartsLean(bool suppressed) => LogsInAtStart(suppressed) && Accounts.SelectedProfile is not null && !ShowSetupCard && Lean.Wanted;
@@ -522,7 +527,11 @@ public partial class MainViewModel : ObservableObject
     {
         _pol.Records.EndOrphans();
         _pol.Prestarter.Prestart();
-        if (!LogsInAtStart(autoLoginSuppressed)) return;
+        if (!LogsInAtStart(autoLoginSuppressed))
+        {
+            _launch.DropAhead();
+            return;
+        }
         Log.Information("Logging in to {Account} automatically", Accounts.SelectedProfile?.Id);
         LogInCommand.Execute(null);
     }
@@ -664,16 +673,24 @@ public partial class MainViewModel : ObservableObject
     private async Task ConnectSocialAsync()
     {
         Log.Information("Log in pressed");
-        if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount()) return;
+        // an early start from the app opening is only kept when the login that follows is the one it was for
+        if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount()) { _launch.DropAhead(); return; }
         // a new install's Windower/Ashita question comes before its first login, however the login was asked for
-        if (ShowSetupCard) return;
+        if (ShowSetupCard) { _launch.DropAhead(); return; }
         // one account for the whole login, so switching mid-way can't mix two up
-        if (Accounts.SelectedProfile is not { } profile) return;
+        if (Accounts.SelectedProfile is not { } profile) { _launch.DropAhead(); return; }
         // the small window goes up first, so the questions before a login open over it
         bool lean = Lean.Open();
         (PolAccount Pol, SquareEnixAccount SquareEnix, string Otp)? details = null;
         try { details = LogInDetails(profile); }
-        finally { if (details is null) Lean.Finish(); }
+        finally
+        {
+            if (details is null)
+            {
+                Lean.Finish();
+                _launch.DropAhead();
+            }
+        }
         if (details is not var (pol, squareEnix, otp)) return;
         Log.Information("Login details read for account {Profile}", profile.Id);
         if (lean) DropHandleNotice();
@@ -743,6 +760,7 @@ public partial class MainViewModel : ObservableObject
             EndCancellable();
             if (!gameRan) SetPhase(loggedIn ? SessionPhase.LoggedIn : SessionPhase.LoggedOut);
             Lean.Finish();
+            _launch.DropAhead();
         }
         if (startAfter && PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null);
         if (lean && loggedIn) await Lean.FollowUpAsync();
@@ -753,7 +771,8 @@ public partial class MainViewModel : ObservableObject
     {
         if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(profile, requireAll: true)) return null;
         if (!EnsureMemberAgreement() || Accounts.LoadForLogIn(profile) is not var (pol, squareEnix)) return null;
-        var claim = _launch.Claim(profile, () => Accounts.AskOtp(profile, squareEnix));
+        // with the account claimed, so no pol.exe starts for a login another copy's already got. It runs behind the code
+        var claim = _launch.Claim(profile, () => Accounts.AskOtp(profile, squareEnix), () => _launch.StartAhead(profile));
         if (claim.InUse is { } inUse) _dialogs.Error("Account in use", inUse);
         return claim.Otp is { } otp && claim.InUse is null ? (pol, squareEnix, otp) : null;
     }

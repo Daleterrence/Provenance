@@ -3,7 +3,7 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Windower;
 
-internal sealed class WindowerPluginUpdate(WindowerUpdateFolder job, WindowerServers servers, string branch)
+internal sealed class WindowerPluginUpdate(WindowerUpdateFolder job, WindowerServers servers, string branch, WindowerScanCache? cache = null)
 {
     private readonly string _pluginsDir = Path.Combine(job.Root, "plugins");
 
@@ -33,7 +33,7 @@ internal sealed class WindowerPluginUpdate(WindowerUpdateFolder job, WindowerSer
         bool missing = !File.Exists(dll);
         if (!p.Required && missing) return false;
         if (skip && !(p.Required && missing)) return false;
-        return WindowerFiles.FileVersion(dll) != p.Version;
+        return WindowerFiles.FileVersion(dll, cache) != p.Version;
     }
 
     // Zip first and the DLL last, once every file's in, so anything short gets tried again. Like Windower, an update

@@ -18,6 +18,9 @@ public sealed record WindowerLaunchSetup
     public Func<string, string, WindowerUpdater>? NewUpdater { get; init; }
     public TimeSpan UpdateLimit { get; init; } = WindowerLauncher.UpdateLimit;
     internal WindowerBackgroundUpdates Background { get; init; } = WindowerBackgroundUpdates.Shared;
+    // a check made ahead of the launch, for it to pick up
+    internal WindowerChecks? Checks { get; init; }
+    internal WindowerScanCache? ScanCache { get; init; }
     // the answer an earlier start of this login already got, so Windower isn't asked twice
     internal WindowerUpdateAnswer? KnownUpdate { get; init; }
 }

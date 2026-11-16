@@ -115,24 +115,47 @@ public sealed partial class PolSession : IDisposable
 
     private int ConnectCore(LoginRequest request, CancellationToken ct)
     {
-        var progress = request.Progress;
-        EarlyLogin? early = null;
-        int Fail(string text, int code = LoginCodes.LauncherFailed)
-        {
-            early?.Drop();
-            early?.End();
-            progress?.Report(LaunchProgress.Failed(text));
-            return code;
-        }
-        int Cancelled()
-        {
-            progress?.Report(LaunchProgress.Cancelled(early?.End() ?? false));
-            return LoginCodes.Cancelled;
-        }
         _hookLog = null;
         _viewerLanguage = null;
         _played = false;
-        if (request.Pol.Password.Length > HookExitText.MaxPolPasswordLength) return Fail(HookExitText.PolPasswordTooLongText, LoginCodes.DetailsUnreadable);
+        var ahead = TakeAhead(request.ProfileId, request.Options);
+        if (request.Pol.Password.Length > HookExitText.MaxPolPasswordLength)
+        {
+            ahead?.Abandon();
+            request.Progress?.Report(LaunchProgress.Failed(HookExitText.PolPasswordTooLongText));
+            return LoginCodes.DetailsUnreadable;
+        }
+        if (ahead is not null) return FinishAhead(ahead, request, ct);
+        using var stage = new LoginStage();
+        return Prepare(request, ct, stage) ?? Finish(request, ct, stage);
+    }
+
+    // what a login's first half leaves for its second
+    private sealed class LoginStage : IDisposable
+    {
+        internal EarlyLogin? Early;
+        internal IDisposable? ViewerHold;
+        internal string ViewerDir = "", PolExe = "", LauncherExe = "";
+
+        public void Dispose()
+        {
+            ViewerHold?.Dispose();
+            Early?.Drop();
+            Early?.End();
+        }
+    }
+
+    // everything a login does before it needs the account's details. Null carries on, a code has said why already
+    private int? Prepare(LoginRequest request, CancellationToken ct, LoginStage stage, bool ahead = false)
+    {
+        var progress = request.Progress;
+        int Fail(string text, int code = LoginCodes.LauncherFailed)
+        {
+            stage.Early?.Drop();
+            stage.Early?.End();
+            progress?.Report(LaunchProgress.Failed(text));
+            return code;
+        }
         var region = _settings.DetectedRegion;
         if (!PolPaths.Supported(region))
             return Fail(region is null
@@ -141,57 +164,73 @@ public sealed partial class PolSession : IDisposable
         if (polExe is null)
             return Fail("Some of the files needed to start PlayOnline are missing. Check FINAL FANTASY XI is installed, and if it is, reinstall Provenance.");
         if (Credentials.KeyForLogIn() is { } keyProblem) return Fail(keyProblem);
-        var launch = early = new EarlyLogin(this, request, viewerDir!, polExe, launcherExe, ct);
+        var launch = stage.Early = new EarlyLogin(this, request, viewerDir!, polExe, launcherExe, ct, ahead);
+        stage.ViewerDir = viewerDir!;
+        stage.PolExe = polExe;
+        stage.LauncherExe = launcherExe;
+        launch.BeforeLock();
+        // the viewer checks for its own update on every connect and always says yes
         try
         {
-            launch.BeforeLock();
-            // the viewer checks for its own update on every connect and always says yes
-            try
-            {
-                UpdateViewer(viewerDir!, new InlineProgress<PatchProgress>(
-                    p => progress?.Report(LaunchProgress.Updating("Starting", p, 0.02, LaunchProgress.LogInUpdateEnd))),
-                    () => { launch.End(); Prestarter.FreeViewerFiles(); }, ct, launch.OnLocked);
-            }
-            catch (OperationCanceledException)
-            {
-                return Cancelled();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "PlayOnline Viewer update failed");
-                return Fail(ErrorText.Of(ex, "The PlayOnline Viewer couldn't be updated. Try logging in again in a moment."));
-            }
-            if (launch.Failed is { } startFailed) return Fail(startFailed);
-            launch.Release(withLine: launch.Active);
-            // after the viewer's own check and before any pol.exe's used, so it's one connection to SE at a time
-            if (request.Options.Lean && request.BeforePol is { } stillLean && !stillLean())
-                request = request with { Options = request.Options with { Lean = false } };
-            if (ct.IsCancellationRequested) return Cancelled();
-            // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the login ends
-            using var viewerHold = HoldForLogin(viewerDir!, launch, ct, out var buildProblem);
-            if (ct.IsCancellationRequested) return Cancelled();
-            if (buildProblem != null)
-            {
-                Log.Warning("PlayOnline Viewer build not supported: {Problem}", buildProblem);
-                return Fail(buildProblem);
-            }
-            // under the gate so a StopHold still running has dropped its chat entry before the id changes
-            string launchId;
-            lock (_gate) launchId = launch.Active ? launch.LaunchId! : Credentials.NewLaunchId();
-            var keys = new List<string>();
-            try
-            {
-                return ConnectHeld(request, polExe, launcherExe, launchId, keys, launch, ct);
-            }
-            finally
-            {
-                Credentials.CleanupOneShots(keys);   // on every way out, so passwords never linger in Credential Manager
-            }
+            UpdateViewer(viewerDir!, new InlineProgress<PatchProgress>(
+                p => progress?.Report(LaunchProgress.Updating("Starting", p, 0.02, LaunchProgress.LogInUpdateEnd))),
+                () => { launch.End(); Prestarter.FreeViewerFiles(); }, ct, launch.OnLocked);
         }
-        finally
+        catch (OperationCanceledException)
+        {
+            progress?.Report(LaunchProgress.Cancelled(launch.End()));
+            return LoginCodes.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "PlayOnline Viewer update failed");
+            return Fail(ErrorText.Of(ex, "The PlayOnline Viewer couldn't be updated. Try logging in again in a moment."));
+        }
+        if (launch.Failed is { } startFailed) return Fail(startFailed);
+        launch.Release(withLine: launch.Active);
+        return null;
+    }
+
+    // everything that needs the account's details
+    private int Finish(LoginRequest request, CancellationToken ct, LoginStage stage)
+    {
+        var progress = request.Progress;
+        var launch = stage.Early!;
+        int Fail(string text, int code = LoginCodes.LauncherFailed)
         {
             launch.Drop();
             launch.End();
+            progress?.Report(LaunchProgress.Failed(text));
+            return code;
+        }
+        int Cancelled()
+        {
+            progress?.Report(LaunchProgress.Cancelled(launch.End()));
+            return LoginCodes.Cancelled;
+        }
+        // after the viewer's own check and before any pol.exe's used
+        if (request.Options.Lean && request.BeforePol is { } stillLean && !stillLean())
+            request = request with { Options = request.Options with { Lean = false } };
+        if (ct.IsCancellationRequested) return Cancelled();
+        // the hook patches fixed offsets in pol.exe and polcore.dll, so both stay locked until the login ends
+        stage.ViewerHold = HoldForLogin(stage.ViewerDir, launch, ct, out var buildProblem);
+        if (ct.IsCancellationRequested) return Cancelled();
+        if (buildProblem != null)
+        {
+            Log.Warning("PlayOnline Viewer build not supported: {Problem}", buildProblem);
+            return Fail(buildProblem);
+        }
+        // under the gate so a StopHold still running has dropped its chat entry before the id changes
+        string launchId;
+        lock (_gate) launchId = launch.Active ? launch.LaunchId! : Credentials.NewLaunchId();
+        var keys = new List<string>();
+        try
+        {
+            return ConnectHeld(request, stage.PolExe, stage.LauncherExe, launchId, keys, launch, ct);
+        }
+        finally
+        {
+            Credentials.CleanupOneShots(keys);   // on every way out, so passwords never linger in Credential Manager
         }
     }
 
@@ -556,6 +595,7 @@ public sealed partial class PolSession : IDisposable
     public void Dispose()
     {
         Prestarter.Close();
+        CloseAhead();
         Credentials.StopSweeps();
         try
         {

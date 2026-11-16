@@ -135,6 +135,29 @@ static int pol_exe_hook_slot(HMODULE exe, int id, void *hook, const char *what)
     return 1;
 }
 
+/* the DirectX gate makes pol.exe wait about a second on dxdiagn before its splash, and nothing uses the answer. It's made
+   to return true, in one 4 byte write so a call landing on it never sees half of it */
+static int pol_exe_skip_dx_check(BYTE *exe)
+{
+    BYTE *p;
+    DWORD old, now;
+    if (!pc_addr_found(AT_DX_CHECK)) {
+        base_log("pol_hook: DirectX check not found - left alone\r\n");
+        return 0;
+    }
+    p = pc_addr_of(exe, AT_DX_CHECK);
+    if (!VirtualProtect(p, 4, PAGE_EXECUTE_READWRITE, &old)) {
+        base_log("pol_hook: DirectX check protect failed - left alone\r\n");
+        return 0;
+    }
+    now = 0xb0 | 0x01 << 8 | 0xc3 << 16 | (DWORD)p[3] << 24;   /* mov al, 1 / ret, then what was there */
+    *(volatile DWORD *)p = now;
+    FlushInstructionCache(GetCurrentProcess(), p, 4);
+    VirtualProtect(p, 4, old, &old);
+    base_log("pol_hook: DirectX check skipped\r\n");
+    return 1;
+}
+
 /* out needs 64 bytes, and gets ? for anything outside a loaded module */
 static void crash_where(unsigned addr, char *out)
 {

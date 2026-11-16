@@ -13,7 +13,7 @@ public static class PolUpdates
     public static PatchResult UpdateViewer(string viewerDir, PolRegion region, IProgress<PatchProgress>? progress, Action freeFiles,
                                            CancellationToken ct, Action<bool>? afterQueued = null) =>
         UpdateViewer(viewerDir, progress, freeFiles, ct, afterQueued,
-                     beforeChange => GameUpdate.Run(PatchProduct.Viewer(viewerDir, region), region, progress, beforeChange, ct));
+                     beforeChange => GameUpdate.Run(PatchProduct.Viewer(viewerDir, region), region, progress, beforeChange, ct, mirror: MirrorCheck.Shared));
 
     internal static PatchResult UpdateViewer(string viewerDir, IProgress<PatchProgress>? progress, Action freeFiles, CancellationToken ct,
                                              Action<bool>? afterQueued, Func<Action, PatchResult> check) =>
@@ -53,7 +53,7 @@ public static class PolUpdates
                 if (GameRunning())
                     throw Shown.Mark(new InvalidOperationException(
                         "FINAL FANTASY XI needs an update, but the game is running. Close every FINAL FANTASY XI window, then press Play again."));
-            }, ct, known);
+            }, ct, known, mirror: MirrorCheck.Shared);
             Log.Information("{Product} update check: {Result}", GameProduct.Game.Name, r);
             return r;
         });
@@ -65,9 +65,7 @@ public static class PolUpdates
         {
             var product = PatchProduct.Ffxi(ffxiDir, viewerDir, region);
             progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
-            var check = new PolUpdater(product).Check(ct);
-            Log.Information("{Product} version check: up to date {UpToDate}", product.Name, check.UpToDate);
-            return check;
+            return MirrorCheck.Shared.Check(new PolUpdater(product), ct);
         });
 
     // swapped in tests, a stand-in can't be at the installed viewer's path

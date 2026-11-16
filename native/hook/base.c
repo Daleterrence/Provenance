@@ -40,10 +40,32 @@ static void base_saver_restore(void)
     if (g_saver >= 0 && !base_others_running()) SystemParametersInfoW(SPI_SETSCREENSAVEACTIVE, (UINT)g_saver, NULL, 0);
 }
 
+/* Sleep(1) lasts a whole 15.6ms tick in pol.exe unless something asks for a finer one, and the login's pump sleeps
+   that way a lot. winmm's loaded by name, so nothing new is linked */
+static UINT (WINAPI *g_time_begin)(UINT), (WINAPI *g_time_end)(UINT);
+static int g_timer_on;
+static void base_timer_find(void)
+{
+    HMODULE mm;
+    if (g_time_begin && g_time_end) return;
+    mm = GetModuleHandleW(L"winmm.dll");
+    if (!mm) mm = LoadLibraryExW(L"winmm.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!mm) return;
+    g_time_begin = (UINT (WINAPI *)(UINT))GetProcAddress(mm, "timeBeginPeriod");
+    g_time_end = (UINT (WINAPI *)(UINT))GetProcAddress(mm, "timeEndPeriod");
+}
+static void base_timer_end(void)
+{
+    if (!g_timer_on) return;
+    g_timer_on = 0;
+    g_time_end(1);
+}
+
 /* not ExitProcess: Windower 4's Hook.dll fails fast (0xc0000409) in its detach code when the game never started, so
    it's TerminateProcess, the big hammer */
 NORETURN static void base_end_pol(UINT code)
 {
+    base_timer_end();
     base_saver_restore();
     TerminateProcess(GetCurrentProcess(), code);
     ExitProcess(code);   /* only if TerminateProcess somehow comes back */
@@ -110,6 +132,19 @@ static void base_log(const char *fmt, ...)
         CloseHandle(h);
     }
     if (g_lgcs_ready) LeaveCriticalSection(&g_lgcs);
+}
+
+/* kept on for the login only, the hold sleeps in 16ms steps anyway */
+static void base_timer_begin(void)
+{
+    if (g_timer_on) return;
+    base_timer_find();
+    if (!g_time_begin || !g_time_end || g_time_begin(1) != 0) {
+        base_log("login: no 1ms timer, the pump sleeps at the system's pace\r\n");
+        return;
+    }
+    g_timer_on = 1;
+    base_log("login: 1ms timer on until the session's ready\r\n");
 }
 
 /* every Provenance start sets these (and POL_IPC_DIR, which base_ipc_dir checks) */

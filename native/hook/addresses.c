@@ -48,6 +48,12 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
     [AT_REGION_INDEX] = { .name = "region index", .module = IN_EXE, .code = IS_DATA, .required = REQUIRED,
         .usual = 0xf03dc, .sig_at = 0x263dd, .operand = 2,
         .sig = "8b 0d ?? ?? ?? ?? 8b c1 83 e8 00 74 ?? 83 e8 01 74 ??" },
+    /* asks dxdiagn for the DirectX version and says whether it's 8.1 or later. Starts on the push ebp, it's patched over
+       its first bytes */
+    [AT_DX_CHECK] = { .name = "DirectX check", .module = IN_EXE, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x25970, .sig_at = 0x25970, .operand = ADDR_MATCH,
+        .sig = "55 8b ec 51 6a 00 8d 45 fc c7 45 fc 00 00 00 00 6a 00 50 e8 ?? ?? ?? ?? "
+            "83 c4 0c 81 7d fc 00 01 08 00 0f 93 c0 8b e5 5d c3" },
 
     /* the COM getter that hands the service table over. Starts on its EBP frame, the argument's at [ebp+0xc] */
     [AT_SERVICES] = { .name = "service table", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,

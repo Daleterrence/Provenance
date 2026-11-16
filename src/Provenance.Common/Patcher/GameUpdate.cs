@@ -8,13 +8,14 @@ namespace Provenance.Common.Patcher;
 public static class GameUpdate
 {
     internal static PatchResult Run(PatchProduct product, PolRegion installed, IProgress<PatchProgress>? progress,
-                                    Action beforeChange, CancellationToken ct, VersionCheck? known = null, IPatchConnector? connector = null)
+                                    Action beforeChange, CancellationToken ct, VersionCheck? known = null, IPatchConnector? connector = null,
+                                    MirrorCheck? mirror = null)
     {
         var slug = product.Game.Slug;
         var mirrorRegion = MirrorLayout.UpdateFolder(installed, slug);
         var updater = new PolUpdater(product) { KeepLargeAddressAware = true, Connector = connector ?? DirectPatchConnector.Instance };
         if (known is null) progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
-        var check = known ?? updater.Check(ct);
+        var check = known ?? (mirror is null ? updater.Check(ct) : mirror.Check(updater, ct));
         if (check.UpToDate) return PatchResult.UpToDate;
 
         bool changed = false;

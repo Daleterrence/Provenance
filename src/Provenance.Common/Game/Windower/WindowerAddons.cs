@@ -30,6 +30,39 @@ public static partial class WindowerAddons
         return list.OrderBy(a => a.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    // what a launch uses of Scan: the folders that hold their own main Lua, and nothing read out of it. A folder whose
+    // time matches its row isn't looked into
+    internal static IReadOnlyList<WindowerAddonInfo> ScanForLaunch(string windowerDir, WindowerScanCache cache)
+    {
+        var addonsDir = Path.Combine(windowerDir, "addons");
+        if (!Directory.Exists(addonsDir))
+        {
+            cache.KeepAddons(new HashSet<string>());
+            return [];
+        }
+        List<DirectoryInfo> folders;
+        try { folders = new DirectoryInfo(addonsDir).EnumerateDirectories().ToList(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return []; }
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var list = new List<WindowerAddonInfo>();
+        foreach (var di in folders)
+        {
+            var name = di.Name;
+            if (name.Length == 0 || name.Equals("libs", StringComparison.OrdinalIgnoreCase)) continue;
+            bool main;
+            try
+            {
+                main = cache.AddonMain(di, () => di.EnumerateFiles("*.lua").Any(f => f.Name.Equals(name + ".lua", StringComparison.OrdinalIgnoreCase)));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
+            seen.Add(name);
+            var folder = Path.Combine(addonsDir, name);
+            if (main) list.Add(new WindowerAddonInfo(new AddonListing(name, name, null, null, null, folder), Path.Combine(folder, name + ".lua")));
+        }
+        cache.KeepAddons(seen);
+        return list.OrderBy(a => a.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     internal sealed record Header(string? Name, string? Author, string? Version);
 
     // regexes, not a Lua parser. First assignment not behind a -- wins

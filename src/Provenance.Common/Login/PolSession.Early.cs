@@ -20,7 +20,8 @@ public sealed partial class PolSession
 
     // Windower and Ashita get their pol.exe going inside the viewer update's lock and it's handed its login once
     // everything else is ready
-    private sealed class EarlyLogin(PolSession owner, LoginRequest request, string viewerDir, string polExe, string launcherExe, CancellationToken ct)
+    private sealed class EarlyLogin(PolSession owner, LoginRequest request, string viewerDir, string polExe, string launcherExe, CancellationToken ct,
+                                    bool ahead = false)
     {
         private readonly HeldProgress _voice = new(request.Progress);
         private readonly WindowerUpdateAnswers _answers = new();
@@ -53,7 +54,7 @@ public sealed partial class PolSession
         {
             owner.Windower.Forget();
             var psi = Watcher.LauncherStart(launcherExe, polExe);
-            HookEnvironment.SetPrestart(psi.Environment);
+            HookEnvironment.SetPrestart(psi.Environment, loginComing: true);
             var options = request.Options;
             var launchId = LaunchId!;
             bool ashita = owner.Platform == ThirdPartyHook.Ashita;
@@ -61,7 +62,9 @@ public sealed partial class PolSession
                 ? (progress, token, hookStarted) => AshitaLauncher.StartViaAshita(owner._settings, owner._watcher, psi, polExe, launchId,
                                                                                   options.ThirdPartyHookProfile, progress, token, hookStarted)
                 : (progress, token, _) => owner.Windower.Start(psi, polExe, launchId, options, progress, token, _answers));
-            _current = new EarlyStart(chain, _voice, owner._pol, stamp => owner.Records.Save(stamp, request.ProfileId), owner.Records.Clear,
+            // an early start before the details has no account to name yet, and the login's claim has to stay till it has
+            Action<ProcessStamp> record = ahead ? owner.Records.Park : stamp => owner.Records.Save(stamp, request.ProfileId);
+            _current = new EarlyStart(chain, _voice, owner._pol, record, owner.Records.Clear,
                                       owner.EarlyEndGrace, ashita ? Watcher.PolDidNotStart : Watcher.WindowerDidNotStart, ct);
             _current.Start();
         }

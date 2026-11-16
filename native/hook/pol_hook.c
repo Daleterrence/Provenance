@@ -12,6 +12,8 @@
 #include "base.c"
 #include "addresses.c"
 #include "pol_exe.c"
+#include "redirector.c"
+#include "polcore_sockets.c"
 #include "credentials.c"
 #include "viewer_setup.c"
 #include "requests.c"
@@ -125,6 +127,7 @@ static void pol_hook_install(void)
         if (g_pOpenMutexW) pol_exe_hook_slot(exe, AT_OPEN_MUTEX_SLOT, (void *)pol_exe_my_OpenMutexW, "OpenMutexW");
     }
     pol_exe_hook_slot(exe, AT_CREATE_DIALOG_SLOT, (void *)pol_exe_my_CreateDialogParamW, "CreateDialogParamW");
+    pol_exe_skip_dx_check((BYTE *)exe);
     /* an E9 jmp over the menu session (pol.exe 0x00413710 in 1.18.15e) */
     p = pc_addr_of((BYTE *)exe, AT_MENU_SESSION);
     /* the game's end is only ever caught at the content launcher's return, so no detour without that hook */
@@ -170,7 +173,10 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, void *r)
     idn = GetEnvironmentVariableA(ENV_LAUNCH_ID, id, sizeof id);
     if (idn > 0 && !pol_hook_launch_id_ok(id, idn)) {
         base_log("pol_hook: Windower/Ashita launch id refused\r\n");
-    } else if (idn > 0) {
+        return TRUE;
+    }
+    redirector_start();
+    if (idn > 0) {
         base_ipc_dir(path);
         wsprintfA(path + lstrlenA(path), IPC_PID_FILE, id);
         f = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);

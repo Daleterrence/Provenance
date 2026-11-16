@@ -45,6 +45,11 @@ public sealed class WindowerUpdater
     // a Windower.exe that took the lock over from one that died keeps it till it exits, so with one open the wait's short
     public Func<bool> WindowerRunning { get; init; } = () => IsRunning("Windower");
 
+    // a test's own, otherwise the app's for this folder
+    internal WindowerScanCache? ScanCache { get; init; }
+
+    private WindowerScanCache Cache => ScanCache ?? WindowerScanCaches.For(Folder);
+
     private string TempDir => WindowerUpdateFolder.TempDirOf(Folder);
     private string HookPath => Path.Combine(Folder, "Hook.dll");
     private string LauncherPath => Path.Combine(Folder, "Windower.exe");
@@ -66,12 +71,24 @@ public sealed class WindowerUpdater
         return await run.FinishAsync();
     }
 
-    // up to and including the core files, with the update lock and the folder's pins still held for FinishAsync
-    internal async Task<WindowerUpdateRun> BeginAsync(CancellationToken ct = default)
+    // the front half on its own, as a check made ahead of a launch: nothing stays held once it's done
+    internal async Task<WindowerChecked?> CheckAsync(CancellationToken ct = default)
+    {
+        using var run = await BeginAsync(ct);
+        return run.Checked();
+    }
+
+    // what a check's answer depends on, so a later launch can see whether it still stands
+    internal WindowerStamps Stamps() =>
+        new(WindowerStamps.Of(HookPath), WindowerStamps.Of(LauncherPath), WindowerStamps.Of(WindowerManifest.CachePath(Folder)), WindowerStamps.Of(SwitchFlag));
+
+    // up to and including the core files, with the update lock and the folder's pins still held for FinishAsync. An
+    // earlier check that still stands, looked at once the lock and pins are held, stands in for the requests
+    internal async Task<WindowerUpdateRun> BeginAsync(CancellationToken ct = default, WindowerChecked? earlier = null)
     {
         var result = new WindowerUpdateResult(Branch);
-        result.HookBefore = result.HookAfter = WindowerFiles.FileVersion(HookPath);
-        result.LauncherBefore = result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath);
+        result.HookBefore = result.HookAfter = WindowerFiles.FileVersion(HookPath, Cache);
+        result.LauncherBefore = result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath, Cache);
         var (hold, timedOut) = await TakeMutexAsync(result.Errors, ct);
         if (hold is null)
         {
@@ -96,9 +113,20 @@ public sealed class WindowerUpdater
             }
 
             var manifest = WindowerManifest.Empty;
-            await job.Step(async () => manifest = await ManifestAsync(job, skip, result));
-            await job.Step(() => CoreAsync(job, manifest, skip, result));
-            return new WindowerUpdateRun(this, result, hold, job, manifest, skip);
+            bool again = earlier is { Manifest: not null } && !skip && earlier.Stamps.Matches(Stamps());
+            if (again)
+            {
+                manifest = earlier!.Manifest!;
+                result.HasManifest = true;
+            }
+            else
+            {
+                await job.Step(async () => manifest = await ManifestAsync(job, skip, result));
+                await job.Step(() => CoreAsync(job, manifest, skip, result));
+                Cache.DropIfChanged(result);
+            }
+            Cache.Save();
+            return new WindowerUpdateRun(this, result, hold, job, manifest, skip) { FromEarlierCheck = again, CoreCompared = !again && !skip };
         }
         catch
         {
@@ -109,15 +137,16 @@ public sealed class WindowerUpdater
     }
 
     internal bool PluginsPending(WindowerUpdateFolder job, WindowerManifest manifest, bool skip) =>
-        new WindowerPluginUpdate(job, Servers, Branch).AnyToFetch(manifest, skip);
+        new WindowerPluginUpdate(job, Servers, Branch, Cache).AnyToFetch(manifest, skip);
 
     internal async Task RestAsync(WindowerUpdateFolder job, WindowerManifest manifest, bool skip, WindowerUpdateResult result)
     {
         await job.Step(() => ResAsync(job, result));
-        await job.Step(() => new WindowerPluginUpdate(job, Servers, Branch).UpdateAllAsync(manifest, skip, result));
+        await job.Step(() => new WindowerPluginUpdate(job, Servers, Branch, Cache).UpdateAllAsync(manifest, skip, result));
         await job.Step(() => new WindowerAddonUpdate(job, Servers, Branch).UpdateAsync(skip, result));
         if (!skip) job.Cleanup();
         result.UnreachableHosts = job.Http.OfflineHosts.ToList();
+        Cache.DropIfChanged(result);
     }
 
     // the DLL with its file's date (so normally the 1601 one), then the zip only if the DLL came down
@@ -132,10 +161,11 @@ public sealed class WindowerUpdater
         var plugin = WindowerManifest.LoadCached(Folder)?.Find(name);
         if (plugin is null || !WindowerFiles.IsPlainName(plugin.Name))
             return new(name, false, written, [$"{name} isn't in Windower's plugin list."]);
-        var plugins = new WindowerPluginUpdate(job, Servers, Branch);
+        var plugins = new WindowerPluginUpdate(job, Servers, Branch, Cache);
         var dll = plugins.DllPath(plugin.Name);
         var outcome = WindowerFetchOutcome.Unreachable;
         await job.Step(async () => outcome = await plugins.FetchAsync(plugin, dll, install: true, written));
+        if (written.Count > 0) Cache.Drop();
         bool installed = outcome == WindowerFetchOutcome.Downloaded || outcome == WindowerFetchOutcome.NotModified && File.Exists(dll);
         return new(plugin.Name, installed, written, errors);
     }
@@ -161,6 +191,7 @@ public sealed class WindowerUpdater
                 if (addons.WriteFile(zip, f)) written.Add(f.Path);
             return Task.CompletedTask;
         });
+        if (written.Count > 0) Cache.Drop();
         return new(addon.Name, WindowerAddonTree.IsInstalled(addon, Folder), written, errors);
     }
 
@@ -186,13 +217,13 @@ public sealed class WindowerUpdater
     public WindowerBranchInfo BranchInfo()
     {
         var m = WindowerManifest.LoadCached(Folder);
-        return new(Branch, WindowerFiles.FileVersion(HookPath), WindowerFiles.LauncherVersion(LauncherPath), m?.HookVersion, m?.LauncherVersion,
+        return new(Branch, WindowerFiles.FileVersion(HookPath, Cache), WindowerFiles.LauncherVersion(LauncherPath, Cache), m?.HookVersion, m?.LauncherVersion,
                    File.Exists(SwitchFlag));
     }
 
     private WindowerHttp NewHttp()
     {
-        var v = WindowerFiles.LauncherVersion(LauncherPath);
+        var v = WindowerFiles.LauncherVersion(LauncherPath, Cache);
         return new WindowerHttp { UserAgent = WindowerHttp.UserAgentFor(v) };
     }
 
@@ -277,13 +308,17 @@ public sealed class WindowerUpdater
         if (!skip && result.LauncherBefore != manifest.LauncherVersion &&
             await ReplaceAsync(job, $"{Branch}/Windower.exe", LauncherPath, "Windower's own launcher"))
         {
-            result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath);
+            Cache.Drop();
+            result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath, Cache);
             job.Http.UserAgent = WindowerHttp.UserAgentFor(result.LauncherAfter);
         }
         // a missing Hook.dll can't be loaded by anything, so it comes down even while games run
-        if ((!skip || !File.Exists(HookPath)) && WindowerFiles.FileVersion(HookPath) != manifest.HookVersion &&
+        if ((!skip || !File.Exists(HookPath)) && WindowerFiles.FileVersion(HookPath, Cache) != manifest.HookVersion &&
             await ReplaceAsync(job, $"{Branch}/Hook.dll", HookPath, "Hook.dll"))
-            result.HookAfter = WindowerFiles.FileVersion(HookPath);
+        {
+            Cache.Drop();
+            result.HookAfter = WindowerFiles.FileVersion(HookPath, Cache);
+        }
     }
 
     private async Task<bool> ReplaceAsync(WindowerUpdateFolder job, string url, string target, string what)

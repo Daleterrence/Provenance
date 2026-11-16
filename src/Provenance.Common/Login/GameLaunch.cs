@@ -60,10 +60,11 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
     internal Func<Action<string>?, CancellationToken, Task<string?>>? FinishWindowerUpdateSeam { get; init; }
 
     // claimed before the code's asked, so no other copy logs this account in meanwhile
-    public ClaimResult Claim(Account p, Func<string?> askOtp)
+    public ClaimResult Claim(Account p, Func<string?> askOtp, Action? claimed = null)
     {
         if (!pol.Records.TryClaimAccount(p.Id, out var problem))
             return new(null, problem ?? "This account is in use in another copy of Provenance.", false);
+        claimed?.Invoke();
         if (!p.UseOtp) return new("", null, false);
         if (askOtp() is not { } otp)
         {
@@ -72,6 +73,14 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         }
         return new(otp, null, false);
     }
+
+    // the login's first half, started before its questions are asked. With a stood-in login there's nothing to pick it up
+    public void StartAhead(Account p)
+    {
+        if (LogInSeam is null) pol.StartAhead(p.Id, new SessionOptions(false, null));
+    }
+
+    public void DropAhead() => pol.DropAhead();
 
     public async Task<LogInResult> LogInAsync(LaunchLogin l, CancellationToken ct)
     {

@@ -30,6 +30,7 @@ public static class HookContract
         public const string Screensaver = "POL_SCREENSAVER";
         public const string Prestart = "POL_PRESTART";
         public const string Lean = "POL_LEAN";
+        public const string LoginComing = "POL_LOGIN_COMING";
         public const string CredPol = "POL_CRED_POL";
         public const string CredSea = "POL_CRED_SEA";
         public const string CredOtp = "POL_CRED_OTP";

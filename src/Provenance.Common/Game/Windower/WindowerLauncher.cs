@@ -80,6 +80,7 @@ public sealed class WindowerLauncher : IDisposable
             FfxiDir = PolPaths.TryGetInstallFolder(region, GameProduct.Game),
             Lists = lists,
             SharedExtras = shared,
+            Checks = WindowerChecks.Shared,
         };
     }
 
@@ -99,7 +100,30 @@ public sealed class WindowerLauncher : IDisposable
         }
     }
 
-    public static void StopBackgroundUpdates(TimeSpan wait) => WindowerBackgroundUpdates.Shared.Stop(wait);
+    public static void StopBackgroundUpdates(TimeSpan wait)
+    {
+        WindowerChecks.Shared.Stop(wait);
+        WindowerBackgroundUpdates.Shared.Stop(wait);
+    }
+
+    // starts Windower's update check while the app opens so a login finds it done. Never throws, and does nothing unless
+    // the platform's Windower with a folder that can be used
+    public static void CheckAtOpen(ISettingsService settings)
+    {
+        try
+        {
+            var s = settings.Current;
+            if (s.ThirdPartyHookPlatform != ThirdPartyHook.Windower) return;
+            var path = s.WindowerPath;
+            var begun = WindowerChecks.Shared.Starting();
+            _ = Task.Run(() =>
+            {
+                try { WindowerChecks.Shared.StartFor(path); }
+                finally { begun(); }
+            });
+        }
+        catch (Exception e) { Log.Warning(e, "Windower's update check couldn't be started"); }
+    }
 
     internal static Dictionary<string, WindowerAddonList>? Snapshot(IReadOnlyDictionary<string, WindowerAddonList>? lists) =>
         lists?.Where(kv => kv.Value is not null).ToDictionary(kv => kv.Key, kv => kv.Value.Copy(), StringComparer.Ordinal);
@@ -219,15 +243,26 @@ public sealed class WindowerLauncher : IDisposable
         WindowerUpdateRun? run = null;
         try
         {
-            run = updater.BeginAsync(limit.Token).GetAwaiter().GetResult();
-            split = run.CanSplit && !ct.IsCancellationRequested;
-            if (split)
+            var earlier = _setup.Checks?.Take(_setup.WindowerDir, updater.Branch, limit.Token);
+            if (earlier?.Failed is { } before)
             {
-                Update = run.Result;
-                _rest = run;
-                _restLimit = TimeSpan.FromTicks(Math.Max((_setup.UpdateLimit - clock.Elapsed).Ticks, TimeSpan.FromSeconds(1).Ticks));
+                Log.Information("Windower update ({Branch}): the check from earlier didn't go through, so it wasn't asked again", before.Branch);
+                Update = before;
             }
-            else Update = run.FinishAsync().GetAwaiter().GetResult();
+            else
+            {
+                run = updater.BeginAsync(limit.Token, earlier).GetAwaiter().GetResult();
+                if (run.FromEarlierCheck) Log.Information("Windower update ({Branch}): the check from earlier still stands, so Windower wasn't asked again", updater.Branch);
+                else _setup.Checks?.Record(_setup.WindowerDir, updater.Branch, run.Checked());
+                split = run.CanSplit && !ct.IsCancellationRequested;
+                if (split)
+                {
+                    Update = run.Result;
+                    _rest = run;
+                    _restLimit = TimeSpan.FromTicks(Math.Max((_setup.UpdateLimit - clock.Elapsed).Ticks, TimeSpan.FromSeconds(1).Ticks));
+                }
+                else Update = run.FinishAsync().GetAwaiter().GetResult();
+            }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -297,7 +332,9 @@ public sealed class WindowerLauncher : IDisposable
         var dir = _setup.WindowerDir;
         var ffxi = _setup.FfxiDir
                    ?? throw Shown.Mark(new DirectoryNotFoundException("Provenance couldn't find the FINAL FANTASY XI folder, so it can't start the game through Windower."));
-        Lists = WindowerAddonList.ForLaunch(dir, Profile, WindowerAddonList.Effective(file, _setup.Lists, Profile.Name, _setup.SharedExtras));
+        var scan = WindowerLaunchScan.Run(dir, Profile, WindowerAddonList.Effective(file, _setup.Lists, Profile.Name, _setup.SharedExtras),
+                                          _setup.ScanCache ?? WindowerScanCaches.For(dir));
+        Lists = scan.Lists;
         var sent = Profile.Clone();
         // fast login swaps in Windower's own POL proxy and the other two patch pol.exe, all of which fight the hook.
         // settings.xml keeps the user's own values for Windower.exe
@@ -312,8 +349,8 @@ public sealed class WindowerLauncher : IDisposable
             FfxiPath = ffxi,
             WindowerPath = dir,
             Branch = file.Branch,
-            LauncherVersion = WindowerHookBlock.LauncherVersion(dir),
-            HookVersion = WindowerHookBlock.HookVersion(dir),
+            LauncherVersion = scan.LauncherVersion,
+            HookVersion = scan.HookVersion,
             Width = Profile.Width,
             Height = Profile.Height,
             RequiredPlugins = Lists.RequiredPlugins,

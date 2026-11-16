@@ -10,6 +10,7 @@ using Provenance.Common.Hook;
 using Provenance.Common.Logging;
 using Provenance.Common.Login;
 using Provenance.Common.Otp;
+using Provenance.Common.Patcher;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
 using Provenance.Wpf.Controls.Behaviours;
@@ -76,7 +77,12 @@ public partial class App : Application
 
         WarmKeys();
         CatchUnhandled();
-        StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, pol.Prestarter.StartEarly);
+        // both done by the time anyone can press LOG IN
+        MirrorCheck.StartAtOpen(settings);
+        WindowerLauncher.CheckAtOpen(settings);
+        var autoLogin = AutoLoginAtOpen.Coming(settings, credentials, shiftAtStart || ShiftDown() || args.NoAutoLogin);
+        StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, () => pol.Prestarter.StartEarly(loginComing: autoLogin is not null));
+        AutoLoginAtOpen.StartAhead(pol, autoLogin);
 
         bool noAutoLogin = shiftAtStart || ShiftDown() || args.NoAutoLogin;
         var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin);

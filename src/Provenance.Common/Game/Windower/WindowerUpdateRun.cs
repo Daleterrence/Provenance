@@ -25,6 +25,24 @@ internal sealed class WindowerUpdateRun : IDisposable
 
     public bool Open => _job is not null;
 
+    // the requests were left out because a check from earlier still stood
+    public bool FromEarlierCheck { get; init; }
+
+    // the manifest was asked for and the core files compared with it in this run, with nothing held back by a running game
+    public bool CoreCompared { get; init; }
+
+    // what a later launch can go on instead of asking again. Null when there's nothing worth keeping (a run that was
+    // skipped, or never got the lock, asked nothing). A failure's kept just long enough for the next login not to repeat it
+    public WindowerChecked? Checked()
+    {
+        var r = Result;
+        if (r.Skipped || r.LockTimedOut) return null;
+        if (r.Errors.Count > 0) return new WindowerChecked(null, default, r);
+        // kept only when both core files really are the manifest's version now, or a login would take it as read
+        bool current = r.HookAfter == _manifest.HookVersion && r.LauncherAfter == _manifest.LauncherVersion;
+        return CoreCompared && current && _job is not null && _updater is not null && r.HasManifest ? new WindowerChecked(_manifest, _updater.Stamps(), null) : null;
+    }
+
     public bool PluginsPending => _job is { } job && _updater!.PluginsPending(job, _manifest, _skip);
 
     // a clean front half with no plugin to fetch, so what's left only touches res and the addons

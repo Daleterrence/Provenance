@@ -12,9 +12,15 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Patcher;
 
-public sealed record VersionCheck(string Local, string Server, IPEndPoint Endpoint)
+// Endpoint is null when the mirror answered instead of SE: that only ever says the installed version is current, so
+// there's no server to download from
+public sealed record VersionCheck(string Local, string Server, IPEndPoint? Endpoint)
 {
     public bool UpToDate => PolVersion.UpToDate(Local, Server);
+
+    public bool FromMirror => Endpoint is null;
+
+    internal static VersionCheck Mirror(string local) => new(local, local, null);
 }
 
 public enum PatchResult { UpToDate, Updated, UpdatedQueued }
@@ -75,8 +81,9 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             check = Check(ct);
         }
         else product.CheckStream();
-        var (local, server, ep) = check;
+        var (local, server, _) = check;
         if (check.UpToDate) return PatchResult.UpToDate;
+        var ep = check.Endpoint ?? throw new InvalidOperationException($"The {product.Name} version check didn't come from PlayOnline, so there's nowhere to download from.");
         beforeChange?.Invoke();
 
         // like POL, the manifest gets its own connection (mode 200), the downloads theirs (300) and apply (400) none

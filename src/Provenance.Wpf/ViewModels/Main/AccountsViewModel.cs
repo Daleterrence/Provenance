@@ -46,7 +46,7 @@ public partial class AccountsViewModel : ObservableObject
         if (changed) PersistProfileList();   // no settings write on an ordinary start
         avatars.Prewarm(Profiles.Select(p => p.ProfilePictureId));
 
-        var active = Profiles.FirstOrDefault(p => p.Id == _settings.Current.ActiveProfileId) ?? Profiles.FirstOrDefault();
+        var active = ProfileAtStart(_settings.Current);
         _selectedProfile = active;
         _autoLogin = _settings.Current.AutoLogin;
         if (active != null) LoadCredentialsForProfile(active);
@@ -55,6 +55,12 @@ public partial class AccountsViewModel : ObservableObject
     }
 
     public ObservableCollection<Account> Profiles { get; }
+
+    // the account the window opens on, and the one an automatic login at open is for
+    internal static Account? ProfileAtStart(LauncherSettings s) =>
+        s.Profiles.FirstOrDefault(p => p.Id == s.ActiveProfileId) ?? s.Profiles.FirstOrDefault();
+
+    internal static bool SavedDetails(ICredentialService credentials, Account profile) => credentials.HasUsableDetails(profile.Id);
 
     private ObservableCollection<AccountRow>? _rows;
 
@@ -161,7 +167,7 @@ public partial class AccountsViewModel : ObservableObject
     private void LoadCredentialsForProfile(Account profile)
     {
         UseOtp = profile.UseOtp;
-        HasSavedCredentials = _credentials.HasUsableDetails(profile.Id);
+        HasSavedCredentials = SavedDetails(_credentials, profile);
     }
 
     // with slots, the settings lock is held from reading another copy's numbers to saving, so two can't give out one

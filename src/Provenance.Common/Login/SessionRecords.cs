@@ -25,13 +25,16 @@ public sealed class SessionRecords
 
     internal void Save(ProcessStamp stamp, string? profileId) => Write(stamp, profileId, played: false);
 
+    // a pol.exe waiting before any account's known, so its record names none and the claim stays where it is
+    internal void Park(ProcessStamp stamp) => Write(stamp, null, played: false, releaseClaim: false);
+
     // the record stays as the game's, so no copy logs this account in on top of it
     internal void MarkPlayed()
     {
         if (_stamp is { } stamp) Write(stamp, Profile, played: true);
     }
 
-    private void Write(ProcessStamp stamp, string? profileId, bool played)
+    private void Write(ProcessStamp stamp, string? profileId, bool played, bool releaseClaim = true)
     {
         try
         {
@@ -41,7 +44,7 @@ public sealed class SessionRecords
             var path = Path.Combine(SessionStore.SessionDir, $"{stamp.Pid}.json");
             SessionStore.WriteRecord(path, stamp, profileId, played);
             _sessionFile = path;
-            ReleaseClaim();
+            if (releaseClaim) ReleaseClaim();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

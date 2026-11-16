@@ -37,16 +37,20 @@ public static class HookExitText
         HookExit.UnsafeStart => (LoginCodes.LauncherFailed, UnsafeStartText),
         HookExit.GameStartFailed => (LoginCodes.LauncherFailed, GameStartFailedText),
         HookExit.Refused => (LoginCodes.AuthFailed, RefusedText),
-        HookExit.TurnedAway => (LoginCodes.AccountBlocked, "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why."),
+        HookExit.TurnedAway => (LoginCodes.AccountBlocked, TurnedAwayText),
         HookExit.ListLoadFailed => (LoginCodes.Unfinished, LoadFailedText("")),
         _ => (LoginCodes.Unfinished, ClosedBeforeLogInText),
     };
+
+    private const string TurnedAwayText = "PlayOnline turned this account away. Log in with the PlayOnline Viewer to see why.";
 
     internal static string SessionClosedText(int? exitCode) => (HookExit?)exitCode switch
     {
         HookExit.BadIpcFolder => PrivateFolderText,
         HookExit.UnsafeStart => UnsafeStartText,
         HookExit.GameStartFailed => GameStartFailedText,
+        HookExit.TurnedAway => TurnedAwayText,
+        HookExit.ListLoadFailed => LoadFailedText(""),
         _ => "Your PlayOnline session has closed. Log in again to see your friends and messages.",
     };
 

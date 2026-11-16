@@ -30,10 +30,11 @@ internal static class HookEnvironment
     }
 
     // POL_IPC_DIR, POL_CRED_KEYFILE and POL_OWNER have to go in here, the go file never carries them
-    internal static void SetPrestart(IDictionary<string, string?> env)
+    internal static void SetPrestart(IDictionary<string, string?> env, bool loginComing = false)
     {
         SetBase(env);
         env[HookContract.Env.Prestart] = "1";
+        if (loginComing) env[HookContract.Env.LoginComing] = "1";
     }
 
     internal static void SetLogin(IDictionary<string, string?> env, Targets targets, int status, SessionOptions options)

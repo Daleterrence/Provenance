@@ -3,8 +3,8 @@ static int hold_db_free(void)
     return GetTickCount64() - g_s.db_last >= 3000 && !(requests_busy() & JB_DB);
 }
 
-/* the server's handle, else the first in use (app.dll 0x10028a76). Provenance's last one (POL_HANDLE) goes before
-   the first in use, since so far the server's never given my sessions one back */
+/* the server's handle (the status load hands back the one it remembers), else the first in use (app.dll 0x10028a76).
+   Provenance's last one (POL_HANDLE) goes before the first in use, for a lean session that has no status load */
 static int hold_login_handle(BYTE *b, const char **why)
 {
     pol_handle rec;
@@ -212,6 +212,7 @@ static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
     if (g_s.edit_job >= 0) pc_cancel_job(b, g_s.edit_job);
     if (g_s.pic_want >= 0) my_profile_pic_cancel(b);
     if (g_s.grp_job >= 0) pc_cancel_job(b, g_s.grp_job);
+    login_groups_cancel(b);
     /* FFXI installs its own message handlers, so polcore gets its defaults back */
     if (pc_has(b, SV_RESET_PUSH_CALLBACKS)) pc_reset_push_callbacks(b);
     /* the viewer always has notices on when a game starts, without them FFXI only sees new messages at its next lobby
@@ -327,6 +328,7 @@ static void hold_run(BYTE *b)
     g_in_hold = 1;
     hold_play_event_open();
     snapshot_social(b);
+    login_groups_go();
     for (;;) {
         ctl = hold_ctl_due(GetTickCount64(), &lastCtl, woke);
         /* a dropped session (another login of this POL ID, KILL, a ban push, the server hanging up) ends the hold,
@@ -357,6 +359,7 @@ static void hold_run(BYTE *b)
             login_account_blocked(b, "jail");
         }
         login_status_pump(b);
+        login_groups_pump(b, spath);
         if (g_s.status_job < 0 && g_s.status_want >= 0)
             login_status_start(b, g_my_slot, g_s.status_want, g_s.status_loc);
         /* the new-mail flag (svc 0x1460, set by a push), cleared with 0x1464(0) like the viewer (app.dll 0x1019fef3) */
