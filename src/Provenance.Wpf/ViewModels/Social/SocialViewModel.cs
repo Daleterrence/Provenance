@@ -355,6 +355,13 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _login.OnlineFriends = now.Select(Id).ToHashSet();
     }
 
+    // an account that's removed while it's logged in mustn't write its messages back after they're deleted
+    internal void StopKeeping(string profileId)
+    {
+        if (_login.Chat?.ProfileId == profileId) _login.Chat.Discard();
+        GroupChat.DiscardLog(profileId);
+    }
+
     // a new login, maybe on another account, so nothing from the last one can show under this one
     public void Start(string profileId, string? storeRoot = null)
     {

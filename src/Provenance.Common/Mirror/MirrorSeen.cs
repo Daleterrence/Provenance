@@ -4,7 +4,7 @@ using Provenance.Common.IO;
 namespace Provenance.Common.Mirror;
 
 // The newest pointer time taken for each region, so an older signed pointer can't be served again. It sits next to
-// viewer-builds, which outlives a reinstall. Never throws, a file that won't read means nothing's remembered
+// viewer-builds (which outlives a reinstall) and never throws, a file that won't read means nothing's remembered
 public sealed class MirrorSeen(string? path, DateTimeOffset floor)
 {
     private const int MaxFileBytes = 64 * 1024;

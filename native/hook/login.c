@@ -301,8 +301,8 @@ static HANDLE login_go_watch(void)
     h = FindFirstChangeNotificationA(dir, FALSE, FILE_NOTIFY_CHANGE_FILE_NAME);
     return h ? h : INVALID_HANDLE_VALUE;
 }
-/* the folder changing or Provenance ending wakes it, and it looks again every 400ms anyway. Without a change handle it
-   beats every 16ms. Re-armed before the turn that follows, so a change in between isn't lost */
+/* the folder changing or Provenance ending wakes it, and it looks again every 400ms anyway (every 16ms without a change
+   handle). Re-armed before the turn that follows, so a change in between isn't lost */
 static void login_go_nap(HANDLE *watch)
 {
     HANDLE h[2];

@@ -29,6 +29,7 @@ public sealed class ChatStore
     // DPAPI-encrypted, it's friends' messages in there
     public ChatStore(string profileId, string? root = null)
     {
+        ProfileId = profileId;
         if (root is null)
         {
             // no AppData at all would make this a relative path, so the log just isn't kept
@@ -49,7 +50,9 @@ public sealed class ChatStore
 
     public IReadOnlyList<ChatEntry> Entries => _entries;
 
-    public bool Dirty { get; private set; }
+    private bool _dirty, _closed;
+    public bool Dirty { get => _dirty; private set => _dirty = value && !_closed; }
+    public string ProfileId { get; } = "";
 
     public bool MergeIncoming(PolMessage m) => m.HasBody && m.IsChat && AddOnce(m, m.Subject, m.Text, "received");
 
@@ -190,7 +193,14 @@ public sealed class ChatStore
 
     private void SaveDeleted()
     {
-        if (_deletedFile?.Save(_deleted) == true) _deletedDirty = false;
+        if (!_closed && _deletedFile?.Save(_deleted) == true) _deletedDirty = false;
+    }
+
+    // the account's gone and so are its files, so nothing this holds is ever written again
+    public void Discard()
+    {
+        _closed = true;
+        _dirty = _deletedDirty = false;
     }
 
     public bool SetSentFrom(string token, int fromSlot, bool toOther)
@@ -403,7 +413,7 @@ public sealed class ChatStore
 
     public bool Save()
     {
-        if (_file is null) return false;
+        if (_file is null || _closed) return false;
         if (_deletedDirty) SaveDeleted();
         SaveCount++;
         // history's a convenience, never worth breaking the session over

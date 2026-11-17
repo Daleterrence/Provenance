@@ -257,6 +257,11 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     public void FlushLog() => _log?.Flush();
 
+    internal void DiscardLog(string profileId)
+    {
+        if (_log?.ProfileId == profileId) _log.Discard();
+    }
+
     private void End(string? message)
     {
         _log?.Flush();

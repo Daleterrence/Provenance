@@ -4,13 +4,26 @@ using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Login;
 using Provenance.Common.Settings;
+using Provenance.Wpf.ViewModels.Settings;
 using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
 // what Play starts the game through, and the Windower profile or Ashita boot configuration it'll use
-public sealed class PlayPlatform(PolSession pol, ISettingsService settings) : ObservableObject
+public sealed class PlayPlatform : ObservableObject
 {
+    private readonly PolSession pol;
+    private readonly ISettingsService settings;
+
+    internal HookFolderProbe Folders { get; }
+
+    internal PlayPlatform(PolSession pol, ISettingsService settings, HookFolderProbe? folders = null)
+    {
+        this.pol = pol;
+        this.settings = settings;
+        Folders = folders ?? HookFolderProbe.Shared;
+    }
+
     public string? Subtitle => pol.Platform switch
     {
         ThirdPartyHook.Windower => "WINDOWER LOADED",
@@ -37,13 +50,13 @@ public sealed class PlayPlatform(PolSession pol, ISettingsService settings) : Ob
     // the same pick Play uses: Ashita falls back to the last config Ashita ran with, Windower's "" is the unnamed one
     public IReadOnlyList<Choice> Choices()
     {
-        var target = PlayTarget.For(settings.Current, null);
+        var target = Folders.Target(settings.Current, settings.Current.ThirdPartyHookPlatform);
         if (target.Platform == ThirdPartyHook.Ashita)
-            return AshitaBootFiles.Names(target.Dir)
+            return Folders.AshitaBootNames(settings.Current.AshitaPath, target.Dir)
                 .Select(n => new Choice(n.File, n.Shown, target.Is(n.File))).ToList();
         if (target.Platform == ThirdPartyHook.Windower)
         {
-            var names = WindowerInstall.Profiles(target.Dir);
+            var names = Folders.WindowerProfileNames(settings.Current.WindowerPath, target.Dir);
             var picked = target.Picked(names);
             return names.Select(n => new Choice(n, WindowerInstall.DisplayName(n, names), n == picked)).ToList();
         }
@@ -54,7 +67,8 @@ public sealed class PlayPlatform(PolSession pol, ISettingsService settings) : Ob
     {
         var menu = new List<MenuAction> { new(ChoicesTitle, false), MenuAction.Separator };
         var choices = Choices();
-        if (choices.Count == 0) menu.Add(new(NoChoicesText, false));
+        if (choices.Count == 0)
+            menu.Add(new(Folders.Checking(settings.Current, settings.Current.ThirdPartyHookPlatform) ? HookFolder.CheckingText : NoChoicesText, false));
         foreach (var c in choices) menu.Add(new(c.Display, true, () => Pick(c.Name)) { Checked = c.Current });
         return menu;
     }

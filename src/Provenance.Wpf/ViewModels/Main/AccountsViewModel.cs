@@ -308,6 +308,8 @@ public partial class AccountsViewModel : ObservableObject
 
     internal string? MessagesRoot { get; set; }
 
+    internal Action<string>? MessagesEnding { get; set; }
+
     [RelayCommand]
     private void RemoveAccount(Account? profile)
     {
@@ -324,6 +326,7 @@ public partial class AccountsViewModel : ObservableObject
             _dialogs.Error("Remove account", RemoveFailedText, offerLogs: true);
             return;
         }
+        MessagesEnding?.Invoke(profile.Id);
         AccountMessages.Delete(profile.Id, MessagesRoot);
         // the account list clears the selection when its item goes, so this has to be asked first
         bool wasSelected = profile == SelectedProfile;

@@ -64,7 +64,9 @@
 #endif
 
 #define RUNNING L"PlayOnline or FINAL FANTASY XI is running, or Provenance has it open in the background. Exit Provenance and the game, then press Retry."
-#define UNPROTECTED L"The uninstall information for %s isn't protected, so to be safe nothing was removed.\n\nOpen Provenance and press Repair game files, which saves it again where only administrators can change it. Then try again."
+#define UNPROTECTED_TAIL L" isn't protected, so to be safe nothing was removed.\n\nOpen Provenance and press Repair game files, which saves it again where only administrators can change it. Then try again."
+#define UNPROTECTED L"The uninstall information for %s" UNPROTECTED_TAIL
+#define UNPROTECTED_NO_NAME L"The uninstall information" UNPROTECTED_TAIL
 
 #define NOT_FOUND(st) ((st) == (NTSTATUS)0xC0000034L || (st) == (NTSTATUS)0xC000003AL)
 
@@ -783,10 +785,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
         MessageBoxW(NULL, L"The uninstall information was not found.", TITLE, MB_ICONERROR);
         return 1;
     }
-    /* nothing in the record is read before it's known only admins can change it */
+    /* nothing in the record is read before it's known only admins can change it, so its name isn't known yet */
     if (unprotected(argv[1])) {
-        _snwprintf_s(ask, _countof(ask), _TRUNCATE, UNPROTECTED, g_name);
-        if (!quiet) MessageBoxW(NULL, ask, TITLE, MB_ICONERROR);
+        if (!quiet) MessageBoxW(NULL, UNPROTECTED_NO_NAME, TITLE, MB_ICONERROR);
         return 4;
     }
     if (!(text = load(argv[1], &chars))) {

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text;
 using Provenance.Common.IO;
 using Provenance.Common.Security;
@@ -13,20 +14,27 @@ public static class BannerImages
     internal static HttpClient ImageHttp { get; set; } =
         new(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(15) };
 
-    internal static async Task<byte[]?> DownloadAsync(Uri u, CancellationToken ct)
+    internal static async Task<byte[]?> DownloadAsync(Uri u, CancellationToken ct) => (await FetchAsync(u, ct).ConfigureAwait(false)).Bytes;
+
+    // Final is false when asking again later could work (a 5xx, a stalled body)
+    private readonly record struct Fetched(byte[]? Bytes, bool Final);
+
+    private static async Task<Fetched> FetchAsync(Uri u, CancellationToken ct)
     {
         for (int hop = 0; hop < 4; hop++)
         {
-            if (PlayOnlineSite.UpgradeBannerUrl(u) is not { } safe) return null;
+            if (PlayOnlineSite.UpgradeBannerUrl(u) is not { } safe) return new(null, true);
             u = safe;
             using var resp = await ImageHttp.GetAsync(u, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if ((int)resp.StatusCode is >= 300 and < 400)
             {
-                if (resp.Headers.Location is not { } loc) return null;
+                if (resp.Headers.Location is not { } loc) return new(null, true);
                 u = loc.IsAbsoluteUri ? loc : new Uri(u, loc);
                 continue;   // the next pass upgrades it, or bails when it's left POL's site
             }
-            if (!resp.IsSuccessStatusCode || resp.Content.Headers.ContentLength > MaxImageBytes) return null;
+            if (!resp.IsSuccessStatusCode)
+                return new(null, (int)resp.StatusCode is >= 400 and < 500 && resp.StatusCode is not (HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests));
+            if (resp.Content.Headers.ContentLength > MaxImageBytes) return new(null, true);
             // read in pieces and stop past the cap, so a reply with no length header never gets buffered whole
             // the client's timeout stops at the headers, so the body gets its own
             using var read = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -39,17 +47,18 @@ public static class BannerImages
                 int n;
                 while ((n = await body.ReadAsync(chunk, read.Token).ConfigureAwait(false)) > 0)
                 {
-                    if (ms.Length + n > MaxImageBytes) return null;
+                    if (ms.Length + n > MaxImageBytes) return new(null, true);
                     ms.Write(chunk, 0, n);
                 }
-                return ms.ToArray();
+                return new(ms.ToArray(), true);
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return new(null, false); }
         }
-        return null;
+        return new(null, true);
     }
 
-    // addresses that failed this run, so a refresh never asks POL's site for one again
+    // addresses POL's site answered for with no picture, so a refresh never asks for one again
+    // a timeout or no connection isn't an answer, so those get tried on the next refresh
     private static readonly ConcurrentDictionary<string, bool> Failed = new();
 
     // a topic's banner never changes, one already on disk needs no request
@@ -71,8 +80,13 @@ public static class BannerImages
             address = u.AbsoluteUri;
             if (Failed.ContainsKey(address)) return null;
             Directory.CreateDirectory(dir);
-            var bytes = await DownloadAsync(u, ct).ConfigureAwait(false);
-            if (bytes is null || bytes.Length == 0 || bytes.Length > MaxImageBytes || !LooksLikeImage(bytes))
+            var (bytes, final) = await FetchAsync(u, ct).ConfigureAwait(false);
+            if (bytes is null)
+            {
+                if (final) Failed[address] = true;
+                return null;
+            }
+            if (bytes.Length == 0 || bytes.Length > MaxImageBytes || !LooksLikeImage(bytes))
             {
                 Failed[address] = true;
                 return null;
@@ -80,11 +94,7 @@ public static class BannerImages
             await AtomicFile.WriteAsync(path, bytes, ct).ConfigureAwait(false);
             return path;
         }
-        catch (Exception e)
-        {
-            if (address is not null && !(e is OperationCanceledException && ct.IsCancellationRequested)) Failed[address] = true;
-            return null;
-        }
+        catch { return null; }
     }
 
     internal static void ForgetFailures() => Failed.Clear();

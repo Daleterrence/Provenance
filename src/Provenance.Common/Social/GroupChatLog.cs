@@ -30,6 +30,7 @@ public sealed class GroupChatLog
 
     public GroupChatLog(string profileId, string? root = null)
     {
+        ProfileId = profileId;
         if (root is null)
         {
             if (AppPaths.UserData is not { } userData) return;
@@ -43,7 +44,9 @@ public sealed class GroupChatLog
     public IReadOnlyList<GroupChatEntry> Lines(string group) =>
         _groups.TryGetValue(group, out var l) ? l : [];
 
-    public bool Dirty { get; private set; }
+    private bool _dirty, _closed;
+    public bool Dirty { get => _dirty; private set => _dirty = value && !_closed; }
+    public string ProfileId { get; } = "";
     private DateTime _savedAt;
     // a busy chat brings lines every second, and every save re-encrypts every group's whole log
     public static readonly TimeSpan SaveEvery = TimeSpan.FromSeconds(5);
@@ -90,9 +93,16 @@ public sealed class GroupChatLog
         return true;
     }
 
+    // the account's gone and so are its files, so nothing this holds is ever written again
+    public void Discard()
+    {
+        _closed = true;
+        _dirty = false;
+    }
+
     public bool Save()
     {
-        if (_file is null || !_file.Save(_groups)) return false;
+        if (_file is null || _closed || !_file.Save(_groups)) return false;
         Dirty = false;
         _savedAt = DateTime.UtcNow;
         return true;

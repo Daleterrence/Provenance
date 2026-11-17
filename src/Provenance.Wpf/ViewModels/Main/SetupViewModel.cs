@@ -68,12 +68,20 @@ public partial class SetupViewModel : ObservableObject
         }
         // a folder browsed to meanwhile stays, and one already in settings goes ahead of anything found
         var s = _settings.Current;
-        WindowerFolder ??= WindowerProblem(s.WindowerPath) is null ? s.WindowerPath : found.Windower.FirstOrDefault();
-        AshitaFolder ??= AshitaProblem(s.AshitaPath) is null ? s.AshitaPath : found.Ashita.FirstOrDefault();
+        var (windowerOk, ashitaOk) = await Task.Run(() => (WindowerCheck(s.WindowerPath) is null, AshitaCheck(s.AshitaPath) is null));
+        WindowerFolder ??= windowerOk ? s.WindowerPath : found.Windower.FirstOrDefault();
+        AshitaFolder ??= ashitaOk ? s.AshitaPath : found.Ashita.FirstOrDefault();
         _looked = true;
         Looking = false;
         if (Status.Text == LookingText) Status.Clear();
     }
+
+    // stands in for the folder checks
+    internal Func<bool, string?, string?>? CheckFolder { get; set; }
+
+    private string? WindowerCheck(string? dir) => CheckFolder is { } c ? c(true, dir) : WindowerProblem(dir);
+
+    private string? AshitaCheck(string? dir) => CheckFolder is { } c ? c(false, dir) : AshitaProblem(dir);
 
     private static string? WindowerProblem(string? dir) =>
         HookFolder.Usable(dir) is not { } usable || !WindowerInstall.IsFolder(usable) ? HookFolder.DriveProblem(dir) ?? WindowerInstall.NotFoundText
@@ -82,48 +90,54 @@ public partial class SetupViewModel : ObservableObject
     private static string? AshitaProblem(string? dir) =>
         HookFolder.Usable(dir) is { } usable && AshitaInstall.IsFolder(usable) ? null : HookFolder.DriveProblem(dir) ?? AshitaInstall.NotFoundText;
 
+    // a share's checked off the UI thread, a local folder on the spot
+    internal static Task<string?> ProblemAsync(Func<string?, string?> problemWith, string? dir) =>
+        HookFolder.OnNetwork(dir) ? Task.Run(() => problemWith(dir)) : Task.FromResult(problemWith(dir));
+
     [RelayCommand]
-    private void BrowseWindower()
+    private async Task BrowseWindower()
     {
-        if (Browsed(WindowerInstall.BrowseTitle, WindowerProblem) is { } dir) WindowerFolder = dir;
+        if (await Browsed(WindowerInstall.BrowseTitle, WindowerCheck) is { } dir) WindowerFolder = dir;
     }
 
     [RelayCommand]
-    private void BrowseAshita()
+    private async Task BrowseAshita()
     {
-        if (Browsed(AshitaInstall.BrowseTitle, AshitaProblem) is { } dir) AshitaFolder = dir;
+        if (await Browsed(AshitaInstall.BrowseTitle, AshitaCheck) is { } dir) AshitaFolder = dir;
     }
 
-    private string? Browsed(string title, Func<string?, string?> problemWith)
+    private async Task<string?> Browsed(string title, Func<string?, string?> problemWith)
     {
         if (_dialogs.PickFolder(title) is not { } dir) return null;
-        if (problemWith(dir) is { } problem)
+        if (HookFolder.OnNetwork(dir)) Status.Show(HookFolder.CheckingText);
+        if (await ProblemAsync(problemWith, dir) is { } problem)
         {
             Status.Fail(problem);
             return null;
         }
-        if (Status.IsError) Status.Clear();
+        if (Status.IsError || Status.Text == HookFolder.CheckingText) Status.Clear();
         return dir;
     }
 
     private bool CanUseWindower() => WindowerFolder is not null;
 
     [RelayCommand(CanExecute = nameof(CanUseWindower))]
-    private void UseWindower() => Use(ThirdPartyHook.Windower, WindowerFolder, WindowerProblem);
+    private Task UseWindower() => Use(ThirdPartyHook.Windower, WindowerFolder, WindowerCheck);
 
     private bool CanUseAshita() => AshitaFolder is not null;
 
     [RelayCommand(CanExecute = nameof(CanUseAshita))]
-    private void UseAshita() => Use(ThirdPartyHook.Ashita, AshitaFolder, AshitaProblem);
+    private Task UseAshita() => Use(ThirdPartyHook.Ashita, AshitaFolder, AshitaCheck);
 
     [RelayCommand]
     private void UseNeither() => Finish(s => s.ThirdPartyHookPlatform = ThirdPartyHook.None);
 
     // the folder's checked once more, it can have gone since it was found
-    private void Use(ThirdPartyHook platform, string? dir, Func<string?, string?> problemWith)
+    private async Task Use(ThirdPartyHook platform, string? dir, Func<string?, string?> problemWith)
     {
         if (dir is null) return;
-        if (problemWith(dir) is { } problem)
+        if (HookFolder.OnNetwork(dir)) Status.Show(HookFolder.CheckingText);
+        if (await ProblemAsync(problemWith, dir) is { } problem)
         {
             Status.Fail(problem);
             return;

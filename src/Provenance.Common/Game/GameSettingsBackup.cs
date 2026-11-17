@@ -237,6 +237,7 @@ public static partial class GameSettingsBackup
             if (blocked?.Invoke() is { } why) throw Shown.Mark(new InvalidOperationException(why));
             var leftOut = new List<string>(before.LeftOut.Select(l => "before: " + l));
             int restored = 0;
+            bool putting = false;
             var pinned = new List<(PinnedDir Pins, IGrouping<TargetDir?, ZipArchiveEntry> Entries)>();
             try
             {
@@ -250,11 +251,12 @@ public static partial class GameSettingsBackup
                     foreach (var e in group)
                     {
                         var data = ReadEntry(e) ?? throw new NotABackupException();
+                        putting = true;
                         Put(pins.Pins, pins.Dir, e.Name, data, written.TryGetValue(e.FullName, out var at) ? at : null);
                         restored++;
                     }
             }
-            catch (Exception e) when (e is not NotABackupException && !Shown.Is(e))
+            catch (Exception e) when (putting && e is not NotABackupException && !Shown.Is(e))
             {
                 throw new RestoredPartlyException(before.Outcome, e);
             }

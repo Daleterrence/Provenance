@@ -13,9 +13,8 @@ namespace Provenance.Wpf.Services;
 // a release that failed its signed statement, as opposed to one that just didn't download
 internal sealed class ReleaseRefusedException(string reason) : Exception(reason);
 
-// betas go on the beta channel, the rest on stable. A beta copy reads both, so it moves up to a newer stable
-// release (Velopack never offers an older one). Every package is checked against the statement the publisher signed
-// for it before Velopack does anything with it
+// betas go on the beta channel, the rest on stable. A beta copy reads both, so it moves up to a newer stable release
+// (Velopack never offers an older one), and each package is checked against its signed statement first
 internal sealed class ChannelSource(string url, SemanticVersion? installed, IFileDownloader? downloader = null,
                                     IReadOnlyDictionary<string, ECDsa>? trusted = null)
     : SimpleWebSource(url, downloader)

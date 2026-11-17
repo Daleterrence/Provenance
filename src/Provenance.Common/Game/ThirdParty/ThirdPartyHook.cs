@@ -33,6 +33,16 @@ public static class ThirdPartyHooks
     // network mapping becomes its share's path. Everything that reads or starts the folder has to use what this gives back
     public static string? Usable(string? dir) => dir is null ? null : DriveTargets.Resolve(dir);
 
+    // a share, or a drive that goes to one. Looking inside it can sit waiting on the network, so not on the UI thread
+    public static bool OnNetwork(string? dir)
+    {
+        if (Usable(dir) is not { } usable) return false;
+        var real = DriveTargets.Real(usable);
+        if (real.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return true;
+        return real.StartsWith(@"\\", StringComparison.Ordinal) && !real.StartsWith(@"\\?\", StringComparison.Ordinal)
+            && !real.StartsWith(@"\\.\", StringComparison.Ordinal);
+    }
+
     // only the drive letter, nothing that could wait on a share, so a settings page can ask it
     public static string? DriveProblem(string? dir) =>
         Usable(dir) is { } real && FolderPins.DriveMissing(real)
