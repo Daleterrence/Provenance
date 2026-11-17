@@ -331,6 +331,7 @@ public partial class AccountsViewModel : ObservableObject
         // the account list clears the selection when its item goes, so this has to be asked first
         bool wasSelected = profile == SelectedProfile;
         Profiles.Remove(profile);
+        _settings.Current.MultiAccounts.RemoveAll(e => e.ProfileId == profile.Id);
         PersistProfileList();
         KeePassXc.ForgetIfUnused(Profiles);
         if (wasSelected) SelectedProfile = Profiles.FirstOrDefault();
