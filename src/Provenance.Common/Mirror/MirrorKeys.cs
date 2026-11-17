@@ -2,23 +2,33 @@ using System.Security.Cryptography;
 
 namespace Provenance.Common.Mirror;
 
-// P-256 SubjectPublicKeyInfo, the private halves live with the publisher and never come anywhere near this
+// P-256 SubjectPublicKeyInfo, the private halves live with the publisher and never come anywhere near this. A new key
+// gets a new id, and a retired one goes in Revoked so its id is never used again
 public static class MirrorKeys
 {
-    public const string PrimaryId = "p1";
-    public const string RecoveryId = "r1";
+    public static IReadOnlyList<(string Id, string PublicKey)> BuiltIn { get; } =
+    [
+        ("p1", "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEDMVslMw+4fOgIfdSs2YCrVenuSb8kUxlN5WGNHtCE0DJ3nf0fb/y3y78UjvHXVI7zMZnIaV4bgnToz1bz4RSHA=="),
+        ("r1", "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW9Q20UAitUfOYs1yhejMmDcvz61LonO+qlaprWNT4a2uGYf9X6tg4y4wxSccGD1d53p3jtcj9+R4JCg3iD3jTw=="),
+    ];
 
-    private const string PrimaryPublic = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEDMVslMw+4fOgIfdSs2YCrVenuSb8kUxlN5WGNHtCE0DJ3nf0fb/y3y78UjvHXVI7zMZnIaV4bgnToz1bz4RSHA==";
-    private const string RecoveryPublic = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW9Q20UAitUfOYs1yhejMmDcvz61LonO+qlaprWNT4a2uGYf9X6tg4y4wxSccGD1d53p3jtcj9+R4JCg3iD3jTw==";
+    public static IReadOnlyList<string> Revoked { get; } = [];
 
-    public static IReadOnlyDictionary<string, ECDsa> Trusted { get; } = Build();
+    public static IReadOnlyDictionary<string, ECDsa> Trusted { get; } = TrustedFrom(BuiltIn, Revoked);
 
     // one that won't import is a broken build, so it fails here instead of looking like a mirror outage
-    private static Dictionary<string, ECDsa> Build() => new()
+    public static IReadOnlyDictionary<string, ECDsa> TrustedFrom(IEnumerable<(string Id, string PublicKey)> table, IEnumerable<string> revoked)
     {
-        [PrimaryId] = TryImport(PrimaryPublic) ?? throw new InvalidOperationException("The built-in primary mirror key doesn't import."),
-        [RecoveryId] = TryImport(RecoveryPublic) ?? throw new InvalidOperationException("The built-in recovery mirror key doesn't import."),
-    };
+        var gone = revoked.ToHashSet(StringComparer.Ordinal);
+        var keys = new Dictionary<string, ECDsa>(StringComparer.Ordinal);
+        foreach (var (id, publicKey) in table)
+        {
+            if (gone.Contains(id)) continue;
+            var key = TryImport(publicKey) ?? throw new InvalidOperationException($"The built-in mirror key {id} doesn't import.");
+            if (!keys.TryAdd(id, key)) throw new InvalidOperationException($"The built-in mirror key {id} is in the table twice.");
+        }
+        return keys;
+    }
 
     public static ECDsa? TryImport(string spkiBase64)
     {

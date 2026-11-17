@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The release check CI and tools\check-release.ps1 run. It compiles the app's own statement code and keys rather
+       than referencing Provenance.Common, which is built x86, and the runner's dotnet is x64 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Provenance.ReleaseCheck</RootNamespace>
+    <AssemblyName>ReleaseCheck</AssemblyName>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <RuntimeIdentifier />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\Provenance.Common\Mirror\AppRelease.cs" Link="App\AppRelease.cs" />
+    <Compile Include="..\..\src\Provenance.Common\Mirror\MirrorJson.cs" Link="App\MirrorJson.cs" />
+    <Compile Include="..\..\src\Provenance.Common\Mirror\MirrorKeys.cs" Link="App\MirrorKeys.cs" />
+    <Compile Include="..\..\src\Provenance.Common\Mirror\SignedBlob.cs" Link="App\SignedBlob.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Velopack" />
+  </ItemGroup>
+
+</Project>

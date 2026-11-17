@@ -4,17 +4,20 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Provenance.Common.IO;
 using Provenance.Common.Mirror;
+using Serilog;
 
 namespace Provenance.Common.Patcher;
 
 // The trust boundary: pointers and indexes only come back once their signature checks out, and a download only replaces
-// its target once its size and SHA-256 match the signed entry
-public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, ECDsa> trusted, string baseUrl = MirrorLayout.BaseUrl)
+// its target once its size and SHA-256 match the signed entry. A pointer older than one already taken is refused too
+public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, ECDsa> trusted, string baseUrl = MirrorLayout.BaseUrl,
+                                 MirrorSeen? seen = null)
 {
     internal const long MaxSignedBytes = 16 * 1024 * 1024;
 
 #pragma warning disable RS0030 // MirrorClient owns its client
-    public static MirrorClient Shared { get; } = new(Named(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }), MirrorKeys.Trusted);
+    public static MirrorClient Shared { get; } =
+        new(Named(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }), MirrorKeys.Trusted, MirrorLayout.BaseUrl, MirrorSeen.Shared);
 #pragma warning restore RS0030
 
     private static HttpClient Named(HttpClient http)
@@ -29,8 +32,13 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
     {
         var payload = await GetSignedAsync(MirrorLayout.PointerKey(region), ct);
         if (payload is null) return null;
-        try { return MirrorPointer.FromBytes(payload); }
+        MirrorPointer pointer;
+        try { pointer = MirrorPointer.FromBytes(payload); }
         catch (InvalidDataException) { return null; }
+        // another region's pointer goes back for the caller to refuse, it never moves this region's time
+        if (seen is null || pointer.Region != region || seen.Accept(region, pointer.Published)) return pointer;
+        Log.Warning("The mirror's pointer for {Region} is older than one already seen ({Published:u})", region, pointer.Published);
+        return null;
     }
 
     public async Task<MirrorIndex?> GetIndexAsync(string region, string product, string version, CancellationToken ct)

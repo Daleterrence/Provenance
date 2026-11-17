@@ -52,4 +52,16 @@ public static class SignedBlob
         }
         catch (Exception) { return false; }
     }
+
+    // the id a blob says it's signed with, for the log. Nothing's verified
+    public static string? KeyId(ReadOnlySpan<byte> blob)
+    {
+        if (blob.Length < Magic.Length + 1 || !blob[..Magic.Length].SequenceEqual(Magic)) return null;
+        int idLen = blob[Magic.Length];
+        if (idLen == 0 || blob.Length < Magic.Length + 1 + idLen) return null;
+        var id = blob.Slice(Magic.Length + 1, idLen);
+        foreach (var b in id)
+            if (b is < 0x21 or > 0x7e) return null;
+        return Encoding.ASCII.GetString(id);
+    }
 }

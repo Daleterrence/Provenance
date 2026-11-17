@@ -16,6 +16,7 @@ internal static class SignedBuilds
     private static int _asked;
     private static string? _path = AppPaths.UserData is { } dir ? Path.Combine(dir, "viewer-builds") : null;
     private static IReadOnlyDictionary<string, ECDsa>? _trusted;
+    private static DateTimeOffset _floor = MirrorFloor.Published;
 
     internal static Func<CancellationToken, Task> Fetch = ct => RefreshAsync(MirrorClient.Shared, ct);
 
@@ -67,25 +68,25 @@ internal static class SignedBuilds
         }
     }
 
-    // An older list than the one held is ignored. With nothing newer held, an older signed list is taken, so a pulled
-    // build can come back until the next fetch.
+    // An older list than the one held is ignored, and so is one older than the floor. With nothing held, a list signed
+    // since the floor is taken, so a pulled build can come back until the next fetch.
     internal static bool Offer(MirrorBuilds list, byte[] blob)
     {
         lock (Gate)
         {
             Load();
-            if (_held is not null && list.Published <= _held.Published) return false;
+            if (list.Published < _floor || (_held is not null && list.Published <= _held.Published)) return false;
             _held = list;
             Save(blob);
             return true;
         }
     }
 
-    internal static void Reset(string? path, IReadOnlyDictionary<string, ECDsa>? trusted)
+    internal static void Reset(string? path, IReadOnlyDictionary<string, ECDsa>? trusted, DateTimeOffset? floor = null)
     {
         lock (Gate)
         {
-            (_path, _trusted, _held, _loaded, _asked) = (path, trusted, null, false, 0);
+            (_path, _trusted, _held, _loaded, _asked, _floor) = (path, trusted, null, false, 0, floor ?? MirrorFloor.Published);
         }
     }
 
@@ -96,7 +97,7 @@ internal static class SignedBuilds
         try
         {
             if (_path is not null && File.Exists(_path) && new FileInfo(_path).Length <= MirrorClient.MaxSignedBytes)
-                _held = MirrorBuilds.FromSigned(File.ReadAllBytes(_path), _trusted ?? MirrorKeys.Trusted);
+                _held = MirrorBuilds.FromSigned(File.ReadAllBytes(_path), _trusted ?? MirrorKeys.Trusted) is { } kept && kept.Published >= _floor ? kept : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
