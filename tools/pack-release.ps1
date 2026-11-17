@@ -10,7 +10,8 @@
     Directory.Build.props. The exe's file version keeps just the numbers (1.0.0.0) and its product version gets the
     short commit (1.0.0-beta.1+1a2b3c4).
     It only packs committed code (a clean working tree) and needs an empty -Out outside the repo, by default
-    %TEMP%\provenance-release\<version>. Nothing gets signed and nothing gets uploaded.
+    %TEMP%\provenance-release\<version>. Nothing gets uploaded, and the package's statement (<package>.sig) is signed
+    afterwards, on the draft release.
     A version with a suffix (1.0.0-beta.1) goes on the beta channel, one without (1.0.0) on stable. Copies on a beta
     look at both and take the newest, copies on a stable version only ever look at stable.
 .EXAMPLE
@@ -126,7 +127,7 @@ try {
 }
 
 Write-Host ''
-Write-Host "Release $Version from commit $commit is in $Out (not signed, not uploaded)."
+Write-Host "Release $Version from commit $commit is in $Out (not uploaded). Its statement comes next, signed on the draft before it's published."
 Write-Host "Natives: built from native\ at $($commit.Substring(0, 7))"
 if ($channel -eq 'beta') { Write-Host 'Channel: beta. Only copies on a beta will see it.' }
 else { Write-Host 'Channel: stable. Every copy will see it, betas included.' }

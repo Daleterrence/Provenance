@@ -5,20 +5,29 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'A published release (v1.0.0) whose statement goes up on its own: checked, uploaded, and nothing else. Empty for a normal build.'
+        required: false
+        default: ''
   release:
     types: [published]
 
 permissions:
-  contents: write
+  contents: read
 
 # the one Velopack version, the build checks it against the package the app uses
 env:
   VELOPACK_VERSION: '1.2.161'
 
 jobs:
+  # a fork has no assets key or R2 secrets, so neither job runs there
   build:
-    if: github.event_name != 'release'
+    if: github.repository == 'Daleterrence/Provenance' && github.event_name != 'release' && !inputs.tag
     runs-on: windows-latest
+    # the draft release is the only thing it writes
+    permissions:
+      contents: write
     # any new warning fails the build, see Directory.Build.props
     env:
       ProvenanceCI: 'true'
@@ -80,37 +89,41 @@ jobs:
           if ('${{ steps.pack.outputs.prerelease }}' -eq 'true') { $a += '--prerelease' }
           gh release create @a
 
-  # publishing a release puts its files on the update server
+  # Publishing a release puts its statement and then its files on the update server. Run by hand with a tag, it puts
+  # just the statement up for a release that's already published, and vpk never runs
   upload:
-    if: github.event_name == 'release'
+    if: github.repository == 'Daleterrence/Provenance' && (github.event_name == 'release' || inputs.tag)
     runs-on: windows-latest
     permissions:
       contents: read
     # one upload per channel at a time, a cancelled run just needs a re-run
     concurrency:
-      group: update-server-${{ contains(github.event.release.tag_name, '-') && 'beta' || 'stable' }}
+      group: update-server-${{ contains(github.event.release.tag_name || inputs.tag, '-') && 'beta' || 'stable' }}
       cancel-in-progress: false
     steps:
+      # the workflow's own commit: the tag's for a published release, so the check has that release's keys
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 10.0.x
 
       - name: Install vpk
+        if: github.event_name == 'release'
         shell: pwsh
         run: dotnet tool install -g vpk --version $env:VELOPACK_VERSION
 
-      - name: Upload to R2
+      # the app's own check on the release's own files. A release that fails it never reaches the update server, so
+      # nobody's offered an update their copy would refuse
+      - name: Check the statement
+        id: check
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          foreach ($name in 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY') {
-            if (-not [Environment]::GetEnvironmentVariable($name)) { throw "The repository secret $name isn't set." }
-          }
           if ($env:TAG -cnotmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "$env:TAG isn't a version tag like v1.0.0 or v1.0.0-beta.1." }
           # same rule as tools/pack-release.ps1, a suffix means beta
           $channel = if ($env:TAG.Contains('-')) { 'beta' } else { 'stable' }
@@ -119,9 +132,53 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Couldn't download the files on release $env:TAG." }
           $package = "Provenance-$($env:TAG.Substring(1))-$channel-full.nupkg"
           if (-not (Test-Path -LiteralPath (Join-Path $dir $package))) { throw "Release $env:TAG has no $package, so it isn't the build for that tag." }
+          dotnet run --project tools/ReleaseCheck/ReleaseCheck.csproj -c Release -- $dir $env:TAG.Substring(1)
+          if ($LASTEXITCODE -ne 0) { throw "Release $env:TAG doesn't pass the app's own check, so nothing was uploaded." }
+          "channel=$channel" >> $env:GITHUB_OUTPUT
+          "dir=$dir" >> $env:GITHUB_OUTPUT
+          "package=$package" >> $env:GITHUB_OUTPUT
+
+      # before vpk puts the feed up, so the feed never names a version whose statement isn't there yet
+      - name: Upload the statement to R2
+        shell: pwsh
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          DIR: ${{ steps.check.outputs.dir }}
+          PACKAGE: ${{ steps.check.outputs.package }}
+        run: |
+          foreach ($name in 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY') {
+            if (-not [Environment]::GetEnvironmentVariable($name)) { throw "The repository secret $name isn't set." }
+          }
+          $env:AWS_ACCESS_KEY_ID = $env:R2_ACCESS_KEY_ID
+          $env:AWS_SECRET_ACCESS_KEY = $env:R2_SECRET_ACCESS_KEY
+          $sig = "$env:PACKAGE.sig"
+          aws s3 cp (Join-Path $env:DIR $sig) "s3://provenance-updates/$sig" --endpoint-url "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com" `
+            --cache-control 'public, max-age=300' --content-type 'application/octet-stream' --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "Uploading $sig failed (exit code $LASTEXITCODE)" }
+          "$sig is on the update server." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload to R2
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          CHANNEL: ${{ steps.check.outputs.channel }}
+          DIR: ${{ steps.check.outputs.dir }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          foreach ($name in 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY') {
+            if (-not [Environment]::GetEnvironmentVariable($name)) { throw "The repository secret $name isn't set." }
+          }
           # keeps the last 5 versions on each channel, older packages get deleted
-          vpk --skip-updates upload s3 --outputDir $dir --channel $channel --bucket provenance-updates --region auto `
+          vpk --skip-updates upload s3 --outputDir $env:DIR --channel $env:CHANNEL --bucket provenance-updates --region auto `
             --endpoint "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com" --keyId $env:R2_ACCESS_KEY_ID `
             --secret $env:R2_SECRET_ACCESS_KEY --keepMaxReleases 5
           if ($LASTEXITCODE -ne 0) { throw "vpk upload failed (exit code $LASTEXITCODE)" }
-          "Provenance $($env:TAG.Substring(1)) is on the $channel channel." >> $env:GITHUB_STEP_SUMMARY
+          "Provenance $($env:TAG.Substring(1)) is on the $env:CHANNEL channel." >> $env:GITHUB_STEP_SUMMARY

@@ -39,6 +39,11 @@ public static class SelfUpdate
     internal static readonly Problem CantInstall = new("Provenance couldn't install the update", HasToUpdate + "Restart your PC and try again.");
     internal static readonly Problem CantStartCheck = new("Provenance couldn't check for updates",
         HasToUpdate + "Try again, and if this keeps happening, reinstall Provenance.");
+    internal static readonly Problem CantVerify = new("Provenance couldn't verify the update",
+        HasToUpdate + "The update didn't pass its security check, so it wasn't installed. Try again later.");
+
+    // the locator's the one the install gets handed to, so the check before it looks at the same file
+    internal sealed record Updater(UpdateManager Updates, string Root, ChannelSource Source, IVelopackLocator Locator);
 
     internal sealed class UpdateProblem(Problem problem) : Exception(problem.Title)
     {
@@ -59,8 +64,7 @@ public static class SelfUpdate
         return Task.FromResult(false);
     }
 
-    internal static async Task<bool> RunAsync(LaunchArgs args, bool noAutoLogin, Func<(UpdateManager Updates, string Root)> open,
-                                              Func<UpdateWindow> newWindow)
+    internal static async Task<bool> RunAsync(LaunchArgs args, bool noAutoLogin, Func<Updater> open, Func<UpdateWindow> newWindow)
     {
         UpdateWindow? window = null;
         using var quit = new CancellationTokenSource();
@@ -114,14 +118,13 @@ public static class SelfUpdate
         }
     }
 
-    private static async Task<Step> Attempt(Func<(UpdateManager Updates, string Root)> open, bool afterUpdate, string[] restartArgs,
+    private static async Task<Step> Attempt(Func<Updater> open, bool afterUpdate, string[] restartArgs,
                                             Func<UpdateWindow> show, CancellationToken quit)
     {
-        UpdateManager updates;
-        string root;
+        Updater opened;
         try
         {
-            (updates, root) = open();
+            opened = open();
         }
         catch (Exception ex)
         {
@@ -129,6 +132,7 @@ public static class SelfUpdate
             show();
             throw new UpdateProblem(CantStartCheck);
         }
+        var (updates, root, source, locator) = opened;
         if (!updates.IsInstalled)
         {
             Log.Information("Not an installed copy, so no update check");
@@ -159,6 +163,11 @@ public static class SelfUpdate
         var target = update.TargetFullRelease;
         try { await Download(updates, update, window, quit); }
         catch (OperationCanceledException) when (quit.IsCancellationRequested) { throw; }
+        catch (ReleaseRefusedException ex)
+        {
+            Log.Warning("Provenance {Version} was refused: {Reason}", target.Version, ex.Message);
+            throw new UpdateProblem(CantVerify);
+        }
         catch (Exception ex)
         {
             Log.Warning(ex, "The download of Provenance {Version} failed", target.Version);
@@ -172,15 +181,40 @@ public static class SelfUpdate
             return Step.Start;
         }
 
-        QueueInstall(window, target, restartArgs);
+        await CheckBeforeInstall(source, locator, target, quit);
+        QueueInstall(window, locator, target, restartArgs);
         return Step.HandedOver;
+    }
+
+    // Velopack skips the download, and so the check in it, for a package that's already there. This is the file
+    // UpdateExe.Apply passes as --package, and one that isn't there is refused too or Update.exe would pick its own
+    internal static async Task CheckBeforeInstall(ChannelSource source, IVelopackLocator locator, VelopackAsset target, CancellationToken quit)
+    {
+        var package = locator.PackagesDir is { } dir ? Path.Combine(dir, target.FileName) : null;
+        try { await source.RecheckAsync(target, package, quit); }
+        catch (OperationCanceledException) when (quit.IsCancellationRequested) { throw; }
+        catch (ReleaseRefusedException ex)
+        {
+            Log.Warning("Provenance {Version} was refused before the install: {Reason}", target.Version, ex.Message);
+            throw new UpdateProblem(CantVerify);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "The statement for Provenance {Version} didn't download", target.Version);
+            throw new UpdateProblem(CantDownload);
+        }
     }
 
     private static UpdateManager Manager() =>
         new(new ChannelSource(UpdateServer, VelopackLocator.Current.CurrentlyInstalledVersion));
 
-    private static (UpdateManager, string) Open() =>
-        (Manager(), VelopackLocator.Current.RootAppDir ?? throw new InvalidOperationException("Velopack found no install folder."));
+    private static Updater Open()
+    {
+        var locator = VelopackLocator.Current;
+        var source = new ChannelSource(UpdateServer, locator.CurrentlyInstalledVersion);
+        return new Updater(new UpdateManager(source, null, locator),
+                           locator.RootAppDir ?? throw new InvalidOperationException("Velopack found no install folder."), source, locator);
+    }
 
     // null when it's up to date. Quitting throws OperationCanceledException, anything else that stops it an UpdateProblem
     internal static async Task<UpdateInfo?> Check(UpdateManager updates, CancellationToken quit, TimeSpan timeout)
@@ -276,11 +310,11 @@ public static class SelfUpdate
         }, stall.Token));
     }
 
-    private static void QueueInstall(UpdateWindow window, VelopackAsset target, string[] restartArgs)
+    private static void QueueInstall(UpdateWindow window, IVelopackLocator locator, VelopackAsset target, string[] restartArgs)
     {
         window.ShowInstalling();
         Log.Information("Handing over to Update.exe to install {Version}", target.Version);
-        QueueHandOver(() => UpdateExe.Apply(VelopackLocator.Current, target, silent: false, waitPid: 0, restart: true, restartArgs), restartArgs);
+        QueueHandOver(() => UpdateExe.Apply(locator, target, silent: false, waitPid: 0, restart: true, restartArgs), restartArgs);
     }
 
     private sealed record HandOver(Action Start, string[] RestartArgs);
