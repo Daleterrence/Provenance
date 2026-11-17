@@ -57,9 +57,10 @@ public static class BannerImages
         return new(null, true);
     }
 
-    // addresses POL's site answered for with no picture, so a refresh never asks for one again
-    // a timeout or no connection isn't an answer, so those get tried on the next refresh
+    // addresses POL's site answered for with no picture, so a refresh never asks for one again. A timeout or no
+    // connection isn't an answer, so it's tried once more and then counts as one
     private static readonly ConcurrentDictionary<string, bool> Failed = new();
+    private static readonly ConcurrentDictionary<string, bool> Retried = new();
 
     // a topic's banner never changes, one already on disk needs no request
     public static async Task<string?> LocalAsync(string url, CancellationToken ct = default)
@@ -79,11 +80,12 @@ public static class BannerImages
             }
             address = u.AbsoluteUri;
             if (Failed.ContainsKey(address)) return null;
-            Directory.CreateDirectory(dir);
-            var (bytes, final) = await FetchAsync(u, ct).ConfigureAwait(false);
-            if (bytes is null)
+            Fetched got;
+            try { got = await FetchAsync(u, ct).ConfigureAwait(false); }
+            catch (Exception) when (!ct.IsCancellationRequested) { got = new(null, false); }
+            if (got.Bytes is not { } bytes)
             {
-                if (final) Failed[address] = true;
+                if (got.Final || !Retried.TryAdd(address, true)) Failed[address] = true;
                 return null;
             }
             if (bytes.Length == 0 || bytes.Length > MaxImageBytes || !LooksLikeImage(bytes))
@@ -91,13 +93,26 @@ public static class BannerImages
                 Failed[address] = true;
                 return null;
             }
-            await AtomicFile.WriteAsync(path, bytes, ct).ConfigureAwait(false);
+            try
+            {
+                Directory.CreateDirectory(dir);
+                await AtomicFile.WriteAsync(path, bytes, ct).ConfigureAwait(false);
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                Failed[address] = true;
+                return null;
+            }
             return path;
         }
         catch { return null; }
     }
 
-    internal static void ForgetFailures() => Failed.Clear();
+    internal static void ForgetFailures()
+    {
+        Failed.Clear();
+        Retried.Clear();
+    }
 
     internal static bool LooksLikeImage(byte[] b) =>
         b.Length >= 4 && ((b[0] == 0xFF && b[1] == 0xD8) || (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) ||

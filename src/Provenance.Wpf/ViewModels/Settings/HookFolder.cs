@@ -6,10 +6,6 @@ namespace Provenance.Wpf.ViewModels.Settings;
 // folder Play would use
 internal static class HookFolder
 {
-    internal const string CheckingText = "Checking the folder...";
-
-    internal static bool OnNetwork(string? path) => !string.IsNullOrWhiteSpace(path) && ThirdPartyHooks.OnNetwork(path);
-
     internal static string? Usable(string? path) => string.IsNullOrWhiteSpace(path) ? null : ThirdPartyHooks.Usable(path);
 
     internal static string? DriveProblem(string? path) => string.IsNullOrWhiteSpace(path) ? null : ThirdPartyHooks.DriveProblem(path);

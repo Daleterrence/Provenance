@@ -86,7 +86,7 @@ public partial class HookSettings : ObservableObject, IProfileHost
     {
         ThirdPartyHook.Ashita => new(ThirdPartyHook.Ashita, AshitaDir, AshitaBootConfig?.Name ?? _settings.Current.AshitaBootConfig ?? ""),
         ThirdPartyHook.Windower => new(ThirdPartyHook.Windower, WindowerDir,
-            WindowerProfile?.Name ?? Target(_settings.Current, ThirdPartyHook.Windower).Profile),
+            WindowerProfile?.Name ?? PlayTarget.For(_settings.Current, null, ThirdPartyHook.Windower).Profile),
         _ => new(ThirdPartyHook.None, null, ""),
     };
 
@@ -101,71 +101,31 @@ public partial class HookSettings : ObservableObject, IProfileHost
     }
 
     // only the folder in the box, never one found somewhere else, since profiles get changed in it
-    public string? WindowerDir => Folders.Get(true, WindowerPath).Dir;
+    public string? WindowerDir => HookFolder.Usable(WindowerPath) is { } usable && WindowerInstall.IsFolder(usable) ? usable : null;
     // settings.xml's writer refuses one too, so nothing here offers to change it
-    public bool WindowerLinked => Folders.Get(true, WindowerPath).Linked;
-    public string? AshitaDir => Folders.Get(false, AshitaPath).Dir;
-
-    internal HookFolderProbe Folders
-    {
-        get => _folders ??= Attach(new HookFolderProbe(post: Later));
-        set => _folders = Attach(value);
-    }
-    private HookFolderProbe? _folders;
-
-    private HookFolderProbe Attach(HookFolderProbe probe)
-    {
-        probe.Answered += (windower, path) =>
-        {
-            if (path != (windower ? WindowerPath : AshitaPath)) return;
-            ReloadLists();
-            UpdateThirdPartyHookStatus();
-            ReloadCards();
-        };
-        return probe;
-    }
-
-    private bool Checking => Hook switch
-    {
-        ThirdPartyHook.Windower => Folders.Get(true, WindowerPath).Pending,
-        ThirdPartyHook.Ashita => Folders.Get(false, AshitaPath).Pending,
-        _ => false,
-    };
-
-    internal bool CheckingFolder => Checking;
+    public bool WindowerLinked => WindowerDir is { } d && FolderPins.Linked(d);
+    public string? AshitaDir => HookFolder.Usable(AshitaPath) is { } usable && AshitaInstall.IsFolder(usable) ? usable : null;
 
     internal void Load()
     {
         _loading = true;
         var s = _settings.Current;
         Hook = s.ThirdPartyHookPlatform;
-        // a share's looked at off the UI thread, so it's kept as it's saved
-        AshitaPath = HookFolder.OnNetwork(s.AshitaPath) ? s.AshitaPath : AshitaInstall.Detect(s.AshitaPath) ?? s.AshitaPath;
-        WindowerPath = HookFolder.OnNetwork(s.WindowerPath) ? s.WindowerPath : WindowerInstall.Detect(s.WindowerPath) ?? s.WindowerPath;
+        AshitaPath = AshitaInstall.Detect(s.AshitaPath) ?? s.AshitaPath;
+        WindowerPath = WindowerInstall.Detect(s.WindowerPath) ?? s.WindowerPath;
         _loading = false;
-        Folders.Forget(AshitaPath);
-        Folders.Forget(WindowerPath);
-        ReloadLists();
-        UpdateThirdPartyHookStatus();
-        ReloadCards();
-    }
-
-    private void ReloadLists()
-    {
-        var s = _settings.Current;
         // the boot config Ashita really ran with last (from its logs), so the game keeps its window and plugins
-        var windower = Target(s, ThirdPartyHook.Windower);
-        var ashita = Target(s, ThirdPartyHook.Ashita);
+        var windower = PlayTarget.For(s, null, ThirdPartyHook.Windower);
+        var ashita = PlayTarget.For(s, null, ThirdPartyHook.Ashita);
         RefreshThirdPartyHookLists(windower.Profile, ashita.Profile);
         // a pick that's gone from its folder isn't swapped for another here, Play would fail on it too
-        bool was = _loading;
         _loading = true;
         if (ashita.Profile.Length > 0 && AshitaBootConfig is not null && !ashita.Is(AshitaBootConfig.Name)) AshitaBootConfig = null;
         if (windower.Profile.Length > 0 && WindowerProfile is not null && !windower.Is(WindowerProfile.Name)) WindowerProfile = null;
-        _loading = was;
+        _loading = false;
+        UpdateThirdPartyHookStatus();
+        ReloadCards();
     }
-
-    internal PlayTarget Target(LauncherSettings s, ThirdPartyHook hook) => Folders.Target(s, hook);
 
     internal static HookProfileItem? Item(IEnumerable<HookProfileItem> items, string? name) =>
         name is null ? null : items.FirstOrDefault(i => i.Name == name) ?? items.FirstOrDefault(i => i.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -189,9 +149,9 @@ public partial class HookSettings : ObservableObject, IProfileHost
         try
         {
             AshitaBootConfigs.Clear();
-            foreach (var (file, shown) in Folders.AshitaBootNames(AshitaPath, AshitaDir)) AshitaBootConfigs.Add(new HookProfileItem(file, shown));
+            foreach (var (file, shown) in AshitaBootFiles.Names(AshitaDir)) AshitaBootConfigs.Add(new HookProfileItem(file, shown));
             WindowerProfiles.Clear();
-            var names = Folders.WindowerProfileNames(WindowerPath, WindowerDir);
+            var names = WindowerInstall.Profiles(WindowerDir);
             foreach (var n in names) WindowerProfiles.Add(new HookProfileItem(n, WindowerInstall.DisplayName(n, names)));
             AshitaBootConfig = Item(AshitaBootConfigs, ashitaKeep)
                                ?? AshitaBootConfigs.FirstOrDefault(c => c.Name.Equals("default.ini", StringComparison.OrdinalIgnoreCase))
@@ -207,11 +167,10 @@ public partial class HookSettings : ObservableObject, IProfileHost
     {
         var (text, isError) = Hook switch
         {
-            _ when Checking => (HookFolder.CheckingText, false),
             ThirdPartyHook.Ashita when AshitaDir is null => (HookFolder.DriveProblem(AshitaPath) ?? AshitaInstall.NotFoundText, true),
             ThirdPartyHook.Ashita => ("The game starts through Ashita with the boot configuration picked at the top.", false),
             ThirdPartyHook.Windower when WindowerDir is null => (HookFolder.DriveProblem(WindowerPath) ?? WindowerInstall.NotFoundText, true),
-            ThirdPartyHook.Windower when WindowerLinked => (WindowerInstall.LinkedText, true),
+            ThirdPartyHook.Windower when FolderPins.Linked(WindowerDir) => (WindowerInstall.LinkedText, true),
             ThirdPartyHook.Windower => ("The game starts through Windower with the profile picked at the top.", false),
             _ => ("The game starts directly, without Windower or Ashita.", false),
         };
@@ -312,7 +271,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
     partial void OnAshitaPathChanged(string value)
     {
         if (_loading) return;
-        Folders.Forget(value);
         RefreshThirdPartyHookLists();
         SaveThirdPartyHook();
         AshitaReload?.Invoke();
@@ -321,7 +279,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
     partial void OnWindowerPathChanged(string value)
     {
         if (_loading) return;
-        Folders.Forget(value);
         RefreshThirdPartyHookLists();
         SaveThirdPartyHook();
         WindowerReload?.Invoke();
@@ -429,11 +386,9 @@ public partial class HookSettings : ObservableObject, IProfileHost
     {
         string? pick = null;
         bool ok = false;
-        // a share's lists come from the last look at it, so it's looked at again afterwards
         try
         {
             pick = change();
-            Folders.Forget(IsWindower ? WindowerPath : AshitaPath);
             ok = true;
             ProfileStatus.Clear();
         }

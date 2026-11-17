@@ -31,27 +31,78 @@ public static class ThirdPartyHooks
 {
     // a drive the player mapped in their own session usually isn't there for this elevated process, so a persistent
     // network mapping becomes its share's path. Everything that reads or starts the folder has to use what this gives back
-    public static string? Usable(string? dir) => dir is null ? null : DriveTargets.Resolve(dir);
-
-    // a share, or a drive that goes to one. Looking inside it can sit waiting on the network, so not on the UI thread
-    public static bool OnNetwork(string? dir)
+    // A folder on a share that doesn't answer in time isn't usable, so nothing waits on the network for it
+    public static string? Usable(string? dir)
     {
-        if (Usable(dir) is not { } usable) return false;
-        var real = DriveTargets.Real(usable);
-        if (real.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return true;
-        return real.StartsWith(@"\\", StringComparison.Ordinal) && !real.StartsWith(@"\\?\", StringComparison.Ordinal)
-            && !real.StartsWith(@"\\.\", StringComparison.Ordinal);
+        if (dir is null) return null;
+        var resolved = DriveTargets.Resolve(dir);
+        return ShareRoot(resolved) is { } root && !ShareAnswers(root) ? null : resolved;
+    }
+
+    internal static TimeSpan ShareWait = TimeSpan.FromSeconds(1.5), ShareKeep = TimeSpan.FromSeconds(10);
+    internal static Func<string, bool> ShareExists = Directory.Exists;
+    private static readonly Dictionary<string, (bool Up, DateTime At)> Shares = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> Asking = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object ShareLock = new();
+
+    internal static void ForgetShares()
+    {
+        lock (ShareLock) Shares.Clear();
+    }
+
+    // up or down is kept for a few seconds, and a check that's still out counts as down without another being started
+    private static bool ShareAnswers(string root)
+    {
+        Task<bool> ask;
+        lock (ShareLock)
+        {
+            if (Shares.TryGetValue(root, out var known) && DateTime.UtcNow - known.At < ShareKeep) return known.Up;
+            if (Asking.Contains(root)) return false;
+            Asking.Add(root);
+            ask = Task.Run(() =>
+            {
+                bool up;
+                try { up = ShareExists(root); }
+                catch { up = false; }
+                lock (ShareLock)
+                {
+                    Shares[root] = (up, DateTime.UtcNow);
+                    Asking.Remove(root);
+                }
+                return up;
+            });
+        }
+        if (ask.Wait(ShareWait)) return ask.Result;
+        lock (ShareLock)
+            if (Asking.Contains(root)) Shares[root] = (false, DateTime.UtcNow);
+        return false;
+    }
+
+    // the share a path is on, a local one gives null without anything being asked
+    internal static string? ShareRoot(string path)
+    {
+        if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) path = @"\\" + path[8..];
+        else if (path.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            if (path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\\.\", StringComparison.Ordinal)) return null;
+        }
+        else if (DriveTargets.HasDriveLetter(path) && DriveTargets.Remote(path[0])) path = DriveTargets.Real(path);
+        else return null;
+        if (!path.StartsWith(@"\\", StringComparison.Ordinal)) return null;
+        var parts = path[2..].Split('\\', 3);
+        if (parts[0].Length == 0) return null;
+        return parts.Length > 1 && parts[1].Length > 0 ? @"\\" + parts[0] + '\\' + parts[1] : @"\\" + parts[0];
     }
 
     // only the drive letter, nothing that could wait on a share, so a settings page can ask it
     public static string? DriveProblem(string? dir) =>
-        Usable(dir) is { } real && FolderPins.DriveMissing(real)
+        dir is not null && DriveTargets.Resolve(dir) is var real && FolderPins.DriveMissing(real)
             ? $"Drive {char.ToUpperInvariant(real[0])}: isn't available to Provenance. If it's a SUBST drive, choose the folder by its real path instead."
             : null;
 
     public static void RequireDrive(string? dir)
     {
-        if (Usable(dir) is not { } real) return;
+        if (dir is null || DriveTargets.Resolve(dir) is not { } real) return;
         if (DriveProblem(real) is { } missing) throw Shown.Mark(new IOException(missing));
         if (real.StartsWith(@"\\", StringComparison.Ordinal) && !Directory.Exists(real))
             throw Shown.Mark(new IOException($"Provenance can't open {real}, so it can't use the folder. Check the share is reachable and that this Windows account can open it, then try again."));

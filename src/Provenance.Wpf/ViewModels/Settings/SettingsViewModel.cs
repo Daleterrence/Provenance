@@ -338,9 +338,9 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         var s = _settings.Current;
         if (Hooks.IsWindower && Hooks.WindowerDir is { } w)
             return Hooks.WindowerProfile is { } p ? new WindowerGameStore(w, p.Name, registry, p.Display)
-                 : new WindowerGameStore(w, Hooks.Target(s, ThirdPartyHook.Windower).Profile, registry);
+                 : new WindowerGameStore(w, PlayTarget.For(s, null, ThirdPartyHook.Windower).Profile, registry);
         if (Hooks.IsAshita && Hooks.AshitaDir is { } a
-            && (Hooks.AshitaBootConfig?.Name ?? Hooks.Target(s, ThirdPartyHook.Ashita).Profile) is { Length: > 0 } boot)
+            && (Hooks.AshitaBootConfig?.Name ?? PlayTarget.For(s, null, ThirdPartyHook.Ashita).Profile) is { Length: > 0 } boot)
             return new AshitaGameStore(a, boot, registry, Hooks.AshitaBootConfig?.Display);
         return registry;
     }
