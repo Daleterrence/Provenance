@@ -16,7 +16,8 @@ internal sealed class ReleaseRefusedException(string reason) : Exception(reason)
 // betas go on the beta channel, the rest on stable. A beta copy reads both, so it moves up to a newer stable release
 // (Velopack never offers an older one), and each package is checked against its signed statement first
 internal sealed class ChannelSource(string url, SemanticVersion? installed, IFileDownloader? downloader = null,
-                                    IReadOnlyDictionary<string, ECDsa>? trusted = null)
+                                    IReadOnlyDictionary<string, ECDsa>? trusted = null,
+                                    Action<IReadOnlyList<SemanticVersion>>? feedRead = null)
     : SimpleWebSource(url, downloader)
 {
     public const string Stable = AppRelease.Stable;
@@ -42,7 +43,9 @@ internal sealed class ChannelSource(string url, SemanticVersion? installed, IFil
             assets = [.. feeds.SelectMany(f => f.Assets)];
         }
         // only full packages are ever published, and Velopack runs a delta through Update.exe before anything's checked
-        return new VelopackAssetFeed { Assets = [.. assets.Where(a => a.Type == VelopackAssetType.Full)] };
+        var full = assets.Where(a => a.Type == VelopackAssetType.Full).ToArray();
+        feedRead?.Invoke([.. full.Select(a => a.Version)]);
+        return new VelopackAssetFeed { Assets = full };
     }
 
     // Velopack downloads into localFile (the .partial) and does nothing with it until this returns, so this is the

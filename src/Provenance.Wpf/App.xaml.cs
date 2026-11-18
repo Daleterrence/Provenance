@@ -37,6 +37,9 @@ public partial class App : Application
 
     internal static bool RestartOnExit { get; set; }
 
+    // Restart Now: the update's already downloaded, so the exit ends any game and Update.exe takes over
+    internal static bool RestartForUpdate { get; set; }
+
     internal static bool SkipStartup { get; set; }
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -90,7 +93,8 @@ public partial class App : Application
         shift = AutoLoginAtOpen.ShiftLater(shift, ShiftDown, settings);
         bool noAutoLogin = shift || args.NoAutoLogin;
         var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin);
-        _ = SelfUpdate.TellIfUpdateWaiting(mainVm.Notice);
+        _ = SelfUpdate.TellIfUpdateWaiting(mainVm.UpdateNotice);
+        SelfUpdate.TellIfHeldBack(args, mainVm.Notice);
         StartMainViewModel(mainVm, noAutoLogin);
     }
 
@@ -287,8 +291,7 @@ public partial class App : Application
             if (_pol is { } pol) EndSession(pol);
             try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }   // exit goes ahead without it
             WindowerLauncher.StopBackgroundUpdates(TimeSpan.FromSeconds(3));
-            if (RestartOnExit) StartAgain();
-            else if (!SelfUpdate.HandOverAfterExit(out var restartArgs)) StartAgain(restartArgs);
+            if (SelfUpdate.AfterExit(RestartOnExit, RestartForUpdate) is { } startWith) StartAgain(startWith);
         }
         finally
         {

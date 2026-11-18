@@ -10,7 +10,7 @@
         xmlns:local="clr-namespace:Provenance.Wpf.Views.Main"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Main"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
-        Title="Provenance" Icon="/Assets/provenance.ico" Width="1000" Height="640" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen"
+        Title="{Binding WindowTitle, FallbackValue=Provenance}" Icon="/Assets/provenance.ico" Width="1000" Height="640" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType"
         Style="{StaticResource AppWindow.Fixed}"
         CloseOnEscape="False">
@@ -36,7 +36,7 @@
             </Border.OpacityMask>
         </Border>
 
-        <controls:TitleBar Title="PROVENANCE" Icon="{StaticResource TitleIcon}" TitleSize="13" DimTitle="True" GlyphSize="17"
+        <controls:TitleBar Title="{Binding TitleBarText, FallbackValue=PROVENANCE}" Icon="{StaticResource TitleIcon}" TitleSize="13" DimTitle="True" GlyphSize="17"
                            CloseToolTip="{Binding CloseTooltip}" CloseName="{Binding CloseName}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <controls:PopupToggle x:Name="WorldsChip" Style="{x:Null}" VerticalAlignment="Center"
@@ -114,17 +114,34 @@
             </Border>
         </Popup>
 
-        <Border Grid.Row="1" Padding="24,9" Background="{DynamicResource Surface.2}"
-                BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
-                Visibility="{Binding GameOpen, Converter={StaticResource BoolToVis}}">
-            <Grid ColumnDefinitions="Auto,*">
-                <materialDesign:PackIcon Kind="InformationOutline" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center"
-                                         Foreground="{DynamicResource State.Warn}" />
-                <TextBlock Grid.Column="1" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text.1}"
-                           behaviours:Announce.WhenShown="True"
-                           Text="You cannot use any PlayOnline or social features of Provenance whilst logged into the game." />
-            </Grid>
-        </Border>
+        <StackPanel Grid.Row="1">
+            <!-- no close button and nothing that hides it, it stays until the update's in -->
+            <Border Padding="24,9" Background="{DynamicResource Surface.2}"
+                    BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding UpdateNotice.Showing, Converter={StaticResource BoolToVis}}">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <materialDesign:PackIcon Kind="Update" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             Foreground="{DynamicResource State.Warn}" />
+                    <TextBlock Grid.Column="1" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text.1}"
+                               behaviours:Announce.Once="{Binding UpdateNotice.Showing}" Text="{Binding UpdateNotice.Text}" />
+                    <Button Grid.Column="2" Margin="16,0,0,0" VerticalAlignment="Center" Style="{StaticResource PolButton}"
+                            Command="{Binding UpdateNotice.RestartNowCommand}" Content="RESTART NOW"
+                            ToolTip="{Binding UpdateNotice.RestartTip}" ToolTipService.ShowOnDisabled="True"
+                            AutomationProperties.Name="Restart Now" />
+                </Grid>
+            </Border>
+            <Border Padding="24,9" Background="{DynamicResource Surface.2}"
+                    BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding GameOpen, Converter={StaticResource BoolToVis}}">
+                <Grid ColumnDefinitions="Auto,*">
+                    <materialDesign:PackIcon Kind="InformationOutline" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             Foreground="{DynamicResource State.Warn}" />
+                    <TextBlock Grid.Column="1" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text.1}"
+                               behaviours:Announce.WhenShown="True"
+                               Text="You cannot use any PlayOnline or social features of Provenance whilst logged into the game." />
+                </Grid>
+            </Border>
+        </StackPanel>
 
         <Grid Grid.Row="2" ColumnDefinitions="1.5*,400">
             <local:NewsCard />

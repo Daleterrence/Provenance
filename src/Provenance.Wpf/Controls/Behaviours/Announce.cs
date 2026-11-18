@@ -14,7 +14,40 @@ public static class Announce
     public static bool GetWhenShown(DependencyObject d) => (bool)d.GetValue(WhenShownProperty);
     public static void SetWhenShown(DependencyObject d, bool value) => d.SetValue(WhenShownProperty, value);
 
+    // Once is for something that's announced when it first turns up and never again, however often it's hidden and
+    // shown after: bound to a flag that only ever goes true
+    public static readonly DependencyProperty OnceProperty = DependencyProperty.RegisterAttached(
+        "Once", typeof(bool), typeof(Announce), new PropertyMetadata(false, OnOnceChanged));
+
+    public static bool GetOnce(DependencyObject d) => (bool)d.GetValue(OnceProperty);
+    public static void SetOnce(DependencyObject d, bool value) => d.SetValue(OnceProperty, value);
+
     internal static Action<UIElement>? Told;
+
+    private static void OnOnceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not UIElement element) return;
+        if (e.NewValue is not true)
+        {
+            element.ClearValue(AutomationProperties.LiveSettingProperty);
+            return;
+        }
+        AutomationProperties.SetLiveSetting(element, AutomationLiveSetting.Polite);
+        if (element.IsVisible)
+        {
+            Raise(element);
+            return;
+        }
+        // it's up in a window that's still in the tray, so it's read when the first one's on screen
+        DependencyPropertyChangedEventHandler? first = null;
+        first = (_, args) =>
+        {
+            if (args.NewValue is not true) return;
+            element.IsVisibleChanged -= first;
+            Raise(element);
+        };
+        element.IsVisibleChanged += first;
+    }
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

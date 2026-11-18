@@ -40,6 +40,17 @@ public static class GameWindow
         return false;
     }
 
+    // the same as pressing the window's close button, for every top-level window the process has. Returns how many were asked
+    public static int AskToClose(int pid)
+    {
+        int asked = 0;
+        foreach (var h in WindowsOf(pid))
+            if (User32.PostMessageW(h, WmClose, UIntPtr.Zero, IntPtr.Zero)) asked++;
+        return asked;
+    }
+
+    private const uint WmClose = 0x0010;
+
     // every top-level window with its process id, until the callback returns false
     public static void ForEachWindow(Func<IntPtr, int, bool> visit) =>
         User32.EnumWindows((h, _) =>

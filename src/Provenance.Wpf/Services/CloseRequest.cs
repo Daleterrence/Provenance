@@ -1,4 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Security.AccessControl;
 using Microsoft.Win32.SafeHandles;
 using Provenance.Common.Security;
 using Provenance.Launcher;
@@ -35,6 +38,30 @@ public static class CloseRequest
             }, null, Timeout.Infinite, executeOnlyOnce: true);
         }
         catch (Exception ex) { Log.Warning(ex, "The uninstaller's close request could not be set up"); }
+    }
+
+    // Restart Now asks the other copies of this install the way the uninstaller does. One that can't be asked is
+    // still there afterwards, which is what the caller waits on
+    public static void AskOthers()
+    {
+        foreach (var p in Process.GetProcessesByName("Provenance"))
+        {
+            using (p)
+            {
+                if (p.Id == Environment.ProcessId) continue;
+                try
+                {
+                    if (!EventWaitHandleAcl.TryOpenExisting(CloseRequestName.For(AppContext.BaseDirectory, p.Id), EventWaitHandleRights.Modify, out var asked))
+                        continue;
+                    using (asked) asked.Set();
+                    Log.Information("Asked Provenance ({Pid}) to close for the update", p.Id);
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                {
+                    Log.Warning(ex, "Provenance ({Pid}) couldn't be asked to close", p.Id);
+                }
+            }
+        }
     }
 
     private sealed class Event : WaitHandle

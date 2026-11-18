@@ -106,11 +106,15 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 
     private bool CanStartOrStop() => Running ? !Stopping : !_session.Launching && !_session.LoggedIn && _pol.Pid is null;
 
+    // Restart Now is under way
+    internal Func<bool> UpdateBusy { get; set; } = () => false;
+
     // concurrent, so the same button stays clickable as the stop while a run goes
     [RelayCommand(CanExecute = nameof(CanStartOrStop), AllowConcurrentExecutions = true)]
     private async Task StartAllAccountsAsync()
     {
         if (Running) { StopAllAccounts(); return; }
+        if (UpdateBusy()) return;
         if (_session.Launching || _session.LoggedIn || _pol.Pid is not null) return;
         if (!MultiPlatformChosen())
         {

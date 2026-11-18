@@ -20,8 +20,9 @@ public partial class MainWindow : AppWindow
         Tray = new TrayMode(this, ExitApp, () => _asking);
         Tray.BackFromTray += async () =>
         {
-            if (Vm is { } vm && await SelfUpdate.UpdateWaitingAsync()) SelfUpdate.ShowWaiting(vm.Notice);
+            if (Vm is { } vm && await SelfUpdate.UpdateWaitingAsync()) SelfUpdate.ShowWaiting(vm.UpdateNotice);
         };
+        SelfUpdate.TagChanged += OnTagChanged;
         DataContextChanged += OnDataContextChanged;
         IsVisibleChanged += (_, _) => ReportShown();
         StateChanged += (_, _) => ReportShown();
@@ -73,6 +74,8 @@ public partial class MainWindow : AppWindow
         Height *= scale;
     }
 
+    private void OnTagChanged() => Dispatcher.InvokeAsync(() => Vm?.TitleChanged());
+
     private void OnWorldsChip(object sender, RoutedEventArgs e) => Menus.Toggle(WorldsChip, () => WorldsPopup);
 
     private void OnNoticeHover(object sender, MouseEventArgs e) => Vm?.Notice.Hold(true);
@@ -87,6 +90,7 @@ public partial class MainWindow : AppWindow
             old.RequestHide -= OnRequestHide;
             old.RequestShow -= OnRequestShow;
             old.RequestRestart -= OnRequestRestart;
+            old.RequestUpdateRestart -= OnRequestUpdateRestart;
             old.RequestExit -= OnRequestExit;
             old.RequestAttention -= OnRequestAttention;
             old.AttentionCleared -= OnAttentionCleared;
@@ -96,6 +100,7 @@ public partial class MainWindow : AppWindow
             @new.RequestHide += OnRequestHide;
             @new.RequestShow += OnRequestShow;
             @new.RequestRestart += OnRequestRestart;
+            @new.RequestUpdateRestart += OnRequestUpdateRestart;
             @new.RequestExit += OnRequestExit;
             @new.RequestAttention += OnRequestAttention;
             @new.AttentionCleared += OnAttentionCleared;
@@ -135,6 +140,13 @@ public partial class MainWindow : AppWindow
     {
         App.RestartOnExit = true;
         ExitApp();
+    }
+
+    // already confirmed, so nothing more is asked on the way out. The exit logs the session out, ends any game and hands over to Update.exe
+    private void OnRequestUpdateRestart()
+    {
+        App.RestartForUpdate = true;
+        Dispatcher.InvokeAsync(ExitWithoutAsking);
     }
 
     // not from inside Closing, Close throws in there
@@ -228,12 +240,16 @@ public partial class MainWindow : AppWindow
     {
         _exiting = false;
         App.RestartOnExit = false;
+        if (!App.RestartForUpdate) return;
+        App.RestartForUpdate = false;
+        Vm?.RestartCancelled();
     }
 
     // a shutdown closes the window whatever OnClosing says, so the icon can't be left behind
     protected override void OnClosed(EventArgs e)
     {
         _closed = true;
+        SelfUpdate.TagChanged -= OnTagChanged;
         Tray.Dispose();
         base.OnClosed(e);
     }

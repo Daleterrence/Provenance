@@ -42,12 +42,14 @@ public partial class MainViewModel : ObservableObject
     public event Action? RequestHide;
     public event Action? RequestShow;
     public event Action? RequestRestart;
+    public event Action? RequestUpdateRestart;
     public event Action? RequestExit;
     public event Action<bool>? RequestAttention;
     public event Action? AttentionCleared;
 
     public MainViewModel(IDialogs dialogs, IWindowManager windows, ICredentialService credentials, ISettingsService settings,
-                         FeedService feeds, PolSession pol, AvatarService avatars, TimeProvider? time = null, GameLaunch? launch = null)
+                         FeedService feeds, PolSession pol, AvatarService avatars, TimeProvider? time = null, GameLaunch? launch = null,
+                         Func<Task<bool>>? prepareRestart = null)
     {
         _dialogs = dialogs;
         _windows = windows;
@@ -64,6 +66,9 @@ public partial class MainViewModel : ObservableObject
         if (_settings.SaveProblem is not null) SaveNotice();
         if (_settings.LoadProblem is { } loadProblem)
             _ui.Post(() => _dialogs.Info("Settings reset", loadProblem));
+        _updateRestart = new UpdateRestart(dialogs, prepareRestart ?? SelfUpdate.PrepareRestartAsync, () => RequestUpdateRestart?.Invoke(),
+                                     RestartBlocked);
+        UpdateNotice = new UpdateBanner(_updateRestart);
         _pol = pol;
         Session = new SessionState(pol);
         _launch = launch ?? new GameLaunch(pol, settings);
@@ -83,6 +88,13 @@ public partial class MainViewModel : ObservableObject
                                () => RequestHide?.Invoke(), () => RequestShow?.Invoke(), () => RequestExit?.Invoke()));
         Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session, _launch,
             new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, GameStart.BackUpGameSettingsAsync));
+        Multi.UpdateBusy = () => UpdatingNow;
+        _updateRestart.BusyChanged += () =>
+        {
+            OnPropertyChanged(nameof(PlayEnabled));
+            LogInCommand.NotifyCanExecuteChanged();
+            Multi.StartAllAccountsCommand.NotifyCanExecuteChanged();
+        };
         Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, Session, () => News.WindowShown, RefreshInstallState);
         Lean = new LeanStartViewModel(dialogs, windows, settings, pol, _ui, Accounts, _launch, this,
             new LeanStartLinks(() => GameInstalled, SetPhase, OnProgress, ResetProgress, EndCancellable, GameStart.BackUpGameSettingsAsync, id => StartSocial(id),
@@ -216,6 +228,7 @@ public partial class MainViewModel : ObservableObject
         LogInCommand.NotifyCanExecuteChanged();
         SignOutCommand.NotifyCanExecuteChanged();
         OpenAccountsCommand.NotifyCanExecuteChanged();
+        UpdateNotice.Refresh();
         Social.HandleSwitching = Handles.Switching;
         if (launchingChanged) OnPropertyChanged(nameof(IsLaunching));
         if (loggedInChanged) OnPropertyChanged(nameof(LoggedIn));
@@ -380,7 +393,7 @@ public partial class MainViewModel : ObservableObject
         (await _launch.LogInAsync(new LaunchLogin(p, pol, squareEnix, otp, Accounts.EnsureHomeSlot(p), stillLean is not null, null, progress,
                                                   PromptHandleName, stillLean), token)).Code;
 
-    private bool CanLogin() => !IsLaunching && !Multi.Running;
+    private bool CanLogin() => !IsLaunching && !Multi.Running && !UpdatingNow;
 
     [RelayCommand(CanExecute = nameof(CanLogin))]
     private Task LogInAsync() => _connectTask = ConnectSocialAsync();
@@ -417,6 +430,37 @@ public partial class MainViewModel : ObservableObject
 
     public NoticeBanner Notice { get; } = new();
 
+    private readonly UpdateRestart _updateRestart;
+
+    public UpdateBanner UpdateNotice { get; }
+
+    // a game that's already up is what Restart Now closes, so only a login, a logout, a game or an account that's still starting holds it off
+    private string? RestartBlocked() =>
+        LoggingIn || Session.Phase is SessionPhase.LoggingIn or SessionPhase.UpdatingGame or SessionPhase.StartingGame
+            or SessionPhase.LoggingOut or SessionPhase.MultiRun or SessionPhase.MultiStopping ? RestartBlockedText : null;
+
+    internal const string RestartBlockedText =
+        "Provenance is in the middle of logging in or starting a game, so it can't restart to update yet. Try again once that's finished.";
+
+    // Restart Now is under way, so no login or game starts
+    public bool UpdatingNow => _updateRestart.Busy;
+
+    internal void RestartCancelled()
+    {
+        SelfUpdate.DropHandOver();
+        _updateRestart.Cancelled();
+    }
+
+    public string WindowTitle => VersionTag.WindowTitle(VersionTag.OwnText(), SelfUpdate.Tag);
+
+    public string TitleBarText => VersionTag.TitleBarText(VersionTag.OwnText(), SelfUpdate.Tag);
+
+    internal void TitleChanged()
+    {
+        OnPropertyChanged(nameof(WindowTitle));
+        OnPropertyChanged(nameof(TitleBarText));
+    }
+
     public RepairButtonViewModel Repair { get; }
 
     public SocialViewModel Social { get; }
@@ -438,7 +482,7 @@ public partial class MainViewModel : ObservableObject
     public bool GameOpen => Session.Phase == SessionPhase.InGame;
     public string PlayText => GameOpen ? "GAME OPEN" : "PLAY";
     public string PlayName => GameOpen ? "Game open" : "Play";
-    public bool PlayEnabled => Social.CanPlay && !GameOpen;
+    public bool PlayEnabled => Social.CanPlay && !GameOpen && !UpdatingNow;
 
     // the Launch card stays till the wait for the game's window is over, so a Play the hook refuses never shows game open
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowLaunchCard), nameof(ShowFriendsCard))] private bool _gameUp;
@@ -828,7 +872,7 @@ public partial class MainViewModel : ObservableObject
         });
 
     [RelayCommand]
-    private Task PlayAsync() => GameStart.PlayAsync();
+    private Task PlayAsync() => UpdatingNow ? Task.CompletedTask : GameStart.PlayAsync();
 
     internal GameStart GameStart { get; }
 

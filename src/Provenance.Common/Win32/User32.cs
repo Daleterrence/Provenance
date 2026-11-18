@@ -30,6 +30,9 @@ internal static class User32
     internal static extern bool IsWindowVisible(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    internal static extern bool PostMessageW(IntPtr hWnd, uint msg, UIntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
     internal static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]

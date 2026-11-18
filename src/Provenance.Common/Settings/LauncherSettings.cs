@@ -24,7 +24,7 @@ public sealed class LauncherSettings
 
     public bool StartGameImmediately { get; set; }
 
-    public bool KeepSignedInInTray { get; set; } = true;
+    public bool KeepSignedInInTray { get; set; }
 
     public List<MultiAccountEntry> MultiAccounts { get; set; } = [];
 
