@@ -18,6 +18,10 @@ public sealed class SvgIcon : Grid
     public static readonly DependencyProperty GlyphProperty = DependencyProperty.Register(
         nameof(Glyph), typeof(string), typeof(SvgIcon), new PropertyMetadata("", (d, _) => ((SvgIcon)d).Refresh()));
 
+    // a one-colour file by its name instead of a glyph, in Foreground, at the width its own shape gives it
+    public static readonly DependencyProperty IconFileProperty = DependencyProperty.Register(
+        nameof(IconFile), typeof(string), typeof(SvgIcon), new PropertyMetadata("", (d, _) => ((SvgIcon)d).Refresh()));
+
     public static readonly DependencyProperty IsOpenProperty = DependencyProperty.Register(
         nameof(IsOpen), typeof(bool), typeof(SvgIcon), new PropertyMetadata(false, (d, _) => ((SvgIcon)d).Refresh()));
 
@@ -56,6 +60,12 @@ public sealed class SvgIcon : Grid
     {
         get => (string)GetValue(GlyphProperty);
         set => SetValue(GlyphProperty, value);
+    }
+
+    public string IconFile
+    {
+        get => (string)GetValue(IconFileProperty);
+        set => SetValue(IconFileProperty, value);
     }
 
     public bool IsOpen
@@ -105,6 +115,8 @@ public sealed class SvgIcon : Grid
             Children.Add(e);
         }
         Children.Add(_assetIcon);
+        _assetIcon.SetBinding(System.Windows.Automation.AutomationProperties.NameProperty,
+                              new Binding { Path = new PropertyPath("(AutomationProperties.Name)"), Source = this });
         SizeChanged += (_, _) => SizeDisc();
         _settle = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TransitionTime };
         _settle.Tick += (_, _) =>
@@ -164,6 +176,15 @@ public sealed class SvgIcon : Grid
     {
         State = Resolve((bool)GetValue(HoverProperty) || (bool)GetValue(FocusedProperty), (bool)GetValue(PressedProperty), _settling, IsOpen);
         _assetIcon.Opacity = 1;
+        if (IconFile.Length > 0)
+        {
+            var colour = Foreground as SolidColorBrush;
+            _assetIcon.Source = SvgIcons.TintedFile(IconFile, colour?.Color ?? Colors.Black);
+            _assetIcon.Opacity = colour?.Opacity ?? 1;
+            _assetIcon.RenderTransform = Transform.Identity;
+            _disc.Visibility = _light.Visibility = _edge.Visibility = _press.Visibility = Visibility.Collapsed;
+            return;
+        }
         if (Flat)
         {
             var tint = Foreground as SolidColorBrush;

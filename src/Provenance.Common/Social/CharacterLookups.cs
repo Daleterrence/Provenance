@@ -2,8 +2,8 @@ using Provenance.Common.Hook;
 
 namespace Provenance.Common.Social;
 
-// one lookup at a time, 3s apart like the hook, for an uncached character someone's just turned up on. A failed one
-// waits for that friend's next presence change
+// one lookup at a time, 3s apart like the hook, for a character someone's just turned up on that has no name yet or a
+// zone to refresh. A failed one waits for that friend's next presence change
 public sealed class CharacterLookups(CharacterNames names)
 {
     private Dictionary<string, string> _seen = new(StringComparer.Ordinal);
@@ -12,6 +12,10 @@ public sealed class CharacterLookups(CharacterNames names)
     private readonly HashSet<string> _asked = new(StringComparer.Ordinal);
     // friends whose request never got written, with the character it was for. They get their ask back at their next presence change
     private readonly Dictionary<string, string> _unsent = new(StringComparer.Ordinal);
+    // zones are only ever in memory, they change too often to keep
+    private readonly Dictionary<string, string> _zones = new(StringComparer.Ordinal);
+    // characters waiting in the queue for their zone, so a name turning up in the cache meanwhile doesn't drop them
+    private readonly HashSet<string> _zoneDue = new(StringComparer.Ordinal);
     private string _askingFor = "";
     // ones given up on, in case the hook took them late and still answers
     private readonly List<(string Token, PolFriendGame Game)> _late = new();
@@ -21,6 +25,11 @@ public sealed class CharacterLookups(CharacterNames names)
     public PolFriendGame? Asking { get; private set; }
     public string Token => _watch.Token ?? "";
     public int Queued => _queue.Count;
+
+    public string? Zone(string key) => _zones.GetValueOrDefault(key);
+
+    // characters that aren't looked up at all, for who's something nothing is shown about
+    public Func<PolFriendGame, bool> Skip { get; set; } = _ => false;
 
     // an empty list says nothing about who's on what (the hook hasn't loaded it yet), so it changes nothing
     public void Seen(IReadOnlyCollection<PolFriend> friends)
@@ -34,17 +43,25 @@ public sealed class CharacterLookups(CharacterNames names)
             var game = f.Online && !f.Pending ? f.Game : null;
             var key = game?.Character.Key ?? "";
             now[id] = key;
-            if (game is null) continue;
+            if (game is null || Skip(game)) continue;
             bool moved = !_seen.TryGetValue(id, out var was) || was != key;
             if (moved && _unsent.Remove(id, out var unsentKey)) _asked.Remove(unsentKey);
-            bool wanted = names.Get(key) is null ? moved : AskAgain(key);
+            var known = names.Get(key);
+            bool zone = known is not { Why.Length: > 0 } && WantsZoneRead(key, moved);
+            bool wanted = known is null ? moved : known.Why.Length > 0 ? AskAgain(key) : zone;
             if (!wanted || Asking?.Character.Key == key || _queue.Exists(q => q.Game.Character.Key == key)) continue;
+            if (zone) _zoneDue.Add(key);
             _queue.Add((game, id));
         }
         _seen = now;
     }
 
     private bool AskAgain(string key) => names.Get(key) is { Why: "private" } && !_asked.Contains(key);
+
+    // whether a friend on a character whose name we know gets a read for the zone. Just once, when they turn up
+    private static bool WantsZoneRead(string key, bool turnedUp) => turnedUp;
+
+    private static string? ZoneName(int id) => id != 0 ? FfxiNames.Area(id) : null;
 
     // the one to ask the hook for now, if any. Anyone who's left that character meanwhile drops out of the queue
     public PolFriendGame? Next(DateTime now)
@@ -57,16 +74,23 @@ public sealed class CharacterLookups(CharacterNames names)
         }
         if (Asking is not null || now - _last < HookLimits.ProfileServerGap) return null;
         names.Refresh();
-        _queue.RemoveAll(q => (names.Get(q.Game.Character.Key) is not null && !AskAgain(q.Game.Character.Key))
-                              || !_seen.ContainsValue(q.Game.Character.Key));
+        _queue.RemoveAll(q => Satisfied(q.Game.Character.Key) || !_seen.ContainsValue(q.Game.Character.Key) || Skip(q.Game));
         if (_queue.Count == 0) return null;
         (Asking, _askingFor) = _queue[0];
         _queue.RemoveAt(0);
         _asked.Add(Asking.Character.Key);
+        _zoneDue.Remove(Asking.Character.Key);
         _watch.Begin(HookLimits.CharacterLookup, now);
         _last = now;
         return Asking;
     }
+
+    private bool Satisfied(string key) => names.Get(key) switch
+    {
+        null => false,
+        { Why.Length: > 0 } => !AskAgain(key),
+        _ => !_zoneDue.Contains(key),
+    };
 
     // true once the hook's settled one, kept or not. A late answer to one given up on still counts, as long as it's for
     // the same character
@@ -77,11 +101,21 @@ public sealed class CharacterLookups(CharacterNames names)
         int late = current ? -1 : _late.FindIndex(x => x.Token == token);
         if (!current && late < 0) return false;
         var asked = current ? Asking! : _late[late].Game;
-        if (CharacterNames.FromAnswer(state, r) is { } known && r?.Character.Key == asked.Character.Key)
-            names.Remember(asked.Character.Key, known);
+        if (r?.Character.Key == asked.Character.Key)
+        {
+            if (CharacterNames.FromAnswer(state, r) is { } known) names.Remember(asked.Character.Key, known);
+            RememberZone(asked.Character.Key, state, r);
+        }
         if (current) Asking = null;
         else _late.RemoveAt(late);
         return true;
+    }
+
+    // a private or missing record has no zone to keep, and a read that failed some other way leaves the old one
+    private void RememberZone(string key, string state, PolCharacterLookup r)
+    {
+        if (state == "done" && r is { ZoneState: ProfileFieldState.Shown } && ZoneName(r.ZoneId) is { } zone) _zones[key] = zone;
+        else if (state is "done" or "failed:-5324" or "failed:no profile") _zones.Remove(key);
     }
 
     public void Failed()
@@ -101,6 +135,7 @@ public sealed class CharacterLookups(CharacterNames names)
     {
         _queue.Clear();
         _asked.Clear();
+        _zoneDue.Clear();
         _unsent.Clear();
         _late.Clear();
         Asking = null;

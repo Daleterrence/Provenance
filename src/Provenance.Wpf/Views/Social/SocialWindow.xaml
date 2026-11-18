@@ -237,6 +237,7 @@
                             </Border>
                         </StackPanel>
                     </Grid>
+                    <local:ZoneTroubleBanner Margin="0,10,0,0" Active="{Binding ZoneTrouble}" />
                 </StackPanel>
 
                 <local:FriendsList x:Name="FriendList" Grid.Row="1" />

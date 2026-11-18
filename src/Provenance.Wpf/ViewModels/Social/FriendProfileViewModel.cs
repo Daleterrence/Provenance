@@ -206,7 +206,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         _login.HandleProfile = p;
         _login.CharacterShown = null;
         Tabs.Clear();
-        if (p.Characters.Count > 0)
+        if (p.Characters.Count > 0 && !_social.IsAnonFriend(_login.ProfileKey))
         {
             Tabs.Add(new ProfileTab(-1, "", _social.Viewer.Text(0x4abe, "Handle Profile"))
             {
@@ -224,13 +224,14 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             ? _social.Avatars.ProfilePicture(row.ProfilePictureId) : _social.Avatars.NoProfilePicture;
 
     private string TabLabel(string characterKey) =>
-        _social.CharacterNames.Get(characterKey) is { Name.Length: > 0 } known ? _social.Viewer.Filtered(known.Name) : FfxiProfileText.Title;
+        !_social.IsAnonFriend(_login.ProfileKey) && _social.CharacterNames.Get(characterKey) is { Name.Length: > 0 } known ? _social.Viewer.Filtered(known.Name) : FfxiProfileText.Title;
 
     // one read per click, never for the tab that's already up or while one's out. Handle Profile shows the answer it had
     [RelayCommand]
     private void SelectTab(ProfileTab? tab)
     {
         if (tab is null || !tab.Clickable || _login.Ffxi.Running || Loading || !Tabs.Contains(tab)) return;
+        if (!tab.IsHandle && _social.IsAnonFriend(_login.ProfileKey)) return;
         if (tab.IsHandle)
         {
             if (_login.HandleProfile is null) return;

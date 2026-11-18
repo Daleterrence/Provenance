@@ -445,21 +445,37 @@ static void profiles_character_text(BYTE *b, pdb_rec *rec, const char *name, cha
         json_sjis_copy(raw, it->v.str, sizeof raw);
     json_pol(b, raw, 0x80, js, cap);
 }
+static int profiles_num_field_ok(BYTE *b, pdb_schema *s, const char *name)
+{
+    int idx;
+    const pdb_field *f = profile_db_field(s, name, &idx);
+    return f && f->type == 3 && pc_pdb_field_index(b, s, name) == idx;
+}
 /* nameState 0 shown, 1 withheld, 2 empty. Like the viewer, only the record level says whether the name's visible,
-   z_name's own level just goes in the log */
+   z_name's own level just goes in the log. The zone's states are the FFXI tab's, and a schema without z_zoneid
+   still gives the name */
 static void profiles_character_build(BYTE *b, pdb_rec *rec)
 {
     char nm[0x100], wn[0x100];
     BYTE lv = 0;
-    int st;
+    int st, zst = PV_NOTSET, zone = 0;
+    pdb_item *zi;
     profiles_character_text(b, rec, "z_name", nm, sizeof nm, &lv);
     st = rec->level < 1 ? 1 : strcmp(nm, "\"\"") == 0 ? 2 : 0;
     profiles_character_text(b, rec, "z_worldname", wn, sizeof wn, NULL);
+    if (rec->level < 1) zst = PV_PRIVATE;
+    else if (profiles_num_field_ok(b, g_ch_pib, "z_zoneid") && (zi = profile_db_get(b, g_ch_pib, "z_zoneid", rec)) != NULL &&
+             (zi->flags & 1)) {
+        zst = PV_OK;
+        zone = (int)(short)zi->v.u16;
+    }
     jw w = {0};
     jw_raw(&w, "name", st == 1 ? "\"\"" : nm);
     jw_int(&w, "nameState", st);
     jw_uint(&w, "level", rec->level);
     jw_raw(&w, "worldName", wn);
+    jw_int(&w, "zoneId", zone);
+    jw_int(&w, "zoneIdState", zst);
     jw_fit(&w, g_ch_json, sizeof g_ch_json, "character");
     jw_free(&w);
     base_log("character: record level %u, name level %u, state %d\r\n", rec->level, lv, st);
@@ -483,11 +499,9 @@ static const char *const g_fp_nums[][2] = {
 
 static int profiles_ffxiprofile_check_schema(BYTE *b, pdb_schema *s)
 {
-    int i, idx;
-    for (i = 0; i < (int)(sizeof g_fp_nums / sizeof g_fp_nums[0]); i++) {
-        const pdb_field *f = profile_db_field(s, g_fp_nums[i][0], &idx);
-        if (!f || f->type != 3 || pc_pdb_field_index(b, s, g_fp_nums[i][0]) != idx) return 0;
-    }
+    int i;
+    for (i = 0; i < (int)(sizeof g_fp_nums / sizeof g_fp_nums[0]); i++)
+        if (!profiles_num_field_ok(b, s, g_fp_nums[i][0])) return 0;
     return 1;
 }
 /* states as the handle profile's, and prof_001 has no per-field levels so the record level decides them all. Type 3

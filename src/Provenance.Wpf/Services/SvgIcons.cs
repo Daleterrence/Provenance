@@ -65,6 +65,23 @@ public static partial class SvgIcons
             ? AroundInk(Load($"status-{glyph}.svg", colour, Whole))
             : Frame(Load($"status-{glyph}.svg", colour, filled ? Solid(colour) : null), GlyphFrame(glyph)));
 
+    // a file that isn't one of the status glyphs, in one colour, framed by its own viewBox
+    public static ImageSource? TintedFile(string file, Color colour) =>
+        Cached($"{file}#{colour}", () => Frame(Load(file, colour), ViewBox(file)));
+
+    private static readonly HashSet<string> Reported = new();
+
+    // whether a file by name is there and draws, said once in the log when it isn't
+    public static bool Available(string file)
+    {
+        if (TintedFile(file, Colors.Black) is not null) return true;
+        lock (Gate)
+        {
+            if (Reported.Add(file)) Log.Warning("Icon {File} isn't there or didn't load", file);
+        }
+        return false;
+    }
+
     private static Func<string, string> Solid(Color colour) =>
         svg => svg.Replace("fill=\"none\"", $"fill=\"#{colour.R:X2}{colour.G:X2}{colour.B:X2}\"", StringComparison.Ordinal);
 

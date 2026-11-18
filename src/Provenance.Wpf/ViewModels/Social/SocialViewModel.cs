@@ -212,6 +212,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private void OnPhaseChanged()
     {
         OnPropertyChanged(nameof(LoggedIn));
+        RefreshZoneTrouble();
         OnPropertyChanged(nameof(NoFriends));
         OnPropertyChanged(nameof(NoFriendsInList));
         OnPropertyChanged(nameof(FriendsUnavailable));
@@ -392,6 +393,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
         StatusPending = false;
         _lookups?.Reset();
+        ZoneSearch?.Reset();
         Profile.Reset();
         Search.Reset();
         Messages.Reset();
@@ -558,7 +560,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 f.Pending ? "Friend request sent" : f.Online ? f.StatusLabel : "Offline", f.Online && !f.Pending, f.Row,
                 _avatars.ProfilePicture(f.ProfilePictureId), _login.Chat?.UnreadFrom(f.Name, f.Key) ?? 0,
                 f.Pending ? FriendSection.RequestsSent : f.Online ? FriendSection.Online : FriendSection.Offline)
-            { Key = f.Key, Status = f.Status, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, InGame = f.Online && !f.Pending && f.Game is not null };
+            { Key = f.Key, Status = f.Status, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, Party = PartyOf(f), InGame = f.Online && !f.Pending && f.Game is not null };
         }).ToList();
         // invitations (kind 0xe) and requests (kind 1) are listed until they're answered, from the server or the store
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_login.Answered.Contains(m.Mid)))
@@ -778,10 +780,54 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         }
     }
 
-    private CharacterLookups Lookups => _lookups ??= new CharacterLookups(CharacterNames);
+    private CharacterLookups Lookups => _lookups ??= new CharacterLookups(CharacterNames) { Skip = game => ZoneSearch?.IsAnon(game) == true };
+
+    // a friend the search server says is anon, found by their key. Their profile shows no character
+    internal bool IsAnonFriend(string friendKey) =>
+        friendKey.Length > 0 && ZoneSearch is { } search &&
+        _login.Last.Friends.FirstOrDefault(f => f.Key == friendKey)?.Game is { } game && search.IsAnon(game);
+
+    private FriendZoneSearch? _zoneSearch;
+
+    // null is no search at all, the app switches it on at start-up
+    internal FriendZoneSearch? ZoneSearch
+    {
+        get => _zoneSearch;
+        set
+        {
+            if (_zoneSearch is not null) _zoneSearch.Changed -= OnZonesChanged;
+            _zoneSearch = value;
+            if (value is not null) value.Changed += OnZonesChanged;
+        }
+    }
+
+    internal Action<Action>? PostToUi { get; set; }
+
+    // a pass for the clock alone, for the refresh
+    internal void TickZones()
+    {
+        if (LoggedIn) ZoneSearch?.Tick(null);
+        RefreshZoneTrouble();
+    }
+
+    public const string ZoneTroubleText =
+        "Provenance is currently having issues retrieving some information for your friends. Some information may be outdated.";
+
+    // a world's gone 2 minutes without answering, and still has friends on it that are being asked about
+    [ObservableProperty] private bool _zoneTrouble;
+
+    private void RefreshZoneTrouble() => ZoneTrouble = LoggedIn && ZoneSearch is { Troubled: true };
+
+    private void OnZonesChanged() => PostToUi?.Invoke(() =>
+    {
+        RefreshZoneTrouble();
+        RebuildFriends();
+    });
 
     private void ApplyCharacters(PolSocialSnapshot snap)
     {
+        if (LoggedIn) ZoneSearch?.Tick(snap.FriendsLoaded ? snap.Friends : null);
+        RefreshZoneTrouble();
         var lookups = Lookups;
         lookups.Answer(snap.CharacterJob.Token, snap.CharacterJob.State, snap.Character);
         lookups.Waiting(snap.CharacterJob.Token, snap.ProfileServerBusy, Now);
@@ -790,11 +836,17 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (!SocialRequests.RequestCharacter(pid, lookups.Token, game.Character)) lookups.Failed();
     }
 
+    private PartyState PartyOf(PolFriend f) =>
+        f.Online && !f.Pending && f.Game is { } game && ZoneSearch is { } search && !search.IsAnon(game) ? search.Party(game) : PartyState.None;
+
     private (string Long, string Short) Playing(PolFriend f)
     {
         if (!f.Online || f.Pending || f.Game is not { } game) return ("", "");
+        // an anon friend is only ever on a world, whatever the profile says
+        if (ZoneSearch?.IsAnon(game) == true) return PlayingText.For("", FfxiWorlds.Name(game.World));
         var name = CharacterNames.Get(game.Character.Key)?.Name ?? "";
-        return PlayingText.For(name.Length > 0 ? _viewer.Filtered(name) : "", FfxiWorlds.Name(game.World));
+        var zone = ZoneSearch?.Area(game) is { } area ? FfxiNames.Area(area) : null;
+        return PlayingText.For(name.Length > 0 ? _viewer.Filtered(name) : "", FfxiWorlds.Name(game.World), zone ?? Lookups.Zone(game.Character.Key));
     }
 
     public void AddFriend() => _windows.AddFriend(this);

@@ -12,6 +12,12 @@ public sealed record FriendItem(string Name, string Playing, string Comment, str
     public bool HasStatus => StatusLabel.Length > 0;
     public string SectionTitle => Section.Title();
     public string PlayingShort { get; init; } = "";
+    public PartyState Party { get; init; }
+    public string PartyIconFile => PartyIcons.For(Party);
+    public bool HasPartyIcon => PartyIconFile.Length > 0;
+    public string PartyTip => HasPartyIcon ? PartyText.Tip(Party) : "";
+    // null when there's nothing to show, so no icon is built for the rows that have none
+    public PartyIconView? PartyIcon => HasPartyIcon ? new PartyIconView(PartyIconFile, PartyTip) : null;
     public string Key { get; init; } = "";   // the hook's hashed POL ID + handle, empty if it couldn't make one
     public bool Pending { get; init; }
     public int RequestMid { get; init; }

@@ -13,6 +13,7 @@ using Provenance.Common.Otp;
 using Provenance.Common.Patcher;
 using Provenance.Common.Security;
 using Provenance.Common.Settings;
+using Provenance.Common.Social;
 using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Win32;
 using Serilog;
@@ -253,6 +254,7 @@ public partial class App : Application
             _ = mainVm.News.LoadFeedsAsync();
             _ = mainVm.News.LoadWorldsAsync();
         }
+        mainVm.Social.ZoneSearch = FriendZoneSearch.Retail();
         mainVm.Startup(suppressed);
         if (MainWindow is { } mainWindow) ShowIfNothingStarted(mainWindow, mainVm);
     }

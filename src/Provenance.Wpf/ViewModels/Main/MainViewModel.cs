@@ -105,6 +105,8 @@ public partial class MainViewModel : ObservableObject
         Viewer = new ViewerResources(settings);
         Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings, Session, Viewer, time);
         Social.OpenChatRequested += OpenChatWith;
+        Social.PostToUi = action => _ui.Post(action);
+        _socialPoll.Tick += (_, _) => Social.TickZones();
         Accounts.MessagesEnding = Social.StopKeeping;
 
         Multi.RequestShow += () => RequestShow?.Invoke();

@@ -135,7 +135,8 @@ public static class SocialSnapshotFiles
     private static PolCharacterLookup? ReadCharacter(JsonElement c) =>
         c.ValueKind == JsonValueKind.Object
             ? new PolCharacterLookup(ReadCharacterId(c), Str(c, "name").Trim(),
-                                     FieldState(c, "nameState"), (PrivacyLevel)Long(c, "level"), Str(c, "worldName"))
+                                     FieldState(c, "nameState"), (PrivacyLevel)Long(c, "level"), Str(c, "worldName"),
+                                     (int)Long(c, "zoneId"), FieldState(c, "zoneIdState"))
             : null;
 
     public static PolStoredLines? ParseStore(string json)

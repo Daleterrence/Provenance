@@ -32,6 +32,11 @@ public static class Announce
     private static void OnVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (e.NewValue is not true || sender is not UIElement element) return;
+        Raise(element);
+    }
+
+    public static void Raise(UIElement element)
+    {
         // after the layout, a reader can't find an element that's only just been shown
         element.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
         {

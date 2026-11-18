@@ -16,7 +16,7 @@ public sealed record PolFriendGame(int World, CharacterId Character);
 
 // the hook's answer for one character's FFXI profile
 public sealed record PolCharacterLookup(CharacterId Character, string Name, ProfileFieldState NameState, PrivacyLevel Level,
-                                        string WorldName);
+                                        string WorldName, int ZoneId = 0, ProfileFieldState ZoneState = ProfileFieldState.NotSet);
 
 // Name is the character's for a character search, Handle is always the handle's
 public sealed record PolSearchHit(int Index, string Name, int ProfilePictureId, string Key, bool IsFriend)

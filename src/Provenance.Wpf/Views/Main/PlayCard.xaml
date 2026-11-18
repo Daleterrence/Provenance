@@ -9,6 +9,8 @@
             <TextBlock DockPanel.Dock="Top" Margin="8,0,4,8" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
                 <Run Text="Friends" /><Run Text="   " /><Run Text="{Binding Social.Summary, Mode=OneWay}" FontSize="12" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
             </TextBlock>
+            <socialViews:ZoneTroubleBanner DockPanel.Dock="Top" Margin="8,0,4,8"
+                                           Active="{Binding Social.ZoneTrouble}" />
             <socialViews:FriendsList x:Name="FriendList" DataContext="{Binding Social}" OwnSelection="True" FriendActivated="OnFriendActivated" />
         </DockPanel>
         <StackPanel Grid.Row="1" Margin="8,10,8,0">
