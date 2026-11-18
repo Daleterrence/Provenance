@@ -5,9 +5,65 @@
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
     <ScrollViewer VerticalScrollBarVisibility="Visible">
         <StackPanel Margin="28,22">
-            <TextBlock Text="Closing and the tray" Style="{StaticResource Section}" />
+            <TextBlock Text="Installation" Style="{StaticResource Section}" />
+            <TextBlock Text="Region" Style="{StaticResource Label}" />
+            <TextBlock Text="{Binding RegionText}" Margin="0,0,0,10" />
+            <TextBlock Text="PlayOnline Viewer folder" Style="{StaticResource Label}" />
+            <Grid Margin="0,0,0,10" ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding ViewerFolder}" TextWrapping="Wrap" Foreground="{DynamicResource Text.2}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Margin="8,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                        DataContext="{Binding OpenViewerFolder}" Command="{Binding OpenCommand}" ToolTip="Open folder" AutomationProperties.Name="Open the PlayOnline Viewer folder">
+                    <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
+                </Button>
+            </Grid>
+            <TextBlock Text="FINAL FANTASY XI folder" Style="{StaticResource Label}" />
+            <Grid Margin="0,0,0,10" ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding FfxiFolder}" TextWrapping="Wrap" Foreground="{DynamicResource Text.2}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Margin="8,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                        DataContext="{Binding OpenFfxiFolder}" Command="{Binding OpenCommand}" ToolTip="Open folder" AutomationProperties.Name="Open the FINAL FANTASY XI folder">
+                    <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
+                </Button>
+            </Grid>
+            <HeaderedContentControl Header="News region" Margin="0,4,0,22" Tag="This is the PlayOnline site the news and server status come from.">
+                <ComboBox ItemsSource="{Binding FeedRegionChoices}" SelectedIndex="{Binding FeedRegionIndex}" AutomationProperties.Name="News region" />
+            </HeaderedContentControl>
+
+            <TextBlock Text="Appearance" Style="{StaticResource Section}" />
             <Border Style="{StaticResource Card}">
                 <StackPanel>
+                    <!-- the tiles split the row between them, and the margin on the end of the last one is taken back off the list -->
+                    <ItemsControl x:Name="ThemeTiles" ItemsSource="{Binding ThemeTiles}" Focusable="False" IsTabStop="False" Margin="0,8,-12,10"
+                                  KeyboardNavigation.DirectionalNavigation="Cycle" AutomationProperties.Name="Theme">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <RadioButton Style="{StaticResource ThemeTile}" GroupName="SettingsTheme" Tag="{Binding Image}" ToolTip="{Binding Title}"
+                                             IsChecked="{Binding Picked, Mode=TwoWay}" AutomationProperties.Name="{Binding Title}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <HeaderedContentControl Header="Show timestamps" Tag="Shows the time next to messages, group chat lines and chat room lines.">
+                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ShowTimestamps}"
+                                      AutomationProperties.Name="Show timestamps" />
+                    </HeaderedContentControl>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="App Behaviour" Style="{StaticResource Section}" />
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <HeaderedContentControl Header="Chat language filter"
+                                            Tag="When this is on, offensive words are hidden in messages, comments and profiles from other PlayOnline members, and in FINAL FANTASY XI.">
+                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ChatLanguageFilter}"
+                                      AutomationProperties.Name="Chat language filter" />
+                    </HeaderedContentControl>
+                    <TextBlock Text="{Binding PolOptionsStatus}" behaviours:State.IsError="True" Style="{StaticResource ProfileStatusText}" />
                     <HeaderedContentControl Header="Close Provenance when the game exits"
                                             Tag="On, closing FINAL FANTASY XI closes Provenance too. Off, Provenance comes back when the game closes, logged out.">
                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ExitAfterGameExits}"
@@ -25,80 +81,6 @@
                     </HeaderedContentControl>
                 </StackPanel>
             </Border>
-
-            <TextBlock Text="Appearance" Style="{StaticResource Section}" />
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <!-- full width with the label on top, so the two pictures have the room -->
-                    <StackPanel Margin="0,8,0,10">
-                        <TextBlock Text="Theme" FontSize="13" Foreground="{DynamicResource Text.1}" Margin="0,0,0,8" />
-                        <ItemsControl x:Name="ThemeTiles" ItemsSource="{Binding ThemeTiles}" Focusable="False" IsTabStop="False"
-                                      KeyboardNavigation.DirectionalNavigation="Cycle" AutomationProperties.Name="Theme">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <RadioButton Style="{StaticResource ThemeTile}" GroupName="SettingsTheme" Content="{Binding Title}" Tag="{Binding Image}"
-                                                 IsChecked="{Binding Picked, Mode=TwoWay}" AutomationProperties.Name="{Binding Title}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                    <HeaderedContentControl Header="Show timestamps" Tag="Shows the time next to messages, group chat lines and chat room lines.">
-                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ShowTimestamps}"
-                                      AutomationProperties.Name="Show timestamps" />
-                    </HeaderedContentControl>
-                </StackPanel>
-            </Border>
-
-            <TextBlock Text="PlayOnline" Style="{StaticResource Section}" />
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <HeaderedContentControl Header="Chat language filter"
-                                            Tag="When this is on, offensive words are hidden in messages, comments and profiles from other PlayOnline members, and in FINAL FANTASY XI.">
-                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding ChatLanguageFilter}"
-                                      AutomationProperties.Name="Chat language filter" />
-                    </HeaderedContentControl>
-                    <HeaderedContentControl Header="Auto-disconnect"
-                                            Tag="After your set time period, you will automatically disconnect from FINAL FANTASY XI.">
-                        <ComboBox ItemsSource="{Binding AutoDisconnectChoices}" SelectedIndex="{Binding AutoDisconnectIndex}"
-                                  AutomationProperties.Name="Auto-disconnect" />
-                    </HeaderedContentControl>
-                    <TextBlock Text="{Binding PolOptionsStatus}" behaviours:State.IsError="True" Style="{StaticResource ProfileStatusText}" />
-                </StackPanel>
-            </Border>
-
-            <TextBlock Text="News and status" Style="{StaticResource Section}" />
-            <Border Style="{StaticResource Card}">
-                <HeaderedContentControl Header="News region" Tag="This is the PlayOnline site the news and server status come from.">
-                    <ComboBox ItemsSource="{Binding FeedRegionChoices}" SelectedIndex="{Binding FeedRegionIndex}" AutomationProperties.Name="News region" />
-                </HeaderedContentControl>
-            </Border>
-
-            <TextBlock Text="Installation" Style="{StaticResource Section}" />
-            <TextBlock Text="Region" Style="{StaticResource Label}" />
-            <TextBlock Text="{Binding RegionText}" Margin="0,0,0,10" />
-            <TextBlock Text="PlayOnline Viewer folder" Style="{StaticResource Label}" />
-            <Grid Margin="0,0,0,10" ColumnDefinitions="*,Auto">
-                <TextBlock Text="{Binding ViewerFolder}" TextWrapping="Wrap" Foreground="{DynamicResource Text.2}" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Margin="8,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
-                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
-                        DataContext="{Binding OpenViewerFolder}" Command="{Binding OpenCommand}" ToolTip="Open folder" AutomationProperties.Name="Open the PlayOnline Viewer folder">
-                    <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
-                </Button>
-            </Grid>
-            <TextBlock Text="FINAL FANTASY XI folder" Style="{StaticResource Label}" />
-            <Grid Margin="0,0,0,18" ColumnDefinitions="*,Auto">
-                <TextBlock Text="{Binding FfxiFolder}" TextWrapping="Wrap" Foreground="{DynamicResource Text.2}" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Margin="8,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
-                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
-                        DataContext="{Binding OpenFfxiFolder}" Command="{Binding OpenCommand}" ToolTip="Open folder" AutomationProperties.Name="Open the FINAL FANTASY XI folder">
-                    <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
-                </Button>
-            </Grid>
 
             <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding VersionText}" />
         </StackPanel>

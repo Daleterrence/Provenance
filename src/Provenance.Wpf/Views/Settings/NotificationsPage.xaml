@@ -6,29 +6,31 @@
             <TextBlock Text="Notifications" Style="{StaticResource Section}" />
             <TextBlock Style="{StaticResource IntroText}" Margin="0,0,0,14"
                        Text="Choose which notices Provenance shows, and which ones flash its taskbar button." />
-            <!-- over the same two columns the rows put their switches in -->
-            <Grid Margin="17,0,17,0" ColumnDefinitions="*,16,230">
-                <Grid Grid.Column="2" ColumnDefinitions="*,*">
-                    <TextBlock Text="Notice" Style="{StaticResource Label}" HorizontalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="Flash" Style="{StaticResource Label}" HorizontalAlignment="Center" />
-                </Grid>
-            </Grid>
             <Border Style="{StaticResource Card}">
-                <ItemsControl ItemsSource="{Binding Rows}" Focusable="False" IsTabStop="False">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <HeaderedContentControl Header="{Binding Label}" Tag="{Binding Help}">
-                                <Grid ColumnDefinitions="*,*">
-                                    <ToggleButton Style="{StaticResource Switch}" HorizontalAlignment="Center" IsChecked="{Binding Shows}"
+                <StackPanel>
+                    <!-- the headings and every row share these three columns, so each switch sits under its heading -->
+                    <Grid Margin="0,6,0,0" ColumnDefinitions="*,80,80">
+                        <TextBlock Grid.Column="1" Text="Notice" Style="{StaticResource Label}" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="Flash" Style="{StaticResource Label}" HorizontalAlignment="Center" />
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Rows}" Focusable="False" IsTabStop="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid MinHeight="48" Margin="0,2" ColumnDefinitions="*,80,80">
+                                    <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                        <TextBlock Text="{Binding Label}" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource Text.1}" />
+                                        <TextBlock Text="{Binding Help}" Style="{StaticResource Help}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource Switch}" HorizontalAlignment="Center" IsChecked="{Binding Shows}"
                                                   AutomationProperties.Name="{Binding ShowsName}" />
-                                    <ToggleButton Grid.Column="1" Style="{StaticResource Switch}" HorizontalAlignment="Center" IsChecked="{Binding Flashes}"
+                                    <ToggleButton Grid.Column="2" Style="{StaticResource Switch}" HorizontalAlignment="Center" IsChecked="{Binding Flashes}"
                                                   Visibility="{Binding HasFlash, Converter={StaticResource BoolToVis}}"
                                                   AutomationProperties.Name="{Binding FlashesName}" />
                                 </Grid>
-                            </HeaderedContentControl>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </Border>
         </StackPanel>
     </ScrollViewer>

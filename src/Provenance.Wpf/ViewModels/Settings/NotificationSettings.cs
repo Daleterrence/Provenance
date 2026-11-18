@@ -10,7 +10,7 @@ public sealed partial class NoticeRow : ObservableObject
     private readonly ISettingsService _settings;
     private readonly NoticeKind _kind;
 
-    internal NoticeRow(ISettingsService settings, NoticeKind kind, string label, string? help)
+    internal NoticeRow(ISettingsService settings, NoticeKind kind, string label, string help)
     {
         _settings = settings;
         _kind = kind;
@@ -21,7 +21,7 @@ public sealed partial class NoticeRow : ObservableObject
     }
 
     public string Label { get; }
-    public string? Help { get; }
+    public string Help { get; }
     public bool HasFlash => _kind != NoticeKind.FriendOnline;
     public string ShowsName => $"{Label}, show a notice";
     public string FlashesName => $"{Label}, flash the taskbar";
@@ -41,12 +41,11 @@ public sealed class NotificationSettings
     {
         Rows =
         [
-            new(settings, NoticeKind.FriendOnline, "A friend comes online", null),
-            new(settings, NoticeKind.Message, "A new message", null),
-            new(settings, NoticeKind.FriendRequest, "A friend request", null),
-            new(settings, NoticeKind.GroupInvite, "A group invitation", null),
-            new(settings, NoticeKind.Answer, "Answers and group changes",
-                "When someone accepts or declines your friend request or group invitation, or a friend group you're in is disbanded or you're removed from it."),
+            new(settings, NoticeKind.FriendOnline, "A friend comes online", "A quiet notice. Not shown while you're in the game."),
+            new(settings, NoticeKind.Message, "A new message", "When a friend sends you a message."),
+            new(settings, NoticeKind.FriendRequest, "A friend request", "When someone sends you a friend request."),
+            new(settings, NoticeKind.GroupInvite, "A group invitation", "When someone invites you to a friend group."),
+            new(settings, NoticeKind.Answer, "Answers and group changes", "Replies to your requests and invitations, and group changes."),
             new(settings, NoticeKind.GroupChat, "New group chat lines", "Only while the group chat window isn't in front."),
         ];
     }

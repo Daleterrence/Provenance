@@ -150,6 +150,7 @@
             <Setter Property="Padding" Value="8,6" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -168,6 +169,11 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- what init.txt, the init command or an Ashita script loads itself, with why its rows have no switch -->

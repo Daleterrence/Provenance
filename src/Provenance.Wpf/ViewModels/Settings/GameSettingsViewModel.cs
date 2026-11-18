@@ -63,10 +63,6 @@ public partial class GameSettingsViewModel : ObservableObject
     public ThirdPartyHook? Platform => _store.Platform;
 
     public const string RenderSizeText = "This is the resolution the game draws its 3D graphics at, before scaling them to the game resolution.";
-    public const string WindowerRenderSizeText = "Windower saves this as a multiple of the game resolution, so these sizes are the same shape as it.";
-
-    // Windower keeps the 3D resolution as a multiple of the game's, so a square can't be saved in its profile
-    public string RenderSizeHelp => _store.SameShapeRenderSizes ? WindowerRenderSizeText : RenderSizeText;
 
     public SettingsViewModel? Settings { get; internal set; }
 
@@ -103,7 +99,6 @@ public partial class GameSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(Platform));
         OnPropertyChanged(nameof(ProfileHeading));
         OnPropertyChanged(nameof(IntroText));
-        OnPropertyChanged(nameof(RenderSizeHelp));
         OnPropertyChanged(nameof(Editable));
         OnPropertyChanged(nameof(ReadOnlyNote));
     }

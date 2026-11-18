@@ -66,24 +66,20 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <!-- a picture of the main window you click to pick it. Tag holds the picture, the content its name, and the picked one
-         gets the accent ring -->
+    <!-- a picture of the main window you click to pick it. Tag holds the picture, and the picked one gets the accent ring.
+         It's as wide as the cell it's in, with the height following the picture -->
     <Style x:Key="ThemeTile" TargetType="RadioButton">
-        <Setter Property="Width" Value="246" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="Margin" Value="0,0,12,0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
-        <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <StackPanel Background="Transparent">
-                        <Border x:Name="Ring" BorderThickness="2" Padding="2" CornerRadius="{StaticResource Radius.Panel}"
-                                BorderBrush="{DynamicResource Border.Hair}" Background="{DynamicResource Surface.1}">
-                            <Image Source="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
-                        </Border>
-                        <ContentPresenter x:Name="Name" Margin="2,6,0,0" TextElement.FontSize="13" />
-                    </StackPanel>
+                    <Border x:Name="Ring" Background="{DynamicResource Surface.1}" BorderThickness="2" Padding="2" CornerRadius="{StaticResource Radius.Panel}"
+                            BorderBrush="{DynamicResource Border.Hair}">
+                        <Image Source="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                    </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource Text.3}" />
@@ -93,7 +89,6 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource Primary}" />
-                            <Setter TargetName="Name" Property="TextElement.Foreground" Value="{DynamicResource Text.1}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

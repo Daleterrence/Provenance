@@ -2,7 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// one of the two pictures of the main window under Theme. Picking one picks that theme
+// one of the two pictures of the main window on General. Picking one picks that theme
 public sealed class ThemeTile : ObservableObject
 {
     private readonly Action<int> _pick;

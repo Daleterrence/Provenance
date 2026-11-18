@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
-             xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+             xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Settings">
     <Grid RowDefinitions="*,Auto">
         <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="28,22,28,6">
@@ -58,7 +59,7 @@
                 <TextBlock Text="Graphics" Style="{StaticResource Section}" />
                 <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                     <StackPanel>
-                        <HeaderedContentControl Header="3D resolution" Tag="{Binding RenderSizeHelp}">
+                        <HeaderedContentControl Header="3D resolution" Tag="{x:Static vm:GameSettingsViewModel.RenderSizeText}">
                             <ComboBox ItemsSource="{Binding RenderSizes}" SelectedItem="{Binding RenderSize}" />
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="Textures" Tag="This only changes the quality of light flares and clouds.">
@@ -186,11 +187,25 @@
                     </StackPanel>
                 </Border>
 
+                <TextBlock Text="Connection" Style="{StaticResource Section}" />
+                <Border Style="{StaticResource Card}" DataContext="{Binding Settings}">
+                    <StackPanel>
+                        <TextBlock Text="This applies straight away, to every profile." Style="{StaticResource Help}" Margin="0,10,0,2" />
+                        <HeaderedContentControl Header="Auto-disconnect"
+                                                Tag="After your set time period, you will automatically disconnect from FINAL FANTASY XI.">
+                            <ComboBox ItemsSource="{Binding AutoDisconnectChoices}" SelectedIndex="{Binding AutoDisconnectIndex}"
+                                      AutomationProperties.Name="Auto-disconnect" />
+                        </HeaderedContentControl>
+                        <TextBlock Text="{Binding PolOptionsStatus}" behaviours:State.IsError="True" Style="{StaticResource ProfileStatusText}" />
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="Memory" Style="{StaticResource Section}" />
                 <Border Style="{StaticResource Card}" DataContext="{Binding Settings}">
                     <StackPanel>
+                        <TextBlock Text="This applies straight away, to every profile." Style="{StaticResource Help}" Margin="0,10,0,2" />
                         <HeaderedContentControl Header="Large Address Aware" IsEnabled="{Binding LargeAddressAwareEnabled}"
-                                                Tag="When this is on, the game can use up to 4&#160;GB of memory instead of 2&#160;GB, which helps with HD texture mods. It's the same setting as Windower's Large Address Aware, and unlike the rest of this page it saves straight away.">
+                                                Tag="When this is on, the game can use up to 4&#160;GB of memory instead of 2&#160;GB, which helps with HD texture mods.">
                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding LargeAddressAwareOn}"
                                           AutomationProperties.Name="Large Address Aware" />
                         </HeaderedContentControl>

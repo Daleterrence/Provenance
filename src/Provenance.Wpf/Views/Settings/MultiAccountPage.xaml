@@ -20,12 +20,12 @@
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <HeaderedContentControl Header="Continue multi-login process on error"
-                                                Tag="If one of the accounts fails to log in due to an incorrect password, no subscription, or other problem, carry on logging in the other accounts. Disabling this option will make Provenance stop if there's an error logging in to an account. Some problems, like a failed game update, always stop the run.">
+                                                Tag="When an account can't log in, Provenance carries on with the rest. Off, it stops there.">
                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding MultiContinueOnError}"
                                           AutomationProperties.Name="Continue multi-login process on error" />
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="Close Provenance when finished"
-                                                Tag="This will exit Provenance when all of your accounts are successfully logged in. If there is an error logging any account in, it will always stay open to tell you what went wrong and let you try again.">
+                                                Tag="Closes Provenance once all your accounts are logged in. If one has a problem, it stays open so you can see what went wrong.">
                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding MultiCloseWhenFinished}"
                                           AutomationProperties.Name="Close Provenance when finished" />
                         </HeaderedContentControl>
