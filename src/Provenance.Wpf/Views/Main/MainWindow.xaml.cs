@@ -109,10 +109,10 @@ public partial class MainWindow : AppWindow
 
     // a tray tip only for a notice that's just been shown, never an old one again for a flash.
     // Queued, the snapshot behind this hasn't counted the new message yet
-    private void OnRequestAttention(bool tip) => Dispatcher.InvokeAsync(() =>
+    private void OnRequestAttention(bool tip, bool flash) => Dispatcher.InvokeAsync(() =>
     {
         if (tip && Vm?.Notice.Current is { } notice && Tray.ShowNotice(notice.Text)) return;
-        if (IsActive || !IsVisible || Vm is not { WantsAttention: true }) return;
+        if (!flash || IsActive || !IsVisible || Vm is not { WantsAttention: true }) return;
         TaskbarFlash.Start(this);
     });
 

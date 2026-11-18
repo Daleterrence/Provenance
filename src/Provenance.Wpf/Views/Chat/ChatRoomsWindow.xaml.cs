@@ -21,7 +21,8 @@ public partial class ChatRoomsWindow : AppWindow
                            Func<int, ImageSource?>? emote = null)
     {
         InitializeComponent();
-        DataContext = _vm = new ChatRoomsViewModel(social, dialogs, savePassword, dropPassword, emote);
+        DataContext = _vm = new ChatRoomsViewModel(social, dialogs, savePassword, dropPassword, emote, () => social.ShowTimes);
+        Activated += (_, _) => _vm.RefreshTimes();
         Loaded += (_, _) => _vm.Start();
         Closed += (_, _) =>
         {

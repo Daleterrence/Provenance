@@ -56,7 +56,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         };
         FriendsView = CollectionViewSource.GetDefaultView(Friends);
         FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
-        GroupChat = new GroupChatViewModel(this, dialogs, () => _settings.Current.GroupChatTimes, () => _settings.Current.GroupChatFlash);
+        GroupChat = new GroupChatViewModel(this, dialogs, () => ShowTimes, () => Flashes(NoticeKind.GroupChat));
         GroupChat.UnreadChanged += () =>
         {
             Groups.MarkDirty();
@@ -64,6 +64,18 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             OnPropertyChanged(nameof(GroupChatUnread));
         };
         session.PhaseChanged += OnPhaseChanged;
+        Timestamps.Changed += RefreshTimes;
+    }
+
+    public bool Flashes(NoticeKind kind) => _settings.Current.Flashes(kind);
+
+    // read when a window comes to the front, so a change in Settings shows the next time
+    public bool ShowTimes => _settings.Current.ShowTimestamps;
+
+    public void RefreshTimes()
+    {
+        OnPropertyChanged(nameof(ShowTimes));
+        GroupChat.RefreshTimes();
     }
 
     public SocialSearch Search { get; }

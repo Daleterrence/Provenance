@@ -64,7 +64,8 @@
                             </TextBox>
                         </Border>
                         <TextBlock x:Name="Meta" FontSize="10.5" Margin="6,2,6,0" Foreground="{DynamicResource Text.3}"
-                                   Text="{Binding TimeText}" />
+                                   Text="{Binding TimeText}"
+                                   Visibility="{Binding DataContext.ShowTimes, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVis}}" />
                         <StackPanel x:Name="SendState" Orientation="Horizontal" Margin="6,0" HorizontalAlignment="Right"
                                     Visibility="Collapsed">
                             <TextBlock x:Name="SendStateText" FontSize="10.5" Foreground="{DynamicResource Text.3}" Text="{Binding StateText}" />

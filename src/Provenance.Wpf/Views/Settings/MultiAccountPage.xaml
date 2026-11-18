@@ -17,16 +17,20 @@
                        Text="Provenance is starting your accounts. You can change these settings once it's finished."
                        Visibility="{Binding MultiRunGoing, Converter={StaticResource BoolToVis}}" />
             <StackPanel IsEnabled="{Binding MultiEditable}" Style="{StaticResource DimWhenOff}">
-                <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding MultiContinueOnError}" Margin="0,0,0,4">
-                    <TextBlock Text="Continue multi-login process on error" TextWrapping="Wrap" />
-                </CheckBox>
-                <TextBlock Style="{StaticResource Help}" Margin="26,0,0,10"
-                           Text="If one of the accounts fails to log in due to an incorrect password, no subscription, or other problem, carry on logging in the other accounts. Disabling this option will make Provenance stop if there's an error logging in to an account. Some problems, like a failed game update, always stop the run." />
-                <CheckBox Foreground="{DynamicResource Text.2}" IsChecked="{Binding MultiCloseWhenFinished}" Margin="0,0,0,4">
-                    <TextBlock Text="Close Provenance when finished" TextWrapping="Wrap" />
-                </CheckBox>
-                <TextBlock Style="{StaticResource Help}" Margin="26,0,0,14"
-                           Text="This will exit Provenance when all of your accounts are successfully logged in. If there is an error logging any account in, it will always stay open to tell you what went wrong and let you try again." />
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Continue multi-login process on error"
+                                                Tag="If one of the accounts fails to log in due to an incorrect password, no subscription, or other problem, carry on logging in the other accounts. Disabling this option will make Provenance stop if there's an error logging in to an account. Some problems, like a failed game update, always stop the run.">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding MultiContinueOnError}"
+                                          AutomationProperties.Name="Continue multi-login process on error" />
+                        </HeaderedContentControl>
+                        <HeaderedContentControl Header="Close Provenance when finished"
+                                                Tag="This will exit Provenance when all of your accounts are successfully logged in. If there is an error logging any account in, it will always stay open to tell you what went wrong and let you try again.">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding MultiCloseWhenFinished}"
+                                          AutomationProperties.Name="Close Provenance when finished" />
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Border>
                 <TextBlock Text="You haven't added any accounts yet. Press ADD ACCOUNT on the main window to add one."
                            Style="{StaticResource ShowWhenZero}" behaviours:State.Count="{Binding MultiAccountRows.Count}" />
                 <ItemsControl ItemsSource="{Binding MultiAccountRows}" Focusable="False">

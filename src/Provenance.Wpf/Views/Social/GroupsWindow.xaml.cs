@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Provenance.Common.Settings;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Services;
@@ -46,7 +47,7 @@ public partial class GroupsWindow : AppWindow
     // an invitation landing here counts as seen. With Provenance in the background this window flashes instead
     private void OnInviteLanded(string who, int mid)
     {
-        if (!IsVisible || WindowState == WindowState.Minimized) return;
+        if (Vm?.Flashes(NoticeKind.GroupInvite) != true || !IsVisible || WindowState == WindowState.Minimized) return;
         if (WindowOwner.Active() is not null) return;
         TaskbarFlash.Start(this);
     }

@@ -1,7 +1,8 @@
 <UserControl x:Class="Provenance.Wpf.Views.Settings.WindowerAshitaPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours">
+             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
     <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="28,22">
             <TextBlock Text="Windower/Ashita" Style="{StaticResource Section}" />
@@ -16,11 +17,16 @@
 
             <StackPanel Visibility="{Binding Hooks.IsAshita, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="Ashita folder" Style="{StaticResource Label}" />
-                <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
+                <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto,Auto">
                     <TextBox Text="{Binding Hooks.AshitaPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                              AutomationProperties.Name="Ashita folder" />
                     <Button Style="{StaticResource BrowseButton}"
                             Command="{Binding Hooks.BrowseAshitaCommand}" />
+                    <Button Grid.Column="2" Margin="6,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                            Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                            DataContext="{Binding Hooks.OpenAshitaFolder}" Command="{Binding OpenCommand}" ToolTip="Open folder" AutomationProperties.Name="Open folder">
+                        <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
+                    </Button>
                 </Grid>
                 <TextBlock Text="{Binding Hooks.ProfileStatus.Text}" behaviours:State.IsError="{Binding Hooks.ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
                 <TextBlock Text="{Binding Ashita.AshitaCardNote}" Margin="0,0,0,14">
@@ -51,11 +57,16 @@
 
             <StackPanel Visibility="{Binding Hooks.IsWindower, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="Windower folder" Style="{StaticResource Label}" />
-                <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto">
+                <Grid Margin="0,0,0,14" ColumnDefinitions="*,Auto,Auto">
                     <TextBox Text="{Binding Hooks.WindowerPath, UpdateSourceTrigger=LostFocus}" Style="{StaticResource FieldText}"
                              AutomationProperties.Name="Windower folder" />
                     <Button Style="{StaticResource BrowseButton}"
                             Command="{Binding Hooks.BrowseWindowerCommand}" />
+                    <Button Grid.Column="2" Margin="6,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                            Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                            DataContext="{Binding Hooks.OpenWindowerFolder}" Command="{Binding OpenCommand}" ToolTip="Open folder" AutomationProperties.Name="Open folder">
+                        <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
+                    </Button>
                 </Grid>
                 <TextBlock Text="{Binding Hooks.ProfileStatus.Text}" behaviours:State.IsError="{Binding Hooks.ProfileStatus.IsError}" Style="{StaticResource ProfileStatusText}" />
                 <Border Margin="0,0,0,14" Padding="14,10" CornerRadius="{StaticResource Radius.Panel}" BorderThickness="1" BorderBrush="{DynamicResource State.Warn}"

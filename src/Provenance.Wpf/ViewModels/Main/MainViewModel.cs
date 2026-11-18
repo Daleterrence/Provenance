@@ -44,7 +44,8 @@ public partial class MainViewModel : ObservableObject
     public event Action? RequestRestart;
     public event Action? RequestUpdateRestart;
     public event Action? RequestExit;
-    public event Action<bool>? RequestAttention;
+    // whether a notice went up, and whether the taskbar should flash
+    public event Action<bool, bool>? RequestAttention;
     public event Action? AttentionCleared;
 
     public MainViewModel(IDialogs dialogs, IWindowManager windows, ICredentialService credentials, ISettingsService settings,
@@ -123,20 +124,20 @@ public partial class MainViewModel : ObservableObject
 
         Multi.RequestShow += () => RequestShow?.Invoke();
         Multi.RequestExit += () => RequestExit?.Invoke();
-        Social.MessageReceived += (from, text) => Alert(from, $"New message from {from}: {TextBits.Preview(text, 60)}");
+        Social.MessageReceived += (from, text) => Alert(NoticeKind.Message, from, $"New message from {from}: {TextBits.Preview(text, 60)}");
         Social.FriendRequestReceived += (who, mid) =>
-            Alert(null, $"{who} sent you a friend request. Open {FriendsWindowTitle} to answer it.", "AccountPlusOutline",
+            Alert(NoticeKind.FriendRequest, null, $"{who} sent you a friend request. Open {FriendsWindowTitle} to answer it.", "AccountPlusOutline",
                   stays: true, request: mid);
         Social.GroupInviteReceived += (who, mid) =>
-            Alert(who, $"{who} invited you to a friend group. Open {FriendsWindowTitle} to answer it.", "BellOutline",
+            Alert(NoticeKind.GroupInvite, who, $"{who} invited you to a friend group. Open {FriendsWindowTitle} to answer it.", "BellOutline",
                   request: mid);
-        Social.NoticeReceived += (who, text) => Alert(who, text, "BellOutline");
+        Social.NoticeReceived += (who, text) => Alert(NoticeKind.Answer, who, text, "BellOutline");
         Social.GroupChatRequested += OpenGroupChat;
         Social.GroupChat.LineArrived += OnGroupChatLine;
         // a quiet one, no taskbar flash, and it never covers a message notice
         Social.FriendCameOnline += who =>
         {
-            if (GameOpen || !_settings.Current.NotifyFriendsOnline || Notice.Current is { Text.Length: > 0 }) return;
+            if (GameOpen || !_settings.Current.Shows(NoticeKind.FriendOnline) || Notice.Current is { Text.Length: > 0 }) return;
             Notice.Show($"{who} is online now.", "AccountCheckOutline", NoticeTarget.Chat, who);
         };
         Handles = new HandlesViewModel(_dialogs, () => _pol.Pid, _avatars.ProfilePicture, Session, () => Social.Last, time, Viewer.TextOutsideJapan)
@@ -347,26 +348,27 @@ public partial class MainViewModel : ObservableObject
 
     public void MarkTrayTipShown() => _settings.SaveChange(s => s.TrayTipShown = true);
 
-    private void Alert(string? sender, string text, string icon = "mail", bool stays = false, int request = 0)
+    private void Alert(NoticeKind kind, string? sender, string text, string icon = "mail", bool stays = false, int request = 0)
     {
         if (GameOpen) return;   // a snapshot read already under way when Play's sent still lands, with the game open
-        Notice.Show(text, icon, sender is null ? NoticeTarget.Friends : NoticeTarget.Chat, sender, request, stays);
-        RequestAttention?.Invoke(true);
+        bool notice = _settings.Current.Shows(kind), flash = _settings.Current.Flashes(kind);
+        if (notice) Notice.Show(text, icon, sender is null ? NoticeTarget.Friends : NoticeTarget.Chat, sender, request, stays);
+        if (notice || flash) RequestAttention?.Invoke(notice, flash);
     }
 
     // false once everything's been read or seen, like a message landing in a conversation that's already on screen
-    public bool WantsAttention => Social.UnseenCount > 0 || (_settings.Current.GroupChatFlash && Social.GroupChatUnread > 0);
+    public bool WantsAttention => Social.UnseenCount > 0 || (_settings.Current.Flashes(NoticeKind.GroupChat) && Social.GroupChatUnread > 0);
 
     // lines in the group chat with its window hidden or behind, one notice a batch, as the settings say
     private void OnGroupChatLine(string group, string who, string text, int count)
     {
-        bool notice = _settings.Current.GroupChatNotice;
+        bool notice = _settings.Current.Shows(NoticeKind.GroupChat), flash = _settings.Current.Flashes(NoticeKind.GroupChat);
         if (notice)
         {
             Notice.Show(count == 1 ? $"{who} in {group}: {TextBits.Preview(text, 60)}" : $"{count} new lines in {group}", "Forum",
                         NoticeTarget.GroupChat);
         }
-        if (notice || _settings.Current.GroupChatFlash) RequestAttention?.Invoke(notice);
+        if (notice || flash) RequestAttention?.Invoke(notice, flash);
     }
 
     // the Groups tab's Group Chat: the viewer's handle question (0x3eb0) first when it's needed, then the window

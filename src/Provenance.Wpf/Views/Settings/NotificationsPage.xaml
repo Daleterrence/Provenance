@@ -1,0 +1,35 @@
+<UserControl x:Class="Provenance.Wpf.Views.Settings.NotificationsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Visible">
+        <StackPanel Margin="28,22">
+            <TextBlock Text="Notifications" Style="{StaticResource Section}" />
+            <TextBlock Style="{StaticResource IntroText}" Margin="0,0,0,14"
+                       Text="Choose which notices Provenance shows, and which ones flash its taskbar button." />
+            <!-- over the same two columns the rows put their switches in -->
+            <Grid Margin="17,0,17,0" ColumnDefinitions="*,16,230">
+                <Grid Grid.Column="2" ColumnDefinitions="*,*">
+                    <TextBlock Text="Notice" Style="{StaticResource Label}" HorizontalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="Flash" Style="{StaticResource Label}" HorizontalAlignment="Center" />
+                </Grid>
+            </Grid>
+            <Border Style="{StaticResource Card}">
+                <ItemsControl ItemsSource="{Binding Rows}" Focusable="False" IsTabStop="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <HeaderedContentControl Header="{Binding Label}" Tag="{Binding Help}">
+                                <Grid ColumnDefinitions="*,*">
+                                    <ToggleButton Style="{StaticResource Switch}" HorizontalAlignment="Center" IsChecked="{Binding Shows}"
+                                                  AutomationProperties.Name="{Binding ShowsName}" />
+                                    <ToggleButton Grid.Column="1" Style="{StaticResource Switch}" HorizontalAlignment="Center" IsChecked="{Binding Flashes}"
+                                                  Visibility="{Binding HasFlash, Converter={StaticResource BoolToVis}}"
+                                                  AutomationProperties.Name="{Binding FlashesName}" />
+                                </Grid>
+                            </HeaderedContentControl>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

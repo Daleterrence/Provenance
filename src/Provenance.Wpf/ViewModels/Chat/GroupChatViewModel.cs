@@ -76,6 +76,9 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     public bool WindowActive { get; set; }
 
+    // Show timestamps changed while the chat's open
+    public void RefreshTimes() => ShowTimes = _timesWanted();
+
     public bool FlashWanted => _flashWanted();
 
     public void WindowActivated()

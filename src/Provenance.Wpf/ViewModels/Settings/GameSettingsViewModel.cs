@@ -13,6 +13,7 @@ using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
+using SquareSizes = Provenance.Common.Game.RenderSizes;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
@@ -37,6 +38,7 @@ public partial class GameSettingsViewModel : ObservableObject
         _dialogs = dialogs;
         _region = region;
         _store = store ?? new RegistryGameStore(region);
+        OpenScreenshotFolder = new(() => ScreenshotFolder.Trim() is { Length: > 0 } f ? f : DefaultScreenshotFolder);
         foreach (var m in DisplayModes()) Resolutions.Add(m);
         Load();
     }
@@ -60,8 +62,18 @@ public partial class GameSettingsViewModel : ObservableObject
     public string ProfileShown => _store.ProfileDisplay ?? "";
     public ThirdPartyHook? Platform => _store.Platform;
 
-    // the game never reads 0044, it only picks which sizes the official tool lists, so a profile has no use for it
-    public bool KeepAspectShown => !HasProfile;
+    public const string RenderSizeText = "This is the resolution the game draws its 3D graphics at, before scaling them to the game resolution.";
+    public const string WindowerRenderSizeText = "Windower saves this as a multiple of the game resolution, so these sizes are the same shape as it.";
+
+    // Windower keeps the 3D resolution as a multiple of the game's, so a square can't be saved in its profile
+    public string RenderSizeHelp => _store.SameShapeRenderSizes ? WindowerRenderSizeText : RenderSizeText;
+
+    public SettingsViewModel? Settings { get; internal set; }
+
+    public OpenFolder OpenScreenshotFolder { get; }
+
+    // where the game puts them with the box empty
+    private static string DefaultScreenshotFolder => Path.Combine(AppPaths.Documents, "My Games", "FINAL FANTASY XI");
 
     // the Config Tool line only holds with no Windower or Ashita, they keep some of these in their own files
     public string IntroText => HasProfile
@@ -91,7 +103,7 @@ public partial class GameSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(Platform));
         OnPropertyChanged(nameof(ProfileHeading));
         OnPropertyChanged(nameof(IntroText));
-        OnPropertyChanged(nameof(KeepAspectShown));
+        OnPropertyChanged(nameof(RenderSizeHelp));
         OnPropertyChanged(nameof(Editable));
         OnPropertyChanged(nameof(ReadOnlyNote));
     }
@@ -116,7 +128,6 @@ public partial class GameSettingsViewModel : ObservableObject
     [ObservableProperty] private int _vegetation;
     [ObservableProperty] private bool _drawDistance;
     [ObservableProperty] private bool _enhancedShading;
-    [ObservableProperty] private bool _keepAspect;
     [ObservableProperty] private bool _sound;
     [ObservableProperty] private double _soundEffects;
     [ObservableProperty] private bool _backgroundSound;
@@ -136,7 +147,7 @@ public partial class GameSettingsViewModel : ObservableObject
 
     public string BrightnessText => Brightness.ToString("+0.0;-0.0;0.0");
     partial void OnBrightnessChanged(double value) => OnPropertyChanged(nameof(BrightnessText));
-    partial void OnKeepAspectChanged(bool value) => RebuildRenderSizes(RenderSize);
+    partial void OnScreenshotFolderChanged(string value) => OpenScreenshotFolder.Refresh();
 
     // the scale stays put and the menu resolution follows the new size (the official tool leaves it stale)
     partial void OnResolutionChanged(string value)
@@ -234,7 +245,6 @@ public partial class GameSettingsViewModel : ObservableObject
             var res = Fmt(s.Width, s.Height);
             if (!Resolutions.Contains(res)) Resolutions.Insert(0, res);
             Resolution = res;
-            KeepAspect = s.KeepAspect == 1;
             RebuildRenderSizes(Fmt(s.BgWidth, s.BgHeight));
             (_uiWidth, _uiHeight) = (s.UiWidth, s.UiHeight);
             // a value from elsewhere can sit past either end. The slider rests at that end and the pair stays as it is
@@ -276,7 +286,9 @@ public partial class GameSettingsViewModel : ObservableObject
         s.OpeningMovie = B(OpeningMovie); s.Textures = Textures; s.Maps2D = Maps2D; s.Fonts = Fonts;
         // off keeps a mip level Windower or Ashita had above 1
         s.Vegetation = Vegetation; s.DrawDistanceMip = DrawDistance ? 0 : Math.Max(1, _original.DrawDistanceMip); s.EnhancedShading = B(EnhancedShading);
-        s.KeepAspect = KeepAspectShown ? B(KeepAspect) : _original.KeepAspect; s.Sound = B(Sound); s.SoundEffects = (int)Math.Round(SoundEffects);
+        // a size picked from the list is square, which the game's aspect switch has no use for
+        s.KeepAspect = HasProfile || Parse(RenderSize, 0, 0) == (_original.BgWidth, _original.BgHeight) ? _original.KeepAspect : 0;
+        s.Sound = B(Sound); s.SoundEffects = (int)Math.Round(SoundEffects);
         s.BackgroundSound = B(BackgroundSound); s.ScreenshotFolder = ScreenshotFolder.Trim();
         s.FullResScreenshots = B(FullResScreenshots); s.LegacySettings = B(LegacySettings);
         s.HardwareMouse = B(HardwareMouse); s.SimpleCharSelect = B(SimpleCharSelect); s.GraphicsFix = B(GraphicsFix);
@@ -332,36 +344,6 @@ public partial class GameSettingsViewModel : ObservableObject
     private void Revert() { ShowOriginal(); Status.Show("Your unsaved changes have been undone."); }
 
     [RelayCommand]
-    private void Defaults()
-    {
-        // the official Default button leaves the gamepad alone
-        var d = FfxiSettings.Defaults();
-        d.PadMode = PadModeShown();
-        Apply(d);
-        Status.Show("The default settings are shown. Press Save to keep them.");
-    }
-
-    // the official tool's presets, which only touch the graphics values
-    [RelayCommand]
-    private void Preset(string? which)
-    {
-        var (w, h) = Parse(Resolution, 800, 600);
-        switch (which)
-        {
-            case "Ultra":
-                RenderSize = PickOrAdd(Fmt(w * 2, h * 2)); Textures = 2; Fonts = 2; Vegetation = 2;
-                EnhancedShading = true; DrawDistance = true; Maps2D = 1; break;
-            case "High":
-                RenderSize = PickOrAdd(Fmt(w, h)); Textures = 1; Fonts = 1; Vegetation = 1;
-                EnhancedShading = true; DrawDistance = true; Maps2D = 1; break;
-            default:
-                RenderSize = PickOrAdd(SameShapeOnly ? RenderSizes.FirstOrDefault() ?? Fmt(w, h) : Fmt(512, 512));
-                Textures = 0; Maps2D = 0; Fonts = 0; Vegetation = 1; DrawDistance = false; EnhancedShading = false; break;
-        }
-        Status.Show($"The {which} preset is shown. Press Save to keep it.");
-    }
-
-    [RelayCommand]
     private void BrowseScreenshots()
     {
         if (_dialogs.PickFolder("Choose a folder for the game's screenshots and settings") is { } d) ScreenshotFolder = d;
@@ -384,29 +366,34 @@ public partial class GameSettingsViewModel : ObservableObject
         Status.Show("The gamepad tool is open. When you've finished with it, close these settings and open them again to see its changes.");
     }
 
-    // Windower keeps the 3D resolution as one scale of the game's, so only that shape can be saved there
-    private bool SameShapeOnly => (KeepAspectShown && KeepAspect) || _store.SameShapeRenderSizes;
-
+    // 1x and 2x the game resolution and the display modes of its shape for Windower, whose profile only holds a scale
+    // of the game's, and squares for the rest. Neither side goes past 4096
     private void RebuildRenderSizes(string keep)
     {
         var (w, h) = Parse(Resolution, 800, 600);
         RenderSizes.Clear();
-        var list = new List<string> { Fmt(w, h), Fmt(w * 2, h * 2) };
-        if (!SameShapeOnly) foreach (var p in new[] { 512, 1024, 2048, 4096 }) list.Add(Fmt(p, p));
-        foreach (var m in Resolutions) { var (mw, mh) = Parse(m, 0, 0); if (!SameShapeOnly || mw * h == mh * w) list.Add(m); }
-        foreach (var x in list.Distinct()) RenderSizes.Add(x);
+        if (_store.SameShapeRenderSizes)
+        {
+            var list = new List<string> { Fmt(w, h), Fmt(w * 2, h * 2) };
+            foreach (var m in Resolutions) { var (mw, mh) = Parse(m, 0, 0); if (mw * h == mh * w) list.Add(m); }
+            foreach (var x in list.Distinct().Where(Fits)) RenderSizes.Add(x);
+        }
+        else foreach (var q in SquareSizes.Squares) RenderSizes.Add(Fmt(q, q));
         var pick = string.IsNullOrEmpty(keep) ? Fmt(w, h) : keep;
         // a scale's rounding can leave it a pixel off the shape, which is fine. Another resolution's shape takes the
         // nearest one that fits
         var (kw, kh) = Parse(pick, w, h);
         if (_store.SameShapeRenderSizes && Math.Abs((long)kw * h - (long)kh * w) > Math.Max(w, h))
-            pick = RenderSizes.OrderBy(r => Math.Abs(Parse(r, 0, 0).Item1 - kw)).First();
+            pick = RenderSizes.OrderBy(r => Math.Abs(Parse(r, 0, 0).Item1 - kw)).FirstOrDefault() ?? pick;
         RenderSize = PickOrAdd(pick);
     }
 
+    private static bool Fits(string size) => Parse(size, 0, 0) is var (w, h) && w <= SquareSizes.Max && h <= SquareSizes.Max;
+
+    // a size from elsewhere shows as it is, at the top, and goes when another one's picked
     private string PickOrAdd(string v)
     {
-        if (!RenderSizes.Contains(v)) RenderSizes.Add(v);
+        if (!RenderSizes.Contains(v)) RenderSizes.Insert(0, v);
         return v;
     }
 

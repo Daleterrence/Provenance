@@ -1,0 +1,86 @@
+<UserControl x:Class="Provenance.Wpf.Views.Settings.BackupsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
+    <ScrollViewer VerticalScrollBarVisibility="Visible">
+        <StackPanel Margin="28,22">
+            <TextBlock Text="Automatic backups" Style="{StaticResource Section}" />
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <HeaderedContentControl Header="Automatic backups"
+                                            Tag="When this is on, Provenance backs up your characters' in-game settings and macros before the game starts, if they've changed. It keeps the newest 5.">
+                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding BackupGameSettings}"
+                                      AutomationProperties.Name="Automatic backups" />
+                    </HeaderedContentControl>
+                    <StackPanel Margin="0,8,0,10">
+                        <TextBlock Text="Backups folder" FontSize="13" Foreground="{DynamicResource Text.1}" />
+                        <Border Height="8" />
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                            <TextBox Text="{Binding BackupFolder, UpdateSourceTrigger=LostFocus}"
+                                     materialDesign:HintAssist.Hint="%APPDATA%\Provenance\Backups" AutomationProperties.Name="Backups folder">
+                                <TextBox.Style>
+                                    <!-- the full default path, only while the box is empty and it's the one in use -->
+                                    <Style TargetType="TextBox" BasedOn="{StaticResource FieldText}">
+                                        <Style.Triggers>
+                                            <Trigger Property="Text" Value="">
+                                                <Setter Property="ToolTip" Value="{Binding DefaultBackupFolder}" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBox.Style>
+                            </TextBox>
+                            <Button Style="{StaticResource BrowseButton}"
+                                    Command="{Binding BrowseBackupFolderCommand}" />
+                            <Button Grid.Column="2" Margin="6,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                                    Command="{Binding OpenBackupFolderCommand}" ToolTip="Open folder" AutomationProperties.Name="Open folder">
+                                <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="{Binding BackupStatus.Text}" behaviours:State.IsError="{Binding BackupStatus.IsError}" Style="{StaticResource ProfileStatusText}" Margin="0,8,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="Saved backups" Style="{StaticResource Section}" />
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <HeaderedContentControl Header="Back up now" Tag="Backs up your characters' in-game settings and macros into the backups folder straight away.">
+                        <Button Content="BACK UP NOW" Style="{StaticResource PolButton}" FontSize="12"
+                                Command="{Binding BackUpNowCommand}" IsEnabled="{Binding CanBackUpNow}" />
+                    </HeaderedContentControl>
+                    <TextBlock Text="{Binding BackUpNote}" Style="{StaticResource WarnText}" Margin="0,0,0,8"
+                               Visibility="{Binding BackUpNote, Converter={StaticResource NullToVisibilityConverter}}" />
+                    <TextBlock Text="{Binding ActionStatus.Text}" behaviours:State.IsError="{Binding ActionStatus.IsError}" Style="{StaticResource ProfileStatusText}" Margin="0,0,0,8" />
+                </StackPanel>
+            </Border>
+            <TextBlock Text="{Binding RestoreNote}" Style="{StaticResource WarnText}" Margin="0,0,0,8"
+                       Visibility="{Binding RestoreNote, Converter={StaticResource NullToVisibilityConverter}}" />
+            <TextBlock Text="There aren't any backups in this folder yet." Style="{StaticResource Help}" Margin="0,0,0,12"
+                       Visibility="{Binding Empty, Converter={StaticResource BoolToVis}}" />
+            <ItemsControl ItemsSource="{Binding Items}" Focusable="False" IsTabStop="False">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,8" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.1}"
+                                BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
+                                    <TextBlock Text="{Binding When}" FontSize="13" />
+                                    <TextBlock Text="{Binding Characters}" Style="{StaticResource Help}" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="RESTORE" Style="{StaticResource PolButton}" FontSize="12"
+                                        Command="{Binding DataContext.RestoreFromCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}" AutomationProperties.Name="{Binding RestoreName}"
+                                        IsEnabled="{Binding DataContext.CanRestoreNow, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Content="RESTORE FROM A FILE" Style="{StaticResource PolButton}" FontSize="12" HorizontalAlignment="Left" Margin="0,6,0,0"
+                    Command="{Binding RestoreFromFileCommand}" IsEnabled="{Binding CanRestoreNow}" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

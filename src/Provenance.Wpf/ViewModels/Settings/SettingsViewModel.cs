@@ -67,7 +67,10 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             PolRegion.Japan => "Japan",
             _ => "No PlayOnline install found",
         };
-        string Folder(GameProduct product) => (region is { } r ? PolPaths.TryGetInstallFolder(r, product) : null) ?? "Not found";
+        string? Found(GameProduct product) => region is { } r ? PolPaths.TryGetInstallFolder(r, product) : null;
+        string Folder(GameProduct product) => Found(product) ?? "Not found";
+        OpenViewerFolder = new(() => Found(GameProduct.Viewer));
+        OpenFfxiFolder = new(() => Found(GameProduct.Game));
         ViewerFolder = Folder(GameProduct.Viewer);
         PolOptionsStatus = region is { } r && PolPaths.TryGetInstallFolder(r, GameProduct.Viewer) is { } viewer && FolderPins.Linked(viewer)
             ? PolOptions.LinkedText : "";
@@ -75,11 +78,10 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         _exitAfterGameExits = settings.Current.ExitAfterGameExits;
         _keepSignedInInTray = settings.Current.KeepSignedInInTray;
         _minimizeToTray = settings.Current.MinimizeToTray;
-        _notifyFriendsOnline = settings.Current.NotifyFriendsOnline;
-        _groupChatNotice = settings.Current.GroupChatNotice;
-        _groupChatFlash = settings.Current.GroupChatFlash;
-        _groupChatTimes = settings.Current.GroupChatTimes;
+        _showTimestamps = settings.Current.ShowTimestamps;
         _themeIndex = Array.IndexOf(AppTheme.Names, AppTheme.Normalise(settings.Current.Theme));
+        ThemeTiles = [.. AppTheme.Names.Select((name, i) => new ThemeTile(name, ThemeChoices[i], i, PickTheme) { Picked = i == _themeIndex })];
+        Notifications = new NotificationSettings(settings);
         _largeAddressAwareOn = settings.Current.LargeAddressAware;
         _chatLanguageFilter = PolOptions.ChatFilter(settings.Current);
         _autoDisconnectIndex = Math.Max(0, Array.IndexOf(PolOptions.AutoDisconnectChoices, PolOptions.AutoDisconnect(settings.Current)));
@@ -87,6 +89,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         Hooks.Load();
         Multi.Load();
         Game = new GameSettingsViewModel(dialogs, region, GameStoreForSelection(), _context.GameRunning);
+        Game.Settings = this;
         _gameReady = true;
         Addons = new AddonsPluginsViewModel(settings, Hooks.PickedAddonsTarget);
         Hooks.PropertyChanged += (_, e) =>
@@ -114,6 +117,10 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     public GameSettingsViewModel Game { get; }
     public AddonsPluginsViewModel Addons { get; }
     public BackupSettings Backups { get; }
+    public NotificationSettings Notifications { get; }
+    public IReadOnlyList<ThemeTile> ThemeTiles { get; }
+    public OpenFolder OpenViewerFolder { get; }
+    public OpenFolder OpenFfxiFolder { get; }
     public HandlesViewModel Handles { get; }
     public string RegionText { get; }
     public string ViewerFolder { get; }
@@ -136,19 +143,17 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _exitAfterGameExits;
     [ObservableProperty] private bool _keepSignedInInTray;
     [ObservableProperty] private bool _minimizeToTray;
-    [ObservableProperty] private bool _notifyFriendsOnline;
-    [ObservableProperty] private bool _groupChatNotice;
-    [ObservableProperty] private bool _groupChatFlash;
-    [ObservableProperty] private bool _groupChatTimes;
+    [ObservableProperty] private bool _showTimestamps;
     [ObservableProperty] private int _feedRegionIndex;
 
     partial void OnExitAfterGameExitsChanged(bool value) => _settings.SaveChange(s => s.ExitAfterGameExits = value);
     partial void OnKeepSignedInInTrayChanged(bool value) => _settings.SaveChange(s => s.KeepSignedInInTray = value);
     partial void OnMinimizeToTrayChanged(bool value) => _settings.SaveChange(s => s.MinimizeToTray = value);
-    partial void OnNotifyFriendsOnlineChanged(bool value) => _settings.SaveChange(s => s.NotifyFriendsOnline = value);
-    partial void OnGroupChatNoticeChanged(bool value) => _settings.SaveChange(s => s.GroupChatNotice = value);
-    partial void OnGroupChatFlashChanged(bool value) => _settings.SaveChange(s => s.GroupChatFlash = value);
-    partial void OnGroupChatTimesChanged(bool value) => _settings.SaveChange(s => s.GroupChatTimes = value);
+    partial void OnShowTimestampsChanged(bool value)
+    {
+        _settings.SaveChange(s => s.ShowTimestamps = value);
+        Timestamps.RaiseChanged();
+    }
 
     [ObservableProperty] private bool _chatLanguageFilter;
     [ObservableProperty] private int _autoDisconnectIndex;
@@ -177,7 +182,10 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         if (value < 0 || value >= AppTheme.Names.Length) return;
         _settings.SaveChange(s => s.Theme = AppTheme.Names[value]);
         AppTheme.Apply(AppTheme.Names[value]);
+        foreach (var tile in ThemeTiles) tile.Picked = tile.Index == value;
     }
+
+    private void PickTheme(int index) => ThemeIndex = index;
 
     partial void OnFeedRegionIndexChanged(int value)
     {
@@ -270,6 +278,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     // the phases inside one login or play all read the same, so the files only get read again when the answer moves
     private void OnPhaseChanged()
     {
+        if (ShownTab == SettingsTab.Backups) Backups.RefreshRestoreNote();
         var blocked = _session.LargeAddressAwareBlocked();
         if (blocked == _blockedWas) return;
         _blockedWas = blocked;
@@ -280,6 +289,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _blockTimer?.Stop();
         _session.PhaseChanged -= OnPhaseChanged;
         _session.RunChanged -= MultiRunChanged;
     }
@@ -288,23 +298,69 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     {
         Multi.RunChanged();
         Hooks.NotifyProfilesChanged();
+        if (ShownTab == SettingsTab.Backups) Backups.RefreshRestoreNote();
     }
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private SettingsTab _shownTab;
 
+    // nothing says when the game closes, so while Backups is up the reasons RESTORE is off are asked again every few seconds
+    private System.Windows.Threading.DispatcherTimer? _blockTimer;
+
+    internal void BlockTick() => Backups.RefreshRestoreNote();
+
+    private void WatchBlocks(bool on)
+    {
+        if (on)
+        {
+            _blockTimer ??= new(System.Windows.Threading.DispatcherPriority.Background, System.Windows.Threading.Dispatcher.CurrentDispatcher)
+            {
+                Interval = TimeSpan.FromSeconds(3),
+            };
+            _blockTimer.Tick -= OnBlockTick;
+            _blockTimer.Tick += OnBlockTick;
+            _blockTimer.Start();
+        }
+        else _blockTimer?.Stop();
+    }
+
+    private void OnBlockTick(object? sender, EventArgs e) => BlockTick();
+
+    internal bool WatchingBlocks => _blockTimer is { IsEnabled: true };
+
     public void ShowTab(SettingsTab tab)
     {
         ShownTab = tab;
+        WatchBlocks(tab == SettingsTab.Backups);
         // a profile picked on another tab since the Game page was last shown
         if (tab == SettingsTab.Game && !ShowingGame()) PickGameProfile();
-        if (tab == SettingsTab.General) _ = ReadLargeAddressAwareAsync();
+        Refresh(tab);
         if (tab == SettingsTab.WindowerAshita) Hooks.ReloadCards();
     }
 
     // Windower can change pol.exe while the window's open, so it's read again on every show, switch back and activate
-    public void WindowActivated()
+    public void WindowActivated() => Refresh(ShownTab);
+
+    // what a page reads from outside the window: pol.exe, the folders and the backups
+    private void Refresh(SettingsTab tab)
     {
-        if (ShownTab == SettingsTab.General) _ = ReadLargeAddressAwareAsync();
+        switch (tab)
+        {
+            case SettingsTab.General:
+                OpenViewerFolder.Refresh();
+                OpenFfxiFolder.Refresh();
+                break;
+            case SettingsTab.Game:
+                _ = ReadLargeAddressAwareAsync();
+                Game.OpenScreenshotFolder.Refresh();
+                break;
+            case SettingsTab.WindowerAshita:
+                Hooks.OpenAshitaFolder.Refresh();
+                Hooks.OpenWindowerFolder.Refresh();
+                break;
+            case SettingsTab.Backups:
+                _ = Backups.Reload();
+                break;
+        }
     }
 
     // Windower/Ashita, Game and Addons and plugins are the tabs that change a profile, though there's nothing to pick

@@ -19,7 +19,7 @@ public static partial class SvgIcons
     [
         "card", "smiley", "chat", "key", "groupchat2", "search", "wave", "bubble", "ring", "list", "sword", "person",
         "delete", "add", "copy", "help", "ok", "lock", "star", "edit", "mail", "close", "dismiss", "folder",
-        "left", "right", "up", "down", "settings", "accounts", "more", "download", "verified", "plugin", "gamepad", "profile-edit",
+        "left", "right", "up", "down", "settings", "accounts", "more", "download", "verified", "plugin", "gamepad", "profile-edit", "crystal",
     ];
     public static readonly string[] OnlineKeys = ["online", "away", "invisible"];
     // POL cuts these with its badge circle. Centred on a button's disc the cut ends up inside it, so they're drawn whole

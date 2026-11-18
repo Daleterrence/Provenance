@@ -1,12 +1,13 @@
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Controls.Primitives;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.ViewModels.Settings;
 
 namespace Provenance.Wpf.Views.Settings;
 
-// General and Windower/Ashita save each change straight away, but the Game page holds its changes until Save, so
-// closing with unsaved Game changes asks first
+// every page saves each change straight away bar the FFXI one, which holds its changes until Save, so closing with
+// unsaved ones asks first
 public partial class SettingsWindow : AppWindow
 {
     private readonly Dictionary<SettingsTab, FrameworkElement> _pages = [];
@@ -14,7 +15,9 @@ public partial class SettingsWindow : AppWindow
     public SettingsWindow()
     {
         InitializeComponent();
-        Tabs.ItemsSource = SettingsPages.All;
+        var pages = new ListCollectionView(SettingsPages.All.ToList());
+        pages.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SettingsPage.Group)));
+        Tabs.ItemsSource = pages;
         Tabs.SelectedIndex = 0;
         Tabs.SelectionChanged += (_, _) => ShowPage(SelectedTab);
         Loaded += (_, _) => ShowPage(SelectedTab);

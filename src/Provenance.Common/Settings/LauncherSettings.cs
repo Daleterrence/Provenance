@@ -38,12 +38,23 @@ public sealed class LauncherSettings
 
     public bool TrayTipShown { get; set; }
 
+    // one notice switch and one taskbar flash switch for each kind of news the friends side shows. A friend coming
+    // online never flashes, so it has no flash
     public bool NotifyFriendsOnline { get; set; } = true;
-
+    public bool NotifyMessages { get; set; } = true;
+    public bool FlashMessages { get; set; } = true;
+    public bool NotifyFriendRequests { get; set; } = true;
+    public bool FlashFriendRequests { get; set; } = true;
+    public bool NotifyGroupInvites { get; set; } = true;
+    public bool FlashGroupInvites { get; set; } = true;
+    public bool NotifyAnswers { get; set; } = true;
+    public bool FlashAnswers { get; set; } = true;
     // a busy group chat with its window hidden or behind
     public bool GroupChatNotice { get; set; } = true;
     public bool GroupChatFlash { get; set; } = true;
-    public bool GroupChatTimes { get; set; }
+
+    // the time next to messages, group chat lines and chat room lines
+    public bool ShowTimestamps { get; set; } = true;
 
     // 0 online, 1 away, 2 busy, 4 appear offline
     public int PlayOnlineStatus { get; set; }

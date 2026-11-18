@@ -58,27 +58,8 @@
                 <TextBlock Text="Graphics" Style="{StaticResource Section}" />
                 <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                     <StackPanel>
-                        <Grid Margin="0,8,0,6" ColumnDefinitions="*,Auto">
-                            <StackPanel Style="{StaticResource DimWhenOff}" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Quick preset" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource Text.1}" />
-                                <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
-                                           Text="A preset changes the graphics settings below in one go. Press Save to keep the changes." />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Content="ULTRA" Style="{StaticResource PolButton}" Padding="12,0" MinWidth="76" FontSize="12"
-                                        Command="{Binding PresetCommand}" CommandParameter="Ultra" />
-                                <Button Content="HIGH" Style="{StaticResource PolButton}" Padding="12,0" MinWidth="76" FontSize="12"
-                                        Margin="8,0,0,0" Command="{Binding PresetCommand}" CommandParameter="High" />
-                                <Button Content="STANDARD" Style="{StaticResource PolButton}" Padding="12,0" MinWidth="76" FontSize="12"
-                                        Margin="8,0,0,0" Command="{Binding PresetCommand}" CommandParameter="Standard" />
-                            </StackPanel>
-                        </Grid>
-                        <HeaderedContentControl Header="3D resolution" Tag="This is the resolution the game draws its 3D graphics at, before scaling them to the game resolution.">
+                        <HeaderedContentControl Header="3D resolution" Tag="{Binding RenderSizeHelp}">
                             <ComboBox ItemsSource="{Binding RenderSizes}" SelectedItem="{Binding RenderSize}" />
-                        </HeaderedContentControl>
-                        <HeaderedContentControl Header="Keep aspect ratio" Tag="When this is on, the 3D resolution list only shows sizes that are the same shape as the game resolution."
-                                                Visibility="{Binding KeepAspectShown, Converter={StaticResource BoolToVis}}">
-                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding KeepAspect}" />
                         </HeaderedContentControl>
                         <HeaderedContentControl Header="Textures" Tag="This only changes the quality of light flares and clouds.">
                             <ComboBox ItemsSource="{Binding Quality3}" SelectedIndex="{Binding Textures}" />
@@ -152,29 +133,42 @@
                     </StackPanel>
                 </Border>
 
+                <TextBlock Text="Screenshots" Style="{StaticResource Section}" />
+                <!-- the card isn't switched off with the page, Open folder only opens Explorer -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Full-size screenshots" Tag="When this is on, your screenshots are saved at your screen's resolution."
+                                                IsEnabled="{Binding Editable}">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding FullResScreenshots}" />
+                        </HeaderedContentControl>
+                        <StackPanel Margin="0,8,0,10">
+                            <StackPanel Style="{StaticResource DimWhenOff}" IsEnabled="{Binding Editable}">
+                                <TextBlock Text="Screenshots and settings folder" FontSize="13" Foreground="{DynamicResource Text.1}" />
+                                <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
+                                           Text="The game saves your screenshots and some of its settings in this folder." />
+                                <Border Height="8" />
+                            </StackPanel>
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <TextBox Text="{Binding ScreenshotFolder}" Style="{StaticResource FieldText}" IsEnabled="{Binding Editable}"
+                                         materialDesign:HintAssist.Hint="Documents\My Games\FINAL FANTASY XI" AutomationProperties.Name="Screenshots and settings folder" />
+                                <Button Style="{StaticResource BrowseButton}" IsEnabled="{Binding Editable}"
+                                        Command="{Binding BrowseScreenshotsCommand}" />
+                                <Button Grid.Column="2" Margin="6,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                                        DataContext="{Binding OpenScreenshotFolder}" Command="{Binding OpenCommand}" ToolTip="Open folder" AutomationProperties.Name="Open folder">
+                                    <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="Other" Style="{StaticResource Section}" />
                 <Border Style="{StaticResource Card}" IsEnabled="{Binding Editable}">
                     <StackPanel>
                         <HeaderedContentControl Header="Opening movie" Tag="When this is on, the game plays its opening movie each time it starts.">
                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding OpeningMovie}" />
                         </HeaderedContentControl>
-                        <HeaderedContentControl Header="Full-size screenshots" Tag="When this is on, your screenshots are saved at your screen's resolution.">
-                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding FullResScreenshots}" />
-                        </HeaderedContentControl>
-                        <StackPanel Margin="0,8,0,10">
-                            <StackPanel Style="{StaticResource DimWhenOff}">
-                                <TextBlock Text="Screenshots and settings folder" FontSize="13" Foreground="{DynamicResource Text.1}" />
-                                <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
-                                           Text="The game saves your screenshots and some of its settings in this folder." />
-                                <Border Height="8" />
-                            </StackPanel>
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBox Text="{Binding ScreenshotFolder}" Style="{StaticResource FieldText}"
-                                         materialDesign:HintAssist.Hint="Documents\My Games\FINAL FANTASY XI" />
-                                <Button Style="{StaticResource BrowseButton}"
-                                        Command="{Binding BrowseScreenshotsCommand}" />
-                            </Grid>
-                        </StackPanel>
                         <HeaderedContentControl Header="Hardware mouse cursor">
                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding HardwareMouse}" />
                         </HeaderedContentControl>
@@ -191,6 +185,25 @@
                         </StackPanel>
                     </StackPanel>
                 </Border>
+
+                <TextBlock Text="Memory" Style="{StaticResource Section}" />
+                <Border Style="{StaticResource Card}" DataContext="{Binding Settings}">
+                    <StackPanel>
+                        <HeaderedContentControl Header="Large Address Aware" IsEnabled="{Binding LargeAddressAwareEnabled}"
+                                                Tag="When this is on, the game can use up to 4&#160;GB of memory instead of 2&#160;GB, which helps with HD texture mods. It's the same setting as Windower's Large Address Aware, and unlike the rest of this page it saves straight away.">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding LargeAddressAwareOn}"
+                                          AutomationProperties.Name="Large Address Aware" />
+                        </HeaderedContentControl>
+                        <TextBlock Text="{Binding LargeAddressAwareStatus}"
+                                   TextWrapping="Wrap" FontSize="12" Margin="0,0,0,10">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource StatusText}">
+                                    <Setter Property="Visibility" Value="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource NullToVisibilityConverter}}" />
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
 
@@ -201,8 +214,7 @@
                            Style="{StaticResource StatusText}" VerticalAlignment="Center"
                            TextWrapping="Wrap" FontSize="12" Margin="0,0,12,0" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Content="DEFAULTS" MinWidth="100" Style="{StaticResource PolButton}" Command="{Binding DefaultsCommand}" IsEnabled="{Binding Editable}" />
-                    <Button Content="REVERT" MinWidth="100" Style="{StaticResource PolButton}" Command="{Binding RevertCommand}" Margin="{StaticResource Footer.Gap}" IsEnabled="{Binding Editable}" />
+                    <Button Content="REVERT" MinWidth="100" Style="{StaticResource PolButton}" Command="{Binding RevertCommand}" IsEnabled="{Binding Editable}" />
                     <Button Content="SAVE" MinWidth="100" Margin="{StaticResource Footer.Gap}" Style="{StaticResource PolButton}"
                             Command="{Binding SaveCommand}" IsEnabled="{Binding Editable}" />
                 </StackPanel>

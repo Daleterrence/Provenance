@@ -38,6 +38,8 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private bool _restoringZone, _quiet, _disposed, _joinLocked;
     private readonly Dictionary<int, string> _categories = new();
     private readonly Func<int, ImageSource?>? _emote;
+    private readonly Func<bool> _timesWanted;
+    [ObservableProperty] private bool _showTimes;
     private readonly HookJobWatch _master = new();
     private string? _masterName;
     private MasterJob _masterKind;
@@ -46,8 +48,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     // savePassword hands a room password to the hook for one enter (token, password), dropPassword takes back one it
     // never read
     internal ChatRoomsViewModel(ISocialSession social, IDialogs dialogs, Func<string, string, bool> savePassword, Action dropPassword,
-                              Func<int, ImageSource?>? emote = null)
+                              Func<int, ImageSource?>? emote = null, Func<bool>? timesWanted = null)
     {
+        _timesWanted = timesWanted ?? (() => true);
+        _showTimes = _timesWanted();
+        Timestamps.Changed += RefreshTimes;
         _social = social;
         _dialogs = dialogs;
         _savePassword = savePassword;
@@ -75,6 +80,9 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     }
 
     internal bool SendTicking => _tick.IsEnabled;
+
+    // read when the window comes to the front, so a change in Settings shows the next time
+    public void RefreshTimes() => ShowTimes = _timesWanted();
 
     public ObservableCollection<ChatZoneItem> Zones { get; } = new();
     public ICollectionView ZonesView { get; }
@@ -700,6 +708,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _social.SnapshotApplied -= OnSnapshot;
         _social.PropertyChanged -= OnSocialChanged;
         AppTheme.Changed -= OnThemeChanged;
+        Timestamps.Changed -= RefreshTimes;
         _tick.Stop();
         Leave();
     }

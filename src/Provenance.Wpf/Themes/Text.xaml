@@ -66,6 +66,41 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <!-- a picture of the main window you click to pick it. Tag holds the picture, the content its name, and the picked one
+         gets the accent ring -->
+    <Style x:Key="ThemeTile" TargetType="RadioButton">
+        <Setter Property="Width" Value="246" />
+        <Setter Property="Margin" Value="0,0,12,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingBox}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <StackPanel Background="Transparent">
+                        <Border x:Name="Ring" BorderThickness="2" Padding="2" CornerRadius="{StaticResource Radius.Panel}"
+                                BorderBrush="{DynamicResource Border.Hair}" Background="{DynamicResource Surface.1}">
+                            <Image Source="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                        </Border>
+                        <ContentPresenter x:Name="Name" Margin="2,6,0,0" TextElement.FontSize="13" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource Text.3}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="False">
+                            <Setter Property="IsTabStop" Value="False" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource Primary}" />
+                            <Setter TargetName="Name" Property="TextElement.Foreground" Value="{DynamicResource Text.1}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- for a note that's only there while a list is empty. State.Count is the list's count -->
     <Style x:Key="ShowWhenZero" TargetType="TextBlock" BasedOn="{StaticResource Help}">
         <Setter Property="Visibility" Value="Collapsed" />

@@ -58,8 +58,8 @@ public sealed class FfxiSettings
         s.WindowMode = 0;
         s.Width = screenWidth;
         s.Height = screenHeight;
-        s.BgWidth = s.BgHeight = 4096;
-        s.KeepAspect = 0;   // the 4096x4096 render is square
+        s.BgWidth = s.BgHeight = RenderSizes.ClosestTo(screenWidth);
+        s.KeepAspect = 0;   // the render is square
         (s.UiWidth, s.UiHeight) = MenuResolution(screenWidth, screenHeight, Math.Min(1.5, MaxMenuScale(screenWidth, screenHeight)));
         s.Sound = 1;
         s.SoundEffects = 20;

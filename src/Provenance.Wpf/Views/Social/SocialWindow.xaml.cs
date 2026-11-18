@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using MaterialDesignThemes.Wpf;
+using Provenance.Common.Settings;
 using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Services;
@@ -74,6 +75,7 @@ public partial class SocialWindow : AppWindow
         };
         IsVisibleChanged += (_, _) => ReportVisible();
         StateChanged += (_, _) => ReportVisible();
+        Activated += (_, _) => Vm?.RefreshTimes();
 #pragma warning disable RS0030 // a view, not a view model
         if (Application.Current is { } app) app.Activated += OnAppActivated;
 #pragma warning restore RS0030
@@ -91,9 +93,9 @@ public partial class SocialWindow : AppWindow
     {
         vm.PropertyChanged += OnVmChanged;
         vm.MessageReceived += OnMessageLanded;
-        vm.NoticeReceived += OnMessageLanded;
-        vm.FriendRequestReceived += OnRequestLanded;
-        vm.GroupInviteReceived += OnRequestLanded;
+        vm.NoticeReceived += OnAnswerLanded;
+        vm.FriendRequestReceived += OnFriendRequestLanded;
+        vm.GroupInviteReceived += OnGroupInviteLanded;
     }
 
     private void Detach(SocialViewModel vm)
@@ -102,27 +104,35 @@ public partial class SocialWindow : AppWindow
         if (HasFriends) vm.FriendsListVisible = false;
         vm.PropertyChanged -= OnVmChanged;
         vm.MessageReceived -= OnMessageLanded;
-        vm.NoticeReceived -= OnMessageLanded;
-        vm.FriendRequestReceived -= OnRequestLanded;
-        vm.GroupInviteReceived -= OnRequestLanded;
+        vm.NoticeReceived -= OnAnswerLanded;
+        vm.FriendRequestReceived -= OnFriendRequestLanded;
+        vm.GroupInviteReceived -= OnGroupInviteLanded;
     }
 
     // Landing in this window counts as read or seen, so the main window stays quiet. With Provenance in the
     // background this one flashes instead, till it's brought up
-    private void OnMessageLanded(string who, string _)
+    private void OnMessageLanded(string who, string _) => OnLineLanded(NoticeKind.Message, who);
+
+    private void OnAnswerLanded(string who, string _) => OnLineLanded(NoticeKind.Answer, who);
+
+    private void OnLineLanded(NoticeKind kind, string who)
     {
         if (HasMessages && Vm?.SelectedFriend is { } f && string.Equals(f.Name, who, StringComparison.OrdinalIgnoreCase))
-            FlashIfBehind();
+            FlashIfBehind(kind);
     }
 
-    private void OnRequestLanded(string who, int mid)
+    private void OnFriendRequestLanded(string who, int mid) => OnRequestLanded(NoticeKind.FriendRequest);
+
+    private void OnGroupInviteLanded(string who, int mid) => OnRequestLanded(NoticeKind.GroupInvite);
+
+    private void OnRequestLanded(NoticeKind kind)
     {
-        if (HasFriends) FlashIfBehind();
+        if (HasFriends) FlashIfBehind(kind);
     }
 
-    private void FlashIfBehind()
+    private void FlashIfBehind(NoticeKind kind)
     {
-        if (!IsVisible || WindowState == WindowState.Minimized) return;
+        if (Vm?.Flashes(kind) != true || !IsVisible || WindowState == WindowState.Minimized) return;
         if (WindowOwner.Active() is not null) return;
         TaskbarFlash.Start(this);
     }

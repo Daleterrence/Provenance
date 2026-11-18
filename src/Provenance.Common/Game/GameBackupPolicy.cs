@@ -110,6 +110,34 @@ public static class GameBackupPolicy
         }
     }
 
+    public const string BackedUpText = "Your game settings are backed up.";
+    public const string UnchangedText = "Your game settings haven't changed since your newest backup, so there's nothing new to back up.";
+    public const string NothingThereText = "There were no game settings to back up.";
+
+    // a backup the player asked for, the same one the automatic ones make. On a worker. Whether it worked, and what to say
+    public static (bool Done, string Text) BackUpNow(BackupSources sources, string folder)
+    {
+        try
+        {
+            using var gate = GameSettingsBackup.TryLock(RestoreWait);
+            if (gate is null) return (false, BusyText);
+            var result = GameSettingsBackup.BackUp(sources, folder);
+            Log.Information("Game settings backup (asked for): {Outcome} {Zip}", result.Outcome, result.Zip);
+            foreach (var line in result.LeftOut) Log.Information("Game settings backup: {Line}", line);
+            return result.Outcome switch
+            {
+                BackupOutcome.Unchanged => (true, UnchangedText),
+                BackupOutcome.NothingThere => (true, NothingThereText),
+                _ => (true, BackedUpText),
+            };
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Game settings backup (asked for) failed");
+            return (false, FailedText(ex));
+        }
+    }
+
     internal static string FailedText(Exception ex) => Reason(ex) is { } r
         ? $"Your game settings couldn't be backed up, because {r.Why}. {r.Fix}"
         : "Your game settings couldn't be backed up because of a problem Provenance didn't expect. It'll try again the next time you play.";
@@ -120,11 +148,11 @@ public static class GameBackupPolicy
     // only the backups folder can stop a backup, a source file that won't read is just left out
     internal static (string Why, string Fix)? Reason(Exception ex) => ex switch
     {
-        BackupFolderLinkedException => ("your backups folder is a link to somewhere else", "Choose the folder it points to in Settings, under General."),
-        IOException { HResult: DiskFull or HandleDiskFull } => ("the drive your backups folder is on is full", "Free up some space on it, or choose another folder in Settings, under General."),
-        UnauthorizedAccessException => ("Windows didn't let Provenance save them in your backups folder", "Choose another folder in Settings, under General."),
+        BackupFolderLinkedException => ("your backups folder is a link to somewhere else", "Choose the folder it points to in Settings, under Backups."),
+        IOException { HResult: DiskFull or HandleDiskFull } => ("the drive your backups folder is on is full", "Free up some space on it, or choose another folder in Settings, under Backups."),
+        UnauthorizedAccessException => ("Windows didn't let Provenance save them in your backups folder", "Choose another folder in Settings, under Backups."),
         DirectoryNotFoundException or DriveNotFoundException or IOException { HResult: NotReady or BadNetPath or BadNetName } =>
-            ("your backups folder can't be reached", "Check its drive is connected, or choose another folder in Settings, under General."),
+            ("your backups folder can't be reached", "Check its drive is connected, or choose another folder in Settings, under Backups."),
         _ => null,
     };
 }

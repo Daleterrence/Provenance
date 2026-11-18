@@ -123,7 +123,18 @@
 
         <Grid Grid.Row="1" ColumnDefinitions="210,*">
             <ListBox x:Name="Tabs" Background="{DynamicResource Surface.1}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Border.Pane}" ItemContainerStyle="{StaticResource NavPage}"
-                     Padding="0,10" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                     Padding="0,6" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <!-- small headings between the groups. They're not items, so Tab and the arrows only ever land on a page -->
+                <ListBox.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Text.3}"
+                                           Margin="24,12,10,4" />
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListBox.GroupStyle>
                 <ListBox.Resources>
                     <DataTemplate DataType="{x:Type local:GlyphIcon}">
                         <controls:SvgIcon Glyph="{Binding Glyph}" Flat="True" Width="20" Height="20" Foreground="{DynamicResource Text.2}" />

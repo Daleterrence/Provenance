@@ -36,7 +36,12 @@ public partial class HookSettings : ObservableObject, IProfileHost
         _context = context;
         _stopPrestart = stopPrestart;
         _gameFollows = gameFollows;
+        OpenAshitaFolder = new(() => HookFolder.Usable(AshitaPath));
+        OpenWindowerFolder = new(() => HookFolder.Usable(WindowerPath));
     }
+
+    public OpenFolder OpenAshitaFolder { get; }
+    public OpenFolder OpenWindowerFolder { get; }
 
     internal event Action? Saved;
     internal event Action? ListsRefreshed;
@@ -135,6 +140,8 @@ public partial class HookSettings : ObservableObject, IProfileHost
     // the cards load again, the Addons tab can repoint the boot configuration's script meanwhile
     internal void ReloadCards()
     {
+        OpenAshitaFolder.Refresh();
+        OpenWindowerFolder.Refresh();
         WindowerReload?.Invoke();
         AshitaReload?.Invoke();
     }
@@ -270,6 +277,7 @@ public partial class HookSettings : ObservableObject, IProfileHost
 
     partial void OnAshitaPathChanged(string value)
     {
+        OpenAshitaFolder.Refresh();
         if (_loading) return;
         RefreshThirdPartyHookLists();
         SaveThirdPartyHook();
@@ -278,6 +286,7 @@ public partial class HookSettings : ObservableObject, IProfileHost
 
     partial void OnWindowerPathChanged(string value)
     {
+        OpenWindowerFolder.Refresh();
         if (_loading) return;
         RefreshThirdPartyHookLists();
         SaveThirdPartyHook();
