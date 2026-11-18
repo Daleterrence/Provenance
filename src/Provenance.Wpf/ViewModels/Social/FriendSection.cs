@@ -1,11 +1,12 @@
 namespace Provenance.Wpf.ViewModels.Social;
 
-public enum FriendSection { FriendRequests, GroupInvitations, Online, Offline, RequestsSent, Others }
+public enum FriendSection { Unread, FriendRequests, GroupInvitations, Online, Offline, RequestsSent, Others }
 
 public static class FriendSections
 {
     public static string Title(this FriendSection section) => section switch
     {
+        FriendSection.Unread => "UNREAD",
         FriendSection.FriendRequests => "FRIEND REQUESTS",
         FriendSection.GroupInvitations => "GROUP INVITATIONS",
         FriendSection.Online => "ONLINE",

@@ -60,6 +60,26 @@ internal static class WindowFrame
         w.BorderThickness = new Thickness(w.WindowState == WindowState.Maximized ? 0 : line);
     }
 
+    // the work area of the monitor a window is on, in DIPs. One that isn't shown yet goes by where it's set to open, and
+    // anything that can't be asked gets the main screen's
+    internal static Rect WorkAreaOf(Window w)
+    {
+        try
+        {
+            var dpi = VisualTreeHelper.GetDpi(w);
+            IntPtr monitor;
+            if (new WindowInteropHelper(w).Handle is { } hwnd && hwnd != IntPtr.Zero) monitor = User32.MonitorFromWindow(hwnd, MonitorDefaultToNearest);
+            else if (!double.IsNaN(w.Left) && !double.IsNaN(w.Top))
+                monitor = User32.MonitorFromPoint(new POINT { X = (int)(w.Left * dpi.DpiScaleX), Y = (int)(w.Top * dpi.DpiScaleY) }, MonitorDefaultToNearest);
+            else return SystemParameters.WorkArea;
+            var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+            if (monitor == IntPtr.Zero || !User32.GetMonitorInfo(monitor, ref mi)) return SystemParameters.WorkArea;
+            return new Rect(mi.rcWork.Left / dpi.DpiScaleX, mi.rcWork.Top / dpi.DpiScaleY,
+                            (mi.rcWork.Right - mi.rcWork.Left) / dpi.DpiScaleX, (mi.rcWork.Bottom - mi.rcWork.Top) / dpi.DpiScaleY);
+        }
+        catch (Exception) { return SystemParameters.WorkArea; }
+    }
+
     // a maximised borderless window covers the taskbar too, which took me far too long to notice
     private const int WM_GETMINMAXINFO = 0x0024;
     private const uint MonitorDefaultToNearest = 2;
@@ -115,7 +135,6 @@ internal static class WindowFrame
     private const uint ABM_GETAUTOHIDEBAREX = 0x0B;
     private const int AbeLeft = 0, AbeTop = 1, AbeRight = 2, AbeBottom = 3;
 
-    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)]
     private struct MINMAXINFO { public POINT ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize; }
 }

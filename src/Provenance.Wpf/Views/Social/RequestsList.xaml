@@ -1,0 +1,87 @@
+<UserControl x:Class="Provenance.Wpf.Views.Social.RequestsList"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
+             xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Social"
+             xmlns:local="clr-namespace:Provenance.Wpf.Views.Social"
+             mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialViewModel}">
+
+    <UserControl.Resources>
+        <Style x:Key="AnswerButton" TargetType="Button" BasedOn="{StaticResource PolButton}">
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Margin" Value="0,0,6,4" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="IsEnabled" Value="{Binding DataContext.CanEdit, RelativeSource={RelativeSource AncestorType=local:RequestsList}}" />
+        </Style>
+        <DataTemplate x:Key="RequestRow" DataType="{x:Type vm:FriendItem}">
+            <Grid Margin="6,6,6,4" Background="Transparent" ColumnDefinitions="Auto,*">
+                <controls:ProfilePictureCircle Diameter="36" Margin="0,0,12,0" VerticalAlignment="Top"
+                                               Source="{Binding Avatar}" />
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Medium" Foreground="{DynamicResource Text.1}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Comment}" FontSize="12" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
+                               Margin="0,1,0,0" Visibility="{Binding Comment, Converter={StaticResource NullToVisibilityConverter}}" />
+                    <WrapPanel Margin="0,6,0,0">
+                        <Button x:Name="Accept" Tag="{x:Static vm:RequestChoice.Accept}" Click="OnAnswer" Visibility="Collapsed"
+                                Style="{StaticResource AnswerButton}" />
+                        <Button x:Name="Decline" Tag="{x:Static vm:RequestChoice.Decline}" Click="OnAnswer" Visibility="Collapsed"
+                                Style="{StaticResource AnswerButton}" />
+                        <Button x:Name="Ignore" Tag="{x:Static vm:RequestChoice.Ignore}" Click="OnAnswer" Visibility="Collapsed"
+                                Style="{StaticResource AnswerButton}" Content="IGNORE..." />
+                        <Button x:Name="Delete" Tag="{x:Static vm:RequestChoice.Delete}" Click="OnAnswer" Visibility="Collapsed"
+                                Style="{StaticResource AnswerButton}" Content="DELETE FRIEND REQUEST..." />
+                    </WrapPanel>
+                </StackPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Section}" Value="{x:Static vm:FriendSection.FriendRequests}">
+                    <Setter TargetName="Accept" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Accept" Property="Content" Value="ACCEPT FRIEND REQUEST" />
+                    <Setter TargetName="Decline" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Decline" Property="Content" Value="DECLINE FRIEND REQUEST..." />
+                    <Setter TargetName="Ignore" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Section}" Value="{x:Static vm:FriendSection.GroupInvitations}">
+                    <Setter TargetName="Accept" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Accept" Property="Content" Value="ACCEPT GROUP INVITATION" />
+                    <Setter TargetName="Decline" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Decline" Property="Content" Value="DECLINE GROUP INVITATION" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Section}" Value="{x:Static vm:FriendSection.RequestsSent}">
+                    <Setter TargetName="Delete" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMe}" Value="True">
+                    <Setter TargetName="Accept" Property="IsEnabled" Value="False" />
+                    <Setter TargetName="Ignore" Property="IsEnabled" Value="False" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding RequestsView}" ItemTemplate="{StaticResource RequestRow}"
+                          Focusable="False" KeyboardNavigation.TabNavigation="Continue">
+                <ItemsControl.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate>
+                                <TextBlock Margin="12,10,0,2" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Text.3}">
+                                    <Run Text="{Binding Name, Mode=OneWay}" /><Run Text=" (" /><Run
+                                         Text="{Binding ItemCount, Mode=OneWay}" /><Run Text=")" />
+                                </TextBlock>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ItemsControl.GroupStyle>
+            </ItemsControl>
+        </ScrollViewer>
+        <TextBlock Margin="16,20" VerticalAlignment="Top" FontSize="12" Foreground="{DynamicResource Text.3}" TextWrapping="Wrap"
+                   Text="There aren't any requests right now."
+                   Visibility="{Binding NoRequests, Converter={StaticResource BoolToVis}}" />
+    </Grid>
+</UserControl>

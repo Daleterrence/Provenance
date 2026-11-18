@@ -266,7 +266,8 @@ public sealed class ChatStore
     // The rest go by time then seq
     public IEnumerable<ChatEntry> With(string peer, string key = "")
     {
-        var lines = _entries.Where(e => e.IsWith(peer, key)).ToList();
+        // a notice about one of my requests is a notification, it never sits in a conversation
+        var lines = _entries.Where(e => e.IsWith(peer, key) && (e.Outgoing || e.State != "notice")).ToList();
         int first = lines.FindIndex(Waiting);
         var keyed = new List<(ChatEntry E, bool Tail, (long Time, long Seq) At)>(lines.Count);
         (long Time, long Seq) last = (long.MinValue, long.MinValue);
@@ -291,6 +292,16 @@ public sealed class ChatStore
         var s = Stat();
         return key.Length > 0 ? s.UnreadByKey.GetValueOrDefault(key) + s.UnreadKeyless.GetValueOrDefault(peer)
                               : s.UnreadByName.GetValueOrDefault(peer);
+    }
+
+    // the newest unread line's time and seq, (0, 0) when there isn't one
+    public (long Time, long Seq) NewestUnread(string peer, string key = "")
+    {
+        var s = Stat();
+        if (key.Length == 0) return s.NewestByName.GetValueOrDefault(peer);
+        var a = s.NewestByKey.GetValueOrDefault(key);
+        var b = s.NewestKeyless.GetValueOrDefault(peer);
+        return a.CompareTo(b) >= 0 ? a : b;
     }
 
     public int Unread => Stat().Unread;
@@ -350,6 +361,9 @@ public sealed class ChatStore
         public readonly Dictionary<string, int> UnreadByKey = new(StringComparer.Ordinal);
         public readonly Dictionary<string, int> UnreadKeyless = new(StringComparer.OrdinalIgnoreCase);
         public readonly Dictionary<string, int> UnreadByName = new(StringComparer.OrdinalIgnoreCase);
+        public readonly Dictionary<string, (long, long)> NewestByKey = new(StringComparer.Ordinal);
+        public readonly Dictionary<string, (long, long)> NewestKeyless = new(StringComparer.OrdinalIgnoreCase);
+        public readonly Dictionary<string, (long, long)> NewestByName = new(StringComparer.OrdinalIgnoreCase);
         public readonly HashSet<string> UnreadKeys = new(StringComparer.Ordinal);
         public readonly HashSet<string> UnsentKeys = new(StringComparer.Ordinal);
         public readonly HashSet<string> KeylessNames = new(StringComparer.OrdinalIgnoreCase);
@@ -363,6 +377,11 @@ public sealed class ChatStore
         var s = new Stats { Version = _version };
         var writers = new Dictionary<string, (ChatEntry Last, HashSet<string> Names)>(StringComparer.Ordinal);
         static void Count(Dictionary<string, int> d, string k) => d[k] = d.GetValueOrDefault(k) + 1;
+        static void Newest(Dictionary<string, (long, long)> d, string k, ChatEntry e)
+        {
+            var at = (e.Time, e.Seq);
+            if (!d.TryGetValue(k, out var old) || at.CompareTo(old) > 0) d[k] = at;
+        }
         foreach (var e in _entries)
         {
             if (e.PeerKey.Length > 0 && e.Peer.Length > 0) s.NameByKey[e.PeerKey] = e.Peer;
@@ -373,12 +392,16 @@ public sealed class ChatStore
                 if (e.State == "unsent") s.UnsentKeys.Add(e.Key);
                 continue;
             }
+            // answers to my requests are notices, not messages, so they're never unread and never make someone a writer
+            if (e.State == "notice") continue;
             if (!e.Read)
             {
                 s.Unread++;
                 s.UnreadKeys.Add(e.Key);
                 Count(s.UnreadByName, e.Peer);
                 Count(e.PeerKey.Length > 0 ? s.UnreadByKey : s.UnreadKeyless, e.PeerKey.Length > 0 ? e.PeerKey : e.Peer);
+                Newest(s.NewestByName, e.Peer, e);
+                Newest(e.PeerKey.Length > 0 ? s.NewestByKey : s.NewestKeyless, e.PeerKey.Length > 0 ? e.PeerKey : e.Peer, e);
             }
             var id = e.PeerKey.Length > 0 ? "k:" + e.PeerKey : "n:" + e.Peer.ToUpperInvariant();
             if (!writers.TryGetValue(id, out var w))

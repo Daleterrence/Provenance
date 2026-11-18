@@ -28,7 +28,8 @@ public sealed class LauncherSettings
 
     public List<MultiAccountEntry> MultiAccounts { get; set; } = [];
 
-    public bool SocialSplit { get; set; }
+    // how wide the conversation pane in the Friends window was last dragged to, 0 for the default
+    public double MessagesPaneWidth { get; set; }
 
     public bool AddonSectionsFolded { get; set; }
 

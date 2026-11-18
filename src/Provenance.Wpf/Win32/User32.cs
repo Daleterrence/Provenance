@@ -17,6 +17,9 @@ internal static class User32
     internal static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
 
     [DllImport("user32.dll")]
+    internal static extern IntPtr MonitorFromPoint(POINT pt, uint flags);
+
+    [DllImport("user32.dll")]
     internal static extern uint MapVirtualKeyW(uint code, uint mapType);
 
     [DllImport("user32.dll")]
@@ -31,6 +34,9 @@ internal static class User32
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct FLASHWINFO { public uint cbSize; public IntPtr hwnd; public uint dwFlags; public uint uCount; public uint dwTimeout; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct POINT { public int X, Y; }
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct RECT { public int Left, Top, Right, Bottom; }

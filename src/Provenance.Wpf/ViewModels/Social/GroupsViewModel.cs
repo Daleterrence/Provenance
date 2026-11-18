@@ -368,10 +368,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         return
         [
             new("Send message", friend is { CanMessage: true }, () =>
-            {
-                _social.SelectedFriend = friend;
-                _social.ShowMessagesWindow();
-            }),
+                _social.OpenConversation(friend!)),
             new("View profile", friend is { IsFriend: true, Pending: false }, () => _social.ShowProfile(friend!)),
             MenuAction.Separator,
             new("Make group master...", Can(GroupRole.Master), () =>

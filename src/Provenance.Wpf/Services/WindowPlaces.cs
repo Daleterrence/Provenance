@@ -30,11 +30,12 @@ internal static class WindowPlaces
     }
 
     // saved as it closes or hides, from the normal bounds so a minimised or maximised one comes back as it was
-    internal static void Track(ISettingsService settings, Window w, string key)
+    internal static void Track(ISettingsService settings, Window w, string key, Func<Rect, Rect>? shape = null)
     {
         void Save()
         {
             var b = w.RestoreBounds;
+            if (!b.IsEmpty && shape is not null) b = shape(b);
             if (!w.IsLoaded || b.IsEmpty || b.Width <= 0 || b.Height <= 0) return;
             var place = new WindowPlace { Left = Math.Round(b.Left), Top = Math.Round(b.Top), Width = Math.Round(b.Width), Height = Math.Round(b.Height) };
             settings.SaveChange(s => s.WindowPlaces[key] = place);

@@ -17,20 +17,17 @@ using Provenance.Wpf.Views.Social;
 
 namespace Provenance.Wpf.Services;
 
-public enum SecondWindow { Friends, Messages, Groups, ChatRooms, ProfileEditor }
+public enum SecondWindow { Friends, Groups, ChatRooms, ProfileEditor }
 
 public interface IWindowManager
 {
     bool ProfileEditorOpen { get; }
-    string FriendsTitle { get; }
 
     void ShowFriends(SocialViewModel social);
-    void ShowMessages(SocialViewModel social);
     void ShowGroups(SocialViewModel social);
-    // only with the windows split. Without takeFocus it only opens one that isn't up yet
-    void ShowMessagesAlongside(SocialViewModel social, bool takeFocus);
-    void Split(SocialViewModel social);
-    void Merge(SocialViewModel social);
+    // opens the window for a conversation, or brings the one it has to the front
+    void ShowPopOut(SocialViewModel social, PoppedConversation conversation);
+    void ClosePopOut(PoppedConversation conversation);
     // closed runs when a window made here goes
     void ShowChatRooms(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword,
                        Func<int, ImageSource?> emote, Action closed);
@@ -63,7 +60,7 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     static WindowManager() => BusyCover.Install(Covered);
 
     internal static bool Covered(Window w) =>
-        w is MainWindow or SocialWindow or GroupsWindow or ChatRoomsWindow or GroupChatWindow or SettingsWindow or EditProfileWindow or ProfileWindow;
+        w is MainWindow or SocialWindow or PopOutWindow or GroupsWindow or ChatRoomsWindow or GroupChatWindow or SettingsWindow or EditProfileWindow or ProfileWindow;
 
     public void SetBusy(string? text) => BusyCover.Set(text);
 
@@ -81,56 +78,51 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         if (activate) w.Activate();
     }
 
-    private static List<SocialWindow> SocialWindows() => Application.Current.Windows.OfType<SocialWindow>().ToList();
+    private static SocialWindow? FriendsWindow() => Application.Current?.Windows.OfType<SocialWindow>().FirstOrDefault();
 
-    private SocialPart Friends => settings.Current.SocialSplit ? SocialPart.Friends : SocialPart.Both;
-
-    private SocialPart Messages => settings.Current.SocialSplit ? SocialPart.Messages : SocialPart.Both;
+    private static PopOutWindow? PopOutFor(PoppedConversation c) =>
+        Application.Current?.Windows.OfType<PopOutWindow>().FirstOrDefault(w => w.Conversation == c);
 
     public bool ProfileEditorOpen => Find<EditProfileWindow>() is not null;
 
-    public string FriendsTitle => Friends.Title();
-
-    public void ShowFriends(SocialViewModel social) => ShowSocial(social, Friends, activate: true);
-
-    public void ShowMessages(SocialViewModel social) => ShowSocial(social, Messages, activate: true);
-
-    public void ShowMessagesAlongside(SocialViewModel social, bool takeFocus)
-    {
-        if (!settings.Current.SocialSplit) return;
-        if (takeFocus || !SocialWindows().Any(x => x.Part == SocialPart.Messages))
-            ShowSocial(social, SocialPart.Messages, takeFocus);
-    }
-
     // unowned, so they stay up while the main window's minimised or in the tray
-    private void ShowSocial(SocialViewModel social, SocialPart part, bool activate, Rect? place = null)
+    public void ShowFriends(SocialViewModel social)
     {
-        var w = SocialWindows().FirstOrDefault(x => x.Part == part);
-        if (w != null)
+        if (FriendsWindow() is { } open)
         {
-            BringBack(w, activate);
+            BringBack(open);
             return;
         }
-        foreach (var old in SocialWindows().Where(x => (x.Part == SocialPart.Both) != (part == SocialPart.Both))) old.Close();
-        w = new SocialWindow(part) { DataContext = social, ShowActivated = activate };
-        string key = part switch { SocialPart.Friends => "friends", SocialPart.Messages => "messages", _ => "friends-and-messages" };
-        bool saved = place is null && WindowPlaces.Restore(settings, w, key);
-        if (place is null && !saved && part == SocialPart.Messages
-            && SocialWindows().FirstOrDefault(x => x.Part == SocialPart.Friends) is { IsVisible: true } fw)
-        {
-            var (screenLeft, screenRight) = ScreenEdges();
-            double left = LeftBeside(fw.Left, fw.ActualWidth, w.Width, screenLeft, screenRight);
-            place = new Rect(left, fw.Top, w.Width, fw.ActualHeight);
-        }
-        if (place is { } r)
-        {
-            w.WindowStartupLocation = WindowStartupLocation.Manual;
-            (w.Left, w.Top, w.Width, w.Height) = (r.Left, r.Top, r.Width, r.Height);
-        }
-        else if (!saved) w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        WindowPlaces.Track(settings, w, key);
+        var w = new SocialWindow();
+        if (settings.Current.MessagesPaneWidth > 0) w.SavedPaneWidth = settings.Current.MessagesPaneWidth;
+        w.PaneWidthChanged += width => settings.SaveChange(s => s.MessagesPaneWidth = width);
+        if (!WindowPlaces.Restore(settings, w, "friends")) w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        // after the place is back, so a pane that opens with it widens from where the window is
+        w.DataContext = social;
+        WindowPlaces.Track(settings, w, "friends", w.ListBounds);
         w.Show();
     }
+
+    public void ShowPopOut(SocialViewModel social, PoppedConversation conversation)
+    {
+        if (PopOutFor(conversation) is { } open)
+        {
+            BringBack(open);
+            return;
+        }
+        var w = new PopOutWindow(conversation) { DataContext = conversation.Messages };
+        if (FriendsWindow() is { IsVisible: true } fw)
+        {
+            // beside the Friends window, on whichever side has room
+            var (screenLeft, screenRight) = ScreenEdges();
+            double left = LeftBeside(fw.Left, fw.ActualWidth, w.Width, screenLeft, screenRight);
+            (w.WindowStartupLocation, w.Left, w.Top) = (WindowStartupLocation.Manual, left, fw.Top);
+        }
+        else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        w.Show();
+    }
+
+    public void ClosePopOut(PoppedConversation conversation) => PopOutFor(conversation)?.Close();
 
     // right of Friends, or left when that'd run off the screen. With room on neither side it's whichever screen edge
     // covers less of Friends, the right on a tie
@@ -143,32 +135,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         double farRight = Math.Max(screenLeft, screenRight - width);
         double Covered(double at) => Math.Max(0, Math.Min(at + width, friendsLeft + friendsWidth) - Math.Max(at, friendsLeft));
         return Covered(screenLeft) < Covered(farRight) ? screenLeft : farRight;
-    }
-
-    public void Split(SocialViewModel social) => SetSplit(social, true);
-
-    public void Merge(SocialViewModel social) => SetSplit(social, false);
-
-    private void SetSplit(SocialViewModel social, bool split)
-    {
-        if (settings.Current.SocialSplit == split) return;
-        var open = SocialWindows().Where(w => w.IsVisible).ToList();
-        Rect? area = open.Count == 0 ? null
-            : open.Select(w => w.WindowState == WindowState.Normal ? new Rect(w.Left, w.Top, w.ActualWidth, w.ActualHeight) : w.RestoreBounds)
-                  .Aggregate(Rect.Union);
-        settings.SaveChange(s => s.SocialSplit = split);
-        foreach (var w in SocialWindows()) w.Close();
-        if (split)
-        {
-            bool conversation = social.SelectedFriend != null;
-            double friendsWidth = SocialPart.Friends.Widths().Open;
-            ShowSocial(social, SocialPart.Friends, activate: !conversation,
-                       area is { } a ? new Rect(a.Left, a.Top, friendsWidth, a.Height) : null);
-            ShowSocial(social, SocialPart.Messages, activate: conversation,
-                       area is { } b ? new Rect(b.Left + friendsWidth + Gap, b.Top, Math.Max(SocialPart.Messages.Widths().Min, b.Width - friendsWidth - Gap), b.Height) : null);
-        }
-        else
-            ShowSocial(social, SocialPart.Both, activate: true, area is { } a ? new Rect(a.Left, a.Top, Math.Max(SocialPart.Both.Widths().Min, a.Width), a.Height) : null);
     }
 
     public void ShowGroups(SocialViewModel social)
@@ -251,8 +217,7 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     {
         Window? w = which switch
         {
-            SecondWindow.Friends => SocialWindows().FirstOrDefault(x => x.Part == Friends),
-            SecondWindow.Messages => SocialWindows().FirstOrDefault(x => x.Part == Messages),
+            SecondWindow.Friends => FriendsWindow(),
             SecondWindow.Groups => Find<GroupsWindow>(),
             SecondWindow.ChatRooms => Find<ChatRoomsWindow>(),
             _ => Find<EditProfileWindow>(),
@@ -291,7 +256,8 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         Find<GroupsWindow>()?.Close();
         // one opened from the main window's list is the main window's, so it wouldn't go with the friends windows
         Find<ProfileWindow>()?.Close();
-        foreach (var w in SocialWindows()) w.Close();
+        FriendsWindow()?.Close();
+        foreach (var w in Application.Current.Windows.OfType<PopOutWindow>().ToList()) w.Close();
     }
 
     // before the app's services exist, so it's a static

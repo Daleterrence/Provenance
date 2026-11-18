@@ -26,9 +26,9 @@ public sealed class ChatSync(MailSendQueue sends)
     }
 
     // POL's copy of a message only goes once mine's saved, like the viewer.
-    // open is the conversation on screen, blocked the game running or a handle switch
+    // open is the conversations on screen, blocked the game running or a handle switch
     public ChatSyncResult Merge(ChatStore chat, PolSocialSnapshot snap, int? pid, bool blocked,
-                                (string Name, string Key)? open, Func<PolMessage, string?> noticeText,
+                                IReadOnlyCollection<(string Name, string Key)> open, Func<PolMessage, string?> noticeText,
                                 Func<string, string> filtered)
     {
         bool changed = false;
@@ -104,8 +104,9 @@ public sealed class ChatSync(MailSendQueue sends)
         bool sendsChanged = sends.Pump(chat, pid, blocked);
         // a stored send finishes well inside 2 minutes, so nothing says "Sending..." for ever
         changed |= chat.ExpireSending(ChatStore.SendExpiry(sends.Queued), sends.StillPending());
-        if (changed && open is { } o && chat.UnreadFrom(o.Name, o.Key) > 0)
-            chat.MarkRead(o.Name, o.Key);
+        if (changed)
+            foreach (var (name, key) in open)
+                if (chat.UnreadFrom(name, key) > 0) chat.MarkRead(name, key);
         // dirty rather than changed, a log whose last save failed isn't on disk either
         bool kept = chat.SaveIfDue(DateTime.UtcNow);
         if (takeStore && kept && pid is { } storePid)

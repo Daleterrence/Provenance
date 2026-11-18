@@ -28,6 +28,7 @@ public partial class FriendsList : UserControl
     {
         InitializeComponent();
         ((INotifyCollectionChanged)List.Items).CollectionChanged += OnRowsChanged;
+        List.PreviewMouseLeftButtonUp += OnRowClicked;
     }
 
     public bool OwnSelection
@@ -67,6 +68,14 @@ public partial class FriendsList : UserControl
             _kept = List.Items.OfType<FriendItem>().FirstOrDefault(f => f.Is(was));
             if (_kept is not null) List.SelectedItem = _kept;
         });
+    }
+
+    // a click on a friend with a window of their own brings it up (arrowing onto them doesn't, that'd take the focus)
+    private void OnRowClicked(object sender, MouseButtonEventArgs e)
+    {
+        if (OwnSelection || Vm is not { } vm) return;
+        var row = ItemsControl.ContainerFromElement(List, e.OriginalSource as DependencyObject);
+        if (row is ListBoxItem { DataContext: FriendItem f } && vm.PoppedFor(f) is not null) vm.OpenConversation(f);
     }
 
     // the row under the pointer, not whatever was selected before

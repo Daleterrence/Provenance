@@ -32,7 +32,7 @@
                              Visibility="{Binding Social.StatusPending, Converter={StaticResource BoolToVis}}" />
             </Grid>
             <StackPanel x:Name="SocialButtons" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                <!-- one row of equal cells, so all four are as wide as the widest -->
+                <!-- one row of equal cells, so all three are as wide as the widest -->
                 <UniformGrid x:Name="SocialSet" Rows="1" Margin="6,0,0,0"
                              IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}">
                     <UniformGrid.Resources>
@@ -53,16 +53,6 @@
                         <StackPanel Orientation="Horizontal">
                             <controls:SvgIcon Glyph="groupchat2" IsOpen="{Binding Social.GroupsWindowVisible}" />
                             <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="GROUPS" />
-                        </StackPanel>
-                    </Button>
-                    <Button Command="{Binding ToggleMessagesCommand}" ToolTip="Displays your PlayOnline messages" AutomationProperties.Name="Messages">
-                        <StackPanel Orientation="Horizontal">
-                            <controls:SvgIcon Glyph="chat" IsOpen="{Binding Social.Messages.ConversationVisible}" />
-                            <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="MESSAGES" />
-                            <Border Style="{StaticResource ButtonBadge}"
-                                    Visibility="{Binding Social.HasUnread, Converter={StaticResource BoolToVis}}">
-                                <TextBlock Text="{Binding Social.UnreadCount}" Style="{StaticResource ButtonBadgeText}" />
-                            </Border>
                         </StackPanel>
                     </Button>
                     <Button Command="{Binding ToggleFriendsCommand}" ToolTip="Displays your PlayOnline friends list" AutomationProperties.Name="Friends">

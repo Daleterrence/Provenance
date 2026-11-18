@@ -619,8 +619,7 @@ public partial class MainViewModel : ObservableObject
     public void OpenChatWith(FriendItem friend)
     {
         if (Multi.Running || GameOpen) return;
-        Social.SelectedFriend = Social.Friends.FirstOrDefault(f => f.Is(friend)) ?? friend;
-        _windows.ShowMessages(Social);
+        Social.OpenConversation(friend);
     }
 
     public void OpenNotice()
@@ -631,11 +630,18 @@ public partial class MainViewModel : ObservableObject
             if (Social.GroupChat.Open) _windows.ShowGroupChat(Social.GroupChat);
             return;
         }
+        if (notice.Request > 0 || notice.Target == NoticeTarget.Friends)
+        {
+            if (Multi.Running || GameOpen) return;
+            Social.ShowRequests();
+            OpenSocial();
+            return;
+        }
         if (notice.Sender is { } who && Social.Friends.FirstOrDefault(f => f.Name == who) is { } f) OpenChatWith(f);
         else OpenSocial();
     }
 
-    internal string FriendsWindowTitle => _windows.FriendsTitle;
+    internal string FriendsWindowTitle => "Friends";
 
     internal void OpenSocial()
     {
@@ -647,12 +653,6 @@ public partial class MainViewModel : ObservableObject
     {
         if (Multi.Running || GameOpen) return;
         _windows.ShowGroups(Social);
-    }
-
-    internal void OpenMessages()
-    {
-        if (Multi.Running || GameOpen) return;
-        _windows.ShowMessages(Social);
     }
 
     // the bottom bar's buttons. Pressed with their own window on screen they close it, nothing else does
@@ -668,13 +668,6 @@ public partial class MainViewModel : ObservableObject
     {
         if (Multi.Running || GameOpen) return;
         if (!_windows.CloseIfShown(SecondWindow.Groups)) OpenGroups();
-    }
-
-    [RelayCommand]
-    private void ToggleMessages()
-    {
-        if (Multi.Running || GameOpen) return;
-        if (!_windows.CloseIfShown(SecondWindow.Messages)) OpenMessages();
     }
 
     [RelayCommand]

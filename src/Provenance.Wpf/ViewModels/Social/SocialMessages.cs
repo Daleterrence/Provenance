@@ -10,11 +10,22 @@ namespace Provenance.Wpf.ViewModels.Social;
 public sealed partial class SocialMessages : ObservableObject
 {
     private readonly SocialViewModel _social;
+    private readonly Func<FriendItem?> _friend;
     private bool _conversationVisible;
     private DateTime _conversationDay;   // the day the "Today" headings were made on
     private string? _listedFor;
+    private string? _draftFor;
+    private FriendItem? _draftPerson;
 
-    public SocialMessages(SocialViewModel social) => _social = social;
+    // the pane's follows the selection, a pop-out's is its own friend
+    public SocialMessages(SocialViewModel social, Func<FriendItem?> friend)
+    {
+        _social = social;
+        _friend = friend;
+    }
+
+    public SocialViewModel Social => _social;
+    public FriendItem? Friend => _friend();
 
     public ObservableCollection<ChatEntry> Conversation { get; } = new();
     internal MailSendQueue Sends => _social.Login.Sends;
@@ -30,22 +41,15 @@ public sealed partial class SocialMessages : ObservableObject
     public bool ComposeCountShown => ComposeBytes >= PolMessage.MaxTextBytes * 9 / 10;
     private bool ComposeHasWide => ComposeBytes > Compose.Trim().Replace("\r", "").Length;
 
-    public bool CanCompose => _social.SelectedFriend is { CanMessage: true } && !_social.GameRunning && !_social.HandleSwitching;
+    public bool CanCompose => Friend is { CanMessage: true } f && _social.Friends.Any(i => i.Is(f)) && !_social.GameRunning && !_social.HandleSwitching;
 
     // a draft per conversation, so it never goes to the next person picked (POL mail can't be called back)
-    private sealed class PerLogin
-    {
-        public readonly Dictionary<string, string> Drafts = new();
-        public string? DraftFor;
-        public FriendItem? DraftPerson;
-    }
-
-    private PerLogin _login = new();
+    private Dictionary<string, string> Drafts => _social.Login.Drafts;
     // keyless people can share a name, so the row's in there too
     private static string DraftKey(FriendItem f) =>
         f.Key.Length > 0 ? "k:" + f.Key : $"n:{f.Name.ToUpperInvariant()}:{f.Row}";
 
-    public string ComposeNote => _social.SelectedFriend switch
+    public string ComposeNote => Friend switch
     {
         null => "",
         _ when _social.GameRunning => "While FINAL FANTASY XI is running, replies go through the game.",
@@ -68,7 +72,7 @@ public sealed partial class SocialMessages : ObservableObject
             if (_conversationVisible == value) return;
             _conversationVisible = value;
             OnPropertyChanged();
-            if (value && _social.SelectedFriend is { } f && _social.Chat is { } chat && chat.UnreadFrom(f.Name, f.Key) > 0)
+            if (value && Friend is { } f && _social.Chat is { } chat && chat.UnreadFrom(f.Name, f.Key) > 0)
                 ReadConversation(f, rebuild: true);
         }
     }
@@ -77,7 +81,8 @@ public sealed partial class SocialMessages : ObservableObject
 
     internal void Reset()
     {
-        _login = new();
+        _draftFor = null;
+        _draftPerson = null;
         Compose = "";
         _listedFor = null;
         Conversation.Clear();
@@ -98,27 +103,40 @@ public sealed partial class SocialMessages : ObservableObject
         if (rebuild) _social.RebuildFriends();
     }
 
+    // a pop-out going: its text is kept for whoever shows this conversation next
+    internal void Release()
+    {
+        if (_draftFor is not null)
+        {
+            if (string.IsNullOrWhiteSpace(Compose)) Drafts.Remove(_draftFor);
+            else Drafts[_draftFor] = Compose;
+        }
+        _draftFor = null;
+        _draftPerson = null;
+    }
+
     internal void SelectionChanged(FriendItem? value)
     {
+        OnPropertyChanged(nameof(Friend));
         OnPropertyChanged(nameof(ComposeNote));
         var key = value is null ? null : DraftKey(value);
         // a presence update gives the same person a new row and the text goes with them. Keyless needs the same row too
-        bool samePerson = value != null && _login.DraftPerson != null && value.Is(_login.DraftPerson) &&
-                          (value.Key.Length > 0 || _login.DraftPerson.Key.Length > 0 || key == _login.DraftFor);
+        bool samePerson = value != null && _draftPerson != null && value.Is(_draftPerson) &&
+                          (value.Key.Length > 0 || _draftPerson.Key.Length > 0 || key == _draftFor);
         if (samePerson)
         {
-            if (_login.DraftFor != null && key != _login.DraftFor && _login.Drafts.Remove(_login.DraftFor, out var moved))
-                _login.Drafts[key!] = moved;
+            if (_draftFor != null && key != _draftFor && Drafts.Remove(_draftFor, out var moved))
+                Drafts[key!] = moved;
         }
-        else if (_login.DraftFor != null)
+        else if (_draftFor != null)
         {
-            if (string.IsNullOrWhiteSpace(Compose)) _login.Drafts.Remove(_login.DraftFor);
-            else _login.Drafts[_login.DraftFor] = Compose;
+            if (string.IsNullOrWhiteSpace(Compose)) Drafts.Remove(_draftFor);
+            else Drafts[_draftFor] = Compose;
         }
-        _login.DraftPerson = value;
-        _login.DraftFor = key;
-        if (!samePerson) Compose = key != null && _login.Drafts.TryGetValue(key, out var draft) ? draft : "";
-        // picking someone in the main window shows nothing, so it stays unread until the friends window shows it
+        _draftPerson = value;
+        _draftFor = key;
+        if (!samePerson) Compose = key != null && Drafts.TryGetValue(key, out var draft) ? draft : "";
+        // picking someone in the main window shows nothing, so it stays unread until a window shows it
         if (value != null && _social.Chat != null && value.Unread > 0 && ConversationVisible)
             ReadConversation(value, rebuild: !_social.ApplyingSnapshot);
         Refresh();
@@ -129,7 +147,7 @@ public sealed partial class SocialMessages : ObservableObject
     internal void Refresh()
     {
         _conversationDay = DateTime.Now.Date;
-        if (_social.SelectedFriend is not { } f || _social.Chat is not { } chat)
+        if (Friend is not { } f || _social.Chat is not { } chat)
         {
             _listedFor = null;
             Conversation.Clear();
@@ -146,7 +164,7 @@ public sealed partial class SocialMessages : ObservableObject
         DateTime? day = null;
         foreach (var line in chat.With(f.Name, f.Key))
         {
-            var e = line.Outgoing || line.State == "notice" ? line
+            var e = line.Outgoing ? line
                   : line with { Subject = _social.Viewer.Filtered(line.Subject), Text = _social.Viewer.Filtered(line.Text) };
             var d = e.When.Date;
             next.Add(d == day ? e : e with { DayBreak = DayLabel(d) });
@@ -171,7 +189,7 @@ public sealed partial class SocialMessages : ObservableObject
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
     {
-        if (!CanSend() || _social.SelectedFriend is not { } f || _social.Chat == null) return;
+        if (!CanSend() || Friend is not { } f || _social.Chat == null) return;
         var text = Compose.Trim();
         if (text.Length == 0) return;
         Queue(f, text);
@@ -200,7 +218,7 @@ public sealed partial class SocialMessages : ObservableObject
 
     private void AfterDelete()
     {
-        Refresh();
+        _social.RefreshConversations();
         _social.UnreadCount = _social.Chat?.Unread ?? 0;
         _social.MarkFriendsDirty();
         _social.RebuildFriends();
@@ -208,7 +226,7 @@ public sealed partial class SocialMessages : ObservableObject
 
     public void Resend(ChatEntry e)
     {
-        if (!e.Failed || _social.Chat is not { } chat || !CanCompose || _social.SelectedFriend is not { } f || _social.Session.Pid is null) return;
+        if (!e.Failed || _social.Chat is not { } chat || !CanCompose || Friend is not { } f || _social.Session.Pid is null) return;
         if (!chat.RemoveFailed(e.Key)) return;
         Queue(f, e.Text);
         Refresh();
@@ -225,7 +243,7 @@ public sealed partial class SocialMessages : ObservableObject
     {
         Sends.Settle(_social.Chat, end != SessionEnd.Dropped, end == SessionEnd.Play ? "failed:game" : "failed:session");
         _social.Chat?.Flush();
-        Refresh();
+        _social.RefreshConversations();
     }
 
     public static string ClearConversationQuestion(string name) =>

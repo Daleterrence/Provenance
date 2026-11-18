@@ -11,102 +11,9 @@
         xmlns:local="clr-namespace:Provenance.Wpf.Views.Social"
         xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Social"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialViewModel}"
-        Title="Friends and messages" Icon="/Assets/provenance.ico"
-        Width="900" Height="640" MinWidth="720" MinHeight="480" WindowStartupLocation="CenterOwner"
+        Title="Friends" Icon="/Assets/provenance.ico"
+        Width="400" Height="640" MinWidth="360" MinHeight="480" WindowStartupLocation="CenterOwner"
         Style="{StaticResource AppWindow}">
-
-    <Window.Resources>
-        <!-- a button dressed as a link so Tab and Enter still reach it. No BasedOn keeps MaterialDesign's look off -->
-        <Style x:Key="LineLink" TargetType="Button">
-            <Setter Property="KeyboardNavigation.AcceptsReturn" Value="True" />
-            <Setter Property="FontSize" Value="10.5" />
-            <Setter Property="Margin" Value="8,0,0,0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <TextBlock x:Name="Label" Background="Transparent"
-                                   Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" />
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Label" Property="TextDecorations" Value="Underline" />
-                            </Trigger>
-                            <Trigger Property="behaviours:FocusCue.Shown" Value="True">
-                                <Setter TargetName="Label" Property="TextDecorations" Value="Underline" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <DataTemplate x:Key="ChatLine">
-            <StackPanel>
-                <TextBlock Text="{Binding DayBreak}" HorizontalAlignment="Center" Margin="0,12,0,2" FontSize="11"
-                           Foreground="{DynamicResource Text.3}"
-                           Visibility="{Binding DayBreak, Converter={StaticResource NullToVisibilityConverter}}" />
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <controls:ProfilePictureCircle x:Name="TheirProfilePicture" Diameter="30" Margin="0,6,8,0"
-                                                   VerticalAlignment="Top"
-                                                   Source="{Binding DataContext.SelectedFriend.Avatar, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                   InGame="{Binding DataContext.SelectedFriend.InGame, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
-                    <controls:ProfilePictureCircle x:Name="MyProfilePicture" Grid.Column="2" Diameter="30" Margin="8,6,0,0"
-                                                   VerticalAlignment="Top" Visibility="Collapsed"
-                                                   Source="{Binding DataContext.Avatar, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
-                    <StackPanel x:Name="Line" Grid.Column="1" Margin="0,4" HorizontalAlignment="Left">
-                        <Border x:Name="Bubble" MaxWidth="420" HorizontalAlignment="Left" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}"
-                                Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
-                            <!-- read-only so it can be copied, no Tab stop so Tab goes on to the compose box -->
-                            <TextBox x:Name="Body" Style="{StaticResource SelectableText}" Text="{Binding Display, Mode=OneWay}" FontSize="13" IsTabStop="False" ContextMenuOpening="OnLineMenu">
-                                <TextBox.ContextMenu>
-                                    <ContextMenu />
-                                </TextBox.ContextMenu>
-                            </TextBox>
-                        </Border>
-                        <TextBlock x:Name="Meta" FontSize="10.5" Margin="6,2,6,0" Foreground="{DynamicResource Text.3}"
-                                   Text="{Binding TimeText}"
-                                   Visibility="{Binding DataContext.ShowTimes, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVis}}" />
-                        <StackPanel x:Name="SendState" Orientation="Horizontal" Margin="6,0" HorizontalAlignment="Right"
-                                    Visibility="Collapsed">
-                            <TextBlock x:Name="SendStateText" FontSize="10.5" Foreground="{DynamicResource Text.3}" Text="{Binding StateText}" />
-                            <Button x:Name="Retry" Style="{StaticResource LineLink}" Foreground="{DynamicResource Primary}"
-                                    Content="Send again" Visibility="Collapsed" Click="OnResend" />
-                            <Button x:Name="RemoveLine" Style="{StaticResource LineLink}" Foreground="{DynamicResource Text.3}"
-                                    Content="Remove" Visibility="Collapsed" Click="OnRemoveFailed" />
-                        </StackPanel>
-                    </StackPanel>
-                </Grid>
-            </StackPanel>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding Outgoing}" Value="True">
-                    <Setter TargetName="Line" Property="HorizontalAlignment" Value="Right" />
-                    <Setter TargetName="TheirProfilePicture" Property="Visibility" Value="Collapsed" />
-                    <Setter TargetName="MyProfilePicture" Property="Visibility" Value="Visible" />
-                    <Setter TargetName="Bubble" Property="Background" Value="{DynamicResource Primary.Muted}" />
-                    <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right" />
-                    <Setter TargetName="Meta" Property="HorizontalAlignment" Value="Right" />
-                    <Setter TargetName="SendState" Property="Visibility" Value="Visible" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Failed}" Value="True">
-                    <Setter TargetName="SendStateText" Property="Foreground" Value="{DynamicResource State.Warn}" />
-                    <Setter TargetName="Retry" Property="Visibility" Value="Visible" />
-                    <Setter TargetName="RemoveLine" Property="Visibility" Value="Visible" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding State}" Value="notice">
-                    <Setter TargetName="Line" Property="HorizontalAlignment" Value="Center" />
-                    <Setter TargetName="TheirProfilePicture" Property="Visibility" Value="Collapsed" />
-                    <Setter TargetName="MyProfilePicture" Property="Visibility" Value="Collapsed" />
-                    <Setter TargetName="Bubble" Property="Background" Value="Transparent" />
-                    <Setter TargetName="Bubble" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Center" />
-                    <Setter TargetName="Meta" Property="HorizontalAlignment" Value="Center" />
-                    <Setter TargetName="SendState" Property="Visibility" Value="Collapsed" />
-                    <Setter TargetName="Body" Property="FontStyle" Value="Italic" />
-                    <Setter TargetName="Body" Property="Foreground" Value="{DynamicResource Text.3}" />
-                </DataTrigger>
-            </DataTemplate.Triggers>
-        </DataTemplate>
-    </Window.Resources>
 
     <Grid RowDefinitions="40,*">
         <controls:TitleBar x:Name="Bar" ShowMaximise="True">
@@ -118,23 +25,18 @@
                         <TextBlock Text="ADD A FRIEND" Margin="6,0,0,0" FontSize="12" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="LayoutButton" Width="44" Height="40" Padding="0" Foreground="{DynamicResource Text.2}"
-                        Style="{StaticResource IconButton}"
-                        shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnLayout">
-                    <materialDesign:PackIcon x:Name="LayoutIcon" Kind="ArrowSplitVertical" Width="18" Height="18" />
-                </Button>
             </StackPanel>
         </controls:TitleBar>
 
-        <Grid Grid.Row="1">
+        <Grid x:Name="Body" Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="FriendsColumn" Width="320" MinWidth="260" />
-                <ColumnDefinition x:Name="SplitterColumn" Width="5" />
-                <ColumnDefinition x:Name="MessagesColumn" Width="*" MinWidth="360" />
+                <ColumnDefinition x:Name="FriendsColumn" Width="*" MinWidth="360" />
+                <ColumnDefinition x:Name="SplitterColumn" Width="0" />
+                <ColumnDefinition x:Name="MessagesColumn" Width="0" />
             </Grid.ColumnDefinitions>
 
-            <Grid x:Name="FriendsPart" Background="{DynamicResource Surface.1}" RowDefinitions="Auto,*,Auto">
-                <Expander Grid.Row="2" Background="{DynamicResource Surface.1}" BorderBrush="{DynamicResource Border.Pane}"
+            <Grid x:Name="FriendsPart" Background="{DynamicResource Surface.1}" RowDefinitions="Auto,Auto,*,Auto">
+                <Expander Grid.Row="3" Background="{DynamicResource Surface.1}" BorderBrush="{DynamicResource Border.Pane}"
                           BorderThickness="0,1,0,0" Padding="8,0,8,8"
                           Visibility="{Binding HasBlocked, Converter={StaticResource BoolToVis}}">
                     <Expander.Header>
@@ -241,100 +143,34 @@
                     <local:ZoneTroubleBanner Margin="0,10,0,0" Active="{Binding ZoneTrouble}" />
                 </StackPanel>
 
-                <local:FriendsList x:Name="FriendList" Grid.Row="1" />
-            </Grid>
-
-            <GridSplitter x:Name="PartSplitter" Grid.Column="1" Style="{StaticResource PaneSplitter}" AutomationProperties.HelpText="Drag to resize" />
-
-            <Grid x:Name="MessagesPart" Grid.Column="2" Background="{DynamicResource Bg.Base}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24"
-                            Visibility="{Binding NoSelection, Converter={StaticResource BoolToVis}}">
-                    <controls:SvgIcon Glyph="mail" Flat="True" Width="44" Height="44"
-                                      HorizontalAlignment="Center" Foreground="{DynamicResource Text.3}" />
-                    <TextBlock Margin="0,10,0,4" HorizontalAlignment="Center" FontSize="14"
-                               Text="{Binding NothingSelected}" />
-                    <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="{DynamicResource Text.3}"
-                               Visibility="{Binding HasUnread, Converter={StaticResource BoolToVis}}">
-                        <Run Text="{Binding UnreadCount, Mode=OneWay}" /><Run Text=" unread" />
-                    </TextBlock>
-                    <TextBlock Margin="0,12,0,0" HorizontalAlignment="Center" FontSize="12" Foreground="{DynamicResource State.Warn}"
-                               Text="Provenance couldn't get your messages from PlayOnline."
-                               Visibility="{Binding MessagesUnavailable, Converter={StaticResource BoolToVis}}" />
-                </StackPanel>
-
-                <Grid RowDefinitions="Auto,*,Auto"
-                      Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
-                    <Border Style="{StaticResource PaneHeader}">
-                        <Grid>
-                            <Button HorizontalAlignment="Right" VerticalAlignment="Center" Width="32" Height="32" Padding="0"
-                                    Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
-                                    AutomationProperties.Name="Actions for this person" Click="OnConversationMenu">
-                                <controls:SvgIcon Glyph="more" Width="20" Height="20" />
-                            </Button>
-                            <Grid Margin="0,0,40,0" ColumnDefinitions="Auto,*">
-                                <controls:ProfilePictureCircle Diameter="40" Margin="0,0,12,0" VerticalAlignment="Center"
-                                                               Source="{Binding SelectedFriend.Avatar}" InGame="{Binding SelectedFriend.InGame}" />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding SelectedFriend.Name}" FontSize="15" FontWeight="SemiBold" />
-                                    <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,Auto,*">
-                                        <controls:StatusMark Status="{Binding SelectedFriend.Status}" Online="{Binding SelectedFriend.Online}"
-                                                             Shown="{Binding SelectedFriend.HasStatus, FallbackValue=False}" Margin="0,0,6,0" />
-                                        <TextBlock Grid.Column="1" Text="{Binding SelectedFriend.StatusLabel}" FontSize="12"
-                                                   Foreground="{DynamicResource Text.3}" VerticalAlignment="Center" />
-                                        <controls:FitText Grid.Column="2" Long="{Binding SelectedFriend.Playing}" Short="{Binding SelectedFriend.PlayingShort}"
-                                                          FontSize="12" Foreground="{DynamicResource Text.3}" Margin="12,0,0,0" VerticalAlignment="Center" />
-                                    </Grid>
-                                </StackPanel>
-                            </Grid>
-                        </Grid>
-                    </Border>
-                    <!-- the lines are different heights, so it scrolls by the pixel and only the ones on show get a visual -->
-                    <ItemsControl Grid.Row="1" x:Name="ChatLines" ItemsSource="{Binding Messages.Conversation}" ItemTemplate="{StaticResource ChatLine}"
-                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel">
-                        <ItemsControl.Template>
-                            <ControlTemplate TargetType="ItemsControl">
-                                <ScrollViewer x:Name="PART_ChatScroll" VerticalScrollBarVisibility="Auto" Padding="14,8">
-                                    <ItemsPresenter />
-                                </ScrollViewer>
-                            </ControlTemplate>
-                        </ItemsControl.Template>
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <VirtualizingStackPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                    <TextBlock Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" FontSize="12"
-                               Foreground="{DynamicResource Text.3}" TextWrapping="Wrap" TextAlignment="Center"
-                               Style="{StaticResource ShowWhenZero}" behaviours:State.Count="{Binding Messages.Conversation.Count}">
-                        <Run Text="No messages with " /><Run Text="{Binding SelectedFriend.Name, Mode=OneWay}" /><Run Text=" yet." />
-                    </TextBlock>
-                    <Border Grid.Row="2" Style="{StaticResource FooterBar}">
-                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
-                            <!-- MaxLength's only a backstop, the real limit's 300 bytes -->
-                            <TextBox AutomationProperties.Name="Message" x:Name="ComposeBox" MinHeight="40" MaxHeight="120" FontSize="13"
-                                     Text="{Binding Messages.Compose, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
-                                     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="{x:Static social:PolMessage.MaxTextBytes}"
-                                     Style="{StaticResource OutlinedField}" Padding="10,8"
-                                     materialDesign:HintAssist.Hint="Write a message (Enter sends, Shift+Enter adds a line)"
-                                     materialDesign:HintAssist.IsFloating="False"
-                                     materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
-                                     IsEnabled="{Binding Messages.CanCompose}"
-                                     behaviours:ComposeBox.Send="{Binding Messages.SendCommand}" behaviours:ComposeBox.Rules="{Binding Messages.ComposeRules}" />
-                            <Button Grid.Column="1" Margin="{StaticResource Footer.Gap}" Height="40" VerticalAlignment="Bottom"
-                                    Style="{StaticResource PolButton}" Command="{Binding Messages.SendCommand}" Content="SEND" />
-                            <DockPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0">
-                                <!-- the "n/300" count only shows near the limit -->
-                                <TextBlock DockPanel.Dock="Right" Margin="10,0,0,0" FontSize="11" Foreground="{DynamicResource Text.3}"
-                                           Text="{Binding Messages.ComposeCount}"
-                                           Visibility="{Binding Messages.ComposeCountShown, Converter={StaticResource BoolToVis}}" />
-                                <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource Text.3}"
-                                           Text="{Binding Messages.ComposeNote}" />
-                            </DockPanel>
-                        </Grid>
-                    </Border>
+                <Grid Grid.Row="1" Margin="14,0,14,0" ColumnDefinitions="Auto,Auto,*">
+                    <Button x:Name="FriendsTab" Style="{StaticResource UnderlineTab}" Content="Friends" Click="OnFriendsTab"
+                            behaviours:State.IsCurrent="{Binding RequestsTab, Converter={StaticResource InvertBool}}" />
+                    <Button x:Name="RequestsTabButton" Grid.Column="1" Style="{StaticResource UnderlineTab}" Click="OnRequestsTab"
+                            behaviours:State.IsCurrent="{Binding RequestsTab}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Requests" VerticalAlignment="Center" />
+                            <Border Style="{StaticResource CountBadge}" Margin="6,0,0,0" Height="16" MinWidth="16"
+                                    Visibility="{Binding HasPendingAnswers, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding PendingAnswers}" Style="{StaticResource CountBadgeText}" />
+                            </Border>
+                        </StackPanel>
+                    </Button>
+                    <Border Grid.ColumnSpan="3" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Border.Pane}" Panel.ZIndex="-1" />
+                </Grid>
+                <Grid Grid.Row="2">
+                    <local:FriendsList x:Name="FriendList"
+                                       Visibility="{Binding RequestsTab, Converter={StaticResource InvertBoolToVis}}" />
+                    <local:RequestsList x:Name="RequestList"
+                                        Visibility="{Binding RequestsTab, Converter={StaticResource BoolToVis}}" />
                 </Grid>
             </Grid>
+
+            <GridSplitter x:Name="PartSplitter" Grid.Column="1" Style="{StaticResource PaneSplitter}" AutomationProperties.HelpText="Drag to resize"
+                          Visibility="Collapsed" DragCompleted="OnPaneDragged" />
+
+            <local:ConversationView x:Name="Conversation" Grid.Column="2" Background="{DynamicResource Bg.Base}" DataContext="{Binding Messages}"
+                                    Visibility="Collapsed" />
         </Grid>
     </Grid>
 </controls:AppWindow>

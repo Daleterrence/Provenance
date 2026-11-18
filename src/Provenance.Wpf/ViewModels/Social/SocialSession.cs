@@ -27,6 +27,10 @@ internal sealed class SocialSession
     public HashSet<int> ShownRequests { get; } = new();
     public HashSet<string> OnlineFriends { get; set; } = new();
     public DateTime? PresenceQuietUntil { get; set; }
+    // unsent text per conversation, shared so it follows a conversation between the pane and a pop-out
+    public Dictionary<string, string> Drafts { get; } = new();
+    // friends held in UNREAD while their conversation's open, by id, with where they were
+    public Dictionary<string, (long Time, long Seq)> Held { get; } = new();
     public HookJobWatch Edit { get; } = new();
     public HookJobWatch Picture { get; } = new();
     // my own characters' profiles as Edit profile read them, by the hook's key

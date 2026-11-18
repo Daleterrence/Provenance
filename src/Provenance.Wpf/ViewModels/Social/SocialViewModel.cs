@@ -20,6 +20,8 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
+public enum RequestChoice { Accept, Decline, Ignore, Delete }
+
 public partial class SocialViewModel : ObservableObject, ISocialSession
 {
     private readonly IDialogs _dialogs;
@@ -44,7 +46,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _avatars = avatars;
         _settings = settings;
         Search = new(this);
-        Messages = new(this);
+        Messages = new(this, () => PaneFriend);
         Profile = new(this);
         Groups = new(this);
         EditNote.PropertyChanged += (_, e) =>
@@ -55,7 +57,11 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             OnPropertyChanged(nameof(EditStatusShown));
         };
         FriendsView = CollectionViewSource.GetDefaultView(Friends);
+        FriendsView.Filter = o => o is FriendItem f && IsListed(f);
         FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
+        RequestsView = new CollectionViewSource { Source = Friends }.View;
+        RequestsView.Filter = o => o is FriendItem f && !IsListed(f);
+        RequestsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
         GroupChat = new GroupChatViewModel(this, dialogs, () => ShowTimes, () => Flashes(NoticeKind.GroupChat));
         GroupChat.UnreadChanged += () =>
         {
@@ -87,6 +93,19 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public ObservableCollection<FriendItem> Friends { get; } = new();
     public ICollectionView FriendsView { get; }
+    public ICollectionView RequestsView { get; }
+
+    // requests, invitations and a request I sent are on the Requests tab, a friend is only on the list once they've accepted
+    internal static bool IsListed(FriendItem f) =>
+        f.Section is not (FriendSection.FriendRequests or FriendSection.GroupInvitations or FriendSection.RequestsSent);
+
+    [ObservableProperty] private bool _requestsTab;
+
+    partial void OnRequestsTabChanged(bool value) => RefreshUnseen();
+
+    public bool NoRequests => !Friends.Any(f => !IsListed(f));
+
+    public void ShowRequests() => RequestsTab = true;
     public ObservableCollection<PolBlocked> Blocked { get; } = new();
 
     [ObservableProperty] private string _accountName = "PlayOnline";
@@ -110,7 +129,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public bool HasPendingAnswers => PendingAnswers > 0;
     public bool CanPlay => PlayBlockedReason is null;
     public string Summary => OnlineCount switch { 0 => "No friends online", 1 => "1 friend online", var n => $"{n} friends online" };
-    public bool NoFriends => LoggedIn && Friends.Count == 0;
+    public bool NoFriends => LoggedIn && !Friends.Any(IsListed);
     public bool NoFriendsInList => NoFriends && !FriendsUnavailable;
 
     private bool _goingOnline;
@@ -118,9 +137,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public bool PopShown => PopText.Length > 0 && LoggedIn && !GameRunning;
     public bool FriendsUnavailable => OnlineFailed && LoggedIn;
     public bool LoggedIn => _session.LoggedIn;
-    public string NothingSelected => NoFriends ? NoFriendsText
-                                               : "Select a friend to see your messages.";
-    private const string NoFriendsText = "You don't have any friends on this PlayOnline account yet.";
     public SessionState Session => _session;
 
     public event Action<FriendItem>? OpenChatRequested;
@@ -210,10 +226,39 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public bool StatusEditable => !StatusPending && WriteBlockedNote is null;
     private bool _applyingSnapshot;
 
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasSelection), nameof(NoSelection))]
     private FriendItem? _selectedFriend;
+    private bool _settling;
+
+    public FriendItem? SelectedFriend
+    {
+        get => _selectedFriend;
+        set
+        {
+            // the list lets go of a row while it's swapped for its update, which isn't anyone picking nobody
+            if (_rebuilding && !_settling && value is null) return;
+            if (!SetProperty(ref _selectedFriend, value)) return;
+            OnPropertyChanged(nameof(HasSelection));
+            OnSelectedFriendChanged(value);
+        }
+    }
+
     public bool HasSelection => SelectedFriend != null;
-    public bool NoSelection => SelectedFriend == null;
+
+    private readonly List<PoppedConversation> _popped = new();
+    public IReadOnlyList<PoppedConversation> PoppedOut => _popped;
+
+    // the friend the pane shows. A friend with a window of their own is never shown twice, so selecting one leaves the pane shut
+    public FriendItem? PaneFriend => SelectedFriend is { } f && PoppedFor(f) is null ? f : null;
+    public bool HasPane => PaneFriend != null;
+
+    public PoppedConversation? PoppedFor(FriendItem f) => _popped.FirstOrDefault(p => p.Friend.Is(f));
+
+    internal IEnumerable<SocialMessages> Conversations => _popped.Select(p => p.Messages).Prepend(Messages);
+
+    internal void RefreshConversations()
+    {
+        foreach (var c in Conversations.ToList()) c.Refresh();
+    }
 
     // from the Play press till the game closes nothing new goes to the hook, answers already asked for still land
     public bool GameRunning => _session.GameRunning;
@@ -228,12 +273,12 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         OnPropertyChanged(nameof(NoFriends));
         OnPropertyChanged(nameof(NoFriendsInList));
         OnPropertyChanged(nameof(FriendsUnavailable));
+        OnPropertyChanged(nameof(NoRequests));
         OnPropertyChanged(nameof(PopShown));
-        OnPropertyChanged(nameof(NothingSelected));
         bool running = _session.GameRunning;
         if (_gameRunningShown.Changed(running))
         {
-            Messages.StateChanged();
+            foreach (var c in Conversations.ToList()) c.StateChanged();
             OnPropertyChanged(nameof(GameRunning));
             OnPropertyChanged(nameof(StatusEditable));
         }
@@ -268,7 +313,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     partial void OnHandleSwitchingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanGroupChat));
-        Messages.StateChanged();
+        foreach (var c in Conversations.ToList()) c.StateChanged();
         if (!value && EditNote.Text == SwitchingNote) EditNote.Clear();
     }
 
@@ -317,7 +362,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private void RefreshUnseen()
     {
         var waiting = Friends.Where(f => f.RequestMid > 0).Select(f => f.RequestMid).ToList();
-        if (_friendsListVisible || _mainWindowActive) _login.ShownRequests.UnionWith(waiting);
+        // requests are on the Requests tab, so the Friends window only shows them with that tab up
+        if ((_friendsListVisible && RequestsTab) || _mainWindowActive) _login.ShownRequests.UnionWith(waiting);
         // the groups window only lists group invitations
         else if (_groupsWindowVisible) _login.ShownRequests.UnionWith(Friends.Where(f => f.IsGroupInvite).Select(f => f.RequestMid));
         UnseenCount = UnreadCount + waiting.Count(m => !_login.ShownRequests.Contains(m));
@@ -408,12 +454,14 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         ZoneSearch?.Reset();
         Profile.Reset();
         Search.Reset();
+        _popped.Clear();
         Messages.Reset();
         Groups.Reset();
         EditBusy = false;
         ProfilePictureSaving = false;
         EditNote.Clear();
         SelectedFriend = null;
+        _login.Held.Clear();
         Friends.Clear();
         Blocked.Clear();
         HasBlocked = false;
@@ -430,6 +478,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(NoFriends));
         OnPropertyChanged(nameof(NoFriendsInList));
+        OnPropertyChanged(nameof(NoRequests));
+        RequestsTab = false;
     }
 
     public void Apply(PolSocialSnapshot snap)
@@ -477,7 +527,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         NoticeComingOnline(snap);
         OnlineCount = snap.Friends.Count(f => f.Online && !f.Pending);
         UnreadCount = _login.Chat?.Unread ?? 0;
-        if (SelectedFriend != null && Messages.DayChanged) Messages.Refresh();   // past midnight
+        foreach (var c in Conversations.ToList()) if (c.Friend != null && c.DayChanged) c.Refresh();   // past midnight
         PendingAnswers = Friends.Count(f => f.IsRequest || f.IsGroupInvite);
         RefreshUnseen();
 
@@ -526,19 +576,19 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         }
         HasBlocked = Blocked.Count > 0;
         OnPropertyChanged(nameof(CanEdit));
-        if (chatChanged) Messages.Refresh();
+        if (chatChanged) RefreshConversations();
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(NoFriends));
         OnPropertyChanged(nameof(NoFriendsInList));
-        OnPropertyChanged(nameof(NothingSelected));
+        OnPropertyChanged(nameof(NoRequests));
         SnapshotApplied?.Invoke(snap);
     }
 
     private bool MergeChat(ChatStore chat, PolSocialSnapshot snap)
     {
-        (string, string)? open = Messages.ConversationVisible && SelectedFriend is { } f ? (f.Name, f.Key) : null;
+        var open = Conversations.Where(c => c.ConversationVisible && c.Friend != null).Select(c => (c.Friend!.Name, c.Friend.Key)).ToList();
         var r = _login.Sync.Merge(chat, snap, _pol.Pid, WriteBlockedNote is not null, open, NoticeText, _viewer.Filtered);
-        if (r.SendsChanged) Messages.Refresh();
+        if (r.SendsChanged) RefreshConversations();
         foreach (var n in r.News)
             switch (n.Kind)
             {
@@ -562,17 +612,39 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         : StatusPending ? "Wait for your status change to finish first."
         : null;
 
+    private static string IdOf(string key, string name) => key.Length > 0 ? "k:" + key : "n:" + name.ToUpperInvariant();
+
+    private bool IsOpenConversation(FriendItem f) =>
+        (SelectedFriend is { } s && s.Is(f)) || PoppedFor(f) is not null;
+
+    // someone with unread lines goes up to UNREAD, newest first. One whose conversation is open stays put once it's
+    // read, until it's closed or the selection moves on
+    private (FriendSection Section, (long, long) Newest) Place(FriendSection home, string key, string name, int unread)
+    {
+        var id = IdOf(key, name);
+        if (unread > 0 && home is not FriendSection.RequestsSent)
+            return (FriendSection.Unread, _login.Chat?.NewestUnread(name, key) ?? default);
+        if (home is FriendSection.Online or FriendSection.Offline or FriendSection.Others && _login.Held.TryGetValue(id, out var at))
+            return (FriendSection.Unread, at);
+        return (home, default);
+    }
+
     private void RebuildFriends(PolSocialSnapshot snap)
     {
+        foreach (var f in Friends)
+            if (f.Section == FriendSection.Unread && IsOpenConversation(f)) _login.Held[IdOf(f.Key, f.Name)] = f.NewestUnread;
+        foreach (var id in _login.Held.Keys.ToList())
+            if (!Friends.Any(f => IdOf(f.Key, f.Name) == id && IsOpenConversation(f))) _login.Held.Remove(id);
         var items = snap.Friends.Select(f =>
         {
             var (playing, playingShort) = Playing(f);
+            int unread = _login.Chat?.UnreadFrom(f.Name, f.Key) ?? 0;
+            var (section, newest) = Place(f.Pending ? FriendSection.RequestsSent : f.Online ? FriendSection.Online : FriendSection.Offline, f.Key, f.Name, unread);
             return new FriendItem(
                 f.Name, playing, f.Pending ? "" : _viewer.Filtered(f.Comment),
                 f.Pending ? "Friend request sent" : f.Online ? f.StatusLabel : "Offline", f.Online && !f.Pending, f.Row,
-                _avatars.ProfilePicture(f.ProfilePictureId), _login.Chat?.UnreadFrom(f.Name, f.Key) ?? 0,
-                f.Pending ? FriendSection.RequestsSent : f.Online ? FriendSection.Online : FriendSection.Offline)
-            { Key = f.Key, Status = f.Status, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, Party = PartyOf(f), InGame = f.Online && !f.Pending && f.Game is not null };
+                _avatars.ProfilePicture(f.ProfilePictureId), unread, section)
+            { Key = f.Key, Status = f.Status, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, Party = PartyOf(f), InGame = f.Online && !f.Pending && f.Game is not null, NewestUnread = newest };
         }).ToList();
         // invitations (kind 0xe) and requests (kind 1) are listed until they're answered, from the server or the store
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_login.Answered.Contains(m.Mid)))
@@ -594,33 +666,137 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 bool listed = last.PeerKey.Length > 0 ? keys.Contains(last.PeerKey) || used.Any(keyless.Contains)
                                                       : names.Contains(last.Peer);
                 if (listed) continue;
+                int unread = _login.Chat.UnreadFrom(last.Peer, last.PeerKey);
+                var (section, newest) = Place(FriendSection.Others, last.PeerKey, last.Peer, unread);
                 items.Add(new FriendItem(last.Peer, "", "Not on your friend list", "", false, -1,
-                                         _avatars.NoProfilePicture, _login.Chat.UnreadFrom(last.Peer, last.PeerKey),
-                                         FriendSection.Others) { Key = last.PeerKey });
+                                         _avatars.NoProfilePicture, unread, section) { Key = last.PeerKey, NewestUnread = newest });
             }
         }
         items = items.OrderBy(i => i.Section)
+                     .ThenByDescending(i => i.Section == FriendSection.Unread ? i.NewestUnread : default)
                      .ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         if (!_login.FriendsDirty && items.SequenceEqual(Friends)) return;
         _login.FriendsDirty = false;
         var keep = SelectedFriend;
-        Friends.Patch(items, SameRow, (a, b) => a == b, (i, item) =>
+        var gone = new List<PoppedConversation>();
+        _rebuilding = true;
+        try
         {
-            bool selected = ReferenceEquals(SelectedFriend, Friends[i]);
-            Friends[i] = item;
-            if (selected) SelectedFriend = item;
-        });
-        if (keep != null && !Friends.Contains(SelectedFriend!))
-            SelectedFriend = Friends.FirstOrDefault(i => i.Is(keep));
+            Friends.Patch(items, SameRow, (a, b) => a == b, (i, item) =>
+            {
+                bool selected = ReferenceEquals(SelectedFriend, Friends[i]);
+                Friends[i] = item;
+                if (selected) SelectedFriend = item;
+            });
+            if (keep != null && !Friends.Contains(SelectedFriend!))
+            {
+                _settling = true;
+                try { SelectedFriend = Friends.FirstOrDefault(i => i.Is(keep)); }
+                finally { _settling = false; }
+            }
+            foreach (var p in _popped)
+                if (Friends.FirstOrDefault(i => i.Is(p.Friend)) is { } now) p.Update(now);
+                else
+                {
+                    p.Messages.StateChanged();   // it can't send to a row that isn't there
+                    // an empty list that isn't loaded yet isn't everyone going
+                    if (snap.FriendsLoaded) gone.Add(p);
+                }
+        }
+        finally { _rebuilding = false; }
+        foreach (var p in gone)
+        {
+            _windows.ClosePopOut(p);
+            PopOutClosed(p);
+        }
         Groups.SyncInvites(Friends);
     }
 
-    // online and offline count as one section (a presence change just moves the row), a request and a friend row don't
+    private bool _rebuilding;
+
+    // online, offline and unread count as one section (a row just moves), a request and a friend row don't
     private static bool SameRow(FriendItem a, FriendItem b) =>
         a.Is(b) && (a.Section == b.Section ||
-                    (a.Section is FriendSection.Online or FriendSection.Offline && b.Section is FriendSection.Online or FriendSection.Offline));
+                    (a.Section is FriendSection.Online or FriendSection.Offline or FriendSection.Unread
+                     && b.Section is FriendSection.Online or FriendSection.Offline or FriendSection.Unread));
 
-    partial void OnSelectedFriendChanged(FriendItem? value) => Messages.SelectionChanged(value);
+    private void OnSelectedFriendChanged(FriendItem? value)
+    {
+        PaneChanged();
+    }
+
+    private void PaneChanged()
+    {
+        OnPropertyChanged(nameof(PaneFriend));
+        OnPropertyChanged(nameof(HasPane));
+        Messages.SelectionChanged(PaneFriend);
+        ReleaseHeld();
+    }
+
+    // a friend held in UNREAD drops back once nothing has their conversation open
+    private void ReleaseHeld()
+    {
+        if (_rebuilding || _login.Held.Count == 0) return;
+        if (!_login.Held.Keys.Any(id => !Friends.Any(f => IdOf(f.Key, f.Name) == id && IsOpenConversation(f)))) return;
+        _login.FriendsDirty = true;
+        RebuildFriends();
+    }
+
+    public void OpenConversation(FriendItem friend)
+    {
+        var f = Friends.FirstOrDefault(i => i.Is(friend)) ?? friend;
+        if (PoppedFor(f) is { } popped)
+        {
+            _windows.ShowPopOut(this, popped);
+            return;
+        }
+        SelectedFriend = f;
+        _windows.ShowFriends(this);
+    }
+
+    public void PopOut(FriendItem friend)
+    {
+        var f = Friends.FirstOrDefault(i => i.Is(friend)) ?? friend;
+        if (PoppedFor(f) is { } popped)
+        {
+            _windows.ShowPopOut(this, popped);
+            return;
+        }
+        // added first so the friend's still held in UNREAD while the pane lets go, and its unsent text goes to the new window
+        popped = new PoppedConversation(this, f);
+        _popped.Add(popped);
+        if (SelectedFriend is { } s && s.Is(f)) SelectedFriend = null;
+        popped.Messages.SelectionChanged(f);
+        _windows.ShowPopOut(this, popped);
+    }
+
+    public void PopIn(PoppedConversation popped)
+    {
+        if (!Detach(popped)) return;
+        _windows.ClosePopOut(popped);
+        SelectedFriend = Friends.FirstOrDefault(i => i.Is(popped.Friend)) ?? popped.Friend;
+        PaneChanged();
+        _windows.ShowFriends(this);
+    }
+
+    // its window's gone, the conversation's just closed
+    public void PopOutClosed(PoppedConversation popped)
+    {
+        if (!Detach(popped)) return;
+        if (SelectedFriend is { } s && s.Is(popped.Friend)) SelectedFriend = null;
+        ReleaseHeld();
+    }
+
+    private bool Detach(PoppedConversation popped)
+    {
+        if (!_popped.Remove(popped)) return false;
+        popped.Messages.ConversationVisible = false;
+        popped.Messages.Release();
+        return true;
+    }
+
+    // the Hide button: no selection, no pane, and any friend picked opens it again
+    public void HidePane() => SelectedFriend = null;
 
     internal void MarkFriendsDirty() => _login.FriendsDirty = true;
 
@@ -872,16 +1048,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (!_windows.CloseIfShown(SecondWindow.ProfileEditor)) _windows.EditProfile(this);
     }
 
-    internal void ShowMessagesWindow() => _windows.ShowMessages(this);
-
-    public void ShowMessagesAlongside(bool takeFocus) => _windows.ShowMessagesAlongside(this, takeFocus);
-
-    public void SetWindowsSplit(bool split)
-    {
-        if (split) _windows.Split(this);
-        else _windows.Merge(this);
-    }
-
     // a request or invitation gets the viewer's answer window (Ignore lives on the right-click menu)
     public void AnswerRow(FriendItem f)
     {
@@ -921,36 +1087,68 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     internal bool ConfirmDestructive(string title, string body, string ok) =>
         _dialogs.Confirm(title, body, ok, ConfirmStyle.Destructive);
 
+    public const string AcceptRequestText = "Accept friend request";
+    public const string DeclineRequestText = "Decline friend request...";
+    public const string IgnoreRequestText = "Ignore...";
+    public const string AcceptInviteText = "Accept group invitation";
+    public const string DeclineInviteText = "Decline group invitation";
+    public const string DeleteRequestText = "Delete friend request...";
+
+    private void DeclineRequest(FriendItem f)
+    {
+        if (ConfirmDestructive("Decline friend request", $"Decline the friend request from {f.Name}?", "DECLINE"))
+            Search.AnswerRequest(f, RequestAnswer.Decline);
+    }
+
+    private void IgnoreRequest(FriendItem f)
+    {
+        if (ConfirmDestructive("Ignore " + f.Name,
+                IgnoreRequestQuestion(f.Name, f.Key.Length > 0 && Friends.Any(x => x.IsFriend && !x.Pending && x.Key == f.Key)),
+                "IGNORE"))
+            Search.AnswerRequest(f, RequestAnswer.Ignore);
+    }
+
+    // the Requests tab's buttons, the same answers as the right-click menu
+    public void AnswerWith(FriendItem f, RequestChoice choice)
+    {
+        if (!CanEdit) return;
+        switch (choice)
+        {
+            case RequestChoice.Accept when f.IsGroupInvite: Groups.AnswerInvite(f, true); break;
+            case RequestChoice.Decline when f.IsGroupInvite: Groups.AnswerInvite(f, false); break;
+            case RequestChoice.Accept when f.IsRequest && !f.IsMe: Search.AnswerRequest(f, RequestAnswer.Accept); break;
+            case RequestChoice.Decline when f.IsRequest: DeclineRequest(f); break;
+            case RequestChoice.Ignore when f.IsRequest && !f.IsMe: IgnoreRequest(f); break;
+            case RequestChoice.Delete when f.Pending && f.IsFriend && f.Key.Length > 0: DeleteRequest(f); break;
+        }
+    }
+
+    private void DeleteRequest(FriendItem f)
+    {
+        if (ConfirmDestructive("Delete friend request", $"Delete your friend request to {f.Name}? This takes it off your own friend list.", "DELETE"))
+            RemoveFriend(f);
+    }
+
     public IReadOnlyList<MenuAction> FriendMenu(FriendItem f, Action<FriendItem>? openConversation = null)
     {
         bool edit = CanEdit && f.IsFriend && f.Key.Length > 0;
         if (f.IsGroupInvite)
-            return [new("Accept group invitation", CanEdit, () => Groups.AnswerInvite(f, true)),
-                    new("Decline group invitation", CanEdit, () => Groups.AnswerInvite(f, false))];
+            return [new(AcceptInviteText, CanEdit, () => Groups.AnswerInvite(f, true)),
+                    new(DeclineInviteText, CanEdit, () => Groups.AnswerInvite(f, false))];
         if (f.IsRequest)
-            return [new("Accept friend request", CanEdit && !f.IsMe, () => Search.AnswerRequest(f, RequestAnswer.Accept)),
-                    new("Decline friend request...", CanEdit, () =>
-                    {
-                        if (ConfirmDestructive("Decline friend request", $"Decline the friend request from {f.Name}?", "DECLINE"))
-                            Search.AnswerRequest(f, RequestAnswer.Decline);
-                    }),
+            return [new(AcceptRequestText, CanEdit && !f.IsMe, () => Search.AnswerRequest(f, RequestAnswer.Accept)),
+                    new(DeclineRequestText, CanEdit, () => DeclineRequest(f)),
                     MenuAction.Separator,
                     // the viewer's request window only ignores this one handle
-                    new("Ignore...", CanEdit && !f.IsMe, () =>
-                    {
-                        if (ConfirmDestructive("Ignore " + f.Name,
-                                IgnoreRequestQuestion(f.Name, f.Key.Length > 0 && Friends.Any(x => x.IsFriend && !x.Pending && x.Key == f.Key)),
-                                "IGNORE"))
-                            Search.AnswerRequest(f, RequestAnswer.Ignore);
-                    })];
+                    new(IgnoreRequestText, CanEdit && !f.IsMe, () => IgnoreRequest(f))];
         if (!f.IsFriend && !f.Pending)
             return [new($"Add {f.Name} as a friend...", CanEdit, () => _windows.AddFriend(this, f.Name, f.Key))];
         var menu = new List<MenuAction>
         {
             new("Send message", f.CanMessage, () =>
             {
-                SelectedFriend = f;
-                openConversation?.Invoke(f);
+                if (openConversation is not null) openConversation(f);
+                else OpenConversation(f);
             }),
             new("View profile", f.IsFriend && !f.Pending, () => _windows.ShowProfile(this, f)),
         };
@@ -970,13 +1168,11 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             // the same name has nothing to save, the viewer skips it too
             if (name is not null && name.Trim() != f.Name) RenameFriend(f, name);
         }));
-        var removeBody = f.Pending
-            ? $"Delete your friend request to {f.Name}? This takes it off your own friend list."
-            : $"Remove {f.Name} from your PlayOnline friend list? Your saved messages with {f.Name} stay in Provenance.";
-        menu.Add(new(f.Pending ? "Delete friend request..." : "Remove from friends...", edit, () =>
+        var removeBody = $"Remove {f.Name} from your PlayOnline friend list? Your saved messages with {f.Name} stay in Provenance.";
+        menu.Add(new(f.Pending ? DeleteRequestText : "Remove from friends...", edit, () =>
         {
-            if (ConfirmDestructive(f.Pending ? "Delete friend request" : "Remove friend", removeBody, f.Pending ? "DELETE" : "REMOVE"))
-                RemoveFriend(f);
+            if (f.Pending) DeleteRequest(f);
+            else if (ConfirmDestructive("Remove friend", removeBody, "REMOVE")) RemoveFriend(f);
         }));
         menu.Add(new("Ignore...", edit && !f.Pending && !f.IsMe, () =>
         {
