@@ -116,15 +116,17 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     [ObservableProperty] private string? _accountNotice;
     [ObservableProperty] private bool _messagesUnavailable;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanPlay))] private string? _playBlockedReason;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasUnread))]
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasUnread), nameof(NotificationCount))]
     private int _unreadCount;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasPendingAnswers))]
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasPendingAnswers), nameof(NotificationCount))]
     private int _pendingAnswers;
     // unread, plus requests no friend list has had on screen yet. The taskbar stays lit while it's above 0
     [ObservableProperty] private int _unseenCount;
     public int MyProfilePictureId { get; private set; }
 
     public bool HasUnread => UnreadCount > 0;
+    // what the taskbar badge counts: unread messages and requests still waiting for an answer
+    public int NotificationCount => LoggedIn ? NotificationBadge.Count(UnreadCount, PendingAnswers) : 0;
     // requests get a badge too (on Friends), so one's never just an 8s banner
     public bool HasPendingAnswers => PendingAnswers > 0;
     public bool CanPlay => PlayBlockedReason is null;
@@ -253,6 +255,50 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public PoppedConversation? PoppedFor(FriendItem f) => _popped.FirstOrDefault(p => p.Friend.Is(f));
 
+    private FriendItem? _lastPaneFriend;
+    private PoppedConversation? _lastPopped;
+
+    // the Friends window's messages button: hides the pane, or brings back the last conversation that was in it. One
+    // that's in a window of its own comes back into the pane instead, and with no last one it's the pop-out used most recently
+    private (FriendItem? Show, PoppedConversation? PopIn) MessagesTarget()
+    {
+        if (_lastPaneFriend is { } l && Friends.FirstOrDefault(i => i.Is(l)) is { } f)
+            return PoppedFor(f) is { } p ? (null, p) : (f, null);
+        var recent = _lastPopped is { } lp && _popped.Contains(lp) ? lp : _popped.LastOrDefault();
+        return (null, recent);
+    }
+
+    public bool CanToggleMessages => HasPane || MessagesTarget() is not (null, null);
+    public string MessagesToggleText => HasPane ? "Hide messages" : "Show messages";
+
+    public void ToggleMessages()
+    {
+        if (HasPane)
+        {
+            HidePane();
+            return;
+        }
+        var (show, popIn) = MessagesTarget();
+        if (popIn is not null) PopIn(popIn);
+        else if (show is not null)
+        {
+            SelectedFriend = show;
+            _windows.ShowFriends(this);
+        }
+    }
+
+    // a pop-out that's just been used, which is where Show messages goes when no conversation was in the pane
+    internal void PopOutUsed(PoppedConversation popped)
+    {
+        if (_popped.Contains(popped)) _lastPopped = popped;
+    }
+
+    private void MessagesToggleChanged()
+    {
+        OnPropertyChanged(nameof(CanToggleMessages));
+        OnPropertyChanged(nameof(MessagesToggleText));
+    }
+
     internal IEnumerable<SocialMessages> Conversations => _popped.Select(p => p.Messages).Prepend(Messages);
 
     internal void RefreshConversations()
@@ -269,6 +315,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private void OnPhaseChanged()
     {
         OnPropertyChanged(nameof(LoggedIn));
+        OnPropertyChanged(nameof(NotificationCount));
         RefreshZoneTrouble();
         OnPropertyChanged(nameof(NoFriends));
         OnPropertyChanged(nameof(NoFriendsInList));
@@ -398,10 +445,27 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         return snap with { Messages = snap.Messages.Except(done).ToList() };
     }
 
+    private void RefreshPending() =>
+        PendingAnswers = Friends.Count(f => (f.IsRequest || f.IsGroupInvite) && !_login.Answering.Contains(f.RequestMid) && !_login.Answered.Contains(f.RequestMid));
+
+    // from the press, so the counts drop at once instead of with the next snapshot
+    internal void AnswerStarted(int mid)
+    {
+        _login.Answering.Add(mid);
+        RefreshPending();
+    }
+
+    internal void AnswerFailed(int mid)
+    {
+        _login.Answering.Remove(mid);
+        RefreshPending();
+    }
+
     internal void Answered(int mid, bool ack)
     {
         _login.Answered.Add(mid);
         _login.FriendsDirty = true;
+        RefreshPending();
         if (!ack) return;
         if (_login.Last.Messages.FirstOrDefault(m => m.Mid == mid) is { } answered) _login.Remembered?.Add(answered, Now);
         _login.AckPending.Add(mid);
@@ -455,6 +519,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         Profile.Reset();
         Search.Reset();
         _popped.Clear();
+        _lastPaneFriend = null;
+        _lastPopped = null;
         Messages.Reset();
         Groups.Reset();
         EditBusy = false;
@@ -463,6 +529,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         SelectedFriend = null;
         _login.Held.Clear();
         Friends.Clear();
+        MessagesToggleChanged();
         Blocked.Clear();
         HasBlocked = false;
         OnlineCount = UnreadCount = PendingAnswers = 0;
@@ -528,7 +595,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         OnlineCount = snap.Friends.Count(f => f.Online && !f.Pending);
         UnreadCount = _login.Chat?.Unread ?? 0;
         foreach (var c in Conversations.ToList()) if (c.Friend != null && c.DayChanged) c.Refresh();   // past midnight
-        PendingAnswers = Friends.Count(f => f.IsRequest || f.IsGroupInvite);
+        RefreshPending();
         RefreshUnseen();
 
         if (_login.RequestedStatus is { } want)
@@ -710,6 +777,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             PopOutClosed(p);
         }
         Groups.SyncInvites(Friends);
+        MessagesToggleChanged();
     }
 
     private bool _rebuilding;
@@ -729,6 +797,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     {
         OnPropertyChanged(nameof(PaneFriend));
         OnPropertyChanged(nameof(HasPane));
+        if (PaneFriend is { } shown) _lastPaneFriend = shown;
+        MessagesToggleChanged();
         Messages.SelectionChanged(PaneFriend);
         ReleaseHeld();
     }
@@ -747,6 +817,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         var f = Friends.FirstOrDefault(i => i.Is(friend)) ?? friend;
         if (PoppedFor(f) is { } popped)
         {
+            _lastPopped = popped;
             _windows.ShowPopOut(this, popped);
             return;
         }
@@ -765,7 +836,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         // added first so the friend's still held in UNREAD while the pane lets go, and its unsent text goes to the new window
         popped = new PoppedConversation(this, f);
         _popped.Add(popped);
+        _lastPopped = popped;
         if (SelectedFriend is { } s && s.Is(f)) SelectedFriend = null;
+        MessagesToggleChanged();
         popped.Messages.SelectionChanged(f);
         _windows.ShowPopOut(this, popped);
     }
@@ -790,6 +863,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private bool Detach(PoppedConversation popped)
     {
         if (!_popped.Remove(popped)) return false;
+        if (_lastPopped == popped) _lastPopped = null;
+        MessagesToggleChanged();
         popped.Messages.ConversationVisible = false;
         popped.Messages.Release();
         return true;

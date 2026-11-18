@@ -1,8 +1,6 @@
 <controls:AppWindow x:Class="Provenance.Wpf.Views.Social.PopOutWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
         xmlns:local="clr-namespace:Provenance.Wpf.Views.Social"
         Title="Messages" Icon="/Assets/provenance.ico"
@@ -10,14 +8,7 @@
         Style="{StaticResource AppWindow}">
 
     <Grid RowDefinitions="40,*">
-        <controls:TitleBar x:Name="Bar">
-            <Button x:Name="PopInButton" HorizontalAlignment="Right" Width="44" Height="40" Padding="0" Foreground="{DynamicResource Text.2}"
-                    Style="{StaticResource IconButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnPopIn"
-                    ToolTip="Put this conversation back in the Friends window"
-                    AutomationProperties.Name="Put this conversation back in the Friends window">
-                <materialDesign:PackIcon Kind="DockWindow" Width="18" Height="18" />
-            </Button>
-        </controls:TitleBar>
-        <local:ConversationView x:Name="Pane" Grid.Row="1" PaneButtons="False" Background="{DynamicResource Bg.Base}" />
+        <controls:TitleBar x:Name="Bar" />
+        <local:ConversationView x:Name="Pane" Grid.Row="1" Popped="True" Background="{DynamicResource Bg.Base}" />
     </Grid>
 </controls:AppWindow>

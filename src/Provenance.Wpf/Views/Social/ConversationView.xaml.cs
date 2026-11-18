@@ -9,12 +9,8 @@ namespace Provenance.Wpf.Views.Social;
 
 public partial class ConversationView : UserControl
 {
-    public static readonly DependencyProperty PaneButtonsProperty = DependencyProperty.Register(
-        nameof(PaneButtons), typeof(bool), typeof(ConversationView), new PropertyMetadata(true, (d, e) =>
-        {
-            var v = (ConversationView)d;
-            v.PopOutButton.Visibility = v.HideButton.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed;
-        }));
+    public static readonly DependencyProperty PoppedProperty = DependencyProperty.Register(
+        nameof(Popped), typeof(bool), typeof(ConversationView), new PropertyMetadata(false));
 
     private ScrollViewer? _chatScroll;
     private string? _shownWith;
@@ -31,11 +27,11 @@ public partial class ConversationView : UserControl
         DataContextChanged += (_, e) => FollowEnd.SetSource(ChatScroll, (e.NewValue as SocialMessages)?.Conversation);
     }
 
-    // the pop-out has no pane to pop out of or hide
-    public bool PaneButtons
+    // in its own window, where the pop out button puts the conversation back
+    public bool Popped
     {
-        get => (bool)GetValue(PaneButtonsProperty);
-        set => SetValue(PaneButtonsProperty, value);
+        get => (bool)GetValue(PoppedProperty);
+        set => SetValue(PoppedProperty, value);
     }
 
     private SocialMessages? Messages => DataContext as SocialMessages;
@@ -97,10 +93,9 @@ public partial class ConversationView : UserControl
 
     private void OnPopOut(object sender, RoutedEventArgs e)
     {
-        if (Messages is { Friend: { } f } m) m.Social.PopOut(f);
+        if (Popped) (Window.GetWindow(this) as PopOutWindow)?.PutBack();
+        else if (Messages is { Friend: { } f } m) m.Social.PopOut(f);
     }
-
-    private void OnHide(object sender, RoutedEventArgs e) => Messages?.Social.HidePane();
 
     private void OnLineMenu(object sender, ContextMenuEventArgs e)
     {

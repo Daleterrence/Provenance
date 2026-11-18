@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Media;
 using Provenance.Common.PolFormat;
+using Provenance.Common.Social;
 using Provenance.Common.Settings;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.ViewModels.Install;
@@ -111,15 +112,42 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
             return;
         }
         var w = new PopOutWindow(conversation) { DataContext = conversation.Messages };
-        if (FriendsWindow() is { IsVisible: true } fw)
+        if (!PlaceAtLastPopOut(w))
         {
-            // beside the Friends window, on whichever side has room
-            var (screenLeft, screenRight) = ScreenEdges();
-            double left = LeftBeside(fw.Left, fw.ActualWidth, w.Width, screenLeft, screenRight);
-            (w.WindowStartupLocation, w.Left, w.Top) = (WindowStartupLocation.Manual, left, fw.Top);
+            if (FriendsWindow() is { IsVisible: true } fw)
+            {
+                // beside the Friends window, on whichever side has room
+                var (screenLeft, screenRight) = ScreenEdges();
+                double left = LeftBeside(fw.Left, fw.ActualWidth, w.Width, screenLeft, screenRight);
+                (w.WindowStartupLocation, w.Left, w.Top) = (WindowStartupLocation.Manual, left, fw.Top);
+            }
+            else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
-        else w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        WindowPlaces.Track(settings, w, PopOutKey, live: true);
+        PopOutOpening?.Invoke(w);
         w.Show();
+    }
+
+    internal const string PopOutKey = "pop-out";
+
+    // swapped in tests, to keep a pop-out where it was put
+    internal static Action<Window>? PopOutOpening { get; set; }
+
+    // where the last pop-out was moved or closed, nudged off any that's up there already and kept on a monitor that's there
+    private bool PlaceAtLastPopOut(PopOutWindow w)
+    {
+        if (!settings.Current.WindowPlaces.TryGetValue(PopOutKey, out var p)) return false;
+        var saved = new Spot(p.Left, p.Top, p.Width, p.Height);
+        if (!PopOutPlacement.Usable(saved)) return false;
+        // the helper goes by where the window's set to open, so that's the saved place first
+        (w.WindowStartupLocation, w.Left, w.Top) = (WindowStartupLocation.Manual, saved.Left, saved.Top);
+        var area = SocialWindow.WorkArea(w);
+        var room = new Spot(area.Left, area.Top, area.Width, area.Height);
+        var up = Application.Current.Windows.OfType<PopOutWindow>().Where(o => o != w && o.IsVisible)
+                            .Select(o => o.WindowState == WindowState.Normal ? (o.Left, o.Top) : (o.RestoreBounds.Left, o.RestoreBounds.Top));
+        var at = PopOutPlacement.Open(saved, up, room, w.MinWidth, w.MinHeight);
+        (w.Left, w.Top, w.Width, w.Height) = (at.Left, at.Top, at.Width, at.Height);
+        return true;
     }
 
     public void ClosePopOut(PoppedConversation conversation) => PopOutFor(conversation)?.Close();

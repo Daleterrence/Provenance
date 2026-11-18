@@ -48,12 +48,22 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
             {
                 if (InTray) Icon.SetState(StateOf(vm));
             }
+            void FollowCount(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+            {
+                if (InTray && e.PropertyName == nameof(ViewModels.Social.SocialViewModel.NotificationCount)) Icon?.SetBadge(vm.Social.NotificationCount);
+            }
             vm.Session.PhaseChanged += Follow;
-            _unfollow = () => vm.Session.PhaseChanged -= Follow;
+            vm.Social.PropertyChanged += FollowCount;
+            _unfollow = () =>
+            {
+                vm.Session.PhaseChanged -= Follow;
+                vm.Social.PropertyChanged -= FollowCount;
+            };
         }
         ListenForTaskbar();
         var state = StateOf(vm);
         Icon.SetState(state);
+        Icon.SetBadge(vm.Social.NotificationCount);
         Icon.Visible = true;
         window.Hide();   // the friends windows are their own windows and stay as they are
         Log.Information("Hidden to the tray ({State})", state.ToString());   // as text, or the log puts it in quotes

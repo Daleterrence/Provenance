@@ -18,6 +18,7 @@ public partial class PopOutWindow : AppWindow
         social.MessageReceived += OnMessageLanded;
         IsVisibleChanged += (_, _) => ReportVisible();
         StateChanged += (_, _) => ReportVisible();
+        Activated += (_, _) => social.PopOutUsed(conversation);
         Loaded += (_, _) =>
         {
             ReportVisible();
@@ -59,5 +60,5 @@ public partial class PopOutWindow : AppWindow
 
     private void OnAppActivated(object? sender, EventArgs e) => TaskbarFlash.StopIfFlashing(this);
 
-    private void OnPopIn(object sender, RoutedEventArgs e) => Conversation.Messages.Social.PopIn(Conversation);
+    internal void PutBack() => Conversation.Messages.Social.PopIn(Conversation);
 }

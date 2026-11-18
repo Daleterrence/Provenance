@@ -142,6 +142,8 @@ public partial class SocialWindow : AppWindow
         if (vm.HasPane) Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, () => Conversation.FocusCompose());
     }
 
+    private void OnToggleMessages(object sender, RoutedEventArgs e) => Vm?.ToggleMessages();
+
     private void OnFriendsTab(object sender, RoutedEventArgs e)
     {
         if (Vm is { } vm) vm.RequestsTab = false;

@@ -2,6 +2,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
+using Provenance.Common.Social;
 using Provenance.Wpf.Win32;
 using Serilog;
 
@@ -13,6 +14,8 @@ public sealed class TrayIcon : IDisposable
 {
     private readonly System.Windows.Forms.NotifyIcon _icon;
     private readonly System.Drawing.Icon _noticePicture, _trayPicture;
+    private System.Drawing.Icon? _badged;
+    private string _badge = "";
     private readonly System.Windows.Forms.ToolStripItem _friends, _signOut, _exit;
     private readonly Func<string> _friendsTitle;
 
@@ -113,6 +116,21 @@ public sealed class TrayIcon : IDisposable
         set => _icon.Visible = value;
     }
 
+    internal string BadgeLabel => _badge;
+    internal System.Drawing.Icon ShownPicture => _badged ?? _trayPicture;
+
+    // the app's picture with the count on it, or the plain one with nothing waiting
+    internal void SetBadge(int count)
+    {
+        var label = NotificationBadge.Label(count);
+        if (label == _badge) return;
+        _badge = label;
+        var old = _badged;
+        _badged = label.Length > 0 ? BadgePictures.Tray(_trayPicture, label) : null;
+        _icon.Icon = _badged ?? _trayPicture;
+        old?.Dispose();
+    }
+
     internal int PutBacks, Tips, WithPicture;
     internal System.Drawing.Icon NoticePicture => _noticePicture;
 
@@ -166,6 +184,7 @@ public sealed class TrayIcon : IDisposable
         _icon.Visible = false;
         _icon.Dispose();
         _trayPicture.Dispose();
+        _badged?.Dispose();
         _noticePicture.Dispose();
     }
 }

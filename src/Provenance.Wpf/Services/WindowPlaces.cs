@@ -29,8 +29,9 @@ internal static class WindowPlaces
         return true;
     }
 
-    // saved as it closes or hides, from the normal bounds so a minimised or maximised one comes back as it was
-    internal static void Track(ISettingsService settings, Window w, string key, Func<Rect, Rect>? shape = null)
+    // saved as it closes or hides, from the normal bounds so a minimised or maximised one comes back as it was. Live ones
+    // are saved shortly after each move or resize too
+    internal static void Track(ISettingsService settings, Window w, string key, Func<Rect, Rect>? shape = null, bool live = false)
     {
         void Save()
         {
@@ -42,5 +43,24 @@ internal static class WindowPlaces
         }
         w.Closing += (_, e) => { if (!e.Cancel) Save(); };
         w.IsVisibleChanged += (_, e) => { if (e.NewValue is false) Save(); };
+        if (!live) return;
+        var wait = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background, w.Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(400),
+        };
+        wait.Tick += (_, _) =>
+        {
+            wait.Stop();
+            Save();
+        };
+        void Moved(object? sender, EventArgs e)
+        {
+            if (!w.IsLoaded || !w.IsVisible) return;
+            wait.Stop();
+            wait.Start();
+        }
+        w.LocationChanged += Moved;
+        w.SizeChanged += Moved;
+        w.Closed += (_, _) => wait.Stop();
     }
 }

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Provenance.Common.Social;
 using Provenance.Wpf.Controls;
 using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Services;
@@ -17,6 +18,7 @@ public partial class MainWindow : AppWindow
     public MainWindow()
     {
         InitializeComponent();
+        TaskbarItemInfo = new System.Windows.Shell.TaskbarItemInfo();
         Tray = new TrayMode(this, ExitApp, () => _asking);
         Tray.BackFromTray += async () =>
         {
@@ -94,6 +96,7 @@ public partial class MainWindow : AppWindow
             old.RequestExit -= OnRequestExit;
             old.RequestAttention -= OnRequestAttention;
             old.AttentionCleared -= OnAttentionCleared;
+            old.Social.PropertyChanged -= OnSocialChanged;
         }
         if (e.NewValue is MainViewModel @new)
         {
@@ -104,7 +107,27 @@ public partial class MainWindow : AppWindow
             @new.RequestExit += OnRequestExit;
             @new.RequestAttention += OnRequestAttention;
             @new.AttentionCleared += OnAttentionCleared;
+            @new.Social.PropertyChanged += OnSocialChanged;
         }
+        ShowBadge();
+    }
+
+    private void OnSocialChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SocialViewModel.NotificationCount)) ShowBadge();
+    }
+
+    // the taskbar button's badge and what a screen reader says about it, gone when nothing's waiting
+    internal void ShowBadge()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.InvokeAsync(ShowBadge);
+            return;
+        }
+        int count = Vm?.Social.NotificationCount ?? 0;
+        TaskbarItemInfo.Overlay = count > 0 ? BadgePictures.Overlay(NotificationBadge.Label(count)) : null;
+        TaskbarItemInfo.Description = NotificationBadge.Description(count);
     }
 
     // a tray tip only for a notice that's just been shown, never an old one again for a flash.

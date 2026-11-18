@@ -8,6 +8,7 @@
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
              xmlns:social="clr-namespace:Provenance.Common.Social;assembly=Provenance.Common"
              xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Social"
+             xmlns:local="clr-namespace:Provenance.Wpf.Views.Social"
              mc:Ignorable="d" d:DataContext="{d:DesignInstance vm:SocialMessages}">
 
     <UserControl.Resources>
@@ -141,15 +142,19 @@
                     </StackPanel>
                 </Grid>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="8,0,0,0">
-                    <Button x:Name="PopOutButton" Width="32" Height="32" Padding="0" Style="{StaticResource IconButton}"
-                            Foreground="{DynamicResource Text.3}" Click="OnPopOut"
-                            ToolTip="Pop out this conversation" AutomationProperties.Name="Pop out this conversation">
+                    <Button x:Name="PopOutButton" Width="32" Height="32" Padding="0" Foreground="{DynamicResource Text.3}" Click="OnPopOut"
+                            ToolTip="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource Self}}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                <Setter Property="AutomationProperties.Name" Value="Pop out this conversation" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Popped, RelativeSource={RelativeSource AncestorType=local:ConversationView}}" Value="True">
+                                        <Setter Property="AutomationProperties.Name" Value="Put this conversation back in the Friends window" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
                         <materialDesign:PackIcon Kind="OpenInNew" Width="18" Height="18" />
-                    </Button>
-                    <Button x:Name="HideButton" Width="32" Height="32" Padding="0" Style="{StaticResource IconButton}"
-                            Foreground="{DynamicResource Text.3}" Click="OnHide"
-                            ToolTip="Hide messages" AutomationProperties.Name="Hide messages">
-                        <materialDesign:PackIcon Kind="DockRight" Width="18" Height="18" />
                     </Button>
                     <Button Width="32" Height="32" Padding="0" Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
                             AutomationProperties.Name="Actions for this person" Click="OnConversationMenu">

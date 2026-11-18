@@ -24,6 +24,8 @@ internal sealed class SocialSession
     public ChatSync Sync { get; }
     public HashSet<int> AckPending { get; } = new();
     public HashSet<int> Answered { get; } = new();
+    // answers on their way, which stop counting as waiting till one fails
+    public HashSet<int> Answering { get; } = new();
     public HashSet<int> ShownRequests { get; } = new();
     public HashSet<string> OnlineFriends { get; set; } = new();
     public DateTime? PresenceQuietUntil { get; set; }

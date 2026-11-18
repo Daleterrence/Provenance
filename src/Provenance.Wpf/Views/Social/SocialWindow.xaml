@@ -25,6 +25,12 @@
                         <TextBlock Text="ADD A FRIEND" Margin="6,0,0,0" FontSize="12" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="MessagesToggle" Width="44" Height="40" Padding="0" Foreground="{DynamicResource Text.2}"
+                        Style="{StaticResource IconButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnToggleMessages"
+                        IsEnabled="{Binding CanToggleMessages}" ToolTip="{Binding MessagesToggleText}"
+                        AutomationProperties.Name="{Binding MessagesToggleText}">
+                    <materialDesign:PackIcon Kind="DockRight" Width="18" Height="18" />
+                </Button>
             </StackPanel>
         </controls:TitleBar>
 

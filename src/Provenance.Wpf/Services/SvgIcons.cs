@@ -236,6 +236,18 @@ public static partial class SvgIcons
 
     public static ImageSource? XiBadge => Cached(XiBadgeFile, () => Framed(XiBadgeFile));
 
+    // the badge's body made longer to the left, so on a profile picture its rounded end can sit behind the picture and
+    // the letters keep their place. Without the body where it's expected it's the badge as the file has it
+    public static ImageSource? XiBadgeTucked => Cached(XiBadgeFile + "#tucked", () =>
+    {
+        const string body = "<rect x=\"1\" y=\"1\" width=\"36\"";
+        if (Text(XiBadgeFile) is not { } svg || !svg.Contains(body, StringComparison.Ordinal)) return Framed(XiBadgeFile);
+        double left = XiBadgeGeometry.FrameLeft;
+        string longer = FormattableString.Invariant($"<rect x=\"{left}\" y=\"1\" width=\"{36 + 1 - left}\"");
+        return Frame(Load(XiBadgeFile, edit: t => t.Replace(body, longer, StringComparison.Ordinal)),
+                     new Rect(left, 0, XiBadgeGeometry.FrameWidth, XiBadgeGeometry.ViewHeight));
+    });
+
     // the badge cropped square round its letters for a circle to fill, from the image so a re-export stays centred.
     // Letters are smaller so the X's tips clear the edge
     public static ImageSource? XiBadgeRound => Cached(XiBadgeFile + "#round", () => Frame(SmallerLetters(Load(XiBadgeFile)), RoundFrame()));

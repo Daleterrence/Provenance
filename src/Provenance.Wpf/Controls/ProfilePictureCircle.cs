@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Provenance.Common.Social;
 using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Controls;
@@ -67,17 +68,16 @@ public sealed class ProfilePictureCircle : ContentControl
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
         grid.Children.Add(img);
         Badge = null;
-        if (!InGame || SvgIcons.XiBadge is not { } badge)
+        if (!InGame || SvgIcons.XiBadgeTucked is not { } badge)
         {
             Content = grid;
             return;
         }
         // a Canvas, so the bit hanging off the edge isn't clipped by the layout
-        double w = d * 0.64;
-        Badge = new Image { Source = badge, Width = w, Height = w * badge.Height / badge.Width, Stretch = Stretch.Uniform };
-        // its top edge level with the picture's (the icon starts a unit into its 20 high box)
-        Canvas.SetLeft(Badge, d * 0.62);
-        Canvas.SetTop(Badge, -Badge.Height / 20);
+        var at = XiBadgeGeometry.For(d);
+        Badge = new Image { Source = badge, Width = at.Width, Height = at.Height, Stretch = Stretch.Uniform };
+        Canvas.SetLeft(Badge, at.Left);
+        Canvas.SetTop(Badge, at.Top);
         var under = new Canvas();
         under.Children.Add(Badge);
         var both = new Grid { Width = d, Height = d };

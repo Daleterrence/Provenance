@@ -8,6 +8,9 @@ internal static class User32
     internal static extern bool ChangeWindowMessageFilterEx(IntPtr window, uint message, uint action, IntPtr changes);
 
     [DllImport("user32.dll")]
+    internal static extern bool DestroyIcon(IntPtr icon);
+
+    [DllImport("user32.dll")]
     internal static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
 
     [DllImport("user32.dll")]

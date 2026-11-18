@@ -148,9 +148,11 @@ public sealed partial class GroupsViewModel : ObservableObject
         _login.BySend = bySend;
         _login.Leaving = leaving;
         _login.InviteFor = invite;   // only now, a refused click must never mark it answered
+        if (invite != null) _social.AnswerStarted(invite.RequestMid);
         if (write(pid, token)) return;
         _login.Group.Forget();
         _login.InviteFor = null;
+        if (invite != null) _social.AnswerFailed(invite.RequestMid);
         _social.WriteOrFail(false);
     }
 
@@ -258,6 +260,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         _social.EditBusy = false;
         // a timed-out answer leaves the list for this session too, so it can't be answered twice
         if (invite != null && st is "ok" or "timeout") _social.Answered(invite.RequestMid, ack: st == "ok");
+        else if (invite != null) _social.AnswerFailed(invite.RequestMid);
         if (invite != null)
         {
             var answer = _login.InviteAccepted ? "accepted" : "declined";

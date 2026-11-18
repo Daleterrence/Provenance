@@ -208,6 +208,7 @@ public sealed partial class SocialSearch : ObservableObject
         _login.Answer.Begin(token, HookLimits.Answer, _social.Now);
         _login.AnswerFor = f;
         _login.AnswerKind = answer;
+        _social.AnswerStarted(f.RequestMid);
         var subject = answer == RequestAnswer.Accept
             ? _social.Viewer.Text(0x46d0, "Friend registration accepted")
             : _social.Viewer.Text(0x46d1, "Friend registration declined");
@@ -215,6 +216,7 @@ public sealed partial class SocialSearch : ObservableObject
         if (SocialRequests.AnswerRequest(pid, answer, token, f.RequestMid, subject, allHandles: false)) return;
         _login.Answer.Forget();
         _login.AnswerFor = null;
+        _social.AnswerFailed(f.RequestMid);
         _social.WriteOrFail(false);
     }
 
@@ -244,6 +246,7 @@ public sealed partial class SocialSearch : ObservableObject
         }
         // it may still have gone out, so it leaves the list for this session rather than invite a second answer
         if (st == "timeout") _social.Answered(f.RequestMid, ack: false);
+        else _social.AnswerFailed(f.RequestMid);
         Log.Warning("Answering a friend request ({Answer}) failed: {State}", _login.AnswerKind, st);
         _social.EditNote.Fail(st switch
         {

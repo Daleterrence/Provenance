@@ -31,25 +31,35 @@
                         <Button x:Name="Decline" Tag="{x:Static vm:RequestChoice.Decline}" Click="OnAnswer" Visibility="Collapsed"
                                 Style="{StaticResource AnswerButton}" />
                         <Button x:Name="Ignore" Tag="{x:Static vm:RequestChoice.Ignore}" Click="OnAnswer" Visibility="Collapsed"
-                                Style="{StaticResource AnswerButton}" Content="IGNORE..." />
+                                Style="{StaticResource AnswerButton}" Content="IGNORE..."
+                                ToolTip="Ignore friend request" AutomationProperties.Name="Ignore friend request" />
                         <Button x:Name="Delete" Tag="{x:Static vm:RequestChoice.Delete}" Click="OnAnswer" Visibility="Collapsed"
-                                Style="{StaticResource AnswerButton}" Content="DELETE FRIEND REQUEST..." />
+                                Style="{StaticResource AnswerButton}" Content="DELETE..."
+                                ToolTip="Delete friend request" AutomationProperties.Name="Delete friend request" />
                     </WrapPanel>
                 </StackPanel>
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Section}" Value="{x:Static vm:FriendSection.FriendRequests}">
                     <Setter TargetName="Accept" Property="Visibility" Value="Visible" />
-                    <Setter TargetName="Accept" Property="Content" Value="ACCEPT FRIEND REQUEST" />
+                    <Setter TargetName="Accept" Property="Content" Value="ACCEPT" />
+                    <Setter TargetName="Accept" Property="ToolTip" Value="Accept friend request" />
+                    <Setter TargetName="Accept" Property="AutomationProperties.Name" Value="Accept friend request" />
                     <Setter TargetName="Decline" Property="Visibility" Value="Visible" />
-                    <Setter TargetName="Decline" Property="Content" Value="DECLINE FRIEND REQUEST..." />
+                    <Setter TargetName="Decline" Property="Content" Value="DECLINE..." />
+                    <Setter TargetName="Decline" Property="ToolTip" Value="Decline friend request" />
+                    <Setter TargetName="Decline" Property="AutomationProperties.Name" Value="Decline friend request" />
                     <Setter TargetName="Ignore" Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Section}" Value="{x:Static vm:FriendSection.GroupInvitations}">
                     <Setter TargetName="Accept" Property="Visibility" Value="Visible" />
-                    <Setter TargetName="Accept" Property="Content" Value="ACCEPT GROUP INVITATION" />
+                    <Setter TargetName="Accept" Property="Content" Value="ACCEPT" />
+                    <Setter TargetName="Accept" Property="ToolTip" Value="Accept group invitation" />
+                    <Setter TargetName="Accept" Property="AutomationProperties.Name" Value="Accept group invitation" />
                     <Setter TargetName="Decline" Property="Visibility" Value="Visible" />
-                    <Setter TargetName="Decline" Property="Content" Value="DECLINE GROUP INVITATION" />
+                    <Setter TargetName="Decline" Property="Content" Value="DECLINE" />
+                    <Setter TargetName="Decline" Property="ToolTip" Value="Decline group invitation" />
+                    <Setter TargetName="Decline" Property="AutomationProperties.Name" Value="Decline group invitation" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Section}" Value="{x:Static vm:FriendSection.RequestsSent}">
                     <Setter TargetName="Delete" Property="Visibility" Value="Visible" />
