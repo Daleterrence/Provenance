@@ -32,9 +32,14 @@ public static class SelfUpdate
         File.Exists(Path.Combine(AppContext.BaseDirectory, "sq.version")) &&
         File.Exists(Path.Combine(AppContext.BaseDirectory, "..", "Update.exe"));
 
-    internal sealed record Problem(string Title, string Detail, bool CanRetry = true);
-
     private const string HasToUpdate = "Provenance has to be up to date before it can start. ";
+
+    internal sealed record Problem(string Title, string Detail, bool CanRetry = true)
+    {
+        // Restart Now is in a running app, so the start-up opening makes no sense there
+        public string RestartDetail => Detail.StartsWith(HasToUpdate, StringComparison.Ordinal) ? Detail[HasToUpdate.Length..] : Detail;
+    }
+
     internal static readonly Problem CantCheck = new("Provenance couldn't check for updates", HasToUpdate + "Check your internet connection and try again.");
     internal static readonly Problem CantDownload = new("Provenance couldn't download the update", HasToUpdate + "Check your internet connection and try again.");
     internal static readonly Problem CantInstall = new("Provenance couldn't install the update", HasToUpdate + "Restart your PC and try again.");
@@ -246,7 +251,7 @@ public static class SelfUpdate
                     Log.Information("Restart Now was cancelled, {Closed} other copies had already closed", tally.Closed);
                     return false;
                 }
-                if (quit.IsCancellationRequested || !await window.AskTryAgain(problem.Title, problem.Detail, problem.CanRetry))
+                if (quit.IsCancellationRequested || !await window.AskTryAgain(problem.Title, problem.RestartDetail, problem.CanRetry))
                 {
                     if (tally.Closed == 0) Log.Information("Restart Now stopped, nothing was closed");
                     else Log.Information("Restart Now stopped, {Closed} other copies had already closed", tally.Closed);

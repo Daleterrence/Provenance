@@ -18,10 +18,11 @@
     <Window.Resources>
         <!-- decoded once near the size shown, the source is 256x256 -->
         <BitmapImage x:Key="TitleIcon" UriSource="/Assets/provenance-256.png" DecodePixelWidth="64" />
+        <SolidColorBrush x:Key="BannerBrush" Color="{DynamicResource Surface.2.Color}" Opacity="0.94" />
     </Window.Resources>
 
-    <Grid RowDefinitions="40,Auto,*,Auto">
-        <Border Grid.Row="2" VerticalAlignment="Top" Height="160" IsHitTestVisible="False">
+    <Grid RowDefinitions="40,*,Auto">
+        <Border Grid.Row="1" VerticalAlignment="Top" Height="160" IsHitTestVisible="False">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                     <GradientStop Color="{DynamicResource Bg.Glow}" Offset="0" />
@@ -36,7 +37,7 @@
             </Border.OpacityMask>
         </Border>
 
-        <controls:TitleBar Title="{Binding TitleBarText, FallbackValue=PROVENANCE}" Icon="{StaticResource TitleIcon}" TitleSize="13" DimTitle="True" GlyphSize="17"
+        <controls:TitleBar KeyboardNavigation.TabIndex="0" Title="{Binding TitleBarText, FallbackValue=PROVENANCE}" Icon="{StaticResource TitleIcon}" TitleSize="13" DimTitle="True" GlyphSize="17"
                            CloseToolTip="{Binding CloseTooltip}" CloseName="{Binding CloseName}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <controls:PopupToggle x:Name="WorldsChip" Style="{x:Null}" VerticalAlignment="Center"
@@ -114,36 +115,7 @@
             </Border>
         </Popup>
 
-        <StackPanel Grid.Row="1">
-            <!-- no close button and nothing that hides it, it stays until the update's in -->
-            <Border Padding="24,9" Background="{DynamicResource Surface.2}"
-                    BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
-                    Visibility="{Binding UpdateNotice.Showing, Converter={StaticResource BoolToVis}}">
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <materialDesign:PackIcon Kind="Update" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center"
-                                             Foreground="{DynamicResource State.Warn}" />
-                    <TextBlock Grid.Column="1" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text.1}"
-                               behaviours:Announce.Once="{Binding UpdateNotice.Showing}" Text="{Binding UpdateNotice.Text}" />
-                    <Button Grid.Column="2" Margin="16,0,0,0" VerticalAlignment="Center" Style="{StaticResource PolButton}"
-                            Command="{Binding UpdateNotice.RestartNowCommand}" Content="RESTART NOW"
-                            ToolTip="{Binding UpdateNotice.RestartTip}" ToolTipService.ShowOnDisabled="True"
-                            AutomationProperties.Name="Restart Now" />
-                </Grid>
-            </Border>
-            <Border Padding="24,9" Background="{DynamicResource Surface.2}"
-                    BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
-                    Visibility="{Binding GameOpen, Converter={StaticResource BoolToVis}}">
-                <Grid ColumnDefinitions="Auto,*">
-                    <materialDesign:PackIcon Kind="InformationOutline" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center"
-                                             Foreground="{DynamicResource State.Warn}" />
-                    <TextBlock Grid.Column="1" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text.1}"
-                               behaviours:Announce.WhenShown="True"
-                               Text="You cannot use any PlayOnline or social features of Provenance whilst logged into the game." />
-                </Grid>
-            </Border>
-        </StackPanel>
-
-        <Grid Grid.Row="2" ColumnDefinitions="1.5*,400">
+        <Grid Grid.Row="1" ColumnDefinitions="1.5*,400">
             <local:NewsCard />
 
             <Grid Grid.Column="1" Margin="0,24,24,24">
@@ -163,7 +135,37 @@
             </Grid>
         </Grid>
 
-        <StackPanel Grid.Row="2" Panel.ZIndex="10" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="24,0,0,18">
+        <!-- over the content, so one coming or going never moves it -->
+        <StackPanel Grid.Row="1" Panel.ZIndex="10" VerticalAlignment="Top" KeyboardNavigation.TabIndex="1">
+            <!-- no close button and nothing that hides it, it stays until the update's in -->
+            <Border Padding="24,9" Background="{StaticResource BannerBrush}"
+                    BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding UpdateNotice.Showing, Converter={StaticResource BoolToVis}}">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <materialDesign:PackIcon Kind="Update" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             Foreground="{DynamicResource Primary}" />
+                    <TextBlock Grid.Column="1" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text.1}"
+                               behaviours:Announce.Once="{Binding UpdateNotice.Showing}" Text="{Binding UpdateNotice.Text}" />
+                    <Button Grid.Column="2" Margin="16,0,0,0" VerticalAlignment="Center" Style="{StaticResource PolButton}"
+                            Command="{Binding UpdateNotice.RestartNowCommand}" Content="RESTART NOW"
+                            ToolTip="{Binding UpdateNotice.RestartTip}" ToolTipService.ShowOnDisabled="True"
+                            AutomationProperties.Name="Restart Now" />
+                </Grid>
+            </Border>
+            <Border Padding="24,9" Background="{StaticResource BannerBrush}"
+                    BorderBrush="{DynamicResource Border.Pane}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding GameOpen, Converter={StaticResource BoolToVis}}">
+                <Grid ColumnDefinitions="Auto,*">
+                    <materialDesign:PackIcon Kind="InformationOutline" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             Foreground="{DynamicResource State.Warn}" />
+                    <TextBlock Grid.Column="1" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text.1}"
+                               behaviours:Announce.WhenShown="True"
+                               Text="You cannot use any PlayOnline or social features of Provenance whilst logged into the game." />
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Panel.ZIndex="10" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="24,0,0,18">
         <Border HorizontalAlignment="Left"
                 MaxWidth="560" Padding="14,10" CornerRadius="{StaticResource Radius.Panel}"
                 Background="{DynamicResource Surface.2}" BorderBrush="{DynamicResource Primary}" BorderThickness="1"
@@ -233,6 +235,6 @@
                        IsError="{Binding Social.PopIsError, Mode=OneWay}" Shown="{Binding Social.PopShown, Mode=OneWay}" />
         </StackPanel>
 
-        <local:SocialFooter Grid.Row="3" Visibility="{Binding LoggedIn, Converter={StaticResource BoolToVis}}" />
+        <local:SocialFooter Grid.Row="2" Visibility="{Binding LoggedIn, Converter={StaticResource BoolToVis}}" />
     </Grid>
 </controls:AppWindow>
