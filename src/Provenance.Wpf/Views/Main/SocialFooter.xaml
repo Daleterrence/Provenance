@@ -57,7 +57,7 @@
                     </Button>
                     <Button Command="{Binding ToggleFriendsCommand}" ToolTip="Displays your PlayOnline friends list" AutomationProperties.Name="Friends">
                         <StackPanel Orientation="Horizontal">
-                            <controls:SvgIcon Glyph="smiley" IsOpen="{Binding Social.FriendsTabVisible}" />
+                            <controls:SvgIcon Glyph="chat" IsOpen="{Binding Social.FriendsTabVisible}" />
                             <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="FRIENDS" />
                             <Border Style="{StaticResource ButtonBadge}"
                                     Visibility="{Binding Social.HasPendingAnswers, Converter={StaticResource BoolToVis}}"

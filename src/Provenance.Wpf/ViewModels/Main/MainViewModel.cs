@@ -453,13 +453,10 @@ public partial class MainViewModel : ObservableObject
         _updateRestart.Cancelled();
     }
 
-    public string WindowTitle => VersionTag.WindowTitle(VersionTag.OwnText(), SelfUpdate.Tag);
-
     public string TitleBarText => VersionTag.TitleBarText(VersionTag.OwnText(), SelfUpdate.Tag);
 
     internal void TitleChanged()
     {
-        OnPropertyChanged(nameof(WindowTitle));
         OnPropertyChanged(nameof(TitleBarText));
     }
 

@@ -85,6 +85,33 @@
         </Setter>
     </Style>
 
+    <!-- a strip over the content that blurs what's under it, the tint and the line come from the theme -->
+    <Style TargetType="controls:GlassBanner">
+        <Setter Property="Foreground" Value="{DynamicResource Banner.Text}" />
+        <Setter Property="Padding" Value="18,11,16,11" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:GlassBanner">
+                    <Grid>
+                        <Grid ClipToBounds="True" IsHitTestVisible="False">
+                            <Rectangle Fill="{DynamicResource Bg.Base}" Margin="-24" />
+                            <Rectangle x:Name="Frost" Margin="-24">
+                                <Rectangle.Effect>
+                                    <BlurEffect Radius="16" KernelType="Gaussian" RenderingBias="Performance" />
+                                </Rectangle.Effect>
+                            </Rectangle>
+                        </Grid>
+                        <Border Background="{DynamicResource Banner.Bg}" BorderBrush="{DynamicResource Banner.Line}" BorderThickness="0,0,0,1"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- icon and title, then whatever the window puts in the bar, then maximise and close. Only the buttons take
          clicks, the rest drags the window -->
     <Style TargetType="controls:TitleBar">
@@ -97,8 +124,8 @@
                         <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center" HorizontalAlignment="Left">
                             <Image x:Name="Crystal" Source="{TemplateBinding Icon}" Width="20" Height="20" Margin="0,0,8,0"
                                    RenderOptions.BitmapScalingMode="HighQuality" />
-                            <TextBlock x:Name="TitleText" Text="{TemplateBinding Title}" FontSize="{TemplateBinding TitleSize}"
-                                       VerticalAlignment="Center" />
+                            <TextBlock x:Name="TitleText" Text="{TemplateBinding ShownTitle}" FontSize="{TemplateBinding TitleSize}"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                         </StackPanel>
                         <DockPanel>
                             <Button x:Name="PART_Close" DockPanel.Dock="Right" Width="44" Height="40" Padding="0"

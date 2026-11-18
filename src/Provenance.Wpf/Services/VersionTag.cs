@@ -33,8 +33,6 @@ internal static class VersionTag
 
     public static SemanticVersion? Own() => OwnText() is { } text && SemanticVersion.TryParse(text, out var version) ? version : null;
 
-    public static string WindowTitle(string? version, string? tag) => Join("Provenance", version, tag);
-
     public static string TitleBarText(string? version, string? tag) => Join("PROVENANCE", version, tag);
 
     private static string Join(string name, string? version, string? tag) =>

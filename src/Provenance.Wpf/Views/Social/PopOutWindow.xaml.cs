@@ -12,7 +12,8 @@ public partial class PopOutWindow : AppWindow
     {
         Conversation = conversation;
         InitializeComponent();
-        Title = conversation.Title;
+        Bar.UpperCase = false;
+        Bar.Title = conversation.Title;
         conversation.PropertyChanged += OnConversationChanged;
         var social = conversation.Messages.Social;
         social.MessageReceived += OnMessageLanded;
@@ -43,7 +44,7 @@ public partial class PopOutWindow : AppWindow
 
     private void OnConversationChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PoppedConversation.Title)) Title = Conversation.Title;
+        if (e.PropertyName == nameof(PoppedConversation.Title)) Bar.Title = Conversation.Title;
     }
 
     private void ReportVisible() =>

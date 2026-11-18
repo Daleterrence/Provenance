@@ -14,7 +14,9 @@ public sealed class PoppedConversation : ObservableObject
 
     public SocialMessages Messages { get; }
     public FriendItem Friend => _friend;
-    public string Title => $"Messages with {_friend.Name}";
+
+    // capitals like every other title, but a handle's spelt the way its owner spells it
+    public string Title => $"MESSAGES - {_friend.Name}";
 
     // a presence update gives the same person a new row
     internal void Update(FriendItem friend)
