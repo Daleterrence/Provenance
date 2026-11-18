@@ -302,6 +302,10 @@ static int pc_mail_header(BYTE *b, void *msg, int kind, unsigned from_lo, unsign
 PC_SVC5(int, pc_mail_body, SV_MAIL_BODY, const char *, subject, const char *, text, int, att_len, const void *, att, char *, out)
 #define SV_MAIL_DECODE_HEADER      0x540   /* a saved message's header in this session's form */
 PC_SVC2(int, pc_mail_decode_header, SV_MAIL_DECODE_HEADER, void *, hdr, const char *, file)
+#define SV_MAIL_PATH_UNREAD        0x470   /* a message's file path in r\b from its header (out is 0x200), folder then the 96 character name */
+PC_SVC2_V(void, pc_mail_path_unread, SV_MAIL_PATH_UNREAD, void *, hdr, char *, out)
+#define SV_MAIL_PATH_READ          0x474   /* the same into r\a */
+PC_SVC2_V(void, pc_mail_path_read, SV_MAIL_PATH_READ, void *, hdr, char *, out)
 #define SV_JOB_SLOTS               0xff4   /* polcore's job slots in use and in all */
 PC_SVC2_V(void, pc_job_slots, SV_JOB_SLOTS, int *, used, int *, total)
 #define SV_SET_PUSH_CALLBACKS      0xd9c   /* registers the six push handlers */

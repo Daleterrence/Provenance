@@ -263,15 +263,17 @@ static void snapshot_social(BYTE *b)
     }
     jw_end(&w);
     jw_arr(&w, "messages");
-    /* states 0-3, oldest first since slots get reused */
-    for (i = mail_inbox_next(0, 0xf); i >= 0; i = mail_inbox_next(g_mail[i].mid, 0xf)) {
+    /* states 0-3 and 7, oldest first since slots get reused */
+    for (i = mail_inbox_next(0, 0xf | 1 << 7); i >= 0; i = mail_inbox_next(g_mail[i].mid, 0xf | 1 << 7)) {
         const mailrec *ml = &g_mail[i];
         int hold = mail_inbox_held(ml) || mail_inbox_undecided(b, ml) || ml->raw_pending;
         held += hold;
         message_store_msg_json(b, &w, ml->hdr, ml->mid,
-                      hold ? "pending" : ml->state == 3 ? "realtime" : ml->state == 2 ? "failed"
+                      hold ? "pending" : ml->state == 7 ? "stored" : ml->state == 3 ? "realtime" : ml->state == 2 ? "failed"
                                                      : ml->state == 1 ? "read" : "pending",
                       -1,   /* no read bit, a server copy hasn't got one */
+                      /* a request's sender on my ignore list, by the hook's own rule (a handle's row or an all-handles one) */
+                      (pc_mail_kind(ml->hdr) == 1 || pc_mail_kind(ml->hdr) == 0xe) ? mail_inbox_sender_ignored(b, ml->hdr) : -1,
                       hold ? "" : ml->subj, hold ? "" : ml->text, ml->has_att && !hold ? ml->att : NULL);
     }
     jw_end(&w);

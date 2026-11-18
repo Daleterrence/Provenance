@@ -1,7 +1,7 @@
 namespace Provenance.Common.Social;
 
-// State is "read" (body downloaded), "pending", "failed", "realtime" or "local" (from the game's message store, not
-// on the server any more)
+// State is "read" (body downloaded), "pending", "failed", "realtime", "local" (from the game's message store, not
+// on the server any more) or "stored" (a request or invitation held in that store, answered from there)
 public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, long Seq, string State,
                                 string Subject, string Text, int Mid = 0, string FromKey = "")
 {
@@ -10,14 +10,17 @@ public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, 
     // the in-memory ids are session-masked, this one's stable
     public string Key => $"{From}|{FromSlot}|{Seq}|{Time}";
 
-    public bool HasBody => State is "read" or "realtime" or "local";
+    public bool HasBody => State is "read" or "realtime" or "local" or "stored";
     public bool IsChat => Kind == 0;
     public bool IsLocal => State == "local";
+    public bool IsStored => State == "stored";
     public bool IsMe { get; init; }
     // who it was addressed to (the hook's hashed POL ID + handle) and whether that's my own POL ID
     public string ToKey { get; init; } = "";
     public bool ToMe { get; init; }
     public bool Read { get; init; }
+    // the hook's own check of a request's sender against my ignore list, a handle's row or an all-handles one
+    public bool Ignored { get; init; }
     // the group a removal or disband was about, from its attachment
     public string Group { get; init; } = "";
 

@@ -1,4 +1,4 @@
-static void message_store_msg_json(BYTE *b, jw *w, const BYTE *e, int mid, const char *state, int read,
+static void message_store_msg_json(BYTE *b, jw *w, const BYTE *e, int mid, const char *state, int read, int ignored,
                     const char *subj, const char *text, const BYTE *att)
 {
     char sk[17], tk[17];
@@ -21,6 +21,7 @@ static void message_store_msg_json(BYTE *b, jw *w, const BYTE *e, int mid, const
     jw_uint(w, "seq", MAIL(e)->seq);
     jw_lit(w, "state", state);
     if (read >= 0) jw_bool(w, "read", read);
+    if (ignored >= 0) jw_bool(w, "ignored", ignored);
     /* removed from a group (0x12) or it was disbanded (0x13): the name's in the type-10 attachment, the text's empty */
     if (att && (kind == 0x12 || kind == 0x13)) jw_sjis(w, "group", b, att + 8, 0x14, 71);
     jw_text(w, "subject", subj);
@@ -75,10 +76,10 @@ static int message_store_plain_path(const char *path)
         *c = was;
     }
 }
-static HANDLE message_store_open_plain(const char *path)
+static HANDLE message_store_open_plain_as(const char *path, DWORD access)
 {
     BY_HANDLE_FILE_INFORMATION fi;
-    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+    HANDLE h = CreateFileA(path, access, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
                            OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
     if (h == INVALID_HANDLE_VALUE) return h;
     if (!GetFileInformationByHandle(h, &fi) || fi.nNumberOfLinks != 1 ||
@@ -88,15 +89,62 @@ static HANDLE message_store_open_plain(const char *path)
     }
     return h;
 }
+static HANDLE message_store_open_plain(const char *path) { return message_store_open_plain_as(path, GENERIC_READ); }
+/* a folder opened without share-delete so it can't be swapped for a link while it's held, and not a link itself */
+static HANDLE message_store_open_folder(const char *path)
+{
+    BY_HANDLE_FILE_INFORMATION fi;
+    HANDLE h = CreateFileA(path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                           FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    if (h == INVALID_HANDLE_VALUE) return h;
+    if (!GetFileInformationByHandle(h, &fi) || !(fi.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+        (fi.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        CloseHandle(h);
+        return INVALID_HANDLE_VALUE;
+    }
+    return h;
+}
+/* where the open folder really is, against where it should be. A link in any folder above it shows up as a different path */
+static int message_store_final_ok(HANDLE h, const char *expect)
+{
+    char got[MAX_PATH + 160], full[MAX_PATH + 160], want[MAX_PATH + 160], *p = got;
+    DWORD n = GetFinalPathNameByHandleA(h, got, sizeof got, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    if (!n || n >= sizeof got) return 0;
+    if (!strncmp(got, "\\\\?\\UNC\\", 8)) { p = got + 6; p[0] = '\\'; }
+    else if (!strncmp(got, "\\\\?\\", 4)) p += 4;
+    n = GetFullPathNameA(expect, sizeof full, full, NULL);
+    if (!n || n >= sizeof full) return 0;
+    if (!GetLongPathNameA(full, want, sizeof want)) lstrcpyA(want, full);
+    return lstrcmpiA(p, want) == 0;
+}
+/* rename the open file to a full path, never over one that's there */
+static int message_store_rename_open(HANDLE f, const char *to)
+{
+    WCHAR w[MAX_PATH + 160];
+    FILE_RENAME_INFO *ri;
+    DWORD size;
+    int n, ok;
+    if ((n = MultiByteToWideChar(CP_ACP, 0, to, -1, w, (int)(sizeof w / sizeof w[0]))) <= 0) return 0;
+    size = (DWORD)(sizeof *ri + n * sizeof(WCHAR));
+    if (!(ri = (FILE_RENAME_INFO *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size))) return 0;
+    ri->ReplaceIfExists = FALSE;
+    ri->RootDirectory = NULL;
+    ri->FileNameLength = (DWORD)((n - 1) * sizeof(WCHAR));
+    memcpy(ri->FileName, w, n * sizeof(WCHAR));
+    ok = SetFileInformationByHandle(f, FileRenameInfo, ri, size);
+    HeapFree(GetProcessHeap(), 0, ri);
+    return ok;
+}
 static int message_store_owned(const BYTE *h, int sub, unsigned __int64 me)
 {
     return memcmp(sub >= 2 ? &MAIL(h)->from_lo : &MAIL(h)->to_lo, &me, 8) == 0;
 }
-/* requests and invitations can't be answered from a copy, the server's is gone */
-static int message_store_wanted(const BYTE *h, int sub)
+/* mode 2 is requests and invitations only, mode 1 the chat history without them */
+static int message_store_wanted(const BYTE *h, int sub, int mode)
 {
     unsigned kd = pc_mail_kind(h);
     if (pc_mail_receipt(h)) return 0;
+    if (mode == 2) return sub < 2 && (kd == 1 || kd == 0xe);
     if (sub >= 2) return kd == 0;
     return kd == 0 || kd == 9 || kd == 10 || kd == 0xf || kd == 0x10 || kd == 0x12 || kd == 0x13;
 }
@@ -127,7 +175,7 @@ static int message_store_list(BYTE *b, int home, int sub, unsigned __int64 me, i
         memset(&v[n], 0, sizeof v[n]);
         if (pc_mail_decode_header(b, v[n].hdr, fd.cFileName) != 0) continue;
         if (!(MAIL(v[n].hdr)->flags & MAIL_VALID)) continue;   /* the viewer's loader skips those too */
-        if (!message_store_owned(v[n].hdr, sub, me) || (wanted && !message_store_wanted(v[n].hdr, sub))) continue;
+        if (!message_store_owned(v[n].hdr, sub, me) || (wanted && !message_store_wanted(v[n].hdr, sub, wanted))) continue;
         lstrcpyA(v[n].name, fd.cFileName);
         v[n].home = home;
         v[n].sub = sub;
@@ -210,6 +258,127 @@ static void message_store_drop(void)
     /* and an enter, a create, a master's change or a group chat request that never got taken */
     requests_sweep();
 }
+/* svc 0x470 (r\b) and 0x474 (r\a) write folder then name, the name is the last 96 characters */
+static int message_store_file_name(BYTE *b, int read, void *hdr, char *name)
+{
+    char out[0x200];
+    int n;
+    memset(out, 0, sizeof out);
+    if (read) pc_mail_path_read(b, hdr, out); else pc_mail_path_unread(b, hdr, out);
+    out[sizeof out - 1] = 0;
+    n = lstrlenA(out);
+    if (n < 96) return 0;
+    lstrcpyA(name, out + n - 96);
+    return message_store_name_ok(name);
+}
+/* the viewer's move (app.dll 0x1024e804): state bits to 1, 0x4000 off, rename r\b to r\a. The old name has to build back
+   from the header or nothing moves */
+static int message_store_move_read(BYTE *b, const BYTE *hdr, const char *name, int home)
+{
+    __declspec(align(8)) BYTE h[sizeof(pol_mail)];
+    char was[100], now[100], from[MAX_PATH + 160], to[MAX_PATH + 160], dir[MAX_PATH + 160];
+    HANDLE f, d;
+    int ok;
+    if (!g_viewer[0] || home < 0 || !message_store_name_ok(name) || !pc_has(b, SV_MAIL_PATH_UNREAD) ||
+        !pc_has(b, SV_MAIL_PATH_READ)) {
+        base_log("store: the answered request isn't moved, no way to build its new name\r\n");
+        return 0;
+    }
+    memcpy(h, hdr, sizeof h);
+    MAIL(h)->seen &= 0xf3ff;
+    if (!message_store_file_name(b, 0, h, was) || lstrcmpA(was, name) != 0) {
+        base_log("store: the answered request isn't moved, its name doesn't build back from its header\r\n");
+        return 0;
+    }
+    MAIL(h)->flags &= 0xbfff;
+    MAIL(h)->seen = (WORD)((MAIL(h)->seen & 0xf3ff) | 0x400);
+    if (!message_store_file_name(b, 1, h, now)) {
+        base_log("store: the answered request isn't moved, no name for r\\a\r\n");
+        return 0;
+    }
+    message_store_dir(from, home, 1);
+    message_store_dir(to, home, 0);
+    if (!message_store_plain_path(from) || !message_store_plain_path(to) || !message_store_dir_exists(to)) {
+        base_log("store: the answered request isn't moved, r\\b or r\\a isn't a plain folder\r\n");
+        return 0;
+    }
+    if (lstrlenA(from) + 1 + 96 >= (int)sizeof from || lstrlenA(to) + 1 + 96 >= (int)sizeof to) {
+        base_log("store: the answered request isn't moved, the path's too long\r\n");
+        return 0;
+    }
+    lstrcpyA(dir, to);
+    lstrcatA(from, "\\");
+    lstrcatA(from, name);
+    lstrcatA(to, "\\");
+    lstrcatA(to, now);
+    /* the file is held open for the rename and the folder is checked as late as it can be, so nothing's swapped in between */
+    if ((f = message_store_open_plain_as(from, DELETE | SYNCHRONIZE)) == INVALID_HANDLE_VALUE) {
+        base_log("store: the answered request isn't moved, its file won't open as a plain file\r\n");
+        return 0;
+    }
+    if ((d = message_store_open_folder(dir)) == INVALID_HANDLE_VALUE) {
+        CloseHandle(f);
+        base_log("store: the answered request isn't moved, r\\a isn't a plain folder\r\n");
+        return 0;
+    }
+    if (!message_store_final_ok(d, dir)) {
+        CloseHandle(d);
+        CloseHandle(f);
+        base_log("store: the answered request isn't moved, r\\a isn't where it should be\r\n");
+        return 0;
+    }
+    ok = message_store_rename_open(f, to);
+    if (!ok) base_log("store: moving the answered request to r\\a failed (%lu), the file's left in r\\b\r\n", GetLastError());
+    CloseHandle(d);
+    CloseHandle(f);
+    return ok;
+}
+#define STORED_MAX 100   /* of MAIL_MAX, so the server's messages still have room */
+/* the viewer and game hold these in r\b till they're answered. They go in before the server's list, and one with a copy in
+   r\a is answered already */
+static void message_store_requests(BYTE *b, unsigned __int64 me)
+{
+    static char body[STORE_BODY_MAX];
+    static mailrec probe;
+    storefile *v = NULL, *ans = NULL;
+    int k, na, i, j, got, held = 0, skipped = 0, dups = 0, dropped = 0;
+    char tail[96];
+    k = message_store_list(b, g_home, 1, me, 2, &v);
+    na = message_store_list(b, g_home, 0, me, 2, &ans);
+    if (k > STORED_MAX) k = STORED_MAX;
+    for (i = k - 1; i >= 0; i--) {   /* the oldest first, so the mids run in arrival order */
+        mailrec *m;
+        for (j = 0; j < na; j++) if (mail_inbox_same(ans[j].hdr, v[i].hdr)) break;
+        if (j < na) continue;
+        for (j = 0; j < g_s.mail_n; j++) if (mail_inbox_same(g_mail[j].hdr, v[i].hdr)) break;
+        if (j < g_s.mail_n) { dups++; continue; }   /* the same message twice, once is enough */
+        if ((got = message_store_body(&v[i], body, sizeof body)) <= 0) { skipped++; continue; }
+        memset(&probe, 0, sizeof probe);
+        memcpy(probe.hdr, v[i].hdr, MAIL_KEY_SIZE);
+        mail_inbox_parse(b, &probe, body, got);
+        if (pc_mail_kind(probe.hdr) == 0xe && !probe.has_att) { skipped++; continue; }   /* no group, no answer */
+        if (!(m = mail_inbox_add(v[i].hdr))) { dropped++; continue; }
+        memcpy(m->subj, probe.subj, sizeof m->subj);
+        memcpy(m->text, probe.text, sizeof m->text);
+        memcpy(m->att, probe.att, sizeof m->att);
+        m->has_att = probe.has_att;
+        m->state = 7;
+        m->stored = 1;
+        m->shome = g_home;
+        lstrcpyA(m->sname, v[i].name);
+        held++;
+    }
+    if (v) HeapFree(GetProcessHeap(), 0, v);
+    if (ans) HeapFree(GetProcessHeap(), 0, ans);
+    SecureZeroMemory(body, sizeof body);
+    SecureZeroMemory(&probe, sizeof probe);
+    if (held) g_snap_dirty = 1;
+    tail[0] = 0;
+    if (dups) wsprintfA(tail + lstrlenA(tail), ", %d the same message twice (kept once)", dups);
+    if (skipped) wsprintfA(tail + lstrlenA(tail), ", %d not readable", skipped);
+    if (dropped) wsprintfA(tail + lstrlenA(tail), ", %d not kept (table full or seen before)", dropped);
+    base_log("store: %d friend request(s) and group invitation(s) held from r\\b (home%02d)%s\r\n", held, g_home, tail);
+}
 /* FFXI deletes what it fetches from the server, so the store's the only copy of what was handled in game. Read
    once, nothing on the wire */
 static void message_store_import(BYTE *b)
@@ -223,6 +392,7 @@ static void message_store_import(BYTE *b)
     int n = 0, cap = 0, k, i, j, s, got, nin = 0, nout = 0, left = 0;
     message_store_drop();
     if (!me || g_home < 0) return;
+    message_store_requests(b, me);
     for (s = 0; s < 4; s++) {   /* s\a before s\b, so a sent copy beats the outbox's */
         k = message_store_list(b, g_home, s, me, 1, &v);
         for (i = 0; i < k; i++) {
@@ -263,7 +433,7 @@ static void message_store_import(BYTE *b)
         mail_inbox_parse(b, &scratch, body, got);
         if (sent) message_store_sent_json(b, &one, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent",
                                   scratch.subj, scratch.text);
-        else message_store_msg_json(b, &one, all[i].hdr, 0, "local", (MAIL(all[i].hdr)->seen >> 8) & 1,
+        else message_store_msg_json(b, &one, all[i].hdr, 0, "local", (MAIL(all[i].hdr)->seen >> 8) & 1, -1,
                             scratch.subj, scratch.text, scratch.has_att ? scratch.att : NULL);
         if (one.fail) { jw_free(&one); continue; }
         /* newest first, so a store too big for the file loses its oldest lines */

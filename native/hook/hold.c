@@ -190,19 +190,30 @@ static void hold_turn(BYTE *b, int ctl)
     }
 }
 
+/* an answered request's server copy gets a few seconds to go, or the next login lists it as new once its file has moved */
+#define TWIN_DELETE_MS 3000
+static void hold_twin_wait(BYTE *b, ULONGLONG ms, void (*turn)(BYTE *, int))
+{
+    ULONGLONG until = GetTickCount64() + ms;
+    while (!g_lean && mail_inbox_twin_pending() && GetTickCount64() < until)
+        turn(b, 1);
+}
+static void hold_twin_deletes(BYTE *b) { hold_twin_wait(b, TWIN_DELETE_MS, hold_drain_turn); }
+
 /* Play: only writes hold it, ms at most. An inbox read or delete is cancelled after the wait: a cancel stalls job polls
    10s, which FFXI's start-up sits out */
 static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
 {
     ULONGLONG until = GetTickCount64() + ms;
     g_s.draining = 1;
-    if (!g_lean) mail_inbox_ack_request();
+    if (!g_lean) mail_inbox_ack_request(b);
     hold_db_reads_abandon(b);
     my_profile_abandon(b);
     chat_room_end(b);
     group_chat_end(b, "left", 1);
     while (hold_writes_pending() && GetTickCount64() < until)
         hold_drain_turn(b, !g_lean);
+    hold_twin_deletes(b);
     for (int i = 0; i < FETCH_LANES; i++) if (g_s.mail_lanes[i].job >= 0) pc_cancel_job(b, g_s.mail_lanes[i].job);
     if (g_s.del_job >= 0) pc_cancel_job(b, g_s.del_job);
     for (int i = 0; i < g_s.send_queue_n; i++) if (g_sq[i].job >= 0) pc_cancel_job(b, g_sq[i].job);
@@ -232,10 +243,11 @@ static void hold_sign_out(BYTE *b, const char *spath)
     message_store_drop();
     hold_play_event_close();
     g_s.draining = 1;
-    if (!g_lean) mail_inbox_ack_request();
+    if (!g_lean) mail_inbox_ack_request(b);
     my_profile_abandon(b);
     while (hold_writes_pending() && GetTickCount64() < until)
         hold_drain_turn(b, !g_lean);
+    hold_twin_deletes(b);
     login_viewer_sign_out(b);
     base_log("hold: logged out\r\n");
     base_end_pol(0);
@@ -368,7 +380,7 @@ static void hold_run(BYTE *b)
             base_log("messages: new messages flag set - listing the inbox\r\n");
             g_s.mail_refresh = 1;
         }
-        if (ctl && !g_lean) mail_inbox_ack_request();
+        if (ctl && !g_lean) mail_inbox_ack_request(b);
         if (!g_lean) mail_inbox_pump(b);
         if (ctl) hold_full_request(b, spath);
         hold_turn(b, ctl);

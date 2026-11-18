@@ -17,6 +17,7 @@ public sealed record FriendItem(string Name, string Playing, string Comment, str
     public int RequestMid { get; init; }
     public bool IsGroupInvite { get; init; }
     public bool IsMe { get; init; }           // one of my own handles on my list, it can only be removed
+    public bool SenderIgnored { get; init; } // a request's sender is on my ignore list, for any handle or this one
     public bool IsRequest => RequestMid > 0 && !IsGroupInvite;
     public bool HasUnread => Unread > 0;
     public bool InGame { get; init; }

@@ -7,6 +7,7 @@ using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
+using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
@@ -56,6 +57,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         public string? Leaving;
         public bool BySend;
         public FriendItem? InviteFor;
+        public bool InviteAccepted;
         public readonly HashSet<string> Expanded = [];
     }
 
@@ -229,6 +231,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         if (!invite.IsGroupInvite || !_social.CanEdit) return;   // refused before the viewer's string table gets read
         var subject = accept ? _social.Viewer.Text(0x46d6, "Group registration accepted")
                              : _social.Viewer.Text(0x46d1, "Friend registration declined");
+        _login.InviteAccepted = accept;
         BeginGroup((pid, token) => SocialRequests.AnswerGroupInvite(pid, token, accept, invite.RequestMid, subject),
                    accept ? "You accepted the group invitation." : "You declined the group invitation.",
                    bySend: true, invite: invite);
@@ -255,6 +258,12 @@ public sealed partial class GroupsViewModel : ObservableObject
         _social.EditBusy = false;
         // a timed-out answer leaves the list for this session too, so it can't be answered twice
         if (invite != null && st is "ok" or "timeout") _social.Answered(invite.RequestMid, ack: st == "ok");
+        if (invite != null)
+        {
+            var answer = _login.InviteAccepted ? "accepted" : "declined";
+            if (st == "ok") Log.Information("A group invitation was answered ({Answer})", answer);
+            else Log.Warning("Answering a group invitation ({Answer}) failed: {State}", answer, st);
+        }
         if (st == "ok")
         {
             // with its chat open, the chat says it (and only once), and the lines kept for it go either way

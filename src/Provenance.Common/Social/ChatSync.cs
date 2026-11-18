@@ -1,3 +1,5 @@
+using Serilog;
+
 namespace Provenance.Common.Social;
 
 public enum ChatNewsKind { Message, Notice, FriendRequest, GroupInvite }
@@ -63,10 +65,17 @@ public sealed class ChatSync(MailSendQueue sends)
                 if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
                 continue;
             }
+            // one banner per request for each login, a stored one comes back at the next if it's still not answered
             if (m.HasBody && m.Kind == PolMessage.KindGroupInvite && m.Mid > 0 && _seenRequests.Add(m.Mid))
+            {
+                Log.Information("A group invitation showed up (from the {Source})", m.IsStored ? "store" : "server");
                 news.Add(new(ChatNewsKind.GroupInvite, m.From, Mid: m.Mid));
+            }
             if (m.HasBody && m.Kind == PolMessage.KindFriendRequest && m.Mid > 0 && _seenRequests.Add(m.Mid))
+            {
+                Log.Information("A friend request showed up (from the {Source})", m.IsStored ? "store" : "server");
                 news.Add(new(ChatNewsKind.FriendRequest, m.From, Mid: m.Mid));
+            }
             // chat from someone I ignore gets binned unread. The hook only catches listed mail, not a push
             if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey))
             {
@@ -87,7 +96,7 @@ public sealed class ChatSync(MailSendQueue sends)
                 changed = true;
                 news.Add(new(ChatNewsKind.Message, who, filtered(m.Text.Length > 0 ? m.Text : m.Subject)));
             }
-            // chat only, a request stays on the server for the viewer and is never deleted unseen
+            // chat only, a request is acked once it's answered (see SocialViewModel.Answered)
             if (m.HasBody && m.IsChat && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
         }
         foreach (var (time, seq, fromSlot) in snap.Returned) changed |= chat.MarkReturned(time, seq, fromSlot);

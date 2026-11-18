@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Provenance.Common.Hook;
 using Provenance.Common.Social;
 using Provenance.Wpf.ViewModels.Shared;
+using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
@@ -187,6 +188,12 @@ public sealed partial class SocialSearch : ObservableObject
             _social.EditNote.Fail(HookFailures.Friends.OwnRequest);
             return;
         }
+        if (answer == RequestAnswer.Accept && (f.SenderIgnored || (f.Key.Length > 0 && _social.Blocked.Any(x => x.Key == f.Key))))
+        {
+            Log.Information("A friend request wasn't accepted, the sender is on the ignore list");
+            _social.EditNote.Fail(_social.Viewer.Text(0x3bd6, HookFailures.Friends.AcceptIgnored));
+            return;
+        }
         if (answer == RequestAnswer.Accept && _social.Friends.Count(x => x.IsFriend) >= PolLimits.MaxFriends)
         {
             _social.EditNote.Fail(HookFailures.FriendListFull);
@@ -225,6 +232,7 @@ public sealed partial class SocialSearch : ObservableObject
         _social.EditBusy = false;
         if (st == "sent")
         {
+            Log.Information("A friend request was answered ({Answer})", _login.AnswerKind);
             _social.Answered(f.RequestMid, ack: true);
             _social.Chat?.AddNote(f.Name, f.Key, _login.AnswerKind switch
             {
@@ -236,6 +244,7 @@ public sealed partial class SocialSearch : ObservableObject
         }
         // it may still have gone out, so it leaves the list for this session rather than invite a second answer
         if (st == "timeout") _social.Answered(f.RequestMid, ack: false);
+        Log.Warning("Answering a friend request ({Answer}) failed: {State}", _login.AnswerKind, st);
         _social.EditNote.Fail(st switch
         {
             "timeout" => HookFailures.Friends.AnswerNoReply,

@@ -6,7 +6,10 @@
 #define MAIL_SEEN 256
 typedef struct {
     __declspec(align(8)) BYTE hdr[sizeof(pol_mail)];   /* 8-aligned: 0x518 rejects anything else */
-    int state;                             /* 0 listed, 1 read, 2 failed, 3 real-time, 4 saved, 5 deleted, 6 skip */
+    /* state 7 is a request or invitation from r\b, held till it's answered. The server's own copy (a twin, from the
+       server list only) keeps its header here for the delete, and state 8 is answered with that delete still to go */
+    __declspec(align(8)) BYTE twin[sizeof(pol_mail)];
+    int state;                             /* 0 listed, 1 read, 2 failed, 3 real-time, 4 saved, 5 deleted, 6 skip, 7 stored, 8 stored and answered */
     BYTE raw[0x180];                       /* a real-time body, parsed on the next turn */
     int raw_len, raw_pending;
     int mid;
@@ -14,7 +17,17 @@ typedef struct {
     char text[13000];
     BYTE att[0x20];
     int has_att;
+    int stored, shome, has_twin, twin_deleted, del_tries, del_lost, moved, move_fails;
+    ULONGLONG del_at, move_at;
+    char sname[100];
 } mailrec;
+/* the session's first server list came back, or failed for good. Till then an answered stored entry can't tell if it has a
+   server copy, so its file stays put */
+static int g_mail_listed;
+#define STORED_TRIES 3
+#define STORED_DEL_GAP_MS 5000
+#define STORED_MOVE_GAP_MS 2000
+#define LOST_SLOT (-0x1540)
 static mailrec g_mail[MAIL_MAX];
 /* identities of messages whose slot got reused, so a re-listed one isn't fetched again */
 static BYTE g_mail_seen[MAIL_SEEN][0x1a];
@@ -94,18 +107,46 @@ static int mail_inbox_saved_spare(void)
         if (g_s.del_job < 0 || i != g_s.del_idx) return i;
     return -1;
 }
-static mailrec *mail_inbox_add(const BYTE *hdr)
+/* the server's copy turned up in its list: its header goes on the entry, and if it's answered already the delete is due */
+static void mail_inbox_stored_twin(mailrec *m, const BYTE *hdr)
+{
+    if (!m->stored || m->has_twin) return;
+    memset(m->twin, 0, sizeof m->twin);
+    memcpy(m->twin, hdr, MAIL_KEY_SIZE);
+    m->has_twin = 1;
+    base_log("messages: the server's copy of a stored request or invitation joined it\r\n");
+    if (m->state == 5) {   /* answered already: its delete is due, and a move that failed gets another go after it */
+        m->state = 8;
+        m->move_fails = 0;
+        m->move_at = 0;
+    }
+}
+/* the oldest failed, deleted or skipped one, never a stored one */
+static int mail_inbox_evictable(void)
+{
+    int best = -1;
+    for (int i = 0; i < g_s.mail_n; i++) {
+        unsigned st = g_mail[i].state;
+        if (!g_mail[i].stored && (st == 2 || st == 5 || st == 6) && (best < 0 || g_mail[i].mid < g_mail[best].mid)) best = i;
+    }
+    return best;
+}
+/* listed is the server's list, the only way a twin turns up. A push or a store file with the same identity is nothing new */
+static mailrec *mail_inbox_add_from(const BYTE *hdr, int listed)
 {
     BYTE id[0x1a];
     int i;
     for (i = 0; i < g_s.mail_n; i++)
-        if (mail_inbox_same(g_mail[i].hdr, hdr)) return NULL;
+        if (mail_inbox_same(g_mail[i].hdr, hdr)) {
+            if (listed) mail_inbox_stored_twin(&g_mail[i], hdr);
+            return NULL;
+        }
     mail_inbox_ident(hdr, id);
     for (i = 0; i < g_s.mail_seen_n; i++)
         if (memcmp(g_mail_seen[i], id, sizeof id) == 0) return NULL;
     if (g_s.mail_n < MAIL_MAX) {
         i = g_s.mail_n++;
-    } else if ((i = mail_inbox_next(0, 1 << 2 | 1 << 5 | 1 << 6)) >= 0 || (i = mail_inbox_saved_spare()) >= 0) {
+    } else if ((i = mail_inbox_evictable()) >= 0 || (i = mail_inbox_saved_spare()) >= 0) {
         /* the oldest failed, deleted or skipped one makes room, then a saved one whose delete hasn't started (the next
            login fetches it again). Its identity goes in the ring */
         mail_inbox_ident(g_mail[i].hdr, g_mail_seen[g_s.mail_seen_next]);
@@ -120,6 +161,7 @@ static mailrec *mail_inbox_add(const BYTE *hdr)
     g_mail[i].mid = ++g_s.mail_mid;
     return &g_mail[i];
 }
+static mailrec *mail_inbox_add(const BYTE *hdr) { return mail_inbox_add_from(hdr, 0); }
 static void mail_inbox_log_hdr(const char *what, const BYTE *h)
 {
     base_log("messages: %s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what,
@@ -245,12 +287,14 @@ static void mail_inbox_list_done(int r)
             g_s.mail_refresh = 1;
         } else {
             base_log("messages: list failed %d again - waiting for new mail\r\n", r);
+            g_mail_listed = 1;
             if (lstrcmpA(g_mail_state, "ok") != 0) lstrcpyA(g_mail_state, "failed");
             g_snap_dirty = 1;
         }
         return;
     }
     g_mail_fails = 0;
+    g_mail_listed = 1;
     lstrcpyA(g_mail_state, "ok");
     g_snap_dirty = 1;
     for (int i = 0; i < MAIL_MAX; i++) {
@@ -258,7 +302,7 @@ static void mail_inbox_list_done(int r)
         if (!(MAIL(e)->flags & MAIL_VALID)) continue;
         found++;
         mail_inbox_log_hdr("listed", e);
-        if (mail_inbox_add(e)) added++;
+        if (mail_inbox_add_from(e, 1)) added++;
     }
     base_log("messages: list done, %d on server, %d new\r\n", found, added);
 }
@@ -348,17 +392,35 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
         return;
     }
 }
+/* a stored entry's server copy wouldn't go: it's tried again a few times, apart, and never after the slot's lost */
+static void mail_inbox_stored_delete_failed(mailrec *m, int r)
+{
+    m->del_tries++;
+    m->del_at = GetTickCount64() + STORED_DEL_GAP_MS;
+    if (r == LOST_SLOT) m->del_lost = 1;
+    base_log("store: the server copy's delete failed %d (try %d of %d%s)\r\n", r, m->del_tries, STORED_TRIES,
+             m->del_lost ? ", the slot's lost so no more" : "");
+}
+static void mail_inbox_stored_pump(BYTE *b);
 /* saved by the launcher: delete the server copy (svc 0x508, keyed like the GET). One to a slot this account lost
    is refused (-0x1540) and stays, as in the viewer. */
 static void mail_inbox_delete_start(BYTE *b)
 {
     int i, t;
-    for (i = mail_inbox_next(0, 1 << 4); i >= 0; i = mail_inbox_next(g_mail[i].mid, 1 << 4)) {
-        BYTE *h = g_mail[i].hdr;
+    for (i = mail_inbox_next(0, 1 << 4 | 1 << 8); i >= 0; i = mail_inbox_next(g_mail[i].mid, 1 << 4 | 1 << 8)) {
+        mailrec *m = &g_mail[i];
+        BYTE *h = m->state == 8 ? m->twin : m->hdr;
+        if (m->state == 8 && (!m->has_twin || m->twin_deleted || m->del_lost || m->del_tries >= STORED_TRIES ||
+                              GetTickCount64() < m->del_at))
+            continue;
         t = pc_mail_delete(b, h);
         if (t == NO_SLOT) return;
         base_log("messages: delete start -> %d (from slot %u to slot %u)\r\n", t, MAIL(h)->from_slot, MAIL(h)->to_slot);
-        if (t < 0) { g_mail[i].state = 5; continue; }
+        if (t < 0 && m->state == 8) {
+            mail_inbox_stored_delete_failed(m, t);
+            continue;
+        }
+        if (t < 0) { m->state = 5; continue; }
         g_s.del_job = t; g_s.del_idx = i;
         return;
     }
@@ -390,12 +452,20 @@ static void mail_inbox_pump(BYTE *b)
             done = 1;
         }
     if (g_s.del_job >= 0 && (r = pc_mail_delete_check(b, g_s.del_job)) != 0) {
+        mailrec *dm = &g_mail[g_s.del_idx];
         g_s.del_job = -1;
-        g_mail[g_s.del_idx].state = 5;
-        if (r == 1) base_log("messages: deleted from the server after saving\r\n");
-        else base_log("messages: delete failed %d - the message stays on the server\r\n", r);
+        if (dm->state == 8) {
+            /* the file only moves once the server's copy is gone, or the next login would list it as a new request */
+            if (r == 1) { dm->twin_deleted = 1; base_log("messages: deleted from the server after saving\r\n"); }
+            else mail_inbox_stored_delete_failed(dm, r);
+        } else {
+            dm->state = 5;
+            if (r == 1) base_log("messages: deleted from the server after saving\r\n");
+            else base_log("messages: delete failed %d - the message stays on the server\r\n", r);
+        }
         done = 1;
     }
+    mail_inbox_stored_pump(b);
     /* a freed lane waits a turn, so a waiting send gets it first */
     if (done) return;
     if (!g_s.draining)
@@ -411,7 +481,55 @@ static void mail_inbox_pump(BYTE *b)
         mail_inbox_delete_start(b);
 }
 #define ACK_MAX (1024 * 1024)   /* about 140,000 mids, far more than a session ever has */
-static void mail_inbox_ack_request(void)
+static int message_store_move_read(BYTE *b, const BYTE *hdr, const char *name, int home);
+/* an answered stored entry, one step on. It waits for the first server list (that's when it learns it has a copy), then
+   for the copy's delete, and only then moves the file to r\a like the viewer does. A move that fails is tried again a few
+   times, apart. Running out of tries leaves the file in r\b and the app's own record of the answer finishes it later */
+static void mail_inbox_stored_step(BYTE *b, mailrec *m)
+{
+    ULONGLONG now = GetTickCount64();
+    if (!g_mail_listed) return;
+    if (m->has_twin && !m->twin_deleted) {
+        if (m->del_lost || m->del_tries >= STORED_TRIES) {
+            base_log("store: the answered request stays in r\\b, its server copy wasn't deleted\r\n");
+            m->state = 5;
+        }
+        return;
+    }
+    if (m->moved) { m->state = 5; return; }
+    if (now < m->move_at) return;
+    if (message_store_move_read(b, m->hdr, m->sname, m->shome)) {
+        m->moved = 1;
+        m->state = 5;
+        base_log("store: an answered request moved to r\\a\r\n");
+    } else if (++m->move_fails >= STORED_TRIES) {
+        base_log("store: the answered request stays in r\\b, the move failed %d times\r\n", m->move_fails);
+        m->state = 5;
+    } else {
+        m->move_at = now + STORED_MOVE_GAP_MS;
+    }
+}
+static void mail_inbox_stored_pump(BYTE *b)
+{
+    for (int i = 0; i < g_s.mail_n; i++) if (g_mail[i].state == 8) mail_inbox_stored_step(b, &g_mail[i]);
+}
+/* answered: the text's gone, the rest is up to the step above */
+static void mail_inbox_stored_done(BYTE *b, mailrec *m)
+{
+    m->text[0] = 0; m->subj[0] = 0;
+    SecureZeroMemory(m->att, sizeof m->att);
+    m->has_att = 0;
+    m->state = 8;
+    mail_inbox_stored_step(b, m);
+    g_snap_dirty = 1;
+}
+/* an answered stored entry that's still got something to do */
+static int mail_inbox_twin_pending(void)
+{
+    for (int i = 0; i < g_s.mail_n; i++) if (g_mail[i].state == 8) return 1;
+    return 0;
+}
+static void mail_inbox_ack_request(BYTE *b)
 {
     char *buf;
     int got, v = -1;
@@ -422,7 +540,9 @@ static void mail_inbox_ack_request(void)
         if (c >= '0' && c <= '9') v = v > 9999999 ? v : (v < 0 ? 0 : v * 10) + (c - '0');
         else {
             mailrec *m = v > 0 ? mail_inbox_by_mid(v) : NULL;
-            if (m && (m->state == 1 || m->state == 3)) {
+            if (m && m->state == 7) {
+                mail_inbox_stored_done(b, m);
+            } else if (m && (m->state == 1 || m->state == 3)) {
                 m->state = m->state == 1 ? 4 : 5;
                 m->text[0] = 0; m->subj[0] = 0;
                 m->raw_pending = 0; m->raw_len = 0;

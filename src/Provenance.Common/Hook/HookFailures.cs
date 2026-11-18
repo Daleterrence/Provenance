@@ -111,6 +111,7 @@ public static class HookFailures
         public const string AnswerNoReply = "PlayOnline didn't reply, so it's not certain your answer got through. If the request's still open, it'll show again next time you log in.";
         public const string AnswerHandleChanging = "Your handle was changing, so your answer wasn't sent. Try again.";
         public const string NoSuchRequest = "That friend request isn't there any more.";
+        public const string AcceptIgnored = "You can't accept a request from someone on your ignore list.";
         public const string OwnRequest = "That request is from one of your own handles. You can only decline it.";
         public const string AnswerFriendGone = "That person isn't on your friend list any more, so nothing was sent.";
         public const string AnswerStopped = "PlayOnline didn't take your recent messages, so answers can't be sent until you log in again.";

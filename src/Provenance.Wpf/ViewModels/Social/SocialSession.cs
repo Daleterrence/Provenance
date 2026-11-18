@@ -12,6 +12,8 @@ internal sealed class SocialSession
     }
 
     public ChatStore? Chat { get; set; }
+    // the requests this account answered, so one that comes round at a later login is finished unseen
+    public AnsweredRequests? Remembered { get; set; }
     public PolSocialSnapshot Last { get; set; } = PolSocialSnapshot.Empty;
     public bool FriendsDirty { get; set; } = true;
     public PolStatus? RequestedStatus { get; set; }

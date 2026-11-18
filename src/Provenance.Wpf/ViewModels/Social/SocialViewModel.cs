@@ -16,6 +16,7 @@ using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Chat;
 using Provenance.Wpf.ViewModels.Main;
 using Provenance.Wpf.ViewModels.Shared;
+using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
@@ -320,11 +321,30 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _login.AckPending.Clear();
     }
 
+    // a request or invitation I answered at an earlier login that's listed again (its server copy or its stored file never
+    // finished going) is acked straight away and never shown, so the hook can finish it
+    private PolSocialSnapshot FinishRemembered(PolSocialSnapshot snap)
+    {
+        if (_login.Remembered is not { } remembered) return snap;
+        var done = snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_login.Answered.Contains(m.Mid) &&
+                                            m.Kind is PolMessage.KindFriendRequest or PolMessage.KindGroupInvite &&
+                                            remembered.Has(m)).ToList();
+        if (done.Count == 0) return snap;
+        foreach (var m in done)
+        {
+            _login.Answered.Add(m.Mid);
+            _login.AckPending.Add(m.Mid);
+        }
+        Log.Information("{Count} answered request(s) came round again and were finished without showing them", done.Count);
+        return snap with { Messages = snap.Messages.Except(done).ToList() };
+    }
+
     internal void Answered(int mid, bool ack)
     {
         _login.Answered.Add(mid);
         _login.FriendsDirty = true;
         if (!ack) return;
+        if (_login.Last.Messages.FirstOrDefault(m => m.Mid == mid) is { } answered) _login.Remembered?.Add(answered, Now);
         _login.AckPending.Add(mid);
         FlushAcks();
     }
@@ -367,7 +387,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     {
         _login.Chat?.Flush();
         var chat = new ChatStore(profileId, storeRoot);
-        _login = new SocialSession { Chat = chat };
+        _login = new SocialSession { Chat = chat, Remembered = new AnsweredRequests(profileId, storeRoot, Now) };
         GroupChat.SetLog(new GroupChatLog(profileId, storeRoot));
         chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
         StatusPending = false;
@@ -415,6 +435,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         var timer = ReferenceEquals(_login.Last, PolSocialSnapshot.Empty) ? new StepTimer("First friends and messages apply") : null;
         // a friend's profile shows what they let this handle see, so ones read under another handle go
         if (_login.Last.MyKey.Length > 0 && snap.MyKey.Length > 0 && _login.Last.MyKey != snap.MyKey) Profile.Forget();
+        snap = FinishRemembered(snap);
         _login.Last = snap;
         bool chatChanged = _login.Chat != null && MergeChat(_login.Chat, snap);
         timer?.Lap("merge chat");
@@ -539,7 +560,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 f.Pending ? FriendSection.RequestsSent : f.Online ? FriendSection.Online : FriendSection.Offline)
             { Key = f.Key, Status = f.Status, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, InGame = f.Online && !f.Pending && f.Game is not null };
         }).ToList();
-        // invitations (kind 0xe) and requests (kind 1) stay on the server until they're answered
+        // invitations (kind 0xe) and requests (kind 1) are listed until they're answered, from the server or the store
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_login.Answered.Contains(m.Mid)))
             if (m.Kind == PolMessage.KindGroupInvite)
                 items.Add(new FriendItem(m.From, "", m.Text.Length > 0 ? _viewer.Filtered(m.Text) : "Group invitation", "", false, -1,
@@ -548,7 +569,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             else if (m.Kind == PolMessage.KindFriendRequest)
                 items.Add(new FriendItem(m.From, "", "Wants to be your friend", "", false, -1,
                                          _avatars.NoProfilePicture, 0, FriendSection.FriendRequests)
-                          { Key = m.FromKey, RequestMid = m.Mid, IsMe = m.IsMe });
+                          { Key = m.FromKey, RequestMid = m.Mid, IsMe = m.IsMe, SenderIgnored = m.Ignored });
         if (_login.Chat != null)
         {
             var keys = items.Where(i => i.Key.Length > 0).Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
