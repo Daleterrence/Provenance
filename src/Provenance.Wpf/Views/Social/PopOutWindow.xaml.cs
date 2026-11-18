@@ -28,7 +28,6 @@ public partial class PopOutWindow : AppWindow
 #pragma warning disable RS0030 // a view, not a view model
         if (Application.Current is { } app) app.Activated += OnAppActivated;
 #pragma warning restore RS0030
-        // closing it is all that happens, the conversation just isn't in a window any more
         Closed += (_, _) =>
         {
             conversation.PropertyChanged -= OnConversationChanged;

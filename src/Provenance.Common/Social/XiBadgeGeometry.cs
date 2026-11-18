@@ -1,10 +1,10 @@
 namespace Provenance.Common.Social;
 
-// xi-badge.svg is 40 x 20 with its body at 1,1 (36 x 16, corners 4.2). The picture is drawn over the badge, so the body
-// is made longer to the left and its flat top starts where the circle's top is. The rounded end stays behind the picture
+// xi-badge.svg is 40 x 20, body at 1,1 (36 x 16, corners 4.2). The body runs further left with its flat top level with
+// the circle's, so the rounded end hides behind the picture drawn over it
 public static class XiBadgeGeometry
 {
-    public const double ViewWidth = 40, ViewHeight = 20, BodyTop = 1, BodyLeft = 1, BodyWidth = 36, BodyHeight = 16, Corner = 4.2,
+    public const double ViewWidth = 40, ViewHeight = 20, BodyTop = 1, Corner = 4.2,
                         LettersLeft = 18.92;
 
     public const double WidthOfDiameter = 0.64, LeftOfDiameter = 0.62;

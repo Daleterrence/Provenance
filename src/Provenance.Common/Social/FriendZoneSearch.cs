@@ -30,7 +30,6 @@ public sealed class FriendZoneSearch
         _rule = new SearchRefresh(world => endpoints(world) is not null);
     }
 
-    // the real servers, which the test programs must never reach
     public static FriendZoneSearch Retail()
     {
         var host = Assembly.GetEntryAssembly()?.GetName().Name ?? "";

@@ -301,7 +301,6 @@ public static class SelfUpdate
         return true;
     }
 
-    // true to go ahead and exit
     internal static Task<bool> PrepareRestartAsync() =>
         InstalledCopy ? PrepareRestartAsync(Open, WindowManager.ShowUpdate, ct => CloseOtherCopiesAsync(ct: ct)) : Task.FromResult(false);
 
@@ -403,7 +402,6 @@ public static class SelfUpdate
         }
     }
 
-    // swapped in tests, so a copy that isn't installed never reads the real server from one
     internal static Func<ChannelSource>? HandCopiedSource { get; set; }
 
     private static async Task ReadFeedAsync(TimeSpan timeout)
@@ -429,12 +427,10 @@ public static class SelfUpdate
 
     internal static event Action? TagChanged;
 
-    // swapped in tests
     internal static Func<SemanticVersion?> OwnVersion { get; set; } = VersionTag.Own;
 
     internal static void NoteFeed(IReadOnlyList<SemanticVersion> feed)
     {
-        // a feed with nothing in it says nothing
         if (feed.Count == 0 || OwnVersion() is not { } own) return;
         var tag = VersionTag.For(own, feed);
         if (tag == Tag) return;
@@ -529,7 +525,6 @@ public static class SelfUpdate
 
     private static int CountRunning(string root) => Running(root, "Provenance").Count();
 
-    // What EndGames does to a process, swapped in tests
     internal sealed record GameOps(Func<ProcessStamp, bool> IsRunning, Func<ProcessStamp, int> AskToClose, Func<ProcessStamp, bool> EndHard)
     {
         public static readonly GameOps Real = new(s => s.IsRunning(), s => GameWindow.AskToClose(s.Pid),
@@ -684,7 +679,6 @@ public static class SelfUpdate
         QueueHandOver(() => Apply(locator, target, restartArgs), restartArgs);
     }
 
-    // what's handed to Update.exe, swapped in tests
     internal static Action<IVelopackLocator, VelopackAsset, string[]> Apply { get; set; } = ApplyForReal;
 
     private static void ApplyForReal(IVelopackLocator locator, VelopackAsset target, string[] restartArgs) =>

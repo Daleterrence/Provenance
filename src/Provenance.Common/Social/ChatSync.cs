@@ -115,7 +115,7 @@ public sealed class ChatSync(MailSendQueue sends)
                 changed = true;
                 news.Add(new(ChatNewsKind.Message, who, filtered(m.Text.Length > 0 ? m.Text : m.Subject)));
             }
-            // chat only, a request is acked once it's answered (see SocialViewModel.Answered)
+            // chat only, a request is acked once it's answered
             if (m.HasBody && m.IsChat && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
         }
         foreach (var (time, seq, fromSlot) in snap.Returned) changed |= chat.MarkReturned(time, seq, fromSlot);

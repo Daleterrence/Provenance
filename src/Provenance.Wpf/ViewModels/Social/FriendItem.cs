@@ -27,7 +27,7 @@ public sealed record FriendItem(string Name, string Playing, string Comment, str
     public bool IsRequest => RequestMid > 0 && !IsGroupInvite;
     public bool HasUnread => Unread > 0;
     public bool InGame { get; init; }
-    // the newest unread line's time and seq, which is how the UNREAD section is ordered
+    // the newest unread line's time and seq, which is how the unread section is ordered
     public (long Time, long Seq) NewestUnread { get; init; }
     public bool IsFriend => Row >= 0;
     public bool CanMessage => Row >= 0 && !Pending && !IsMe;

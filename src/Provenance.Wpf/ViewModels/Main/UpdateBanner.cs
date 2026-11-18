@@ -21,7 +21,6 @@ public sealed partial class UpdateBanner : ObservableObject
 
     public string Text => SelfUpdate.WaitingText;
 
-    // why Restart Now is greyed out, if it is
     public string? RestartTip => _restart.BlockedReason;
 
     internal void Show() => SetProperty(ref _showing, true, nameof(Showing));

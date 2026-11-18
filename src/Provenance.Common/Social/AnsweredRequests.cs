@@ -1,13 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using Provenance.Common.IO;
-using Provenance.Common.Settings;
 
 namespace Provenance.Common.Social;
 
-// the requests and invitations this account has answered, by a hash of the message's identity (sender, seq, time and both
-// slots, through the hook's own keys, so no ID is kept). A copy that comes round at a later login is finished without
-// being shown. Kept for 30 days, DPAPI-encrypted like the chat log
+// answered requests and invitations, kept 30 days by a hash of the message's identity (no ID is stored), so a copy that
+// comes round at a later login is finished unseen. DPAPI-encrypted like the chat log
 public sealed class AnsweredRequests
 {
     public static readonly TimeSpan Keep = TimeSpan.FromDays(30);

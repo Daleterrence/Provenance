@@ -29,9 +29,8 @@ public sealed class ThirdPartyHookJson : JsonConverter<ThirdPartyHook>
 
 public static class ThirdPartyHooks
 {
-    // a drive the player mapped in their own session usually isn't there for this elevated process, so a persistent
-    // network mapping becomes its share's path. Everything that reads or starts the folder has to use what this gives back
-    // A folder on a share that doesn't answer in time isn't usable, so nothing waits on the network for it
+    // mapped drives usually aren't there for an elevated process, so a persistent mapping becomes its share's path and
+    // callers have to use what comes back. A share that doesn't answer in time isn't usable
     public static string? Usable(string? dir)
     {
         if (dir is null) return null;

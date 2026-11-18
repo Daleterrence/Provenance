@@ -303,7 +303,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private SettingsTab _shownTab;
 
-    // nothing says when the game closes, so while Backups is up the reasons RESTORE is off are asked again every few seconds
+    // nothing says when the game closes, so while Backups is up the reasons restore is off are asked again every few seconds
     private System.Windows.Threading.DispatcherTimer? _blockTimer;
 
     internal void BlockTick() => Backups.RefreshRestoreNote();

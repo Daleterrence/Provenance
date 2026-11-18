@@ -3,7 +3,6 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
-using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
 using Provenance.Wpf.ViewModels.Shared;
 

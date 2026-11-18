@@ -2,13 +2,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common;
 using Provenance.Common.Credentials;
-using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Login;
 using Provenance.Common.Patcher;
-using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
 using Provenance.Common.Settings;
 using Provenance.Common.Social;
@@ -106,7 +104,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 
     private bool CanStartOrStop() => Running ? !Stopping : !_session.Launching && !_session.LoggedIn && _pol.Pid is null;
 
-    // Restart Now is under way
     internal Func<bool> UpdateBusy { get; set; } = () => false;
 
     // concurrent, so the same button stays clickable as the stop while a run goes

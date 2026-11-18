@@ -4,9 +4,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Provenance.Common.Game;
 using Provenance.Common.Hook;
-using Provenance.Common.Install;
 using Provenance.Common.Login;
 using Provenance.Common.Logging;
 using Provenance.Common.PolFormat;
@@ -594,7 +592,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         NoticeComingOnline(snap);
         OnlineCount = snap.Friends.Count(f => f.Online && !f.Pending);
         UnreadCount = _login.Chat?.Unread ?? 0;
-        foreach (var c in Conversations.ToList()) if (c.Friend != null && c.DayChanged) c.Refresh();   // past midnight
+        foreach (var c in Conversations.ToList()) if (c.Friend != null && c.DayChanged) c.Refresh();
         RefreshPending();
         RefreshUnseen();
 
@@ -698,7 +696,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private bool IsOpenConversation(FriendItem f) =>
         (SelectedFriend is { } s && s.Is(f)) || PoppedFor(f) is not null;
 
-    // someone with unread lines goes up to UNREAD, newest first. One whose conversation is open stays put once it's
+    // someone with unread lines goes up to the unread section, newest first. One whose conversation is open stays put once it's
     // read, until it's closed or the selection moves on
     private (FriendSection Section, (long, long) Newest) Place(FriendSection home, string key, string name, int unread)
     {
@@ -817,7 +815,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         ReleaseHeld();
     }
 
-    // a friend held in UNREAD drops back once nothing has their conversation open
+    // a friend held in the unread section drops back once nothing has their conversation open
     private void ReleaseHeld()
     {
         if (_rebuilding || _login.Held.Count == 0) return;
@@ -847,7 +845,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             _windows.ShowPopOut(this, popped);
             return;
         }
-        // added first so the friend's still held in UNREAD while the pane lets go, and its unsent text goes to the new window
+        // added first so the friend's still held in the unread section while the pane lets go, and its unsent text goes to the new window
         popped = new PoppedConversation(this, f);
         _popped.Add(popped);
         _lastPopped = popped;
@@ -866,7 +864,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _windows.ShowFriends(this);
     }
 
-    // its window's gone, the conversation's just closed
     public void PopOutClosed(PoppedConversation popped)
     {
         if (!Detach(popped)) return;
@@ -884,7 +881,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         return true;
     }
 
-    // the Hide button: no selection, no pane, and any friend picked opens it again
     public void HidePane() => SelectedFriend = null;
 
     internal void MarkFriendsDirty() => _login.FriendsDirty = true;
@@ -1080,7 +1076,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     internal Action<Action>? PostToUi { get; set; }
 
-    // a pass for the clock alone, for the refresh
     internal void TickZones()
     {
         if (LoggedIn) ZoneSearch?.Tick(null);
@@ -1197,7 +1192,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             Search.AnswerRequest(f, RequestAnswer.Ignore);
     }
 
-    // the Requests tab's buttons, the same answers as the right-click menu
     public void AnswerWith(FriendItem f, RequestChoice choice)
     {
         if (!CanEdit) return;

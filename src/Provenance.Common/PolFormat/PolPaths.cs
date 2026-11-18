@@ -37,7 +37,7 @@ public static class PolPaths
     public static string RegionName(PolRegion region) => region switch
     {
         PolRegion.Europe => "Europe",
-        PolRegion.Japan => "\u65E5\u672C",   // the two characters for Japan
+        PolRegion.Japan => "\u65E5\u672C",
         _ => "North America",
     };
 

@@ -130,7 +130,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
 
     internal const string PopOutKey = "pop-out";
 
-    // swapped in tests, to keep a pop-out where it was put
     internal static Action<Window>? PopOutOpening { get; set; }
 
     // where the last pop-out was moved or closed, nudged off any that's up there already and kept on a monitor that's there

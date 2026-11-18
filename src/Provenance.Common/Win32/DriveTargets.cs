@@ -10,10 +10,10 @@ internal static class DriveTargets
 {
     private const uint DriveRemote = 4;
 
-    // what the system says a drive letter points at, swapped out by the tests
+    // what the system says a drive letter points at
     internal static Func<char, string?> Lookup = SystemLookup;
 
-    // the share a persistent mapping in this user's own registry hive points at, swapped out by the tests
+    // the share a persistent mapping in this user's own registry hive points at
     internal static Func<char, string?> NetworkLookup = FromRegistry;
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
@@ -25,7 +25,7 @@ internal static class DriveTargets
     [DllImport("mpr.dll", CharSet = CharSet.Unicode)]
     private static extern int WNetGetConnectionW(string local, StringBuilder remote, ref int length);
 
-    // a letter that goes to a share, asked of the system and nothing else, swapped out by the tests
+    // a letter that goes to a share, asked of the system and nothing else
     internal static Func<char, bool> Remote = c => GetDriveTypeW(char.ToUpperInvariant(c) + @":\") == DriveRemote;
 
     public static bool HasDriveLetter(string path) => path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':';

@@ -117,9 +117,7 @@ public sealed class TrayIcon : IDisposable
     }
 
     internal string BadgeLabel => _badge;
-    internal System.Drawing.Icon ShownPicture => _badged ?? _trayPicture;
 
-    // the app's picture with the count on it, or the plain one with nothing waiting
     internal void SetBadge(int count)
     {
         var label = NotificationBadge.Label(count);

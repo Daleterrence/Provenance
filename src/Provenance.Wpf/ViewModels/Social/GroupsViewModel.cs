@@ -5,7 +5,6 @@ using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Social;
-using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
 using Serilog;
 

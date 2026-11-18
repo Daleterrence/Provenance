@@ -5,7 +5,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-// the files ChatStore and GroupChatLog keep for one account, and any copy of them that was set aside unreadable
 internal static partial class AccountMessages
 {
     [GeneratedRegex(@"^(dat|deleted\.dat|groups\.dat)(\.\d{14}\.unreadable|\.[0-9a-f]{32}\.tmp)?$", RegexOptions.IgnoreCase)]

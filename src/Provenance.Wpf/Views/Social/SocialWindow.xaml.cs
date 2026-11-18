@@ -69,7 +69,6 @@ public partial class SocialWindow : AppWindow
     // how wide the conversation pane opens, and told when the user drags it to something else
     public double PaneWidth { get; set; } = 480;
 
-    // what it was saved as, which isn't news to whoever saves it
     public double SavedPaneWidth { set => PaneWidth = _paneAsked = value; }
 
     public event Action<double>? PaneWidthChanged;

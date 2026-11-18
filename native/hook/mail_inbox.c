@@ -584,7 +584,6 @@ static void mail_inbox_read_pump(BYTE *b)
     for (int i = 0; i < g_s.mail_n; i++) if (g_mail[i].read_want) mail_inbox_read_step(b, &g_mail[i]);
     message_store_imp_pump(b);
 }
-/* answered: the text's gone, the rest is up to the step above */
 static void mail_inbox_stored_done(BYTE *b, mailrec *m)
 {
     m->text[0] = 0; m->subj[0] = 0;
@@ -594,7 +593,6 @@ static void mail_inbox_stored_done(BYTE *b, mailrec *m)
     mail_inbox_stored_step(b, m);
     g_snap_dirty = 1;
 }
-/* an answered stored entry that's still got something to do */
 static int mail_inbox_twin_pending(void)
 {
     for (int i = 0; i < g_s.mail_n; i++) {
@@ -618,7 +616,6 @@ static void mail_inbox_ack_request(BYTE *b)
             if (m && m->state == 7) {
                 mail_inbox_stored_done(b, m);
             } else if (m && (m->state == 1 || m->state == 3)) {
-                /* the log has it now, so its file can be trimmed */
                 if (m->filed) message_store_secure_add(m->sname);
                 m->state = m->state == 3 || (m->filed && (m->srv_gone || m->del_failed)) ? 5 : 4;
                 m->text[0] = 0; m->subj[0] = 0;

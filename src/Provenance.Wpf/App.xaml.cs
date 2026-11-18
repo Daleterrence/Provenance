@@ -1,7 +1,5 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Input;
-using Provenance.Common;
 using Provenance.Common.Credentials;
 using Provenance.Common.Feeds;
 using Provenance.Common.Game;

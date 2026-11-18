@@ -5,7 +5,6 @@ namespace Provenance.Wpf.Services;
 
 internal static class WindowOwner
 {
-    // whether Windows has given a window the foreground depends on the desktop, so tests say which one's in front
     internal static Func<Window?>? ActiveSeam { get; set; }
 
     public static Window? Active() => ActiveSeam is { } seam ? seam() : Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);

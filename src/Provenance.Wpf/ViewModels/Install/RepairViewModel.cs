@@ -11,7 +11,6 @@ using Provenance.Common.Patcher;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Progress;
 using Provenance.Wpf.Services;
-using Provenance.Wpf.ViewModels.Main;
 
 namespace Provenance.Wpf.ViewModels.Install;
 

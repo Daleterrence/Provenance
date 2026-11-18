@@ -26,11 +26,11 @@
     <SolidColorBrush x:Key="Primary"        Color="#0B53A0" />
     <!-- a picked row in a list, toned so the row's grey and blue text still reads on it -->
     <SolidColorBrush x:Key="Row.Selected"   Color="#BFCCDA" />
-    <!-- POL's selected row, #386497 at half over the panel -->
     <SolidColorBrush x:Key="Banner.Bg"      Color="#2E0B53A0" />
     <SolidColorBrush x:Key="Banner.Line"    Color="#4D0B53A0" />
     <SolidColorBrush x:Key="Banner.Text"    Color="#0A2F5C" />
     <SolidColorBrush x:Key="Banner.Icon"    Color="#0B53A0" />
+    <!-- POL's selected row, #386497 at half over the panel -->
     <SolidColorBrush x:Key="Primary.Muted"  Color="#8CA2BB" />
 
     <!-- it's whisper text in chat rooms too, so it's dark enough for that -->

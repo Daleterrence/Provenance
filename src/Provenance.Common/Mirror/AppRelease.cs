@@ -37,9 +37,8 @@ public sealed record AppRelease(int Format, string Kind, string AppId, string Ch
         catch (InvalidDataException) { return null; }
     }
 
-    // Null when the package on disk is exactly the release the statement signs and this copy takes that channel,
-    // otherwise why not. The app, the publisher and the release check all use this one, so none can pass what another
-    // refuses (assetVersion is the feed's version as Velopack prints it)
+    // Null when the package is exactly the release the statement signs, on a channel this copy takes, otherwise why not.
+    // The app, the publisher and the release check all share it, so none passes what another refuses
     public static string? Check(ReadOnlySpan<byte> blob, IReadOnlyDictionary<string, ECDsa> trusted, bool installedIsPrerelease,
                                 string assetVersion, string assetFileName, bool assetIsFull, string? packagePath)
     {

@@ -1,8 +1,7 @@
 namespace Provenance.Wpf.Services;
 
-// Restart Now on the update banner: asks first, then the update's checked and downloaded and everything else is closed
-// (prepare, which closes nothing if it can't), then this copy exits. Its session is logged out and any game ended in
-// App.OnExit, and Update.exe does the install. blocked says why it can't start right now, if it can't
+// Restart Now on the update banner: asks, then prepare checks, downloads and closes the other copies (or closes nothing),
+// then this copy exits and App.OnExit hands over to Update.exe. blocked says why it can't start yet
 public sealed class UpdateRestart(IDialogs dialogs, Func<Task<bool>> prepare, Action exit, Func<string?>? blocked = null)
 {
     public const string Title = "Restart Provenance";
@@ -12,7 +11,6 @@ public sealed class UpdateRestart(IDialogs dialogs, Func<Task<bool>> prepare, Ac
 
     private bool _busy;
 
-    // while the update's under way, the window shouldn't start anything
     public bool Busy
     {
         get => _busy;
@@ -50,6 +48,5 @@ public sealed class UpdateRestart(IDialogs dialogs, Func<Task<bool>> prepare, Ac
         }
     }
 
-    // the exit was turned down after all
     public void Cancelled() => Busy = false;
 }

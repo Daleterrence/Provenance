@@ -24,11 +24,11 @@
     <SolidColorBrush x:Key="Primary"        Color="#6A9BD8" />
     <!-- a picked row in a list, toned so the row's grey and blue text still reads on it -->
     <SolidColorBrush x:Key="Row.Selected"   Color="#182F50" />
-    <!-- the nav pills and my own messages -->
     <SolidColorBrush x:Key="Banner.Bg"      Color="#8C24497A" />
     <SolidColorBrush x:Key="Banner.Line"    Color="#479CC3F2" />
     <SolidColorBrush x:Key="Banner.Text"    Color="#FFFFFF" />
     <SolidColorBrush x:Key="Banner.Icon"    Color="#CFE2FA" />
+    <!-- the nav pills and my own messages -->
     <SolidColorBrush x:Key="Primary.Muted"  Color="#24497A" />
 
     <SolidColorBrush x:Key="Accent.Gold"    Color="#C9A227" />

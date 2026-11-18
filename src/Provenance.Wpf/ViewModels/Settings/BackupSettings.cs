@@ -4,7 +4,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Game;
 using Provenance.Common.Game.ThirdParty;
-using Provenance.Common.Patcher;
 using Provenance.Common.Settings;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
@@ -48,7 +47,6 @@ public partial class BackupSettings : ObservableObject
     public ObservableCollection<BackupRow> Items { get; } = [];
     [ObservableProperty] private bool _listed;
     public bool Empty => Listed && Items.Count == 0;
-    // why RESTORE is off, when it is
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanRestoreNow))] private string? _restoreNote;
     public bool CanRestoreNow => RestoreNote is null && !RestoringBackup && !BackingUp;
 
@@ -62,14 +60,13 @@ public partial class BackupSettings : ObservableObject
 
     public const string BackUpBlockedText = "You can back up once Provenance has finished starting your accounts.";
 
-    // why BACK UP NOW is off, when it's the accounts starting. A backup doesn't mind the game or a login, the automatic
+    // why back up now is off, when it's the accounts starting. A backup doesn't mind the game or a login, the automatic
     // ones run in the middle of both
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanBackUpNow))] private string? _backUpNote;
 
     // an empty box is the default folder, and a backup makes the folder if it isn't there yet
     public bool CanBackUpNow => BackUpNote is null && !RestoringBackup && !BackingUp;
 
-    // what BACK UP NOW and RESTORE are doing or did, under the list's buttons
     public StatusLine ActionStatus { get; } = new();
 
     internal Action<string> ShowBackupFolderForTest { get; set; } = Explorer.ShowFolder;
@@ -116,7 +113,7 @@ public partial class BackupSettings : ObservableObject
             found = [];
         }
         if (mine != _reads) return;
-        // left alone when nothing's changed, so a focused RESTORE keeps its focus and nothing's announced again
+        // left alone when nothing's changed, so a focused restore button keeps its focus and nothing's announced again
         static (string, DateTime, int, int) Key(BackupInfo i) => (i.Path, i.CreatedUtc, i.Characters, i.Files);
         if (!Items.Select(r => Key(r.Info)).SequenceEqual(found.Select(Key)))
         {

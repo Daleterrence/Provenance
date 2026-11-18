@@ -2,7 +2,6 @@ namespace Provenance.Common.Social;
 
 public readonly record struct SearchEndpoint(string Host, int Port);
 
-// who the search server knows a character as, and where each world's server is
 public static class SearchServers
 {
     // the id the server wants folds the ctsid down to 20 bits, byte 2 being the world and left out
