@@ -57,8 +57,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         FriendsView = CollectionViewSource.GetDefaultView(Friends);
         FriendsView.Filter = o => o is FriendItem f && IsListed(f);
         FriendsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
-        RequestsView = new CollectionViewSource { Source = Friends }.View;
-        RequestsView.Filter = o => o is FriendItem f && !IsListed(f);
+        RequestsView = CollectionViewSource.GetDefaultView(Requests);
         RequestsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FriendItem.SectionTitle)));
         GroupChat = new GroupChatViewModel(this, dialogs, () => ShowTimes, () => Flashes(NoticeKind.GroupChat));
         GroupChat.UnreadChanged += () =>
@@ -93,6 +92,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public ICollectionView FriendsView { get; }
     public ICollectionView RequestsView { get; }
 
+    // a list of its own, not a second view over Friends. A view from a CollectionViewSource nobody holds stops following
+    // its source once the GC takes the CollectionViewSource, and the tab just sat there empty
+    public ObservableCollection<FriendItem> Requests { get; } = new();
+
     // requests, invitations and a request I sent are on the Requests tab, a friend is only on the list once they've accepted
     internal static bool IsListed(FriendItem f) =>
         f.Section is not (FriendSection.FriendRequests or FriendSection.GroupInvitations or FriendSection.RequestsSent);
@@ -101,7 +104,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     partial void OnRequestsTabChanged(bool value) => RefreshUnseen();
 
-    public bool NoRequests => !Friends.Any(f => !IsListed(f));
+    public bool NoRequests => Requests.Count == 0;
 
     public void ShowRequests() => RequestsTab = true;
     public ObservableCollection<PolBlocked> Blocked { get; } = new();
@@ -527,6 +530,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         SelectedFriend = null;
         _login.Held.Clear();
         Friends.Clear();
+        Requests.Clear();
         MessagesToggleChanged();
         Blocked.Clear();
         HasBlocked = false;
@@ -783,6 +787,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 }
         }
         finally { _rebuilding = false; }
+        Requests.Patch(items.Where(i => !IsListed(i)).ToList(), (a, b) => a.Section == b.Section && a.RequestMid == b.RequestMid && a.Is(b), (a, b) => a == b);
+        OnPropertyChanged(nameof(NoRequests));
         foreach (var p in gone)
         {
             _windows.ClosePopOut(p);
