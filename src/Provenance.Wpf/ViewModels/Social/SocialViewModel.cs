@@ -666,7 +666,21 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             }
         if (!r.Kept || (r.ToAck.Count > 0 && _pol.Pid is { } pid && !SocialRequests.Ack(pid, r.ToAck.ToList())))
             _login.Sync.Unack(r.ToAck);
+        FlushReads();
         return r.Changed;
+    }
+
+    // reads go to the hook so the files follow. Nothing to ask while the game runs, the next login catches up
+    internal void FlushReads()
+    {
+        if (WriteBlockedNote is not null || _pol.Pid is not { } pid) return;
+        var mids = _login.Sync.TakeRead();
+        if (mids.Count > 0 && !SocialRequests.Read(pid, mids)) _login.Sync.RequeueRead(mids);
+    }
+
+    internal void DeleteStoreFiles(IReadOnlyCollection<ChatEntry> gone)
+    {
+        if (gone.Count > 0 && !GameRunning && _pol.Pid is { } pid) SocialRequests.DeleteFiles(pid, gone);
     }
 
     // what's still on its way under the active handle. A switch waits for it, it'd go from the new one otherwise

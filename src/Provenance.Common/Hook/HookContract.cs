@@ -59,6 +59,8 @@ public static class HookContract
         public const string Send = "send";
         public const string Status = "status";
         public const string Ack = "ack";
+        public const string Read = "read";
+        public const string DeleteFiles = "deletefiles";
         public const string Comment = "comment";
         public const string Pic = "pic";
         public const string Friend = "friend";
@@ -87,7 +89,7 @@ public static class HookContract
 
         public static readonly string[] All =
         [
-            Send, Status, Ack, Comment, Pic, Friend, Answer, Search, Profile, Group, MyProfile, SaveProfile, Rename,
+            Send, Status, Ack, Read, DeleteFiles, Comment, Pic, Friend, Answer, Search, Profile, Group, MyProfile, SaveProfile, Rename,
             Character, FfxiProfile, MyFfxiProfile, ChatZones, ChatRooms, ChatJoin, ChatSend, ChatLeave, ChatCreate, ChatMaster,
             Handle, GroupChatJoin, GroupChatSend, GroupChatLeave, Full,
         ];

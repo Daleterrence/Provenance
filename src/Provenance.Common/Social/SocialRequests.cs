@@ -18,15 +18,34 @@ public static class SocialRequests
     // mids safely in the chat log, so the hook can delete them the viewer's way (GET, save, DELETE)
     public static bool Ack(int pid, IEnumerable<int> mids)
     {
-        try
-        {
-            var path = HookFiles.PathFor(pid, HookContract.Requests.Ack);
-            var text = string.Join("\n", mids);
-            // ids the hook hasn't read yet stay. If it takes the file between the check and the read, nothing's lost
-            try { text = File.ReadAllText(path) + "\n" + text; } catch (FileNotFoundException) { }
-            return HookFiles.WriteRequest(pid, HookContract.Requests.Ack, HookFiles.Body(text));
-        }
+        try { return HookFiles.WriteRequest(pid, HookContract.Requests.Ack, Unread(pid, HookContract.Requests.Ack, mids.Select(m => m.ToString()))); }
         catch { return false; }
+    }
+
+    // mids read in Provenance, so the hook moves their files from r\b to r\a
+    public static bool Read(int pid, IEnumerable<int> mids)
+    {
+        try { return HookFiles.WriteRequest(pid, HookContract.Requests.Read, Unread(pid, HookContract.Requests.Read, mids.Select(m => m.ToString()))); }
+        catch { return false; }
+    }
+
+    // lines Delete or Clear took out of the log. One with no time or friend's key has nothing the hook could match
+    public static bool DeleteFiles(int pid, IEnumerable<ChatEntry> entries)
+    {
+        var lines = entries.Where(e => e.Time > 0 && e.PeerKey.Length > 0 && e.PeerKey.All(Uri.IsHexDigit) &&
+                                       !(e.Outgoing && e.State is not ("sent" or "unsent")))
+                           .Select(e => $"{(e.Outgoing ? 's' : 'r')}|{e.Time}|{e.Seq}|{e.PeerKey}").ToList();
+        if (lines.Count == 0) return true;
+        try { return HookFiles.WriteRequest(pid, HookContract.Requests.DeleteFiles, Unread(pid, HookContract.Requests.DeleteFiles, lines)); }
+        catch { return false; }
+    }
+
+    // after any lines the hook hasn't taken yet
+    private static HookFiles.RequestBody Unread(int pid, string request, IEnumerable<string> lines)
+    {
+        var text = string.Join("\n", lines);
+        try { text = File.ReadAllText(HookFiles.PathFor(pid, request)) + "\n" + text; } catch (FileNotFoundException) { }
+        return HookFiles.Body(text);
     }
 
     public static bool SetProfilePicture(int pid, int picId, string token) =>

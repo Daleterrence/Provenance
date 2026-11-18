@@ -247,6 +247,7 @@ static void mail_send_pump(BYTE *b)
         if (r == 1) lstrcpyA(st, "sent"); else lstrcpyA(st, requests_failed(r));
         mail_send_result(s->token, st, s->msg);
         if (r == 1) mail_send_sent_record(b, s->msg);
+        if (r == 1 && pc_mail_kind(s->msg) == 0) message_store_sent(b, s->msg);
         ms = GetTickCount64() - s->started;
         base_log("messages: send done -> %d (%ums)\r\n", r, (unsigned)ms);
         mail_send_paced(r, ms);

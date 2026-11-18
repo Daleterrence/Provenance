@@ -81,6 +81,12 @@ static int hold_writes_waiting(void)
 {
     return (requests_busy() & JB_WAIT) != 0;
 }
+static void hold_store_requests(BYTE *b)
+{
+    mail_inbox_ack_request(b);
+    mail_inbox_read_request();
+    message_store_delete_request(b);
+}
 static void hold_drain_turn(BYTE *b, int mail)
 {
     pc_pump_once(b);
@@ -206,7 +212,7 @@ static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
 {
     ULONGLONG until = GetTickCount64() + ms;
     g_s.draining = 1;
-    if (!g_lean) mail_inbox_ack_request(b);
+    if (!g_lean) hold_store_requests(b);
     hold_db_reads_abandon(b);
     my_profile_abandon(b);
     chat_room_end(b);
@@ -232,6 +238,7 @@ static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
     hold_idle_timeout_for_game(b);
     DeleteFileA(spath);   /* the snapshot has friends' messages in it */
     message_store_drop();
+    g_store_open = 0;
 }
 
 /* writes under way get 5s to finish, then the viewer's log out */
@@ -243,7 +250,7 @@ static void hold_sign_out(BYTE *b, const char *spath)
     message_store_drop();
     hold_play_event_close();
     g_s.draining = 1;
-    if (!g_lean) mail_inbox_ack_request(b);
+    if (!g_lean) hold_store_requests(b);
     my_profile_abandon(b);
     while (hold_writes_pending() && GetTickCount64() < until)
         hold_drain_turn(b, !g_lean);
@@ -334,6 +341,7 @@ static void hold_run(BYTE *b)
     }
     base_log(LOG_HELD "; waiting for Play (POL_CRED_PLAY)\r\n");
     if (g_lean) base_log("hold: no friends or messages for this session\r\n");
+    g_store_open = 1;
     if (!g_lean) hold_push_callbacks(b);
     hold_handle(b);
     if (!g_lean) message_store_import(b);
@@ -380,7 +388,7 @@ static void hold_run(BYTE *b)
             base_log("messages: new messages flag set - listing the inbox\r\n");
             g_s.mail_refresh = 1;
         }
-        if (ctl && !g_lean) mail_inbox_ack_request(b);
+        if (ctl && !g_lean) hold_store_requests(b);
         if (!g_lean) mail_inbox_pump(b);
         if (ctl) hold_full_request(b, spath);
         hold_turn(b, ctl);

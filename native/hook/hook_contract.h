@@ -42,6 +42,8 @@
 #define REQ_SEND "send"
 #define REQ_STATUS "status"
 #define REQ_ACK "ack"
+#define REQ_READ "read"
+#define REQ_DELETE_FILES "deletefiles"
 #define REQ_COMMENT "comment"
 #define REQ_PIC "pic"
 #define REQ_FRIEND "friend"

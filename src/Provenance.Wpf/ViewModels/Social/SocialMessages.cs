@@ -97,7 +97,8 @@ public sealed partial class SocialMessages : ObservableObject
 
     private void ReadConversation(FriendItem f, bool rebuild)
     {
-        _social.Chat!.MarkRead(f.Name, f.Key);
+        _social.Login.Sync.NoteRead(_social.Chat!.MarkRead(f.Name, f.Key));
+        _social.FlushReads();
         _social.UnreadCount = _social.Chat.Unread;
         _social.MarkFriendsDirty();
         if (rebuild) _social.RebuildFriends();
@@ -194,6 +195,8 @@ public sealed partial class SocialMessages : ObservableObject
         if (text.Length == 0) return;
         Queue(f, text);
         Compose = "";
+        // a reply reads what it answers, as the game does
+        if (_social.Chat.UnreadFrom(f.Name, f.Key) > 0) ReadConversation(f, rebuild: false);
         Refresh();
     }
 
@@ -202,17 +205,22 @@ public sealed partial class SocialMessages : ObservableObject
         if (e.Failed && _social.Chat is { } chat && chat.RemoveFailed(e.Key)) Refresh();
     }
 
-    // this PC's copy only. It stays gone, the next login's read of the game's store won't bring it back
+    // gone from this PC and the game's message store, and it stays gone
     public void DeleteLine(ChatEntry e)
     {
         if (_social.Chat is not { } chat || !ChatStore.CanDelete(e) || !chat.Delete(e.Key)) return;
+        _social.DeleteStoreFiles([e]);
         AfterDelete();
     }
 
     // only the lines that were on screen when Clear was picked, not ones that landed while it asked
     public void ClearConversation(IReadOnlyCollection<string> keys)
     {
-        if (_social.Chat is not { } chat || chat.DeleteKeys(keys) == 0) return;
+        if (_social.Chat is not { } chat) return;
+        var set = keys.ToHashSet(StringComparer.Ordinal);
+        var gone = chat.Entries.Where(e => set.Contains(e.Key) && ChatStore.CanDelete(e)).ToList();
+        if (chat.DeleteKeys(keys) == 0) return;
+        _social.DeleteStoreFiles(gone);
         AfterDelete();
     }
 
@@ -246,8 +254,9 @@ public sealed partial class SocialMessages : ObservableObject
         _social.RefreshConversations();
     }
 
-    public static string ClearConversationQuestion(string name) =>
-        $"Delete every message with {name} that Provenance has kept on this PC? This can't be undone.";
+    public static string ClearConversationQuestion(string name, bool gameRunning = false) => gameRunning
+        ? $"Delete every message with {name}? FINAL FANTASY XI and PlayOnline Viewer keep their copies while the game's running. This can't be undone."
+        : $"Delete every message with {name}? They're deleted from FINAL FANTASY XI and PlayOnline Viewer as well. This can't be undone.";
 
     public IReadOnlyList<MenuAction> LineMenu(ChatEntry entry) =>
         [new("Delete message", ChatStore.CanDelete(entry), () => DeleteLine(entry))];
@@ -259,7 +268,7 @@ public sealed partial class SocialMessages : ObservableObject
         menu.Add(new("Clear conversation...", Conversation.Any(ChatStore.CanDelete), () =>
         {
             var shown = Conversation.Select(e => e.Key).ToList();
-            if (_social.ConfirmDestructive("Clear conversation", ClearConversationQuestion(f.Name), "CLEAR")) ClearConversation(shown);
+            if (_social.ConfirmDestructive("Clear conversation", ClearConversationQuestion(f.Name, _social.GameRunning), "CLEAR")) ClearConversation(shown);
         }));
         return menu;
     }

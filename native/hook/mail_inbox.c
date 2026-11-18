@@ -18,12 +18,23 @@ typedef struct {
     BYTE att[0x20];
     int has_att;
     int stored, shome, has_twin, twin_deleted, del_tries, del_lost, moved, move_fails;
+    /* filed: a file in r\b under sname. read_want: the app read it, so it moves once its server copy has gone */
+    int filed, srv_gone, del_failed, read_want, del_early;
     ULONGLONG del_at, move_at;
     char sname[100];
 } mailrec;
 /* the session's first server list came back, or failed for good. Till then an answered stored entry can't tell if it has a
    server copy, so its file stays put */
 static int g_mail_listed;
+static int message_store_put(BYTE *b, int sub, const BYTE *hdr, const char *body, char *name);
+static int message_store_trim(BYTE *b, int sub);
+static int message_store_move_read_ex(BYTE *b, const BYTE *hdr, const char *name, int home, int read);
+static void message_store_secure_add(const char *name);
+static int message_store_imp_pump(BYTE *b);
+static int message_store_imp_pending(void);
+static void message_store_imp_want(int mid);
+/* the hold sets this and Play clears it, the game owns the folders after that */
+static int g_store_open;
 #define STORED_TRIES 3
 #define STORED_DEL_GAP_MS 5000
 #define STORED_MOVE_GAP_MS 2000
@@ -127,7 +138,8 @@ static int mail_inbox_evictable(void)
     int best = -1;
     for (int i = 0; i < g_s.mail_n; i++) {
         unsigned st = g_mail[i].state;
-        if (!g_mail[i].stored && (st == 2 || st == 5 || st == 6) && (best < 0 || g_mail[i].mid < g_mail[best].mid)) best = i;
+        if (!g_mail[i].stored && !g_mail[i].read_want && (st == 2 || st == 5 || st == 6) &&
+            (best < 0 || g_mail[i].mid < g_mail[best].mid)) best = i;
     }
     return best;
 }
@@ -162,6 +174,26 @@ static mailrec *mail_inbox_add_from(const BYTE *hdr, int listed)
     return &g_mail[i];
 }
 static mailrec *mail_inbox_add(const BYTE *hdr) { return mail_inbox_add_from(hdr, 0); }
+/* the viewer's order: the file in r\b first, then the server copy goes. Answerable requests are held from here on */
+static void mail_inbox_file(BYTE *b, mailrec *m, const char *body, int listed)
+{
+    char name[100];
+    unsigned kd = pc_mail_kind(m->hdr);
+    if (!message_store_put(b, 1, m->hdr, body, name)) return;
+    m->filed = 1;
+    m->shome = g_home;
+    lstrcpyA(m->sname, name);
+    if (kd == 1 || (kd == 0xe && m->has_att)) {
+        m->state = 7;
+        m->stored = 1;
+        if (listed) {
+            memcpy(m->twin, m->hdr, MAIL_KEY_SIZE);
+            m->has_twin = 1;
+            m->del_early = 1;
+        }
+    }
+    message_store_trim(b, 1);
+}
 static void mail_inbox_log_hdr(const char *what, const BYTE *h)
 {
     base_log("messages: %s slot=%u kind=%u len=%u seq=%u time=%u 3e=%04x 42=%04x\r\n", what,
@@ -312,6 +344,7 @@ static void mail_inbox_read_done(BYTE *b, int lane, int r)
     if (r == 1) {
         mail_inbox_parse(b, m, g_s.mail_lanes[lane].body, (int)MAIL(m->hdr)->len);
         m->state = 1;
+        mail_inbox_file(b, m, g_s.mail_lanes[lane].body, 1);
         g_mail_fresh = 1;
         base_log("messages: body read (%u bytes)\r\n", MAIL(m->hdr)->len);
     } else {
@@ -402,25 +435,36 @@ static void mail_inbox_stored_delete_failed(mailrec *m, int r)
              m->del_lost ? ", the slot's lost so no more" : "");
 }
 static void mail_inbox_stored_pump(BYTE *b);
+static void mail_inbox_read_pump(BYTE *b);
 /* saved by the launcher: delete the server copy (svc 0x508, keyed like the GET). One to a slot this account lost
    is refused (-0x1540) and stays, as in the viewer. */
+#define DELETE_STATES (1 << 1 | 1 << 4 | 1 << 7 | 1 << 8)
+static int mail_inbox_delete_due(const mailrec *m, ULONGLONG now)
+{
+    if (m->state == 4) return 1;
+    if (m->state == 1) return m->filed && !m->srv_gone && !m->del_failed;
+    return (m->state == 8 || (m->state == 7 && m->del_early)) && m->has_twin && !m->twin_deleted && !m->del_lost &&
+           m->del_tries < STORED_TRIES && now >= m->del_at;
+}
 static void mail_inbox_delete_start(BYTE *b)
 {
     int i, t;
-    for (i = mail_inbox_next(0, 1 << 4 | 1 << 8); i >= 0; i = mail_inbox_next(g_mail[i].mid, 1 << 4 | 1 << 8)) {
+    ULONGLONG now = GetTickCount64();
+    for (i = mail_inbox_next(0, DELETE_STATES); i >= 0; i = mail_inbox_next(g_mail[i].mid, DELETE_STATES)) {
         mailrec *m = &g_mail[i];
-        BYTE *h = m->state == 8 ? m->twin : m->hdr;
-        if (m->state == 8 && (!m->has_twin || m->twin_deleted || m->del_lost || m->del_tries >= STORED_TRIES ||
-                              GetTickCount64() < m->del_at))
-            continue;
+        BYTE *h = m->state >= 7 ? m->twin : m->hdr;
+        if (!mail_inbox_delete_due(m, now)) continue;
         t = pc_mail_delete(b, h);
         if (t == NO_SLOT) return;
         base_log("messages: delete start -> %d (from slot %u to slot %u)\r\n", t, MAIL(h)->from_slot, MAIL(h)->to_slot);
-        if (t < 0 && m->state == 8) {
+        if (t < 0 && m->state >= 7) {
             mail_inbox_stored_delete_failed(m, t);
             continue;
         }
-        if (t < 0) { m->state = 5; continue; }
+        if (t < 0) {
+            if (m->state == 4) m->state = 5; else m->del_failed = 1;
+            continue;
+        }
         g_s.del_job = t; g_s.del_idx = i;
         return;
     }
@@ -437,6 +481,7 @@ static void mail_inbox_pump(BYTE *b)
     for (i = 0; i < g_s.mail_n; i++)
         if (g_mail[i].raw_pending) {
             mail_inbox_parse(b, &g_mail[i], (const char *)g_mail[i].raw, g_mail[i].raw_len);
+            if (g_mail[i].raw_len == (int)MAIL(g_mail[i].hdr)->len) mail_inbox_file(b, &g_mail[i], (const char *)g_mail[i].raw, 0);
             g_mail[i].raw_pending = 0;
             g_mail[i].raw_len = 0;
             SecureZeroMemory(g_mail[i].raw, sizeof g_mail[i].raw);
@@ -454,18 +499,20 @@ static void mail_inbox_pump(BYTE *b)
     if (g_s.del_job >= 0 && (r = pc_mail_delete_check(b, g_s.del_job)) != 0) {
         mailrec *dm = &g_mail[g_s.del_idx];
         g_s.del_job = -1;
-        if (dm->state == 8) {
+        if (dm->state == 7 || dm->state == 8) {
             /* the file only moves once the server's copy is gone, or the next login would list it as a new request */
             if (r == 1) { dm->twin_deleted = 1; base_log("messages: deleted from the server after saving\r\n"); }
             else mail_inbox_stored_delete_failed(dm, r);
         } else {
-            dm->state = 5;
+            if (r == 1) dm->srv_gone = 1; else dm->del_failed = 1;
+            if (dm->state == 4) dm->state = 5;
             if (r == 1) base_log("messages: deleted from the server after saving\r\n");
             else base_log("messages: delete failed %d - the message stays on the server\r\n", r);
         }
         done = 1;
     }
     mail_inbox_stored_pump(b);
+    mail_inbox_read_pump(b);
     /* a freed lane waits a turn, so a waiting send gets it first */
     if (done) return;
     if (!g_s.draining)
@@ -513,6 +560,30 @@ static void mail_inbox_stored_pump(BYTE *b)
 {
     for (int i = 0; i < g_s.mail_n; i++) if (g_mail[i].state == 8) mail_inbox_stored_step(b, &g_mail[i]);
 }
+/* a read message moves to r\a once its server copy has gone. One whose copy wouldn't go stays put till the next login */
+static void mail_inbox_read_step(BYTE *b, mailrec *m)
+{
+    ULONGLONG now = GetTickCount64();
+    if (m->del_failed || !m->filed) { m->read_want = 0; return; }
+    if (!g_mail_listed || now < m->move_at || (m->state != 3 && !m->srv_gone)) return;
+    if (message_store_move_read_ex(b, m->hdr, m->sname, m->shome, 1)) {
+        m->moved = 1;
+        m->read_want = 0;
+        base_log("store: a read message moved to r\\a\r\n");
+        message_store_trim(b, 0);
+    } else if (++m->move_fails >= STORED_TRIES) {
+        base_log("store: a read message stays in r\\b, the move failed %d times\r\n", m->move_fails);
+        m->read_want = 0;
+    } else {
+        m->move_at = now + STORED_MOVE_GAP_MS;
+    }
+}
+static void mail_inbox_read_pump(BYTE *b)
+{
+    if (!g_store_open) return;
+    for (int i = 0; i < g_s.mail_n; i++) if (g_mail[i].read_want) mail_inbox_read_step(b, &g_mail[i]);
+    message_store_imp_pump(b);
+}
 /* answered: the text's gone, the rest is up to the step above */
 static void mail_inbox_stored_done(BYTE *b, mailrec *m)
 {
@@ -526,8 +597,12 @@ static void mail_inbox_stored_done(BYTE *b, mailrec *m)
 /* an answered stored entry that's still got something to do */
 static int mail_inbox_twin_pending(void)
 {
-    for (int i = 0; i < g_s.mail_n; i++) if (g_mail[i].state == 8) return 1;
-    return 0;
+    for (int i = 0; i < g_s.mail_n; i++) {
+        const mailrec *m = &g_mail[i];
+        if (m->state == 8) return 1;
+        if (g_store_open && m->filed && (mail_inbox_delete_due(m, ~0ULL) || (m->read_want && !m->del_failed))) return 1;
+    }
+    return g_store_open && message_store_imp_pending();
 }
 static void mail_inbox_ack_request(BYTE *b)
 {
@@ -543,11 +618,36 @@ static void mail_inbox_ack_request(BYTE *b)
             if (m && m->state == 7) {
                 mail_inbox_stored_done(b, m);
             } else if (m && (m->state == 1 || m->state == 3)) {
-                m->state = m->state == 1 ? 4 : 5;
+                /* the log has it now, so its file can be trimmed */
+                if (m->filed) message_store_secure_add(m->sname);
+                m->state = m->state == 3 || (m->filed && (m->srv_gone || m->del_failed)) ? 5 : 4;
                 m->text[0] = 0; m->subj[0] = 0;
                 m->raw_pending = 0; m->raw_len = 0;
                 SecureZeroMemory(m->raw, sizeof m->raw);
                 g_snap_dirty = 1;
+            }
+            v = -1;
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, buf);
+}
+static void mail_inbox_read_request(void)
+{
+    char *buf;
+    int got, v = -1;
+    if (!requests_waiting(REQ_READ)) return;
+    if ((got = requests_take_ex(REQ_READ, NULL, 0, &buf, ACK_MAX)) < 0) return;
+    for (int i = 0; i <= got; i++) {
+        char c = buf[i];
+        if (c >= '0' && c <= '9') v = v > 9999999 ? v : (v < 0 ? 0 : v * 10) + (c - '0');
+        else {
+            mailrec *m = v > 0 ? mail_inbox_by_mid(v) : NULL;
+            if (m && m->filed && !m->stored && !m->moved) {
+                m->read_want = 1;
+                m->move_fails = 0;
+                m->move_at = 0;
+            } else if (!m && v > 0) {
+                message_store_imp_want(v);
             }
             v = -1;
         }

@@ -65,6 +65,8 @@ static const req_row g_requests[] = {
     { REQ_GROUPCHATJOIN, RQ_REFUSE | RQ_SWEPT, NULL, 0, 0, NULL, request_refuse_gjoin },
     { REQ_GROUPCHATSEND, RQ_REFUSE | RQ_SWEPT, NULL, 0, 0, NULL, request_refuse_gsend },
     { REQ_ACK },
+    { REQ_READ },
+    { REQ_DELETE_FILES },
     { REQ_SEARCH, RQ_USER, NULL, 0, 0, NULL, NULL, busy_search },
     { REQ_PROFILE, RQ_USER, NULL, 0, 0, NULL, NULL, busy_profile },
     { REQ_CHARACTER, 0, NULL, 0, 0, NULL, NULL, busy_character },

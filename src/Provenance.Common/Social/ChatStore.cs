@@ -176,6 +176,8 @@ public sealed class ChatStore
             _deleted[e.Key] = e.Time;
             // a copy of a sent line coming back is matched by its header, not its key
             if (e.Outgoing && e.ToOther == true && e.Time > 0) _deleted[SentKey(e.Time, e.Seq, e.FromSlot)] = e.Time;
+            if (e.Outgoing && e.Time > 0 && e.FromSlot >= 0 && e.Key.StartsWith("out:", StringComparison.Ordinal))
+                _deleted[StoredSentKey(e.Time, e.Seq, e.FromSlot)] = e.Time;
         }
         if (_deleted.Count > KeepDeleted)
             foreach (var k in _deleted.OrderBy(kv => kv.Value).Take(_deleted.Count - KeepDeleted).Select(kv => kv.Key).ToList())
@@ -309,10 +311,30 @@ public sealed class ChatStore
     // a group per key (or name, without one): its newest line and every name it's had
     public IReadOnlyList<(string Key, ChatEntry Last, IReadOnlySet<string> Names)> Writers => Stat().Writers;
 
-    public void MarkRead(string peer, string key = "")
+    public IReadOnlyList<string> MarkRead(string peer, string key = "")
     {
-        if (EditWhere(e => !e.Outgoing && !e.Read && e.IsWith(peer, key), e => e with { Read = true })) Changed();
+        var turned = new List<string>();
+        bool Match(ChatEntry e)
+        {
+            if (e.Outgoing || e.Read || !e.IsWith(peer, key)) return false;
+            turned.Add(e.Key);
+            return true;
+        }
+        if (EditWhere(Match, e => e with { Read = true })) Changed();
+        return turned;
     }
+
+    // a received chat line the log has as read (notices stay put in the store)
+    public bool IsReadChat(string key) => Stat().ReadKeys.Contains(key);
+
+    // a line of mine already in the log, so its copy in the game's sent folder isn't another one
+    public bool HasSentLine(long time, long seq, int fromSlot) =>
+        time > 0 && fromSlot >= 0 &&
+        (_deleted.ContainsKey(StoredSentKey(time, seq, fromSlot)) ||
+         _entries.Any(e => e.Outgoing && e.Time == time && e.Seq == seq && e.FromSlot == fromSlot &&
+                           e.Key.StartsWith("out:", StringComparison.Ordinal)));
+
+    private static string StoredSentKey(long time, long seq, int fromSlot) => $"stored-sent:{time}|{seq}|{fromSlot}";
 
     private void Add(ChatEntry e)
     {
@@ -365,6 +387,7 @@ public sealed class ChatStore
         public readonly Dictionary<string, (long, long)> NewestKeyless = new(StringComparer.OrdinalIgnoreCase);
         public readonly Dictionary<string, (long, long)> NewestByName = new(StringComparer.OrdinalIgnoreCase);
         public readonly HashSet<string> UnreadKeys = new(StringComparer.Ordinal);
+        public readonly HashSet<string> ReadKeys = new(StringComparer.Ordinal);
         public readonly HashSet<string> UnsentKeys = new(StringComparer.Ordinal);
         public readonly HashSet<string> KeylessNames = new(StringComparer.OrdinalIgnoreCase);
         public readonly Dictionary<string, string> NameByKey = new(StringComparer.Ordinal);
@@ -394,6 +417,7 @@ public sealed class ChatStore
             }
             // answers to my requests are notices, not messages, so they're never unread and never make someone a writer
             if (e.State == "notice") continue;
+            if (e.Read) s.ReadKeys.Add(e.Key);
             if (!e.Read)
             {
                 s.Unread++;

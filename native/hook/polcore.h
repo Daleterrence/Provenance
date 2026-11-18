@@ -306,6 +306,8 @@ PC_SVC2(int, pc_mail_decode_header, SV_MAIL_DECODE_HEADER, void *, hdr, const ch
 PC_SVC2_V(void, pc_mail_path_unread, SV_MAIL_PATH_UNREAD, void *, hdr, char *, out)
 #define SV_MAIL_PATH_READ          0x474   /* the same into r\a */
 PC_SVC2_V(void, pc_mail_path_read, SV_MAIL_PATH_READ, void *, hdr, char *, out)
+#define SV_MAIL_PATH_SENT          0x47c   /* the same into s\a */
+PC_SVC2_V(void, pc_mail_path_sent, SV_MAIL_PATH_SENT, void *, hdr, char *, out)
 #define SV_JOB_SLOTS               0xff4   /* polcore's job slots in use and in all */
 PC_SVC2_V(void, pc_job_slots, SV_JOB_SLOTS, int *, used, int *, total)
 #define SV_SET_PUSH_CALLBACKS      0xd9c   /* registers the six push handlers */

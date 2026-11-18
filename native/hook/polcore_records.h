@@ -139,7 +139,7 @@ typedef struct pol_mail {
     BYTE  from_slot, to_slot;
     WORD  flags;            /* bits 7-11 the kind (0 chat, 1 friend request), bits 12-13 1 for a delivery receipt, 0x8000 valid */
     WORD  r40;
-    WORD  seen;             /* 0x100 once it's been read */
+    WORD  seen;             /* bits 10-11 the folder (0 r\b, 1 r\a, 2 s\b, 3 s\a), 0x100 locked */
     DWORD r44, r48;
     char *body;
 } pol_mail;

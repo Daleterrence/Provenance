@@ -15,6 +15,24 @@ public sealed class ChatSync(MailSendQueue sends)
     private readonly HashSet<int> _acked = new();
     private readonly HashSet<int> _seenRequests = new();
     private bool _storeTaken;
+    // the hook's mid for each chat line it holds a file for, and the ones read here whose file has to follow
+    private readonly Dictionary<string, int> _mids = new(StringComparer.Ordinal);
+    private readonly HashSet<int> _toRead = new();
+
+    public void NoteRead(IEnumerable<string> keys)
+    {
+        foreach (var key in keys)
+            if (_mids.TryGetValue(key, out var mid)) _toRead.Add(mid);
+    }
+
+    public IReadOnlyList<int> TakeRead()
+    {
+        var mids = _toRead.OrderBy(m => m).ToList();
+        _toRead.Clear();
+        return mids;
+    }
+
+    public void RequeueRead(IEnumerable<int> mids) => _toRead.UnionWith(mids);
 
     public bool IsAcked(int mid) => _acked.Contains(mid);
 
@@ -39,7 +57,7 @@ public sealed class ChatSync(MailSendQueue sends)
                 snap.Friends.Count(x => string.Equals(x.Name, f.Name, StringComparison.OrdinalIgnoreCase)) == 1)
                 changed |= chat.Adopt(f.Name, f.Key);   // lines saved while the hook had no key for them
         bool takeStore = snap.Stored != null && !_storeTaken;
-        if (takeStore) changed |= MergeStored(chat, snap, noticeText);
+        if (takeStore) changed |= MergeStored(chat, snap, noticeText, _toRead, _mids);
         // the recent results too, since an answer can take the send slot before a line's result lands. First, so an
         // echo in the same snapshot finds its time and seq
         foreach (var (token, state, time, seq, _, _) in snap.AllSends)
@@ -52,7 +70,8 @@ public sealed class ChatSync(MailSendQueue sends)
             changed |= chat.SetSentFrom(token, fromSlot, toOther);
         foreach (var m in snap.Messages)
         {
-            var who = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == m.FromKey)?.Name ?? m.From;
+            if (m.IsChat && m.HasBody && m.Mid > 0) _mids[m.Key] = m.Mid;
+            var who =snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == m.FromKey)?.Name ?? m.From;
             if (m.HasBody && noticeText(m) is { } line)
             {
                 // one about my own action (say I disbanded the group) isn't news, but it still goes from the server
@@ -106,7 +125,7 @@ public sealed class ChatSync(MailSendQueue sends)
         changed |= chat.ExpireSending(ChatStore.SendExpiry(sends.Queued), sends.StillPending());
         if (changed)
             foreach (var (name, key) in open)
-                if (chat.UnreadFrom(name, key) > 0) chat.MarkRead(name, key);
+                if (chat.UnreadFrom(name, key) > 0) NoteRead(chat.MarkRead(name, key));
         // dirty rather than changed, a log whose last save failed isn't on disk either
         bool kept = chat.SaveIfDue(DateTime.UtcNow);
         if (takeStore && kept && pid is { } storePid)
@@ -129,13 +148,15 @@ public sealed class ChatSync(MailSendQueue sends)
     // SE's group lines already say what happened, so they don't get the sender's name in front
     private static bool SaysWho(int kind) => kind is not (PolMessage.KindGroupRemoved or PolMessage.KindGroupDisbanded);
 
-    // the game's message store, read by the hook at login: it's history, so no notices, and nothing to ack since none of
-    // it's on the server any more
-    private static bool MergeStored(ChatStore chat, PolSocialSnapshot snap, Func<PolMessage, string?> noticeText)
+    // the game's message store, read at login. It's history, so no notices and nothing to ack. A line the log has as read
+    // that the store has unread is queued to be moved
+    private static bool MergeStored(ChatStore chat, PolSocialSnapshot snap, Func<PolMessage, string?> noticeText,
+                                    HashSet<int> toRead, Dictionary<string, int> mids)
     {
         bool changed = false;
         foreach (var s in snap.Stored!.Sent)
         {
+            if (chat.HasSentLine(s.Time, s.Seq, s.FromSlot)) continue;
             var to = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == s.ToKey)?.Name ??
                      (s.To.Length > 0 ? s.To : chat.NameFor(s.ToKey));
             if (to.Length > 0 || s.ToKey.Length > 0) changed |= chat.AddGameSent(to, s);
@@ -151,8 +172,12 @@ public sealed class ChatSync(MailSendQueue sends)
             if (noticeText(m) is { } line)
             {
                 if (!Mine(snap, m)) changed |= chat.MergeNotice(m, line);
+                continue;
             }
-            else changed |= chat.MergeIncoming(m);
+            changed |= chat.MergeIncoming(m);
+            if (!m.IsChat || m.Mid <= 0) continue;
+            mids[m.Key] = m.Mid;
+            if (!m.Read && chat.IsReadChat(m.Key)) toRead.Add(m.Mid);
         }
         var times = snap.Stored.Sent.Select(s => s.Time).Concat(snap.Stored.Received.Select(m => m.Time)).Where(t => t > 0).ToList();
         if (times.Count > 0) chat.PruneDeleted(times.Min());
