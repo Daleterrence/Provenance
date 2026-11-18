@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Runtime.ExceptionServices;
+using Serilog;
 
 namespace Provenance.Common.Credentials;
 
@@ -36,9 +38,24 @@ public sealed class CredentialService : ICredentialService
         catch (CredentialUnreadableException) { return null; }
     }
 
-    public bool HasUsableDetails(string profileId) =>
-        _store.HasWrappedSecret(KeyFor(CredentialTargets.Pol, profileId)) &&
-        _store.HasWrappedSecret(KeyFor(CredentialTargets.Sea, profileId));
+    private bool _unreadableLogged;
+
+    // a store that can't be read at all (no logon session behind the process) shows every profile as needing
+    // details, instead of crashing start-up
+    public bool HasUsableDetails(string profileId)
+    {
+        try
+        {
+            return _store.HasWrappedSecret(KeyFor(CredentialTargets.Pol, profileId)) &&
+                   _store.HasWrappedSecret(KeyFor(CredentialTargets.Sea, profileId));
+        }
+        catch (Win32Exception ex)
+        {
+            if (!_unreadableLogged) Log.Warning(ex, "Could not read the saved account details");
+            _unreadableLogged = true;
+            return false;
+        }
+    }
 
     public bool HasEntries(string profileId) =>
         _store.Exists(KeyFor(CredentialTargets.Pol, profileId)) && _store.Exists(KeyFor(CredentialTargets.Sea, profileId));
