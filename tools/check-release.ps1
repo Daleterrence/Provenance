@@ -2,9 +2,9 @@
 .SYNOPSIS
     Runs the app's own update check on a release: its statement, its package and its feed entry.
 .EXAMPLE
-    pwsh tools/check-release.ps1 v1.0.0-rc.1
+    pwsh tools/check-release.ps1 v1.0.0-pb.1
 .EXAMPLE
-    pwsh tools/check-release.ps1 v1.0.0-rc.1 -Folder C:\Releases\1.0.0-rc.1
+    pwsh tools/check-release.ps1 v1.0.0-pb.1 -Folder C:\Releases\1.0.0-pb.1
 .EXAMPLE
     pwsh tools/check-release.ps1 -Live
 #>
