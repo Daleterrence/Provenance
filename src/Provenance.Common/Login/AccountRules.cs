@@ -12,7 +12,7 @@ public static class AccountRules
 {
     public enum SideEdit
     {
-        Keep,      // ID and password both empty, the saved entry's neither read nor written
+        Keep,
         Replace,
         Fill,
     }
@@ -22,7 +22,6 @@ public static class AccountRules
         : id.Length > 0 && password.Length > 0 ? SideEdit.Replace
         : SideEdit.Fill;
 
-    // a key that's gone still passes the header test, so the run's details-again text is what tells
     public static bool NeedsAllDetails(bool usable, string? multiProblem) =>
         !usable || multiProblem?.StartsWith(HookExitText.DetailsAgainLead, StringComparison.Ordinal) == true;
 
@@ -39,8 +38,6 @@ public static class AccountRules
     public static AccountDialogResult WithoutPasswords(AccountDialogResult typed) =>
         typed with { PolPassword = "", SeaPassword = "" };
 
-    // checked in the order the form shows them, with IDs coming in trimmed (POL's in capitals) and the item as typed.
-    // required means adding, or details that can't be used any more
     public static FormProblem? CheckForm(bool required, string polId, string polPassword, string squareEnixId, string squareEnixPassword,
                                          bool useOtp, string otpSource, string otpItem)
     {
@@ -89,16 +86,12 @@ public static class AccountRules
         return new(new PolAccount(pol.PolId.Trim().ToUpperInvariant(), pol.Password), new SquareEnixAccount(squareEnix.Username.Trim(), squareEnix.Password), null);
     }
 
-    // both entries there with no details means they won't unwrap (a key that's gone, say)
     public static string MissingDetailsText(bool bothEntries) =>
         bothEntries ? HookExitText.DetailsAgainText : "This account's login details are missing. Press Manage Accounts and edit this account to add them.";
 
-    // both entries there but unusable is a Credential failure, so it stays off until edited (like hook exit 11)
     public static AccountFailure MissingDetailsFailure(bool bothEntries) =>
         new(bothEntries ? AccountFailureKind.Credential : AccountFailureKind.Account, MissingDetailsText(bothEntries));
 
-    // the login only finishes once the hook's written a snapshot, so a missing one is the file being gone or unreadable
-    // since (the session ending, say), not anything POL did
     public static AccountFailure? PlayGateFailure(PolSocialSnapshot? snap)
     {
         if (snap is null)
@@ -106,7 +99,6 @@ public static class AccountRules
         return PolAccountNotices.PlayBlockedReason(snap) is { } blocked ? new(AccountFailureKind.Account, blocked) : null;
     }
 
-    // an unread or unanswered Play wants a restart so the run stops, a refusal or a lost session is this account's problem
     public static AccountFailureKind PlayFailureKind(string text) =>
         text == HookExitText.PlayUnreadableText ? AccountFailureKind.Install : AccountFailureKind.Account;
 
@@ -123,8 +115,7 @@ public static class AccountRules
         _ => "Couldn't log in",
     };
 
-    // never a retry by itself after a refusal, it'd stretch a three-strikes lockout. A refused password or a handle
-    // problem is the user's to fix, anything else might need the log
+    // never a retry by itself after a refusal, it'd stretch a three-strikes lockout
     public static (string Title, string Text, bool AutoOff, bool OfferLogs) LoginFailure(int code, string? detail, bool autoLogin)
     {
         bool autoOff = code is LoginCodes.AuthFailed or LoginCodes.AccountBlocked
@@ -139,13 +130,12 @@ public static class AccountRules
                 || TitleFor(code) == "Couldn't log in");
     }
 
-    // the hook hands these to POL in the ANSI code page, so anything outside printable ASCII arrives changed, gets
-    // refused, and the refusal counts toward the lockout
+    // the hook hands these to POL in the ANSI code page, so anything outside printable ASCII is refused and counts toward the lockout
     public static string? PasswordProblem(string password) =>
         IsPrintableAscii(password) ? null : "Passwords can only use English letters, numbers and keyboard symbols.";
 
     public static string? SquareEnixIdProblem(string squareEnixId) =>
         IsPrintableAscii(squareEnixId) ? null : "A Square Enix ID can only use English letters, numbers and keyboard symbols.";
 
-    private static bool IsPrintableAscii(string s) => s.All(c => c is >= '!' and <= '~');   // 0x21 to 0x7E
+    private static bool IsPrintableAscii(string s) => s.All(c => c is >= '!' and <= '~');
 }

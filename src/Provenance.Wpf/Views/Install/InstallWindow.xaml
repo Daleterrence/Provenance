@@ -18,7 +18,6 @@
             <Grid RowDefinitions="Auto,Auto,*">
                 <controls:DialogHeader Title="Install FINAL FANTASY XI" />
 
-                <!-- before a run, and after a stop or a failure so the folders can change -->
                 <StackPanel Grid.Row="1" Margin="0,18,0,0" Visibility="{Binding CanStart, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="This downloads the official game (about " Foreground="{DynamicResource Text.2}" FontSize="13" TextWrapping="Wrap">
                         <Run Text="{Binding TotalGb, Mode=OneWay}" /><Run Text=") and installs it the way Square Enix's own installer does." />

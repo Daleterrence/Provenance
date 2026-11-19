@@ -5,8 +5,6 @@ namespace Provenance.Common.Social;
 
 public enum PreLaunchResult { Play, Stop, ShowHandles }
 
-// the viewer's last step before a game starts (app.dll 0x101def83): unlinked FFXI Content IDs go on the active handle.
-// It only asks when there's more than one handle
 public sealed class PreLaunchLink
 {
     public const string Title = "Link Content ID";
@@ -16,7 +14,6 @@ public sealed class PreLaunchLink
     public const string SavingText = "Updating Content ID list...";
     public const string PageGaveUpText = "Your last handle change hasn't finished, so your characters couldn't be linked. Try again in a moment.";
 
-    // Fit is as many as the active handle has room for, in index order like the viewer's scan
     public sealed record Plan(PolHandle Active, IReadOnlyList<PolContentId> Unlinked, IReadOnlyList<PolContentId> Fit, bool Ask);
 
     public static Plan? For(PolSocialSnapshot snap)
@@ -28,14 +25,12 @@ public sealed class PreLaunchLink
         return new Plan(active, unlinked, unlinked.Take(room).ToList(), snap.Handles.Count > 1);
     }
 
-    // the game can't use a character that isn't linked to a handle, so a link that didn't work stops it starting
     public static string FailedText(string failure) => $"{failure}\n\nFINAL FANTASY XI wasn't started.";
 
     public required Func<int?> Pid { get; init; }
     public required Func<string, bool> Ask { get; init; }
     public required Action<string> Failed { get; init; }
     public Action<string>? Saying { get; init; }
-    // the Handles page's own progress text while its change is going, there's only one handle request at a time
     public Func<string?> PageWaiting { get; init; } = () => null;
     public required Func<int, bool> Alive { get; init; }
     public Func<int, PolSocialSnapshot?> Read { get; init; } = SocialSnapshotFiles.TryRead;
@@ -44,7 +39,6 @@ public sealed class PreLaunchLink
 
     private static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(250);
 
-    // a session that's gone just lets Play go on: its answer says what happened better than anything here could
     public async Task<PreLaunchResult> RunAsync()
     {
         if (Pid() is not { } pid) return PreLaunchResult.Play;
@@ -63,7 +57,6 @@ public sealed class PreLaunchLink
             await Delay(Tick);
         }
         if (Read(pid) is not { } snap || For(snap) is not { } plan) return PreLaunchResult.Play;
-        // the viewer's No asks once more, and neither answer starts the game
         if (plan.Ask && !Ask(string.Format(AskText, plan.Active.Name)))
             return Ask(ShowListText) ? PreLaunchResult.ShowHandles : PreLaunchResult.Stop;
         if (plan.Fit.Count > 0)
@@ -84,7 +77,6 @@ public sealed class PreLaunchLink
     private static string Failure(string state) =>
         state == "failed:-7168" ? HookFailures.Handles.PreLaunchAlreadyLinked : HandleList.Failed(HandleChange.Link, state);
 
-    // Failed is null once it's saved. Once the hook has it, only its answer (or its 150s) ends the wait
     private async Task<(bool Gone, string? Failed)> SaveAsync(int pid, Plan plan)
     {
         if (!Alive(pid)) return (true, null);

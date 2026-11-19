@@ -2,8 +2,6 @@ namespace Provenance.Common.Game.ThirdParty;
 
 public static class LuaAddonFolders
 {
-    // addons\<name>\<name>.lua, the name matching its folder in any case (libs is shared code, never an addon). A
-    // folder that can't be read (a dangling junction, no access) is just skipped
     public static IReadOnlyList<(string Name, string Folder, string Main)> Walk(string addonsDir, bool skipDotted)
     {
         List<string> folders;

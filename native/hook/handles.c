@@ -1,5 +1,3 @@
-/* handles and Content IDs, listed from memory (svc 0x2b4/0x2c4). A switch is the viewer's one ChangeMyStatus (app.dll
-   0x10040c9e), a link a local 0x2dc (0x2e0 first for a move) and then one PutChrList (0x1038) */
 enum { HOP_NONE, HOP_SWITCH, HOP_LINK, HOP_LINKALL, HOP_CREATE, HOP_DELETE, HOP_ORDER };
 static int g_hall[8], g_hall_n;
 static int g_in_hold;
@@ -33,8 +31,7 @@ static void handles_switch_start(BYTE *b)
     if (t < 0) { handles_done(requests_failed(t)); return; }
     g_s.handle_job = t;
 }
-/* polcore links into the first free slot of 8, not where it was, so it's put back by hand in the records
-   (Content IDs polcore.dll 0x10403080, handles 0x10405800) */
+/* polcore links into the first free slot of 8, not where it was, so it's put back by hand (Content IDs polcore.dll 0x10403080, handles 0x10405800) */
 static void handles_place(BYTE *b, int idx, int slot, int pos)
 {
     BYTE *hs = pc_handle_record(b, slot)->chars;
@@ -47,7 +44,6 @@ static void handles_place(BYTE *b, int idx, int slot, int pos)
     hs[now] &= 0xfe;   /* what polcore's own unlink leaves (polcore.dll 0x10022d00) */
     *f = (*f & ~(7u << 22)) | (DWORD)pos << 22;
 }
-/* a put that didn't go puts polcore back how the server has it, which costs nothing (no reload, the viewer doesn't) */
 static void handles_undo(BYTE *b)
 {
     if (g_s.handle_op == HOP_LINKALL) {
@@ -59,8 +55,7 @@ static void handles_undo(BYTE *b)
         handle_edit_undo(b);
     }
 }
-/* the put only goes when polcore's stamps say the server's list isn't newer, else it quietly loads instead and
-   still says 1 (polcore.dll 0x10023350) */
+/* the put only goes when polcore's stamps say the server's list isn't newer, else it quietly loads instead and still says 1 (polcore.dll 0x10023350) */
 static void handles_put_start(BYTE *b)
 {
     int reload = pc_links_server_newer(b);
@@ -86,7 +81,6 @@ static void handles_put_done(BYTE *b, int r)
         handles_done(requests_failed(r));
         return;
     }
-    /* a put that became a load already has the server's copy in polcore */
     f = peers_get_chr(b, g_s.handle_idx, &c) ? c.link : 0;
     linked = (f & CHR_LINKED) && (int)CHR_HANDLE(f) == g_s.handle_slot;
     for (int i = 0; g_s.handle_op == HOP_LINKALL && i < g_hall_n; i++) {
@@ -97,7 +91,6 @@ static void handles_put_done(BYTE *b, int r)
     else if (!linked) handles_done("failed:not saved");
     else handles_done("saved");
 }
-/* my profile's the handle's, so a loaded one's the old handle's now */
 static void handles_switched(BYTE *b)
 {
     char jp[MAX_PATH + 64];
@@ -110,8 +103,7 @@ static void handles_switched(BYTE *b)
 
 static int handles_writes_asked(void) { return requests_listed(RQ_ASKED); }
 
-/* the viewer's link before a game (app.dll 0x100235d5): unlinked ones go on the active handle in one PutChrList.
-   The app only sends what fits, so it's all or nothing */
+/* the viewer's link before a game (app.dll 0x100235d5) */
 static void handles_linkall(BYTE *b, int slot, const pol_handle *h, char *ix, char *ck, char *p)
 {
     char k[17];
@@ -150,8 +142,6 @@ static void handles_linkall(BYTE *b, int slot, const pol_handle *h, char *ix, ch
     handles_put_start(b);
 }
 
-/* <op>, token, then lines each op reads for itself (see handle_create, handle_order and below).
-   The keys are the snapshot's, so a request can't land on a record that changed */
 static void handles_request(BYTE *b)
 {
     char buf[2048], *p, *op, *tok, *sl, *hk, *ix, *ck, k[17];
@@ -159,7 +149,6 @@ static void handles_request(BYTE *b)
     pol_chr c;
     int slot, idx = -1, kind, cur, old = -1, r, n;
     DWORD f;
-    /* a background character lookup finishes first, rather than the switch being turned away as busy */
     if (g_ch_read.j.step) return;
     if ((n = requests_take(REQ_HANDLE, buf, sizeof buf)) < 0) return;
     p = buf;
@@ -190,8 +179,6 @@ static void handles_request(BYTE *b)
     if (kind == HOP_SWITCH) {
         cur = pc_current_handle(b);
         if (slot == cur) { handle_fail("failed:already active"); return; }
-        /* they went under the old handle, some with its slot in them, and a read's answer is what the old handle
-           was allowed to see */
         if ((requests_busy() & (JB_WRITE | JB_SWITCH)) || handles_writes_asked()) {
             handle_fail("failed:busy");
             return;
@@ -201,7 +188,6 @@ static void handles_request(BYTE *b)
         lstrcpyA(g_s.handle_state, "working");
         base_log("handles: switch from slot %d to slot %d\r\n", cur, slot);
         g_snap_dirty = 1;
-        /* the viewer quits private chat before a switch, so a room's left first, through the one PART there is */
         if (chat_room_open()) chat_room_end(b);
         if (group_chat_open() || group_chat_joined(b)) group_chat_end(b, "left:handle", 0);
         handles_switch_start(b);
@@ -248,11 +234,10 @@ static void handles_pump(BYTE *b, int ctl)
         return;
     }
     if (g_s.handle_want) {
-        /* a switch still waiting for a slot isn't worth starting once the game or a log out is on its way */
         if (g_s.handle_op == HOP_SWITCH && g_s.draining) handles_done("failed:draining");
         else if (g_s.handle_op == HOP_SWITCH) handles_switch_start(b);
         else if (handles_list_edit()) handle_list_put_start(b);
-        else handles_put_start(b);   /* applied locally already, so it still goes in a drain */
+        else handles_put_start(b);
         return;
     }
     if (g_s.handle_job < 0) return;
@@ -269,8 +254,7 @@ static void handles_pump(BYTE *b, int ctl)
         handles_done(requests_failed(r));
     }
 }
-/* Play with a change still going: FFXI's world login reads polcore's records, so a link the server never confirmed
-   is taken back first */
+/* FFXI's world login reads polcore's records, so a link the server never confirmed is taken back first */
 static void handles_abandon(BYTE *b)
 {
     if (g_s.handle_op == HOP_NONE) return;

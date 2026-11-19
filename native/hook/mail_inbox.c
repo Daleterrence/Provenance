@@ -1,16 +1,10 @@
-/* mail: list and read on two lanes, delete on a third, polled once a turn
-     list  svc 0x524(out, max), poll 0x528 (1 = done), zeroed 8-aligned array, stride 0x50, valid = MAIL_VALID in flags
-     read  svc 0x518, poll 0x51c on a copy of the entry (first 0x48 bytes = server key), body at +0x4c
-     push  svc 0xd9c registers evt(0, H) for a stored message, raw(H) for a real-time one (body at H+0x4c) */
-#define MAIL_MAX 200   /* the viewer lists 200 in one go */
+#define MAIL_MAX 200
 #define MAIL_SEEN 256
 typedef struct {
     __declspec(align(8)) BYTE hdr[sizeof(pol_mail)];   /* 8-aligned: 0x518 rejects anything else */
-    /* state 7 is a request or invitation from r\b, held till it's answered. The server's own copy (a twin, from the
-       server list only) keeps its header here for the delete, and state 8 is answered with that delete still to go */
     __declspec(align(8)) BYTE twin[sizeof(pol_mail)];
     int state;                             /* 0 listed, 1 read, 2 failed, 3 real-time, 4 saved, 5 deleted, 6 skip, 7 stored, 8 stored and answered */
-    BYTE raw[0x180];                       /* a real-time body, parsed on the next turn */
+    BYTE raw[0x180];
     int raw_len, raw_pending;
     int mid;
     char subj[400];
@@ -18,13 +12,10 @@ typedef struct {
     BYTE att[0x20];
     int has_att;
     int stored, shome, has_twin, twin_deleted, del_tries, del_lost, moved, move_fails;
-    /* filed: a file in r\b under sname. read_want: the app read it, so it moves once its server copy has gone */
     int filed, srv_gone, del_failed, read_want, del_early;
     ULONGLONG del_at, move_at;
     char sname[100];
 } mailrec;
-/* the session's first server list came back, or failed for good. Till then an answered stored entry can't tell if it has a
-   server copy, so its file stays put */
 static int g_mail_listed;
 static int message_store_put(BYTE *b, int sub, const BYTE *hdr, const char *body, char *name);
 static int message_store_trim(BYTE *b, int sub);
@@ -33,14 +24,12 @@ static void message_store_secure_add(const char *name);
 static int message_store_imp_pump(BYTE *b);
 static int message_store_imp_pending(void);
 static void message_store_imp_want(int mid);
-/* the hold sets this and Play clears it, the game owns the folders after that */
 static int g_store_open;
 #define STORED_TRIES 3
 #define STORED_DEL_GAP_MS 5000
 #define STORED_MOVE_GAP_MS 2000
 #define LOST_SLOT (-0x1540)
 static mailrec g_mail[MAIL_MAX];
-/* identities of messages whose slot got reused, so a re-listed one isn't fetched again */
 static BYTE g_mail_seen[MAIL_SEEN][0x1a];
 static __declspec(align(8)) BYTE g_inbox[sizeof(pol_mail) * MAIL_MAX];
 static int g_mail_fresh;
@@ -64,8 +53,6 @@ static void mail_inbox_parse(BYTE *b, mailrec *m, const char *body, int len)
         m->has_att = 1;
     }
 }
-/* the viewer's message identity (app.dll 0x1005245d): ids, seq, time and slots. Other bytes can differ in a pushed
-   copy. */
 static int mail_inbox_same(const BYTE *a, const BYTE *c)
 {
     return memcmp(a, c, offsetof(pol_mail, name)) == 0 && MAIL(a)->seq == MAIL(c)->seq && MAIL(a)->time == MAIL(c)->time &&
@@ -78,8 +65,6 @@ static void mail_inbox_ident(const BYTE *h, BYTE out[0x1a])
     out[0x18] = MAIL(h)->from_slot;
     out[0x19] = MAIL(h)->to_slot;
 }
-/* the slot with the lowest mid above after and a state in mask (a bit per state), or -1. Mids only go up, so it's
-   arrival order */
 static int mail_inbox_next(int after, unsigned mask)
 {
     int best = -1;
@@ -97,8 +82,6 @@ static ULONGLONG mail_inbox_order(const BYTE *h)
 {
     return (ULONGLONG)MAIL(h)->time << 32 | MAIL(h)->seq;
 }
-/* a chat line waits for an earlier one from the same handle that's still to be read, two sends or two reads at once
-   can finish in either order */
 static int mail_inbox_held(const mailrec *m)
 {
     const BYTE *e = m->hdr, *o;
@@ -118,7 +101,6 @@ static int mail_inbox_saved_spare(void)
         if (g_s.del_job < 0 || i != g_s.del_idx) return i;
     return -1;
 }
-/* the server's copy turned up in its list: its header goes on the entry, and if it's answered already the delete is due */
 static void mail_inbox_stored_twin(mailrec *m, const BYTE *hdr)
 {
     if (!m->stored || m->has_twin) return;
@@ -126,13 +108,12 @@ static void mail_inbox_stored_twin(mailrec *m, const BYTE *hdr)
     memcpy(m->twin, hdr, MAIL_KEY_SIZE);
     m->has_twin = 1;
     base_log("messages: the server's copy of a stored request or invitation joined it\r\n");
-    if (m->state == 5) {   /* answered already: its delete is due, and a move that failed gets another go after it */
+    if (m->state == 5) {
         m->state = 8;
         m->move_fails = 0;
         m->move_at = 0;
     }
 }
-/* the oldest failed, deleted or skipped one, never a stored one */
 static int mail_inbox_evictable(void)
 {
     int best = -1;
@@ -143,7 +124,6 @@ static int mail_inbox_evictable(void)
     }
     return best;
 }
-/* listed is the server's list, the only way a twin turns up. A push or a store file with the same identity is nothing new */
 static mailrec *mail_inbox_add_from(const BYTE *hdr, int listed)
 {
     BYTE id[0x1a];
@@ -159,8 +139,6 @@ static mailrec *mail_inbox_add_from(const BYTE *hdr, int listed)
     if (g_s.mail_n < MAIL_MAX) {
         i = g_s.mail_n++;
     } else if ((i = mail_inbox_evictable()) >= 0 || (i = mail_inbox_saved_spare()) >= 0) {
-        /* the oldest failed, deleted or skipped one makes room, then a saved one whose delete hasn't started (the next
-           login fetches it again). Its identity goes in the ring */
         mail_inbox_ident(g_mail[i].hdr, g_mail_seen[g_s.mail_seen_next]);
         g_s.mail_seen_next = (g_s.mail_seen_next + 1) % MAIL_SEEN;
         if (g_s.mail_seen_n < MAIL_SEEN) g_s.mail_seen_n++;
@@ -174,7 +152,6 @@ static mailrec *mail_inbox_add_from(const BYTE *hdr, int listed)
     return &g_mail[i];
 }
 static mailrec *mail_inbox_add(const BYTE *hdr) { return mail_inbox_add_from(hdr, 0); }
-/* the viewer's order: the file in r\b first, then the server copy goes. Answerable requests are held from here on */
 static void mail_inbox_file(BYTE *b, mailrec *m, const char *body, int listed)
 {
     char name[100];
@@ -200,11 +177,9 @@ static void mail_inbox_log_hdr(const char *what, const BYTE *h)
        MAIL(h)->from_slot, (unsigned)pc_mail_kind(h), MAIL(h)->len,
        MAIL(h)->seq, MAIL(h)->time, MAIL(h)->flags, MAIL(h)->seen);
 }
-/* push callbacks run inside polcore's IRC processing on the hold loop's thread, H on its stack, so copy and get out */
 static void __cdecl mail_inbox_evt(int code, void *arg)
 {
     base_log("messages: evt code=%d arg=%p\r\n", code, arg);
-    /* 2 friend presence, 3 kind-9 notice, 4-6 groups: polcore already updated its arrays */
     if (code >= 2 && code <= 6) g_snap_dirty = 1;
     if (code == 0 && arg && !IsBadReadPtr(arg, MAIL_KEY_SIZE)) {
         LONG n = g_s.push_n;
@@ -237,7 +212,6 @@ static int mail_inbox_mine(BYTE *b, const BYTE *h)
     return pc_mail_kind(h) == 0 && peers_is_me(b, MAIL(h)->from_lo, MAIL(h)->from_hi);
 }
 
-/* every line this session sent to another POL ID: header time and seq and the slot it went from */
 #define SENT_IDS 256
 static struct { DWORD time, seq; BYTE from_slot; } g_sent_ids[SENT_IDS];
 static int mail_inbox_sent_by_me(const BYTE *h)
@@ -248,7 +222,6 @@ static int mail_inbox_sent_by_me(const BYTE *h)
             return 1;
     return 0;
 }
-/* a zeroed or odd recipient field never counts as someone else's POL ID */
 static int mail_inbox_polid_ok(BYTE *b, DWORD lo, DWORD hi)
 {
     char id[64];
@@ -256,8 +229,6 @@ static int mail_inbox_polid_ok(BYTE *b, DWORD lo, DWORD hi)
     peers_fmt_polid(b, lo, hi, id);
     return lstrlenA(id) == 8;
 }
-/* an echo of mine: a line this session sent to another POL ID (same time, seq and slot), or a handle writing to itself.
-   Anything else from my ID is real */
 static int mail_inbox_echo(BYTE *b, const BYTE *h)
 {
     DWORD lo = MAIL(h)->to_lo, hi = MAIL(h)->to_hi;
@@ -265,7 +236,6 @@ static int mail_inbox_echo(BYTE *b, const BYTE *h)
     return mail_inbox_sent_by_me(h) || (mail_inbox_polid_ok(b, lo, hi) && peers_is_me(b, lo, hi) &&
            MAIL(h)->from_slot == MAIL(h)->to_slot);
 }
-/* the ones that came back, so the app can mark the line it sent */
 #define RETURNED_MAX 16
 static struct { DWORD time, seq; BYTE from_slot; } g_returned[RETURNED_MAX];
 static void mail_inbox_returned(const BYTE *h)
@@ -280,8 +250,6 @@ static void mail_inbox_returned(const BYTE *h)
     if (g_s.returned_n < RETURNED_MAX) g_s.returned_n++;
     g_snap_dirty = 1;
 }
-/* a line of mine can't be told from an echo while a send is still going, so it waits unread,
-   out of the snapshot's bodies, till they're all answered */
 static int mail_send_going(void);
 static int mail_inbox_undecided(BYTE *b, const mailrec *m)
 {
@@ -367,8 +335,6 @@ static int mail_inbox_lane_busy(int kind, int idx)
         if (g_s.mail_lanes[l].job >= 0 && g_s.mail_lanes[l].kind == kind && (kind == 1 || g_s.mail_lanes[l].idx == idx)) return 1;
     return 0;
 }
-/* list or read, -0x100 (no free polcore slot, refused locally) tries again next turn. Only the list waits out the
-   30s after a failed one, reads still go */
 static void mail_inbox_fetch_start(BYTE *b, int lane)
 {
     int i, t;
@@ -394,8 +360,6 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
             m->state = 4;
             continue;
         }
-        /* the viewer reads one like any other and deletes it once it's saved. A line I sent is never shown as
-           received, so it's deleted unread like an ignored sender's */
         if (mail_inbox_echo(b, m->hdr)) {
             base_log("messages: a chat line I sent came back - deleted unread\r\n");
             mail_inbox_returned(m->hdr);
@@ -403,7 +367,6 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
             continue;
         }
         if (mail_inbox_undecided(b, m)) continue;
-        /* chat 0, friend request 1, answers 9/10, group invitation 0xe and its notices, the rest stay unread */
         if (!(kd == 0 || kd == 1 || kd == 9 || kd == 10 || kd == 0xe || kd == 0xf || kd == 0x10 ||
               kd == 0x12 || kd == 0x13)) {
             base_log("messages: kind %u is not shown by Provenance - not fetched\r\n", kd);
@@ -425,7 +388,6 @@ static void mail_inbox_fetch_start(BYTE *b, int lane)
         return;
     }
 }
-/* a stored entry's server copy wouldn't go: it's tried again a few times, apart, and never after the slot's lost */
 static void mail_inbox_stored_delete_failed(mailrec *m, int r)
 {
     m->del_tries++;
@@ -436,8 +398,6 @@ static void mail_inbox_stored_delete_failed(mailrec *m, int r)
 }
 static void mail_inbox_stored_pump(BYTE *b);
 static void mail_inbox_read_pump(BYTE *b);
-/* saved by the launcher: delete the server copy (svc 0x508, keyed like the GET). One to a slot this account lost
-   is refused (-0x1540) and stays, as in the viewer. */
 #define DELETE_STATES (1 << 1 | 1 << 4 | 1 << 7 | 1 << 8)
 static int mail_inbox_delete_due(const mailrec *m, ULONGLONG now)
 {
@@ -472,12 +432,11 @@ static void mail_inbox_delete_start(BYTE *b)
 static void mail_inbox_pump(BYTE *b)
 {
     int i, r, done = 0;
-    for (i = 0; i < g_s.push_n; i++) {   /* arrival order */
+    for (i = 0; i < g_s.push_n; i++) {
         mail_inbox_log_hdr("notice", g_push_q[i]);
         mail_inbox_add(g_push_q[i]);
     }
     g_s.push_n = 0;
-    /* a real-time body is only copied in the callback, so it's parsed here */
     for (i = 0; i < g_s.mail_n; i++)
         if (g_mail[i].raw_pending) {
             mail_inbox_parse(b, &g_mail[i], (const char *)g_mail[i].raw, g_mail[i].raw_len);
@@ -500,7 +459,6 @@ static void mail_inbox_pump(BYTE *b)
         mailrec *dm = &g_mail[g_s.del_idx];
         g_s.del_job = -1;
         if (dm->state == 7 || dm->state == 8) {
-            /* the file only moves once the server's copy is gone, or the next login would list it as a new request */
             if (r == 1) { dm->twin_deleted = 1; base_log("messages: deleted from the server after saving\r\n"); }
             else mail_inbox_stored_delete_failed(dm, r);
         } else {
@@ -513,25 +471,19 @@ static void mail_inbox_pump(BYTE *b)
     }
     mail_inbox_stored_pump(b);
     mail_inbox_read_pump(b);
-    /* a freed lane waits a turn, so a waiting send gets it first */
     if (done) return;
     if (!g_s.draining)
         for (i = 0; i < FETCH_LANES && mail_send_msg_slot_ok(b); i++) {
             if (g_s.mail_lanes[i].job >= 0) continue;
             mail_inbox_fetch_start(b, i);
-            if (g_s.mail_lanes[i].job < 0) break;   /* nothing to read, or polcore said no */
+            if (g_s.mail_lanes[i].job < 0) break;
         }
-    /* a delete keeps to the viewer's 2 jobs. In a drain it only goes with no write waiting for a slot, and nothing
-       waits for it */
     if (g_s.del_job < 0 && mail_send_msg_jobs() < 2 && (!g_s.draining ||
         (!mail_send_msg_jobs() && !hold_writes_waiting())) && mail_send_msg_slot_ok(b))
         mail_inbox_delete_start(b);
 }
-#define ACK_MAX (1024 * 1024)   /* about 140,000 mids, far more than a session ever has */
+#define ACK_MAX (1024 * 1024)
 static int message_store_move_read(BYTE *b, const BYTE *hdr, const char *name, int home);
-/* an answered stored entry, one step on. It waits for the first server list (that's when it learns it has a copy), then
-   for the copy's delete, and only then moves the file to r\a like the viewer does. A move that fails is tried again a few
-   times, apart. Running out of tries leaves the file in r\b and the app's own record of the answer finishes it later */
 static void mail_inbox_stored_step(BYTE *b, mailrec *m)
 {
     ULONGLONG now = GetTickCount64();
@@ -560,7 +512,6 @@ static void mail_inbox_stored_pump(BYTE *b)
 {
     for (int i = 0; i < g_s.mail_n; i++) if (g_mail[i].state == 8) mail_inbox_stored_step(b, &g_mail[i]);
 }
-/* a read message moves to r\a once its server copy has gone. One whose copy wouldn't go stays put till the next login */
 static void mail_inbox_read_step(BYTE *b, mailrec *m)
 {
     ULONGLONG now = GetTickCount64();

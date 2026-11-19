@@ -27,7 +27,6 @@ public partial class ConversationView : UserControl
         DataContextChanged += (_, e) => FollowEnd.SetSource(ChatScroll, (e.NewValue as SocialMessages)?.Conversation);
     }
 
-    // in its own window, where the pop out button puts the conversation back
     public bool Popped
     {
         get => (bool)GetValue(PoppedProperty);
@@ -49,12 +48,10 @@ public partial class ConversationView : UserControl
         }
     }
 
-    // a conversation that was already there when the window or pane came up starts at its newest line
     private void ToEnd() => Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () => ChatScroll.ScrollToEnd());
 
     internal void FocusCompose() => ComposeBox.Focus();
 
-    // another friend's conversation starts at the end, and so does a line just sent, so nobody sends it twice by mistake
     private bool PinConversation(NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Reset)

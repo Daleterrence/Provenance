@@ -52,6 +52,5 @@ public static class ToolFix
         _ => ToolView.DownloadFailed,
     };
 
-    // null once it's open, otherwise the line to show
     public static string? OpenSettings() => OnePassword.OpenSettings() ? null : OnePassword.OpenSettingsFailedText;
 }

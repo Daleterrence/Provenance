@@ -3,8 +3,7 @@ static int hold_db_free(void)
     return GetTickCount64() - g_s.db_last >= 3000 && !(requests_busy() & JB_DB);
 }
 
-/* the server's handle (the status load hands back the one it remembers), else the first in use (app.dll 0x10028a76).
-   Provenance's last one (POL_HANDLE) goes before the first in use, for a lean session that has no status load */
+/* the status load hands back the server's handle, else the first in use (app.dll 0x10028a76). POL_HANDLE goes before that for a lean session */
 static int hold_login_handle(BYTE *b, const char **why)
 {
     pol_handle rec;
@@ -23,7 +22,6 @@ static int hold_login_handle(BYTE *b, const char **why)
         if (handle_get(b, i, &rec)) return i;
     return -1;
 }
-/* the status the player picked for this login, online when there's none */
 static int hold_status_wanted(void)
 {
     char sv[8];
@@ -115,7 +113,6 @@ static int hold_idle_timeout_for_game(BYTE *b)
     base_log("hold: reading option.bin\r\n");
     pc_option_load_start(b);
     until = GetTickCount64() + 5000;
-    /* a few looks straight away, the load's a local file and usually done by then */
     while ((r = pc_option_load_done(b)) == 0 && GetTickCount64() < until) Sleep(looks++ < 16 ? 0 : 1);
     if (r > 0) rec = pc_option_record(b, "GOPN1_AO");
     if (rec) mins = *(int *)(rec + 0x18);
@@ -129,7 +126,6 @@ static int hold_idle_timeout_for_game(BYTE *b)
     return mins;
 }
 
-/* the app sets this right after it writes the Play entry so Play skips the 150ms beat. The file still decides */
 static HANDLE g_play_event;
 static void hold_play_event_open(void)
 {
@@ -142,7 +138,6 @@ static void hold_play_event_close(void)
     if (g_play_event) CloseHandle(g_play_event);
     g_play_event = NULL;
 }
-/* the 16ms the hold sleeps between turns, cut short by the app. 1 when it was */
 static int hold_beat(void)
 {
     DWORD r;
@@ -156,7 +151,6 @@ static int hold_beat(void)
     Sleep(16);
     return 0;
 }
-/* a control turn takes the requests and checks Play, every 150ms or as soon as the app nudges */
 static int hold_ctl_due(ULONGLONG now, ULONGLONG *last, int woke)
 {
     if (!woke && now - *last < 150) return 0;
@@ -191,7 +185,6 @@ static void hold_turn(BYTE *b, int ctl)
         /* the viewer's OK maps busy (2) to online and 3 to appear offline */
         if (want == 2) want = 0;
         if (want == 3) want = 4;
-        /* a go-online still waiting for a slot keeps its location, -2 keeps the rest */
         if (want == 0 || want == 1 || want == 4) login_status_start(b, g_my_slot, want, g_s.status_want >= 0 ? g_s.status_loc : -2);
     }
 }
@@ -230,18 +223,16 @@ static void hold_play_drain(BYTE *b, const char *spath, DWORD ms)
     if (g_s.pic_want >= 0) my_profile_pic_cancel(b);
     if (g_s.grp_job >= 0) pc_cancel_job(b, g_s.grp_job);
     login_groups_cancel(b);
-    /* FFXI installs its own message handlers, so polcore gets its defaults back */
     if (pc_has(b, SV_RESET_PUSH_CALLBACKS)) pc_reset_push_callbacks(b);
     /* the viewer always has notices on when a game starts, without them FFXI only sees new messages at its next lobby
        login. A local flag, nothing goes on the wire */
     if (g_lean && pc_has(b, SV_MESSAGE_NOTICES)) pc_message_notices(b, 1);
     hold_idle_timeout_for_game(b);
-    DeleteFileA(spath);   /* the snapshot has friends' messages in it */
+    DeleteFileA(spath);
     message_store_drop();
     g_store_open = 0;
 }
 
-/* writes under way get 5s to finish, then the viewer's log out */
 #define SIGN_OUT_DRAIN_MS 5000
 static void hold_sign_out(BYTE *b, const char *spath)
 {
@@ -260,8 +251,7 @@ static void hold_sign_out(BYTE *b, const char *spath)
     base_end_pol(0);
 }
 
-/* a lean session made full where it is: what a full login sends after its lists, only later. Status then groups is
-   the viewer's order for those two */
+/* status then groups is the viewer's order for those two */
 static void hold_go_full(BYTE *b, const char *spath)
 {
     struct pending_load run[2] = {
@@ -279,7 +269,6 @@ static void hold_go_full(BYTE *b, const char *spath)
     login_loads_check(b, run, 2);
     g_lean = 0;
     hold_push_callbacks(b);
-    /* picked again, the status answer can have set polcore's handle */
     hold_go_online(b, hold_handle_pick(b));
     message_store_import(b);
     base_log("hold: friends and messages added\r\n");
@@ -318,8 +307,6 @@ static void hold_link_watch(BYTE *b)
     g_link_sends = 0;
 }
 
-/* held until Play, a stop, Provenance ending or pol.exe ending. It's an IRC link so it never stops pumping, and never
-   sends more than the viewer would. */
 static void hold_run(BYTE *b)
 {
     static ULONGLONG lastCtl;
@@ -334,7 +321,6 @@ static void hold_run(BYTE *b)
         base_end_pol(AUTH_REFUSED_EXIT);
     }
     base_ipc_file(spath, IPC_SOCIAL);
-    /* a login that finished after its Provenance went never gets held */
     if (base_owner_gone()) {
         base_log("hold: Provenance ended during the login - logging out and exiting\r\n");
         hold_sign_out(b, spath);
@@ -400,7 +386,6 @@ static void hold_run(BYTE *b)
             } else {
                 base_log(LOG_PLAY_STARTED " - finishing PlayOnline writes, then booting FFXI\r\n");
                 hold_play_drain(b, spath, 15000);
-                /* the game keeps going whatever happens to Provenance */
                 if (g_owner) CloseHandle(g_owner);
                 g_owner = NULL;
                 hold_play_event_close();

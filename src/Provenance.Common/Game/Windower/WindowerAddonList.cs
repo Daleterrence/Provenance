@@ -7,8 +7,6 @@ public sealed record WindowerLaunchLists(IReadOnlyList<string> RequiredPlugins, 
     public IReadOnlyList<string> InitCommandPlugins { get; init; } = [];
 }
 
-// a profile's addons and plugins, kept in Provenance's own settings by Windower profile name. UseGlobal (and no entry
-// at all) means the shared list, settings.xml's <autoload> plus Provenance's own extras
 public sealed class WindowerAddonList
 {
     public bool UseGlobal { get; set; } = true;
@@ -25,13 +23,10 @@ public sealed class WindowerAddonList
     private static List<string> Merge(List<string> names, List<string>? extras) =>
         [.. names, .. Clean(extras).Where(n => !names.Contains(n, StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase)];
 
-    // a profile renamed outside Provenance has no entry any more, so it's back on the global list.
-    // settings.json can hold a null for anything, so nothing here trusts it
     public static WindowerAddonList Effective(WindowerSettingsFile settings, IReadOnlyDictionary<string, WindowerAddonList>? lists, string profileName,
                                               WindowerAddonList? extras = null) =>
         lists is not null && lists.TryGetValue(profileName, out var own) && own is { UseGlobal: false } ? own.Copy() : Global(settings, extras);
 
-    // the new name never inherits whatever an old profile of that name left behind
     public static void Renamed(IDictionary<string, WindowerAddonList> lists, string oldName, string newName)
     {
         if (oldName == newName) return;
@@ -45,7 +40,6 @@ public sealed class WindowerAddonList
         if (lists.TryGetValue(source, out var own) && own is not null) lists[copy] = own.Copy();
     }
 
-    // a file that didn't load reads as having no profiles, which would wipe every list
     public static void Prune(IDictionary<string, WindowerAddonList> lists, WindowerSettingsFile settings)
     {
         if (!settings.CanSave) return;
@@ -54,8 +48,6 @@ public sealed class WindowerAddonList
             lists.Remove(key);
     }
 
-    // the shared list and a profile's own go out the same way: whatever's installed and loadable, less anything
-    // init.txt loads itself
     public static WindowerLaunchLists ForLaunch(string windowerDir, WindowerProfile profile, WindowerAddonList effective,
                                                 IReadOnlyList<WindowerPluginInfo>? plugins = null, IReadOnlyList<WindowerAddonInfo>? addons = null)
     {
@@ -81,8 +73,7 @@ public sealed class WindowerAddonList
             if (addons.FirstOrDefault(a => a.Listing.Key.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Listing.Key);
             else skipped.Add($"{n} (addon not installed)");
 
-        // required plugins always go, the addons need LuaCore before init.txt runs. Nothing shows init's own load
-        // LuaCore runs, so its addons go in too (a second load just says "already loaded")
+        // required plugins always go, the addons need LuaCore before init.txt runs
         var loads = ScriptLoads.Read(windowerDir, profile.InitCommand);
         string? Already(string name, Dictionary<string, string> loaded) =>
             loaded.TryGetValue(name, out var where) && where != ScriptLoads.InitCommand ? $"{name} (already loaded by {where})" : null;
@@ -92,7 +83,6 @@ public sealed class WindowerAddonList
             if (Already(n, loads.Addons) is { } why) { sendAddons.Remove(n); skipped.Add(why); }
         var fromInit = addons.Where(a => loads.Addons.GetValueOrDefault(a.Listing.Key) == ScriptLoads.InitCommand).Select(a => a.Listing.Key).ToList();
         sendAddons.AddRange(fromInit.Where(n => !sendAddons.Contains(n, StringComparer.OrdinalIgnoreCase)));
-        // same for a plugin the init command loads, the hook says "Plugin already loaded." to the second one
         var pluginsFromInit = plugins.Where(p => p is { Installed: true, IsWindowerPlugin: true, Required: false }
                                                  && loads.Plugins.GetValueOrDefault(p.Listing.Key) == ScriptLoads.InitCommand).Select(p => p.Listing.Key).ToList();
         sendPlugins = plugins.Select(p => p.Listing.Key).Where(n => sendPlugins.Contains(n) || pluginsFromInit.Contains(n)).ToList();

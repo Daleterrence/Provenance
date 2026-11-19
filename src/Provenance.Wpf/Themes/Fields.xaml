@@ -37,7 +37,6 @@
             <Setter.Value>
                 <DataTemplate>
                     <StackPanel Orientation="Horizontal">
-                        <!-- in the list only the status you're on keeps its fill, the box itself isn't in a ComboBoxItem -->
                         <controls:StatusMark Status="{Binding Status}" Margin="0,0,6,0"
                                              Filled="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ComboBoxItem}, FallbackValue=True}" />
                         <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />

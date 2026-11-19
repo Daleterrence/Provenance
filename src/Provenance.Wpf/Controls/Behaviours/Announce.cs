@@ -5,7 +5,6 @@ using System.Windows.Threading;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// a screen reader reads the element out each time it comes on screen, with the keyboard focus left where it is
 public static class Announce
 {
     public static readonly DependencyProperty WhenShownProperty = DependencyProperty.RegisterAttached(
@@ -14,8 +13,6 @@ public static class Announce
     public static bool GetWhenShown(DependencyObject d) => (bool)d.GetValue(WhenShownProperty);
     public static void SetWhenShown(DependencyObject d, bool value) => d.SetValue(WhenShownProperty, value);
 
-    // Once is for something that's announced when it first turns up and never again, however often it's hidden and
-    // shown after: bound to a flag that only ever goes true
     public static readonly DependencyProperty OnceProperty = DependencyProperty.RegisterAttached(
         "Once", typeof(bool), typeof(Announce), new PropertyMetadata(false, OnOnceChanged));
 
@@ -38,7 +35,6 @@ public static class Announce
             Raise(element);
             return;
         }
-        // it's up in a window that's still in the tray, so it's read when the first one's on screen
         DependencyPropertyChangedEventHandler? first = null;
         first = (_, args) =>
         {
@@ -70,7 +66,6 @@ public static class Announce
 
     public static void Raise(UIElement element)
     {
-        // after the layout, a reader can't find an element that's only just been shown
         element.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
         {
             if (!element.IsVisible || !AutomationPeer.ListenerExists(AutomationEvents.LiveRegionChanged)) return;

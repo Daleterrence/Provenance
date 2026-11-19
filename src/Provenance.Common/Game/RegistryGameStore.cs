@@ -16,7 +16,6 @@ public sealed class RegistryGameStore(PolRegion? region, Func<bool, RegistryKey?
 
     private RegistryKey? Open(bool write) => openKey is not null ? openKey(write) : region is { } r ? FfxiRegistry.Open(r, write) : null;
 
-    // the game makes its settings on its first start
     public FfxiSettings Load()
     {
         using var k = Open(false);

@@ -2,7 +2,7 @@ using System.IO.Compression;
 
 namespace Provenance.Common.Patcher;
 
-// app.dll's file worker at 0x102aa101. The bit codecs start with a u32 bit count, then the bits low first.
+// the bit codecs start with a u32 bit count, then the bits low first
 public static class PatchCodecs
 {
     // .slc type byte: 1 = stored, 3 = zlib, anything else bit-LZSS
@@ -32,12 +32,11 @@ public static class PatchCodecs
         }
     }
 
-    // app.dll 0x102ae1e5: flag 0 = an 8-bit literal, flag 1 = 16-bit distance + 8-bit length copied from the output
+    // flag 0 = an 8-bit literal, flag 1 = 16-bit distance + 8-bit length copied from the output
     public static void Lzss(Stream src, Stream dst, CancellationToken ct, long maxLength = long.MaxValue) =>
         Decode(new BitReader(src), new Window(dst, maxLength), null, ct);
 
-    // app.dll 0x102ae777, same but a 1 flag is followed by 0 (output copy) or 1 + s16 offset + u8 length
-    // (copy from base at output position + offset)
+    // same but a 1 flag is followed by 0 (output copy) or 1 + s16 offset + u8 length (copy from base)
     public static void ApplyOlc(string delta, string baseFile, string output, long maxLength, CancellationToken ct)
     {
         using var src = new FileStream(delta, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan);

@@ -5,8 +5,7 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Security;
 
-// For folders other users can write to: each one from the root down is held without delete sharing, so none can be
-// swapped for a link mid-write
+// each folder from the root down is held without delete sharing, so none can be swapped for a link mid-write
 public sealed class FolderPins : IDisposable
 {
     private readonly string _given;
@@ -23,15 +22,11 @@ public sealed class FolderPins : IDisposable
 
     public string Root => _root;
 
-    // null if root or a folder on the way is a link or the root's a file, a file below it throws.
-    // Either way what was held is let go
     public static FolderPins? HoldExact(string root, string dir) => Pinned(new FolderPins(root), dir);
 
     public static FolderPins HoldExactOrThrow(string root, string dir, string message) =>
         HoldExact(root, dir) ?? throw Shown.Mark(new IOException(message));
 
-    // HoldExact, but a link above top is followed (an install moved to another drive, say) and everything's held where
-    // it really is. Real gives the path to write to
     private static FolderPins? HoldFollowingLinksAbove(string top, string dir)
     {
         var given = Path.TrimEndingDirectorySeparator(Path.GetFullPath(top));
@@ -44,7 +39,6 @@ public sealed class FolderPins : IDisposable
         return Pinned(new FolderPins(given, real), dir);
     }
 
-    // throws if dir isn't there, or something on the way is a link
     public static FolderPins HoldFollowingLinksAboveOrThrow(string top, string dir)
     {
         if (!Directory.Exists(dir)) throw new DirectoryNotFoundException($"{dir} isn't there.");
@@ -68,8 +62,6 @@ public sealed class FolderPins : IDisposable
 
     public string Real(string path) => Rebase(path);
 
-    // The root and every folder down to dir, made where missing. Held ones are checked again, an emptied folder can
-    // still be made a link while it's held
     public bool Pin(string dir)
     {
         var full = Rebase(dir);
@@ -91,8 +83,6 @@ public sealed class FolderPins : IDisposable
         return true;
     }
 
-    // every folder from the root down to dir is held, still a plain folder, and the root's still where it was. Called
-    // right before anything's written, moved or deleted there
     public bool Intact(string dir)
     {
         var full = Rebase(dir);
@@ -108,7 +98,6 @@ public sealed class FolderPins : IDisposable
         return true;
     }
 
-    // right before the move or replace, an emptied folder can still be made a link while it's held
     public void Recheck(string dir, params IEnumerable<string> files)
     {
         if (!Intact(dir)) throw LinkError(dir);
@@ -120,8 +109,6 @@ public sealed class FolderPins : IDisposable
         if (_held.Remove(Rebase(dir), out var h)) h.Dispose();
     }
 
-    // Deletes a file, link or empty folder through a handle on the entry itself (a link goes, not its target), and only
-    // if it really sits in the held folder
     public bool DeleteEntry(string path)
     {
         var full = Rebase(path);
@@ -147,8 +134,7 @@ public sealed class FolderPins : IDisposable
         return Kernel32.SetFileInformationByHandle(h, FileDispositionInfo, ref yes, 1);
     }
 
-    // Pin's root test without holding anything: a folder that's a link, or reached through one (junctioned parent, SUBST drive),
-    // isn't where its path says. Won't open isn't counted
+    // a folder that's a link, or reached through one (junctioned parent, SUBST drive), isn't where its path says
     public static bool ThroughLink(string root)
     {
         var given = LongName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)));
@@ -158,26 +144,21 @@ public sealed class FolderPins : IDisposable
         return !SamePlace(FileHandles.FinalPath(h, allowUnc: true), Expected(given));
     }
 
-    // ThroughLink for a folder out of settings, where a path that won't even parse just isn't a link. A third-party
-    // reparse point (OneDrive's) is fine, the same as for the Windower updater
+    // a third-party reparse point (OneDrive's) is fine, the same as for the Windower updater
     public static bool Linked(string dir)
     {
         try { return ThroughLink(dir); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; }
     }
 
-    // a drive letter that nothing's behind, as seen from here
     public static bool DriveMissing(string dir) => DriveTargets.HasDriveLetter(dir) && !DriveTargets.Exists(dir[0]);
 
-    // where a folder really is, every link on the way (its own too) followed. Null if it won't open
     public static string? RealPath(string dir)
     {
         using var h = FileHandles.Open(FileHandles.LongPath(Path.GetFullPath(dir)), FileHandles.ReadAttributes, FileHandles.ShareAll, FileHandles.BackupSemantics);
         return h.IsInvalid ? null : FileHandles.FinalPath(h, allowUnc: true);
     }
 
-    // no reparse point at all between root and path, and the last part's a folder or file as asked (missing is fine).
-    // Stricter than IsRedirect on purpose, it's the hook's message_store_plain_path rule
     public static bool Plain(string root, string path, bool lastIsFolder)
     {
         if (!PathInside.IsUnder(root, path)) return false;
@@ -199,7 +180,6 @@ public sealed class FolderPins : IDisposable
 
     internal static IOException LinkError(string p) => Shown.Mark(new IOException($"Provenance won't write to {p}, it's a link to somewhere else."));
 
-    // a drive root already ends in a backslash, so there's none to skip
     internal static string[] PartsBelow(string root, string full) =>
         full[(Path.EndsInDirectorySeparator(root) ? root.Length : root.Length + 1)..].Split('\\');
 
@@ -211,7 +191,6 @@ public sealed class FolderPins : IDisposable
             : full;
     }
 
-    // a read-attributes-only handle wouldn't do, those don't count for sharing
     private bool Add(string dir)
     {
         if (_held.ContainsKey(dir)) return Fine(dir);
@@ -228,8 +207,6 @@ public sealed class FolderPins : IDisposable
         return false;
     }
 
-    // still a folder, not a link, and for the root still at the path it was asked for (a parent swapped for a link
-    // would move it)
     private bool Fine(string dir)
     {
         var h = _held[dir];
@@ -240,7 +217,6 @@ public sealed class FolderPins : IDisposable
                SamePlace(FileHandles.FinalPath(h, allowUnc: true), Expected(_root));
     }
 
-    // where a handle on this path comes back as, which for a mapped or SUBST drive isn't the letter
     private static string Expected(string path)
     {
         var real = DriveTargets.Real(path);
@@ -250,7 +226,6 @@ public sealed class FolderPins : IDisposable
     private static bool SamePlace(string? a, string b) =>
         a is not null && string.Equals(a.TrimEnd('\\'), b.TrimEnd('\\'),StringComparison.OrdinalIgnoreCase);
 
-    // 8.3 names expanded, so the root can be compared with where its handle really is
     private static string LongName(string path)
     {
         var buf = new StringBuilder(1024);

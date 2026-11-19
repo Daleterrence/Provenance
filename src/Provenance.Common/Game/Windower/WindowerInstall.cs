@@ -5,7 +5,6 @@ namespace Provenance.Common.Game.Windower;
 
 public static class WindowerInstall
 {
-    // Hook.dll is the one that matters, but a folder with only Windower.exe can still fetch it
     public static bool IsFolder(string? dir) =>
         !string.IsNullOrWhiteSpace(dir) && Usable(dir) is { } d && (File.Exists(Path.Combine(d, "Windower.exe")) || File.Exists(Path.Combine(d, "Hook.dll")));
 
@@ -37,7 +36,6 @@ public static class WindowerInstall
             return [];
         }
     }
-    // a profile really called Default keeps the name, and the unnamed one says it has none
     public static string DisplayName(string name, IReadOnlyCollection<string> all) =>
         name.Length > 0 ? name : all.Any(n => n.Equals("Default", StringComparison.OrdinalIgnoreCase)) ? "Default (no name)" : "Default";
 }

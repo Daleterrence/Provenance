@@ -65,7 +65,6 @@ internal sealed class SearchCipher
         right = l ^ _p[1];
     }
 
-    // whole 8 byte blocks from start, little endian, in place. A tail shorter than a block is left alone
     public void Run(Span<byte> bytes, int start, int length, bool decrypt)
     {
         for (int at = start; at + 8 <= start + length; at += 8)

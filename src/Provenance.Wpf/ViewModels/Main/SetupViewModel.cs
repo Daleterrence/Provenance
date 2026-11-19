@@ -12,7 +12,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-// the one question a new install gets asked: Windower, Ashita or neither. Nothing's saved till a button's pressed
 public partial class SetupViewModel : ObservableObject
 {
     internal const string LookingText = "Looking for Windower and Ashita...";
@@ -28,7 +27,6 @@ public partial class SetupViewModel : ObservableObject
         _settings = settings;
     }
 
-    // true when the answer changed the platform
     internal event Action<bool>? Finished;
 
     public bool Pending => _settings.Current.SetupPending;
@@ -66,7 +64,6 @@ public partial class SetupViewModel : ObservableObject
             Log.Warning(ex, "Looking for Windower and Ashita failed");
             found = new([], []);
         }
-        // a folder browsed to meanwhile stays, and one already in settings goes ahead of anything found
         var s = _settings.Current;
         WindowerFolder ??= WindowerProblem(s.WindowerPath) is null ? s.WindowerPath : found.Windower.FirstOrDefault();
         AshitaFolder ??= AshitaProblem(s.AshitaPath) is null ? s.AshitaPath : found.Ashita.FirstOrDefault();
@@ -119,7 +116,6 @@ public partial class SetupViewModel : ObservableObject
     [RelayCommand]
     private void UseNeither() => Finish(s => s.ThirdPartyHookPlatform = ThirdPartyHook.None);
 
-    // the folder's checked once more, it can have gone since it was found
     private void Use(ThirdPartyHook platform, string? dir, Func<string?, string?> problemWith)
     {
         if (dir is null) return;
@@ -136,8 +132,6 @@ public partial class SetupViewModel : ObservableObject
         });
     }
 
-    // the profile and boot configuration stay as they are, blank already means Windower's unnamed profile and the
-    // last boot configuration Ashita ran with
     private void Finish(Action<LauncherSettings> pick)
     {
         var before = _settings.Current.ThirdPartyHookPlatform;
@@ -151,7 +145,6 @@ public partial class SetupViewModel : ObservableObject
         Finished?.Invoke(_settings.Current.ThirdPartyHookPlatform != before);
     }
 
-    // answered somewhere else, like the Settings page
     internal void Done()
     {
         if (!Pending) return;

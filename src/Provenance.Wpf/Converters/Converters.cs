@@ -37,7 +37,6 @@ public sealed class InvertBoolToVisibilityConverter : OneWayConverter
         value is true ? Visibility.Collapsed : Visibility.Visible;
 }
 
-// "9 Oct 2026, 9:03 AM", the month spelled out so 10/9 vs 9/10 can't trip anyone up
 public sealed class LocalTimeConverter : OneWayConverter
 {
     public override object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)

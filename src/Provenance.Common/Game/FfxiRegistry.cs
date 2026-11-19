@@ -3,7 +3,6 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game;
 
-// HKLM, so writes need admin. 0001/0002, 0003/0004 and 0037/0038 always go as pairs, 0028 is float bits
 public static class FfxiRegistry
 {
     public static RegistryKey? Open(PolRegion region, bool write)
@@ -47,7 +46,6 @@ public static class FfxiRegistry
         return k == null || new[] { "0001", "0002", "0003", "0004", "0034", "0037", "0038" }.Any(n => k.GetValue(n) is not int);
     }
 
-    // only what's missing, like the official tool does when it opens
     public static int WriteFirstStart(PolRegion region)
     {
         var (w, h) = Display.Primary();
@@ -55,11 +53,9 @@ public static class FfxiRegistry
         return FillMissing(k, FfxiSettings.FirstStart(w, h));
     }
 
-    // only what's missing, and the Fixed values get the tool's defaults too
     public static int FillMissing(RegistryKey k, FfxiSettings s)
     {
         int n = 0;
-        // the installer writes 0034 = 1 (windowed) itself, so it gets set too while the resolution never has been
         if (k.GetValue("0001") is null && k.GetValue("0034") is int mode && mode != s.WindowMode)
         {
             k.SetValue("0034", s.WindowMode, RegistryValueKind.DWord);
@@ -116,7 +112,6 @@ public static class FfxiRegistry
                     break;
                 case BrightnessValue b:
                     var bright = MathF.Round(Math.Clamp(s.Brightness, -1f, 1f), 1);
-                    // a value from elsewhere between two tenths stays as it is till it's moved
                     if (bright != MathF.Round(Math.Clamp(original.Brightness, -1f, 1f), 1)) Set(b.Name, BitConverter.SingleToInt32Bits(bright));
                     break;
                 case IntValue i:

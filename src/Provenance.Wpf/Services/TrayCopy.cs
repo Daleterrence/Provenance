@@ -6,8 +6,6 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// a second Provenance asks the running copies if one's in the tray with nobody logged in,
-// and if so that one comes back and the second just closes
 internal static class TrayCopy
 {
     public static readonly uint Message = User32.RegisterWindowMessageW("Provenance.ReuseTrayCopy");
@@ -23,7 +21,6 @@ internal static class TrayCopy
             using (p) return (p.Id, ProcessTree.ImagePath(p.Id));
         }).ToList();
 
-    // only the same exe, a copy of it somewhere else is somebody else's
     internal static IReadOnlyList<int> OtherCopies(IEnumerable<(int Pid, string? Image)> running, int ownPid, string ownImage) =>
         running.Where(r => r.Pid != ownPid && r.Image is { } image && SamePath(image, ownImage)).Select(r => r.Pid).ToList();
 
@@ -33,8 +30,7 @@ internal static class TrayCopy
     internal static bool AskWindow(IntPtr window, int timeoutMs) =>
         User32.SendMessageTimeoutW(window, Message, UIntPtr.Zero, IntPtr.Zero, AbortIfHung, (uint)timeoutMs, out var answer) != IntPtr.Zero && answer == 1;
 
-    // every top-level window of those processes, hidden ones too (a copy in the tray has no main window as far as Process
-    // can tell)
+    // hidden ones too, a copy in the tray has no main window as far as Process can tell
     internal static bool AskCopies(IReadOnlyCollection<int> pids)
     {
         if (pids.Count == 0) return false;
@@ -44,7 +40,6 @@ internal static class TrayCopy
         {
             if (clock.ElapsedMilliseconds > TotalMs) return false;
             if (!pids.Contains(pid)) return true;
-            // this is the process the player just started, so the other copy only gets to the front if this one lets it
             GameWindow.AllowForeground(pid);
             taken = AskWindow(window, TimeoutMs);
             return !taken;
@@ -52,7 +47,6 @@ internal static class TrayCopy
         return taken;
     }
 
-    // any failure opens normally
     internal static bool ReuseRunning()
     {
         try

@@ -16,7 +16,6 @@ static int g_cr_rooms_n, g_cr_rzone, g_cr_roff, g_cr_rtotal;
 static cr_sort g_cr_sortby[2];
 static DWORD g_cr_vzone, g_cr_vcapa;
 
-/* an IRC channel name as the room list builds it, nothing that'd change the JOIN line */
 static int chat_list_irc_ok(const char *s)
 {
     int n = lstrlenA(s);
@@ -55,14 +54,12 @@ static const pfb_tab *chat_list_tab_of(const pfb_hdr *p, int field)
     const pfb_item *it = p ? profile_db_pfb_item(p, field) : NULL;
     return it ? it->tab : NULL;
 }
-/* one the list shows, so a room can't be made in a zone the viewer hides */
 static int chat_list_zone_known(DWORD code)
 {
     for (int i = 0; i < g_cr_zone_n; i++) if (g_cr_zone[i].code == code) return 1;
     return 0;
 }
 
-/* the zone list or the room list is going, the job's state is that list's */
 static int g_cr_room_list;
 static void chat_list_db_done(const char *state);
 static void chat_list_db_start(BYTE *b, db_job *j)
@@ -94,7 +91,6 @@ static void chat_list_db_done(const char *state)
     g_snap_dirty = 1;
 }
 static void chat_list_db_abandon(BYTE *b) { db_job_abandon(b, &g_cr); }
-/* which list's asked for, before anything can finish it */
 static void chat_list_db_which(int rooms)
 {
     g_cr_room_list = rooms;
@@ -158,7 +154,6 @@ static void chat_list_parse_rooms(BYTE *b)
         g_cr_rooms_n++;
     }
 }
-/* this entry's own part k, not one profile_db_pfb_part would borrow from the entry before */
 static int chat_list_part_there(const pfb_tab *t, int i, int k)
 {
     const char *x = t->e[i].text;
@@ -172,7 +167,6 @@ static int chat_list_db_load(BYTE *b, int rooms)
     if (!g_cr_cpib) g_cr_cpib = profile_db_load_file(b, L"ch_count.pib", "ch_count", chat_list_check_count);
     if (!g_cr_cpfb) g_cr_cpfb = profile_db_pfb_load(b, L"ch_count.pfb", "chat rooms: ");
     if (!g_cr_cpib || !chat_list_tab_of(g_cr_cpfb, 0)) return 0;
-    /* the room categories ride along with the zones, Create Room needs them before any room list */
     if (!g_cr_rpfb) g_cr_rpfb = profile_db_pfb_load(b, L"c_chan.pfb", "chat rooms: ");
     if (!g_cr_zone_n) {
         const pfb_tab *t = chat_list_tab_of(g_cr_cpfb, 0);

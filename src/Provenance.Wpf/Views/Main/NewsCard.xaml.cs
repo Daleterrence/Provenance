@@ -25,7 +25,6 @@ public partial class NewsCard : UserControl
         Vm?.News.HoldSlides(false);
     }
 
-    // focus on the Read link holds the article too, so Enter opens the one shown
     private void OnNewsFocus(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (sender is UIElement card) Vm?.News.HoldSlides(card.IsKeyboardFocusWithin || card.IsMouseOver);
@@ -41,7 +40,7 @@ public partial class NewsCard : UserControl
 
     private void AnimateNews(int dir)
     {
-        if (!SystemParameters.ClientAreaAnimation) return;   // Windows "show animations" is off
+        if (!SystemParameters.ClientAreaAnimation) return;
         if (NewsContent.RenderTransform is not TranslateTransform tt) return;
         var duration = TimeSpan.FromMilliseconds(340);
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };

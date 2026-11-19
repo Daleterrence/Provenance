@@ -12,12 +12,11 @@ public sealed partial class SocialMessages : ObservableObject
     private readonly SocialViewModel _social;
     private readonly Func<FriendItem?> _friend;
     private bool _conversationVisible;
-    private DateTime _conversationDay;   // the day the "Today" headings were made on
+    private DateTime _conversationDay;
     private string? _listedFor;
     private string? _draftFor;
     private FriendItem? _draftPerson;
 
-    // the pane's follows the selection, a pop-out's is its own friend
     public SocialMessages(SocialViewModel social, Func<FriendItem?> friend)
     {
         _social = social;
@@ -34,7 +33,6 @@ public sealed partial class SocialMessages : ObservableObject
     [NotifyPropertyChangedFor(nameof(ComposeBytes), nameof(ComposeCount), nameof(ComposeCountShown), nameof(ComposeNote))]
     private string _compose = "";
 
-    // the box counts in the bytes FFXI goes by, a Japanese character's two
     public ComposeRules ComposeRules { get; } = new() { MaxBytes = () => PolMessage.MaxTextBytes };
     public int ComposeBytes => ShiftJis.ByteCount(Compose.Trim());
     public string ComposeCount => $"{ComposeBytes}/{PolMessage.MaxTextBytes}";
@@ -43,9 +41,7 @@ public sealed partial class SocialMessages : ObservableObject
 
     public bool CanCompose => Friend is { CanMessage: true } f && _social.Friends.Any(i => i.Is(f)) && !_social.GameRunning && !_social.HandleSwitching;
 
-    // a draft per conversation, so it never goes to the next person picked (POL mail can't be called back)
     private Dictionary<string, string> Drafts => _social.Login.Drafts;
-    // keyless people can share a name, so the row's in there too
     private static string DraftKey(FriendItem f) =>
         f.Key.Length > 0 ? "k:" + f.Key : $"n:{f.Name.ToUpperInvariant()}:{f.Row}";
 
@@ -104,7 +100,6 @@ public sealed partial class SocialMessages : ObservableObject
         if (rebuild) _social.RebuildFriends();
     }
 
-    // a pop-out going: its text is kept for whoever shows this conversation next
     internal void Release()
     {
         if (_draftFor is not null)
@@ -121,7 +116,6 @@ public sealed partial class SocialMessages : ObservableObject
         OnPropertyChanged(nameof(Friend));
         OnPropertyChanged(nameof(ComposeNote));
         var key = value is null ? null : DraftKey(value);
-        // a presence update gives the same person a new row and the text goes with them. Keyless needs the same row too
         bool samePerson = value != null && _draftPerson != null && value.Is(_draftPerson) &&
                           (value.Key.Length > 0 || _draftPerson.Key.Length > 0 || key == _draftFor);
         if (samePerson)
@@ -137,7 +131,6 @@ public sealed partial class SocialMessages : ObservableObject
         _draftPerson = value;
         _draftFor = key;
         if (!samePerson) Compose = key != null && Drafts.TryGetValue(key, out var draft) ? draft : "";
-        // picking someone in the main window shows nothing, so it stays unread until a window shows it
         if (value != null && _social.Chat != null && value.Unread > 0 && ConversationVisible)
             ReadConversation(value, rebuild: !_social.ApplyingSnapshot);
         Refresh();
@@ -154,7 +147,6 @@ public sealed partial class SocialMessages : ObservableObject
             Conversation.Clear();
             return;
         }
-        // a different person starts a fresh list (the window scrolls to its end), the same one is patched in place
         var who = f.Key.Length > 0 ? "k:" + f.Key : "n:" + f.Name.ToUpperInvariant();
         if (who != _listedFor)
         {
@@ -186,7 +178,6 @@ public sealed partial class SocialMessages : ObservableObject
     private bool CanSend() =>
         CanCompose && !string.IsNullOrWhiteSpace(Compose) && ComposeBytes <= PolMessage.MaxTextBytes && _social.Session.Pid != null;
 
-    // POL mail (the viewer's stored send), so it reaches them offline too
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
     {
@@ -195,7 +186,6 @@ public sealed partial class SocialMessages : ObservableObject
         if (text.Length == 0) return;
         Queue(f, text);
         Compose = "";
-        // a reply reads what it answers, as the game does
         if (_social.Chat.UnreadFrom(f.Name, f.Key) > 0) ReadConversation(f, rebuild: false);
         Refresh();
     }
@@ -205,7 +195,6 @@ public sealed partial class SocialMessages : ObservableObject
         if (e.Failed && _social.Chat is { } chat && chat.RemoveFailed(e.Key)) Refresh();
     }
 
-    // gone from this PC and the game's message store, and it stays gone
     public void DeleteLine(ChatEntry e)
     {
         if (_social.Chat is not { } chat || !ChatStore.CanDelete(e) || !chat.Delete(e.Key)) return;
@@ -213,7 +202,6 @@ public sealed partial class SocialMessages : ObservableObject
         AfterDelete();
     }
 
-    // only the lines that were on screen when Clear was picked, not ones that landed while it asked
     public void ClearConversation(IReadOnlyCollection<string> keys)
     {
         if (_social.Chat is not { } chat) return;
@@ -246,7 +234,6 @@ public sealed partial class SocialMessages : ObservableObject
             Refresh();
     }
 
-    // the session's ending and its results won't get here
     public void SettleSends(SessionEnd end)
     {
         Sends.Settle(_social.Chat, end != SessionEnd.Dropped, end == SessionEnd.Play ? "failed:game" : "failed:session");

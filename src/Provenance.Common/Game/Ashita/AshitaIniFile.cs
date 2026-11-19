@@ -7,11 +7,9 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game.Ashita;
 
-// Ashita reads these through the ANSI profile API, so they stay in the ANSI code page. A line nobody edits goes back
-// byte for byte
+// Ashita reads these through the ANSI profile API, so they stay in the ANSI code page
 public sealed class AshitaIniFile
 {
-    // the profile API's line length wraps past this
     public const int MaxLine = 65534;
 
     private static readonly char[] Space = [' ', '\t', '\v', '\f'];
@@ -85,7 +83,7 @@ public sealed class AshitaIniFile
         var enc = utf16 ? Encoding.Unicode : ansi;
         bool Is(int at, char c) => data[at] == c && (!utf16 || data[at + 1] == 0);
 
-        // Windows ends a line at a lone CR too. No DBCS code page has a trail byte under 0x40, so this is safe
+        // Windows ends a line at a lone CR too
         var lines = new List<Line>();
         int from = start;
         for (int i = start; i + unit <= data.Length; i += unit)
@@ -139,7 +137,6 @@ public sealed class AshitaIniFile
         var parent = Path.GetDirectoryName(dir) ?? dir;
         SafeWrite.Replace(full, ToBytes(), parent, refuse: [dir, parent], backup: real =>
         {
-            // a backup from before a token was taken out would keep it on disk
             if (File.Exists(real) && Parse(File.ReadAllBytes(real), ansi.CodePage).Secrets().Except(Secrets()).Any())
                 return SafeWrite.Backup.DropOld;
             return backup ? SafeWrite.Backup.Keep : SafeWrite.Backup.None;
@@ -157,7 +154,6 @@ public sealed class AshitaIniFile
         var t = text.AsSpan().TrimStart(Space);
         if (t.IsEmpty) return new(Kind.Blank, "", 0, 0);
         if (t[0] == ';') return new(Kind.Comment, "", 0, 0);
-        // "[ashita.boot" with no ] still opens the section for Windows
         if (t[0] == '[')
         {
             int close = t.IndexOf(']');
@@ -258,7 +254,6 @@ public sealed class AshitaIniFile
         if (bad) throw Shown.Mark(new ArgumentException($"\"{name}\" can't be used as a {(section ? "section" : "setting")} name in a boot configuration."));
     }
 
-    // a second command line or plugin argument goes rather than staying behind as a comment, either can hold a token
     private static bool Secret(string section, string key) => Same(key, "command") || Same(section, "ashita.polplugins.args");
 
     public void Set(string section, string key, string value)
@@ -306,7 +301,6 @@ public sealed class AshitaIniFile
         return gone.Count;
     }
 
-    // every line setting the key, commented out with ; or # or not, in one section or (null) the whole file
     public int Scrub(string? section, string key)
     {
         var gone = LinesIn(section).Where(i => KeyOf(lines[i].Text) is { } k && Same(k.Key, key)).ToList();
@@ -330,8 +324,7 @@ public sealed class AshitaIniFile
                      .Concat(LinesIn("ashita.polplugins.args"))
                      .Select(i => KeyOf(lines[i].Text)?.Value).OfType<string>().Where(v => v.Length > 0).ToHashSet();
 
-    // Ashita.dll looks names up by their exact bytes, so it never sees [Ashita.Boot]. Plugins' sections and polplugin
-    // names aren't its to look up
+    // Ashita.dll looks names up by their exact bytes, so it never sees [Ashita.Boot]
     private static bool NeedsLowercase(Parsed p, string? section)
     {
         static bool Ashitas(string s) => s.StartsWith("ashita.", StringComparison.OrdinalIgnoreCase)

@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace Provenance.Common.Feeds;
 
-// "Oct. 12, 2026 22:00 to 23:30 (PDT)" style article times -> local time. A date with no time stays as it is
+// "Oct. 12, 2026 22:00 to 23:30 (PDT)" style article times -> local time
 public static class ArticleTimes
 {
     private static readonly Dictionary<string, int> ZoneMinutes = new(StringComparer.OrdinalIgnoreCase)
@@ -44,7 +44,6 @@ public static class ArticleTimes
             var result = $"{a.ToString("D", culture)} {a.ToString("t", culture)}";
             if (m.Groups["t2"].Success && Moment(year, month, day, m.Groups["t2"].Value, offset) is { } end0)
             {
-                // the end shares the date, so one before the start ran past midnight
                 var end = end0 < start ? end0.AddDays(1) : end0;
                 var b = TimeZoneInfo.ConvertTime(end, local);
                 result += b.Date == a.Date

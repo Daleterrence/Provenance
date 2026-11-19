@@ -14,14 +14,11 @@ namespace Provenance.Common.Install;
 
 public sealed record GamePart(string FileName, Uri Url, long Size, string Md5);
 
-// Fraction is -1 while there's nothing to measure. Download marks bytes coming over the network, the only ones that get
-// a rate
 public sealed record InstallProgress(string Stage, string Detail, double Fraction, long DoneBytes, long TotalBytes, bool Download = false,
                               GameProduct? Product = null);
 
 public sealed record PartStep(GamePart Part, int Index, int Count, long DoneBefore, long Total);
 
-// What the caller does at each step of DownloadAndExtractAsync. The progress ones are made fresh for every attempt
 public sealed class DownloadSteps
 {
     public Action? Downloading { get; init; }
@@ -80,14 +77,13 @@ public sealed class GameInstaller
         (1_339_572_151, "62932811d80080e7cd72a830c0ce7c99"),
     ];
 
-    // HttpClient's timeout is off for 1.6 GB parts, and a half-open connection would otherwise wait forever
     public static TimeSpan IdleTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
     private readonly HttpClient _http;
 
     public GameInstaller(HttpClient? http = null)
     {
-#pragma warning disable RS0030 // GameInstaller owns its client
+#pragma warning disable RS0030
         _http = http ?? new HttpClient(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.None })
             { Timeout = Timeout.InfiniteTimeSpan };
 #pragma warning restore RS0030
@@ -124,7 +120,6 @@ public sealed class GameInstaller
         using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
         if (have == part.Size)
         {
-            // already all there, so a range request from the end would only be refused
             await using (var whole = new FileStream(partial, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, useAsync: true))
             {
                 var chunk = new byte[1 << 20];
@@ -135,7 +130,6 @@ public sealed class GameInstaller
             VerifyAndMove(part, md5, partial, dest);
             return;
         }
-        // only armed while waiting on SE, re-hashing a resumed .part can take a while
         using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
         {
@@ -189,7 +183,6 @@ public sealed class GameInstaller
         File.Move(partial, dest, overwrite: true);
     }
 
-    // a part that fails its check is deleted and fetched once more
     public Task<string> DownloadAndExtractAsync(PolRegion region, string partsDir, string unpackedDir, DownloadSteps steps, CancellationToken ct) =>
         DownloadAndExtractAsync(PartsFor(region), partsDir, unpackedDir, steps, ct);
 
@@ -218,7 +211,6 @@ public sealed class GameInstaller
         }
     }
 
-    // Each part stays open read-only from its MD5 check to the end, so the bytes checked are the bytes unpacked
     public Task<string> ExtractAsync(string downloadDir, string unpackedDir, PolRegion region,
                                      IProgress<ByteProgress>? progress, CancellationToken ct,
                                      IProgress<ByteProgress>? checkProgress = null) =>
@@ -321,7 +313,6 @@ public sealed class GameInstaller
             await RunDirectXAsync(dxsetup, warnings, ct, () => Say(progress, "The install will stop once the DirectX runtime has finished installing."));
         }
 
-        // the FFXI package's own DISM step, Sysnative so a 32-bit host gets the 64-bit DISM
         var dism = Path.Combine(AppPaths.Windows,
             Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess ? "Sysnative" : "System32", "dism.exe");
         bool restartPending = false;
@@ -353,8 +344,7 @@ public sealed class GameInstaller
         return warnings;
     }
 
-    // June 2010 was the last DirectX runtime and the only source of these 32-bit files, so if they're here DXSETUP
-    // would change nothing and just add minutes
+    // June 2010 was the last DirectX runtime, if these are here DXSETUP changes nothing and just adds minutes
     public static bool DirectXJun2010Present()
     {
         var sys = AppPaths.SystemX86;
@@ -376,8 +366,6 @@ public sealed class GameInstaller
                                                   bool payloadInPlace)
     {
         var name = product.Name;
-        // The main file alone never counts, the mirror might have only just put it there. The InstallFolder value is
-        // what marks a product installed, Apply writes it last.
         if (MsiInstaller.IsInstalled(product.ProductCode(region)) ||
             (PolPaths.TryGetInstallFolder(region, product) is { } dir && File.Exists(Path.Combine(dir, product.KeyFile))))
         {
@@ -417,7 +405,7 @@ public sealed class GameInstaller
     private static string Package(string root, GameProduct product) =>
         File.Exists(product.PackageIn(root)) ? product.PackageIn(root) : throw Shown.Mark(new FileNotFoundException(product.NoPackageText));
 
-    // a stop waits for it to finish, DXSETUP or DISM killed part way can leave the DirectX runtime half installed
+    // DXSETUP or DISM killed part way can leave the DirectX runtime half installed
     internal static async Task<int> RunAsync(string exe, string args, CancellationToken ct, Action? stopping = null)
     {
         ct.ThrowIfCancellationRequested();
@@ -429,7 +417,6 @@ public sealed class GameInstaller
         return p.ExitCode;
     }
 
-    // null when it worked, else the error to show
     public static string? LocateExisting(string folder, PolRegion region, Action<Exception>? failed = null)
     {
         try
@@ -438,7 +425,6 @@ public sealed class GameInstaller
             var viewer = FindGameFolder(folder, GameProduct.Viewer.KeyFile);
             if (ffxi == null && viewer == null)
                 return $"Couldn't find {GameProduct.Game.Name} in that folder.";
-            // the viewer's own env.dat says which region's keys its pol.exe reads
             if (viewer != null && PolEnv.Region(viewer) is { } own) region = own;
             using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
             using var key = baseKey.CreateSubKey(PolPaths.Hive(region) + @"\InstallFolder", writable: true)

@@ -19,7 +19,6 @@ public sealed partial class AddonsSection : ObservableObject
 
     public string Header => $"{Group.Title} ({Count})";
 
-    // the page's, not its own: every section folds together off the one setting
     public bool IsOpen
     {
         get => _page.SectionsOpen;

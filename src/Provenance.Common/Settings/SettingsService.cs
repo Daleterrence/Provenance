@@ -14,13 +14,10 @@ public sealed class SettingsService : ISettingsService
     private readonly string _path;
     private const int ReadTries = 5, ReadRetryDelay = 300;
     private bool _saveFailedRaised;
-    // the file's there but wouldn't open, so nothing may replace what's in it
     private bool _unreadable;
     private PolRegion? _region;
-    // this copy's settings as it last read or saved them, which is what tells its own changes from another copy's
     private JsonObject _known;
 
-    // the app's UI thread, where its settings change. Null with no app, like the tests
     private readonly SynchronizationContext? _owner;
 
     public LauncherSettings Current { get; private set; }
@@ -37,7 +34,6 @@ public sealed class SettingsService : ISettingsService
 
     public string? SaveProblem { get; private set; }
 
-    // looked up again until it's found, so an install made while the app runs gets picked up
     public PolRegion? DetectedRegion => _region ??= PolPaths.TryAutoDetectRegion();
 
     public void RedetectRegion() => _region = null;
@@ -92,7 +88,6 @@ public sealed class SettingsService : ISettingsService
         }
         catch (Exception ex) { error = ex; }
         Log.Warning(error, "Could not parse settings.json, falling back to defaults");
-        // the next save replaces settings.json, account list and all
         var bad = _path + ".bad";
         bool kept;
         try { File.Copy(_path, bad, overwrite: true); kept = true; } catch { kept = false; }
@@ -134,18 +129,14 @@ public sealed class SettingsService : ISettingsService
             change(known);
             _known = Node(known);
         }
-        // the next save replaces a file that didn't load, as Save does
         else if (LoadProblem is not null) Write(Current);
         else Log.Warning("settings.json couldn't be read again, so a change is only kept until Provenance closes");
     }
 
-    // what this copy changed since it last read or saved goes on top of the file as it is now, so another copy's
-    // changes meanwhile stay. An unreadable file is replaced whole
     private bool Write(LauncherSettings settings)
     {
         using var gate = HoldLock();
         var saved = ReadSaved();
-        // another copy may have given out a slot since this one loaded, a number once given stays given
         if (saved is not null && saved.LastHomeSlot > settings.LastHomeSlot)
             settings.LastHomeSlot = saved.LastHomeSlot;
         var mine = Node(settings);
@@ -189,8 +180,6 @@ public sealed class SettingsService : ISettingsService
 
     private static JsonObject Node(LauncherSettings settings) => JsonSerializer.SerializeToNode(settings, JsonOptions)!.AsObject();
 
-    // accounts and their multi-account rows match up by id and the Windower lists by profile name, so one added,
-    // edited or removed in either copy keeps that
     private static JsonObject Merge(JsonObject mine, JsonObject? was, JsonObject file, bool lists = true)
     {
         var merged = new JsonObject();
@@ -212,7 +201,6 @@ public sealed class SettingsService : ISettingsService
         return merged;
     }
 
-    // one gone from the file was removed by another copy, one this copy never had was added by one
     private static JsonNode? MergeKeyed(JsonNode? mine, JsonNode? was, JsonNode? file, string key)
     {
         if (Entries(mine, key) is not { } m || Entries(file, key) is not { } f)
@@ -228,7 +216,6 @@ public sealed class SettingsService : ISettingsService
         }
         foreach (var (id, item) in f)
             if (!before.ContainsKey(id) && !m.ContainsKey(id)) merged[id] = item;
-        // the multi-account order can be changed, so this copy's goes when it moved one and the file's otherwise
         bool moved = !m.Keys.Where(before.ContainsKey).SequenceEqual(before.Keys.Where(m.ContainsKey));
         var order = (moved ? m.Keys.Concat(f.Keys) : f.Keys.Concat(m.Keys)).Distinct().Where(merged.ContainsKey);
         if (key.Length > 0) return new JsonArray(order.Select(id => merged[id]?.DeepClone()).ToArray());
@@ -237,7 +224,6 @@ public sealed class SettingsService : ISettingsService
         return map;
     }
 
-    // null when it isn't the shape expected or an id turns up twice, and then the whole list goes by the plain rule
     private static OrderedDictionary<string, JsonNode?>? Entries(JsonNode? node, string key)
     {
         var entries = new OrderedDictionary<string, JsonNode?>();
@@ -263,7 +249,6 @@ public sealed class SettingsService : ISettingsService
         }
     }
 
-    // Save's move fails while anything has the file open, whatever it shares, so this waits its turn at the same lock
     public LauncherSettings? ReadSaved()
     {
         try

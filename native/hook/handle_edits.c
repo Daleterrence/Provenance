@@ -1,8 +1,5 @@
-/* creating and deleting a handle and reordering Content IDs, the viewer's Handle List (app.dll 0x10029a7a). A create
-   or delete is a local 0x314/0x318 and then one PutHandleList (0x1030), a reorder 0x2c8 a record and one PutChrList */
 static struct { int n, idx[64]; BYTE old[64], want[64]; } g_hord;
 
-/* 0x318 is the delete, so it only runs on a slot a create claimed (in use, no Handle ID from the server yet) */
 static void handle_create_release(BYTE *b)
 {
     pol_handle h;
@@ -17,7 +14,6 @@ static void handle_order_back(BYTE *b, int n)
         pc_set_content_id(b, (unsigned)g_hord.idx[i], &c);
     }
 }
-/* a delete has nothing to put back, the record's gone from polcore till the next login */
 static void handle_edit_undo(BYTE *b)
 {
     if (g_s.handle_op == HOP_CREATE) handle_create_release(b);
@@ -36,19 +32,16 @@ static void handle_list_done(BYTE *b, int r)
     pol_handle h;
     int there = handle_get(b, g_s.handle_slot, &h);
     if (r == 1 && g_s.handle_reload) {
-        handles_done("failed:reloaded");   /* polcore has the server's copy, there's nothing of mine to take back */
+        handles_done("failed:reloaded");
     } else if (r == 1 && (g_s.handle_op == HOP_CREATE ? there && handle_hid(&h) : !there)) {
         handles_done("saved");
     } else if (r == HANDLE_LIST_STALE && g_s.handle_op == HOP_CREATE) {
-        /* the server turned the name down, which is an answer: the slot's free for the next try */
         handle_create_release(b);
         handles_done(requests_failed(r));
     } else {
         handle_list_failed(b, r == 1 ? "failed:not saved" : requests_failed(r));
     }
 }
-/* the put only goes when polcore's stamps say the server's list isn't newer, like the Content ID one (polcore.dll
-   0x1001dfa0) */
 static void handle_list_put_start(BYTE *b)
 {
     int reload = pc_handle_list_server_newer(b);
@@ -78,7 +71,6 @@ static void handle_edit_done(BYTE *b, int r)
     if (g_s.handle_op == HOP_ORDER) handle_order_done(b, r); else handle_list_done(b, r);
 }
 
-/* polcore's job slots are asked first, so nothing's changed locally and then left waiting for one */
 static int handle_list_busy(BYTE *b) { return g_me.step != 0 || mail_send_slots_free(b) < 1; }
 static void handle_edit_started(int op, int slot)
 {
@@ -89,8 +81,6 @@ static void handle_edit_started(int op, int slot)
     g_snap_dirty = 1;
 }
 
-/* the viewer's own steps (app.dll 0x1003e3f8): the name to SJIS (0xa40), then 0x314 takes the lowest free slot. The
-   active handle stays where it is, so no 0x1434 */
 static void handle_create(BYTE *b, char *p)
 {
     WCHAR wname[32];
@@ -134,8 +124,6 @@ static void handle_create(BYTE *b, char *p)
     handle_list_put_start(b);
 }
 
-/* the viewer's own steps (app.dll 0x10029a7a): 0x318, then the one PutHandleList. No PutChrList goes, the unlinks ride
-   on the next one */
 static void handle_delete(BYTE *b, int slot, const pol_handle *h)
 {
     pol_handle o;
@@ -155,8 +143,6 @@ static void handle_delete(BYTE *b, int slot, const pol_handle *h)
     handle_list_put_start(b);
 }
 
-/* only what the viewer's own list could leave is taken (app.dll 0x10023232): the same bytes handed round, or the
-   whole account numbered from 0 */
 static void handle_order(BYTE *b, char *p)
 {
     BYTE had[256], has[256], now[64];

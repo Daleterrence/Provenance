@@ -9,7 +9,6 @@ public sealed record GameProduct
     public required string ShortName { get; init; }
     public required string FolderName { get; init; }
     public required string KeyFile { get; init; }
-    // POL's own id for it, and the name of its value under InstallFolder
     public required int PatchId { get; init; }
     public required string Package { get; init; }
     public required string ShortcutProperty { get; init; }

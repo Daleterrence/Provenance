@@ -18,15 +18,12 @@ public static class PolOptions
     public static bool ChatFilter(LauncherSettings s) => s.ChatLanguageFilter ?? true;
     public static int AutoDisconnect(LauncherSettings s) => s.AutoDisconnectMinutes ?? -1;
 
-    // there's no telling POL's defaults from someone's own choice, so an existing install's accounts are left alone
-    // till one's picked in Settings. A new install starts with both off
     public static void NewInstall(LauncherSettings s)
     {
         s.ChatLanguageFilter ??= false;
         s.AutoDisconnectMinutes ??= -1;
     }
 
-    // null for a file that's gone or isn't a readable option.bin. Throws when it's there but can't be read just now
     private static byte[]? ReadPlain(string path)
     {
         try
@@ -54,13 +51,10 @@ public static class PolOptions
         return MessageFolders.All(f => FolderPins.Plain(viewerDir, Path.Combine(msg, f), lastIsFolder: true)) ? slot : HomeSlots.Shared;
     }
 
-    // before every game start. A slot with no option.bin (or one polcore can't read) gets the viewer's template first,
-    // the same as the viewer does for a new member
     public static void Apply(LauncherSettings s, string viewerDir, int slot, PolRegion region)
     {
         if (s.ChatLanguageFilter is null && s.AutoDisconnectMinutes is null) return;
-        // the viewer folder may be one users can write to, so nothing below it can be a link either, it'd be an elevated
-        // write through one
+        // nothing below it can be a link either, it'd be an elevated write through one
         if (FolderPins.Linked(viewerDir))
         {
             Log.Warning("The PlayOnline Viewer folder {Viewer} is reached through a link, PlayOnline settings not written for home{Slot:00}", viewerDir, slot);

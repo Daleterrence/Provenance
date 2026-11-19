@@ -3,7 +3,6 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Common.Game.Windower;
 
-// a settings.xml read before, so a name box checking every keystroke doesn't read the file each time
 public sealed class WindowerProfiles(ISettingsService settings, string dir, WindowerSettingsFile? snapshot = null) : ILaunchProfiles
 {
     private WindowerSettingsFile Current => snapshot ?? WindowerSettingsFile.Load(dir);
@@ -39,7 +38,6 @@ public sealed class WindowerProfiles(ISettingsService settings, string dir, Wind
     public void Delete(string name) =>
         Edit((f, l) => { f.Delete(name, l); return ""; }, () => Repoint(name, null));
 
-    // the settings only get saved once everything's been changed, so the save can't be missed
     private string Edit(Func<WindowerSettingsFile, IDictionary<string, WindowerAddonList>, string> change, Action? then = null)
     {
         var result = "";

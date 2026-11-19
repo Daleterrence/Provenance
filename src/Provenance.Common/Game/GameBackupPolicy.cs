@@ -21,7 +21,6 @@ public static class GameBackupPolicy
             ? GameSettingsBackup.Sources(ffxi, SettingsFolder(s, new RegistryGameStore(region), accountBoot))
             : null;
 
-    // 0042 as the game will see it, which through Ashita is the boot configuration's own when it sets one
     internal static string SettingsFolder(LauncherSettings s, RegistryGameStore registry, string? accountBoot)
     {
         var windows = registry.LoadWindows().ScreenshotFolder;
@@ -37,7 +36,6 @@ public static class GameBackupPolicy
         }
     }
 
-    // what the player's told, or null when there's nothing to say. Never throws, the game starts whatever happens here
     public static string? BeforePlay(LauncherSettings s, Func<BackupSources?> sources)
     {
         try
@@ -75,7 +73,6 @@ public static class GameBackupPolicy
 
     public static string When(BackupInfo b) => b.CreatedUtc.ToLocalTime().ToString("d MMMM yyyy 'at' HH:mm", British);
 
-    // on a worker, the lock's held by this thread. What's shown afterwards, and whether it worked
     public static (bool Done, string Text) Restore(string zip, BackupInfo info, BackupSources sources, string folder, Func<string?> blocked)
     {
         try
@@ -114,7 +111,6 @@ public static class GameBackupPolicy
     public const string UnchangedText = "Your game settings haven't changed since your newest backup, so there's nothing new to back up.";
     public const string NothingThereText = "There were no game settings to back up.";
 
-    // a backup the player asked for, the same one the automatic ones make. On a worker. Whether it worked, and what to say
     public static (bool Done, string Text) BackUpNow(BackupSources sources, string folder)
     {
         try
@@ -145,7 +141,6 @@ public static class GameBackupPolicy
     private const int DiskFull = unchecked((int)0x80070070), HandleDiskFull = unchecked((int)0x80070027),
                       NotReady = unchecked((int)0x80070015), BadNetPath = unchecked((int)0x80070035), BadNetName = unchecked((int)0x80070043);
 
-    // only the backups folder can stop a backup, a source file that won't read is just left out
     internal static (string Why, string Fix)? Reason(Exception ex) => ex switch
     {
         BackupFolderLinkedException => ("your backups folder is a link to somewhere else", "Choose the folder it points to in Settings, under Backups."),

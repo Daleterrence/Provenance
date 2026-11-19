@@ -3,8 +3,6 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Game.Windower;
 
-// Version is null when the manifest's text doesn't parse, which never matches a file so it downloads every run (same as
-// Windower)
 public sealed record WindowerPlugin(string Name, Version? Version, string Description, bool Resources, bool Required, bool Hidden);
 
 public sealed class WindowerManifest
@@ -28,8 +26,7 @@ public sealed class WindowerManifest
 
     public static WindowerManifest? Load(string file) => TextFiles.LoadXml(file) is { } doc ? Parse(doc) : null;
 
-    // the root's name isn't checked and everything's a child element. A plugin without a name is dropped, Windower
-    // would fall over on it
+    // a plugin without a name is dropped, Windower would fall over on it
     public static WindowerManifest Parse(XDocument doc)
     {
         var root = doc.Root;
@@ -49,7 +46,6 @@ public sealed class WindowerManifest
 
     public WindowerPlugin? Find(string name) => WindowerText.FindByName(Plugins, p => p.Name, name);
 
-    // res\manifest.xml: any child of the root is a file name, the element's name isn't checked
     public static IReadOnlyList<string> ParseRes(XDocument doc) => doc.Root?.Elements().Select(e => e.Value).ToList() ?? [];
 
     public static Version? ParseVersion(string? text) => Version.TryParse(text, out var v) ? v : null;

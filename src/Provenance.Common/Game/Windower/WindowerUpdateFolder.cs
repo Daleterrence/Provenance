@@ -5,8 +5,7 @@ using Serilog;
 
 namespace Provenance.Common.Game.Windower;
 
-// Windower's way of replacing a file: old one renamed into updates\temp\<guid> (works on a loaded DLL or EXE),
-// new one moved in. Throws on a link in the way
+// Windower's way of replacing a file: old one renamed into updates\temp\<guid> (works on a loaded DLL or EXE), new one moved in
 internal sealed class WindowerUpdateFolder : IDisposable
 {
     // ERROR_REPARSE_POINT_ENCOUNTERED, so a refusal isn't retried like a sharing violation
@@ -34,7 +33,6 @@ internal sealed class WindowerUpdateFolder : IDisposable
 
     public string TempDir => TempDirOf(Root);
 
-    // install shows these, so Windows' and .NET's own wording only goes in the log
     public static string Reason(Exception e, string ours)
     {
         if (Shown.Is(e)) return e.Message;
@@ -51,8 +49,6 @@ internal sealed class WindowerUpdateFolder : IDisposable
         return Path.Combine(TempDir, Guid.NewGuid().ToString());
     }
 
-    // Downloads into a fresh temp file, null when nothing usable came down (why's in Errors). Whatever's left in updates\temp
-    // is Cleanup's, and a 304 isn't an error
     public async Task<(WindowerFetch Fetch, string? Temp)> FetchToTemp(Uri site, string url, DateTime? since, string what,
                                                                        Func<string, bool>? usable = null, string? unusable = null)
     {
@@ -140,7 +136,6 @@ internal sealed class WindowerUpdateFolder : IDisposable
         }
     }
 
-    // if the new file can't go in, the old one goes back where it was
     public void Swap(string fresh, string target)
     {
         var old = Backup(target);
@@ -161,8 +156,6 @@ internal sealed class WindowerUpdateFolder : IDisposable
         }
     }
 
-    // a new temp file with the entry in it, and the entry's own time (like Windower's ExtractToFile) set on the open
-    // handle rather than by name afterwards
     public string WriteEntry(ZipArchiveEntry entry)
     {
         var temp = NewTemp();
@@ -207,8 +200,7 @@ internal sealed class WindowerUpdateFolder : IDisposable
         DeleteTree(Pins, TempDir);
     }
 
-    // never through a link: everything goes through FolderPins.DeleteEntry, so a link is removed and not what it
-    // points at. Each folder's held while it's emptied
+    // never through a link, everything goes through FolderPins.DeleteEntry
     private static void DeleteTree(FolderPins parent, string dir)
     {
         using (var pins = FolderPins.HoldExact(dir, dir))

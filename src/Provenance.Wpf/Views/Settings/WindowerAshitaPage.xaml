@@ -89,7 +89,6 @@
                                 <Button.Style>
                                     <Style TargetType="Button" BasedOn="{StaticResource PolButton}">
                                         <Style.Triggers>
-                                            <!-- its own look while it waits for a key, so a hover can't hide it -->
                                             <DataTrigger Binding="{Binding Windower.WaitingForConsoleKey}" Value="True">
                                                 <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
                                                 <Setter Property="Template">

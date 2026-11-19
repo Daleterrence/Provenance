@@ -1,13 +1,10 @@
 <Project>
-  <!-- SemVer 2, bumped and committed before each release (tools/pack-release.ps1 refuses any other -Version). The
-       exe's file version keeps just the numbers (1.0.0.0) -->
   <PropertyGroup>
     <VersionPrefix>1.0.0</VersionPrefix>
     <VersionSuffix>beta.6.1</VersionSuffix>
   </PropertyGroup>
 
-  <!-- polcore.dll and FFXi.dll are 32-bit in-process COM servers, a 64-bit host only gets a flaky DCOM surrogate. The
-       RID gets the exes a 32-bit apphost, a library blanks it -->
+  <!-- polcore.dll and FFXi.dll are 32-bit in-process COM servers, a 64-bit host only gets a flaky DCOM surrogate -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <PlatformTarget>x86</PlatformTarget>
@@ -23,15 +20,11 @@
   <ItemGroup>
     <GlobalAnalyzerConfigFiles Include="$(ProvenanceGlobalConfig)" />
   </ItemGroup>
-  <!-- CI sets ProvenanceCI, so a new warning fails the build there and stays a warning on your own machine. NuGet's
-       advisory warnings stay warnings, a package getting an advisory shouldn't break a build on its own -->
   <PropertyGroup Condition="'$(ProvenanceCI)' == 'true'">
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
   </PropertyGroup>
 
-  <!-- BannedSymbols.txt is checked by an analyzer, nothing from the package ships. Projects that use these on
-       purpose turn it off -->
   <PropertyGroup>
     <EnableHouseRules Condition="'$(EnableHouseRules)' == ''">true</EnableHouseRules>
   </PropertyGroup>
@@ -39,13 +32,10 @@
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
   </ItemGroup>
-  <!-- without it everything still builds, just with none of the C# rules checked -->
   <Target Name="RequireStyleRules" BeforeTargets="CoreCompile">
     <Error Condition="!Exists('$(ProvenanceGlobalConfig)')" Text="$(ProvenanceGlobalConfig) is missing, so none of the C# rules would be checked." />
   </Target>
 
-  <!-- the images aren't in this repo. They come from PROVENANCE_ASSETS as given, or the assets folder with the icon in it next
-       to the repo or one folder up -->
   <PropertyGroup>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == ''">$(PROVENANCE_ASSETS)</ProvenanceAssetsDir>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == '' and Exists('$(MSBuildThisFileDirectory)..\assets\app\provenance.ico')">$(MSBuildThisFileDirectory)..\assets</ProvenanceAssetsDir>
@@ -53,7 +43,6 @@
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' != ''">$([System.IO.Path]::GetFullPath('$(ProvenanceAssetsDir)'))</ProvenanceAssetsDir>
   </PropertyGroup>
 
-  <!-- the SDK tacks the full 40-character commit onto the product version, 7 is plenty to find it again -->
   <Target Name="ShortSourceRevision" BeforeTargets="AddSourceRevisionToInformationalVersion"
           Condition="$(SourceRevisionId.Length) &gt; 7">
     <PropertyGroup>

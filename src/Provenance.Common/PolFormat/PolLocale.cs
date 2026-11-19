@@ -3,8 +3,6 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.PolFormat;
 
-// the version that suits where Windows says the PC is: Europe and Oceania get the European one, Japan the Japanese
-// one, and the Americas and everywhere else North America
 public static class PolLocale
 {
     private static readonly HashSet<string> EuropeanVersion = new(StringComparer.OrdinalIgnoreCase)
@@ -24,7 +22,6 @@ public static class PolLocale
         _ => PolRegion.UnitedStates,
     };
 
-    // the home location (Settings, Country or region) first, it's where the PC is rather than how it formats dates
     public static PolRegion FromWindows() => ForCountry(HomeCountry() ?? FormatCountry());
 
     private static string? HomeCountry()

@@ -11,7 +11,6 @@
                 <ControlTemplate TargetType="ListBoxItem">
                     <Border x:Name="Bd" CornerRadius="{StaticResource Radius.Panel}" Background="Transparent">
                         <Grid>
-                            <!-- a pale fill alone barely shows on the panel, so the picked row gets a bar too -->
                             <Border x:Name="Mark" Width="3" Margin="0,4" HorizontalAlignment="Left" CornerRadius="1.5"
                                     Background="{DynamicResource Primary}" Visibility="Collapsed" />
                             <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />

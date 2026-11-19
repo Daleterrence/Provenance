@@ -39,7 +39,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         public readonly HookJobWatch Profile = new(), Ffxi = new();
         public string ProfileKey = "", ProfileFor = "";
         public int ProfileRow = -1;
-        // what's on screen: the handle's answer and the last character one that loaded, so going back never reads again
         public PolProfile? HandleProfile;
         public PolFfxiProfile? CharacterShown;
         public ProfileTab? FfxiFor, FfxiFrom;
@@ -49,7 +48,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
 
     private PerLogin _login = new();
 
-    // nothing from the friend row goes in the header, a Private profile hides the name and picture too
     public void Request(FriendItem f)
     {
         Clear();
@@ -57,7 +55,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         _login.ProfileFor = f.Name;
         _login.ProfileRow = f.Row;
         _login.ProfileKey = f.Key;
-        // a request with no answer yet has no profile to show (the viewer greys it out)
         if (!f.IsFriend || f.Pending || _social.Session.Pid is not { } pid)
         {
             Note.Show(HookFailures.Profile.FriendsOnly);
@@ -68,7 +65,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             Note.Show(SocialViewModel.GameRunningNote);
             return;
         }
-        // the same profile again within 5min shows the copy already here, no second request for a page just read
         if (f.Key.Length > 0 && _login.ProfileCache.TryGetValue(f.Key, out var hit) &&
             _social.Now - hit.At < TimeSpan.FromMinutes(5))
         {
@@ -85,7 +81,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         Note.Fail(HookFailures.RequestWriteFailed);
     }
 
-    // after a switch: nothing read under the old handle stays on screen or in the cache
     internal void Forget()
     {
         _login.ProfileCache.Clear();
@@ -126,7 +121,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         return cat.Length > 0 ? $"{pic.Name} ({cat})" : pic.Name;
     }
 
-    // a popup's modal loop lets the next snapshot in, so it waits till the snapshot's all applied
     internal void RaisePopup()
     {
         if (_login.PopupAfterApply is not { } text) return;
@@ -142,10 +136,9 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         ApplyFfxiProfileState(snap);
     }
 
-    // a new login, so nothing from the last one stays up
     internal void Reset()
     {
-        _login = new();   // a new hook has none of the slots the cached profiles' tabs read
+        _login = new();
         Note.Clear();
         Clear();
         ShowsPicture = true;
@@ -155,7 +148,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     {
         if (!_login.Profile.Running) return;
         _login.Profile.WaitingTurn(snap.ProfileJob.Token, snap.ProfileServerBusy, _social.Now);
-        // a "done" with no profile isn't an answer yet
         bool mine = snap.ProfileJob.Token == _login.Profile.Token && (snap.ProfileJob.State != "done" || snap.Profile != null);
         if (_login.Profile.Settle(mine ? snap.ProfileJob.State : null, "done", _social.Now) is not { } st) return;
         if (st == "timeout") _social.DiscardRequest(HookContract.Requests.Profile);
@@ -184,7 +176,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         "failed:pending" => HookFailures.Profile.FriendsOnly,
         "failed:no schema" => HookFailures.Profile.NoSchema,
         NoCharacter => HookFailures.Profile.NoCharacter,
-        // only a number is POL's own error, the rest never got as far as asking
         _ when int.TryParse(SocialRequests.FailReason(st), out _) => HookFailures.Profile.NotSent(SocialRequests.FailReason(st)),
         _ => HookFailures.Profile.NotAsked(SocialRequests.FailReason(st)),
     };
@@ -199,7 +190,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         _ => "",
     };
 
-    // the tabs only show when there's a character to put in them
     private void HandleProfileArrived(PolProfile p)
     {
         _login.HandleProfile = p;
@@ -225,7 +215,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
     private string TabLabel(string characterKey) =>
         !_social.IsAnonFriend(_login.ProfileKey) && _social.CharacterNames.Get(characterKey) is { Name.Length: > 0 } known ? _social.Viewer.Filtered(known.Name) : FfxiProfileText.Title;
 
-    // one read per click, never for the tab that's already up or while one's out. Handle Profile shows the answer it had
     [RelayCommand]
     private void SelectTab(ProfileTab? tab)
     {
@@ -245,7 +234,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             return;
         }
         if (_social.Session.Pid is not { } pid) return;
-        // the row from the latest friend list, a friend added or removed above this one moves it
         if (_login.ProfileKey.Length > 0 && _social.Last.FriendsLoaded)
         {
             if (_social.Last.Friends.FirstOrDefault(x => x.Key == _login.ProfileKey && x.Row >= 0) is not { Pending: false } now)
@@ -279,7 +267,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         }
     }
 
-    // a tab that was up before, from what it had, no new read
     private void ShowTabAgain(ProfileTab? tab)
     {
         if (tab is null) return;
@@ -297,7 +284,6 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         if (st == "timeout") _social.DiscardRequest(HookContract.Requests.FfxiProfile);
         Loading = false;
         var tab = _login.FfxiFor!;
-        // the hook read whatever's in that slot now, which has to be the character the tab's for
         if (st == "done" && snap.FfxiProfile!.Character.Key != tab.CharacterKey) st = NoCharacter;
         if (st == "done")
         {
@@ -317,13 +303,11 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             _login.PopupAfterApply = _social.Viewer.Text(0x4ab6, "Selected profile is hidden.");
             return;
         }
-        // a profile shown again from the copy has slots the hook's lost, so opening it again reads it afresh
         if (st == NoCharacter) _login.ProfileCache.Remove(_login.ProfileKey);
         Note.Set(st == "failed:no profile" ? _social.Viewer.Text(0x4a83, "No profile data found.") : ProfileFailText(st), st != "failed:no profile");
         tab.Failed = Note.IsError;
     }
 
-    // the handle's H-ID and mail stay, and there's no picture
     private void ShowCharacterPage(PolFfxiProfile? r)
     {
         ShowsPicture = false;

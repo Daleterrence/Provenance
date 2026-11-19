@@ -13,15 +13,12 @@ public partial class LeanStartWindow : AppWindow
         InitializeComponent();
     }
 
-    // the start's finished with it, so it goes without a word
     internal void CloseNow()
     {
         _done = true;
         Close();
     }
 
-    // closed by hand it's cancel, and the start takes it down once that's gone through. With nothing left to cancel
-    // it stays, this is the only window until the start's over
     protected override void OnClosing(CancelEventArgs e)
     {
         if (!_done && DataContext is MainViewModel main)

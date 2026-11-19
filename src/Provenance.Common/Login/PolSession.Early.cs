@@ -18,8 +18,6 @@ public sealed partial class PolSession
 
     private bool ThirdPartyLogin => Platform is ThirdPartyHook.Ashita or ThirdPartyHook.Windower;
 
-    // Windower and Ashita get their pol.exe going inside the viewer update's lock and it's handed its login once
-    // everything else is ready
     private sealed class EarlyLogin(PolSession owner, LoginRequest request, string viewerDir, string polExe, string launcherExe, CancellationToken ct,
                                     bool ahead = false)
     {
@@ -62,14 +60,12 @@ public sealed partial class PolSession
                 ? (progress, token, hookStarted) => AshitaLauncher.StartViaAshita(owner._settings, owner._watcher, psi, polExe, launchId,
                                                                                   options.ThirdPartyHookProfile, progress, token, hookStarted)
                 : (progress, token, _) => owner.Windower.Start(psi, polExe, launchId, options, progress, token, _answers));
-            // an early start before the details has no account to name yet, and the login's claim has to stay till it has
             Action<ProcessStamp> record = ahead ? owner.Records.Park : stamp => owner.Records.Save(stamp, request.ProfileId);
             _current = new EarlyStart(chain, _voice, owner._pol, record, owner.Records.Clear,
                                       owner.EarlyEndGrace, ashita ? Watcher.PolDidNotStart : Watcher.WindowerDidNotStart, ct);
             _current.Start();
         }
 
-        // the start's lines and Windower's notice show once the viewer check and its update bar are done
         internal void Release(bool withLine = true) => _voice.Release(withLine);
 
         internal string? Failed => _current?.Failure;
@@ -83,7 +79,6 @@ public sealed partial class PolSession
             return current?.End() ?? false;
         }
 
-        // null once progress has said why
         internal int? Take(ProcessStartInfo psi, CancellationToken token)
         {
             var progress = request.Progress;

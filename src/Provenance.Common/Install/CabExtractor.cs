@@ -38,7 +38,6 @@ internal sealed class CabExtractor(string cabPath, Func<string, string?> targetF
         {
             hfdi = Cabinet.FDICreate(Alloc, Free, open, read, write, close, seek, -1 /* cpuUNKNOWN */, erf);
             if (hfdi == IntPtr.Zero) throw Shown.Mark(new InvalidOperationException("Windows couldn't start unpacking the installer."));
-            // the name's only a token since Open always opens cabPath, so paths outside the ANSI code page still work
             bool ok = Cabinet.FDICopy(hfdi, "provenance.cab", "\\", 0, notify, IntPtr.Zero, IntPtr.Zero);
             if (_error != null) ExceptionDispatchInfo.Capture(_error).Throw();
             ct.ThrowIfCancellationRequested();
@@ -47,7 +46,7 @@ internal sealed class CabExtractor(string cabPath, Func<string, string?> targetF
         finally
         {
             if (hfdi != IntPtr.Zero) Cabinet.FDIDestroy(hfdi);
-            GC.KeepAlive((open, read, write, close, seek, notify));   // FDI holds on to these until FDIDestroy
+            GC.KeepAlive((open, read, write, close, seek, notify));
             Marshal.FreeHGlobal(erf);
             foreach (var s in _open.Values) s.Dispose();
             _open.Clear();
@@ -129,8 +128,7 @@ internal sealed class CabExtractor(string cabPath, Func<string, string?> targetF
                 }
                 case FdintCloseFileInfo:
                 {
-                    // the cabinet's date like Windows Installer, set on the open handle since reopening costs a second
-                    // virus scan per file
+                    // the cabinet's date like Windows Installer, set on the open handle since reopening costs a virus scan per file
                     if (_outputs.Remove(n.hf.ToInt32()) && _open.TryGetValue(n.hf.ToInt32(), out var fs) && DosTime(n.date, n.time) is { } utc)
                     {
                         fs.Flush();
@@ -149,7 +147,6 @@ internal sealed class CabExtractor(string cabPath, Func<string, string?> targetF
         catch (Exception e) { _error ??= e; return new IntPtr(-1); }
     }
 
-    // today's UTC offset rather than the one on that date, same as DosDateTimeToFileTime + LocalFileTimeToFileTime
     private static DateTime? DosTime(ushort date, ushort time)
     {
         try

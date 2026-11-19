@@ -6,7 +6,6 @@ public static class ToolFacts
 
     private sealed record Fact(string Tool, string Source, string Name, Version Oldest);
 
-    // Oldest is the earliest version that's used. An older one, even a genuine one, never goes in or gets used
     private static readonly Fact[] Table =
     [
         new(OnePassword, OtpSources.OnePassword, "1Password", new(2, 41, 1)),

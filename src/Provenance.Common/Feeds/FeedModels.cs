@@ -32,7 +32,6 @@ public sealed record FeedItem(string Title, string Url, DateTimeOffset? Date, st
 
 public sealed record FeedResult(PolRegion Region, FeedKind Kind, IReadOnlyList<FeedItem> Items);
 
-// At is when the worker last answered for these (the saved copy's time when Stale), null when there's nothing
 public sealed record FeedFetch<T>(IReadOnlyList<T> Items, DateTime? At, bool Stale)
 {
     internal static readonly FeedFetch<T> None = new([], null, false);
@@ -56,9 +55,7 @@ public sealed record WorldStatus(string Name, string Status, int? Online = null)
 
     public bool IsUp => Status == "up";
 
-    // invariant, so the separator's a comma whatever the PC's set to
     public string OnlineText => Online is { } n && (n > 0 || !TestServer) ? n.ToString("N0", CultureInfo.InvariantCulture) + " online" : "";
 
-    // "Atomos (Test Server)", whose count only shows once someone's on it
     private bool TestServer => Name.StartsWith("Atomos", StringComparison.Ordinal);
 }

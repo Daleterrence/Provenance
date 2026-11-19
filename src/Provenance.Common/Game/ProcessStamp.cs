@@ -5,15 +5,13 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game;
 
-// A process as its pid plus the kernel's UTC start time, since Windows reuses pids. One that can't be read is never
-// the same process and never gets ended.
+// a process as its pid plus the kernel's UTC start time, since Windows reuses pids
 public readonly record struct ProcessStamp(int Pid, long StartUtcTicks)
 {
     public enum Ending { NotThat, ExitedOnItsOwn, Ended }
 
     internal enum Seen { Gone, Unreadable, Running, Exited }
 
-    // swapped in tests, there's no way to make a real process refuse to be read
     internal static Func<int, (Seen Seen, long StartUtcTicks)> Look { get; set; } = LookAtKernel;
 
     public DateTime StartUtc => new(StartUtcTicks, DateTimeKind.Utc);
@@ -39,7 +37,6 @@ public readonly record struct ProcessStamp(int Pid, long StartUtcTicks)
         }
     }
 
-    // for a copy that may not be readable: it only looks dead when it's gone or has another start time
     public bool MightBeRunning() => Pid > 0 && Look(Pid) switch
     {
         (Seen.Running, var ticks) => ticks == StartUtcTicks,
@@ -47,10 +44,8 @@ public readonly record struct ProcessStamp(int Pid, long StartUtcTicks)
         _ => false,
     };
 
-    // a process that's there but can't be read still counts as running
     public static bool PidRunning(int pid) => Look(pid).Seen is Seen.Running or Seen.Unreadable;
 
-    // ends it only if it's still this process (and passes alsoIf), after giving it graceMs to go by itself
     public Ending EndIfStill(int graceMs = 0, int afterMs = 0, Func<ProcessStamp, bool>? alsoIf = null)
     {
         if (Pid <= 0) return Ending.NotThat;

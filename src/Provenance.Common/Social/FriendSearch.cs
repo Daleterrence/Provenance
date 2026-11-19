@@ -2,7 +2,6 @@ namespace Provenance.Common.Social;
 
 public enum FriendSearchKind { Handle, Hid, Character }
 
-// the hook makes the same checks and refuses anything else, these just save a trip to it
 public static class FriendSearch
 {
     public static string Wire(FriendSearchKind kind) => kind switch
@@ -22,7 +21,6 @@ public static class FriendSearch
     public static bool HandleOk(string s) =>
         s.Length is >= 1 and <= 15 && s.All(c => c is >= ' ' and <= '~') && s.Any(c => c != ' ');
 
-    // 00-1234567 or 1234567, the dash and spaces don't count
     public static bool HidOk(string s)
     {
         if (s.Length > 20) return false;
@@ -46,6 +44,5 @@ public static class FriendSearch
         _ => HandleOk(s),
     };
 
-    // how FFXI keeps a name, and so what any hit for it is called
     public static string InitCap(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..].ToLowerInvariant();
 }

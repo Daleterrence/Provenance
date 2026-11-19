@@ -4,8 +4,7 @@ using System.Text;
 
 namespace Provenance.Common.Mirror;
 
-// "PXM1", a key id length byte, the ASCII key id, a LE ushort signature length, the signature, then the payload.
-// ECDSA P-256 over SHA-256 of the payload, IEEE P1363 (64 bytes).
+// "PXM1", a key id length byte, the key id, a LE ushort signature length, the signature, the payload (ECDSA P-256, IEEE P1363)
 public static class SignedBlob
 {
     private static readonly byte[] Magic = "PXM1"u8.ToArray();
@@ -53,7 +52,6 @@ public static class SignedBlob
         catch (Exception) { return false; }
     }
 
-    // the id a blob says it's signed with, for the log. Nothing's verified
     public static string? KeyId(ReadOnlySpan<byte> blob)
     {
         if (blob.Length < Magic.Length + 1 || !blob[..Magic.Length].SequenceEqual(Magic)) return null;

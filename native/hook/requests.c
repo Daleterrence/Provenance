@@ -1,6 +1,5 @@
 static volatile int g_snap_dirty;
 
-/* the lists a request can be in, set in request_table.c */
 enum { RQ_REFUSE = 1, RQ_ASKED = 2, RQ_USER = 4, RQ_SWEPT = 8 };
 static int requests_listed(int list);
 static void requests_sweep(void);
@@ -36,7 +35,6 @@ static BOOL requests_new(const char *ext)
     requests_paths(ext, path, taken);
     return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
 }
-/* delete-on-close, so it's only acted on once the delete's certain. -1 = not now, it stays .taking, never runs twice */
 static int requests_read_taken(const char *taken, char *buf, int cap, char **grown, DWORD most)
 {
     FILE_DISPOSITION_INFO del = { TRUE };
@@ -69,7 +67,6 @@ static int requests_take_ex(const char *ext, char *buf, int cap, char **grown, D
     int n;
     if (grown) *grown = NULL;
     requests_paths(ext, path, taken);
-    /* a .taking left by a failed read goes first, so requests keep their order (Away, then back) */
     if (GetFileAttributesA(taken) != INVALID_FILE_ATTRIBUTES) {
         n = requests_read_taken(taken, buf, cap, grown, most);
     } else {

@@ -25,7 +25,6 @@ public partial class MessageDialog : AppWindow
     internal static MessageDialog ForConfirm(string title, string body, string ok, ConfirmStyle style = ConfirmStyle.Normal,
                                              string? cancelLabel = null, string? choiceA = null, string? choiceB = null)
     {
-        // a plain question keeps its question mark, one that deletes something is a warning
         var dlg = Create(title, body, notice: style == ConfirmStyle.Destructive);
         dlg.CancelButton.Visibility = Visibility.Visible;
         if (cancelLabel != null) dlg.CancelButton.Content = cancelLabel;
@@ -38,7 +37,6 @@ public partial class MessageDialog : AppWindow
             dlg.CancelButton.IsDefault = true;
             dlg.Loaded += (_, _) => dlg.CancelButton.Focus();
         }
-        // one red button per dialog: the delete when there is one, otherwise cancel. A No answering a question stays blue
         if (style == ConfirmStyle.Destructive) dlg.OkButton.SetResourceReference(StyleProperty, "RedButton");
         if (style == ConfirmStyle.Destructive || cancelLabel != null) dlg.CancelButton.SetResourceReference(StyleProperty, "PolButton");
         if (choiceA != null && choiceB != null)

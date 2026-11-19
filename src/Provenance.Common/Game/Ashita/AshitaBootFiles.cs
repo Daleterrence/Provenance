@@ -16,7 +16,6 @@ public static class AshitaBootFiles
 
     public static string Folder(string ashitaDir) => Path.Combine(ashitaDir, "config", "boot");
 
-    // one copy per source config, so two accounts on different configs never overwrite one Ashita's still reading
     public static string LaunchCopyName(string? source) =>
         string.IsNullOrWhiteSpace(source) ? CopyPrefix + ".ini" : $"{CopyPrefix}.{Path.GetFileNameWithoutExtension(source)}.ini";
 
@@ -40,8 +39,6 @@ public static class AshitaBootFiles
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    // each one as Ashita's launcher lists it, its [ashita.launcher] name or else the file name. Two that would read the
-    // same get their file names after them
     public static IReadOnlyList<(string File, string Shown)> Names(string? ashitaDir)
     {
         var named = List(ashitaDir).Select(f => (File: f, Name: LauncherName(ashitaDir!, f) ?? f)).ToList();
@@ -64,7 +61,6 @@ public static class AshitaBootFiles
 
     private static bool IsIniFileName(string name) => IsBootFileName(name) && !FileNames.IsDeviceName(name);
 
-    // for a new name. One that's already there only has to be an .ini file, so a bad name can still be renamed
     public static string? NameProblem(string? fileName, string? ashitaDir = null)
     {
         if (string.IsNullOrWhiteSpace(fileName)) return "Give the boot configuration a name.";
@@ -78,7 +74,6 @@ public static class AshitaBootFiles
         if (!IsIniFileName(fileName)) return "Windows doesn't allow that name.";
         var stem = Path.GetFileNameWithoutExtension(fileName).Trim();
         if (stem.Length >= 2 && stem[0] == '\'' && stem[^1] == '\'') return "A boot configuration's name can't start and end with a quote.";
-        // Ashita-cli gets it on its command line as ANSI
         if (!AshitaIniFile.FitsCodePage(fileName))
             return "That name has characters Ashita can't read with this PC's language for non-Unicode programs.";
         if (IsLaunchCopy(fileName)) return "Provenance uses that name for its own copies, choose another one.";
@@ -124,15 +119,12 @@ public static class AshitaBootFiles
         return path;
     }
 
-    // config and boot stay held while files are copied, moved or deleted there, and it's all done where they really are
     private static FolderPins Hold(string ashitaDir)
     {
         var config = Path.GetFullPath(Path.Combine(ashitaDir, "config"));
         return FolderPins.HoldFollowingLinksAboveOrThrow(config, Path.Combine(config, "boot"));
     }
 
-    // a copy of the install's own example with the game settings left to Windows, or a short one of mine. Either way
-    // the hardware mouse starts on
     public static string Create(string ashitaDir, string name, bool fromExample, int playOnline = 2)
     {
         var path = NewFile(ashitaDir, name);
@@ -181,8 +173,6 @@ public static class AshitaBootFiles
         return path;
     }
 
-    // a launcher name that's only the old file's name (as Create sets it) follows the rename. One that can't be read
-    // or written keeps its name, the file's moved either way
     private static void FollowName(string path, string oldFileName)
     {
         try
@@ -210,8 +200,7 @@ public static class AshitaBootFiles
         FileDelete.Try(pins.Real(Path.Combine(Folder(ashitaDir), LaunchCopyName(name))));
     }
 
-    // Ashita's [ashita.language] playonline: 1 Japanese, 2 English (North America), 3 European, for the region pol.exe's
-    // env.dat says
+    // Ashita's [ashita.language] playonline: 1 Japanese, 2 English (North America), 3 European
     internal static int LanguageCodeFor(string polExe) => RegionOfPol(polExe) switch
     {
         PolRegion.Japan => 1,

@@ -1,6 +1,5 @@
-#define FETCH_LANES 2   /* two at once, like the viewer's fetch queue */
+#define FETCH_LANES 2
 #define SEND_HIST 8
-/* a mail list (kind 1, one at a time) or read (kind 2) in flight */
 typedef struct { int job, kind, idx; char *body; } fetch_lane;
 typedef struct { char token[48]; char state[48]; DWORD time, seq, to_lo, to_hi; int from_slot; } send_hist;
 
@@ -8,14 +7,13 @@ typedef struct { char token[48]; char state[48]; DWORD time, seq, to_lo, to_hi; 
 #define PACE_PER_HOUR 600
 enum { PACE_OK, PACE_MIN, PACE_HOUR, PACE_HELD, PACE_STOPPED };
 typedef struct {
-    ULONGLONG take[PACE_PER_HOUR];   /* ring of PUT start times */
+    ULONGLONG take[PACE_PER_HOUR];
     int next, count;
-    ULONGLONG hold, failed;          /* no PUT before hold, when the last failure landed */
-    int fails, stopped;              /* failed sends in a row, no more sends this session */
+    ULONGLONG hold, failed;
+    int fails, stopped;
 } send_pace;
 
-/* a profile server job: step 0 idle, 1 waiting for a slot, 2 running, 3 and 4 the same for a second call. last_read is the
-   highest step still a read */
+/* a profile server job: step 0 idle, 1 waiting for a slot, 2 running, 3 and 4 the same for a second call */
 typedef struct db_job {
     int step, job;
     ULONGLONG t0;
@@ -81,7 +79,7 @@ typedef struct hook_session {
     int sent_ids_next;
     int returned_n;
     int returned_next;
-    char send_token[48];   /* the snapshot's "send", the newest message and its state */
+    char send_token[48];
     char send_state[48];
     int send_queue_n;
     send_pace pace;
@@ -102,7 +100,6 @@ typedef struct hook_session {
     char prof_state[32];
 } hook_session;
 
-/* nothing running and nothing asked for: no jobs (-1), no slot picked, every counter at 0 */
 #define SESSION_IDLE \
     .edit_job = -1, \
     .grp_job = -1, \
@@ -118,5 +115,5 @@ typedef struct hook_session {
     .del_job = -1, \
     .pic_want = -1
 
-static hook_session g_s = { SESSION_IDLE, .mail_refresh = 1 };   /* the inbox gets listed as soon as there's a hold */
+static hook_session g_s = { SESSION_IDLE, .mail_refresh = 1 };
 

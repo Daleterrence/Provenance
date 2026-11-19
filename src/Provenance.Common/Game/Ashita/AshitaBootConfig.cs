@@ -11,7 +11,6 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
     internal static readonly IReadOnlyList<string> GameValues =
         [.. FfxiValues.All.Where(v => v.Ashita && v is not OpaqueValue).Select(v => v.Name)];
 
-    // the ones that come out blank in a file that doesn't set them
     private static readonly IReadOnlyList<string> TextValues =
         [.. FfxiValues.All.Where(v => v.Ashita && v is TextValue or PadValue or OpaqueValue).Select(v => v.Name)];
 
@@ -44,7 +43,6 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
            .DistinctBy(e => e.Key, StringComparer.OrdinalIgnoreCase)
            .Select(e => new AshitaPolPlugin(e.Key, Ini.Get(PolPluginSection, e.Key) == "1")).ToList();
 
-    // it ends up as polplugins\<name>.dll
     public void SetPolPlugin(string name, bool on)
     {
         if (name.Length == 0 || name[0] == '.' || name.Contains("..") || !name.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.'))
@@ -68,8 +66,6 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
                 case IntValue i when text is not null && ToInt(text) != -1:
                     i.Set(s, i.AshitaClamp(ToInt(text)));
                     break;
-                // the registry's when it starts -1, but "-1,..." is a pad value like any other. An empty one shows the
-                // registry's too, Warnings flags it
                 case TextValue or PadValue when !string.IsNullOrEmpty(text)
                     && (!text.StartsWith("-1", StringComparison.Ordinal) || text.StartsWith("-1,", StringComparison.Ordinal)):
                     if (v is TextValue t) t.Set(s, text);
@@ -89,7 +85,6 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
         return pad;
     }
 
-    // every value written out, and the pad values Provenance doesn't edit get -1 so the game never gets them blank
     public void WriteGame(FfxiSettings s)
     {
         var shots = string.IsNullOrEmpty(s.ScreenshotFolder) ? "-1" : s.ScreenshotFolder;
@@ -102,7 +97,6 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
                     SetInt(Registry, v.Name, BitConverter.SingleToInt32Bits(InRange(s.Brightness)));
                     break;
                 case IntValue i:
-                    // an odd number already in the file stays unless the value itself changed
                     int now = i.AshitaClamp(i.Get(s));
                     if (i.KeepsStored && Ini.Get(Registry, i.Name) is { } was && ToInt(was) != -1 && i.Range(ToInt(was)) == now) break;
                     SetInt(Registry, i.Name, now);
@@ -125,7 +119,6 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
         else Ini.Set(section, key, value);
     }
 
-    // a value that already reads as this number keeps its own text, so nothing changes that doesn't have to
     private void SetInt(string section, string key, int value)
     {
         var old = Ini.Get(section, key);

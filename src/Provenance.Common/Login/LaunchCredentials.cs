@@ -13,7 +13,6 @@ public sealed class LaunchCredentials
     internal static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan LeftoverAge = TimeSpan.FromMinutes(10);
 
-    // the room password's one-shot entry, and the full target the hook gets as POL_CRED_CHAT
     internal static string ChatKey(string launchId) => $"{LaunchKeyPrefix}{launchId}:CHAT";
     internal static string ChatTarget(string launchId) => Target(ChatKey(launchId));
 
@@ -43,7 +42,6 @@ public sealed class LaunchCredentials
 
     private WindowsCredentialStore Wrapped => _wrapped();
 
-    // the key's opened before anything starts, so one that can't be read gets its own text
     internal string? KeyForLogIn()
     {
         try
@@ -77,7 +75,6 @@ public sealed class LaunchCredentials
         catch (Exception ex) { Log.Warning(ex, "Sweep of leftover login credentials failed"); }
     }
 
-    // no sweep touches the store once this returns
     internal void StopSweeps()
     {
         _sweepsStopped = true;
@@ -116,7 +113,6 @@ public sealed class LaunchCredentials
 
     internal static string Target(string key) => $"{WindowsCredentialStore.DefaultPrefix}:{key}";
 
-    // one the key can't read never matches, so what was typed goes as one-shot copies instead
     private string? SavedUserName(string key)
     {
         try { return Wrapped.ReadUserName(key); }
@@ -131,7 +127,6 @@ public sealed class LaunchCredentials
         return Target(key);
     }
 
-    // the account's saved entries when they're still this request's, otherwise one-shot copies of what was typed
     internal HookEnvironment.Targets TargetsFor(LoginRequest request, List<string> keys)
     {
         string polTarget, squareEnixTarget;
@@ -167,7 +162,6 @@ public sealed class LaunchCredentials
         keys.Clear();
     }
 
-    // the room password goes to the hook as a one-shot entry like the account details, deleted once read.
     // User is the enter's token, so it only works for that one
     public bool SaveChatPassword(string token, string password)
     {

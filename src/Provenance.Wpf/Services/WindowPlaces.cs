@@ -8,7 +8,6 @@ internal static class WindowPlaces
     internal static Func<Rect> ScreenArea { get; set; } = () =>
         new(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop, SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
 
-    // enough of the title bar on screen to grab it
     internal static bool OnScreen(WindowPlace p, Rect screen)
     {
         if (double.IsNaN(p.Left + p.Top + p.Width + p.Height) || double.IsInfinity(p.Left + p.Top + p.Width + p.Height) || p.Width <= 0 || p.Height <= 0)
@@ -29,8 +28,6 @@ internal static class WindowPlaces
         return true;
     }
 
-    // saved as it closes or hides, from the normal bounds so a minimised or maximised one comes back as it was. Live ones
-    // are saved shortly after each move or resize too
     internal static void Track(ISettingsService settings, Window w, string key, Func<Rect, Rect>? shape = null, bool live = false)
     {
         void Save()

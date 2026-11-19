@@ -78,7 +78,6 @@ public partial class WindowerCard : ObservableObject
             var p = file is { LoadError: null } && _hook.WindowerProfile is { } item ? Find(file, item.Name) : null;
             ConsoleKey = Choice(p?.ConsoleKey ?? WindowerKeys.Insert);
             AllowWinKey = p?.AllowWinKey ?? false;
-            // mid-switch the branch is the switch's, it reloads the card once it's done
             if (!SwitchingBranch)
             {
                 WindowerDev = file?.Dev == true;
@@ -126,7 +125,6 @@ public partial class WindowerCard : ObservableObject
 
     public void CancelConsoleKey() => WaitingForConsoleKey = false;
 
-    // a key in DirectInput's numbering. Esc gives up, one Windower can't use is ignored, any other becomes the key
     public void PressConsoleKey(int code)
     {
         if (!WaitingForConsoleKey) return;
@@ -183,8 +181,6 @@ public partial class WindowerCard : ObservableObject
         finally { _loadingCard = false; }
     }
 
-    // only saved here, the next login's update fetches it. The flag makes that update ask for the new branch's
-    // manifest in full rather than trust the old one's date
     private async Task SwitchBranchAsync(string branch)
     {
         if (_hook.WindowerDir is not { } dir) return;

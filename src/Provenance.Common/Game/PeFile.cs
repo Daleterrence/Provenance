@@ -5,8 +5,7 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Game;
 
-// reads a DLL's sections, exports and version off the disk, nothing loaded so a plugin's code never runs.
-// Anyone can drop a file in a plugin folder, so reads are bounds-checked
+// anyone can drop a file in a plugin folder, so reads are bounds-checked
 internal sealed class PeFile
 {
     public const ushort MachineI386 = 0x014C;
@@ -72,8 +71,7 @@ internal sealed class PeFile
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    // where the low byte of Characteristics is (0x146 in pol.exe): "MZ", e_lfanew at 0x3c, "PE" and two zero bytes there,
-    // then the field 22 bytes on. Null if not PE
+    // low byte of Characteristics: "MZ", e_lfanew at 0x3c, "PE" and two zero bytes, then the field 22 bytes on
     public static long? CharacteristicsAt(byte[] d) => PeAt(d) is { } pe ? pe + 22 : null;
 
     private static long? PeAt(byte[] d)
@@ -83,7 +81,6 @@ internal sealed class PeFile
         return pe < 0x40 || pe + 24 > d.Length || U32(d, pe) != 0x00004550 ? null : pe;
     }
 
-    // keepSections is for a caller that only trusts the first few
     public static PeFile? Parse(byte[] d, int keepSections = MaxSections)
     {
         if (PeAt(d) is not { } pe) return null;
@@ -124,7 +121,6 @@ internal sealed class PeFile
 
     public ReadOnlySpan<byte> AtVa(ulong va, int max) => va < ImageBase ? default : AtRva(va - ImageBase, max);
 
-    // a printable UTF-8 string that ends in a zero within max bytes
     public string? TextAtVa(ulong va, int max) => Text(AtVa(va, max + 1));
 
     private static string? Text(ReadOnlySpan<byte> span)
@@ -157,8 +153,6 @@ internal sealed class PeFile
         return map;
     }
 
-    // RT_VERSION, its first name and first language, then VS_FIXEDFILEINFO's file version (what FileVersionInfo calls
-    // FileMajorPart and friends)
     private Version? ReadVersion(uint rva)
     {
         int root = Offset(rva);

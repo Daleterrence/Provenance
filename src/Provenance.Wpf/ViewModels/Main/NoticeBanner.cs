@@ -6,7 +6,6 @@ namespace Provenance.Wpf.ViewModels.Main;
 
 public enum NoticeTarget { None, Chat, Friends, GroupChat }
 
-// Request is the hook's number for the request or invitation the notice is about, 0 for the rest
 public sealed record Notice(string Text, string Icon, NoticeTarget Target, string? Sender, int Request, bool Stays)
 {
     public bool Opens => Target != NoticeTarget.None;
@@ -16,7 +15,6 @@ public partial class NoticeBanner : ObservableObject
 {
     private DispatcherTimer? _timer;
 
-    // "mail" is POL's envelope, anything else is a Material icon name
     [ObservableProperty] private Notice? _current;
 
     public void Show(string text, string icon = "mail", NoticeTarget target = NoticeTarget.None, string? sender = null,
@@ -53,19 +51,16 @@ public partial class NoticeBanner : ObservableObject
         else _timer.Start();
     }
 
-    // the hook numbers mail per session, so a request's notice can't outlive it
     public void DropRequest()
     {
         if (Current is { Request: not 0 }) Current = null;
     }
 
-    // only while it's still the one showing, whatever's replaced it stays
     public void Drop(Notice? notice)
     {
         if (notice is not null && ReferenceEquals(Current, notice)) Current = null;
     }
 
-    // answered here, the request leaves the list and the notice goes with it
     public void DropIfAnswered(Func<int, bool> isWaiting)
     {
         if (Current is { Request: not 0 } n && !isWaiting(n.Request)) Current = null;

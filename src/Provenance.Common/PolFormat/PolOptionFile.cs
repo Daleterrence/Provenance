@@ -2,8 +2,7 @@ using System.Buffers.Binary;
 
 namespace Provenance.Common.PolFormat;
 
-// pub\homeNN\option.bin: POL's file cipher, all-zero key, trailer is the data length.
-// Records from +8, 0x20 each: name, type +0xa (0 is a number), min/max +0xc/+0x10, value +0x18
+// records from +8, 0x20 each: name, type +0xa (0 is a number), min/max +0xc/+0x10, value +0x18
 public static class PolOptionFile
 {
     // 0 is on, 1 off
@@ -17,7 +16,6 @@ public static class PolOptionFile
 
     private static readonly PolFileCipher Cipher = new(new byte[8]);
 
-    // null when it isn't one (wrong size, or the checksum's off)
     public static byte[]? Decrypt(ReadOnlySpan<byte> file)
     {
         if (file.Length > MaxSize) return null;
@@ -49,7 +47,6 @@ public static class PolOptionFile
     public static int? Read(byte[] plain, string name) =>
         Find(plain, name) is var at and >= 0 ? BinaryPrimitives.ReadInt32LittleEndian(plain.AsSpan(at + 0x18)) : null;
 
-    // the same range check polcore does, where a 0..0 range means anything goes
     public static bool Write(byte[] plain, string name, int value)
     {
         int at = Find(plain, name);

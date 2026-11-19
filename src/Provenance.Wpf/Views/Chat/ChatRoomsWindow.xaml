@@ -20,9 +20,7 @@
             <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
         </Style>
 
-        <!-- read-only so a line can be copied, arrivals and the like in the accent colour -->
         <DataTemplate x:Key="RoomLine" DataType="{x:Type vm:ChatLineItem}">
-            <!-- the emoticon sits after the text so every line's text starts in the same place, like the viewer's log -->
             <Grid Margin="0,1" ColumnDefinitions="Auto,*,Auto">
                 <TextBlock Margin="0,1,10,0" FontSize="11" Foreground="{DynamicResource Text.3}" Text="{Binding TimeText}"
                            Visibility="{Binding DataContext.ShowTimes, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVis}}" />
@@ -43,7 +41,6 @@
                 <DataTrigger Binding="{Binding Style}" Value="mine">
                     <Setter TargetName="Body" Property="Foreground" Value="{DynamicResource Text.2}" />
                 </DataTrigger>
-                <!-- after the styles, so a line's own colour wins -->
                 <DataTrigger Binding="{Binding HasColour}" Value="True">
                     <Setter TargetName="Body" Property="Foreground" Value="{Binding Colour}" />
                 </DataTrigger>
@@ -54,7 +51,6 @@
     <Grid RowDefinitions="40,*">
         <controls:TitleBar ShowMaximise="True" />
 
-        <!-- not available: logged out, the game's running, or POL's chat isn't answering -->
         <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24"
                     Visibility="{Binding Unavailable, Converter={StaticResource NullToVisibilityConverter}}">
             <materialDesign:PackIcon Kind="ForumOutline" Width="44" Height="44" HorizontalAlignment="Center" Foreground="{DynamicResource Text.3}" />
@@ -151,7 +147,6 @@
                                     <TextBlock Text="{Binding Categories}" FontSize="11" Foreground="{DynamicResource Text.3}" TextTrimming="CharacterEllipsis"
                                                Visibility="{Binding HasCategories, Converter={StaticResource BoolToVis}}" />
                                 </StackPanel>
-                                <!-- the viewer's JP/EN/FR/GE badge, from the room's language category -->
                                 <Border Grid.Column="2" MinWidth="52" Margin="0,0,12,0" VerticalAlignment="Center">
                                     <Border HorizontalAlignment="Center" Padding="6,1" CornerRadius="4" BorderThickness="1"
                                             BorderBrush="{DynamicResource Border.Hair}" Background="{DynamicResource Surface.2}"
@@ -225,7 +220,6 @@
                         <ItemsControl ItemsSource="{Binding Members}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:ChatMemberItem}">
-                                    <!-- the master's Kick and Designate, filled as the menu opens -->
                                     <Grid Margin="14,3" ColumnDefinitions="18,*,Auto,Auto" Background="Transparent" ContextMenuOpening="OnMemberMenu">
                                         <Grid.ContextMenu>
                                             <ContextMenu />
@@ -263,7 +257,6 @@
             </Grid>
             <Border Grid.Row="2" Style="{StaticResource FooterBar}">
                 <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,*,Auto">
-                    <!-- the viewer's Text Color and Emoticon, both back to none after each line -->
                     <Button Height="40" Width="40" Padding="0" VerticalAlignment="Bottom" Style="{StaticResource IconButton}"
                             x:Name="ColourButton" Click="OnColourMenu" ToolTip="Text colour" AutomationProperties.Name="Text colour">
                         <Grid>

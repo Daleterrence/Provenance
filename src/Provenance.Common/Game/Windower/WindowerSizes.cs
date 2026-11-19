@@ -9,8 +9,7 @@ public readonly record struct WindowerSizes(int Width, int Height, int UIWidth, 
         return uw <= 0 || uh <= 0 ? new(width, height, width, height, 1f) : new(width, height, uw, uh, uiScale);
     }
 
-    // .NET Framework's x86 JIT divides in double and truncates without rounding to float first, so 1100 / 1.1 is 999, not 1000.
-    // Out of range or NaN gives 0x80000000
+    // .NET Framework's x86 JIT divides in double and truncates without rounding to float first, so 1100 / 1.1 is 999, not 1000
     internal static int Truncate(int size, float scale)
     {
         double q = size / (double)scale;

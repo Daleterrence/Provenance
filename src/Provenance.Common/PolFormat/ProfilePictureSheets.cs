@@ -1,15 +1,13 @@
 namespace Provenance.Common.PolFormat;
 
-// profile pics live in obfuscated PNG sheets (data\icon\download\hnf<NNN>.png) of 4x2 cells at 64x96, so pic F is
-// sheet F/8, cell F%8
+// 4x2 cells at 64x96, so pic F is sheet F/8, cell F%8
 public static class ProfilePictureSheets
 {
     public const int CellWidth = 64, CellHeight = 96, Columns = 4, Rows = 2, PerSheet = Columns * Rows;
     private const uint Mult = 0x19660d;
     private static readonly byte[] PngSig = [0x89, 0x50, 0x4e, 0x47];
 
-    // app.dll at 0x1027acce: an LCG XOR seeded by how far the first four bytes are off the PNG signature. A real PNG
-    // comes back as is
+    // an LCG XOR seeded by how far the first four bytes are off the PNG signature, a real PNG comes back as is
     public static byte[] Decode(byte[] data)
     {
         if (data.Length <= 4 || data.AsSpan(0, 4).SequenceEqual(PngSig)) return data;

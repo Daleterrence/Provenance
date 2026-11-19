@@ -4,13 +4,11 @@ using Provenance.Wpf.Controls;
 
 namespace Provenance.Wpf.Views.Dialogs;
 
-// the text comes from the user's own POL install (StringTable.bin 0x7011 to 0x7013), nothing's shipped
 public partial class AgreementDialog : AppWindow
 {
     public AgreementDialog(IReadOnlyDictionary<int, string>? strings)
     {
         InitializeComponent();
-        // the JP table only has "untranslated" placeholders where the agreement goes, so there's nothing of it to show
         bool none = strings != null && strings.TryGetValue(PolStringTable.AgreementText, out var text) && text == "\u672a\u7ffb\u8a33";
         string Get(int id) => !none && strings != null && strings.TryGetValue(id, out var s) ? s : "";
         var body = Get(PolStringTable.AgreementText);

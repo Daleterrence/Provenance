@@ -43,7 +43,6 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
                 ShowWindow();
             };
             Icon.ExitRequested += exit;
-            // the session can move on while this sits in the tray, a game starting or a Play that's refused
             void Follow()
             {
                 if (InTray) Icon.SetState(StateOf(vm));
@@ -65,12 +64,11 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
         Icon.SetState(state);
         Icon.SetBadge(vm.Social.NotificationCount);
         Icon.Visible = true;
-        window.Hide();   // the friends windows are their own windows and stay as they are
-        Log.Information("Hidden to the tray ({State})", state.ToString());   // as text, or the log puts it in quotes
+        window.Hide();
+        Log.Information("Hidden to the tray ({State})", state.ToString());
     }
 
-    // Explorer isn't elevated and Provenance is, so Windows drops Explorer's message unless it's let through.
-    // WinForms never asks for its own window, so the icon's put back from this one
+    // Explorer isn't elevated, so Windows drops its message unless it's let through
     private void ListenForTaskbar()
     {
         if (_listening || PresentationSource.FromVisual(window) is not HwndSource source) return;

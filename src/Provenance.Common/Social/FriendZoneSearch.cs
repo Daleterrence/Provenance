@@ -3,8 +3,6 @@ using Serilog;
 
 namespace Provenance.Common.Social;
 
-// the zones the search servers give for friends in FFXI. Tick only decides and hands the work to the pool, so Changed
-// can come from any thread
 public sealed class FriendZoneSearch
 {
     private readonly Func<int, SearchEndpoint?> _endpoints;
@@ -14,10 +12,7 @@ public sealed class FriendZoneSearch
     private readonly record struct Seen(int Area, PartyState Party);
 
     private readonly Dictionary<(int World, uint Id), Seen> _areas = new();
-    // anyone a reply said is anon, with the friend it came from. They stay anon through logging out and in, failed asks and
-    // new logins, until a reply says they're not or a loaded list no longer has that friend
     private readonly Dictionary<(int World, uint Id), string> _anon = new();
-    // which friend each character was last seen playing as
     private readonly Dictionary<(int World, uint Id), string> _owners = new();
     private bool _troubled;
     private readonly HashSet<int> _failing = new();
@@ -42,7 +37,6 @@ public sealed class FriendZoneSearch
 
     private DateTime Now => _time.GetUtcNow().UtcDateTime;
 
-    // friends is null when the list isn't loaded yet, or for a pass that's only checking the clock
     public void Tick(IReadOnlyCollection<PolFriend>? friends)
     {
         IReadOnlyList<SearchBatch> due;
@@ -62,7 +56,6 @@ public sealed class FriendZoneSearch
         foreach (var batch in due) _ = Task.Run(() => RunAsync(batch, generation));
     }
 
-    // who's playing which character, and the anon entries of friends who've gone from the list
     private void Remember(IReadOnlyCollection<PolFriend> friends)
     {
         var onList = new HashSet<string>(StringComparer.Ordinal);
@@ -76,7 +69,6 @@ public sealed class FriendZoneSearch
         foreach (var key in _owners.Where(o => !onList.Contains(o.Value)).Select(o => o.Key).ToList()) _owners.Remove(key);
     }
 
-    // null when the server didn't say, so the profile's gets used
     public int? Area(PolFriendGame game)
     {
         lock (_gate)
@@ -104,7 +96,6 @@ public sealed class FriendZoneSearch
         }
     }
 
-    // true while some world that's being asked about has gone this long without answering
     public bool Troubled
     {
         get
@@ -176,7 +167,6 @@ public sealed class FriendZoneSearch
         catch (Exception ex) { Log.Warning(ex, "Friend zones: a change handler threw"); }
     }
 
-    // the world's free to be asked again whatever happened, and a failure takes the zones it didn't just get
     private (bool Moved, TimeSpan Wait) Finish(int world, bool answered, int generation, HashSet<uint> got)
     {
         lock (_gate)
@@ -202,7 +192,6 @@ public sealed class FriendZoneSearch
         else if (recovered) Log.Information("Friend zones: {World} is answering again", world);
     }
 
-    // what the server listed for the ids asked. One it didn't list loses its zone, and true says if anything changed
     private bool Keep(int world, List<uint> asked, IReadOnlyList<SearchEntry> found)
     {
         var playing = _rule.Playing();

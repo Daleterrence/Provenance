@@ -1,28 +1,7 @@
-/* the Add/Remove Programs uninstaller for the POL and FFXI installs Provenance applies itself (no Windows Installer).
-   Built twice, once per product with FFXI_UNINSTALL for the game's, so the UAC prompt names the right one.
-   Run as <this exe> "<install>\Uninstall\{ProductCode}.txt" [/quiet] [/all]. /quiet asks nothing and keeps the
-   player's settings (the product folder's USER or usr, and the K key), /all removes them too.
-   The .txt is UTF-16LE, one item per line:
-     N <display name>
-     A <Uninstall key>                  HKLM, 32-bit view
-     S <shortcut file>
-     C <key>                            HKLM, 32-bit view, removed with its subkeys (COM classes, ProgIDs)
-     K <key>                            the same, for the product's own settings. Only under the L key, and kept
-                                        (V lines in it too) unless they're being removed
-     T <LIBID> <major> <minor> <lcid>   a type library registration
-     V <M|U> <key>\t<value name>        M = HKLM, U = HKCU, 32-bit view. "+" for a key the package made. Keys left
-                                        empty go, up to the first one that isn't
-     F <file>
-     P <folder>\t<pattern>              the package's RemoveFile rules, files only
-     I <folder>                         the install root, the R folder's grandparent
-     R <folder>                         removed with everything in it, whatever the game or its updates added. A link
-                                        in there goes as a link, its target stays
-     D <folder>                         removed when empty, deepest first
-     L <key>                            one of the three region keys, HKLM, 32-bit view. Removed with its subkeys by the
-                                        last product out, bar any settings that were kept
-   The .txt can sit somewhere anyone can write, so I, R, K and L only count when this product's InstallFolder under
-   the L key (HKLM, admins only) names the R folder exactly. Nothing runs unless only Administrators and SYSTEM own
-   or can change the .txt and its folder */
+/* record is UTF-16LE, one item per line: N name, A <Uninstall key>, S shortcut, C <key> (removed with subkeys), K <key> (the product's settings, kept unless /all), T <LIBID> <major> <minor> <lcid>,
+   V <M|U> <key>\t<value name> (M HKLM, U HKCU, "+" for a key the package made), F <file>, P <folder>\t<pattern> (files only), I <install root, the R folder's grandparent>,
+   R <folder> (removed with everything in it, a link goes as a link), D <folder> (when empty, deepest first), L <region key> (removed by the last product out).
+   /quiet asks nothing and keeps settings. The .txt can sit somewhere anyone can write, so I, R, K and L only count when InstallFolder under the L key (admins only) names the R folder */
 #define UNICODE
 #define _UNICODE
 #include <windows.h>
@@ -70,7 +49,6 @@
 
 #define NOT_FOUND(st) ((st) == (NTSTATUS)0xC0000034L || (st) == (NTSTATUS)0xC000003AL)
 
-/* both products share the Uninstall folder, so the last one out takes both programs with it */
 static const wchar_t *const g_programs[] = { L"Provenance - PlayOnline Uninstall.exe",
                                              L"Provenance - FINAL FANTASY XI Uninstall.exe" };
 
@@ -79,15 +57,15 @@ static const wchar_t *const g_regions[] = { L"SOFTWARE\\" WIDE(POL_HIVE_JP), L"S
 
 static HWND g_label;
 static const wchar_t *g_product = PRODUCT, *g_keep_dir = KEEP_DIR, *g_other_key = OTHER_KEY, *g_other_dir = OTHER_DIR;
-static wchar_t g_other[MAX_PATH * 2];   /* the other product's kept folder, when this one left it */
+static wchar_t g_other[MAX_PATH * 2];
 static int g_keep = 1, g_depth, g_skipped;
-static wchar_t g_settings[600];   /* the K line's key, which keeping leaves alone */
-static wchar_t g_region[64], g_folder[MAX_PATH * 2];   /* only set once HKLM agrees with the record */
+static wchar_t g_settings[600];
+static wchar_t g_region[64], g_folder[MAX_PATH * 2];
 static int g_unconfirmed, g_unprotected;
 static wchar_t g_name[256] = PRODUCT_NAME;
 static wchar_t g_root[MAX_PATH * 2];
 static wchar_t g_tree[MAX_PATH * 2], g_kept[MAX_PATH * 2];
-static wchar_t g_path[32768];   /* what remove_entry's on, for the restart list */
+static wchar_t g_path[32768];
 static int g_count, g_later, g_pending;
 
 static void status(const wchar_t *text)
@@ -151,7 +129,6 @@ static void delete_file(const wchar_t *path)
     DeleteFileW(path);
 }
 
-/* X:\ and at least one folder, nothing relative, no network paths or streams */
 static int local_path(const wchar_t *p)
 {
     return iswalpha(p[0]) && p[1] == L':' && p[2] == L'\\' && p[3] && p[3] != L'\\' && !wcschr(p + 2, L':');
@@ -162,8 +139,7 @@ static void kept(void)
     if (!g_kept[0]) lstrcpynW(g_kept, g_tree, _countof(g_kept));
 }
 
-/* relative to a folder already open, so nothing on the way can be swapped for a link, and the entry itself is opened
-   rather than anything it points at */
+/* relative to a folder already open, so nothing on the way can be swapped for a link */
 static HANDLE open_at(HANDLE dir, const wchar_t *name, size_t len, ACCESS_MASK access, NTSTATUS *st)
 {
     UNICODE_STRING us;
@@ -197,7 +173,6 @@ static int delete_open(HANDLE h)
     FILE_DISPOSITION_INFO yes = { TRUE };
     BY_HANDLE_FILE_INFORMATION bi;
     if (SetFileInformationByHandle(h, FileDispositionInfoEx, &ex, sizeof ex)) return 1;
-    /* older Windows: read-only cleared first, but not on a file with other hard links, that'd change theirs too */
     if (GetFileInformationByHandle(h, &bi) && (bi.dwFileAttributes & FILE_ATTRIBUTE_READONLY) && bi.nNumberOfLinks == 1) {
         FILE_BASIC_INFO basic = { 0 };
         basic.FileAttributes = bi.dwFileAttributes & ~FILE_ATTRIBUTE_READONLY;
@@ -207,8 +182,6 @@ static int delete_open(HANDLE h)
     return SetFileInformationByHandle(h, FileDispositionInfo, &yes, sizeof yes);
 }
 
-/* in use, so it goes at the next restart, renamed aside first so a reinstall doesn't lose its fresh copy.
-   Into dir's real path, a handle-relative rename is denied */
 static void later(HANDLE dir, HANDLE h)
 {
     struct { FILE_RENAME_INFO i; wchar_t more[MAX_PATH * 2 + 64]; } r;
@@ -236,7 +209,6 @@ static void empty_folder(HANDLE h)
 {
     batch *first = NULL, **tail = &first, *b;
     FILE_INFO_BY_HANDLE_CLASS kind = FileFullDirectoryRestartInfo;
-    /* the whole listing first, something renamed for the restart mustn't turn up in it again */
     for (;;) {
         if (!(b = (batch *)malloc(sizeof *b))) { kept(); break; }
         b->next = NULL;
@@ -271,7 +243,7 @@ static void remove_entry(HANDLE dir, const wchar_t *name, size_t len, int folder
     wmemcpy(g_path + at, name, len);
     g_path[at + len] = 0;
     h = open_at(dir, name, len, DELETE | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | (folder ? FILE_LIST_DIRECTORY : 0), &st);
-    if (h == INVALID_HANDLE_VALUE && folder && !NOT_FOUND(st))   /* it can't go yet, what's in it still can */
+    if (h == INVALID_HANDLE_VALUE && folder && !NOT_FOUND(st))
         h = open_at(dir, name, len, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY, &st);
     if (h == INVALID_HANDLE_VALUE) {
         if (!NOT_FOUND(st)) later(dir, h);
@@ -282,16 +254,12 @@ static void remove_entry(HANDLE dir, const wchar_t *name, size_t len, int folder
             empty_folder(h);
             g_depth--;
         } else counted();
-        /* a folder keeps its name, what's still in it is already down for the restart by its path. The product's
-           folder just stays when its settings did */
         if (!(top && g_skipped) && !delete_open(h)) later(dir, tree ? INVALID_HANDLE_VALUE : h);
         CloseHandle(h);
     }
     g_path[at - 1] = 0;
 }
 
-/* an R line. The root must be a real folder at the I line's path (no link or SUBST drive),
-   and the target strictly inside it */
 static void remove_tree(const wchar_t *target)
 {
     wchar_t full[MAX_PATH * 2], real[MAX_PATH * 2 + 8], want[MAX_PATH * 2 + 8];
@@ -364,8 +332,7 @@ static void clear_but(HKEY k, const wchar_t *only)
     }
 }
 
-/* the other product's kept settings: record gone (I'm the last out), key and kept folder both still there.
-   A link in place of the folder doesn't count */
+/* a link in place of the kept folder doesn't count */
 static int other_kept(const wchar_t *region)
 {
     wchar_t key[600], folder[MAX_PATH * 2];
@@ -386,8 +353,6 @@ static int other_kept(const wchar_t *region)
     return 1;
 }
 
-/* what's in it bar the SquareEnix (or SQUARE) settings, or only the one named in them, then any key left empty in
-   those */
 static void clear_except_settings(HKEY k, const wchar_t *only)
 {
     wchar_t name[256];
@@ -427,7 +392,6 @@ static int keep_settings(HKEY k)
     return subkeys || values;
 }
 
-/* the region's whole key, unless another product's still installed in it */
 static void remove_region(const wchar_t *key)
 {
     wchar_t sub[600];
@@ -459,7 +423,6 @@ static int full_path(const wchar_t *in, wchar_t *out, DWORD size)
 
 typedef struct { wchar_t *p, *end; } cursor;
 
-/* skips the byte-order mark */
 static cursor lines_of(wchar_t *text, DWORD chars)
 {
     cursor c = { text + (chars > 0 && text[0] == 0xFEFF), text + chars };
@@ -503,7 +466,6 @@ static int admin_sid(PSID sid)
     return sid && (IsWellKnownSid(sid, WinBuiltinAdministratorsSid) || IsWellKnownSid(sid, WinLocalSystemSid));
 }
 
-/* owned by someone else than Administrators or SYSTEM, a link, or someone else can write, delete or re-permission it */
 static int open_to_others(const wchar_t *path, DWORD flags)
 {
     const DWORD writes = FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA | FILE_DELETE_CHILD | FILE_WRITE_ATTRIBUTES | DELETE |
@@ -546,7 +508,6 @@ static int unprotected(const wchar_t *record)
     return open_to_others(folder, FILE_FLAG_BACKUP_SEMANTICS);
 }
 
-/* runs before anything's removed, the V lines take the InstallFolder value this checks against */
 static void confirm(wchar_t *text, DWORD chars)
 {
     wchar_t region[64], line[MAX_PATH * 2], tree[MAX_PATH * 2], value[MAX_PATH * 2], folder[MAX_PATH * 2], *slash;
@@ -567,7 +528,6 @@ static void confirm(wchar_t *text, DWORD chars)
     } else ok = 0;
     ok = ok && full_path(value, folder, _countof(folder)) && first(text, chars, L'R', line, _countof(line)) &&
          full_path(line, tree, _countof(tree)) && !_wcsicmp(tree, folder);
-    /* <root>\SquareEnix\<product> */
     for (i = 0; ok && i < 2; i++) ok = (slash = wcsrchr(tree, L'\\')) != NULL && (*slash = 0, local_path(tree));
     if (ok && g_root[0] && !_wcsicmp(tree, g_root)) {
         lstrcpynW(g_region, region, _countof(g_region));
@@ -719,7 +679,6 @@ static void remove_all(wchar_t *text, DWORD chars, const wchar_t *record, const 
     run(text, chars, L'D');
     run(text, chars, L'A');
     DeleteFileW(record);
-    /* the last product gone: the region's settings, both programs and their folder go */
     _snwprintf_s(pattern, _countof(pattern), _TRUNCATE, L"%s\\*.txt", dir);
     h = FindFirstFileW(pattern, &fd);
     if (h != INVALID_HANDLE_VALUE) { FindClose(h); return; }
@@ -728,13 +687,11 @@ static void remove_all(wchar_t *text, DWORD chars, const wchar_t *record, const 
         wchar_t path[MAX_PATH + 64], old[MAX_PATH + 32];
         _snwprintf_s(path, _countof(path), _TRUNCATE, L"%s\\%s", dir, g_programs[i]);
         if (DeleteFileW(path) || GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES) continue;
-        /* this one's running, so it goes at the next restart. Renamed out of the way first, or a reinstall
-           before that restart gets its fresh copy deleted too (whoops, that one bit) */
+        /* this one's running, so it goes at the next restart. Renamed out of the way first, or a reinstall before that restart gets its fresh copy deleted too (whoops, that one bit) */
         _snwprintf_s(old, _countof(old), _TRUNCATE, L"%s\\uninstall-%lu-%d.old", dir, GetCurrentProcessId(), i);
         MoveFileExW(MoveFileExW(path, old, MOVEFILE_REPLACE_EXISTING) ? old : path, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
     }
     MoveFileExW(dir, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
-    /* only goes if it's empty by then */
     if (g_root[0]) MoveFileExW(g_root, NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
 }
 

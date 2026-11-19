@@ -25,14 +25,12 @@ public static class OnePassword
         {
             List<string> args = ["item", "get", item, "--otp"];
             if (AccountId.IsMatch(account)) args.AddRange(["--account", account]);
-            // the app confirms with Windows Hello, hence the long wait
             var r = await ToolProcess.RunAsync(op, args, Env, TimeSpan.FromSeconds(90), ct);
             return OtpSources.CodeFrom(r, err => ProblemFor(err, item));
         }
         finally { ToolInstaller.UpdateInBackground(ToolFacts.OnePassword); }
     }
 
-    // the ones people actually hit, by op's own wording
     internal static (string Outcome, string Text, OtpFix Fix) ProblemFor(string err, string item)
     {
         bool Says(string s) => err.Contains(s, StringComparison.OrdinalIgnoreCase);
@@ -49,7 +47,6 @@ public static class OnePassword
         return ("unrecognised error", "1Password didn't give the code.", OtpFix.TryAgain);
     }
 
-    // op gets these from the app without Windows Hello. Null when op couldn't say
     public static async Task<IReadOnlyList<OnePasswordAccount>?> AccountsAsync(string op, CancellationToken ct)
     {
         try
@@ -90,8 +87,7 @@ public static class OnePassword
         catch (JsonException) { return null; }
     }
 
-    // 1Password mustn't start as admin, so explorer.exe hands the link to the user's own shell, and there's
-    // deliberately no fallback that opens it from here
+    // 1Password mustn't start as admin, so explorer.exe hands the link to the user's own shell
     public static bool OpenSettings()
     {
         try

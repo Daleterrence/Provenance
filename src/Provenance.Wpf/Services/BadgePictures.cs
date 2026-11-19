@@ -4,17 +4,14 @@ using Provenance.Wpf.Win32;
 
 namespace Provenance.Wpf.Services;
 
-// the red count badge, drawn at every size Windows might ask for so a picked frame is never stretched
 internal static class BadgePictures
 {
-    // 100% to 300% scaling of the 16 pixel overlay
     private static readonly int[] OverlaySizes = [16, 20, 24, 32, 40, 48];
 
     private static readonly Dictionary<string, BitmapFrame> Overlays = [];
 
     private static readonly System.Drawing.Color Red = System.Drawing.Color.FromArgb(237, 66, 69);
 
-    // the whole picture is the badge, Windows puts it in the taskbar button's corner
     internal static BitmapFrame Overlay(string label)
     {
         lock (Overlays)
@@ -34,7 +31,6 @@ internal static class BadgePictures
         }
     }
 
-    // the app's own picture with the badge over its bottom right corner, at the picture's own size
     internal static System.Drawing.Icon Tray(System.Drawing.Icon app, string label)
     {
         int n = app.Width;
@@ -42,7 +38,6 @@ internal static class BadgePictures
         using (var g = Smooth(bmp))
         {
             using var original = app.ToBitmap();
-            // a straight copy, so the picture itself isn't resampled
             g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
             g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.None;
             g.DrawImage(original, 0, 0, n, n);
@@ -72,7 +67,6 @@ internal static class BadgePictures
         return g;
     }
 
-    // a disc with the number's outline centred in it, so it's centred whatever the font does with its ascent
     private static void Badge(System.Drawing.Graphics g, float x, float y, float d, string label)
     {
         using var red = new System.Drawing.SolidBrush(Red);

@@ -6,8 +6,6 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.Views.Chat;
 
-// the viewer's Create Room form: name, zone, occupancy 2-20, password on or off, and the three category groups with
-// Not set first
 public partial class CreateRoomDialog : AppWindow
 {
     private Func<string, bool>? _confirm;
@@ -21,7 +19,6 @@ public partial class CreateRoomDialog : AppWindow
         Loaded += (_, _) => NameBox.Focus();
     }
 
-    // set up but not shown
     internal static CreateRoomDialog For(IReadOnlyList<ChatZone> zones, int zone, IReadOnlyList<ChatCategory> categories,
                                          Func<string, bool>? confirm)
     {

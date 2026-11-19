@@ -4,7 +4,6 @@ public static class FfxiProfileText
 {
     public const string Title = "FINAL FANTASY XI";
 
-    // a character tab's rows in order. Private is a value the record level hides, NotSet anything empty or not in a table
     public static IReadOnlyList<(string Label, string Value)> Rows(PolFfxiProfile p, string privateText, string notSet,
                                                                     Func<string, string> filter)
     {

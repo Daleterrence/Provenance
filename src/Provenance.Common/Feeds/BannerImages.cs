@@ -16,7 +16,6 @@ public static class BannerImages
 
     internal static async Task<byte[]?> DownloadAsync(Uri u, CancellationToken ct) => (await FetchAsync(u, ct).ConfigureAwait(false)).Bytes;
 
-    // Final is false when asking again later could work (a 5xx, a stalled body)
     private readonly record struct Fetched(byte[]? Bytes, bool Final);
 
     private static async Task<Fetched> FetchAsync(Uri u, CancellationToken ct)
@@ -30,13 +29,11 @@ public static class BannerImages
             {
                 if (resp.Headers.Location is not { } loc) return new(null, true);
                 u = loc.IsAbsoluteUri ? loc : new Uri(u, loc);
-                continue;   // the next pass upgrades it, or bails when it's left POL's site
+                continue;
             }
             if (!resp.IsSuccessStatusCode)
                 return new(null, (int)resp.StatusCode is >= 400 and < 500 && resp.StatusCode is not (HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests));
             if (resp.Content.Headers.ContentLength > MaxImageBytes) return new(null, true);
-            // read in pieces and stop past the cap, so a reply with no length header never gets buffered whole
-            // the client's timeout stops at the headers, so the body gets its own
             using var read = CancellationTokenSource.CreateLinkedTokenSource(ct);
             read.CancelAfter(ImageHttp.Timeout);
             try
@@ -57,12 +54,9 @@ public static class BannerImages
         return new(null, true);
     }
 
-    // addresses POL's site answered for with no picture, so a refresh never asks for one again. A timeout or no
-    // connection isn't an answer, so it's tried once more and then counts as one
     private static readonly ConcurrentDictionary<string, bool> Failed = new();
     private static readonly ConcurrentDictionary<string, bool> Retried = new();
 
-    // a topic's banner never changes, one already on disk needs no request
     public static async Task<string?> LocalAsync(string url, CancellationToken ct = default)
     {
         string? address = null;
@@ -75,7 +69,7 @@ public static class BannerImages
             var path = Path.Combine(dir, FileHash.Sha256(Encoding.UTF8.GetBytes(u.AbsoluteUri))[..32] + ext);
             if (File.Exists(path) && new FileInfo(path).Length > 0)
             {
-                try { File.SetLastWriteTimeUtc(path, DateTime.UtcNow); } catch { }   // still in use, so the prune keeps it
+                try { File.SetLastWriteTimeUtc(path, DateTime.UtcNow); } catch { }
                 return path;
             }
             address = u.AbsoluteUri;
@@ -125,7 +119,7 @@ public static class BannerImages
             if (localPath is null || FeedCache.Folder("images") is not { } dir) return;
             if (PathInside.IsUnder(dir, localPath)) File.Delete(Path.GetFullPath(localPath));
         }
-        catch { }   // a leftover image just gets pruned later
+        catch { }
     }
 
     public static void Prune(TimeSpan maxAge)
@@ -137,6 +131,6 @@ public static class BannerImages
             foreach (var f in Directory.EnumerateFiles(dir))
                 if (File.GetLastWriteTimeUtc(f) < cutoff) { FileDelete.Try(f); }
         }
-        catch { }   // it runs again next time
+        catch { }
     }
 }

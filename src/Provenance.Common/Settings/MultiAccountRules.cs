@@ -9,12 +9,10 @@ public static class MultiAccountRules
     {
         var known = profileIds.ToHashSet();
         return stored.Where(e => e.Enabled && !e.CredentialsRefused && known.Contains(e.ProfileId))
-                     .DistinctBy(e => e.ProfileId)   // even from a hand-edited list
+                     .DistinctBy(e => e.ProfileId)
                      .ToList();
     }
 
-    // each account has to have its own picked, so nobody's left guessing which one it starts with
-    // null is nothing picked, an empty name is Windower's Default profile
     public static List<MultiAccountEntry> WithoutProfile(IEnumerable<MultiAccountEntry> runEntries) =>
         runEntries.Where(e => e.ThirdPartyHookProfile is null).ToList();
 

@@ -10,7 +10,6 @@ public sealed record WindowerAddonEntry(string? Author, string? Description);
 
 public static partial class WindowerAddons
 {
-    // the _addon lines sit at the top, nobody needs the rest of a 200 KB addon for them
     private const int MaxRead = 64 * 1024;
     private const int RegexMs = 500;
 
@@ -30,8 +29,6 @@ public static partial class WindowerAddons
         return list.OrderBy(a => a.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    // what a launch uses of Scan: the folders that hold their own main Lua, and nothing read out of it. A folder whose
-    // time matches its row isn't looked into
     internal static IReadOnlyList<WindowerAddonInfo> ScanForLaunch(string windowerDir, WindowerScanCache cache)
     {
         var addonsDir = Path.Combine(windowerDir, "addons");
@@ -65,7 +62,6 @@ public static partial class WindowerAddons
 
     internal sealed record Header(string? Name, string? Author, string? Version);
 
-    // regexes, not a Lua parser. First assignment not behind a -- wins
     internal static Header ReadHeader(string lua)
     {
         if (lua.Length > MaxRead) lua = lua[..MaxRead];
@@ -111,8 +107,6 @@ public static partial class WindowerAddons
     [GeneratedRegex(@"^[0-9][0-9.]*$", RegexOptions.None, RegexMs)]
     private static partial Regex Number();
 
-    // updates\addons.xml, out of the Lua repo, by name in any case. First entry for a name wins, and the text comes
-    // out cleaned
     public static IReadOnlyDictionary<string, WindowerAddonEntry> AddonsXml(string windowerDir)
     {
         var map = new Dictionary<string, WindowerAddonEntry>(StringComparer.OrdinalIgnoreCase);

@@ -14,7 +14,6 @@ using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.ViewModels.Install;
 
-// the pol.exe callbacks stop my pre-started pol.exe (it holds viewer files) and keep it off until the repair's done
 public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<IDisposable>? stopWaitingPol = null, Action? beforeRelease = null) : ObservableObject
 {
     internal const string CheckingText = "This may take a while.";
@@ -27,15 +26,14 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
 
     private readonly UiThread _ui = new();
     private CancellationTokenSource? _cts;
-    private volatile bool _changing;   // GameRepair says so right before the first game file changes
-    private volatile bool _fixed;      // and once the registry pass has put something right, or DXSETUP's started
-    private volatile bool _fixing;     // as the registry pass or DXSETUP starts
+    private volatile bool _changing;
+    private volatile bool _fixed;
+    private volatile bool _fixing;
     private bool _started;
     private DownloadMeter? _meter;
-    private GameProduct _product = GameProduct.Viewer;   // the one GameRepair's last said it's working on, the viewer goes first
-    private bool _repairing;           // the stage has moved from checking to repairing
+    private GameProduct _product = GameProduct.Viewer;
+    private bool _repairing;
 
-    // Enter and Esc both answer no, the yes takes DAT mods away for good
     internal bool ConfirmRepair(int files, long bytes, bool outOfDate, int ffxiFiles) =>
         dialogs.Confirm("Repair game files?", Question(files, bytes, outOfDate, ffxiFiles), "CONTINUE", ConfirmStyle.SafeKeys);
 
@@ -61,7 +59,6 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
 
     public bool StopRequested => _cts?.IsCancellationRequested == true;
 
-    // made on first use, on the UI thread. It's fed the bar's own bytes, so its percent is the bar's
     private DownloadMeter Meter => _meter ??= new DownloadMeter(text => Amount = text, text => TimeLeft = text, fraction => Fraction = fraction);
 
     [ObservableProperty]
@@ -82,7 +79,6 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
     internal static string StageText(GameProduct product, bool repairing) =>
         $"{(repairing ? "Repairing" : "Checking")} your {product.Name} files...";
 
-    // a stop has put its own words up, a product starting after it mustn't take them back
     internal void ShowProduct(GameProduct product)
     {
         if (!Running || StopRequested) return;
@@ -98,7 +94,6 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
 
     internal static string ResultText(RepairResult result) => result.FilesReplaced > 0 || result.OtherFixes > 0 ? DoneText : NoIssuesText;
 
-    // the replaced files under each product, then the rest one to a line
     internal static string DetailsText(RepairResult result)
     {
         var lines = new List<string>();
@@ -113,8 +108,6 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
         return string.Join(Environment.NewLine, lines);
     }
 
-    // a pending update shows as changed files too, so they're "damaged or out of date".
-    // The DAT warning only shows when one of the files is the game's
     internal static string Question(int files, long bytes, bool outOfDate, int ffxiFiles)
     {
         var size = ByteText.Size(bytes, kb: true);
@@ -157,11 +150,9 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
                 End("Nothing to repair", "Provenance couldn't find both the PlayOnline Viewer and FINAL FANTASY XI on this PC. Install the game first.", failed: true);
                 return;
             }
-            // the installers' INSTALLDIR is the viewer folder's grandparent (<root>\SquareEnix\PlayOnlineViewer)
             var installRoot = Directory.GetParent(viewerDir.TrimEnd('\\'))?.Parent?.FullName ?? Path.GetPathRoot(Path.GetFullPath(viewerDir))!;
             if (await Task.Run(() => PolUpdates.GameRunning(), ct)) { End("Repair can't start", GameRunningText, failed: true); return; }
 
-            // the check keeps its own two lines, the steps only show once there's something to fix
             bool downloading = false, showSteps = false;
             IProgress<string> status = new Progress<string>(s =>
             {
@@ -175,19 +166,15 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
             {
                 long done = p.Done, total = p.Total;
                 if (!downloading) checkTotal = total;
-                // with nothing known wrong the package databases carry on the check's bar, one total by bytes
                 else if (!showSteps) { done += checkTotal; total += checkTotal; }
                 Indeterminate = false;
-                // never back under one title, the line under it follows the held bar too
                 Meter.Update(done, total, total > 0 ? (double)done / total : 1, download: downloading);
             });
             var waiting = new Progress<PatchProgress>(p => Status = p.Text);
             var outcome = await Task.Run(() => GameFilesLock.Locked(GameFilesLock.Job.Repair, ct, waiting, () =>
             {
                 _ui.Run(() => Status = CheckingText);
-                // again under the lock, another copy may have started the game while this one waited
                 if (PolUpdates.GameRunning()) throw new RefusedException(GameRunningText);
-                // my waiting pol.exe holds viewer files, so it goes first like it does for a viewer update
                 if (stopWaitingPol is not null)
                 {
                     stoppedPol = true;
@@ -197,7 +184,6 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
                 }
                 if (PolUpdates.ViewerRunning()) throw new RefusedException(ViewerRunningText);
 
-                // the installer data runs as admin (DXSETUP), so each run gets its own admin-only folder
                 var stagingRoot = ProtectedFolders.SubDir("repair");
                 RemoveStaging(Directory.GetDirectories(stagingRoot));
                 var staging = Path.Combine(stagingRoot, Guid.NewGuid().ToString("N"));
@@ -219,7 +205,6 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
                                     plan.Count, plan.Bytes, plan.StaleVersions, plan.QueuePending, plan.DirectXMissing,
                                     plan.Indexes[GameProduct.Viewer.Slug].Version, plan.Work[GameProduct.Viewer.Slug].Count,
                                     plan.Indexes[GameProduct.Game.Slug].Version, plan.Work[GameProduct.Game.Slug].Count);
-                    // only replacing game files asks, the registry and DirectX never touch game data
                     bool ask = plan.Count > 0 || plan.QueuePending;
                     if (ask)
                     {
@@ -227,14 +212,13 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
                         _ui.Run(() => yes = ConfirmRepair(plan.Count, plan.Bytes, plan.StaleVersions.Count > 0, plan.Work[GameProduct.Game.Slug].Count));
                         if (!yes) return new Outcome(Ending.Declined);
                     }
-                    // the check or the question may have been sat there a while
                     if (PolUpdates.GameRunning()) throw new RefusedException(GameRunningText);
                     if (PolUpdates.ViewerRunning()) throw new RefusedException(ViewerRunningText);
                     bool known = ask || plan.StaleVersions.Count > 0 || plan.DirectXMissing;
                     _ui.Run(() =>
                     {
                         downloading = true;
-                        if (!known) return;   // the bar carries on for the package databases
+                        if (!known) return;
                         showSteps = true;
                         StartRepairing();
                         Status = "";
@@ -272,7 +256,7 @@ public partial class RepairViewModel(IDialogs dialogs, PolRegion? region, Func<I
             Log.Error("Repair: the mirror could not be used: {Reason}", ex.Message);
             End("Repair didn't finish", "Repair couldn't download what it needs. Try again later. " + Unchanged(), failed: true);
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)   // a request that timed out
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         {
             Log.Error("Repair: the mirror is unreachable: {Reason}", ex.Message);
             End("Repair didn't finish", "Repair couldn't connect to download what it needs. Check your internet connection, then try again. " + Unchanged(),

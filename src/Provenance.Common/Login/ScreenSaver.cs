@@ -7,8 +7,6 @@ namespace Provenance.Common.Login;
 
 public static class ScreenSaver
 {
-    // pol.exe switches the screen saver off while it runs, so it's read before each start and the last pol.exe out puts
-    // it back
     internal static string? AtStart { get; set; }
 
     public static void Note(ISettingsService settings) =>
@@ -21,8 +19,6 @@ public static class ScreenSaver
         return pols.Length > 0;
     }
 
-    // Windows only has the real answer with no pol.exe about, so that's kept for starts while one runs. A settings.json
-    // that didn't load is left for the user's next save
     internal static void Note(ISettingsService settings, Func<bool> polRunning, Func<bool?> readWindows,
                               Func<bool>? endedUnseen = null, Action<bool>? set = null)
     {
@@ -60,7 +56,6 @@ public static class ScreenSaver
 
     internal static bool? Saved { get; set; }
 
-    // a pol.exe that crashed or got killed never put it back itself, and the next start's read has to be the real one
     internal static void PutBack() => PutBack(Saved, AnyPolRunning, Set);
 
     internal static bool PutBack(bool? wasOn, Func<bool> polRunning, Action<bool> set)

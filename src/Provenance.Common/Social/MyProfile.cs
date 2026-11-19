@@ -7,13 +7,10 @@ public sealed record MyProfileField(string Label, PrivacyLevel Level, long Value
 
 public sealed record MyProfileChoice(long Code, IReadOnlyList<string> Parts);
 
-// one of my FFXI characters, as the viewer's editor tabs have them. Key is the hook's for asking about it, Name is empty
-// when the Content ID list doesn't have one
 public sealed record MyProfileCharacter(int Slot, string Key, int World, string Name)
 {
     public string? WorldName => FfxiWorlds.Name(World);
 
-    // the hook's key is the three ids as 8 hex digits each, Content ID then the character ID's two halves
     public CharacterId? Id =>
         Key.Length == 24 && uint.TryParse(Key.AsSpan(0, 8), System.Globalization.NumberStyles.AllowHexSpecifier, null, out var sid) &&
         uint.TryParse(Key.AsSpan(8, 8), System.Globalization.NumberStyles.AllowHexSpecifier, null, out var lo) &&
@@ -21,19 +18,15 @@ public sealed record MyProfileCharacter(int Slot, string Key, int World, string 
             ? new CharacterId(sid, (ulong)hi << 32 | lo) : null;
 }
 
-// Tables are the viewer's value tables (prof_pol.pfb)
 public sealed record MyProfile(string Handle, PrivacyLevel Level, IReadOnlyDictionary<string, MyProfileField> Fields,
                                IReadOnlyDictionary<string, IReadOnlyList<MyProfileChoice>> Tables)
 {
     public string Token { get; init; } = "";
-    // the H-ID of the handle it was loaded for, a rename's refused for any other
     public string Key { get; init; } = "";
     public IReadOnlyList<MyProfileCharacter> Characters { get; init; } = [];
 
     public static string PathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.MyProfile);
 
-    // the e-mail address from the POL profile (z_mail) comes in masked, first letter, *** and the domain, never the
-    // real one
     public static MyProfile? TryRead(int pid) =>
         HookFiles.ReadJson(pid, HookContract.Files.MyProfile, HookFiles.MaxBytes.MyProfile, Parse);
 

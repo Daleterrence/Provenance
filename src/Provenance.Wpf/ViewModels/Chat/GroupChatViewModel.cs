@@ -11,7 +11,6 @@ using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.ViewModels.Chat;
 
-// Text is what's shown (filtered, unless it's mine), the log keeps what came in
 public sealed record GroupChatLineItem(string Id, string Name, string Text, bool Me, DateTimeOffset When)
 {
     public string Display => $"{Name}: {Text}";
@@ -20,8 +19,6 @@ public sealed record GroupChatLineItem(string Id, string Name, string Text, bool
 
 public sealed record GroupChatMemberItem(string Name, bool Me, string Note);
 
-// a friend group's chat, one at a time like the viewer. Close only hides it, it stays in till Exit, a handle switch,
-// the game, logging out or the group going
 public sealed partial class GroupChatViewModel : ObservableObject
 {
     public enum Phase { Out, Joining, In }
@@ -43,7 +40,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
     private string? _tailGroup;
     private long _tailSeen;
     private DateTime _tailUntil;
-    // the hook writes its file at most once a second, so a few seconds covers the last of it
     internal static readonly TimeSpan TailFor = TimeSpan.FromSeconds(10);
     private readonly Dictionary<string, int> _unread = new(StringComparer.OrdinalIgnoreCase);
 
@@ -87,16 +83,11 @@ public sealed partial class GroupChatViewModel : ObservableObject
         Seen();
     }
 
-    // lines from someone else while the window's hidden or behind, once a batch: the group's name, the last one's
-    // sender and text, and how many came
     public event Action<string, string, string, int>? LineArrived;
-    // the chat's over: null when there's nothing to say about it, otherwise the viewer's own words for why
     public event Action<string?>? Ended;
     public event Action? UnreadChanged;
-    // there's something for the window's tick to do
     public event Action? TickNeeded;
 
-    // a chat that's open (a join to time out, a send to wait on), a send going, or lines not on disk yet
     public bool NeedsTick => Open || !_gate.CanSend || _log is { Dirty: true };
 
     private void WakeTick()
@@ -107,7 +98,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public int UnreadFor(string groupId) => _unread.GetValueOrDefault(groupId);
     public int UnreadTotal => _unread.Values.Sum();
 
-    // a new login's log, and nothing unread carried over from the last
     public void SetLog(GroupChatLog? log)
     {
         _log = log;
@@ -125,8 +115,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
         UnreadChanged?.Invoke();
     }
 
-    // the handle question's already been asked by the time this runs. One still joining just has its window shown
-    // again, like the viewer
     public bool Join(PolGroup group)
     {
         if (_social.Session.Pid is not { } pid) return false;
@@ -172,7 +160,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     internal bool ConfirmExit() => _dialogs.YesNo(DialogTitle, ExitQuestion);
 
-    // the viewer's Exit, after its question
     public void Exit()
     {
         if (!Open) return;
@@ -189,7 +176,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
         _tailUntil = _social.Now + TailFor;
     }
 
-    // what the hook still has of a chat that's over goes in that group's kept lines, nothing on screen
     private void ReadTail()
     {
         if (_tailGroup is not { } group || _social.Session.Pid is not { } pid) return;
@@ -215,20 +201,17 @@ public sealed partial class GroupChatViewModel : ObservableObject
         if (!withdrawn) GroupChatFiles.Leave(pid, HookFiles.NewToken(), Current == Phase.Joining ? _join.Token ?? "" : "");
     }
 
-    // the session's over (logged out, POL closed), nothing to send
     public void CloseQuietly()
     {
         if (Open) End(null);
         ClearUnread();
     }
 
-    // leaving or disbanding the group from the Groups tab: its chat goes with it, and so do the lines kept for it
     public bool GroupLeft(string groupId, string message)
     {
         _log?.Clear(groupId);
         WakeTick();
         if (_unread.Remove(groupId)) UnreadChanged?.Invoke();
-        // and the hook's last lines for it don't go back in a log that's just been cleared
         if (_tailGroup is { } t && string.Equals(t, groupId, StringComparison.OrdinalIgnoreCase)) _tailGroup = null;
         bool endedForIt = _quietlyEnded is { } q && string.Equals(q, groupId, StringComparison.OrdinalIgnoreCase);
         _quietlyEnded = null;
@@ -244,7 +227,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
         return true;
     }
 
-    // a leave or disband that didn't go: true when its chat's already closed, or closing in this same snapshot
     public bool LeaveFailed(string groupId, PolSocialSnapshot snap)
     {
         if (_quietlyEnded is { } q && string.Equals(q, groupId, StringComparison.OrdinalIgnoreCase))
@@ -310,7 +292,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public ComposeRules ComposeRules => _rules ??= new() { SingleLine = true, MaxChars = GroupChatFiles.MaxText, Filter = FilterInput };
     private ComposeRules? _rules;
 
-    // typing or pasting: what Shift-JIS can't carry is dropped, with a word about it
     public string FilterInput(string text)
     {
         var kept = ShiftJis.Filter(text, out bool dropped);
@@ -318,7 +299,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
         return kept;
     }
 
-    // the window's half-second tick: Send's button, a join or a line that never got an answer, and the log's save
     public void Tick()
     {
         var now = _social.Now;
@@ -350,7 +330,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
         return true;
     }
 
-    // only the lines that were on screen when Clear was picked, not ones that came in while it asked
     public void ClearLines(IReadOnlyCollection<string> ids)
     {
         var set = ids.ToHashSet(StringComparer.Ordinal);
@@ -362,7 +341,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ISocialSession.HandleSwitching)) SendCommand.NotifyCanExecuteChanged();
-        // the hook leaves for the game, the window goes with it
         if (e.PropertyName == nameof(ISocialSession.GameRunning) && _social.GameRunning && Open) End(null);
     }
 
@@ -389,7 +367,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
                 return;
             case "gone" or "removed":
                 ReadLines(gc);
-                // my own leave or disband from the Groups tab, which comes before its answer, and that one says it
                 if (_social.LeavingGroupId is { } leaving && SameGroup(leaving))
                 {
                     _quietlyEnded = GroupId;
@@ -449,7 +426,6 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     private void FinishSend(string done, string text)
     {
-        // it went, but with no row of mine in the group polcore never hands my copy back, so it's shown from here
         if (done == "sent:unechoed" && _sentLine is { } line)
         {
             var e = GroupChatEntry.Mine(MyHandle, line);
@@ -461,14 +437,12 @@ public sealed partial class GroupChatViewModel : ObservableObject
         {
             ComposeNote = done == "failed:characters" ? HookFailures.GroupChat.Characters
                 : HookFailures.ForChatLine(done) ?? _social.Viewer.Text(0x3eba, HookFailures.GroupChat.SendFailed);
-            // the line goes back in the box, like the viewer keeps it till it's gone
             if (Compose.Length == 0) Compose = text;
         }
         _sentLine = null;
         SendCommand.NotifyCanExecuteChanged();
     }
 
-    // me first, then whoever's in the chat, the viewer's "in chat/members" count
     private void RefreshMembers(PolGroup group)
     {
         if (!Open) return;

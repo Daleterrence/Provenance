@@ -59,7 +59,6 @@ public sealed partial class PolSession : IDisposable
         }
     }
 
-    // raised on whichever thread changed it, often under the session's lock, so a handler just hands the work on
     public event Action? PidChanged;
 
     public SessionRecords Records { get; }
@@ -73,8 +72,7 @@ public sealed partial class PolSession : IDisposable
     internal Action<string, CancellationToken> FindBuild { get; init; } = SignedBuilds.FetchIfUnknown;
     internal Action ScreenSaverBack { get; init; } = ScreenSaver.PutBack;
     internal Func<DateTime> Now { get; init; } = () => DateTime.UtcNow;
-    // quiet this long and the login's stuck. polcore fails a list load or a login step at 100s by itself, apart from
-    // state 23, which it sits in for 400s
+    // polcore fails a list load or a login step at 100s by itself, apart from state 23, which it sits in for 400s
     internal TimeSpan StallLimit { get; init; } = TimeSpan.FromSeconds(260);
     internal WindowerStart Windower { get; }
     internal ThirdPartyHookTracker HookTracker { get; } = new();
@@ -105,7 +103,6 @@ public sealed partial class PolSession : IDisposable
         finally { if (rc != 0) Records.ReleaseClaim(); }
     }
 
-    // on the UI thread, where Settings changes the live addon lists while the login carries on in the background
     internal SessionOptions ForLaunch(SessionOptions? options) =>
         (options ?? new SessionOptions(false, null)) with
         {
@@ -130,7 +127,6 @@ public sealed partial class PolSession : IDisposable
         return Prepare(request, ct, stage) ?? Finish(request, ct, stage);
     }
 
-    // what a login's first half leaves for its second
     private sealed class LoginStage : IDisposable
     {
         internal EarlyLogin? Early;
@@ -145,7 +141,6 @@ public sealed partial class PolSession : IDisposable
         }
     }
 
-    // everything a login does before it needs the account's details. Null carries on, a code has said why already
     private int? Prepare(LoginRequest request, CancellationToken ct, LoginStage stage, bool ahead = false)
     {
         var progress = request.Progress;
@@ -191,7 +186,6 @@ public sealed partial class PolSession : IDisposable
         return null;
     }
 
-    // everything that needs the account's details
     private int Finish(LoginRequest request, CancellationToken ct, LoginStage stage)
     {
         var progress = request.Progress;
@@ -208,7 +202,6 @@ public sealed partial class PolSession : IDisposable
             progress?.Report(LaunchProgress.Cancelled(launch.End()));
             return LoginCodes.Cancelled;
         }
-        // after the viewer's own check and before any pol.exe's used
         if (request.Options.Lean && request.BeforePol is { } stillLean && !stillLean())
             request = request with { Options = request.Options with { Lean = false } };
         if (ct.IsCancellationRequested) return Cancelled();
@@ -220,7 +213,6 @@ public sealed partial class PolSession : IDisposable
             Log.Warning("PlayOnline Viewer build not supported: {Problem}", buildProblem);
             return Fail(buildProblem);
         }
-        // under the gate so a StopHold still running has dropped its chat entry before the id changes
         string launchId;
         lock (_gate) launchId = launch.Active ? launch.LaunchId! : Credentials.NewLaunchId();
         var keys = new List<string>();
@@ -230,11 +222,10 @@ public sealed partial class PolSession : IDisposable
         }
         finally
         {
-            Credentials.CleanupOneShots(keys);   // on every way out, so passwords never linger in Credential Manager
+            Credentials.CleanupOneShots(keys);
         }
     }
 
-    // a pol.exe started early was started on the files as they were, so it only carries on if they hold as they are
     private IDisposable? HoldForLogin(string viewerDir, EarlyLogin early, CancellationToken ct, out string? problem)
     {
         if (early.Active)
@@ -248,8 +239,6 @@ public sealed partial class PolSession : IDisposable
         return HoldBuild(viewerDir, ct, out problem);
     }
 
-    // the files are only hashed once when the build's known. One only the mirror's list knows has to be on it first,
-    // and then Large Address Aware has a build to work with
     private IDisposable? HoldBuild(string viewerDir, CancellationToken ct, out string? problem)
     {
         var held = HoldViewer(viewerDir, out problem);
@@ -279,7 +268,6 @@ public sealed partial class PolSession : IDisposable
             return ct.IsCancellationRequested ? LoginCodes.Cancelled : LoginCodes.LauncherFailed;
         AdoptPid(pid, request.ProfileId);
         progress?.Report(new LaunchProgress("Starting", "Starting PlayOnline...", 0.04));
-        // an old process with this pid left these. Not the go file, a pre-started pol.exe reads its login from it
         HookFiles.ClearFor(pid);
         Credentials.DropChatPassword();
         HookFiles.Delete(pid, HookContract.Files.Stop);
@@ -301,7 +289,6 @@ public sealed partial class PolSession : IDisposable
         return psi;
     }
 
-    // null once progress has said why
     private int? StartPol(LoginRequest request, ProcessStartInfo psi, string polExe, string launchId, WindowerUpdateAnswers answers, CancellationToken ct)
     {
         var progress = request.Progress;
@@ -315,7 +302,6 @@ public sealed partial class PolSession : IDisposable
         if (platform == ThirdPartyHook.Windower)
             return Windower.Start(psi, polExe, launchId, options, progress, ct, answers);
         if (Prestarter.TakePrestarted(psi, ct) is { } pre) return pre;
-        // a cancel while the pre-start was being taken leaves it waiting, so nothing starts in its place
         if (ct.IsCancellationRequested)
         {
             progress?.Report(LaunchProgress.Cancelled());
@@ -329,12 +315,10 @@ public sealed partial class PolSession : IDisposable
         lock (_gate)
         {
             Pid = pid;
-            // kept so the exit code still says why if it dies mid login
             _polProc?.Dispose();
             try { _polProc = Process.GetProcessById(pid); _ = _polProc.Handle; _polStamp = ProcessStamp.Of(pid); }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException or Win32Exception) { _polProc = null; _polStamp = null; }
         }
-        // saved now, if this copy dies mid login the next start ends this pol.exe
         SaveSession(profileId);
         Log.Information("Hold session: pol.exe pid {Pid}", pid);
     }
@@ -355,7 +339,6 @@ public sealed partial class PolSession : IDisposable
         var lastActivity = DateTime.UtcNow;
         int? Ending(HookEvent? e)
         {
-            // the language the hook gave polcore, the same one app.dll builds the jail page's address from
             if (e is ViewerStarted { Language: { } lang }) _viewerLanguage = lang;
             if (e is AuthRefused refused) LastRefusalReason = refused.Reason;
             return HookExitText.LoginEnd(e, _settings.RegionOrDefault, _viewerLanguage) is var (code, text) ? Fail(code, text) : null;
@@ -374,12 +357,11 @@ public sealed partial class PolSession : IDisposable
                 Credentials.SaveHandle(name);
                 lastActivity = DateTime.UtcNow;
             }
-            if (ct.IsCancellationRequested) break;   // a cancel that lands with the first snapshot still wins
+            if (ct.IsCancellationRequested) break;
             var timer = new StepTimer("First friends and messages load in");
             if (SocialSnapshotFiles.TryRead(pid) is { } snap)
             {
                 timer.Lap("read");
-                // the hook writes the store file before its first snapshot, so it's there now even if Play comes next
                 var stored = SocialSnapshotFiles.TryReadStore(pid);
                 timer.Lap("store read");
                 SnapshotUpdated?.Invoke(snap with { Stored = stored });
@@ -393,12 +375,10 @@ public sealed partial class PolSession : IDisposable
             }
             if (!ProcessStamp.PidRunning(pid))
             {
-                // it can log its refusal and exit between two reads
                 foreach (var line in hookLog.ReadRemainingLines())
                     if (Ending(HookLog.Parse(line)) is { } result) return result;
                 int? exit = null;
                 try { if (_polProc is { HasExited: true } ended) exit = ended.ExitCode; }
-                // the exit code is a nice to have
                 catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
                 ScreenSaver.PutBack();
                 LogEarlyExit(pid, exit, logPath);
@@ -407,19 +387,16 @@ public sealed partial class PolSession : IDisposable
             }
             if (DateTime.UtcNow - lastActivity > StallLimit)
                 return Fail(LoginCodes.Stalled, HookExitText.StalledText);
-            // the 250ms is the heartbeat, it's what notices a pol.exe that's gone without a word
             wake.Wait(TimeSpan.FromMilliseconds(250), ct);
         }
         return Stopped(progress, polClosed: true);
     }
 
-    // the hook's own log is in the admin-only folder, so a player's log needs the exit code and the crash lines too
     private static void LogEarlyExit(int pid, int? exit, string hookLog)
     {
         Log.Warning("pol.exe {Pid} ended before the login finished, exit code {Exit}", pid, exit is { } e ? $"0x{e:X8}" : "unknown");
         try
         {
-            // a crash is its address, the registers, the fault and up to 12 stack lines, so 16 keeps one whole
             var crashes = HookLog.EventsOfThisRun(hookLog).OfType<Crashed>();
             foreach (var crash in crashes.Take(16)) Log.Warning("pol_hook: {Line}", crash.Line.Trim());
         }
@@ -452,12 +429,10 @@ public sealed partial class PolSession : IDisposable
         SessionEnded?.Invoke(LostSessionText(pid) ?? HookExitText.SessionClosedText(exit));
     }
 
-    // under the gate, once the held pol.exe has ended by itself. Its exit code, when there's a way to read it
     private int? ForgetEndedPol(int pid)
     {
         int? exit = null;
         try { if (_polProc is { HasExited: true } gone && gone.Id == pid) exit = gone.ExitCode; }
-        // the exit code is a nice to have
         catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
         Log.Warning("Held PlayOnline session (pid {Pid}) ended on its own (exit code {Exit})", pid, exit);
         ScreenSaver.PutBack();
@@ -472,12 +447,10 @@ public sealed partial class PolSession : IDisposable
     {
         _snapshots.Stop();
         Records.Clear();
-        // taken now so one that a new login starts meanwhile is left alone
         var hook = HookTracker.Take();
         Task.Run(() => ThirdPartyHookTracker.End(hook));
     }
 
-    // turns the held lean session into a full one where it is, with no second login. Ends with what a login would say
     public Task<GoFullResult> GoFullAsync(CancellationToken ct) => Task.Run(() => GoFull(ct));
 
     private GoFullResult GoFull(CancellationToken ct)
@@ -499,7 +472,6 @@ public sealed partial class PolSession : IDisposable
                 return new(LoginCodes.Cancelled, null);
             }
             bool alive = ProcessStamp.PidRunning(pid);
-            // the hook can log why and end between two reads, so what's left is read once it's gone
             foreach (var line in alive ? hookLog.ReadNewLines() : hookLog.ReadRemainingLines())
                 ended ??= HookExitText.LoginEnd(HookLog.Parse(line), _settings.RegionOrDefault, _viewerLanguage);
             if (!alive)
@@ -510,7 +482,6 @@ public sealed partial class PolSession : IDisposable
                 var (code, text) = ended ?? HookExitText.EndedBeforeLogIn(exit);
                 return new(code, text);
             }
-            // online too, a handle's only the active one once that's answered and Play's link needs it
             if (ended is null && SocialSnapshotFiles.TryRead(pid) is { Lean: false, StatusBusy: false } snap)
                 return new(0, null, snap with { Stored = SocialSnapshotFiles.TryReadStore(pid) });
             if (watch.Reached(Now()))
@@ -522,7 +493,6 @@ public sealed partial class PolSession : IDisposable
         }
     }
 
-    // the hook's reason when it lost the session itself, read once
     private string? LostSessionText(int pid)
     {
         string? why = null;
@@ -540,11 +510,9 @@ public sealed partial class PolSession : IDisposable
     public void SignalPlay()
     {
         if (Credentials.LaunchId is null) return;
-        // skip the log so far, only the answer to this Play counts and not an unreadable entry planted earlier
         if (Pid is { } pid)
             try { LogOf(pid).ReadNewLines(); } catch (Exception ex) { Log.Warning(ex, "Could not read the hook log before Play"); }
         Windower.PutValuesBack();
-        // saved first, so a throw leaves the session held
         Credentials.SavePlay();
         if (Pid is { } playing) NudgeHold(playing);
         _played = true;
@@ -552,7 +520,6 @@ public sealed partial class PolSession : IDisposable
         if (Pid is not null) Records.MarkPlayed();
     }
 
-    // the hold finds the Play entry on its own beat anyway, this only gets it there sooner
     private static void NudgeHold(int pid)
     {
         try
@@ -619,7 +586,6 @@ public sealed partial class PolSession : IDisposable
         HookTracker.Forget();
     }
 
-    // multi-account mode: forget the played session, the game and its record stay as they are
     public void ReleasePlayedSession()
     {
         lock (_gate)
@@ -632,7 +598,6 @@ public sealed partial class PolSession : IDisposable
             Credentials.ForgetLaunch();
             _played = false;
             Records.Forget();
-            // nothing watches the game from here, and one that crashes leaves the screen saver off
             if (_polProc is { } game)
                 game.WaitForExitAsync().ContinueWith(_ => { game.Dispose(); ScreenSaverBack(); }, TaskScheduler.Default);
             _polProc = null;
@@ -652,7 +617,6 @@ public sealed partial class PolSession : IDisposable
         while (true)
         {
             bool alive = ProcessStamp.PidRunning(pid);
-            // it can log its answer and end between two reads, so read what's left once it's gone
             foreach (var line in alive ? hookLog.ReadNewLines() : hookLog.ReadRemainingLines())
             {
                 switch (HookLog.Parse(line))
@@ -670,18 +634,15 @@ public sealed partial class PolSession : IDisposable
                         return HookExitText.PlayRefusedText;
                 }
             }
-            // nothing polls while Play runs, so a session the hook lost meanwhile only shows here
             if (!alive)
             {
                 Log.Warning("pol.exe {Pid} ended before the game started, the PlayOnline session was lost", pid);
                 var why = LostSessionText(pid) ?? HookExitText.PlaySessionClosedText;
                 ScreenSaver.PutBack();
                 EndUnstartedPlay();
-                // no pol.exe left to stop, and a later one with this pid would read it
                 HookFiles.Delete(pid, HookContract.Files.Stop);
                 return why;
             }
-            // a held pol.exe never exits by itself, so without this the wait would never end
             if (DateTime.UtcNow >= until)
             {
                 Log.Error("No answer from the hook to Play within {Seconds}s (pol.exe {Pid}): the game did not start; ending the session",
@@ -701,7 +662,6 @@ public sealed partial class PolSession : IDisposable
         StopHold();
     }
 
-    // the game's exit code, when there's still a way to read it
     public async Task<int?> WaitForExitAsync()
     {
         if (Pid is not { } pid) return null;
@@ -711,9 +671,7 @@ public sealed partial class PolSession : IDisposable
             await p.WaitForExitAsync();
             return p.ExitCode;
         }
-        // no process to wait on, so try the kept handle below
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
-        // already gone, the handle kept from its start can still say how it ended. No gate, this can be the UI thread
         var kept = _polProc;
         try { return kept is { HasExited: true } && kept.Id == pid ? kept.ExitCode : null; }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { return null; }

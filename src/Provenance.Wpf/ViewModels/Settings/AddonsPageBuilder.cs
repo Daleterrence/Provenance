@@ -10,8 +10,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// What the Addons page shows for a Windower profile or an Ashita boot configuration, worked out from the files and
-// Provenance's settings. Nothing in here changes either
 internal static class AddonsPageBuilder
 {
     private const string LoadedBy = "already loaded by ";
@@ -119,7 +117,6 @@ internal static class AddonsPageBuilder
         var repo = (scan.Tree?.Addons ?? []).Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         AddonListing Offered(WindowerAddon t) => scan.AddonsXml.TryGetValue(t.Name, out var x)
             ? new AddonListing(t.Name, t.Name, null, x.Author, x.Description, null) : AddonListing.Named(t.Name);
-        // Windower.exe's own link, for an addon that's in both addons.xml and the tree. It beats a readme in the folder
         AddonListing Linked(AddonListing l) =>
             scan.AddonsXml.ContainsKey(l.Key) && scan.Tree?.Find(l.Key) is { } t && WindowerAddonTree.ReadmeLink(t, file.Branch) is { } link
                 ? l with { Docs = new AddonDocs(AddonDocsKind.Link, link) } : l;
@@ -141,8 +138,6 @@ internal static class AddonsPageBuilder
         return listed.Where(n => !string.IsNullOrWhiteSpace(n) && seen.Add(n)).ToList();
     }
 
-    // the launch's own skip reasons read back, so the page never disagrees with what really loads. Bit cheeky, but
-    // nothing else knows
     private static Dictionary<string, string> Reasons(string dir, WindowerProfile profile, WindowerScan scan, AddonKind kind, List<string> names)
     {
         var list = kind == AddonKind.Addon ? new WindowerAddonList { Addons = names } : new WindowerAddonList { Plugins = names };
@@ -153,7 +148,6 @@ internal static class AddonsPageBuilder
             int at = s.LastIndexOf(" (", StringComparison.Ordinal);
             if (at > 0 && s.EndsWith(')')) reasons.TryAdd(s[..at], s[(at + 2)..^1]);
         }
-        // each kind its own, a plugin can share an addon's name
         foreach (var n in kind == AddonKind.Addon ? launch.InitCommandAddons : launch.InitCommandPlugins) reasons.TryAdd(n, LoadedBy + "the profile's init command");
         return reasons;
     }
@@ -230,7 +224,6 @@ internal static class AddonsPageBuilder
         var pol = boot.PolPlugins;
         AshitaLoad PolState(string n) => pol.Any(p => Same(p.Name, n) && p.On) ? AshitaLoad.On : AshitaLoad.Off;
         var polFound = scan.Plugins.Where(p => p.Kind == AshitaPluginKind.PolPlugin).ToList();
-        // a switched-off one shows off whatever the boot configuration says, as it is when Provenance starts the game
         var polRows = polFound.Select(p => AshitaPolPlugins.IsTakeover(p.Listing.Key)
             ? new RowData(AddonKind.PolPlugin, p.Listing with { Description = AshitaPolPlugins.IncompatibleReason(p.Listing.Key) })
                 { CanChange = false, Incompatible = true, Badges = [Badges.Incompatible], Team = AshitaTeam(AddonKind.PolPlugin, p.Listing.Key) }
@@ -272,7 +265,6 @@ internal static class AddonsPageBuilder
             "Ashita can't load a name like this one from a script or boot configuration. Rename it to plain letters and numbers to use it.", Warn: true);
     }
 
-    // rows something other than the page's switches loads, top to bottom as the page shows them
     internal static class Groups
     {
         public static readonly AddonGroup InitTxt = new("Loaded by your init.txt",

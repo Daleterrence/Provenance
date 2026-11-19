@@ -13,7 +13,6 @@ internal static class ScriptLoads
     {
         var plugins = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var addons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        // just what the hook gets: load and exec are echoes by then, and a cut-off tail never runs
         Scan(WindowerHookBlock.InitCommandAsSent(initCommand), InitCommand, plugins, addons);
         Run(Path.Combine(windowerDir, "scripts"), "init.txt", 0, new HashSet<string>(StringComparer.OrdinalIgnoreCase), plugins, addons);
         return (plugins, addons);
@@ -42,7 +41,6 @@ internal static class ScriptLoads
         return File.Exists(path) ? path : File.Exists(path + ".txt") ? path + ".txt" : null;
     }
 
-    // runs is only there for a script file, and gets the scripts it runs with exec
     internal static void Scan(string script, string where, Dictionary<string, string> plugins, Dictionary<string, string> addons, List<string>? runs = null)
     {
         foreach (var whole in script.Split('\n'))
@@ -57,10 +55,8 @@ internal static class ScriptLoads
                 if (words.Length < 2) continue;
                 string Name(int i) => words[i].Trim('"', '\'');
                 var verb = words[0].ToLowerInvariant();
-                // in the init command only a plugin_load as typed: load is an echo by then, and the one in front is mine
                 if (runs is null ? words[0] == "plugin_load" : verb is "load" or "plugin_load") plugins.TryAdd(Name(1), where);
                 else if (verb == "lua" && words.Length >= 3 && words[1].ToLowerInvariant() is "load" or "l") addons.TryAdd(Name(2), where);
-                // one plain word only, the hook's handling of quotes and of a capital Exec isn't documented
                 else if (runs is not null && words is [("exec" or "console_exec"), var name] && !name.Contains('"') && !name.Contains('\'')) runs.Add(name);
             }
         }

@@ -9,7 +9,6 @@ using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Social;
 
-// unowned like the friends window, so it stays up with the main window in the tray
 public partial class GroupsWindow : AppWindow
 {
     private SocialViewModel? Vm => DataContext as SocialViewModel;
@@ -25,14 +24,13 @@ public partial class GroupsWindow : AppWindow
         };
         IsVisibleChanged += (_, _) => ReportVisible();
         StateChanged += (_, _) => ReportVisible();
-#pragma warning disable RS0030 // a view, not a view model
+#pragma warning disable RS0030
         if (Application.Current is { } app) app.Activated += OnAppActivated;
 #pragma warning restore RS0030
-        // the view model outlives the window, so a closed one lets go
         Closed += (_, _) =>
         {
             if (Vm is { } vm) Detach(vm);
-#pragma warning disable RS0030 // a view, not a view model
+#pragma warning disable RS0030
             if (Application.Current is { } a) a.Activated -= OnAppActivated;
 #pragma warning restore RS0030
         };
@@ -44,7 +42,6 @@ public partial class GroupsWindow : AppWindow
         vm.GroupInviteReceived -= OnInviteLanded;
     }
 
-    // an invitation landing here counts as seen. With Provenance in the background this window flashes instead
     private void OnInviteLanded(string who, int mid)
     {
         if (Vm?.Flashes(NoticeKind.GroupInvite) != true || !IsVisible || WindowState == WindowState.Minimized) return;
@@ -91,7 +88,6 @@ public partial class GroupsWindow : AppWindow
         Menus.Toggle(button, () => BuildRowMenu(row) ? row.ContextMenu : null);
     }
 
-    // a right-click opens it at the pointer again, after the dots button put it below itself
     private void OnRowMenu(object sender, ContextMenuEventArgs e)
     {
         if (sender is not FrameworkElement row || !BuildRowMenu(row))

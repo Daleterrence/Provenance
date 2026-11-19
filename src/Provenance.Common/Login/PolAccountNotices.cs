@@ -5,19 +5,15 @@ using Provenance.Common.Social;
 
 namespace Provenance.Common.Login;
 
-// the viewer's own account checks (app.dll LM table at 0x104a6d68, Content ID check at 0x10199093), so the game gets
-// refused in the same cases with the same text
 public static class PolAccountNotices
 {
-    // app string 0x65d9. A cancelled Content ID is just missing, so this covers never subscribed and cancelled
+    // a cancelled Content ID is just missing, so this covers never subscribed and cancelled
     public const string NoFfxiContentId =
         "You have no Content ID for FINAL FANTASY XI. Please obtain a new Content ID or reactivate " +
         "a cancelled one in order to play the game and/or to use the PlayOnline services.";
 
-    // Blocks when the viewer's frame only offers Log Out or a fix-it page
     public sealed record Notice(int Status, string Code, bool Blocks, string Text);
 
-    // the viewer's own text, word for word, minus the bits that tell you to press one of its buttons
     private static readonly Dictionary<int, Notice> Table = new[]
     {
         N(221, true, "Unable to log in due to unexpected error."),
@@ -54,8 +50,7 @@ public static class PolAccountNotices
         N(252, false, "The credit card registered for your payment method will expire at the end of the month. Please update the credit card information before it expires. You can do so from \"Register/Update Payment Method\" within the Square Enix Account Management System."),
     }.ToDictionary(n => n.Status);
 
-    // EU points LM-01 and LM-14 at their own messages (0x6ee6, 0x5730) and words LM-17, LM-19 and LM-31 its own way.
-    // Every other row is the US one
+    // EU words LM-01, LM-14, LM-17, LM-19 and LM-31 its own way, every other row is the US one
     private static readonly Dictionary<int, Notice> Europe = new[]
     {
         N(221, true, "Your account is closed due to unpaid fees."),
@@ -72,8 +67,7 @@ public static class PolAccountNotices
     public static string? PlayBlockedReason(PolSocialSnapshot snap) =>
         snap.FfxiService == "none" ? NoFfxiContentId : snap.HandleUnconfirmed ? HookFailures.Handles.PlayHeld : null;
 
-    // status byte from svc 0xd20, where 253..255 have no row and the viewer shows LM-01 for them. A refused login has
-    // no day count for LM-02, so that one says it in words
+    // a refused login has no day count for LM-02, so that one says it in words
     public static Notice? For(int status, PolRegion region = PolRegion.UnitedStates, int days = 0)
     {
         if (status is >= 253 and <= 255) status = 221;
@@ -98,7 +92,6 @@ public static class PolAccountNotices
         _ => $"Network Connection Error (code {reason}).",
     };
 
-    // env.dat's POL_JAIL_USER_LOGIN_URL with app.dll's language tag for %s ({ja-JP, en-US, en-GB, ...}[language] at 0x104b34a0).
     // JP is always 0, US 1, EU reads Settings\Language (MSI writes 1), so only 2 is en-GB
     public static string JailUrl(PolRegion region, int? language) =>
         $"http://info.playonline.com/snews/{region switch
@@ -133,33 +126,26 @@ public static class PolAccountNotices
     private static int? LoadCode(string what) =>
         what.StartsWith("load:", StringComparison.Ordinal) && int.TryParse(what[(what.IndexOf('=') + 1)..], out var code) ? code : null;
 
-    // a load refused because POL's own servers are in trouble, which says nothing about the account
     public static string? ServerProblem(string what) =>
         LoadCode(what) is -5370 or -5371 or (>= -5438 and <= -5435) ? "The server may be experiencing problems." : null;
 
-    // a dropped session, the viewer's way: its two disconnect texts, else msg 0x5654 with POL-nnnn (0x5a16) and
-    // polerr's text. A -250 (no PING for 400s) only shares LM-30's number
     public static string SessionLost(int reason, PolRegion region = PolRegion.UnitedStates) => reason switch
     {
         -0x40f => "Disconnected. The current PlayOnline ID was used to log in from another terminal.",
         -0x400 or -0x401 or -0x40e => "Disconnected. Now offline.",
-        // the viewer says nothing for one that isn't negative, and the session's still gone
         >= 0 => "Disconnected from PlayOnline.",
         _ => NetworkError((int)Math.Min(-(long)reason, int.MaxValue), region),
     };
 
-    // the three polerr texts with a %d (days left on a payment) are the viewer's to fill in, so they're left off
     public static string NetworkError(int code, PolRegion region = PolRegion.UnitedStates)
     {
         var head = $"Network Connection Error\nPOL-{code:0000}";
         return PolErrors.Text(code, region) is { } text && !text.Contains("%d") ? $"{head}\n{text}" : head;
     }
 
-    // polerr 207, what the viewer says once a revoked login drops
     private const string ConnectionLost =
         "Connection terminated or not available. Please try connecting again later or check cables, networking devices, and network settings.";
 
-    // viewer message 0x7007
     public const string BadPassword =
         "PlayOnline passwords corresponding to the following are now invalid.\n\n" +
         "- PlayOnline passwords under 8 characters\n" +

@@ -14,7 +14,6 @@ public static class WindowerKeyNames
         ["MediaSelect"] = "Media select", ["WebBack"] = "Browser back", ["WebForward"] = "Browser forward",
         ["WebStop"] = "Browser stop", ["WebRefresh"] = "Browser refresh", ["WebHome"] = "Browser home",
         ["WebSearch"] = "Browser search", ["WebBookmarks"] = "Browser favourites", ["NoConvert"] = "No convert",
-        // the one key code both names share, saved as Circumflex
         ["Circumflex"] = "Previous track",
     };
 
@@ -30,8 +29,7 @@ public static class WindowerKeyNames
         WindowerKeys.All.Where(WindowerKeys.Pickable).Select(WindowerKeys.Canonical).DistinctBy(k => k.ScanCode)
                     .Select(k => new ConsoleKeyChoice(k, Display(k))).ToList();
 
-    // DirectInput's number for a key, as Windower uses: the scan code, plus 0x80 when extended. Windows swaps Pause and
-    // Num Lock, and Print Screen only ever comes as a key up
+    // DirectInput's number for a key, as Windower uses: the scan code, plus 0x80 when extended
     public static int DirectInputCode(int virtualKey, int scanCode, bool extended) => virtualKey switch
     {
         0x13 => 197,

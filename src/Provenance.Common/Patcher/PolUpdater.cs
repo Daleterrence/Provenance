@@ -12,8 +12,6 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Patcher;
 
-// Endpoint is null when the mirror answered instead of SE: that only ever says the installed version is current, so
-// there's no server to download from
 public sealed record VersionCheck(string Local, string Server, IPEndPoint? Endpoint)
 {
     public bool UpToDate => PolVersion.UpToDate(Local, Server);
@@ -27,15 +25,14 @@ public enum PatchResult { UpToDate, Updated, UpdatedQueued }
 
 public enum PatchPhase { Check, Manifest, Scan, Download, Apply }
 
-public sealed record PatchProgress(PatchPhase Phase, string Text, double Fraction);   // Fraction -1: nothing to measure
+public sealed record PatchProgress(PatchPhase Phase, string Text, double Fraction);
 
-// app.dll's patch engine at 0x1029cd5a (driven by CUpgradeWindow at 0x101b68d4) request for request, except
 // downloads get a few connections since one took over an hour on a fresh install
 public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = null, int connections = PolUpdater.DefaultConnections)
 {
     public PatchProduct Product => product;
 
-    public const int DefaultConnections = 4;   // SE rate-limits when there are too many
+    public const int DefaultConnections = 4;
     internal Func<long> Clock { get; init; } = () => Environment.TickCount64;
     internal IPatchConnector Connector { get; init; } = DirectPatchConnector.Instance;
     private string Dir => product.Folder;
@@ -43,7 +40,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     // the app keeps Windower's Large Address Aware pol.exe, any other copy has to stay SE's to the byte
     public bool KeepLargeAddressAware { get; init; }
 
-    // the manifest's off the network and this runs as admin, so nothing gets to leave the product folder
     internal string Local(string name) =>
         PathInside.Resolve(Dir, name) ?? throw new InvalidDataException($"The {product.Name} file list names an unsafe path: {name}");
 
@@ -72,7 +68,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         finally { link.Dispose(); }
     }
 
-    // beforeChange only runs once an update's needed, and can throw to stop it
     public PatchResult Run(IProgress<PatchProgress>? progress, CancellationToken ct, Action? beforeChange = null, VersionCheck? check = null)
     {
         if (check == null)
@@ -86,7 +81,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         var ep = check.Endpoint ?? throw new InvalidOperationException($"The {product.Name} version check didn't come from PlayOnline, so there's nowhere to download from.");
         beforeChange?.Invoke();
 
-        // like POL, the manifest gets its own connection (mode 200), the downloads theirs (300) and apply (400) none
         var session = new PatchSession(product, Connector, pinned: ep.Address);
         using var link = session.Connect(ct).Link;
         progress?.Report(new PatchProgress(PatchPhase.Manifest, $"Getting the list of {product.Name} files...", -1));
@@ -159,7 +153,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         int done = 0;
         try
         {
-            // local hashing only, the network requests stay one at a time
             Parallel.For(0, files.Count, new ParallelOptions { CancellationToken = ct, MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount / 2) },
                 i =>
                 {
@@ -195,7 +188,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             if (k < 0)
             {
                 if (fromTmp2) { AtomicFile.DeleteReadOnly(tmp2); continue; }   // POL's "illegal tmp2 file rollback"
-                // Windower's Large Address Aware pol.exe is SE's file with one bit set. A newer pol.exe replaces it whole
+                // Windower's Large Address Aware pol.exe is SE's file with one bit set
                 if (KeepLargeAddressAware && f.Name.Equals(GameProduct.Viewer.KeyFile, StringComparison.OrdinalIgnoreCase) &&
                     LargeAddressAware.Unpatched(target) is { } se && FileSig.Of(new MemoryStream(se), ct) == f.Last.Sig)
                     return new Decision(Kind.Current, 0, 0, false);
@@ -217,7 +210,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
     private void Download(PatchSession session, List<(PatchFile File, long Bytes)> work, string local, long total,
                           IProgress<PatchProgress>? progress, CancellationToken ct)
     {
-        // workers can't share a target or its .tmp files, and Windows folds case and drops trailing dots, so full paths
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (f, _) in work)
         {
@@ -239,8 +231,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         else if (d.Kind == Kind.Indirect) Indirect(session, link, f, d.From, d.FromTmp2, moved, kept, ct);
     }
 
-    // A broken connection gets replaced and its file restarted (three goes max), a refused one
-    // hands its file back, and whatever's left gets one single-connection round.
     private sealed class DownloadWorkers(PatchSession session, int connections, string productName, long total, IProgress<PatchProgress>? progress,
                                          Action<PatchServerLink, PatchFile, Action<long>, Action, CancellationToken> fetch)
     {
@@ -385,7 +375,6 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
             if (!File.Exists(tmp2)) continue;
             if (f.Attribute == BlockAttribute.Reset2)
             {
-                // files a running viewer has open get queued in its patch.ini for startpol.exe
                 if (!ViewerQueue.Queue(product.ViewerFolder, product.Folder.TrimEnd('\\') + "\\" + f.Name))
                     throw Shown.Mark(new IOException($"Provenance couldn't set {f.Name} to update when PlayOnline restarts. Try again."));
                 rst.Append(f.Name).Append(' ');
@@ -398,8 +387,7 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         return queued ? PatchResult.UpdatedQueued : PatchResult.Updated;
     }
 
-    // the last check before anything's replaced: a new env.dat that moves the install between JP and US/EU means the
-    // wrong stream, so nothing goes in
+    // a new env.dat that moves the install between JP and US/EU means the wrong stream
     internal void CheckStagedEnv(List<PatchFile> manifest)
     {
         if (product.Game != GameProduct.Viewer) return;

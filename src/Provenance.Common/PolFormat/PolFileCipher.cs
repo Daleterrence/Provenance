@@ -2,8 +2,7 @@ using System.Buffers.Binary;
 
 namespace Provenance.Common.PolFormat;
 
-// POL's file cipher (polcore.dll 0x100081e0 decrypt, 0x100081a0 encrypt). 8-byte blocks plus a trailer (a value
-// and a plaintext checksum), each through a byte layer and a 64-bit layer.
+// 8-byte blocks plus a trailer (a value and a plaintext checksum), each through a byte layer and a 64-bit layer
 public sealed class PolFileCipher
 {
     private readonly byte[] _ctx = new byte[0x100];
@@ -71,7 +70,6 @@ public sealed class PolFileCipher
         }
         ulong k = BinaryPrimitives.ReadUInt64LittleEndian(_ctx.AsSpan(b));
         ulong x = unchecked(BinaryPrimitives.ReadUInt64LittleEndian(tmp) - k) ^ CounterMix(counter) ^ k;
-        // the halves are stored swapped
         BinaryPrimitives.WriteUInt32LittleEndian(dst, (uint)(x >> 32));
         BinaryPrimitives.WriteUInt32LittleEndian(dst[4..], (uint)x);
     }
@@ -92,8 +90,7 @@ public sealed class PolFileCipher
         }
     }
 
-    // the byte layer does "x = sbox(x) - key[j]" eight times with sbox(x) = x + 0x78. Eight rounds of "encryption"
-    // that fold into one add, nice one SE
+    // the byte layer does "x = sbox(x) - key[j]" eight times with sbox(x) = x + 0x78, folds into one add, nice one SE
     private byte ByteLayerAdd(int b)
     {
         int s = 0;

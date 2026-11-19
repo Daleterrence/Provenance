@@ -6,8 +6,6 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game;
 
-// pol.exe only changes under the update lock with no pol.exe from the viewer running. The setting's what the switch
-// shows, the file just catches up with it
 public static class LargeAddressAwareSwitch
 {
     public sealed record Reading(bool Available, string? Note);
@@ -72,12 +70,10 @@ public static class LargeAddressAwareSwitch
         try
         {
             if (LargeAddressAware.Read(polExe) == on) return Outcome.Done;
-            // the next login's own update brings a build Provenance knows
             if (!LargeAddressAware.IsKnownBuild(polExe))
                 return SignedBuilds.Check(dir) == ViewerBuild.State.Outdated ? Outcome.NextStart : Outcome.Done;
             if (t.Blocked() is not null) return Outcome.NextStart;
             using var gate = GameFilesLock.TryLock(GameFilesLock.Job.LargeAddressAware, TimeSpan.FromSeconds(2));
-            // again under the lock, a login starting now would want my waiting pol.exe
             if (gate is null || t.Blocked() is not null) return Outcome.NextStart;
             if (LargeAddressAware.Read(polExe) == on) return Outcome.Done;
             var result = TryWrite(t, on, holdPrestarts, retryInUse: false);
@@ -104,12 +100,10 @@ public static class LargeAddressAwareSwitch
             Apply(settings, For(settings.DetectedRegion, blocked), when, holdPrestarts);
     }
 
-    // anything in the way gets logged and the start carries on without it
     internal static void Apply(ISettingsService settings, Target t, string when, Func<IDisposable>? holdPrestarts = null)
     {
         try
         {
-            // another copy may have turned it off since this one loaded its settings
             var s = settings.ReadSaved() ?? settings.Current;
             bool on = s.LargeAddressAware;
             if ((!on && !s.LargeAddressAwareClearAtStart) || t.ViewerDir is not { } dir) return;

@@ -97,7 +97,6 @@ public static class SocialSnapshotFiles
                                                                         (int)Long(c, "world"))),
         };
 
-    // anything missing reads as private, never as a value
     private static PolFfxiProfile? ReadFfxiProfile(JsonElement p)
     {
         if (p.ValueKind != JsonValueKind.Object) return null;
@@ -153,7 +152,6 @@ public static class SocialSnapshotFiles
         catch { return null; }
     }
 
-    // read once and taken (deleted) once it's in the chat log. The hook caps it at 3 MB
     public static PolStoredLines? TryReadStore(int pid) =>
         HookFiles.ReadJson(pid, HookContract.Files.Store, HookFiles.MaxBytes.Store, ParseStore);
 

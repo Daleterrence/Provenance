@@ -2,8 +2,7 @@ using System.Text;
 
 namespace Provenance.Common.PolFormat;
 
-// from the user's own install: proface0.txt categories, proface1.txt pics.
-// Both are XORed with their own file name as a repeating ASCII key, then UTF-16LE
+// both are XORed with their own file name as a repeating ASCII key, then UTF-16LE
 public static class ProfilePictureCatalog
 {
     public sealed record Category(string Name, string Key, int RegionMask);
@@ -21,11 +20,9 @@ public static class ProfilePictureCatalog
         return Encoding.Unicode.GetString(plain, start, plain.Length - start);
     }
 
-    // the install's own region by default, from its env.dat like pol.exe
     public static Catalog? Load(string viewerDir, int? region = null)
     {
         region ??= PolEnv.AreaIndex(ViewerBuild.RegionOf(viewerDir));
-        // the US install has them under viewer\data\common, the EU one keeps per-language copies
         var dir = new[] { Path.Combine(viewerDir, "viewer", "data", "common"), Path.Combine(viewerDir, "data", "common") }
                   .FirstOrDefault(d => File.Exists(Path.Combine(d, "proface0.txt")));
         if (dir is null) return null;
@@ -49,7 +46,6 @@ public static class ProfilePictureCatalog
         foreach (var f in Lines(picsText).Select(l => l.Split('\t')))
         {
             if (f.Length < 5) continue;
-            // a sheet's first line names it and its category
             if (f[3].Trim().Length > 0 && int.TryParse(f[3].Trim(), out var s))
             {
                 sheet = s;

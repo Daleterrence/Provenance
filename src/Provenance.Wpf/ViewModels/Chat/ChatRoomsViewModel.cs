@@ -13,7 +13,6 @@ using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.ViewModels.Chat;
 
-// everything goes through the hook's files, bar the room password, which goes as a one-shot Credential Manager entry
 public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 {
     public enum Page { Lobby, Room }
@@ -44,8 +43,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private MasterJob _masterKind;
     private enum MasterJob { Kick, Master, Password }
 
-    // savePassword hands a room password to the hook for one enter (token, password), dropPassword takes back one it
-    // never read
     internal ChatRoomsViewModel(ISocialSession social, IDialogs dialogs, Func<string, string, bool> savePassword, Action dropPassword,
                               Func<int, ImageSource?>? emote = null, Func<bool>? timesWanted = null)
     {
@@ -69,7 +66,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _tick.Tick += (_, _) => SendTick(_social.Now);
     }
 
-    // Send's button only greys and ungreys when asked, so this keeps asking till a line can go again
     internal void SendTick(DateTime now)
     {
         SendCommand.NotifyCanExecuteChanged();
@@ -80,7 +76,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     internal bool SendTicking => _tick.IsEnabled;
 
-    // read when the window comes to the front, so a change in Settings shows the next time
     public void RefreshTimes() => ShowTimes = _timesWanted();
 
     public ObservableCollection<ChatZoneItem> Zones { get; } = new();
@@ -92,7 +87,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public ObservableCollection<ChatEmoteItem> EmoteChoices { get; } = new();
     public bool HasEmotes => EmoteChoices.Count > 0;
 
-    // the next line's colour (-1 none) and emoticon (0 none), back to none once it's sent like the viewer's
     [ObservableProperty, NotifyPropertyChangedFor(nameof(PickedColour))] private int _colour = -1;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(PickedEmote))] private int _emoticon;
     public Brush? PickedColour => Colour < 0 ? null : ColourChoices[Colour].Swatch;
@@ -110,7 +104,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private bool Confirm(string question) => _dialogs.YesNo(DialogTitle, question);
 
-    // the viewer asks for the new one and then again to confirm it
     private string? AskNewPassword()
     {
         var pw = _dialogs.AskSecret("Set password", "Enter password.", ChatRoomFiles.MaxNewPassword, ChatRoomFiles.NewPasswordProblem);
@@ -154,7 +147,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     partial void OnBusyTextChanged(string value) => OnPropertyChanged(nameof(Busy));
 
-    // a pick is a click, putting the same zone back after a reload isn't
     partial void OnSelectedZoneChanged(ChatZoneItem? value)
     {
         if (value != null && Available && !_restoringZone) RequestRooms(0);
@@ -162,7 +154,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private int? Pid => _social.Session.Pid;
 
-    // the zone list, the viewer's first search when chat opens and Try again's. Nothing else starts one
     [RelayCommand]
     public void Start()
     {
@@ -239,7 +230,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     private bool CanCreate => Zones.Count > 0 && !Entering && !Searching && Current == Page.Lobby && !_social.HandleSwitching;
 
-    // the viewer's Create Room: its form, the chat name, then the hook makes the room and I'm its master
     [RelayCommand(CanExecute = nameof(CanCreate))]
     private void CreateRoom()
     {
@@ -269,7 +259,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
 
     public bool CanKick(ChatMemberItem? m) => m is { Me: false } && CanMaster;
 
-    // a member's Kick and Designate, only for the room master and never on my own row
     public IReadOnlyList<MenuAction> MemberMenu(ChatMemberItem m) =>
         [new("Kick...", true, () => Kick(m)), new("Designate...", true, () => Designate(m))];
 
@@ -361,7 +350,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         });
     }
 
-    // the handle's name, cut to what a chat name can hold
     private string DefaultNick()
     {
         var n = _social.AccountName.Trim();
@@ -389,7 +377,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         RoomsNote = "Room entry cancelled.";
     }
 
-    // a send not taken never goes, an enter not taken is withdrawn, or called off by the leave if that fails
     public void Leave()
     {
         if (Pid is { } pid)
@@ -406,7 +393,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         BackToLobby();
     }
 
-    // the session's ending anyway (log out, the game closing), which drops the room without a PART
     public void CloseQuietly()
     {
         _quiet = true;
@@ -435,7 +421,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         ExitCommand.NotifyCanExecuteChanged();
     }
 
-    // the limit depends on the room's name and mine, so with no room yet it's the worst case of both
     public ComposeRules ComposeRules => _rules ??= new()
     {
         SingleLine = true,
@@ -465,7 +450,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         SendCommand.NotifyCanExecuteChanged();
     }
 
-    // the game starting leaves the room straight away, the hook might never see the Play. Try again once it's closed
     private void OnSocialChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ISocialSession.HandleSwitching) or nameof(ISocialSession.GameRunning))
@@ -500,7 +484,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         _lastSeq = Math.Max(_lastSeq, chat.LineSeq);
     }
 
-    // taken whenever they come, c_chan.pfb can fail to read with the zones and work with a room list
     private void ApplyCategories(ChatRoomsSnapshot chat)
     {
         if (chat.Categories.Count == 0) return;
@@ -571,14 +554,12 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                     Entering = false;
                     BusyText = "";
                     Lines.Clear();
-                    // the hook keeps the room's lines from the JOIN's answer, before it says "in"
                     _seenSeq = _joinSeq;
                     AddLine(0, $"Entered\n{title}.", "notice");
                     ExitCommand.NotifyCanExecuteChanged();
                     SendCommand.NotifyCanExecuteChanged();
                 }
                 RoomName = title;
-                // like the viewer, only members whose hello's given a name are listed or counted
                 var now = chat.Members.Where(m => m.Me || m.Name.Length > 0)
                     .OrderByDescending(x => x.Master).ThenByDescending(x => x.Me)
                     .Select(m => new ChatMemberItem(m.Me ? m.Name : _social.Viewer.Filtered(m.Name), m.Me, m.Master, m.Away, m.Key)).ToList();
@@ -587,14 +568,11 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                     Members.Clear();
                     foreach (var m in now) Members.Add(m);
                 }
-                // an official room's master is the server's, never gives a name and has a place past the capacity
-                // (app.dll 0x10088ecc)
                 int limit = chat.Limit - (ChatLook.Official(chat.RoomIrc) ? 1 : 0);
                 RoomCount = limit > 0 ? $"{Members.Count}/{limit}" : $"{Members.Count}";
                 IsMaster = Members.Any(m => m.Me && m.Master);
                 RoomLocked = chat.Locked;
                 return;
-            // out of the room before the dialog, which runs its own loop where the next snapshot lands
             case "kicked":
                 BackToLobby();
                 ShowError($"You have been kicked\nfrom {title}.");
@@ -613,7 +591,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
                 return;
         }
         if (!chat.RoomJob.State.StartsWith("failed", StringComparison.Ordinal)) return;
-        // the hook deletes the password entry once it knows there's one, this is in case it never got that far
         if (_joinLocked) _dropPassword();
         var why = chat.RoomJob.State switch
         {
@@ -654,7 +631,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
         while (Lines.Count > 500) Lines.RemoveAt(0);
     }
 
-    // the viewer's own words for every line, and its one stand-in when a name never came through
     internal (string Text, string Style) LineText(ChatLine l)
     {
         string name = l.Me ? l.Name : _social.Viewer.Filtered(l.Name), text = l.Me ? l.Text : _social.Viewer.Filtered(l.Text);
@@ -695,7 +671,6 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     {
         if (done != "sent")
             SendNote = HookFailures.ForChatLine(done) ?? HookFailures.ChatCommError;
-        // only the hook can tell whether it fits polcore's line, so one that doesn't goes back to be cut down
         if (done == "failed:too long" && Compose.Length == 0) Compose = text;
         SendCommand.NotifyCanExecuteChanged();
     }

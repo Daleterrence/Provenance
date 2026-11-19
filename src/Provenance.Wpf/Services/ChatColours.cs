@@ -8,20 +8,16 @@ internal static class ChatColours
 {
     internal static SolidColorBrush LineBrush(uint argb) => LineBrush(argb, Grounds());
 
-    // what the lines and the colour picker sit on, in whichever theme's showing
     internal static Color[] Grounds() =>
         [.. new[] { "Bg.Base", "Surface.1", "Surface.2" }
             .Select(k => Application.Current?.TryFindResource(k) as SolidColorBrush).OfType<SolidColorBrush>().Select(b => b.Color)];
 
-    // the viewer's colours are for its light window. On dark they're lifted to the same hue at a lightness that reads,
-    // on light only the too pale get darkened
     internal static SolidColorBrush LineBrush(uint argb, IReadOnlyList<Color> grounds)
     {
         bool light = grounds.Count > 0 && grounds.Average(c => (c.R + c.G + c.B) / 765.0) > 0.5;
         var hsl = Hsl.Of(argb);
         if (!light) hsl = hsl with { L = Math.Max(hsl.L, 0.68), S = Math.Min(1, hsl.S * 1.1) };
-        // HSL's lightness isn't what the eye sees (a yellow at 0.4 is still pale, a blue at 0.7 still dark), so it
-        // carries on till it's AA on everything it sits on
+        // HSL's lightness isn't what the eye sees (a yellow at 0.4 is still pale, a blue at 0.7 still dark)
         var colour = hsl.ToColor();
         double Worst(Color c) => grounds.Count == 0 ? 21 : grounds.Min(gr => Contrast(c, gr));
         if (light) while (Worst(colour) < 4.5 && hsl.L > 0) colour = (hsl = hsl with { L = hsl.L - 0.02 }).ToColor();

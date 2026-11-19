@@ -3,7 +3,6 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Feeds;
 
-// the last answer the worker gave for each address, so a worker that can't be reached still has something to show
 public static class FeedCache
 {
     public sealed record Entry(string Body, string? ETag, string? LastModified, DateTime SavedAt);
@@ -21,7 +20,6 @@ public static class FeedCache
     {
         try
         {
-            // the file is the reply plus its header lines, so it gets some room over the reply's cap
             if (CachePath(url) is not { } path || !File.Exists(path) || new FileInfo(path).Length > FeedClient.MaxReplyBytes + 64 * 1024) return null;
             var text = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
             var split = text.IndexOf("\n\n", StringComparison.Ordinal);
@@ -39,14 +37,13 @@ public static class FeedCache
         }
     }
 
-    // a 304 means the saved copy is still current, so it counts as checked now
     public static void Touch(string url)
     {
         try
         {
             if (CachePath(url) is { } path && File.Exists(path)) File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
         }
-        catch { }   // the cache is only a shortcut, the worst case is one more fetch
+        catch { }
     }
 
     public static void Write(string url, string body, string? etag, string? lastModified)
@@ -57,6 +54,6 @@ public static class FeedCache
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             AtomicFile.Write(path, $"ETag: {etag}\nLast-Modified: {lastModified}\n\n{body}");
         }
-        catch { }   // not saved just means it's fetched again
+        catch { }
     }
 }

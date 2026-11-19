@@ -2,8 +2,7 @@ using System.Security.Cryptography;
 
 namespace Provenance.Common.Mirror;
 
-// P-256 SubjectPublicKeyInfo, the private halves live with the publisher and never come anywhere near this. A new key
-// gets a new id, and a retired one goes in Revoked so its id is never used again
+// a retired key goes in Revoked so its id is never used again
 public static class MirrorKeys
 {
     public static IReadOnlyList<(string Id, string PublicKey)> BuiltIn { get; } =
@@ -16,7 +15,6 @@ public static class MirrorKeys
 
     public static IReadOnlyDictionary<string, ECDsa> Trusted { get; } = TrustedFrom(BuiltIn, Revoked);
 
-    // one that won't import is a broken build, so it fails here instead of looking like a mirror outage
     public static IReadOnlyDictionary<string, ECDsa> TrustedFrom(IEnumerable<(string Id, string PublicKey)> table, IEnumerable<string> revoked)
     {
         var gone = revoked.ToHashSet(StringComparer.Ordinal);
@@ -40,7 +38,7 @@ public static class MirrorKeys
             key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(spkiBase64), out _);
             if (key.KeySize == 256 && key.ExportParameters(false).Curve.Oid?.Value == "1.2.840.10045.3.1.7") return key;
         }
-        catch (Exception) { }   // a key that won't import is no key
+        catch (Exception) { }
         key?.Dispose();
         return null;
     }

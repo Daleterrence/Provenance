@@ -6,8 +6,7 @@ using Provenance.Common.Patcher;
 
 namespace Provenance.Common.PolFormat;
 
-// patch.ver (app.dll mode 400, polcore svc 0x1248/0x124c): 24 zero bytes and the version text in 0x100, encrypted to
-// 0x120 with trailer value 0x118
+// 24 zero bytes and the version text in 0x100, encrypted to 0x120 with trailer value 0x118
 public static class PatchVer
 {
     private const int TextOffset = 24, TextSize = 0x100, PlainSize = 0x118;
@@ -45,8 +44,7 @@ public static class PatchVer
         return new PolFileCipher(key8).Encrypt(plain, PlainSize);
     }
 
-    // "" with no patch.ver. POL tries the product id alone when the Interface-seeded key doesn't open it,
-    // so this does too
+    // POL tries the product id alone when the Interface-seeded key doesn't open it, so this does too
     public static string Read(PatchProduct product)
     {
         var path = FileIn(product.Folder);
@@ -57,7 +55,6 @@ public static class PatchVer
                ?? throw new InvalidDataException($"The {product.Name} version file (patch.ver) could not be read.");
     }
 
-    // only the Interface-seeded key, null when it doesn't open the file (or there isn't one)
     public static string? ReadSeeded(PatchProduct product)
     {
         var path = FileIn(product.Folder);
@@ -72,7 +69,6 @@ public static class PatchVer
         AtomicFile.Write(path, bytes);
     }
 
-    // a stopped update then never leaves a patch.ver claiming a version
     public static void Drop(string folder)
     {
         var path = FileIn(folder);

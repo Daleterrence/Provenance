@@ -7,7 +7,6 @@ public sealed record MultiRunOptions(bool ContinueOnError, bool CloseWhenFinishe
 public interface IMultiRunHost
 {
     bool IsInGame(string profileId);
-    // null means it's in the game and its session was released
     Task<AccountFailure?> LogInAndPlayAsync(MultiRunAccount account, CancellationToken ct);
 }
 
@@ -19,7 +18,7 @@ public static class MultiAccountRunner
     public static async Task<MultiRunResult> RunAsync(IReadOnlyList<MultiRunAccount> accounts, MultiRunOptions options,
                                                       IMultiRunHost host, IProgress<string>? status, CancellationToken ct)
     {
-        var list = accounts.ToArray();   // in case the caller changes theirs mid-run
+        var list = accounts.ToArray();
         var failures = new List<(MultiRunAccount, AccountFailure)>();
         bool stopped = false;
         for (int i = 0; i < list.Length; i++)

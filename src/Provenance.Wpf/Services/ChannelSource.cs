@@ -10,11 +10,9 @@ using Velopack.Sources;
 
 namespace Provenance.Wpf.Services;
 
-// a release that failed its signed statement, as opposed to one that just didn't download
 internal sealed class ReleaseRefusedException(string reason) : Exception(reason);
 
-// betas go on the beta channel, the rest on stable. A beta copy reads both, so it moves up to a newer stable release
-// (Velopack never offers an older one), and each package is checked against its signed statement first
+// a beta copy reads both channels, Velopack never offers an older one so it moves up to a newer stable
 internal sealed class ChannelSource(string url, SemanticVersion? installed, IFileDownloader? downloader = null,
                                     IReadOnlyDictionary<string, ECDsa>? trusted = null,
                                     Action<IReadOnlyList<SemanticVersion>>? feedRead = null)
@@ -29,7 +27,6 @@ internal sealed class ChannelSource(string url, SemanticVersion? installed, IFil
     private readonly IReadOnlyDictionary<string, ECDsa> _trusted = trusted ?? MirrorKeys.Trusted;
     private readonly Dictionary<string, byte[]> _statements = new(StringComparer.Ordinal);
 
-    // the channel Velopack passes in is the one this copy was packed with, the version already says the same
     public override async Task<VelopackAssetFeed> GetReleaseFeed(IVelopackLogger logger, string? appId, string channel,
                                                                  Guid? stagingId = null, VelopackAsset? latestLocalRelease = null)
     {
@@ -48,8 +45,7 @@ internal sealed class ChannelSource(string url, SemanticVersion? installed, IFil
         return new VelopackAssetFeed { Assets = full };
     }
 
-    // Velopack downloads into localFile (the .partial) and does nothing with it until this returns, so this is the
-    // last point before its own hash check, the move and Update.exe being taken out of the package
+    // Velopack does nothing with localFile until this returns, so this is the last point before its own hash check
     public override async Task DownloadReleaseEntry(IVelopackLogger logger, VelopackAsset releaseEntry, string localFile, Action<int> progress,
                                                     CancellationToken cancelToken)
     {
@@ -66,8 +62,6 @@ internal sealed class ChannelSource(string url, SemanticVersion? installed, IFil
         }
     }
 
-    // the package that's about to be handed to Update.exe, with the statement this run already has or a fresh one.
-    // A refused package is deleted, so a try again downloads it
     public async Task RecheckAsync(VelopackAsset asset, string? packagePath, CancellationToken ct)
     {
         try
@@ -84,7 +78,6 @@ internal sealed class ChannelSource(string url, SemanticVersion? installed, IFil
         }
     }
 
-    // before anything's fetched: a delta, or a name that isn't vpk's (an address elsewhere, a path) never downloads
     private static void RefuseOddName(VelopackAsset asset)
     {
         if (asset.Type != VelopackAssetType.Full) throw new ReleaseRefusedException($"{asset.FileName} isn't a full package");
@@ -101,7 +94,6 @@ internal sealed class ChannelSource(string url, SemanticVersion? installed, IFil
         Log.Information("Provenance {Version} matches the statement signed with {KeyId}", asset.Version, SignedBlob.KeyId(statement));
     }
 
-    // from the same server as the package. A 404 is a refusal, anything else that goes wrong is a download that failed
     private async Task<byte[]> FetchStatementAsync(VelopackAsset asset, CancellationToken ct)
     {
         var name = AppRelease.StatementName(asset.FileName);

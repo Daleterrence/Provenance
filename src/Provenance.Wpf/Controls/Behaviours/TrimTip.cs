@@ -6,7 +6,6 @@ using System.Windows.Media;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// For a tooltip that's the whole of a line that can be cut short: it only opens while the line is cut
 public static class TrimTip
 {
     public static readonly DependencyProperty OnlyWhenCutProperty = DependencyProperty.RegisterAttached(
@@ -27,7 +26,6 @@ public static class TrimTip
         if (sender is FrameworkElement element && !IsCut(element)) e.Handled = true;
     }
 
-    // a panel's cut when any line straight inside it is
     internal static bool IsCut(FrameworkElement element) => element switch
     {
         TextBlock text => IsCut(text),
@@ -36,10 +34,9 @@ public static class TrimTip
         _ => false,
     };
 
-    // WPF won't say whether it trimmed, so the text's measured again: one line against the width, a wrapped one against the height
+    // WPF won't say whether it trimmed, so the text's measured again
     private static bool IsCut(TextBlock block)
     {
-        // Text is empty for a block made of runs
         var said = block.Text.Length > 0 ? block.Text : new TextRange(block.ContentStart, block.ContentEnd).Text;
         if (said.Length == 0 || block.ActualWidth <= 0) return false;
         var text = new FormattedText(said, CultureInfo.CurrentUICulture, block.FlowDirection,

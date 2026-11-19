@@ -63,7 +63,6 @@ internal sealed class WindowerStart
         }
     }
 
-    // another launch through Windower may have written its own profile's values since this one's
     internal void PutValuesBack()
     {
         if (Volatile.Read(ref _play) is not { } values) return;

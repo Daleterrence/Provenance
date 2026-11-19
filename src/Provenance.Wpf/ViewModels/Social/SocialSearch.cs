@@ -14,7 +14,6 @@ public sealed partial class SocialSearch : ObservableObject
 
     public SocialSearch(SocialViewModel social) => _social = social;
 
-    // Name is the character's for a character hit, which shows like a friend in game does
     public sealed record SearchHitItem(int Index, string Name, ImageSource? Avatar, bool IsFriend, string Key,
                                        bool RequestSent = false, bool IsMe = false)
     {
@@ -33,7 +32,6 @@ public sealed partial class SocialSearch : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ByHandle), nameof(ByHid), nameof(ByCharacter), nameof(Hint), nameof(Intro), nameof(MaxLength))]
     private FriendSearchKind _kind;
-    // the picker's off while a search runs, so the hits always match the kind showing
     partial void OnKindChanged(FriendSearchKind value)
     {
         if (Busy) return;
@@ -68,7 +66,7 @@ public sealed partial class SocialSearch : ObservableObject
     }
 
     private PerLogin _login = new();
-    private const int SearchPage = 100;   // the hook fetches the first 100, like the viewer
+    private const int SearchPage = 100;
     private const string TooManyResults = "Too many results. Please narrow your search.";
 
     internal bool Writing => _login.Answer.Running || _login.Request.Running;
@@ -118,7 +116,6 @@ public sealed partial class SocialSearch : ObservableObject
         Note.Fail(HookFailures.RequestWriteFailed);
     }
 
-    // a search nobody's waiting on any more: withdrawn if the hook hasn't taken it yet, and its answer's ignored
     public void Cancel()
     {
         if (!_login.Search.Running) return;
@@ -179,7 +176,6 @@ public sealed partial class SocialSearch : ObservableObject
         Note.Fail(HookFailures.RequestWriteFailed);
     }
 
-    // Accept and Decline reply with the viewer's fixed subject, Ignore ignores them and declines
     public void AnswerRequest(FriendItem f, RequestAnswer answer)
     {
         if (!f.IsRequest) return;
@@ -212,7 +208,6 @@ public sealed partial class SocialSearch : ObservableObject
         var subject = answer == RequestAnswer.Accept
             ? _social.Viewer.Text(0x46d0, "Friend registration accepted")
             : _social.Viewer.Text(0x46d1, "Friend registration declined");
-        // ignoring from a request only ever covers this handle, same as the viewer
         if (SocialRequests.AnswerRequest(pid, answer, token, f.RequestMid, subject, allHandles: false)) return;
         _login.Answer.Forget();
         _login.AnswerFor = null;
@@ -244,7 +239,6 @@ public sealed partial class SocialSearch : ObservableObject
             });
             return;
         }
-        // it may still have gone out, so it leaves the list for this session rather than invite a second answer
         if (st == "timeout") _social.Answered(f.RequestMid, ack: false);
         else _social.AnswerFailed(f.RequestMid);
         Log.Warning("Answering a friend request ({Answer}) failed: {State}", _login.AnswerKind, st);
@@ -281,14 +275,12 @@ public sealed partial class SocialSearch : ObservableObject
                 Hits.Clear();
                 foreach (var h in snap.Search.Hits)
                 {
-                    // the search matched INITCAP of what was typed, so a hit with no name in it is still called that
                     var name = characters && h.Name.Length == 0 ? FriendSearch.InitCap(_login.SearchedValue) : h.Name;
                     Hits.Add(new SearchHitItem(h.Index, name, _social.Avatars.ProfilePicture(characters ? 0 : h.ProfilePictureId),
                                                h.IsFriend, h.Key, IsMe: h.IsMe)
                              { IsCharacter = characters, World = characters ? h.World : "" });
                 }
                 var what = characters ? "character" : "handle";
-                // only past the first page were there more than came back, the hook drops a hit with nothing in it
                 var total = snap.Search.Total > SearchPage ? snap.Search.Total : Hits.Count;
                 Note.Show(Hits.Count == 0 ? _login.SearchedKind switch
                           {

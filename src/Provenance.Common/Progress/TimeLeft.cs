@@ -1,7 +1,5 @@
 namespace Provenance.Common.Progress;
 
-// "About 3 minutes left" under a progress bar. Says it's estimating until it's seen 10s of steady progress, then a
-// smoothed countdown that stays up and keeps counting until Clear, even when the pace goes strange
 public sealed class TimeLeft
 {
     public const string Estimating = "Estimating remaining time...";
@@ -15,7 +13,6 @@ public sealed class TimeLeft
     private double? _left, _shown;
     private bool _stalled, _active;
 
-    // starts the estimate over, what's already on show carries on counting down meanwhile
     public void Reset()
     {
         _samples.Clear();
@@ -23,7 +20,6 @@ public sealed class TimeLeft
         _left = null;
     }
 
-    // the next job starts from estimating again
     public void Clear()
     {
         Reset();
@@ -31,13 +27,11 @@ public sealed class TimeLeft
         _active = false;
     }
 
-    // done and total in any unit, bytes or a fraction. A new total or progress going backwards starts it over
     public void Add(long nowMs, double done, double total)
     {
         _active = true;
         _nowMs = nowMs;
         if (!double.IsFinite(done) || !double.IsFinite(total) || total <= 0) { Reset(); return; }
-        // a stall or a sleep says nothing about the pace once it moves again, so it settles from scratch
         if (_samples.Count == 0 || total != _total || done < _done || nowMs - _sampleMs > WindowMs || (_stalled && done > _done))
         {
             Start(nowMs, done, total);
@@ -72,7 +66,6 @@ public sealed class TimeLeft
         if (nowMs - _startMs >= SettleMs && double.IsFinite(_left.Value)) { _shown = _left; _shownMs = nowMs; }
     }
 
-    // blank only before a job's first reading
     public string Text =>
         _shown is { } shown ? Describe(Math.Max(0, shown - (_nowMs - _shownMs))) : _active ? Estimating : "";
 

@@ -25,14 +25,14 @@ public partial class PopOutWindow : AppWindow
             ReportVisible();
             if (ShowActivated) Pane.FocusCompose();
         };
-#pragma warning disable RS0030 // a view, not a view model
+#pragma warning disable RS0030
         if (Application.Current is { } app) app.Activated += OnAppActivated;
 #pragma warning restore RS0030
         Closed += (_, _) =>
         {
             conversation.PropertyChanged -= OnConversationChanged;
             social.MessageReceived -= OnMessageLanded;
-#pragma warning disable RS0030 // a view, not a view model
+#pragma warning disable RS0030
             if (Application.Current is { } a) a.Activated -= OnAppActivated;
 #pragma warning restore RS0030
             social.PopOutClosed(conversation);
@@ -49,7 +49,6 @@ public partial class PopOutWindow : AppWindow
     private void ReportVisible() =>
         Conversation.Messages.ConversationVisible = IsVisible && WindowState != WindowState.Minimized;
 
-    // with Provenance in the background it flashes instead, till it's brought up
     private void OnMessageLanded(string who, string _)
     {
         if (!string.Equals(Conversation.Friend.Name, who, StringComparison.OrdinalIgnoreCase)) return;

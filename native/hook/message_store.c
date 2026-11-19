@@ -29,9 +29,8 @@ static void message_store_msg_json(BYTE *b, jw *w, const BYTE *e, int mid, const
     jw_end(w);
 }
 
-/* pub\homeNN\msg: r\b unread, r\a read (FFXI moves them there), s\b the game's outbox, s\a sent. A file's name is
-   its header in polcore's base64 */
-#define STORE_KEEP 200   /* per folder, the viewer's own cap */
+/* r\b unread, r\a read (FFXI moves them there), s\b the game's outbox, s\a sent. A file's name is its header in polcore's base64 */
+#define STORE_KEEP 200
 #define STORE_SCAN_MAX 20000
 #define STORE_BODY_MAX 0x1100
 #define STORE_JSON_MAX (3 * 1024 * 1024)
@@ -90,7 +89,6 @@ static HANDLE message_store_open_plain_as(const char *path, DWORD access)
     return h;
 }
 static HANDLE message_store_open_plain(const char *path) { return message_store_open_plain_as(path, GENERIC_READ); }
-/* a folder opened without share-delete so it can't be swapped for a link while it's held, and not a link itself */
 static HANDLE message_store_open_folder(const char *path)
 {
     BY_HANDLE_FILE_INFORMATION fi;
@@ -104,7 +102,6 @@ static HANDLE message_store_open_folder(const char *path)
     }
     return h;
 }
-/* where the open folder really is, against where it should be. A link in any folder above it shows up as a different path */
 static int message_store_final_ok(HANDLE h, const char *expect)
 {
     char got[MAX_PATH + 160], full[MAX_PATH + 160], want[MAX_PATH + 160], *p = got;
@@ -117,7 +114,6 @@ static int message_store_final_ok(HANDLE h, const char *expect)
     if (!GetLongPathNameA(full, want, sizeof want)) lstrcpyA(want, full);
     return lstrcmpiA(p, want) == 0;
 }
-/* rename the open file to a full path, never over one that's there */
 static int message_store_rename_open(HANDLE f, const char *to)
 {
     WCHAR w[MAX_PATH + 160];
@@ -139,7 +135,6 @@ static int message_store_owned(const BYTE *h, int sub, unsigned __int64 me)
 {
     return memcmp(sub >= 2 ? &MAIL(h)->from_lo : &MAIL(h)->to_lo, &me, 8) == 0;
 }
-/* mode 2 is requests and invitations only, mode 1 the chat history without them */
 static int message_store_wanted(const BYTE *h, int sub, int mode)
 {
     unsigned kd = pc_mail_kind(h);
@@ -148,7 +143,6 @@ static int message_store_wanted(const BYTE *h, int sub, int mode)
     if (sub >= 2) return kd == 0;
     return kd == 0 || kd == 9 || kd == 10 || kd == 0xf || kd == 0x10 || kd == 0x12 || kd == 0x13;
 }
-/* my newest STORE_KEEP in one folder, headers decoded by polcore (svc 0x540) so the ids are in this session's form */
 static int message_store_list(BYTE *b, int home, int sub, unsigned __int64 me, int wanted, storefile **out)
 {
     char glob[MAX_PATH + 64];
@@ -174,7 +168,7 @@ static int message_store_list(BYTE *b, int home, int sub, unsigned __int64 me, i
         }
         memset(&v[n], 0, sizeof v[n]);
         if (pc_mail_decode_header(b, v[n].hdr, fd.cFileName) != 0) continue;
-        if (!(MAIL(v[n].hdr)->flags & MAIL_VALID)) continue;   /* the viewer's loader skips those too */
+        if (!(MAIL(v[n].hdr)->flags & MAIL_VALID)) continue;
         if (!message_store_owned(v[n].hdr, sub, me) || (wanted && !message_store_wanted(v[n].hdr, sub, wanted))) continue;
         lstrcpyA(v[n].name, fd.cFileName);
         v[n].home = home;
@@ -200,7 +194,6 @@ static int message_store_read(const char *path, char *buf, int cap)
     CloseHandle(h);
     return ok ? (int)got : -1;
 }
-/* the same message's copy in the other folder if this one won't read */
 static int message_store_body(const storefile *f, char *buf, int cap)
 {
     char path[MAX_PATH + 160];
@@ -253,14 +246,12 @@ static void message_store_drop(void)
     message_store_forget_import();
     base_ipc_file(p, IPC_STORE);
     DeleteFileA(p);
-    base_ipc_file(p, IPC_CHATROOM);   /* the chat room's lines, other people's words like the messages */
+    base_ipc_file(p, IPC_CHATROOM);
     DeleteFileA(p);
     base_ipc_file(p, IPC_GROUPCHAT);
     DeleteFileA(p);
-    /* and an enter, a create, a master's change or a group chat request that never got taken */
     requests_sweep();
 }
-/* svc 0x470 (r\b), 0x474 (r\a) and 0x47c (s\a): folder then name, the name is the last 96 characters */
 static int message_store_file_name(BYTE *b, int which, void *hdr, char *name)
 {
     char out[0x200];
@@ -275,8 +266,7 @@ static int message_store_file_name(BYTE *b, int which, void *hdr, char *name)
     lstrcpyA(name, out + n - 96);
     return message_store_name_ok(name);
 }
-/* the viewer's move (app.dll 0x1024e804): state bits to 1, 0x4000 off, rename r\b to r\a. The old name has to build back
-   from the header or nothing moves */
+/* state bits to 1, 0x4000 off, rename r\b to r\a. The old name has to build back from the header or nothing moves */
 static int message_store_delete_file(const char *dir, const char *name);
 static int message_store_move_read_ex(BYTE *b, const BYTE *hdr, const char *name, int home, int read)
 {
@@ -318,13 +308,11 @@ static int message_store_move_read_ex(BYTE *b, const BYTE *hdr, const char *name
     lstrcatA(from, name);
     lstrcatA(to, "\\");
     lstrcatA(to, now);
-    /* already in r\a means it was read before, so what's left in r\b is a copy */
     if (read && GetFileAttributesA(to) != INVALID_FILE_ATTRIBUTES) {
         ok = GetFileAttributesA(from) == INVALID_FILE_ATTRIBUTES || message_store_delete_file(fdir, name);
         if (ok) message_store_secure_add(now);
         return ok;
     }
-    /* the file is held open for the rename and the folder is checked as late as it can be, so nothing's swapped in between */
     if ((f = message_store_open_plain_as(from, DELETE | SYNCHRONIZE)) == INVALID_HANDLE_VALUE) {
         base_log("store: %s isn't moved, its file won't open as a plain file\r\n", what);
         return 0;
@@ -370,8 +358,6 @@ static int message_store_delete_file(const char *dir, const char *name)
     return ok;
 }
 
-/* names of files whose message is in Provenance's log: 'a' once the app saved it, 'i' for the login import once the app
-   has taken its file. A trim only deletes these */
 #define SECURE_MAX 2048
 static struct { char name[100]; char how; } g_secure[SECURE_MAX];
 static int g_secure_n, g_secure_next, g_import_pending;
@@ -418,8 +404,7 @@ static void message_store_forget_import(void)
     message_store_imp_forget();
 }
 
-/* the viewer's write (app.dll 0x10054ea8). 1 written, 2 already there at the right size, 0 not written (the message is
-   then only in the log). sub is 1 for r\b and 2 for s\a, which has state bits 3 */
+/* 1 written, 2 already there at the right size, 0 not written (the message is then only in the log) */
 static int message_store_put(BYTE *b, int sub, const BYTE *hdr, const char *body, char *name)
 {
     __declspec(align(8)) BYTE h[sizeof(pol_mail)];
@@ -455,7 +440,6 @@ static int message_store_put(BYTE *b, int sub, const BYTE *hdr, const char *body
         base_log("store: a message isn't filed, %s isn't where it should be\r\n", g_store_sub[sub]);
         return 0;
     }
-    /* written under a name the viewer ignores, then renamed into place */
     lstrcpyA(tmp, path);
     lstrcatA(tmp, ".tmp");
     DeleteFileA(tmp);
@@ -479,7 +463,6 @@ static int message_store_put(BYTE *b, int sub, const BYTE *hdr, const char *body
     if (!ok) base_log("store: a message isn't filed, writing it failed (%lu)\r\n", GetLastError());
     return ok;
 }
-/* the viewer's s\a copy. Never s\b, the viewer sends whatever's left there */
 static void message_store_sent(BYTE *b, const BYTE *msg)
 {
     char name[100];
@@ -496,8 +479,6 @@ static int message_store_trim_order(const void *x, const void *y)
     if (MAIL(a)->time != MAIL(c)->time) return MAIL(a)->time < MAIL(c)->time ? -1 : 1;
     return MAIL(a)->seq == MAIL(c)->seq ? 0 : MAIL(a)->seq < MAIL(c)->seq ? -1 : 1;
 }
-/* the viewer's cap: over STORE_KEEP valid files the oldest unlocked go first. Only files whose message is in the log go,
-   so a folder can stay over it */
 static int message_store_trim(BYTE *b, int sub)
 {
     char dir[MAX_PATH + 160], glob[MAX_PATH + 170];
@@ -512,7 +493,7 @@ static int message_store_trim(BYTE *b, int sub)
     if ((h = FindFirstFileA(glob, &fd)) == INVALID_HANDLE_VALUE) return 0;
     do raw++; while (raw <= STORE_SCAN_MAX && FindNextFileA(h, &fd));
     FindClose(h);
-    if (raw <= STORE_KEEP + 2) return 0;   /* dots count too */
+    if (raw <= STORE_KEEP + 2) return 0;
     if (!(v = (storefile *)HeapAlloc(GetProcessHeap(), 0, (raw + 1) * sizeof *v))) return 0;
     if ((h = FindFirstFileA(glob, &fd)) != INVALID_HANDLE_VALUE) {
         do {
@@ -611,8 +592,6 @@ static void message_store_file_gone(const char *name)
             g_imp[i].name[0] = 0;
         }
 }
-/* Delete and Clear in Provenance: "r" or "s", then the header's time, seq and the friend's key. Files are found by
-   decoding headers, never by a name from the request */
 #define DEL_MAX 1024
 typedef struct { char sent; DWORD time, seq; char key[20]; } delline;
 static delline g_del[DEL_MAX];
@@ -694,9 +673,7 @@ static void message_store_delete_request(BYTE *b)
     }
     HeapFree(GetProcessHeap(), 0, buf);
 }
-#define STORED_MAX 100   /* of MAIL_MAX, so the server's messages still have room */
-/* the viewer and game hold these in r\b till they're answered. They go in before the server's list, and one with a copy in
-   r\a is answered already */
+#define STORED_MAX 100
 static void message_store_requests(BYTE *b, unsigned __int64 me)
 {
     static char body[STORE_BODY_MAX];
@@ -707,17 +684,17 @@ static void message_store_requests(BYTE *b, unsigned __int64 me)
     k = message_store_list(b, g_home, 1, me, 2, &v);
     na = message_store_list(b, g_home, 0, me, 2, &ans);
     if (k > STORED_MAX) k = STORED_MAX;
-    for (i = k - 1; i >= 0; i--) {   /* the oldest first, so the mids run in arrival order */
+    for (i = k - 1; i >= 0; i--) {
         mailrec *m;
         for (j = 0; j < na; j++) if (mail_inbox_same(ans[j].hdr, v[i].hdr)) break;
         if (j < na) continue;
         for (j = 0; j < g_s.mail_n; j++) if (mail_inbox_same(g_mail[j].hdr, v[i].hdr)) break;
-        if (j < g_s.mail_n) { dups++; continue; }   /* the same message twice, once is enough */
+        if (j < g_s.mail_n) { dups++; continue; }
         if ((got = message_store_body(&v[i], body, sizeof body)) <= 0) { skipped++; continue; }
         memset(&probe, 0, sizeof probe);
         memcpy(probe.hdr, v[i].hdr, MAIL_KEY_SIZE);
         mail_inbox_parse(b, &probe, body, got);
-        if (pc_mail_kind(probe.hdr) == 0xe && !probe.has_att) { skipped++; continue; }   /* no group, no answer */
+        if (pc_mail_kind(probe.hdr) == 0xe && !probe.has_att) { skipped++; continue; }
         if (!(m = mail_inbox_add(v[i].hdr))) { dropped++; continue; }
         memcpy(m->subj, probe.subj, sizeof m->subj);
         memcpy(m->text, probe.text, sizeof m->text);
@@ -740,8 +717,6 @@ static void message_store_requests(BYTE *b, unsigned __int64 me)
     if (dropped) wsprintfA(tail + lstrlenA(tail), ", %d not kept (table full or seen before)", dropped);
     base_log("store: %d friend request(s) and group invitation(s) held from r\\b (home%02d)%s\r\n", held, g_home, tail);
 }
-/* FFXI deletes what it fetches from the server, so the store's the only copy of what was handled in game. Read
-   once, nothing on the wire */
 static void message_store_import(BYTE *b)
 {
     static mailrec scratch;
@@ -754,13 +729,12 @@ static void message_store_import(BYTE *b)
     message_store_drop();
     if (!me || g_home < 0) return;
     message_store_requests(b, me);
-    for (s = 0; s < 4; s++) {   /* s\a before s\b, so a sent copy beats the outbox's */
+    for (s = 0; s < 4; s++) {
         k = message_store_list(b, g_home, s, me, 1, &v);
         for (i = 0; i < k; i++) {
             for (j = 0; j < n; j++)
                 if ((all[j].sub >= 2) == (s >= 2) && mail_inbox_same(all[j].hdr, v[i].hdr)) break;
             if (j < n) {
-                /* the same message twice: read if either copy is (r\a says so), sent if either went */
                 if (s == 0) all[j].read = 1;
                 if (s == 2 && all[j].sub == 3) all[j] = v[i];
                 else if (all[j].alt_home < 0) {
@@ -802,7 +776,6 @@ static void message_store_import(BYTE *b)
         else message_store_msg_json(b, &one, all[i].hdr, mid, "local", all[i].read, -1,
                             scratch.subj, scratch.text, scratch.has_att ? scratch.att : NULL);
         if (one.fail) { jw_free(&one); continue; }
-        /* newest first, so a store too big for the file loses its oldest lines */
         if (in.n + out.n + one.n + 2 > STORE_JSON_MAX || (jw_splice(dst, one.p, one.n), dst->fail)) {
             left = n - i;
             jw_free(&one);

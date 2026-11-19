@@ -6,16 +6,14 @@ using static Provenance.Common.Security.LockedFolder;
 
 namespace Provenance.Common.Security;
 
-// C:\ProgramData\Provenance's admin-only folders. Never %TEMP% or %APPDATA%, where a program could swap a file for a
-// link and get written through
+// never %TEMP% or %APPDATA%, where a program could swap a file for a link
 public static class ProtectedFolders
 {
     private static readonly object Gate = new();
     private static string? _dir;
-    private static string? _rootForTest;   // under Gate
+    private static string? _rootForTest;
 
-    // what this process and its programs make is Administrators' whatever the PC's policy says ("object creator"
-    // would make it the user's, and the check would move it out)
+    // Administrators' whatever the PC's policy says, "object creator" would make it the user's
     public static bool OwnNewFilesAsAdministrators() => SetTokenOwner(Admins);
 
     internal static bool SetTokenOwner(SecurityIdentifier owner)
@@ -32,7 +30,7 @@ public static class ProtectedFolders
             var pin = GCHandle.Alloc(sid, GCHandleType.Pinned);
             try
             {
-                var tokenOwner = pin.AddrOfPinnedObject();   // TOKEN_OWNER is just the SID pointer
+                var tokenOwner = pin.AddrOfPinnedObject();
                 if (Advapi32.SetTokenInformation(token, 4 /* TokenOwner */, ref tokenOwner, IntPtr.Size)) return true;
                 Log.Warning("New files couldn't be made {Owner}'s ({Error})", owner.Value, Marshal.GetLastPInvokeError());
                 return false;
@@ -70,7 +68,6 @@ public static class ProtectedFolders
         return dir;
     }
 
-    // beside ipc rather than in it, for files that are nothing to do with the hook
     public static string RootSubDir(string name, bool usersMayRead = false)
     {
         var root = Path.GetDirectoryName(IpcDir)!;
@@ -83,12 +80,10 @@ public static class ProtectedFolders
     {
         var root = _rootForTest ?? AppPaths.ProgramData;
         var bin = Path.Combine(root, BinName);
-        // any user can make folders in ProgramData, so a "Provenance" some other program made gets moved aside first
         var (held, _) = Hold(root, usersMayRead: true, bin: null);
         using (held!)
         {
             Hold(bin, usersMayRead: false, bin: null).Held!.Dispose();
-            // only what's at the top: each of its folders is walked when it's first used
             WalkHeld(held!, root, deep: false, bin);
         }
         var dir = Path.Combine(root, "ipc");
@@ -100,7 +95,6 @@ public static class ProtectedFolders
     private static void Lock(string path, bool usersMayRead, string bin)
     {
         var (held, wrote) = Hold(path, usersMayRead, bin);
-        // once per run, unless its permissions had to be written just now
         using (held!)
             if (wrote || !Walked.ContainsKey(path)) WalkHeld(held!, path, deep: true, bin);
     }

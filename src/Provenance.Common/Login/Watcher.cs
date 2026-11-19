@@ -63,7 +63,6 @@ internal sealed class Watcher
         foreach (var a in arguments) psi.ArgumentList.Add(a);
     }
 
-    // Provenance can sit in the tray for days, so the screen saver's read again before every pol.exe start
     internal void BeforeStart(string viewerDir, string when)
     {
         ApplyLargeAddressAware(viewerDir, when);
@@ -80,8 +79,7 @@ internal sealed class Watcher
         return run;
     }
 
-    // Smart App Control refuses a new unsigned build till Windows' cloud check knows it, so that gets retried. Null once
-    // progress has said why
+    // Smart App Control refuses a new unsigned build till Windows' cloud check knows it, so that gets retried
     internal int? Start(ProcessStartInfo psi, IProgress<LaunchProgress>? progress, CancellationToken ct, TimeSpan limit, string failText)
     {
         var (outcome, pid, text) = Retrying(() => RunOnce(psi, ct, limit, failText), progress, ct);
@@ -98,8 +96,6 @@ internal sealed class Watcher
         }
     }
 
-    // each attempt has to leave nothing behind for the next, and only the wait is reported from here. One that says
-    // Refused itself (checkLog false) isn't looked up in the log
     internal (LaunchOutcome Outcome, T? Value, string Text) Retrying<T>(Func<(LaunchOutcome Outcome, T? Value, string Failure)> attempt,
                                                                       IProgress<LaunchProgress>? progress, CancellationToken ct, bool checkLog = true)
     {
@@ -134,7 +130,7 @@ internal sealed class Watcher
             using var p = StartProcess(psi) ?? throw new InvalidOperationException("Provenance Watcher did not start");
             if (WatcherProcess.Wait(p, AttachLimit) is not { } run)
             {
-                try { p.Kill(); } catch { }   // already gone
+                try { p.Kill(); } catch { }
                 return (LaunchOutcome.Failed, "Provenance couldn't start logging in to PlayOnline in time. Try again.");
             }
             if (run.ExitCode == 0 && HookLog.Attached(run.Out)) return (LaunchOutcome.Started, "");
@@ -153,8 +149,7 @@ internal sealed class Watcher
         }
     }
 
-    // A cancel waits for the watcher (its steps time out on their own) then ends its pol.exe. Killing it half way would
-    // leave a suspended pol.exe behind.
+    // killing it half way would leave a suspended pol.exe behind
     private (LaunchOutcome Outcome, int Pid, string Failure) RunOnce(ProcessStartInfo psi, CancellationToken ct, TimeSpan limit, string failText)
     {
         try

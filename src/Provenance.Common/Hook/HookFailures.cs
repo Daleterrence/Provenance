@@ -13,7 +13,6 @@ public static class HookFailures
     public const string LineHandleChanging = "Your handle was changing, so that line wasn't sent. Try again.";
     public const string LineMayNotHaveGone = "PlayOnline didn't answer, so that line may not have gone.";
 
-    // what a chat line's send says for the failures every chat shares, null for any other
     public static string? ForChatLine(string state) => state switch
     {
         "failed:too long" => TooLongForLine,

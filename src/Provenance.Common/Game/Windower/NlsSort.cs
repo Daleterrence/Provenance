@@ -2,8 +2,7 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game.Windower;
 
-// Windower sorts addons with .NET Framework's culture compare, which is Windows' own (NLS). .NET now uses ICU, which
-// puts co-op before cob, so this asks Windows directly
+// Windower sorts addons with .NET Framework's culture compare (NLS), .NET's ICU puts co-op before cob
 internal static class NlsSort
 {
     private const uint LinguisticCasing = 0x08000000;

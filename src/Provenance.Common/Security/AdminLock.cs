@@ -3,14 +3,10 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Security;
 
-// locks between copies of the app (and threads of one): a file opened with no sharing, in an admin-only folder. Any
-// program could squat a named mutex, so it isn't one
 public static class AdminLock
 {
     private static volatile string? _dir;
 
-    // C:\ProgramData\Provenance\ipc\locks, set at start-up. There's deliberately no fallback, a lock taken while it's
-    // null throws
     public static string? Dir
     {
         get => _dir;
@@ -44,7 +40,6 @@ public static class AdminLock
         return Path.Combine(dir, name + ".lock");
     }
 
-    // with the SID in the name, other Windows users' copies never wait on it
     public static string PerUser(string name)
     {
         using var me = WindowsIdentity.GetCurrent();
@@ -52,8 +47,6 @@ public static class AdminLock
         return $"{name}-{sid}";
     }
 
-    // null only when another holder kept it for the whole timeout. Anything else that stops the open throws, never a
-    // silent pass
     public static IDisposable? TryAcquire(string name, TimeSpan timeout, CancellationToken ct = default, bool reentrant = false)
     {
         var path = PathFor(name);
@@ -61,8 +54,6 @@ public static class AdminLock
         return TryAcquireFile(path, timeout, ct, reentrant);
     }
 
-    // held while the file's open, so a crash can't leave it held (never deleting the file avoids a race).
-    // Re-entrant only when both takes ask: nested, same thread, no await
     public static IDisposable? TryAcquireFile(string lockPath, TimeSpan timeout, CancellationToken ct = default, bool reentrant = false)
     {
         var full = Path.GetFullPath(lockPath);
@@ -78,7 +69,7 @@ public static class AdminLock
                 }
             }
         }
-        long started = Environment.TickCount64;   // monotonic, so a clock change can't stretch the wait
+        long started = Environment.TickCount64;
         long limit = timeout <= TimeSpan.Zero ? 0
                    : timeout >= TimeSpan.FromDays(1) ? long.MaxValue / 2
                    : (long)Math.Ceiling(timeout.TotalMilliseconds);
@@ -103,7 +94,6 @@ public static class AdminLock
         TryAcquireFile(lockPath, timeout) ??
         throw new IOException($"Another copy of Provenance held {Path.GetFileName(lockPath)} for {timeout.TotalSeconds:0.#}s.");
 
-    // the last dispose closes the file, from any thread (so after an await is fine)
     private sealed class Handle(string path, Holder holder) : IDisposable
     {
         private int _disposed;

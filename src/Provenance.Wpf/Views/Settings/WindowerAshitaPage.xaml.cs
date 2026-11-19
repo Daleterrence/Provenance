@@ -42,8 +42,6 @@ public partial class WindowerAshitaPage : UserControl
 
     private void OnConsoleKeyFocusLost(object sender, KeyboardFocusChangedEventArgs e) => CancelConsoleKey();
 
-    // while it waits every key is the button's, so Esc doesn't close Settings and Tab doesn't move on. A held key's
-    // repeats don't count
     private void OnConsoleKeyDown(object sender, KeyEventArgs e)
     {
         if (DataContext is not SettingsViewModel { Windower.WaitingForConsoleKey: true } vm) return;
@@ -58,8 +56,7 @@ public partial class WindowerAshitaPage : UserControl
         if ((e.Key == Key.System ? e.SystemKey : e.Key) == Key.Snapshot) vm.Windower.PressConsoleKey(DirectInputCode(Key.Snapshot));
     }
 
-    // the scan code's in the key message itself, which tells Enter from the keypad's. A key that didn't come from one
-    // (raised by hand) gets the scan code Windows would give it
+    // the scan code's in the key message, which tells Enter from the keypad's
     private static int DirectInputCode(Key key)
     {
         int vk = KeyInterop.VirtualKeyFromKey(key);

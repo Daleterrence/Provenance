@@ -20,8 +20,7 @@ internal static class MirrorJson
     public static bool IsSha256(string? s) =>
         s is { Length: 64 } && s.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f'));
 
-    // No size cap on the decompression, it only runs once SignedBlob.TryOpen has passed. Only InvalidDataException
-    // gets out.
+    // no size cap on the decompression, it only runs once SignedBlob.TryOpen has passed
     public static T Unpack<T>(ReadOnlySpan<byte> data) where T : class
     {
         try

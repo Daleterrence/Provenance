@@ -1,7 +1,6 @@
 namespace Provenance.Common.Game;
 
-// everything one launch started, by parent pid. Start times are checked (a reused pid is younger than its child),
-// members held open so a child counts once its parent's gone
+// start times are checked (a reused pid is younger than its child), members are held open so a child counts once its parent's gone
 public sealed class LaunchTree : IDisposable
 {
     public sealed record Opened(IDisposable? Hold, DateTime? StartUtc);
@@ -14,7 +13,6 @@ public sealed class LaunchTree : IDisposable
     private readonly HashSet<string> _unreadable = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<int> _seen = new();
 
-    // the caller holds the root itself (the launcher's Process), so it counts even after it's exited
     public LaunchTree(int rootPid, DateTime rootStartUtc, Func<int, Opened?>? open = null)
     {
         _root = rootPid;
@@ -54,8 +52,6 @@ public sealed class LaunchTree : IDisposable
                 added = true;
             }
         }
-        // gone, with nothing naming it as a parent: it can't start anything now, so its handle goes rather than pile up
-        // over a long wait (its pid stops counting with it)
         var parents = snapshot.Select(e => e.ParentPid).ToHashSet();
         foreach (var pid in _members.Keys.Where(pid => pid != _root && !_seen.Contains(pid) && !parents.Contains(pid)).ToList())
         {
@@ -64,7 +60,6 @@ public sealed class LaunchTree : IDisposable
         }
     }
 
-    // members that were running at the last look (named exeName, or any), the root left out
     public List<(int Pid, DateTime Start)> Alive(string? exeName = null) =>
         _members.Where(m => m.Key != _root && _seen.Contains(m.Key)
                             && (exeName is null || m.Value.ExeName.Equals(exeName, StringComparison.OrdinalIgnoreCase)))
@@ -72,7 +67,6 @@ public sealed class LaunchTree : IDisposable
 
     public bool AnyAlive => _members.Keys.Any(pid => pid != _root && _seen.Contains(pid));
 
-    // one under the launch that couldn't be opened or read: it can't be told apart, so it never becomes a member
     public bool Unreadable(string exeName) => _unreadable.Contains(exeName);
 
     public void Dispose()

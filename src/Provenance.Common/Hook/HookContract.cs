@@ -1,21 +1,20 @@
 namespace Provenance.Common.Hook;
 
-// pol.exe's exit codes with the hook's names for them (native/hook/hook_contract.h), 0 is a clean end
 public enum HookExit
 {
-    Refused = 3,                // AUTH_REFUSED_EXIT
-    NoHandle = 4,               // NO_HANDLE_EXIT
-    HandleRefused = 5,          // HANDLE_REFUSED_EXIT
-    TurnedAway = 7,             // TURNED_AWAY_EXIT
-    Stopped = 8,                // STOPPED_EXIT
-    ListLoadFailed = 10,        // LIST_LOAD_EXIT
-    DetailsUnreadable = 11,     // DETAILS_UNREADABLE_EXIT
-    BadIpcFolder = 12,          // IPC_DIR_EXIT
-    UnsafeStart = 13,           // MUTEX_EXIT
-    GameStartFailed = 15,       // GAME_START_EXIT
-    NotStartedByProvenance = 16, // NO_ENV_EXIT
-    NotHooked = 17,             // NOT_HOOKED_EXIT
-    AddressesNotFound = 18,     // ADDRESSES_EXIT
+    Refused = 3,
+    NoHandle = 4,
+    HandleRefused = 5,
+    TurnedAway = 7,
+    Stopped = 8,
+    ListLoadFailed = 10,
+    DetailsUnreadable = 11,
+    BadIpcFolder = 12,
+    UnsafeStart = 13,
+    GameStartFailed = 15,
+    NotStartedByProvenance = 16,
+    NotHooked = 17,
+    AddressesNotFound = 18,
 }
 
 // the same names as native/hook/hook_contract.h, a change goes in both
@@ -48,12 +47,11 @@ public static class HookContract
         public const string PolPrefix = "POL_";
         public const string ProvenancePrefix = "PROVENANCE_";
 
-        // a pre-started pol.exe's go file carries these, the hook drops any other key
         public static readonly string[] GoFile =
             [CredPol, CredSea, CredOneshot, CredOtp, CredHandle, CredPlay, CredChat, Status, Home, Handle, Lean];
     }
 
-    // a request file is pol_hook.<pid>.<name>, written by the app, and the hook renames it to .taking while it reads it
+    // a request file is pol_hook.<pid>.<name>, the hook renames it to .taking while it reads it
     public static class Requests
     {
         public const string Send = "send";
@@ -106,17 +104,14 @@ public static class HookContract
         public const string Ended = "ended";
         public const string Go = "go";
         public const string Stop = "stop";
-        // the app's own, the hook never opens it
         public const string Prestart = "prestart";
         public const string Taking = ".taking";
-        // the format of every file's name, pid then name, and of the pid file a Windower or Ashita launch gets (launch id)
         public const string Name = "pol_hook.{0}.{1}";
         public const string PidFile = "provenance.{0}.pid";
-        // the hold makes it and the app sets it after writing the Play entry, so Play doesn't wait for the hold's next look
         public const string PlayEvent = "provenance_play.{0}";
     }
 
-    // pieces of the hook's log lines (and the watcher's output) that the app looks for, so none of them get reworded
+    // pieces of the hook's log lines the app looks for, so none of them get reworded
     public static class LogLines
     {
         public const string FirstLine = "pol_hook: highest user address";

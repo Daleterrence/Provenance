@@ -6,8 +6,6 @@ using Provenance.Wpf.ViewModels.Settings;
 
 namespace Provenance.Wpf.Views.Settings;
 
-// every page saves each change straight away bar the FFXI one, which holds its changes until Save, so closing with
-// unsaved ones asks first
 public partial class SettingsWindow : AppWindow
 {
     private readonly Dictionary<SettingsTab, FrameworkElement> _pages = [];
@@ -48,7 +46,6 @@ public partial class SettingsWindow : AppWindow
         if (IsLoaded) ShowPage(SelectedTab);
     }
 
-    // a box handed a new list keeps its old pick without it being in the list, so it's cleared first
     private void OnHooksChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(HookSettings.SwitcherProfiles)) ProfileSwitcher.SetCurrentValue(Selector.SelectedItemProperty, null);

@@ -21,9 +21,7 @@ public partial class AddFriendDialog : AppWindow
         _social = vm;
         DataContext = vm.Search;
         Loaded += (_, _) => NameBox.Focus();
-        // a search still out when it closes is nobody's, so its hits never turn up under whatever's asked next
         Closed += (_, _) => Search.Cancel();
-        // opened from a row: search their name straight away, then pick their own hit (two people can share a name)
         if (handleName != null)
         {
             Search.Cancel();
@@ -38,7 +36,7 @@ public partial class AddFriendDialog : AppWindow
                         Hits.SelectedItem = mine;
                 };
                 Search.Hits.CollectionChanged += pick;
-                Closed += (_, _) => Search.Hits.CollectionChanged -= pick;   // the view model outlives the dialog
+                Closed += (_, _) => Search.Hits.CollectionChanged -= pick;
             }
         }
         Hits.SelectionChanged += (_, _) => UpdateSend();

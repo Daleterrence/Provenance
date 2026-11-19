@@ -15,7 +15,6 @@
                      ItemsSource="{Binding Categories}" SelectedItem="{Binding Category}"
                      DisplayMemberPath="Name" Padding="0,8"
                      ItemContainerStyle="{StaticResource NavItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
-            <!-- a list so the arrow keys move between pics, and Enter uses the picked one -->
             <ListBox x:Name="Pics" Grid.Column="1" Padding="12" Background="Transparent" BorderThickness="0"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      ItemsSource="{Binding Tiles}" SelectedItem="{Binding SelectedTile}"

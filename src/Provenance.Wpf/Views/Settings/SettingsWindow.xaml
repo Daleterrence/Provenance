@@ -12,8 +12,7 @@
         Style="{StaticResource AppWindow}">
 
     <Window.Resources>
-        <!-- labels go beside or above, never a floating hint (it draws a dark chip on this background, and I've lost
-             that fight before) -->
+        <!-- never a floating hint, it draws a dark chip on this background and I've lost that fight before -->
         <Style TargetType="ComboBox" BasedOn="{StaticResource FieldCombo}" />
 
         <Style x:Key="NavPage" TargetType="ListBoxItem" BasedOn="{StaticResource NavItem}">
@@ -31,11 +30,9 @@
             <Setter Property="Padding" Value="10,5,6,5" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
-            <!-- a field pill on the dark title bar, the way POL draws its fields -->
             <Setter Property="Background" Value="{DynamicResource Title.Field}" />
             <Setter Property="Foreground" Value="{DynamicResource Title.FieldText}" />
         </Style>
-        <!-- label and optional help (Tag) on the left, the control in a fixed column so they all line up -->
         <Style TargetType="HeaderedContentControl">
             <Setter Property="Focusable" Value="False" />
             <Setter Property="IsTabStop" Value="False" />
@@ -53,7 +50,6 @@
                             <StackPanel x:Name="Text" VerticalAlignment="Center">
                                 <TextBlock FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource Text.1}"
                                            Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" />
-                                <!-- usually plain text, the odd one with a bold bit is a TextBlock of its own -->
                                 <ContentPresenter x:Name="HelpText" Margin="0,2,0,0" Content="{TemplateBinding Tag}">
                                     <ContentPresenter.Resources>
                                         <DataTemplate DataType="{x:Type sys:String}">
@@ -79,8 +75,6 @@
     </Window.Resources>
 
     <Grid RowDefinitions="40,*">
-        <!-- only the switcher's controls take clicks, the rest of the bar still drags the window. The dropdown gives up its
-             width before the title does -->
         <controls:TitleBar Title="Settings">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -124,7 +118,6 @@
         <Grid Grid.Row="1" ColumnDefinitions="210,*">
             <ListBox x:Name="Tabs" Background="{DynamicResource Surface.1}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Border.Pane}" ItemContainerStyle="{StaticResource NavPage}"
                      Padding="0,6" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
-                <!-- small headings between the groups. They're not items, so Tab and the arrows only ever land on a page -->
                 <ListBox.GroupStyle>
                     <GroupStyle>
                         <GroupStyle.HeaderTemplate>

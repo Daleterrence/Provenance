@@ -9,12 +9,11 @@ namespace Provenance.Common.Otp;
 
 internal enum Verdict { Genuine, NotGenuine, CantCheck, TooOld }
 
-// 1Password's op and Bitwarden's bw run as admin, so each one's signature, signer and CA get checked before every use
 internal static class ToolSignature
 {
-    // 1Password's own ID on its signing certificate (1password.dev/cli/verify). The issuing CA changes, this doesn't
+    // 1Password's own ID on its signing certificate, the issuing CA changes and this doesn't
     private const string OnePasswordEku = "1.3.6.1.4.1.311.97.661420558.769123285.207353056.500447802";
-    // Bitwarden's company number in Delaware, from its EV certificate. It stays the same when the cert's renewed
+    // Bitwarden's company number in Delaware, from its EV certificate
     private const string BitwardenCompanyNumber = "7654941";
     private const string CodeSigningEku = "1.3.6.1.5.5.7.3.3", TimeStampingEku = "1.3.6.1.5.5.7.3.8";
 
@@ -30,8 +29,6 @@ internal static class ToolSignature
         return file is null ? Verdict.CantCheck : Check(file, path, tool, online);
     }
 
-    // NotGenuine only when it's certain (changed, unsigned, the wrong signer, revoked). Anything it can't tell is
-    // CantCheck, which never runs either
     internal static Verdict Check(SafeFileHandle file, string path, string tool, bool online)
     {
         using var sig = WinVerify(file, path);
@@ -72,7 +69,6 @@ internal static class ToolSignature
         };
     }
 
-    // null for a multi-valued RDN, no real signer has one
     private static Dictionary<string, List<string>>? SubjectParts(X509Certificate2 cert)
     {
         var parts = new Dictionary<string, List<string>>();
@@ -107,8 +103,6 @@ internal static class ToolSignature
         return Pinned(sig.Chain[0], sig.Chain, root, ca, online, sig.StampedAt, sig.StampChain);
     }
 
-    // only the root built in for that maker counts, through that maker's CA. Dates are as of a timestamp that pins
-    // the same way, else now
     internal static PinResult Pinned(X509Certificate2 signer, X509Certificate2Collection extra, X509Certificate2 root, string ca, bool online,
                                      DateTime? stampedAt = null, X509Certificate2Collection? stampChain = null)
     {
@@ -124,8 +118,6 @@ internal static class ToolSignature
 
     private sealed record Link(string Name, bool Revoked);
 
-    // revocation's only asked at install and update, when the PC's online anyway. An answer that doesn't come isn't
-    // held against it, a revoked cert is
     private static (bool Built, List<Link> Links) Build(X509Certificate2 leaf, X509Certificate2Collection extra, X509Certificate2 root, string eku,
                                                        DateTime at, bool online)
     {
@@ -188,8 +180,7 @@ internal static class ToolSignature
                 var signer = prov == IntPtr.Zero ? IntPtr.Zero : Wintrust.WTHelperGetProvSignerFromChain(prov, 0, false, 0);
                 ReadChain(signer, chain);
                 var stamp = signer == IntPtr.Zero ? IntPtr.Zero : Wintrust.WTHelperGetProvSignerFromChain(prov, 0, true, 0);
-                // CRYPT_PROVIDER_SGNR: a DWORD, then the FILETIME the timestamp gives. dwError comes after the chain
-                // pointer, dwSignerType and psSigner
+                // CRYPT_PROVIDER_SGNR: a DWORD, the FILETIME, then dwError after the chain pointer, dwSignerType and psSigner
                 int errorAt = (16 + IntPtr.Size + 4 + IntPtr.Size - 1) / IntPtr.Size * IntPtr.Size + IntPtr.Size;
                 if (stamp != IntPtr.Zero && Marshal.ReadInt32(stamp, errorAt) == 0)
                 {
@@ -212,7 +203,7 @@ internal static class ToolSignature
         }
     }
 
-    // csCertChain sits at 12, after a DWORD and a FILETIME. Each CRYPT_PROVIDER_CERT is a DWORD, then the PCCERT_CONTEXT
+    // csCertChain sits at 12, after a DWORD and a FILETIME
     private static void ReadChain(IntPtr sgnr, X509Certificate2Collection into)
     {
         int count = sgnr == IntPtr.Zero ? 0 : Math.Min(Marshal.ReadInt32(sgnr, 12), 16);
@@ -225,14 +216,13 @@ internal static class ToolSignature
         }
     }
 
-    // test only, the app always goes through Check
     internal static Signature? VerifiedSignature(string path)
     {
         using var file = Open(path);
         return file is null ? null : WinVerify(file, path);
     }
 
-    // Microsoft Identity Verification Root Certificate Authority 2020, SHA-256 5367F20C...2E1270
+    // Microsoft Identity Verification Root Certificate Authority 2020
     private const string MicrosoftIdentityRoot2020 =
         "MIIFzDCCA7SgAwIBAgIQVJjS0dRbGZVIE3nIEcCHmTANBgkqhkiG9w0BAQwFADB3MQswCQYDVQQGEwJVUzEeMBwGA1UEChMVTWljcm9z" +
         "b2Z0IENvcnBvcmF0aW9uMUgwRgYDVQQDEz9NaWNyb3NvZnQgSWRlbnRpdHkgVmVyaWZpY2F0aW9uIFJvb3QgQ2VydGlmaWNhdGUgQXV0" +
@@ -255,7 +245,7 @@ internal static class ToolSignature
         "vdSI5qmjqrv3ZDg7X8wM0DW+dBkDpsWqTKJhNoI+HfMrvJdd20t4Oy31O+9gI+j17AsjNpWvmGa/U9N7uGlKKpZmacSUxvRfbqyYeIiA" +
         "Blyisu2i";
 
-    // DigiCert Trusted Root G4, SHA-256 552F7BDC...C89988
+    // DigiCert Trusted Root G4
     private const string DigiCertTrustedRootG4 =
         "MIIFkDCCA3igAwIBAgIQBZsbV56OITLiOQe9p3d1XDANBgkqhkiG9w0BAQwFADBiMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNl" +
         "cnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29tMSEwHwYDVQQDExhEaWdpQ2VydCBUcnVzdGVkIFJvb3QgRzQwHhcNMTMwODAx" +

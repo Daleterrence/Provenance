@@ -1,4 +1,3 @@
-/* polcore's own negative codes pass straight through, mine sit in a range it doesn't use */
 #define FS_PENDING        0
 #define FS_DONE           1
 #define FS_E_ARGS     (-0x7f01)
@@ -14,8 +13,6 @@
 
 #define P8(a, i) a[i], a[(i)+1], a[(i)+2], a[(i)+3], a[(i)+4], a[(i)+5], a[(i)+6], a[(i)+7]
 
-/* my own profile save and the handle rename, the viewer's way. The save is the pic save's UPDATE with N items
-   instead of 2 */
 #define PE_MAXF 32
 
 typedef struct pe_field {
@@ -31,7 +28,6 @@ typedef struct pe_req {
     pe_field f[PE_MAXF];
 } pe_req;
 
-/* the viewer fills its SET slots in prof_pol.pfb item order, this is that order for every editable item */
 static const char *const pe_order[] = {
     "z_purp", "z_ficon", "z_mail", "z_age", "z_age_f", "z_sex", "z_job", "z_area",
     "z_lang0", "z_lang1", "z_lang2", "z_fav0", "z_fav1", "z_fav2",
@@ -50,8 +46,6 @@ static const pe_field *my_profile_edit_find(const pe_req *q, const char *name)
 #define PE_E_VALUE  (-0x7f21)
 #define PE_E_COUNT  (-0x7f22)
 
-/* starts the UPDATE on a record loaded the same way as the profile pic save's. The job (poll it with svc 0x4d8),
-   -0x100 when there's no free job slot, or < 0 */
 static int my_profile_edit_update_start(BYTE *b, pdb_schema *s, pdb_rec *rec, int slot, const pe_req *q)
 {
     pdb_item it[64] = {0};
@@ -75,7 +69,6 @@ static int my_profile_edit_update_start(BYTE *b, pdb_schema *s, pdb_rec *rec, in
         const pe_field *f = my_profile_edit_find(q, nm);
         const pdb_field *sf;
         pdb_item *ri;
-        /* only what was edited. The viewer can flag z_lang1/2 with z_lang0, but never does (app.dll 0x10227221) */
         if (!f) continue;
         sf = profile_db_field(s, nm, &idx);
         ri = pc_pdb_find(b, s, nm, rec);
@@ -139,7 +132,6 @@ static int my_profile_edit_update_start(BYTE *b, pdb_schema *s, pdb_rec *rec, in
     pc_pdb_rec_set(b, &set, (q->level >= 1 && q->level <= 3) ? q->level : rec->level, 0x40,
                            P8(sl, 0), P8(sl, 8), P8(sl, 16), P8(sl, 24),
                            P8(sl, 32), P8(sl, 40), P8(sl, 48), P8(sl, 56));
-    /* the body's built right here, so the items can live on this stack. -0x1401 if it comes to 0x800 or more */
     return pc_pdb_update_start(b, s, where, &set);
 }
 
@@ -148,14 +140,13 @@ static int my_profile_edit_mail_ok(BYTE *b, const char *sjis)
     return pc_mail_address_ok(b, sjis, lstrlenA(sjis)) == 0;
 }
 
-/* the handle rename: SetHandle, then the handle-list upload (KPutHandleList), like the viewer's handle editor */
 #define HR_E_NAME    (-0x7f30)
 #define HR_E_NGWORD  (-0x7f31)
 #define HR_E_DIC     (-0x7f32)
 #define HR_E_REVERT  (-0x7f33)
 
 static void *g_hr_dic;
-static int my_profile_handle_ngword(BYTE *b, const WCHAR *name)   /* 1 = NG, 0 = ok, < 0 = no dictionary */
+static int my_profile_handle_ngword(BYTE *b, const WCHAR *name)
 {
     if (!g_hr_dic) {
         WCHAR p[0x200];
@@ -163,7 +154,7 @@ static int my_profile_handle_ngword(BYTE *b, const WCHAR *name)   /* 1 = NG, 0 =
         DWORD sz, got = 0;
         BYTE *buf;
         memset(p, 0, sizeof p);
-        if (pc_data_file(b, 0xb, p, 0x1ff, 0) <= 0) return HR_E_DIC;   /* ..\data\dic\entryz.dic */
+        if (pc_data_file(b, 0xb, p, 0x1ff, 0) <= 0) return HR_E_DIC;
         h = CreateFileW(p, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
         if (h == INVALID_HANDLE_VALUE) return HR_E_DIC;
         sz = GetFileSize(h, NULL);
@@ -174,7 +165,6 @@ static int my_profile_handle_ngword(BYTE *b, const WCHAR *name)   /* 1 = NG, 0 =
             return HR_E_DIC;
         }
         CloseHandle(h);
-        /* relocated in place, so buf is the dictionary from here on and never gets freed. NULL if the size is off */
         g_hr_dic = pc_dic_relocate(b, buf, (int)sz);
         if (!g_hr_dic) { HeapFree(GetProcessHeap(), 0, buf); return HR_E_DIC; }
     }
@@ -184,8 +174,6 @@ static int my_profile_handle_ngword(BYTE *b, const WCHAR *name)   /* 1 = NG, 0 =
 enum { HR_IDLE, HR_UP_START, HR_UP_POLL, HR_RL_START, HR_RL_POLL };
 static struct { int st, slot, job, err; char want[16], old[16]; } g_hr = { HR_IDLE, -1, -1, 0, {0}, {0} };
 
-/* the server kept the old name, so put it back here too, or the next handle-list upload (the slot stays dirty) sends
-   the rename anyway */
 static void my_profile_handle_restore(BYTE *b)
 {
     pol_handle h;
@@ -194,7 +182,6 @@ static void my_profile_handle_restore(BYTE *b)
     pc_set_handle(b, (unsigned)g_hr.slot, &h);
 }
 
-/* call once per pump turn with the same arguments until it's non-zero: 1 done, < 0 error */
 static int my_profile_handle_rename(BYTE *b, int slot, const WCHAR *newName)
 {
     pol_handle h;
@@ -220,9 +207,9 @@ static int my_profile_handle_rename(BYTE *b, int slot, const WCHAR *newName)
         if (r < 0) return r;
         memcpy(g_hr.want, h.name, 16);
         g_hr.slot = slot; g_hr.st = HR_UP_START;
-    }   /* fall through */
+    }
     case HR_UP_START:
-        r = pc_handles_save(b);                                       /* KPutHandleList */
+        r = pc_handles_save(b);
         if (r == NO_SLOT) return FS_PENDING;
         if (r < 0) { g_hr.st = HR_IDLE; my_profile_handle_restore(b); return r; }
         g_hr.job = r; g_hr.st = HR_UP_POLL;
@@ -231,15 +218,14 @@ static int my_profile_handle_rename(BYTE *b, int slot, const WCHAR *newName)
         r = pc_handles_save_check(b, g_hr.job);
         if (r == 0) return FS_PENDING;
         g_hr.job = -1;
-        /* -0x105: reload the handle list like the viewer does, then report it */
         if (r == HANDLE_LIST_STALE) { g_hr.err = r; g_hr.st = HR_RL_START; return FS_PENDING; }
         g_hr.st = HR_IDLE;
         if (r < 0) { my_profile_handle_restore(b); return r; }
         handle_get(b, g_hr.slot, &h);
-        h.name[15] = 0;                 /* bytes after the NUL can be left over from the old name */
+        h.name[15] = 0;
         return strcmp(h.name, g_hr.want) == 0 ? FS_DONE : HR_E_REVERT;
     case HR_RL_START:
-        r = pc_handles_load(b);                                        /* KGetHandleList */
+        r = pc_handles_load(b);
         if (r == NO_SLOT) return FS_PENDING;
         if (r < 0) { g_hr.st = HR_IDLE; return g_hr.err; }
         g_hr.job = r; g_hr.st = HR_RL_POLL;
@@ -254,13 +240,11 @@ static int my_profile_handle_rename(BYTE *b, int slot, const WCHAR *newName)
     return FS_E_ARGS;
 }
 
-/* saveprofile levels: 1 private, 2 friends, 3 everyone, 0 keep */
 static pe_req g_me_req;
 static char g_me_mail[0x150];
 static WCHAR g_me_name[32];
 static unsigned __int64 g_me_hid;
 
-/* 1 load waits for a slot, 2 load job, 3 save waits, 4 save job, 5 rename. The loaded record stays for the saves */
 static void my_profile_done(const char *state);
 static void my_profile_go(BYTE *b, db_job *j);
 static db_job g_me = { .job = -1, .state = g_s.me_state, .cap = sizeof g_s.me_state, .done = my_profile_done,
@@ -291,22 +275,18 @@ static void my_profile_table(BYTE *b, jw *w, const char *key, const pfb_item *pi
     }
     jw_end(w);
 }
-/* the e-mail address from my POL profile goes in masked (first letter, ***, then the domain). No @ means it's
-   the viewer's "No Mail address" text, left alone */
 static void my_profile_mask_mail(const char *in, char *out, int cap)
 {
     const char *at = strchr(in, '@');
     int lead;
     if (!at) { lstrcpynA(out, in, cap); return; }
-    lead = ((BYTE)in[0] >= 0x81 && (BYTE)in[0] <= 0x9f) || (BYTE)in[0] >= 0xe0 ? 2 : 1;   /* SJIS lead byte */
+    lead = ((BYTE)in[0] >= 0x81 && (BYTE)in[0] <= 0x9f) || (BYTE)in[0] >= 0xe0 ? 2 : 1;
     if (lead > at - in) lead = (int)(at - in);
     lstrcpynA(out, in, lead + 1);
     lstrcatA(out, "***");
     lstrcpynA(out + lead + 3, at, cap - lead - 3);
 }
 
-/* my FFXI characters, the viewer's edit page tabs (app.dll 0x10224e5c): my record's z_phead slots when it's this
-   handle's, else the Content IDs linked to the handle. Only title 1 gets one here */
 typedef struct me_chr { int slot; DWORD ctsid, lo, hi; } me_chr;
 static int my_profile_chars(BYTE *b, me_chr *out, const char **from)
 {
@@ -349,7 +329,6 @@ static void my_profile_chr_key(const me_chr *c, char k[25])
 {
     wsprintfA(k, "%08x%08x%08x", c->ctsid, c->lo, c->hi);
 }
-/* the name's the Content ID list's, z_phead doesn't have one */
 static void my_profile_chars_json(BYTE *b, jw *w)
 {
     me_chr ch[8];
@@ -374,8 +353,6 @@ static void my_profile_chars_json(BYTE *b, jw *w)
     jw_end(w);
     base_log("profile edit: %d FFXI characters (from %s)\r\n", n, from);
 }
-/* same read as a friend's tab, but the ids come from my_profile_chars for that slot, never the request.
-   The key only checks the card's still the same character */
 static void my_profile_ffxi_request(BYTE *b)
 {
     char buf[128], *p, *tok, *key, *sl, want[25];
@@ -533,7 +510,6 @@ static void my_profile_request(BYTE *b)
     p = buf;
     tok = requests_line(&p);
     lstrcpynA(g_s.me_token, tok, sizeof g_s.me_token);
-    /* a rename uploads the handle list too, so it'd carry a create or delete's change with it */
     if (kind == 3 && handles_list_edit()) { my_profile_done("failed:busy"); return; }
     if (kind == 3 && g_s.handle_unconfirmed) { my_profile_done("failed:unconfirmed"); return; }
     if (!profile_db_load_pib(b) || !profile_db_load_pfb(b)) { my_profile_done("failed:no schema"); return; }
@@ -561,7 +537,6 @@ static void my_profile_request(BYTE *b)
         key = requests_line(&p);
         memset(&h, 0, sizeof h);
         pc_get_handle(b, (unsigned)g_my_slot, &h);
-        /* the handle the editor loaded, so one left open across a switch can't rename the new one */
         peers_hid_key(handle_hid(&h), now);
         if (lstrcmpA(key, now) != 0) { my_profile_done("failed:not loaded"); return; }
         memset(g_me_name, 0, sizeof g_me_name);
@@ -579,7 +554,6 @@ static void my_profile_request(BYTE *b)
     nomail[0] = 0;
     memset(&h, 0, sizeof h);
     pc_get_handle(b, (unsigned)g_my_slot, &h);
-    /* one loaded under another handle (before a switch) isn't this one's */
     if (!g_me.rec || !ME_REC->items || handle_hid(&h) != g_me_hid) {
         my_profile_done("failed:not loaded");
         return;
@@ -597,11 +571,10 @@ static void my_profile_request(BYTE *b)
         if (!(idx = my_profile_field_ok(line)) || g_me_req.n >= PE_MAXF) {
             my_profile_done("failed:bad field"); return;
         }
-        g_me_req.f[g_me_req.n].name = g_me_fields[idx - 1];   /* static, buf's gone by the time the save runs */
+        g_me_req.f[g_me_req.n].name = g_me_fields[idx - 1];
         if (idx == 1) {
             pol_sjis(b, eq, g_me_mail, sizeof g_me_mail);
             if (lstrlenA(g_me_mail) > 0x13f) { my_profile_done("failed:mail too long"); return; }
-            /* the viewer checks an address with svc 0x6e8, and its own "No Mail address" text isn't one */
             if (!(nomail[0] && !lstrcmpA(g_me_mail, nomail)) &&
                 (!g_me_mail[0] || !my_profile_edit_mail_ok(b, g_me_mail))) {
                 my_profile_done("failed:bad mail");
@@ -641,7 +614,6 @@ static void my_profile_pump(BYTE *b, int ctl)
         g_me.job = -1;
         if (r < 0) { my_profile_done(requests_failed(r)); return; }
         if (!ME_REC->items) { my_profile_done("failed:no profile"); return; }
-        /* as in the profile pic save, the record must be this handle's (the viewer doesn't check) */
         it = profile_db_get(b, g_profile_db_pib, "z_hid", ME_REC);
         if (!it || it->v.u64 != g_me_hid) { my_profile_done("failed:mismatch"); return; }
         it = profile_db_get(b, g_profile_db_pib, "z_pnum", ME_REC);
@@ -652,7 +624,7 @@ static void my_profile_pump(BYTE *b, int ctl)
         my_profile_done(my_profile_write_json(b) ? "ready" : "failed:write");
         return;
     case 3:
-        db_job_waiting(b, &g_me, 0);   /* a write, so it still runs during a drain */
+        db_job_waiting(b, &g_me, 0);
         return;
     case 4:
         r = pc_pdb_update_check(b, g_me.job);
@@ -675,10 +647,8 @@ static void my_profile_pump(BYTE *b, int ctl)
     }
 }
 
-/* the viewer's pic save: load my record, UPDATE z_ficon and z_utime, then SetHandle locally.
-   1 load waits for a slot, 2 load job, 3 update waits, 4 update job */
 static int g_pic_slot;
-static unsigned g_pic_pic;   /* sheet * 8 + cell */
+static unsigned g_pic_pic;
 static unsigned __int64 g_pic_hid;
 static void my_profile_pic_done(const char *state);
 static void my_profile_pic_go(BYTE *b, db_job *j);
@@ -692,7 +662,6 @@ static void my_profile_pic_done(const char *state)
     g_s.pic_want = -1;
     g_snap_dirty = 1;
 }
-/* SetHandle only marks the slot dirty and copies the pic into my group entries, nothing goes out */
 static int my_profile_pic_apply_local(BYTE *b, int slot, unsigned pic, unsigned __int64 hid)
 {
     pol_handle h;
@@ -752,7 +721,6 @@ static void my_profile_pic_begin(BYTE *b)
     pdb_schema *s;
     if (g_my_slot < 0 || g_my_slot > 63) { my_profile_pic_done(requests_failed(FS_E_ARGS)); return; }
     if (!(s = profile_db_load_pib(b))) { my_profile_pic_done(requests_failed(FS_E_PIB)); return; }
-    /* the viewer keeps its slot in bits 13-18 too and uses it as the GetHandle index, so both have to agree */
     if (!handle_get(b, g_my_slot, &h) || (int)((h.hi >> 13) & 0x3f) != g_my_slot) {
         my_profile_pic_done(requests_failed(FS_E_HANDLE));
         return;
@@ -769,7 +737,6 @@ static void my_profile_pic_loaded(BYTE *b)
     pdb_schema *s = g_profile_db_pib;
     pdb_item *it;
     if (!PIC_REC->items) { my_profile_pic_fail(FS_E_NOREC, "no profile record on the server"); return; }
-    /* the record has to be this handle's. The viewer doesn't check */
     it = pc_pdb_find(b, s, "z_hid", PIC_REC);
     if (!it || it->v.u64 != g_pic_hid) { my_profile_pic_fail(FS_E_MISMATCH, "record z_hid differs"); return; }
     it = pc_pdb_find(b, s, "z_pnum", PIC_REC);
@@ -785,8 +752,7 @@ static void my_profile_pic_loaded(BYTE *b)
     g_pic.step = 3;
     my_profile_pic_update_start(b, &g_pic);
 }
-/* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for 10s (why tho?????),
-   so it's only for shutdown */
+/* svc 0x4dc frees the job slot but also makes every polcore job poll return 0 for 10s (why tho?????), so it's only for shutdown */
 static void my_profile_pic_cancel(BYTE *b)
 {
     if (g_pic.job >= 0) {
@@ -821,7 +787,6 @@ static void my_profile_pic_pump(BYTE *b, int ctl)
         my_profile_pic_begin(b);
         return;
     }
-    /* a write that's running is left to finish, one that hasn't started is called off */
     if (g_s.draining && j->step != 2 && j->step != 4) {
         my_profile_pic_reset();
         g_s.pic_want = -1;
@@ -843,7 +808,6 @@ static void my_profile_pic_pump(BYTE *b, int ctl)
         r = pc_pdb_update_check(b, j->job);
         if (db_job_pending(b, j, r, 0)) return;
         j->job = -1;
-        /* the viewer gives up after 18000 polls and calls the save done anyway, here polcore's own fail at 100s is an error */
         if (r < 0) { my_profile_pic_fail(r, "profile update (svc 0x4d8)"); return; }
         r = my_profile_pic_apply_local(b, g_pic_slot, g_pic_pic, g_pic_hid);
         if (r < 0) DB_LOG("profile picture: server updated, local handle apply failed %d\r\n", r);

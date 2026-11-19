@@ -11,14 +11,11 @@ using Provenance.Wpf.Controls.Behaviours;
 
 namespace Provenance.Wpf.Controls;
 
-// a POL status glyph following its button (selected on hover or focus, faded on a press, active while held or IsOpen)
-// on a disc in its colours. Flat draws the single-colour file, and Filled paints it solid
 public sealed class SvgIcon : Grid
 {
     public static readonly DependencyProperty GlyphProperty = DependencyProperty.Register(
         nameof(Glyph), typeof(string), typeof(SvgIcon), new PropertyMetadata("", (d, _) => ((SvgIcon)d).Refresh()));
 
-    // a one-colour file by its name instead of a glyph, in Foreground, at the width its own shape gives it
     public static readonly DependencyProperty IconFileProperty = DependencyProperty.Register(
         nameof(IconFile), typeof(string), typeof(SvgIcon), new PropertyMetadata("", (d, _) => ((SvgIcon)d).Refresh()));
 
@@ -134,7 +131,6 @@ public sealed class SvgIcon : Grid
         : selected ? IconState.Selected
         : IconState.Idle;
 
-    // a button that opens a dialog shows active till it's closed
     public static void OpenWhile(object? button, Action dialog)
     {
         var icon = button is DependencyObject d ? Find(d) : null;
@@ -198,8 +194,6 @@ public sealed class SvgIcon : Grid
         _disc.Visibility = _light.Visibility = _edge.Visibility = shown;
         _press.Visibility = _onButton && !Flat && State == IconState.Transition ? Visibility.Visible : Visibility.Collapsed;
         if (!_onButton || Flat) return;
-        // the button's own fills, so it's red on a red button and follows the theme. A bit of white keeps the disc
-        // lighter than its face, active's green is light enough already
         _disc.SetResourceReference(Shape.FillProperty, State switch
         {
             IconState.Selected or IconState.Transition => "Btn.Fill.Hover",
@@ -207,7 +201,6 @@ public sealed class SvgIcon : Grid
             _ => "Btn.Fill",
         });
         _light.Opacity = State switch { IconState.Selected => 0.32, IconState.Transition => 0.26, IconState.Active => 0, _ => 0.2 };
-        // a light hairline round it, or the disc just looks like a tint on the face (a dark one gets lost on the blue)
         _edge.Opacity = State switch { IconState.Selected => 0.65, IconState.Transition => 0.5, IconState.Active => 0.8, _ => 0.45 };
         SizeDisc();
     }
@@ -217,7 +210,6 @@ public sealed class SvgIcon : Grid
         if (Glyph.Length == 0) return;
         double d = Math.Min(ActualWidth, ActualHeight) * SvgIcons.DiscShare;
         foreach (var e in new[] { _disc, _press, _light, _edge }) e.Width = e.Height = d;
-        // a 1 unit edge in the 32 box
         _edge.StrokeThickness = d / 20;
     }
 }

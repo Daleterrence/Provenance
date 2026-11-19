@@ -20,7 +20,6 @@ static int peers_handle_used(const pol_handle *h)
     return n;
 }
 
-/* one rule for every handle name: 1-15 printable ASCII bytes (0x7f is out) and not all blanks */
 static int peers_ascii_name_ok(const char *s)
 {
     int n = 0, visible = 0;
@@ -46,8 +45,6 @@ static const char *peers_friend_status(unsigned fa)
         default: return "online";
     }
 }
-/* the game slot the row is in, when it's FFXI. FFXiMain checks the world id (the ctsid's byte 2) against your own the
-   same way */
 static int peers_friend_ffxi(const pol_friend *f, DWORD *ctsid, DWORD *ctLo, DWORD *ctHi)
 {
     unsigned fa = f->flags;
@@ -60,8 +57,7 @@ static int peers_friend_ffxi(const pol_friend *f, DWORD *ctsid, DWORD *ctLo, DWO
     return 1;
 }
 
-/* ids are masked per session and names change, so conversations are keyed on HMAC-SHA256("<my POL ID>/<peer POL
-   ID>/<slot>"), 8 bytes in hex. No POL ID ever leaves the hook. */
+/* ids are masked per session and names change, so conversations are keyed on HMAC-SHA256("<my POL ID>/<peer POL ID>/<slot>"), 8 bytes in hex */
 static char g_my_polid[64];
 static BYTE g_peer_secret[32];
 static int g_peer_secret_ok;
@@ -80,7 +76,6 @@ static int peers_secret_read(const WCHAR *path)
     CloseHandle(f);
     return g_peer_secret_ok;
 }
-/* POL_IPC_DIR is one folder for the whole PC, so each Windows user gets their own file there, named by their SID */
 static int peers_secret_name(WCHAR *out, int cap)
 {
     BYTE buf[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
@@ -160,7 +155,6 @@ static void peers_friend_key(BYTE *b, const pol_friend *f, char k[17])
 {
     peers_key(b, f->id_lo, f->id_hi, (unsigned)pc_friend_slot(f), k);
 }
-/* the same test as polcore.dll 0x100254d0 */
 static int peers_find_friend_row(BYTE *b, DWORD lo, DWORD hi, int slot)
 {
     pol_friend_copy r;

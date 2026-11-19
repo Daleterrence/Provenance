@@ -11,7 +11,6 @@ public static class PopOutPlacement
     public static bool Usable(Spot s) =>
         double.IsFinite(s.Left) && double.IsFinite(s.Top) && double.IsFinite(s.Width) && double.IsFinite(s.Height) && s.Width > 0 && s.Height > 0;
 
-    // pulled inside the work area, shrunk to it when it's bigger and never under the window's minimum
     public static Spot Clamp(Spot want, Spot room, double minWidth, double minHeight)
     {
         double w = Math.Min(Math.Max(want.Width, minWidth), Math.Max(room.Width, minWidth));
@@ -21,8 +20,6 @@ public static class PopOutPlacement
         return new Spot(left, top, w, h);
     }
 
-    // the saved spot, nudged down and right while another pop-out sits on it. With no room left to nudge it starts
-    // again from the top left of the work area
     public static Spot Open(Spot saved, IEnumerable<(double Left, double Top)> taken, Spot room, double minWidth, double minHeight)
     {
         var at = Clamp(saved, room, minWidth, minHeight);

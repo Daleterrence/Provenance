@@ -4,18 +4,14 @@
                     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
                     xmlns:conv="clr-namespace:Provenance.Wpf.Converters"
                     xmlns:hook="clr-namespace:Provenance.Common.Game.ThirdParty;assembly=Provenance.Common">
-    <!-- Settings' profile cards, white text on these in both themes -->
     <SolidColorBrush x:Key="Platform.Windower" Color="#339933" />
     <SolidColorBrush x:Key="Platform.Ashita"   Color="#D45447" />
 
     <FontFamily x:Key="Font.Body">Segoe UI</FontFamily>
-    <!-- fixed width, for a readme's code blocks and tables -->
     <FontFamily x:Key="Font.Mono">Consolas</FontFamily>
 
-    <!-- lives here so the cards share one decode, near the size shown (the source is 1026x907) -->
     <BitmapImage x:Key="BgLogo" UriSource="/Assets/bg-logo.png" DecodePixelHeight="680" />
 
-    <!-- cards, panels and popups, then the floating dialogs (Windows' own window corner). Buttons stay square -->
     <CornerRadius x:Key="Radius.Panel">6</CornerRadius>
     <CornerRadius x:Key="Radius.Dialog">8</CornerRadius>
 
@@ -35,7 +31,6 @@
         <Setter Property="Background" Value="{DynamicResource Title.Edge}" />
     </Style>
 
-    <!-- a 1px line on the side the panel's on, the rest shows the window behind -->
     <Style x:Key="PaneSplitter" TargetType="GridSplitter">
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -52,7 +47,6 @@
         </Setter>
     </Style>
 
-    <!-- every right-click, dots and Play menu. The margin's room for the shadow, the popup's see-through -->
     <Style TargetType="ContextMenu">
         <Setter Property="Background" Value="{DynamicResource Surface.2}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Pane}" />
@@ -95,7 +89,6 @@
         </Setter>
     </Style>
 
-    <!-- a column for the tick (or an icon) that only takes room when something in the menu has one -->
     <Style TargetType="MenuItem">
         <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
@@ -198,7 +191,6 @@
         <Setter Property="Foreground" Value="{DynamicResource Text.3}" />
     </Style>
 
-    <!-- the profile a Settings page is changing, in its app's colour. Tag is the platform -->
     <Style x:Key="PlatformCard" TargetType="Border">
         <Setter Property="CornerRadius" Value="{StaticResource Radius.Panel}" />
         <Setter Property="Padding" Value="16,12" />
@@ -214,12 +206,10 @@
         </Style.Triggers>
     </Style>
 
-    <!-- the default wide grey scrollbar with arrows looks awful on the dark theme -->
     <Style TargetType="ScrollBar" BasedOn="{StaticResource MaterialDesignScrollBarMinimal}">
         <Setter Property="materialDesign:ScrollBarAssist.ThumbCornerRadius" Value="3" />
     </Style>
 
-    <!-- keys of their own, so a tooltip on a title bar doesn't take the bar's light text -->
     <Style TargetType="ToolTip" BasedOn="{StaticResource MaterialDesignToolTip}">
         <Setter Property="Background" Value="{DynamicResource Tip.Bg}" />
         <Setter Property="Foreground" Value="{DynamicResource Tip.Text}" />
@@ -229,7 +219,6 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Body}" />
         <Setter Property="UseLayoutRounding" Value="True" />
-        <!-- one with nothing to say would still draw its little box -->
         <Style.Triggers>
             <Trigger Property="Content" Value="{x:Null}">
                 <Setter Property="Visibility" Value="Collapsed" />
@@ -295,7 +284,6 @@
         <Setter Property="Foreground" Value="{DynamicResource Btn.Rim}" />
     </Style>
 
-    <!-- focus rings, one per shape, built in code. They only show for keyboard focus and the box one's the default -->
     <x:Static x:Key="FocusRing" Member="behaviours:FocusLook.RowRing" />
     <x:Static x:Key="FocusRingBox" Member="behaviours:FocusLook.BoxRing" />
     <x:Static x:Key="FocusRingPill" Member="behaviours:FocusLook.PillRing" />
@@ -329,7 +317,6 @@
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     </Style>
 
-    <!-- State.Status is the world's status, and an unknown one is grey on the chip and in the list -->
     <Style x:Key="WorldDot" TargetType="Ellipse">
         <Setter Property="Fill" Value="{DynamicResource Text.3}" />
         <Style.Triggers>

@@ -1,5 +1,3 @@
-/* each region as its app.dll sets polcore up. svc 0x17dc(1) swaps in the JP conversion table half,
-   and 0x690's language is what FFXI reads back via 0x694 as its area code */
 static const struct pol_region {
     const char *name, *polcore, *hive, *maker, *strings;
     int selector, jp_table, lang;   /* lang: JP 0 always, -1 Settings\Language or 1, -2 it or the UI language */
@@ -11,7 +9,6 @@ static const struct pol_region {
 
 static const struct pol_region *g_region;
 
-/* pol.exe's index (0 JP, 1 US, 2 EU), or the loaded polcore when it isn't one */
 static const struct pol_region *viewer_region_of(int idx)
 {
     if (idx >= 0 && idx <= 2) return &g_regions[idx];
@@ -54,7 +51,6 @@ static DWORD viewer_lang(void)
     return lang;
 }
 
-/* svc 0xf14 and 0x690 in app.dll's order, with JP's 0x17dc in between and its 0x17e0 after */
 static void viewer_region_init(BYTE *b, DWORD lang)
 {
     const struct pol_region *r = viewer_region();
@@ -65,7 +61,6 @@ static void viewer_region_init(BYTE *b, DWORD lang)
     base_log("viewer_init: region %s, selector %d, conversion table %d\r\n", r->name, r->selector, r->jp_table);
 }
 
-/* StringTable.bin's bits, LSB first from +0x10. -1 when it runs out */
 static int viewer_pex_bits(const BYTE *d, DWORD bits, DWORD *bit, int k)
 {
     int v = 0, i;
@@ -76,8 +71,6 @@ static int viewer_pex_bits(const BYTE *d, DWORD bits, DWORD *bit, int k)
     return v;
 }
 
-/* <folder>\<sub>\StringTable.bin unpacked: "PEX\0", the plain size at +4, then LZ77 bits over a zeroed 0x1000 window
-   (0 literal, 1 a 12-bit offset and a 4-bit length + 2) */
 static BYTE *viewer_string_table(const char *folder, const char *sub, DWORD *len)
 {
     char path[MAX_PATH + 48];
@@ -117,7 +110,7 @@ static BYTE *viewer_string_table(const char *folder, const char *sub, DWORD *len
     return buf;
 }
 
-/* records from +0x10: u16 size, u16 id, NUL-ended UTF-16. Copied out, at most cap - 1 characters */
+/* records from +0x10: u16 size, u16 id, NUL-ended UTF-16 */
 static int viewer_table_text(const BYTE *raw, DWORD n, int id, WCHAR *out, int cap, int drop_cr)
 {
     DWORD o = 0x10, i;
@@ -139,8 +132,6 @@ static int viewer_table_text(const BYTE *raw, DWORD n, int id, WCHAR *out, int c
     return 0;
 }
 
-/* message #i (0-9 titles, 10-19 texts) as app.dll (0x10057900) makes it: table string, CRs dropped from texts, via
-   svc 0xa40. Length or -1, and english falls back to the US table */
 static int viewer_message_bytes(BYTE *b, const BYTE *raw, DWORD n, int i, int english, char out[0x100])
 {
     static const WORD ids[20] = { 0x46c9, 0x46d0, 0x46d1, 0x46d2, 0x46d3, 0x46d4, 0x46d6, 0x46d8, 0x46dc, 0x46da,
@@ -164,8 +155,7 @@ static int viewer_message_bytes(BYTE *b, const BYTE *raw, DWORD n, int i, int en
     return lstrlenA(out);
 }
 
-/* SET_MESSAGE_TITLE/TEXT from the region's own StringTable like its viewer (EU's English one), so a friend gets the
-   same bytes. Text #4 is the name dialog FFXI-3322 needs */
+/* text #4 is the name dialog FFXI-3322 needs */
 static void viewer_set_messages(BYTE *b, const char *folder)
 {
     const struct pol_region *r = viewer_region();
@@ -174,7 +164,6 @@ static void viewer_set_messages(BYTE *b, const char *folder)
     char s[0x100];
     int i, set = 0;
     for (i = 0; i < 20; i++) {
-        /* JP keeps polcore's own Japanese for anything its table hasn't got */
         if (viewer_message_bytes(b, raw, n, i, !r->jp_table, s) < 0) continue;
         if (i < 10) pc_set_message_title(b, i, s);
         else pc_set_message_text(b, i - 10, s);
@@ -185,14 +174,12 @@ static void viewer_set_messages(BYTE *b, const char *folder)
     if (raw) HeapFree(GetProcessHeap(), 0, raw);
 }
 
-/* drops trailing backslashes (Locate existing install writes one) but never a drive's own */
 static void viewer_trim_slash(char *s)
 {
     int n = lstrlenA(s);
     while (n > 3 && s[n - 1] == '\\') s[--n] = 0;
 }
 
-/* the region's InstallFolder\1000 like the app reads it, into its own buffer so a failed read keeps the default */
 static void viewer_folder(char folder[MAX_PATH])
 {
     HKEY hk;
@@ -207,13 +194,11 @@ static void viewer_folder(char folder[MAX_PATH])
     RegCloseKey(hk);
 }
 
-#define LEGACY_HOME 84   /* shared by every account without a slot of its own */
+#define LEGACY_HOME 84
 static char g_viewer[MAX_PATH];
 static int g_home = -1, g_home_made;
 
 static int message_store_plain_path(const char *path);
-/* SET_USER_SLOT, then pub\homeNN\msg\{s/a,s/b,r/a,r/b}, folders polcore can't make itself. Never a slot that goes
-   through a link, FFXI writes there as admin */
 static int viewer_home_set(BYTE *b, int slot)
 {
     static const char *const sub[4] = { "s\\a", "s\\b", "r\\a", "r\\b" };
@@ -238,8 +223,7 @@ static int viewer_home_set(BYTE *b, int slot)
     return 1;
 }
 
-/* the viewer's init before content (REGISTRY_LANG, FFXI_LANG, REGISTRY_KEY, INSTALL_FOLDER, FILE_INIT), which the menu
-   detour skips, or character creation throws FFXI-3322 in Japanese */
+/* the menu detour skips the viewer's init before content, or character creation throws FFXI-3322 in Japanese */
 static void viewer_init(BYTE *b)
 {
     DWORD lang = viewer_lang();
@@ -253,7 +237,6 @@ static void viewer_init(BYTE *b)
     pc_set_install_folder(b, folder);
     pc_file_init(b);
     lstrcpynA(g_viewer, folder, sizeof g_viewer);
-    /* home84 till login_home_pick moves the account to its own after the login, then the folders get made */
     pc_set_user_slot(b, LEGACY_HOME);
     g_home = LEGACY_HOME;
     base_log("viewer_init: user slot %d for now\r\n", LEGACY_HOME);

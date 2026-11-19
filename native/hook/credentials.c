@@ -1,4 +1,3 @@
-/* polcore's own SHA-1 (polcore.dll 0x1002d6a0/d6d0/dac0), the exact hash the wire uses. 0x5c-byte context. */
 static void cred_sha1(BYTE *b, const void *data, unsigned len, BYTE out[20])
 {
     BYTE ctx[0x80];
@@ -8,7 +7,6 @@ static void cred_sha1(BYTE *b, const void *data, unsigned len, BYTE out[20])
     SecureZeroMemory(ctx, sizeof ctx);
 }
 
-/* NULL when it's missing, too long or won't convert */
 static const WCHAR *cred_target(const char *env, WCHAR *buf, int n)
 {
     char a[256];
@@ -50,7 +48,6 @@ static const char *cred_why(int rc)
     static const char *const why[] = { "unknown", "not found", "not wrapped", "unwrap failed", "too long" };
     return rc >= PC_NOT_FOUND && rc <= PC_TOO_LONG ? why[rc] : why[0];
 }
-/* the name the screens use for a credential kind */
 static const char *cred_kind_name(const char *kind)
 {
     return kind[0] == 'P' ? "PlayOnline ID" : "Square Enix ID";
@@ -67,7 +64,6 @@ static void cred_consume(const WCHAR *target, const char *kind)
     if (!CredDeleteW(target, CRED_TYPE_GENERIC, 0))
         base_log("login: one-shot target '%ls' delete failed err=%u\r\n", target, GetLastError());
 }
-/* a failure ends pol.exe (exit 11) so Provenance asks for the details again */
 static void cred_read_details(const char *env, const char *kind, char *id, int idcap, char *pw, int pwcap)
 {
     WCHAR tbuf[256];
@@ -88,7 +84,6 @@ static void cred_read_details(const char *env, const char *kind, char *id, int i
     base_log(LOG_DETAILS_UNREADABLE " (%s) - exiting, the game wasn't started\r\n", cred_kind_name(kind));
     base_end_pol(DETAILS_UNREADABLE_EXIT);
 }
-/* account IDs in the log: first 2 chars + length only (the log stays on disk) */
 static const char *cred_mask_id(const char *id, char *out)
 {
     out[0] = id && id[0] ? id[0] : '?';
@@ -96,8 +91,6 @@ static const char *cred_mask_id(const char *id, char *out)
     wsprintfA(out + 2, "***(%d)", id ? lstrlenA(id) : 0);
     return out;
 }
-/* secret = SHA1(hex_lower(SHA1(password)) || "playonline") like the viewer (app.dll 0x1019ab29), into
-   polcore.dll 0x1001e4b0 (svc+0x1778) with mode 1 (no OTP) or 2 (OTP) */
 static void seed_account_login(BYTE *b)
 {
     char seid[32] = {0}, sepw[64] = {0}, hex[41], otp[8] = {0}, m[24];
@@ -135,7 +128,6 @@ static void seed_account_login(BYTE *b)
     SecureZeroMemory(seid, sizeof seid);
 }
 
-/* Play is the one-shot POL_CRED_PLAY entry, user "play", wrapped so nothing else can forge it */
 static int cred_play_signalled(void)
 {
     static WCHAR tbuf[256];
@@ -156,7 +148,7 @@ static int cred_play_signalled(void)
     if (rc == PC_NOT_FOUND) {
         warned = 0;
     } else if (rc != PC_OK && !warned) {
-        warned = 1;   /* once, Provenance takes this line as a failed start */
+        warned = 1;
         base_log(LOG_PLAY_UNREADABLE " (%s) - ignored\r\n", cred_why(rc));
     }
     return 0;

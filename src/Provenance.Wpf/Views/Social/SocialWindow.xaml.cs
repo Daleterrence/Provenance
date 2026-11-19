@@ -37,13 +37,12 @@ public partial class SocialWindow : AppWindow
         IsVisibleChanged += (_, e) =>
         {
             ReportVisible();
-            // a Friends window that's gone leaves nobody picked, so it comes back with no pane
             if (e.NewValue is false) Vm?.HidePane();
         };
         StateChanged += (_, _) => ReportVisible();
         Activated += (_, _) => Vm?.RefreshTimes();
         SizeChanged += OnSized;
-#pragma warning disable RS0030 // a view, not a view model
+#pragma warning disable RS0030
         if (Application.Current is { } app) app.Activated += OnAppActivated;
 #pragma warning restore RS0030
         // the view model outlives the window, so a closed one lets go
@@ -58,7 +57,7 @@ public partial class SocialWindow : AppWindow
                 vm.HidePane();
                 Detach(vm);
             }
-#pragma warning disable RS0030 // a view, not a view model
+#pragma warning disable RS0030
             if (Application.Current is { } a) a.Activated -= OnAppActivated;
 #pragma warning restore RS0030
         };
@@ -66,7 +65,6 @@ public partial class SocialWindow : AppWindow
 
     private SocialViewModel? Vm => DataContext as SocialViewModel;
 
-    // how wide the conversation pane opens, and told when the user drags it to something else
     public double PaneWidth { get; set; } = 480;
 
     public double SavedPaneWidth { set => PaneWidth = _paneAsked = value; }
@@ -97,8 +95,6 @@ public partial class SocialWindow : AppWindow
         vm.GroupInviteReceived -= OnGroupInviteLanded;
     }
 
-    // Landing in this window counts as read or seen, so the main window stays quiet. With Provenance in the
-    // background this one flashes instead, till it's brought up
     private void OnMessageLanded(string who, string _) => OnLineLanded(NoticeKind.Message, who);
 
     private void OnAnswerLanded(string who, string _) => OnLineLanded(NoticeKind.Answer, who);
@@ -120,11 +116,8 @@ public partial class SocialWindow : AppWindow
         TaskbarFlash.Start(this);
     }
 
-    // it only flashes while it's on screen, so with Provenance back in front it's done its job (the request might've
-    // been answered from the main window, say)
     private void OnAppActivated(object? sender, EventArgs e) => TaskbarFlash.StopIfFlashing(this);
 
-    // a hidden or minimised window's messages stay unread until it's back, and its requests unseen
     private void ReportVisible()
     {
         if (Vm is not { } vm) return;
@@ -133,7 +126,6 @@ public partial class SocialWindow : AppWindow
         vm.FriendsListVisible = shown;
     }
 
-    // a double-click or Enter takes the cursor to the box, so the reply can just be typed
     private void OnActivated(FriendItem f)
     {
         if (Vm is not { } vm) return;
@@ -153,18 +145,14 @@ public partial class SocialWindow : AppWindow
         if (Vm is { } vm) vm.RequestsTab = true;
     }
 
-    // the work area of the monitor this window's on, swapped in tests
     internal static Func<Window, Rect> WorkArea { get; set; } = WindowFrame.WorkAreaOf;
 
-    // the pane's only there with a friend picked. It opens to the right and keeps the left edge, shifted left when that
-    // would run off the screen, and closing it narrows the window back
     private void ApplyPane()
     {
         bool want = Vm?.HasPane == true;
         if (want == _paneShown) return;
         double chrome = Body.ActualWidth > 0 ? ActualWidth - Body.ActualWidth : 0;
         bool resize = WindowState == WindowState.Normal;
-        // the window's own resizing, which isn't the user giving the pane a width, settles by the time the layout's idle
         _holding = true;
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle, () => _holding = false);
         ApplyPaneCore(want, chrome, resize, WorkArea(this));
@@ -208,12 +196,9 @@ public partial class SocialWindow : AppWindow
         }
     }
 
-    // saved as the list's width, so it comes back the same however the pane was (and when it was maximised, as the
-    // normal bounds have the pane at the width it last had normal)
     internal Rect ListBounds(Rect b) =>
         _paneShown ? new Rect(b.Left, b.Top, Math.Max(FriendsColumn.MinWidth, b.Width - Handle - Math.Max(PaneMin, PaneWidth)), b.Height) : b;
 
-    // the user's own width is kept for the next time the pane opens, whether they dragged the splitter or the window's edge
     private void OnSized(object sender, SizeChangedEventArgs e)
     {
         if (_holding || !_paneShown || WindowState != WindowState.Normal || !e.WidthChanged || MessagesColumn.ActualWidth < PaneMin) return;
@@ -227,7 +212,6 @@ public partial class SocialWindow : AppWindow
         PaneWidthChanged?.Invoke(PaneWidth);
     }
 
-    // the viewer's Edit Comments, in place. Only Enter saves (it's a request to POL), Esc or leaving puts it back
     private string _savedComment = "";
 
     private void OnCommentFocus(object sender, KeyboardFocusChangedEventArgs e)
@@ -244,7 +228,6 @@ public partial class SocialWindow : AppWindow
         Keyboard.ClearFocus();
     }
 
-    // focus going to another app or the box's own right-click menu keeps the edit
     private void OnCommentLostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         // ContextMenu spelt out, on its own it's this window's property
@@ -258,13 +241,12 @@ public partial class SocialWindow : AppWindow
         CommentBox.CaretIndex = CommentBox.Text.Length;
     }
 
-    // once a change finishes the box shows what POL actually has, so a refused one doesn't look like friends can see it
     private void OnVmChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(SocialViewModel.HasPane)) ApplyPane();
         if (e.PropertyName != nameof(SocialViewModel.EditBusy)) return;
         if (sender is not SocialViewModel { EditBusy: false } vm) return;
-        if (CommentBox.IsKeyboardFocusWithin) return;   // they're typing a new one
+        if (CommentBox.IsKeyboardFocusWithin) return;
         CommentBox.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget();
         _savedComment = vm.MyComment;
     }
@@ -282,7 +264,7 @@ public partial class SocialWindow : AppWindow
             UndoComment();
             return;
         }
-        _savedComment = text;   // what was sent stays in the box while POL answers
+        _savedComment = text;
         vm.SetComment(text);
     }
 

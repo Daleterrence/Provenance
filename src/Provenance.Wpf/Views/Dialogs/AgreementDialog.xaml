@@ -18,7 +18,7 @@
 
         <Border Grid.Row="2" Margin="18,0,18,0" CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.1}"
                 BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
-            <!-- read-only so it can be copied, and it scrolls itself, an outer ScrollViewer fights it for the wheel -->
+            <!-- it scrolls itself, an outer ScrollViewer fights it for the wheel -->
             <TextBox x:Name="BodyText" Style="{StaticResource SelectableText}" FontSize="12.5" TextBlock.LineHeight="18" Padding="14,10"
                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" behaviours:KeyScroll.Enabled="True" />
         </Border>

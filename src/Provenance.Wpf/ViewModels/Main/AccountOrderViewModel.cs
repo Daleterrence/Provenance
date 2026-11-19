@@ -16,7 +16,6 @@ public sealed partial class AccountOrderItem(Account account, string name, Image
     [ObservableProperty] private bool _canMoveDown;
 }
 
-// every move is applied and saved on the spot, so the window has nothing to confirm
 public sealed partial class AccountOrderViewModel : ObservableObject
 {
     private readonly AccountsViewModel _accounts;

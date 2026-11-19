@@ -33,7 +33,6 @@
             <TextBlock Text="Appearance" Style="{StaticResource Section}" />
             <Border Style="{StaticResource Card}">
                 <StackPanel>
-                    <!-- the tiles split the row between them, and the margin on the end of the last one is taken back off the list -->
                     <ItemsControl x:Name="ThemeTiles" ItemsSource="{Binding ThemeTiles}" Focusable="False" IsTabStop="False" Margin="0,8,-12,10"
                                   KeyboardNavigation.DirectionalNavigation="Cycle" AutomationProperties.Name="Theme">
                         <ItemsControl.ItemsPanel>

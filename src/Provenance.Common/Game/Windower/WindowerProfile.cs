@@ -33,7 +33,6 @@ public sealed class WindowerProfile
     public string Args { get; set => field = value ?? ""; } = "";
     public string Executable { get; set => field = value ?? DefaultExecutable; } = DefaultExecutable;
 
-    // anything Windower doesn't know about, kept so a save here doesn't lose it (Windower's own save still will)
     public List<XElement> UnknownElements { get; private set; } = [];
     public List<XAttribute> UnknownAttributes { get; private set; } = [];
 
@@ -108,7 +107,6 @@ public sealed class WindowerProfile
         Add(sized, "width", Width.ToString(CultureInfo.InvariantCulture));
         Add(sized, "height", Height.ToString(CultureInfo.InvariantCulture));
         Add(MipMapLevel > 0, "mipmaplevel", MipMapLevel.ToString(CultureInfo.InvariantCulture));
-        // written as Windower compares them, NaN included
         Add(Gamma != 0f, "gamma", FormatFloat(Gamma));
         Add(!(UIScale <= 0f), "uiscale", FormatFloat(UIScale));
         Add(!HardwareMouse, "hardwaremouse", "false");
@@ -129,7 +127,6 @@ public sealed class WindowerProfile
     }
 
     // .NET Framework's float.ToString(): 7 significant digits, rounded half up where .NET now goes to even
-    // (2371148.5 is 2371149 there, 2371148 here), and -0 comes out as 0
     public static string FormatFloat(float v)
     {
         if (v == 0f) return "0";
@@ -155,8 +152,7 @@ public sealed class WindowerProfile
 
         public static bool Bool(string? s, bool def) => bool.TryParse(s, out var v) ? v : def;
 
-        // .NET Framework parsed a float as a double and refused anything out of range, where .NET now gives infinity.
-        // The spelt-out symbols are the only way in for those
+        // .NET Framework refused a float out of range where .NET gives infinity, so the spelt-out symbols are the only way in
         public static float Float(string? s, float def)
         {
             if (s is null) return def;

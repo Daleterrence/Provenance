@@ -28,7 +28,6 @@ public partial class PopCard : UserControl
     public string Text { get => (string)GetValue(TextProperty); set => SetValue(TextProperty, value); }
     public bool IsError { get => (bool)GetValue(IsErrorProperty); set => SetValue(IsErrorProperty, value); }
 
-    // the words stay put while the card fades out
     private void Say(string text)
     {
         if (text.Length == 0) return;
@@ -36,7 +35,6 @@ public partial class PopCard : UserControl
         Tell();
     }
 
-    // once per change, after the layout, with the keyboard focus left where it is
     private void Tell()
     {
         if (_telling) return;
@@ -52,7 +50,7 @@ public partial class PopCard : UserControl
 
     private void Pop(bool shown)
     {
-        if (!SystemParameters.ClientAreaAnimation)   // Windows "show animations" is off
+        if (!SystemParameters.ClientAreaAnimation)
         {
             Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
             if (shown) Tell();

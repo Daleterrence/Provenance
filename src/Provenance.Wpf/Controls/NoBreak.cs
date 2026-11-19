@@ -1,6 +1,5 @@
 namespace Provenance.Wpf.Controls;
 
-// Swaps the spaces inside a name for non-breaking ones, for showing only. The string itself isn't changed
 public static class NoBreak
 {
     private const char Space = (char)0xA0;
@@ -15,7 +14,6 @@ public static class NoBreak
     {
         foreach (var name in Names)
             if (text.Contains(name, StringComparison.Ordinal)) text = text.Replace(name, name.Replace(' ', Space), StringComparison.Ordinal);
-        // a setting named inside quotes, "like this"
         int open = text.IndexOf('"');
         while (open >= 0)
         {

@@ -6,8 +6,6 @@ using System.Windows.Media;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// a settings row's header is only a label drawn beside its control, so a screen reader gets the control with no name.
-// This gives it the header's, unless it has one of its own
 public static class HeaderNames
 {
     public static readonly DependencyProperty NamesContentProperty = DependencyProperty.RegisterAttached(
@@ -33,8 +31,6 @@ public static class HeaderNames
             AutomationProperties.SetName(target, header);
     }
 
-    // the content itself when it's a control, otherwise the first one inside it (a slider beside its value). A check box
-    // or button already reads out what's written on it
     private static DependencyObject? FirstControl(DependencyObject d)
     {
         if (d is ContentControl { Content: string { Length: > 0 } }) return null;

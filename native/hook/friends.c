@@ -3,7 +3,6 @@ static int g_edit_kind;   /* 1 list upload, 2 comment, 3 upload that became a re
 static WCHAR g_comment_want[0x33];
 
 #define edit_fail(why) requests_refuse(g_s.edit_state, sizeof g_s.edit_state, "friends: edit refused - %s\r\n", why)
-/* like the viewer, a local edit (svc 0x5f4/0x2f0/0x2e4/0x2e8) marks the row, then one list upload sends it */
 static void friends_upload_start(BYTE *b)
 {
     int reload = pc_friends_server_newer(b);
@@ -29,8 +28,6 @@ static void friends_comment_start(BYTE *b)
     lstrcpyA(g_s.edit_state, "saving");
     g_snap_dirty = 1;
 }
-/* UTF-8 -> a comment of 0x31 UTF-16 chars at most (into a zeroed out), control chars as spaces, never half a
-   surrogate pair. 0 = not valid UTF-8. */
 static int friends_comment_text(const char *s, WCHAR *out)
 {
     static WCHAR wide[0x400];
@@ -51,7 +48,6 @@ static void friends_edit_request(BYTE *b)
         p = buf;
         tok = requests_line(&p);
         lstrcpynA(g_s.edit_token, tok, sizeof g_s.edit_token);
-        /* no token line means it isn't the launcher's, and a stray empty file mustn't clear the comment */
         if (!tok[0] || p == tok + lstrlenA(tok)) { edit_fail("failed:bad request"); return; }
         { char *e = p + lstrlenA(p); while (e > p && (e[-1] == '\n' || e[-1] == '\r')) *--e = 0; }
         memset(g_comment_want, 0, sizeof g_comment_want);
@@ -65,7 +61,6 @@ static void friends_edit_request(BYTE *b)
     arg = requests_line(&p);
     lstrcpynA(g_s.edit_token, tok, sizeof g_s.edit_token);
     if (!requests_parse_num(rows, 4, &row)) { edit_fail("failed:bad request"); return; }
-    /* <key> is the row's snapshot key, so an edit never lands on a row that changed */
     if (lstrcmpA(op, "unignore") == 0) {
         memset(&fr, 0, sizeof fr);
         if (row >= 100 || pc_ignore_copy(b, row, &fr) < 0 || !pc_friend_valid(&fr.f)) {
@@ -97,7 +92,6 @@ static void friends_edit_request(BYTE *b)
     } else if (lstrcmpA(op, "ignore") == 0) {
         if (peers_is_me(b, fr.f.id_lo, fr.f.id_hi)) { edit_fail("failed:self"); return; }
         memcpy(nm, fr.f.name, 15); nm[15] = 0;
-        /* AddBlock takes them off the friend list as well (polcore.dll 0x10024ad0) */
         r = pc_ignore_add(b, -1, arg[0] == '1' ? 1u : 0u, fr.f.id_lo, fr.f.id_hi,
                                (unsigned)pc_friend_slot(&fr.f), nm);
         base_log("friends: ignore row %d (%s) -> %d\r\n", row, arg[0] == '1' ? "every handle" : "this handle", r);
@@ -140,15 +134,13 @@ static void friends_slots_put_back(BYTE *b)
 static void friends_edit_pump(BYTE *b, int ctl)
 {
     if (g_s.edit_job < 0) {
-        if (g_s.edit_upload_want) friends_upload_start(b);   /* applied locally already, so it still goes in a drain */
+        if (g_s.edit_upload_want) friends_upload_start(b);
         else if (g_s.comment_wanted) friends_comment_start(b);
         else if (ctl && !g_s.draining) friends_edit_request(b);
         return;
     }
     int upload = g_edit_kind == 1, r;
-    /* polcore takes the upload's answer inside the poll. A reload is its own list load, which looks after the slots */
     if (upload) friends_slots_keep(b);
-    /* a comment (svc 0x67c) is polled with 0x684. Not 0x680, however much it looks like it should be */
     r = g_edit_kind == 2 ? pc_comment_save_check(b, g_s.edit_job) : pc_friends_save_check(b, g_s.edit_job);
     if (upload) friends_slots_put_back(b);
     if (r == 0) return;

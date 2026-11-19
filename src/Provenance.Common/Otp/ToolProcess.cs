@@ -7,7 +7,6 @@ internal static class ToolProcess
 {
     internal static string? HomeRootForTest;
 
-    // the tools' own profile, per Windows user and admin-only, so nothing they write or unpack to load is the user's
     internal static string Home
     {
         get
@@ -28,7 +27,6 @@ internal static class ToolProcess
         }
     }
 
-    // its own folder, never whatever folder the elevated app happens to be in. Hidden means no window and every stream redirected
     internal static ProcessStartInfo StartInfo(string exe, IEnumerable<string> args, bool hidden = true)
     {
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" };
@@ -42,7 +40,6 @@ internal static class ToolProcess
         return psi;
     }
 
-    // stdin's closed straight away, so it can never sit waiting for typing
     internal static async Task<RunResult> RunAsync(string exe, IEnumerable<string> args, IDictionary<string, string>? env,
                                                   TimeSpan timeout, CancellationToken ct)
     {
@@ -57,14 +54,13 @@ internal static class ToolProcess
         try { await p.WaitForExitAsync(cts.Token); }
         catch (OperationCanceledException)
         {
-            try { p.Kill(entireProcessTree: true); } catch { }   // already gone
+            try { p.Kill(entireProcessTree: true); } catch { }
             if (ct.IsCancellationRequested) throw;
             throw new TimeoutException($"{Path.GetFileNameWithoutExtension(exe)} didn't answer within {timeout.TotalSeconds:0} seconds.");
         }
         return new RunResult(p.ExitCode, await o, await e);
     }
 
-    // built from nothing: Windows' own folders on PATH, the profile in Provenance's locked home, nothing else the user's set
     internal static void LockedEnvironment(IDictionary<string, string?> env)
     {
         var windows = AppPaths.Windows;

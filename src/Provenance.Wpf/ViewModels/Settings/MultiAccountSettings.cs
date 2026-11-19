@@ -6,7 +6,6 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// The first profile choice is none, which an account that's turned on can't start with
 public partial class MultiAccountSettings : ObservableObject
 {
     private readonly HookSettings _hook;
@@ -14,7 +13,6 @@ public partial class MultiAccountSettings : ObservableObject
     private readonly SettingsContext _context;
     private bool _loadingMulti;
 
-    // each account's stored Enabled as last loaded or saved. One that's gone off since got turned off by a run
     private Dictionary<string, bool> _multiEnabledAsKnown = new();
 
     internal MultiAccountSettings(HookSettings hook, ISettingsService settings, SettingsContext context)
@@ -33,8 +31,6 @@ public partial class MultiAccountSettings : ObservableObject
     public bool MultiHasThirdPartyHook => _hook.Hook != ThirdPartyHook.None;
     public string MultiProfileLabel => _hook.IsAshita ? "Ashita boot configuration" : "Windower profile";
 
-    // read-only while a run goes, it saves refused and blocked accounts as they happen and a save from here
-    // mustn't undo that
     public bool MultiRunGoing => _context.MultiRunning();
     public bool MultiEditable => MultiHasThirdPartyHook && !MultiRunGoing;
 
@@ -99,7 +95,6 @@ public partial class MultiAccountSettings : ObservableObject
         choice == ProfileDefaultChoice ? null
         : ChoiceItems?.FirstOrDefault(i => i.Display == choice)?.Name ?? choice;
 
-    // a Windower profile means nothing to Ashita and vice versa, so a platform switch clears every stored one
     private void RefreshMultiChoices(bool platformChanged = false)
     {
         _loadingMulti = true;
@@ -129,7 +124,6 @@ public partial class MultiAccountSettings : ObservableObject
                 ? $"Choose the {MultiProfileLabel} {r.Name} starts with." : null;
     }
 
-    // safe mid-run too: the run read its profiles at the start, and only the profile changes
     private void ClearMultiProfiles()
     {
         var withProfile = _settings.Current.MultiAccounts.Where(e => e.ThirdPartyHookProfile is not null).ToList();
@@ -143,17 +137,14 @@ public partial class MultiAccountSettings : ObservableObject
     private void SaveMulti()
     {
         if (_loadingMulti || MultiRunGoing) return;
-        // read the stored list again, a run may have saved a failure since the rows were loaded
         var stored = _settings.Current.MultiAccounts;
         var saved = new List<MultiAccountEntry>();
-        _loadingMulti = true;   // the rows brought in line below mustn't save again
+        _loadingMulti = true;
         try
         {
             foreach (var r in MultiAccountRows)
             {
                 var entry = new MultiAccountEntry { ProfileId = r.ProfileId, Enabled = r.Enabled, ThirdPartyHookProfile = FromChoice(r.ThirdPartyHookProfile), Problem = r.Problem };
-                // a refused password, or one a run turned off since the load: the stored state wins, so no edit
-                // here turns it back on by mistake
                 if (stored.FirstOrDefault(e => e.ProfileId == r.ProfileId) is { } now &&
                     (now.CredentialsRefused || (!now.Enabled && _multiEnabledAsKnown.GetValueOrDefault(r.ProfileId))))
                 {

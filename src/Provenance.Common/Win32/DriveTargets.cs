@@ -4,16 +4,12 @@ using Microsoft.Win32;
 
 namespace Provenance.Common.Win32;
 
-// A handle opened through a mapped or SUBST drive reports the folder behind the letter, so a path has to be turned
-// into that before it's compared with where its handle really is
 internal static class DriveTargets
 {
     private const uint DriveRemote = 4;
 
-    // what the system says a drive letter points at
     internal static Func<char, string?> Lookup = SystemLookup;
 
-    // the share a persistent mapping in this user's own registry hive points at
     internal static Func<char, string?> NetworkLookup = FromRegistry;
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
@@ -25,12 +21,10 @@ internal static class DriveTargets
     [DllImport("mpr.dll", CharSet = CharSet.Unicode)]
     private static extern int WNetGetConnectionW(string local, StringBuilder remote, ref int length);
 
-    // a letter that goes to a share, asked of the system and nothing else
     internal static Func<char, bool> Remote = c => GetDriveTypeW(char.ToUpperInvariant(c) + @":\") == DriveRemote;
 
     public static bool HasDriveLetter(string path) => path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':';
 
-    // the path with its drive letter replaced by where that really goes, a letter that goes nowhere left alone
     public static string Real(string path)
     {
         for (int i = 0; i < 4 && HasDriveLetter(path); i++)
@@ -41,8 +35,7 @@ internal static class DriveTargets
         return path;
     }
 
-    // a letter this session doesn't have, but the player's own mapped it to a share, becomes that share's path. Anything
-    // else is left as it is
+    // mapped drives usually aren't there for an elevated process, so a persistent mapping becomes its share's path
     public static string Resolve(string path)
     {
         if (!HasDriveLetter(path) || Exists(path[0]) || NetworkLookup(char.ToUpperInvariant(path[0])) is not { Length: > 2 } share
@@ -50,8 +43,6 @@ internal static class DriveTargets
         return share.TrimEnd('\\') + path[2..];
     }
 
-    // false for a letter nothing's behind, which is what an elevated process sees of a drive mapped in the player's own
-    // session
     public static bool Exists(char letter) => GetDriveTypeW(char.ToUpperInvariant(letter) + @":\") > 1;
 
     private static string? FromRegistry(char letter)

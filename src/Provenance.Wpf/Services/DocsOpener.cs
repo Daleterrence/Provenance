@@ -6,7 +6,6 @@ namespace Provenance.Wpf.Services;
 
 internal static class DocsOpener
 {
-    // both through explorer.exe, so the browser starts as the user. A text file isn't opened from here, it's shown
     public static void Open(AddonDocs docs)
     {
         switch (docs.Kind)

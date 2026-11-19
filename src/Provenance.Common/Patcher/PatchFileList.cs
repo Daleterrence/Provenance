@@ -3,11 +3,10 @@ using System.Text.RegularExpressions;
 
 namespace Provenance.Common.Patcher;
 
-// directive flags 2, 0x80, 0x40, 4. The names go into patch2.cfg as they are, don't rename them.
+// directive flags 2, 0x80, 0x40, 4. The names go into patch2.cfg as they are, don't rename them
 public enum BlockAttribute { None, Reset, Reset2, Option, Select }
 
-// "<stamp> <len> <sum> <md5w> <stamp>/Direct/<p>.slc <slcLen> [<stamp>/Indirect/<p>.olc <olcLen>]". Paths can hold
-// spaces, POL's tokeniser keeps them.
+// "<stamp> <len> <sum> <md5w> <stamp>/Direct/<p>.slc <slcLen> [<stamp>/Indirect/<p>.olc <olcLen>]"
 public sealed record PatchLine(string Stamp, FileSig Sig, string SlcPath, long SlcLen, string? OlcPath, long OlcLen)
 {
     public override string ToString() =>
@@ -25,7 +24,7 @@ public static class PatchFileList
         @"^(\S+) (-?\d+) (-?\d+) (-?\d+) (.+?\.slc) (\d+)(?: (.+?\.olc) (\d+))?\s*$", RegexOptions.CultureInvariant);
     private static readonly Regex MarkerRx = new(@"__([A-Za-z0-9]{3})__", RegexOptions.CultureInvariant);
 
-    // a "__XXX__" region marker keeps the file only when XXX is tagFilter (app.dll 0x102a5bec and 0x102a5c83)
+    // a "__XXX__" region marker keeps the file only when XXX is tagFilter
     public static List<PatchFile> Parse(string text, string tagFilter)
     {
         var files = new List<PatchFile>();

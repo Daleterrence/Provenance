@@ -32,7 +32,6 @@ public static class ToolInstaller
     internal static bool Supported(string tool) => tool switch
     {
         ToolFacts.OnePassword => OnePasswordArch() is not null,
-        // x64 only, and Windows 10 on ARM can't run x64 programs
         ToolFacts.Bitwarden => RuntimeInformation.OSArchitecture == Architecture.X64 ||
                      (RuntimeInformation.OSArchitecture == Architecture.Arm64 && Environment.OSVersion.Version.Build >= 22000),
         _ => false,
@@ -46,7 +45,6 @@ public static class ToolInstaller
         _ => null,
     };
 
-    // never throws, a cancel aside
     public static async Task<ToolInstall> InstallAsync(string tool, IProgress<double>? progress, CancellationToken ct)
     {
         if (!Supported(tool))
@@ -59,7 +57,6 @@ public static class ToolInstaller
         {
             held = await Task.Run(() => AdminLock.TryAcquire(ToolFacts.LockName(tool), TimeSpan.FromMinutes(10), ct), ct);
             if (held is null) return ToolInstall.DownloadFailed;
-            // another copy of Provenance may have put one in place while this one waited
             var own = Path.Combine(ToolFinder.Dir, tool + ".exe");
             if (await Task.Run(() =>
                 {
@@ -79,7 +76,6 @@ public static class ToolInstaller
         finally { held?.Dispose(); }
     }
 
-    // once a day at most, and only after the tool's been used
     public static void UpdateInBackground(string tool) =>
         _ = Task.Run(async () =>
         {
@@ -96,7 +92,6 @@ public static class ToolInstaller
         if (held is null) return;
         var state = ToolNote.Read(dir, tool);
         if (!ToolNote.IsDue(state)) return;
-        // counts as checked even when the check fails, so a server that's down gets asked once a day, not every use
         ToolNote.Write(dir, tool, new ToolNote(state?.Version ?? "", DateTime.UtcNow));
         var (version, url) = await LatestAsync(tool, ct);
         if (Version.TryParse(state?.Version, out var have) && Version.TryParse(version, out var latest) && latest <= have) return;
@@ -122,14 +117,12 @@ public static class ToolInstaller
     {
         if (tool == ToolFacts.OnePassword)
         {
-            // the same version check 1Password's own install script makes
             var arch = OnePasswordArch() ?? throw new PlatformNotSupportedException();
             using var doc = JsonDocument.Parse(await Http.GetStringAsync(OnePasswordVersionUrl, ct));
             var v = doc.RootElement.GetProperty("version").GetString() ?? "";
             if (ToolFinder.ParseVersion(v) is null) throw new InvalidDataException("1Password's version check didn't give a version.");
             return (v, $"https://cache.agilebits.com/dist/1P/op2/pkg/v{v}/op_windows_{arch}_v{v}.zip");
         }
-        // Bitwarden's download link redirects to the release's zip on GitHub, and that names the version
         using var r = await HttpNoRedirect.GetAsync(BitwardenDownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
         var location = r.Headers.Location is { IsAbsoluteUri: true } l ? l.AbsoluteUri : "";
         var m = BitwardenZip.Match(location);
@@ -149,7 +142,6 @@ public static class ToolInstaller
         {
             await DownloadAsync(url, zip, progress, ct);
             await Task.Run(() => ExtractExe(zip, tool + ".exe", exe), ct);
-            // the check and the version run off one handle, held between them
             var (verdict, got) = await Task.Run(() =>
             {
                 using var held = ToolSignature.Open(exe);
@@ -163,8 +155,6 @@ public static class ToolInstaller
                             ToolFacts.Name(tool), version, url, verdict);
                 return verdict == Verdict.NotGenuine ? ToolInstall.CheckFailed : ToolInstall.CantCheck;
             }
-            // the version the file itself gives, never what the server named. Nothing older than what's built in or
-            // what's already there goes in
             var floor = File.Exists(Path.Combine(dir, tool + ".exe")) && ToolNote.NotedVersion(dir, tool) is { } have && have > ToolFacts.Oldest(tool) ? have : ToolFacts.Oldest(tool);
             if (got is null || got < floor)
             {
@@ -232,13 +222,11 @@ public static class ToolInstaller
         try { File.Move(fresh, final, overwrite: true); }
         catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && File.Exists(final))
         {
-            // a copy that's running can't be replaced, but it can be moved out of the way
             File.Move(final, Path.Combine(dir, $"{tool}-old-{ShortId.New(8)}.exe"));
             File.Move(fresh, final);
         }
     }
 
-    // leftovers of a download that didn't finish, or of a swap. One that's still running stays till next time
     private static void Sweep(string dir, string tool)
     {
         foreach (var pattern in new[] { $"{tool}-new-*", $"{tool}-old-*" })

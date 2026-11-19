@@ -1,7 +1,6 @@
 namespace Provenance.Common.Game.Windower;
 
-// Windower.exe holds Windower.Update.Mutex around every update and install. A mutex belongs to a thread and awaits hop
-// threads, so a thread of its own holds this one
+// a mutex belongs to a thread and awaits hop threads, so a thread of its own holds this one
 internal sealed class WindowerUpdateMutex : IDisposable
 {
     private readonly ManualResetEventSlim _release = new();
@@ -25,8 +24,7 @@ internal sealed class WindowerUpdateMutex : IDisposable
             bool owned = false;
             try
             {
-                // an abandoned mutex is mine now, and gets released once like any other (Windower takes it twice and
-                // keeps it till it exits)
+                // an abandoned mutex is mine now (Windower takes it twice and keeps it till it exits)
                 int got;
                 try { got = WaitHandle.WaitAny([m, ct.WaitHandle], wait); }
                 catch (AbandonedMutexException e) when (e.MutexIndex == 0) { got = 0; }

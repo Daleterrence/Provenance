@@ -1,7 +1,6 @@
 enum { SNAPSHOT_NAME_CAP = 64, SNAPSHOT_STATE_CAP = 110, SNAPSHOT_GROUP_CAP = 96, SNAPSHOT_TEXT_CAP = 96,
        SNAPSHOT_COMMENT_CAP = 0x33 * 3 + 8 };
 
-/* the bytes last written, so a snapshot that hasn't changed isn't written again */
 static char *g_snap_kept;
 static int g_snap_kept_n;
 static char g_snap_kept_path[MAX_PATH + 64];
@@ -80,7 +79,6 @@ static void snapshot_social(BYTE *b)
         jw_end(&w);
     }
     jw_end(&w);
-    /* the messages the hook has, and whether each one's PUT has started */
     jw_arr(&w, "queue");
     for (i = 0; i < g_s.send_queue_n; i++) {
         jw_obj(&w, NULL);
@@ -183,7 +181,6 @@ static void snapshot_social(BYTE *b)
         }
         jw_end(&w);
     }
-    /* GetMyComment (svc 0x688) and GetMyStatus (0x338) are local reads, fine every 2s */
     if (pc_has(b, SV_MY_COMMENT)) {
         memset(wc, 0, sizeof wc);
         pc_my_comment(b, -2, wc);
@@ -210,7 +207,6 @@ static void snapshot_social(BYTE *b)
     st = pc_my_status_or(b, 4);
     name = st == 0 ? "online" : st == 1 ? "away" : st == 2 ? "busy" : "appear-offline";
     jw_lit(&w, "myStatus", name);
-    /* the current handle's record: +0x08 the name in SJIS, +0x1c the profile pic id */
     if (pc_has(b, SV_CURRENT_HANDLE) && pc_has(b, SV_GET_HANDLE)) {
         int slot = pc_current_handle(b);
         pol_handle rec = {0};
@@ -237,7 +233,6 @@ static void snapshot_social(BYTE *b)
         DWORD cs, cl, chi;
         if (IsBadReadPtr(a, sizeof *a) || IsBadReadPtr(bn, sizeof *bn)) break;
         if (!pc_friend_valid(a)) continue;   /* polcore.dll 0x10024d30 */
-        /* the comment's UTF-16 while the names are SJIS */
         memcpy(fw, bn->comment, 0x32 * sizeof(WCHAR));
         WideCharToMultiByte(CP_UTF8, 0, fw, -1, combuf, (int)sizeof combuf - 1, NULL, NULL);
         peers_friend_key(b, a, sk);
@@ -263,7 +258,6 @@ static void snapshot_social(BYTE *b)
     }
     jw_end(&w);
     jw_arr(&w, "messages");
-    /* states 0-3 and 7, oldest first since slots get reused */
     for (i = mail_inbox_next(0, 0xf | 1 << 7); i >= 0; i = mail_inbox_next(g_mail[i].mid, 0xf | 1 << 7)) {
         const mailrec *ml = &g_mail[i];
         int hold = mail_inbox_held(ml) || mail_inbox_undecided(b, ml) || ml->raw_pending;
@@ -272,7 +266,6 @@ static void snapshot_social(BYTE *b)
                       hold ? "pending" : ml->state == 7 ? "stored" : ml->state == 3 ? "realtime" : ml->state == 2 ? "failed"
                                                      : ml->state == 1 ? "read" : "pending",
                       -1,   /* no read bit, a server copy hasn't got one */
-                      /* a request's sender on my ignore list, by the hook's own rule (a handle's row or an all-handles one) */
                       (pc_mail_kind(ml->hdr) == 1 || pc_mail_kind(ml->hdr) == 0xe) ? mail_inbox_sender_ignored(b, ml->hdr) : -1,
                       hold ? "" : ml->subj, hold ? "" : ml->text, ml->has_att && !hold ? ml->att : NULL);
     }

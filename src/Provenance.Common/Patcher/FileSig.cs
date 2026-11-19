@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 
 namespace Provenance.Common.Patcher;
 
-// POL's file signature (worker op 15): signed-char byte sum, first 4 MD5 bytes as a LE int, length
+// signed-char byte sum, first 4 MD5 bytes as a LE int, length
 public readonly record struct FileSig(int Sum, int Md5Word, long Length)
 {
     public static FileSig Of(string path, CancellationToken ct = default)

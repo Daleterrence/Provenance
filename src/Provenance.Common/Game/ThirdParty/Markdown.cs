@@ -31,7 +31,6 @@ public static class Markdown
 
     private readonly record struct ListMark(bool Ordered, int Start, int Content, bool Empty);
 
-    // past the limits it keeps what fits and sets Truncated
     public static MarkdownDoc Parse(string text)
     {
         bool cut = text.Length > MaxChars;

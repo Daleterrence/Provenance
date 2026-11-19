@@ -13,7 +13,6 @@ public partial class GeneralPage : UserControl
         ThemeTiles.PreviewKeyDown += OnThemeKey;
     }
 
-    // the arrows move between the tiles and pick the one they land on, and Tab only stops on the picked one
     private void OnThemeKey(object sender, KeyEventArgs e)
     {
         int step = e.Key is Key.Right or Key.Down ? 1 : e.Key is Key.Left or Key.Up ? -1 : 0;

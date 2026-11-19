@@ -50,7 +50,6 @@ internal static class BusyCover
     private static bool _installed;
     private static string? _text;
 
-    // a window that opens while the cover's on gets one too
     public static void Install(Func<Window, bool> covered)
     {
         _covered = covered;
@@ -59,7 +58,6 @@ internal static class BusyCover
         EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent, new RoutedEventHandler(OnLoaded));
     }
 
-    // null takes it off again
     public static void Set(string? text)
     {
         _text = text;
@@ -100,6 +98,5 @@ internal static class BusyCover
         held.Root.IsEnabled = held.WasEnabled;
     }
 
-    // Esc and the rest would still reach the window itself with its content off
     private static void Swallow(object sender, KeyEventArgs e) => e.Handled = true;
 }

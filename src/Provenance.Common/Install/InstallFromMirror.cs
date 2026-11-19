@@ -17,8 +17,6 @@ internal sealed record InstallData(MirrorPointer Pointer, string Version, string
     public string MsiFor(GameProduct product) => product == GameProduct.Viewer ? ViewerMsi : FfxiMsi;
 }
 
-// installer data goes to a staging folder laid out like the unpacked installer, game files straight to where the
-// packages put them
 public sealed class InstallFromMirror(MirrorClient client, string region, string logName = "Mirror install",
                                       LogEventLevel logLevel = LogEventLevel.Warning)
 {
@@ -27,7 +25,6 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
     private const string InstallSlug = "install";
     private const string PrepareStage = "Preparing";
     public const string PrepareText = "Getting the download ready...";
-    // no detail line while downloading, the stage already says what's coming down (the reports carry Download instead)
     public const string DownloadText = "";
     private const string ScanText = "Checking the files already downloaded...";
 
@@ -43,12 +40,8 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
 
     public IReadOnlyList<StagedProduct> Staged { get; private set; } = [];
 
-    // the game's file list when StageAsync found the mirror on POL's current version, so sizing the first update after
-    // SE's parts fetches nothing again. Null when that update could come from POL
     public MirrorIndex? GameIndex { get; private set; }
 
-    // null with SkipReason when the mirror can't serve it or an install's in the way, nothing under installRoot gets
-    // touched then
     public async Task<string?> StageAsync(string stagingDir, string installRoot, IProgress<InstallProgress>? progress, CancellationToken ct)
     {
         Staged = [];
@@ -67,7 +60,6 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
             var msi = data.MsiFor(product);
             if (ReadPackage(msi, installRoot, product, out var folder, out targets[i]) is { } unusable)
                 return Skip<string>(unusable);
-            // RunInstallAsync keeps an earlier install, so the files have to go there and it has to be complete
             if (RegisteredFolder(product) is { } registered)
             {
                 if (!PathInside.Same(registered, folder)) return Skip<string>($"{name} is already registered in {registered}");
@@ -84,7 +76,6 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
         for (int i = 0; i < products.Count; i++)
         {
             var (slug, name) = (products[i].Slug, products[i].Name);
-            // the region's hive, its Interface value keys patch.ver
             var product = PatchProduct.For(products[i], folders[i], viewerDir, Region);
             progress?.Report(new InstallProgress(PrepareStage, $"Checking the {name} version...", -1, 0, 0));
             string? server = null;
@@ -104,7 +95,6 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
             }
             if (products[i] == GameProduct.Game && index.Version == server) GameIndex = index;
             if (MirrorDownloads.Unusable(folders[i], index) is { } unsafePath) return Skip<string>(unsafePath);
-            // Apply needs every file its package installs, a missing one would only stop it after the whole download
             if (Unlisted(folders[i], targets[i], index) is { } unlisted)
             {
                 var reason = $"the {slug} index {index.Version} does not list {unlisted}, which the {name} package installs";
@@ -116,13 +106,12 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
 
         await FetchAsync(plans.Select(p => (p.Product.Product.Folder, p.Index, p.Name, true)).ToList(), progress, ct);
 
-        // run pol.exe's boot step here, the downloads gave viewer\com\*.dll and their patchfiles copies different times
+        // the downloads gave viewer\com\*.dll and their patchfiles copies different times, so pol.exe's boot step runs here
         if (ViewerQueue.QueuedWorkPending(viewerDir)) ViewerQueue.ApplyQueued(viewerDir);
         Staged = plans.Select(p => p.Product).ToList();
         return stagingDir;
     }
 
-    // last of all, so a stopped install never has a patch.ver claiming a version
     public void WriteVersions()
     {
         foreach (var s in Staged) PatchVer.Write(s.Product, s.Version);
@@ -200,7 +189,6 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
             var stage = isProduct ? $"Downloading {name}" : "Downloading the installer data";
             long total = MirrorDownloads.DownloadSize(work[i]);
             progress?.Report(new InstallProgress(stage, DownloadText, 0, 0, total, Download: true));
-            // drop patch.ver before touching a folder, so a stopped run never claims a version
             if (isProduct && work[i].Count > 0) PatchVer.Drop(folder);
             var reasons = new ConcurrentDictionary<string, Exception>(StringComparer.OrdinalIgnoreCase);
             var failed = await MirrorDownloads.DownloadAllAsync(client, region, folder, work[i], MirrorDownloads.DefaultParallel,
@@ -215,7 +203,6 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
             {
                 var files = failed.Select(e => e.Path).ToList();
                 var names = MirrorDownloads.NameList(files);
-                // a write that failed here (disk full, a locked file) is the PC's to fix, SE's parts would fail too
                 if (files.Any(f => reasons.TryGetValue(f, out var ex) && MirrorFailure.IsLocal(ex)))
                     throw Shown.Mark(new IOException($"{files.Count} {name} {(files.Count == 1 ? "file" : "files")} couldn't be written: {names}. Free up some space or close whatever's using them, then try again."));
                 throw new MirrorUnusableException($"{files.Count} {name} file(s) could not be downloaded: {names}.", files);

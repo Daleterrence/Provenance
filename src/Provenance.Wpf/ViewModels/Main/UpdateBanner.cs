@@ -4,8 +4,6 @@ using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-// The strip at the top of the main window for an update that's waiting. Once it's up it stays until the app has
-// updated, so there's no way to hide it and no other notice shares it
 public sealed partial class UpdateBanner : ObservableObject
 {
     private readonly UpdateRestart _restart;

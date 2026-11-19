@@ -5,7 +5,6 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
 
-// only a full pick counts, and an unknown code's kept until something's picked
 public sealed partial class CascadePick : ObservableObject
 {
     private readonly IReadOnlyList<MyProfileChoice> _rows;
@@ -81,7 +80,7 @@ public sealed partial class CascadePick : ObservableObject
     private void FillLeaves(IEnumerable<MyProfileChoice> rows, int part)
     {
         foreach (var r in rows) Leaves.Add(new Choice<long>(r.Code, Part(r, part)));
-        if (Leaves.Count == 1 && !_setting) Leaf = Leaves[0];   // nothing to choose between
+        if (Leaves.Count == 1 && !_setting) Leaf = Leaves[0];
     }
 
     private void Touch()

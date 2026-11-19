@@ -16,7 +16,6 @@
         CloseOnEscape="False">
 
     <Window.Resources>
-        <!-- decoded once near the size shown, the source is 256x256 -->
         <BitmapImage x:Key="TitleIcon" UriSource="/Assets/provenance-256.png" DecodePixelWidth="64" />
     </Window.Resources>
 
@@ -75,7 +74,6 @@
             </StackPanel>
         </controls:TitleBar>
 
-        <!-- out of the title bar, which has its own colours for what sits on it -->
         <Popup x:Name="WorldsPopup" StaysOpen="False" PlacementTarget="{Binding ElementName=WorldsChip}"
                Placement="Bottom" VerticalOffset="4" AllowsTransparency="True" PopupAnimation="Fade">
             <Border CornerRadius="{StaticResource Radius.Panel}" Padding="14,10" Background="{DynamicResource Surface.2}" MinWidth="240"
@@ -134,9 +132,7 @@
             </Grid>
         </Grid>
 
-        <!-- over the content, so one coming or going never moves it -->
         <StackPanel Grid.Row="1" Panel.ZIndex="10" VerticalAlignment="Top" KeyboardNavigation.TabIndex="1">
-            <!-- no close button and nothing that hides it, it stays until the update's in -->
             <controls:GlassBanner Backdrop="{Binding ElementName=UnderBanner}"
                     Visibility="{Binding UpdateNotice.Showing, Converter={StaticResource BoolToVis}}">
                 <Grid ColumnDefinitions="Auto,*,Auto">
@@ -206,7 +202,6 @@
                         </Style>
                     </materialDesign:PackIcon.Style>
                 </materialDesign:PackIcon>
-                <!-- the text's a button too, so Tab and Enter can open the notice -->
                 <Button Grid.Column="1" Style="{x:Null}" Click="OnOpenNotice" VerticalAlignment="Center"
                         Cursor="{Binding Cursor, RelativeSource={RelativeSource AncestorType=Border}}"
                         KeyboardNavigation.AcceptsReturn="True">

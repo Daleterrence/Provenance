@@ -17,7 +17,6 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// Every change saves straight away. The install region's detected, not picked, but news can come from any region's site
 public partial class SettingsViewModel : ObservableObject, IDisposable
 {
     private static readonly string[] FeedRegionCodes = ["auto", "na", "eu", "jp"];
@@ -127,7 +126,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     public string PolOptionsStatus { get; }
     public string FfxiFolder { get; }
 
-    // the SemVer one (1.0.0-beta.1), not the numeric assembly version, minus the "+<commit>" the build adds
     public string VersionText { get; } =
         "Version " + (typeof(SettingsViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion.Split('+')[0] ?? "dev");
@@ -158,7 +156,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _chatLanguageFilter;
     [ObservableProperty] private int _autoDisconnectIndex;
 
-    // either one set here pins the other at what's on screen, since both get written from then on
     partial void OnChatLanguageFilterChanged(bool value) => _settings.SaveChange(s =>
     {
         s.ChatLanguageFilter = value;
@@ -194,7 +191,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         _feeds?.NotifyRegionSettingChanged();
     }
 
-    // the saved setting. The line under it says when pol.exe hasn't caught up with it yet
     [ObservableProperty] private bool _largeAddressAwareOn;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(LargeAddressAwareEnabled))] private bool _largeAddressAwareAvailable;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(LargeAddressAwareEnabled))] private bool _largeAddressAwareBusy;
@@ -210,7 +206,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private LargeAddressAwareSwitch.Target LargeAddressAwareTarget() =>
         LargeAddressAwareTargetForTest ?? LargeAddressAwareSwitch.For(_settings.DetectedRegion, _session.LargeAddressAwareBlocked);
 
-    // hashes pol.exe and polcore.dll, so it's off the UI thread. A newer read or a change drops an older one
     public async Task ReadLargeAddressAwareAsync()
     {
         if (_largeAddressAwareForTest || LargeAddressAwareBusy) return;
@@ -266,7 +261,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             Log.Error(ex, "Large Address Aware change failed");
             outcome = LargeAddressAwareSwitch.Outcome.NextStart;
         }
-        // an on gets applied at every start anyway, an off only once (a refused one too, Windows may allow it later)
         if (outcome != LargeAddressAwareSwitch.Outcome.Done && !on) _settings.SaveChange(s => s.LargeAddressAwareClearAtStart = true);
         var after = await ReadLargeAddressAware();
         LargeAddressAwareBusy = false;
@@ -275,7 +269,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             ? LargeAddressAwareSwitch.DeniedText : after.Note ?? "";
     }
 
-    // the phases inside one login or play all read the same, so the files only get read again when the answer moves
     private void OnPhaseChanged()
     {
         if (ShownTab == SettingsTab.Backups) Backups.RefreshRestoreNote();
@@ -303,7 +296,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowProfileSwitcher), nameof(ShowProfileTools))] private SettingsTab _shownTab;
 
-    // nothing says when the game closes, so while Backups is up the reasons restore is off are asked again every few seconds
     private System.Windows.Threading.DispatcherTimer? _blockTimer;
 
     internal void BlockTick() => Backups.RefreshRestoreNote();
@@ -331,16 +323,13 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     {
         ShownTab = tab;
         WatchBlocks(tab == SettingsTab.Backups);
-        // a profile picked on another tab since the Game page was last shown
         if (tab == SettingsTab.Game && !ShowingGame()) PickGameProfile();
         Refresh(tab);
         if (tab == SettingsTab.WindowerAshita) Hooks.ReloadCards();
     }
 
-    // Windower can change pol.exe while the window's open, so it's read again on every show, switch back and activate
     public void WindowActivated() => Refresh(ShownTab);
 
-    // what a page reads from outside the window: pol.exe, the folders and the backups
     private void Refresh(SettingsTab tab)
     {
         switch (tab)
@@ -363,8 +352,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         }
     }
 
-    // Windower/Ashita, Game and Addons and plugins are the tabs that change a profile, though there's nothing to pick
-    // on Addons and plugins while every profile gets the same list
     public bool ShowProfileSwitcher =>
         ShownTab is SettingsTab.WindowerAshita or SettingsTab.Game or SettingsTab.AddonsPlugins && (Hooks.IsWindower || Hooks.IsAshita)
         && !(ShownTab == SettingsTab.AddonsPlugins && Addons is { SameListForEveryProfile: true });
@@ -382,12 +369,11 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         if (pick == 0)
         {
             Game.SaveCommand.Execute(null);
-            return !Game.HasUnsavedChanges;   // the save failed, its error's on the page
+            return !Game.HasUnsavedChanges;
         }
         return true;
     }
 
-    // with no list to pick from (settings.xml unreadable, say) it's still the chosen profile's, so its problem shows
     private IGameSettingsStore GameStoreForSelection()
     {
         var registry = new RegistryGameStore(_settings.DetectedRegion, _gameKey);
@@ -401,18 +387,14 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         return registry;
     }
 
-    // changes made on the Game page for the profile before wait there, ShowingGame asks about them
     private void SyncGame()
     {
         if (!_gameReady) return;
         var want = GameStoreForSelection();
-        // one that couldn't load gets another go, settings.xml may have been sorted since
         if (want.Key == Game.Store.Key && Game.Available || Game.HasUnsavedChanges) return;
         Game.UseStore(want);
     }
 
-    // on the Game tab the page moves with the pick, so changes it hasn't saved get asked about first. False when the
-    // player backs out, and the pick goes back
     private bool GameFollows() => ShownTab != SettingsTab.Game || ShowingGame();
 
     public bool ShowingGame()
@@ -426,14 +408,13 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             if (answer == true)
             {
                 Game.SaveCommand.Execute(null);
-                if (Game.HasUnsavedChanges) return false;   // the save failed, its error's on the page
+                if (Game.HasUnsavedChanges) return false;
             }
         }
         Game.UseStore(want);
         return true;
     }
 
-    // backing out of that on the way into the Game tab leaves the page on its own profile, so the pick follows it there
     public void PickGameProfile()
     {
         if (Game.Store.ProfileName is not { } name) return;
@@ -443,7 +424,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             Hooks.AshitaBootConfig = HookSettings.Item(Hooks.AshitaBootConfigs, name) ?? Hooks.AshitaBootConfig;
     }
 
-    // the Game page keeps a renamed profile's unsaved changes, a deleted one's go with it
     private void RetargetGameAfterEdit(bool ok, string? renamedFrom)
     {
         var gameProfile = Game.Store.ProfileName;

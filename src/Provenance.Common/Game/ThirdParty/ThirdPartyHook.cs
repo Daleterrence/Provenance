@@ -6,11 +6,9 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game.ThirdParty;
 
-// the numbers are the order of the choices on the Windower/Ashita page. settings.json keeps the lower case words
 [JsonConverter(typeof(ThirdPartyHookJson))]
 public enum ThirdPartyHook { None = 0, Ashita = 1, Windower = 2 }
 
-// reads any case and spacing, and anything it doesn't know as None
 public sealed class ThirdPartyHookJson : JsonConverter<ThirdPartyHook>
 {
     public override bool HandleNull => true;
@@ -29,8 +27,7 @@ public sealed class ThirdPartyHookJson : JsonConverter<ThirdPartyHook>
 
 public static class ThirdPartyHooks
 {
-    // mapped drives usually aren't there for an elevated process, so a persistent mapping becomes its share's path and
-    // callers have to use what comes back. A share that doesn't answer in time isn't usable
+    // mapped drives usually aren't there for an elevated process, so a persistent mapping becomes its share's path
     public static string? Usable(string? dir)
     {
         if (dir is null) return null;
@@ -49,7 +46,6 @@ public static class ThirdPartyHooks
         lock (ShareLock) Shares.Clear();
     }
 
-    // up or down is kept for a few seconds, and a check that's still out counts as down without another being started
     private static bool ShareAnswers(string root)
     {
         Task<bool> ask;
@@ -77,7 +73,6 @@ public static class ThirdPartyHooks
         return false;
     }
 
-    // the share a path is on, a local one gives null without anything being asked
     internal static string? ShareRoot(string path)
     {
         if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) path = @"\\" + path[8..];
@@ -93,7 +88,6 @@ public static class ThirdPartyHooks
         return parts.Length > 1 && parts[1].Length > 0 ? @"\\" + parts[0] + '\\' + parts[1] : @"\\" + parts[0];
     }
 
-    // only the drive letter, nothing that could wait on a share, so a settings page can ask it
     public static string? DriveProblem(string? dir) =>
         dir is not null && DriveTargets.Resolve(dir) is var real && FolderPins.DriveMissing(real)
             ? $"Drive {char.ToUpperInvariant(real[0])}: isn't available to Provenance. If it's a SUBST drive, choose the folder by its real path instead."

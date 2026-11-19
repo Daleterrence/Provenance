@@ -1,14 +1,11 @@
 <#
 .SYNOPSIS
-    The version, the assets folder, Velopack's version and the C++ tools, looked up the same way for every build script
-    and CI, and the libraries the natives link. Dot-source it, it only defines functions and those two lists.
+    Looks up the version, the assets folder, Velopack's version and the C++ tools for every build script and CI. Dot-source it.
 #>
 
 $HookLibs = 'user32.lib advapi32.lib crypt32.lib bcrypt.lib'
 $UninstallLibs = 'user32.lib advapi32.lib ole32.lib oleaut32.lib shell32.lib ntdll.lib'
 
-# the version, the assets folder and the package versions as the build sees them, asked once a script. Through a file, so
-# nothing else dotnet prints gets in
 $BuildValues = @{}
 function Get-BuildValues {
     if ($BuildValues.Count) { return $BuildValues.Common }
@@ -17,7 +14,6 @@ function Get-BuildValues {
     try {
         $ask = '-getProperty:Version', '-getProperty:ProvenanceAssetsDir', '-getItem:PackageVersion'
         $null = & dotnet msbuild $project -nologo @ask "-getResultOutputFile:$out"
-        # with a result file MSBuild keeps its errors to itself, so a failure asks again without one to show them
         if ($LASTEXITCODE -ne 0) { throw "dotnet msbuild couldn't read ${project}:`n$(& dotnet msbuild $project -nologo @ask 2>&1 | Out-String)" }
         $BuildValues.Common = Get-Content -LiteralPath $out -Raw | ConvertFrom-Json
         $BuildValues.Common
@@ -60,8 +56,7 @@ function Find-VcVars {
     $vcvars
 }
 
-# vcvarsall takes a couple of seconds, so its environment's kept for every command after. It runs vswhere.exe by name,
-# and the VS Installer folder isn't on PATH by default
+# it runs vswhere.exe by name, and the VS Installer folder isn't on PATH by default
 $VcVarsEnvironments = @{}
 function Invoke-VcVars([string]$VcVars, [string]$Command) {
     if (-not $VcVarsEnvironments.ContainsKey($VcVars)) {
@@ -73,7 +68,6 @@ function Invoke-VcVars([string]$VcVars, [string]$Command) {
         if ($LASTEXITCODE -ne 0 -or -not $vars['INCLUDE']) { throw "vcvarsall.bat x64_x86 didn't set up the C++ tools ($VcVars)" }
         $VcVarsEnvironments[$VcVars] = $vars
     }
-    # the script's own environment goes back afterwards
     $vars = $VcVarsEnvironments[$VcVars]
     $saved = @{}
     try {
@@ -90,7 +84,6 @@ function Invoke-VcVars([string]$VcVars, [string]$Command) {
     }
 }
 
-# one compile or link that stops the script when it fails
 function Invoke-NativeBuild([string]$VcVars, [string]$Command, [string]$Out) {
     Invoke-VcVars $VcVars $Command
     if ($LASTEXITCODE -ne 0) { throw "native build failed: $Out (exit code $LASTEXITCODE)" }

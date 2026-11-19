@@ -2,8 +2,7 @@ using System.Buffers.Binary;
 
 namespace Provenance.Common.Game.Ashita;
 
-// reads a plugin's name, author, description and version without loading it. Every read is bounds-checked, anyone can
-// drop a file in plugins\
+// every read is bounds-checked, anyone can drop a file in plugins\
 internal sealed class AshitaPluginMetadata
 {
     private const int MaxSections = 32, MaxCandidates = 1024, MaxRemembered = 1 << 16;
@@ -29,8 +28,7 @@ internal sealed class AshitaPluginMetadata
 
     public double? ExportedDouble(uint rva) => Double(pe.ImageBase + rva);
 
-    // four string getters then a double getter (IPluginBase's GetName, GetAuthor, GetDescription, GetLink, GetVersion)
-    // is a plugin's vtable, bar the SDK's own base classes. Bit hacky, but nothing gets loaded
+    // a plugin's vtable is four string getters then a double getter, bar the SDK's own base classes
     public (string Name, string Author, string Description, double Version)? Vtable()
     {
         long budget = MaxScanned;
@@ -51,7 +49,6 @@ internal sealed class AshitaPluginMetadata
         return null;
     }
 
-    // overlapping sections are only read once
     private List<(long From, long To)> DataRanges()
     {
         var ranges = pe.Sections.Where(s => (s.Flags & PeFile.DataFlag) != 0 && (s.Flags & PeFile.ExecuteFlag) == 0)
@@ -65,7 +62,6 @@ internal sealed class AshitaPluginMetadata
 
     private enum Shape { None, Pointer, Double, Float, One, Zero }
 
-    // vtables point at the same few functions over and over
     private (Shape Shape, uint Value) Getter(ulong va)
     {
         if (getters.TryGetValue(va, out var known)) return known;
@@ -74,8 +70,7 @@ internal sealed class AshitaPluginMetadata
         return found;
     }
 
-    // a getter is "mov eax, imm32" (strings) or an fld (doubles) then ret. Unoptimised builds wrap it in the push ebp
-    // frame, incremental linking puts a jmp in front
+    // a getter is "mov eax, imm32" (strings) or an fld (doubles) then ret, maybe behind a push ebp frame or a jmp
     private (Shape Shape, uint Value) Decode(ulong va)
     {
         for (int hops = 0; hops < 3; hops++)

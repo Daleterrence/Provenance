@@ -14,7 +14,6 @@ public static class FfxiNames
     private static readonly string[] Races =
         ["Hume Male", "Hume Female", "Elvaan Male", "Elvaan Female", "Tarutaru Male", "Tarutaru Female", "Mithra", "Galka"];
 
-    // the game's area ids. 0 is somewhere nobody knows
     private static readonly Dictionary<int, string> Areas = new()
     {
         [0] = "Unknown", [1] = "Phanauet Channel", [2] = "Carpenters' Landing", [3] = "Manaclipper",

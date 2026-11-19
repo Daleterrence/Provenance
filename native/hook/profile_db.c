@@ -29,13 +29,10 @@ static int profile_db_check_schema(BYTE *b, pdb_schema *s)
         if (want[i].need && !(f->flags & want[i].need)) return 0;
         if (pc_pdb_field_index(b, s, want[i].n) != idx) return 0;
     }
-    /* the decoder's worst case: items from (buf+0x17)&~7, nfields*16 bytes of them, then rec_raw, in rec_size + 8 */
     if (0x17 + (unsigned __int64)s->nfields * 0x10 + s->rec_raw > (unsigned __int64)s->rec_size + 8) return 0;
     return 1;
 }
 
-/* data\db\<file> read into a zeroed heap block with slack spare bytes, path getting where it came from.
-   NULL when missing or outside min..max size, the caller owns the block */
 static BYTE *profile_db_file_read(BYTE *b, const WCHAR *file, WCHAR path[0x200 + 32], DWORD min, DWORD max, DWORD slack,
                                   int log_open, DWORD *size)
 {
@@ -43,7 +40,7 @@ static BYTE *profile_db_file_read(BYTE *b, const WCHAR *file, WCHAR path[0x200 +
     DWORD sz, got = 0;
     BYTE *buf;
     memset(path, 0, (0x200 + 32) * sizeof(WCHAR));
-    if (pc_data_path(b, 0x14, path, 0x200, 0) <= 0) return NULL;  /* "<root>\data\db\" */
+    if (pc_data_path(b, 0x14, path, 0x200, 0) <= 0) return NULL;
     path[0x200 - 1] = 0;
     lstrcatW(path, file);
     f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -61,7 +58,6 @@ static BYTE *profile_db_file_read(BYTE *b, const WCHAR *file, WCHAR path[0x200 +
     return buf;
 }
 
-/* a .pib by its file name, relocated by polcore. check gets the relocated schema, NULL when either says no */
 static pdb_schema *profile_db_load_file(BYTE *b, const WCHAR *file, const char *tag, int (*check)(BYTE *, pdb_schema *))
 {
     WCHAR path[0x200 + 32];
@@ -69,7 +65,6 @@ static pdb_schema *profile_db_load_file(BYTE *b, const WCHAR *file, const char *
     BYTE *buf = profile_db_file_read(b, file, path, 0x3c, 0x10000, 0, 1, &sz);
     pdb_schema *s;
     if (!buf) return NULL;
-    /* check the raw file before polcore relocates it, in 64 bits so a huge offset can't wrap past the check */
     s = (pdb_schema *)buf;
     if (memcmp(s->name, tag, lstrlenA(tag) + 1) != 0 || s->relocated != 0 || s->nfields == 0 ||
         s->rec_size > 0x10000 || s->rec_raw > 0x10000 ||
@@ -82,7 +77,7 @@ static pdb_schema *profile_db_load_file(BYTE *b, const WCHAR *file, const char *
     s = pc_pib_load(b, buf);
     if (s != (pdb_schema *)buf || !check(b, s)) {
         DB_LOG("db: %ls is not the expected schema\r\n", path);
-        HeapFree(GetProcessHeap(), 0, buf);    /* no job's seen it yet */
+        HeapFree(GetProcessHeap(), 0, buf);
         return NULL;
     }
     DB_LOG("db: %ls loaded, %u fields, record buffer %u bytes\r\n", path, s->nfields, s->rec_size);
@@ -101,7 +96,6 @@ static pdb_item *profile_db_get(BYTE *b, pdb_schema *s, const char *name, pdb_re
     return pc_pdb_find(b, s, name, rec);
 }
 
-/* the viewer's where for one handle, or a character by its two ids. NULL when polcore wouldn't take a field */
 static pdb_cond *db_where_hid(BYTE *b, pdb_schema *s, unsigned __int64 *hid, pdb_cond *c)
 {
     memset(c, 0, sizeof *c);
@@ -135,7 +129,6 @@ static void db_job_done(db_job *j, const char *state)
     j->step = 0;
     j->job = -1;
 }
-/* a read that's running is freed on polcore's side and its record's left alone. One still waiting never gave polcore anything */
 static void db_job_abandon(BYTE *b, db_job *j)
 {
     if (j->step < 1 || j->step > j->last_read) return;
@@ -145,14 +138,12 @@ static void db_job_abandon(BYTE *b, db_job *j)
     }
     j->done("cancelled");
 }
-/* a step that's waiting for a slot: cancelled in a drain, given up on at wait_ms, else tried again */
 static void db_job_waiting(BYTE *b, db_job *j, int cancel_on_drain)
 {
     if (g_s.draining && cancel_on_drain) j->done("cancelled");
     else if (j->wait_ms && GetTickCount64() - j->t0 >= j->wait_ms) j->done("failed:busy");
     else j->start(b, j);
 }
-/* 1 while the poll's answer r is still no answer, and a read that's polled in a drain is called off */
 static int db_job_pending(BYTE *b, db_job *j, int r, int cancel_on_drain)
 {
     if (r) return 0;
@@ -160,13 +151,9 @@ static int db_job_pending(BYTE *b, db_job *j, int r, int cancel_on_drain)
     return 1;
 }
 
-/* searches, profiles (friends', FFXI and my own), character lookups and picture saves all hit the profile server,
-   so they share the 3s gap and go one at a time */
-
 static int hold_db_free(void);
 
 static pfb_hdr *g_pfb;
-/* a .pfb by its file name, relocated by polcore, tag starting the log line */
 static pfb_hdr *profile_db_pfb_load(BYTE *b, const WCHAR *file, const char *tag)
 {
     WCHAR path[0x200 + 32];
@@ -195,7 +182,6 @@ static int profile_db_pfb_find(const pfb_tab *t, DWORD v)
     for (int i = 0; i < t->n; i++) if (t->e[i].code == v) return i;
     return -1;
 }
-/* level k (0..2) of entry i, an empty level taken from the nearest entry before it (app.dll 0x102264a9) */
 static void profile_db_pfb_part(const pfb_tab *t, int i, int k, char *out, int cap)
 {
     out[0] = 0;
@@ -278,7 +264,6 @@ static int profile_db_pfb_value(BYTE *b, pdb_schema *s, pfb_hdr *p, pdb_rec *rec
     return out[0][0] ? PV_OK : PV_NOTSET;
 }
 
-/* the app asks for the next lookup as soon as one's answered, so the user's own reads and saves go first */
 static int profile_db_user_waiting(void)
 {
     return requests_listed(RQ_USER);

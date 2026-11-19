@@ -4,7 +4,6 @@ using System.Windows.Input;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// a read-only text box only moves a hidden caret on the arrow and page keys, so this scrolls it with them
 public static class KeyScroll
 {
     public static readonly DependencyProperty EnabledProperty = DependencyProperty.RegisterAttached(

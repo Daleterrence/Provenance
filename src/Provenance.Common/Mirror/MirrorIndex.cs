@@ -4,7 +4,6 @@ public sealed record MirrorEntry(string Path, long Size, string Sha256, long Com
 
 public sealed record MirrorPack(string Sha256, long Size);
 
-// format 1 has an object per file, format 2 adds packs
 public sealed record MirrorIndex(int Format, string Region, string Product, string Version, DateTimeOffset Published,
                                  string Codec, IReadOnlyList<MirrorEntry> Files, IReadOnlyList<MirrorPack>? Packs = null)
 {
@@ -42,7 +41,6 @@ public sealed record MirrorIndex(int Format, string Region, string Product, stri
             {
                 if (f.Offset < 0 || f.Offset > packSize - f.CompressedSize)
                     throw new InvalidDataException("packed mirror index has an entry outside its pack");
-                // identical content can share one location, anything else can't overlap
                 bool same = sha == f.Sha256 && off == f.Offset && len == f.CompressedSize;
                 if (!same && f.Offset < end) throw new InvalidDataException("packed mirror index has overlapping entries");
                 (sha, off, len) = (f.Sha256, f.Offset, f.CompressedSize);

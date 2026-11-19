@@ -16,7 +16,6 @@ public sealed class ChatSendGate(TimeSpan giveUp)
         _text = text;
     }
 
-    // the hook's state for my token with the line as it was typed, or null while it's still going
     public (string State, string Text)? Settle(string? hookToken, string? hookState, DateTime now)
     {
         if (Token != null && hookToken == Token && hookState is { } s &&
@@ -25,7 +24,6 @@ public sealed class ChatSendGate(TimeSpan giveUp)
         return Expire(now);
     }
 
-    // a token the hook never took or never answered counts as gone after the give-up, snapshot or not
     public (string State, string Text)? Expire(DateTime now) =>
         !_watch.Running || !_watch.Overdue(now) ? null : Done("failed:timeout");
 

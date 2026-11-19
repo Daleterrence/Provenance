@@ -6,14 +6,11 @@ namespace Provenance.Common.Social;
 
 public sealed record ChatZone(int Code, string Group, string Name, int Rooms, int People);
 
-// Group is "Target Members", "Purpose" or "Main Language"
 public sealed record ChatCategory(int Code, string Group, string Name);
 
-// Irc is the name the hook joins, Created is Unix seconds
 public sealed record ChatRoomEntry(string Irc, string Name, bool Locked, int People, int Capacity,
                                    IReadOnlyList<int> Categories, long Created);
 
-// Key only means something inside the one room, the hook never hands out ids
 public sealed record ChatMember(int Key, string Name, bool Me, bool Master, bool Away);
 
 // the snapshot's "chat", once chat's been used. States:

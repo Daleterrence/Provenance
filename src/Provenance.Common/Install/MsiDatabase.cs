@@ -96,7 +96,6 @@ public sealed class MsiDatabase : IDisposable
         var target = Path.GetFullPath(targetMsi);
         var folder = Path.GetDirectoryName(target)!;
         Directory.CreateDirectory(folder);
-        // a copy left by a crash is a whole installer, so it goes
         foreach (var old in Directory.EnumerateFiles(folder, Path.GetFileName(target) + ".*.tmp").Where(f => f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)))
             FileDelete.Try(old);
         AtomicFile.Build(target, tmp =>

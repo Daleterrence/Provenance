@@ -4,8 +4,6 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Game;
 
-// a Windower profile's own values go to settings.xml, and Windower writes them into the registry at every launch. The
-// rest are the registry's, shared by every profile
 public sealed class WindowerGameStore(string windowerDir, string profileName, RegistryGameStore registry, string? display = null) : IGameSettingsStore
 {
     public string Key => $"windower|{Path.GetFullPath(windowerDir)}|{profileName}|{registry.Key}";
@@ -19,7 +17,6 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
         file.Find(profileName) ?? (profileName.Length == 0 ? file.Unnamed ?? new WindowerProfile() : null)
         ?? throw Shown.Mark(new InvalidOperationException($"The Windower profile {profileName} isn't in Windower's settings any more. Choose another one under Windower/Ashita."));
 
-    // a link is refused here rather than only when Save gets to it
     public FfxiSettings Load()
     {
         if (FolderPins.Linked(windowerDir)) throw Shown.Mark(new IOException(WindowerInstall.LinkedText));
@@ -32,7 +29,6 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
         return Read(Profile(file), windows);
     }
 
-    // exactly what Windower writes at launch, on top of what the registry has for everything else
     public static FfxiSettings Read(WindowerProfile p, FfxiSettings windows)
     {
         var s = windows.Clone();
@@ -48,12 +44,10 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
     {
         var changed = GameFields.Changed(settings, original);
         var own = changed.Where(GameFields.Windower.Contains).ToList();
-        // the 3D resolution on screen stays put, which is a new scale of a new resolution
         if (own.Contains(GameFields.Resolution) && !own.Contains(GameFields.RenderSize)) own.Add(GameFields.RenderSize);
         if (own.Count > 0) WindowerSettingsFile.Update(windowerDir, f => Write(Profile(f), settings, own));
         var shared = changed.Where(f => !GameFields.Windower.Contains(f)).ToList();
         int written = 0;
-        // against the registry's own values, the page's are the profile's and would go in with them
         if (shared.Count > 0)
         {
             var windows = registry.LoadWindows();
@@ -73,7 +67,6 @@ public sealed class WindowerGameStore(string windowerDir, string profileName, Re
                     break;
                 case GameFields.UiSize: p.UIScale = (float)FfxiSettings.MenuScale(s.Height, s.UiWidth, s.UiHeight); break;
                 case GameFields.Brightness: p.Gamma = MathF.Round(s.Brightness, 1); break;
-                // the list only offers sizes the same shape as the game's, the one thing a single scale can hold
                 case GameFields.RenderSize: p.SuperSampling = s.Width > 0 ? (float)s.BgWidth / s.Width : 1f; break;
                 case GameFields.DistantTextures: p.MipMapLevel = Math.Max(0, s.DrawDistanceMip); break;
                 case GameFields.EnhancedShading: p.BumpMapping = s.EnhancedShading == 1; break;

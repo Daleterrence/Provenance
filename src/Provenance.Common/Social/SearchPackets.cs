@@ -3,8 +3,6 @@ using System.Security.Cryptography;
 
 namespace Provenance.Common.Social;
 
-// Area is the zone id and Id the character's, packed the way the request packs it. Name is kept but not shown yet. The
-// flags are 0 when the entry doesn't have them
 internal readonly record struct SearchEntry(uint Id, int Area, string Name, uint Flags1 = 0, uint Flags2 = 0, uint Language = 0);
 
 internal static class SearchFlags
@@ -12,12 +10,10 @@ internal static class SearchFlags
     public const uint Anon = 0x4000;
     public const uint InParty = 0x2000;
     public const uint PartyLeader = 0x0008;
-    // an alliance leader bit isn't known yet, PartyState has no room for it until it is
 }
 
 internal sealed record SearchPacket(bool Final, int Total, IReadOnlyList<SearchEntry> Entries);
 
-// FFXI's search server as the game talks to it, for the one thing we ask: the list of characters by id
 internal static class SearchPackets
 {
     public const int Port = 54002;
@@ -29,8 +25,6 @@ internal static class SearchPackets
 
     private static readonly byte[] StaticKey = "0s=m<1IZ2zBCc8{~"u8.ToArray();
 
-    // the same length and layout as the game's, padding up to a multiple of 64. The game's padding is whatever its buffer
-    // held, ours is zeros
     public static byte[] BuildIdList(IReadOnlyList<uint> ids, ReadOnlySpan<byte> keyHalf, ReadOnlySpan<byte> x)
     {
         if (ids.Count is 0 or > MaxIds) throw new ArgumentOutOfRangeException(nameof(ids));
@@ -60,7 +54,6 @@ internal static class SearchPackets
         return MD5.HashData(all);
     }
 
-    // the length word of a reply packet, or 0 when it isn't one we'd read
     public static int ReplyLength(ReadOnlySpan<byte> first4)
     {
         if (first4.Length < 4) return 0;
@@ -68,7 +61,6 @@ internal static class SearchPackets
         return length is >= Header + Trailer and <= MaxReply ? (int)length : 0;
     }
 
-    // one whole packet, the way it came off the wire. Nothing here throws on bad bytes, it just says no
     public static bool TryRead(ReadOnlySpan<byte> packet, ReadOnlySpan<byte> x, out SearchPacket? read)
     {
         read = null;

@@ -3,8 +3,7 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Hook;
 
-// files the app and pol_hook (inside pol.exe) swap. Dir is an admin-only folder handed to the hook as POL_IPC_DIR, so
-// nothing unelevated can read or plant them
+// files the app and pol_hook swap, Dir is admin-only so nothing unelevated can plant them
 public static class HookFiles
 {
     private static volatile string? _dir;
@@ -13,7 +12,6 @@ public static class HookFiles
     public const string WatcherExe = "Provenance Watcher.exe";
     public const string HookDll = "pol_hook.dll";
 
-    // set at start-up, and there's no fallback: a file path asked for before that throws
     public static string? Dir
     {
         get => _dir;
@@ -34,16 +32,13 @@ public static class HookFiles
         return [path, path + HookContract.Files.Taking];
     }
 
-    // Discard deletes the request and its .taking and can't say if the hook got there first. Withdraw says which
-    // happened, so use it when the answer matters.
     public static void Discard(int pid, string name)
     {
         foreach (var p in RequestPaths(pid, name))
             FileDelete.Try(p);
     }
 
-    // the hook takes a request by renaming it, so this rename and a take can't both happen. A file a scanner has open
-    // gets a few more tries
+    // the hook takes a request by renaming it, so this rename and a take can't both happen
     public static Withdrawal Withdraw(int pid, string name)
     {
         var path = PathFor(pid, name);
@@ -66,8 +61,6 @@ public static class HookFiles
         FileDelete.Try(PathFor(pid, name));
     }
 
-    // leftovers of an old process with this pid: snapshots and chat rooms a new pol.exe would start from, and untaken requests.
-    // Not the stop, ended or go files (a session's own)
     public static void ClearFor(int pid)
     {
         foreach (var name in new[] { HookContract.Files.Social, HookContract.Files.Store, HookContract.Files.ChatRoom,
@@ -77,18 +70,14 @@ public static class HookFiles
             Discard(pid, name);
     }
 
-    // log out and exit, or exit having sent nothing. Throws when the file can't be written
     public static void RequestStop(int pid) => File.WriteAllText(PathFor(pid, HookContract.Files.Stop), "stop");
 
     public static string NewToken() => ShortId.New(12);
 
-    // free text for the last field of a request, the one place line breaks survive. Everything else is one line
     public readonly record struct RequestBody(string Text);
 
     public static RequestBody Body(string text) => new(Clean(text, keepLineBreaks: true));
 
-    // one line per field in the order the hook reads them, control characters (tabs, line breaks) become spaces so a
-    // field can't split in two. False if not written
     public static bool WriteRequest(int pid, string name, params object[] fields)
     {
         try
@@ -109,8 +98,7 @@ public static class HookFiles
     private static string Clean(string s, bool keepLineBreaks) =>
         new(s.Replace("\r", "").Select(c => c < ' ' && !(keepLineBreaks && c == '\n') ? ' ' : c).ToArray());
 
-    // the most of each hook JSON file a reader takes, so one gone wrong is never read whole.
-    // The hook caps the store at 3MB, the others are well under
+    // the hook caps the store at 3MB, the others are well under
     public static class MaxBytes
     {
         public const int Social = 8 * 1024 * 1024;
@@ -120,8 +108,7 @@ public static class HookFiles
         public const int MyProfile = 1024 * 1024;
     }
 
-    // null when the file isn't there, is over maxBytes or doesn't parse. The hook may have it open for writing and may
-    // swap it at any moment, so it's read sharing both
+    // the hook may have it open for writing and swap it at any moment, so it's read sharing both
     public static T? ReadJson<T>(int pid, string name, int maxBytes, Func<string, T?> parse) where T : class
     {
         var path = PathFor(pid, name);
@@ -133,7 +120,6 @@ public static class HookFiles
         catch { return null; }
     }
 
-    // the hook inside a third-party hook's pol.exe writes its pid here
     public static string PidFile(string launchId) =>
         Path.Combine(RequiredDir, string.Format(CultureInfo.InvariantCulture, HookContract.Files.PidFile, launchId));
 
@@ -160,7 +146,7 @@ public static class HookFiles
                 f.Delete();
                 deleted++;
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }   // next start-up has a go
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
         return deleted;
     }

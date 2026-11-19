@@ -1,9 +1,7 @@
-/* kept in step with Provenance.Common/Hook/HookContract.cs. The app parses the LOG_ lines below out of the hook's log,
-   so don't reword one without changing the other side */
+/* kept in step with Provenance.Common/Hook/HookContract.cs, the app parses the LOG_ lines out of the hook's log */
 #ifndef HOOK_CONTRACT_H
 #define HOOK_CONTRACT_H
 
-/* set on pol.exe's start, and a pre-started one's go file can carry some of them later */
 #define ENV_IPC_DIR "POL_IPC_DIR"
 #define ENV_CRED_KEYFILE "POL_CRED_KEYFILE"
 #define ENV_HOLD "POL_HOLD"
@@ -34,9 +32,9 @@
 #define IPC_DIR_EXIT 12
 #define MUTEX_EXIT 13       /* no secret or HMAC: end pol.exe, never fall back to the stock names */
 #define GAME_START_EXIT 15
-#define NO_ENV_EXIT 16      /* not started by Provenance, its environment isn't there */
-#define NOT_HOOKED_EXIT 17  /* no detour, so it'd only ever get as far as the viewer's own menu */
-#define ADDRESSES_EXIT 18   /* something it needs in pol.exe or polcore can't be found, nothing in it was touched */
+#define NO_ENV_EXIT 16
+#define NOT_HOOKED_EXIT 17
+#define ADDRESSES_EXIT 18
 
 /* a request file is pol_hook.<pid>.<name>, written by the app, and the hook renames it to .taking while it reads it */
 #define REQ_SEND "send"
@@ -109,7 +107,6 @@
 #define LOG_PLAY_UNREADABLE "hold: Play entry unreadable"
 #define LOG_PLAY_REFUSED "hold: Play refused:"
 #define LOG_PRESTART_READY "prestart: ready"
-/* the watcher's, printed rather than logged */
 #define LOG_WATCHER_RUNNING "pol.exe running (pid "
 #define LOG_WATCHER_ATTACHED "attached to pol.exe"
 

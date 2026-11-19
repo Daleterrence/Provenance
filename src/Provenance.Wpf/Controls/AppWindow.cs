@@ -13,15 +13,12 @@ public class AppWindow : Window
     public static readonly DependencyProperty WideShadowProperty = DependencyProperty.Register(
         nameof(WideShadow), typeof(bool), typeof(AppWindow), new PropertyMetadata(false));
 
-    // the see-through margin round a dialog card, which is where its shadow falls
     public Thickness CardMargin { get => (Thickness)GetValue(CardMarginProperty); set => SetValue(CardMarginProperty, value); }
 
     public bool WideShadow { get => (bool)GetValue(WideShadowProperty); set => SetValue(WideShadowProperty, value); }
 
-    // Esc closes unless a window turns it off (the dialogs have a cancel button for it) or answers it itself
     public bool CloseOnEscape { get; set; } = true;
 
-    // the app's closing (tray Exit), so a question here would only leave a window up with the tray gone
     protected bool OwnerClosing { get; private set; }
 
     internal static Func<double> WorkAreaHeight { get; set; } = () => SystemParameters.WorkArea.Height;
@@ -32,8 +29,6 @@ public class AppWindow : Window
         Closed += (_, _) => { if (Owner != null) Owner.Closing -= OnOwnerClosing; };
     }
 
-    // 1366x768 at 125 to 150 percent is shorter than the windows are, and most can't be resized. Where a window has a
-    // body it scrolls, so its buttons stay on screen
     protected override void OnInitialized(EventArgs e)
     {
         base.OnInitialized(e);
@@ -55,7 +50,7 @@ public class AppWindow : Window
         WindowFrame.Apply(this);
     }
 
-    // KeyDown, not PreviewKeyDown, so an open dropdown or menu gets its Esc first and only closes itself
+    // KeyDown, not PreviewKeyDown, so an open dropdown or menu gets its Esc first
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);

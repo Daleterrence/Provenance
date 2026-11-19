@@ -4,18 +4,15 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Social;
 
-// like the viewer's own pub\homeNN\msg. The server keeps no read flag or sent copy, so those live here
 public sealed class ChatStore
 {
     private readonly List<ChatEntry> _entries = new();
     private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
-    // lines deleted here. The game's message store's read again at every login and a line can still be on the server
-    // when it's deleted, so without these it'd just come back
-    private readonly Dictionary<string, long> _deleted = new(StringComparer.Ordinal);   // key -> the line's time
+    // the game's message store is read again at every login, so without these a deleted line would come back
+    private readonly Dictionary<string, long> _deleted = new(StringComparer.Ordinal);
     private bool _deletedDirty;
     public const int KeepDeleted = 5000;
     internal int DeletedCount => _deleted.Count;
-    // the 2s poll asks for counts every time, so they're worked out once per change, not per ask
     private int _version;
     private Stats? _stats;
 
@@ -26,13 +23,11 @@ public sealed class ChatStore
     private readonly EncryptedJsonFile<List<ChatEntry>>? _file;
     private readonly EncryptedJsonFile<Dictionary<string, long>>? _deletedFile;
 
-    // DPAPI-encrypted, it's friends' messages in there
     public ChatStore(string profileId, string? root = null)
     {
         ProfileId = profileId;
         if (root is null)
         {
-            // no AppData at all would make this a relative path, so the log just isn't kept
             if (AppPaths.UserData is not { } userData) return;
             root = Path.Combine(userData, "messages");
         }
@@ -42,7 +37,6 @@ public sealed class ChatStore
         if (_deletedFile.Load() is { } keys)
             foreach (var (k, t) in keys) _deleted[k] = t;
         if (_file.Load() is not { } loaded) return;
-        // a delete whose log save never landed is still a delete
         var kept = loaded.Where(e => !_deleted.ContainsKey(e.Key)).ToList();
         _entries.AddRange(kept);
         foreach (var e in kept) _keys.Add(e.Key);
@@ -62,7 +56,6 @@ public sealed class ChatStore
     {
         if (_deleted.ContainsKey(m.Key)) return false;
         bool read = m.IsLocal && m.Read;
-        // read in game: the line's read here too, even one that came in from the server before Play
         if (_keys.Contains(m.Key))
             return read && Stat().UnreadKeys.Contains(m.Key) && Replace(m.Key, e => e with { Read = true });
         Add(new ChatEntry(m.Key, m.From, false, subject, text,
@@ -71,7 +64,6 @@ public sealed class ChatStore
         return true;
     }
 
-    // keyed on the header, and a line from the game's outbox becomes sent if a later look finds it went
     public bool AddGameSent(string peer, PolSentLine s)
     {
         if (_deleted.ContainsKey(s.Key)) return false;
@@ -103,7 +95,6 @@ public sealed class ChatStore
         return e;
     }
 
-    // a session's lines all at once when it ends, one save
     public bool SetSendStates(IEnumerable<(string Token, string State)> states)
     {
         bool changed = false;
@@ -118,7 +109,6 @@ public sealed class ChatStore
         return changed;
     }
 
-    // once sent, my line takes the header's time and seq like the friend's copy. That's polcore's clock, set by the server
     public bool SetSendState(string token, string state, long time = 0, long seq = 0)
     {
         var key = "out:" + token;
@@ -132,8 +122,6 @@ public sealed class ChatStore
         return true;
     }
 
-    // a line I sent to another POL ID, from fromSlot with this header time and seq (kept across restarts). One to my
-    // own handles doesn't count, its copy coming in is real
     public bool SentAt(long time, long seq, int fromSlot) =>
         time > 0 && fromSlot >= 0 &&
         (_deleted.ContainsKey(SentKey(time, seq, fromSlot)) ||
@@ -142,22 +130,18 @@ public sealed class ChatStore
 
     private static string SentKey(long time, long seq, int fromSlot) => $"sent:{time}|{seq}|{fromSlot}";
 
-    // a line still going can't be deleted, its answer has to land somewhere
     public static bool CanDelete(ChatEntry e) => !Waiting(e);
 
     public bool Delete(string key) => DeleteWhere(e => e.Key == key) > 0;
 
     public int Clear(string peer, string key = "") => DeleteWhere(e => e.IsWith(peer, key));
 
-    // just these, so lines that land while a Clear's being confirmed aren't taken with it
     public int DeleteKeys(IReadOnlyCollection<string> keys)
     {
         var set = keys.ToHashSet(StringComparer.Ordinal);
         return DeleteWhere(e => set.Contains(e.Key));
     }
 
-    // a line older than the oldest one the game's store still holds can't come back from it, and the server's copy
-    // goes as soon as it's saved
     public void PruneDeleted(long olderThan)
     {
         var old = _deleted.Where(kv => kv.Value < olderThan).Select(kv => kv.Key).ToList();
@@ -174,7 +158,6 @@ public sealed class ChatStore
         foreach (var e in gone)
         {
             _deleted[e.Key] = e.Time;
-            // a copy of a sent line coming back is matched by its header, not its key
             if (e.Outgoing && e.ToOther == true && e.Time > 0) _deleted[SentKey(e.Time, e.Seq, e.FromSlot)] = e.Time;
             if (e.Outgoing && e.Time > 0 && e.FromSlot >= 0 && e.Key.StartsWith("out:", StringComparison.Ordinal))
                 _deleted[StoredSentKey(e.Time, e.Seq, e.FromSlot)] = e.Time;
@@ -198,7 +181,6 @@ public sealed class ChatStore
         if (!_closed && _deletedFile?.Save(_deleted) == true) _deletedDirty = false;
     }
 
-    // the account's gone and so are its files, so nothing this holds is ever written again
     public void Discard()
     {
         _closed = true;
@@ -214,7 +196,6 @@ public sealed class ChatStore
         return true;
     }
 
-    // that line came back, so it went to POL but never reached anyone
     public bool MarkReturned(long time, long seq, int fromSlot)
     {
         if (fromSlot < 0) return false;
@@ -240,7 +221,6 @@ public sealed class ChatStore
     public static TimeSpan SendExpiry(int queued) =>
         HookLimits.MailInFlight + TimeSpan.FromMilliseconds(1500 * Math.Max(0, queued));
 
-    // still sending after maxAge means the hook never answered (the session ended, say)
     public bool ExpireSending(TimeSpan maxAge, IReadOnlySet<string>? keep = null)
     {
         if (Stat().Waiting == 0) return false;
@@ -252,7 +232,6 @@ public sealed class ChatStore
         return changed;
     }
 
-    // name-only entries take the key of the one friend with that name, then they survive a rename
     public bool Adopt(string name, string key)
     {
         if (key.Length == 0 || !Stat().KeylessNames.Contains(name)) return false;
@@ -264,11 +243,8 @@ public sealed class ChatStore
                          e => e with { PeerKey = key });
     }
 
-    // lines still going, and mine typed after one, sit at the bottom in typing order (a later one can finish first).
-    // The rest go by time then seq
     public IEnumerable<ChatEntry> With(string peer, string key = "")
     {
-        // a notice about one of my requests is a notification, it never sits in a conversation
         var lines = _entries.Where(e => e.IsWith(peer, key) && (e.Outgoing || e.State != "notice")).ToList();
         int first = lines.FindIndex(Waiting);
         var keyed = new List<(ChatEntry E, bool Tail, (long Time, long Seq) At)>(lines.Count);
@@ -278,7 +254,6 @@ public sealed class ChatStore
             var e = lines[i];
             bool mine = e.Key.StartsWith("out:", StringComparison.Ordinal);
             var at = (e.Time, e.Seq);
-            // one that never got a header time (failed, unconfirmed) stays after the line typed before it
             if (mine && e.State != "sent" && at.CompareTo(last) < 0) at = last;
             if (mine) last = at;
             keyed.Add((e, first >= 0 && i >= first && mine, at));
@@ -288,7 +263,6 @@ public sealed class ChatStore
 
     private static bool Waiting(ChatEntry e) => e.Outgoing && e.State is "sending" or "queued";
 
-    // the same answer as counting e.IsWith(peer, key) over the unread lines
     public int UnreadFrom(string peer, string key = "")
     {
         var s = Stat();
@@ -296,7 +270,6 @@ public sealed class ChatStore
                               : s.UnreadByName.GetValueOrDefault(peer);
     }
 
-    // the newest unread line's time and seq, (0, 0) when there isn't one
     public (long Time, long Seq) NewestUnread(string peer, string key = "")
     {
         var s = Stat();
@@ -308,7 +281,6 @@ public sealed class ChatStore
 
     public int Unread => Stat().Unread;
 
-    // a group per key (or name, without one): its newest line and every name it's had
     public IReadOnlyList<(string Key, ChatEntry Last, IReadOnlySet<string> Names)> Writers => Stat().Writers;
 
     public IReadOnlyList<string> MarkRead(string peer, string key = "")
@@ -324,10 +296,8 @@ public sealed class ChatStore
         return turned;
     }
 
-    // a received chat line the log has as read (notices stay put in the store)
     public bool IsReadChat(string key) => Stat().ReadKeys.Contains(key);
 
-    // a line of mine already in the log, so its copy in the game's sent folder isn't another one
     public bool HasSentLine(long time, long seq, int fromSlot) =>
         time > 0 && fromSlot >= 0 &&
         (_deleted.ContainsKey(StoredSentKey(time, seq, fromSlot)) ||
@@ -344,7 +314,6 @@ public sealed class ChatStore
         Dirty = true;
     }
 
-    // every change to a line goes through Edit or EditWhere, so the counts are never stale and the log's marked dirty
     private void Edit(int i, Func<ChatEntry, ChatEntry> change)
     {
         _entries[i] = change(_entries[i]);
@@ -415,7 +384,6 @@ public sealed class ChatStore
                 if (e.State == "unsent") s.UnsentKeys.Add(e.Key);
                 continue;
             }
-            // answers to my requests are notices, not messages, so they're never unread and never make someone a writer
             if (e.State == "notice") continue;
             if (e.Read) s.ReadKeys.Add(e.Key);
             if (!e.Read)
@@ -441,12 +409,10 @@ public sealed class ChatStore
 
     private void Changed() => Dirty = true;
 
-    // a save encrypts the whole log, so a change only marks it dirty and the snapshot or a flush writes it
     public static readonly TimeSpan SaveRetry = TimeSpan.FromSeconds(30);
     private DateTime _failedAt;
     internal int SaveCount { get; private set; }
 
-    // from the last try that failed, so a full disk isn't hit and logged on every snapshot
     public bool SaveIfDue(DateTime now)
     {
         if (!Dirty) return true;
@@ -463,7 +429,6 @@ public sealed class ChatStore
         if (_file is null || _closed) return false;
         if (_deletedDirty) SaveDeleted();
         SaveCount++;
-        // history's a convenience, never worth breaking the session over
         if (!_file.Save(_entries)) return false;
         Dirty = false;
         return true;

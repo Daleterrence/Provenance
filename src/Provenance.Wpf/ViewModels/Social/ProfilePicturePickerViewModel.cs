@@ -10,7 +10,7 @@ public sealed partial class ProfilePicturePickerViewModel : ObservableObject
     private readonly Func<int, ImageSource?> _image;
     private readonly int _current;
     private ProfilePictureTile? _picked;
-    private bool _syncing;   // showing the pick again isn't a new pick
+    private bool _syncing;
 
     [ObservableProperty] private ProfilePictureCatalog.Category? _category;
     [ObservableProperty] private IReadOnlyList<ProfilePictureTile> _tiles = [];
@@ -47,7 +47,6 @@ public sealed partial class ProfilePicturePickerViewModel : ObservableObject
         Tiles = tiles;
         SelectedTile = tiles.FirstOrDefault(t => t.IsSelected);
         _syncing = false;
-        // the current pic counts as a pick too, Use keeps it and nothing gets saved
         if (_picked is null && SelectedTile is { } current)
         {
             _picked = current;
@@ -65,7 +64,6 @@ public sealed partial class ProfilePicturePickerViewModel : ObservableObject
         CanUse = true;
     }
 
-    // true when it's a different pic from the one in use, the same one means nothing to save so nothing goes to POL
     public bool Use()
     {
         Result = _picked?.ProfilePicture.Id;

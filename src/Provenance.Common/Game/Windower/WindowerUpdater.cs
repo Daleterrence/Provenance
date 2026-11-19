@@ -9,8 +9,6 @@ public sealed record WindowerInstallResult(string Name, bool Installed, IReadOnl
 
 public enum WindowerBranchState { Matches, UpdatePending, NoManifest }
 
-// nothing records which branch a file came from, so the cached manifest is all there is to go on. SwitchPending: it's
-// still the old branch's
 public sealed record WindowerBranchInfo(string Branch, Version HookFile, Version LauncherFile, Version? HookManifest, Version? LauncherManifest,
                                         bool SwitchPending = false)
 {
@@ -20,8 +18,6 @@ public sealed record WindowerBranchInfo(string Branch, Version HookFile, Version
         : WindowerBranchState.UpdatePending;
 }
 
-// Windower.exe's start-up updates without Windower.exe. The same cache files in updates\, so either carries on from the
-// other, and Windower.exe's replaced when the manifest says but never run
 public sealed class WindowerUpdater
 {
     public const string MutexName = "Windower.Update.Mutex";
@@ -39,13 +35,11 @@ public sealed class WindowerUpdater
     public WindowerServers Servers { get; init; } = WindowerServers.Default;
     public Func<bool> OthersRunning { get; init; } = AnyRunning;
 
-    // Windower waits forever, which is no good before a launch
     public TimeSpan MutexWait { get; init; } = TimeSpan.FromSeconds(30);
 
     // a Windower.exe that took the lock over from one that died keeps it till it exits, so with one open the wait's short
     public Func<bool> WindowerRunning { get; init; } = () => IsRunning("Windower");
 
-    // a test's own, otherwise the app's for this folder
     internal WindowerScanCache? ScanCache { get; init; }
 
     private WindowerScanCache Cache => ScanCache ?? WindowerScanCaches.For(Folder);
@@ -71,19 +65,15 @@ public sealed class WindowerUpdater
         return await run.FinishAsync();
     }
 
-    // the front half on its own, as a check made ahead of a launch: nothing stays held once it's done
     internal async Task<WindowerChecked?> CheckAsync(CancellationToken ct = default)
     {
         using var run = await BeginAsync(ct);
         return run.Checked();
     }
 
-    // what a check's answer depends on, so a later launch can see whether it still stands
     internal WindowerStamps Stamps() =>
         new(WindowerStamps.Of(HookPath), WindowerStamps.Of(LauncherPath), WindowerStamps.Of(WindowerManifest.CachePath(Folder)), WindowerStamps.Of(SwitchFlag));
 
-    // up to and including the core files, with the update lock and the folder's pins still held for FinishAsync. An
-    // earlier check that still stands, looked at once the lock and pins are held, stands in for the requests
     internal async Task<WindowerUpdateRun> BeginAsync(CancellationToken ct = default, WindowerChecked? earlier = null)
     {
         var result = new WindowerUpdateResult(Branch);
@@ -149,7 +139,6 @@ public sealed class WindowerUpdater
         Cache.DropIfChanged(result);
     }
 
-    // the DLL with its file's date (so normally the 1601 one), then the zip only if the DLL came down
     public async Task<WindowerInstallResult> InstallPluginAsync(string name, CancellationToken ct = default)
     {
         var errors = new List<string>();
@@ -195,8 +184,7 @@ public sealed class WindowerUpdater
         return new(addon.Name, WindowerAddonTree.IsInstalled(addon, Folder), written, errors);
     }
 
-    // The manifest cache isn't per branch, so the first request after a switch sends the 1601 date rather than risk a
-    // 304. The cache stays as a fallback
+    // the manifest cache isn't per branch, so the first request after a switch sends the 1601 date rather than risk a 304
     public async Task<bool> PrepareBranchSwitchAsync(CancellationToken ct = default)
     {
         var errors = new List<string>();
@@ -267,7 +255,6 @@ public sealed class WindowerUpdater
         var cached = WindowerManifest.Load(cache);
         bool switched = File.Exists(SwitchFlag);
         WindowerManifest? fresh = null;
-        // a skipped run still fetches a manifest that isn't there, nothing else says what to install
         if (!skip || cached is null)
         {
             try
@@ -301,8 +288,7 @@ public sealed class WindowerUpdater
         return manifest ?? WindowerManifest.Empty;
     }
 
-    // Windower checks the hook only when it didn't just replace itself (it restarts instead). != on purpose, a lower
-    // version on the server is a downgrade
+    // Windower checks the hook only when it didn't just replace itself. != on purpose, a lower version on the server is a downgrade
     private async Task CoreAsync(WindowerUpdateFolder job, WindowerManifest manifest, bool skip, WindowerUpdateResult result)
     {
         if (!skip && result.LauncherBefore != manifest.LauncherVersion &&
@@ -312,7 +298,6 @@ public sealed class WindowerUpdater
             result.LauncherAfter = WindowerFiles.LauncherVersion(LauncherPath, Cache);
             job.Http.UserAgent = WindowerHttp.UserAgentFor(result.LauncherAfter);
         }
-        // a missing Hook.dll can't be loaded by anything, so it comes down even while games run
         if ((!skip || !File.Exists(HookPath)) && WindowerFiles.FileVersion(HookPath, Cache) != manifest.HookVersion &&
             await ReplaceAsync(job, $"{Branch}/Hook.dll", HookPath, "Hook.dll"))
         {
@@ -344,8 +329,6 @@ public sealed class WindowerUpdater
         }
     }
 
-    // runs with games up too. The old resources.xml goes first, so a run that stops part way leaves none and the next
-    // one checks every file again
     private async Task ResAsync(WindowerUpdateFolder job, WindowerUpdateResult result)
     {
         var resDir = Path.Combine(Folder, "res");
@@ -420,7 +403,6 @@ public sealed class WindowerUpdater
                 job.Errors.Add($"{name}.lua couldn't be replaced, the old one was kept: {e.Message}");
             }
         }
-        // Windower saves the list anyway, but then a file that didn't come down isn't looked at again till it changes
         if (whole && job.Ready(cache)) job.Move(temp, cache);
         else job.Delete(temp);
     }

@@ -6,8 +6,6 @@ public sealed record WindowerAddonFile(string Path, string Sha);
 
 public sealed record WindowerAddon(string Name, string MainPath, IReadOnlyList<WindowerAddonFile> Files);
 
-// updates\addons.json is GitHub's tree of the Windower/Lua repo, saved as it came. An addon is a folder in addons/ with
-// <folder>.lua straight inside, everything in addons/libs is a library
 public sealed class WindowerAddonTree
 {
     private static readonly char[] Slashes = ['/', '\\'];
@@ -77,8 +75,7 @@ public sealed class WindowerAddonTree
 
     public static bool IsInstalled(WindowerAddon addon, string windowerDir) => File.Exists(Path.Combine(windowerDir, addon.MainPath));
 
-    // Windower.exe's About link: readme.md, else readme.txt, straight inside the addon's folder. Every part's escaped,
-    // explorer.exe reads a bare comma as another switch
+    // every part's escaped, explorer.exe reads a bare comma as another switch
     public static string? ReadmeLink(WindowerAddon addon, string branch)
     {
         string[]? Top(string name) => addon.Files.Select(f => f.Path.Split(Slashes))
@@ -87,7 +84,6 @@ public sealed class WindowerAddonTree
         return $"https://github.com/Windower/Lua/blob/{Uri.EscapeDataString(branch)}/{string.Join('/', parts.Select(Uri.EscapeDataString))}";
     }
 
-    // addons/<name>/data/... is the addon's own settings, only written when it isn't there yet. Libs are always written
     public static bool OnlyIfMissing(string path) =>
         path.Split(Slashes, 4) is [_, var folder, "data", _] && folder != "libs";
 

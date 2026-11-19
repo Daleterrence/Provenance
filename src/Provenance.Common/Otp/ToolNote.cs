@@ -11,7 +11,7 @@ internal sealed record ToolNote(string Version, DateTime Checked)
     {
         if (state is null) return true;
         var age = DateTime.UtcNow - state.Checked;
-        return age < TimeSpan.Zero || age >= CheckEvery;   // a clock that went back counts as due
+        return age < TimeSpan.Zero || age >= CheckEvery;
     }
 
     private static string StatePath(string dir, string tool) => Path.Combine(dir, tool + ".json");
@@ -22,7 +22,6 @@ internal sealed record ToolNote(string Version, DateTime Checked)
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return null; }
     }
 
-    // what the file said when it went in, so the own copy isn't asked before every run
     internal static System.Version? NotedVersion(string dir, string tool) => System.Version.TryParse(Read(dir, tool)?.Version, out var v) ? v : null;
 
     internal static void Write(string dir, string tool, ToolNote state)

@@ -4,8 +4,7 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game.Windower;
 
-// the 42180 bytes Hook.dll copies out of the WindowerMMFSettingsHandler mapping. No version or size field anywhere,
-// so the offsets have to stay exactly where Windower.exe 4.7.9.3 puts them
+// the 42180 bytes Hook.dll copies out of the WindowerMMFSettingsHandler mapping, no version or size field so the offsets stay where Windower.exe 4.7.9.3 puts them
 public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string InitPlugins, string InitAddons,
                                        WindowerSizes Sizes, IReadOnlyList<string> Warnings)
 {
@@ -89,8 +88,7 @@ public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string 
         }));
     }
 
-    // Windower cuts it mid-command, so this stops at the last whole one.
-    // It runs before plugins, so a lua load gets LuaCore first (never seen it work)
+    // Windower cuts it mid-command, so this stops at the last whole one
     internal static string InitCommandAsSent(string? initCommand, List<string>? warnings = null)
     {
         var command = FilterInitCommand(initCommand);
@@ -135,7 +133,6 @@ public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string 
         return char.ToUpperInvariant(path[0]) + path[1..];
     }
 
-    // Windower.exe's own version when it's there (that's its assembly version too), otherwise the cached manifest's
     internal static string LauncherVersion(string windowerDir, WindowerScanCache? cache = null) =>
         ReadVersion(Path.Combine(windowerDir, "Windower.exe"), cache)?.ToString()
         ?? (WindowerManifest.LoadCached(windowerDir)?.LauncherVersion is { } v && v != new Version() ? v.ToString() : null)

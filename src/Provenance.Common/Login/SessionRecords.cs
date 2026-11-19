@@ -19,16 +19,13 @@ public sealed class SessionRecords
 
     internal string? Profile { get; private set; }
 
-    // a record whose pol.exe and copy have both gone, so nothing saw that pol.exe end
     internal static bool PolEndedUnseen() => SessionStore.SessionFilePaths().Any(path =>
         SessionStore.TryReadRecord(path) is { Pid: > 0 } f && !f.Game.IsRunning() && !f.Owner.MightBeRunning());
 
     internal void Save(ProcessStamp stamp, string? profileId) => Write(stamp, profileId, played: false);
 
-    // a pol.exe waiting before any account's known, so its record names none and the claim stays where it is
     internal void Park(ProcessStamp stamp) => Write(stamp, null, played: false, releaseClaim: false);
 
-    // the record stays as the game's, so no copy logs this account in on top of it
     internal void MarkPlayed()
     {
         if (_stamp is { } stamp) Write(stamp, Profile, played: true);
@@ -61,7 +58,6 @@ public sealed class SessionRecords
             if (claim is null) { problem = "Another copy of Provenance is busy logging in. Try again in a moment."; return false; }
             if (HeldByAnotherCopy(profileId))
             {
-                // multi-account mode lets go of its games, so a game's record might have no live copy
                 problem = GameRunningFor(profileId)
                     ? "FINAL FANTASY XI is already running on this account. Log in again once you've closed that game."
                     : "You're already logged in to this account in another copy of Provenance. If its window is closed, you can reopen it from the tray icon.";
@@ -102,8 +98,6 @@ public sealed class SessionRecords
         Profile = null;
     }
 
-    // a copy that ended before Play can leave its pol.exe logged in (or still logging itself out), so it's ended here
-    // and the next login starts fresh
     public void EndOrphans()
     {
         foreach (var path in SessionStore.SessionFilePaths())

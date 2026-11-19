@@ -16,7 +16,7 @@ typedef struct pdb_schema {
     char       name[0x10];
     DWORD      rec_raw;
     BYTE      *p14;
-    WORD       table_id;    /* 1000 = handle profiles */
+    WORD       table_id;
     BYTE       b1a;
     BYTE       nfields;
     pdb_field *fields;
@@ -29,8 +29,8 @@ typedef struct pdb_schema {
 
 typedef struct pdb_item {
     struct pdb_item *next;
-    BYTE  flags;            /* bit 0 = set */
-    BYTE  level;            /* per-field visibility, echoed back as the record has it */
+    BYTE  flags;
+    BYTE  level;
     BYTE  field;
     BYTE  type;
     union {
@@ -87,14 +87,14 @@ typedef char pf_chk_hdr[sizeof(pfb_hdr) == 0x20 ? 1 : -1];
 #pragma pack(push, 1)
 /* a friend or ignore row. polcore hands copies of 0x140 bytes (pol_friend_copy), the arrays hold the first 0xb0 */
 typedef struct pol_game {
-    WORD  flags;        /* bit 0 valid */
-    WORD  title;        /* 1 is FFXI */
+    WORD  flags;
+    WORD  title;
     DWORD ctsid;        /* FFXI's world id is its byte 2 */
     DWORD ctid_lo, ctid_hi;
 } pol_game;
 
 typedef struct pol_friend {
-    DWORD    id_lo, id_hi;   /* POL ID */
+    DWORD    id_lo, id_hi;
     DWORD    flags;          /* bits 13-15 status + 1 (1 online, 2 away, 3 busy, 0 offline), 0x800 online, 0x10000 a game
                                 slot's in use, bits 17-19 which one, 0x10000000 pending request, 3 on an ignore row for all handles */
     BYTE     r0c[4];
@@ -102,7 +102,7 @@ typedef struct pol_friend {
     pol_game games[8];
     DWORD    hid_lo;         /* bit 0 valid, the H-ID is bits 1-44 of hid_lo and hid_hi */
     DWORD    hid_hi;         /* bits 13-18 the handle's slot */
-    char     name[16];       /* the handle's name, SJIS */
+    char     name[16];
 } pol_friend;
 
 typedef struct pol_friend_copy {
@@ -110,17 +110,15 @@ typedef struct pol_friend_copy {
     BYTE       more[0x90];
 } pol_friend_copy;
 
-/* the friend list's second array, one row for each of the friend rows */
 typedef struct pol_friend_extra {
     DWORD pic;
     BYTE  r04[0x18];
     WCHAR comment[0x34];
 } pol_friend_extra;
 
-/* a Content ID record */
 typedef struct pol_chr {
-    WORD  flags;        /* bit 0 valid */
-    WORD  title;        /* 1 is FFXI */
+    WORD  flags;
+    WORD  title;
     DWORD ctsid;
     DWORD ctid_lo, ctid_hi;
     DWORD link;         /* low byte the order, 0x8000 linked, bits 16-21 the handle's slot, bits 22-24 its place on it */
@@ -129,11 +127,10 @@ typedef struct pol_chr {
     char  text[0x40];
 } pol_chr;
 
-/* a message header, the first 0x48 bytes are the server's key and body points at the text once it's read */
 typedef struct pol_mail {
     DWORD from_lo, from_hi;
     DWORD to_lo, to_hi;
-    char  name[0x10];       /* the sender's handle, SJIS */
+    char  name[0x10];
     BYTE  r20[0x10];
     DWORD seq, time, len;
     BYTE  from_slot, to_slot;
@@ -151,7 +148,6 @@ typedef char pc_chk_friend_extra[sizeof(pol_friend_extra) == 0x84 ? 1 : -1];
 typedef char pc_chk_chr[sizeof(pol_chr) == 0x68 ? 1 : -1];
 typedef char pc_chk_mail[sizeof(pol_mail) == 0x50 ? 1 : -1];
 
-/* every field the code reads sits where polcore keeps it */
 #define PC_AT(type, field, off) typedef char pc_at_##type##_##field[offsetof(type, field) == (off) ? 1 : -1]
 PC_AT(pol_handle, name, 0x08);
 PC_AT(pol_handle, flags, 0x18);

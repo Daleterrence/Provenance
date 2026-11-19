@@ -44,7 +44,6 @@ public partial class MainViewModel : ObservableObject
     public event Action? RequestRestart;
     public event Action? RequestUpdateRestart;
     public event Action? RequestExit;
-    // whether a notice went up, and whether the taskbar should flash
     public event Action<bool, bool>? RequestAttention;
     public event Action? AttentionCleared;
 
@@ -63,7 +62,6 @@ public partial class MainViewModel : ObservableObject
                     "Provenance couldn't save your settings, so your changes will only last until Provenance closes.", offerLogs: true));
         }
         _settings.SaveFailed += _ => SaveNotice();
-        // a save that failed before this was listening, start-up does a few
         if (_settings.SaveProblem is not null) SaveNotice();
         if (_settings.LoadProblem is { } loadProblem)
             _ui.Post(() => _dialogs.Info("Settings reset", loadProblem));
@@ -110,7 +108,7 @@ public partial class MainViewModel : ObservableObject
         {
             Log.Information("Session ended: {Why} (logged in here: {Connected})", why, LoggedIn);
             if (!LoggedIn) return;
-            EndSession(SessionEnd.Dropped);   // no question asked, the session's gone so the editor couldn't save anyway
+            EndSession(SessionEnd.Dropped);
             RequestShow?.Invoke();
             _dialogs.Info("PlayOnline session ended", why);
             Log.Information("Session ended: the notice was closed");
@@ -134,7 +132,6 @@ public partial class MainViewModel : ObservableObject
         Social.NoticeReceived += (who, text) => Alert(NoticeKind.Answer, who, text, "BellOutline");
         Social.GroupChatRequested += OpenGroupChat;
         Social.GroupChat.LineArrived += OnGroupChatLine;
-        // a quiet one, no taskbar flash, and it never covers a message notice
         Social.FriendCameOnline += who =>
         {
             if (GameOpen || !_settings.Current.Shows(NoticeKind.FriendOnline) || Notice.Current is { Text.Length: > 0 }) return;
@@ -198,10 +195,8 @@ public partial class MainViewModel : ObservableObject
                 break;
             case SessionPhase.InGame:
                 Social.Messages.SettleSends(SessionEnd.Play);
-                // nothing they do works in game. Here and not at the Play press, so an update that fails closes nothing
                 _windows.CloseSessionWindows();
                 if (Notice.Current is { Opens: true }) Notice.Take();
-                // the window hides to the tray once the game's up, whatever the tray settings say
                 TrayIcon.Warm();
                 break;
             case SessionPhase.LoggedOut:
@@ -217,7 +212,6 @@ public partial class MainViewModel : ObservableObject
         bool loggedIn = Session.LoggedIn, launching = Session.Launching;
         bool loggedInChanged = _loggedInShown.Changed(loggedIn), launchingChanged = _launchingShown.Changed(launching);
         bool gameOpenChanged = _inGameShown.Changed(GameOpen);
-        // going into the game changes what X does without changing logged in
         if (gameOpenChanged || loggedInChanged) CloseChanged();
         if (!GameOpen) GameUp = false;
         if (loggedInChanged)
@@ -301,7 +295,6 @@ public partial class MainViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(p.Detail)) ProgressText = p.Detail;
         if (p.Fraction >= 0)
         {
-            // after a viewer update at login the login's own steps share what's left, so the bar only moves forward
             if (p.Patch is not null) _updatedFirst = true;
             double f = _updatedFirst && p.Patch is null
                 ? LaunchProgress.LogInUpdateEnd + (1 - LaunchProgress.LogInUpdateEnd) * p.Fraction : p.Fraction;
@@ -312,7 +305,6 @@ public partial class MainViewModel : ObservableObject
         if (p.Kind is LaunchProgressKind.Failed or LaunchProgressKind.Stopped) _elapsedTimer.Stop();
     }
 
-    // each phase gets its own, a check's pace says nothing about the download after it
     private void TrackTimeLeft(PatchProgress? patch)
     {
         if (patch is null) _timeLeft.Clear();
@@ -332,7 +324,6 @@ public partial class MainViewModel : ObservableObject
 
     public bool KeepInTrayOnClose => LoggedIn && _settings.Current.KeepSignedInInTray;
 
-    // none for a plain close: logged out, or in game with the tray setting off, where the game keeps its session
     public string? CloseTooltip => KeepInTrayOnClose ? "Close to the tray (you'll stay logged in to PlayOnline)"
         : LoggedIn && Session.Phase != SessionPhase.InGame ? "Close and log out of PlayOnline"
         : null;
@@ -350,16 +341,14 @@ public partial class MainViewModel : ObservableObject
 
     private void Alert(NoticeKind kind, string? sender, string text, string icon = "mail", bool stays = false, int request = 0)
     {
-        if (GameOpen) return;   // a snapshot read already under way when Play's sent still lands, with the game open
+        if (GameOpen) return;
         bool notice = _settings.Current.Shows(kind), flash = _settings.Current.Flashes(kind);
         if (notice) Notice.Show(text, icon, sender is null ? NoticeTarget.Friends : NoticeTarget.Chat, sender, request, stays);
         if (notice || flash) RequestAttention?.Invoke(notice, flash);
     }
 
-    // false once everything's been read or seen, like a message landing in a conversation that's already on screen
     public bool WantsAttention => Social.UnseenCount > 0 || (_settings.Current.Flashes(NoticeKind.GroupChat) && Social.GroupChatUnread > 0);
 
-    // lines in the group chat with its window hidden or behind, one notice a batch, as the settings say
     private void OnGroupChatLine(string group, string who, string text, int count)
     {
         bool notice = _settings.Current.Shows(NoticeKind.GroupChat), flash = _settings.Current.Flashes(NoticeKind.GroupChat);
@@ -371,7 +360,6 @@ public partial class MainViewModel : ObservableObject
         if (notice || flash) RequestAttention?.Invoke(notice, flash);
     }
 
-    // the Groups tab's Group Chat: the viewer's handle question (0x3eb0) first when it's needed, then the window
     private void OpenGroupChat(GroupsViewModel.GroupItem g)
     {
         if (Multi.Running || GameOpen || Social.Last.GroupList.FirstOrDefault(x => x.Id == g.Id) is not { } group) return;
@@ -380,7 +368,6 @@ public partial class MainViewModel : ObservableObject
             _windows.ShowGroupChat(Social.GroupChat);
             return;
         }
-        // the question needs this login's handles
         ShowHandles();
         Handles.OpenGroup(group, () =>
         {
@@ -389,7 +376,6 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
-    // stillLean makes it a lean login, which asks it once before any pol.exe's used
     internal async Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount squareEnix, string otp,
                                                  IProgress<LaunchProgress>? progress, CancellationToken token, Func<bool>? stillLean = null) =>
         (await _launch.LogInAsync(new LaunchLogin(p, pol, squareEnix, otp, Accounts.EnsureHomeSlot(p), stillLean is not null, null, progress,
@@ -436,7 +422,6 @@ public partial class MainViewModel : ObservableObject
 
     public UpdateBanner UpdateNotice { get; }
 
-    // a game that's already up is what Restart Now closes, so only a login, a logout, a game or an account that's still starting holds it off
     private string? RestartBlocked() =>
         LoggingIn || Session.Phase is SessionPhase.LoggingIn or SessionPhase.UpdatingGame or SessionPhase.StartingGame
             or SessionPhase.LoggingOut or SessionPhase.MultiRun or SessionPhase.MultiStopping ? RestartBlockedText : null;
@@ -444,7 +429,6 @@ public partial class MainViewModel : ObservableObject
     internal const string RestartBlockedText =
         "Provenance is in the middle of logging in or starting a game, so it can't restart to update yet. Try again once that's finished.";
 
-    // Restart Now is under way, so no login or game starts
     public bool UpdatingNow => _updateRestart.Busy;
 
     internal void RestartCancelled()
@@ -470,20 +454,17 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnGameInstalledChanged(bool value) => RefreshSetupCard();
 
-    // a new install goes Install card, Welcome on the log-in card, the Windower/Ashita card, then the log-in card proper
     public bool ShowInstallCard => !GameInstalled && !IsLaunching && !LoggedIn;
     public bool ShowSetupCard => SetupCardWaits(Setup.Pending, GameInstalled, Accounts.HasProfile) && !IsLaunching && !LoggedIn;
     public bool ShowLogInCard => GameInstalled && !IsLaunching && !LoggedIn && !ShowSetupCard;
     public bool ShowFriendsCard => LoggedIn && (!IsLaunching || GameUp);
     public bool ShowLaunchCard => IsLaunching && !GameUp;
 
-    // only this copy's own game. A multi-account run lets go of its games, and another copy's never gets here
     public bool GameOpen => Session.Phase == SessionPhase.InGame;
     public string PlayText => GameOpen ? "GAME OPEN" : "PLAY";
     public string PlayName => GameOpen ? "Game open" : "Play";
     public bool PlayEnabled => Social.CanPlay && !GameOpen && !UpdatingNow;
 
-    // the Launch card stays till the wait for the game's window is over, so a Play the hook refuses never shows game open
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowLaunchCard), nameof(ShowFriendsCard))] private bool _gameUp;
 
     public SetupViewModel Setup { get; }
@@ -511,7 +492,6 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex) { Log.Warning(ex, "Stopping the pre-start failed"); }
     }
 
-    // a pol.exe pre-started for a plain login has to go before Windower or Ashita start one of their own
     private void RestartPrestart() =>
         PrestartRestarted = Task.Run(() =>
         {
@@ -569,7 +549,6 @@ public partial class MainViewModel : ObservableObject
 
     internal static bool SetupCardWaits(bool pending, bool gameInstalled, bool hasProfile) => pending && gameInstalled && hasProfile;
 
-    // the app opens on the small window, with the full one made but never shown
     internal bool StartsLean(bool suppressed) => LogsInAtStart(suppressed) && Accounts.SelectedProfile is not null && !ShowSetupCard && Lean.Wanted;
 
     public void Startup(bool autoLoginSuppressed)
@@ -593,8 +572,7 @@ public partial class MainViewModel : ObservableObject
         _ui.Run(() =>
         {
             timer?.Lap("wait for the UI thread");
-            if (_pol.Pid is null) return;   // read just before a log out
-            // a run's lean session has no social side and nothing here may write a request to its hook
+            if (_pol.Pid is null) return;
             if (Multi.Running) { Multi.RunSnapshot = snap; return; }
             if (Lean.Hold(snap)) return;
             try
@@ -652,7 +630,6 @@ public partial class MainViewModel : ObservableObject
         _windows.ShowGroups(Social);
     }
 
-    // the bottom bar's buttons. Pressed with their own window on screen they close it, nothing else does
     [RelayCommand]
     private void ToggleFriends()
     {
@@ -683,7 +660,6 @@ public partial class MainViewModel : ObservableObject
         ChatRoomsOpen = true;
     }
 
-    // a save that's still waiting when the app goes, Windows shutting down included
     internal void SaveMessages()
     {
         try
@@ -694,7 +670,6 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex) { Log.Warning(ex, "The message log wasn't saved on the way out"); }
     }
 
-    // false when an open profile editor's unsaved changes were kept
     internal bool ConfirmExit() => _windows.ConfirmDropProfileEditor("Exit");
 
     internal void CloseProfileEditor() => _windows.CloseProfileEditor();
@@ -704,7 +679,6 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanSignOut))]
     private void SignOut()
     {
-        // Play's game update needs the session it's holding
         if (Multi.Running || IsLaunching) return;
         if (!_windows.ConfirmDropProfileEditor("Log out")) return;
         EndSession(SessionEnd.LogOut);
@@ -718,7 +692,7 @@ public partial class MainViewModel : ObservableObject
         {
             try
             {
-                _pol.StopHold();    // the kill waits a few seconds, so keep it off the UI thread
+                _pol.StopHold();
                 _pol.Prestarter.Prestart();
             }
             finally { _ui.Post(() => { if (Session.Phase == SessionPhase.LoggingOut) SetPhase(SessionPhase.LoggedOut); }); }
@@ -728,13 +702,9 @@ public partial class MainViewModel : ObservableObject
     private async Task ConnectSocialAsync()
     {
         Log.Information("Log in pressed");
-        // an early start from the app opening is only kept when the login that follows is the one it was for
         if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount()) { _launch.DropAhead(); return; }
-        // a new install's Windower/Ashita question comes before its first login, however the login was asked for
         if (ShowSetupCard) { _launch.DropAhead(); return; }
-        // one account for the whole login, so switching mid-way can't mix two up
         if (Accounts.SelectedProfile is not { } profile) { _launch.DropAhead(); return; }
-        // the small window goes up first, so the questions before a login open over it
         bool lean = Lean.Open();
         (PolAccount Pol, SquareEnixAccount SquareEnix, string Otp)? details = null;
         try { details = LogInDetails(profile); }
@@ -765,7 +735,6 @@ public partial class MainViewModel : ObservableObject
         {
             int code = await ConnectProfileAsync(profile, pol, squareEnix, otp, progress, token, Lean.BeforePol(profile.Id, token));
             await _ui.Flush();   // queued progress reports have to land first (yes, really)
-            // still lean, so the game starts from here and this only comes back once it's over or the session's full
             if (code == 0 && Lean.Running) (code, lastFailure, gameRan) = await Lean.AfterLogInAsync(profile.Id, token);
             if (gameRan) return;
             if (code == 0)
@@ -821,18 +790,15 @@ public partial class MainViewModel : ObservableObject
         if (lean && loggedIn) await Lean.FollowUpAsync();
     }
 
-    // null when there's nothing to log in with. A one-time code counts as used once typed, so the details dialog comes first
     private (PolAccount Pol, SquareEnixAccount SquareEnix, string Otp)? LogInDetails(Account profile)
     {
         if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(profile, requireAll: true)) return null;
         if (!EnsureMemberAgreement() || Accounts.LoadForLogIn(profile) is not var (pol, squareEnix)) return null;
-        // with the account claimed, so no pol.exe starts for a login another copy's already got. It runs behind the code
         var claim = _launch.Claim(profile, () => Accounts.AskOtp(profile, squareEnix), () => _launch.StartAhead(profile));
         if (claim.InUse is { } inUse) _dialogs.Error("Account in use", inUse);
         return claim.Otp is { } otp && claim.InUse is null ? (pol, squareEnix, otp) : null;
     }
 
-    // the US viewer asks once per POL ID, here it's once per install
     internal bool EnsureMemberAgreement()
     {
         if (_settings.Current.AcceptedMemberAgreement) return true;
@@ -857,7 +823,6 @@ public partial class MainViewModel : ObservableObject
                 "Enter 1 to 15 English letters, numbers or symbols:",
                 maxLength: PolLimits.HandleName, validate: HandleList.NameProblem);
             if (name is null) return null;
-            // a handle's public straight away, so one last look first
             return _dialogs.Confirm("Create PlayOnline handle",
                 $"Create the handle {name}? Other players will see it, and you can rename it later by editing your profile.", "CREATE")
                 ? name : null;
@@ -875,7 +840,6 @@ public partial class MainViewModel : ObservableObject
         DropHandleNotice();
     }
 
-    // fed every snapshot, so a change still going when Settings closes is answered all the same
     internal HandlesViewModel Handles { get; }
     internal const string HandleSwitchingText = "Switching your handle, please wait...";
     internal ViewerResources Viewer { get; }
@@ -886,7 +850,6 @@ public partial class MainViewModel : ObservableObject
         Social.HandleSwitching = Handles.Switching;
     }
 
-    // a run reads each account's details as its turn comes, so nothing's edited or removed under it
     private bool CanOpenAccounts() => !Multi.Running && !GameOpen;
 
     [RelayCommand(CanExecute = nameof(CanOpenAccounts))]
@@ -919,7 +882,6 @@ public partial class MainViewModel : ObservableObject
             vm.Dispose();
             Handles.Closed();
         }
-        // a platform picked here answers the new install's question too
         if (platformPicked) Setup.Done();
         if (vm.Hooks.RestartWanted)
         {
@@ -933,8 +895,6 @@ public partial class MainViewModel : ObservableObject
 
     public PlayPlatform PlayPlatform { get; }
 
-    // a switch that fails says so in a notice that stays, one that works just changes the footer's name and picture.
-    // A pick turned away before anything's sent gets the usual few seconds
     public IReadOnlyList<MenuAction> HandleMenu()
     {
         ShowHandles();
@@ -949,14 +909,13 @@ public partial class MainViewModel : ObservableObject
 
     private Notice? _handleNotice;
 
-    // what the menu last said went wrong isn't true any more once another change is going, or it's a new login
     private void DropHandleNotice()
     {
         Notice.Drop(_handleNotice);
         _handleNotice = null;
     }
 
-    // the URL comes from a feed, and ShellExecute would happily run a program, a network path or another protocol
+    // the URL comes from a feed, ShellExecute would run anything
     [RelayCommand]
     private void OpenLink(string? url)
     {
@@ -966,8 +925,6 @@ public partial class MainViewModel : ObservableObject
             if (!string.IsNullOrWhiteSpace(url)) Log.Warning("Not opening a link that is not a web link: {Url}", url);
             return;
         }
-        // elevated, so a browser started from here would be too. explorer.exe hands it to the user's shell, and if it won't
-        // there's no starting it directly
         try { Explorer.OpenLink(u); }
         catch (Exception ex)
         {

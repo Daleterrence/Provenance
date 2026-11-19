@@ -16,7 +16,6 @@ static int login_home_from_env(void)
     if (n == 0 || n >= sizeof v || !requests_parse_num(v, 2, &s) || !login_home_slot_ok(s)) return -1;
     return s;
 }
-/* the account's own slot, or home84 when Provenance didn't send one (it's run out of slots) */
 static void login_home_pick(BYTE *b)
 {
     int slot = login_home_from_env();
@@ -28,18 +27,14 @@ static void login_home_pick(BYTE *b)
     base_log("home: user slot %d (pub\\home%02d)\r\n", slot, slot);
 }
 
-/* notices whose viewer screen only offers log out or a fix-it page (closed, suspended, banned...). The JP, US and EU
-   blocks of app.dll's table block the same codes */
 static int login_notice_blocks(unsigned st)
 {
     static const unsigned char block[] = { 221, 226, 227, 228, 229, 230, 231, 233, 235, 237, 239,
                                            240, 241, 242, 243, 244, 245, 246, 247, 248, 251 };
-    if (st >= 253 && st <= 255) return 1;   /* no table row: the viewer shows LM-01 (log out only) */
+    if (st >= 253 && st <= 255) return 1;
     for (int i = 0; i < (int)sizeof block; i++) if (block[i] == st) return 1;
     return 0;
 }
-/* LM-02's text has a day count. The viewer only asks svc 0xd24 for it on that row
-   (polcore 0x10046100: days from now to the login result's date, today included) */
 static void login_notice_read(BYTE *b)
 {
     if (!pc_has(b, SV_NOTICE_STATUS)) return;
@@ -51,7 +46,6 @@ static void login_notice_read(BYTE *b)
     }
 }
 
-/* the viewer's log out (app.dll 0x101983fb). 0xcc4 runs once, it returns 0, not 7, for the hook's connection type */
 static void login_viewer_sign_out(BYTE *b)
 {
     if (pc_has(b, SV_SIGN_OUT_PREPARE)) pc_sign_out_prepare(b, 1);
@@ -66,11 +60,9 @@ NORETURN static void login_account_blocked(BYTE *b, const char *what)
     base_end_pol(TURNED_AWAY_EXIT);
 }
 
-/* presence only gets pushed once I'm in with a handle, the viewer's last login step is (-2,-1,1,-2,0,1000).
-   Handle -1 = none */
 static void login_status_start(BYTE *b, int handle, int status, int location)
 {
-    int chr = location >= 0 ? -1 : -2;   /* a location clears the game, like the viewer's (app.dll 0x10041342) */
+    int chr = location >= 0 ? -1 : -2;
     int t = pc_change_my_status(b, handle, chr, 1, status, 0, location);
     if (t == NO_SLOT) { g_s.status_want = status; g_s.status_loc = location; return; }
     g_s.status_want = -1;
@@ -90,7 +82,6 @@ static void login_status_pump(BYTE *b)
     g_snap_dirty = 1;
 }
 
-/* the stop file is a file stat, so it's looked for on a beat and not every step */
 #define STOP_BEAT_MS 16
 static int login_stop_due(ULONGLONG *last)
 {
@@ -101,8 +92,7 @@ static int login_stop_due(ULONGLONG *last)
 }
 
 struct pending_load { const char *name; int (*load)(BYTE *); int (*check)(BYTE *, int); int ticket, res, write; };
-/* read only. LOAD_MY_STATUS's answer, via the pointer at polcore.dll 0x10404df8 + job * 0x338: +0 handle slot, +6
-   status + 1, at 0 polcore drops the slot */
+/* LOAD_MY_STATUS's answer: +0 handle slot, +6 status + 1, at 0 polcore drops the slot */
 static void login_status_reply_log(BYTE *b, int t)
 {
     BYTE *r = t >= 0 && t <= 3 ? pc_status_answer(b, t) : NULL;
@@ -113,9 +103,8 @@ static void login_status_reply_log(BYTE *b, int t)
     base_log(LOG_PROFILE "my status from the server: handle %u, status byte %u (current handle %d, my status %d)\r\n",
        r[0], r[6], pc_current_handle_or(b, -1), pc_my_status_or(b, -1));
 }
-#define LOADS_IN_FLIGHT 4   /* polcore's job slots, the viewer's own peak */
-#define LOADS_BURST 4       /* passes between sleeps */
-/* every load's check, and the start of any that can go. How many are still waiting */
+#define LOADS_IN_FLIGHT 4
+#define LOADS_BURST 4
 static int login_loads_pass(BYTE *b, struct pending_load *items, int n, ULONGLONG *started)
 {
     int i, pending = 0, active;
@@ -132,7 +121,7 @@ static int login_loads_pass(BYTE *b, struct pending_load *items, int n, ULONGLON
             started[i] = GetTickCount64();
             base_log(LOG_PROFILE "%s load -> ticket %d\r\n", items[i].name, t);
             if (t < 0) {
-                items[i].res = t;   /* never retried, the viewer asks once and logs out */
+                items[i].res = t;
                 continue;
             }
         }
@@ -145,7 +134,6 @@ static int login_loads_pass(BYTE *b, struct pending_load *items, int n, ULONGLON
     login_status_pump(b);
     return pending;
 }
-/* a running write (the handle save) ignores the stop file, the server may already have it */
 static void login_loads_stop(BYTE *b, struct pending_load *items, int n, const ULONGLONG *started, ULONGLONG *beat)
 {
     int i;
@@ -157,7 +145,7 @@ static void login_loads_stop(BYTE *b, struct pending_load *items, int n, const U
     {
         char spath[MAX_PATH];
         base_ipc_file(spath, IPC_SOCIAL);
-        DeleteFileA(spath);   /* a lean hold's snapshot, nothing there before the hold */
+        DeleteFileA(spath);
         message_store_drop();
     }
     login_viewer_sign_out(b);
@@ -198,7 +186,7 @@ static int login_wait_handle_name(BYTE *b, char *name, int cap)
     int warned = 0;
     const WCHAR *t = cred_target(ENV_CRED_HANDLE, tbuf, 256);
     if (!t) return -2;
-    base_log(LOG_HANDLE_WANTED " from Provenance\r\n");   /* Provenance watches for this line */
+    base_log(LOG_HANDLE_WANTED " from Provenance\r\n");
     /* waits rather than exits, as exiting skips the QUIT and a stale session blocks the next login for a while */
     for (int ticks = 0; ticks < 10 * 60 * 5; ticks++) {
         int rc = cred_read(t, user, sizeof user, ans, sizeof ans);
@@ -257,7 +245,6 @@ static int login_handle_bootstrap(BYTE *b)
         base_log("login: " LOG_HANDLE_REJECTED " locally (1-15 characters, not all spaces)\r\n");
         return HANDLE_REFUSED_EXIT;
     }
-    /* reload first, the save only goes through when the list stamps match (polcore.dll 0x10403050 >= 0x10403044) */
     login_run_loads(b, &fresh, 1);
     if (fresh.res != 1) return HANDLE_REFUSED_EXIT;
     MultiByteToWideChar(CP_ACP, 0, name, -1, wname, 32);
@@ -267,7 +254,6 @@ static int login_handle_bootstrap(BYTE *b)
                   : "login: " LOG_HANDLE_REJECTED " (the PlayOnline Viewer's word list could not be read)\r\n");
         return HANDLE_REFUSED_EXIT;
     }
-    /* the viewer's first-login steps: name -> id (0xa40), claim a free slot (0x314), select it (0x1434), save */
     ZeroMemory(id, sizeof id);
     pc_wide_to_sjis(b, (char *)id, wname, SJIS_GETA);
     idx = pc_claim_handle(b, -1, 1, id);
@@ -282,7 +268,6 @@ static int login_handle_bootstrap(BYTE *b)
         pc_release_handle(b, idx);
         return HANDLE_REFUSED_EXIT;
     }
-    /* the viewer goes on with polcore's own list here, the claimed slot's already in it */
     n = login_count_handles(b);
     if (n < 1) {
         base_log("login: handle save reported ok but the handle list is still empty\r\n");
@@ -292,7 +277,6 @@ static int login_handle_bootstrap(BYTE *b)
     return 0;
 }
 
-/* a file name changing in the hook's folder (the go or stop file turning up) wakes the wait */
 static HANDLE login_go_watch(void)
 {
     char dir[MAX_PATH];
@@ -301,8 +285,6 @@ static HANDLE login_go_watch(void)
     h = FindFirstChangeNotificationA(dir, FALSE, FILE_NOTIFY_CHANGE_FILE_NAME);
     return h ? h : INVALID_HANDLE_VALUE;
 }
-/* the folder changing or Provenance ending wakes it, and it looks again every 400ms anyway (every 16ms without a change
-   handle). Re-armed before the turn that follows, so a change in between isn't lost */
 static void login_go_nap(HANDLE *watch)
 {
     HANDLE h[2];
@@ -324,8 +306,6 @@ static void login_go_nap(HANDLE *watch)
     Sleep(16);
 }
 
-/* POL_PRESTART: pol.exe starts at app open with no credentials and waits here having sent nothing. A login writes
-   the go file (allow-listed KEY=VALUE lines). */
 static void login_prestart_wait(void)
 {
     static const char *allowed[] = { ENV_CRED_POL, ENV_CRED_SEA, ENV_CRED_ONESHOT, ENV_CRED_OTP,
@@ -369,7 +349,6 @@ static void login_prestart_wait(void)
     base_log("prestart: go\r\n");
 }
 
-/* the viewer's FFXI gate (app.dll 0x10199093), a valid Content ID record for content 1 */
 static void login_ffxi_gate_read(BYTE *b)
 {
     pol_chr rec;
@@ -383,15 +362,11 @@ static void login_ffxi_gate_read(BYTE *b)
     base_log("login: " LOG_CONTENT_IDS "%d valid, %d FFXI\r\n", any, ffxi);
 }
 
-/* status, friends, handles and characters, which polcore's four job slots take at once. A lean session skips the
-   status, but FFXI reads the friend list and never loads it. Groups come later, see login_groups_go */
 static struct pending_load *login_set(struct pending_load *all, int *n)
 {
     *n = g_lean ? 3 : 4;
     return g_lean ? all + 1 : all;
 }
-/* the viewer loads my status on its own and starts the lists from its OnSuccess (app.dll 0x10040822, 0x10040650).
-   A lean session made full does the same, a full login starts the status with the lists */
 static void login_loads(BYTE *b, struct pending_load *run, int n)
 {
     if (run[0].load != pc_status_load) {
@@ -401,8 +376,6 @@ static void login_loads(BYTE *b, struct pending_load *run, int n)
     login_run_loads(b, run, 1);
     if (run[0].res == 1) login_run_loads(b, run + 1, n - 1);
 }
-/* a load refused with an account status (-0x1450 and down: suspended, IP restricted, password changed...) turns
-   the account away, any other failure logs out too, like the viewer */
 static void login_loads_check(BYTE *b, struct pending_load *run, int n)
 {
     char what[48];
@@ -424,7 +397,6 @@ static void login_loads_check(BYTE *b, struct pending_load *run, int n)
     }
 }
 
-/* a full login's groups load goes out once the hold has written its first snapshot, and the hold's own turns finish it */
 enum { GROUPS_NONE, GROUPS_HELD, GROUPS_RUNNING };
 static int g_groups_state;
 static struct pending_load g_groups_load = { "groups", pc_groups_load, pc_groups_check, 0, 0 };
@@ -437,8 +409,6 @@ static void login_groups_go(void)
     g_groups_started = 0;
     g_groups_state = GROUPS_RUNNING;
 }
-/* a refused account is turned away and any other failure logs out, like the loads before it. The snapshot has friends'
-   messages in it, so a failure takes it away first */
 static void login_groups_pump(BYTE *b, const char *spath)
 {
     if (g_groups_state != GROUPS_RUNNING) return;
@@ -460,8 +430,7 @@ static void login_groups_cancel(BYTE *b)
 }
 #define AUTH_CHAT_LOGIN 23
 #define AUTH_BURST 4
-/* up to AUTH_BURST steps while the state holds. Until the chat connection's up a refused connect is retried each
-   step, so that stays at one step and Sleep(16) */
+/* until the chat connection's up a refused connect is retried each step, so that stays at one step and Sleep(16) */
 static void login_auth_turn(BYTE *b, unsigned sm)
 {
     for (int k = 0; k < AUTH_BURST; k++) {
@@ -474,7 +443,6 @@ static void login_auth_turn(BYTE *b, unsigned sm)
     }
     Sleep(1);
 }
-/* no give-up of my own, polcore fails a stuck step itself and Provenance ends a login that goes quiet */
 static void login_auth_run(BYTE *b)
 {
     unsigned sm;
@@ -505,7 +473,6 @@ static void login_auth_run(BYTE *b)
     }
     base_log(LOG_AUTH_OK " (state 30) - session bound\r\n");
 }
-/* id and pw are cleared on the way */
 #define LOGIN_ID_SIZE 16
 #define LOGIN_PW_SIZE 40
 static void login_session(BYTE *b, char *id, char *pw)
@@ -526,21 +493,17 @@ static void login_session(BYTE *b, char *id, char *pw)
     int r, rc, nrun, jail;
     base_timer_begin();
     pc_session_init(b);
-    /* inet init (polcore.dll 0x1000fe20 sets the flag at 0x100a66d4, the connect helper returns -2071 without it) */
+    /* the connect helper returns -2071 without the inet flag */
     r = pc_inet_init(b);
     base_log("login: inet init -> %d\r\n", r);
-    /* POLCON_OPEN (polcore.dll 0x100448a0) with a kind 1 conn and five zeroed dial-up buffers. It overwrites the
-       password and host, so both go in after it. */
     r = pc_con_open(b, CON_TYPE, &conn);
     base_log("login: POLCON_OPEN(%d) -> %d\r\n", CON_TYPE, r);
     pc_encode_password(b, encpw, pw);
     SecureZeroMemory(pw, LOGIN_PW_SIZE);
-    /* SET_PASSWORD (polcore.dll 0x10046df0) copies the bytes into polcore, so mine get cleared */
     pc_set_password(b, encpw, 0);
     SecureZeroMemory(encpw, sizeof encpw);
     pc_encode_host(b, hostbuf, "ci000.pol.com");
     pc_set_polcom_host(b, hostbuf);
-    /* ENCODE_POLID (polcore.dll 0x10046e70) scrambles the ID into polcore. It's reversible, so never logged. */
     pc_encode_polid(b, id);
     SecureZeroMemory(id, LOGIN_ID_SIZE);
     seed_account_login(b);
@@ -549,7 +512,6 @@ static void login_session(BYTE *b, char *id, char *pw)
         *pc_auth_state(b) = AUTH_START;
     login_auth_run(b);
     login_notice_read(b);
-    /* stricter than the viewer on purpose, a blocked account stops here */
     flags = *pc_login_flags(b);
     jail = pc_jailed_or(b, 0);
     base_log("login: result flags %04x notice %u jail %d\r\n", flags, g_notice, jail);
@@ -560,7 +522,6 @@ static void login_session(BYTE *b, char *id, char *pw)
     }
     if (jail) login_account_blocked(b, "jail");
     login_home_pick(b);
-    /* MESSAGE_NOTICES(1), or polcore marks every message as lost. Lean mode reads no messages, so asks for none. */
     if (!g_lean)
         pc_message_notices(b, 1);
     pc_clear_error(b);
@@ -604,8 +565,7 @@ static void fake_session(void)
     HMODULE pc = viewer_polcore_module();
     if (!pc) { base_log("pol_hook: polcore.dll not loaded at menu time?!\r\n"); return; }
     addr_require(IN_POLCORE, viewer_region()->polcore, (BYTE *)pc, (DWORD)(ULONG_PTR)pc);
-    /* before the login, so a crash during it gets a CRASH line too. Not a VEH, that'd catch IsBadReadPtr's first-chance
-       probes and recurse through base_log */
+    /* not a VEH, that'd catch IsBadReadPtr's first-chance probes and recurse through base_log */
     SetUnhandledExceptionFilter(crash_filter);
     polcore_sockets_patch((BYTE *)pc);
     viewer_init((BYTE *)pc);
@@ -614,8 +574,7 @@ static void fake_session(void)
         base_log("viewer_init: user slot %d (pub\\home%02d)\r\n", g_home, g_home);
 }
 
-/* gate 7 (FFXiMain.dll 0x04245cb0) decodes patch.ver from the current directory. Real POL boots from the FFXI folder,
-   the hook would inherit POL's and bail silently (silently being the key word) */
+/* gate 7 (FFXiMain.dll 0x04245cb0) decodes patch.ver from the current directory. Real POL boots from the FFXI folder, the hook would inherit POL's and bail silently (silently being the key word) */
 static void login_set_cwd_ffxi(void)
 {
     HKEY k;

@@ -39,7 +39,6 @@ public sealed partial class AddonRow : ObservableObject
     public bool SwitchEnabled => CanChange && !Installing;
     public bool Greyed => Incompatible || Group is not null;
 
-    // the page saves it and reads it all back, so a change that didn't save puts the switch back
     public bool On
     {
         get => _on;

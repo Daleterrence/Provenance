@@ -3,8 +3,6 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// one row for each kind of notice, with a switch for the notice and one for the taskbar flash. Every change saves
-// straight away
 public sealed partial class NoticeRow : ObservableObject
 {
     private readonly ISettingsService _settings;

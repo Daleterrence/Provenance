@@ -35,7 +35,6 @@ internal static class Shortcut
             var target = path.ToString();
             return Path.IsPathFullyQualified(target) ? target : null;
         }
-        // whatever stops it loading, a file that isn't a shortcut included, there's no target to give
         catch (Exception ex) when (ex is COMException or IOException or UnauthorizedAccessException or ArgumentException or InvalidCastException)
         {
             return null;

@@ -26,7 +26,6 @@ public sealed class TrayIcon : IDisposable
 
     internal static int Warmed;
 
-    // a cold menu takes about a second on the UI thread, so one's built and dropped on a worker first.
     // MTA, or a dead STA thread owns WinForms' system events window
     public static void Warm()
     {
@@ -39,20 +38,19 @@ public sealed class TrayIcon : IDisposable
                 menu.Items.Add("Open", null, (_, _) => { });
                 menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
             }
-            catch { }   // just means the first close is slow again
+            catch { }
         }) { IsBackground = true, Name = "Tray warm-up" }.Start();
     }
 
     internal static Stream? AppIcon() => Application.GetResourceStream(new Uri("pack://application:,,,/Assets/provenance.ico"))?.Stream;
 
-    // WinForms has no default picture. With none it never adds the icon at all, and still says it's visible
+    // with no default picture WinForms never adds the icon at all, and still says it's visible
     internal static System.Drawing.Icon LoadIcon(Func<Stream?> open, bool large = false)
     {
         Exception? why = null;
         try
         {
             using var stream = open();
-            // the frame drawn for the size it's shown at: small in the tray, large on a notice. Windows stretches or squeezes any other
             var size = large ? System.Windows.Forms.SystemInformation.IconSize : System.Windows.Forms.SystemInformation.SmallIconSize;
             if (stream is not null) return new System.Drawing.Icon(stream, size);
         }
@@ -89,14 +87,12 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         _signOut = menu.Items.Add("Log out of PlayOnline", null, (_, _) => SignOutRequested?.Invoke());
         _exit = menu.Items.Add("Exit and log out", null, (_, _) => ExitRequested?.Invoke());
-        // the friends windows can be split or merged while this sits in the tray
         menu.Opening += (_, _) => _friends.Text = _friendsTitle();
         _icon.ContextMenuStrip = menu;
         _icon.DoubleClick += (_, _) => OpenRequested?.Invoke();
         _icon.BalloonTipClicked += (_, _) => OpenRequested?.Invoke();
     }
 
-    // in game Exit leaves the game and its session alone, so it doesn't say it logs out
     internal void SetState(TrayState state)
     {
         bool loggedIn = state == TrayState.LoggedIn;
@@ -132,7 +128,6 @@ public sealed class TrayIcon : IDisposable
     internal int PutBacks, Tips, WithPicture;
     internal System.Drawing.Icon NoticePicture => _noticePicture;
 
-    // off and on again, so WinForms adds the icon afresh and doesn't just update one Windows no longer has
     internal void PutBack()
     {
         _icon.Visible = false;
@@ -160,8 +155,7 @@ public sealed class TrayIcon : IDisposable
     private static readonly FieldInfo? IconWindow = typeof(System.Windows.Forms.NotifyIcon).GetField("_window", Hidden),
                                        IconId = typeof(System.Windows.Forms.NotifyIcon).GetField("_id", Hidden);
 
-    // WinForms only does Windows' stock pictures on a notice, so this one goes to Windows directly.
-    // That needs the icon's window and id, which WinForms keeps private
+    // WinForms only does Windows' stock pictures on a notice, so this goes to Windows directly
     private bool ShowWithPicture(string title, string text)
     {
         if (IconWindow?.GetValue(_icon) is not System.Windows.Forms.NativeWindow { Handle: var window } || window == IntPtr.Zero

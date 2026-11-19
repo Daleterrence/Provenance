@@ -27,7 +27,6 @@ public static class DragAnywhere
             window.DragMove();
     }
 
-    // a text box's own clicks land on parts inside it, so it's the whole chain up from where the click landed
     internal static bool CanStartFrom(object? source)
     {
         for (var d = source as DependencyObject; d is not null; d = d is Visual or System.Windows.Media.Media3D.Visual3D

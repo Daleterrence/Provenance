@@ -15,8 +15,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// Like General, every change saves straight away. The cards, the accounts and the Game page follow each one
-// through the events
 public partial class HookSettings : ObservableObject, IProfileHost
 {
     private readonly IDialogs _dialogs;
@@ -44,12 +42,10 @@ public partial class HookSettings : ObservableObject, IProfileHost
 
     internal event Action? Saved;
     internal event Action? ListsRefreshed;
-    // true when the player switched platform, false for the first load
     internal event Action<bool>? PlatformSwitched;
     public event Action? WindowerReload, AshitaReload;
     internal event Action? AccountsReload;
     public event Action? ProfilesChanged;
-    // whether the change worked, and the profile's old name after a rename
     internal event Action<bool, string?>? ProfileEdited;
     internal event Action? CloseRequested;
 
@@ -65,12 +61,10 @@ public partial class HookSettings : ObservableObject, IProfileHost
     public StatusLine ProfileStatus { get; } = new();
     public ObservableCollection<HookProfileItem> AshitaBootConfigs { get; } = new();
     public ObservableCollection<HookProfileItem> WindowerProfiles { get; } = new();
-    // the title bar's one switcher shows whichever platform's list is the current one
     public ObservableCollection<HookProfileItem> SwitcherProfiles => IsAshita ? AshitaBootConfigs : WindowerProfiles;
     public HookProfileItem? SelectedProfile
     {
         get => IsAshita ? AshitaBootConfig : WindowerProfile;
-        // swapping the list in the box clears its selection and says so, which isn't a pick
         set
         {
             if (value is null) return;
@@ -84,8 +78,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
     public bool IsAshita => Hook == ThirdPartyHook.Ashita;
     public bool IsWindower => Hook == ThirdPartyHook.Windower;
 
-    // the same folder and profile this tab is changing. With nothing in its list (settings.xml won't read, say) it's
-    // still the one that was picked
     internal AddonsTarget PickedAddonsTarget() => Hook switch
     {
         ThirdPartyHook.Ashita => new(ThirdPartyHook.Ashita, AshitaDir, AshitaBootConfig?.Name ?? _settings.Current.AshitaBootConfig ?? ""),
@@ -97,16 +89,13 @@ public partial class HookSettings : ObservableObject, IProfileHost
     private string? AskName(string title, string prompt, string start, Func<string, string?> check) =>
         _dialogs.Ask(title, prompt, start, WindowerSettingsFile.MaxNameLength, validate: check);
 
-    // a pick that's turned down goes back once the dropdown's finished with it
     private void Later(Action a)
     {
         if (_ui.Available) _ui.Post(a);
         else a();
     }
 
-    // only the folder in the box, never one found somewhere else, since profiles get changed in it
     public string? WindowerDir => HookFolder.Usable(WindowerPath) is { } usable && WindowerInstall.IsFolder(usable) ? usable : null;
-    // settings.xml's writer refuses one too, so nothing here offers to change it
     public bool WindowerLinked => WindowerDir is { } d && FolderPins.Linked(d);
     public string? AshitaDir => HookFolder.Usable(AshitaPath) is { } usable && AshitaInstall.IsFolder(usable) ? usable : null;
 
@@ -118,11 +107,9 @@ public partial class HookSettings : ObservableObject, IProfileHost
         AshitaPath = AshitaInstall.Detect(s.AshitaPath) ?? s.AshitaPath;
         WindowerPath = WindowerInstall.Detect(s.WindowerPath) ?? s.WindowerPath;
         _loading = false;
-        // the boot config Ashita really ran with last (from its logs), so the game keeps its window and plugins
         var windower = PlayTarget.For(s, null, ThirdPartyHook.Windower);
         var ashita = PlayTarget.For(s, null, ThirdPartyHook.Ashita);
         RefreshThirdPartyHookLists(windower.Profile, ashita.Profile);
-        // a pick that's gone from its folder isn't swapped for another here, Play would fail on it too
         _loading = true;
         if (ashita.Profile.Length > 0 && AshitaBootConfig is not null && !ashita.Is(AshitaBootConfig.Name)) AshitaBootConfig = null;
         if (windower.Profile.Length > 0 && WindowerProfile is not null && !windower.Is(WindowerProfile.Name)) WindowerProfile = null;
@@ -136,7 +123,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
 
     internal bool StillThere(string name) => IsWindower ? Item(WindowerProfiles, name) is not null : Item(AshitaBootConfigs, name) is not null;
 
-    // the cards load again, the Addons tab can repoint the boot configuration's script meanwhile
     internal void ReloadCards()
     {
         OpenAshitaFolder.Refresh();
@@ -200,7 +186,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
             s.ThirdPartyHookPlatform = hook;
             s.AshitaPath = ashita;
             s.WindowerPath = windower;
-            // nothing shown (no folder yet) keeps what was picked before
             if (boot is not null) s.AshitaBootConfig = boot;
             if (profile is not null) s.WindowerProfile = profile;
         });
@@ -208,7 +193,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
         Saved?.Invoke();
     }
 
-    // set once the player's agreed to a restart for a platform change, the window closes and the app restarts after
     public bool RestartWanted { get; private set; }
 
     public static string RestartText(ThirdPartyHook from, ThirdPartyHook to) =>
@@ -222,8 +206,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
         _ => "no Windower or Ashita",
     };
 
-    // after the first load, switching between Windower and Ashita clears each account's stored profile. Logged in, the
-    // old one's loaded, so it takes a restart, and a no puts it back unsaved
     partial void OnHookChanged(ThirdPartyHook oldValue, ThirdPartyHook newValue)
     {
         bool restart = !_loading && _context.LoggedIn();
@@ -235,7 +217,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
         SaveThirdPartyHook();
         PlatformSwitched?.Invoke(!_loading);
         if (_loading) return;
-        // a pol.exe pre-started for a plain login would hold off Windower's updates, and it's no use to either of them
         if (newValue != ThirdPartyHook.None) _stopPrestart?.Invoke();
         ReloadCards();
         if (!restart) return;
@@ -298,13 +279,11 @@ public partial class HookSettings : ObservableObject, IProfileHost
     [RelayCommand]
     private void BrowseWindower() { if (_dialogs.PickFolder(WindowerInstall.BrowseTitle) is { } d) WindowerPath = d; }
 
-    // the Windower card keeps this up to date
     public string? WindowerProblem { get; set; }
 
     public bool CanManageProfiles => !_context.MultiRunning()
         && (IsWindower ? WindowerDir is not null && !WindowerLinked && WindowerProblem is null : IsAshita && AshitaDir is not null);
     public bool CanCopyProfile => CanManageProfiles && (IsWindower ? WindowerProfile is not null : AshitaBootConfig is not null);
-    // the unnamed Windower profile and Ashita's own examples stay as they are
     public bool CanChangeProfile => CanManageProfiles && (IsWindower
         ? WindowerProfile is { Name.Length: > 0 }
         : AshitaBootConfig is { } a && !AshitaBootFiles.IsShippedExample(a.Name));
@@ -330,8 +309,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
         }
     }
 
-    // the current platform's side of the profile commands. A delete doesn't need Windower's settings.xml read, and
-    // KeepAfterDelete is what the list picks once one's gone (Windower's unnamed profile if there is one)
     private sealed record ProfileSet(ILaunchProfiles Profiles, string Label, HookProfileItem? Selected, string? KeepAfterDelete);
 
     private ProfileSet? CurrentProfiles(bool needsSelected, bool readWindower = true)
@@ -372,7 +349,6 @@ public partial class HookSettings : ObservableObject, IProfileHost
     private void RenameProfile()
     {
         if (!CanChangeProfile || CurrentProfiles(needsSelected: true) is not { Selected: { } p } set) return;
-        // Ashita renames the file, a name of its own stays put
         var ask = IsAshita && p.Display != p.Name ? $"What should the file for {p.Display} be called?" : $"What should {p.Display} be called?";
         var name = AskName($"Rename {set.Label}", ask, p.Name, n => set.Profiles.NameProblem(n, renaming: p.Name));
         if (name is null || set.Profiles.Canonical(name) == p.Name) return;

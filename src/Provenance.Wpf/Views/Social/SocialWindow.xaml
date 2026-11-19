@@ -98,7 +98,6 @@
                                 <TextBlock Text="{Binding Summary}" Margin="10,0,0,0" FontSize="12" VerticalAlignment="Center"
                                            Foreground="{DynamicResource Text.3}" />
                             </StackPanel>
-                            <!-- my comment, edited in place. The hover underline and idle pencil hint it's editable -->
                             <Border Margin="0,1,0,0" BorderThickness="0,0,0,1" IsEnabled="{Binding CanEdit}">
                                 <Border.Style>
                                     <Style TargetType="Border">

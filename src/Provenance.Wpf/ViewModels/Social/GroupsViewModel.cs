@@ -29,7 +29,6 @@ public sealed partial class GroupsViewModel : ObservableObject
         public bool IsMaster => MyRole == GroupRole.Master;
         public bool CanInvite => MyRole is GroupRole.SubMaster or GroupRole.Master;
         public bool IsInvited => MyRole == GroupRole.Invited;
-        // the viewer's picker only offers groups I'm a member, sub-master or master of
         public bool CanChat => MyRole is GroupRole.Member or GroupRole.SubMaster or GroupRole.Master;
         public string Summary => $"{Members.Count} {(Members.Count == 1 ? "member" : "members")}, {OnlineCount} online";
         public int Unread { get; init; }
@@ -44,7 +43,6 @@ public sealed partial class GroupsViewModel : ObservableObject
     [ObservableProperty, NotifyPropertyChangedFor(nameof(NoGroups))] private bool _hasGroups;
     public bool NoGroups => !HasGroups;
 
-    // group invitations waiting for an answer, the same rows the friend list shows
     public ObservableCollection<FriendItem> Invites { get; } = new();
     [ObservableProperty] private bool _hasInvites;
 
@@ -119,7 +117,7 @@ public sealed partial class GroupsViewModel : ObservableObject
                 .ThenBy(m => m.Name, StringComparer.CurrentCultureIgnoreCase)
                 .Select(m => new GroupMemberItem(m.Index, m.Name, m.Key, _social.Avatars.ProfilePicture(m.ProfilePictureId),
                                                  m.Role, RoleText(m.Role), StatusText(m), m.Online, m.Me,
-                                                 m.Me ? m.Comment : _social.Viewer.Filtered(m.Comment))   // mine fills its edit box
+                                                 m.Me ? m.Comment : _social.Viewer.Filtered(m.Comment))
                     { Status = m.Status.ToPolStatus() })
                 .ToList();
             int online = g.Members.Count(m => m.Online && !m.Me);
@@ -127,17 +125,14 @@ public sealed partial class GroupsViewModel : ObservableObject
         }).ToList();
         if (!_login.Dirty && groups.Count == Items.Count && groups.Zip(Items).All(p => SameGroup(p.First, p.Second))) return;
         _login.Dirty = false;
-        // a group that didn't change keeps its row (and an open menu on it)
         Items.Patch(groups, (a, b) => a.Id == b.Id, SameGroup);
         HasGroups = Items.Count > 0;
     }
 
-    // the members are a list, so the record's own == would only ever say they differ
     private static bool SameGroup(GroupItem a, GroupItem b) =>
         a.Id == b.Id && a.Name == b.Name && a.MyRole == b.MyRole && a.OnlineCount == b.OnlineCount && a.Unread == b.Unread && a.Expanded == b.Expanded &&
         a.Members.SequenceEqual(b.Members);
 
-    // bySend: an invitation or its answer, which report back as sends. leaving: the group this takes me out of
     private void BeginGroup(Func<int, string, bool> write, string doneText, bool bySend = false, string? leaving = null,
                             FriendItem? invite = null)
     {
@@ -146,7 +141,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         _login.Done = doneText;
         _login.BySend = bySend;
         _login.Leaving = leaving;
-        _login.InviteFor = invite;   // only now, a refused click must never mark it answered
+        _login.InviteFor = invite;
         if (invite != null) _social.AnswerStarted(invite.RequestMid);
         if (write(pid, token)) return;
         _login.Group.Forget();
@@ -157,8 +152,6 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     public bool CanCreate => Items.Count(x => !x.IsInvited) < PolLimits.MaxGroups;
     public string LimitText => HookFailures.Groups.TooManyGroups;
-
-    // each one checks the viewer's rule as well as the menus do, so no caller can send what the viewer wouldn't
 
     public void Create(string name)
     {
@@ -176,7 +169,6 @@ public sealed partial class GroupsViewModel : ObservableObject
             BeginGroup((pid, token) => SocialRequests.DisbandGroup(pid, token, g.Id), $"Group \"{g.Name}\" disbanded.", leaving: g.Id);
     }
 
-    // a member or sub-master, an invitation gets answered instead
     public void Leave(GroupItem g)
     {
         if (g.MyRole is not (< GroupRole.Member or GroupRole.Master))
@@ -184,8 +176,6 @@ public sealed partial class GroupsViewModel : ObservableObject
                        _social.Viewer.Text(0x3eab, "You have left the group \"%s.\"").Replace("%s", g.Name), leaving: g.Id);
     }
 
-    // masters and sub-masters remove non-masters and relieve sub-masters (back to Member), only the master promotes to
-    // sub-master or master, and never on my own row
     public static bool CanSetRole(GroupItem g, GroupMemberItem m, GroupRole role) => !m.Me && role switch
     {
         GroupRole.Remove => g.CanInvite && m.Role != GroupRole.Master,
@@ -229,7 +219,7 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     public void AnswerInvite(FriendItem invite, bool accept)
     {
-        if (!invite.IsGroupInvite || !_social.CanEdit) return;   // refused before the viewer's string table gets read
+        if (!invite.IsGroupInvite || !_social.CanEdit) return;
         var subject = accept ? _social.Viewer.Text(0x46d6, "Group registration accepted")
                              : _social.Viewer.Text(0x46d1, "Friend registration declined");
         _login.InviteAccepted = accept;
@@ -247,7 +237,6 @@ public sealed partial class GroupsViewModel : ObservableObject
         string state;
         if (!_login.BySend) state = mine ? snap.GroupJob.State : "";
         else if (snap.SendStateFor(_login.Group.Token) is { } sent) state = sent;
-        // a send refused before it went out reports in the group slot
         else if (mine && snap.GroupJob.State.StartsWith("failed", StringComparison.Ordinal)) state = snap.GroupJob.State;
         else state = "";
         bool done = state is "sent" or "saved";
@@ -257,7 +246,6 @@ public sealed partial class GroupsViewModel : ObservableObject
         _login.Leaving = null;
         _login.InviteFor = null;
         _social.EditBusy = false;
-        // a timed-out answer leaves the list for this session too, so it can't be answered twice
         if (invite != null && st is "ok" or "timeout") _social.Answered(invite.RequestMid, ack: st == "ok");
         else if (invite != null) _social.AnswerFailed(invite.RequestMid);
         if (invite != null)
@@ -268,7 +256,6 @@ public sealed partial class GroupsViewModel : ObservableObject
         }
         if (st == "ok")
         {
-            // with its chat open, the chat says it (and only once), and the lines kept for it go either way
             if (left != null && _social.GroupChat.GroupLeft(left, _login.Done)) return;
             _social.EditNote.Show(_login.Done, TimeSpan.FromSeconds(12));
             return;
@@ -299,7 +286,6 @@ public sealed partial class GroupsViewModel : ObservableObject
             "failed:hourly limit" => HookFailures.Groups.HourlyLimit,
             var s => HookFailures.ChangeRejected(SocialRequests.FailReason(s)),
         });
-        // the hook leaves the group's chat before the group, so a refused leave can still have closed it
         if (left != null && _social.GroupChat.LeaveFailed(left, snap)) _social.EditNote.Fail(_social.EditNote.Text + " " + ChatClosedNote);
     }
 
@@ -324,7 +310,6 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     public IReadOnlyList<MenuAction> GroupMenu(GroupItem g)
     {
-        // invitations get answered from their own row, like the viewer, so two can't get mixed up
         if (g.IsInvited)
             return [new("Accept or decline it under Group invitations", false)];
         bool can = _social.CanEdit;

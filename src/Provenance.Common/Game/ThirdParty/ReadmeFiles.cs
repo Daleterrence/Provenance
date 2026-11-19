@@ -5,7 +5,6 @@ namespace Provenance.Common.Game.ThirdParty;
 
 public static class ReadmeFiles
 {
-    // the biggest readme I've seen is 44 KB, so anything over this isn't one
     private const long MaxBytes = 1 << 20;
 
     private static readonly (string Name, AddonDocsKind Kind)[] Names =
@@ -14,7 +13,6 @@ public static class ReadmeFiles
         ("readme.html", AddonDocsKind.Page), ("readme.htm", AddonDocsKind.Page),
     ];
 
-    // the first of those straight inside the folder, in any case. null for a folder that's missing or won't read
     public static AddonDocs? Find(string folder)
     {
         List<string> files;
@@ -29,7 +27,6 @@ public static class ReadmeFiles
     // only a .md gets laid out. A readme.txt is often hand-spaced columns, which Markdown would run together
     public static bool IsMarkdown(string path) => Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase);
 
-    // UTF-8 unless a BOM says UTF-16, which is what Notepad's Unicode writes. null when it can't be read
     public static string? ReadText(string path)
     {
         try
@@ -45,7 +42,6 @@ public static class ReadmeFiles
     private static bool SizeOk(string file)
     {
         try { return new FileInfo(file).Length is > 0 and <= MaxBytes; }
-        // a file that can't be stat'd just isn't shown
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 }

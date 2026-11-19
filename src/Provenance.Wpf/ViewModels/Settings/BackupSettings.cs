@@ -43,7 +43,6 @@ public partial class BackupSettings : ObservableObject
 
     public const string NoBackupsText = "There aren't any backups in this folder yet.";
 
-    // newest first, the ones in the folder as it was last read
     public ObservableCollection<BackupRow> Items { get; } = [];
     [ObservableProperty] private bool _listed;
     public bool Empty => Listed && Items.Count == 0;
@@ -60,11 +59,8 @@ public partial class BackupSettings : ObservableObject
 
     public const string BackUpBlockedText = "You can back up once Provenance has finished starting your accounts.";
 
-    // why back up now is off, when it's the accounts starting. A backup doesn't mind the game or a login, the automatic
-    // ones run in the middle of both
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanBackUpNow))] private string? _backUpNote;
 
-    // an empty box is the default folder, and a backup makes the folder if it isn't there yet
     public bool CanBackUpNow => BackUpNote is null && !RestoringBackup && !BackingUp;
 
     public StatusLine ActionStatus { get; } = new();
@@ -76,7 +72,6 @@ public partial class BackupSettings : ObservableObject
 
     partial void OnBackupGameSettingsChanged(bool value) => _settings.SaveChange(s => s.BackupGameSettings = value);
 
-    // an empty box is the default folder
     partial void OnBackupFolderChanged(string value)
     {
         var folder = value.Trim();
@@ -93,8 +88,6 @@ public partial class BackupSettings : ObservableObject
     internal Task Listing { get; private set; } = Task.CompletedTask;
     private int _reads;
 
-    // the folder's read again when the tab comes up, the window comes back to the front and the folder changes. A
-    // newer read drops an older one
     public Task Reload()
     {
         RefreshRestoreNote();
@@ -113,7 +106,6 @@ public partial class BackupSettings : ObservableObject
             found = [];
         }
         if (mine != _reads) return;
-        // left alone when nothing's changed, so a focused restore button keeps its focus and nothing's announced again
         static (string, DateTime, int, int) Key(BackupInfo i) => (i.Path, i.CreatedUtc, i.Characters, i.Files);
         if (!Items.Select(r => Key(r.Info)).SequenceEqual(found.Select(Key)))
         {
@@ -126,7 +118,6 @@ public partial class BackupSettings : ObservableObject
 
     internal Func<string, IReadOnlyList<BackupInfo>> ListBackups { get; set; } = GameSettingsBackup.List;
 
-    // the same reasons a restore gives, said above the list so the buttons going grey isn't a mystery
     public void RefreshRestoreNote()
     {
         RestoreNote = RestoreBlocked();
@@ -139,14 +130,12 @@ public partial class BackupSettings : ObservableObject
         if (_dialogs.PickFolder("Choose a folder for your game settings backups") is { } d) BackupFolder = d;
     }
 
-    // the folder there's no backup in yet gets made, so there's something to open
     [RelayCommand]
     private void OpenBackupFolder()
     {
         var folder = GameSettingsBackup.FolderOrDefault(_settings.Current.BackupFolder);
         try
         {
-            // a share that doesn't answer isn't waited on
             if (ThirdPartyHooks.Usable(folder) is null) throw new IOException("The share doesn't answer.");
             if (!Directory.Exists(folder))
                 using (GameSettingsBackup.HoldFolder(folder) ?? throw new BackupFolderLinkedException(folder)) { }
@@ -163,8 +152,7 @@ public partial class BackupSettings : ObservableObject
         }
     }
 
-    // the game writes its settings when a character logs out, so a restore under a running one wouldn't last. Asked
-    // again right before anything's written
+    // the game writes its settings when a character logs out, so a restore under a running one wouldn't last
     internal string? RestoreBlocked() =>
         _context.GameRunning() ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
         : _context.LoggedIn() ? "You can restore a backup once you're logged out of PlayOnline."

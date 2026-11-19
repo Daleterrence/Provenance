@@ -3,8 +3,6 @@ using Provenance.Common.Progress;
 
 namespace Provenance.Wpf.Services;
 
-// UI thread only, sampled every second so a stall shows. The bar never goes back within a step, a retry that takes
-// bytes back just holds it
 public sealed class DownloadMeter
 {
     private readonly TransferRate _rate = new(TimeSpan.FromSeconds(5));
@@ -32,8 +30,6 @@ public sealed class DownloadMeter
         };
     }
 
-    // fraction under 0 leaves the bar alone. download false is local work (checking, unpacking) with no rate,
-    // amount false leaves the bar text to whoever shows the sizes
     public void Update(long done, long total, double fraction, bool download = true, bool amount = true, object? step = null)
     {
         long now = Environment.TickCount64;
@@ -67,7 +63,6 @@ public sealed class DownloadMeter
         return changed;
     }
 
-    // between steps of a job: the sizes go but the time left stays up and counts down
     public void Clear()
     {
         _rate.Reset();
@@ -96,7 +91,6 @@ public sealed class DownloadMeter
         _showFraction?.Invoke(0);
     }
 
-    // the bytes the held bar stands for, so the text under it doesn't drop back on a retry either
     private long Hold(double fraction, bool newStep, long done, long total)
     {
         _held = newStep ? fraction : Math.Max(_held, fraction);

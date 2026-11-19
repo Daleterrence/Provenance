@@ -24,7 +24,6 @@
                                       Visibility="{Binding Succeeded, Converter={StaticResource BoolToVis}}" />
                     <controls:BalancedText Message="{Binding Stage}" FontSize="20" FontWeight="SemiBold"
                                            Visibility="{Binding Stage, Converter={StaticResource NullToVisibilityConverter}}" />
-                    <!-- a result with no heading reads as the main line -->
                     <controls:BalancedText Message="{Binding Status}" behaviours:State.IsError="{Binding Failed}">
                         <controls:BalancedText.Style>
                             <Style TargetType="controls:BalancedText">

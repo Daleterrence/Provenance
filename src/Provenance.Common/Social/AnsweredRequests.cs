@@ -4,8 +4,6 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Social;
 
-// answered requests and invitations, kept 30 days by a hash of the message's identity (no ID is stored), so a copy that
-// comes round at a later login is finished unseen. DPAPI-encrypted like the chat log
 public sealed class AnsweredRequests
 {
     public static readonly TimeSpan Keep = TimeSpan.FromDays(30);
@@ -32,7 +30,6 @@ public sealed class AnsweredRequests
     public static string Identity(PolMessage m) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{m.FromKey}|{m.FromSlot}|{m.Seq}|{m.Time}|{m.ToKey}")))[..32];
 
-    // a message the hook couldn't make a key for can't be told from another
     public bool Has(PolMessage m) => m.FromKey.Length > 0 && _seen.ContainsKey(Identity(m));
 
     public void Add(PolMessage m, DateTime now)

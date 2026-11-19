@@ -7,11 +7,9 @@ namespace Provenance.Common.Game.Windower;
 
 internal static class WindowerFiles
 {
-    // with a cache, a file that hasn't changed since it was last read isn't opened
     public static Version FileVersion(string file, WindowerScanCache? cache = null) =>
         File.Exists(file) ? (cache is null ? PeFile.ReadFileVersion(file) : cache.Pe(file)?.Version) ?? new Version(0, 0, 0, 0) : new Version();
 
-    // Windower compares (and builds its User-Agent from) its assembly version. Only the metadata's read, nothing's loaded
     public static Version LauncherVersion(string exe, WindowerScanCache? cache = null)
     {
         if (!File.Exists(exe)) return new Version();

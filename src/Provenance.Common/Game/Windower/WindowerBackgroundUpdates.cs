@@ -1,6 +1,5 @@
 namespace Provenance.Common.Game.Windower;
 
-// one per Windower folder for the life of the app
 internal sealed class WindowerBackgroundUpdates
 {
     internal static WindowerBackgroundUpdates Shared { get; } = new();
@@ -24,7 +23,6 @@ internal sealed class WindowerBackgroundUpdates
         lock (_gate) return _byFolder.TryGetValue(Key(folder), out var update) && !update.Finished ? update : null;
     }
 
-    // the app's closing: everything stops, and anything started after this stops straight away
     internal void Stop(TimeSpan wait)
     {
         _ending.Cancel();

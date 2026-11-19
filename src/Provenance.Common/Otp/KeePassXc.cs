@@ -40,7 +40,6 @@ public static class KeePassXc
             try { entries = await Logins(false, 60); }
             catch (KeePassXcException e) when (e.Code == KeePassXcException.DatabaseLocked)
             {
-                // KeePassXC shows its unlock dialog, then says when the database is open
                 try { await Logins(true, 15); }
                 catch (KeePassXcException) { }
                 await calls.CallNoResult(t => client.WaitForUnlockAsync(t), TimeSpan.FromMinutes(2), "KeePassXC is still locked.");
@@ -48,7 +47,6 @@ public static class KeePassXc
             }
             var (picked, pickProblem) = PickEntry(entries, squareEnixId, url);
             if (picked is null) return OtpSources.Problem(entries.Count == 0 ? "no entry with a code" : "several entries", pickProblem!, OtpFix.TypeInstead);
-            // only ever the picked entry's code
             if (picked.Totp is { } own && OtpSources.SixDigits.IsMatch(own)) return new OtpFetchResult(own, null);
             if (await calls.Call(t => client.GetTotpAsync(picked.Uuid, t), TimeSpan.FromSeconds(15)) is { } code &&
                 OtpSources.SixDigits.IsMatch(code))
@@ -68,8 +66,6 @@ public static class KeePassXc
         finally { calls.Stop(); }
     }
 
-    // the saved connection if KeePassXC still knows it, else a new one (which makes KeePassXC ask to allow the app). Null
-    // when even the new one isn't accepted
     private static async Task<(string Id, byte[] Key)?> PairAsync(KeePassXcClient client, WindowsCredentialStore store, ProxyCalls calls)
     {
         Task<bool> Paired(string id, byte[] key) =>
@@ -80,7 +76,7 @@ public static class KeePassXc
         if (saved is { } c)
         {
             var buf = new byte[64];
-            if (Convert.TryFromBase64String(c.Secret, buf, out int n) && n == 32) savedKey = buf[..32];   // else pair again
+            if (Convert.TryFromBase64String(c.Secret, buf, out int n) && n == 32) savedKey = buf[..32];
         }
         if (savedId is not null && savedKey is not null && await Paired(savedId, savedKey)) return (savedId, savedKey);
         var key = KeePassXcClient.NewIdKey();
@@ -95,7 +91,7 @@ public static class KeePassXc
         public void Stop()
         {
             try { if (!proxy.HasExited) proxy.Kill(); }
-            catch { }   // already gone
+            catch { }
         }
 
         public async Task<T> Call<T>(Func<CancellationToken, Task<T>> work, TimeSpan limit, string message = NoAnswer)
@@ -116,8 +112,6 @@ public static class KeePassXc
             Call(async t => { await work(t); return true; }, limit, message);
     }
 
-    // entries with a code beat ones without (a login next to a separate authenticator entry). With several, the one
-    // whose login is the SE ID, so never another account's code
     internal static (KeePassXcEntry? Entry, string? Problem) PickEntry(IReadOnlyList<KeePassXcEntry> entries, string squareEnixId, string url)
     {
         if (entries.Any(e => !string.IsNullOrEmpty(e.Totp)))
@@ -132,7 +126,6 @@ public static class KeePassXc
             : (mine, null);
     }
 
-    // deletes need no wrap key, so the key file's never touched (and it never throws)
     public static void ForgetIfUnused(IEnumerable<Account> profiles) =>
         ForgetIfUnused(profiles, static () => CredentialKey.Keyless);
 
@@ -146,8 +139,7 @@ public static class KeePassXc
         catch (Exception ex) { Log.Warning(ex, "Removing the KeePassXC association failed"); }
     }
 
-    // only from KeePassXC's own Program Files folder, and only if that's admin-only. Never from the registry or a
-    // browser manifest, anything running as the user can edit those
+    // only from its own Program Files folder, never the registry or a browser manifest, the user can edit those
     private static string? FindProxy()
     {
         // ProgramW6432, as this is a 32-bit app and ProgramFiles is the (x86) one

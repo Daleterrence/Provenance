@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Provenance.Common.PolFormat;
 
-// env.dat is "NAME,value" lines in POL's file cipher, under polcore's built-in key (0x1009af90)
+// "NAME,value" lines in POL's file cipher
 public static class PolEnv
 {
     private static readonly byte[] Key = [0xfd, 0x31, 0x42, 0x53, 0x64, 0x75, 0x86, 0x97];
@@ -33,20 +33,17 @@ public static class PolEnv
         return new PolFileCipher(Key).Encrypt(data, (uint)text.Length);
     }
 
-    // the one pol.exe reads (WinMain 0x00414560 through 0x0040f5c0): EU\env.dat when there is one, data\utf\env.dat
-    // otherwise. An EU install has both and the utf one says US
+    // EU\env.dat when there is one, data\utf\env.dat otherwise (an EU install has both and the utf one says US)
     private static string? FileIn(string viewerDir) =>
         new[] { Path.Combine("EU", "env.dat"), Path.Combine("data", "utf", "env.dat") }
             .Select(rel => Path.Combine(viewerDir, rel)).FirstOrDefault(File.Exists);
 
     public static string? ValueIn(string viewerDir, string name) => FileIn(viewerDir) is { } path ? Value(path, name) : null;
 
-    // POL_UCS_AREA_KBN and the viewer's own region index (app.dll 0x105c7b44) share one numbering
     private static readonly PolRegion[] ByArea = [PolRegion.Japan, PolRegion.UnitedStates, PolRegion.Europe];
 
     public static int AreaIndex(PolRegion region) => Array.IndexOf(ByArea, region);
 
-    // pol.exe's own answer, POL_UCS_AREA_KBN. A bad EU file is no answer
     public static PolRegion? Region(string viewerDir) =>
         int.TryParse(ValueIn(viewerDir, "POL_UCS_AREA_KBN"), NumberStyles.None, CultureInfo.InvariantCulture, out var area)
             && area < ByArea.Length ? ByArea[area] : null;

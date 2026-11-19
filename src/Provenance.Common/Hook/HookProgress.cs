@@ -9,7 +9,6 @@ public sealed class HookProgress(bool lean = false)
     private bool _ready;
     private int _loadsDone;
 
-    // polcore's login state machine (the fractions only keep the bar moving, don't read much into them)
     public static (string Text, double Fraction) AuthStateText(int state) => state switch
     {
         18 or 19 or 20 or 21 or 22 => ("Connecting to PlayOnline...", 0.10),
@@ -47,7 +46,6 @@ public sealed class HookProgress(bool lean = false)
                 return Once("cids", "Logged in", "This account has no Content ID for FINAL FANTASY XI.", 0.9);
             case SessionHeld:
                 _ready = true;
-                // a lean session never goes online, and it's too soon to say the game's starting
                 return _lean ? null : Once("held", "Connected", "Going online...", 0.95);
             case StopRequested:
                 return Once("stop", LaunchProgress.Cancelled(polClosed: true));

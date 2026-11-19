@@ -10,7 +10,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-// what Play needs from the main window's own progress card and windows
 internal sealed record GameStartLinks(
     Action<SessionPhase> SetPhase,
     Func<string, string, CancellationToken> BeginCancellable,
@@ -25,7 +24,6 @@ internal sealed record GameStartLinks(
 internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISettingsService settings, PolSession pol, GameLaunch launch,
                                 MainViewModel main, GameStartLinks links)
 {
-    // the game update Play runs is handed the check a lean start already made, and nothing else ever is
     private GameCheck? _knownCheck;
 
     internal async Task PlayWithAsync(GameCheck? known)
@@ -38,16 +36,13 @@ internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISetti
     internal async Task PlayAsync()
     {
         if (main.Multi.Running) return;
-        // POL's own Play gate, and it only asks for each list at login so there's no reload here either
         if (main.Social.PlayBlockedReason is { } why)
         {
             dialogs.Error("Can't start FINAL FANTASY XI", why);
             return;
         }
         if (!windows.ConfirmDropProfileEditor("Play", leaveSaving: true)) return;
-        // nothing new goes to the hook from here, the game update still applies its answers
         links.SetPhase(SessionPhase.UpdatingGame);
-        // like the viewer, the game update comes after the login with the session held meanwhile
         if (!await UpdateGameAsync())
         {
             links.SetPhase(SessionPhase.LoggedIn);
@@ -60,7 +55,6 @@ internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISetti
             if (linked == PreLaunchResult.ShowHandles) links.ShowHandles();
             return;
         }
-        // the link waits for a create or delete that's going, which can come back not confirmed or not come back in time
         if (main.Social.PlayBlockedReason is { } held)
         {
             links.SetPhase(SessionPhase.LoggedIn);
@@ -118,7 +112,6 @@ internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISetti
         if (notice is not null) links.Report(LaunchProgress.Notice(notice));
     }
 
-    // a test says whether its made-up session is still there
     internal Func<int, bool>? SessionAliveForTest { get; set; }
 
     internal Task<PreLaunchResult> LinkBeforePlayAsync()
@@ -133,10 +126,8 @@ internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISetti
             read: _ => main.Social.Last);
     }
 
-    // a test points it at made-up folders
     internal Func<LauncherSettings, string?, BackupSources?>? GameBackupSourcesForTest { get; set; }
 
-    // however it goes the game still starts, a failed backup only gets a notice
     internal async Task BackUpGameSettingsAsync(string? accountBoot, Action<string>? saying = null)
     {
         if (await launch.BackUpAsync(accountBoot, saying, GameBackupSourcesForTest) is { } problem)

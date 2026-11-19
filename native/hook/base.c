@@ -3,8 +3,7 @@ static int g_lgcs_ready;
 
 static int base_getenv_set(const char *name) { return GetEnvironmentVariableA(name, NULL, 0) > 0; }
 
-/* pol.exe turns the screen saver off at start and only puts it back in its own cleanup, which base_end_pol skips. The
-   app reads POL_SCREENSAVER first, by DllMain it may already be off */
+/* pol.exe turns the screen saver off at start and only puts it back in its own cleanup, which base_end_pol skips */
 static int g_saver = -1;
 static void base_saver_save(void)
 {
@@ -15,7 +14,6 @@ static void base_saver_save(void)
     else if (SystemParametersInfoW(SPI_GETSCREENSAVEACTIVE, 0, &on, 0))
         g_saver = on != 0;
 }
-/* other copies of this exe, so another pol.exe still in game keeps it off and the last one out puts it back */
 static int base_others_running(void)
 {
     WCHAR self[MAX_PATH], *name = self, *s;
@@ -40,8 +38,7 @@ static void base_saver_restore(void)
     if (g_saver >= 0 && !base_others_running()) SystemParametersInfoW(SPI_SETSCREENSAVEACTIVE, (UINT)g_saver, NULL, 0);
 }
 
-/* Sleep(1) lasts a whole 15.6ms tick in pol.exe unless something asks for a finer one, and the login's pump sleeps
-   that way a lot. winmm's loaded by name, so nothing new is linked */
+/* Sleep(1) lasts a whole 15.6ms tick in pol.exe unless something asks for a finer one */
 static UINT (WINAPI *g_time_begin)(UINT), (WINAPI *g_time_end)(UINT);
 static int g_timer_on;
 static void base_timer_find(void)
@@ -61,18 +58,15 @@ static void base_timer_end(void)
     g_time_end(1);
 }
 
-/* not ExitProcess: Windower 4's Hook.dll fails fast (0xc0000409) in its detach code when the game never started, so
-   it's TerminateProcess, the big hammer */
+/* Windower 4's Hook.dll fails fast (0xc0000409) in its detach code when the game never started, so TerminateProcess */
 NORETURN static void base_end_pol(UINT code)
 {
     base_timer_end();
     base_saver_restore();
     TerminateProcess(GetCurrentProcess(), code);
-    ExitProcess(code);   /* only if TerminateProcess somehow comes back */
+    ExitProcess(code);
 }
 
-/* Provenance's admin-only POL_IPC_DIR: missing, too long or not a folder ends pol.exe so nothing lands anywhere
-   readable. No base_log() here, it'd recurse */
 static void base_ipc_dir(char out[MAX_PATH])
 {
     DWORD n = GetEnvironmentVariableA(ENV_IPC_DIR, out, MAX_PATH), a;
@@ -88,7 +82,6 @@ static void base_ipc_file(char *out, const char *ext)
     wsprintfA(out + lstrlenA(out), IPC_NAME, GetCurrentProcessId(), ext);
 }
 
-/* a file the app reads, written as <name>.tmp and renamed over the real one so it never sees half of it */
 typedef struct { HANDLE h; char path[MAX_PATH + 64], tmp[MAX_PATH + 80]; } ipc_json;
 static int base_ipc_json_open(const char *ext, ipc_json *f)
 {
@@ -103,7 +96,6 @@ static int base_ipc_json_write(ipc_json *f, const char *p, int n)
     DWORD wn = 0;
     return WriteFile(f->h, p, (DWORD)n, &wn, NULL) && wn == (DWORD)n;
 }
-/* ok = everything went in, 1 when the file's in place now. Anything else leaves the old file and no .tmp behind */
 static int base_ipc_json_commit(ipc_json *f, int ok)
 {
     CloseHandle(f->h);
@@ -134,7 +126,6 @@ static void base_log(const char *fmt, ...)
     if (g_lgcs_ready) LeaveCriticalSection(&g_lgcs);
 }
 
-/* kept on for the login only, the hold sleeps in 16ms steps anyway */
 static void base_timer_begin(void)
 {
     if (g_timer_on) return;
@@ -147,7 +138,6 @@ static void base_timer_begin(void)
     base_log("login: 1ms timer on until the session's ready\r\n");
 }
 
-/* every Provenance start sets these (and POL_IPC_DIR, which base_ipc_dir checks) */
 static void base_env_check(void)
 {
     if (base_getenv_set(ENV_HOLD) && base_getenv_set(ENV_CRED_KEYFILE)) return;
@@ -163,7 +153,7 @@ static int base_stop_requested(void)
     return GetFileAttributesA(p) != INVALID_FILE_ATTRIBUTES;
 }
 
-/* POL_OWNER is the Provenance that started this pol.exe. Held by handle, so a reused pid can't stand in for it */
+/* held by handle, so a reused pid can't stand in for it */
 static HANDLE g_owner;
 static int g_owner_gone;
 static ULONGLONG g_owner_checked;
@@ -175,7 +165,7 @@ static void base_owner_open(void)
     g_owner = OpenProcess(SYNCHRONIZE, FALSE, pid);
     if (g_owner) { base_log("pol_hook: owned by Provenance pid %u\r\n", pid); return; }
     err = GetLastError();
-    g_owner_gone = err == ERROR_INVALID_PARAMETER;   /* no such process, it went before the hook even loaded */
+    g_owner_gone = err == ERROR_INVALID_PARAMETER;
     base_log("pol_hook: Provenance pid %u can't be watched (error %u)\r\n", pid, err);
 }
 static int base_owner_gone(void)

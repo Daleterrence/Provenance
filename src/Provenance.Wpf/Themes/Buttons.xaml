@@ -2,8 +2,6 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
                     xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
-    <!-- every text button, the same in both themes: a soft gradient either side of POL's base blue, a faint light line
-         along the top. The greyed-out and focus colours are in each palette -->
     <LinearGradientBrush x:Key="Btn.Fill" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#1F4F87" Offset="0" />
         <GradientStop Color="#133C69" Offset="1" />
@@ -12,12 +10,10 @@
         <GradientStop Color="#2A5D97" Offset="0" />
         <GradientStop Color="#1A487B" Offset="1" />
     </LinearGradientBrush>
-    <!-- turned over, so it looks pushed in -->
     <LinearGradientBrush x:Key="Btn.Fill.Press" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#0F335B" Offset="0" />
         <GradientStop Color="#164070" Offset="1" />
     </LinearGradientBrush>
-    <!-- an icon's disc while its button's in use (its window's open, or it's held down), near POL's own green -->
     <LinearGradientBrush x:Key="Btn.Icon.Active" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#7FCA94" Offset="0" />
         <GradientStop Color="#5DAA74" Offset="1" />
@@ -25,13 +21,11 @@
     <SolidColorBrush x:Key="Btn.Sheen" Color="White" Opacity="0.16" />
     <SolidColorBrush x:Key="Btn.Rim" Color="#0C2D52" />
     <SolidColorBrush x:Key="Btn.Text" Color="#FFFFFF" />
-    <!-- where the template puts the sheen and the focus ring. The Play segments change these -->
     <Thickness x:Key="Btn.Sheen.Inset">1</Thickness>
     <Thickness x:Key="Btn.Sheen.Width">0,1,0,0</Thickness>
     <Thickness x:Key="Btn.Ring.Inset">-4</Thickness>
     <DropShadowEffect x:Key="Btn.Shadow" BlurRadius="8" ShadowDepth="2" Direction="270" Opacity="0.35" Color="Black" />
 
-    <!-- Play gets a brighter blue, a lighter edge and a soft blue glow so it's the first thing you see -->
     <LinearGradientBrush x:Key="Play.Fill" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#2B67B5" Offset="0" />
         <GradientStop Color="#1A4F8F" Offset="1" />
@@ -55,7 +49,6 @@
                     BorderThickness="{TemplateBinding BorderThickness}" />
             <Border x:Name="Sheen" Margin="{DynamicResource Btn.Sheen.Inset}" BorderBrush="{DynamicResource Btn.Sheen}"
                     BorderThickness="{DynamicResource Btn.Sheen.Width}" />
-            <!-- outside the button, so keyboard focus never looks like a hover -->
             <Border x:Name="Ring" Margin="{DynamicResource Btn.Ring.Inset}" BorderThickness="2" BorderBrush="{DynamicResource Focus.Ring}"
                     Visibility="Collapsed" />
             <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" RecognizesAccessKey="True"
@@ -97,8 +90,6 @@
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Template" Value="{StaticResource Btn.Template}" />
-        <!-- on the button, not the template, so content that's its own element (icon and label) takes the button's
-             colour and a style can swap the fills -->
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{DynamicResource Btn.Fill.Hover}" />
@@ -112,8 +103,6 @@
         </Style.Triggers>
     </Style>
 
-    <!-- back-out buttons (cancel, log out) and the OK on a confirm that deletes something. The template looks its
-         colours up by name, so these stand in for the blue ones -->
     <Style x:Key="RedButton" TargetType="ButtonBase" BasedOn="{StaticResource PolButton}">
         <Style.Resources>
             <LinearGradientBrush x:Key="Btn.Fill" StartPoint="0,0" EndPoint="0,1">
@@ -157,8 +146,6 @@
         <Setter Property="Content" Value="BROWSE" />
     </Style>
 
-    <!-- the play button: play and the cog sit in one shell, each with its own fill, so each lights up and greys out
-         on its own -->
     <Style x:Key="ActionShell" TargetType="Border">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource Play.Rim}" />
@@ -167,8 +154,7 @@
         <Setter Property="Effect" Value="{DynamicResource Play.Shadow}" />
     </Style>
 
-    <!-- the button's template in Play's brighter blue, ring and sheen drawn inside. Hover and press are triggers,
-         not swapped Btn.Fill keys, as an icon on it reads those for its disc -->
+    <!-- hover and press are triggers, not swapped Btn.Fill keys, as an icon on it reads those for its disc -->
     <Style x:Key="ActionSegment" TargetType="Button" BasedOn="{StaticResource PolButton}">
         <Setter Property="Background" Value="{DynamicResource Play.Fill}" />
         <Setter Property="BorderThickness" Value="0" />
@@ -191,8 +177,6 @@
         </Style.Triggers>
     </Style>
 
-    <!-- icon-only button: a round highlight sized to the button, a pill when it's wide.
-         Icons that draw their own disc skip it -->
     <Style x:Key="IconButton" TargetType="ButtonBase">
         <Setter Property="Foreground" Value="{DynamicResource Text.2}" />
         <Setter Property="Background" Value="Transparent" />
@@ -237,7 +221,6 @@
         </Setter>
     </Style>
 
-    <!-- an arrow has no highlight, the arrow itself takes the colour (a hover one, then a darker one held down) -->
     <Style x:Key="ArrowButton" TargetType="ButtonBase" BasedOn="{StaticResource IconButton}">
         <Setter Property="Template">
             <Setter.Value>
@@ -270,7 +253,6 @@
         </Setter>
     </Style>
 
-    <!-- a row you click, like an article. The fill is on the button itself, so it's there as soon as the pointer is -->
     <Style x:Key="RowButton" TargetType="Button">
         <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
         <Setter Property="Background" Value="Transparent" />
@@ -313,7 +295,6 @@
         </Setter>
     </Style>
 
-    <!-- a small button for a side action: a solid face and a clear outline, but no gradient so it stays under the main ones -->
     <ControlTemplate x:Key="Small.Template" TargetType="ButtonBase">
         <Grid>
             <Border x:Name="Bd" CornerRadius="13" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
@@ -350,7 +331,6 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
-        <!-- Enter opens it instead of falling through to log in or play -->
         <Setter Property="KeyboardNavigation.AcceptsReturn" Value="True" />
         <Setter Property="Template" Value="{StaticResource Small.Template}" />
         <Style.Triggers>
@@ -372,7 +352,6 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Foreground" Value="{DynamicResource Primary}" />
         <Setter Property="HorizontalAlignment" Value="Left" />
-        <!-- Enter opens the link instead of falling through to log in or play -->
         <Setter Property="KeyboardNavigation.AcceptsReturn" Value="True" />
         <Setter Property="Template">
             <Setter.Value>

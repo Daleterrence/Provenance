@@ -144,7 +144,6 @@ internal sealed class MarkdownInlines(Markdown.Budget budget, Dictionary<string,
         private void Marks(char mark)
         {
             int count = RunLength(_i, mark);
-            // no more than three, so one opener can't be closed over and over into a thousand layers
             if (count > 3)
             {
                 Take(count);
@@ -286,7 +285,6 @@ internal sealed class MarkdownInlines(Markdown.Budget budget, Dictionary<string,
             return sb.ToString();
         }
 
-        // any other <tag ...> stays as typed up to its >, so nothing inside one is formatted or made a link
         private void AngleLink()
         {
             int close = text.AsSpan(_i, Math.Min(MaxLink, text.Length - _i)).IndexOf('>');

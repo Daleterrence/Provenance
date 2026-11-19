@@ -3,7 +3,6 @@ using System.Security.Principal;
 
 namespace Provenance.Common.Security;
 
-// The app runs as admin, so anything it runs or trusts mustn't sit where a non-admin program could swap it
 public static class PathSafety
 {
     private const FileSystemRights WriteRights =
@@ -11,8 +10,6 @@ public static class PathSafety
         FileSystemRights.WriteAttributes | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
         FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
 
-    // nobody but Administrators, SYSTEM and TrustedInstaller can change it or a folder above it, nothing's a link, and
-    // it's on a fixed drive here
     public static bool IsAdminOnly(string path)
     {
         try
@@ -30,14 +27,12 @@ public static class PathSafety
                 foreach (FileSystemAccessRule rule in sec.GetAccessRules(true, true, typeof(SecurityIdentifier)))
                 {
                     if (rule.AccessControlType != AccessControlType.Allow) continue;
-                    // inherit-only rules are for the items inside, which get checked on their own
                     if (rule.PropagationFlags.HasFlag(PropagationFlags.InheritOnly)) continue;
                     if ((rule.FileSystemRights & WriteRights) == 0) continue;
                     if (rule.IdentityReference is SecurityIdentifier sid && !IsTrusted(sid))
                     {
                         // CREATOR OWNER only covers things made later, and their owner gets checked
                         if (sid.IsWellKnown(WellKnownSidType.CreatorOwnerSid)) continue;
-                        // on a drive root, Users may create folders but not change existing ones
                         if (Path.GetPathRoot(item) == item && (rule.FileSystemRights & ~(FileSystemRights.AppendData | FileSystemRights.Synchronize)) == 0) continue;
                         return false;
                     }
@@ -45,15 +40,11 @@ public static class PathSafety
             }
             return true;
         }
-        catch { return false; }   // can't read it, so it isn't shown to be safe
+        catch { return false; }
     }
 
-    // rights that let someone rename, delete or re-permission a folder, or a folder in it. GENERIC_ALL and GENERIC_WRITE
-    // too, in case they're stored unmapped
     private const int MoveRights = 0x00010000 | 0x00000040 | 0x00040000 | 0x00080000 | 0x10000000 | 0x40000000;
 
-    // why someone other than Administrators, SYSTEM or TrustedInstaller could rename, delete or re-permission the
-    // folder or one above it, or null. It only holds while the caller keeps the folder open
     public static string? AdminOnlyProblem(string folder)
     {
         string item = folder;
@@ -89,8 +80,7 @@ public static class PathSafety
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException) { return false; }
     }
 
-    // a share's permissions are whatever its server says, and it can hand back a different file on the next read. A
-    // removable drive can be swapped
+    // a share's permissions are whatever its server says and it can change a file between reads, a removable drive can be swapped
     internal static bool OnLocalFixedDrive(string fullPath, Func<string, DriveType> driveType)
     {
         if (fullPath.StartsWith(@"\\", StringComparison.Ordinal)) return false;

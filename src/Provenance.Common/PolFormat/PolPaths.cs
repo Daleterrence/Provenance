@@ -5,7 +5,6 @@ namespace Provenance.Common.PolFormat;
 
 public enum PolRegion { Japan, UnitedStates, Europe }
 
-// the InstallFolder keys (32-bit view) name values by product id, the viewer's folder is where pol.exe lives
 public static class PolPaths
 {
     private static readonly PolRegion[] Order = [PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan];
@@ -43,8 +42,7 @@ public static class PolPaths
 
     public static PolRegion? TryAutoDetectRegion() => DetectRegion(r => TryGetInstallFolder(r, GameProduct.Viewer));
 
-    // pol.exe goes by env.dat, and a PC that's switched regions keeps the old keys, so a hive only counts when its
-    // viewer's env.dat agrees. With none agreeing, the first folder's env.dat wins
+    // a PC that's switched regions keeps the old keys, so a hive only counts when its viewer's env.dat agrees
     internal static PolRegion? DetectRegion(Func<PolRegion, string?> viewerFolder)
     {
         var found = new List<(PolRegion Hive, string Dir)>();

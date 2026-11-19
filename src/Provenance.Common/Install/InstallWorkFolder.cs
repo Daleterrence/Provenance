@@ -12,7 +12,6 @@ public static class InstallWorkFolder
 
     public sealed class FolderRefusedException(string message) : IOException(message);
 
-    // the installer's download folder and the ffxi-download in it, held with no delete sharing until it's disposed
     public sealed class WorkFolder(string path, SafeFileHandle chosen, SafeFileHandle work) : IDisposable
     {
         public string Path { get; } = path;
@@ -24,8 +23,6 @@ public static class InstallWorkFolder
         }
     }
 
-    // DXSETUP and the MSIs run as admin from here, so it's held (NTFS won't rename a held folder or one above it).
-    // Null when every ffxi-download there is someone else's
     public static WorkFolder? HoldWorkFolder(string chosen, IReadOnlyCollection<string> ownNames, Func<string, string?> problem)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(chosen));
@@ -33,11 +30,9 @@ public static class InstallWorkFolder
         var existing = full;
         for (; !Directory.Exists(existing); existing = Path.GetDirectoryName(existing) ?? throw new FolderRefusedException($"{full} has no drive"))
             missing.Push(existing);
-        // checked before anything's made, and what's made is locked, so it never inherits anyone's write access
         if (problem(existing) is { } before) throw new FolderRefusedException(before);
         while (missing.TryPop(out var dir)) CreateLocked(dir, Intended(usersMayRead: true));
-        // listing access so sharing applies, and read sharing only: a program that has it open to write or delete fails
-        // this, and none can open it that way later
+        // read sharing only, so nothing with it open to write or delete passes, and nothing opens it that way later
         var held = OpenLinkItself(full, ListDirectory | ReadControl | ReadAttributes | Synchronize, ShareRead);
         if (held.IsInvalid)
         {

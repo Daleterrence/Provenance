@@ -9,7 +9,6 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// the views use DynamicResource for every colour, so swapping the palette restyles open windows
 internal static class AppTheme
 {
     public const string Dark = "dark";
@@ -43,8 +42,6 @@ internal static class AppTheme
             else merged.Add(palette);
         }
 
-        // MaterialDesign's own controls (fields, switches, checks, menus, scrollbars) follow along. Done even when the
-        // palette's already in, as MaterialDesign starts out on its own colours
         try
         {
             var helper = new PaletteHelper();

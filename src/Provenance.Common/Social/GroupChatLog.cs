@@ -11,13 +11,10 @@ public sealed record GroupChatEntry(string Id, long Time, string Name, string Te
     public static GroupChatEntry Mine(string name, string text) =>
         new(HookFiles.NewToken(), DateTimeOffset.UtcNow.ToUnixTimeSeconds(), name, text, true);
 
-    // a line without a time of its own gets now
     public static GroupChatEntry From(GroupChatLine l) =>
         new(HookFiles.NewToken(), l.Time > 0 ? l.Time : DateTimeOffset.UtcNow.ToUnixTimeSeconds(), l.Name, l.Text, l.Me);
 }
 
-// every group's chat lines kept on this PC, so a chat opened again (or after a restart) shows what came before. It's
-// only ever Provenance's own copy, POL keeps none
 public sealed class GroupChatLog
 {
     public const int KeepPerGroup = 1000;
@@ -25,7 +22,6 @@ public sealed class GroupChatLog
     private readonly EncryptedJsonFile<Dictionary<string, List<GroupChatEntry>>>? _file;
     private readonly Dictionary<string, List<GroupChatEntry>> _groups = new(StringComparer.OrdinalIgnoreCase);
 
-    // format constant, the same deal as the message log's
     private static readonly byte[] Entropy = Encoding.ASCII.GetBytes("Provenance PlayOnline group chat log v1");
 
     public GroupChatLog(string profileId, string? root = null)
@@ -48,7 +44,6 @@ public sealed class GroupChatLog
     public bool Dirty { get => _dirty; private set => _dirty = value && !_closed; }
     public string ProfileId { get; } = "";
     private DateTime _savedAt;
-    // a busy chat brings lines every second, and every save re-encrypts every group's whole log
     public static readonly TimeSpan SaveEvery = TimeSpan.FromSeconds(5);
 
     public void Add(string group, IEnumerable<GroupChatEntry> lines)
@@ -62,7 +57,6 @@ public sealed class GroupChatLog
         SaveIfDue(DateTime.UtcNow);
     }
 
-    // from the last try, not the last save that worked, so one that keeps failing isn't tried every half second
     public void SaveIfDue(DateTime now)
     {
         if (!Dirty || now - _savedAt < SaveEvery) return;
@@ -93,7 +87,6 @@ public sealed class GroupChatLog
         return true;
     }
 
-    // the account's gone and so are its files, so nothing this holds is ever written again
     public void Discard()
     {
         _closed = true;

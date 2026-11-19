@@ -12,7 +12,6 @@ static void json_str(char *out, int cap, const char *s)
     out[o++] = '"';
     out[o] = 0;
 }
-/* keeps newlines as \n where json_str makes them spaces, message text needs them */
 static int json_text(char *out, int cap, const char *s)
 {
     int o = 0;
@@ -30,8 +29,6 @@ static int json_text(char *out, int cap, const char *s)
     out[o] = 0;
     return o;
 }
-/* the longest prefix of w (n chars) whose converted length is at most max.
-   len(k) is how long its first k come out, and only ever grows with k */
 static int json_cut(WCHAR *w, int n, int max, int (*len)(WCHAR *w, int k, BYTE *b), BYTE *b)
 {
     int lo = 0, hi = n;
@@ -49,8 +46,6 @@ static int json_utf8_len(WCHAR *w, int k, BYTE *b)
     (void)b;
     return k > 0 ? WideCharToMultiByte(CP_UTF8, 0, w, k, NULL, 0, NULL, NULL) : 0;
 }
-/* POL's Shift-JIS (EU Latin extension too) to UTF-8 via svc 0xa38. Names and the 0x180 byte mail body fit the stack buffers,
-   anything longer goes to the heap */
 static void pol_utf8(BYTE *b, const char *src, int len, char *out, int cap)
 {
     char stk[0x182], *tmp = stk;
@@ -67,7 +62,7 @@ static void pol_utf8(BYTE *b, const char *src, int len, char *out, int cap)
         memset(wstk, 0, ((size_t)len + 2) * sizeof(WCHAR));
     }
     if (tmp && w) {
-        memcpy(tmp, src, (size_t)len);                  /* svc 0xa38 has no bound, so the copy ends in two NULs */
+        memcpy(tmp, src, (size_t)len);
         pc_sjis_to_wide(b, w, tmp, WIDE_GETA);
         w[len + 1] = 0;
         n = json_cut(w, lstrlenW(w), cap - 1, json_utf8_len, NULL);
@@ -86,8 +81,6 @@ static int json_sjis_len(WCHAR *w, int k, BYTE *b)
     w[k] = keep;
     return n;
 }
-/* UTF-8 to POL's Shift-JIS through svc 0xa40, cut at whole characters to cap. Gives back how many bytes it came to, 0 when
-   there's nothing or no room */
 static int pol_sjis(BYTE *b, const char *src, char *out, int cap)
 {
     WCHAR *w;
@@ -129,7 +122,6 @@ static void json_sjis_copy(char *out, const char *src, int cap)
     out[i] = 0;
 }
 
-/* POL's Shift-JIS (with the Latin extension the EU tables use) -> UTF-8 through svc 0xa38, cut at u8cap -> JSON */
 static void json_pol(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
 {
     static WCHAR w[0x420];
@@ -139,7 +131,7 @@ static void json_pol(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
     if (u8cap > (int)sizeof u8) u8cap = (int)sizeof u8;
     u8[0] = 0;
     if (sj && sj[0] && u8cap > 1) {
-        lstrcpynA(tmp, sj, sizeof tmp - 2);             /* svc 0xa38 has no bound, so the input gets capped */
+        lstrcpynA(tmp, sj, sizeof tmp - 2);
         memset(w, 0, sizeof w);
         pc_sjis_to_wide(b, w, tmp, WIDE_GETA);
         w[0x41f] = 0;
@@ -150,14 +142,12 @@ static void json_pol(BYTE *b, const char *sj, int u8cap, char *js, int jscap)
     json_text(js, jscap, u8);
 }
 
-/* compact JSON writer over a growing buffer. A level never opened with jw_obj or jw_arr is a bare list of members,
-   which is how pieces spliced into a bigger object are built */
 #define JW_DEPTH 12
 #define JW_MAX 0x4000000
 typedef struct {
     char *p;
     int n, cap, depth, fail;
-    BYTE seen[JW_DEPTH];     /* this level's had something written to it */
+    BYTE seen[JW_DEPTH];
     char close[JW_DEPTH];
 } jw;
 
@@ -170,7 +160,6 @@ static void jw_free(jw *w)
     }
     memset(w, 0, sizeof *w);
 }
-/* where the next need bytes (and the NUL) go, NULL when it's out of memory. After that nothing more gets written */
 static char *jw_room(jw *w, int need)
 {
     if (w->fail) return NULL;
@@ -254,7 +243,6 @@ static void jw_raw(jw *w, const char *key, const char *s)
     jw_key(w, key);
     jw_put(w, s, lstrlenA(s));
 }
-/* members or elements somebody else built, no-op when empty. The comma's mine */
 static void jw_splice(jw *w, const char *s, int n)
 {
     if (n <= 0) return;
@@ -295,8 +283,6 @@ static void jw_pol(jw *w, const char *key, BYTE *b, const char *sj, int u8cap, i
     json_pol(b, sj, u8cap, o, cap);
     w->n += lstrlenA(o);
 }
-/* copies the finished build into a fixed buffer. One that failed or doesn't fit leaves it empty and logs it,
-   so a cut-off member can't get spliced into the snapshot */
 static int jw_fit(const jw *w, char *dst, int cap, const char *what)
 {
     dst[0] = 0;
@@ -307,7 +293,6 @@ static int jw_fit(const jw *w, char *dst, int cap, const char *what)
     if (w->n) memcpy(dst, w->p, (size_t)w->n + 1);
     return 1;
 }
-/* {"token":...,"state":"..."} left open for whatever else the job has to say */
 static void jw_job(jw *w, const char *key, const char *token, const char *state)
 {
     jw_obj(w, key);

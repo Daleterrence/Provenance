@@ -1,5 +1,4 @@
 
-/* prof_001, the FFXI table (title 1). z_phead's what a search hit gets added from */
 static pdb_schema *g_ch_pib;
 static int profiles_character_check_schema(BYTE *b, pdb_schema *s)
 {
@@ -22,12 +21,10 @@ static pdb_schema *profiles_character_load_pib(BYTE *b)
     return g_ch_pib;
 }
 
-/* the viewer's page is 100, and at 1000 or more it doesn't fetch at all */
 #define SEARCH_MAX 100
 #define SEARCH_TOO_MANY 1000
 enum { SK_HANDLE, SK_HID, SK_CHARACTER };
 static const char *const g_srch_kinds[] = { "handle", "hid", "character" };
-/* name is z_phead's handle name, what AddFriend gets whatever the kind */
 typedef struct {
     DWORD lo, hi;
     int slot;
@@ -71,7 +68,6 @@ static void profiles_search_done(const char *state)
     g_snap_dirty = 1;
 }
 static void profiles_search_abandon(BYTE *b) { db_job_abandon(b, &g_search); }
-/* an H-ID as the viewer shows it (00-1234567) or just the number: '-' and spaces go, then 1-13 digits */
 static int profiles_hid_parse(const char *s, unsigned __int64 *out)
 {
     unsigned __int64 v = 0;
@@ -124,8 +120,6 @@ static void profiles_search_request(BYTE *b)
     g_srch_pib = k == SK_CHARACTER ? profiles_character_load_pib(b) : profile_db_load_pib(b);
     if (!g_srch_pib) { profiles_search_done("failed:no schema"); return; }
     memset(&g_search.cond[0], 0, sizeof g_search.cond[0]);
-    /* the clauses are the viewer's, from the .pfb files. The H-ID goes back out as a plain number like svc 0x784
-       leaves it, and INITCAP is how FFXI names are kept */
     if (k == SK_HANDLE) {
         wsprintfA(g_srch_clause, "z_up_name=UPPER(\x04%s\x04)", val);
     } else if (k == SK_HID) {
@@ -163,7 +157,6 @@ static void profiles_search_pump(BYTE *b, int ctl)
         if ((int)out[0] < 0) { profiles_search_done("done"); return; }
         base_log("friends: search %d hits%s\r\n", (int)out[1], out[2] ? " (too many)" : "");
         g_s.search_total = (int)out[1] > 0 ? (int)out[1] : 0;
-        /* the viewer goes by the too-many flag before it looks at the count */
         if (out[2] || (int)out[1] >= SEARCH_TOO_MANY) { g_s.search_many = 1; profiles_search_done("done"); return; }
         if ((int)out[1] <= 0) { profiles_search_done("done"); return; }
         g_srch_set = out[0];
@@ -191,7 +184,6 @@ static void profiles_search_pump(BYTE *b, int ctl)
         h->slot = pc_friend_slot(fr);
         memcpy(h->name, fr->name, 15);
         if (g_s.search_kind == SK_CHARACTER) {
-            /* prof_001 has no profile picture. The world stays out of a Private record */
             it = profile_db_get(b, g_srch_pib, "z_name", (pdb_rec *)rec);
             if (it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, 0x40))
                 json_sjis_copy(h->chname, it->v.str, sizeof h->chname);
@@ -214,8 +206,6 @@ static db_job g_prof = { .job = -1, .state = g_s.prof_state, .cap = sizeof g_s.p
 static int g_prof_row;
 static unsigned __int64 g_prof_hid;
 static char *g_prof_json;
-/* game slots (z_phead, or the friend row) from the last 16 profiles read, by H-ID. The app shows a profile again from
-   its own copy and the tabs still need them */
 #define PROF_SLOTS_KEPT 16
 static struct { unsigned __int64 hid; pol_game slots[8]; } g_prof_slots[PROF_SLOTS_KEPT];
 static int g_prof_slots_next;
@@ -224,7 +214,6 @@ static const pol_game *profiles_slots_for(unsigned __int64 hid)
     for (int i = 0; hid && i < PROF_SLOTS_KEPT; i++) if (g_prof_slots[i].hid == hid) return g_prof_slots[i].slots;
     return NULL;
 }
-/* NULL forgets the handle's */
 static void profiles_slots_keep(unsigned __int64 hid, const pol_game *src)
 {
     int i = 0;
@@ -232,7 +221,7 @@ static void profiles_slots_keep(unsigned __int64 hid, const pol_game *src)
     while (i < PROF_SLOTS_KEPT && g_prof_slots[i].hid != hid) i++;
     if (i == PROF_SLOTS_KEPT) {
         if (!src) return;
-        for (i = 0; i < PROF_SLOTS_KEPT && g_prof_slots[i].hid; i++) ;   /* a forgotten one's free first */
+        for (i = 0; i < PROF_SLOTS_KEPT && g_prof_slots[i].hid; i++) ;
         if (i == PROF_SLOTS_KEPT) {
             i = g_prof_slots_next;
             g_prof_slots_next = (g_prof_slots_next + 1) % PROF_SLOTS_KEPT;
@@ -268,7 +257,6 @@ static void profiles_profile_build(BYTE *b)
     jw_int(&w, "mailState", st);
     it = profile_db_get(b, s, "z_hid", rec);
     memset(hid, 0, sizeof hid);
-    /* the viewer prints the record's low 32 bits, or the H-ID it asked for when that's 0 (a hidden one) */
     if (pc_has(b, SV_FORMAT_HID)) {
         DWORD lo = it ? (DWORD)it->v.u64 : 0, hi = 0;
         if (!lo) { lo = (DWORD)g_prof_hid; hi = (DWORD)(g_prof_hid >> 32); }
@@ -309,8 +297,6 @@ static void profiles_profile_build(BYTE *b)
         jw_end(&w);
     }
     jw_end(&w);
-    /* the FFXI tabs: z_phead's slots like the viewer (readable whatever the level), else the friend row's. Only title
-       1, other games' profiles never get a tab here */
     {
         pol_friend_copy fr;
         pdb_item *ph = profile_db_get(b, s, "z_phead", rec);
@@ -388,7 +374,6 @@ static void profiles_profile_request(BYTE *b)
     if (!peers_get_friend(b, row, &fr)) { profiles_profile_done("failed:no such friend"); return; }
     peers_friend_key(b, &fr.f, k);
     if (lstrcmpA(k, key) != 0) { profiles_profile_done("failed:friend list changed"); return; }
-    /* a row still waiting for an answer has no handle id yet, so no query that could find someone else */
     if (fr.f.flags & FRIEND_PENDING) { profiles_profile_done("failed:pending"); return; }
     if (!(s = profile_db_load_pib(b)) || !profile_db_load_pfb(b)) { profiles_profile_done("failed:no schema"); return; }
     unsigned __int64 hid = pc_friend_hid(&fr.f);
@@ -420,8 +405,6 @@ static void profiles_profile_pump(BYTE *b, int ctl)
     profiles_profile_done("done");
 }
 
-/* prof_001 (title 1) by z_ctsid and z_ctid: a friend's FFXI character, found like the viewer's profile tab does,
-   for one online now and one of a friend's tabs */
 typedef struct ffxi_read {
     db_job j;
     const char *prefix;
@@ -451,9 +434,6 @@ static int profiles_num_field_ok(BYTE *b, pdb_schema *s, const char *name)
     const pdb_field *f = profile_db_field(s, name, &idx);
     return f && f->type == 3 && pc_pdb_field_index(b, s, name) == idx;
 }
-/* nameState 0 shown, 1 withheld, 2 empty. Like the viewer, only the record level says whether the name's visible,
-   z_name's own level just goes in the log. The zone's states are the FFXI tab's, and a schema without z_zoneid
-   still gives the name */
 static void profiles_character_build(BYTE *b, pdb_rec *rec)
 {
     char nm[0x100], wn[0x100];
@@ -504,8 +484,6 @@ static int profiles_ffxiprofile_check_schema(BYTE *b, pdb_schema *s)
         if (!profiles_num_field_ok(b, s, g_fp_nums[i][0])) return 0;
     return 1;
 }
-/* states as the handle profile's, and prof_001 has no per-field levels so the record level decides them all. Type 3
-   is a signed short */
 static void profiles_ffxiprofile_build(BYTE *b, pdb_rec *rec)
 {
     char nm[0x100], wn[0x100];
@@ -610,8 +588,6 @@ static void profiles_character_request(BYTE *b)
 }
 static void profiles_character_pump(BYTE *b, int ctl) { ffxi_read_pump(b, &g_ch_read, ctl, profiles_character_request); }
 
-/* a friend's FFXI character for their profile's tabs, the viewer's prof_001 read. The app only says which slot, the
-   ids come from the friend's own slots */
 static void profiles_ffxiprofile_request(BYTE *b)
 {
     char buf[128], *p, *tok, *rows, *key, *sl, k[17];
@@ -639,7 +615,6 @@ static void profiles_ffxiprofile_request(BYTE *b)
     peers_friend_key(b, &fr.f, k);
     if (lstrcmpA(k, key) != 0) { profiles_ffxiprofile_done("failed:friend list changed"); return; }
     if (fr.f.flags & FRIEND_PENDING) { profiles_ffxiprofile_done("failed:pending"); return; }
-    /* the slots the tabs came from when it's the same handle, like the viewer looks in z_phead first */
     slot = profiles_slots_for(pc_friend_hid(&fr.f));
     slot = (slot ? slot : fr.f.games) + n;
     if (!(slot->flags & 1) || slot->title != 1) { profiles_ffxiprofile_done("failed:no character"); return; }
@@ -652,7 +627,6 @@ static void profiles_ffxiprofile_request(BYTE *b)
     base_log("ffxiprofile: row %d slot %d\r\n", row, n);
     ffxi_read_go(b, &g_fp_read);
 }
-/* a friend's tab or one of my own cards, same read and job */
 static void my_profile_ffxi_request(BYTE *b);
 static void profiles_ffxiprofile_next(BYTE *b)
 {
@@ -661,7 +635,6 @@ static void profiles_ffxiprofile_next(BYTE *b)
 }
 static void profiles_ffxiprofile_pump(BYTE *b, int ctl) { ffxi_read_pump(b, &g_fp_read, ctl, profiles_ffxiprofile_next); }
 
-/* a cheap look at who's on the friend list, so the hits' marks only get worked out again when it changes */
 static DWORD profiles_friends_sig(BYTE *b)
 {
     DWORD h = 2166136261u;

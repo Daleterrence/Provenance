@@ -3,8 +3,6 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Mirror;
 
-// The newest pointer time taken for each region, so an older signed pointer can't be served again. It sits next to
-// viewer-builds (which outlives a reinstall) and never throws, a file that won't read means nothing's remembered
 public sealed class MirrorSeen(string? path, DateTimeOffset floor)
 {
     private const int MaxFileBytes = 64 * 1024;
@@ -17,7 +15,6 @@ public sealed class MirrorSeen(string? path, DateTimeOffset floor)
 
     public DateTimeOffset Floor => floor;
 
-    // an equal time passes, that's the same pointer fetched again
     public bool Accept(string region, DateTimeOffset published)
     {
         lock (_gate)
@@ -46,7 +43,6 @@ public sealed class MirrorSeen(string? path, DateTimeOffset floor)
         return new(StringComparer.Ordinal);
     }
 
-    // two copies writing at once can lose one's time, which only ever lowers a mark
     private void Write(Dictionary<string, DateTimeOffset> seen)
     {
         if (path is null) return;

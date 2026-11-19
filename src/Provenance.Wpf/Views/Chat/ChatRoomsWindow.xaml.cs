@@ -11,7 +11,6 @@ using Provenance.Wpf.ViewModels.Social;
 
 namespace Provenance.Wpf.Views.Chat;
 
-// unowned like the friends window, so it stays up with the main window in the tray. Closing it leaves the room
 public partial class ChatRoomsWindow : AppWindow
 {
     private readonly ChatRoomsViewModel _vm;
@@ -31,10 +30,8 @@ public partial class ChatRoomsWindow : AppWindow
         };
     }
 
-    // Esc in a room is for the room
     protected override bool OnEscape() => !_vm.InRoom && base.OnEscape();
 
-    // the session's going, so the room goes with it and no PART is sent
     public void CloseQuietly()
     {
         _quiet = true;
@@ -42,7 +39,7 @@ public partial class ChatRoomsWindow : AppWindow
         Close();
     }
 
-    // in a room a close is turned down and the question asked after it, as a window stuck inside Closing can't be closed by the app exiting
+    // a window stuck inside Closing can't be closed by the app exiting
     protected override void OnClosing(CancelEventArgs e)
     {
         if (_vm.InRoom && !_quiet && !_leaving && !WindowOwner.AppClosing)
@@ -61,12 +58,10 @@ public partial class ChatRoomsWindow : AppWindow
         try
         {
             if (_closed) return;
-            // closed from the taskbar it can be minimised or behind something, and the question goes over the active window
             WindowManager.BringBack(this);
             if (_vm.InRoom && !_vm.ConfirmLeave()) return;
         }
         finally { _asking = false; }
-        // the app or the session can have taken the window while the question was up
         if (_closed) return;
         _leaving = true;
         try { Close(); }
@@ -80,7 +75,6 @@ public partial class ChatRoomsWindow : AppWindow
             _vm.EnterCommand.Execute(null);
     }
 
-    // a member's Kick and Designate, only for the room master and never on my own row
     private void OnMemberMenu(object sender, ContextMenuEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: ChatMemberItem m, ContextMenu: { } menu } || !_vm.CanKick(m))
@@ -115,7 +109,6 @@ public partial class ChatRoomsWindow : AppWindow
         });
     }
 
-    // the viewer's 12 text colours, and none
     private void OnColourMenu(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement button) return;
@@ -137,7 +130,6 @@ public partial class ChatRoomsWindow : AppWindow
         return menu;
     }
 
-    // the viewer's emoticon palette, its first page of 23
     private void OnEmoteMenu(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement button) Menus.Toggle(button, () => EmotePopup(button));
@@ -145,7 +137,6 @@ public partial class ChatRoomsWindow : AppWindow
 
     internal System.Windows.Controls.Primitives.Popup EmotePopup(FrameworkElement button)
     {
-        // a set width only fits 8 across until a scaled screen rounds the buttons up
         var panel = new System.Windows.Controls.Primitives.UniformGrid { Columns = 8 };
         var none = new Button { Content = "NO", Width = 34, Height = 34, Margin = new Thickness(2), Padding = new Thickness(0),
                                 Style = (Style)FindResource("IconButton"), FontSize = 11 };

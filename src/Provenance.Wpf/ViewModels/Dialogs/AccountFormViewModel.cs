@@ -10,14 +10,12 @@ public sealed record AccountFormOutcome(AccountDialogResult? Result, FormProblem
 
 public sealed record AccountChoice(string Id, string Label);
 
-// The passwords come in through TrySave and go straight back out in the result, nothing here holds one
 public sealed partial class AccountFormViewModel : ObservableObject
 {
     private static readonly string[] Sources = ["", OtpSources.Bitwarden, OtpSources.OnePassword, OtpSources.KeePassXC];
 
     private readonly bool _required;
     private readonly string _savedAccount;
-    // null until 1Password's tool has listed them, or when it couldn't
     private IReadOnlyList<OnePasswordAccount>? _accounts;
     private readonly LatestOnly _toolWork = new();
     private string? _tool;
@@ -67,7 +65,6 @@ public sealed partial class AccountFormViewModel : ObservableObject
 
     public bool ItemVisible => OtpSource.Length > 0;
 
-    // the self-hosted choice has no address of its own, so it's asked for
     public bool BwUrlVisible => BwServer is "";
 
     public bool LoginEnabled => !LoginWaiting;
@@ -79,7 +76,6 @@ public sealed partial class AccountFormViewModel : ObservableObject
     {
         _required = !edit || requireAll;
         _savedAccount = otpAccount;
-        // before its first login the name's a placeholder ("New account"), which reads badly after "Edit"
         Header = !edit ? "Add account"
                : string.IsNullOrWhiteSpace(accountName) || accountName.StartsWith("New account", StringComparison.Ordinal)
                    ? "Edit account" : $"Edit {accountName}";
@@ -88,7 +84,6 @@ public sealed partial class AccountFormViewModel : ObservableObject
         _useOtp = useOtp;
         _otpSource = Sources.Contains(otpSource) ? otpSource : "";
         _otpItem = otpItem ?? "";
-        // IDs typed here the last time it was open, never a saved value and never a password
         _polId = polId;
         _squareEnixId = squareEnixId;
         (_otpItemHint, _otpSourceHelp) = OtpSources.Describe(_otpSource);
@@ -120,14 +115,12 @@ public sealed partial class AccountFormViewModel : ObservableObject
                                            OtpSource.Length > 0 ? OtpItem.Trim() : "", ChosenAccount()), null);
     }
 
-    // with one account there's nothing to pick, and when they couldn't be listed the saved choice stays
     internal string ChosenAccount() =>
         OtpSource != OtpSources.OnePassword ? ""
         : _accounts is null ? _savedAccount
         : _accounts.Count > 1 && SelectedAccount is { } picked ? picked.Id
         : "";
 
-    // a copy found here gets checked again before each use, this is only so the dialog can offer to install one
     internal async Task LookForToolAsync()
     {
         _toolWork.Cancel();
@@ -188,7 +181,6 @@ public sealed partial class AccountFormViewModel : ObservableObject
         ToolButtonVisible = ToolButtonLabel is not null;
         LoginPanelVisible = view == ToolView.Ready && tool == ToolFacts.Bitwarden;
         if (!LoginPanelVisible) return;
-        // a login window that's still open gets watched again, and nothing's left greyed out once there isn't one
         if (LoginRunning() is { } running) _ = WatchLoginAsync(running);
         else ShowLoginWaiting(false);
     }
@@ -210,7 +202,6 @@ public sealed partial class AccountFormViewModel : ObservableObject
         await WatchLoginAsync(LogIn(server));
     }
 
-    // only stops watching when the dialog closes or the source changes, the login itself carries on and locks after
     private async Task WatchLoginAsync(Task<BitwardenLogin> login)
     {
         var mine = _toolWork.Begin();

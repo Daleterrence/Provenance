@@ -16,7 +16,6 @@ public partial class InputDialog : AppWindow
         InitializeComponent();
     }
 
-    // the trimmed text, or null when cancelled
     public static string? Prompt(Window? owner, string title, string prompt, string initialValue = "",
                                  int maxLength = 64, bool allowEmpty = false, Func<string, string?>? validate = null)
     {
@@ -34,7 +33,6 @@ public partial class InputDialog : AppWindow
         return dlg.ShowDialogOver(owner) == true ? dlg.InputBox.Text.Trim() : null;
     }
 
-    // the password as typed (never trimmed), or null when cancelled
     public static string? PromptSecret(Window? owner, string title, string prompt, int maxLength = 64,
                                        Func<string, string?>? validate = null)
     {

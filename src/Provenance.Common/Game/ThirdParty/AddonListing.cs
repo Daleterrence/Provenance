@@ -9,8 +9,7 @@ public sealed record AddonListing(string Key, string Name, string? Version, stri
 
     public static AddonListing Named(string key) => new(key, key, null, null, null, null);
 
-    // no control, format or line break characters, so a name can't bring a bidi override, a zero-width space or a tag
-    // character into the UI. Runes, since tags are surrogate pairs
+    // no control, format or line break characters, so a name can't bring a bidi override, a zero-width space or a tag character into the UI
     public static string? Clean(string? s)
     {
         if (s is null) return null;

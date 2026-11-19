@@ -5,7 +5,7 @@ namespace Provenance.Common.Patcher;
 public sealed class PatchSession(PatchProduct product, IPatchConnector connector, string serverName = "update server", IPAddress? pinned = null)
 {
     public const long KeepAliveMs = 60_000;
-    public const long MaxFileListBytes = 256L << 20;   // the biggest file list is about 6 MB
+    public const long MaxFileListBytes = 256L << 20;
 
     public PatchTarget Target { get; private set; } = new(product.Host, product.Port, pinned);
 
@@ -23,7 +23,6 @@ public sealed class PatchSession(PatchProduct product, IPatchConnector connector
         return redirect;
     }
 
-    // null when s1 has no address, then Target and closeFirst are as they were
     public PatchConnection? Follow(PatchProtocol.VersionReply r, IDisposable? closeFirst, CancellationToken ct)
     {
         var next = connector.Open(new PatchTarget(r.S1, product.Port, Optional: true), closeFirst, ct);
@@ -37,7 +36,6 @@ public sealed class PatchSession(PatchProduct product, IPatchConnector connector
     public static void UnpackFileList(Stream packed, Stream text, CancellationToken ct, long max = MaxFileListBytes) =>
         PatchCodecs.Lzss(packed, text, ct, max);
 
-    // one request at a time, 64 KB at most. typeByte takes the first byte of the first slice as the file's type and returns it
     public byte Download(PatchServerLink link, string path, long size, Stream to, bool typeByte, Action<long>? moved, CancellationToken ct)
     {
         byte type = 0;
@@ -54,7 +52,6 @@ public sealed class PatchSession(PatchProduct product, IPatchConnector connector
         return type;
     }
 
-    // POL's keep-alive, a version request with no local version once the connection's been quiet for over a minute
     public void KeepAliveIfIdle(PatchServerLink link, long now, CancellationToken ct)
     {
         if (now - link.LastRequestTicks > KeepAliveMs) AskVersion(link, "", ct);

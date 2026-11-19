@@ -17,11 +17,8 @@ public interface ILaunchProfiles
 
 public static class LaunchProfiles
 {
-    // a launch finds a profile by its name in any case and trimmed, so these do too
     internal static bool Same(string? a, string b) => a is not null && a.Trim().Equals(b.Trim(), StringComparison.OrdinalIgnoreCase);
 
-    // what used the old name goes to the new one, or back to the Windower/Ashita page's pick on a delete.
-    // The platform's own chosen profile is its own to change
     internal static void Repoint(ISettingsService settings, ThirdPartyHook platform, string old, string? replacement,
                                  Action<LauncherSettings> repointChosen)
     {

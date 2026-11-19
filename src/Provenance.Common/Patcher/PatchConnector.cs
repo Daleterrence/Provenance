@@ -9,7 +9,6 @@ public sealed record PatchConnection(PatchServerLink Link, IPAddress Address);
 
 public interface IPatchConnector
 {
-    // closeFirst goes once the address is known and before the connect, null only when an optional target has no address
     PatchConnection? Open(PatchTarget target, IDisposable? closeFirst, CancellationToken ct);
 }
 

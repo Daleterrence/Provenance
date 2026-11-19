@@ -22,7 +22,6 @@ public partial class AshitaCard : ObservableObject
         hook.AshitaReload += Load;
     }
 
-    // the boot configuration took a new name, so the lists, the accounts and the Game page show it
     internal event Action? Renamed;
 
     public ObservableCollection<string> AshitaScripts { get; } = new();

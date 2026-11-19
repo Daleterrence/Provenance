@@ -36,8 +36,6 @@ internal sealed class WindowerPluginUpdate(WindowerUpdateFolder job, WindowerSer
         return WindowerFiles.FileVersion(dll, cache) != p.Version;
     }
 
-    // Zip first and the DLL last, once every file's in, so anything short gets tried again. Like Windower, an update
-    // asks for the zip whatever the DLL got
     public async Task<WindowerFetchOutcome> FetchAsync(WindowerPlugin p, string dll, bool install, List<string> written)
     {
         if (!job.Ready(dll)) return WindowerFetchOutcome.Broken;
@@ -77,8 +75,7 @@ internal sealed class WindowerPluginUpdate(WindowerUpdateFolder job, WindowerSer
         }
     }
 
-    // Windower extracts with Path.Combine and nothing else, so a zip could write anywhere. One entry that would land
-    // outside plugins\ and none of it goes in
+    // Windower extracts with Path.Combine and nothing else, so one entry that would land outside plugins\ stops the lot
     private bool ExtractZip(string zipFile, string plugin, bool skipThumbs, List<string> written)
     {
         using var zip = ZipFile.OpenRead(zipFile);

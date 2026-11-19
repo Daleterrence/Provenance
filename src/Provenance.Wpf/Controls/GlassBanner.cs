@@ -24,7 +24,6 @@ public class GlassBanner : ContentControl
         LayoutUpdated += (_, _) => Follow();
     }
 
-    // the element whose content is under the banner, drawn behind it and blurred
     public FrameworkElement? Backdrop { get => (FrameworkElement?)GetValue(BackdropProperty); set => SetValue(BackdropProperty, value); }
 
     public override void OnApplyTemplate()

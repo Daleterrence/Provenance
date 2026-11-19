@@ -2,14 +2,11 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Security;
 
-// Provenance runs as admin, so a write into a folder a standard user could own holds every folder down to the file,
-// refuses links and checks again right before the move
+// a write into a folder a standard user could own holds every folder down to the file and checks again before the move
 public static class SafeWrite
 {
     public enum Backup { None, Keep, DropOld }
 
-    // backup null moves over whatever's there, otherwise the policy is asked under the held folders before anything
-    // is written
     public static void Replace(string path, byte[] bytes, string top, Func<string, Backup>? backup = null,
                                IEnumerable<string>? refuse = null, bool flushToDisk = false)
     {
@@ -45,14 +42,12 @@ public static class SafeWrite
         }
         catch
         {
-            // a Replace that failed halfway can leave the temp file as the only copy
             if (!replacing || File.Exists(full)) FileDelete.Try(tmp);
             throw;
         }
         if (plan == Backup.DropOld) File.Delete(bak);
     }
 
-    // for folders the caller already holds: the write goes in a temp, the held folders are checked, then it's moved over
     public static void Replace(FolderPins pins, string dir, string path, Action<FileStream> write)
     {
         AtomicFile.Build(path, tmp =>
@@ -62,8 +57,6 @@ public static class SafeWrite
         });
     }
 
-    // the first name nameFor gives (1, 2, 3...) that isn't taken gets the bytes and is returned, never over a file
-    // that's there. null if none of the first 999 is free
     public static string? CreateFree(string dir, byte[] bytes, Func<int, string> nameFor)
     {
         LinkCheck.Refuse(dir);

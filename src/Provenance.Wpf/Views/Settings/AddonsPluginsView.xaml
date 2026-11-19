@@ -7,7 +7,6 @@
              xmlns:vm="clr-namespace:Provenance.Wpf.ViewModels.Settings"
              TextElement.Foreground="{DynamicResource Text.1}">
     <UserControl.Resources>
-        <!-- Addons, Plugins and Ashita's POL plugins across the top, one list each, sharing the width evenly -->
         <Style x:Key="SubTabs" TargetType="ListBox">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -48,8 +47,6 @@
             </Setter>
         </Style>
 
-        <!-- the sub-tabs sit above the list but outside what scrolls, and beside the scroll bar rather than over it, so
-             they line up with the cards either way -->
         <ControlTemplate x:Key="UnderSubTabs" TargetType="ScrollViewer">
             <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,Auto">
                 <ListBox ItemsSource="{Binding Tabs}" SelectedIndex="{Binding Tab}" Style="{StaticResource SubTabs}" Margin="25,18,25,6"
@@ -61,7 +58,6 @@
             </Grid>
         </ControlTemplate>
 
-        <!-- "No addons found in ..." or no matches, gone when there's nothing to say -->
         <Style x:Key="ListNote" TargetType="TextBlock" BasedOn="{StaticResource Help}">
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Margin" Value="0,0,0,12" />
@@ -84,8 +80,6 @@
             </Border>
         </DataTemplate>
 
-        <!-- the top of the page is the first item in the list, so it scrolls away like the other tabs' pages do. The
-             sub-tabs stay put above it -->
         <DataTemplate DataType="{x:Type vm:AddonsPluginsViewModel}">
             <StackPanel>
                 <StackPanel.Style>
@@ -143,7 +137,6 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- the whole header row is the button, with a flat highlight across it and no shape of its own on the chevron -->
         <Style x:Key="SectionToggle" TargetType="ToggleButton">
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -176,7 +169,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- what init.txt, the init command or an Ashita script loads itself, with why its rows have no switch -->
         <DataTemplate DataType="{x:Type vm:AddonsSection}">
             <StackPanel Margin="28,2,28,8">
                 <ToggleButton IsChecked="{Binding IsOpen}" Style="{StaticResource SectionToggle}"
@@ -284,7 +276,6 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <!-- hidden rather than gone, so the folder buttons line up down the list -->
                     <ToggleButton Grid.Column="4" Margin="16,0,0,0" IsChecked="{Binding On}" IsEnabled="{Binding SwitchEnabled}"
                                   AutomationProperties.Name="{Binding Name}">
                         <ToggleButton.Style>
@@ -303,7 +294,6 @@
     </UserControl.Resources>
 
     <Grid RowDefinitions="*,Auto">
-        <!-- a full Windower install is a few hundred rows, so only the ones on screen get made -->
         <ItemsControl x:Name="List" ItemsSource="{Binding Items}" Focusable="False"
                       VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True">
             <ItemsControl.Template>
@@ -321,7 +311,6 @@
             </ItemsControl.ItemsPanel>
         </ItemsControl>
 
-        <!-- down here so a switch far down the list still shows what happened -->
         <Border Grid.Row="1" Style="{StaticResource FooterBar}"
                 Visibility="{Binding Status.Text, Converter={StaticResource NullToVisibilityConverter}}">
             <TextBlock Text="{Binding Status.Text}" behaviours:State.IsError="{Binding Status.IsError}" Style="{StaticResource StatusText}" TextWrapping="Wrap" FontSize="12" />

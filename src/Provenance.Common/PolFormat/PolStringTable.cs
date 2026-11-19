@@ -2,10 +2,8 @@ using System.Text;
 
 namespace Provenance.Common.PolFormat;
 
-// read from the user's own install, none of SE's text gets shipped
 public static class PolStringTable
 {
-    // the US licence frame's title, agreement and Article 8
     public const int AgreementNotice = 0x7011, AgreementText = 0x7012, AgreementArticle8 = 0x7013;
 
     public static IReadOnlyDictionary<int, string>? Load(string viewerDir)
@@ -24,8 +22,7 @@ public static class PolStringTable
         return null;
     }
 
-    // "PEX\0", the plain size at +4, then LSB-first LZ77 bits from +0x10 over a zeroed 0x1000 window.
-    // 0 = literal, 1 = 12-bit offset + 4-bit length + 2
+    // "PEX\0", the plain size at +4, then LSB-first LZ77 bits from +0x10 (0 = literal, 1 = 12-bit offset + 4-bit length + 2)
     public static byte[]? Unpex(byte[] d)
     {
         if (d.Length < 0x10 || d[0] != 'P' || d[1] != 'E' || d[2] != 'X' || d[3] != 0) return null;
@@ -51,13 +48,12 @@ public static class PolStringTable
             {
                 int off = Read(12), len = Read(4) + 2;
                 for (int i = 0; i < len && pos < end; i++, pos++)
-                    buf[pos] = buf[pos - 0x1000 + off];   // off counts from the window start, 0x1000 back from pos
+                    buf[pos] = buf[pos - 0x1000 + off];
             }
         }
         return buf.AsSpan(0x1000, n).ToArray();
     }
 
-    // records from +0x10: u16 size, u16 id, NUL-ended UTF-16LE text
     public static Dictionary<int, string> Table(byte[] raw)
     {
         var map = new Dictionary<int, string>();

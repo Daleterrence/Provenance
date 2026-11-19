@@ -5,7 +5,6 @@ namespace Provenance.Common.Game.Ashita;
 
 public sealed class AshitaProfiles(ISettingsService settings, string dir, int playOnline) : ILaunchProfiles
 {
-    // "<name>" is taken to mean <name>.ini
     public static string FileName(string name)
     {
         var n = name.Trim();
@@ -41,7 +40,6 @@ public sealed class AshitaProfiles(ISettingsService settings, string dir, int pl
     public string Add(string name) =>
         Path.GetFileName(AshitaBootFiles.Create(dir, FileName(name), fromExample: true, playOnline));
 
-    // a file really called " x.ini" wins, the trimmed name only stands in for padding that isn't in the file's name
     private string FileOf(string name) =>
         File.Exists(Path.Combine(AshitaBootFiles.Folder(dir), name)) ? name : name.Trim();
 

@@ -6,10 +6,8 @@ public static class MirrorPacks
 {
     public const long TargetSize = 64L * 1024 * 1024;
 
-    // wanted ranges closer than this go in one request, gap bytes and all
     public const long MaxGap = 1048576L;
 
-    // a file that'd take a non-empty pack past targetSize starts a new one, so a bigger file gets its own
     public static IReadOnlyList<(int First, int Count)> Group(IReadOnlyList<long> compressedSizes, long targetSize = TargetSize)
     {
         var groups = new List<(int First, int Count)>();

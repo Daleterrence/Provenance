@@ -11,7 +11,6 @@ public sealed partial class ProfileTab(int slot, string characterKey, string lab
     public ImageSource? Picture { get; init; }
     [ObservableProperty] private string _label = label;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Clickable))] private bool _isSelected;
-    // a tab whose read failed can be clicked again to retry
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Clickable))] private bool _failed;
     public bool Clickable => !IsSelected || Failed;
 }

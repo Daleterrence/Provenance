@@ -2,8 +2,7 @@ using System.Security.Cryptography;
 
 namespace Provenance.Common.Mirror;
 
-// What the publisher signs for each app release. Its own key signs the mirror's objects too and the envelope's magic
-// isn't signed, so Kind is what keeps a statement from passing as one of those (none of them has it)
+// Kind is what keeps a statement signed with this key from passing as a mirror object, the envelope's magic isn't signed
 public sealed record AppRelease(int Format, string Kind, string AppId, string Channel, string Version, string FileName, long Size,
                                 string Sha256, DateTimeOffset Published)
 {
@@ -13,7 +12,6 @@ public sealed record AppRelease(int Format, string Kind, string AppId, string Ch
     public const string Beta = "beta";
     public const int MaxBytes = 64 * 1024;
 
-    // the name vpk pack gives a full package, and the name the update server has it under
     public static string PackageName(string version, string channel) => $"{App}-{version}-{channel}-full.nupkg";
 
     public static string StatementName(string packageName) => packageName + ".sig";
@@ -29,7 +27,6 @@ public sealed record AppRelease(int Format, string Kind, string AppId, string Ch
         return v;
     }
 
-    // null for anything that isn't signed by a trusted key or doesn't read
     public static AppRelease? FromSigned(ReadOnlySpan<byte> blob, IReadOnlyDictionary<string, ECDsa> trusted)
     {
         if (blob.Length > MaxBytes || !SignedBlob.TryOpen(blob, trusted, out var payload)) return null;
@@ -37,8 +34,6 @@ public sealed record AppRelease(int Format, string Kind, string AppId, string Ch
         catch (InvalidDataException) { return null; }
     }
 
-    // Null when the package is exactly the release the statement signs, on a channel this copy takes, otherwise why not.
-    // The app, the publisher and the release check all share it, so none passes what another refuses
     public static string? Check(ReadOnlySpan<byte> blob, IReadOnlyDictionary<string, ECDsa> trusted, bool installedIsPrerelease,
                                 string assetVersion, string assetFileName, bool assetIsFull, string? packagePath)
     {

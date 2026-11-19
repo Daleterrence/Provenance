@@ -12,8 +12,6 @@ internal static class ReadmeDocument
     private static readonly double[] HeadingSizes = [22, 18, 15.5, 14, 13, 13];
     private static readonly Thickness BlockGap = new(0, 0, 0, 10), ItemGap = new(0, 0, 0, 4);
 
-    // WPF's elements belong to the thread that makes them, so the building stays here and gives the window room to
-    // breathe between blocks instead
     public static async Task<FlowDocument> BuildAsync(MarkdownDoc doc, Action<Uri> openLink, CancellationToken cancel)
     {
         var page = NewPage();

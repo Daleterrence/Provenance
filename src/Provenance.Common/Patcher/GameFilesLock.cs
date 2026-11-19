@@ -9,14 +9,12 @@ public static class GameFilesLock
 {
     public enum Job { Install, ViewerUpdate, GameUpdate, Repair, LargeAddressAware }
 
-    // a thread-held AdminLock, so call it from a worker and keep the work synchronous
     public static T Locked<T>(Job job, CancellationToken ct, IProgress<PatchProgress>? progress, Func<T> work)
     {
         using var gate = Lock(job, ct, progress);
         return work();
     }
 
-    // what goes after "Another copy of Provenance is". Null is a holder that hasn't said or has gone
     public static string Doing(Job? holder) => holder switch
     {
         Job.Install => "installing FINAL FANTASY XI",
@@ -29,7 +27,6 @@ public static class GameFilesLock
 
     internal static string WaitingText(Job? holder) => $"Waiting for another copy of Provenance to finish {Doing(holder)}...";
 
-    // one lock for every product (installs too), and a copy that dies mid-update lets go with its process
     public static IDisposable Lock(Job job, CancellationToken ct, IProgress<PatchProgress>? progress)
     {
         for (int waits = 0; ; waits++)
@@ -41,7 +38,6 @@ public static class GameFilesLock
         }
     }
 
-    // a quick look, for whether a repair could start now. The short wait lets another copy's own quick look go by
     public static bool LockFree()
     {
         using var gate = AdminLock.TryAcquire("update", TimeSpan.FromMilliseconds(150));
@@ -51,7 +47,6 @@ public static class GameFilesLock
     internal static IDisposable? TryLock(Job job, TimeSpan timeout, CancellationToken ct = default) =>
         AdminLock.TryAcquire("update", timeout, ct) is { } gate ? new Holding(gate, job) : null;
 
-    // the holder's pid and start time go in with the job, so a copy that died holding the lock can't speak for the next
     private static string RecordPath() => Path.ChangeExtension(AdminLock.PathFor("update"), ".job");
 
     public static Job? Holder()
@@ -85,7 +80,6 @@ public static class GameFilesLock
             catch (Exception e) { Log.Debug(e, "Could not note what the update lock is held for"); }
         }
 
-        // the record goes while the lock's still held, or it could take the next holder's with it
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;

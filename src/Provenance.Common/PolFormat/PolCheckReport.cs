@@ -5,12 +5,10 @@ namespace Provenance.Common.PolFormat;
 // one entry line of the report: <same|moved|notfound> <module> <old> <new> <required|optional> <name> [| why]...
 public sealed record PolCheckEntry(string Status, string Module, int Old, int? New, bool Required, string Name, string[] Notes);
 
-// What pol_check printed, one line per fact with fields split by single spaces
 public sealed record PolCheckReport(
     IReadOnlyDictionary<string, string> Modules, IReadOnlyList<PolCheckEntry> Entries, IReadOnlyDictionary<string, int[]> Summaries,
     string Result, int RequiredNotFound)
 {
-    // a report that's cut short is refused, never read as a pass
     public static PolCheckReport Parse(string text)
     {
         var modules = new Dictionary<string, string>();

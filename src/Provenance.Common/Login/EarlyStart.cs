@@ -6,7 +6,6 @@ using Serilog;
 
 namespace Provenance.Common.Login;
 
-// the viewer check has the status line to itself, so the start's lines wait here till it's answered
 internal sealed class HeldProgress(IProgress<LaunchProgress>? to)
 {
     private readonly object _gate = new();
@@ -41,8 +40,7 @@ internal sealed class HeldProgress(IProgress<LaunchProgress>? to)
     }
 }
 
-// pol.exe started through Windower or Ashita while the viewer check's still out, waiting for its go file. The chain
-// gets a thread of its own, Windower's turn belongs to the thread that took it
+// the chain gets a thread of its own, Windower's turn belongs to the thread that took it
 internal sealed class EarlyStart
 {
     internal delegate int? Chain(IProgress<LaunchProgress> progress, CancellationToken ct, Action<ProcessStamp> hookStarted);
@@ -117,7 +115,6 @@ internal sealed class EarlyStart
         }
     }
 
-    // an old process with this pid may have left a stop or go file, either would end this one or send it off early
     private void Found(int pid)
     {
         foreach (var name in new[] { HookContract.Files.Stop, HookContract.Files.Ended, HookContract.Files.Go }) HookFiles.Delete(pid, name);
@@ -128,21 +125,18 @@ internal sealed class EarlyStart
         }
         _pid = pid;
         _stamp = stamp;
-        // so another copy that's about to change the viewer's files can end it while it's only waiting
         try { File.WriteAllText(HookFiles.PathFor(pid, HookContract.Files.Prestart), stamp.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the early pol.exe for other copies"); }
         _found(stamp);
         Log.Information("Started pol.exe (pid {Pid}) ahead of the PlayOnline Viewer check, waiting for the login", pid);
     }
 
-    // false when the cancel came first
     internal bool Wait(CancellationToken ct)
     {
         try { _done.Wait(ct); return true; }
         catch (OperationCanceledException) { return false; }
     }
 
-    // under the lock another copy ends waiting pol.exe with, so it's either been stopped or it's mine to use
     internal bool HandOver(IDictionary<string, string?> env)
     {
         if (_pid is not { } pid || _stamp is not { } stamp) return false;
@@ -163,7 +157,6 @@ internal sealed class EarlyStart
         return true;
     }
 
-    // stops the chain, waits for it to unwind, then ends what it started. True when a pol.exe or hook was closed
     internal bool End()
     {
         lock (_endGate)

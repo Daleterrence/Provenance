@@ -25,6 +25,5 @@ public static class MirrorLayout
 
     public static string PointerKey(string region) => $"{region}/current";
 
-    // one file for every region, outside the region folders so a prune never looks at it
     public const string BuildsKey = "viewer-builds";
 }

@@ -15,7 +15,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-// what a run needs from the main window's own login and Play code
 internal sealed record MultiRunLinks(
     Action<SessionPhase> SetPhase,
     Func<bool> EnsureMemberAgreement,
@@ -52,7 +51,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         session.PhaseChanged += OnPhaseChanged;
     }
 
-    // each progress report restarts the clock, so the first account can download an update of any size
     private static readonly TimeSpan NoProgressLimit = TimeSpan.FromMinutes(10);
 
     private List<MultiAccountEntry> MultiEntries() =>
@@ -106,7 +104,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 
     internal Func<bool> UpdateBusy { get; set; } = () => false;
 
-    // concurrent, so the same button stays clickable as the stop while a run goes
     [RelayCommand(CanExecute = nameof(CanStartOrStop), AllowConcurrentExecutions = true)]
     private async Task StartAllAccountsAsync()
     {
@@ -170,7 +167,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             var lines = failures.Select(f => $"{f.Account.Name}: {f.Failure.Text}").Concat(_lateGameFailures).ToList();
             _lateGameFailures.Clear();
             if (unexpected != null) lines.Add(unexpected);
-            // a long run can end with the window in the tray
             RequestShow?.Invoke();
             _dialogs.Error("Multi-account mode", string.Join("\n", lines), offerLogs: true);
             return;
@@ -178,7 +174,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         if (result is { CloseApp: true }) RequestExit?.Invoke();
     }
 
-    // saved straight away so a crash can't lose it, and found by ID as Settings may have swapped the list mid-run
     private void ApplyFailure(MultiRunAccount account, AccountFailure failure)
     {
         Log.Information("Multi-account mode: {Account} failed ({Kind}): {Text}", account.ProfileId, failure.Kind, failure.Text);
@@ -234,7 +229,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
-            // the dispatcher refused the work (the app's closing), still a failure and never an escape
             Log.Error(ex, "Multi-account mode: {Account} could not run", account.ProfileId);
             return new AccountFailure(AccountFailureKind.Account, ErrorText.Of(ex, "Provenance couldn't start this account."));
         }
@@ -256,7 +250,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         {
             Log.Error(ex, "Multi-account mode: {Account} failed", account.ProfileId);
             await LetGoOfAccountAsync();
-            // no key file means every account would fail the same way, so the run stops (Install)
             return new AccountFailure(ex is CredentialKeyUnavailableException ? AccountFailureKind.Install : AccountFailureKind.Account,
                                       ErrorText.Of(ex, "Provenance ran into a problem with this account."));
         }
@@ -266,7 +259,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         return failure;
     }
 
-    // Null when the game started. Before Play a failure or stop logs the session out, after Play it's only released.
     private async Task<AccountFailure?> RunOneAccountAsync(MultiRunAccount account, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -275,7 +267,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 
         if (!MultiPlatformChosen())
             return new(AccountFailureKind.Install, "You must use either Windower or Ashita with Provenance to use multi-account login.");
-        // after a switch between Windower and Ashita mid-run a stored profile means nothing
         var hookProfile = _pol.Platform == _runPlatform ? _runHookProfiles.GetValueOrDefault(account.ProfileId) : null;
         if (_pol.Platform == ThirdPartyHook.Ashita && hookProfile is { Length: > 0 } boot
             && !AshitaBootFiles.IsBootFileName(boot))
@@ -288,7 +279,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         if (details.Problem is { } problem) return new(AccountFailureKind.Account, problem);
         var (pol, squareEnix) = (details.Pol!, details.SquareEnix!);
 
-        // outside the no-progress guard, it waits for the user
         var claim = _launch.Claim(profile, () =>
         {
             var code = _accounts.AskOtp(profile, squareEnix);
@@ -357,7 +347,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         if (_launch.GameFolders() is not null)
         {
             string eta = "";
-            var left = new PhaseTimeLeft(text => eta = text);   // UI thread only, like the status
+            var left = new PhaseTimeLeft(text => eta = text);
             var patch = new InlineProgress<PatchProgress>(p =>
             {
                 Kick();
@@ -365,7 +355,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
                 _ui.Post(() =>
                 {
                     if (p.Fraction >= 0) left.Update(p.Fraction, p.Phase);
-                    // the apply line just says "Updating FINAL FANTASY XI..." again
                     var what = p.Phase == PatchPhase.Apply ? "" : $". {p.Text.TrimEnd('.')}";
                     SetRunStatus($"Updating FINAL FANTASY XI {step}{what}" + (eta.Length == 0 ? "." : eta.EndsWith("...", StringComparison.Ordinal) ? $". {eta}" : $". {eta}."));
                 });
@@ -413,7 +402,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         return null;
     }
 
-    // once a run, before its first game starts. True when it was this account's turn
     internal async Task<bool> BackUpForRunAsync(string? accountBoot)
     {
         if (_runBackedUp) return false;
@@ -422,8 +410,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         return true;
     }
 
-    // the run's moved on by the time a game that didn't start ends its pol.exe, so that's told when it happens (or
-    // with the run's own report, if it's still going)
     private async Task NoteGameEndAsync(MultiRunAccount account, Task<int?> exited)
     {
         try
@@ -435,7 +421,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             if (Running) _lateGameFailures.Add(line);
             else
             {
-                // the window may well be in the tray by now
                 RequestShow?.Invoke();
                 _dialogs.Error("Multi-account mode", line, offerLogs: true);
             }
@@ -443,7 +428,6 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         catch (Exception ex) { Log.Warning(ex, "Multi-account mode: couldn't tell how {Account}'s game ended", account.ProfileId); }
     }
 
-    // never throws. StopHold leaves a session that got to the game alone, so that one's just forgotten.
     private async Task LetGoOfAccountAsync()
     {
         try

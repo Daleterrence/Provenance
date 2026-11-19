@@ -7,8 +7,7 @@ using Serilog;
 
 namespace Provenance.Common.Otp;
 
-// Codes sent in the last 2 minutes. Accounts sharing an authenticator get the same code and SE refuses a reused one,
-// so I keep salted HMACs of them
+// Accounts sharing an authenticator get the same code and SE refuses a reused one, so I keep salted HMACs of them
 public static class OtpReuse
 {
     private static readonly TimeSpan Keep = TimeSpan.FromMinutes(2);
@@ -22,12 +21,10 @@ public static class OtpReuse
     private static string StorePath => _storePath ?? ProtectedFolders.PathFor("otp-recent.txt");
     private static string KeyPath => _keyPath ?? ProtectedFolders.PathFor("otp-recent.key");
 
-    // when otp-recent.key can't be opened. Codes still count as used within this run, just not across copies
     private static readonly Lazy<byte[]> FallbackKey = new(() => RandomNumberGenerator.GetBytes(32));
 
     private static long Now => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-    // not a credential, the salt just stops the hashes being matched against every six-digit code
     private static Task<byte[]> KeyAsync()
     {
         lock (KeyGate)
@@ -37,7 +34,6 @@ public static class OtpReuse
                 try { return CredentialKey.Open(KeyPath, Protects); }
                 catch (Exception ex)
                 {
-                    // Open already logged its own failure
                     Log.Warning(ex is CredentialKeyUnavailableException ? null : ex,
                         "The used one-time codes are checked with a key in memory for this run: their key file could not be opened");
                     return FallbackKey.Value;
@@ -58,12 +54,10 @@ public static class OtpReuse
         }
     }
 
-    // test only, so a check can tell the in-memory key from the file's
     internal static byte[] KeyForTest() => KeyAsync().GetAwaiter().GetResult();
 
     internal static bool IsFallbackKey(byte[] key) => FallbackKey.IsValueCreated && ReferenceEquals(key, FallbackKey.Value);
 
-    // HMAC-SHA256 (uppercase hex) of "<reuse key>\n<code>" in UTF-8
     internal static string HashFor(byte[] key, string reuseKey, string code) =>
         Convert.ToHexString(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(reuseKey + "\n" + code)));
 
@@ -73,10 +67,8 @@ public static class OtpReuse
         return lines.Where(line => line.Split(' ') is [var at, _] && long.TryParse(at, out var t) && t >= oldest).ToList();
     }
 
-    // on a worker, they can wait on the key file's lock and the store's. None of them throws
     public static Task<bool> WasUsedAsync(string key, string code) => Task.Run(() => WasUsed(key, code));
 
-    // the line written (a time and a hash, never the code) for UnmarkAsync, or null
     public static Task<string?> MarkUsedAsync(string key, string code) => Task.Run(() => MarkUsed(key, code));
 
     public static Task UnmarkAsync(string line) => Task.Run(() => Unmark(line));
@@ -107,15 +99,12 @@ public static class OtpReuse
         finally { gate?.Dispose(); }
     }
 
-    // removes one copy, so the same code recorded by another copy stays
     internal static void Unmark(string line) => Rewrite(remove: line);
 
-    // the next code's due every 30s, plus 2 of slack so a second fetch lands after it changes
     public static int SecondsToNextCode() => SecondsToNextCode(Now);
 
     internal static int SecondsToNextCode(long now) => 30 - (int)(now % 30) + 2;
 
-    // older or unreadable lines get cleaned out of the file on the way
     internal static List<(long At, string Hash)> Read()
     {
         try
@@ -129,8 +118,6 @@ public static class OtpReuse
         catch (Exception ex) { Log.Warning(ex, "Could not read the used one-time codes"); return []; }
     }
 
-    // rereads inside the lock so another copy's new line is kept. Re-entrant for the prune (MarkUsed -> Read -> here),
-    // and an unmark with no lock just doesn't happen
     private static void Rewrite(string? remove = null)
     {
         IDisposable? gate = null;

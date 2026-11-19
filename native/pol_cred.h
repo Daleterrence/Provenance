@@ -1,5 +1,3 @@
-/* reads a Provenance credential from Credential Manager and unwraps it. Static only, so more than one
- * file can include it (link advapi32.lib and crypt32.lib) */
 #ifndef POL_CRED_H
 #define POL_CRED_H
 
@@ -12,11 +10,10 @@
 
 #define PC_OK            0
 #define PC_NOT_FOUND     1
-#define PC_NOT_WRAPPED   2   /* a plain blob or another header, never read */
-#define PC_UNWRAP_FAILED 3   /* key file missing or not 32 bytes, DPAPI refused (wrong key, other target), no NUL */
+#define PC_NOT_WRAPPED   2
+#define PC_UNWRAP_FAILED 3
 #define PC_TOO_LONG      4
 
-/* the admin-only key file, 0 when it's missing or not exactly 32 bytes (Provenance replaces any other size) */
 static int pc_read_key(const char *keyfile, BYTE key[PC_WRAP_KEY_LEN])
 {
     DWORD got = 0;
@@ -31,7 +28,7 @@ static int pc_read_key(const char *keyfile, BYTE key[PC_WRAP_KEY_LEN])
     return ok;
 }
 
-/* 0 ok, 1 too long. exact turns best fit off, so a fullwidth look-alike user name can't pass for an ASCII one. */
+/* exact turns best fit off, so a fullwidth look-alike user name can't pass for an ASCII one */
 static int pc_narrow(const WCHAR *w, int n, char *out, int cap, int exact)
 {
     int need;
@@ -50,7 +47,7 @@ static int pc_narrow(const WCHAR *w, int n, char *out, int cap, int exact)
     return 0;
 }
 
-/* key + UTF-16LE target name, so a blob moved to another target won't unwrap. The caller wipes and frees it. */
+/* key + UTF-16LE target name, so a blob moved to another target won't unwrap */
 static BYTE *pc_entropy(const BYTE key[PC_WRAP_KEY_LEN], const WCHAR *target, DWORD *len)
 {
     int tn = lstrlenW(target);
@@ -63,7 +60,6 @@ static BYTE *pc_entropy(const BYTE key[PC_WRAP_KEY_LEN], const WCHAR *target, DW
     return e;
 }
 
-/* user and secret can be NULL. Any error but PC_NOT_FOUND wipes both. */
 static int pc_cred_read(const WCHAR *target, const char *keyfile, char *user, int ucap, char *secret, int scap)
 {
     PCREDENTIALW cred = NULL;
@@ -78,8 +74,7 @@ static int pc_cred_read(const WCHAR *target, const char *keyfile, char *user, in
     if (!CredReadW(target, CRED_TYPE_GENERIC, 0, &cred) || !cred)
         return PC_NOT_FOUND;
 
-    /* wrapped = "PVW2" + CryptProtectData of the UTF-16LE user name, a NUL and the secret (the app's
-     * WindowsCredentialStore). The entry's own UserName field is never read, anything can write it */
+    /* wrapped = "PVW2" + CryptProtectData of the UTF-16LE user name, a NUL and the secret. The entry's own UserName field is never read, anything can write it */
     if (cred->CredentialBlobSize <= 4 || !cred->CredentialBlob || memcmp(cred->CredentialBlob, "PVW2", 4) != 0) {
         rc = PC_NOT_WRAPPED;
         goto done;

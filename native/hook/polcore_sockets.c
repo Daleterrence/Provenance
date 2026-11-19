@@ -1,5 +1,4 @@
-/* polcore never sets TCP_NODELAY, so each request body waits for the server to ACK its header. Its connect import is
-   swapped for one that sets it, and where a login's early redirector answer goes in */
+/* polcore never sets TCP_NODELAY, so each request body waits for the server to ACK its header */
 static int (PASCAL *g_polcore_connect)(SOCKET, const struct sockaddr *, int);
 
 static int PASCAL polcore_connect(SOCKET s, const struct sockaddr *a, int n)
@@ -10,8 +9,6 @@ static int PASCAL polcore_connect(SOCKET s, const struct sockaddr *a, int n)
     return g_polcore_connect(s, a, n);
 }
 
-/* swaps the connect slots in image's ws2_32 or wsock32 imports for polcore_connect, and says how many. A slot is one
-   aligned pointer, so a call in flight lands on the old one or the new one */
 static int polcore_sockets_hook(BYTE *image)
 {
     IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)image;
@@ -51,7 +48,6 @@ static int polcore_sockets_hook(BYTE *image)
     return hits;
 }
 
-/* a speed-up and nothing more: when the slot isn't there polcore connects as it always did */
 static void polcore_sockets_patch(BYTE *pc)
 {
     if (g_polcore_connect) return;

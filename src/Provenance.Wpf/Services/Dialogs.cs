@@ -7,7 +7,6 @@ using Provenance.Wpf.Views.Dialogs;
 
 namespace Provenance.Wpf.Services;
 
-// Destructive and SafeKeys put Enter and Esc on cancel so a stray key can't do it, only Destructive goes red
 public enum ConfirmStyle { Normal, Destructive, SafeKeys }
 
 public interface IDialogs

@@ -49,7 +49,6 @@ internal sealed class SnapshotWatcher
     internal void Read()
     {
         if (_pid() is not { } pid) return;
-        // the store file only turns up once, at login, and goes once the app has it
         if (SocialSnapshotFiles.TryRead(pid) is { } snap)
             _publish(snap with { Stored = SocialSnapshotFiles.TryReadStore(pid) });
     }

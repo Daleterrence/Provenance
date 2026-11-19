@@ -37,7 +37,6 @@
                     Style="{StaticResource PolButton}" Click="OnRetry" />
         </StackPanel>
 
-        <!-- the six digit boxes get made in code -->
         <UniformGrid x:Name="Digits" Rows="1" Columns="6" HorizontalAlignment="Center"
                      AutomationProperties.Name="One-time password, 6 digits" />
 

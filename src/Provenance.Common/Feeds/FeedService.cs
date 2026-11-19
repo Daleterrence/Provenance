@@ -4,7 +4,6 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Feeds;
 
-// the feed worker keeps one edge-cached copy for every launcher, so POL serves each page about once per cache period
 public sealed class FeedService(ISettingsService settings, FeedClient? client = null)
 {
     public const string Worker = "https://news.provenancexi.app";
@@ -47,7 +46,6 @@ public sealed class FeedService(ISettingsService settings, FeedClient? client = 
     public Task<FeedFetch<WorldStatus>> LoadWorldsAsync(CancellationToken ct = default) =>
         _client.GetWorldsAsync(Region, Worker, ct);
 
-    // the window never loads a URL itself, so it never fetches from a host other than POL's
     public async Task<IReadOnlyList<FeedItem>> WithLocalImagesAsync(IReadOnlyList<FeedItem> items) =>
         await Task.WhenAll(items.Select(async it =>
             it.ImageUrl is not { Length: > 0 } img ? it

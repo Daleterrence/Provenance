@@ -1,15 +1,11 @@
-/* "Provenance Watcher.exe" <pol.exe> <hook dll>: pol.exe starts suspended, gets the hook, then resumes
-   --attach <pid> <hook dll>: for a pol.exe Windower or Ashita started, never ended here
-   --windower <Hook.dll> <pol.exe> <hook dll>: Windower's Hook.dll goes in before the hook, as Windower.exe does */
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
 #include "hook/hook_contract.h"
 
-/* the app reads this output and the exit codes, so they don't change. 20 is the one path that can't be worked round */
 #define PATH_NOT_ANSI_EXIT 20
-static HANDLE g_child;   /* the suspended pol.exe, killed on any later failure */
+static HANDLE g_child;
 static void die(const char *m)
 {
     DWORD err = GetLastError();
@@ -37,8 +33,6 @@ static FARPROC k32_proc(const char *name)
     return GetProcAddress(GetModuleHandleA("kernel32.dll"), name);
 }
 
-/* runs fn(arg) on a thread in p. A buffer arg points at gets freed if no thread starts, but not on a timeout (the thread
-   may still be reading it) */
 static DWORD remote_run(HANDLE p, FARPROC fn, void *arg, void *buf, DWORD wait_ms, const char *create_msg,
                         const char *timeout_msg)
 {
@@ -62,7 +56,6 @@ static DWORD remote_call(HANDLE p, FARPROC fn, void *arg, const char *what)
     return remote_run(p, fn, arg, NULL, 10000, what, what);
 }
 
-/* data goes into the process and loader runs on it in a thread there, giving back what that returns */
 static DWORD remote_load(HANDLE process, FARPROC loader, const void *data, DWORD size, DWORD wait_ms, const char *timeout_msg)
 {
     DWORD code;
@@ -89,8 +82,7 @@ static int attach(DWORD pid, const WCHAR *dll)
     p = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION |
                     PROCESS_VM_WRITE | PROCESS_VM_READ | SYNCHRONIZE, FALSE, pid);
     if (!p) die("cannot open pol.exe to attach");
-    /* no critical-error boxes while the hook loads: a Smart App Control refusal pops a "Bad Image" box that holds the
-       load until someone clicks OK. Great feature :D */
+    /* a Smart App Control refusal pops a "Bad Image" box that holds the load until someone clicks OK. Great feature :D */
     old = remote_call(p, set_error_mode, (void *)(UINT_PTR)(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX),
                       "setting the error mode timed out");
     code = remote_load(p, k32_proc("LoadLibraryW"), dll, (lstrlenW(dll) + 1) * sizeof(WCHAR), 10000, "hook dll load timed out in target");
@@ -112,8 +104,7 @@ static int hook_and_resume(PROCESS_INFORMATION *pi, const void *dll, DWORD size,
     printf("watcher: injected, %s -> %08x\n", how, code);
     if (!code || code == STILL_ACTIVE) die("hook dll was refused or failed to load in target");
     remote_call(pi->hProcess, set_error_mode, (void *)(UINT_PTR)errmode, "restoring the error mode timed out");
-    /* PROVENANCE_WATCHER_NORESUME=1 loads the hook, then ends pol.exe unresumed (checks the injection without
-       starting POL) */
+    /* PROVENANCE_WATCHER_NORESUME=1 loads the hook, then ends pol.exe unresumed */
     if (GetEnvironmentVariableA("PROVENANCE_WATCHER_NORESUME", noresume, sizeof noresume) && noresume[0] == '1') {
         printf("watcher: hook loaded; PROVENANCE_WATCHER_NORESUME set, pol.exe ended unresumed\n");
         TerminateProcess(pi->hProcess, 0);
@@ -135,8 +126,6 @@ static WCHAR *full_path(const WCHAR *path, const char *what)
     return full;
 }
 
-/* pol.exe suspended, in its own folder (FFXiEntry resolves the install paths from the cwd).
-   kiyaku=true skips the EULA, no /game means the hook hands back content code 1 */
 static UINT start_suspended(const WCHAR *pol, PROCESS_INFORMATION *pi)
 {
     STARTUPINFOW si = { sizeof si };
@@ -154,7 +143,6 @@ static UINT start_suspended(const WCHAR *pol, PROCESS_INFORMATION *pi)
     cmd[0] = L'"';
     lstrcpyW(cmd + 1, pol);
     lstrcatW(cmd, L"\" kiyaku=true");
-    /* pol.exe inherits the error mode, so it gets attach's no-boxes rule. The old mode goes back once the hook's in */
     errmode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     SetErrorMode(errmode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     if (!CreateProcessW(pol, cmd, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, slash ? cwd : NULL, &si, pi))
@@ -166,8 +154,6 @@ static UINT start_suspended(const WCHAR *pol, PROCESS_INFORMATION *pi)
     return errmode;
 }
 
-/* LoadLibraryA takes the hook's path in the system code page. A UTF-8 one takes neither the flag nor the lossy pointer,
-   and can't lose anything anyway */
 static int ansi_path(const WCHAR *w, char out[MAX_PATH])
 {
     BOOL lossy = FALSE, utf8 = GetACP() == CP_UTF8;
@@ -175,8 +161,6 @@ static int ansi_path(const WCHAR *w, char out[MAX_PATH])
            !lossy;
 }
 
-/* the app makes Windower's mapping and event before it runs this. Hook.dll throws on its install thread when the
-   mapping's missing, so that's refused before pol.exe even starts */
 static int windower(int argc, WCHAR **arg)
 {
     WCHAR *hook, *pol, *polhook;
@@ -190,7 +174,6 @@ static int windower(int argc, WCHAR **arg)
 
     if (argc < 5) usage();
     pol = arg[3];
-    /* full paths, so what gets checked here is what pol.exe loads from its own working folder */
     hook = full_path(arg[2], "Windower's Hook.dll path is no good");
     polhook = full_path(arg[4], "pol_hook.dll path is no good");
     if (!ansi_path(polhook, dll)) {
@@ -218,18 +201,15 @@ static int windower(int argc, WCHAR **arg)
     printf("watcher: host=%s\n", utf8(pol));
     printf("watcher: hook=%s\n", dll);
     printf("watcher: windower=%s\n", utf8(hook));
-    /* Windower.exe sets it on itself for pol.exe to inherit, so same here */
     SetEnvironmentVariableW(L"__COMPAT_LAYER", L"HighDpiAware");
     errmode = start_suspended(pol, &pi);
 
     /* a signal left over from some earlier launch would let pol.exe resume before the hook's in */
     WaitForSingleObject(ready, 0);
-    /* Windower.exe waits as long as it takes here, and a cold start with antivirus poking at it can be slow */
     code = remote_load(pi.hProcess, k32_proc("LoadLibraryW"), hook,
                        (lstrlenW(hook) + 1) * sizeof(WCHAR), wait_ms, "Windower's Hook.dll load timed out in target");
     printf("watcher: windower, LoadLibraryW -> %08lx\n", code);
     if (!code) die("Windower's Hook.dll was refused or failed to load in target");
-    /* the event comes once every one of its hooks is in, pol.exe stays suspended till then */
     waits[0] = ready;
     waits[1] = pi.hProcess;
     SetLastError(0);
@@ -237,15 +217,13 @@ static int windower(int argc, WCHAR **arg)
     if (n == WAIT_OBJECT_0 + 1) die("pol.exe ended before Windower's hook reported in");
     if (n != WAIT_OBJECT_0) die("Windower's hook didn't report in");
     printf("watcher: windower hook reported in\n");
-    /* Windower's Hook.dll detours LoadLibraryA to refuse anything named like it, and pol_hook.dll only gets past on a quirk
-       (not one I'd bet on lasting). KernelBase's export goes round the detour */
+    /* Windower's Hook.dll detours LoadLibraryA to refuse anything named like it, pol_hook.dll only gets past on a quirk. KernelBase's export goes round the detour */
     kernelbase = GetModuleHandleA("kernelbase.dll");
     if (kernelbase) load_library = GetProcAddress(kernelbase, "LoadLibraryA");
     if (!load_library) load_library = k32_proc("LoadLibraryA");
     return hook_and_resume(&pi, dll, lstrlenA(dll) + 1, errmode, load_library, "LoadLibraryA");
 }
 
-/* wide all the way, Provenance's folder has the Windows user name in it and that can be anything */
 int wmain(int argc, WCHAR **argv)
 {
     WCHAR *pol, *dll;
@@ -257,7 +235,6 @@ int wmain(int argc, WCHAR **argv)
 
     if (argc > 1 && lstrcmpW(argv[1], L"--windower") == 0) return windower(argc, argv);
     if (argc <= dllarg) usage();
-    /* pol.exe would look for a relative one from its own working folder */
     dll = full_path(argv[dllarg], "pol_hook.dll path is no good");
     if (attaching) {
         DWORD pid = (DWORD)wcstoul(argv[2], NULL, 10);

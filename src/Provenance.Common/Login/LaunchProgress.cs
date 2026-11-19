@@ -7,7 +7,6 @@ public enum LaunchProgressKind { Progress, Notice, Failed, Stopped }
 public sealed record LaunchProgress(string Stage, string Detail, double Fraction = -1, PatchProgress? Patch = null,
                                     LaunchProgressKind Kind = LaunchProgressKind.Progress)
 {
-    // a viewer update at login gets the bar up to here, and the login's own steps the rest
     public const double LogInUpdateEnd = 0.5;
 
     public static LaunchProgress Updating(string stage, PatchProgress p, double from, double to) =>
@@ -21,7 +20,6 @@ public sealed record LaunchProgress(string Stage, string Detail, double Fraction
         new("Stopped", polClosed ? "The login was cancelled, and PlayOnline has been closed." : "The login was cancelled.",
             Kind: LaunchProgressKind.Stopped);
 
-    // checking the files is about a fifth of the update's share
     private static double Share(PatchProgress p, double from, double to) => p.Fraction < 0 ? -1 : p.Phase switch
     {
         PatchPhase.Scan => from + (to - from) * 0.2 * p.Fraction,

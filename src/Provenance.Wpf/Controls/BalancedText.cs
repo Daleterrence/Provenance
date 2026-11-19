@@ -5,8 +5,6 @@ using System.Windows.Media;
 
 namespace Provenance.Wpf.Controls;
 
-// A centred, wrapping message. It keeps the product names whole and breaks into lines of about the same length, so
-// there's no stub on the last one
 public sealed class BalancedText : FrameworkElement
 {
     public static readonly DependencyProperty MessageProperty = DependencyProperty.Register(
@@ -55,7 +53,6 @@ public sealed class BalancedText : FrameworkElement
     protected override Visual GetVisualChild(int index) =>
         index == 0 ? _text : throw new ArgumentOutOfRangeException(nameof(index));
 
-    // the narrowest width that still makes the same number of lines
     protected override Size MeasureOverride(Size available)
     {
         _text.Measure(available);

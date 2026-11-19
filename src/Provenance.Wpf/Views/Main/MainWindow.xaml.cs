@@ -54,7 +54,6 @@ public partial class MainWindow : AppWindow
         HwndSource.FromHwnd(handle)?.AddHook(OnWindowMessage);
     }
 
-    // a second copy asking: 1 when this one was in the tray with nobody logged in and has come back for it
     private IntPtr OnWindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if ((uint)msg != TrayCopy.Message) return IntPtr.Zero;
@@ -64,13 +63,11 @@ public partial class MainWindow : AppWindow
 
     private void FitWorkArea() => FitTo(SystemParameters.WorkArea.Size);
 
-    // fixed design size, so on a small or scaled screen (1366x768 at 125%, say) the whole thing scales down
     internal void FitTo(Size area)
     {
         double scale = Math.Min(1.0, Math.Min((area.Width - 16) / Width, (area.Height - 16) / Height));
         if (scale >= 1.0 || Content is not FrameworkElement root) return;
         root.LayoutTransform = new ScaleTransform(scale, scale);
-        // rounding happens before the scale, so it can't land anything on a pixel and leaves the bottom edge a fraction out
         root.UseLayoutRounding = false;
         Width *= scale;
         Height *= scale;
@@ -117,7 +114,6 @@ public partial class MainWindow : AppWindow
         if (e.PropertyName == nameof(SocialViewModel.NotificationCount)) ShowBadge();
     }
 
-    // the taskbar button's badge and what a screen reader says about it, gone when nothing's waiting
     internal void ShowBadge()
     {
         if (!Dispatcher.CheckAccess())
@@ -130,8 +126,6 @@ public partial class MainWindow : AppWindow
         TaskbarItemInfo.Description = NotificationBadge.Description(count);
     }
 
-    // a tray tip only for a notice that's just been shown, never an old one again for a flash.
-    // Queued, the snapshot behind this hasn't counted the new message yet
     private void OnRequestAttention(bool tip, bool flash) => Dispatcher.InvokeAsync(() =>
     {
         if (tip && Vm?.Notice.Current is { } notice && Tray.ShowNotice(notice.Text)) return;
@@ -139,33 +133,27 @@ public partial class MainWindow : AppWindow
         TaskbarFlash.Start(this);
     });
 
-    // read in the friends windows, so this window never came to the front to stop it. Queued like the flash, so it
-    // can't land before one
     private void OnAttentionCleared() => Dispatcher.InvokeAsync(() => TaskbarFlash.StopIfFlashing(this));
 
     private void OnOpenNotice(object sender, RoutedEventArgs e) => Vm?.OpenNotice();
 
-    // a hide that lands once the window's going or gone would put up an icon nothing takes down
     internal void OnRequestHide()
     {
         if (_exiting || _closed || Vm is not { } vm) return;
         Tray.HideWindow(vm);
     }
 
-    // a window that's closed can't be shown again, and a login that ends as the app's going still asks
     private void OnRequestShow()
     {
         if (!_closed) Tray.ShowWindow();
     }
 
-    // the same exit as the tray's, which logs a held session out, then the app starts again once it's gone
     private void OnRequestRestart()
     {
         App.RestartOnExit = true;
         ExitApp();
     }
 
-    // already confirmed, so nothing more is asked on the way out. The exit logs the session out, ends any game and hands over to Update.exe
     private void OnRequestUpdateRestart()
     {
         App.RestartForUpdate = true;
@@ -193,13 +181,11 @@ public partial class MainWindow : AppWindow
         base.OnClosing(e);
     }
 
-    // closing while logged in (with the setting on) keeps POL logged in from the tray, like an open viewer
     private bool GoToTray(System.ComponentModel.CancelEventArgs e)
     {
         if (_exiting || Vm is not { KeepInTrayOnClose: true } vm) return false;
         e.Cancel = true;
         Tray.HideWindow(vm);
-        // the tip's about friends and messages staying up to date, and in game they don't
         if (vm.Session.Phase != SessionPhase.InGame) Tray.ShowFirstCloseTip(vm);
         return true;
     }
@@ -210,7 +196,6 @@ public partial class MainWindow : AppWindow
         e.Cancel = true;
         if (_cancellingLogIn) return true;
         _cancellingLogIn = true;
-        // not from inside Closing, Close throws in there
         Dispatcher.InvokeAsync(async () =>
         {
             await loggingIn.CancelLogInAsync();
@@ -232,11 +217,10 @@ public partial class MainWindow : AppWindow
             return true;
         }
         if (run.Running) run.StopAllAccountsAndExit();
-        else Dispatcher.InvokeAsync(Close);   // the run ended while the question was up, and not from inside Closing
+        else Dispatcher.InvokeAsync(Close);
         return true;
     }
 
-    // a second close while a question's up (Alt+F4, the taskbar's Close) waits for its answer
     private bool WaitForAnswer(System.ComponentModel.CancelEventArgs e)
     {
         if (!_asking) return false;
@@ -268,7 +252,6 @@ public partial class MainWindow : AppWindow
         Vm?.RestartCancelled();
     }
 
-    // a shutdown closes the window whatever OnClosing says, so the icon can't be left behind
     protected override void OnClosed(EventArgs e)
     {
         _closed = true;
@@ -277,8 +260,6 @@ public partial class MainWindow : AppWindow
         base.OnClosed(e);
     }
 
-    // the uninstaller, Windows logging off and closing when the game exits have nobody there to answer questions, so
-    // it asks nothing and an open profile editor just closes as it is
     internal void ExitWithoutAsking()
     {
         Vm?.CloseProfileEditor();
@@ -293,7 +274,6 @@ public partial class MainWindow : AppWindow
     internal void ExitApp()
     {
         _exiting = true;
-        // inside OnClosing with a question up, Close would throw. The answer decides
-        if (!_asking) Close();   // the app's exit logs the held session out
+        if (!_asking) Close();
     }
 }

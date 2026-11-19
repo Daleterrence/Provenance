@@ -8,20 +8,16 @@ using Provenance.Wpf.Win32;
 
 namespace Provenance.Wpf.Controls;
 
-// DWM rounds every window and draws a thin Border.Window line round it, WPF draws the line on square corners where it
-// can't. The line goes while the window's maximised either way
 internal static class WindowFrame
 {
-    public const double Radius = 8;   // DWM's own corner for a normal window, in DIPs
+    public const double Radius = 8;
     private const string Edge = "Border.Window";
 
-    // WindowChrome gives these windows a window region, which DWM rounds fine from 24H2 on. The docs say it can't, so
-    // older builds get the square frame instead
+    // WindowChrome gives these windows a window region, which DWM rounds fine from 24H2 on, older builds get the square frame
     internal static bool Rounded { get; set; } = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 26100);
 
     public static void Apply(Window w)
     {
-        // the layered ones draw their own corners, border and shadow round a see-through margin, so DWM stays out
         if (w.AllowsTransparency) return;
         var hwnd = new WindowInteropHelper(w).Handle;
         HwndSource.FromHwnd(hwnd)?.AddHook(Hook);
@@ -60,8 +56,6 @@ internal static class WindowFrame
         w.BorderThickness = new Thickness(w.WindowState == WindowState.Maximized ? 0 : line);
     }
 
-    // the work area of the monitor a window is on, in DIPs. One that isn't shown yet goes by where it's set to open, and
-    // anything that can't be asked gets the main screen's
     internal static Rect WorkAreaOf(Window w)
     {
         try
@@ -95,8 +89,7 @@ internal static class WindowFrame
         mmi.ptMaxPosition.Y = mi.rcWork.Top - mi.rcMonitor.Top;
         mmi.ptMaxSize.X = mi.rcWork.Right - mi.rcWork.Left;
         mmi.ptMaxSize.Y = mi.rcWork.Bottom - mi.rcWork.Top;
-        // a window that fills the whole monitor counts as full screen, and an auto-hide taskbar won't pop up over
-        // one, so it stops a pixel short on that edge
+        // a window that fills the whole monitor counts as full screen, so an auto-hide taskbar won't pop up over it
         int bars = SameRect(mi.rcWork, mi.rcMonitor) ? AutoHideBars(monitor, mi.rcMonitor) : 0;
         for (int edge = AbeLeft; edge <= AbeBottom; edge++)
         {
@@ -107,12 +100,11 @@ internal static class WindowFrame
             else mmi.ptMaxSize.Y--;
         }
         Marshal.StructureToPtr(mmi, lParam, true);
-        return IntPtr.Zero;   // not handled, so WPF still applies MinWidth and MinHeight
+        return IntPtr.Zero;
     }
 
     private static (IntPtr Monitor, long At, int Bars) _lastBars;
 
-    // this message comes in on every move and resize too, and each ask is a trip to the taskbar, so it's kept a bit
     private static int AutoHideBars(IntPtr monitor, RECT rc)
     {
         long now = Environment.TickCount64;

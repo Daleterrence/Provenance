@@ -6,13 +6,11 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Credentials;
 
-// anything running as this user can read or swap a plain Credential Manager entry, hence the wrap key
 public sealed class WindowsCredentialStore
 {
     public const string DefaultPrefix = "Provenance";
 
-    // a wrapped blob is this, then DPAPI of the UTF-16LE user name, a NUL and the secret. Entropy is the wrap key plus
-    // the target name, so a moved blob won't unwrap (native/pol_cred.h reads it too)
+    // a wrapped blob is this, then DPAPI of the UTF-16LE user name, a NUL and the secret (native/pol_cred.h reads it too)
     public const string WrapMagic = "PVW2";
 
     private static readonly byte[] WrapMagicBytes = Encoding.ASCII.GetBytes(WrapMagic);
@@ -28,7 +26,6 @@ public sealed class WindowsCredentialStore
         _wrapKey = wrapKey;
     }
 
-    // sessionOnly entries die with the logon session. A one-shot launch entry can't outlive a reboot that way
     public void Save(string key, string userName, string secret, bool sessionOnly = false)
     {
         if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("key required", nameof(key));
@@ -40,7 +37,6 @@ public sealed class WindowsCredentialStore
         var plainBytes = Pack(userName, secret);
         byte[] secretBytes = plainBytes;
         IntPtr pSecret = IntPtr.Zero;
-        // one try round the wrap and the write, so the plain bytes get cleared even when the wrap throws
         try
         {
             if (_wrapKey != null)
@@ -57,13 +53,11 @@ public sealed class WindowsCredentialStore
 
             pSecret = Marshal.AllocHGlobal(secretBytes.Length);
             Marshal.Copy(secretBytes, 0, pSecret, secretBytes.Length);
-            // the open user name field is shown to anything that lists the entries, so it stays empty
             Write(target, "", pSecret, (uint)secretBytes.Length,
                   sessionOnly ? CRED_PERSIST_SESSION : CRED_PERSIST_LOCAL_MACHINE);
         }
         finally
         {
-            // no plaintext left behind in free heap pages
             if (pSecret != IntPtr.Zero)
             {
                 for (int i = 0; i < secretBytes.Length; i++)
@@ -111,10 +105,8 @@ public sealed class WindowsCredentialStore
         return false;
     }
 
-    // the user name's wrapped with the secret, so this needs the key just like Read
     public string? ReadUserName(string key) => Read(key)?.UserName;
 
-    // only copies (then clears) the header and never decrypts, so an entry wrapped with another key passes too
     public bool HasWrappedSecret(string key) => WithEntry(FormatTarget(key), false, cred =>
     {
         if (cred.CredentialBlob == IntPtr.Zero || cred.CredentialBlobSize <= WrapMagic.Length) return false;
@@ -127,7 +119,6 @@ public sealed class WindowsCredentialStore
         finally { CryptographicOperations.ZeroMemory(head); }
     });
 
-    // with olderThan, newer entries stay put, another running copy might still need them
     public int DeleteByPrefix(string keyPrefix, TimeSpan? olderThan = null)
     {
         DateTime? cutoff = olderThan is { } age ? DateTime.UtcNow - age : null;
@@ -161,7 +152,6 @@ public sealed class WindowsCredentialStore
         return removed;
     }
 
-    // never decrypts, so it needs no key
     public bool Exists(string key) => WithEntry(FormatTarget(key), false, _ => true);
 
     internal bool CopyEntryForTest(string fromKey, string toKey) => WithEntry(FormatTarget(fromKey), false, src =>
@@ -196,7 +186,6 @@ public sealed class WindowsCredentialStore
         finally { Advapi32.CredFree(credPtr); }
     }
 
-    // the caller reads the error first, before anything else can touch it
     private static void ThrowUnlessNotFound(int err, string message)
     {
         if (err != ERROR_NOT_FOUND) throw new Win32Exception(err, message);
@@ -237,7 +226,6 @@ public sealed class WindowsCredentialStore
         return bytes;
     }
 
-    // the first NUL ends the user name, a secret can hold more of them
     private static StoredCredential? Unpack(ReadOnlySpan<byte> plain)
     {
         if (plain.Length % 2 != 0) return null;
@@ -254,7 +242,6 @@ public sealed class WindowsCredentialStore
 
 }
 
-// prints *** for both, so a stray ToString or log line never leaks a login
 public readonly record struct StoredCredential(string UserName, string Secret)
 {
     private bool PrintMembers(StringBuilder builder)
@@ -264,6 +251,5 @@ public readonly record struct StoredCredential(string UserName, string Secret)
     }
 }
 
-// the message only names the target, never the user name, secret or key
 public sealed class CredentialUnreadableException(string target)
     : Exception($"Stored credential '{target}' cannot be read with the wrap key.");

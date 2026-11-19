@@ -15,7 +15,6 @@ namespace Provenance.Wpf.Views.Social;
 
 public partial class FriendsList : UserControl
 {
-    // the main window's list picks on its own, only the friends window's follows the open conversation
     public static readonly DependencyProperty OwnSelectionProperty = DependencyProperty.Register(
         nameof(OwnSelection), typeof(bool), typeof(FriendsList), new PropertyMetadata(false, (d, e) =>
         {
@@ -47,15 +46,13 @@ public partial class FriendsList : UserControl
     {
         if (OwnSelection)
         {
-            // a row swapped out by an update drops the selection, which isn't the user picking nobody
             if (List.SelectedItem is FriendItem picked) _kept = picked;
             else if (e.RemovedItems.OfType<object>().All(List.Items.Contains)) _kept = null;
         }
         if (List.IsKeyboardFocusWithin && List.SelectedItem is FriendItem f) FriendSelected?.Invoke(f);
     }
 
-    // the view model keeps its selection across updates, so this list does too once the whole update's in, as a swapped
-    // row comes through the grouping as a remove then an add
+    // a swapped row comes through the grouping as a remove then an add
     private bool _reselecting;
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -70,7 +67,6 @@ public partial class FriendsList : UserControl
         });
     }
 
-    // a click on a friend with a window of their own brings it up (arrowing onto them doesn't, that'd take the focus)
     private void OnRowClicked(object sender, MouseButtonEventArgs e)
     {
         if (OwnSelection || Vm is not { } vm) return;
@@ -78,7 +74,6 @@ public partial class FriendsList : UserControl
         if (row is ListBoxItem { DataContext: FriendItem f } && vm.PoppedFor(f) is not null) vm.OpenConversation(f);
     }
 
-    // the row under the pointer, not whatever was selected before
     private void OnDoubleClick(object sender, MouseButtonEventArgs e)
     {
         var row = ItemsControl.ContainerFromElement(List, e.OriginalSource as DependencyObject);
@@ -88,7 +83,7 @@ public partial class FriendsList : UserControl
     private void OnListKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
-        e.Handled = true;   // never on to the window's default button (Play)
+        e.Handled = true;
         if (List.SelectedItem is FriendItem f) Activate(f);
     }
 

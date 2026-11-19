@@ -4,12 +4,10 @@ using Serilog;
 
 namespace Provenance.Common.IO;
 
-// A DPAPI-encrypted JSON file. The entropy is part of the format, so changing one stops every old file opening.
+// the entropy is part of the format, so changing one stops every old file opening
 public sealed class EncryptedJsonFile<T>(string path, byte[] entropy, string logName, bool setAsideUnreadable = true)
     where T : class
 {
-    // null when there's no file or it won't open. One that won't open is moved aside rather than let the next save
-    // overwrite it (another Windows account, a damaged file)
     public T? Load()
     {
         if (!File.Exists(path)) return null;
@@ -25,10 +23,10 @@ public sealed class EncryptedJsonFile<T>(string path, byte[] entropy, string log
             var plain = Dpapi.Unprotect(bytes, entropy);
             if (plain != null && JsonSerializer.Deserialize<T>(plain) is { } loaded) return loaded;
         }
-        catch { }   // falls through to setting it aside
+        catch { }
         if (setAsideUnreadable)
         {
-            try { File.Move(path, path + "." + DateTime.Now.ToString("yyyyMMddHHmmss") + ".unreadable"); } catch { }   // left where it is, the next save overwrites it
+            try { File.Move(path, path + "." + DateTime.Now.ToString("yyyyMMddHHmmss") + ".unreadable"); } catch { }
         }
         return null;
     }

@@ -5,20 +5,15 @@ public sealed record PolFriend(string Name, string Comment, PolStatus Status,
 {
     public bool HasComment => !string.IsNullOrWhiteSpace(Comment);
     public string StatusLabel => PolStatusText.Label(Status);
-    // another of my own handles (same POL ID), can't be ignored or invited
     public bool IsMe { get; init; }
-    // null unless they're online and in FFXI right now
     public PolFriendGame? Game { get; init; }
 }
 
-// the FFXI character a friend's on, from their presence: World is the game's world id
 public sealed record PolFriendGame(int World, CharacterId Character);
 
-// the hook's answer for one character's FFXI profile
 public sealed record PolCharacterLookup(CharacterId Character, string Name, ProfileFieldState NameState, PrivacyLevel Level,
                                         string WorldName, int ZoneId = 0, ProfileFieldState ZoneState = ProfileFieldState.NotSet);
 
-// Name is the character's for a character search, Handle is always the handle's
 public sealed record PolSearchHit(int Index, string Name, int ProfilePictureId, string Key, bool IsFriend)
 {
     public bool IsMe { get; init; }
@@ -26,7 +21,6 @@ public sealed record PolSearchHit(int Index, string Name, int ProfilePictureId, 
     public string World { get; init; } = "";
 }
 
-// what a friend search came back with. Total is how many POL found, which can be more than came back
 public sealed record SearchResult(FriendSearchKind Kind, int Total, bool TooMany, IReadOnlyList<PolSearchHit> Hits)
 {
     public static readonly SearchResult None = new(FriendSearchKind.Handle, 0, false, []);

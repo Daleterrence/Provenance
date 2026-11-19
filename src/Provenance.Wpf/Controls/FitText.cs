@@ -6,7 +6,6 @@ using System.Windows.Media;
 
 namespace Provenance.Wpf.Controls;
 
-// Long when it fits the width it's given, Short when it doesn't (trimmed if even that won't fit)
 public sealed class FitText : FrameworkElement
 {
     public static readonly DependencyProperty LongProperty = DependencyProperty.Register(
@@ -55,7 +54,6 @@ public sealed class FitText : FrameworkElement
 
     public string Shown => _text.Text;
 
-    // showing the short form, or not even all of that
     public bool IsCut => Shown != (Long ?? "") || TextWidth(Shown) > ActualWidth + 0.5;
 
     protected override int VisualChildrenCount => 1;

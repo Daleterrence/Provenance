@@ -29,7 +29,6 @@ public partial class AccountsViewModel : ObservableObject
         int needDetails = Profiles.Count(p => !_credentials.HasUsableDetails(p.Id));
         if (needDetails > 0)
             Log.Information("{Count} account(s) need their login details again", needDetails);
-        // a fresh settings file's "Default" and a never-logged-in "New account" get a proper name
         int n = 0;
         bool changed = false;
         foreach (var p in Profiles)
@@ -41,9 +40,8 @@ public partial class AccountsViewModel : ObservableObject
                 changed = true;
             }
         }
-        // an account without a home slot gets one, in list order (the order they were added)
         changed |= HomeSlots.Assign(_settings.Current);
-        if (changed) PersistProfileList();   // no settings write on an ordinary start
+        if (changed) PersistProfileList();
         avatars.Prewarm(Profiles.Select(p => p.ProfilePictureId));
 
         var active = ProfileAtStart(_settings.Current);
@@ -56,7 +54,6 @@ public partial class AccountsViewModel : ObservableObject
 
     public ObservableCollection<Account> Profiles { get; }
 
-    // the account the window opens on, and the one an automatic login at open is for
     internal static Account? ProfileAtStart(LauncherSettings s) =>
         s.Profiles.FirstOrDefault(p => p.Id == s.ActiveProfileId) ?? s.Profiles.FirstOrDefault();
 
@@ -64,7 +61,6 @@ public partial class AccountsViewModel : ObservableObject
 
     private ObservableCollection<AccountRow>? _rows;
 
-    // made on first read, as each picture's cut out of its sheet on the calling thread
     public ObservableCollection<AccountRow> Rows
     {
         get
@@ -80,7 +76,6 @@ public partial class AccountsViewModel : ObservableObject
 
     private AccountRow RowOf(Account p) => new(p, p.DisplayName, _avatars.ProfilePicture(p.ProfilePictureId));
 
-    // a row that'd come out the same stays, so an edit doesn't hand the list a new one to redraw
     private void OnProfilesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         var rows = _rows!;
@@ -128,14 +123,13 @@ public partial class AccountsViewModel : ObservableObject
     public System.Windows.Media.ImageSource? ProfilePicture =>
         _avatars.ProfilePicture(SelectedProfile?.ProfilePictureId ?? 0);
 
-    internal string? SessionProfileId { get; set; }   // can differ from the selection
+    internal string? SessionProfileId { get; set; }
 
     internal void LearnIdentity(PolSocialSnapshot snap)
     {
         if (string.IsNullOrWhiteSpace(snap.MyHandle) || SessionProfileId is null) return;
         if (Profiles.FirstOrDefault(p => p.Id == SessionProfileId) is not { } prof) return;
         var key = snap.Handles.FirstOrDefault(h => h.Active)?.Key;
-        // no profile picture (-1) says nothing, comparing it anyway would rewrite settings.json every 2s
         if (prof.DisplayName == snap.MyHandle && prof.HandleName == snap.MyHandle &&
             (snap.MyProfilePictureId < 0 || prof.ProfilePictureId == snap.MyProfilePictureId) &&
             (string.IsNullOrEmpty(key) || prof.HandleKey == key)) return;
@@ -170,7 +164,6 @@ public partial class AccountsViewModel : ObservableObject
         HasSavedCredentials = SavedDetails(_credentials, profile);
     }
 
-    // with slots, the settings lock is held from reading another copy's numbers to saving, so two can't give out one
     private void PersistProfileList(bool slots = false)
     {
         using var gate = slots ? _settings.HoldLock() : null;
@@ -180,7 +173,6 @@ public partial class AccountsViewModel : ObservableObject
         _settings.Save(s);
     }
 
-    // a login always goes with the account's own home slot, so one without gets it now
     internal int EnsureHomeSlot(Account p)
     {
         if (!HomeSlots.Valid(p.HomeSlot) || Profiles.Any(o => o != p && o.HomeSlot == p.HomeSlot))
@@ -188,7 +180,6 @@ public partial class AccountsViewModel : ObservableObject
         return p.HomeSlot;
     }
 
-    // the IDs are wrapped with the passwords, so this unwraps every saved POL entry
     private Account? ProfileWithPolId(string polId, Account? except = null) =>
         Profiles.FirstOrDefault(p => p != except &&
                                      string.Equals(_credentials.ReadPolId(p.Id), polId, StringComparison.OrdinalIgnoreCase));
@@ -210,7 +201,6 @@ public partial class AccountsViewModel : ObservableObject
     {
         var r = _dialogs.AskAccount(null, false, edit: false);
         if (r == null) return false;
-        // one POL ID twice would be two cards for one account
         if (ProfileWithPolId(r.PolId) is { } same)
         {
             _dialogs.Info("Account already added",
@@ -227,7 +217,6 @@ public partial class AccountsViewModel : ObservableObject
         try { _credentials.SaveSquareEnixAccount(profile.Id, new SquareEnixAccount(r.SeaId, r.SeaPassword)); }
         catch
         {
-            // the account isn't added, so its POL entry mustn't stay behind
             try { _credentials.DeletePolAccount(profile.Id); }
             catch (Exception ex) { Log.Warning(ex, "Could not remove the PlayOnline login details of account {Id} after a failed save", profile.Id); }
             throw;
@@ -263,7 +252,6 @@ public partial class AccountsViewModel : ObservableObject
         var squareEnix = squareEnixEdit == AccountRules.SideEdit.Fill ? _credentials.LoadSquareEnixAccount(p.Id) : null;
         if (AccountRules.FillFailed(polEdit, pol, squareEnixEdit, squareEnix))
             return EditAccount(p, requireAll: true, typed: AccountRules.WithoutPasswords(r));
-        // read before anything's saved, so the typed details get compared with the saved ones
         var blocked = _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id && e.CredentialsRefused);
         bool cures = blocked is not null && AccountRules.ChangesLogIn(r, _credentials.ReadIds(p.Id), p.UseOtp, p.OtpSource, p.OtpItem, p.OtpAccount);
         if (polEdit != AccountRules.SideEdit.Keep)
@@ -278,7 +266,6 @@ public partial class AccountsViewModel : ObservableObject
         p.OtpAccount = r.OtpAccount;
         PersistProfileList();
         KeePassXc.ForgetIfUnused(Profiles);
-        // without a change that can cure the refusal the refused details are still what'd be sent, so the block stays
         if (blocked is not null && cures)
         {
             var id = blocked.ProfileId;
@@ -292,7 +279,6 @@ public partial class AccountsViewModel : ObservableObject
         }
         else if (blocked is not null)
             _dialogs.Info("Edit account", NothingChangedText);
-        // loading another account's one-time password setting here would write it onto the picked one
         if (p == SelectedProfile)
         {
             LoadCredentialsForProfile(p);
@@ -318,7 +304,6 @@ public partial class AccountsViewModel : ObservableObject
         if (!_dialogs.Confirm("Remove account",
                 $"Remove {profile.DisplayName}, its saved passwords and its saved messages from this PC? Your PlayOnline account itself won't change.",
                 "REMOVE", ConfirmStyle.Destructive)) return;
-        // the card stays when an entry couldn't go, so no saved password's left without a card that names it
         try { _credentials.DeleteProfile(profile.Id); }
         catch (Exception ex)
         {
@@ -346,7 +331,6 @@ public partial class AccountsViewModel : ObservableObject
 
     partial void OnStartGameImmediatelyChanged(bool value) => _settings.SaveChange(s => s.StartGameImmediately = value);
 
-    // accounts on one SE ID share an authenticator
     internal string? AskOtp(Account profile, SquareEnixAccount squareEnix) =>
         _dialogs.AskOtp(profile.OtpSource, profile.OtpItem, "sea:" + squareEnix.Username.Trim().ToLowerInvariant(),
                         squareEnix.Username, profile.OtpAccount);

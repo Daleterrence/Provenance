@@ -6,7 +6,6 @@ using Provenance.Wpf.ViewModels.Chat;
 
 namespace Provenance.Wpf.Views.Chat;
 
-// one for the session, unowned like the chat rooms window. Close only hides it (the viewer's Close), the chat stays in
 public partial class GroupChatWindow : AppWindow
 {
     private readonly GroupChatViewModel _vm;
@@ -35,7 +34,6 @@ public partial class GroupChatWindow : AppWindow
         IsVisibleChanged += (_, _) => { if (!IsVisible) _vm.WindowActive = false; };
         Closing += (_, e) =>
         {
-            // the frame's X and Alt+F4 are the viewer's Close too, the window only really goes with the session
             if (_quiet) return;
             e.Cancel = true;
             Hide();
@@ -73,8 +71,6 @@ public partial class GroupChatWindow : AppWindow
         if (message != null) _vm.Tell(message);
     }
 
-    // up but behind: the taskbar button flashes if that's wanted. A hidden window has no button, and the notice is the
-    // main window's
     private void OnLineArrived(string group, string who, string text, int count)
     {
         if (!_vm.FlashWanted || !IsVisible || IsActive) return;

@@ -2,7 +2,6 @@ using Provenance.Common.Mirror;
 using Provenance.ReleaseCheck;
 using Velopack.Sources;
 
-// 0 only when everything passes with the keys built into the app at this commit
 switch (args)
 {
     case ["--live"]:

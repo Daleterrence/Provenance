@@ -3,8 +3,6 @@ namespace Provenance.Common.Security;
 // names off the network or out of a zip get used as admin, so none of them may leave their folder
 public static class PathInside
 {
-    // full path under root, or null if relative is rooted, has a drive or stream colon, a NUL, an empty, "." or ".." part,
-    // or lands outside root (e.g. "nul")
     public static string? Resolve(string root, string relative)
     {
         var rel = relative.Replace('/', '\\');
@@ -13,8 +11,7 @@ public static class PathInside
         return Collapse(root, rel);
     }
 
-    // for names that are the player's own or a zip's spelling: "./x", "a//b" and "sub/../x" are fine, the full path
-    // just has to land below root
+    // "./x", "a//b" and "sub/../x" are fine, the full path just has to land below root
     public static string? Collapse(string root, string relative)
     {
         if (relative.Length == 0 || Path.IsPathRooted(relative) || relative.Contains(':') || relative.Contains('\0')) return null;

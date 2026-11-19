@@ -5,7 +5,6 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- AppTheme hands MaterialDesign each palette's own blue, these are just its starting point -->
                 <materialDesign:BundledTheme BaseTheme="Dark" PrimaryColor="Blue" SecondaryColor="Blue" />
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
                 <ResourceDictionary Source="Themes/Shared.xaml" />
@@ -14,7 +13,6 @@
                 <ResourceDictionary Source="Themes/Fields.xaml" />
                 <ResourceDictionary Source="Themes/Lists.xaml" />
                 <ResourceDictionary Source="Themes/Windows.xaml" />
-                <!-- merged last so the palette wins any clash. AppTheme swaps it for Light.xaml -->
                 <ResourceDictionary Source="Themes/Dark.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

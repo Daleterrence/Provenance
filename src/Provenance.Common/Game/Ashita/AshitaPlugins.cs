@@ -9,12 +9,10 @@ public sealed record AshitaPlugin(AddonListing Listing, AshitaPluginKind Kind, d
 
 public static class AshitaPlugins
 {
-    // what Ashita.dll 4.3.2.1 answers, used when the installed one can't be read
     public const double ExpectedInterfaceVersion = 4.30;
 
     private const long MaxDll = 64L << 20;
 
-    // a plugin's documentation is only looked for in docs\, a readme sat in plugins\ belongs to nobody
     public static IReadOnlyList<AshitaPlugin> Scan(string ashitaDir, IReadOnlyDictionary<string, AddonDocs>? docs = null)
     {
         docs ??= AshitaDocs.Scan(ashitaDir);
@@ -27,7 +25,7 @@ public static class AshitaPlugins
             {
                 if (!seen.Add(name)) continue;
                 try { if (Read(dll, name, core) is { } plugin) list.Add(plugin with { Listing = plugin.Listing with { Docs = docs.GetValueOrDefault(name) } }); }
-                catch (Exception) { }   // one odd file never takes the whole list down with it
+                catch (Exception) { }
             }
         }
         return list.OrderBy(p => p.Kind).ThenBy(p => p.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
@@ -41,11 +39,10 @@ public static class AshitaPlugins
             var core = AshitaPluginMetadata.Load(Path.Combine(ashitaDir, "Ashita.dll"), MaxDll);
             if (core is not null && core.Exports.TryGetValue("GetInterfaceVersion", out var rva) && core.ExportedDouble(rva) is { } v) return v;
         }
-        catch (Exception) { }   // can't read the core, so go with the expected version
+        catch (Exception) { }
         return ExpectedInterfaceVersion;
     }
 
-    // Ashita looks for <name>.dll, then <name>\<name>.dll
     private static List<(string Name, string Dll)> Dlls(string dir)
     {
         var list = new List<(string, string)>();

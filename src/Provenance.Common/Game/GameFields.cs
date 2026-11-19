@@ -28,7 +28,6 @@ public static class GameFields
         [Resolution] = new((a, b) => a.Width == b.Width && a.Height == b.Height, (f, t) => (t.Width, t.Height) = (f.Width, f.Height)),
         [WindowMode] = Int(s => s.WindowMode, (s, v) => s.WindowMode = v),
         [UiSize] = new((a, b) => a.UiWidth == b.UiWidth && a.UiHeight == b.UiHeight, (f, t) => (t.UiWidth, t.UiHeight) = (f.UiWidth, f.UiHeight)),
-        // the page works in tenths, so a value from elsewhere between two of them isn't a change till it's moved
         [Brightness] = new((a, b) => MathF.Round(a.Brightness, 1) == MathF.Round(b.Brightness, 1), (f, t) => t.Brightness = f.Brightness),
         [RenderSize] = new((a, b) => a.BgWidth == b.BgWidth && a.BgHeight == b.BgHeight, (f, t) => (t.BgWidth, t.BgHeight) = (f.BgWidth, f.BgHeight)),
         [KeepAspect] = Int(s => s.KeepAspect, (s, v) => s.KeepAspect = v),
@@ -56,7 +55,6 @@ public static class GameFields
         [GraphicsFix] = Int(s => s.GraphicsFix, (s, v) => s.GraphicsFix = v),
     };
 
-    // what Windower writes into the registry from a profile at every launch
     public static readonly IReadOnlySet<string> Windower = new HashSet<string>
     {
         Resolution, WindowMode, UiSize, Brightness, RenderSize, DistantTextures, EnhancedShading, Sound, BackgroundSound,

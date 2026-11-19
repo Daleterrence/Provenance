@@ -41,7 +41,6 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
 
     internal const string AutoLoginTip = "Tip: Hold shift whilst starting the app to disable automatic log in!";
 
-    // set by the app opening on an automatic login, taken by the Open that follows
     internal bool AtOpen { get; set; }
 
     internal bool TipShown { get; set; }
@@ -55,7 +54,6 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
         _lean = _shown = Wanted;
         TipShown = _shown && AtOpen;
         if (!_shown) return false;
-        // one that's only up for a few seconds was about something before this login, and would read as its own here
         if (main.Notice.Current is { Stays: false }) main.Notice.Take();
         windows.ShowLeanStart(main);
         return true;
@@ -75,7 +73,6 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
         ShowFull();
     }
 
-    // a lean session's snapshots never reach the friends side, which mustn't write to its hook
     internal bool Hold(PolSocialSnapshot snap)
     {
         if (!_lean) return false;
@@ -91,7 +88,6 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
         ShowFull();
     }
 
-    // on the login's worker thread. The game's own check, and a no once the full window has to take over
     internal Func<bool>? BeforePol(string profileId, CancellationToken ct)
     {
         if (!_lean) return null;
@@ -102,7 +98,6 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
             _check = check;
             if (check.UpToDate) return true;
             Log.Information("The game needs an update or couldn't be checked, so the login carries on in the full window");
-            // before the first snapshot can land, so the friends side's ready for it
             ui.Run(() =>
             {
                 Finish();
@@ -120,7 +115,6 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
         return check;
     }
 
-    // Play's pressed for them, so the Play card's notice line would go unseen behind the update and the game
     private Task PlayAsync()
     {
         if (main.Social.AccountNotice is not { } notice) return links.Play(TakeCheck());
@@ -159,7 +153,6 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
         return new(0, null, false);
     }
 
-    // null when the game can start as it is. A handle's only active once the session's online, so the link needs a full one
     private Func<Task>? Fallback(PolSocialSnapshot? snap)
     {
         if (snap is null) return Told(() => dialogs.Error(CantStart, AccountRules.PlayGateFailure(null)!.Text));
@@ -176,10 +169,8 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
         return Task.CompletedTask;
     };
 
-    // null when Play couldn't even be sent, which leaves a lean session held with nothing to show it on
     private async Task<LeanEnd?> StartGameAsync(string profileId)
     {
-        // nothing's left to cancel, and a close or a Windows log-off mustn't wait on a login that's over
         links.EndCancellable();
         var notice = await launch.FinishWindowerUpdateAsync(text => links.NewProgress("Starting FINAL FANTASY XI", text));
         if (notice is not null) links.Report(LaunchProgress.Notice(notice));

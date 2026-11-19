@@ -1,6 +1,5 @@
 <Project>
-  <!-- release builds carry their SDK's .NET runtime, so one older than 10.0.14 (the Brotli fix for the mirror packs,
-       CVE-2026-111497) is refused. MinimumBundledRuntime goes up with the next fix that matters -->
+  <!-- anything older than 10.0.14 lacks the Brotli fix for the mirror packs -->
   <PropertyGroup>
     <MinimumBundledRuntime>10.0.14</MinimumBundledRuntime>
   </PropertyGroup>

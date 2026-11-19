@@ -31,8 +31,6 @@ public sealed record HandleRow(HandleGroup Group, ImageSource? Picture, IReadOnl
     public bool NoCharacters => Characters.Count == 0;
 }
 
-// Settings > Handles, from the hook's snapshot. It lives as long as the app, so a change still going when Settings
-// closes says how it went next time
 public partial class HandlesViewModel : ObservableObject
 {
     private readonly IDialogs _dialogs;
@@ -50,7 +48,6 @@ public partial class HandlesViewModel : ObservableObject
     private string _signature = "";
     private bool _wasReadOnly;
     private Action<string?>? _after;
-    // every FFXI Content ID's key in the order the page shows, while that isn't the order POL has
     private List<string>? _draft;
     private string _draftFrom = "";
 
@@ -83,7 +80,6 @@ public partial class HandlesViewModel : ObservableObject
     public bool Editable => LoggedIn && !ReadOnly && !Busy;
     private bool CanChange => Editable && _draft is null;
     public bool CanCreate => CanChange;
-    // once it's been sent the new order stays on the page till the answer's in, without its buttons
     public bool Ordering => _draft is not null && !(Busy && _op == HandleChange.Reorder);
     public string OrderChangedText => HandleList.OrderChangedText;
     public string LoggedOutText => HandleList.LoggedOutText;
@@ -91,15 +87,12 @@ public partial class HandlesViewModel : ObservableObject
     public string LimitText => HandleList.LimitText;
     public string NoCharactersText => HandleList.NoCharactersText;
     public bool InChatRoom => _snap.Chat is { RoomJob.State: "in" or "entering" };
-    // mine, or one the hook's still running (it can take mine after the page has given up on it)
     public bool Switching => (Busy && _op == HandleChange.Switch) ||
                              (LoggedIn && _snap is { HandleOp: "switch", HandleJob.State: "working" });
 
-    // a create or delete with no answer yet, mine or one the hook's still running
     public bool ListEditGoing => (Busy && _op is HandleChange.Create or HandleChange.Delete) ||
                                  (LoggedIn && _snap is { HandleOp: "create" or "delete", HandleJob.State: "working" });
 
-    // why a switch can't go right now (something open that's bound to the active handle), or null
     public Func<string?>? SwitchBlocked { get; set; }
 
     public void Refresh()
@@ -114,11 +107,9 @@ public partial class HandlesViewModel : ObservableObject
     {
         LoggedIn = loggedIn && snap != null;
         ReadOnlyText = readOnly;
-        // logged out, the last account's handles go with it
         _snap = LoggedIn ? snap! : PolSocialSnapshot.Empty;
         if (!LoggedIn && _watch.Running)
         {
-            // the session that had it is gone, and so is anything that could say how it went
             _watch.Forget();
             Note.Fail(_op == HandleChange.Switch ? "The PlayOnline session ended before Provenance could confirm the switch."
                                                  : "The PlayOnline session ended before Provenance could confirm the change.");
@@ -130,7 +121,6 @@ public partial class HandlesViewModel : ObservableObject
             ClearDraft();
             Note.Fail(HookFailures.Handles.ListChanged);
         }
-        // the wait doesn't count while the game's starting, nothing can be changed then
         if (readOnly != null || _wasReadOnly) _watch.Restart(Now);
         _wasReadOnly = readOnly != null;
         Settle();
@@ -145,7 +135,6 @@ public partial class HandlesViewModel : ObservableObject
         var state = _snap.HandleJob.StateFor(_watch.Token) ?? "";
         if (state != "saved" && !state.StartsWith("failed", StringComparison.Ordinal))
         {
-            // once the hook's taken it, it's the hook's answer that ends it
             if (state == "working" || !_watch.Reached(Now)) return;
             if (_pid() is { } pid) HookFiles.Discard(pid, HookContract.Requests.Handle);
             state = "timeout";
@@ -167,7 +156,6 @@ public partial class HandlesViewModel : ObservableObject
     {
         var (groups, unlinked) = HandleList.Build(_snap, _draft);
         bool edit = CanChange, move = Editable;
-        // straight after a login no handle's marked active yet, and the one in use mustn't look like it can go
         bool delete = edit && groups.Any(g => g.Handle.Active);
         var sig = $"{edit}/{move}|" + string.Join("|", groups.Select(g =>
                       $"{g.Handle.Slot}/{g.Handle.Name}/{g.Handle.Key}/{g.Handle.ProfilePictureId}/{g.Handle.Active}/{g.Full}/" +
@@ -178,7 +166,6 @@ public partial class HandlesViewModel : ObservableObject
         Rows.Clear();
         foreach (var g in groups)
         {
-            // the arrows are for a handle with two or more characters that have a name, and step over any that haven't
             var named = g.Characters.Where(c => c.Named).ToList();
             HandleCharacterRow Character(HandleCharacter c)
             {
@@ -192,7 +179,6 @@ public partial class HandlesViewModel : ObservableObject
         HasUnlinked = Unlinked.Count > 0;
     }
 
-    // the handles a character could go to, a full one greyed out with the limit under its name
     public IReadOnlyList<MenuAction> LinkMenu(HandleCharacterRow c) =>
         LinkTargets(c).Select(to => new MenuAction(to.Name, !to.Full, () => Link(c, to)) { Detail = to.Full ? HandleList.LimitText : "" })
                       .ToList();
@@ -200,8 +186,6 @@ public partial class HandlesViewModel : ObservableObject
     public IReadOnlyList<HandleRow> LinkTargets(HandleCharacterRow c) =>
         c.Character.Orphan ? [] : Rows.Where(r => r.Handle.Slot != c.Handle?.Slot).ToList();
 
-    // the game's window is up: the hook waited for the change before it booted FFXI, but its answer went with the
-    // snapshot, so all that's known is that it wasn't confirmed here
     public void GameStarted()
     {
         if (!_watch.Running) return;
@@ -213,7 +197,6 @@ public partial class HandlesViewModel : ObservableObject
         Rebuild();
     }
 
-    // Link to... with nowhere to go says so rather than opening nothing
     public void NoTarget()
     {
         Note.Show(HandleList.NoTargetText);
@@ -237,7 +220,6 @@ public partial class HandlesViewModel : ObservableObject
     [RelayCommand]
     public void MoveDown(HandleCharacterRow c) => Move(c, 1);
 
-    // swaps it with the next one on its handle that has a name. Only on the page, nothing's sent till Save order
     private void Move(HandleCharacterRow c, int by)
     {
         if (!Editable || Rows.FirstOrDefault(r => r.Handle.Slot == c.Handle?.Slot) is not { } row) return;
@@ -303,7 +285,6 @@ public partial class HandlesViewModel : ObservableObject
     private string? SwitchRefusal() =>
         ReadOnlyText ?? (Busy || Switching ? HandleList.PageBusyText : null) ?? SwitchBlocked?.Invoke();
 
-    // refused is for a pick turned away before anything's sent, failed for whatever goes wrong after
     public IReadOnlyList<MenuAction> SwitchMenu(Action<string> failed, Action<string>? refused = null)
     {
         if (!LoggedIn || Rows.Count == 0) return [];
@@ -318,7 +299,6 @@ public partial class HandlesViewModel : ObservableObject
         return menu;
     }
 
-    // the menu can be a few seconds old by the time something's picked, so it's all checked again
     private void SwitchFromMenu(int slot, Action<string> failed, Action<string> refused)
     {
         if (!LoggedIn || Rows.FirstOrDefault(r => r.Handle.Slot == slot) is not { Active: false } row) return;
@@ -332,14 +312,12 @@ public partial class HandlesViewModel : ObservableObject
         else _after = text => { if (text is not null) failed(text); };
     }
 
-    // a note from the last login's change doesn't show under the next one
     public void NewLogin()
     {
         Note.Clear();
         _noteSeen = false;
     }
 
-    // Settings is opening: an answer that came in while it was shut shows this once, one already seen there goes
     public void Opened()
     {
         if (!Busy && _noteSeen)
@@ -350,7 +328,6 @@ public partial class HandlesViewModel : ObservableObject
         _noteSeen = true;
     }
 
-    // the page's gone, and an order nobody saved would keep every other button off the next time it opened
     public void Closed()
     {
         _open = false;
@@ -359,7 +336,6 @@ public partial class HandlesViewModel : ObservableObject
         Rebuild();
     }
 
-    // a group's chat only opens under the handle I joined it with
     public void OpenGroup(PolGroup group, Action open)
     {
         void tell(string text) => _dialogs.Info(GroupChatViewModel.DialogTitle, text);
@@ -401,7 +377,6 @@ public partial class HandlesViewModel : ObservableObject
              HandleList.Done(HandleChange.Link, to.Name, c.Label));
     }
 
-    // the viewer's own steps: the name box, a question, then the one upload. Only the server can say a name's taken
     [RelayCommand]
     public void Create()
     {
@@ -419,7 +394,6 @@ public partial class HandlesViewModel : ObservableObject
         Send(HandleChange.Create, (pid, token) => SocialRequests.CreateHandle(pid, token, name), HandleList.Done(HandleChange.Create, name, ""));
     }
 
-    // one question, then the viewer's own delete, where polcore unlinks the handle's characters as it goes
     [RelayCommand]
     public void Delete(HandleRow row)
     {
@@ -431,7 +405,6 @@ public partial class HandlesViewModel : ObservableObject
             return;
         }
         if (!_dialogs.Confirm(HandleList.DeleteTitle, HandleList.DeleteQuestion, "DELETE", ConfirmStyle.Destructive) || !CanChange) return;
-        // the question can sit open a while, so the handle's looked at again before anything's sent
         if (Current() is not { CanDelete: true, Active: false } still || still.Name != now.Name)
         {
             Note.Fail(HookFailures.Handles.ListChanged);

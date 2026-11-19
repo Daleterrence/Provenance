@@ -1,5 +1,3 @@
-/* every request the app can write, one row each: its lists, where a refusal's token goes,
-   and the JB_ bits of the job it starts */
 #define SWITCHING "failed:handle changing"
 
 enum { JB_DB = 1, JB_WRITE = 2, JB_WAIT = 4, JB_SWITCH = 8 };
@@ -46,7 +44,6 @@ static int busy_me(void)
 static int busy_handle(void) { return (g_s.handle_op ? JB_WRITE : 0) | (g_s.handle_want ? JB_WAIT : 0); }
 
 #define TOKEN(field) g_s.field, sizeof g_s.field
-/* the refused ones come first, in the order they're taken in */
 static const req_row g_requests[] = {
     { REQ_SEND, RQ_REFUSE | RQ_ASKED, TOKEN(send_token), 2, mail_send_fail, NULL, busy_send },
     { REQ_FRIEND, RQ_REFUSE | RQ_ASKED, TOKEN(edit_token), 2, request_fail_edit, NULL, busy_edit },
@@ -81,20 +78,17 @@ static const req_row g_requests[] = {
 };
 #define REQ_ROWS ((int)(sizeof g_requests / sizeof g_requests[0]))
 
-/* what's going on, as the JB_ bits of every job there is */
 static int requests_busy(void)
 {
     int bits = 0;
     for (int i = 0; i < REQ_ROWS; i++) if (g_requests[i].busy) bits |= g_requests[i].busy();
     return bits;
 }
-/* 1 when a request in the list is there to be taken, or one's been taken and not finished with */
 static int requests_listed(int list)
 {
     for (int i = 0; i < REQ_ROWS; i++) if ((g_requests[i].in & list) && requests_waiting(g_requests[i].ext)) return 1;
     return 0;
 }
-/* the file and its .taking copy */
 static void requests_sweep(void)
 {
     char p[MAX_PATH + 64];

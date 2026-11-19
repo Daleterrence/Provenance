@@ -6,7 +6,6 @@ using Provenance.Wpf.ViewModels.Dialogs;
 
 namespace Provenance.Wpf.Views.Dialogs;
 
-// Asked after log in is clicked. The code only ever lives in memory for that one launch
 public partial class OtpDialog : AppWindow
 {
     private readonly TextBox[] _boxes = new TextBox[6];
@@ -39,7 +38,6 @@ public partial class OtpDialog : AppWindow
             box.PreviewKeyDown += OnDigitKey;
             box.GotKeyboardFocus += (_, _) => box.SelectAll();
             box.TextChanged += (_, _) => Prompt.ClearError();
-            // Ctrl+V skips PreviewTextInput
             DataObject.AddPastingHandler(box, (_, e) =>
             {
                 e.CancelCommand();
@@ -60,7 +58,6 @@ public partial class OtpDialog : AppWindow
         Closing += (_, _) => Prompt.Close();
     }
 
-    // reuseKey (the SE ID) names the authenticator, so one code never goes out twice
     public static string? Ask(Window? owner, string source = "", string item = "", string reuseKey = "", string squareEnixId = "",
                               string account = "")
     {
@@ -81,7 +78,6 @@ public partial class OtpDialog : AppWindow
         _boxes[next].Focus();
         if (digits.Length == 0) Prompt.ShowError("There's no code on the clipboard.");
         else Prompt.ClearError();
-        // a whole code pasted in has no typing to get wrong, so it goes straight away
         if (from == 0 && digits.Length == _boxes.Length) _ = Prompt.SubmitAsync(Code);
     }
 
@@ -118,7 +114,7 @@ public partial class OtpDialog : AppWindow
                 _boxes[i + 1].Focus();
                 break;
             case Key.Enter:
-                e.Handled = true;   // or the default OK button submits a second time
+                e.Handled = true;
                 _ = Prompt.SubmitAsync(Code);
                 break;
         }
@@ -136,7 +132,7 @@ public partial class OtpDialog : AppWindow
     private void OnMasterKey(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
-        e.Handled = true;   // not the dialog's OK
+        e.Handled = true;
         OnUnlock(sender, e);
     }
 
@@ -148,7 +144,7 @@ public partial class OtpDialog : AppWindow
     {
         foreach (var b in _boxes) b.Text = "";
         string text = "";
-        try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); } catch { }   // another program may hold the clipboard
+        try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); } catch { }
         Fill(text, 0);
     }
 }

@@ -6,8 +6,7 @@ using Serilog;
 
 namespace Provenance.Common.Credentials;
 
-// 32 random bytes in admin-only cred.key, used as DPAPI entropy so a non-admin program only ever gets ciphertext.
-// The hook reads it via POL_CRED_KEYFILE, and it's never logged
+// DPAPI entropy, so a non-admin program only ever gets ciphertext
 public static class CredentialKey
 {
     public const int Length = 32;
@@ -33,7 +32,6 @@ public static class CredentialKey
         }
     }
 
-    // held while cred.key's read for _inUse, so two threads never read it twice for one use
     private static readonly object InUseGate = new();
     private static byte[]? _inUse;
     private static WindowsCredentialStore? _wrapped;
@@ -42,7 +40,6 @@ public static class CredentialKey
     private static WindowsCredentialStore? _keyless;
     private static string _prefix = WindowsCredentialStore.DefaultPrefix;
 
-    // tests, so they never touch the real entries
     internal static string Prefix
     {
         get => Volatile.Read(ref _prefix);
@@ -53,14 +50,11 @@ public static class CredentialKey
         }
     }
 
-    // never reads or makes the key file, so it's safe anywhere (a delete or a header test needs no key)
     public static WindowsCredentialStore Keyless
     {
         get { lock (KeylessGate) return _keyless ??= new WindowsCredentialStore(Prefix); }
     }
 
-    // the one store everything wrapped goes through, made on first use. A key file that can't be opened throws, and
-    // nothing's kept from that
     public static WindowsCredentialStore Wrapped()
     {
         lock (InUseGate) return _wrapped ??= new WindowsCredentialStore(Prefix, InUse());
@@ -68,14 +62,12 @@ public static class CredentialKey
 
     public static Task<WindowsCredentialStore> WrappedAsync() => Task.Run(Wrapped);
 
-    // so the first load or save on the UI thread never sits waiting on the key file's lock
     public static async Task WarmUp()
     {
         try { await WrappedAsync().ConfigureAwait(false); }
         catch (CredentialKeyUnavailableException) { }
     }
 
-    // a copy of the key in use, read from the file on first use. Wiping it leaves the key itself alone
     internal static byte[] InUse()
     {
         lock (InUseGate)
@@ -87,7 +79,6 @@ public static class CredentialKey
 
     public static byte[] Open(string path, string protects = SavedAccounts) => OpenFile(path, protects);
 
-    // the hook couldn't read an entry (exit 11, or "hold: Play entry unreadable"), so reread it now on this worker
     public static void Reload()
     {
         lock (InUseGate)
@@ -98,7 +89,6 @@ public static class CredentialKey
         }
     }
 
-    // under InUseGate. The store holds its own copy, so wiping this one's safe, and the next use makes a new store
     private static void DropInUse()
     {
         if (_inUse is { } old) CryptographicOperations.ZeroMemory(old);
@@ -116,18 +106,16 @@ public static class CredentialKey
         }
     }
 
-    // all under the lock file so two copies never both replace it. Anything that isn't exactly 32 bytes gets a new key
     public static byte[] LoadOrCreate(string? path = null, string protects = SavedAccounts)
     {
         path = Path.GetFullPath(path ?? FilePath);
-        // another copy only holds it for milliseconds, so the limit's only hit when that copy died half way
         using var gate = AdminLock.AcquireFile(LockPathFor(path), GateWait);
         var (key, exists) = TryRead(path);
         if (key != null) return key;
         if (exists)
         {
             Log.Warning("The key file {Path} is not a valid key; a new key is made. What it protected ({Protects}) cannot be read any more", path, protects);
-            FileDelete.Try(path);   // TryCreate then fails on what's still there
+            FileDelete.Try(path);
         }
         return TryCreate(path) ?? throw new IOException($"Provenance could not read or make its credential key {path}.");
     }

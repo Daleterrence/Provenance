@@ -16,13 +16,10 @@ public sealed class StatusLine : ObservableObject
 
     public void Clear() => Set("", false);
 
-    // keeps the words and drops the error colour
     public void Soften() => Set(Text, false);
 
-    // for a line that's an error only some of the time
     public void Set(string text, bool isError) => Set(text, isError, null);
 
-    // goes by itself after a while, like a success that needs no dismissing
     public void Show(string text, TimeSpan clearAfter) => Set(text, false, clearAfter);
 
     private void Set(string text, bool isError, TimeSpan? clearAfter)

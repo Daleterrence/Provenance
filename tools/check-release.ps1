@@ -1,14 +1,6 @@
 <#
 .SYNOPSIS
     Runs the app's own update check on a release: its statement, its package and its feed entry.
-
-.DESCRIPTION
-    With a tag, downloads every file on that GitHub release (a draft too) and runs tools\ReleaseCheck on them. The
-    statement (<package>.sig) has to verify with the keys built into the app at this checkout, and match the package
-    and the release's own releases.<channel>.json entry. -Folder checks a release's files that are already on disk.
-    -Live checks what the update server serves: each channel's feed, its newest package and that package's statement,
-    fetched the way a copy of the app fetches them.
-    Exits 0 only when everything passes.
 .EXAMPLE
     pwsh tools/check-release.ps1 v1.0.0-rc.1
 .EXAMPLE
@@ -61,7 +53,6 @@ $dir = Join-Path ([IO.Path]::GetTempPath()) "provenance-check-$version-$PID"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $code = 1
 try {
-    # gh finds the GitHub repo from this checkout's remote
     Push-Location $repo
     try {
         & gh release download $Tag --dir $dir --clobber

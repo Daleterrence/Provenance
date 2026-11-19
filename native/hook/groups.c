@@ -67,7 +67,6 @@ static void groups_send(BYTE *b, int kind, DWORD toLo, DWORD toHi, int toSlot, i
     mail_send_start(b);
     g_snap_dirty = 1;
 }
-/* the group id comes from the invitation, never the request */
 static void groups_answer(BYTE *b, int accept, int mid, const char *subj, const char *tok)
 {
     const mailrec *m = NULL;
@@ -101,7 +100,6 @@ static void groups_request(BYTE *b)
     grp_hdr gh = { 0 };
     grp_mem m;
     int myClass = 0, haveGroup = 0, mid, slot, idx, cls, tcls, me, row, used = 0;
-    /* a group job's -0x100 is a failure, so wait for a free polcore slot */
     if (g_s.send_queue_n || g_s.answer_kind || mail_send_slots_free(b) < 1) return;
     if (requests_take(REQ_GROUP, buf, sizeof buf) < 0) return;
     p = buf;
@@ -157,8 +155,6 @@ static void groups_request(BYTE *b)
         if (lstrcmpA(k, d) != 0) { group_fail("failed:no such member"); return; }
         tcls = (int)((m.flags >> 18) & 7);
         me = (int)((m.flags >> 21) & 1);
-        /* the viewer's member menu: remove (1) a non-master as master or sub-master, relieve (3) a sub-master, and as
-           master only make a member sub-master (4) or anyone below master (5) */
         if (me ||
             (cls == 1 && ((myClass != 4 && myClass != 5) || tcls == 5)) ||
             (cls == 3 && ((myClass != 4 && myClass != 5) || tcls != 4)) ||

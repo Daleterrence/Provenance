@@ -4,11 +4,9 @@ using Provenance.Common;
 
 namespace Provenance.Wpf.Services;
 
-// the app runs elevated, so explorer.exe hands these to the user's own Explorer, same as links. Paths always go in
-// quotes, explorer reads a comma in a bare one as another switch
+// explorer reads a comma in a bare path as another switch
 internal static class Explorer
 {
-    // the full path, a bare name's looked for in the app folder first
     private static string Exe => AppPaths.ExplorerExe;
 
     internal static Func<ProcessStartInfo, Process?> StartForTest { get; set; } = Process.Start;

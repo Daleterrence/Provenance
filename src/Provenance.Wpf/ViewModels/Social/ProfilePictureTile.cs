@@ -9,7 +9,6 @@ public sealed partial class ProfilePictureTile(ProfilePictureCatalog.ProfilePict
 {
     public ProfilePictureCatalog.ProfilePicture ProfilePicture { get; } = pic;
     public ImageSource? Image { get; } = image;
-    // a line each for whichever of the two the picture has
     public string? Tip => string.Join("\n", new[] { ProfilePicture.Name, ProfilePicture.Artist }.Where(s => !string.IsNullOrEmpty(s))) is { Length: > 0 } tip
         ? tip : null;
     [ObservableProperty] private bool _isSelected;

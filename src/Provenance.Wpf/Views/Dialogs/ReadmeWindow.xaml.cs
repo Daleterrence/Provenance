@@ -27,7 +27,6 @@ public partial class ReadmeWindow : AppWindow
         else BodyText.Text = text;
     }
 
-    // the window's up with Loading... in it first. The reading happens off the UI thread, the building in slices on it
     private async Task ShowPageAsync(string text, Action<Uri> openLink, CancellationToken cancel)
     {
         try

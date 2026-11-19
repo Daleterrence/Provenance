@@ -6,8 +6,7 @@ using Serilog;
 
 namespace Provenance.Common.Patcher;
 
-// The file's kept as the mirror sent it and checked again on every load,
-// so nothing in the app's folder is trusted just for being there
+// kept as the mirror sent it and checked on every load, so nothing in the app's folder is trusted for being there
 internal static class SignedBuilds
 {
     private static readonly object Gate = new();
@@ -31,10 +30,8 @@ internal static class SignedBuilds
 
     internal static ViewerBuild.Builds Accepted() => ViewerBuild.Known with { Signed = Entries() };
 
-    // no network, the built-in list and whatever's held
     public static ViewerBuild.State Check(string viewerDir) => ViewerBuild.Check(viewerDir, ViewerBuild.RegionOf(viewerDir), Accepted());
 
-    // a build nobody's listed gets one look at the mirror's list per run
     public static void FetchIfUnknown(string viewerDir, CancellationToken ct)
     {
         try
@@ -42,7 +39,6 @@ internal static class SignedBuilds
             if (Check(viewerDir) != ViewerBuild.State.Unknown || Interlocked.Exchange(ref _asked, 1) == 1) return;
             Fetch(ct).GetAwaiter().GetResult();
         }
-        // a cancelled lookup didn't happen, so the next login asks again
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { Interlocked.Exchange(ref _asked, 0); }
         catch (Exception ex)
         {
@@ -50,11 +46,9 @@ internal static class SignedBuilds
         }
     }
 
-    // never fetches, a caller that wants an unknown build looked up says so first
     public static IDisposable? Hold(string viewerDir, out string? problem) =>
         ViewerBuild.Hold(viewerDir, ViewerBuild.RegionOf(viewerDir), Accepted(), out problem);
 
-    // a failed fetch leaves what's held alone, the built-in list works with no mirror at all
     public static async Task RefreshAsync(MirrorClient client, CancellationToken ct)
     {
         Interlocked.Exchange(ref _asked, 1);
@@ -68,8 +62,6 @@ internal static class SignedBuilds
         }
     }
 
-    // An older list than the one held is ignored, and so is one older than the floor. With nothing held, a list signed
-    // since the floor is taken, so a pulled build can come back until the next fetch.
     internal static bool Offer(MirrorBuilds list, byte[] blob)
     {
         lock (Gate)

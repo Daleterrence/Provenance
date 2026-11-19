@@ -5,7 +5,6 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game;
 
-// Windower and Ashita start pol.exe themselves. Theirs gets found by its parent chain and the hook attached to it
 public static class ProcessTree
 {
     public readonly record struct Entry(int Pid, int ParentPid, string ExeName);
@@ -25,11 +24,9 @@ public static class ProcessTree
         return list;
     }
 
-    // Windows reuses pids, callers compare start times as well
     public static List<int> ChildrenOf(int parentPid) =>
         Snapshot().Where(e => e.ParentPid == parentPid).Select(e => e.Pid).ToList();
 
-    // held open, so the pid stays this process's for as long as the handle's kept, then its start (null if unreadable)
     internal static LaunchTree.Opened? Open(int pid)
     {
         var h = Kernel32.OpenProcess(Synchronize | QueryLimitedInformation, false, (uint)pid);
@@ -39,7 +36,6 @@ public static class ProcessTree
         return new LaunchTree.Opened(new SafeProcessHandle(h, ownsHandle: true), start);
     }
 
-    // works on a still-suspended process too
     public static string? ImagePath(int pid)
     {
         var h = Kernel32.OpenProcess(QueryLimitedInformation, false, (uint)pid);

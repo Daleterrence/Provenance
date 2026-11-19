@@ -8,7 +8,6 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-// what Play starts the game through, and the Windower profile or Ashita boot configuration it'll use
 public sealed class PlayPlatform(PolSession pol, ISettingsService settings) : ObservableObject
 {
     public string? Subtitle => pol.Platform switch
@@ -34,7 +33,6 @@ public sealed class PlayPlatform(PolSession pol, ISettingsService settings) : Ob
     public string NoChoicesText => pol.Platform == ThirdPartyHook.Ashita
         ? "No boot configurations found" : "No Windower profiles found";
 
-    // the same pick Play uses: Ashita falls back to the last config Ashita ran with, Windower's "" is the unnamed one
     public IReadOnlyList<Choice> Choices()
     {
         var target = PlayTarget.For(settings.Current, null);

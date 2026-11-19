@@ -11,7 +11,6 @@ public static class Bitwarden
 {
     public const string LoginText = "Bitwarden asks for your email, master password and two-step login code in a window of its own.";
 
-    // this run's unlock, memory only
     private static string? _session;
 
     internal static async Task<OtpFetchResult> FetchAsync(string item, string? masterPassword, CancellationToken ct)
@@ -76,7 +75,6 @@ public static class Bitwarden
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { return ""; }
     }
 
-    // "bitwarden.com" puts bw back on its own default. Null for a self-hosted address that isn't a plain https URL
     public static string? Server(string picked, string typed)
     {
         if (picked.Length > 0) return picked;
@@ -90,7 +88,6 @@ public static class Bitwarden
     private static Task<BitwardenLogin>? _login;
     private static Process? _loginWindow;
 
-    // the login that's still going, if there is one. Edit account watches it rather than starting another
     public static Task<BitwardenLogin>? LoginRunning
     {
         get { lock (LoginGate) return _login is { IsCompleted: false } running ? running : null; }
@@ -101,7 +98,6 @@ public static class Bitwarden
         lock (LoginGate) _login = login;
     }
 
-    // one window at a time. Closing Edit account only stops watching it, the window's the user's to finish
     public static Task<BitwardenLogin> LogInAsync(string server)
     {
         lock (LoginGate)
@@ -111,8 +107,6 @@ public static class Bitwarden
         }
     }
 
-    // bw asks for everything in its own window. --quiet so the session key never shows, and it's locked when the
-    // window closes
     private static async Task<BitwardenLogin> RunLoginAsync(string server)
     {
         using var found = await Task.Run(() => ToolFinder.Find(ToolFacts.Bitwarden));
@@ -155,7 +149,6 @@ public static class Bitwarden
         return result;
     }
 
-    // the exit code, or null when it couldn't be run. Never throws
     private static async Task<int?> LockAsync(string bw, string? session, TimeSpan limit, CancellationToken ct)
     {
         try
@@ -170,8 +163,6 @@ public static class Bitwarden
         }
     }
 
-    // at exit a login window still open is closed (so none finishes after Provenance), then it's locked and the
-    // session's forgotten either way. Never throws
     public static async Task LockAtExitAsync()
     {
         Process? window;
@@ -190,7 +181,6 @@ public static class Bitwarden
         catch (Exception ex) { Log.Warning(ex, "Locking Bitwarden failed"); }
     }
 
-    // "[ERROR] <date> <time> <message>" -> "<message>". bw's colours go too
     private static string CleanError(string err)
     {
         var line = Regex.Replace(err, @"\x1b\[[0-9;]*m", "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";

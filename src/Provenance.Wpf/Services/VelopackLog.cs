@@ -3,7 +3,6 @@ using Velopack.Logging;
 
 namespace Provenance.Wpf.Services;
 
-// Velopack's lines go to its own log too, these put them next to mine
 internal sealed class VelopackLog : IVelopackLogger
 {
     public void Log(VelopackLogLevel level, string? message, Exception? exception)

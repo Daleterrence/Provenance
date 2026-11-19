@@ -5,14 +5,11 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Ashita;
 
-// ByScript: the script loads it some way a toggle can't safely change (an /include or /exec, a ;-joined line, a %N%
-// argument, or it's unloaded again further down)
 public enum AshitaLoad { Off, On, ByScript }
 
 public sealed record AshitaScriptLoad(string Name, AshitaLoad State, string? Args);
 
-// scripts\<name>.txt, edited line by line. Ashita reads it as raw bytes up to each \n, so Latin1 keeps every byte and
-// every line ending exactly as it was
+// Ashita reads it as raw bytes up to each \n, so Latin1 keeps every byte and line ending
 public sealed partial class AshitaScript
 {
     public sealed record Line(string Text, string Ending);
@@ -35,7 +32,6 @@ public sealed partial class AshitaScript
         this.scriptsDir = scriptsDir is null ? null : Path.TrimEndingDirectorySeparator(Path.GetFullPath(scriptsDir));
     }
 
-    // a script that isn't there yet reads as empty, and Save makes it
     public static AshitaScript Load(string path, string? scriptsDir = null)
     {
         var full = Path.GetFullPath(path);
@@ -77,7 +73,6 @@ public sealed partial class AshitaScript
         var dir = Path.GetDirectoryName(full)!;
         try
         {
-            // the first .bak is the script from before Provenance touched it, so it's never written over
             SafeWrite.Replace(full, ToBytes(), Top(dir), refuse: FoldersTo(full),
                               backup: real => File.Exists(real + ".bak") ? SafeWrite.Backup.None : SafeWrite.Backup.Keep);
         }
@@ -108,20 +103,16 @@ public sealed partial class AshitaScript
         return folders;
     }
 
-
     public IReadOnlyList<AshitaScriptLoad> Plugins => Listed(false);
     public IReadOnlyList<AshitaScriptLoad> Addons => Listed(true);
 
     public AshitaLoad Plugin(string name) => State(Now(false), name);
     public AshitaLoad Addon(string name) => State(Now(true), name);
 
-    // false when the script loads it in a way a toggle can't touch, or the name can't go in a script. Turning an addon
-    // on turns the addons plugin on too
     public bool SetPlugin(string name, bool on) => Set(false, name, on);
     public bool SetAddon(string name, bool on) => Set(true, name, on);
 
-    // Ashita cuts the name at the first .txt (case and all) and puts .txt back, so "default" and "default.txt" are the
-    // same script but "<name>.TXT" is <name>.TXT.txt
+    // Ashita cuts the name at the first .txt (case and all) and puts .txt back, so "<name>.TXT" is <name>.TXT.txt
     public static string FileName(string script)
     {
         var s = script.Trim().Replace('/', '\\');
@@ -131,8 +122,7 @@ public sealed partial class AshitaScript
 
     public static string? PathFor(string ashitaDir, string script) => Resolve(Path.Combine(ashitaDir, "scripts"), script);
 
-    // default.txt ships with Ashita (a git pull fights any edit) and the examples use it, and editing a shared script
-    // changes every boot config on it. Those get copied first
+    // default.txt ships with Ashita and editing a shared script changes every boot config on it, so those get copied first
     public static bool NeedsCopy(string ashitaDir, string? script, string bootName, IEnumerable<(string Boot, string? Script)> configs)
     {
         if (string.IsNullOrWhiteSpace(script) || PathFor(ashitaDir, script) is not { } file || file.Equals(PathFor(ashitaDir, "default.txt")!, StringComparison.OrdinalIgnoreCase))
@@ -141,7 +131,6 @@ public sealed partial class AshitaScript
         foreach (var (boot, other) in configs)
         {
             var stem = BootStem(boot);
-            // the launch copies Provenance writes keep their source's script, they don't count as sharing it
             if (stem.Equals(me, StringComparison.OrdinalIgnoreCase) || stem.Equals("provenance", StringComparison.OrdinalIgnoreCase) || stem.StartsWith("provenance.", StringComparison.OrdinalIgnoreCase)) continue;
             if (!string.IsNullOrWhiteSpace(other) && PathFor(ashitaDir, other) is { } path && path.Equals(file, StringComparison.OrdinalIgnoreCase)) return true;
         }
@@ -195,8 +184,6 @@ public sealed partial class AshitaScript
 
     private readonly record struct Event(int Line, int Seq, Op Op, string Name, bool Toggle, bool Active, string Args, bool Unordered);
 
-    // what a script does to plugins, or to addons. An /unloadall is kept apart from the named events, since it covers
-    // every name
     private sealed class Loads(bool isAddons)
     {
         public readonly bool IsAddons = isAddons;
@@ -399,7 +386,6 @@ public sealed partial class AshitaScript
         return lastUnloadLine >= InsertAt(loads) ? AshitaLoad.ByScript : AshitaLoad.Off;
     }
 
-    // each step asks for the analysis again, an edit throws the last one away
     private bool Set(bool addon, string name, bool on)
     {
         var loads = Now(addon);
@@ -415,7 +401,6 @@ public sealed partial class AshitaScript
             foreach (var e in toggles.Where(e => e.Active)) Edit(e.Line, "#" + lines[e.Line].Text);
             return true;
         }
-        // a commented /addon load above the addons plugin would run before it's there, so that one gets a new line
         int after = addon ? AddonsLine() : -1;
         int off = toggles.FindIndex(e => !e.Active && e.Line > after);
         if (off >= 0) Edit(toggles[off].Line, lines[toggles[off].Line].Text[1..]);
@@ -426,8 +411,6 @@ public sealed partial class AshitaScript
     private int AddonsLine() =>
         Now(false).ByName.GetValueOrDefault(AddonsPlugin)?.Where(e => e.Op == Op.Load && e.Active).Select(e => e.Line).DefaultIfEmpty(-1).Min() ?? -1;
 
-    // after the last top-level line of the same kind (and an addon after the addons plugin), before the first /wait,
-    // which is there to give addons time to load
     private int InsertAt(Loads loads)
     {
         var wait = Analyse().FirstWait;

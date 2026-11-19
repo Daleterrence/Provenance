@@ -8,7 +8,6 @@ namespace Provenance.Common.Install;
 
 internal static class ComRegistration
 {
-    // RegisterClassInfo and RegisterProgIdInfo, minus the descriptor value that'd send COM off to Windows Installer
     public static (int Classes, int ProgIds) RegisterClasses(MsiDatabase db, Func<string, bool> on, Func<string, string> serverOf,
                                                              MsiPackage.Sandbox? sandbox, bool keepExisting)
     {
@@ -18,7 +17,7 @@ internal static class ComRegistration
         foreach (var r in db.Query("SELECT `CLSID`,`Context`,`Component_`,`ProgId_Default`,`Description` FROM `Class`"))
         {
             if (!on(r[2])) continue;
-            var server = serverOf(r[2]);   // Supported() checked it's a file
+            var server = serverOf(r[2]);
             if (keepExisting && ClassIntact(hklm, r[0], r[1], server)) continue;
             using var cls = hklm.CreateSubKey($@"SOFTWARE\Classes\CLSID\{r[0]}", true);
             if (r[4].Length > 0) cls.SetValue("", r[4]);
@@ -58,7 +57,7 @@ internal static class ComRegistration
         {
             if (!on(r[1])) continue;
             var lib = libOf(r[1]);
-            if (sandbox != null) { if (!keepExisting) typeLibs++; continue; }   // a sandbox can't register one, or check it
+            if (sandbox != null) { if (!keepExisting) typeLibs++; continue; }
             if (keepExisting && TypeLibIntact(lib)) continue;
             Marshal.ThrowExceptionForHR(Oleaut32.LoadTypeLibEx(lib, 1 /* REGKIND_REGISTER */, out var tl));
             if (tl != null) Marshal.ReleaseComObject(tl);
@@ -71,7 +70,6 @@ internal static class ComRegistration
         return typeLibs;
     }
 
-    // the library's own id and version, read from the file without registering it
     public static TYPELIBATTR? ReadTypeLib(string path)
     {
         if (Oleaut32.LoadTypeLibEx(path, 2 /* REGKIND_NONE */, out var tl) != 0 || tl is not ITypeLib typeLib) return null;

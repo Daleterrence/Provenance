@@ -23,12 +23,10 @@ internal static class LockedFolder
 
     private static SecurityIdentifier Owner => OwnerForTest ?? Admins;
 
-    // what isn't Provenance's is moved in here with one rename and cleared later, never deleted where it was
     internal const string BinName = "quarantine";
     internal static readonly ConcurrentDictionary<string, byte> Walked = new(StringComparer.OrdinalIgnoreCase);
     private static int _permissionWrites;
 
-    // tests only: the owner, who's trusted, and hooks at the moments something else could get in
     internal static Func<string, bool>? TrustedForTest;
     internal static Action<string>? BeforeCreateForTest;
     internal static Action<string>? AfterMoveForTest;
@@ -38,7 +36,6 @@ internal static class LockedFolder
 
     internal static int PermissionWrites => Volatile.Read(ref _permissionWrites);
 
-    // made through the held folder's handle with its permissions in one go, or opened there, and kept if it's mine
     internal static SafeFileHandle? HoldOwn(SafeFileHandle parent, string path, string name, IReadOnlyCollection<string> ownNames)
     {
         var sec = Intended(usersMayRead: true);
@@ -71,8 +68,6 @@ internal static class LockedFolder
         }
     }
 
-    // the held handle asks for nothing sharing can refuse, so a program holding the folder can't stop a start. One that
-    // can't be listed now is walked next start
     internal static void WalkHeld(SafeFileHandle held, string path, bool deep, string bin, ISet<string>? only = null, bool shown = false)
     {
         var (list, status) = OpenAt(held, "", ListDirectory | ReadAttributes, DirectoryFile);
@@ -96,8 +91,6 @@ internal static class LockedFolder
         throw new IOException($"Provenance couldn't open {bin} ({status:X8}).");
     }
 
-    // checked and locked through a handle that stops the folder being renamed or swapped while it's open. Anything else
-    // at the path is moved aside and made again
     internal static (SafeFileHandle? Held, bool Wrote) Hold(string path, bool usersMayRead, string? bin)
     {
         var sec = Intended(usersMayRead);
@@ -115,10 +108,9 @@ internal static class LockedFolder
                 {
                     BeforeCreateForTest?.Invoke(path);
                     Interlocked.Increment(ref _permissionWrites);
-                    CreateLocked(path, sec);   // one something else made first is looked at on the next round, never taken
+                    CreateLocked(path, sec);
                     continue;
                 }
-                // an admin can always open its own folder like this, so access denied means it's someone else's
                 if (error != 5) throw new IOException($"Provenance couldn't open {path}.", new Win32Exception(error));
             }
             else
@@ -130,7 +122,6 @@ internal static class LockedFolder
             MoveAside(path, bin);
             AfterMoveForTest?.Invoke(path);
         }
-        // only when it isn't already exactly right (writing it pushes it down to everything inside), then read back
         if (IsLocked(seen.Security!, usersMayRead)) return (held, false);
         Interlocked.Increment(ref _permissionWrites);
         if (!Write(held, sec, out int failed) || !IsLocked(Look(held).Security ?? new DirectorySecurity(), usersMayRead))
@@ -143,7 +134,6 @@ internal static class LockedFolder
 
     private static bool Ours(string path, Seen seen) => seen.Read && seen.IsDir && !seen.IsLink && Trusted(path, seen.Owner) && !Weak(seen.Raw);
 
-    // the root goes beside itself in ProgramData, everything else into the bin
     private static void MoveAside(string path, string? bin)
     {
         var h = OpenLinkItself(path, Delete | ReadControl | ReadAttributes | Synchronize, ShareAll);
@@ -160,7 +150,6 @@ internal static class LockedFolder
                 if (error is 2 or 3) return;
                 throw new IOException($"{path} isn't Provenance's and another program has it open, so it can't be moved aside.", new Win32Exception(error));
             }
-            // looked at again on the handle that moves it, so an admin's folder that took its place stays
             if (Ours(path, Look(h))) return;
             string to;
             int moveError;
@@ -184,8 +173,6 @@ internal static class LockedFolder
         }
     }
 
-    // each entry's opened through its folder's handle, never through a link, and only looked at, so a file another
-    // program has open with no sharing is fine
     private static void Walk(SafeFileHandle top, string topPath, bool deep, string bin, ISet<string>? only = null, bool shown = false)
     {
         var failed = new List<string>();
@@ -264,8 +251,6 @@ internal static class LockedFolder
         if (only is null) foreach (var v in visited) Walked[v] = 0;
     }
 
-    // links, hard-linked files, and an owner that isn't an admin or can't be read (an admin's own always can). A file
-    // whose details can't be read at all is left alone
     private static bool Bad(string path, Seen seen) =>
         seen.Read && (seen.IsLink || !seen.ReadSecurity || !Trusted(path, seen.Owner) || (!seen.IsDir && seen.Links != 1));
 
@@ -300,7 +285,6 @@ internal static class LockedFolder
                 Log.Warning("{Item} isn't Provenance's and another program has it open, so it can't be moved ({Status:X8})", full, status);
                 return Moved.InUse;
             }
-            // looked at again on the handle that moves it, so one of Provenance's own put there since stays
             if (!Bad(full, Look(h))) return Moved.Gone;
             binHandle ??= OpenBin(bin);
             var to = Guid.NewGuid().ToString("N");
@@ -322,8 +306,6 @@ internal static class LockedFolder
             catch (Exception e) { Log.Warning(e, "Could not clear {Bin}", bin); }
         });
 
-    // a folder's entries come up into the bin with one rename each, so a deep tree never recurses and a link only
-    // ever goes itself
     internal static int ClearBin(string bin)
     {
         using var held = OpenBin(bin);
@@ -367,7 +349,6 @@ internal static class LockedFolder
         return left;
     }
 
-    // POSIX delete takes the name away at once, and read-only doesn't stop it
     private static bool Remove(SafeFileHandle h)
     {
         var buf = Marshal.AllocHGlobal(4);
@@ -384,8 +365,7 @@ internal static class LockedFolder
     internal static bool Trusted(string path, SecurityIdentifier? owner) =>
         TrustedForTest is { } fake ? fake(path) : owner is not null && IsAdminOrSystem(owner);
 
-    // anyone but Administrators, SYSTEM and the owner can do more than read it, so a program may already have it open
-    // to write. Inherit-only rules count, they're what its files get
+    // inherit-only rules count, they're what its files get
     internal static bool Weak(byte[]? sd)
     {
         if (sd is null) return true;
@@ -402,7 +382,6 @@ internal static class LockedFolder
         return false;
     }
 
-    // strict is for a caller that can't take a listing that failed for an empty folder
     internal static List<string> List(SafeFileHandle dir, bool strict = false)
     {
         var names = new List<string>();
@@ -419,7 +398,6 @@ internal static class LockedFolder
                 off += next;
             }
         }
-        // the walk ends on ERROR_NO_MORE_FILES
         if (strict && Marshal.GetLastWin32Error() is not 18) throw new IOException($"{new Win32Exception().Message} (listing a folder)");
         return names;
     }
@@ -482,7 +460,6 @@ internal static class LockedFolder
                         sec?.GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier);
     }
 
-    // Windows pushes it down to what's inside, and doesn't go through a link
     internal static bool Write(SafeFileHandle h, DirectorySecurity sec, out int error)
     {
         var raw = new RawSecurityDescriptor(sec.GetSecurityDescriptorBinaryForm(), 0);
@@ -505,7 +482,6 @@ internal static class LockedFolder
         }
     }
 
-    // opened through the folder's handle, so what's above it can't redirect it, and never through a link
     internal static (SafeFileHandle Handle, uint Status) OpenAt(SafeFileHandle parent, string name, uint access, uint options,
                                                                uint disposition = 1 /* FILE_OPEN */, DirectorySecurity? sec = null, uint share = ShareAll)
     {
@@ -537,7 +513,6 @@ internal static class LockedFolder
         }
     }
 
-    // false when something else made it first, which is never taken as this one
     internal static bool CreateLocked(string path, DirectorySecurity sec)
     {
         var sd = sec.GetSecurityDescriptorBinaryForm();
@@ -556,7 +531,7 @@ internal static class LockedFolder
 
     internal const uint DirectoryFile = 0x1;
     private const uint LookAccess = ReadControl | ReadAttributes;
-    internal const uint HoldAccess = ReadControl | WriteDac | WriteOwner | ReadAttributes | Synchronize;   // none of it is share-checked
+    internal const uint HoldAccess = ReadControl | WriteDac | WriteOwner | ReadAttributes | Synchronize;
     private const uint StatusAccessDenied = 0xC0000022;
 
     internal static DirectorySecurity Intended(bool usersMayRead) => Intended(Owner, usersMayRead);
@@ -575,7 +550,6 @@ internal static class LockedFolder
         return sec;
     }
 
-    // exactly Intended or it gets locked again
     internal static bool IsLocked(DirectorySecurity current, bool usersMayRead) => IsLocked(current, Owner, usersMayRead);
 
     internal static bool IsLocked(DirectorySecurity current, SecurityIdentifier owner, bool usersMayRead)

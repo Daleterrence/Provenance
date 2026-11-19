@@ -1,13 +1,11 @@
 static FARPROC g_pCreateMutexW, g_pOpenMutexW;
 
-/* WinMain's single-instance gates are mutexes. Each name gets "_X" + 16 bytes of HMAC-SHA256(per-process secret,
-   name) in hex, so nothing without admin can guess it and squat it first. */
+/* each mutex name gets "_X" + 16 bytes of HMAC-SHA256(per-process secret, name) in hex, so nothing without admin can guess it and squat it first */
 #define MUTEX_NAME_KEEP 200
 #define MUTEX_SUFFIX_LEN 34
 static BYTE g_mutex_secret[32];
 static int g_mutex_secret_ok;
 static INIT_ONCE g_mutex_secret_once = INIT_ONCE_STATIC_INIT;
-/* pol.exe's first mutex call runs this, so never under the loader lock */
 static BOOL CALLBACK pol_exe_mutex_secret_init(PINIT_ONCE once, PVOID param, PVOID *ctx)
 {
     (void)once; (void)param; (void)ctx;
@@ -61,9 +59,8 @@ static FARPROC pol_exe_user32_proc(const char *name)
     if (!u) u = LoadLibraryW(L"user32.dll");
     return u ? GetProcAddress(u, name) : NULL;
 }
-/* pol.exe's splash (dialog 0x67, AT_SPLASH_PROC), made hidden so AT_SPLASH_CLOSE skips its 5s dwell */
 typedef HWND (WINAPI *cdip_t)(HINSTANCE, LPCDLGTEMPLATEW, HWND, DLGPROC, LPARAM);
-static DWORD g_splash_tmpl[64];   /* DWORDs keep the DLGTEMPLATE copy aligned */
+static DWORD g_splash_tmpl[64];
 static HWND pol_exe_hidden_splash(HINSTANCE hInst, LPCWSTR tmpl, HWND parent, DLGPROC proc, LPARAM init)
 {
     cdip_t cdip = (cdip_t)pol_exe_user32_proc("CreateDialogIndirectParamW");
@@ -100,8 +97,6 @@ static HWND WINAPI pol_exe_my_CreateDialogParamW(HINSTANCE hInst, LPCWSTR tmpl, 
     return g_realCreateDialogParamW ? g_realCreateDialogParamW(hInst, tmpl, parent, proc, init) : NULL;
 }
 
-/* a slot MSLU hasn't filled in yet points at MSLU's stub for it in pol.exe
-   (push fallback, push [module], push slot, push name, push dll, call loader) */
 static int pol_exe_slot_unfilled(BYTE *exe, DWORD opbase, DWORD slot)
 {
     addr_module m;
@@ -135,8 +130,6 @@ static int pol_exe_hook_slot(HMODULE exe, int id, void *hook, const char *what)
     return 1;
 }
 
-/* the DirectX gate makes pol.exe wait about a second on dxdiagn before its splash, and nothing uses the answer. It's made
-   to return true, in one 4 byte write so a call landing on it never sees half of it */
 static int pol_exe_skip_dx_check(BYTE *exe)
 {
     BYTE *p;
@@ -150,7 +143,7 @@ static int pol_exe_skip_dx_check(BYTE *exe)
         base_log("pol_hook: DirectX check protect failed - left alone\r\n");
         return 0;
     }
-    now = 0xb0 | 0x01 << 8 | 0xc3 << 16 | (DWORD)p[3] << 24;   /* mov al, 1 / ret, then what was there */
+    now = 0xb0 | 0x01 << 8 | 0xc3 << 16 | (DWORD)p[3] << 24;
     *(volatile DWORD *)p = now;
     FlushInstructionCache(GetCurrentProcess(), p, 4);
     VirtualProtect(p, 4, old, &old);
@@ -158,7 +151,6 @@ static int pol_exe_skip_dx_check(BYTE *exe)
     return 1;
 }
 
-/* out needs 64 bytes, and gets ? for anything outside a loaded module */
 static void crash_where(unsigned addr, char *out)
 {
     MEMORY_BASIC_INFORMATION mbi;
@@ -173,7 +165,6 @@ static void crash_where(unsigned addr, char *out)
     }
 }
 
-/* Registers and a short stack walk, the crash address on its own doesn't say what actually went wrong */
 static void crash_context(EXCEPTION_POINTERS *ep)
 {
     CONTEXT *c = ep->ContextRecord;
@@ -208,7 +199,7 @@ static LONG WINAPI crash_filter(EXCEPTION_POINTERS *ep)
     MEMORY_BASIC_INFORMATION mbi;
     char mod[MAX_PATH] = "?", *name = mod, *slash;
     unsigned base = 0;
-    if (code != 0x406d1388 && code != 0x80000004) {   /* thread naming, single step */
+    if (code != 0x406d1388 && code != 0x80000004) {
         mbi.AllocationBase = 0;
         /* a null base would hand GetModuleFileNameA the exe's own name for a jump into nowhere */
         if (VirtualQuery((void *)(ULONG_PTR)eip, &mbi, sizeof mbi) && mbi.AllocationBase) {

@@ -5,8 +5,6 @@ namespace Provenance.Common.Game.Windower;
 
 public sealed record WindowerRegistryValue(string Name, RegistryValueKind Kind, object Value);
 
-// what Windower.exe writes into FFXI's settings before every launch. Everything else in the key is the shared FFXI
-// settings and stays as it is
 public static class WindowerGameRegistry
 {
     private const string DefaultPadMode = "0,0,0,0,0,0";
@@ -49,8 +47,7 @@ public static class WindowerGameRegistry
         return string.Join(",", fields);
     }
 
-    // a float times the size, then .NET's Convert.ToInt32 (ties go to even). Windower would crash on NaN or an
-    // overflow, here they're 1x and the int range
+    // a float times the size, then .NET's Convert.ToInt32 (ties go to even)
     internal static int Scaled(int size, float superSampling)
     {
         float f = Math.Max(1f, size * superSampling);
@@ -59,8 +56,6 @@ public static class WindowerGameRegistry
         return r >= int.MaxValue ? int.MaxValue : (int)r;
     }
 
-    // FinalFantasyXI, then FinalFantasyXITestClient if that's there too. Nothing at all when the main key's missing,
-    // same as Windower
     public static IReadOnlyList<string> Apply(WindowerProfile profile, PolRegion region, int width, int height, RegistryKey? root = null)
     {
         var path = PolPaths.VendorKey(region);

@@ -33,12 +33,10 @@ public sealed record LaunchLogin(Account Account, PolAccount Pol, SquareEnixAcco
 
 public sealed record LogInResult(int Code, int? Refusal);
 
-// Code and Text are what a login gives, Snapshot the first one that's full and online
 public sealed record GoFullResult(int Code, string? Text, PolSocialSnapshot? Snapshot = null);
 
 public sealed record GameUpdateResult(bool Done, bool Cancelled, Exception? Error);
 
-// the game's version check, made once for a start: what the server said, or why it couldn't be asked
 public sealed record GameCheck(VersionCheck? Version, Exception? Error)
 {
     public bool UpToDate => Version is { UpToDate: true };
@@ -59,7 +57,6 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
     internal Func<LaunchLogin, CancellationToken, Task<int>>? LogInSeam { get; init; }
     internal Func<Action<string>?, CancellationToken, Task<string?>>? FinishWindowerUpdateSeam { get; init; }
 
-    // claimed before the code's asked, so no other copy logs this account in meanwhile
     public ClaimResult Claim(Account p, Func<string?> askOtp, Action? claimed = null)
     {
         if (!pol.Records.TryClaimAccount(p.Id, out var problem))
@@ -74,7 +71,6 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         return new(otp, null, false);
     }
 
-    // the login's first half, started before its questions are asked. With a stood-in login there's nothing to pick it up
     public void StartAhead(Account p)
     {
         if (LogInSeam is null) pol.StartAhead(p.Id, new SessionOptions(false, null));
@@ -101,7 +97,6 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
           && PolPaths.TryGetInstallFolder(settings.RegionOrDefault, GameProduct.Viewer) is { } viewer
             ? (ffxi, viewer, settings.RegionOrDefault) : null;
 
-    // known is this start's check, so SE's asked once. One that failed is the update's failure, with nothing asked again
     public async Task<GameUpdateResult> UpdateGameAsync(IProgress<PatchProgress>? progress, CancellationToken ct, GameCheck? known = null)
     {
         if (GameFolders() is not { } dirs) return new(true, false, null);
@@ -116,7 +111,6 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         catch (Exception ex) { return new(false, false, ex); }
     }
 
-    // on the caller's thread. Null with no game to check, or when it was cancelled
     public GameCheck? CheckGame(IProgress<PatchProgress>? progress, CancellationToken ct)
     {
         if (GameFolders() is not { } dirs) return null;
@@ -125,8 +119,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         catch (Exception ex) { return new(null, ex); }
     }
 
-    // the game mustn't start while Windower's update is still writing in its folder. Says what's going on only if it has
-    // to wait, and gives back the update's notice if it didn't all go in
+    // the game mustn't start while Windower's update is still writing in its folder
     public async Task<string?> FinishWindowerUpdateAsync(Action<string>? saying, CancellationToken ct = default)
     {
         if (FinishWindowerUpdateSeam is { } seam) return await seam(saying, ct);
@@ -141,7 +134,6 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
 
     public Task<GoFullResult> GoFullAsync(CancellationToken ct) => GoFullSeam is { } seam ? seam(ct) : pol.GoFullAsync(ct);
 
-    // where the viewer does it, after the update and right before the game starts
     public Task<PreLaunchResult> LinkAsync(Func<string, bool> ask, Action<string> failed, Action<string> saying, Func<string?> pageWaiting,
                                            Func<int, bool>? alive, Func<int, PolSocialSnapshot?> read) =>
         new PreLaunchLink
@@ -167,7 +159,6 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         if (PolPaths.TryGetInstallFolder(settings.RegionOrDefault, GameProduct.Viewer) is { } viewer) WritePolOptions(profileId, viewer);
     }
 
-    // the game reads these from the account's option.bin when it starts, so they go in before every start
     internal void WritePolOptions(string? profileId, string viewer)
     {
         try
@@ -180,7 +171,6 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
             var s = settings.Current;
             using (settings.HoldLock())
             {
-                // another copy may have changed them since this one read settings.json
                 if (settings.ReadSaved() is { } saved)
                 {
                     s.ChatLanguageFilter = saved.ChatLanguageFilter ?? s.ChatLanguageFilter;
@@ -192,7 +182,6 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         catch (Exception e) { Log.Warning(e, "Could not write the PlayOnline settings before the game starts"); }
     }
 
-    // right before the game starts. However it goes the game still starts, a failed one only gets a problem to show
     public async Task<string?> BackUpAsync(string? accountBoot, Action<string>? saying, Func<LauncherSettings, string?, BackupSources?>? sources = null)
     {
         var s = settings.ReadSaved() ?? settings.Current;

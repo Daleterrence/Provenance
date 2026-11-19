@@ -18,7 +18,6 @@ public static partial class AshitaAddons
             .OrderBy(a => a.Listing.Key, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    // a readme in the addon's own folder wins over one in docs\
     private static AshitaAddon? Read(string dir, string name, string main, IReadOnlyDictionary<string, AddonDocs> docs)
     {
         if (TextFiles.ReadHead(main, MaxMainFile) is not { } text) return null;
@@ -37,7 +36,7 @@ public static partial class AshitaAddons
                                                       : (locals ??= Locals(text)).GetValueOrDefault(m.Groups["local"].Value);
                 if (AddonListing.Clean(value) is { } v) fields[key] = v;
             }
-            // Windower and Ashita v3 addons fill in _addon instead. Some v4 ones mention it too, but they set addon.* as well
+            // Windower and Ashita v3 addons fill in _addon instead
             foreign = OldTable().IsMatch(text) && !Assigned().IsMatch(text);
         }
         catch (RegexMatchTimeoutException) { }

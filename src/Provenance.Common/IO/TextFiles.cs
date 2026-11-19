@@ -6,7 +6,6 @@ namespace Provenance.Common.IO;
 
 internal static class TextFiles
 {
-    // a DOCTYPE is skipped and nothing external is ever fetched. null when the file's missing or isn't XML
     public static XDocument? LoadXml(string file)
     {
         try
@@ -20,7 +19,6 @@ internal static class TextFiles
     public static XmlReaderSettings XmlSettings(bool ignoreWhitespace = false) =>
         new() { DtdProcessing = DtdProcessing.Ignore, XmlResolver = null, IgnoreWhitespace = ignoreWhitespace };
 
-    // the first maxBytes of a file as UTF-8 (no BOM), or null when it can't be read
     public static string? ReadHead(string path, int maxBytes)
     {
         try

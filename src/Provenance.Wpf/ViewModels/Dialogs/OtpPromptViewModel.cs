@@ -5,18 +5,15 @@ namespace Provenance.Wpf.ViewModels.Dialogs;
 
 public enum OtpStep { Typing, Fetching, WaitingForNextCode, Installing, Problem, NeedsPassword, Accepting }
 
-// The six boxes and the clipboard stay in the window, the typed code comes in as an argument
 public sealed partial class OtpPromptViewModel : ObservableObject
 {
     private readonly string _source, _reuseKey;
     private readonly Func<bool> _isShowing;
     private string? _code;
     private bool _closed;
-    // the latest fetch or install, so an older one can tell it's been replaced
     private readonly LatestOnly _fetch = new();
     private OtpFix _fix;
     private string? _installTool, _problemLabel;
-    // a typed check, or a fetched code being recorded
     private Task _inFlight = Task.CompletedTask;
 
     internal Func<string?, CancellationToken, Task<OtpFetchResult>> Fetch { get; set; }
@@ -25,7 +22,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
     internal Func<string, string, Task<bool>> WasUsed { get; set; } = OtpReuse.WasUsedAsync;
     internal Func<string, string, Task<string?>> MarkUsed { get; set; } = OtpReuse.MarkUsedAsync;
     internal Func<string, Task> Unmark { get; set; } = OtpReuse.UnmarkAsync;
-    // the number of seconds is read when the wait starts
     internal Func<int, CancellationToken, Task> WaitForNextCode { get; set; } = (seconds, ct) => Task.Delay(TimeSpan.FromSeconds(seconds), ct);
 
     public event Action<string>? Fill;
@@ -55,7 +51,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
 
     internal OtpFix Fix => _fix;
 
-    // reuseKey (the SE ID) names the authenticator, so one code never goes out twice
     public OtpPromptViewModel(string source, string item, string account, string reuseKey, string squareEnixId, Func<bool> isShowing)
     {
         _source = source;
@@ -71,7 +66,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
         if (_source.Length > 0) _ = FetchAsync(null);
     }
 
-    // the reuse check can wait on a key file, so it's on a worker and the dialog stays responsive
     public Task SubmitAsync(string typed)
     {
         if (Checking || _code != null) return Task.CompletedTask;
@@ -113,7 +107,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
         if (value) ErrorText = null;
     }
 
-    // boxes first (each cleared box hides the error), then the error so it stays up
     internal void ShowCodeUsed()
     {
         ClearBoxes?.Invoke();
@@ -125,14 +118,12 @@ public sealed partial class OtpPromptViewModel : ObservableObject
 
     public void ClearError() => ErrorText = null;
 
-    // the window's closing: whatever's still going stops, and nothing more is recorded or sent
     public void Close()
     {
         _closed = true;
         _fetch.Cancel();
     }
 
-    // if cancel got there first nothing's sent, and the record comes off again so a retry isn't called used
     private async Task AcceptAsync(string code)
     {
         if (_closed) return;
@@ -147,7 +138,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
         Finished?.Invoke(code);
     }
 
-    // a code fills the boxes and goes straight away, a problem gets shown and the boxes stay open for typing
     private async Task FetchAsync(string? masterPassword)
     {
         var name = OtpSources.Name(_source);
@@ -157,7 +147,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
         SourceText = _source == OtpSources.OnePassword ? OnePassword.WaitText : $"Getting the code from {name}...";
         var mine = _fetch.Begin();
         var r = await Fetch(masterPassword, mine);
-        // same code as the account before (one authenticator), so wait for the next one
         for (int tries = 0; r.Code is { } used && _reuseKey.Length > 0 && await WasUsed(_reuseKey, used) && tries < 3; tries++)
         {
             if (!_isShowing() || mine.IsCancellationRequested) return;
@@ -168,11 +157,10 @@ public sealed partial class OtpPromptViewModel : ObservableObject
             r = await Fetch(null, mine);
         }
         if (!_isShowing() || _code != null) return;
-        if (mine.IsCancellationRequested) return;   // a newer attempt owns the screen
+        if (mine.IsCancellationRequested) return;
         SpinnerVisible = false;
         if (r.Code is { } code && !(_reuseKey.Length > 0 && await WasUsed(_reuseKey, code)))
         {
-            // a typed code already on its way goes first
             try { await _inFlight.WaitAsync(mine); }
             catch (OperationCanceledException) { return; }
             if (!_isShowing() || _closed || _code != null || mine.IsCancellationRequested) return;
@@ -187,7 +175,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
         ShowProblem(r.Problem ?? "", r.Fix, r.Tool);
     }
 
-    // one plain line and the button that fixes it. The boxes stay open for typing whatever it says
     internal void ShowProblem(string text, OtpFix fix, string? tool = null, string? label = null)
     {
         SpinnerVisible = false;
@@ -213,7 +200,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
                 _ = InstallAsync(tool);
                 break;
             case OtpFix.OpenOnePasswordSettings:
-                // the button asks again once 1Password's open
                 ShowProblem(OpenSettings() ?? SourceText, OtpFix.TryAgain);
                 break;
             case OtpFix.TypeInstead:
@@ -231,7 +217,6 @@ public sealed partial class OtpPromptViewModel : ObservableObject
         if (masterPassword.Length > 0) _ = FetchAsync(masterPassword);
     }
 
-    // a fresh copy goes straight on to the code. Closing the dialog stops the download
     private async Task InstallAsync(string tool)
     {
         var mine = _fetch.Begin();

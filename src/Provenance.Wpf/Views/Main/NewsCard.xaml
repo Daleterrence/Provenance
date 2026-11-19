@@ -145,7 +145,6 @@
                     <Button Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="{Binding Url}" Style="{StaticResource RowButton}">
                         <Grid ColumnDefinitions="Auto,*,Auto">
-                            <!-- the post's category on POL's Information page, or a dot when there's none -->
                             <Ellipse Width="7" Height="7" Margin="0,0,10,0"
                                      VerticalAlignment="Center" Fill="{DynamicResource Text.3}"
                                      Visibility="{Binding HasCategory, Converter={StaticResource InvertBoolToVis}}" />

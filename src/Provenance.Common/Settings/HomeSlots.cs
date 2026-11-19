@@ -1,14 +1,12 @@
 namespace Provenance.Common.Settings;
 
-// each account's own pub\homeNN, numbered in the order they were added like the viewer's members. From 10 so the
-// viewer's own 01-08 never get touched, and never 84
+// from 10 so the viewer's own 01-08 never get touched, and never 84
 public static class HomeSlots
 {
     public const int First = 10, Last = 99, Shared = 84;
 
     public static bool Valid(int slot) => slot is >= First and <= Last && slot != Shared;
 
-    // keeps each account's slot (the first, if two claim one) and never hands out one another copy's saved
     public static bool Assign(LauncherSettings s, LauncherSettings? saved = null)
     {
         bool changed = false;
@@ -42,7 +40,6 @@ public static class HomeSlots
         return changed;
     }
 
-    // the one after the highest given so far, and once those run out the lowest no account has
     private static int Next(ref int last, HashSet<int> blocked)
     {
         for (int c = Math.Max(last + 1, First); c <= Last; c++)

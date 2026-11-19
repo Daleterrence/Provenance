@@ -8,7 +8,6 @@ internal sealed class WindowerAddonUpdate(WindowerUpdateFolder job, WindowerServ
 {
     private readonly string _addonsDir = Path.Combine(job.Root, "addons");
 
-    // Changed files of installed addons are written, plus every lib, since Windower never counts libs as old files
     public async Task UpdateAsync(bool skip, WindowerUpdateResult result)
     {
         var cachePath = WindowerAddonTree.CachePath(job.Root);

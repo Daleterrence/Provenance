@@ -6,7 +6,6 @@ using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.Controls;
 
-// the 64x96 POL profile picture fills the width and sits a bit high, a fifth off the top
 public sealed class ProfilePictureCircle : ContentControl
 {
     public static readonly DependencyProperty SourceProperty = DependencyProperty.Register(
@@ -33,7 +32,6 @@ public sealed class ProfilePictureCircle : ContentControl
         set => SetValue(DiameterProperty, value);
     }
 
-    // a friend in FFXI gets the XI badge, tucked behind the top right so just the letters show
     public bool InGame
     {
         get => (bool)GetValue(InGameProperty);
@@ -73,7 +71,6 @@ public sealed class ProfilePictureCircle : ContentControl
             Content = grid;
             return;
         }
-        // a Canvas, so the bit hanging off the edge isn't clipped by the layout
         var at = XiBadgeGeometry.For(d);
         Badge = new Image { Source = badge, Width = at.Width, Height = at.Height, Stretch = Stretch.Uniform };
         Canvas.SetLeft(Badge, at.Left);

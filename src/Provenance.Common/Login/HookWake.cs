@@ -11,8 +11,6 @@ internal sealed class HookWake : IDisposable
 
     internal bool Watching => _watchers.Count > 0;
 
-    // the files' folder is watched for just those names, so nothing else the hook writes wakes it. One that can't be
-    // watched leaves the plain timed wait
     internal static HookWake Of(params string[] paths)
     {
         var wake = new HookWake();
@@ -41,11 +39,9 @@ internal sealed class HookWake : IDisposable
 
     private void Poke()
     {
-        // a watcher can fire after Dispose
         try { _changed.Set(); } catch (ObjectDisposedException) { }
     }
 
-    // true when a file changed or the token was cancelled, false when the time ran out
     internal bool Wait(TimeSpan max, CancellationToken ct) =>
         WaitHandle.WaitAny([_changed, ct.WaitHandle], max) != WaitHandle.WaitTimeout;
 

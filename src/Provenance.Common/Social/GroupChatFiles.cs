@@ -33,7 +33,6 @@ public static class GroupChatFiles
     public static bool Send(int pid, string token, string text) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.GroupChatSend, token, text);
 
-    // join is an untaken join this calls off, when the app couldn't withdraw it
     public static bool Leave(int pid, string token, string join = "") =>
         HookFiles.WriteRequest(pid, HookContract.Requests.GroupChatLeave, token, join);
 

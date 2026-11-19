@@ -26,7 +26,6 @@ public partial class EditProfileWindow : AppWindow
 
     internal EditProfileViewModel Editor => _vm;
 
-    // the caller already asked (log out, exit), or the session's gone and nothing can be saved
     public void CloseQuietly()
     {
         _closeQuietly = true;
@@ -35,7 +34,7 @@ public partial class EditProfileWindow : AppWindow
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
-    // the question is asked after a turned down close, a window stuck inside Closing can't be closed by the session ending
+    // a window stuck inside Closing can't be closed by the session ending
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (_closeQuietly || _answered) return;
@@ -59,7 +58,6 @@ public partial class EditProfileWindow : AppWindow
             if (!_vm.ConfirmClose()) return;
         }
         finally { _asking = false; }
-        // the session can have taken the window while the question was up
         if (_closed) return;
         _answered = true;
         try { Close(); }

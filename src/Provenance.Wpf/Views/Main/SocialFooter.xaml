@@ -7,7 +7,6 @@
     <Border Height="44" Style="{StaticResource FooterBar}" Padding="16,0">
         <Grid ColumnDefinitions="Auto,*,Auto">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}">
-                <!-- the button and the picker after these grey themselves, so only the picture and the name are dimmed here -->
                 <StackPanel Orientation="Horizontal" Style="{StaticResource DimWhenOff}">
                     <social:MyProfilePicture x:Name="MyPicture" Diameter="32" Margin="0,0,10,0" DataContext="{Binding Social}"
                                              ToolTip="Change your profile picture. Right-click to switch handle."
@@ -19,7 +18,6 @@
                     <TextBlock Text="{Binding Social.AccountName}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
                 </StackPanel>
                 <social:EditProfileButton Margin="4,0,0,0" VerticalAlignment="Center" DataContext="{Binding Social}" />
-                <!-- locked with a spinner until POL confirms -->
                 <ComboBox AutomationProperties.Name="Status" Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource StatusPicker}"
                           IsEnabled="{Binding Social.StatusEditable}"
                           ItemsSource="{Binding Social.StatusItems}" SelectedIndex="{Binding Social.MyStatusIndex}" />
@@ -32,7 +30,6 @@
                              Visibility="{Binding Social.StatusPending, Converter={StaticResource BoolToVis}}" />
             </Grid>
             <StackPanel x:Name="SocialButtons" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                <!-- one row of equal cells, so all three are as wide as the widest -->
                 <UniformGrid x:Name="SocialSet" Rows="1" Margin="6,0,0,0"
                              IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}">
                     <UniformGrid.Resources>

@@ -2,8 +2,6 @@ using System.Text;
 
 namespace Provenance.Common.IO;
 
-// Writes go to a temp file beside the target and get moved over it, so a reader never sees half a file and a crash
-// leaves the old one
 public static class AtomicFile
 {
     public static string TempFor(string path) => $"{path}.{Guid.NewGuid():N}.tmp";
@@ -16,7 +14,6 @@ public static class AtomicFile
     public static Task WriteAsync(string path, byte[] bytes, CancellationToken ct = default) =>
         BuildAsync(path, tmp => File.WriteAllBytesAsync(tmp, bytes, ct));
 
-    // for a file that takes more than a write (a copy that's then edited, a stream with its own settings)
     public static void Build(string path, Action<string> fill) =>
         BuildAsync(path, tmp => { fill(tmp); return Task.CompletedTask; }).GetAwaiter().GetResult();
 
@@ -35,7 +32,6 @@ public static class AtomicFile
         }
     }
 
-    // never over anything that's there: false if the path is already taken
     public static bool CreateNew(string path, byte[] bytes)
     {
         var tmp = TempFor(path);
@@ -52,7 +48,6 @@ public static class AtomicFile
         finally { FileDelete.Try(tmp); }
     }
 
-    // a read-only target would make the move over it fail. Returns what the attributes were
     public static FileAttributes ClearReadOnly(string path)
     {
         if (!File.Exists(path)) return 0;
@@ -67,8 +62,6 @@ public static class AtomicFile
         File.Delete(path);
     }
 
-    // the installer marks some files read-only, so the new file gets the old attributes back (and the old one keeps
-    // them if the move fails)
     public static void ReplaceKeepingReadOnly(string temp, string target)
     {
         var attrs = ClearReadOnly(target);

@@ -17,8 +17,6 @@ using SquareSizes = Provenance.Common.Game.RenderSizes;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// the FFXI Config tool's options, saved to the registry or the Windower profile or Ashita boot config the store's for.
-// Changes wait for Save, only changed values are written
 public partial class GameSettingsViewModel : ObservableObject
 {
     private readonly IDialogs _dialogs;
@@ -26,10 +24,8 @@ public partial class GameSettingsViewModel : ObservableObject
     private readonly Func<bool> _gameRunning;
     private IGameSettingsStore _store;
     private FfxiSettings _original = FfxiSettings.Defaults();
-    // what the page read back to when it showed _original, which a clamped value or a nearest render size can move off it
     private FfxiSettings _shown = FfxiSettings.Defaults();
     private bool _applying, _forTest, _loaded;
-    // 0037/0038 as they'll be saved. A loaded value stays exact until the slider or the resolution moves
     private int _uiWidth, _uiHeight;
 
     public GameSettingsViewModel(IDialogs dialogs, PolRegion? region, IGameSettingsStore? store = null, Func<bool>? gameRunning = null)
@@ -68,10 +64,8 @@ public partial class GameSettingsViewModel : ObservableObject
 
     public OpenFolder OpenScreenshotFolder { get; }
 
-    // where the game puts them with the box empty
     private static string DefaultScreenshotFolder => Path.Combine(AppPaths.Documents, "My Games", "FINAL FANTASY XI");
 
-    // the Config Tool line only holds with no Windower or Ashita, they keep some of these in their own files
     public string IntroText => HasProfile
         ? "Only the settings you change are saved."
         : "These are the same settings as in the FINAL FANTASY XI Config Tool. Only the settings you change are saved, and Windower or Ashita can override some of them while you play.";
@@ -83,7 +77,6 @@ public partial class GameSettingsViewModel : ObservableObject
         Load();
     }
 
-    // the same profile under its new name, so nothing on screen changes
     public void Retarget(IGameSettingsStore store)
     {
         _store = store;
@@ -144,7 +137,6 @@ public partial class GameSettingsViewModel : ObservableObject
     partial void OnBrightnessChanged(double value) => OnPropertyChanged(nameof(BrightnessText));
     partial void OnScreenshotFolderChanged(string value) => OpenScreenshotFolder.Refresh();
 
-    // the scale stays put and the menu resolution follows the new size (the official tool leaves it stale)
     partial void OnResolutionChanged(string value)
     {
         RebuildRenderSizes(RenderSize);
@@ -159,7 +151,6 @@ public partial class GameSettingsViewModel : ObservableObject
         if (!_applying) UiFromScale();
     }
 
-    // moving back to where a loaded value sat gives that exact pair again, not one worked out a pixel off
     private void UiFromScale()
     {
         var (w, h) = Parse(Resolution, 800, 600);
@@ -172,8 +163,6 @@ public partial class GameSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(UiSizeText));
     }
 
-    // the official tool puts these back to 0 whenever Legacy settings is off (the hardware mouse too, but the game
-    // reads that one whatever Legacy settings says)
     partial void OnLegacySettingsChanged(bool value)
     {
         if (value || _applying) return;
@@ -212,7 +201,6 @@ public partial class GameSettingsViewModel : ObservableObject
         Status.Show(problem ?? (HasProfile ? $"These are the current game settings for this {ProfileKind}." : "These are your current game settings."));
     }
 
-    // made-up settings in place of this PC's, and Save never writes them
     internal void ShowForTest(FfxiSettings s)
     {
         _forTest = true;
@@ -242,7 +230,6 @@ public partial class GameSettingsViewModel : ObservableObject
             Resolution = res;
             RebuildRenderSizes(Fmt(s.BgWidth, s.BgHeight));
             (_uiWidth, _uiHeight) = (s.UiWidth, s.UiHeight);
-            // a value from elsewhere can sit past either end. The slider rests at that end and the pair stays as it is
             UiScaleMax = FfxiSettings.MaxMenuScale(s.Width, s.Height);
             UiScale = Math.Clamp(FfxiSettings.MenuScale(s.Height, s.UiWidth, s.UiHeight), 1, UiScaleMax);
             OnPropertyChanged(nameof(UiScaleText));
@@ -279,9 +266,7 @@ public partial class GameSettingsViewModel : ObservableObject
         (s.UiWidth, s.UiHeight) = (_uiWidth, _uiHeight);
         s.Brightness = (float)Math.Round(Brightness, 1);
         s.OpeningMovie = B(OpeningMovie); s.Textures = Textures; s.Maps2D = Maps2D; s.Fonts = Fonts;
-        // off keeps a mip level Windower or Ashita had above 1
         s.Vegetation = Vegetation; s.DrawDistanceMip = DrawDistance ? 0 : Math.Max(1, _original.DrawDistanceMip); s.EnhancedShading = B(EnhancedShading);
-        // a size picked from the list is square, which the game's aspect switch has no use for
         s.KeepAspect = HasProfile || Parse(RenderSize, 0, 0) == (_original.BgWidth, _original.BgHeight) ? _original.KeepAspect : 0;
         s.Sound = B(Sound); s.SoundEffects = (int)Math.Round(SoundEffects);
         s.BackgroundSound = B(BackgroundSound); s.ScreenshotFolder = ScreenshotFolder.Trim();
@@ -361,8 +346,6 @@ public partial class GameSettingsViewModel : ObservableObject
         Status.Show("The gamepad tool is open. When you've finished with it, close these settings and open them again to see its changes.");
     }
 
-    // 1x and 2x the game resolution and the display modes of its shape for Windower, whose profile only holds a scale
-    // of the game's, and squares for the rest. Neither side goes past 4096
     private void RebuildRenderSizes(string keep)
     {
         var (w, h) = Parse(Resolution, 800, 600);
@@ -375,8 +358,6 @@ public partial class GameSettingsViewModel : ObservableObject
         }
         else foreach (var q in SquareSizes.Squares) RenderSizes.Add(Fmt(q, q));
         var pick = string.IsNullOrEmpty(keep) ? Fmt(w, h) : keep;
-        // a scale's rounding can leave it a pixel off the shape, which is fine. Another resolution's shape takes the
-        // nearest one that fits
         var (kw, kh) = Parse(pick, w, h);
         if (_store.SameShapeRenderSizes && Math.Abs((long)kw * h - (long)kh * w) > Math.Max(w, h))
             pick = RenderSizes.OrderBy(r => Math.Abs(Parse(r, 0, 0).Item1 - kw)).FirstOrDefault() ?? pick;
@@ -385,7 +366,6 @@ public partial class GameSettingsViewModel : ObservableObject
 
     private static bool Fits(string size) => Parse(size, 0, 0) is var (w, h) && w <= SquareSizes.Max && h <= SquareSizes.Max;
 
-    // a size from elsewhere shows as it is, at the top, and goes when another one's picked
     private string PickOrAdd(string v)
     {
         if (!RenderSizes.Contains(v)) RenderSizes.Insert(0, v);
@@ -400,7 +380,6 @@ public partial class GameSettingsViewModel : ObservableObject
         return p.Length == 2 && int.TryParse(p[0], out var a) && int.TryParse(p[1], out var b) ? (a, b) : (dw, dh);
     }
 
-    // the primary screen's modes, largest first, capped at 3840 wide like the official tool
     private static IEnumerable<string> DisplayModes()
     {
         var seen = new HashSet<(int, int)>();

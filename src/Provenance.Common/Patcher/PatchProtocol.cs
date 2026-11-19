@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Provenance.Common.Patcher;
 
-// app.dll's patch frames (0x102a6235 and friends): u32 length, MD5(frame[8..])[0..4], "POLP", u32 command, body
+// u32 length, MD5(frame[8..])[0..4], "POLP", u32 command, body
 public static class PatchProtocol
 {
     public const int Manifest = 1, ManifestData = 2, Range = 3, RangeData = 4, Version = 7, VersionData = 8;

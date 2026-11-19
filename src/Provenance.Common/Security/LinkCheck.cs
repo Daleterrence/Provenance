@@ -3,7 +3,6 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Security;
 
-// Provenance runs as admin, so a junction or symlink a standard user can write would send its writes elsewhere.
 // OneDrive, Dev Drive and the like use reparse points but don't redirect
 public static class LinkCheck
 {
@@ -11,7 +10,6 @@ public static class LinkCheck
 
     public static bool IsRedirect(uint attributes, uint reparseTag) => ((FileAttributes)attributes).HasFlag(FileAttributes.ReparsePoint) && reparseTag is MountPoint or Symlink;
 
-    // a drive root or something that isn't there isn't one
     public static bool IsRedirect(string path)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));

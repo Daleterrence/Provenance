@@ -26,7 +26,6 @@ public partial class ProfilePicturePickerWindow : AppWindow
         ShowPick();
     }
 
-    // the picked one can be a long way down a big category
     private void ShowPick() => Dispatcher.BeginInvoke(() =>
     {
         if (_vm.SelectedTile is { } shown) Pics.ScrollIntoView(shown);

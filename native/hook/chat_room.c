@@ -1,5 +1,3 @@
-/* POL chat rooms: zone and room lists are database searches, a room is IRC on polcore's link.
-   One command in flight, each step waits for the last like the viewer */
 
 static int chat_room_new_key_ok(const char *k);
 static int group_chat_busy(void);
@@ -20,7 +18,6 @@ static void chat_room_raw_pump(BYTE *b)
     }
 }
 
-/* polcore's member array for the room, local only. 0 when it isn't in the room any more */
 static int chat_room_members(BYTE *b)
 {
     int s = chat_frame_session(b), seen[CR_PEOPLE] = {0};
@@ -66,8 +63,6 @@ static void chat_room_send_state(const char *state)
 }
 
 #define CR_NOTHING_TO_LEAVE (-0x7e01)
-/* the only place a PART goes from. The window's leave and Play's both come through here, and the PART that goes
-   clears g_s.cr_joined, so whichever's second finds nothing to leave */
 static int chat_room_part(BYTE *b)
 {
     int s = chat_frame_session(b), r;
@@ -121,14 +116,12 @@ static void chat_room_go(int step)
     g_s.cr_st = step;
     g_s.cr_tries = 0;
 }
-/* a new room's AWAY and JOIN only get the 5 */
 static int chat_room_tries_for(int step)
 {
     return step == CR_PART || (!g_cr_making && (step == CR_AWAY || step == CR_JOIN)) ? CR_TRIES_ENTER : CR_TRIES;
 }
 static void chat_room_master_end(const char *state)
 {
-    /* the old password came off and the new one didn't go on, so the room's open now */
     if (lstrcmpA(state, "done") && lstrcmpA(state, "failed:left room") && g_cr_mop == MO_KEY && g_cr_mi > 0 &&
         g_cr_msteps[0] == MS_UNKEY && g_cr_msteps[g_cr_mi] == MS_KEY) {
         SecureZeroMemory(g_cr_key, sizeof g_cr_key);
@@ -141,7 +134,7 @@ static void chat_room_master_end(const char *state)
     SecureZeroMemory(g_cr_newkey, sizeof g_cr_newkey);
     g_snap_dirty = 1;
 }
-static char g_cr_part_state[32];   /* what a PART that's already been reported ends in, "left" when empty */
+static char g_cr_part_state[32];
 static void chat_room_left(const char *state)
 {
     if (lstrcmpA(g_cr_sstate, "sending") == 0) chat_room_send_state("failed:left");
@@ -158,7 +151,6 @@ static void chat_room_left(const char *state)
     chat_room_state(state);
     g_cr_part_state[0] = 0;
 }
-/* a step's answer: >0 done, <0 the server's error (or the link's), from svc 0x244 */
 static void chat_room_step_done(BYTE *b, int r)
 {
     int st = g_s.cr_st;
@@ -177,7 +169,6 @@ static void chat_room_step_done(BYTE *b, int r)
         return;
     }
     if (st >= CR_SETTOPIC) {
-        /* a room that didn't get its settings isn't the room that was asked for, so it's left */
         if (r < 0) {
             base_log("chat rooms: new room step %d answered %d, leaving it\r\n", st, r);
             wsprintfA(g_cr_part_state, "failed:create %d", r);
@@ -195,12 +186,10 @@ static void chat_room_step_done(BYTE *b, int r)
         if (r < 0) base_log("chat rooms: WHO answered %d\r\n", r);
         chat_room_members(b);
         if (g_cr_making) {
-            /* the viewer's hello goes before the new room's settings (0x31, then 0x32 on) */
             g_s.cr_hello = !g_s.cr_leave;
             chat_room_go(g_s.cr_leave ? CR_PART : CR_SETTOPIC);
             return;
         }
-        /* alone and room master: a room nobody else is in, so the viewer skips the TOPIC query */
         {
             int n = 0, master = 0;
             for (int i = 0; i < g_cr_people_n; i++)
@@ -273,7 +262,6 @@ static void chat_room_msg_done(int r, const char *why)
     g_cr_msg_kind = -1;
     if (kind == CRM_SAY) chat_room_send_state(why ? why : r > 0 ? "sent" : requests_failed(r));
     else if (why || r < 0) base_log("chat rooms: frame %d answered %d\r\n", kind, r);
-    /* like the viewer, a frame that didn't go doesn't stop the job */
     if (kind >= CRM_KEY) chat_room_master_next();
 }
 
@@ -289,7 +277,6 @@ static void chat_room_send_request(BYTE *b)
     text = requests_line(&p);
     colour = requests_line(&p);
     emote = requests_line(&p);
-    /* the viewer's 12 colours and the 23 faces of its first page, anything else goes as none */
     g_cr_colour = requests_parse_num(colour, 2, &n) && n < 12 ? n : -1;
     g_cr_emote = requests_parse_num(emote, 2, &n) && n < 24 ? n : 0;
     lstrcpynA(g_cr_stok, tok, sizeof g_cr_stok);
@@ -317,7 +304,6 @@ static void chat_room_frame_out(BYTE *b, int type)
     chat_room_msg_start(b, type);
 }
 
-/* 7, a and b: type, "00000", the language and the rest (a name or a password) */
 static void chat_room_frame_tail(BYTE *b, int type, const WCHAR *tail)
 {
     static WCHAR w[0x80];
@@ -356,8 +342,6 @@ static int chat_room_key_ok(const char *s)
     for (int i = 0; i < n; i++) if ((BYTE)s[i] <= 0x20 || (BYTE)s[i] >= 0x7f || s[i] == ',') return 0;
     return 1;
 }
-/* room password is the one-shot POL_CRED_CHAT entry (user = the join's token), wrapped like the account details
-   so it never touches a file. 0 if missing or not this join's */
 static int chat_room_password(const char *tok, char *key, int cap)
 {
     WCHAR tbuf[256];
@@ -378,7 +362,6 @@ static void chat_room_join_refused(const char *state)
     SecureZeroMemory(g_cr_key, sizeof g_cr_key);
     if (state) chat_room_state(state);
 }
-/* the app couldn't withdraw its enter or create, so its leave got here first */
 static int chat_room_called_off(const char *tok)
 {
     int off = g_cr_cancel_tok[0] && !lstrcmpA(g_cr_cancel_tok, tok);
@@ -414,7 +397,6 @@ static void chat_room_join_request(BYTE *b)
     irc = requests_line(&p);
     haskey = requests_line(&p);
     nick = requests_line(&p);
-    /* the password entry's read, and so deleted, before anything can turn the enter down */
     if (haskey[0]) pw = chat_room_password(tok, g_cr_key, sizeof g_cr_key);
     if (g_s.cr_st != CR_OUT) {
         base_log("chat rooms: enter ignored, already in or entering a room\r\n");
@@ -439,7 +421,6 @@ static void chat_room_join_request(BYTE *b)
     chat_room_enter(b);
 }
 
-/* the viewer's new room password box: up to 16, letters and numbers */
 static int chat_room_new_key_ok(const char *k)
 {
     int n = lstrlenA(k);
@@ -454,8 +435,6 @@ static int chat_room_cate(const char *x, int base, int count, int *out)
     if (!requests_parse_num(x, 3, out)) return 0;
     return *out == 0 || (*out >= base && *out < base + count);
 }
-/* a new room (app.dll 0x100a188d): <token>, <1 with a password in Credential Manager>, <zone>,
-   <occupancy>, <the three categories>, <chat name>, <room name>. The JOIN makes it and makes me its master */
 static void chat_room_create_request(BYTE *b)
 {
     char buf[512], *p, *tok, *haskey, *zone, *limit, *c0, *c1, *c2, *nick, *name, sj[0x80], id[0x40];
@@ -487,7 +466,6 @@ static void chat_room_create_request(BYTE *b)
         chat_room_join_refused("failed:bad request");
         return;
     }
-    /* the viewer's room name box holds 30 */
     n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, name, -1, w, 0x40);
     for (int i = 0; n > 0 && w[i]; i++) {
         if (w[i] < 0x20 || w[i] == 0x7f) n = 0;
@@ -497,7 +475,6 @@ static void chat_room_create_request(BYTE *b)
     if ((s = chat_frame_session(b)) < 0) { chat_room_join_refused("failed:no chat"); return; }
     if (haskey[0] && (!pw || !chat_room_new_key_ok(g_cr_key))) { chat_room_join_refused("failed:no password"); return; }
     if (!haskey[0]) g_cr_key[0] = 0;
-    /* '#', the viewer's language, "CU" and svc 0x224's text, which is unique to now and this login */
     memset(id, 0, sizeof id);
     pc_chat_unique_text(b, s, id);
     id[0x34] = 0;
@@ -522,7 +499,6 @@ static void chat_room_leave_request(BYTE *b)
     if (requests_take(REQ_CHATLEAVE, buf, sizeof buf) < 0) return;
     requests_line(&p);
     join = requests_line(&p);
-    /* the app couldn't withdraw its enter, so it's called off here instead, even with a PART still going */
     if (join[0] && lstrcmpA(join, g_cr_tok)) lstrcpynA(g_cr_cancel_tok, join, sizeof g_cr_cancel_tok);
     if (g_s.cr_st == CR_OUT || g_s.cr_leave) return;
     base_log("chat rooms: leaving %s\r\n", g_cr_room);
@@ -546,15 +522,12 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
         r = g_s.cr_wait == CRW_MSG ? pc_chat_message_check(b, s, out) : pc_chat_command_check(b, s);
         if (r == 0 && GetTickCount64() - g_cr_sent_at < CR_WAIT_MS) return;
         if (r == 0) {
-            pc_chat_command_forget(b, s);   /* forget it, the viewer's own timeout. Never sent again without a new click */
+            pc_chat_command_forget(b, s);
             base_log("chat rooms: no answer in %us (step %d)\r\n", CR_WAIT_MS / 1000, g_s.cr_st);
             if (g_s.cr_wait == CRW_MSG) { chat_room_msg_done(0, "failed:timeout"); return; }
-            /* a JOIN that timed out but got there anyway counts */
             if (g_s.cr_st == CR_JOIN && chat_room_members(b)) { chat_room_step_done(b, 1); return; }
             if (g_s.cr_st == CR_AWAY) { chat_room_left("failed:timeout"); return; }
             if (g_s.cr_st == CR_JOIN) {
-                /* it could still get there, so its PART goes now and waits like any step. The window's back in the
-                   lobby already */
                 g_s.cr_wait = CRW_NONE;
                 lstrcpyA(g_cr_part_state, "failed:timeout");
                 chat_room_state(g_cr_part_state);
@@ -567,7 +540,6 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
                 chat_room_master_end("failed:timeout");
                 return;
             }
-            /* a new room's setting with no answer might not be there, so it's left like a refusal */
             if (g_s.cr_st >= CR_SETTOPIC) {
                 g_s.cr_wait = CRW_NONE;
                 chat_room_step_done(b, -1);
@@ -590,7 +562,6 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
             g_cr_reread = 0;
             if (!chat_room_members(b)) { chat_room_left(g_cr_kicked_me ? "kicked" : "gone"); return; }
         }
-        /* a PRIVMSG reads the same answer as the group chat's JOIN, WHO and PART, so nothing goes while one's out */
         if (group_chat_busy()) return;
         if (g_cr_msg_kind >= 0) {
             chat_room_msg_start(b, g_cr_msg_kind);
@@ -615,7 +586,6 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
         chat_room_frame_out(b, CRM_HELLO);
         return;
     }
-    /* polcore's group chat reads the same one command answer for its JOIN and PART, so they never overlap */
     if (group_chat_busy()) return;
     r = chat_room_command(b, g_s.cr_st);
     if (r == 0) {
@@ -634,7 +604,6 @@ static void chat_room_in_room_pump(BYTE *b, int ctl)
     g_cr_sent_at = GetTickCount64();
 }
 
-/* every hold loop turn, requests only on control turns */
 static void chat_room_pump(BYTE *b, int ctl)
 {
     if (g_s.draining) return;
@@ -643,9 +612,7 @@ static void chat_room_pump(BYTE *b, int ctl)
     if (ctl && (g_s.cr_st != CR_IN || g_s.cr_leave) && requests_waiting(REQ_CHATMASTER)) chat_room_master_request();
     if (g_cr.step) chat_list_db_pump(b);
     if (!ctl) return;
-    /* waiting, not new: a .taking left by a read that failed is tried again first */
     if (requests_waiting(REQ_CHATLEAVE)) { chat_room_leave_request(b); return; }
-    /* a PART goes first */
     if (g_s.cr_st == CR_OUT && requests_waiting(REQ_CHATJOIN)) { chat_room_join_request(b); return; }
     if (g_s.cr_st == CR_OUT && requests_waiting(REQ_CHATCREATE)) { chat_room_create_request(b); return; }
     if (g_cr.step || !hold_db_free()) return;
@@ -654,18 +621,16 @@ static void chat_room_pump(BYTE *b, int ctl)
 }
 
 static int chat_room_open(void) { return g_s.cr_st != CR_OUT; }
-/* a command or a PRIVMSG waiting on its answer. One that hasn't gone yet holds nothing, it waits for the group chat */
 static int chat_room_cmd_busy(void) { return g_s.cr_wait != CRW_NONE; }
 
-/* an enter or a line asked for while the handle's changing, answered as not done */
 static void chat_room_join_refused_switching(const char *tok, const char *haskey)
 {
     char k[sizeof g_cr_key];
     g_cr_used = 1;
     k[0] = 0;
-    if (haskey[0]) chat_room_password(tok, k, sizeof k);   /* only to delete it */
+    if (haskey[0]) chat_room_password(tok, k, sizeof k);
     SecureZeroMemory(k, sizeof k);
-    if (g_s.cr_st != CR_OUT) return;   /* a room that's there keeps its own token and password */
+    if (g_s.cr_st != CR_OUT) return;
     lstrcpynA(g_cr_tok, tok, sizeof g_cr_tok);
     chat_room_join_refused("failed:handle changing");
 }
@@ -678,7 +643,7 @@ static void chat_room_master_refused_switching(const char *tok, const char *hask
     char k[sizeof g_cr_newkey];
     g_cr_used = 1;
     k[0] = 0;
-    if (haskey[0]) chat_room_password(tok, k, sizeof k);   /* only to delete it */
+    if (haskey[0]) chat_room_password(tok, k, sizeof k);
     SecureZeroMemory(k, sizeof k);
     if (g_cr_mop) return;
     lstrcpynA(g_cr_mtok, tok, sizeof g_cr_mtok);
@@ -691,7 +656,6 @@ static void chat_room_send_refused_switching(const char *tok)
     chat_room_send_state("failed:handle changing");
 }
 
-/* Play: FFXI takes the link over, so a room gets a PART first (the user's leaving chat for the game) */
 static void chat_room_end(BYTE *b)
 {
     int s = chat_frame_session(b), r;
@@ -700,8 +664,6 @@ static void chat_room_end(BYTE *b)
     if (g_s.cr_st == CR_OUT) return;
     if (s >= 0 && g_s.cr_wait != CRW_NONE) pc_chat_command_forget(b, s);
     g_s.cr_wait = CRW_NONE;
-    /* a JOIN with no answer yet still gets there, so it's PARTed like a room. Group chat can have the link's one
-       command out, so the PART retries till it goes */
     while ((r = chat_room_part(b)) == 0 && GetTickCount64() < until) {
         pc_pump_once(b);
         Sleep(16);
@@ -750,7 +712,6 @@ static void chat_room_write_lines(BYTE *b)
     }
     jw_free(&w);
 }
-/* the snapshot's "chat", only once chat's been used so the rest of the snapshot stays as it was */
 static void chat_room_snapshot(BYTE *b, jw *w)
 {
     char part[0x80];

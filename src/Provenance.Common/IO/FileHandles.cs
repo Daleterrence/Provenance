@@ -8,13 +8,11 @@ internal static class FileHandles
     internal const uint ListDirectory = 0x1, ReadAttributes = 0x80, WriteAttributes = 0x100, Delete = 0x10000;
     internal const uint ReadControl = 0x00020000, WriteDac = 0x00040000, WriteOwner = 0x00080000, Synchronize = 0x00100000;
     internal const uint GenericRead = 0x80000000;
-    // ShareReadWrite has no FILE_SHARE_DELETE, so a folder can't be renamed while it's held
     internal const uint ShareRead = 1, ShareWrite = 2, ShareDelete = 4, ShareReadWrite = ShareRead | ShareWrite, ShareAll = ShareReadWrite | ShareDelete;
     internal const uint BackupSemantics = 0x02000000, OpenReparsePoint = 0x00200000;
     internal const uint LinkItself = BackupSemantics | OpenReparsePoint;
     private const uint OpenExisting = 3;
 
-    // an invalid handle when it won't open, the error is Marshal.GetLastPInvokeError
     internal static SafeFileHandle Open(string path, uint access, uint share, uint flags) =>
         Kernel32.CreateFileW(path, access, share, IntPtr.Zero, OpenExisting, flags, IntPtr.Zero);
 
@@ -30,12 +28,10 @@ internal static class FileHandles
 
     internal static bool TryInfo(SafeFileHandle h, out ByHandleFileInformation info) => Kernel32.GetFileInformationByHandle(h, out info);
 
-    // where the handle really is, every link followed, \\?\ prefix off. A UNC path is null unless allowUnc, then \\server\share
     internal static string? FinalPath(SafeFileHandle h, bool allowUnc)
     {
         var buf = new char[1024];
         int n = Kernel32.GetFinalPathNameByHandleW(h, buf, buf.Length, 0);
-        // too small: n is the size it wants, with the terminator
         if (n >= buf.Length)
         {
             buf = new char[n];

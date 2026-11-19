@@ -4,7 +4,6 @@
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
              xmlns:socialViews="clr-namespace:Provenance.Wpf.Views.Social">
     <Grid Margin="14,14,14,18" RowDefinitions="*,Auto">
-        <!-- nothing new comes in while the game's open, so the list is as it was at Play and can't be used -->
         <DockPanel IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}" Style="{StaticResource DimWhenOff}">
             <TextBlock DockPanel.Dock="Top" Margin="8,0,4,8" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
                 <Run Text="Friends" /><Run Text="   " /><Run Text="{Binding Social.Summary, Mode=OneWay}" FontSize="12" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
@@ -14,7 +13,6 @@
             <socialViews:FriendsList x:Name="FriendList" DataContext="{Binding Social}" OwnSelection="True" FriendActivated="OnFriendActivated" />
         </DockPanel>
         <StackPanel Grid.Row="1" Margin="8,10,8,0">
-            <!-- edge to edge of the card, so Play reads as its own thing and not part of the list -->
             <Border Height="1" Margin="-22,0,-22,16" Background="{DynamicResource Border.Pane}" />
             <TextBlock Margin="0,0,0,8" TextWrapping="Wrap" TextAlignment="Center" FontSize="12"
                        Foreground="{DynamicResource State.Down}" Text="{Binding Social.PlayBlockedReason}"
@@ -36,7 +34,6 @@
                 <Grid ColumnDefinitions="*,Auto,Auto">
                     <Button x:Name="PlayButton" Command="{Binding PlayCommand}" IsEnabled="{Binding PlayEnabled}" IsDefault="True"
                             Style="{StaticResource ActionSegment}" AutomationProperties.Name="{Binding PlayName}">
-                        <!-- an invisible copy of the line above Play keeps Play in the middle, nudged up a touch -->
                         <StackPanel Margin="0,0,0,6">
                             <TextBlock Text="{Binding PlayPlatform.Subtitle}" FontSize="9" FontWeight="SemiBold" Opacity="0" Margin="0,0,0,-3"
                                        HorizontalAlignment="Center" AutomationProperties.Name=""

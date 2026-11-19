@@ -16,15 +16,12 @@ using Provenance.Wpf.Services;
 
 namespace Provenance.Wpf.ViewModels.Install;
 
-// The mirror goes first (current files straight into the game folders), then SE's five parts as the fallback,
-// unpacked here and installed with no installer windows
 public partial class InstallViewModel : ObservableObject
 {
-    private const long GameDriveBytes = 16_500_000_000;       // the installed and updated game, with update temp files
-    private const long DownloadDriveBytes = 15_500_000_000;   // the parts and their unpacked copy
+    private const long GameDriveBytes = 16_500_000_000;
+    private const long DownloadDriveBytes = 15_500_000_000;
     private const string MirrorFolder = "mirror";
 
-    // the versions the installer offers, North American first, only ones Provenance can log in with
     private static readonly PolRegion[] RegionValues = new[] { PolRegion.UnitedStates, PolRegion.Europe, PolRegion.Japan }
         .Where(r => GameInstaller.CanInstall(r) && PolPaths.Supported(r)).ToArray();
 
@@ -44,7 +41,6 @@ public partial class InstallViewModel : ObservableObject
     public InstallViewModel(IDialogs dialogs, PolRegion? region, Func<IDisposable>? holdPrestarts = null)
     {
         _dialogs = dialogs;
-        // a viewer that's already there decides, otherwise it's the player's pick
         ShowRegionChoice = region is not { } r || !RegionValues.Contains(r);
         var local = LocaleRegionForTest();
         _autoRegion = RegionValues.Contains(local) ? local : RegionValues[0];
@@ -52,9 +48,7 @@ public partial class InstallViewModel : ObservableObject
         _region = ShowRegionChoice ? _autoRegion : region!.Value;
         _holdPrestarts = holdPrestarts;
         _meter = new DownloadMeter(text => DownloadText = text, text => TimeLeftText = text, fraction => DownloadFraction = fraction);
-        // the MSIs' own default INSTALLDIR for these 32-bit packages
         InstallFolder = Path.Combine(AppPaths.ProgramFilesX86, "PlayOnline");
-        // the installer files run as admin, so they live in an admin-only folder (LockWorkFolder), never %TEMP%
         DownloadFolder = AppPaths.ProgramData;
         TotalGb = ByteText.Gb(GameInstaller.TotalBytes(_region));
         UpdateSpace();
@@ -66,7 +60,6 @@ public partial class InstallViewModel : ObservableObject
 
     public IReadOnlyList<string> RegionChoices { get; }
 
-    // fixed once a run's started, half an install of one region under the other's would be a mess
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanChooseRegion))]
     private bool _regionLocked;
@@ -120,7 +113,6 @@ public partial class InstallViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(StepText))]
     private int _currentStep;    // 0 download, 1 unpack, 2 install, 3 done
 
-    // the mirror's files come ready to install, so that way has no unpack step
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StepText))]
     private bool _fromMirror;
@@ -133,7 +125,6 @@ public partial class InstallViewModel : ObservableObject
         _ => "Finishing",
     };
 
-    // Continue tries the mirror again first, so a stop while unpacking can't promise the unpack
     internal static string StoppedText(int step) => step switch
     {
         0 => "The download was stopped. It'll carry on from where it left off.",
@@ -148,7 +139,6 @@ public partial class InstallViewModel : ObservableObject
 
     private void UpdateSpace()
     {
-        // a relative or empty path would resolve against this elevated process's working folder
         if (InstallFolder is not { } install || DownloadFolder is not { } download ||
             !Path.IsPathFullyQualified(install) || !Path.IsPathFullyQualified(download))
         {
@@ -214,8 +204,6 @@ public partial class InstallViewModel : ObservableObject
         return _dialogs.Confirm("Stop the install?", what, "STOP", ConfirmStyle.Destructive);
     }
 
-    // its files run as admin, so it's an admin-only ffxi-download folder in an admin-only folder, both held till the install ends.
-    // A stranger's folder with the same name is skipped
     private InstallWorkFolder.WorkFolder LockWorkFolder(IEnumerable<string> ownNames)
     {
         var chosen = Path.TrimEndingDirectorySeparator(Path.GetFullPath(DownloadFolder));
@@ -240,8 +228,6 @@ public partial class InstallViewModel : ObservableObject
         }
     }
 
-    // the detail already has the sizes, so the meter only adds the time left. Each package is its own step, Windows
-    // Installer's retries and rollback included
     private Progress<InstallProgress> InstallStepProgress() => new(p =>
     {
         Detail = p.Detail;
@@ -287,7 +273,6 @@ public partial class InstallViewModel : ObservableObject
         _meter.Restart();
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
-        // the download takes hours on a slow line, and Windows mustn't sleep in the middle of it
         KeepAwake.Hold();
         IDisposable? hold = null;
         InstallWorkFolder.WorkFolder? workFolder = null;
@@ -297,7 +282,6 @@ public partial class InstallViewModel : ObservableObject
             Stage = "Preparing";
             Detail = "Checking this PC...";
             Log.Information("Install: region {Region}", _region);
-            // my own waiting pol.exe would fail the check below, and none may start while the files go in
             if (_holdPrestarts is not null)
             {
                 await Task.Run(() =>
@@ -315,7 +299,6 @@ public partial class InstallViewModel : ObservableObject
                 throw Shown.Mark(new InvalidOperationException("PlayOnline or FINAL FANTASY XI is running, or another copy of Provenance has it open in the background. Close it or exit that copy of Provenance, then press Try again."));
             if (InstallFolderCheck.OtherVersionIn(InstallFolder, _region, PolPaths.TryGetInstallFolder) is { } clash)
                 throw Shown.Mark(new InvalidOperationException(clash));
-            // only from here, a refused start leaves the choice open
             RegionLocked = true;
 
             var parts = GameInstaller.PartsFor(_region).ToList();
@@ -351,7 +334,6 @@ public partial class InstallViewModel : ObservableObject
                 },
                 UnpackProgress = () => LocalProgress("Unpacking the installer..."),
                 CheckProgress = () => LocalProgress(),
-                // the bad part's been deleted, so it downloads again (once)
                 Damaged = e => Log.Warning("{Part} failed its MD5 check before unpacking; downloading it again", e.Part),
             }, ct);
 
@@ -369,7 +351,6 @@ public partial class InstallViewModel : ObservableObject
             Detail = "Removing the installer files...";
             await Task.Run(() => InstallParts.RemoveParts(work, _region), CancellationToken.None);
 
-            // SE's files are from 2019, so the first login updates POL and the first Play the game
             var updateBytes = await FirstUpdateSizeAsync(ct);
             Log.Information("Install finished in {Folder}; warnings: {Warnings}", InstallFolder, warnings);
             Finished(PartsNextText(updateBytes), warnings);
@@ -402,8 +383,6 @@ public partial class InstallViewModel : ObservableObject
         }
     }
 
-    // verified current files from the mirror, the installer's steps without the copy, then patch.ver last. False sends
-    // it to SE's parts, but a problem on this PC is an error
     internal async Task<bool> InstallFromMirrorAsync(string work, CancellationToken ct)
     {
         _mirror = null;
@@ -434,7 +413,6 @@ public partial class InstallViewModel : ObservableObject
         }
         string? staged;
         IReadOnlyList<string> warnings;
-        // the game files go straight into the game folders, so the whole way to patch.ver is under the lock
         using (await UpdateLockAsync(ct))
         {
             try
@@ -465,7 +443,7 @@ public partial class InstallViewModel : ObservableObject
             {
                 warnings = await _installer.RunInstallAsync(staged, InstallFolder, Path.Combine(work, "logs"), _region, InstallStepProgress(), ct, payloadInPlace: true);
                 FfxiSettings.WriteFirstStartSettings(_region);
-                mirror.WriteVersions();   // last, so a stopped install never claims a version
+                mirror.WriteVersions();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -479,7 +457,6 @@ public partial class InstallViewModel : ObservableObject
         await Task.Run(() =>
         {
             InstallParts.RemoveDir(staged);
-            // a parts run stopped before this one leaves gigabytes of SE's parts behind otherwise
             InstallParts.RemoveParts(work, _region);
         }, CancellationToken.None);
 
@@ -495,8 +472,6 @@ public partial class InstallViewModel : ObservableObject
         "PlayOnline updates itself the first time you log in, and the game updates the first time you press Play" +
         (gameUpdateBytes is long b && b > 0 ? $" ({ByteText.Size(b, kb: true)} to download)." : ".");
 
-    // how the first Play picks its files, reusing the mirror's game index. Null when that could come from POL
-    // (no version, or not on the mirror) or the mirror's unreachable
     private async Task<long?> FirstUpdateSizeAsync(CancellationToken ct)
     {
         if (_mirror?.GameIndex is not { } index
@@ -526,7 +501,6 @@ public partial class InstallViewModel : ObservableObject
         finally { _meter.Clear(); }
     }
 
-    // the lock updates and repairs take, so another copy can't write into the same folders meanwhile
     private async Task<IDisposable> UpdateLockAsync(CancellationToken ct)
     {
         var waiting = new Progress<PatchProgress>(p =>

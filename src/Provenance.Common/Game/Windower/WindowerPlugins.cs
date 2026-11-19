@@ -6,7 +6,6 @@ public sealed record WindowerPluginInfo
 {
     public required AddonListing Listing { get; init; }
     public bool Installed { get; init; }
-    // false for a DLL without Windower's two exports (or not x86), which can't be turned on
     public bool IsWindowerPlugin { get; init; }
     public bool InManifest { get; init; }
     public Version? ManifestVersion { get; init; }
@@ -20,10 +19,8 @@ public static class WindowerPlugins
 {
     private static readonly IReadOnlyList<string> RequiredExports = ["GetInterfaceVersion", "CreateInstance"];
 
-    // manifest plugins first in the manifest's order (installed or not), then any other DLL in plugins\ by name
     public static IReadOnlyList<WindowerPluginInfo> Scan(string windowerDir) => Scan(windowerDir, null);
 
-    // with a cache, a DLL whose row still matches its listing entry isn't opened
     internal static IReadOnlyList<WindowerPluginInfo> Scan(string windowerDir, WindowerScanCache? cache)
     {
         var dir = Path.Combine(windowerDir, "plugins");

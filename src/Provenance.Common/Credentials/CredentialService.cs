@@ -4,8 +4,6 @@ using Serilog;
 
 namespace Provenance.Common.Credentials;
 
-// The wrap key's opened on first use, so a broken key file can't stop the app starting. Header tests and deletes don't
-// need it, the IDs do as they're wrapped with the passwords
 public sealed class CredentialService : ICredentialService
 {
     private readonly WindowsCredentialStore _store;
@@ -31,7 +29,6 @@ public sealed class CredentialService : ICredentialService
     public SquareEnixAccount? LoadSquareEnixAccount(string profileId) =>
         ReadOrNull(KeyFor(CredentialTargets.Sea, profileId)) is { } c ? new SquareEnixAccount(c.UserName, c.Secret) : null;
 
-    // an entry the wrap key can't read (a lost key) loads as null, and the user types the details in again
     private StoredCredential? ReadOrNull(string key)
     {
         try { return Wrapped.Read(key); }
@@ -40,8 +37,6 @@ public sealed class CredentialService : ICredentialService
 
     private bool _unreadableLogged;
 
-    // a store that can't be read at all (no logon session behind the process) shows every profile as needing
-    // details, instead of crashing start-up
     public bool HasUsableDetails(string profileId)
     {
         try
@@ -65,7 +60,6 @@ public sealed class CredentialService : ICredentialService
 
     public string? ReadPolId(string profileId) => ReadId(KeyFor(CredentialTargets.Pol, profileId));
 
-    // no entry, no key needed
     private string? ReadId(string key) => _store.Exists(key) ? ReadOrNull(key)?.UserName : null;
 
     public void SavePolAccount(string profileId, PolAccount account)
@@ -92,7 +86,6 @@ public sealed class CredentialService : ICredentialService
         _store.Delete(key);
     }
 
-    // a failed POL delete mustn't leave the SEA entry behind
     public void DeleteProfile(string profileId)
     {
         Exception? first = null;
@@ -103,7 +96,6 @@ public sealed class CredentialService : ICredentialService
         if (first != null) ExceptionDispatchInfo.Throw(first);
     }
 
-    // the store turns "POL:<profile id>" into the target "Provenance:POL:<profile id>"
     private static string KeyFor(string baseKey, string profileId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);

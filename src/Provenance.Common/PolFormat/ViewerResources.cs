@@ -30,7 +30,6 @@ public sealed class ViewerResources
 
     public string? Folder => _settings.DetectedRegion is { } r ? _folder(r) : null;
 
-    // the first try is the only one, even with no region yet
     public string Text(int id, string fallback)
     {
         if (!_tableTried)
@@ -48,7 +47,6 @@ public sealed class ViewerResources
 
     public bool FilterOn => PolOptions.ChatFilter(_settings.Current);
 
-    // the chat language filter where the viewer runs it: what other people wrote, never my own lines
     public string Filtered(string text)
     {
         if (text.Length == 0 || !FilterOn) return text;
@@ -60,7 +58,6 @@ public sealed class ViewerResources
         return _wordFilter?.Apply(text) ?? text;
     }
 
-    // only a load that worked is kept, so a failed one gets another go
     public ProfilePictureCatalog.Catalog? Pictures
     {
         get

@@ -1,7 +1,5 @@
 namespace Provenance.Wpf.Services;
 
-// Restart Now on the update banner: asks, then prepare checks, downloads and closes the other copies (or closes nothing),
-// then this copy exits and App.OnExit hands over to Update.exe. blocked says why it can't start yet
 public sealed class UpdateRestart(IDialogs dialogs, Func<Task<bool>> prepare, Action exit, Func<string?>? blocked = null)
 {
     public const string Title = "Restart Provenance";

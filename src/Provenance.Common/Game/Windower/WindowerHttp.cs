@@ -20,8 +20,6 @@ public readonly record struct WindowerFetch(WindowerFetchOutcome Outcome, string
     public bool Ok => Outcome == WindowerFetchOutcome.Downloaded;
 }
 
-// Requests shaped like Windower.exe's HttpWebRequest ones: its User-Agent and header order, no proxy, TLS 1.2. Only a
-// 200 counts, like there
 public sealed class WindowerHttp : IDisposable
 {
     public static readonly TimeSpan HeaderTimeout = TimeSpan.FromSeconds(5);
@@ -34,7 +32,6 @@ public sealed class WindowerHttp : IDisposable
     // what File.GetLastWriteTimeUtc gives for a file that isn't there, and Windower sends it as is
     public static readonly DateTime NoFile = DateTime.FromFileTimeUtc(0);
 
-    // the Windower.exe the requests claim to come from when there isn't one in the folder yet
     public static readonly Version DefaultLauncher = new(4, 7, 9, 3);
 
     private readonly HttpClient _client;
@@ -54,11 +51,9 @@ public sealed class WindowerHttp : IDisposable
 
     public string UserAgent { get; set; } = UserAgentFor(DefaultLauncher);
 
-    // hosts that didn't answer at all, by the site asked rather than where a redirect went. The archive's site is
-    // github.com here, Windower switches off api.github.com for it
+    // hosts that didn't answer at all, by the site asked rather than where a redirect went
     public IReadOnlyCollection<string> OfflineHosts => _offline;
 
-    // redirects are followed by hand so every hop carries the same headers in the same order
     public static SocketsHttpHandler CreateHandler() => new()
     {
         UseProxy = false,
@@ -72,8 +67,7 @@ public sealed class WindowerHttp : IDisposable
         ConnectCallback = ConnectAsync,
     };
 
-    // .NET Framework sends Connection: Keep-Alive on a connection's first request only, so the request that opens one
-    // gets it here (a lot of faff for one header)
+    // .NET Framework sends Connection: Keep-Alive on a connection's first request only (a lot of faff for one header)
     private static async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext context, CancellationToken ct)
     {
         var connection = context.InitialRequestMessage.Headers.Connection;
@@ -91,8 +85,7 @@ public sealed class WindowerHttp : IDisposable
         }
     }
 
-    // Windower/<major>.<minor> (Windows NT <os major>.<os minor>; WOW64), a launcher version that isn't known gets the
-    // default. Windower.exe is always x86, so a 64-bit Windows always gets WOW64 whatever Provenance is built as
+    // Windower.exe is always x86, so a 64-bit Windows always gets WOW64 whatever Provenance is built as
     public static string UserAgentFor(Version launcher)
     {
         if (launcher.Major == 0) launcher = DefaultLauncher;
@@ -115,7 +108,6 @@ public sealed class WindowerHttp : IDisposable
         {
             result = await FetchAsync(site, url, modified, () => output = new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None),
                                       t => stamp = t, MaxDownloadBytes, ct);
-            // on the handle, so the time can't land on something swapped in by name afterwards
             if (result.Ok && output is not null)
             {
                 try { File.SetLastWriteTimeUtc(output.SafeFileHandle, stamp ?? DateTime.UtcNow); }
@@ -229,8 +221,7 @@ public sealed class WindowerHttp : IDisposable
         }
     }
 
-    // .NET Framework's order: User-Agent, If-Modified-Since, Host (then Connection, see ConnectAsync).
-    // SocketsHttpHandler writes Host first unless it's set by hand
+    // .NET Framework's order: User-Agent, If-Modified-Since, Host (then Connection, see ConnectAsync)
     private HttpRequestMessage Request(Uri uri, DateTime? modified)
     {
         var req = new HttpRequestMessage(HttpMethod.Get, uri) { Version = HttpVersion.Version11 };

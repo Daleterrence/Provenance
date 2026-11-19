@@ -1,5 +1,3 @@
-/* the room master's kick, designate and password change (app.dll 0x1009ba31). Each step is one command or one frame,
-   and each waits for the last */
 static void chat_room_master_next(void)
 {
     if (!g_cr_mop) return;
@@ -22,7 +20,6 @@ static void chat_room_master_step(BYTE *b)
     case MS_OP: r = chat_room_mode(b, 0xc, g_cr_mlo, g_cr_mhi, NULL, 1); break;
     case MS_UNKEY: r = chat_room_mode(b, 8, 0, 0, g_cr_key, 0); break;
     case MS_KEY: r = chat_room_mode(b, 8, 0, 0, g_cr_newkey, 1); break;
-    /* the viewer shows its own line for the kick and the new master as the frame goes */
     case MS_KICKFRAME:
         chat_frame_add_line(CRK_KICKED, 0, NULL, g_cr_mname, NULL);
         chat_room_frame_tail(b, CRM_KICK, g_cr_mname);
@@ -61,7 +58,6 @@ static void chat_room_master_refused(const char *state)
     g_snap_dirty = 1;
 }
 static int chat_room_password(const char *tok, char *key, int cap);
-/* <token>, <1 when there's a new password in Credential Manager>, kick|master|password, <member key> */
 static void chat_room_master_request(void)
 {
     char buf[256], *p, *tok, *haskey, *op, *key, nk[sizeof g_cr_newkey];
@@ -108,7 +104,6 @@ static void chat_room_master_request(void)
                 if ((g_cr_mem[i * 16 + 0xc] & 1) && *(DWORD *)(g_cr_mem + i * 16) == who->lo &&
                     *(DWORD *)(g_cr_mem + i * 16 + 4) == who->hi)
                     m = g_cr_mem + i * 16;
-            /* banned first so a kicked member can't just come back, unless they're banned already */
             if (!m || !(*(DWORD *)(m + 8) & (1u << 4))) g_cr_msteps[g_cr_mn++] = MS_BAN;
             g_cr_msteps[g_cr_mn++] = MS_KICKFRAME;
             g_cr_msteps[g_cr_mn++] = MS_KICK;

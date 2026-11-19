@@ -1,26 +1,20 @@
-/* where each polcore.h address is in the current pol.exe and polcore build, the bytes of code that uses it, and the resolver that finds them */
 #define IN_EXE 0
 #define IN_POLCORE 1
 #define IS_DATA 0
-#define IS_CODE 1          /* in .text: patched, called or compared */
-#define SKIPPABLE 0        /* the hook can do without it, and skips what needs it */
+#define IS_CODE 1
+#define SKIPPABLE 0
 #define REQUIRED 1
-#define ADDR_MATCH (-1)    /* the address is in the match, as far in as the current build has it */
+#define ADDR_MATCH (-1)
 
-/* the list stamps' setter, which picks the server's or mine by its argument */
 #define SIG_STAMPS "8b 44 24 04 85 c0 b8 ?? ?? ?? ?? 75 05 b8 ?? ?? ?? ?? 8b 4c 24 08 85 c9 74 02 89 08"
-/* CreateDialogParamW(hinst, 0x67, NULL, splash proc, 0). hInstance comes off a global, so there's an extra "ff 35" load
-       before the call */
 #define SIG_SPLASH "6a 00 68 ?? ?? ?? ?? 6a 00 6a 67 ff 35 ?? ?? ?? ?? ff 15 ?? ?? ?? ??"
 
 static struct hook_addr g_addr[ADDRESS_COUNT] = {
-    /* Starts on the push ebp, a detour past the frame setup leaves the stub's stack a dword off */
+    /* starts on the push ebp, a detour past the frame setup leaves the stub's stack a dword off */
     [AT_MENU_SESSION] = { .name = "menu session", .module = IN_EXE, .code = IS_CODE, .required = REQUIRED,
         .usual = 0x27030, .sig_at = 0x27030, .operand = ADDR_MATCH,
         .sig = "55 8b ec 6a ff 68 ?? ?? ?? ?? 64 a1 00 00 00 00 50 81 ec 88 08 00 00 a1 ?? ?? ?? ?? 33 c5 89 45 f0 "
             "56 57 50 8d 45 f4 64 a3 00 00 00 00 8b f1 80 7e 21 01" },
-    /* pol.exe has more than one content launcher, sharing this code bar addresses. So it starts at the GUID the right one asks
-       FFXiEntry for. The last call is the do-nothing trace the hook takes over */
     [AT_GAME_RETURN] = { .name = "game return", .module = IN_EXE, .code = IS_CODE, .required = REQUIRED,
         .usual = 0x20c58, .sig_at = 0x20bf4, .operand = ADDR_MATCH,
         .sig = "51 68 ?? ?? ?? ?? 6a 17 6a 00 50 ff 15 ?? ?? ?? ?? 85 c0 0f 88 ?? ?? ?? ?? "
@@ -48,14 +42,11 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
     [AT_REGION_INDEX] = { .name = "region index", .module = IN_EXE, .code = IS_DATA, .required = REQUIRED,
         .usual = 0xf03dc, .sig_at = 0x263dd, .operand = 2,
         .sig = "8b 0d ?? ?? ?? ?? 8b c1 83 e8 00 74 ?? 83 e8 01 74 ??" },
-    /* asks dxdiagn for the DirectX version and says whether it's 8.1 or later. Starts on the push ebp, it's patched over
-       its first bytes */
     [AT_DX_CHECK] = { .name = "DirectX check", .module = IN_EXE, .code = IS_CODE, .required = SKIPPABLE,
         .usual = 0x25970, .sig_at = 0x25970, .operand = ADDR_MATCH,
         .sig = "55 8b ec 51 6a 00 8d 45 fc c7 45 fc 00 00 00 00 6a 00 50 e8 ?? ?? ?? ?? "
             "83 c4 0c 81 7d fc 00 01 08 00 0f 93 c0 8b e5 5d c3" },
 
-    /* the COM getter that hands the service table over. Starts on its EBP frame, the argument's at [ebp+0xc] */
     [AT_SERVICES] = { .name = "service table", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
         .usual = 0xc4180, .sig_at = 0x51385, .operand = 8,
         .sig = "55 8b ec 8b 45 0c c7 00 ?? ?? ?? ?? 33 c0 5d c2 08 00" },
@@ -86,7 +77,6 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
     [AT_CON_IDLE] = { .name = "POLCON_IDLE", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
         .usual = 0x40520, .sig_at = 0x40520, .operand = ADDR_MATCH,
         .sig = "51 57 33 ff a1 ?? ?? ?? ?? 3b c7 75 08 b8 01 00 00 00 5f 59 c3" },
-    /* its decoding twin straight after is the same bytes bar the call, so this starts in the function before it */
     [AT_ENCODE_POLID] = { .name = "ENCODE_POLID", .module = IN_POLCORE, .code = IS_CODE, .required = REQUIRED,
         .usual = 0x41f30, .sig_at = 0x41f10, .operand = ADDR_MATCH,
         .sig = "56 8b 74 24 08 57 b9 10 00 00 00 bf ?? ?? ?? ?? f3 a5 66 a5 5f 5e c3 90 90 90 90 90 90 90 90 90 "
@@ -150,8 +140,6 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .sig = "8d 44 24 18 8d 54 09 08 52 68 ?? ?? ?? ??" },
 };
 
-/* a module as the resolver sees it: image, what its code addresses are relative to (run-time base, or ImageBase for an
-   unrelocated copy), .text offsets and sections */
 typedef struct {
     BYTE *image;
     DWORD opbase, text, text_end, size;
@@ -159,7 +147,6 @@ typedef struct {
     WORD section_count;
 } addr_module;
 
-/* 0 when the headers don't make sense or there's no .text to look in */
 static int addr_module_open(addr_module *m, BYTE *image, DWORD opbase)
 {
     IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)image;
@@ -190,14 +177,12 @@ static int addr_module_open(addr_module *m, BYTE *image, DWORD opbase)
 
 static DWORD addr_sig_len(const char *sig) { return (DWORD)(lstrlenA(sig) + 1) / 3; }
 static BYTE addr_hex(char c) { return (BYTE)(c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10); }
-/* sig is two hex digits a byte, one space between, ?? for anything. This is byte k's value, 0 when it's ?? */
 static int addr_sig_byte(const char *sig, DWORD k, BYTE *want)
 {
     const char *c = sig + k * 3;
     *want = *c == '?' ? 0 : (BYTE)(addr_hex(c[0]) << 4 | addr_hex(c[1]));
     return *c != '?';
 }
-/* every byte's value, and in fixed whether it counts. The arrays have to hold addr_sig_len(sig) */
 static void addr_sig_bytes(const char *sig, BYTE *want, BYTE *fixed)
 {
     DWORD k, n = addr_sig_len(sig);
@@ -217,13 +202,11 @@ static int addr_sig_fits(const addr_module *m, DWORD off, const char *sig)
     return off >= m->text && off <= m->text_end && m->text_end - off >= n && addr_sig_at(m->image + off, sig);
 }
 
-/* a signature taken apart once for the search, its first byte that counts (not always byte 0) tested first */
 #define ADDR_PAT_MAX 256
 typedef struct {
     BYTE want[ADDR_PAT_MAX], fixed[ADDR_PAT_MAX];
     DWORD n, lead;
 } addr_pat;
-/* 0 when it's empty, all ??, or too long to hold, and the search takes those the long way */
 static int addr_pat_parse(addr_pat *p, const char *sig)
 {
     DWORD k;
@@ -242,8 +225,6 @@ static int addr_pat_at(const addr_pat *p, const BYTE *img)
     return 1;
 }
 
-/* a writable, non-executable section with at least 4 bytes of it from a (packed polcore's .text and POL1 are
-   writable too, but they're executable) */
 static int addr_in_data(const addr_module *m, DWORD a)
 {
     const IMAGE_SECTION_HEADER *s = m->sections;
@@ -257,7 +238,6 @@ static int addr_in_data(const addr_module *m, DWORD a)
     return 0;
 }
 
-/* a match of sig at off, and if the entry has bytes it shows or a call it makes, they're what the match points at */
 static int addr_extras(const struct hook_addr *e, const addr_module *m, DWORD off)
 {
     DWORD p;
@@ -276,8 +256,6 @@ static int addr_matches(const struct hook_addr *e, const addr_module *m, DWORD o
     return addr_sig_fits(m, off, e->sig) && addr_extras(e, m, off);
 }
 
-/* e's address for a match at off, or 0 when it'd be somewhere that kind of thing can't be: code in .text, data in a
-   writable section that isn't code */
 static DWORD addr_from(const struct hook_addr *e, const addr_module *m, DWORD off)
 {
     DWORD a = e->operand == ADDR_MATCH ? off + (e->usual - e->sig_at)
@@ -286,7 +264,6 @@ static DWORD addr_from(const struct hook_addr *e, const addr_module *m, DWORD of
     return addr_in_data(m, a) ? a : 0;
 }
 
-/* every place in .text the entry matches, whatever its address is, counted to 2, and where the first is */
 static int addr_scan(const struct hook_addr *e, const addr_module *m, DWORD *first)
 {
     addr_pat pat;
@@ -306,8 +283,6 @@ static int addr_scan(const struct hook_addr *e, const addr_module *m, DWORD *fir
     return hits;
 }
 
-/* tries the old address, then the one place in .text it fits, else 0. hits counts the places it fitted,
-   so 1 with 0 at means the old address was bad */
 static void addr_find(struct hook_addr *e, const addr_module *m)
 {
     DWORD off = e->sig_at;
@@ -330,7 +305,6 @@ static void addr_list(char *list, int cap, const char *item)
     lstrcatA(list, item);
 }
 
-/* 1 when every required address in module is found and a summary's logged, else a line for each that isn't */
 static int addr_resolve(int module, const char *label, BYTE *image, DWORD opbase)
 {
     addr_module m;
@@ -365,7 +339,6 @@ static int addr_resolve(int module, const char *label, BYTE *image, DWORD opbase
     return 1;
 }
 
-/* the same, but ends pol.exe when something it needs isn't there */
 static void addr_require(int module, const char *label, BYTE *image, DWORD opbase)
 {
     if (addr_resolve(module, label, image, opbase)) return;

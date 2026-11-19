@@ -62,7 +62,6 @@
                         Command="{Binding Multi.StartAllAccountsCommand}" Content="{Binding Multi.StartAllText}"
                         Visibility="{Binding Multi.Running, Converter={StaticResource InvertBoolToVis}}"
                         ToolTip="Logs in and starts the game for each account you've turned on in Settings, under Multi-account, one after another." />
-                <!-- it's a stop button while the run's going -->
                 <Button Height="36" Style="{StaticResource RedButton}"
                         Command="{Binding Multi.StartAllAccountsCommand}" Content="{Binding Multi.StartAllText}"
                         Visibility="{Binding Multi.Running, Converter={StaticResource BoolToVis}}" />

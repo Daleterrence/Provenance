@@ -13,8 +13,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-// Repair game files lives on the logged-out cards. A logged-in pol.exe holds the viewer and game files open, and ending
-// it would log the account out
 public partial class RepairButtonViewModel : ObservableObject
 {
     internal static string LockedText(GameFilesLock.Job? holder) =>
@@ -55,7 +53,6 @@ public partial class RepairButtonViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private bool _available;
 
-    // what the probe last saw: another copy holding the update lock, or the game running
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BlockedReason))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
@@ -67,7 +64,6 @@ public partial class RepairButtonViewModel : ObservableObject
         : _pol.Pid is not null || _session.Phase == SessionPhase.LoggingOut ? "Repair can start once you're logged out of PlayOnline."
         : BusyReason;
 
-    // A broken install can have lost FFXiMain.dll, so it only needs both folders registered
     internal static bool State(PolRegion? region, Func<PolRegion, GameProduct, string?> folder)
     {
         var r = region ?? PolRegion.UnitedStates;
@@ -76,7 +72,6 @@ public partial class RepairButtonViewModel : ObservableObject
 
     internal void SetRegion(PolRegion? region) => Available = State(region, PolPaths.TryGetInstallFolder);
 
-    // Pid and the end of a log out have no change notice of their own
     internal void Refresh()
     {
         OnPropertyChanged(nameof(BlockedReason));
@@ -88,8 +83,6 @@ public partial class RepairButtonViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanStart))]
     private void Start()
     {
-        // pre-starts are held off for the whole repair, so none lands a pol.exe on top of it.
-        // Still held when a replaced pol.exe gets its LAA back
         var vm = new RepairViewModel(_dialogs, _settings.DetectedRegion, _pol.Prestarter.HoldPrestarts,
                                      () => LargeAddressAwareSwitch.Apply(_settings, "after the repair"));
         Repairing = true;
@@ -106,17 +99,14 @@ public partial class RepairButtonViewModel : ObservableObject
     internal void StopProbing() => _repairProbe.Stop();
     internal bool Probing => _probing;
 
-    // when the window comes forward, and every few seconds while a logged-out card's up
     public async Task ProbeAsync()
     {
-        // a multi-account run holds the update lock in this copy, which isn't "another copy"
         if (_probing || Repairing || !_windowShown() || !Available || _session.LoggedIn || _session.Launching || _session.InMultiRun) return;
         _probing = true;
         try { BusyReason = await Task.Run(Busy); }
         finally { _probing = false; }
     }
 
-    // the lock's only taken for a moment, and only when it's free
     private static string? Busy()
     {
         try

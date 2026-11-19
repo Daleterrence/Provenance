@@ -3,7 +3,6 @@ using Provenance.Common.Game.ThirdParty;
 
 namespace Provenance.Common.Game;
 
-// an Ashita boot configuration's [ffxi.registry], which Ashita hands the game in place of the registry's values
 public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryGameStore registry, string? display = null) : IGameSettingsStore
 {
     public string Key => $"ashita|{Path.GetFullPath(ashitaDir)}|{bootName}|{registry.Key}";
@@ -23,7 +22,6 @@ public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryG
         return path;
     }
 
-    // what the file leaves to Windows shows the registry's value
     public FfxiSettings Load()
     {
         var windows = registry.Load();
@@ -31,7 +29,6 @@ public sealed class AshitaGameStore(string ashitaDir, string bootName, RegistryG
         return cfg.ReadGame(windows);
     }
 
-    // every value goes in, so nothing's left to a registry the game may never see (sandbox empties it)
     public GameSaveResult Save(FfxiSettings settings, FfxiSettings original)
     {
         var changed = GameFields.Changed(settings, original);

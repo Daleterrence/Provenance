@@ -2,7 +2,6 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Social;
 
-// what a chat box takes. MaxBytes counts the line as the Shift-JIS it goes out as
 public sealed class ComposeRules
 {
     public bool SingleLine { get; init; }
@@ -12,7 +11,6 @@ public sealed class ComposeRules
 
     public static string Flatten(string text) => text.Replace("\r", "").Replace('\n', ' ');
 
-    // the part of add that goes in after text, never half a surrogate pair
     public string Fit(string text, string add)
     {
         if (add.Length > MaxChars - text.Length)

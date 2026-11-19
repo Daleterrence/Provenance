@@ -5,13 +5,10 @@ using Serilog;
 
 namespace Provenance.Common.Social;
 
-// Name is empty when there's none to show, Why says which: "private" or "not found"
 public sealed record KnownCharacter(string Name, string Why = "");
 
-// keyed "ctsid:ctid". A name or no record at all is only asked for once, a private one's asked about again each login
 public sealed class CharacterNames
 {
-    // bump it if what gets kept ever turns out wrong, older files then load as empty
     private const int Version = 1;
     private readonly string? _path;
     private readonly Dictionary<string, KnownCharacter> _known = new(StringComparer.Ordinal);
@@ -54,8 +51,7 @@ public sealed class CharacterNames
         foreach (var (key, c) in Read(_path)) _known.TryAdd(key, c);
     }
 
-    // null for anything that might go differently next time.
-    // Other error codes and an empty name aren't kept, nobody's seen what those mean for an FFXI profile yet
+    // other error codes and an empty name aren't kept, nobody's seen what those mean for an FFXI profile yet
     public static KnownCharacter? FromAnswer(string state, PolCharacterLookup? r) => state switch
     {
         "done" when r is { NameState: ProfileFieldState.Shown, Name.Length: > 0 } => new(r.Name),
@@ -66,8 +62,6 @@ public sealed class CharacterNames
         _ => null,
     };
 
-    // whatever name the tab shows, so an old one never outlives a record gone private.
-    // A shown record with no name isn't kept (nobody knows what that means yet)
     public static KnownCharacter? FromProfile(PolFfxiProfile r) =>
         r is { NameState: ProfileFieldState.Shown, Name.Length: > 0 } ? new(r.Name)
         : r.NameState == ProfileFieldState.Private ? new("", "private") : null;
@@ -86,8 +80,6 @@ public sealed class CharacterNames
         catch { return new(); }
     }
 
-    // another copy of Provenance may have added some since this one loaded, so theirs stay. The lock file stops two
-    // saves at once each writing over the other's
     private void Save()
     {
         if (_path is null) return;
@@ -102,13 +94,12 @@ public sealed class CharacterNames
             var info = new FileInfo(_path);
             _fileWas = (info.LastWriteTimeUtc, info.Length);
         }
-        catch (Exception e)   // it just gets asked again next session
+        catch (Exception e)
         {
             Log.Warning("Character names: {Line}", $"{Path.GetFileName(_path)} couldn't be saved ({e.GetType().Name}: {e.Message})");
         }
     }
 
-    // null after 2s of trying, a save stuck that long behind another one goes ahead anyway
     private static IDisposable? Lock(string path)
     {
         try

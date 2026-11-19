@@ -3,7 +3,6 @@ using Provenance.Common.Hook;
 
 namespace Provenance.Common;
 
-// forgiving reads for the hook's snapshot and the feed worker's JSON, a missing field gets the fallback
 internal static class JsonFields
 {
     // a missing object is a default element and TryGetProperty throws on it

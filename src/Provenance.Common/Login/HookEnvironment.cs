@@ -10,7 +10,6 @@ internal static class HookEnvironment
     internal sealed record Targets(string Pol, string SquareEnix, IReadOnlyList<string> OneShot, string? Otp, string Handle, string Play,
                                    string Chat);
 
-    // the hook reads POL_* and PROVENANCE_*, so a stray one from the user's environment never reaches it
     internal static void Reset(IDictionary<string, string?> env)
     {
         foreach (var k in env.Keys.Where(k => k.StartsWith(HookContract.Env.PolPrefix, StringComparison.OrdinalIgnoreCase) ||
@@ -18,7 +17,6 @@ internal static class HookEnvironment
             env.Remove(k);
     }
 
-    // with POL_OWNER the hook logs out once this copy's gone, unless the game's started
     internal static void SetBase(IDictionary<string, string?> env)
     {
         Reset(env);
@@ -40,7 +38,6 @@ internal static class HookEnvironment
     internal static void SetLogin(IDictionary<string, string?> env, Targets targets, int status, SessionOptions options)
     {
         SetBase(env);
-        // only the viewer's menu values, busy goes online
         env[HookContract.Env.Status] = status is 0 or 1 or 4 ? status.ToString() : "0";
         env[HookContract.Env.CredPol] = targets.Pol;
         env[HookContract.Env.CredSea] = targets.SquareEnix;
@@ -55,14 +52,12 @@ internal static class HookEnvironment
         SetHandle(env, options.HandleKey);
     }
 
-    // the hook's key for a Handle ID is 11 hex digits, anything else from a hand-edited settings.json stays out
     internal static void SetHandle(IDictionary<string, string?> env, string? key)
     {
         if (key is { Length: 11 } && key.All(char.IsAsciiHexDigit)) env[HookContract.Env.Handle] = key;
         else env.Remove(HookContract.Env.Handle);
     }
 
-    // pol_hook leaves pol.exe's mutex names to Hook.dll when it sees the launch id
     internal static void SetLaunchId(IDictionary<string, string?> env, string launchId) =>
         env[HookContract.Env.LaunchId] = launchId;
 
@@ -75,8 +70,7 @@ internal static class HookEnvironment
     internal static void WriteGoFile(int pid, IDictionary<string, string?> env) =>
         AtomicFile.Write(HookFiles.PathFor(pid, HookContract.Files.Go), string.Join("\n", GoFileEntries(env)));
 
-    // nothing POL_ or PROVENANCE_ from the user's environment, every POL_ value of this login, plus the launch marker
-    // and id. Never PROVENANCE_HOOK, the watcher's --attach loads the hook
+    // never PROVENANCE_HOOK, the watcher's --attach loads the hook
     internal static void ApplyContract(IDictionary<string, string?> target, IDictionary<string, string?> launchEnv, string launchId)
     {
         Reset(target);

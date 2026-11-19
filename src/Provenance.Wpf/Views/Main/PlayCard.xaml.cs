@@ -13,7 +13,6 @@ public partial class PlayCard : UserControl
 
     private MainViewModel? Vm => DataContext as MainViewModel;
 
-    // a press anywhere but on the list lets go of the highlighted friend
     internal void DeselectUnlessIn(DependencyObject? pressed)
     {
         var list = FriendList.List;
@@ -25,7 +24,6 @@ public partial class PlayCard : UserControl
 
     private void OnFriendActivated(FriendItem friend) => Vm?.OpenChatWith(friend);
 
-    // read fresh each time, so it follows Settings and any profile added since
     private void OnPlayChoices(object sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm || sender is not FrameworkElement cog) return;
@@ -34,7 +32,6 @@ public partial class PlayCard : UserControl
             var menu = new ContextMenu();
             Menus.Fill(menu, vm.PlayPlatform.ChoicesMenu());
             PlayChoicesIcon.IsOpen = true;
-            // Closed comes late, a newer menu can be up by then
             menu.Closed += (_, _) => PlayChoicesIcon.IsOpen = Menus.OpenFrom(cog);
             return menu;
         });

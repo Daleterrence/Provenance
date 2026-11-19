@@ -25,7 +25,6 @@ public partial class NewsViewModel : ObservableObject
         _openLink = openLink;
         _slideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
         _slideTimer.Tick += (_, _) => AdvanceNews(+1);
-        // POL only rewrites world status every 5min anyway
         _worldsTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
         _worldsTimer.Tick += async (_, _) => { if (WindowShown) await RefreshIfStaleAsync(); };
         _feeds.RegionChanged += (_, _) => ui.Post(async () =>
@@ -110,17 +109,14 @@ public partial class NewsViewModel : ObservableObject
         if (list.Count == 0)
         {
             if (Worlds.Count == 0) { WorldsSummary = "World status isn't available"; WorldsState = ""; }
-            // nothing new came back, so the counts on show would only get older
             for (int i = 0; i < Worlds.Count; i++)
                 if (Worlds[i].Online != null) Worlds[i] = Worlds[i] with { Online = null };
             WorldsTotalText = "";
             return;
         }
-        // only a good read counts, a saved copy's tried again on the next tick
         if (!fetch.Stale) _worldsAt = Now;
         WorldsCheckedText = "Checked at " + fetch.At!.Value.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
         Worlds.Clear();
-        // a saved copy can be hours old, which is fine for a status and no good for a count
         foreach (var w in list) Worlds.Add(fetch.Stale ? w with { Online = null } : w);
         WorldsTotalText = TotalOnlineText(Worlds);
         var notUp = list.Where(w => !w.IsUp).ToList();
@@ -140,7 +136,6 @@ public partial class NewsViewModel : ObservableObject
 
     public async Task LoadFeedsAsync(bool again = false)
     {
-        // a region change mid-load mustn't get lost
         if (_feedsLoading) { _feedsAgain |= again; return; }
         _feedsLoading = true;
         try
@@ -160,7 +155,6 @@ public partial class NewsViewModel : ObservableObject
                 CurrentNewsIndex = at;
                 CurrentNews = NewsItems.ElementAtOrDefault(at);
             }
-            // four fit without a scroll bar
             var topStatus = status.Items.Take(4).ToList();
             if (Sig(topStatus) != Sig(StatusItems))
             {
@@ -191,11 +185,10 @@ public partial class NewsViewModel : ObservableObject
         CurrentNewsIndex = ((CurrentNewsIndex + delta) % NewsItems.Count + NewsItems.Count) % NewsItems.Count;
     }
 
-    // forward (the timer, the next arrow, a later dot) slides in from the right, back from the left
     private void RaiseSlid(int now)
     {
         int n = NewsItems.Count, was = _slideFrom;
-        if (now < 0) return;   // the pager pushes -1 while the list is rebuilt
+        if (now < 0) return;
         _slideFrom = now;
         if (n < 2 || was < 0 || was >= n || was == now) return;
         Slid?.Invoke(now == (was + 1) % n ? 1 : now == (was - 1 + n) % n ? -1 : Math.Sign(now - was));

@@ -9,7 +9,7 @@ public static class PlayOnlineSite
 
     public static string ServicePage(PolRegion region) => $"https://www.playonline.com/{RegionToken(region)}/service/";
 
-    // https on POL's own site only. A feed doesn't get to make this PC fetch from anywhere else
+    // https on POL's own site only
     public static bool IsPlayOnlineUrl(Uri u) =>
         u.Scheme == Uri.UriSchemeHttps &&
         (u.Host.Equals("playonline.com", StringComparison.OrdinalIgnoreCase) ||

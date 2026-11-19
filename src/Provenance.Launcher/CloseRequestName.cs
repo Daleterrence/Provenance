@@ -4,7 +4,6 @@ using System.Text;
 
 namespace Provenance.Launcher;
 
-// compiled into both exes. They sit in the same folder, so the hash matches
 internal static class CloseRequestName
 {
     public static string For(string appDir, int pid)

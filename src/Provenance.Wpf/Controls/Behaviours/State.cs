@@ -2,7 +2,6 @@ using System.Windows;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// Flags the shared styles pick their look from, so a view reads State.IsError="{Binding Failed}" and not a bare Tag
 public static class State
 {
     public static readonly DependencyProperty IsErrorProperty = DependencyProperty.RegisterAttached(
@@ -11,7 +10,6 @@ public static class State
     public static readonly DependencyProperty IsCurrentProperty = DependencyProperty.RegisterAttached(
         "IsCurrent", typeof(bool), typeof(State), new PropertyMetadata(false));
 
-    // -1 until a view sets it, so a style waiting for zero doesn't take unset for it
     public static readonly DependencyProperty CountProperty = DependencyProperty.RegisterAttached(
         "Count", typeof(int), typeof(State), new PropertyMetadata(-1));
 

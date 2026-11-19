@@ -7,10 +7,8 @@ using Serilog;
 
 namespace Provenance.Common.Game.ThirdParty;
 
-// each list best first
 public sealed record FoundHooks(IReadOnlyList<string> Windower, IReadOnlyList<string> Ashita);
 
-// looks a lot wider than Detect does, which is fine for a one-off but not for something Play runs
 public static class ThirdPartyHookFinder
 {
     internal sealed record Sources(Func<IEnumerable<string>> ShortcutTargets, Func<IEnumerable<string>> UsualFolders,
@@ -70,7 +68,6 @@ public static class ThirdPartyHookFinder
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException) { return null; }
     }
 
-    // a launch refuses a Windower folder that's reached through a link, so there's no point offering one
     private static bool WindowerHere(string dir) => WindowerInstall.IsSetUp(dir) && !FolderPins.Linked(dir);
 
     private static IEnumerable<string> ShortcutTargets()
@@ -94,8 +91,7 @@ public static class ThirdPartyHookFinder
         new[] { AppPaths.ProgramFilesX86, AppPaths.ProgramFiles, ProgramFiles64 }.OfType<string>().Where(r => r.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
-    // Windows hands a 32-bit app the x86 Program Files for a shortcut into the 64-bit one, so a target that isn't there
-    // gets tried in both
+    // Windows hands a 32-bit app the x86 Program Files for a shortcut into the 64-bit one
     internal static IEnumerable<string> InEitherProgramFiles(string target, string x86, string? x64)
     {
         yield return target;

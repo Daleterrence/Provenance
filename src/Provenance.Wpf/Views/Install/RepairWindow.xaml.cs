@@ -16,8 +16,6 @@ public partial class RepairWindow : AppWindow
         Closing += OnClosing;
     }
 
-    // closing mid-repair asks, then stops it. The window stays up until the repair's really ended (it can be mid-step)
-    // and shows how it went
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (!_vm.Running) return;

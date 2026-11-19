@@ -72,7 +72,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public bool Flashes(NoticeKind kind) => _settings.Current.Flashes(kind);
 
-    // read when a window comes to the front, so a change in Settings shows the next time
     public bool ShowTimes => _settings.Current.ShowTimestamps;
 
     public void RefreshTimes()
@@ -92,11 +91,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public ICollectionView FriendsView { get; }
     public ICollectionView RequestsView { get; }
 
-    // a list of its own, not a second view over Friends. A view from a CollectionViewSource nobody holds stops following
-    // its source once the GC takes the CollectionViewSource, and the tab just sat there empty
+    // a view from a CollectionViewSource nobody holds stops following its source once the GC takes it
     public ObservableCollection<FriendItem> Requests { get; } = new();
 
-    // requests, invitations and a request I sent are on the Requests tab, a friend is only on the list once they've accepted
     internal static bool IsListed(FriendItem f) =>
         f.Section is not (FriendSection.FriendRequests or FriendSection.GroupInvitations or FriendSection.RequestsSent);
 
@@ -121,14 +118,11 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private int _unreadCount;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasPendingAnswers), nameof(NotificationCount))]
     private int _pendingAnswers;
-    // unread, plus requests no friend list has had on screen yet. The taskbar stays lit while it's above 0
     [ObservableProperty] private int _unseenCount;
     public int MyProfilePictureId { get; private set; }
 
     public bool HasUnread => UnreadCount > 0;
-    // what the taskbar badge counts: unread messages and requests still waiting for an answer
     public int NotificationCount => LoggedIn ? NotificationBadge.Count(UnreadCount, PendingAnswers) : 0;
-    // requests get a badge too (on Friends), so one's never just an 8s banner
     public bool HasPendingAnswers => PendingAnswers > 0;
     public bool CanPlay => PlayBlockedReason is null;
     public string Summary => OnlineCount switch { 0 => "No friends online", 1 => "1 friend online", var n => $"{n} friends online" };
@@ -147,7 +141,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public event Action<string, string>? NoticeReceived;
     public event Action<string, int>? FriendRequestReceived;
     public event Action<string, int>? GroupInviteReceived;
-    public event Action<string>? FriendCameOnline;          // never for the presence that lands at login
+    public event Action<string>? FriendCameOnline;
     public event Action<PolSocialSnapshot>? SnapshotApplied;
 
     public void RequestChat(FriendItem friend) => OpenChatRequested?.Invoke(friend);
@@ -178,7 +172,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     internal ChatStore? Chat => _login.Chat;
     internal SocialSession Login => _login;
 
-    // nobody's waiting on it any more, so a request the hook hasn't taken yet doesn't run
     internal void DiscardRequest(string ext)
     {
         if (_pol.Pid is { } pid) HookFiles.Discard(pid, ext);
@@ -188,7 +181,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public IDictionary<string, PolFfxiProfile> OwnCharacterProfiles => _login.OwnCharacterProfiles;
 
-    // the viewer's status menu has these three, only the viewer itself ever sets Busy
     private static readonly PolStatus[] StatusChoices = [PolStatus.Online, PolStatus.Away, PolStatus.AppearOffline];
     public sealed record StatusItem(PolStatus Status, string Label)
     {
@@ -196,7 +188,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     }
     public IReadOnlyList<StatusItem> StatusItems { get; } = StatusChoices.Select(s => new StatusItem(s, PolStatusText.Label(s))).ToList();
     [ObservableProperty] private int _myStatusIndex;
-    // one card above the bottom bar, the newest message wins and an error stays up for PopErrorTime
     internal static readonly TimeSpan PopErrorTime = TimeSpan.FromSeconds(6);
     private const string StatusWaiting = "Changing your online status...";
     public static string StatusChanging(PolStatus status) => $"Changing your online status to {PolStatusText.Label(status)}...";
@@ -237,7 +228,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         get => _selectedFriend;
         set
         {
-            // the list lets go of a row while it's swapped for its update, which isn't anyone picking nobody
             if (_rebuilding && !_settling && value is null) return;
             if (!SetProperty(ref _selectedFriend, value)) return;
             OnPropertyChanged(nameof(HasSelection));
@@ -250,7 +240,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private readonly List<PoppedConversation> _popped = new();
     public IReadOnlyList<PoppedConversation> PoppedOut => _popped;
 
-    // the friend the pane shows. A friend with a window of their own is never shown twice, so selecting one leaves the pane shut
     public FriendItem? PaneFriend => SelectedFriend is { } f && PoppedFor(f) is null ? f : null;
     public bool HasPane => PaneFriend != null;
 
@@ -259,8 +248,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private FriendItem? _lastPaneFriend;
     private PoppedConversation? _lastPopped;
 
-    // the Friends window's messages button: hides the pane, or brings back the last conversation that was in it. One
-    // that's in a window of its own comes back into the pane instead, and with no last one it's the pop-out used most recently
     private (FriendItem? Show, PoppedConversation? PopIn) MessagesTarget()
     {
         if (_lastPaneFriend is { } l && Friends.FirstOrDefault(i => i.Is(l)) is { } f)
@@ -288,7 +275,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         }
     }
 
-    // a pop-out that's just been used, which is where Show messages goes when no conversation was in the pane
     internal void PopOutUsed(PoppedConversation popped)
     {
         if (_popped.Contains(popped)) _lastPopped = popped;
@@ -307,7 +293,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         foreach (var c in Conversations.ToList()) c.Refresh();
     }
 
-    // from the Play press till the game closes nothing new goes to the hook, answers already asked for still land
     public bool GameRunning => _session.GameRunning;
     public const string GameRunningNote = "That has to wait till FINAL FANTASY XI is closed.";
 
@@ -336,7 +321,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public bool FriendsTabVisible => FriendsListVisible;
 
-    // more than one account running means lean sessions, which have no chat at all
     public bool CanGroupChat => LoggedIn && WriteBlockedNote is null && !_session.InMultiRun;
 
     public event Action<GroupsViewModel.GroupItem>? GroupChatRequested;
@@ -347,7 +331,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (g is { CanChat: true } && CanGroupChat) GroupChatRequested?.Invoke(g);
     }
 
-    // a handle switch going: nothing writes till it's done, it'd go from the new handle
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEdit), nameof(StatusEditable))]
     private bool _handleSwitching;
@@ -410,9 +393,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private void RefreshUnseen()
     {
         var waiting = Friends.Where(f => f.RequestMid > 0).Select(f => f.RequestMid).ToList();
-        // requests are on the Requests tab, so the Friends window only shows them with that tab up
         if ((_friendsListVisible && RequestsTab) || _mainWindowActive) _login.ShownRequests.UnionWith(waiting);
-        // the groups window only lists group invitations
         else if (_groupsWindowVisible) _login.ShownRequests.UnionWith(Friends.Where(f => f.IsGroupInvite).Select(f => f.RequestMid));
         UnseenCount = UnreadCount + waiting.Count(m => !_login.ShownRequests.Contains(m));
     }
@@ -428,8 +409,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _login.AckPending.Clear();
     }
 
-    // a request or invitation I answered at an earlier login that's listed again (its server copy or its stored file never
-    // finished going) is acked straight away and never shown, so the hook can finish it
     private PolSocialSnapshot FinishRemembered(PolSocialSnapshot snap)
     {
         if (_login.Remembered is not { } remembered) return snap;
@@ -449,7 +428,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private void RefreshPending() =>
         PendingAnswers = Friends.Count(f => (f.IsRequest || f.IsGroupInvite) && !_login.Answering.Contains(f.RequestMid) && !_login.Answered.Contains(f.RequestMid));
 
-    // from the press, so the counts drop at once instead of with the next snapshot
     internal void AnswerStarted(int mid)
     {
         _login.Answering.Add(mid);
@@ -489,9 +467,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private void NoticeComingOnline(PolSocialSnapshot snap)
     {
         static string Id(PolFriend f) => f.Key.Length > 0 ? f.Key : "n:" + f.Name;
-        if (!snap.FriendsLoaded) return;   // an empty list isn't "everyone went offline"
+        if (!snap.FriendsLoaded) return;
         var now = snap.Friends.Where(f => f.Online && !f.Pending).ToList();
-        // everyone already online turns up in the first 30s, only later changes are news
         _login.PresenceQuietUntil ??= Now + TimeSpan.FromSeconds(30);
         if (Now >= _login.PresenceQuietUntil)
             foreach (var f in now)
@@ -499,21 +476,19 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _login.OnlineFriends = now.Select(Id).ToHashSet();
     }
 
-    // an account that's removed while it's logged in mustn't write its messages back after they're deleted
     internal void StopKeeping(string profileId)
     {
         if (_login.Chat?.ProfileId == profileId) _login.Chat.Discard();
         GroupChat.DiscardLog(profileId);
     }
 
-    // a new login, maybe on another account, so nothing from the last one can show under this one
     public void Start(string profileId, string? storeRoot = null)
     {
         _login.Chat?.Flush();
         var chat = new ChatStore(profileId, storeRoot);
         _login = new SocialSession { Chat = chat, Remembered = new AnsweredRequests(profileId, storeRoot, Now) };
         GroupChat.SetLog(new GroupChatLog(profileId, storeRoot));
-        chat.ExpireSending(TimeSpan.FromMinutes(3));   // lines a closed session never answered
+        chat.ExpireSending(TimeSpan.FromMinutes(3));
         StatusPending = false;
         _lookups?.Reset();
         ZoneSearch?.Reset();
@@ -566,7 +541,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private void ApplyCore(PolSocialSnapshot snap)
     {
         var timer = ReferenceEquals(_login.Last, PolSocialSnapshot.Empty) ? new StepTimer("First friends and messages apply") : null;
-        // a friend's profile shows what they let this handle see, so ones read under another handle go
         if (_login.Last.MyKey.Length > 0 && snap.MyKey.Length > 0 && _login.Last.MyKey != snap.MyKey) Profile.Forget();
         snap = FinishRemembered(snap);
         _login.Last = snap;
@@ -580,7 +554,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             chatChanged = true;
         }
         FlushAcks();
-        // my own jobs first, so a failure never leaves a lock behind and an answered request's gone before the redraw
         ApplyEditState(snap);
         Search.Apply(snap);
         ApplyProfilePictureState(snap);
@@ -613,7 +586,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             }
             else if (Now - _login.RequestedAt > HookLimits.Status)
             {
-                _login.RequestedStatus = null;   // polcore gives up after 100s
+                _login.RequestedStatus = null;
                 PopStatusError(HookFailures.Friends.StatusNoAnswer(PolStatusText.Label(want)));
             }
         }
@@ -672,7 +645,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         return r.Changed;
     }
 
-    // reads go to the hook so the files follow. Nothing to ask while the game runs, the next login catches up
     internal void FlushReads()
     {
         if (WriteBlockedNote is not null || _pol.Pid is not { } pid) return;
@@ -685,7 +657,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (gone.Count > 0 && !GameRunning && _pol.Pid is { } pid) SocialRequests.DeleteFiles(pid, gone);
     }
 
-    // what's still on its way under the active handle. A switch waits for it, it'd go from the new one otherwise
     internal string? PendingWrite() =>
         Messages.Sends.Going ? "Wait for your messages to finish sending first."
         : _login.Edit.Running ? "Wait for your friend list change to finish first."
@@ -700,8 +671,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private bool IsOpenConversation(FriendItem f) =>
         (SelectedFriend is { } s && s.Is(f)) || PoppedFor(f) is not null;
 
-    // someone with unread lines goes up to the unread section, newest first. One whose conversation is open stays put once it's
-    // read, until it's closed or the selection moves on
     private (FriendSection Section, (long, long) Newest) Place(FriendSection home, string key, string name, int unread)
     {
         var id = IdOf(key, name);
@@ -729,7 +698,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 _avatars.ProfilePicture(f.ProfilePictureId), unread, section)
             { Key = f.Key, Status = f.Status, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, Party = PartyOf(f), InGame = f.Online && !f.Pending && f.Game is not null, NewestUnread = newest };
         }).ToList();
-        // invitations (kind 0xe) and requests (kind 1) are listed until they're answered, from the server or the store
+        // invitations are kind 0xe, requests kind 1
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_login.Answered.Contains(m.Mid)))
             if (m.Kind == PolMessage.KindGroupInvite)
                 items.Add(new FriendItem(m.From, "", m.Text.Length > 0 ? _viewer.Filtered(m.Text) : "Group invitation", "", false, -1,
@@ -781,8 +750,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 if (Friends.FirstOrDefault(i => i.Is(p.Friend)) is { } now) p.Update(now);
                 else
                 {
-                    p.Messages.StateChanged();   // it can't send to a row that isn't there
-                    // an empty list that isn't loaded yet isn't everyone going
+                    p.Messages.StateChanged();
                     if (snap.FriendsLoaded) gone.Add(p);
                 }
         }
@@ -800,7 +768,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     private bool _rebuilding;
 
-    // online, offline and unread count as one section (a row just moves), a request and a friend row don't
     private static bool SameRow(FriendItem a, FriendItem b) =>
         a.Is(b) && (a.Section == b.Section ||
                     (a.Section is FriendSection.Online or FriendSection.Offline or FriendSection.Unread
@@ -821,7 +788,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         ReleaseHeld();
     }
 
-    // a friend held in the unread section drops back once nothing has their conversation open
     private void ReleaseHeld()
     {
         if (_rebuilding || _login.Held.Count == 0) return;
@@ -851,7 +817,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             _windows.ShowPopOut(this, popped);
             return;
         }
-        // added first so the friend's still held in the unread section while the pane lets go, and its unsent text goes to the new window
         popped = new PoppedConversation(this, f);
         _popped.Add(popped);
         _lastPopped = popped;
@@ -916,7 +881,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         EditNote.Fail(HookFailures.RequestWriteFailed);
     }
 
-    // followSend: the job's answer comes back as a send result, so the edit job isn't tracked
     internal bool BeginEdit(out int pid, out string token, bool followSend = false)
     {
         token = HookFiles.NewToken();
@@ -944,7 +908,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (f.IsFriend && f.Key.Length > 0) EditFriend(FriendEdit.Delete, f.Row, f.Key);
     }
 
-    // POL drops their messages and takes them off the list. allHandles covers every handle on their POL ID
     public void IgnoreFriend(FriendItem f, bool allHandles)
     {
         if (f.IsFriend && !f.Pending && f.Key.Length > 0)
@@ -984,7 +947,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     private bool _filterWasOn;
 
-    // a pic save is two requests, in the viewer's order
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EditNoteShown), nameof(Saving), nameof(EditStatus), nameof(EditStatusShown))]
     private bool _profilePictureSaving;
@@ -1061,14 +1023,12 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     private CharacterLookups Lookups => _lookups ??= new CharacterLookups(CharacterNames) { Skip = game => ZoneSearch?.IsAnon(game) == true };
 
-    // a friend the search server says is anon, found by their key. Their profile shows no character
     internal bool IsAnonFriend(string friendKey) =>
         friendKey.Length > 0 && ZoneSearch is { } search &&
         _login.Last.Friends.FirstOrDefault(f => f.Key == friendKey)?.Game is { } game && search.IsAnon(game);
 
     private FriendZoneSearch? _zoneSearch;
 
-    // null is no search at all, the app switches it on at start-up
     internal FriendZoneSearch? ZoneSearch
     {
         get => _zoneSearch;
@@ -1091,7 +1051,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public const string ZoneTroubleText =
         "Provenance is currently having issues retrieving some information for your friends. Some information may be outdated.";
 
-    // a world's gone 2 minutes without answering, and still has friends on it that are being asked about
     [ObservableProperty] private bool _zoneTrouble;
 
     private void RefreshZoneTrouble() => ZoneTrouble = LoggedIn && ZoneSearch is { Troubled: true };
@@ -1120,7 +1079,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private (string Long, string Short) Playing(PolFriend f)
     {
         if (!f.Online || f.Pending || f.Game is not { } game) return ("", "");
-        // an anon friend is only ever on a world, whatever the profile says
         if (ZoneSearch?.IsAnon(game) == true) return PlayingText.For("", FfxiWorlds.Name(game.World));
         var name = CharacterNames.Get(game.Character.Key)?.Name ?? "";
         var zone = ZoneSearch?.Area(game) is { } area ? FfxiNames.Area(area) : null;
@@ -1138,7 +1096,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (!_windows.CloseIfShown(SecondWindow.ProfileEditor)) _windows.EditProfile(this);
     }
 
-    // a request or invitation gets the viewer's answer window (Ignore lives on the right-click menu)
     public void AnswerRow(FriendItem f)
     {
         if (!CanEdit) return;
@@ -1228,7 +1185,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             return [new(AcceptRequestText, CanEdit && !f.IsMe, () => Search.AnswerRequest(f, RequestAnswer.Accept)),
                     new(DeclineRequestText, CanEdit, () => DeclineRequest(f)),
                     MenuAction.Separator,
-                    // the viewer's request window only ignores this one handle
                     new(IgnoreRequestText, CanEdit && !f.IsMe, () => IgnoreRequest(f))];
         if (!f.IsFriend && !f.Pending)
             return [new($"Add {f.Name} as a friend...", CanEdit, () => _windows.AddFriend(this, f.Name, f.Key))];
@@ -1241,7 +1197,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             }),
             new("View profile", f.IsFriend && !f.Pending, () => _windows.ShowProfile(this, f)),
         };
-        // the viewer's Invite into Group: only groups I'm master or sub-master of, and never myself
         var inviteTo = Groups.Items.Where(g => g.CanInvite && !g.Members.Any(m => m.Key.Length > 0 && m.Key == f.Key)).ToList();
         if (inviteTo.Count > 0 && f.IsFriend && !f.Pending && !f.IsMe)
             menu.Add(new("Invite into group", CanEdit)
@@ -1254,7 +1209,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             var name = _dialogs.Ask("Rename friend",
                 $"Choose a new name for {f.Name} on your friend list (up to 15 English letters, numbers or symbols). " +
                 "PlayOnline saves it with your friend list.", f.Name, maxLength: PolLimits.HandleName);
-            // the same name has nothing to save, the viewer skips it too
             if (name is not null && name.Trim() != f.Name) RenameFriend(f, name);
         }));
         var removeBody = $"Remove {f.Name} from your PlayOnline friend list? Your saved messages with {f.Name} stay in Provenance.";

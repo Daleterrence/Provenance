@@ -26,8 +26,7 @@ internal static class BackupReader
         public long ReadAt = readAt;
     }
 
-    // size and last write before and after each read, a few goes at it. An empty character file is one caught
-    // mid-write, the game always writes something
+    // an empty character file is one caught mid-write, the game always writes something
     internal static Taken? ReadSteady(Found f)
     {
         for (int i = 0; i < Tries; i++)
@@ -43,8 +42,7 @@ internal static class BackupReader
         return null;
     }
 
-    // the C runtime writes a big file in two goes, and between them it sits there at the first part's size. A look
-    // after the game's had time to finish catches that
+    // the C runtime writes a big file in two goes, and between them it sits at the first part's size
     internal static void SettleDown(List<Taken> taken, List<Found> torn, List<string> leftOut)
     {
         BeforeSettleForTest?.Invoke();
@@ -96,8 +94,7 @@ internal static class BackupReader
         return got == size ? data[..got] : null;
     }
 
-    // a link, a hard link or a file moved out from under its folder would have an elevated copy read what it
-    // shouldn't, so all three are refused on the open handle
+    // a link, hard link or moved file would make an elevated copy read what it shouldn't, so all three are refused
     internal static SafeFileHandle OpenChecked(string path, string folder, bool data, out Stat stat)
     {
         var h = FileHandles.Open(FileHandles.LongPath(Path.GetFullPath(path)), data ? FileHandles.GenericRead : FileHandles.ReadAttributes,

@@ -5,13 +5,10 @@ using Provenance.Common.Progress;
 
 namespace Provenance.Common.Patcher;
 
-// OnMirror false means the mirror can't serve this version and nothing changed. Otherwise Failed holds what didn't
-// download (and patch.ver stays put). SomeLocal is a failure that was this PC's (a full disk, a locked file).
 public sealed record MirrorOutcome(bool OnMirror, IReadOnlyList<MirrorEntry> Failed, int Replaced, bool SomeLocal = false);
 
 public static class MirrorUpdater
 {
-    // patch.ver goes last and only when nothing failed, POL is the caller's fallback
     public static async Task<MirrorOutcome> UpdateAsync(MirrorClient client, string region, string product, string folder,
         PolUpdater updater, VersionCheck check, Action beforeChange, IProgress<PatchProgress>? progress, CancellationToken ct,
         Action<string, bool>? log = null)
@@ -49,8 +46,6 @@ public static class MirrorUpdater
         return new MirrorOutcome(true, failed, work.Count - failed.Count, local);
     }
 
-    // the change from the installed version's index when the mirror has it, otherwise whatever doesn't match on disk.
-    // Every path in next is checked before anything's read or asked for
     private static async Task<IReadOnlyList<MirrorEntry>> WorkAsync(MirrorClient client, string region, string product, string folder,
         MirrorIndex next, string local, IProgress<ByteProgress>? scanned, CancellationToken ct)
     {
@@ -66,8 +61,6 @@ public static class MirrorUpdater
         return work;
     }
 
-    // the bytes UpdateAsync would download to reach next, which has to be POL's current version (the mirror's can lag,
-    // then POL updates it). Null when next is unusable
     public static async Task<long?> DownloadSizeAsync(MirrorClient client, string region, string product, string folder, string local,
         MirrorIndex next, IProgress<ByteProgress>? scanned, CancellationToken ct)
     {

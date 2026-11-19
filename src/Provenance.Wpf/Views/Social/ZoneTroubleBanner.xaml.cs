@@ -4,8 +4,6 @@ using Provenance.Wpf.Controls.Behaviours;
 
 namespace Provenance.Wpf.Views.Social;
 
-// Active shows it. A screen reader hears it once per trouble, from whichever window's showing it first, however many
-// banners come on with it and however often a window's shown again
 public partial class ZoneTroubleBanner : UserControl
 {
     public static readonly DependencyProperty ActiveProperty = DependencyProperty.Register(

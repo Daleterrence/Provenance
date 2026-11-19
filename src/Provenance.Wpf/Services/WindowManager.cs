@@ -26,29 +26,23 @@ public interface IWindowManager
 
     void ShowFriends(SocialViewModel social);
     void ShowGroups(SocialViewModel social);
-    // opens the window for a conversation, or brings the one it has to the front
     void ShowPopOut(SocialViewModel social, PoppedConversation conversation);
     void ClosePopOut(PoppedConversation conversation);
-    // closed runs when a window made here goes
     void ShowChatRooms(SocialViewModel social, Func<string, string, bool> savePassword, Action dropPassword,
                        Func<int, ImageSource?> emote, Action closed);
     void ShowGroupChat(GroupChatViewModel groupChat);
     void ShowProfile(SocialViewModel social, FriendItem friend);
     void EditProfile(SocialViewModel social);
-    // false when it isn't on screen, so the caller shows it. True even if the window then asks and stays open
     bool CloseIfShown(SecondWindow which);
     void AddFriend(SocialViewModel social, string? handleName = null, string? handleKey = null);
     bool ConfirmDropProfileEditor(string action, bool leaveSaving = false);
     void CloseProfileEditor();
-    // the session's going, so these go with it and say nothing
     void CloseSessionWindows();
-    // these four hold the caller till the window closes
     void ShowInstall(InstallViewModel vm);
     void ShowSettings(SettingsViewModel vm, SettingsTab tab);
     void ShowRepair(RepairViewModel vm);
     void ShowAccounts(AccountsViewModel accounts);
     int? PickProfilePicture(ProfilePictureCatalog.Catalog catalog, AvatarService avatars, int current);
-    // the small window of a login that starts the game itself, up in place of the main window
     void ShowLeanStart(MainViewModel main);
     void CloseLeanStart();
     void SetBusy(string? text);
@@ -65,7 +59,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
 
     public void SetBusy(string? text) => BusyCover.Set(text);
 
-    // swapped in tests, a real screen can't be made too narrow for them
     internal static Func<(double Left, double Right)> ScreenEdges { get; set; } = () =>
         (SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth);
 
@@ -86,7 +79,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
 
     public bool ProfileEditorOpen => Find<EditProfileWindow>() is not null;
 
-    // unowned, so they stay up while the main window's minimised or in the tray
     public void ShowFriends(SocialViewModel social)
     {
         if (FriendsWindow() is { } open)
@@ -98,7 +90,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         if (settings.Current.MessagesPaneWidth > 0) w.SavedPaneWidth = settings.Current.MessagesPaneWidth;
         w.PaneWidthChanged += width => settings.SaveChange(s => s.MessagesPaneWidth = width);
         if (!WindowPlaces.Restore(settings, w, "friends")) w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        // after the place is back, so a pane that opens with it widens from where the window is
         w.DataContext = social;
         WindowPlaces.Track(settings, w, "friends", w.ListBounds);
         w.Show();
@@ -116,7 +107,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         {
             if (FriendsWindow() is { IsVisible: true } fw)
             {
-                // beside the Friends window, on whichever side has room
                 var (screenLeft, screenRight) = ScreenEdges();
                 double left = LeftBeside(fw.Left, fw.ActualWidth, w.Width, screenLeft, screenRight);
                 (w.WindowStartupLocation, w.Left, w.Top) = (WindowStartupLocation.Manual, left, fw.Top);
@@ -132,13 +122,11 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
 
     internal static Action<Window>? PopOutOpening { get; set; }
 
-    // where the last pop-out was moved or closed, nudged off any that's up there already and kept on a monitor that's there
     private bool PlaceAtLastPopOut(PopOutWindow w)
     {
         if (!settings.Current.WindowPlaces.TryGetValue(PopOutKey, out var p)) return false;
         var saved = new Spot(p.Left, p.Top, p.Width, p.Height);
         if (!PopOutPlacement.Usable(saved)) return false;
-        // the helper goes by where the window's set to open, so that's the saved place first
         (w.WindowStartupLocation, w.Left, w.Top) = (WindowStartupLocation.Manual, saved.Left, saved.Top);
         var area = SocialWindow.WorkArea(w);
         var room = new Spot(area.Left, area.Top, area.Width, area.Height);
@@ -151,8 +139,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
 
     public void ClosePopOut(PoppedConversation conversation) => PopOutFor(conversation)?.Close();
 
-    // right of Friends, or left when that'd run off the screen. With room on neither side it's whichever screen edge
-    // covers less of Friends, the right on a tie
     internal static double LeftBeside(double friendsLeft, double friendsWidth, double width, double screenLeft, double screenRight)
     {
         double right = friendsLeft + friendsWidth + Gap;
@@ -203,7 +189,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         BringBack(w);
     }
 
-    // the view model only holds one profile, so an open window gets reused
     public void ShowProfile(SocialViewModel social, FriendItem friend)
     {
         if (Find<ProfileWindow>() is { } open)
@@ -219,7 +204,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         w.Show();
     }
 
-    // never parented to the friends window, so closing that can't take unsaved changes down with it
     public void EditProfile(SocialViewModel social)
     {
         if (Find<EditProfileWindow>() is { } open)
@@ -250,7 +234,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
             _ => Find<EditProfileWindow>(),
         };
         if (w is not { IsVisible: true } || w.WindowState == WindowState.Minimized) return false;
-        // its unsaved changes question goes over whichever window's active, and that's the main one after a press there
         if (w is EditProfileWindow { Editor.HasUnsavedWork: true }) BringBack(w);
         w.Close();
         return true;
@@ -262,7 +245,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
     public bool ConfirmDropProfileEditor(string action, bool leaveSaving = false)
     {
         if (Find<EditProfileWindow>() is not { } ed) return true;
-        // Play keeps the session, so a save that's already out can still land and the editor stays up to say how it went
         if (leaveSaving && ed.Editor.Saving) return true;
         if (ed.Editor.HasUnsavedWork)
         {
@@ -281,13 +263,11 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
         Find<ChatRoomsWindow>()?.CloseQuietly();
         Find<GroupChatWindow>()?.CloseQuietly();
         Find<GroupsWindow>()?.Close();
-        // one opened from the main window's list is the main window's, so it wouldn't go with the friends windows
         Find<ProfileWindow>()?.Close();
         FriendsWindow()?.Close();
         foreach (var w in Application.Current.Windows.OfType<PopOutWindow>().ToList()) w.Close();
     }
 
-    // before the app's services exist, so it's a static
     internal static UpdateWindow ShowUpdate()
     {
         var w = new UpdateWindow();
@@ -318,7 +298,6 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
 
     public void ShowAccounts(AccountsViewModel accounts) => new AccountsWindow { DataContext = accounts }.ShowDialogOver(WindowOwner.Find());
 
-    // a plain hide, so the main window doesn't go to the tray for it. It comes back when the model asks to be shown
     public void ShowLeanStart(MainViewModel main)
     {
         if (Find<LeanStartWindow>() is { } up)

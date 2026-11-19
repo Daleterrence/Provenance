@@ -7,8 +7,7 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Install;
 
-// applies an MSI straight from its tables, skipping Windows Installer and its 61,353 components (ugh). Supported()
-// refuses what it can't do
+// applies an MSI straight from its tables, skipping Windows Installer and its 61,353 components (ugh)
 public sealed class MsiPackage : IDisposable
 {
     private static readonly Regex TokenRx = new(@"\[(\\.|[^\[\]]*)\]");
@@ -19,8 +18,6 @@ public sealed class MsiPackage : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    // Tables Apply reproduces, or that do nothing on an installed machine (the installer's own dialogs and sequences,
-    // searches, hashes). Any other table with rows makes the package unsupported.
     private static readonly HashSet<string> Known = new(StringComparer.Ordinal)
     {
         "_Validation", "AdminExecuteSequence", "AdminUISequence", "AdvtExecuteSequence", "AppSearch", "Binary", "CheckBox",
@@ -38,7 +35,6 @@ public sealed class MsiPackage : IDisposable
         "TARGETDIR", "ProgramFilesFolder", "CommonFilesFolder", "ProgramMenuFolder", "StartMenuFolder", "DesktopFolder", "SystemFolder", "WindowsFolder",
     };
 
-    // the one folder a package puts its key file in, inside the root. Null when it does, else what's wrong
     public static string? ProductFolder(IEnumerable<string> targets, string installRoot, string keyFile, out string folder)
     {
         folder = "";
@@ -69,7 +65,6 @@ public sealed class MsiPackage : IDisposable
             if (!int.TryParse(c[2].Length == 0 ? "0" : c[2], out var attrs) || (attrs & ~(4 | 8)) != 0) return $"component attributes {c[2]}";
             keyPaths[c[0]] = c[3];
         }
-        // read-only, hidden, system, vital and the two compression flags
         if (_db.Query("SELECT `Attributes` FROM `File`").Any(r => r[0].Length > 0 && (!int.TryParse(r[0], out var a) || (a & ~(1 | 2 | 4 | 512 | 8192 | 16384)) != 0)))
             return "file attributes";
         foreach (var r in _db.Query("SELECT `Component_`,`AppId_`,`FileTypeMask`,`Icon_`,`DefInprocHandler`,`Argument` FROM `Class`"))
@@ -83,8 +78,6 @@ public sealed class MsiPackage : IDisposable
 
     public sealed record Sandbox(string RegistryKey, string Folder);
 
-    // with the region's key, the product's InstallFolder value and its settings key, the uninstall takes the product's whole
-    // folder and settings, not just what the package wrote
     public sealed record UninstallSetup(string UninstallerExe, string Folder, string InstallSource, string? RegionKey = null,
                                         string? FolderValue = null, string? SettingsKey = null);
 
@@ -96,8 +89,6 @@ public sealed class MsiPackage : IDisposable
 
     private enum Keep { Kind, Path, Exact }
 
-    // files first so a stopped run never leaves values pointing at missing files, InstallFolder goes last. keepExisting
-    // (a repair) only rewrites what's missing or wrong, and the counts are what it wrote
     public Result Apply(string installDir, IReadOnlyDictionary<string, string> properties,
                         IProgress<ByteProgress>? progress, CancellationToken ct, int parallel = 4, Sandbox? sandbox = null,
                         UninstallSetup? uninstall = null, Action<string>? status = null, bool payloadInPlace = false,
@@ -109,7 +100,6 @@ public sealed class MsiPackage : IDisposable
             ["INSTALLDIR"] = installDir.TrimEnd('\\') + "\\",
         };
         var dirs = ResolveDirectories(props, sandbox);
-        // attributes come from this one query, a query per component (61,353 for FFXI) leaves the install sat at 100% for ages
         var comps = _db.Query("SELECT `Component`,`Directory_`,`Condition`,`KeyPath`,`Attributes` FROM `Component`")
             .ToDictionary(r => r[0], r => (Dir: r[1], Condition: r[2], KeyPath: r[3], Attrs: int.TryParse(r[4], out var a) ? a : 0));
         bool On(string comp) => comps.TryGetValue(comp, out var c) && Condition(c.Condition, props);
@@ -165,14 +155,11 @@ public sealed class MsiPackage : IDisposable
             File.SetAttributes(files[key].Path, File.GetAttributes(files[key].Path) | (FileAttributes)a);
 
         string Format(string s) => FormatValue(s, props, dirs, files);
-        // a value naming one of the install's folders or files has to name it, a moved install leaves the old ones
         bool NamesPath(string s) => TokenRx.Matches(s).Any(m => m.Groups[1].Value is var t
             && (t.StartsWith('#') || t.StartsWith('!') || t.StartsWith('$') || dirs.ContainsKey(t)));
-        // POL folds the Interface values into the patch.ver key, and nothing under HKCR is anybody's setting
         Keep How(int root, string key, string value) => key.EndsWith(@"\Interface", StringComparison.OrdinalIgnoreCase) ? Keep.Exact
             : NamesPath(value) ? Keep.Path : root == 0 ? Keep.Exact : Keep.Kind;
-        // SE's viewer package writes some values twice (patchfiles copies of app.dll and polcore.dll, then the real ones).
-        // A full apply leaves the last, so a repair checks only that
+        // SE's viewer package writes some values twice, a full apply leaves the last so a repair checks only that
         IEnumerable<(int Root, string Key, string Name, string Value)> Final(List<(int Root, string Key, string Name, string Value)> list) =>
             !keepExisting ? list
             : list.Select((r, i) => (r, i))
@@ -180,7 +167,6 @@ public sealed class MsiPackage : IDisposable
                   .Select(g => g.Last()).OrderBy(x => x.i).Select(x => x.r);
 
         var registry = _db.Query("SELECT `Root`,`Key`,`Name`,`Value`,`Component_` FROM `Registry`");
-        // before anything that marks the product installed, so it's never installed without an uninstall entry
         bool wroteUninstall = false;
         if (uninstall != null && !(keepExisting && UninstallRecord.Intact(_db, uninstall, sandbox)))
         {
@@ -196,7 +182,6 @@ public sealed class MsiPackage : IDisposable
         {
             if (!On(r[4])) continue;
             var key = Format(r[1]);
-            // Windows Installer's own records never get copied, the product isn't registered with it
             if (key.Contains(@"\Installer\UserData\", StringComparison.OrdinalIgnoreCase)) continue;
             (key.EndsWith(@"\InstallFolder", StringComparison.OrdinalIgnoreCase) ? last : rows).Add((int.Parse(r[0]), key, Format(r[2]), r[3]));
         }
@@ -207,7 +192,7 @@ public sealed class MsiPackage : IDisposable
             {
                 using var hive = MsiRegistry.Hive(sandbox);
                 using var k = hive.CreateSubKey(MsiRegistry.SharedDlls, true);
-                if (keepExisting && k.GetValue(shared.Path) is not null) continue;   // a repair isn't another install
+                if (keepExisting && k.GetValue(shared.Path) is not null) continue;
                 k.SetValue(shared.Path, (k.GetValue(shared.Path) is int n ? n : 0) + 1, RegistryValueKind.DWord);
                 if (keepExisting) values++;
             }
@@ -216,7 +201,6 @@ public sealed class MsiPackage : IDisposable
         var (classes, progIdsWritten) = ComRegistration.RegisterClasses(_db, On, KeyFile, sandbox, keepExisting);
         int typeLibs = ComRegistration.RegisterTypeLibs(_db, On, KeyFile, sandbox, keepExisting);
 
-        // a repair only puts back the ones that are gone
         int shortcuts = 0;
         status?.Invoke("Creating the shortcuts...");
         foreach (var r in _db.Query("SELECT `Directory_`,`Name`,`Component_`,`Target`,`Arguments`,`Description`,`WkDir` FROM `Shortcut`"))
@@ -246,7 +230,6 @@ public sealed class MsiPackage : IDisposable
             .ToList();
     }
 
-    // a file by its path under the folder that holds the product's key file, with the MD5 the package gives it
     public (string Path, byte[]? Md5) ProductFile(string installDir, string keyFile, string rel)
     {
         var targets = Targets(installDir);
@@ -257,7 +240,6 @@ public sealed class MsiPackage : IDisposable
         return found.Count == 1 ? found[0] : throw new InvalidDataException($"The package doesn't list {rel} exactly once.");
     }
 
-    // one file out of the package's cabinets, by the path Targets gave it. Only the cabinet that holds it is read
     public void ExtractFile(string installDir, string path, string to, CancellationToken ct)
     {
         var props = new Dictionary<string, string> { ["INSTALLDIR"] = installDir.TrimEnd('\\') + "\\" };
@@ -266,7 +248,6 @@ public sealed class MsiPackage : IDisposable
         var want = Path.GetFullPath(path);
         var rows = _db.Query("SELECT `File`,`Component_`,`FileName`,`Sequence` FROM `File`");
         var found = rows.Where(r => Path.GetFullPath(Path.Combine(dirs[comps[r[1]]], MsiDatabase.LongName(r[2]))).Equals(want, StringComparison.OrdinalIgnoreCase)).ToList();
-        // the cabinet's names are matched to the key without its case, so no other key may differ only by that
         if (found.Count != 1 || !int.TryParse(found[0][3], out var sequence) || rows.Count(r => r[0].Equals(found[0][0], StringComparison.OrdinalIgnoreCase)) != 1)
             throw new InvalidDataException($"The package doesn't list {Path.GetFileName(path)} exactly once.");
         var cab = _db.Query("SELECT `LastSequence`,`Cabinet` FROM `Media`")
@@ -367,7 +348,6 @@ public sealed class MsiPackage : IDisposable
             return 0;
         }
         var (kind, data) = RegistryData(value, format);
-        // the game and the viewer write their own settings with these same kinds, so the right kind is somebody's setting
         if (keepExisting)
         {
             using var had = hive.OpenSubKey(path);
@@ -401,7 +381,6 @@ public sealed class MsiPackage : IDisposable
         _ => false,
     };
 
-    // how Windows compares paths, case aside and a trailing \ not mattering
     private static bool SameText(string a, string b) =>
         string.Equals(a.TrimEnd('\\'), b.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 }

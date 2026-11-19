@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The release check CI and tools\check-release.ps1 run. It compiles the app's own statement code and keys rather
-       than referencing Provenance.Common, which is built x86, and the runner's dotnet is x64 -->
+  <!-- compiles the app's own statement code rather than referencing Provenance.Common, which is built x86, and the runner's dotnet is x64 -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>Provenance.ReleaseCheck</RootNamespace>

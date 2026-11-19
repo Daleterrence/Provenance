@@ -13,7 +13,6 @@ public sealed record HookJob(string Token, string State)
     public static bool IsFailed(string? state) => state?.StartsWith("failed", StringComparison.Ordinal) == true;
 }
 
-// one job the app's waiting on. It has no clock of its own, every call takes the time
 public sealed class HookJobWatch
 {
     private DateTime _since;
@@ -36,7 +35,6 @@ public sealed class HookJobWatch
 
     public void Restart(DateTime now) => _since = now;
 
-    // profile server jobs go one at a time, so one that hasn't started yet shouldn't be timed
     public void WaitingTurn(string hookToken, bool hookBusy, DateTime now)
     {
         if (Running && hookToken != Token && hookBusy) _since = now;
@@ -48,7 +46,6 @@ public sealed class HookJobWatch
 
     public bool Reached(DateTime now) => Elapsed(now) >= _limit;
 
-    // the job's last word (ok or "failed:..."), "timeout" once it's overdue, or null while it's still going
     public string? Settle(string? state, string ok, DateTime now)
     {
         if (Token is null) return null;

@@ -3,8 +3,7 @@ using Serilog;
 
 namespace Provenance.Common.Security;
 
-// Smart App Control blocks a new unsigned Provenance Watcher.exe or pol_hook.dll until Windows' cloud check knows it,
-// so a fresh build can fail and then work
+// Smart App Control blocks a new unsigned build until Windows' cloud check knows it, so a fresh one can fail and then work
 public static class CodeIntegrity
 {
     private const string LogName = "Microsoft-Windows-CodeIntegrity/Operational";
@@ -16,7 +15,6 @@ public static class CodeIntegrity
     public const string RefusedText =
         "Windows Smart App Control blocked one of Provenance's files. Smart App Control blocks programs it doesn't recognise, and Provenance isn't digitally signed yet. Try again in a few minutes. If it's still blocked, you can't log in with this version of Provenance on this PC.";
 
-    // event 3077 (or 3033, "did not meet the signing level") naming one of the files. False when the log can't be read
     public static bool Refused(DateTime sinceUtc, params string[] fileNames)
     {
         try

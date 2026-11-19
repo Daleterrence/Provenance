@@ -12,7 +12,6 @@ internal static partial class AccountMessages
 
     internal static string? Folder => AppPaths.UserData is { } userData ? Path.Combine(userData, "messages") : null;
 
-    // best effort, a file that won't go is logged and left
     internal static int Delete(string profileId, string? folder = null)
     {
         folder ??= Folder;

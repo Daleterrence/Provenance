@@ -7,10 +7,9 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Patcher;
 
-// runs as admin off a network index, so every write goes through SafePath and DecodeAsync checks each download first
+// runs as admin off a network index, so every write goes through SafePath
 public static class MirrorDownloads
 {
-    // a range holds lots of files, so a few streams are bound by bandwidth rather than round trips
     public const int DefaultParallel = 8;
 
     private const int Attempts = 3;
@@ -23,7 +22,6 @@ public static class MirrorDownloads
     public static string SafePath(string folder, string relative) =>
         PathInside.Resolve(folder, relative) ?? throw new InvalidDataException($"The mirror index names an unsafe path: {relative}");
 
-    // every path an index names, before anything of it's read, fetched or written. Null when they're all fine
     internal static string? Unusable(string folder, MirrorIndex index)
     {
         try
@@ -44,8 +42,6 @@ public static class MirrorDownloads
         return to.Files.Where(e => !old.TryGetValue(e.Path, out var sha) || sha != e.Sha256).ToList();
     }
 
-    // only for an index that's passed Unusable, it opens every path in it. Progress always ends on Done == Total, and
-    // keepLargeAddressAware is for the app's game folders only
     public static async Task<IReadOnlyList<MirrorEntry>> ScanAsync(string folder, MirrorIndex index,
         IProgress<ByteProgress>? progress, CancellationToken ct, bool keepLargeAddressAware = false)
     {
@@ -90,7 +86,6 @@ public static class MirrorDownloads
 
     private static (string?, long, string, long, long) Place(MirrorEntry e) => (e.Pack, e.Offset, e.Sha256, e.Size, e.CompressedSize);
 
-    // a bad entry fails only itself, a network error or idle timeout its whole range
     public static async Task<IReadOnlyList<MirrorEntry>> DownloadAllAsync(MirrorClient client, string region, string folder,
         IReadOnlyList<MirrorEntry> work, int parallel, IProgress<ByteProgress>? progress, CancellationToken ct,
         Action<MirrorEntry, Exception>? onFailure = null, TimeSpan? idleTimeout = null, Action<MirrorEntry, int, Exception>? onRetry = null)
@@ -123,7 +118,6 @@ public static class MirrorDownloads
                 }
                 await Parallel.ForEachAsync(MirrorPacks.Plan(pending.Select(l => l.Entry)), opts, async (span, token) =>
                     await FetchSpanAsync(client, region, span, at, idle, n => Interlocked.Add(ref done, n), token));
-                // a write that failed here would fail again, only the mirror's own failures are worth another go
                 pending = pending.Where(l => l.Last is { } why && !MirrorFailure.IsLocal(why)).ToList();
             }
             foreach (var l in at.Values.Where(l => l.Last is not null)) Interlocked.Add(ref done, l.Entry.CompressedSize);
@@ -142,8 +136,7 @@ public static class MirrorDownloads
     private static async Task FetchSpanAsync(MirrorClient client, string region, MirrorSpan span, Dictionary<MirrorEntry, Location> at,
         TimeSpan idle, Action<long> add, CancellationToken token)
     {
-        // HttpClient.Timeout only covers the headers, this covers every wait for data and each read resets it, or one
-        // stalled object holds up a whole phase for minutes
+        // HttpClient.Timeout only covers the headers, this covers every wait for data
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
         cts.CancelAfter(idle);
         int i = 0;
@@ -174,7 +167,6 @@ public static class MirrorDownloads
                     await MirrorClient.DecodeAsync(body, e, loc.Targets, cts.Token, n => { got += n; add(n); });
                     loc.Last = null;
                 }
-                // corrupt or a disk error, but all its bytes were read so the next entry can follow
                 catch (Exception ex) when (ex is not OperationCanceledException && got == e.CompressedSize && Expected(ex))
                 {
                     loc.Last = ex;

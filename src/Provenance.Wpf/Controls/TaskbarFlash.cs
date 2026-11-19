@@ -5,8 +5,6 @@ using Provenance.Wpf.Win32;
 
 namespace Provenance.Wpf.Controls;
 
-// Start keeps going till the window comes to the front. StopIfFlashing's the only other way to clear it, the taskbar
-// button stays highlighted otherwise
 internal static class TaskbarFlash
 {
     internal static Action<Window, bool>? Seen;
@@ -28,7 +26,6 @@ internal static class TaskbarFlash
         if (Forget(w)) Flash(w, false, 0);   // FLASHW_STOP
     }
 
-    // coming to the front stops the flash on its own, this only forgets it
     private static void OnBroughtUp(object? sender, EventArgs e)
     {
         if (sender is Window w) Forget(w);

@@ -9,7 +9,6 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// the viewer folder's looked for until it exists, the app can start before POL's installed
 public sealed class AvatarService(ISettingsService settings)
 {
     private string? _viewerDir;
@@ -17,7 +16,6 @@ public sealed class AvatarService(ISettingsService settings)
     private readonly Dictionary<int, ImageSource?> _cache = new();
     private readonly Dictionary<int, BitmapSource?> _sheets = new();
 
-    // pictures given straight in, as if they'd been read from that folder
     internal void UseStandIns(string viewerDir, IReadOnlyDictionary<int, ImageSource?> pictures)
     {
         _viewerDir = viewerDir;
@@ -53,11 +51,11 @@ public sealed class AvatarService(ISettingsService settings)
                 foreach (var s in sheets)
                 {
                     try { LoadSheet(s); }
-                    catch { }   // a sheet that fails is skipped
+                    catch { }
                 }
             });
         }
-        catch { }   // warming up is only a head start
+        catch { }
     }
 
     private ImageSource? Load(int picId)
@@ -76,12 +74,11 @@ public sealed class AvatarService(ISettingsService settings)
                 img = crop;
             }
         }
-        catch { }   // no picture, the caller shows the default
+        catch { }
         lock (_lock) _cache[picId] = img;
         return img;
     }
 
-    // null when the sheet's missing or won't decode, and that's never retried. Safe from any thread
     private BitmapSource? LoadSheet(int sheetIndex)
     {
         if (ViewerDir is not { } dir) return null;
@@ -91,7 +88,7 @@ public sealed class AvatarService(ISettingsService settings)
         {
             if (ProfilePictureSheets.SheetPath(dir, sheetIndex) is { } sheetPath) img = DecodeSheet(sheetPath);
         }
-        catch { }   // a sheet that won't decode stays null
+        catch { }
         lock (_lock)
         {
             if (_sheets.TryGetValue(sheetIndex, out var won)) return won;
@@ -100,7 +97,6 @@ public sealed class AvatarService(ISettingsService settings)
         return img;
     }
 
-    // a viewer image with the profile pic sheets' XOR on it, frozen so any thread can use it
     internal static BitmapSource DecodeSheet(string path)
     {
         var sheet = new BitmapImage();

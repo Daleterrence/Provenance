@@ -13,10 +13,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        // first thing, a UAC prompt can outlast a held key
         bool shift = (User32.GetAsyncKeyState(VkShift) & 0x8000) != 0;
-        // the install, update and uninstall hooks exit in here, so none of them needs admin. Updates only get applied
-        // from Provenance.exe, where the update window is
         try
         {
             VelopackApp.Build()
@@ -26,7 +23,7 @@ internal static class Program
         }
         catch (Exception ex) { Note("Velopack start-up failed", ex); }
 
-        // Run() normally exits on a hook. If it threw instead, a hook still mustn't start the app (UAC mid-uninstall)
+        // a hook mustn't start the app even if Run threw (UAC mid-uninstall)
         if (args.Length > 0 && args[0].StartsWith("--veloapp-", StringComparison.OrdinalIgnoreCase))
             return 0;
 
@@ -41,7 +38,7 @@ internal static class Program
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
         {
-            return 1;   // UAC prompt cancelled, nothing to say
+            return 1;
         }
         catch (Exception ex)
         {
@@ -51,8 +48,6 @@ internal static class Program
         }
     }
 
-    // uninstall runs without admin and can't stop an elevated copy, so its open files would stay. Each copy gets asked
-    // to close the normal way instead, like its tray's Exit
     private static void CloseRunningCopies()
     {
         // Velopack kills this hook at 30s, so it all fits in 25 and an unanswered message can't hold it past that
@@ -68,8 +63,7 @@ internal static class Program
                 var h = Kernel32.OpenEventW(EventModifyState | Synchronize, false, name);
                 if (h == IntPtr.Zero)
                 {
-                    // denied means mine but run as another account (an admin's password at the UAC prompt), so it
-                    // can't be asked. Not found means another install's copy
+                    // denied means mine but run as another account so it can't be asked, not found means another install's copy
                     if (Marshal.GetLastWin32Error() == ErrorAccessDenied) unreachable = true;
                     continue;
                 }
@@ -86,7 +80,6 @@ internal static class Program
                     "(if it's in the system tray, right-click its icon to exit), then press OK.", MbIconWarning);
             answered.Set();
         }) { IsBackground = true }.Start();
-        // a copy that couldn't be asked can't be watched either, so that one waits for the OK
         while (Left() > TimeSpan.Zero)
         {
             if (!unreachable && AllClosed(asked, TimeSpan.Zero)) return;
@@ -95,7 +88,6 @@ internal static class Program
         AllClosed(asked, Left() < TimeSpan.FromSeconds(5) ? Left() : TimeSpan.FromSeconds(5));
     }
 
-    // a copy's event goes when the copy does
     private static bool AllClosed(List<string> names, TimeSpan limit)
     {
         long until = Environment.TickCount64 + (long)limit.TotalMilliseconds;
@@ -118,14 +110,13 @@ internal static class Program
     private static void Message(string text, uint icon) =>
         User32.MessageBoxW(IntPtr.Zero, text, "Provenance", MbOk | icon | MbTopmost | MbSetForeground);
 
-    // lands in Velopack's own log (%LocalAppData%\velopack), there's nowhere else to put it
     private static void Note(string what, Exception ex)
     {
         try
         {
             if (VelopackLocator.IsCurrentSet) VelopackLocator.Current.Log.Warn(ex, what);
         }
-        catch { }   // the log is a courtesy, never worth failing over
+        catch { }
     }
 
     private const string ShiftHeldSwitch = "--shift-held";

@@ -7,14 +7,10 @@ using System.Windows.Shapes;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// only styles carrying FocusCue.Ring get through, anything else (MaterialDesign's included) becomes the box ring.
-// null stays null for controls that draw their own
 public static class FocusLook
 {
     private static Style? _row, _box, _pill, _round;
 
-    // true when the focus came from the keyboard and the control is one Tab stops on, so a list or scroll viewer that took
-    // a click never gets one
     private sealed class RingShown : IMultiValueConverter
     {
         public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture) =>
@@ -56,8 +52,7 @@ public static class FocusLook
 
     private static bool _installed;
 
-    // FrameworkElement owns the property so it can't be overridden itself, but each type straight under it can.
-    // Has to run before the first element's made
+    // FrameworkElement owns the property so it can't be overridden itself, but each type straight under it can
     private static IEnumerable<Type> Roots()
     {
         var wpf = typeof(FrameworkElement).Assembly;

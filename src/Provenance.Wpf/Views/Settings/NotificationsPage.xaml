@@ -8,7 +8,6 @@
                        Text="Choose which notices Provenance shows, and which ones flash its taskbar button." />
             <Border Style="{StaticResource Card}">
                 <StackPanel>
-                    <!-- the headings and every row share these three columns, so each switch sits under its heading -->
                     <Grid Margin="0,6,0,0" ColumnDefinitions="*,80,80">
                         <TextBlock Grid.Column="1" Text="Notice" Style="{StaticResource Label}" HorizontalAlignment="Center" />
                         <TextBlock Grid.Column="2" Text="Flash" Style="{StaticResource Label}" HorizontalAlignment="Center" />

@@ -8,14 +8,13 @@ using Serilog;
 
 namespace Provenance.Common.Patcher;
 
-// The trust boundary: pointers and indexes only come back once their signature checks out, and a download only replaces
-// its target once its size and SHA-256 match the signed entry. A pointer older than one already taken is refused too
+// pointers and indexes only come back once their signature checks out, and a download only replaces its target once size and SHA-256 match
 public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, ECDsa> trusted, string baseUrl = MirrorLayout.BaseUrl,
                                  MirrorSeen? seen = null)
 {
     internal const long MaxSignedBytes = 16 * 1024 * 1024;
 
-#pragma warning disable RS0030 // MirrorClient owns its client
+#pragma warning disable RS0030
     public static MirrorClient Shared { get; } =
         new(Named(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }), MirrorKeys.Trusted, MirrorLayout.BaseUrl, MirrorSeen.Shared);
 #pragma warning restore RS0030
@@ -35,7 +34,6 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         MirrorPointer pointer;
         try { pointer = MirrorPointer.FromBytes(payload); }
         catch (InvalidDataException) { return null; }
-        // another region's pointer goes back for the caller to refuse, it never moves this region's time
         if (seen is null || pointer.Region != region || seen.Accept(region, pointer.Published)) return pointer;
         Log.Warning("The mirror's pointer for {Region} is older than one already seen ({Published:u})", region, pointer.Published);
         return null;
@@ -53,7 +51,6 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         catch (InvalidDataException) { return null; }
     }
 
-    // the signed bytes come back too, so the caller can keep them and check them again on the next start
     public async Task<(MirrorBuilds List, byte[] Blob)?> GetBuildsAsync(CancellationToken ct)
     {
         var blob = await GetBlobAsync(MirrorLayout.BuildsKey, ct);
@@ -86,7 +83,6 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         }
     }
 
-    // a failure still reads on to the entry's end, so the next entry in the span can follow
     public static async Task DecodeAsync(Stream span, MirrorEntry entry, IReadOnlyList<string> targets, CancellationToken ct, Action<int>? received = null)
     {
         ArgumentOutOfRangeException.ThrowIfZero(targets.Count);
@@ -212,7 +208,6 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         return blob is not null && SignedBlob.TryOpen(blob, trusted, out var payload) ? payload : null;
     }
 
-    // null on a 404 or a body over 16 MB. The 60s cap covers the whole read, not just the headers.
     private async Task<byte[]?> GetBlobAsync(string key, CancellationToken ct)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -234,7 +229,6 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
                 ms.Write(buf, 0, n);
             }
         }
-        // a connection dropped part way through, so callers fall back as they would for no connection at all
         catch (IOException ex)
         {
             throw new HttpRequestException(HttpRequestError.ResponseEnded, $"the connection dropped while reading {key}: {ex.Message}", ex);

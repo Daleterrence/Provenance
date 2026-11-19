@@ -2,8 +2,7 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Login;
 
-// the viewer's polerr.bin, the text it shows under a POL-nnnn code (svc 0xfb0). English, and the US and EU files only
-// differ at 5310
+// the US and EU polerr.bin files only differ at 5310
 public static class PolErrors
 {
     public static string? Text(int code, PolRegion region = PolRegion.UnitedStates)
@@ -16,8 +15,6 @@ public static class PolErrors
         return null;
     }
 
-    // the payment ones (payment method, Webmoney, balance) are unused and never come up, they're only here
-    // so the table matches the viewer's
     private static readonly string[] Texts =
     [
         "An unexpected problem occurred. Persistent problems can be reported from Service & Support.",

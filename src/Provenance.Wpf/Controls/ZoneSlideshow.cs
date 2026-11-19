@@ -22,7 +22,6 @@ public sealed class ZoneSlideshow : Grid
     {
         _order = new ZoneOrder(ZoneOrder.Find(folder), Random.Shared);
         ClipToBounds = true;
-        // one gradient only fades one direction, so the sides and the top and bottom get a mask each
         OpacityMask = Edges(horizontal: true, 0.1);
         var inner = new Grid { OpacityMask = Edges(horizontal: false, 0.22) };
         inner.Children.Add(_back);
@@ -52,14 +51,12 @@ public sealed class ZoneSlideshow : Grid
         if (Load(_order.Next()) is not { } next) return;
         var (incoming, outgoing) = (_back, _front);
         incoming.Source = next;
-        // in on top of the old one, which stays solid until it's covered, so the background never shows through halfway
         SetZIndex(incoming, 1);
         SetZIndex(outgoing, 0);
         FadeIn(incoming, outgoing);
         (_front, _back) = (incoming, outgoing);
     }
 
-    // only opacity, so it fades with Windows' animation effects off too (a hard cut every few seconds is worse)
     private static void FadeIn(Image incoming, Image? outgoing)
     {
         var fade = new DoubleAnimation(0, 1, Fade) { EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } };
@@ -106,7 +103,6 @@ public sealed class ZoneSlideshow : Grid
     }
 }
 
-// every picture once in a random order, then a new order that never starts on the one just shown
 internal sealed class ZoneOrder(IReadOnlyList<string> files, Random random)
 {
     private readonly List<string> _round = [];

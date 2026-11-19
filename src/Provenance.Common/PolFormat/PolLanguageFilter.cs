@@ -3,8 +3,7 @@ using System.Text;
 
 namespace Provenance.Common.PolFormat;
 
-// the viewer's own word list (data\dic\vulgar2.dic) run the way polcore runs it (svc 0x5a8 builds, svc 0x1660 masks).
-// Matching is on Shift-JIS bytes, a masked character shows as '?'
+// the viewer's word list run the way polcore runs it, matching on Shift-JIS bytes with a masked character shown as '?'
 public sealed class PolLanguageFilter
 {
     private const byte Mask = (byte)'?';
@@ -29,7 +28,6 @@ public sealed class PolLanguageFilter
         return new Trie(at, Rel(0), Rel(4), Rel(8), Rel(12), BinaryPrimitives.ReadInt32LittleEndian(_d.AsSpan(at + 0x10)) != 0);
     }
 
-    // null when the install hasn't got one, or it doesn't decrypt
     public static PolLanguageFilter? Load(string viewerDir)
     {
         try
@@ -42,7 +40,6 @@ public sealed class PolLanguageFilter
 
     public static PolLanguageFilter? FromFile(byte[] file)
     {
-        // POL's file cipher under the key 01 00 00 00 00 00 00 00
         if (new PolFileCipher([1, 0, 0, 0, 0, 0, 0, 0]).Decrypt(file) is not { } r || r.Data.Length < 0x4a38) return null;
         try { return new PolLanguageFilter(r.Data); }
         catch (Exception e) when (e is InvalidDataException or ArgumentOutOfRangeException) { return null; }
@@ -69,7 +66,6 @@ public sealed class PolLanguageFilter
         return any ? sb.Append(text, end, text.Length - end).ToString() : text;
     }
 
-    // polcore 0x1004e4d0 in the viewer's mode (4, mask)
     private void MaskWords(byte[] s, int n)
     {
         int i = 0;
@@ -99,7 +95,6 @@ public sealed class PolLanguageFilter
         }
     }
 
-    // mode 2: every letter in it becomes one mask byte, separators stay
     private void MaskRange(byte[] s, int p, int end)
     {
         while (p < end)
@@ -120,8 +115,7 @@ public sealed class PolLanguageFilter
         }
     }
 
-    // polcore 0x1004e760: < 0 for a word, m is the bytes after its first character. 1 for a two-byte character no
-    // word starts with
+    // < 0 for a word, m is the bytes after its first character. 1 for a two-byte character no word starts with
     private int Match(Trie t, byte[] s, int p, int len, out int m)
     {
         m = 0;
@@ -144,7 +138,7 @@ public sealed class PolLanguageFilter
         return r == 0 ? (two ? 1 : 0) : r;
     }
 
-    // polcore 0x1004e8e0: type 1 nodes branch on one character, type 2 hold the rest of a word (bytes negated)
+    // type 1 nodes branch on one character, type 2 hold the rest of a word (bytes negated)
     private int Walk(Trie t, byte[] s, int p, int len, int node, ref int m, int depth)
     {
         if (depth > 512) return 0;
@@ -199,7 +193,7 @@ public sealed class PolLanguageFilter
         return 0;
     }
 
-    // polcore 0x1004ec00, over keys stored negated, compared as unsigned 16-bit
+    // over keys stored negated, compared as unsigned 16-bit
     private int Find(ushort key, int keys, int hi)
     {
         int lo = 0;
@@ -212,14 +206,13 @@ public sealed class PolLanguageFilter
         return (ushort)-U16(keys + lo * 2) == key ? lo : -1;
     }
 
-    // polcore 0x1004e6e0: the bytes a separator (space, punctuation) takes up, 0 for a letter
     private int Skip(byte[] s, int p)
     {
         if (Double(s, p)) return Bit(0x30, s[p + 1]) && Bit(0x10, s[p]) ? 2 : 0;
         return Bit(0x10, s[p]) ? 1 : 0;
     }
 
-    // polcore 0x1004e850: a single byte through +0x4930 (A-Z to a-z), a double one through +0x250 when the trie wants it
+    // a single byte through a table (A-Z to a-z), a double one when the trie wants it
     private int Norm(byte[] s, int p, bool table)
     {
         if (!Double(s, p)) return _d[0x4930 + s[p]];
@@ -230,8 +223,7 @@ public sealed class PolLanguageFilter
     private bool Bit(int table, byte b) => ((_d[table + (b >> 3)] >> (b & 7)) & 1) != 0;
     private int U16(int at) => BinaryPrimitives.ReadUInt16LittleEndian(_d.AsSpan(at));
 
-    // polcore's conversion (0x1004d4d0): ASCII as is, Shift-JIS rows 0x81-0x9f and 0xe0-0xea, SE's row 0x85 for
-    // Windows-1252's top half, '?' otherwise, later rows winning. at[i] is where text[i] starts, zero padded
+    // ASCII as is, Shift-JIS rows 0x81-0x9f and 0xe0-0xea, SE's row 0x85 for Windows-1252's top half, '?' otherwise
     internal static (byte[] Bytes, int[] At) ToBytes(string text, int end)
     {
         var table = Sjis.Value;
@@ -256,8 +248,7 @@ public sealed class PolLanguageFilter
 
     private static readonly Lazy<Dictionary<char, ushort>> Sjis = new(() =>
     {
-        // the default (best fit) decoder, the only way .NET gives the NEC row's copies of nine maths symbols.
-        // Anything it hasn't got comes out as U+30FB, only real at 0x8145
+        // the default (best fit) decoder, the only way .NET gives the NEC row's copies of nine maths symbols
         var cp932 = Encoding.GetEncoding(932);
         var cp1252 = Encoding.GetEncoding(1252, EncoderFallback.ReplacementFallback, new DecoderReplacementFallback("\uffff"));
         var map = new Dictionary<char, ushort>();

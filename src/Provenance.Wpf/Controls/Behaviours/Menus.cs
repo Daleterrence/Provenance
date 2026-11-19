@@ -29,17 +29,14 @@ public static class Menus
         menu.Items.Insert(0, new MenuItem { Header = "Copy", Command = ApplicationCommands.Copy, CommandTarget = box });
     }
 
-    // one button's menu at a time: the button, what it opened, and the button whose press has just shut one
     private static FrameworkElement? _from, _shutBy;
     private static DependencyObject? _open;
 
-    // a field so a test can stand in for a real press
     internal static Func<FrameworkElement, bool> PressIsOn = Pressed;
 
     internal static bool OpenFrom(FrameworkElement button) =>
         ReferenceEquals(_from, button) && _open is { } open && (bool)open.GetValue(Popup.IsOpenProperty);
 
-    // clicked with its menu up, the button closes it. The press that shut the menu by landing on the button opens nothing
     public static void Toggle(FrameworkElement button, Func<ContextMenu?> build, PlacementMode placement = PlacementMode.Bottom) =>
         Flip(button, () =>
         {
@@ -59,7 +56,6 @@ public static class Menus
             return;
         }
         bool mine = OpenFrom(button);
-        // a popup doesn't take the keyboard, so another button can be reached with one still up
         _open?.SetValue(Popup.IsOpenProperty, false);
         _shutBy = null;
         if (mine || build() is not { } menu) return;
@@ -79,7 +75,7 @@ public static class Menus
         isOpen.AddValueChanged(menu, changed);
     }
 
-    // only kept for as long as the press. Dropped below input priority, so the click that ends the press still sees it
+    // dropped below input priority, so the click that ends the press still sees it
     private static void ShutBy(FrameworkElement button)
     {
         void Forget()
@@ -104,7 +100,6 @@ public static class Menus
         });
     }
 
-    // a mouse press inside the button, or Space, which has the button down before a popup notices it's lost the mouse
     private static bool Pressed(FrameworkElement button) =>
         button is ButtonBase { IsPressed: true } || (Mouse.LeftButton == MouseButtonState.Pressed && Under(button));
 

@@ -13,7 +13,6 @@ public partial class UpdateWindow : AppWindow
         Closed += (_, _) => _answer?.TrySetResult(false);
     }
 
-    // the Cancel on the wait for other copies to close. A close with a question up answers it, so this is only for the wait
     public event EventHandler? CancelRequested;
 
     public void ShowChecking()
@@ -59,7 +58,6 @@ public partial class UpdateWindow : AppWindow
         DetailText.Text = "Provenance will restart once the update's installed.";
     }
 
-    // true for Try again, false for Close or the window closing
     public Task<bool> AskTryAgain(string title, string detail, bool canRetry = true)
     {
         StageText.Text = title;

@@ -5,7 +5,6 @@ namespace Provenance.Common.Login;
 
 public static class HookExitText
 {
-    // a run saves the whole line with the account it turns off, so only this much of it is ever matched
     public const string DetailsAgainLead = "Provenance needs this account's login details again.";
     public const string DetailsAgainText = DetailsAgainLead + " Press Manage Accounts and edit this account to add them.";
 

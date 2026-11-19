@@ -4,7 +4,6 @@
                     xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours"
                     xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
                     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes">
-    <!-- the frame every full window shares: its own 40 high title bar, so the system's buttons stay off -->
     <Style x:Key="AppWindow" TargetType="controls:AppWindow">
         <Setter Property="WindowStyle" Value="None" />
         <!-- an icon that lands between two pixels gets smeared over both -->
@@ -28,7 +27,6 @@
         </Setter>
     </Style>
 
-    <!-- a dialog floats as a rounded card in a see-through window, its shadow falling in the margin -->
     <Style x:Key="DialogCard" TargetType="controls:AppWindow">
         <Setter Property="WindowStyle" Value="None" />
         <Setter Property="AllowsTransparency" Value="True" />
@@ -64,7 +62,6 @@
         </Setter>
     </Style>
 
-    <!-- the heading of the install and repair windows: the crystal and a title, with a small close in the corner -->
     <Style TargetType="controls:DialogHeader">
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
@@ -85,7 +82,6 @@
         </Setter>
     </Style>
 
-    <!-- a strip over the content that blurs what's under it, the tint and the line come from the theme -->
     <Style TargetType="controls:GlassBanner">
         <Setter Property="Foreground" Value="{DynamicResource Banner.Text}" />
         <Setter Property="Padding" Value="18,11,16,11" />
@@ -112,8 +108,6 @@
         </Setter>
     </Style>
 
-    <!-- icon and title, then whatever the window puts in the bar, then maximise and close. Only the buttons take
-         clicks, the rest drags the window -->
     <Style TargetType="controls:TitleBar">
         <Setter Property="Foreground" Value="{DynamicResource Text.1}" />
         <Setter Property="IsTabStop" Value="False" />

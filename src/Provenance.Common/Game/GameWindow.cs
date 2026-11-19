@@ -9,18 +9,14 @@ public static class GameWindow
     public static IntPtr Find(int polPid) =>
         WindowsOf(polPid).FirstOrDefault(h => User32.IsWindowVisible(h) && ClassOf(h) == "FFXiClass");
 
-    // the app's holding the foreground from the Play click, so pol.exe needs leave to take it
     public static void AllowForeground(int pid) => User32.AllowSetForegroundWindow((uint)pid);
 
-    // false when Windows refuses (the user's moved on to another program)
     public static bool BringToFront(IntPtr h)
     {
         if (User32.IsIconic(h)) User32.ShowWindow(h, 9 /* SW_RESTORE */);
         return User32.SetForegroundWindow(h);
     }
 
-    // true once the game's window is up. Windows only hands focus to the last program used, which is the app at the
-    // Play click, so pol.exe gets leave to take it first
     public static async Task<bool> BringForwardWhenUpAsync(int pid)
     {
         AllowForeground(pid);
@@ -40,7 +36,6 @@ public static class GameWindow
         return false;
     }
 
-    // the same as pressing the window's close button, for every top-level window the process has. Returns how many were asked
     public static int AskToClose(int pid)
     {
         int asked = 0;
@@ -51,7 +46,6 @@ public static class GameWindow
 
     private const uint WmClose = 0x0010;
 
-    // every top-level window with its process id, until the callback returns false
     public static void ForEachWindow(Func<IntPtr, int, bool> visit) =>
         User32.EnumWindows((h, _) =>
         {

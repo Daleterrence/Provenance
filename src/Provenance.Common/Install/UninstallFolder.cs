@@ -8,11 +8,9 @@ using static Provenance.Common.IO.FileHandles;
 
 namespace Provenance.Common.Install;
 
-// <root>\Uninstall holds what an elevated uninstall runs and the root may be anyone's to write,
-// so it gets its own permissions, set through a handle that's never a link
+// the root may be anyone's to write, so Uninstall gets its own permissions through a handle that's never a link
 public sealed class UninstallFolder : IDisposable
 {
-    // tests only: they don't run as admin, so nothing they make can be Administrators'
     internal static SecurityIdentifier? OwnerForTest;
 
     private static SecurityIdentifier Owner => OwnerForTest ?? LockedFolder.Admins;
@@ -31,7 +29,6 @@ public sealed class UninstallFolder : IDisposable
         _root.Dispose();
     }
 
-    // made with its permissions in one go, or opened and fixed. Neither it nor the root can be renamed while it's held
     public static UninstallFolder Hold(string folder)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
@@ -69,8 +66,6 @@ public sealed class UninstallFolder : IDisposable
         }
     }
 
-    // a file just written in the held folder: Administrators own it whatever this PC's policy says.
-    // Only the owner's read and written, a fresh FileSecurity would write an empty DACL
     public static void Own(string path)
     {
         var file = new FileInfo(path);
@@ -79,7 +74,6 @@ public sealed class UninstallFolder : IDisposable
         file.SetAccessControl(sec);
     }
 
-    // the folder's exactly as Hold leaves it, and nobody else can change the record
     public static bool Protected(string folder, string record)
     {
         using (var f = OpenLinkItself(folder, ReadControl | ReadAttributes, ShareAll))
@@ -93,8 +87,6 @@ public sealed class UninstallFolder : IDisposable
 
     internal static bool Trusted(IdentityReference? owner) => owner is SecurityIdentifier s && (s == Owner || LockedFolder.IsAdminOrSystem(s));
 
-    // anyone but the owner, Administrators and SYSTEM can do more than read it. Inherit-only rules don't count here, the
-    // record is a file
     internal static bool Weak(DirectorySecurity sd)
     {
         const FileSystemRights read = FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize;

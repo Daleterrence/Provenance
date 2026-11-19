@@ -10,26 +10,21 @@ public static class SocialRequests
     public static bool SetStatus(int pid, PolStatus status) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Status, PolStatusText.Code(status).ToString());
 
-    // no control characters but line breaks, the viewer's rule. The hook checks again, and checks the name against the
-    // friend row before it sends
     public static bool Send(int pid, int friendRow, string friendName, string token, string subject, string text) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Send, friendRow, token, friendName, subject, HookFiles.Body(text));
 
-    // mids safely in the chat log, so the hook can delete them the viewer's way (GET, save, DELETE)
     public static bool Ack(int pid, IEnumerable<int> mids)
     {
         try { return HookFiles.WriteRequest(pid, HookContract.Requests.Ack, Unread(pid, HookContract.Requests.Ack, mids.Select(m => m.ToString()))); }
         catch { return false; }
     }
 
-    // mids read in Provenance, so the hook moves their files from r\b to r\a
     public static bool Read(int pid, IEnumerable<int> mids)
     {
         try { return HookFiles.WriteRequest(pid, HookContract.Requests.Read, Unread(pid, HookContract.Requests.Read, mids.Select(m => m.ToString()))); }
         catch { return false; }
     }
 
-    // lines Delete or Clear took out of the log. One with no time or friend's key has nothing the hook could match
     public static bool DeleteFiles(int pid, IEnumerable<ChatEntry> entries)
     {
         var lines = entries.Where(e => e.Time > 0 && e.PeerKey.Length > 0 && e.PeerKey.All(Uri.IsHexDigit) &&
@@ -40,7 +35,6 @@ public static class SocialRequests
         catch { return false; }
     }
 
-    // after any lines the hook hasn't taken yet
     private static HookFiles.RequestBody Unread(int pid, string request, IEnumerable<string> lines)
     {
         var text = string.Join("\n", lines);
@@ -51,7 +45,6 @@ public static class SocialRequests
     public static bool SetProfilePicture(int pid, int picId, string token) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Pic, picId, token);
 
-    // row is the ignore-list index for Unignore. The key's there so a changed list gets refused
     public static bool EditFriend(int pid, FriendEdit op, string token, int row, string key, string arg = "")
     {
         var verb = op switch
@@ -70,7 +63,6 @@ public static class SocialRequests
         return HookFiles.WriteRequest(pid, HookContract.Requests.Answer, verb, token, mid, subject, allHandles ? "1" : "0");
     }
 
-    // the hook checks the value again and builds the query itself
     public static bool Search(int pid, string token, FriendSearchKind kind, string value) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Search, token, FriendSearch.Wire(kind),
                                value.Replace("\r", "").Replace("\n", ""));
@@ -81,8 +73,6 @@ public static class SocialRequests
     public static bool RequestProfile(int pid, string token, int friendRow, string friendKey) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Profile, token, friendRow, friendKey);
 
-    // the group requests all have the same seven lines: the operation, token, group id, three operation fields and a key
-    // the hook checks (blank where an operation has none)
     public static bool CreateGroup(int pid, string token, string name) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "create", token, "", name, "", "", "");
 
@@ -98,7 +88,6 @@ public static class SocialRequests
     public static bool SetGroupComment(int pid, string token, string groupId, string text) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "comment", token, groupId, text, "", "", "");
 
-    // goes out as a message to the friend's row, friendKey is there so a changed list gets refused
     public static bool InviteToGroup(int pid, string token, string groupId, int friendRow, string subject, string text, string friendKey) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "invite", token, groupId, friendRow, subject, text, friendKey);
 
@@ -114,13 +103,11 @@ public static class SocialRequests
     public static bool RequestFfxiProfile(int pid, string token, int friendRow, string friendKey, int slot) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.FfxiProfile, token, friendRow, friendKey, slot);
 
-    // the hook takes the ids from its own list, not the request
     public static bool RequestMyFfxiProfile(int pid, string token, string characterKey, int slot) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.MyFfxiProfile, token, characterKey, slot);
 
     public static bool RequestMyProfile(int pid, string token) => HookFiles.WriteRequest(pid, HookContract.Requests.MyProfile, token);
 
-    // load first, the save keeps each field's own level
     public static bool SaveMyProfile(int pid, string token, PrivacyLevel level, IEnumerable<KeyValuePair<string, string>> fields,
                                      string noMailText = "")
     {
@@ -130,14 +117,12 @@ public static class SocialRequests
         return HookFiles.WriteRequest(pid, HookContract.Requests.SaveProfile, [.. lines]);
     }
 
-    // key is the loaded profile's, so a rename never lands on a handle that's become active since
     public static bool RenameHandle(int pid, string token, string name, string key) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Rename, token, name, key);
 
     public static string FailReason(string state) =>
         state.StartsWith("failed:", StringComparison.Ordinal) ? state[7..] : state;
 
-    // the unlinked ones go on the active handle in one save, the hook refuses the lot if they don't all fit
     public static bool LinkAll(int pid, string token, PolHandle active, IReadOnlyList<PolContentId> contents)
     {
         if (contents.Count is 0 or > HandleList.MaxContentIds) return false;
@@ -146,7 +131,6 @@ public static class SocialRequests
         return HookFiles.WriteRequest(pid, HookContract.Requests.Handle, [.. lines]);
     }
 
-    // the keys are the snapshot's, so the hook refuses one aimed at a record that's changed since
     public static bool SwitchHandle(int pid, string token, PolHandle handle) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "switch", token, handle.Slot, handle.Key);
 
@@ -159,7 +143,6 @@ public static class SocialRequests
     public static bool DeleteHandle(int pid, string token, PolHandle handle) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "delete", token, handle.Slot, handle.Key);
 
-    // only the records whose order byte changes, each with its key like any other handle request
     public static bool ReorderContentIds(int pid, string token, IReadOnlyList<ContentIdOrder> changes)
     {
         if (changes.Count is 0 or > HandleList.MaxContentIdRecords) return false;

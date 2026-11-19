@@ -34,8 +34,7 @@ public sealed class RestoredPartlyException(BackupOutcome before, Exception inne
     public BackupOutcome Before { get; } = before;
 }
 
-// whole character folders rather than SE's patterns, a few KB more and it covers anything they add. The game rewrites
-// these in place unlocked, so each copy's checked for a write mid-read
+// the game rewrites these in place unlocked, so each copy's checked for a write mid-read
 public static partial class GameSettingsBackup
 {
     public const int Kept = 5;
@@ -54,14 +53,11 @@ public static partial class GameSettingsBackup
     public static string DefaultFolder =>
         Path.Combine(AppPaths.UserData ?? "Provenance", "Backups");
 
-    // a part path would be taken from wherever this elevated process happens to be sat
     public static string FolderOrDefault(string? chosen) =>
         chosen?.Trim() is { Length: > 0 } c && Path.IsPathFullyQualified(c) ? c : DefaultFolder;
 
-    // one at a time across every copy on the PC, whoever's running them
     public static IDisposable? TryLock(TimeSpan wait) => AdminLock.TryAcquire("game-settings-backup", wait);
 
-    // an empty settings folder (0042) is Documents\My Games\FINAL FANTASY XI, same as the config tool fills in
     public static BackupSources Sources(string ffxiFolder, string? settingsFolder, string? localAppData = null, string? documents = null)
     {
         var install = Path.TrimEndingDirectorySeparator(Path.GetFullPath(ffxiFolder));
@@ -159,8 +155,6 @@ public static partial class GameSettingsBackup
         finally { FileDelete.Try(tmp); }
     }
 
-    // the folder's from settings.json, so what's missing is made from the nearest one there, each held and checked
-    // first. Null if any of it's a link, before anything goes through one
     public static FolderPins? HoldFolder(string folder)
     {
         folder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
@@ -170,7 +164,6 @@ public static partial class GameSettingsBackup
         return HoldFrom(anchor, folder);
     }
 
-    // a drive root can't be a pin's root, so the first folder under one is made on its own
     private static FolderPins? HoldFrom(string anchor, string dir)
     {
         if (Path.GetDirectoryName(anchor) is null && dir.Length > anchor.Length)
@@ -182,7 +175,6 @@ public static partial class GameSettingsBackup
         return FolderPins.HoldExact(anchor, dir);
     }
 
-    // mine are the ones named like mine with a manifest that reads, newest first
     public static IReadOnlyList<BackupInfo> List(string folder)
     {
         if (!Directory.Exists(folder)) return [];
@@ -211,8 +203,6 @@ public static partial class GameSettingsBackup
         catch (InvalidDataException) { throw new NotABackupException(); }
     }
 
-    // the current settings go in a backup first so it can be undone, and nothing's ever deleted, like SE's own restore.
-    // blocked gets asked again right before the first write
     public static RestoreResult Restore(string zipPath, BackupSources sources, string folder, Func<string?>? blocked = null)
     {
         // no delete sharing, so the backup made first can't prune this one away mid-restore
@@ -225,7 +215,6 @@ public static partial class GameSettingsBackup
             if (ReadManifest(zip) is not { } manifest) throw new NotABackupException();
             var written = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
             foreach (var f in manifest.Files) written.TryAdd(f.Name, f.Written);
-            // every file read through once first, so a damaged zip stops before anything's changed
             try
             {
                 if (zip.Entries.Any(e => e.FullName != ManifestName && ReadEntry(e) is null)) throw new NotABackupException();
@@ -241,7 +230,6 @@ public static partial class GameSettingsBackup
             var pinned = new List<(PinnedDir Pins, IGrouping<TargetDir?, ZipArchiveEntry> Entries)>();
             try
             {
-                // every place is held and checked before anything's written, so a link stops the lot
                 foreach (var group in zip.Entries.Where(e => e.FullName != ManifestName).GroupBy(e => Target(sources, e.FullName)))
                 {
                     if (group.Key is { } dir) pinned.Add((Pin(dir.Root, dir.Sub), group));
@@ -274,8 +262,7 @@ public static partial class GameSettingsBackup
         return me.User;
     }
 
-    // elevated, so the folder would decide who can open or delete it. Permissions are set on the file's handle
-    // so it can't be swapped for a link first
+    // permissions are set on the file's handle so it can't be swapped for a link first
     private static FileStream CreateForUser(string path)
     {
         var fs = new FileInfo(path).Create(FileMode.CreateNew, FileSystemRights.Read | FileSystemRights.Write | FileSystemRights.ReadPermissions
@@ -404,8 +391,7 @@ public static partial class GameSettingsBackup
         }
     }
 
-    // where the folder really is, when nothing at or below its own name is a link. Above it's fine (an install moved
-    // to another drive with a junction, say)
+    // where the folder really is, when nothing at or below its own name is a link
     private static string? Place(string? root, string what, List<string> leftOut)
     {
         if (root is null || !Directory.Exists(root)) return null;
@@ -472,7 +458,6 @@ public static partial class GameSettingsBackup
         return new BackupInfo(path, m.Created.ToUniversalTime(), ids, m.Files.Count) { Manifest = m.Files };
     }
 
-    // every entry has to be one a backup makes, at a size a game file could be
     private static Manifest? ReadManifest(ZipArchive zip)
     {
         if (zip.Entries.Count > MaxEntries) return null;
@@ -521,8 +506,6 @@ public static partial class GameSettingsBackup
         public void Dispose() => pins.Dispose();
     }
 
-    // made from the nearest folder there, never through a link. With the parent missing too (0042 can be anything),
-    // the starting folder can't be behind one either
     private static PinnedDir Pin(string root, string sub)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
@@ -539,8 +522,7 @@ public static partial class GameSettingsBackup
     private static IOException Linked(string dir) =>
         Shown.Mark(new IOException($"Nothing was restored, because {dir} goes through a link to somewhere else."));
 
-    // a new name each time, never opened over one that's there, so a planted link can't catch it.
-    // Write time is restored too, or the next backup sees a change
+    // a new name each time, never opened over one that's there, so a planted link can't catch it
     private static void Put(FolderPins pins, string dir, string name, byte[] data, DateTime? written)
     {
         SafeWrite.Replace(pins, dir, Path.Combine(dir, name), fs =>

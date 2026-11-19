@@ -7,7 +7,6 @@ namespace Provenance.Common.Login;
 
 public sealed partial class PolSession
 {
-    // ending a waiting pol.exe takes its 3s grace and up to 1s more, the rest is the check or the start unwinding
     private static readonly TimeSpan AheadCloseWait = TimeSpan.FromSeconds(8);
 
     private readonly object _aheadGate = new();
@@ -15,12 +14,8 @@ public sealed partial class PolSession
     private Task _aheadGone = Task.CompletedTask;
     private bool _aheadClosed;
 
-    // a waiting pol.exe holds the viewer's files, so one nobody's logged in with by now goes
     internal TimeSpan AheadLimit { get; init; } = TimeSpan.FromMinutes(3);
 
-    // the first half of a login, run before the account's details are in. Only what that half uses decides whether a
-    // login is for it: the account, the platform, the hook profile and the addon lists. Lean, the home slot and the
-    // handle only go in the go file, so they can still differ
     private sealed class AheadLogin(string? profileId, ThirdPartyHook platform, SessionOptions options)
     {
         internal AheadProgress Progress { get; } = new();
@@ -35,11 +30,9 @@ public sealed partial class PolSession
             profileId == otherProfile && platform == otherPlatform && Request.Options.ThirdPartyHookProfile == other.ThirdPartyHookProfile
             && SameLists(Request.Options.WindowerLists, other.WindowerLists) && SameList(Request.Options.WindowerShared, other.WindowerShared);
 
-        // once the first half has ended, whichever way, and nobody's taking it
         internal void Clear(Task result)
         {
             if (result.Exception is { } ex) Log.Debug(ex, "The early start ended badly");
-            // nothing waiting on this is allowed to fail for it
             try
             {
                 Stage.Dispose();
@@ -49,7 +42,6 @@ public sealed partial class PolSession
             catch (Exception e) { Log.Warning(e, "Ending the early start failed"); }
         }
 
-        // taken for a login that can't use it
         internal void Abandon()
         {
             Expiry.Cancel();
@@ -73,8 +65,6 @@ public sealed partial class PolSession
         }
     }
 
-    // on the UI thread like ConnectAsync, the addon lists are read now. One already there for this account and these
-    // options stays, any other goes first
     public void StartAhead(string? profileId, SessionOptions? options)
     {
         if (Volatile.Read(ref _played) || Pid is not null) return;
@@ -101,7 +91,6 @@ public sealed partial class PolSession
 
     public static bool HeldByAnotherCopy(string profileId) => SessionRecords.HeldByAnotherCopy(profileId);
 
-    // not waiting for it to end, the next login or start does
     public void DropAhead()
     {
         AheadLogin? dropped;
@@ -155,10 +144,8 @@ public sealed partial class PolSession
         Dismiss(ahead);
     }
 
-    // under the gate. What a login or another start waits for before it begins
     private Task RetireLocked(AheadLogin ahead) => _aheadGone = Task.WhenAll(_aheadGone, ahead.Gone.Task);
 
-    // after RetireLocked and outside the gate. Gone is only set once the first half has ended and been cleared away
     private static void Dismiss(AheadLogin ahead)
     {
         Cancel(ahead);
@@ -175,7 +162,6 @@ public sealed partial class PolSession
         ahead.Cts.Cancel();
     }
 
-    // the one for this login, or null once anything else has gone. A login never starts on top of one that's still ending
     private AheadLogin? TakeAhead(string? profileId, SessionOptions options)
     {
         AheadLogin? taken = null, dropped = null;
@@ -198,7 +184,6 @@ public sealed partial class PolSession
         return taken;
     }
 
-    // the first half's lines come out in order and the login's cancel reaches it, then the second half carries on
     private int FinishAhead(AheadLogin ahead, LoginRequest request, CancellationToken ct)
     {
         using var stage = ahead.Stage;

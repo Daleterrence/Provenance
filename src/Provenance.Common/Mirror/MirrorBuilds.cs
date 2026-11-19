@@ -3,7 +3,6 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Mirror;
 
-// PolExe and PolExeLaa are pol.exe without and with Large Address Aware on, the same pair the built-in list has
 public sealed record MirrorBuild(string Region, string Version, string PolExe, string PolExeLaa, string Polcore)
 {
     public PolRegion? ToPolRegion() => Enum.GetNames<PolRegion>().Contains(Region) ? Enum.Parse<PolRegion>(Region) : null;
@@ -24,7 +23,6 @@ public sealed record MirrorBuilds(int Format, DateTimeOffset Published, IReadOnl
         return v;
     }
 
-    // null for anything that isn't signed by a trusted key or doesn't read
     public static MirrorBuilds? FromSigned(ReadOnlySpan<byte> blob, IReadOnlyDictionary<string, ECDsa> trusted)
     {
         if (!SignedBlob.TryOpen(blob, trusted, out var payload)) return null;

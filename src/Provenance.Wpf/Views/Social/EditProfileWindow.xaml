@@ -26,12 +26,10 @@
         <Style x:Key="ProfileHelp" TargetType="TextBlock" BasedOn="{StaticResource Help}">
             <Setter Property="Margin" Value="2,6,0,0" />
         </Style>
-        <!-- labels above, never a floating hint (it draws an ugly chip behind itself on this background) -->
         <Style x:Key="ProfileCombo" TargetType="ComboBox" BasedOn="{StaticResource FieldCombo}">
             <Setter Property="MaxDropDownHeight" Value="360" />
         </Style>
-        <!-- the privacy choices as pills, with no ScrollViewer in the list. Its clip sits right on the first row's
-             top line and eats it on a scaled screen -->
+        <!-- no ScrollViewer in the list, its clip sits right on the first row's top line and eats it on a scaled screen -->
         <Style x:Key="Pills" TargetType="ListBox">
             <Setter Property="SelectedValuePath" Value="Code" />
             <Setter Property="Background" Value="Transparent" />
@@ -91,7 +89,6 @@
     <Grid Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,*,Auto">
         <controls:TitleBar />
 
-        <!-- the cards stay put while the form scrolls. A wheel over them scrolls them sideways -->
         <Border Grid.Row="1" Padding="20,16,20,4">
             <ScrollViewer x:Name="CardStrip" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
                           PreviewMouseWheel="OnCardsWheel" Focusable="False">
@@ -153,13 +150,11 @@
             </StackPanel>
             <StackPanel IsEnabled="{Binding CanEditFields}" Visibility="{Binding IsHandleCard, Converter={StaticResource BoolToVis}}">
                 <Grid ColumnDefinitions="Auto,*">
-                    <!-- a button so the keyboard can reach it, drawn as just the picture -->
                     <Button VerticalAlignment="Top" Cursor="Hand" ToolTip="Change your profile picture" AutomationProperties.Name="Change your profile picture"
                             Command="{Binding ChangeProfilePictureCommand}" Foreground="{DynamicResource Text.1}">
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Background" Value="Transparent" />
-                                <!-- a ring for keyboard focus only, a click shows none -->
                                 <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingRound}" />
                                 <Setter Property="Template">
                                     <Setter.Value>
@@ -289,7 +284,6 @@
             </Grid>
         </ScrollViewer>
 
-        <!-- over the form while POL sends the profile. The form's disabled underneath too, so Tab can't get in either -->
         <Grid x:Name="LoadingOverlay" Grid.Row="2" Visibility="Collapsed" Opacity="0" IsHitTestVisible="{Binding LoadingProfile}">
             <Grid.Style>
                 <Style TargetType="Grid">
@@ -340,7 +334,6 @@
 
         <Border Grid.Row="3" Style="{StaticResource FooterBar}">
             <Grid ColumnDefinitions="*,Auto">
-                <!-- the overlay has its own spinner while the profile loads -->
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
                             Visibility="{Binding LoadingProfile, Converter={StaticResource InvertBoolToVis}}">
                     <ProgressBar Width="14" Height="14" Margin="0,0,8,0"

@@ -7,16 +7,12 @@ using Velopack.Sources;
 
 namespace Provenance.ReleaseCheck;
 
-// The app's own check on a release, before it goes up and on what the update server serves once it has. A release
-// this passes is one every copy that trusts these keys takes
 internal static class ReleaseGate
 {
     public const string UpdateServer = "https://updates.provenancexi.app/";
 
-    // same rule as tools\pack-release.ps1 and the app, a suffix means beta
     public static string ChannelOf(string version) => version.Contains('-') ? AppRelease.Beta : AppRelease.Stable;
 
-    // a release's files in one folder, as the GitHub release has them
     public static bool CheckFolder(string folder, string version, IReadOnlyDictionary<string, ECDsa> trusted, TextWriter log)
     {
         var channel = ChannelOf(version);
@@ -36,7 +32,6 @@ internal static class ReleaseGate
         return CheckAsset(entries[0], channel, package, File.ReadAllBytes(statement), trusted, log);
     }
 
-    // each channel's newest full package and its statement, fetched the way a copy fetches them, CDN and all
     public static async Task<bool> CheckLiveAsync(string server, IReadOnlyDictionary<string, ECDsa> trusted, IFileDownloader http, TextWriter log)
     {
         var root = server.EndsWith('/') ? server : server + "/";
@@ -86,7 +81,6 @@ internal static class ReleaseGate
         }
     }
 
-    // the feed's own size and hash the way Velopack checks them, then the statement the way the app does
     private static bool CheckAsset(VelopackAsset asset, string channel, string package, byte[] statement,
                                    IReadOnlyDictionary<string, ECDsa> trusted, TextWriter log)
     {

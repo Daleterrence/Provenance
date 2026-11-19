@@ -3,7 +3,6 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Credentials;
 
-// current-user DPAPI, only this Windows account on this PC can open it
 public static class Dpapi
 {
     private const int CRYPTPROTECT_UI_FORBIDDEN = 0x1;
@@ -33,7 +32,6 @@ public static class Dpapi
         {
             if (outBlob.pbData != IntPtr.Zero)
             {
-                // an unprotect's output is the plain text, so it's wiped before the heap gets it back
                 for (int i = 0; i < outBlob.cbData; i++) Marshal.WriteByte(outBlob.pbData, i, 0);
                 Kernel32.LocalFree(outBlob.pbData);
             }

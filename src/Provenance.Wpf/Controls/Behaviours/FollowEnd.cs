@@ -6,11 +6,8 @@ using System.Windows.Threading;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// follows new lines only if the reader was already at the end, so scrolling back isn't undone.
-// Pin picks the changes that always come into view (a line you just sent)
 public static class FollowEnd
 {
-    // how close to the end still counts as being there
     private const double Slack = 24;
 
     public static readonly DependencyProperty SourceProperty = DependencyProperty.RegisterAttached(
@@ -34,7 +31,6 @@ public static class FollowEnd
         if (d is ScrollViewer scroll) Followers.GetValue(scroll, s => new Follower(s)).Follow(e.NewValue as INotifyCollectionChanged);
     }
 
-    // the view model outlives the window, so a closed one lets go or it keeps scrolling in the background
     private sealed class Follower
     {
         private readonly ScrollViewer _scroll;
@@ -66,7 +62,6 @@ public static class FollowEnd
         private void OnChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             if (e.Action is not (NotifyCollectionChangedAction.Add or NotifyCollectionChangedAction.Reset)) return;
-            // the pin decides first, it keeps track of what's on show
             bool pinned = GetPin(_scroll)?.Invoke(e) == true;
             if (pinned || AtEnd(_scroll))
                 _scroll.Dispatcher.InvokeAsync(_scroll.ScrollToEnd, DispatcherPriority.Background);

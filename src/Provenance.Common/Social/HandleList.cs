@@ -11,14 +11,11 @@ public sealed record HandleCharacter(PolContentId Record, string Label)
 
 public sealed record HandleGroup(PolHandle Handle, IReadOnlyList<HandleCharacter> Characters)
 {
-    // every Content ID on it counts, not only FFXI's
     public bool Full => Handle.ContentIds.Count >= HandleList.MaxContentIds;
 }
 
-// one of the viewer's own lines: where it is in its string table, and the US words for when that can't be read
 public readonly record struct ViewerLine(int Id, string Us, bool OwnEnglish = false);
 
-// the Handles page's lists and wording
 public static class HandleList
 {
     public const int MaxContentIds = 8;
@@ -39,11 +36,9 @@ public static class HandleList
     public const string DeleteQuestion = "Are you sure you want to delete this handle? It will unlink your FINAL FANTASY XI characters.";
     public const string OrderChangedText = "Character order changed. Save it to keep it.";
 
-    // some of the viewer's lines end in a space
     public static string Say(ViewerLine line, Func<int, string, string>? text = null)
     {
         var said = text?.Invoke(line.Id, line.Us) ?? line.Us;
-        // the viewer's English says register on a create, a Japanese table's line is kept as it is
         if (line.OwnEnglish && said.All(char.IsAscii)) said = line.Us;
         return said.Trim();
     }
@@ -61,7 +56,6 @@ public static class HandleList
     public const string PageBusyText = "Another handle change is still going. Try again in a moment.";
     public const string SwitchMenuTitle = "Active handle";
 
-    // the viewer's own fallback for a record with no name
     public static string Label(PolContentId c) => string.IsNullOrWhiteSpace(c.Name) ? "Content ID" : c.Name.Trim();
 
     public static (IReadOnlyList<HandleGroup> Handles, IReadOnlyList<HandleCharacter> Unlinked) Build(PolSocialSnapshot snap,
@@ -82,7 +76,6 @@ public static class HandleList
         return (groups, unlinked);
     }
 
-    // the viewer's and polcore's rule, plain ASCII and not just spaces
     public static string? NameProblem(string name) =>
         name.Any(c => c < 0x20 || c > 0x7e) ? "Use English letters, numbers and symbols only."
         : string.IsNullOrWhiteSpace(name) ? "Type a handle name."
@@ -107,8 +100,7 @@ public static class HandleList
         _ => $"{character} is now linked to the handle {handle}.",
     };
 
-    // one the server never answered may have gone through all the same, so neither says "not saved". -261 is only
-    // a refused name on a create
+    // one the server never answered may have gone through, so neither says "not saved"
     private static string? ListEditFailed(HandleChange op, string state, Func<int, string, string>? text) => (op, state) switch
     {
         (_, "failed:unconfirmed") => HookFailures.Handles.Unconfirmed,

@@ -20,8 +20,7 @@ public sealed record KeePassXcEntry(string Name, string Login, string Uuid, stri
     }
 }
 
-// KeePassXC's browser protocol (keepassxc-browser's keepassxc-protocol.md) over keepassxc-proxy's stdin/stdout. Each
-// frame is a 4-byte LE length plus ASCII JSON, and after change-public-keys the inner JSON is a NaCl box
+// frames are a 4-byte LE length plus ASCII JSON
 public sealed class KeePassXcClient : IDisposable
 {
     private readonly Stream _toHost, _fromHost;
@@ -38,7 +37,6 @@ public sealed class KeePassXcClient : IDisposable
 
     public static byte[] NewIdKey() => Curve25519XSalsa20Poly1305.KeyPair().Item2;
 
-    // in the clear, that's how the protocol does it
     public async Task ExchangeKeysAsync(CancellationToken ct)
     {
         var nonce = RandomNumberGenerator.GetBytes(24);
@@ -51,7 +49,6 @@ public sealed class KeePassXcClient : IDisposable
         _box = new Curve25519XSalsa20Poly1305(_secretKey, hostKey);
     }
 
-    // KeePassXC pops a dialog where the user names the connection, and that name comes back as the id to keep
     public async Task<string> AssociateAsync(byte[] idKey, CancellationToken ct)
     {
         var r = await RequestAsync("associate", new Dictionary<string, string>
@@ -134,7 +131,6 @@ public sealed class KeePassXcClient : IDisposable
         }
         finally
         {
-            // the request and the opened reply hold codes and entry data, so don't leave them lying about in memory
             if (opened != null) CryptographicOperations.ZeroMemory(opened);
             CryptographicOperations.ZeroMemory(plain);
             CryptographicOperations.ZeroMemory(sealedBytes);
@@ -173,7 +169,7 @@ public sealed class KeePassXcClient : IDisposable
         // the default encoder escapes all non-ASCII, which matters because the proxy reads Latin-1
         var body = Encoding.ASCII.GetBytes(JsonSerializer.Serialize(message));
         var frame = new byte[4 + body.Length];
-        BitConverter.TryWriteBytes(frame.AsSpan(0, 4), (uint)body.Length);   // little-endian on Windows
+        BitConverter.TryWriteBytes(frame.AsSpan(0, 4), (uint)body.Length);
         body.CopyTo(frame, 4);
         await _toHost.WriteAsync(frame, ct);
         await _toHost.FlushAsync(ct);

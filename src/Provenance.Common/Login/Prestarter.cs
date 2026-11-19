@@ -42,7 +42,6 @@ public sealed class Prestarter
     private Task<Prestarted?>? _prestart;
     private int _prestartHolds;
 
-    // the gate is the session's, so a pre-start and a session starting can't miss each other
     internal Prestarter(ISettingsService settings, Watcher watcher, OurPol pol, Func<bool> sessionActive, object gate, Seams? seams = null)
     {
         _settings = settings;
@@ -62,16 +61,13 @@ public sealed class Prestarter
 
     internal bool Holding { get { lock (_gate) return _prestartHolds > 0; } }
 
-    // pol.exe and polcore take about 2s to start, so one starts with the app and waits for its go file. Not with
-    // Windower/Ashita, it'd open them.
+    // started with the app to hide the 2s startup, never with Windower/Ashita as it'd open them
     public void Prestart(bool loginComing = false)
     {
         _warmDns();
         StartEarly(loginComing);
     }
 
-    // just the pol.exe, for before the window's built. Prestart's name lookup waits for where it's always been made
-    // loginComing is for a start made because an automatic login's about to happen, the hook gets going on it sooner
     public void StartEarly(bool loginComing = false)
     {
         lock (_gate)
@@ -86,7 +82,6 @@ public sealed class Prestarter
         && _settings.Current.ThirdPartyHookPlatform is not (ThirdPartyHook.Ashita or ThirdPartyHook.Windower)
         && PolPaths.Supported(_settings.DetectedRegion);
 
-    // only the resolver sees this, nothing connects to POL
     private static void ResolveDns()
     {
         long now = Environment.TickCount64;
@@ -104,11 +99,8 @@ public sealed class Prestarter
         try
         {
             var (viewerDir, polExe, launcherExe) = _watcher.FindFiles();
-            // no network here, the login does the version check. With no game there's no login card to use it, and
-            // the install would take it for POL running
             if (polExe is null || !_gameIsInstalled() || SignedBuilds.Check(viewerDir!) != ViewerBuild.State.Supported) return null;
-            // a queued update is the login's job, pol.exe would act on it itself (patch.ini goes to startpol.exe
-            // /REPLACEPOLEXE, which starts a pol.exe that isn't mine)
+            // patch.ini goes to startpol.exe /REPLACEPOLEXE, which starts a pol.exe that isn't mine
             if (ViewerQueue.QueuedWorkPending(viewerDir!))
             {
                 Log.Information("Not pre-starting pol.exe: the PlayOnline Viewer has update work queued, the next login finishes it first");
@@ -121,10 +113,8 @@ public sealed class Prestarter
             using var launcher = _watcher.StartProcess(psi);
             if (launcher is null || Watcher.RunLauncher(launcher, Watcher.Limit) is not { } run) return null;
             if (run.ExitCode != 0 || HookLog.StartedPid(run.Out) is not { } pid) return null;
-            // an older pol.exe with this pid left these, and its stop file would end this one before it logs in
             foreach (var name in new[] { HookContract.Files.Stop, HookContract.Files.Ended, HookContract.Files.Go }) HookFiles.Delete(pid, name);
             var stamp = ProcessStamp.Of(pid);
-            // so another copy that's about to change the viewer's files can end it while it's only waiting
             if (stamp is { } at)
                 try { File.WriteAllText(HookFiles.PathFor(pid, HookContract.Files.Prestart), at.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the pre-started pol.exe for other copies"); }
@@ -141,8 +131,6 @@ public sealed class Prestarter
     private static bool GameInstalled(PolRegion region) =>
         PolPaths.TryGetInstallFolder(region, GameProduct.Game) is { } ffxi && File.Exists(Path.Combine(ffxi, GameProduct.Game.KeyFile));
 
-    // nothing's sent till the go file's written, so an earlier cancel leaves it waiting, hidden, for the next login.
-    // Only a live one goes back (a dead one would block a Prestart)
     internal int? TakePrestarted(ProcessStartInfo psi, CancellationToken ct)
     {
         if (TakePrestart(ct) is not { } pre) return null;
@@ -150,7 +138,6 @@ public sealed class Prestarter
         try
         {
             var log = HookFiles.PathFor(pid, HookContract.Files.Log);
-            // a slow PC gets the whole time a start is given, from when this one began
             var until = (pre.Began ?? DateTime.UtcNow) + (_readyLimit ?? Watcher.Limit);
             while (true)
             {
@@ -161,7 +148,6 @@ public sealed class Prestarter
                 Thread.Sleep(15);
             }
             if (ct.IsCancellationRequested) { GiveBack(Task.FromResult<Prestarted?>(pre)); return null; }
-            // under the lock another copy ends waiting pre-starts with, so it's either been stopped or it's mine to use
             using (var handOver = AdminLock.TryAcquire(PrestartLock, TimeSpan.FromSeconds(5)))
             {
                 if (handOver is null || File.Exists(HookFiles.PathFor(pid, HookContract.Files.Stop))) { EndPrestarted(pre); return null; }
@@ -192,7 +178,6 @@ public sealed class Prestarter
         return null;
     }
 
-    // kept for the next login, unless another one, a session or a hold has turned up meanwhile
     private void GiveBack(Task<Prestarted?> task)
     {
         lock (_gate)
@@ -223,8 +208,6 @@ public sealed class Prestarter
         catch (AggregateException) { }
     }
 
-    // a repair, an install or a Large Address Aware write changes viewer files, so nothing pre-starts pol.exe until
-    // every hold's let go (the Prestart after a log out included). They nest
     public IDisposable HoldPrestarts()
     {
         lock (_gate) _prestartHolds++;
@@ -254,8 +237,6 @@ public sealed class Prestarter
         EndWaitingPrestarts();
     }
 
-    // other copies' waiting pre-starts hold the viewer's files too (their next login just starts another).
-    // One being handed to a login has already lost its record by then
     internal void EndWaitingPrestarts()
     {
         var ending = new List<ProcessStamp>();
@@ -304,7 +285,6 @@ public sealed class Prestarter
         if (LetGoPrestarts()) Prestart();
     }
 
-    // true when that was the last hold
     internal bool LetGoPrestarts()
     {
         lock (_gate)

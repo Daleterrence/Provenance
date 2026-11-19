@@ -13,11 +13,8 @@ public class IntValue : FfxiValue
     public required Action<FfxiSettings, int> Set { get; init; }
     public Func<int, int> Range { get; init; } = v => v;
     public Func<int, int>? AshitaRange { get; init; }
-    // set on the first of a pair, the two always go in together
     public string? Partner { get; init; }
-    // a stored number outside Range reads as Range's answer
     public bool ReadsInRange { get; init; }
-    // and stays as it is on a save that doesn't change the value
     public bool KeepsStored { get; init; }
 
     public int AshitaClamp(int v) => (AshitaRange ?? Range)(v);
@@ -25,7 +22,6 @@ public class IntValue : FfxiValue
 
 public sealed class BrightnessValue : IntValue;
 
-// no setting behind it, the tool's default is all it gets
 public sealed class FixedValue : FfxiValue
 {
     public required int Value { get; init; }
@@ -42,8 +38,7 @@ public sealed class PadValue : FfxiValue;
 // not mine to edit, Ashita gives the game a blank for it
 public sealed class OpaqueValue : FfxiValue;
 
-// pairs: 0001/0002, 0003/0004, 0037/0038. 0028 is float bits, 0031 is 0.006f. Legacy-tool only: 0030 (3D LCD), 0041.
-// Registry only, Ashita doesn't fake them: 0044, 0045
+// 0028 is float bits, 0031 is 0.006f, 0030 (3D LCD) and 0041 are legacy-tool only
 public static class FfxiValues
 {
     private static Func<int, int> Clamp(int min, int max) => v => Math.Clamp(v, min, max);
@@ -108,7 +103,6 @@ public static class FfxiValues
 
     public static FfxiValue Find(string name) => All.First(v => v.Name == name);
 
-    // the second of a pair is the one another value names as its partner
     public static bool IsSecond(IntValue v) => All.OfType<IntValue>().Any(i => i.Partner == v.Name);
 
     public static IntValue? Partner(IntValue v) => v.Partner is { } p ? (IntValue)Find(p) : null;

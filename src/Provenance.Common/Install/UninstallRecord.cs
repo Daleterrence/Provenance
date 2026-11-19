@@ -7,12 +7,9 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Install;
 
-// The record's letters are read by the uninstaller, the format is documented at the top of native\uninstall.c. A letter
-// changes on both sides or neither.
+// the format is at the top of native\uninstall.c, a letter changes on both sides or neither
 internal static class UninstallRecord
 {
-    // the entry, and both files it runs as this build's pair in an admin-only folder, so a repair replaces an older
-    // pair (an entry whose uninstaller's gone can't uninstall anything)
     public static bool Intact(MsiDatabase db, MsiPackage.UninstallSetup setup, MsiPackage.Sandbox? sandbox)
     {
         var code = db.Query("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'").FirstOrDefault()?[0];
@@ -33,8 +30,7 @@ internal static class UninstallRecord
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
     }
 
-    // The Add/Remove Programs entry as Windows Installer writes it, except uninstall and modify run my uninstaller
-    // (MsiExec /X would fail, the product isn't registered with it) and NoRepair is set
+    // uninstall and modify run my uninstaller (MsiExec /X would fail, the product isn't registered with it)
     public static void Write(MsiDatabase db, MsiPackage.UninstallSetup setup, Dictionary<string, string> props,
                              Dictionary<string, string> dirs,
                              Dictionary<string, (string Dir, string Condition, string KeyPath, int Attrs)> comps,
@@ -47,7 +43,6 @@ internal static class UninstallRecord
         using var held = UninstallFolder.Hold(setup.Folder);
         string exe = Path.Combine(setup.Folder, Path.GetFileName(setup.UninstallerExe));
         string list = Path.Combine(setup.Folder, code + ".txt");
-        // made fresh, so they take the folder's permissions rather than keeping whatever they had
         File.Delete(exe);
         File.Delete(list);
         File.Copy(setup.UninstallerExe, exe);
@@ -55,7 +50,6 @@ internal static class UninstallRecord
 
         var root = Path.TrimEndingDirectorySeparator(props["INSTALLDIR"]);
         var lines = new List<string> { "N " + p.GetValueOrDefault("ProductName", ""), "A " + arpKey, "I " + root };
-        // the product's folder, as its InstallFolder value names it. It goes whole, so nothing in it gets a line of its own
         string? tree = null;
         string folderKey = setup.RegionKey + @"\InstallFolder";
         if (setup.RegionKey != null && setup.FolderValue != null)

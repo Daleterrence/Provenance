@@ -6,8 +6,6 @@ namespace Provenance.Common.Hook;
 
 public sealed record WatcherRun(int ExitCode, string Out, string Err);
 
-// Watcher starts or attaches to pol.exe and puts pol_hook.dll in it.
-// Each launch path builds, waits and handles Windows refusing it the same way
 public static class WatcherProcess
 {
     public static string HookDllPath => Path.Combine(HookFiles.NativeDir, HookFiles.HookDll);
@@ -18,7 +16,7 @@ public static class WatcherProcess
         RedirectStandardOutput = true, RedirectStandardError = true,
     };
 
-    // both pipes, a full stderr pipe would block the watcher forever. Null when it's still going at the limit
+    // both pipes, a full stderr pipe would block the watcher forever
     public static WatcherRun? Wait(Process watcher, TimeSpan limit)
     {
         var outTask = watcher.StandardOutput.ReadToEndAsync();
@@ -27,9 +25,7 @@ public static class WatcherProcess
         return new(watcher.ExitCode, outTask.GetAwaiter().GetResult(), errTask.GetAwaiter().GetResult());
     }
 
-    // Windows' Smart App Control stopped it before it ran
     public static bool RefusedToStart(Win32Exception e) => e.NativeErrorCode == CodeIntegrity.PolicyViolation;
 
-    // or stopped it, or the hook, after it started
     public static bool Refused(DateTime sinceUtc) => CodeIntegrity.Refused(sinceUtc, HookFiles.WatcherExe, HookFiles.HookDll);
 }

@@ -2,7 +2,6 @@ using static System.FormattableString;
 
 namespace Provenance.Common.Progress;
 
-// bytes per second over the last window. A sample below the last one (a failed attempt took bytes back) starts over.
 public sealed class TransferRate(TimeSpan window)
 {
     private readonly Queue<(long Ms, long Done)> _samples = new();
@@ -28,7 +27,6 @@ public sealed class TransferRate(TimeSpan window)
         }
     }
 
-    // invariant, a German PC would put "6,60 GB" in an English line
     public static string BarText(long done, long total, double? bytesPerSecond)
     {
         if (total <= 0) return "";

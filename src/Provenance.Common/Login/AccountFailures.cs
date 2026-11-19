@@ -6,12 +6,11 @@ public sealed record AccountFailure(AccountFailureKind Kind, string Text);
 
 public static class AccountFailures
 {
-    // POL answers -5311/-5312 for a wrong SE password and a wrong one-time password alike, so with OTP on it can only
-    // count as an Account failure
+    // POL answers -5311/-5312 for a wrong SE password and a wrong one-time password alike
     public static AccountFailureKind Classify(int code, int? refusalReason, bool usesOtp)
     {
         if (code == LoginCodes.AccountBlocked) return AccountFailureKind.AccountBlocked;
-        if (code == LoginCodes.DetailsUnreadable) return AccountFailureKind.Credential;   // off until the account's edited
+        if (code == LoginCodes.DetailsUnreadable) return AccountFailureKind.Credential;
         if (code == LoginCodes.LauncherFailed) return AccountFailureKind.Install;
         if (code != LoginCodes.AuthFailed) return AccountFailureKind.Account;
         return refusalReason switch

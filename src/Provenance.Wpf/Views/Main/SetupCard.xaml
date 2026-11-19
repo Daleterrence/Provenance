@@ -11,7 +11,6 @@
             <TextBlock TextAlignment="Center" TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource Text.2}"
                        Text="Start the game through Windower 4 or Ashita v4, so everything you've set up in them loads as usual. Provenance still logs you in." />
 
-            <!-- the whole path wraps, it's what the player's agreeing to -->
             <TextBlock Text="Windower 4" FontSize="14" FontWeight="SemiBold" Margin="0,20,0,2" />
             <TextBlock Text="{Binding Setup.WindowerText}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}" />
             <Grid Margin="0,8,0,0" ColumnDefinitions="*,Auto">

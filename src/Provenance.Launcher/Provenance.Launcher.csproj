@@ -1,7 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Velopack's main exe. The shortcuts and the install hooks start this without admin, and it starts Provenance.exe,
-       which asks for admin itself. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <RootNamespace>Provenance.Launcher</RootNamespace>

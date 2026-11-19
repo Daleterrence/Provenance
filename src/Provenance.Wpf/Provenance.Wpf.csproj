@@ -3,7 +3,6 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
-    <!-- the tray icon only (NotifyIcon, fully qualified) -->
     <UseWindowsForms>true</UseWindowsForms>
     <!-- WFO0003 wants the DPI setting out of app.manifest, but WPF wants it in there -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
@@ -12,21 +11,17 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>$(ProvenanceAssetsDir)\app\provenance.ico</ApplicationIcon>
     <Product>Provenance</Product>
-    <!-- Program.Main, so Velopack runs before WPF starts -->
     <StartupObject>Provenance.Wpf.Program</StartupObject>
-    <!-- native\build-native.ps1 builds these, tools/pack-release.ps1 points this at its own fresh build -->
     <NativeToolsDir Condition="'$(NativeToolsDir)' == ''">..\..\native\bin</NativeToolsDir>
   </PropertyGroup>
 
   <Import Project="ReadyToRun.props" />
 
-  <!-- so WinForms names never clash with WPF's (Application, MessageBox...) -->
   <ItemGroup>
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
   </ItemGroup>
 
-  <!-- the images keep their /Assets/ pack paths, the installer's zone pictures go next to the exe -->
   <ItemGroup>
     <Resource Include="$(ProvenanceAssetsDir)\app\provenance.ico" Link="Assets\provenance.ico" />
     <Resource Include="$(ProvenanceAssetsDir)\app\provenance-256.png" Link="Assets\provenance-256.png" />
@@ -57,7 +52,6 @@
     <InternalsVisibleTo Include="provenance-screens" />
   </ItemGroup>
 
-  <!-- Provenance Watcher.exe injects pol_hook.dll, the app hands it the copy in native\ -->
   <ItemGroup>
     <NativeFile Include="$(NativeToolsDir)\pol_hook.dll" />
     <NativeFile Include="$(NativeToolsDir)\Provenance Watcher.exe" />

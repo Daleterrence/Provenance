@@ -6,7 +6,6 @@ using Serilog;
 
 namespace Provenance.Common.Otp;
 
-// Provenance only ever runs the copy it put in its own folder, and checks it before every use
 public static class ToolFinder
 {
     private static readonly Regex VersionText = new(@"^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$");
@@ -16,8 +15,6 @@ public static class ToolFinder
 
     internal static void SetDirForTest(string? dir) => _dirForTest = dir;
 
-    // C:\ProgramData\Provenance\tools, only Administrators and SYSTEM can change it. Users may read, the 1Password app
-    // checks op.exe's signature from the user's side
     internal static string Dir => _dirForTest ?? ProtectedFolders.RootSubDir("tools", usersMayRead: true);
 
     public static ToolFind Find(string tool)
@@ -38,7 +35,6 @@ public static class ToolFinder
         return Verdict.TooOld;
     }
 
-    // only Provenance's own copy, the ProtectedFolders lock on its folder is what keeps it admin-only
     internal static ToolFind Find(string tool, string? own, Func<SafeFileHandle, string, string, Verdict> check)
     {
         if (own is null || ToolSignature.Open(own) is not { } ownFile) return new ToolFind(FindState.NotInstalled);
@@ -51,7 +47,6 @@ public static class ToolFinder
         return new ToolFind(verdict switch { Verdict.CantCheck => FindState.CantCheck, Verdict.TooOld => FindState.TooOld, _ => FindState.NotInstalled });
     }
 
-    // checked again with the lock held, another window may have just put a good copy in
     private static void DeleteOwn(string own, string tool, Func<SafeFileHandle, string, string, Verdict> check)
     {
         try
@@ -69,7 +64,6 @@ public static class ToolFinder
         }
     }
 
-    // what the checked file says it is, op and bw have no version resource of their own. Kept per file for the run
     private static readonly Dictionary<string, (long Size, DateTime Written, Version? Version)> Versions = new(StringComparer.OrdinalIgnoreCase);
 
     internal static Version? VersionOf(string path)
@@ -84,7 +78,6 @@ public static class ToolFinder
 
     internal static Version? ParseVersion(string? line) => line is not null && VersionText.IsMatch(line) ? Version.Parse(line) : null;
 
-    // no async in here, so it can't wait on a thread it's blocking. A version's one line, 4 KB is plenty
     private static string? AskVersion(string path)
     {
         try

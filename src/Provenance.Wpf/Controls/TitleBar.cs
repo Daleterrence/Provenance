@@ -6,8 +6,6 @@ using System.Windows.Media.Imaging;
 
 namespace Provenance.Wpf.Controls;
 
-// Content is whatever sits between the title and the window's own buttons. Everything on the bar gets the light
-// colours, the bar's dark in both themes
 public class TitleBar : ContentControl
 {
     private static readonly ResourceDictionary Light = new() { Source = new Uri("/Provenance;component/Themes/TitleBar.xaml", UriKind.Relative) };
@@ -58,11 +56,9 @@ public class TitleBar : ContentControl
     {
         var shown = UpperCase ? Title?.ToUpper(System.Globalization.CultureInfo.CurrentCulture) : Title;
         SetValue(ShownTitleKey, shown);
-        // the taskbar, Alt+Tab and screen readers get exactly what the bar shows
         if (_window is { } window && !string.IsNullOrEmpty(shown) && window.Title != shown) window.Title = shown;
     }
 
-    // keeps a long title off the window's own buttons
     private void FitTitle()
     {
         if (GetTemplateChild("TitleText") is not TextBlock text) return;

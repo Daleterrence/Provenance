@@ -2,22 +2,15 @@ using Provenance.Common.Hook;
 
 namespace Provenance.Common.Social;
 
-// one lookup at a time, 3s apart like the hook, for a character someone's just turned up on that has no name yet or a
-// zone to refresh. A failed one waits for that friend's next presence change
 public sealed class CharacterLookups(CharacterNames names)
 {
     private Dictionary<string, string> _seen = new(StringComparer.Ordinal);
     private readonly List<(PolFriendGame Game, string Friend)> _queue = new();
-    // characters asked about this login. One hidden last time may be shown by now, so it gets one more ask
     private readonly HashSet<string> _asked = new(StringComparer.Ordinal);
-    // friends whose request never got written, with the character it was for. They get their ask back at their next presence change
     private readonly Dictionary<string, string> _unsent = new(StringComparer.Ordinal);
-    // zones are only ever in memory, they change too often to keep
     private readonly Dictionary<string, string> _zones = new(StringComparer.Ordinal);
-    // characters waiting in the queue for their zone, so a name turning up in the cache meanwhile doesn't drop them
     private readonly HashSet<string> _zoneDue = new(StringComparer.Ordinal);
     private string _askingFor = "";
-    // ones given up on, in case the hook took them late and still answers
     private readonly List<(string Token, PolFriendGame Game)> _late = new();
     private readonly HookJobWatch _watch = new();
     private DateTime _last = DateTime.MinValue;
@@ -28,10 +21,8 @@ public sealed class CharacterLookups(CharacterNames names)
 
     public string? Zone(string key) => _zones.GetValueOrDefault(key);
 
-    // characters that aren't looked up at all, for who's something nothing is shown about
     public Func<PolFriendGame, bool> Skip { get; set; } = _ => false;
 
-    // an empty list says nothing about who's on what (the hook hasn't loaded it yet), so it changes nothing
     public void Seen(IReadOnlyCollection<PolFriend> friends)
     {
         if (friends.Count == 0) return;
@@ -58,12 +49,10 @@ public sealed class CharacterLookups(CharacterNames names)
 
     private bool AskAgain(string key) => names.Get(key) is { Why: "private" } && !_asked.Contains(key);
 
-    // whether a friend on a character whose name we know gets a read for the zone. Just once, when they turn up
     private static bool WantsZoneRead(string key, bool turnedUp) => turnedUp;
 
     private static string? ZoneName(int id) => id != 0 ? FfxiNames.Area(id) : null;
 
-    // the one to ask the hook for now, if any. Anyone who's left that character meanwhile drops out of the queue
     public PolFriendGame? Next(DateTime now)
     {
         if (Asking is { } stuck && _watch.Overdue(now))
@@ -92,8 +81,6 @@ public sealed class CharacterLookups(CharacterNames names)
         _ => !_zoneDue.Contains(key),
     };
 
-    // true once the hook's settled one, kept or not. A late answer to one given up on still counts, as long as it's for
-    // the same character
     public bool Answer(string token, string state, PolCharacterLookup? r)
     {
         if (token.Length == 0 || state is "" or "loading") return false;
@@ -111,7 +98,6 @@ public sealed class CharacterLookups(CharacterNames names)
         return true;
     }
 
-    // a private or missing record has no zone to keep, and a read that failed some other way leaves the old one
     private void RememberZone(string key, string state, PolCharacterLookup r)
     {
         if (state == "done" && r is { ZoneState: ProfileFieldState.Shown } && ZoneName(r.ZoneId) is { } zone) _zones[key] = zone;
@@ -124,13 +110,11 @@ public sealed class CharacterLookups(CharacterNames names)
         Asking = null;
     }
 
-    // the give-up clock only starts once the hook's taken it, it waits while the hook's busy with another read
     public void Waiting(string hookToken, bool hookBusy, DateTime now)
     {
         if (Asking is not null) _watch.WaitingTurn(hookToken, hookBusy, now);
     }
 
-    // a new session. Who's on what carries over, so a failed one still waits for a real change
     public void Reset()
     {
         _queue.Clear();

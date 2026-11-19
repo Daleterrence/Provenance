@@ -8,8 +8,6 @@ namespace Provenance.Common.Patcher;
 
 public static class PolUpdates
 {
-    // freeFiles ends my waiting pol.exe before any file changes. afterQueued runs once the lock's held and queued work
-    // has been applied, before the version check, and is told whether there was none
     public static PatchResult UpdateViewer(string viewerDir, PolRegion region, IProgress<PatchProgress>? progress, Action freeFiles,
                                            CancellationToken ct, Action<bool>? afterQueued = null) =>
         UpdateViewer(viewerDir, progress, freeFiles, ct, afterQueued,
@@ -32,18 +30,15 @@ public static class PolUpdates
                 BeforeChange();
                 ViewerQueue.ApplyQueued(viewerDir);
             }
-            // a stale queue (.tmp2) mustn't overwrite what the mirror writes below
             bool noneQueued = !ViewerQueue.QueuedWorkPending(viewerDir);
             ApplyQueued();
             afterQueued?.Invoke(noneQueued);
             var r = check(BeforeChange);
-            // up to date or not, an earlier run might've died between the update and these steps
             ApplyQueued();
             Log.Information("{Product} update check: {Result}", GameProduct.Viewer.Name, r);
             return r;
         });
 
-    // known is a check already made for this start, so the server isn't asked twice
     public static PatchResult UpdateFfxi(string ffxiDir, string viewerDir, PolRegion region, VersionCheck? known,
                                          IProgress<PatchProgress>? progress, CancellationToken ct) =>
         GameFilesLock.Locked(GameFilesLock.Job.GameUpdate, ct, progress, () =>
@@ -58,7 +53,6 @@ public static class PolUpdates
             return r;
         });
 
-    // the version check on its own, under the update's lock so it waits its turn behind another copy's
     public static VersionCheck CheckFfxi(string ffxiDir, string viewerDir, PolRegion region, IProgress<PatchProgress>? progress,
                                          CancellationToken ct) =>
         GameFilesLock.Locked(GameFilesLock.Job.GameUpdate, ct, progress, () =>
@@ -68,7 +62,6 @@ public static class PolUpdates
             return MirrorCheck.Shared.Check(new PolUpdater(product), ct);
         });
 
-    // swapped in tests, a stand-in can't be at the installed viewer's path
     internal static Func<ProcessStamp, bool> IsViewerPol { get; set; } = stamp => stamp.IsViewerPol();
 
     private static bool AnyPol(Func<Process, bool> match)
@@ -86,7 +79,7 @@ public static class PolUpdates
         try { return p.Modules.Cast<ProcessModule>().Any(m => m.ModuleName.Equals(GameProduct.Game.KeyFile, StringComparison.OrdinalIgnoreCase)); }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
         {
-            return true;   // can't tell, so treat it as the game
+            return true;
         }
     });
 }

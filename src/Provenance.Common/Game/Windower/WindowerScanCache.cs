@@ -8,9 +8,6 @@ namespace Provenance.Common.Game.Windower;
 
 internal readonly record struct PeFacts(bool IsPlugin, Version? Version);
 
-// What a launch needs to know about the files in one Windower folder, kept between launches so a launch with nothing
-// changed opens none of them. Rows are keyed on what a directory listing gives for free. A row that doesn't match, or
-// that can't be trusted, just means the file's read the normal way
 internal sealed class WindowerScanCache
 {
     private const int Format = 1;
@@ -56,7 +53,6 @@ internal sealed class WindowerScanCache
 
     internal Func<DateTime> Now { get; init; } = () => DateTime.UtcNow;
 
-    // every file the cache opened, for a test to see what a launch cost
     internal List<string> Reads { get; } = [];
 
     internal WindowerScanCache(string folder, string? path)
@@ -119,8 +115,6 @@ internal sealed class WindowerScanCache
     private static FileRow Fresh(string key, FileInfo fi) =>
         new() { Name = key, Length = fi.Length, Write = fi.LastWriteTimeUtc.Ticks, Created = fi.CreationTimeUtc.Ticks };
 
-    // the file's version and whether it's a Windower plugin, null when it can't be read. info is the listing's own
-    // entry when the caller has one, so the check costs no extra call
     internal PeFacts? Pe(string path, FileInfo? info = null)
     {
         lock (_gate)
@@ -146,7 +140,6 @@ internal sealed class WindowerScanCache
         }
     }
 
-    // a .NET launcher's assembly version, read with read when it's not on file. Null when there's none, which is kept too
     internal Version? Assembly(string path, Func<Version?> read)
     {
         lock (_gate)
@@ -170,7 +163,6 @@ internal sealed class WindowerScanCache
         }
     }
 
-    // whether the addon's folder holds its own main Lua, from the listing's entry for the folder
     internal bool AddonMain(DirectoryInfo folder, Func<bool> read)
     {
         lock (_gate)
@@ -188,7 +180,6 @@ internal sealed class WindowerScanCache
         }
     }
 
-    // what's gone from the folder goes from the cache
     internal void KeepPlugins(IReadOnlySet<string> names)
     {
         lock (_gate)
@@ -209,7 +200,6 @@ internal sealed class WindowerScanCache
             }
     }
 
-    // never throws, a file that didn't save is a full scan next time
     internal void Save()
     {
         try
@@ -229,7 +219,6 @@ internal sealed class WindowerScanCache
         }
     }
 
-    // whatever Windower's update changed, so the next launch looks at every file again
     internal void Drop()
     {
         lock (_gate)
@@ -250,7 +239,6 @@ internal sealed class WindowerScanCache
 
 internal static class WindowerScanCaches
 {
-    // a test's own folder for the cache files, and its own idea of how old a file has to be before it's kept
     internal static string? RootOverride { get; set; }
     internal static Func<DateTime>? NowOverride { get; set; }
 

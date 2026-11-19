@@ -8,8 +8,6 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Game.Windower;
 
-// Windower's own settings.xml, read the lenient way Windower.exe reads it and saved exactly the way it saves it, so
-// going back to Windower.exe never notices Provenance was there
 public sealed class WindowerSettingsFile
 {
     public const string FileName = "settings.xml";
@@ -32,13 +30,11 @@ public sealed class WindowerSettingsFile
     public IReadOnlyList<WindowerProfile> Profiles => _profiles;
     public IReadOnlyList<string> Warnings => _warnings;
 
-    // the file was there but wasn't XML. It reads as empty like it does for Windower, but it won't be saved over until
-    // MoveBadFileAside has kept a copy
+    // the file was there but wasn't XML, so it won't be saved over until MoveBadFileAside has kept a copy
     public string? LoadError { get; private set; }
     public int? LoadErrorLine { get; private set; }
     public bool CanSave => LoadError is null;
 
-    // LoadError is .NET's wording, for the log. This is the player's, then whatever else they can do about it
     public string Unreadable(string orElse) => LoadErrorLine is { } line
         ? $"Windower's settings.xml has a mistake on line {line}, so Provenance can't read it. Fix that line, or {orElse}"
         : $"Windower's settings.xml has a mistake in it, so Provenance can't read it. Fix the file, or {orElse}";
@@ -113,8 +109,7 @@ public sealed class WindowerSettingsFile
         return f;
     }
 
-    // two names the same once trimmed crash Windower.exe on start, and its own name box can make them. The later one
-    // gets a new name instead of being lost
+    // two names the same once trimmed crash Windower.exe on start, and its own name box can make them
     private void RenameDuplicates()
     {
         var taken = new HashSet<string>(_profiles.Select(p => p.Name), StringComparer.OrdinalIgnoreCase);
@@ -148,8 +143,7 @@ public sealed class WindowerSettingsFile
         foreach (var p in _profiles) root.Add(p.ToXml());
         root.Add(_unknownRoot.Select(e => new XElement(e)));
 
-        // what XDocument.Save(path) does on .NET Framework: version 1.0 whatever the declaration says, UTF-8 with a BOM,
-        // two-space indent, CRLF and nothing after the last >
+        // what XDocument.Save(path) does on .NET Framework: version 1.0, UTF-8 with a BOM, two-space indent, CRLF and nothing after the last >
         var ws = new XmlWriterSettings { Encoding = new UTF8Encoding(true), Indent = true, IndentChars = "  ", NewLineChars = "\r\n" };
         using var ms = new MemoryStream();
         using (var w = XmlWriter.Create(ms, ws)) new XDocument(new XDeclaration("1.0", "utf-8", null), root).Save(w);
@@ -172,12 +166,9 @@ public sealed class WindowerSettingsFile
         using (Lock()) Write(path, ToBytes());
     }
 
-    // re-reads under the lock, so another copy of Provenance saving in between doesn't lose its changes (or this one's)
     public static WindowerSettingsFile Update(string windowerDir, Action<WindowerSettingsFile> change) =>
         Update(windowerDir, new Dictionary<string, WindowerAddonList>(), (f, _) => change(f));
 
-    // the change gets a copy of the lists, which only replaces them once settings.xml is written, so a failed write
-    // can't leave a list moved to a name the file never got
     public static WindowerSettingsFile Update(string windowerDir, IDictionary<string, WindowerAddonList> lists,
                                               Action<WindowerSettingsFile, IDictionary<string, WindowerAddonList>> change)
     {
@@ -196,11 +187,9 @@ public sealed class WindowerSettingsFile
         }
     }
 
-    // only once it's been read again under the lock and still won't parse, so a file fixed in the meantime stays put
     public string? MoveBadFileAside(string windowerDir)
     {
         var path = PathIn(windowerDir);
-        // the rename runs as admin too, so it never goes through a link
         LinkCheck.Refuse(Path.GetFullPath(windowerDir), path);
         using (Lock())
         {
@@ -237,7 +226,6 @@ public sealed class WindowerSettingsFile
                 "Windower's settings.xml couldn't be read, so Provenance won't save over it. Choose Start a new settings file under Windower/Ashita to set it aside and start again."));
     }
 
-    // if the lock doesn't come it writes anyway, the move swaps settings.xml whole
     private static IDisposable? Lock()
     {
         try { return AdminLock.TryAcquire(LockName, LockWait); }
@@ -250,7 +238,6 @@ public sealed class WindowerSettingsFile
         SafeWrite.Replace(path, bytes, dir, refuse: [dir], flushToDisk: true);
     }
 
-    // trimmed, then the first match in any case in file order, like Windower's -p
     public WindowerProfile? Find(string? name)
     {
         var n = (name ?? "").Trim();

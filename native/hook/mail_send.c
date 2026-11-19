@@ -1,4 +1,3 @@
-/* built messages in the order they were built, job -1 until the PUT starts. Two at once, the viewer's own most */
 #define SEND_MAX 2
 typedef struct { BYTE *msg; int job; ULONGLONG started; char token[48]; } sendrec;
 static sendrec g_sq[SEND_MAX];
@@ -16,8 +15,6 @@ static int mail_send_slots_free(BYTE *b)
     if (pc_has(b, SV_JOB_SLOTS)) pc_job_slots(b, &used, &total);
     return total - used;
 }
-/* the viewer's rule (app.dll 0x100512cf) plus a job. 2 of 4 polcore slots free (svc 0xff4) means a third only
-   starts with nothing else running */
 #define MSG_JOBS_MAX 3
 static int mail_send_msg_slot_ok(BYTE *b)
 {
@@ -29,7 +26,6 @@ static int mail_send_built(void)
     return 0;
 }
 
-/* sends are capped, so nothing (a stuck app included) can hammer the server with them */
 static int mail_send_pace_check(const send_pace *p, ULONGLONG now)
 {
     if (p->stopped) return PACE_STOPPED;
@@ -45,14 +41,11 @@ static void mail_send_pace_take(send_pace *p, ULONGLONG now)
     p->next = (p->next + 1) % PACE_PER_HOUR;
     if (p->count < PACE_PER_HOUR) p->count++;
 }
-/* r is a send's result (1 = stored), ms how long its PUT took. Only sends come here, a delete's -0x1540 (a slot
-   this account lost) never does */
 static void mail_send_pace_done(send_pace *p, ULONGLONG now, int r, ULONGLONG ms)
 {
     ULONGLONG h;
     if (r == NO_SLOT) return;
     if (r == 1) p->fails = 0;
-    /* one already on the wire when the last failure landed is the same blip, not another strike */
     else if (!(p->fails && now - ms <= p->failed) && ++p->fails >= 3) p->stopped = 1;
     if (r != 1 && !p->stopped) {
         p->failed = now;
@@ -83,7 +76,6 @@ static void mail_send_note(const char *token, const char *state)
 {
     if (!lstrcmpA(token, g_s.send_token)) lstrcpynA(g_s.send_state, state, sizeof g_s.send_state);
 }
-/* a line that went to another POL ID, remembered so the same line coming back can be told from a real one */
 static void mail_send_sent_record(BYTE *b, const BYTE *hdr)
 {
     DWORD lo = MAIL(hdr)->to_lo, hi = MAIL(hdr)->to_hi;
@@ -119,7 +111,6 @@ static void mail_send_drop(int i)
     for (; i < g_s.send_queue_n - 1; i++) g_sq[i] = g_sq[i + 1];
     g_s.send_queue_n--;
 }
-/* chat lines, answers and group messages all get paced here (a chat take only checks first), oldest built first */
 static void mail_send_start(BYTE *b)
 {
     ULONGLONG now = GetTickCount64();
@@ -136,7 +127,6 @@ static void mail_send_start(BYTE *b)
         mail_send_drop(i);
         return;
     }
-    /* in a drain (Play, log out) a built message goes once a message job's free, the pace's waits don't hold it */
     t = (g_s.draining ? mail_send_msg_jobs() < MSG_JOBS_MAX : why == PACE_OK && mail_send_msg_slot_ok(b))
         ? pc_mail_send(b, s->msg)
         : NO_SLOT;
@@ -145,7 +135,6 @@ static void mail_send_start(BYTE *b)
     if (t < 0) {
         lstrcpyA(st, requests_failed(t));
         mail_send_result(s->token, st, NULL);
-        /* polcore refusing it locally (-0x1551 for a bad header) sent nothing, only the account codes count */
         if (t == -0x153a || t == -0x1540) mail_send_paced(t, 0);
         mail_send_drop(i);
     } else {
@@ -153,14 +142,12 @@ static void mail_send_start(BYTE *b)
         s->job = t;
         s->started = now;
         mail_send_note(s->token, "sending");
-        g_snap_dirty = 1;   /* the app hands over its next line once it sees this one's been taken */
+        g_snap_dirty = 1;
     }
 }
 /* FFXI only prints a message's text when it's 300 bytes or less, counted in the Shift-JIS that goes */
 #define TEXT_MAX_BYTES 300
 
-/* like the viewer (app.dll 0x100556e0), a header (svc 0x438) then the body (svc 0x440). It joins the send
-   queue under g_s.send_token */
 static int mail_send_msg_build(BYTE *b, int kind, unsigned toLo, unsigned toHi, int fromSlot, int toSlot,
                      const char *myName, const char *sj_subj, const char *sj_text, const BYTE *att, int attType)
 {
@@ -175,7 +162,6 @@ static int mail_send_msg_build(BYTE *b, int kind, unsigned toLo, unsigned toHi, 
         return -1;
     }
     n = pc_mail_body(b, sj_subj, sj_text, attLen, att, (char *)msg + MAIL_BUILT_SIZE);
-    /* 0x438's 8th argument is the subject line the recipient's list shows, not a name */
     pc_mail_header(b, msg, kind, (unsigned)me, (unsigned)(me >> 32), toLo, toHi, myName, sj_subj,
                    fromSlot, toSlot, 1000, att ? attType : 0, n);
     mail_inbox_log_hdr("send", msg);
@@ -193,7 +179,7 @@ static void mail_send_parse(BYTE *b, char *buf)
     pol_friend_copy fr;
     char *p = buf, *tok, *who, *subj, *text, *q, myName[16], frName[64];
     int row = 0, digits = 0, mySlot, n, wl;
-    g_s.send_token[0] = 0;   /* the token first, so a refusal reports under its own token */
+    g_s.send_token[0] = 0;
     if ((q = strchr(buf, '\n')) != NULL) {
         int tl = (int)strcspn(++q, "\r\n");
         lstrcpynA(g_s.send_token, q, (tl < (int)sizeof g_s.send_token - 1 ? tl : (int)sizeof g_s.send_token - 1) + 1);
@@ -242,7 +228,6 @@ static void mail_send_pump(BYTE *b)
         sendrec *s = &g_sq[i];
         if (s->job < 0 || (r = pc_mail_send_check(b, s->job)) == 0) continue;
         s->job = -1;
-        /* nothing went, the viewer starts it again next frame (its send state 4 -> 2) */
         if (r == NO_SLOT) { mail_send_note(s->token, "queued"); again = 1; continue; }
         if (r == 1) lstrcpyA(st, "sent"); else lstrcpyA(st, requests_failed(r));
         mail_send_result(s->token, st, s->msg);
@@ -251,17 +236,12 @@ static void mail_send_pump(BYTE *b)
         ms = GetTickCount64() - s->started;
         base_log("messages: send done -> %d (%ums)\r\n", r, (unsigned)ms);
         mail_send_paced(r, ms);
-        mail_send_drop(i--);   /* only now, the upload read it during the polls */
+        mail_send_drop(i--);
     }
-    /* a built message is a write the user asked for, so it still starts during a drain (Play, log out), which waits
-       for it. No new requests then though */
     if (mail_send_built()) { if (!again) mail_send_start(b); return; }
-    /* an answer owns the send slots from its request to its message. A waiting answer or group request goes
-       before the next line, they only start with nothing sending */
     if (g_s.send_queue_n >= SEND_MAX || g_s.draining || g_s.answer_kind || handles_switching() || !requests_waiting(REQ_SEND) ||
         requests_new(REQ_ANSWER) || requests_new(REQ_GROUP))
         return;
-    /* stopped or at the hourly cap, a request is still taken so the app hears it wasn't sent */
     why = mail_send_pace_check(&g_s.pace, GetTickCount64());
     if (why != PACE_OK && why != PACE_STOPPED && why != PACE_HOUR) {
         if (why == PACE_MIN && said != why)
@@ -279,8 +259,6 @@ static void mail_send_pump(BYTE *b)
     HeapFree(GetProcessHeap(), 0, buf);
 }
 
-/* request and accept do AddFriend + a list upload before their message, decline replies at once, ignore does
-   AddBlock first. The viewer's fixed subject, no text. */
 static BYTE g_answer_hdr[MAIL_KEY_SIZE];
 static char g_answer_subj[0x84];
 static char g_answer_text[0x84];
@@ -325,13 +303,11 @@ static void mail_send_answer_request(BYTE *b)
     arg = requests_line(&p);
     hkey = requests_line(&p);
     lstrcpynA(g_answer_token, tok, sizeof g_answer_token);
-    /* every answer ends in a message, so refuse it before AddFriend or a list upload */
     if (mail_send_pace_refusal()) { mail_send_answer_fail(mail_send_pace_refusal()); return; }
     if (!requests_parse_num(mids, 6, &mid)) { mail_send_answer_fail("failed:bad request"); return; }
     if (lstrcmpA(op, "request") == 0) {
         if (mid >= g_s.search_n || g_search.step != 0) { mail_send_answer_fail("failed:no such result"); return; }
         h = &g_srch[mid];
-        /* the hit must be the one the launcher showed, a newer search replaces the list */
         peers_key(b, h->lo, h->hi, (unsigned)h->slot, k);
         if (lstrcmpA(k, hkey) != 0) { mail_send_answer_fail("failed:no such result"); return; }
         if (peers_is_me(b, h->lo, h->hi)) { mail_send_answer_fail("failed:self"); return; }
@@ -372,12 +348,11 @@ static void mail_send_answer_request(BYTE *b)
         return;
     }
     if (lstrcmpA(op, "accept") == 0) {
-        /* the viewer refuses an acceptance into a full list (200) first, even for someone already on it */
         for (i = 0; i < 200; i++) used += peers_get_friend(b, i, &row);
         if (used >= 200) { mail_send_answer_fail(requests_failed(FRIEND_LIST_FULL)); return; }
         r = pc_friend_add(b, -1, 0, MAIL(m->hdr)->from_lo, MAIL(m->hdr)->from_hi, MAIL(m->hdr)->from_slot, nm);
         base_log("friends: accept request mid %d -> AddFriend %d\r\n", mid, r);
-        if (r == ALREADY_LISTED) {   /* already on my list: no upload, just the acceptance */
+        if (r == ALREADY_LISTED) {
             g_s.answer_kind = 9;
             mail_send_answer_send(b);
             return;
@@ -385,7 +360,6 @@ static void mail_send_answer_request(BYTE *b)
         if (r < 0) { mail_send_answer_fail(requests_failed(r)); return; }
         g_s.answer_kind = 9;
     } else if (lstrcmpA(op, "ignore") == 0) {
-        /* this handle only (0u), the viewer's way from a request */
         r = pc_ignore_add(b, -1, 0u, MAIL(m->hdr)->from_lo, MAIL(m->hdr)->from_hi, MAIL(m->hdr)->from_slot, nm);
         base_log("friends: ignore requester mid %d -> AddBlock %d\r\n", mid, r);
         if (r == ALREADY_LISTED) { mail_send_answer_fail("failed:already ignored"); return; }
@@ -413,7 +387,6 @@ static void mail_send_answer_pump(BYTE *b, int ctl)
             return;
         }
     }
-    /* in a drain too, the upload with the new row is done so its message has to follow */
     if (g_s.answer_kind && !g_s.answer_wait) {
         if (g_s.send_queue_n) return;
         mail_send_answer_send(b);

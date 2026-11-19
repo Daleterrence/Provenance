@@ -27,15 +27,14 @@ public partial class App : Application
 
     private PolSession? _pol;
     private MainViewModel? _main;
-    private bool _showingError;   // an error inside the card mustn't stack more cards
-    private bool _started;        // the main window's there, before it there's nothing left running to carry on with
+    private bool _showingError;
+    private bool _started;
 
     internal const string StartupFailedText =
         "Provenance ran into a problem while starting up. Press Open logs to see what went wrong, then start Provenance again.";
 
     internal static bool RestartOnExit { get; set; }
 
-    // Restart Now: the update's already downloaded, so the exit ends any game and Update.exe takes over
     internal static bool RestartForUpdate { get; set; }
 
     internal static bool SkipStartup { get; set; }
@@ -45,11 +44,9 @@ public partial class App : Application
         if (SkipStartup) return;
         base.OnStartup(e);
         var args = new LaunchArgs(e.Args);
-        // first thing: the update check (or a whole update) can outlast a held Shift
         bool shiftAtStart = ShiftDown() || args.ShiftHeld;
         CatchUnhandled();
         Log.Information("Provenance starting");
-        // before the first window, the update one included, so nothing opens in the other theme first
         AppTheme.Apply(AppTheme.FromSettingsFile(SettingsService.DefaultPath));
 
         if (!args.AfterUpdate && TrayCopy.ReuseRunning())
@@ -58,7 +55,6 @@ public partial class App : Application
             return;
         }
 
-        // first, so an update can restart the app straight away. Closing the update window or the error card mustn't end the app
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         if (await SelfUpdate.RunAsync(args, noAutoLogin: shiftAtStart))
         {
@@ -66,7 +62,7 @@ public partial class App : Application
             return;
         }
 
-        // admin-only before any service starts, or a user-level program could plant hook files or hold a lock
+        // admin-only before any service starts, or a user-level program could plant hook files
         if (!PrepareProtectedFolders())
         {
             Shutdown(1);
@@ -79,7 +75,6 @@ public partial class App : Application
         }
 
         WarmKeys();
-        // both done by the time anyone can press LOG IN
         MirrorCheck.StartAtOpen(settings);
         WindowerLauncher.CheckAtOpen(settings);
         bool shift = AutoLoginAtOpen.ShiftAtStart(shiftAtStart, ShiftDown, settings);
@@ -87,7 +82,6 @@ public partial class App : Application
         StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, () => pol.Prestarter.StartEarly(loginComing: autoLogin is not null));
         AutoLoginAtOpen.StartAhead(pol, autoLogin);
 
-        // a Shift pressed a moment later still counts, and drops an early start that's already begun
         shift = AutoLoginAtOpen.ShiftLater(shift, ShiftDown, settings);
         bool noAutoLogin = shift || args.NoAutoLogin;
         var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin);
@@ -96,8 +90,6 @@ public partial class App : Application
         StartMainViewModel(mainVm, noAutoLogin);
     }
 
-    // pol.exe takes a couple of secs to be ready, so it starts before the window's built. The screen saver's noted
-    // first and old sessions ended before it, and one step failing doesn't stop the window
     internal static void StartPolEarly(Action noteScreenSaver, Action endOrphans, Action startPol)
     {
         noteScreenSaver();
@@ -133,7 +125,6 @@ public partial class App : Application
         try
         {
             SweepOldHookFiles();
-            // taken here on the UI thread, since the settings are built lazily on whichever thread asks first
             var uiThread = SynchronizationContext.Current;
             if (uiThread is null) Log.Warning("The settings were built with no UI thread to hand changes to");
             credentials = new CredentialService();
@@ -149,7 +140,6 @@ public partial class App : Application
         }
     }
 
-    // a snapshot holds friends' messages, so it goes once its pol.exe has
     private static void SweepOldHookFiles()
     {
         int swept = HookFiles.Sweep(HookFiles.RequiredDir, ProcessStamp.PidRunning, TimeSpan.FromDays(7), DateTime.UtcNow);
@@ -194,13 +184,11 @@ public partial class App : Application
             Log.Error(args.Exception, "Unobserved task exception");
             args.SetObserved();
         };
-        // without "Provenance exiting" before it, something ended the process outside WPF's shutdown
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Log.Information("Process exit");
     }
 
     private MainViewModel ShowMainWindow(CredentialService credentials, SettingsService settings, PolSession pol, bool noAutoLogin)
     {
-        // the friends windows are unowned, so the app ends with the main window (the tray only hides it)
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         var timer = new StepTimer("Main window");
         var mainWindow = new MainWindow();
@@ -208,8 +196,7 @@ public partial class App : Application
         var windows = new WindowManager(settings, WpfDialogs.Default);
         var mainVm = _main = new MainViewModel(WpfDialogs.Default, windows, credentials, settings, new FeedService(settings), pol, new AvatarService(settings));
         timer.Lap("view model built");
-        // Windows logging off cancels a login, and WPF would close the window ignoring its Cancel, so it closes normally first.
-        // A held session is logged out, nothing goes to tray
+        // Windows logging off cancels a login, and WPF would close the window ignoring its Cancel, so it closes normally first
         SessionEnding += (_, e) =>
         {
             if (LogOff(mainVm, mainWindow)) e.Cancel = true;
@@ -220,20 +207,16 @@ public partial class App : Application
         OpenMainWindow(mainWindow, mainVm, noAutoLogin);
         timer.Lap("shown");
         if (settings.Current.MinimizeToTray) TrayIcon.Warm();
-        // this one really is off the UI thread, the wait's on the pool
         if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));
         return mainVm;
     }
 
-    // a login that starts the game itself opens on its own small window, and this one only shows if it's needed.
-    // Told it's hidden, so its first real show loads the news
     internal static void OpenMainWindow(Window mainWindow, MainViewModel mainVm, bool noAutoLogin)
     {
         if (mainVm.StartsLean(noAutoLogin)) mainVm.News.SetWindowShown(false);
         else mainWindow.Show();
     }
 
-    // for a main window that's never been shown: with no login going nothing else would ever put a window up
     internal static void ShowIfNothingStarted(Window mainWindow, MainViewModel mainVm)
     {
         if (!mainWindow.IsVisible && !mainWindow.IsLoaded && !mainVm.IsLaunching) mainWindow.Show();
@@ -278,8 +261,7 @@ public partial class App : Application
         _ => null,
     };
 
-    // no await, WPF kills the dispatcher when OnExit returns and a held session would never get logged out. Every wait
-    // is time-limited on the pool
+    // no await, WPF kills the dispatcher when OnExit returns and a held session would never get logged out
     protected override void OnExit(ExitEventArgs e)
     {
         try
@@ -287,7 +269,7 @@ public partial class App : Application
             Log.Information("Provenance exiting (code {Code})", e.ApplicationExitCode);
             _main?.SaveMessages();
             if (_pol is { } pol) EndSession(pol);
-            try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }   // exit goes ahead without it
+            try { Task.Run(Bitwarden.LockAtExitAsync).Wait(TimeSpan.FromSeconds(5)); } catch { }
             WindowerLauncher.StopBackgroundUpdates(TimeSpan.FromSeconds(3));
             if (SelfUpdate.AfterExit(RestartOnExit, RestartForUpdate) is { } startWith) StartAgain(startWith);
         }
@@ -298,7 +280,6 @@ public partial class App : Application
         }
     }
 
-    // after the session's ended, so a held POL login is already logged out by the time the new copy starts
     private static void StartAgain(params string[] args)
     {
         try
@@ -311,7 +292,6 @@ public partial class App : Application
         catch (Exception ex) { Log.Error(ex, "Could not start Provenance again"); }
     }
 
-    // every wait in Dispose has its own limit, cut it short and POL stays logged in
     internal static void EndSession(IDisposable session)
     {
         try { session.Dispose(); }

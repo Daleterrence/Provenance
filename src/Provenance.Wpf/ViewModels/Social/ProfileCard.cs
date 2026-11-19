@@ -18,7 +18,6 @@ public sealed partial class ProfileCard : ObservableObject
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private bool _hasChanges;
 
-    // a character's profile rows as the friend pages lay them out, and whether its last read failed
     public ObservableCollection<FriendProfileViewModel.RowItem> Rows { get; } = new();
     public bool ReadFailed { get; set; }
 

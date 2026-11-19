@@ -26,7 +26,6 @@ public sealed class HookLog
 
     public string Path { get; }
 
-    // starts at this run's first line, so a reused pid's older lines are skipped
     public static HookLog OfThisRun(string path)
     {
         long start = 0;
@@ -35,7 +34,6 @@ public sealed class HookLog
         return new HookLog(path, start);
     }
 
-    // poor man's tail -f. Lines come back without their line ending, a half-written last line waits for the next read
     public List<string> ReadNewLines()
     {
         var lines = new List<string>();
@@ -60,7 +58,6 @@ public sealed class HookLog
         return lines;
     }
 
-    // for when pol.exe's gone, so whatever it left without a line ending counts as a line
     public List<string> ReadRemainingLines()
     {
         var lines = ReadNewLines();
@@ -69,12 +66,10 @@ public sealed class HookLog
         return lines;
     }
 
-    // the hook only appends, so a reused pid's log starts with older pol.exe runs.
     // DllMain's first line opens each run, so the last is this pol.exe's
     private static (string Text, long Start) ThisRun(string path)
     {
         using var fs = SharedFile.OpenRead(path);
-        // Latin1 is one char per byte, so Start is a byte offset
         using var sr = new StreamReader(fs, Encoding.Latin1, detectEncodingFromByteOrderMarks: false);
         var text = sr.ReadToEnd();
         int at = text.LastIndexOf(HookContract.LogLines.FirstLine, StringComparison.Ordinal);
@@ -82,11 +77,9 @@ public sealed class HookLog
         return (text[start..], start);
     }
 
-    // IO errors are left to the caller
     public static List<HookEvent> EventsOfThisRun(string path) =>
         ThisRun(path).Text.Split('\n').Select(Parse).OfType<HookEvent>().ToList();
 
-    // one string search, it's polled every 15ms. IO errors are left to the caller
     public static bool PrestartReadyInThisRun(string path) =>
         ThisRun(path).Text.Contains(HookContract.LogLines.PrestartReady, StringComparison.Ordinal);
 

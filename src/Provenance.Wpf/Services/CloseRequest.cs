@@ -9,8 +9,7 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-// The uninstaller (ProvenanceLauncher.exe, no admin) can't stop this elevated process, so it sets this copy's named
-// event instead
+// the uninstaller (no admin) can't stop this elevated process
 public static class CloseRequest
 {
     private static WaitHandle? _event;   // open for the life of the process, the launcher reads it as "still running"
@@ -40,8 +39,6 @@ public static class CloseRequest
         catch (Exception ex) { Log.Warning(ex, "The uninstaller's close request could not be set up"); }
     }
 
-    // Restart Now asks the other copies of this install the way the uninstaller does. One that can't be asked is
-    // still there afterwards, which is what the caller waits on
     public static void AskOthers()
     {
         foreach (var p in Process.GetProcessesByName("Provenance"))

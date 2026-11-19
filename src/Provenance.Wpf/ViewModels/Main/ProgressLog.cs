@@ -3,7 +3,6 @@ using Serilog;
 
 namespace Provenance.Wpf.ViewModels.Main;
 
-// a stage can report the same line thousands of times a minute, so only a change gets logged
 internal sealed class ProgressLog
 {
     private string? _stage, _detail;

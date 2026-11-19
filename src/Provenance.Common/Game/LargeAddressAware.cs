@@ -5,8 +5,7 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game;
 
-// Windower's Large Address Aware tick box: bit 0x20 of pol.exe's COFF Characteristics, set on disk with no checksum fix,
-// so the file comes out the same as Windower's
+// bit 0x20 of pol.exe's COFF Characteristics, set on disk with no checksum fix, so the file comes out the same as Windower's
 public static class LargeAddressAware
 {
     public enum Result { Done, NotPe, UnknownBuild, InUse, Denied, Failed }
@@ -15,7 +14,6 @@ public static class LargeAddressAware
     private const int SharingViolation = unchecked((int)0x80070020);
     private const int LockViolation = unchecked((int)0x80070021);
 
-    // US and Europe share a pol.exe, so that pair is only in once
     internal static readonly (string Off, string On)[] Known = ViewerBuild.Known.PolExes.Select(p => (p.Off, p.On)).Distinct().ToArray();
 
     internal static IEnumerable<(string Off, string On)> Pairs() =>
@@ -50,7 +48,6 @@ public static class LargeAddressAware
         return sha == known.Off || sha == known.On;
     }
 
-    // the pair this pol.exe belongs to, or the first so an unknown file gets UnknownBuild
     public static Result Set(string path, bool on)
     {
         var pair = Known[0];
@@ -81,7 +78,6 @@ public static class LargeAddressAware
                 if (FileHash.Sha256(fs) == (on ? known.On : known.Off)) return Result.Done;
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-            // anything wrong once the byte's gone out puts the old one back, best effort
             try { Put(fs, at, old); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             return Result.Failed;
@@ -91,7 +87,6 @@ public static class LargeAddressAware
         catch (IOException) { return Result.Failed; }
     }
 
-    // SE's own patcher clears read-only on whatever it replaces, so a known pol.exe gets the same
     private static FileStream OpenToWrite(string path, (string Off, string On) known)
     {
         try { return new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None); }
@@ -106,7 +101,6 @@ public static class LargeAddressAware
         }
     }
 
-    // the repair and install scans count Windower's pol.exe as intact, it's SE's file with the one bit set
     public static bool Matches(string relativePath, string listedSha256, string actualSha256) =>
         Pairs().Any(pair => Matches(relativePath, listedSha256, actualSha256, pair));
 

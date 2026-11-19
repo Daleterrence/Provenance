@@ -1,19 +1,6 @@
 <#
 .SYNOPSIS
     Builds a Provenance release with Velopack: Setup.exe, the full nupkg and the release feed files.
-
-.DESCRIPTION
-    Builds the native files from native\ at this commit (native\build-native.ps1, into a temporary folder), publishes
-    Provenance.Launcher and Provenance.Wpf (Release, win-x86, self-contained) into one folder with -Version as the exe
-    version, then runs vpk pack.
-    -Version is SemVer 2 with no build part, so 1.0.0 or 1.0.0-beta.1, and has to be the version committed in
-    Directory.Build.props. The exe's file version keeps just the numbers (1.0.0.0) and its product version gets the
-    short commit (1.0.0-beta.1+1a2b3c4).
-    It only packs committed code (a clean working tree) and needs an empty -Out outside the repo, by default
-    %TEMP%\provenance-release\<version>. Nothing gets uploaded, and the package's statement (<package>.sig) is signed
-    afterwards, on the draft release.
-    A version with a suffix (1.0.0-beta.1) goes on the beta channel, one without (1.0.0) on stable. Copies on a beta
-    look at both and take the newest, copies on a stable version only ever look at stable.
 .EXAMPLE
     pwsh tools/pack-release.ps1 -Version 1.0.0-beta.1
 .EXAMPLE
@@ -25,7 +12,6 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    # SemVer 2 without the +build part, which Velopack ignores when it compares versions
     [ValidatePattern('^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?$')]
     [string]$Version,
     [string]$Out
@@ -44,13 +30,11 @@ $buildNative = Join-Path $repo 'native\build-native.ps1'
 if (-not $Out) { $Out = Join-Path ([IO.Path]::GetTempPath()) "provenance-release\$Version" }
 $Out = [IO.Path]::GetFullPath($Out)
 
-# a release has to be a commit, so it can always be traced back and built again
 $dirty = @(& git -C $repo status --porcelain)
 if ($LASTEXITCODE -ne 0) { throw "git status failed in $repo." }
 if ($dirty.Count) { throw "Commit or undo these first, a release only packs committed code:`n$($dirty -join "`n")" }
 $commit = "$(& git -C $repo rev-parse HEAD)".Trim()
 
-# the commit carries its own version, so a local build of it says the same as the release
 $committed = (Get-ProvenanceVersion).Version
 if ($committed -cne $Version) {
     throw "Directory.Build.props says $committed. Set the version there to $Version and commit it first."
@@ -62,7 +46,6 @@ if ((Test-Path -LiteralPath $Out) -and @(Get-ChildItem -LiteralPath $Out -Force)
     throw "$Out is not empty. Everything in it goes up with the release, so use an empty or new folder."
 }
 
-# Update.exe comes from vpk and the update code from the package, so they have to be the same release
 $velopack = Get-VelopackVersion
 $vpk = (Get-Command vpk -ErrorAction SilentlyContinue)?.Source
 if (-not $vpk) { throw "vpk not found. Install it: dotnet tool install -g vpk --version $velopack" }
@@ -74,7 +57,6 @@ if ($Matches[1] -ne $velopack) {
 
 $natives = 'pol_hook.dll', 'Provenance Watcher.exe', 'Provenance - PlayOnline Uninstall.exe',
     'Provenance - FINAL FANTASY XI Uninstall.exe'
-# the app picks its channels by the same rule (SelfUpdate.ChannelSource), and so does the upload on GitHub
 $channel = if ($Version.Contains('-')) { 'beta' } else { 'stable' }
 Write-Host "vpk $velopack, release $Version ($channel channel) from $commit -> $Out"
 
@@ -84,7 +66,6 @@ $publish = Join-Path $work 'publish'
 try {
     New-Item -ItemType Directory -Force -Path $native, $publish, $Out | Out-Null
 
-    # a fresh build from the committed sources, never whatever's sat in native\bin
     & (Get-Process -Id $PID).Path -NoProfile -File $buildNative -OutDir $native
     if ($LASTEXITCODE -ne 0) { throw "build-native.ps1 failed (exit code $LASTEXITCODE)" }
 
@@ -96,7 +77,6 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for $(Split-Path -Leaf $project) (exit code $LASTEXITCODE)" }
     }
 
-    # Windows wants four numbers in the file version, the pre-release label only goes in the product version
     $numeric = "$($Version.Split('-')[0]).0"
     foreach ($file in @('Provenance.exe', 'ProvenanceLauncher.exe') + @($natives -like '*.exe' | ForEach-Object { "native\$_" })) {
         if (-not (Test-Path -LiteralPath (Join-Path $publish $file))) { throw "The publish folder has no $file" }

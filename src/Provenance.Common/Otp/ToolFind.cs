@@ -4,7 +4,6 @@ namespace Provenance.Common.Otp;
 
 public enum FindState { Found, NotInstalled, CantCheck, TooOld }
 
-// Path is held open (no writes, no deletes) until this is disposed, so what runs is the file that was checked
 public sealed class ToolFind : IDisposable
 {
     private readonly SafeFileHandle? _handle;

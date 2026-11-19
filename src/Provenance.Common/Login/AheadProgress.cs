@@ -1,6 +1,5 @@
 namespace Provenance.Common.Login;
 
-// an early start's lines wait here for the login that takes it, then come out in the order they went in
 internal sealed class AheadProgress : IProgress<LaunchProgress>
 {
     private readonly object _gate = new();
@@ -16,7 +15,6 @@ internal sealed class AheadProgress : IProgress<LaunchProgress>
         }
     }
 
-    // under the lock, so a line from the early start's own thread can't get in front of the held ones
     internal void Attach(IProgress<LaunchProgress>? to)
     {
         lock (_gate)

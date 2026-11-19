@@ -4,7 +4,7 @@ using MaterialDesignThemes.Wpf;
 
 namespace Provenance.Wpf.Controls.Behaviours;
 
-// MaterialDesign pads the top and bottom of a combo box's list with empty space. This swaps in a template without it
+// MaterialDesign pads the top and bottom of a combo box's list with empty space
 public static class TightPopup
 {
     public static readonly DependencyProperty TemplateProperty = DependencyProperty.RegisterAttached(

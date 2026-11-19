@@ -22,12 +22,9 @@ public static partial class SvgIcons
         "left", "right", "up", "down", "settings", "accounts", "more", "download", "verified", "plugin", "gamepad", "profile-edit", "crystal",
     ];
     public static readonly string[] OnlineKeys = ["online", "away", "invisible"];
-    // POL cuts these with its badge circle. Centred on a button's disc the cut ends up inside it, so they're drawn whole
     private static readonly string[] WholeOnButton = ["smiley", "bubble", "ring", "mail", "folder", "key", "person"];
-    // drawn on POL's pixel grid, so they only get moved by whole units. Half a unit over and every upright line's
-    // smeared across two columns
+    // drawn on POL's pixel grid, half a unit over smears every upright line across two columns
     private static readonly string[] OnGrid = ["add", "copy", "folder", "key", "list", "mail"];
-    // the card runs off the disc's left edge and stops just short of its right
     private const double CardScale = 0.9, CardShift = 1.2;
 
     private const string Root = "pack://application:,,,/Provenance;component/Assets/icons/";
@@ -45,8 +42,7 @@ public static partial class SvgIcons
 
     private const string XiBadgeFile = "xi-badge.svg", NoticeFile = "notice.svg";
     private static string EmoteFile(int i) => $"chat_face-{i:00}.svg";
-    // POL's files are named the other way round: its blue icon (-open) is the selected look and its green icon (-hover)
-    // is the one for a button that's in use
+    // POL's files are named the other way round, its blue icon (-open) is the selected look and its green one (-hover) the button in use
     internal static string GlyphFile(string glyph, IconState state) => $"status-{glyph}-{state switch
     {
         IconState.Selected => "open",
@@ -58,20 +54,16 @@ public static partial class SvgIcons
     public static ImageSource? Glyph(string glyph, IconState state) =>
         Cached(GlyphFile(glyph, state), () => Frame(Load(GlyphFile(glyph, state)), GlyphFrame(glyph)));
 
-    // the single-colour file in one colour, no disc, for small marks and anything sat on a dark surface where the idle
-    // icon's black outline gets lost
     public static ImageSource? Tinted(string glyph, Color colour, bool filled = false) =>
         Cached($"status-{glyph}.svg#{colour}{(filled ? "#filled" : "")}", () => WholeOnButton.Contains(glyph)
             ? AroundInk(Load($"status-{glyph}.svg", colour, Whole))
             : Frame(Load($"status-{glyph}.svg", colour, filled ? Solid(colour) : null), GlyphFrame(glyph)));
 
-    // a file that isn't one of the status glyphs, in one colour, framed by its own viewBox
     public static ImageSource? TintedFile(string file, Color colour) =>
         Cached($"{file}#{colour}", () => Frame(Load(file, colour), ViewBox(file)));
 
     private static readonly HashSet<string> Reported = new();
 
-    // whether a file by name is there and draws, said once in the log when it isn't
     public static bool Available(string file)
     {
         if (TintedFile(file, Colors.Black) is not null) return true;
@@ -85,7 +77,6 @@ public static partial class SvgIcons
     private static Func<string, string> Solid(Color colour) =>
         svg => svg.Replace("fill=\"none\"", $"fill=\"#{colour.R:X2}{colour.G:X2}{colour.B:X2}\"", StringComparison.Ordinal);
 
-    // drawn without POL's badge circle, so the frame goes round what's actually inked
     private static Drawing? AroundInk(Drawing? drawing)
     {
         if (drawing is null || Ink(drawing) is not { IsEmpty: false } ink) return drawing;
@@ -93,8 +84,6 @@ public static partial class SvgIcons
         return Frame(drawing, new Rect(ink.X + ink.Width / 2 - half, ink.Y + ink.Height / 2 - half, half * 2, half * 2));
     }
 
-    // for a button's own disc: POL's green or blue disc comes out, outline back to idle.
-    // POL nudges its icons a pixel per state, so each gets centred
     public static ImageSource? ButtonGlyph(string glyph, IconState state) =>
         Cached(GlyphFile(glyph, state) + "#button", () =>
         {
@@ -105,12 +94,9 @@ public static partial class SvgIcons
             return Frame(moved, frame);
         });
 
-    // every glyph draws at one scale on a button, so the discs (r 10 round 16,16) all match.
-    // One poking out of its disc spills past its box instead of shrinking
     public const double ButtonBox = 20;
     public const double DiscShare = 20 / ButtonBox;
     public static double ButtonScale(string glyph) => ButtonFit(glyph).Frame.Width / ButtonBox;
-    // the same off a button, where the square's the one all four states of the file share
     public static double GlyphScale(string glyph) => GlyphFrame(glyph) is { } frame ? frame.Width / ButtonBox : 1;
     internal static Rect FrameOf(string glyph) => ButtonFit(glyph).Frame;
     internal static Vector ShiftOf(string glyph, IconState state) => ButtonFit(glyph).Shift[(int)state];
@@ -142,13 +128,11 @@ public static partial class SvgIcons
             foreach (var state in Enum.GetValues<IconState>())
             {
                 if (AssetButton(glyph, state) is not { } assetButton || Ink(assetButton) is not { IsEmpty: false } ink) continue;
-                // the card's placed by hand, centring what's left of it would undo the cut
                 var shift = glyph == "card" ? new Vector() : new Vector(centre - (ink.Left + ink.Right) / 2, centre - (ink.Top + ink.Bottom) / 2);
-                // a half always goes down. Math.Round sends it to the even number, which can leave two states two units apart
+                // Math.Round sends a half to the even number, which can leave two states two units apart
                 if (OnGrid.Contains(glyph)) shift = new Vector(Math.Ceiling(shift.X - 0.5), Math.Ceiling(shift.Y - 0.5));
                 shifts[(int)state] = shift;
                 ink.Offset(shift);
-                // a bit over, so the frame's clip never shaves the soft edge
                 half = Math.Max(half, new[] { centre - ink.Left, ink.Right - centre, centre - ink.Top, ink.Bottom - centre }.Max() + 0.5);
             }
             var fit = (shifts, new Rect(centre - half, centre - half, half * 2, half * 2));
@@ -157,7 +141,6 @@ public static partial class SvgIcons
         }
     }
 
-    // where the icon really puts ink, off a render at 8x. Bounds counts clipped and see-through bits as well
     internal static Rect Ink(Drawing drawing)
     {
         const int scale = 8, from = -8, units = 48, size = units * scale;
@@ -192,7 +175,6 @@ public static partial class SvgIcons
     internal static string OnButton(string glyph, string svg)
     {
         svg = DiscCircle().Replace(svg, "");
-        // the dark colours line up darkest to darkest with the idle file's, anything near white goes white
         static List<string> Darks(string text) => ColourAttr().Matches(text).Select(m => m.Groups[2].Value.ToUpperInvariant())
             .Where(c => c != HoverDisc && c != OpenDisc && Light(c) < 0.8).Distinct().OrderBy(Light).ToList();
         var idle = Text(GlyphFile(glyph, IconState.Idle)) is { } t ? Darks(t) : [];
@@ -215,8 +197,6 @@ public static partial class SvgIcons
     public static ImageSource? Emote(int index) =>
         index is >= 1 and <= ChatLook.Emotes ? Cached(EmoteFile(index), () => Framed(EmoteFile(index))) : null;
 
-    // busy shows as online and Appear offline as invisible, same as POL, and offline has no badge. Unfilled loses the
-    // pale disc inside the ring, for the statuses the picker isn't on
     public static ImageSource? Online(string key, bool filled = true)
     {
         if (key switch { "online" or "busy" => "online-online.svg", "away" => "online-away.svg", "invisible" => "online-invisible.svg", _ => null }
@@ -226,7 +206,6 @@ public static partial class SvgIcons
             : Cached(file + "#unfilled", () => Frame(Load(file, edit: Unfilled), ViewBox(file)));
     }
 
-    // the ring's a full disc under the pale one, so it becomes a band with the pale disc's hole cut out of it
     internal static string Unfilled(string svg) => RingAndInside().Replace(svg, m =>
     {
         static string Circle(double x, double y, double r) => FormattableString.Invariant($"M{x - r},{y}A{r},{r} 0 1 0 {x + r},{y}A{r},{r} 0 1 0 {x - r},{y}Z");
@@ -236,8 +215,6 @@ public static partial class SvgIcons
 
     public static ImageSource? XiBadge => Cached(XiBadgeFile, () => Framed(XiBadgeFile));
 
-    // the badge's body made longer to the left, so on a profile picture its rounded end can sit behind the picture and
-    // the letters keep their place. Without the body where it's expected it's the badge as the file has it
     public static ImageSource? XiBadgeTucked => Cached(XiBadgeFile + "#tucked", () =>
     {
         const string body = "<rect x=\"1\" y=\"1\" width=\"36\"";
@@ -248,8 +225,6 @@ public static partial class SvgIcons
                      new Rect(left, 0, XiBadgeGeometry.FrameWidth, XiBadgeGeometry.ViewHeight));
     });
 
-    // the badge cropped square round its letters for a circle to fill, from the image so a re-export stays centred.
-    // Letters are smaller so the X's tips clear the edge
     public static ImageSource? XiBadgeRound => Cached(XiBadgeFile + "#round", () => Frame(SmallerLetters(Load(XiBadgeFile)), RoundFrame()));
 
     private const double RoundLetterScale = 0.86;
@@ -258,7 +233,6 @@ public static partial class SvgIcons
     {
         if (assetBadge is null || Parts(assetBadge).Letters is not { } l) return assetBadge;
         var scale = new ScaleTransform(RoundLetterScale, RoundLetterScale, l.X + l.Width / 2, l.Y + l.Height / 2);
-        // the groups keep their own transform, clip and opacity, only the letters inside them shrink
         Drawing Shrink(Drawing d)
         {
             if (d is DrawingGroup g)
@@ -313,7 +287,6 @@ public static partial class SvgIcons
 
     private static Drawing? Framed(string file) => Frame(Load(file), ViewBox(file));
 
-    // the image is exactly the frame, so the drawing sits where the file put it and nothing outside it shows
     private static Drawing? Frame(Drawing? drawing, Rect? frame)
     {
         if (drawing is null || frame is not { } f) return drawing;
@@ -323,8 +296,6 @@ public static partial class SvgIcons
         return group;
     }
 
-    // one square for all four states round the badge's centre, so the glyph never shifts when the state changes. Some
-    // states poke out of the disc, so it's the biggest of them
     private static Rect? GlyphFrame(string glyph)
     {
         lock (Gate)
@@ -341,7 +312,6 @@ public static partial class SvgIcons
         }
     }
 
-    // the single-colour files say currentColor, which gets swapped for a real one before the renderer sees it
     internal static Drawing? Load(string file, Color? currentColour = null, Func<string, string>? edit = null)
     {
         try
@@ -349,8 +319,7 @@ public static partial class SvgIcons
             if (Text(file) is not { } svg) return null;
             if (currentColour is { } c) svg = svg.Replace("currentColor", $"#{c.R:X2}{c.G:X2}{c.B:X2}", StringComparison.Ordinal);
             if (edit is not null) svg = edit(svg);
-            // left alone the renderer shifts a drawing's top left onto the viewBox's, and the search icon has a (clipped) rectangle
-            // at -8 that it shoves 8 units down and right
+            // left alone the renderer shoves the search icon's clipped rectangle at -8 down and right
             var settings = new WpfDrawingSettings
             {
                 IncludeRuntime = false,

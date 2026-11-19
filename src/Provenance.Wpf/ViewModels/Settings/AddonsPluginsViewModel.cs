@@ -13,15 +13,12 @@ using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
-// Folder is null when it can't be found. Profile is the Windower profile ("" is the unnamed one) or the boot config
 public sealed record AddonsTarget(ThirdPartyHook Platform, string? Folder, string Profile);
 
 public delegate Task<WindowerInstallResult> WindowerInstaller(string windowerDir, string branch, AddonKind kind, string name);
 
 public sealed record AddonBadge(string Text, string Tip, bool Warn = false);
 
-// Whatever the Windower/Ashita tab has picked. Every switch saves straight away, then the page is rebuilt from the
-// files and Provenance's settings as they are now
 public partial class AddonsPluginsViewModel : ObservableObject
 {
     private const string SandboxText =
@@ -53,8 +50,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
     public ObservableCollection<AddonRow> Plugins { get; } = [];
     public ObservableCollection<AddonRow> PolPlugins { get; } = [];
 
-    // top to bottom: this for the top of the page, then the sub-tab's list under its heading. Only rows come and go,
-    // so the search box isn't rebuilt mid-typing
     public ObservableCollection<object> Items { get; } = [];
 
     public ObservableCollection<string> Tabs { get; } = ["Addons", "Plugins"];
@@ -86,8 +81,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
     [ObservableProperty] private string? _noAddons;
     [ObservableProperty] private string? _noPlugins;
     [ObservableProperty] private string? _noPolPlugins;
-    // Windower's shared list, so Settings hides the profile switcher. While a page loads it's a guess from the
-    // settings, or the switcher would pop up and vanish again
     [ObservableProperty] private bool _sameListForEveryProfile;
 
     public bool HasLists => Message is null;
@@ -95,8 +88,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
     partial void OnNoAddonsChanged(string? value) => _addonsHeading.Note = value;
     partial void OnNoPluginsChanged(string? value) => _pluginsHeading.Note = value;
 
-    // Ashita's POL plugins tab goes with it, but not while a page loads, so another boot config keeps it picked.
-    // Addons is picked first or the strip would be left empty
     private void SyncTabs(AddonsPage page)
     {
         if (page.Message is not null) return;
@@ -128,8 +119,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
         if (_visible) Refreshing = RefreshAsync();
     }
 
-    // only the scan's in the background. The newest one builds the page from everything as it is when it lands, so a
-    // switch flipped meanwhile stays put
     internal async Task RefreshAsync()
     {
         int mine = ++_refreshes;
@@ -204,7 +193,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
         Filter();
     }
 
-    // rows that are still there keep their place on screen, so a switch doesn't jump about once it's saved
     private void Fill(ObservableCollection<AddonRow> rows, List<RowData> data)
     {
         var old = new Dictionary<string, AddonRow>(StringComparer.OrdinalIgnoreCase);
@@ -224,7 +212,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
         NoPolPlugins = Nothing(PolPlugins, _page?.NoPolPlugins);
         _polHeading.Note = NoPolPlugins ?? (PolPlugins.Any(r => r.Visible && r.Incompatible) ? AshitaInstall.IncompatibleNote : null);
         _polHeading.Warning = PolPlugins.Any(r => string.Equals(r.Key, "sandbox", StringComparison.OrdinalIgnoreCase) && r.On) ? SandboxText : null;
-        // hidden rows stay out of the list altogether, a collapsed one still costs the panel a container
         List<object> items = [this];
         if (HasLists)
         {
@@ -245,7 +232,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
         Sync(Items, items);
     }
 
-    // straight from the settings each time, so the headers and the saved fold can't disagree
     internal bool SectionsOpen => !_settings.Current.AddonSectionsFolded;
 
     internal void FoldSections(bool folded)
@@ -340,7 +326,6 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     internal Action<string, bool> ShowInExplorerForTest { get; set; } = (path, isFile) => { if (isFile) Explorer.ShowFile(path); else Explorer.ShowFolder(path); };
 
-    // an addon opens its own folder, a plugin its folder with the DLL picked
     [RelayCommand]
     private void OpenFolder(AddonRow? row)
     {

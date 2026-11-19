@@ -5,8 +5,6 @@ using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Social;
 
-// Kind: say, entered, left, away, back, master, kicked or whisper. From's the member key (0 mine), Colour the colour
-// char as a number (-1 for 'z'), Emote 0 for none
 public sealed record ChatLine(long Seq, long Time, string Kind, int From, bool Me, string Name, string Text)
 {
     public DateTimeOffset When => DateTimeOffset.FromUnixTimeSeconds(Time).ToLocalTime();
@@ -18,8 +16,7 @@ public sealed record ChatRoomLines(string Room, IReadOnlyList<ChatLine> Lines);
 
 public static class ChatRoomFiles
 {
-    // the hook's limits: chat name 15 Shift-JIS bytes, password 23 chars, text 400 (the viewer's box). The viewer's new
-    // room form: name 30, password 16 letters and numbers, 2-20 people
+    // the hook's limits: chat name 15 Shift-JIS bytes, password 23 chars, text 400
     public const int MaxNameBytes = 15, MaxPasswordLength = 23, MaxTextLength = 400, PageSize = 100;
     public const int MaxRoomName = 30, MaxNewPassword = 16, MinOccupancy = 2, MaxOccupancy = 20, DefaultOccupancy = 10;
 
@@ -37,7 +34,6 @@ public static class ChatRoomFiles
     public static bool Rooms(int pid, string token, int zone, int offset) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.ChatRooms, token, zone, offset);
 
-    // a locked room's password never goes in here, the app hands it over as a one-shot Credential Manager entry
     public static bool Join(int pid, string token, string irc, bool hasPassword, string chatName) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.ChatJoin, token, irc, hasPassword ? "1" : "", chatName);
 
@@ -55,12 +51,10 @@ public static class ChatRoomFiles
         HookFiles.WriteRequest(pid, HookContract.Requests.ChatMaster, token, hasPassword ? "1" : "",
                                op switch { MasterOp.Kick => "kick", MasterOp.Master => "master", _ => "password" }, memberKey);
 
-    // joinToken calls off an enter the app couldn't withdraw, should the hook take it after this
     public static bool Leave(int pid, string token, string joinToken = "") =>
         joinToken.Length > 0 ? HookFiles.WriteRequest(pid, HookContract.Requests.ChatLeave, token, joinToken)
                              : HookFiles.WriteRequest(pid, HookContract.Requests.ChatLeave, token);
 
-    // what the hook would refuse anyway
     public static string? NameProblem(string name) =>
         string.IsNullOrWhiteSpace(name) ? "Enter chat name."
         : name.Any(c => c < ' ') ? "That chat name can't be used."
@@ -73,7 +67,6 @@ public static class ChatRoomFiles
         : name.Any(c => c < ' ') || !ShiftJis.Fits(name) ? HookFailures.ChatRooms.BadName
         : null;
 
-    // the viewer's new password box takes letters and numbers, 16 at most
     public static string? NewPasswordProblem(string password) =>
         password.Length == 0 ? "Room password is not set. Cannot create room."
         : password.Length > MaxNewPassword || !password.All(char.IsAsciiLetterOrDigit) ? "Room passwords are up to 16 letters and numbers."

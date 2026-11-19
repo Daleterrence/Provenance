@@ -13,7 +13,6 @@ public sealed class StatusMark : ContentControl
         nameof(Status), typeof(PolStatus), typeof(StatusMark),
         new PropertyMetadata(PolStatus.Online, (d, _) => ((StatusMark)d).Rebuild()));
 
-    // offline, pending and the like draw no badge but keep the space
     public static readonly DependencyProperty OnlineProperty = DependencyProperty.Register(
         nameof(Online), typeof(bool), typeof(StatusMark),
         new PropertyMetadata(true, (d, _) => ((StatusMark)d).Rebuild()));
@@ -70,7 +69,6 @@ public sealed class StatusMark : ContentControl
     {
         if (!Shown) { Content = null; Visibility = Visibility.Collapsed; return; }
         Visibility = Visibility.Visible;
-        // POL draws no badge for offline, the space keeps the text lined up
         if (!Online) { Content = null; return; }
         var key = Key(Status);
         if (SvgIcons.Online(key, Filled) is { } icon)

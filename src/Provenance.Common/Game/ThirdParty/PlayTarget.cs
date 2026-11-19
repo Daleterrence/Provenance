@@ -5,8 +5,6 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Common.Game.ThirdParty;
 
-// Profile is the Windower profile (trimmed, "" is the unnamed one) or the Ashita boot config file,
-// kept even when it's gone so whoever shows it can say so
 public sealed record PlayTarget(ThirdPartyHook Platform, string? Dir, string Profile, bool FromAccount)
 {
     public static PlayTarget For(LauncherSettings s, string? accountProfile) => For(s, accountProfile, s.ThirdPartyHookPlatform);
@@ -28,7 +26,6 @@ public sealed record PlayTarget(ThirdPartyHook Platform, string? Dir, string Pro
         }
     }
 
-    // the one Windower starts, the first in file order that matches in any case
     public string? Picked(IEnumerable<string> names) => names.FirstOrDefault(Is);
 
     public bool Is(string name) => name.Equals(Profile, StringComparison.OrdinalIgnoreCase);

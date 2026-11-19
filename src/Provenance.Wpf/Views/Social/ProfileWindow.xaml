@@ -14,8 +14,6 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Style="{StaticResource AppWindow}">
 
-    <!-- POL's View Profile: pic, name, H-ID, mail, last update, privacy, its rows in POL's order and the away message.
-         Each FFXI character gets a tab that swaps in its page -->
     <Grid x:Name="Root" Background="{DynamicResource Bg.Base}" RowDefinitions="40,Auto,Auto,*,Auto">
         <controls:TitleBar />
 
@@ -31,7 +29,6 @@
                     <Button behaviours:State.IsCurrent="{Binding IsSelected}"
                             Command="{Binding DataContext.SelectTabCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                             CommandParameter="{Binding}" AutomationProperties.Name="{Binding Label}" ToolTip="{Binding Label}">
-                        <!-- the tooltip still shows on a tab that can't be clicked, it just doesn't light up -->
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource RoundTab}">
                                 <Style.Triggers>

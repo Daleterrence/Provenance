@@ -4,10 +4,8 @@ using Serilog;
 
 namespace Provenance.Common.Otp;
 
-// what the code dialog offers when there's no code
 public enum OtpFix { TryAgain, Install, OpenOnePasswordSettings, TypeInstead, MasterPassword }
 
-// one plain line and its button. Outcome only goes in the log, never the item, the tool's output or the code
 public sealed record OtpFetchResult(string? Code, string? Problem, OtpFix Fix = OtpFix.TryAgain, string? Tool = null)
 {
     internal string Outcome { get; init; } = "";
@@ -19,7 +17,6 @@ public sealed record OtpFetchResult(string? Code, string? Problem, OtpFix Fix = 
     }
 }
 
-// The code from a password manager that's unlocked on this PC, read at login, passed on once and never stored
 public static class OtpSources
 {
     public const string Bitwarden = "bitwarden", OnePassword = "1password", KeePassXC = "keepassxc";
@@ -40,7 +37,6 @@ public static class OtpSources
         _ => ("", ""),
     };
 
-    // never throws, a problem comes back as text
     public static async Task<OtpFetchResult> FetchAsync(string source, string item, string account, string squareEnixId, string? bitwardenPassword,
                                                         CancellationToken ct)
     {
@@ -56,7 +52,6 @@ public static class OtpSources
             };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { r = Problem("cancelled", "Cancelled."); }
-        // KeePassXC's waits say which one ran out, op and bw only ever didn't answer
         catch (TimeoutException ex) { r = Problem("timed out", source == KeePassXC ? ex.Message : $"{Name(source)} didn't answer."); }
         catch (CredentialKeyUnavailableException ex) { r = Problem("key file unavailable", ex.Message, OtpFix.TypeInstead); }
         catch (Exception ex)

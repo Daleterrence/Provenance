@@ -2,7 +2,6 @@ namespace Provenance.Common.Game.Ashita;
 
 public static class AshitaPolPlugins
 {
-    // polplugins that would fight Provenance over the login or the accounts, so they're always off in the launch copy
     private static readonly (string Name, string Reason)[] Takeovers =
     [
         ("autopol", "Provenance logs you in itself."),

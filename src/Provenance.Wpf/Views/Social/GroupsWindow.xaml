@@ -13,7 +13,6 @@
         Style="{StaticResource AppWindow}">
 
     <Window.Resources>
-        <!-- a whole row as one button, so Enter and Space work and a screen reader hears it. No BasedOn keeps MaterialDesign's look off -->
         <Style x:Key="ClickRow" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Background" Value="Transparent" />
@@ -124,7 +123,6 @@
                             <DataTemplate>
                                 <Border Style="{StaticResource GroupCard}">
                                     <StackPanel>
-                                        <!-- the menu's filled as it opens, the dots button opens the same one -->
                                         <Grid Background="Transparent" ContextMenuOpening="OnRowMenu">
                                             <Grid.ContextMenu>
                                                 <ContextMenu />
@@ -251,7 +249,6 @@
                                  Style="{StaticResource Spinner}"
                                  Visibility="{Binding Saving, Converter={StaticResource BoolToVis}}" />
                     <TextBlock FontSize="12" TextWrapping="Wrap" MaxWidth="300" Text="{Binding EditStatus}" />
-                    <!-- only success notes go by themselves -->
                     <Button Width="22" Height="22" Padding="0" Margin="8,0,0,0" VerticalAlignment="Top"
                             Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.3}"
                             Command="{Binding DismissEditNoteCommand}" AutomationProperties.Name="Dismiss"

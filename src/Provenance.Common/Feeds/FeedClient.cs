@@ -15,7 +15,7 @@ public sealed class FeedClient
 
     public FeedClient(HttpClient? http = null)
     {
-#pragma warning disable RS0030 // FeedClient owns its client
+#pragma warning disable RS0030
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
 #pragma warning restore RS0030
         HttpAgent.Set(_http);
@@ -111,7 +111,7 @@ public sealed class FeedClient
                 return new FeedFetch<T>(items, DateTime.UtcNow, false);
             }
             resp.EnsureSuccessStatusCode();
-            // the client's timeout stops at the headers once they're read on their own, so the body gets its own
+            // HttpClient's timeout stops at the headers, so the body gets its own
             using (var read = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
                 read.CancelAfter(_http.Timeout);

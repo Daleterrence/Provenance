@@ -1,17 +1,14 @@
-/* polcore's chat login connects to the redirector, which answers with one line naming the chat server. The hook asks
-   that itself while it loads and hands the answer to polcore's connect on loopback, once */
 #define REDIRECTOR_HOST "ci000.pol.com"
 #define REDIRECTOR_PORT 51240
-#define REDIRECTOR_ASK_MS 5000       /* connect and answer together */
-#define REDIRECTOR_WAIT_MS 6000      /* polcore waits this long for an ask still going, rather than make a second one */
-#define REDIRECTOR_LIFE_MS 60000     /* an older answer is never used */
+#define REDIRECTOR_ASK_MS 5000
+#define REDIRECTOR_WAIT_MS 6000
+#define REDIRECTOR_LIFE_MS 60000
 #define REDIRECTOR_SERVE_MS 1000
-#define REDIRECTOR_LATE_MS 15000     /* how long a connection that didn't show at once is waited for */
+#define REDIRECTOR_LATE_MS 15000
 #define REDIRECTOR_BACKLOG 0x7fffffff
 #define REDIRECTOR_MAX 512
 #define REDIRECTOR_EXCLUSIVE ((int)0xfffffffb)   /* SO_EXCLUSIVEADDRUSE, winsock2.h's */
 
-/* ws2_32 by name, so nothing new is linked */
 static struct {
     int (PASCAL *startup)(WORD, WSADATA *);
     SOCKET (PASCAL *socket)(int, int, int);
@@ -63,7 +60,6 @@ static struct timeval redirector_timeval(ULONGLONG ms)
     tv.tv_usec = (long)(ms % 1000) * 1000;
     return tv;
 }
-/* 1 when s can be read (or written) inside ms */
 static int redirector_wait(SOCKET s, int writing, ULONGLONG ms)
 {
     fd_set set;
@@ -72,8 +68,6 @@ static int redirector_wait(SOCKET s, int writing, ULONGLONG ms)
     FD_SET(s, &set);
     return g_ws.select(0, writing ? NULL : &set, writing ? &set : NULL, NULL, &tv) > 0;
 }
-/* 1 once a connect in progress has gone through. A refused one shows in the except set, not the write set, so it ends the
-   wait at once */
 static int redirector_connected(SOCKET s, ULONGLONG ms)
 {
     fd_set w, e;
@@ -90,8 +84,6 @@ static ULONGLONG redirector_left(ULONGLONG until)
     return now < until ? until - now : 0;
 }
 
-/* asks host:port, which says nothing until it's connected to and then sends one short line. The bytes that came (never
-   0) or -1, all of it inside timeout_ms apart from the name lookup. The connection's closed again straight away */
 static int redirector_ask(const char *host, unsigned short port, DWORD timeout_ms, BYTE *out, int cap)
 {
     struct sockaddr_in sa, peer;
@@ -114,7 +106,6 @@ static int redirector_ask(const char *host, unsigned short port, DWORD timeout_m
     if (g_ws.connect(s, (struct sockaddr *)&sa, sizeof sa) != 0 && g_ws.last_error() != WSAEWOULDBLOCK) goto fail;
     if (!redirector_connected(s, redirector_left(until)) || g_ws.getpeername(s, (struct sockaddr *)&peer, &len) != 0) goto fail;
     while (n < cap) {
-        /* what comes after the first of it gets a moment, the line may be in two bits */
         if (!redirector_wait(s, 0, n ? 100 : redirector_left(until))) break;
         got = g_ws.recv(s, (char *)out + n, cap - n, 0);
         if (got <= 0) break;
@@ -127,7 +118,6 @@ fail:
     return -1;
 }
 
-/* a listener on loopback, on a port the system picks (host order in *port). Nothing else can share it */
 static SOCKET redirector_listen(unsigned short *port)
 {
     struct sockaddr_in la;
@@ -136,7 +126,7 @@ static SOCKET redirector_listen(unsigned short *port)
     if (s == INVALID_SOCKET) return s;
     memset(&la, 0, sizeof la);
     la.sin_family = AF_INET;
-    la.sin_addr.S_un.S_addr = 0x0100007f;   /* 127.0.0.1 */
+    la.sin_addr.S_un.S_addr = 0x0100007f;
     g_ws.setsockopt(s, SOL_SOCKET, REDIRECTOR_EXCLUSIVE, (const char *)&on, sizeof on);
     if (g_ws.bind(s, (struct sockaddr *)&la, sizeof la) != 0 || g_ws.listen(s, REDIRECTOR_BACKLOG) != 0 ||
         g_ws.getsockname(s, (struct sockaddr *)&la, &len) != 0) {
@@ -147,8 +137,6 @@ static SOCKET redirector_listen(unsigned short *port)
     return s;
 }
 
-/* the connection from polcore's port (network order) gets the answer and is kept in *served, anything else is closed.
-   0 when it never came inside wait_ms */
 static int redirector_serve(SOCKET listener, unsigned short port, const BYTE *answer, int n, DWORD wait_ms, SOCKET *served)
 {
     struct sockaddr_in peer;
@@ -176,15 +164,13 @@ static int redirector_serve(SOCKET listener, unsigned short port, const BYTE *an
 }
 
 enum { RED_NOT_ASKED, RED_ASKING, RED_READY, RED_TAKEN, RED_GONE };
-/* the state moves on only by compare-exchange and the rest is written before the move to READY, so what polcore's side
-   reads once it sees READY is whole */
 static struct {
     volatile LONG state;
-    HANDLE thread, answered, done;   /* answered: the ask is over, done: polcore took the answer or it expired */
+    HANDLE thread, answered, done;
     char host[64];
     unsigned short port, lport;
     DWORD ask_ms, wait_ms, life_ms, serve_ms, late_ms;
-    unsigned short late_port;   /* polcore's port when its connection hadn't shown by serve_ms, 0 when it had */
+    unsigned short late_port;
     BYTE answer[REDIRECTOR_MAX];
     int len;
     ULONGLONG at;
@@ -211,7 +197,7 @@ static DWORD WINAPI redirector_thread(void *unused)
     g_red.listener = listener;
     g_red.lport = lport;
     g_red.at = GetTickCount64();
-    if (!redirector_move(RED_ASKING, RED_READY)) {   /* polcore stopped waiting and has asked for itself */
+    if (!redirector_move(RED_ASKING, RED_READY)) {
         g_ws.closesocket(listener);
         base_log("redirector: answered after polcore stopped waiting, not used\r\n");
         return 0;
@@ -223,10 +209,8 @@ static DWORD WINAPI redirector_thread(void *unused)
         base_log("redirector: early answer not wanted in time, dropped\r\n");
         return 0;
     }
-    /* polcore's end closes when it's read the line, like the redirector's would. This end goes after it */
     if (WaitForSingleObject(g_red.done, 5000) != WAIT_OBJECT_0) return 0;
     if (g_red.late_port) {
-        /* polcore's socket is on this listener already, so it's kept open until the connection's been accepted */
         int ok = redirector_serve(listener, g_red.late_port, g_red.answer, g_red.len, g_red.late_ms, &g_red.served);
         g_ws.closesocket(listener);
         base_log("redirector: early answer %s polcore, late\r\n", ok ? "handed to" : "never taken by");
@@ -238,7 +222,6 @@ static DWORD WINAPI redirector_thread(void *unused)
     return 0;
 }
 
-/* where the thread starts from a DllMain: it begins once the loader lock's let go, and nothing here waits for it */
 static void redirector_begin(const char *host, unsigned short port, DWORD ask_ms, DWORD wait_ms, DWORD life_ms)
 {
     memset(&g_red, 0, sizeof g_red);
@@ -273,7 +256,6 @@ static void redirector_start(void)
     redirector_begin(REDIRECTOR_HOST, REDIRECTOR_PORT, REDIRECTOR_ASK_MS, REDIRECTOR_WAIT_MS, REDIRECTOR_LIFE_MS);
 }
 
-/* polcore's connect to a: the redirector's, and is there anything of ours for it */
 static int redirector_aimed(const struct sockaddr *a, int n)
 {
     const struct sockaddr_in *in = (const struct sockaddr_in *)a;
@@ -281,8 +263,6 @@ static int redirector_aimed(const struct sockaddr *a, int n)
            in->sin_port == (unsigned short)(g_red.port >> 8 | g_red.port << 8);
 }
 
-/* polcore is connecting s to the redirector. 1 when s got the early answer (*rc is connect's result), 0 when polcore
-   goes ahead on its own. Waits for an ask still going rather than let a second one out */
 static int redirector_connect(SOCKET s, int (PASCAL *real)(SOCKET, const struct sockaddr *, int), int *rc)
 {
     struct sockaddr_in lo, me;

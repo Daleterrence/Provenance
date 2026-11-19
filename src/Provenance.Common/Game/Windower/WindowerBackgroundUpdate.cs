@@ -2,8 +2,6 @@ using Serilog;
 
 namespace Provenance.Common.Game.Windower;
 
-// the end of a Windower update (resources and addons), carried on after pol.exe's been started. A failed login or a
-// cancel doesn't stop it, only its time limit or the app closing does
 internal sealed class WindowerBackgroundUpdate
 {
     private static readonly TimeSpan Grace = TimeSpan.FromSeconds(10);
@@ -31,10 +29,8 @@ internal sealed class WindowerBackgroundUpdate
 
     internal Task Done => _task;
 
-    // set once it's over if it didn't all go in, and handed out once
     internal string? TakeNotice() => Interlocked.Exchange(ref _notice, null);
 
-    // on the launch's own thread. False when it's still going well past its limit
     internal bool Wait(CancellationToken ct) => _task.Wait(Left(), ct);
 
     internal async Task<bool> WaitAsync(CancellationToken ct = default)

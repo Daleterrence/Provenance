@@ -8,7 +8,6 @@ internal sealed record SearchAnswer(bool Ok, string Reason, IReadOnlyList<Search
     public static SearchAnswer Failed(string reason) => new(false, reason, []);
 }
 
-// one connection and one request, closed after. The limit covers the connect, the write and all of the reply
 internal static class SearchClient
 {
     public static readonly TimeSpan Limit = TimeSpan.FromSeconds(5);

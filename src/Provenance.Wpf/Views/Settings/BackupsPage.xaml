@@ -21,7 +21,6 @@
                             <TextBox Text="{Binding BackupFolder, UpdateSourceTrigger=LostFocus}"
                                      materialDesign:HintAssist.Hint="%APPDATA%\Provenance\Backups" AutomationProperties.Name="Backups folder">
                                 <TextBox.Style>
-                                    <!-- the full default path, only while the box is empty and it's the one in use -->
                                     <Style TargetType="TextBox" BasedOn="{StaticResource FieldText}">
                                         <Style.Triggers>
                                             <Trigger Property="Text" Value="">

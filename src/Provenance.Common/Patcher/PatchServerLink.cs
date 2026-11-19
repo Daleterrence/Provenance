@@ -10,7 +10,6 @@ public sealed class PatchServerNetworkException : IOException
     public PatchServerNetworkException(string message, Exception? inner = null) : base(message, inner) => Shown.Mark(this);
 }
 
-// one request at a time and no retries, same as POL (app.dll at 0x102a6bf5)
 public sealed class PatchServerLink : IDisposable
 {
     private static readonly TimeSpan Silence = TimeSpan.FromMinutes(2);
@@ -79,7 +78,6 @@ public sealed class PatchServerLink : IDisposable
         {
             throw new PatchServerNetworkException("The connection to PlayOnline's update server dropped. Try again in a moment.", e);
         }
-        // a WebSocketStream stops reading and writing once its WebSocket has closed
         catch (NotSupportedException e) when (!_s.CanRead || !_s.CanWrite)
         {
             throw new PatchServerNetworkException("PlayOnline's update server closed the connection. Try again in a moment.", e);

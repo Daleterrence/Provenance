@@ -18,8 +18,6 @@ using Provenance.Common.IO;
 
 namespace Provenance.Common.Game.Windower;
 
-// what Windower.exe does before starting pol.exe, then the watcher's --windower puts in Hook.dll and pol_hook. The
-// mapping and event have fixed names, so launches take turns till the watcher's done
 public sealed class WindowerLauncher : IDisposable
 {
     internal const string LockName = @"Local\ProvenanceWindowerLaunch";
@@ -31,7 +29,6 @@ public sealed class WindowerLauncher : IDisposable
 
     public const string UpdateNoticeText = "Windower couldn't be fully updated this time, so the game starts with the files it already has.";
 
-    // what Windower.exe writes when there's no init.txt, byte for byte
     internal static readonly string DefaultInit = string.Concat(new[]
     {
         "keyboard_allowmmf 1", "", "console_position 15 50", "console_color 255 255 0 0", "console_displayactivity 1",
@@ -84,7 +81,6 @@ public sealed class WindowerLauncher : IDisposable
         };
     }
 
-    // every step up to running the watcher. A throw has a message for the player when it's Shown
     public static WindowerLauncher Prepare(WindowerLaunchSetup setup, IProgress<LaunchProgress>? progress, CancellationToken ct)
     {
         var launch = new WindowerLauncher(setup);
@@ -106,8 +102,6 @@ public sealed class WindowerLauncher : IDisposable
         WindowerBackgroundUpdates.Shared.Stop(wait);
     }
 
-    // starts Windower's update check while the app opens so a login finds it done. Never throws, and does nothing unless
-    // the platform's Windower with a folder that can be used
     public static void CheckAtOpen(ISettingsService settings)
     {
         try
@@ -161,7 +155,6 @@ public sealed class WindowerLauncher : IDisposable
         timer.Lap("hand-over");
     }
 
-    // the launch has read what it needs from the folder by now, and whatever happens to it the rest of the update goes on
     private void BeginBackground()
     {
         if (_rest is not { } run) return;
@@ -337,8 +330,7 @@ public sealed class WindowerLauncher : IDisposable
                                           _setup.ScanCache ?? WindowerScanCaches.For(dir));
         Lists = scan.Lists;
         var sent = Profile.Clone();
-        // fast login swaps in Windower's own POL proxy and the other two patch pol.exe, all of which fight the hook.
-        // settings.xml keeps the user's own values for Windower.exe
+        // fast login swaps in Windower's own POL proxy and the other two patch pol.exe, all of which fight the hook
         sent.IncreaseAccountLimit = false;
         sent.EnableFastLogin = false;
         sent.PreventBackgroundThrottling = false;
@@ -364,8 +356,7 @@ public sealed class WindowerLauncher : IDisposable
 
     private const string BusyText = "Windower is starting another game at the moment. Try again once it's up.";
 
-    // pol.exe trusts every path in the mapping, so one made first by anything else is never used. Hook.dll may keep
-    // its own event though, and an admin's is fine
+    // pol.exe trusts every path in the mapping, so one made first by anything else is never used
     private void OpenHandover()
     {
         using var sa = NamedObjectSecurity.ForHandover();

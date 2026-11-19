@@ -19,8 +19,7 @@ public static class AshitaInstall
     public const string IncompatibleText = "Incompatible with Provenance";
     public const string IncompatibleNote = "The ones marked incompatible stay off whenever Provenance starts the game. Your Ashita settings aren't changed.";
 
-    // Ashita writes the boot config into each log ("Ashita Config Script: \boot\config.ini"), so the newest log that
-    // isn't from my own launch wins. Bit cheeky, but it works
+    // Ashita writes the boot config into each log, so the newest log that isn't from my own launch wins. Bit cheeky, but it works
     public static string? LastUsedBootConfig(string? ashitaDir)
     {
         try
@@ -28,7 +27,6 @@ public static class AshitaInstall
             if (ashitaDir is null) return null;
             var logs = Path.Combine(ashitaDir, "logs");
             if (!Directory.Exists(logs)) return null;
-            // a plain file name only, no slashes of either kind (so no .. tricks either)
             var re = new Regex(@"Config Script:\s*\\boot\\(?<n>[^\\/:\r\n]+\.ini)", RegexOptions.IgnoreCase);
             foreach (var f in new DirectoryInfo(logs).GetFiles("*.txt").OrderByDescending(f => f.LastWriteTimeUtc).Take(20))
             {
@@ -37,13 +35,12 @@ public static class AshitaInstall
                 var buf = new char[16384];
                 var head = new string(buf, 0, sr.Read(buf, 0, buf.Length));
                 var m = re.Match(head);
-                // one that's been renamed or deleted since would only fail the launch
                 if (m.Success && !AshitaBootFiles.IsLaunchCopy(m.Groups["n"].Value)
                     && File.Exists(Path.Combine(AshitaBootFiles.Folder(ashitaDir), m.Groups["n"].Value)))
                     return m.Groups["n"].Value;
             }
         }
-        catch { }   // a folder that won't read has no launch copy to find
+        catch { }
         return null;
     }
 

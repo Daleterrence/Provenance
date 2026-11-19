@@ -3,13 +3,11 @@
 #define CR_PEOPLE 128
 
 #define CR_REPLIES 8
-/* the viewer's give-ups (app.dll 0x10095141, 0x10097c61): 18000 frames (6min at 50 a second) for an answer.
-   A try is a hold loop turn polcore refused the command on (another one out) */
 #define CR_WAIT_MS 360000
-#define CR_TRIES_ENTER 3600   /* entering's AWAY and JOIN, and the PART, which the viewer never gives up on */
-#define CR_TRIES 5            /* any other command, and the typed line */
-#define CR_TRIES_FRAME 20     /* a queued frame: the hello, its replies and the master's */
-#define CR_TEXT_MAX 400       /* characters, the viewer's box. chat_frame_fits is polcore's real limit */
+#define CR_TRIES_ENTER 3600
+#define CR_TRIES 5
+#define CR_TRIES_FRAME 20
+#define CR_TEXT_MAX 400
 #define CR_NAME_MAX 15
 
 typedef struct { char text[0x200]; char chan[0x40]; DWORD lo, hi; int whisper; } cr_raw;
@@ -19,13 +17,9 @@ typedef struct { DWORD seq, time; int kind, me, from, colour, emote; WCHAR name[
 enum { CRK_SAY, CRK_ENTERED, CRK_LEFT, CRK_AWAY, CRK_BACK, CRK_MASTER, CRK_KICKED, CRK_WHISPER };
 static const char *const g_cr_kind[] = { "say", "entered", "left", "away", "back", "master", "kicked", "whisper" };
 
-/* in-room steps: AWAY (back), JOIN, WHO+MODE, TOPIC, then in, and PART on the way out. A new room sets its TOPIC and
-   MODEs after the WHO instead of asking for the TOPIC */
 enum { CR_OUT, CR_AWAY, CR_JOIN, CR_WHO, CR_TOPIC, CR_IN, CR_PART, CR_SETTOPIC, CR_MODE_N, CR_MODE_K, CR_MODE_L };
 enum { CRW_NONE, CRW_CMD, CRW_MSG };
-/* PRIVMSG kinds, the frame's type where there is one */
 enum { CRM_SAY, CRM_HELLO = 2, CRM_REPLY = 3, CRM_KEY = 7, CRM_MASTER = 10, CRM_KICK = 11 };
-/* the room master's jobs, one step at a time like everything else in the room */
 enum { MO_NONE, MO_KICK, MO_MASTER, MO_KEY };
 enum { MS_BAN, MS_KICKFRAME, MS_KICK, MS_OP, MS_OPFRAME, MS_UNKEY, MS_KEY, MS_KEYFRAME };
 
@@ -54,9 +48,9 @@ static int g_cr_people_n, g_cr_next_key;
 static cr_line g_cr_line[CR_LINES];
 static int g_cr_line_n, g_cr_line_next, g_cr_lines_dirty;
 static DWORD g_cr_seq;
-static int g_cr_making;                      /* this enter's a create */
+static int g_cr_making;
 static char g_cr_new_topic[0x80], g_cr_new_limit[4];
-static int g_cr_colour = -1, g_cr_emote;     /* the line being sent's */
+static int g_cr_colour = -1, g_cr_emote;
 static int g_cr_mop, g_cr_msteps[4], g_cr_mn, g_cr_mi;
 static DWORD g_cr_mlo, g_cr_mhi;
 static WCHAR g_cr_mname[0x21];
@@ -86,20 +80,17 @@ static void chat_frame_take(const char *text, const char *chan, DWORD lo, DWORD 
     g_cr_raw_n = n + 1;
 }
 static void __cdecl chat_frame_line(const char *text, const char *chan, DWORD lo, DWORD hi) { chat_frame_take(text, chan, lo, hi, 0); }
-/* a PRIVMSG to me rather than a room, which in chat is a whisper. Kept only while a room's open, same as room lines */
 static void __cdecl chat_frame_private(const char *text, DWORD myLo, DWORD myHi, DWORD lo, DWORD hi)
 {
     (void)myLo; (void)myHi;
     chat_frame_take(text, "", lo, hi, 1);
 }
-/* svc 0x644 gets a room NOTICE first, same as the viewer, and only one it says isn't its own is a room line */
 static int __cdecl chat_frame_notice(const char *text, const char *chan, DWORD lo, DWORD hi)
 {
     int r = ((int (__cdecl *)(const char *, const char *, DWORD, DWORD))g_cr_room_notice)(text, chan, lo, hi);
     if (r == 0) chat_frame_take(text, chan, lo, hi, 0);
     return r;
 }
-/* the svc 0xd9c array, registered once at the start of the hold */
 static void chat_frame_push_callbacks(BYTE *b, void *cb[6])
 {
     g_cr_room_notice = pc_slot(b, SV_ROOM_NOTICE);
@@ -195,8 +186,6 @@ static cr_line *chat_frame_add_line(int kind, int me, const cr_person *p, const 
     return l;
 }
 
-/* one character of a frame's colour, emoticon or colour-index field (app.dll 0x1009664e): 0-9 and a-n either case,
-   a space is 0, 'z' is -1 and anything else 0 */
 static int chat_frame_hex(WCHAR c)
 {
     if (c >= L'0' && c <= L'9') return c - L'0';
@@ -206,13 +195,11 @@ static int chat_frame_hex(WCHAR c)
 }
 static int chat_room_key_ok(const char *s);
 
-/* the name runs from just past the header (6 chars, 8 with the language) to the tab */
 static int chat_frame_tab(const WCHAR *w, int n, int from)
 {
     for (int i = from; i < n; i++) if (w[i] == L'\t') return i;
     return -1;
 }
-/* one room line, already in UTF-16, read like app.dll 0x10099d8e does minus whispers, passwords and profile switches */
 static void chat_frame_parse(const WCHAR *w, DWORD lo, DWORD hi, int whisper)
 {
     WCHAR name[0x21], text[0x201];
@@ -220,7 +207,6 @@ static void chat_frame_parse(const WCHAR *w, DWORD lo, DWORD hi, int whisper)
     cr_person *p;
     if (n < 1 || chat_frame_is_me(lo, hi)) return;
     if (whisper) {
-        /* the viewer only shows a whisper from someone in the room with me */
         if (w[0] != L'1' || n < 6 || (tab = chat_frame_tab(w, n, 6)) < 0 || !(p = chat_frame_person_for(lo, hi, 0)) || !p->member) return;
         chat_frame_copy(name, 0x21, w + 6, tab - 6);
         chat_frame_copy(text, 0x201, tab + 3 <= n ? w + tab + 3 : L"", 0x200);
@@ -239,12 +225,10 @@ static void chat_frame_parse(const WCHAR *w, DWORD lo, DWORD hi, int whisper)
             cr_line *l = chat_frame_add_line(CRK_SAY, 0, p, name, text);
             int page = chat_frame_hex(w[1]) * 16 + chat_frame_hex(w[2]);
             l->colour = chat_frame_hex(w[5]);
-            /* the viewer only draws one when the page isn't -1 ('z') and the face is 1 or more */
             l->emote = w[1] == L'z' || w[2] == L'z' || page < 0 ? 0 : chat_frame_hex(w[3]) * 16 + chat_frame_hex(w[4]);
         }
         return;
     case L'7':
-        /* the master's new password, which the viewer keeps for its own next password change */
         if (p && p->master && n > 8) {
             char k[32];
             int m = WideCharToMultiByte(CP_ACP, 0, w + 8, -1, k, sizeof k, NULL, NULL);
@@ -261,7 +245,6 @@ static void chat_frame_parse(const WCHAR *w, DWORD lo, DWORD hi, int whisper)
         }
         if (w[0] == L'3') return;
         chat_frame_add_line(CRK_ENTERED, 0, p, name, NULL);
-        /* everyone in the room answers an arrival with a 3, once per arrival here, never per frame */
         if (p && !p->answered && g_s.cr_open) {
             p->answered = 1;
             if (g_s.cr_replies < CR_REPLIES) g_s.cr_replies++;
@@ -272,7 +255,6 @@ static void chat_frame_parse(const WCHAR *w, DWORD lo, DWORD hi, int whisper)
         chat_frame_copy(name, 0x21, w + 6, tab - 6);
         if (p && name[0]) lstrcpyW(p->name, name);
         if (tab + 3 < n && w[tab + 3] == L'0') {
-            /* the viewer takes the message from past the name's length again, bounded here */
             int at = tab + 3 + (tab - 6) + 2;
             chat_frame_copy(text, 0x201, at < n ? w + at : L"", 0x200);
             for (int i = 0; text[i]; i++) if (text[i] == L'\t') { text[i] = 0; break; }
@@ -290,10 +272,8 @@ static void chat_frame_parse(const WCHAR *w, DWORD lo, DWORD hi, int whisper)
         chat_frame_add_line(w[0] == L'a' ? CRK_MASTER : CRK_KICKED, 0, NULL, name, NULL);
         return;
     }
-    /* 1 whisper (private only), 5/6 profile views, 7 a new password, 8 leaving: nothing to show */
 }
 
-/* a 2 or 3: type, the viewer's hidden profile, two face chars, '1' (not away) and the chat name */
 static void chat_frame_hello(BYTE *b, int type, WCHAR *w)
 {
     wsprintfW(w, L"%xz000000000000000z0z000z000z000z000z000z000z000z000z0000000z0000000z000000000000000z000000000000000z0",
@@ -304,8 +284,6 @@ static void chat_frame_hello(BYTE *b, int type, WCHAR *w)
     lstrcpynW(w + 104, g_cr_nick, CR_NAME_MAX + 1);
     (void)b;
 }
-/* a 0: type, emoticon page and face (space-padded %2x), colour char, name, tab, language, text.
-   Colour char is its list place + 5 (app.dll 0x100984df), '0' for none */
 static void chat_frame_say(BYTE *b, const WCHAR *text, WCHAR *w, int cap)
 {
     static const WCHAR cc[] = L"0123456789abcdefghijklmn";

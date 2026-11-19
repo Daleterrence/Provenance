@@ -1,7 +1,6 @@
 namespace Provenance.Wpf;
 
-// .NET 10.0.14 on x86 dies on a thread static that fits its 48 byte TLS area till aligned.
-// Filling it first leaves no gap, drop this once it's fixed
+// .NET 10.0.14 on x86 dies on a thread static that fits its 48 byte TLS area till aligned, drop this once it's fixed
 public static class ThreadStaticsFix
 {
     private const int DirectAreaBytes = 48;

@@ -87,11 +87,9 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     public bool IsXiCard => !SelectedCard.IsHandle;
     public bool CanSelectCard => !Busy && !CardLoading;
 
-    // a character's profile is read when its card is opened, and the card strip waits while that's out
     public StatusLine CardNote { get; } = new();
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanSelectCard))] private bool _cardLoading;
 
-    // edits stay with each card, so picking another one never loses any
     [RelayCommand]
     private void SelectCard(ProfileCard? card)
     {
@@ -105,8 +103,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         if (card.Character is not null) ShowCharacter(card, from);
     }
 
-    // one read per card per login. A card read before shows what it had, and nothing's sent while the game's running or
-    // the handle's switching
     private void ShowCharacter(ProfileCard card, ProfileCard from)
     {
         card.ReadFailed = false;
@@ -166,7 +162,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         if (st == "timeout") HookFiles.Discard(_cardPid, HookContract.Requests.MyFfxiProfile);
         var from = _cardFrom;
         EndCardRead();
-        // the hook read whatever's under that slot, which has to be the character the card's for
         if (st == "done" && snap.FfxiProfile!.Character != card.Character!.Id) st = "failed:no character";
         if (st == "done")
         {
@@ -181,7 +176,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         card.ReadFailed = true;
         if (st == "failed:hidden" && from is not null)
         {
-            // back to the card it came from, like the friend pages go back to the tab before
             card.ReadFailed = false;
             card.IsSelected = false;
             from.IsSelected = true;
@@ -220,7 +214,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private bool _busy;
     public StatusLine Note { get; } = new();
 
-    // puts the window's loading overlay up. Only the load gets one, a save leaves the form in view
     [ObservableProperty] private bool _loadingProfile;
 
     public string FooterText => !Busy && Problem.Length > 0 ? Problem : Note.Text;
@@ -232,9 +225,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private void RetryLoad() => Load();
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(VisibilityHelp))]
-    private PrivacyLevel _level;   // Keep if it loaded as none of the others
+    private PrivacyLevel _level;
 
-    // the viewer's own help for each choice
     public string VisibilityHelp => HelpFor(Level);
 
     private string HelpFor(PrivacyLevel level) => level switch
@@ -282,7 +274,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private bool HandleChanged => HandleName.Trim() != _savedHandle;
 
-    // the viewer's checks that work here, the hook and the server check again anyway
     private string Check()
     {
         var name = HandleName.Trim();
@@ -312,7 +303,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             ("z_lang2", Lang2), ("z_fav0", Interest1?.Code), ("z_fav1", Interest2?.Code), ("z_fav2", Interest3?.Code),
         ];
         var list = new List<KeyValuePair<string, string>>();
-        // a field the loaded record lacks counts as 0 (Not set), so it's only sent once it's set
         foreach (var (field, value) in nums)
             if (value is { } v && (_saved.TryGetValue(field, out var was) ? was : 0) != v)
                 list.Add(new(field, v.ToString()));
@@ -328,7 +318,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         if (!SocialRequests.RequestMyProfile(pid, _watch.Token!)) Fail(HookFailures.RequestWriteFailed);
     }
 
-    // a closed session and a waiting game or handle switch each have their own note, and callers differ on which comes first
     private bool Ready(out int pid, bool gameFirst = false)
     {
         pid = 0;
@@ -390,8 +379,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Fail(text);
     }
 
-    // the hook gives up waiting for a slot at 120s and on a rename at 240, and polcore fails a job at 100, this
-    // catches one gone quiet
     internal void CheckTimeout()
     {
         if (_job == Job.None)
@@ -430,7 +417,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             _saved.Clear();
             foreach (var (name, f) in p.Fields) if (name != "z_mail") _saved[name] = f.Value;
             long V(string n) => _saved.TryGetValue(n, out var v) ? v : 0;
-            // a code this install doesn't know shows "Not set" like the viewer, and it's kept so a save can't clear it
             long Keep(IReadOnlyList<Choice<long>> list, long v, Action<IReadOnlyList<Choice<long>>> set)
             {
                 if (v != 0 && list.All(c => c.Code != v)) set(list.Append(new Choice<long>(v, NotSet)).ToList());
@@ -450,7 +436,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             var mail = p.Fields.TryGetValue("z_mail", out var m) ? m.Text.Trim() : "";
             _savedMail = mail == _noMail ? "" : mail;
             Mail = _savedMail;
-            // an unknown level shows no choice and is kept (the hook's level 0) unless one's picked
             _savedLevel = p.Level is >= PrivacyLevel.Private and <= PrivacyLevel.Everyone ? p.Level : PrivacyLevel.Keep;
             Level = _savedLevel;
             _savedHandle = p.Handle.Trim();
@@ -463,7 +448,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         Dirty();
     }
 
-    // a reload starts the characters over
     private void FillCards(IReadOnlyList<MyProfileCharacter> characters)
     {
         EndCardRead();
@@ -481,7 +465,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
 
     private bool CanSave() => IsLoaded && !Busy && HasChanges && Problem.Length == 0;
 
-    // a load has nothing of theirs in it yet, closing just withdraws the request
     internal bool Saving => Busy && !LoadingProfile;
 
     internal bool HasUnsavedWork => Saving || HasChanges;
@@ -514,7 +497,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         }
         Start(Job.Save, "Saving your profile...");
         var noMail = fields.Any(f => f.Key == "z_mail" && f.Value == _noMail) ? _noMail : "";
-        // level 0 keeps the profile's own, only a level that was picked gets sent
         var level = Level != _savedLevel ? Level : PrivacyLevel.Keep;
         if (!SocialRequests.SaveMyProfile(pid, _watch.Token!, level, fields, noMail)) Fail(HookFailures.RequestWriteFailed);
     }
@@ -530,7 +512,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     {
         OnCardSnapshot(snap);
         var hook = snap.MeJob;
-        // waiting its turn behind another profile server job in the hook, so its clock hasn't started
         _watch.WaitingTurn(hook.Token, snap.ProfileServerBusy, _social.Now);
         if (_job == Job.None || !_watch.Running || hook.Token != _watch.Token) return;
         var state = hook.State;
@@ -562,7 +543,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
                 _savedLevel = Level;
                 if (_renameAfterSave && _social.GameRunning)
                 {
-                    // Play was pressed while it saved, so the handle stays changed for later
                     _renameAfterSave = false;
                     Done("Your profile is saved. Your handle wasn't renamed because FINAL FANTASY XI started.");
                     return;
@@ -586,7 +566,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     {
         EndJob();
         Dirty();
-        Note.Show(text);   // after Dirty, which clears it
+        Note.Show(text);
     }
 
     private static string FailText(Job job, string state) => state switch
@@ -617,8 +597,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         },
     };
 
-    // a server code gets the viewer's own words for it. 5440's are about group rights, but it's the server's
-    // general "not authorised", so it gets plain ones
     private static string Why(string state)
     {
         var reason = SocialRequests.FailReason(state);
@@ -633,7 +611,6 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _social.SnapshotApplied -= OnSnapshot;
         _social.PropertyChanged -= OnSocialChanged;
         _timer.Stop();
-        // closed mid-job: an untaken request is withdrawn, one the hook already took finishes there
         if (JobExt is { } ext && _pid != 0) HookFiles.Discard(_pid, ext);
         if (_cardWatch.Running) HookFiles.Discard(_cardPid, HookContract.Requests.MyFfxiProfile);
     }

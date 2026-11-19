@@ -8,7 +8,6 @@ public static class Display
     private const int EnumCurrentSettings = -1, EnumRegistrySettings = -2;
     private const int AttachedToDesktop = 0x1, PrimaryDevice = 0x4, MirroringDriver = 0x8;
 
-    // real pixels, not scaled by Windows' text size
     public static (int Width, int Height) Primary() =>
         Mode(null, EnumCurrentSettings) is { Width: > 0, Height: > 0 } m ? m : (1920, 1080);
 

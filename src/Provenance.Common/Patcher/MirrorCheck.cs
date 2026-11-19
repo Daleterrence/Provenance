@@ -5,14 +5,10 @@ using Serilog;
 
 namespace Provenance.Common.Patcher;
 
-// Stands in for SE's version check at a login or a game start when the mirror's signed pointer names exactly the
-// version that's installed. Any doubt at all and SE's asked as it always was
 public sealed class MirrorCheck
 {
     internal static MirrorCheck Shared { get; } = new((folder, ct) => MirrorClient.Shared.GetPointerAsync(folder, ct));
 
-    // the pointer only moves when the publisher sees a new version, which is about once a day, so 10 minutes adds
-    // little to how far behind it can be. A failure is only remembered for as long as it takes a login to retry.
     internal TimeSpan Lifetime { get; init; } = TimeSpan.FromMinutes(10);
     internal TimeSpan FailedLifetime { get; init; } = TimeSpan.FromSeconds(30);
     internal TimeSpan FetchLimit { get; init; } = TimeSpan.FromSeconds(10);
@@ -31,7 +27,6 @@ public sealed class MirrorCheck
 
     internal MirrorCheck(Func<string, CancellationToken, Task<MirrorPointer?>> fetch) => _fetch = fetch;
 
-    // never throws, and does nothing without a supported install
     public static void StartAtOpen(ISettingsService settings)
     {
         _ = Task.Run(() =>
@@ -92,7 +87,6 @@ public sealed class MirrorCheck
         return age < (e.Task.Result is null ? FailedLifetime : Lifetime).TotalMilliseconds;
     }
 
-    // a task that can't fault, so a login that stops waiting leaves nothing unobserved behind it
     private async Task<MirrorPointer?> Fetch(string folder, Func<Entry> entry)
     {
         MirrorPointer? pointer = null;

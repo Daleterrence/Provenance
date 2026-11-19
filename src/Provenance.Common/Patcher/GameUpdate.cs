@@ -38,7 +38,6 @@ public static class GameUpdate
             outcome = new MirrorOutcome(false, [], 0);
         }
 
-        // the list comes once the mirror's answered, so a dead one isn't waited on twice
         if (outcome.OnMirror && product.Game == GameProduct.Viewer) SignedBuilds.RefreshAsync(client, ct).GetAwaiter().GetResult();
 
         if (!outcome.OnMirror)
@@ -59,9 +58,7 @@ public static class GameUpdate
         var names = new HashSet<string>(outcome.Failed.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
         var failedList = MirrorDownloads.NameList(outcome.Failed.Select(f => f.Path).ToList());
         Log.Warning("Update {Product}: PlayOnline fallback for {Files}", product.Name, failedList);
-        // the file list's in the log line above, so a failure goes up as it is, marked and with its HResult
         var r = new PolUpdater(product, n => names.Contains(n.Replace('\\', '/'))) { KeepLargeAddressAware = true, Connector = connector ?? DirectPatchConnector.Instance }.Run(progress, ct, Once, check);
-        // the mirror already replaced files, so it's an update even when POL had nothing left to do
         return r == PatchResult.UpToDate && outcome.Replaced > 0 ? PatchResult.Updated : r;
     }
 }

@@ -13,10 +13,8 @@ public sealed record RepairPlan(IReadOnlyDictionary<string, IReadOnlyList<Mirror
 {
     public int Count => Work.Values.Sum(w => w.Count);
 
-    // products whose patch.ver doesn't hold the version the files were checked against, read the way POL reads it
     public IReadOnlyList<string> StaleVersions { get; init; } = [];
 
-    // the viewer's own update left half done (patch.ini and .tmp2 files), it'd overwrite good files at the next launch
     public bool QueuePending { get; init; }
 
     public bool DirectXMissing { get; init; }
@@ -26,8 +24,6 @@ public sealed record RepairPlan(IReadOnlyDictionary<string, IReadOnlyList<Mirror
 
 public sealed record RepairedFiles(string Product, IReadOnlyList<string> Files);
 
-// FilesReplaced counts game files, OtherFixes is the number of lines in Fixes (registry, COM, the uninstall entry,
-// shortcuts, DirectX, patch.ver, the queue)
 public sealed record RepairResult(int FilesReplaced, int OtherFixes)
 {
     public IReadOnlyList<RepairedFiles> Replaced { get; init; } = [];
@@ -35,8 +31,6 @@ public sealed record RepairResult(int FilesReplaced, int OtherFixes)
     public IReadOnlyList<string> Fixes { get; init; } = [];
 }
 
-// repairs by size and SHA-256, not POL's signatures, and the caller holds the update lock. Nothing that's already
-// right gets written again, the registry and shortcuts included
 public sealed class GameRepair(MirrorClient client, string region)
 {
     public const string DirectXFailed =
@@ -46,8 +40,6 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     public Func<string, bool> InstalledByWindowsInstaller { get; init; } = MsiInstaller.IsInstalled;
 
-    // the viewer's web cache index. It's installed empty and the viewer rewrites or loses it as it runs, so whatever's
-    // there is fine, and a missing one only has to exist
     private static readonly string[] ViewerOwned = ["usr/all/url/cache/dcfat0.bin"];
 
     private static bool IsOwned(string slug, string path) =>
@@ -63,16 +55,12 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     public Func<bool> DirectXPresent { get; init; } = GameInstaller.DirectXJun2010Present;
 
-    // admin-only, DXSETUP runs from it as admin. Only skipInstallData gets away without one.
     public string? StagingDir { get; init; }
 
-    // runs on worker threads
     public Action<string>? Status { get; init; }
 
     public Action? Changing { get; init; }
 
-    // once the registry pass has put something right (it can't be stopped half way, so this comes after it), and before
-    // DXSETUP. Fixing is as each of those starts
     public Action? Fixed { get; init; }
 
     public Action? Fixing { get; init; }
@@ -126,8 +114,6 @@ public sealed class GameRepair(MirrorClient client, string region)
         };
     }
 
-    // installer data first, so a mirror that can't serve it changes no game file. The registry and DirectX get checked
-    // every time, whatever the files said
     public async Task<RepairResult> ApplyAsync(RepairPlan plan, string viewerDir, string ffxiDir, string installRoot,
                                                IProgress<ByteProgress>? progress, CancellationToken ct, bool skipInstallData = false)
     {
@@ -135,7 +121,6 @@ public sealed class GameRepair(MirrorClient client, string region)
         var products = ProductsOf(viewerDir, ffxiDir);
         var viewer = products[0];
 
-        // the installer data and the replacement files are one bar, the data's size is only known once it starts
         long downloadTotal = products.Sum(p => MirrorDownloads.DownloadSize(WorkOf(plan, p.Game.Slug))), dataTotal = 0;
         var dataProgress = progress is null ? null : new InlineProgress<ByteProgress>(p =>
         {
@@ -144,7 +129,6 @@ public sealed class GameRepair(MirrorClient client, string region)
         });
         var (packages, installDirectX) = skipInstallData ? ([], false) : await PrepareAsync(plan, products, installRoot, dataProgress, ct);
 
-        // a stale queue (.tmp2) goes first, or it'd overwrite a repaired file at the next launch
         var fixes = new List<string>();
         bool queued = false;
         void FinishQueue()
@@ -169,19 +153,15 @@ public sealed class GameRepair(MirrorClient client, string region)
         ThrowIfFailed(failed);
         CreateMissingOwned(plan, viewer);
 
-        // the viewer's patchfiles copies might have been among them, and whatever the queue changed has to match the
-        // index too before patch.ver claims the version
         FinishQueue();
         if (queued)
         {
             Status?.Invoke($"Checking the {GameProduct.Viewer.Name} files again...");
             var again = await ScanAsync(GameProduct.Viewer.Slug, viewer.Folder, plan.Indexes[GameProduct.Viewer.Slug], null, ct);
             if (again.Count > 0) Say($"the PlayOnline Viewer's queued update files changed {again.Count} file(s); they are downloaded again");
-            // no share of the bar for these, it'd have to start again from nothing
             ThrowIfFailed(await DownloadAsync(GameProduct.Viewer.Slug, viewer, again, null, replaced, ct));
         }
 
-        // only what's missing or wrong goes back, the game's own settings stay as they are
         if (packages.Count > 0) Fixing?.Invoke();
         foreach (var p in packages)
         {
@@ -201,7 +181,6 @@ public sealed class GameRepair(MirrorClient client, string region)
 
         WriteVersions(plan, products, fixes);
 
-        // last, the game files are right by now and a failure here has its own message
         if (installDirectX)
         {
             var dxsetup = Path.Combine(StagingDir!, "redist", "Directx_Jun2010", "DXSETUP.exe");
@@ -211,7 +190,6 @@ public sealed class GameRepair(MirrorClient client, string region)
                 throw Shown.Mark(new InvalidOperationException(DirectXFailed));
             }
             Status?.Invoke("Installing the DirectX runtime...");
-            // DXSETUP runs to the end even after a stop, so it's fixing something from the start
             Fixing?.Invoke();
             Fixed?.Invoke();
             var warnings = new List<string>();
@@ -246,7 +224,6 @@ public sealed class GameRepair(MirrorClient client, string region)
         }
     }
 
-    // only where it isn't already right, DownloadAsync dropped it for a product it touched
     private void WriteVersions(RepairPlan plan, PatchProduct[] products, List<string> fixes)
     {
         foreach (var product in products)
@@ -259,14 +236,12 @@ public sealed class GameRepair(MirrorClient client, string region)
         }
     }
 
-    // drops patch.ver first so a stopped repair never claims a version
     private async Task<List<string>> DownloadAsync(string slug, PatchProduct product, IReadOnlyList<MirrorEntry> work,
                                                    IProgress<ByteProgress>? progress, HashSet<string> replaced, CancellationToken ct)
     {
         if (work.Count == 0) return [];
         ChangingNow();
         PatchVer.Drop(product.Folder);
-        // one text for both products, so the time left carries on across them
         Status?.Invoke("Downloading replacement files...");
         var failed = await MirrorDownloads.DownloadAllAsync(client, region, product.Folder, work, MirrorDownloads.DefaultParallel, progress, ct,
             (e, ex) => Say($"{slug} file {e.Path} failed: {ex.GetType().Name}: {ex.Message}"));
@@ -284,8 +259,6 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     private sealed record Package(string Name, string Msi, Dictionary<string, string> Properties, MsiPackage.UninstallSetup Uninstall);
 
-    // the install data (both packages, and the DirectX redist only when the runtime's missing), skipped when Windows Installer
-    // owns both products and DirectX is there. Writes only to staging
     private async Task<(List<Package> Packages, bool InstallDirectX)> PrepareAsync(RepairPlan plan, PatchProduct[] products,
         string installRoot, IProgress<ByteProgress>? progress, CancellationToken ct)
     {
@@ -298,7 +271,6 @@ public sealed class GameRepair(MirrorClient client, string region)
         }
         var install = new InstallFromMirror(client, region, "Repair", LogEventLevel.Information);
         Status?.Invoke("Downloading the installer data...");
-        // the download only, the look over anything already in the staging folder is local and counts other bytes
         var bytes = progress is null ? null : new InlineProgress<InstallProgress>(p => { if (p is { Download: true, Fraction: >= 0 }) progress.Report(new ByteProgress(p.DoneBytes, p.TotalBytes)); });
         var data = await install.FetchInstallDataAsync(StagingDir,
                        installDirectX ? null : e => !e.Path.StartsWith("redist/", StringComparison.OrdinalIgnoreCase), bytes, ct)
@@ -364,7 +336,6 @@ public sealed class GameRepair(MirrorClient client, string region)
         }
     }
 
-    // POL tries the product id alone when the Interface-seeded key doesn't open it, so either one counts
     private static bool VersionRight(PatchProduct product, string version)
     {
         try { return PatchVer.Read(product) == version; }
@@ -373,7 +344,6 @@ public sealed class GameRepair(MirrorClient client, string region)
 
     private PolRegion Region => MirrorLayout.RegionOf(region);
 
-    // the region's hive, POL keys patch.ver with its Interface value
     private PatchProduct[] ProductsOf(string viewerDir, string ffxiDir) =>
         [PatchProduct.For(GameProduct.Viewer, viewerDir, viewerDir, Region), PatchProduct.For(GameProduct.Game, ffxiDir, viewerDir, Region)];
 
