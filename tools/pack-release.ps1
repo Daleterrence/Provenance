@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds a Provenance release with Velopack: Setup.exe, the full nupkg and the release feed files.
+    Builds a Provenance release with Velopack: Provenance-setup.exe, the full nupkg and the release feed files.
 .EXAMPLE
     pwsh tools/pack-release.ps1 -Version 1.0.0-beta.1
 .EXAMPLE
@@ -102,6 +102,8 @@ try {
     foreach ($file in $packed) {
         if (-not (Test-Path -LiteralPath (Join-Path $Out $file))) { throw "vpk finished but $file is missing from $Out" }
     }
+    # one name on every channel, so the download link never changes
+    Move-Item -LiteralPath (Join-Path $Out $packed[0]) -Destination (Join-Path $Out 'Provenance-setup.exe')
 } catch {
     if (Test-Path -LiteralPath $Out) { Get-ChildItem -LiteralPath $Out -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }
     throw

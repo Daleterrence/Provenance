@@ -169,12 +169,29 @@ jobs:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
         run: |
           foreach ($name in 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY') {
             if (-not [Environment]::GetEnvironmentVariable($name)) { throw "The repository secret $name isn't set." }
           }
+          # vpk uploads the installer by the name in assets.<channel>.json
+          $setup = Join-Path $env:DIR 'Provenance-setup.exe'
+          Copy-Item -LiteralPath $setup -Destination (Join-Path $env:DIR "Provenance-$env:CHANNEL-Setup.exe")
           vpk --skip-updates upload s3 --outputDir $env:DIR --channel $env:CHANNEL --bucket provenance-updates --region auto `
             --endpoint "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com" --keyId $env:R2_ACCESS_KEY_ID `
             --secret $env:R2_SECRET_ACCESS_KEY --keepMaxReleases 5
           if ($LASTEXITCODE -ne 0) { throw "vpk upload failed (exit code $LASTEXITCODE)" }
           "Provenance $($env:TAG.Substring(1)) is on the $env:CHANNEL channel." >> $env:GITHUB_STEP_SUMMARY
+          # the site's download, so once there's a stable release a beta never replaces it
+          $feed = (Invoke-WebRequest 'https://updates.provenancexi.app/releases.stable.json' -UseBasicParsing).Content
+          if ($feed -is [byte[]]) { $feed = [Text.Encoding]::UTF8.GetString($feed) }
+          if ($env:CHANNEL -eq 'stable' -or -not ($feed | ConvertFrom-Json).Assets) {
+            $env:AWS_ACCESS_KEY_ID = $env:R2_ACCESS_KEY_ID
+            $env:AWS_SECRET_ACCESS_KEY = $env:R2_SECRET_ACCESS_KEY
+            aws s3 cp $setup 's3://provenance-updates/Provenance-setup.exe' --endpoint-url "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com" `
+              --cache-control 'public, max-age=300' --content-type 'application/octet-stream' --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Uploading Provenance-setup.exe failed (exit code $LASTEXITCODE)" }
+            "Provenance-setup.exe is this release's installer now." >> $env:GITHUB_STEP_SUMMARY
+          }
