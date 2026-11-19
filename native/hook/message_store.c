@@ -102,17 +102,35 @@ static HANDLE message_store_open_folder(const char *path)
     }
     return h;
 }
-static int message_store_final_ok(HANDLE h, const char *expect)
+static int message_store_final_name(HANDLE h, char *out, int size)
 {
-    char got[MAX_PATH + 160], full[MAX_PATH + 160], want[MAX_PATH + 160], *p = got;
+    char got[MAX_PATH + 160], *p = got;
     DWORD n = GetFinalPathNameByHandleA(h, got, sizeof got, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
     if (!n || n >= sizeof got) return 0;
     if (!strncmp(got, "\\\\?\\UNC\\", 8)) { p = got + 6; p[0] = '\\'; }
     else if (!strncmp(got, "\\\\?\\", 4)) p += 4;
-    n = GetFullPathNameA(expect, sizeof full, full, NULL);
-    if (!n || n >= sizeof full) return 0;
-    if (!GetLongPathNameA(full, want, sizeof want)) lstrcpyA(want, full);
-    return lstrcmpiA(p, want) == 0;
+    if (lstrlenA(p) >= size) return 0;
+    lstrcpyA(out, p);
+    return 1;
+}
+/* the viewer folder can sit behind SUBST, a mapped drive or a junction, so expect is measured from where it really is */
+static int message_store_final_ok(HANDLE h, const char *expect)
+{
+    char got[MAX_PATH + 160], want[MAX_PATH + 160];
+    int base = lstrlenA(g_viewer), n, ok;
+    HANDLE v;
+    if (strncmp(expect, g_viewer, base)) return 0;
+    v = CreateFileA(g_viewer, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                    OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (v == INVALID_HANDLE_VALUE) return 0;
+    ok = message_store_final_name(v, want, sizeof want);
+    CloseHandle(v);
+    if (!ok) return 0;
+    n = lstrlenA(want);
+    if (n && want[n - 1] == '\\' && expect[base] == '\\') want[n - 1] = 0;
+    if (n + lstrlenA(expect + base) >= (int)sizeof want) return 0;
+    lstrcatA(want, expect + base);
+    return message_store_final_name(h, got, sizeof got) && lstrcmpiA(got, want) == 0;
 }
 static int message_store_rename_open(HANDLE f, const char *to)
 {

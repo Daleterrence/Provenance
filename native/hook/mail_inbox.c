@@ -553,52 +553,58 @@ static int mail_inbox_twin_pending(void)
     }
     return g_store_open && message_store_imp_pending();
 }
-static void mail_inbox_ack_request(BYTE *b)
+static void mail_inbox_each_mid(char *buf, int got, void (*act)(BYTE *b, int mid), BYTE *b)
 {
-    char *buf;
-    int got, v = -1;
-    if (!requests_waiting(REQ_ACK)) return;
-    if ((got = requests_take_ex(REQ_ACK, NULL, 0, &buf, ACK_MAX)) < 0) return;
+    int v = -1;
     for (int i = 0; i <= got; i++) {
         char c = buf[i];
         if (c >= '0' && c <= '9') v = v > 9999999 ? v : (v < 0 ? 0 : v * 10) + (c - '0');
         else {
-            mailrec *m = v > 0 ? mail_inbox_by_mid(v) : NULL;
-            if (m && m->state == 7) {
-                mail_inbox_stored_done(b, m);
-            } else if (m && (m->state == 1 || m->state == 3)) {
-                if (m->filed) message_store_secure_add(m->sname);
-                m->state = m->state == 3 || (m->filed && (m->srv_gone || m->del_failed)) ? 5 : 4;
-                m->text[0] = 0; m->subj[0] = 0;
-                m->raw_pending = 0; m->raw_len = 0;
-                SecureZeroMemory(m->raw, sizeof m->raw);
-                g_snap_dirty = 1;
-            }
+            act(b, v);
             v = -1;
         }
     }
     HeapFree(GetProcessHeap(), 0, buf);
 }
+static void mail_inbox_ack_one(BYTE *b, int v)
+{
+    mailrec *m = v > 0 ? mail_inbox_by_mid(v) : NULL;
+    if (m && m->state == 7) {
+        mail_inbox_stored_done(b, m);
+    } else if (m && (m->state == 1 || m->state == 3)) {
+        if (m->filed) message_store_secure_add(m->sname);
+        m->state = m->state == 3 || (m->filed && (m->srv_gone || m->del_failed)) ? 5 : 4;
+        m->text[0] = 0; m->subj[0] = 0;
+        m->raw_pending = 0; m->raw_len = 0;
+        SecureZeroMemory(m->raw, sizeof m->raw);
+        g_snap_dirty = 1;
+    }
+}
+static void mail_inbox_read_one(BYTE *b, int v)
+{
+    mailrec *m = v > 0 ? mail_inbox_by_mid(v) : NULL;
+    (void)b;
+    if (m && m->filed && !m->stored && !m->moved) {
+        m->read_want = 1;
+        m->move_fails = 0;
+        m->move_at = 0;
+    } else if (!m && v > 0) {
+        message_store_imp_want(v);
+    }
+}
+static void mail_inbox_ack_request(BYTE *b)
+{
+    char *buf;
+    int got;
+    if (!requests_waiting(REQ_ACK)) return;
+    if ((got = requests_take_ex(REQ_ACK, NULL, 0, &buf, ACK_MAX)) < 0) return;
+    mail_inbox_each_mid(buf, got, mail_inbox_ack_one, b);
+}
 static void mail_inbox_read_request(void)
 {
     char *buf;
-    int got, v = -1;
+    int got;
     if (!requests_waiting(REQ_READ)) return;
     if ((got = requests_take_ex(REQ_READ, NULL, 0, &buf, ACK_MAX)) < 0) return;
-    for (int i = 0; i <= got; i++) {
-        char c = buf[i];
-        if (c >= '0' && c <= '9') v = v > 9999999 ? v : (v < 0 ? 0 : v * 10) + (c - '0');
-        else {
-            mailrec *m = v > 0 ? mail_inbox_by_mid(v) : NULL;
-            if (m && m->filed && !m->stored && !m->moved) {
-                m->read_want = 1;
-                m->move_fails = 0;
-                m->move_at = 0;
-            } else if (!m && v > 0) {
-                message_store_imp_want(v);
-            }
-            v = -1;
-        }
-    }
-    HeapFree(GetProcessHeap(), 0, buf);
+    mail_inbox_each_mid(buf, got, mail_inbox_read_one, NULL);
 }

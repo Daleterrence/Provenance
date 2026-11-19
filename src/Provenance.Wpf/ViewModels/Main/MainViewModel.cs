@@ -427,7 +427,7 @@ public partial class MainViewModel : ObservableObject
             or SessionPhase.LoggingOut or SessionPhase.MultiRun or SessionPhase.MultiStopping ? RestartBlockedText : null;
 
     internal const string RestartBlockedText =
-        "Provenance is in the middle of logging in or starting a game, so it can't restart to update yet. Try again once that's finished.";
+        "Provenance is busy logging in, logging out, updating the game or starting and stopping games, so it can't restart to update yet. Try again once that's finished.";
 
     public bool UpdatingNow => _updateRestart.Busy;
 
@@ -664,7 +664,7 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            Social.Chat?.Flush();
+            Social.SaveChat();
             Social.GroupChat.FlushLog();
         }
         catch (Exception ex) { Log.Warning(ex, "The message log wasn't saved on the way out"); }
@@ -698,6 +698,12 @@ public partial class MainViewModel : ObservableObject
             finally { _ui.Post(() => { if (Session.Phase == SessionPhase.LoggingOut) SetPhase(SessionPhase.LoggedOut); }); }
         });
     }
+
+    private Task ReleaseHeldSessionAsync() => Task.Run(() =>
+    {
+        _pol.StopHold();
+        _pol.Prestarter.Prestart();
+    });
 
     private async Task ConnectSocialAsync()
     {
@@ -747,11 +753,7 @@ public partial class MainViewModel : ObservableObject
             {
                 CanCancel = false;
                 Lean.Finish();
-                await Task.Run(() =>
-                {
-                    _pol.StopHold();
-                    _pol.Prestarter.Prestart();
-                });
+                await ReleaseHeldSessionAsync();
                 var failure = AccountRules.LoginFailure(code, lastFailure, Accounts.AutoLogin);
                 if (failure.AutoOff) Accounts.AutoLogin = false;
                 if (code != LoginCodes.Cancelled)
@@ -760,20 +762,12 @@ public partial class MainViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            await Task.Run(() =>
-            {
-                _pol.StopHold();
-                _pol.Prestarter.Prestart();
-            });
+            await ReleaseHeldSessionAsync();
         }
         catch (Exception ex)
         {
             Log.Error(ex, "The login failed");
-            await Task.Run(() =>
-            {
-                _pol.StopHold();
-                _pol.Prestarter.Prestart();
-            });
+            await ReleaseHeldSessionAsync();
             Lean.Finish();
             _dialogs.Error("Couldn't log in",
                 ErrorText.Of(ex, "Provenance ran into a problem while logging in. Try again, and if it keeps happening, press Open logs to see what went wrong."),

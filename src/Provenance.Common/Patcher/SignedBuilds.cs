@@ -42,7 +42,7 @@ internal static class SignedBuilds
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { Interlocked.Exchange(ref _asked, 0); }
         catch (Exception ex)
         {
-            Log.Information("The mirror's build list didn't come: {Reason}", ex.Message);
+            Log.Information("Viewer build list: {Reason}", ex.Message);
         }
     }
 
@@ -58,7 +58,7 @@ internal static class SignedBuilds
         }
         catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {
-            Log.Information("The mirror's build list didn't come: {Reason}", ex.Message);
+            Log.Information("Viewer build list: {Reason}", ex.Message);
         }
     }
 

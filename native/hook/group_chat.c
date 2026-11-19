@@ -96,7 +96,6 @@ static int group_chat_still_in(BYTE *b)
 static void group_chat_try_start(BYTE *b)
 {
     int r = pc_gchat_start(b, g_gc_lo, g_gc_hi, NULL, NULL, NULL, (void *)group_chat_cb, 3, -1, 4, 0, 0);
-    (void)b;
     if (r == 0) return;
     if (r < 0) { base_log("groupchat: start refused %d\r\n", r); group_chat_out("failed:join"); return; }
     g_gc_st = GC_JOINING;
@@ -167,7 +166,6 @@ static void group_chat_join_request(BYTE *b)
 static void group_chat_leave(BYTE *b)
 {
     int r;
-    (void)b;
     g_gc_leave_want = 0;
     if (g_gc_st == GC_STARTING) {
         if (group_chat_joined(b)) group_chat_force_leave(b);
@@ -281,7 +279,7 @@ static void group_chat_pump(BYTE *b, int ctl)
     } else if (g_gc_st == GC_IN) {
         int still;
         if (!group_chat_link(b)) { group_chat_out("lost"); return; }
-        if ((still = group_chat_still_in(b)) <= 0) {
+        if (ctl && (still = group_chat_still_in(b)) <= 0) {
             group_chat_force_leave(b);
             group_chat_out(still < 0 ? "removed" : "gone");
             return;

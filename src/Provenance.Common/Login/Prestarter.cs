@@ -113,11 +113,9 @@ public sealed class Prestarter
             using var launcher = _watcher.StartProcess(psi);
             if (launcher is null || Watcher.RunLauncher(launcher, Watcher.Limit) is not { } run) return null;
             if (run.ExitCode != 0 || HookLog.StartedPid(run.Out) is not { } pid) return null;
-            foreach (var name in new[] { HookContract.Files.Stop, HookContract.Files.Ended, HookContract.Files.Go }) HookFiles.Delete(pid, name);
+            HookFiles.ClearHandoverFiles(pid);
             var stamp = ProcessStamp.Of(pid);
-            if (stamp is { } at)
-                try { File.WriteAllText(HookFiles.PathFor(pid, HookContract.Files.Prestart), at.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the pre-started pol.exe for other copies"); }
+            if (stamp is { } at) HookFiles.NotePrestart(pid, at);
             Log.Information("Pre-started pol.exe (pid {Pid}), waiting for the login", pid);
             return new Prestarted(pid, stamp, began);
         }
@@ -196,8 +194,7 @@ public sealed class Prestarter
 
     private void EndPrestarted(Prestarted pre)
     {
-        try { HookFiles.RequestStop(pre.Pid); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        HookFiles.TryRequestStop(pre.Pid);
         HookFiles.Delete(pre.Pid, HookContract.Files.Prestart);
         if (pre.Stamp is { } stamp) _pol.End(stamp, graceMs: 3000);
     }

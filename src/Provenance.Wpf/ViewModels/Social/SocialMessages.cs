@@ -198,6 +198,7 @@ public sealed partial class SocialMessages : ObservableObject
     public void DeleteLine(ChatEntry e)
     {
         if (_social.Chat is not { } chat || !ChatStore.CanDelete(e) || !chat.Delete(e.Key)) return;
+        chat.Flush();
         _social.DeleteStoreFiles([e]);
         AfterDelete();
     }
@@ -208,6 +209,7 @@ public sealed partial class SocialMessages : ObservableObject
         var set = keys.ToHashSet(StringComparer.Ordinal);
         var gone = chat.Entries.Where(e => set.Contains(e.Key) && ChatStore.CanDelete(e)).ToList();
         if (chat.DeleteKeys(keys) == 0) return;
+        chat.Flush();
         _social.DeleteStoreFiles(gone);
         AfterDelete();
     }
@@ -237,7 +239,7 @@ public sealed partial class SocialMessages : ObservableObject
     public void SettleSends(SessionEnd end)
     {
         Sends.Settle(_social.Chat, end != SessionEnd.Dropped, end == SessionEnd.Play ? "failed:game" : "failed:session");
-        _social.Chat?.Flush();
+        _social.SaveChat();
         _social.RefreshConversations();
     }
 

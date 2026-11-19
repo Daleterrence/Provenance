@@ -102,6 +102,9 @@ try {
     foreach ($file in $packed) {
         if (-not (Test-Path -LiteralPath (Join-Path $Out $file))) { throw "vpk finished but $file is missing from $Out" }
     }
+} catch {
+    if (Test-Path -LiteralPath $Out) { Get-ChildItem -LiteralPath $Out -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }
+    throw
 } finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }

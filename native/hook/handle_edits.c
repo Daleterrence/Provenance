@@ -100,14 +100,10 @@ static void handle_create(BYTE *b, char *p)
         handle_fail("failed:bad name");
         return;
     }
-    len = pc_wide_to_sjis(b, NULL, wname, SJIS_GETA);
-    if (len < 1 || len > 15) { handle_fail("failed:bad name"); return; }
-    memset(sj, 0, sizeof sj);
-    pc_wide_to_sjis(b, sj, wname, SJIS_GETA);
-    if (!peers_ascii_name_ok(sj)) { handle_fail("failed:bad name"); return; }
-    ng = my_profile_handle_ngword(b, wname);
-    if (ng < 0) { handle_fail("failed:no dictionary"); return; }
-    if (ng) { handle_fail("failed:word"); return; }
+    ng = my_profile_handle_name_check(b, wname, sj, &len);
+    if (ng == HR_E_NAME) { handle_fail("failed:bad name"); return; }
+    if (ng == HR_E_NGWORD) { handle_fail("failed:word"); return; }
+    if (ng) { handle_fail("failed:no dictionary"); return; }
     if (handle_list_busy(b)) { handle_fail("failed:busy"); return; }
     memset(id, 0, sizeof id);
     memcpy(id, sj, (size_t)len);

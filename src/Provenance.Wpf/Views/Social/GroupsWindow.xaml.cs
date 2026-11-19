@@ -24,15 +24,10 @@ public partial class GroupsWindow : AppWindow
         };
         IsVisibleChanged += (_, _) => ReportVisible();
         StateChanged += (_, _) => ReportVisible();
-#pragma warning disable RS0030
-        if (Application.Current is { } app) app.Activated += OnAppActivated;
-#pragma warning restore RS0030
+        TaskbarFlash.StopWhenAppActivated(this);
         Closed += (_, _) =>
         {
             if (Vm is { } vm) Detach(vm);
-#pragma warning disable RS0030
-            if (Application.Current is { } a) a.Activated -= OnAppActivated;
-#pragma warning restore RS0030
         };
     }
 
@@ -44,12 +39,8 @@ public partial class GroupsWindow : AppWindow
 
     private void OnInviteLanded(string who, int mid)
     {
-        if (Vm?.Flashes(NoticeKind.GroupInvite) != true || !IsVisible || WindowState == WindowState.Minimized) return;
-        if (WindowOwner.Active() is not null) return;
-        TaskbarFlash.Start(this);
+        if (Vm?.Flashes(NoticeKind.GroupInvite) == true) TaskbarFlash.StartIfBehind(this);
     }
-
-    private void OnAppActivated(object? sender, EventArgs e) => TaskbarFlash.StopIfFlashing(this);
 
     private void ReportVisible()
     {

@@ -38,8 +38,6 @@ public partial class FriendsList : UserControl
 
     public event Action<FriendItem>? FriendActivated;
 
-    public event Action<FriendItem>? FriendSelected;
-
     private SocialViewModel? Vm => DataContext as SocialViewModel;
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -49,7 +47,6 @@ public partial class FriendsList : UserControl
             if (List.SelectedItem is FriendItem picked) _kept = picked;
             else if (e.RemovedItems.OfType<object>().All(List.Items.Contains)) _kept = null;
         }
-        if (List.IsKeyboardFocusWithin && List.SelectedItem is FriendItem f) FriendSelected?.Invoke(f);
     }
 
     // a swapped row comes through the grouping as a remove then an add
@@ -87,15 +84,7 @@ public partial class FriendsList : UserControl
         if (List.SelectedItem is FriendItem f) Activate(f);
     }
 
-    internal void Activate(FriendItem f)
-    {
-        if (!f.IsRequest && !f.IsGroupInvite)
-        {
-            FriendActivated?.Invoke(f);
-            return;
-        }
-        Vm?.AnswerRow(f);
-    }
+    internal void Activate(FriendItem f) => FriendActivated?.Invoke(f);
 
     private void OnContextMenuOpening(object sender, ContextMenuEventArgs e)
     {

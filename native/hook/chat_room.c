@@ -296,7 +296,7 @@ static void chat_room_send_request(BYTE *b)
 static void chat_room_frame_out(BYTE *b, int type)
 {
     static WCHAR w[0x100];
-    chat_frame_hello(b, type, w);
+    chat_frame_hello(type, w);
     if (chat_frame_sjis(b, w, g_cr_frame, sizeof g_cr_frame) < 0) {
         base_log("chat rooms: frame %d doesn't convert\r\n", type); return;
     }
@@ -398,11 +398,6 @@ static void chat_room_join_request(BYTE *b)
     haskey = requests_line(&p);
     nick = requests_line(&p);
     if (haskey[0]) pw = chat_room_password(tok, g_cr_key, sizeof g_cr_key);
-    if (g_s.cr_st != CR_OUT) {
-        base_log("chat rooms: enter ignored, already in or entering a room\r\n");
-        chat_room_join_refused(NULL);
-        return;
-    }
     if (chat_room_called_off(tok)) {
         base_log("chat rooms: enter called off before it was taken\r\n");
         chat_room_join_refused(NULL);
@@ -448,11 +443,6 @@ static void chat_room_create_request(BYTE *b)
     c0 = requests_line(&p); c1 = requests_line(&p); c2 = requests_line(&p); nick = requests_line(&p);
     name = requests_line(&p);
     if (haskey[0]) pw = chat_room_password(tok, g_cr_key, sizeof g_cr_key);
-    if (g_s.cr_st != CR_OUT) {
-        base_log("chat rooms: create ignored, already in or entering a room\r\n");
-        chat_room_join_refused(NULL);
-        return;
-    }
     if (chat_room_called_off(tok)) {
         base_log("chat rooms: create called off before it was taken\r\n");
         chat_room_join_refused(NULL);
@@ -491,10 +481,9 @@ static void chat_room_create_request(BYTE *b)
     g_cr_making = 1;
     chat_room_enter(b);
 }
-static void chat_room_leave_request(BYTE *b)
+static void chat_room_leave_request(void)
 {
     char buf[128];
-    (void)b;
     char *p = buf, *join;
     if (requests_take(REQ_CHATLEAVE, buf, sizeof buf) < 0) return;
     requests_line(&p);
@@ -612,7 +601,7 @@ static void chat_room_pump(BYTE *b, int ctl)
     if (ctl && (g_s.cr_st != CR_IN || g_s.cr_leave) && requests_waiting(REQ_CHATMASTER)) chat_room_master_request();
     if (g_cr.step) chat_list_db_pump(b);
     if (!ctl) return;
-    if (requests_waiting(REQ_CHATLEAVE)) { chat_room_leave_request(b); return; }
+    if (requests_waiting(REQ_CHATLEAVE)) { chat_room_leave_request(); return; }
     if (g_s.cr_st == CR_OUT && requests_waiting(REQ_CHATJOIN)) { chat_room_join_request(b); return; }
     if (g_s.cr_st == CR_OUT && requests_waiting(REQ_CHATCREATE)) { chat_room_create_request(b); return; }
     if (g_cr.step || !hold_db_free()) return;
@@ -633,10 +622,6 @@ static void chat_room_join_refused_switching(const char *tok, const char *haskey
     if (g_s.cr_st != CR_OUT) return;
     lstrcpynA(g_cr_tok, tok, sizeof g_cr_tok);
     chat_room_join_refused("failed:handle changing");
-}
-static void chat_room_create_refused(const char *tok, const char *haskey)
-{
-    chat_room_join_refused_switching(tok, haskey);
 }
 static void chat_room_master_refused_switching(const char *tok, const char *haskey)
 {
@@ -677,12 +662,11 @@ static void chat_room_end(BYTE *b)
     chat_room_left("left");
 }
 
-static void chat_room_write_lines(BYTE *b)
+static void chat_room_write_lines(void)
 {
     char u8[0x620];
     ipc_json file;
     jw w = {0};
-    (void)b;
     g_cr_written_at = GetTickCount64();
     if (!base_ipc_json_open(IPC_CHATROOM, &file)) return;
     jw_obj(&w, NULL);
@@ -718,7 +702,7 @@ static void chat_room_snapshot(BYTE *b, jw *w)
     const pfb_tab *zt, *ct;
     int i;
     if (!g_cr_used) return;
-    if (g_cr_lines_dirty && GetTickCount64() - g_cr_written_at >= 1000) chat_room_write_lines(b);
+    if (g_cr_lines_dirty && GetTickCount64() - g_cr_written_at >= 1000) chat_room_write_lines();
     jw_obj(w, "chat");
     jw_uint(w, "lineSeq", g_cr_written_seq);
     jw_obj(w, "zones");

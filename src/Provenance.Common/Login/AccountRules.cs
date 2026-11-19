@@ -126,8 +126,8 @@ public static class AccountRules
         if (autoOff)
             why += "\n\nProvenance has turned off Log In Automatically, so it won't try this account again by itself.";
         return (TitleFor(code), why, autoOff,
-                code is LoginCodes.Stalled or LoginCodes.LauncherFailed or LoginCodes.Unfinished
-                || TitleFor(code) == "Couldn't log in");
+                code is not (LoginCodes.AuthFailed or LoginCodes.NoPolHandle or LoginCodes.HandleRejected
+                             or LoginCodes.AccountBlocked or LoginCodes.DetailsUnreadable));
     }
 
     // the hook hands these to POL in the ANSI code page, so anything outside printable ASCII is refused and counts toward the lockout

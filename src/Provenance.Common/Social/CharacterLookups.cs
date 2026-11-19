@@ -38,7 +38,7 @@ public sealed class CharacterLookups(CharacterNames names)
             bool moved = !_seen.TryGetValue(id, out var was) || was != key;
             if (moved && _unsent.Remove(id, out var unsentKey)) _asked.Remove(unsentKey);
             var known = names.Get(key);
-            bool zone = known is not { Why.Length: > 0 } && WantsZoneRead(key, moved);
+            bool zone = known is not { Why.Length: > 0 } && moved;
             bool wanted = known is null ? moved : known.Why.Length > 0 ? AskAgain(key) : zone;
             if (!wanted || Asking?.Character.Key == key || _queue.Exists(q => q.Game.Character.Key == key)) continue;
             if (zone) _zoneDue.Add(key);
@@ -48,8 +48,6 @@ public sealed class CharacterLookups(CharacterNames names)
     }
 
     private bool AskAgain(string key) => names.Get(key) is { Why: "private" } && !_asked.Contains(key);
-
-    private static bool WantsZoneRead(string key, bool turnedUp) => turnedUp;
 
     private static string? ZoneName(int id) => id != 0 ? FfxiNames.Area(id) : null;
 

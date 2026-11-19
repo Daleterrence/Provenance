@@ -6,14 +6,17 @@ public enum ChatNewsKind { Message, Notice, FriendRequest, GroupInvite }
 
 public sealed record ChatNews(ChatNewsKind Kind, string From, string Text = "", int Mid = 0);
 
-public sealed record ChatSyncResult(bool Changed, bool SendsChanged, bool Kept, IReadOnlyList<int> ToAck,
-                                    IReadOnlyList<ChatNews> News);
+public sealed record ChatSyncResult(bool Changed, bool SendsChanged, IReadOnlyList<int> ToAck, IReadOnlyList<ChatNews> News);
 
 public sealed class ChatSync(MailSendQueue sends)
 {
     private readonly HashSet<int> _acked = new();
     private readonly HashSet<int> _seenRequests = new();
     private bool _storeTaken;
+    // acks and the store copy wait until the log version they're in is on disk
+    private readonly List<(int Mid, int Version)> _held = new();
+    private (int Pid, int Version)? _storeDue;
+    private int? _pid;
     private readonly Dictionary<string, int> _mids = new(StringComparer.Ordinal);
     private readonly HashSet<int> _toRead = new();
 
@@ -48,10 +51,20 @@ public sealed class ChatSync(MailSendQueue sends)
         bool changed = false;
         var saved = new List<int>();
         var news = new List<ChatNews>();
-        foreach (var f in snap.Friends)
-            if (f.Key.Length > 0 &&
-                snap.Friends.Count(x => string.Equals(x.Name, f.Name, StringComparison.OrdinalIgnoreCase)) == 1)
-                changed |= chat.Adopt(f.Name, f.Key);
+        if (_pid is { } was && pid is { } now && now != was)
+        {
+            // mids are counted per pol.exe, so the last one's mean nothing to this one
+            _held.Clear();
+            _acked.Clear();
+            _mids.Clear();
+            _toRead.Clear();
+            _seenRequests.Clear();
+        }
+        if (chat.HasKeyless)
+            foreach (var f in snap.Friends)
+                if (f.Key.Length > 0 &&
+                    snap.Friends.Count(x => string.Equals(x.Name, f.Name, StringComparison.OrdinalIgnoreCase)) == 1)
+                    changed |= chat.Adopt(f.Name, f.Key);
         bool takeStore = snap.Stored != null && !_storeTaken;
         if (takeStore) changed |= MergeStored(chat, snap, noticeText, _toRead, _mids);
         foreach (var (token, state, time, seq, _, _) in snap.AllSends)
@@ -114,13 +127,29 @@ public sealed class ChatSync(MailSendQueue sends)
         if (changed)
             foreach (var (name, key) in open)
                 if (chat.UnreadFrom(name, key) > 0) NoteRead(chat.MarkRead(name, key));
-        bool kept = chat.SaveIfDue(DateTime.UtcNow);
-        if (takeStore && kept && pid is { } storePid)
+        chat.SaveIfDue(DateTime.UtcNow);
+        _pid = pid;
+        foreach (var mid in saved) _held.Add((mid, chat.Version));
+        if (takeStore && pid is { } storePid)
         {
-            SocialSnapshotFiles.DeleteStore(storePid);
             _storeTaken = true;
+            _storeDue = (storePid, chat.Version);
         }
-        return new(changed, sendsChanged, kept, saved, news);
+        return new(changed, sendsChanged, TakeKept(chat, pid), news);
+    }
+
+    public IReadOnlyList<int> TakeKept(ChatStore chat, int? pid)
+    {
+        if (pid != _pid) return [];
+        int saved = chat.SavedVersion;
+        if (_storeDue is { } store && store.Version <= saved)
+        {
+            SocialSnapshotFiles.DeleteStore(store.Pid);
+            _storeDue = null;
+        }
+        var kept = _held.Where(h => h.Version <= saved).Select(h => h.Mid).ToList();
+        _held.RemoveAll(h => h.Version <= saved);
+        return kept;
     }
 
     internal static bool Mine(PolSocialSnapshot snap, PolMessage m) =>
@@ -136,9 +165,10 @@ public sealed class ChatSync(MailSendQueue sends)
                                     HashSet<int> toRead, Dictionary<string, int> mids)
     {
         bool changed = false;
+        var hasSentLine = chat.SentLines();
         foreach (var s in snap.Stored!.Sent)
         {
-            if (chat.HasSentLine(s.Time, s.Seq, s.FromSlot)) continue;
+            if (hasSentLine(s.Time, s.Seq, s.FromSlot)) continue;
             var to = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == s.ToKey)?.Name ??
                      (s.To.Length > 0 ? s.To : chat.NameFor(s.ToKey));
             if (to.Length > 0 || s.ToKey.Length > 0) changed |= chat.AddGameSent(to, s);

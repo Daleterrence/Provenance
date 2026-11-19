@@ -36,7 +36,9 @@ public sealed partial class AddonRow : ObservableObject
     [ObservableProperty] private AddonDocs? _docs;
     private string? _author;
 
-    public bool SwitchEnabled => CanChange && !Installing;
+    public bool SwitchEnabled => CanChange && !Installing && !_owner.Busy;
+
+    internal void OwnerBusyChanged() => OnPropertyChanged(nameof(SwitchEnabled));
     public bool Greyed => Incompatible || Group is not null;
 
     public bool On
@@ -45,7 +47,12 @@ public sealed partial class AddonRow : ObservableObject
         set
         {
             if (value == _on) return;
-            if (HasSwitch && SwitchEnabled) _owner.Switch(this, value);
+            if (HasSwitch && SwitchEnabled)
+            {
+                var before = _on;
+                _on = value;
+                if (!_owner.Switch(this, value)) _on = before;
+            }
             OnPropertyChanged();
         }
     }

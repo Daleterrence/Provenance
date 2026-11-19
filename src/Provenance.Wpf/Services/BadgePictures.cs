@@ -19,8 +19,7 @@ internal static class BadgePictures
             if (Overlays.TryGetValue(label, out var have)) return have;
             var frames = OverlaySizes.Select(n =>
             {
-                using var bmp = new System.Drawing.Bitmap(n, n, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-                using (var g = Smooth(bmp)) Badge(g, 0, 0, n, label);
+                using var bmp = Drawn(n, label);
                 using var png = new MemoryStream();
                 bmp.Save(png, System.Drawing.Imaging.ImageFormat.Png);
                 return (n, png: png.ToArray());

@@ -57,10 +57,10 @@ public static class SocialRequests
         return HookFiles.WriteRequest(pid, HookContract.Requests.Friend, verb, token, row, key, arg);
     }
 
-    public static bool AnswerRequest(int pid, RequestAnswer answer, string token, int mid, string subject, bool allHandles = false)
+    public static bool AnswerRequest(int pid, RequestAnswer answer, string token, int mid, string subject)
     {
         var verb = answer switch { RequestAnswer.Accept => "accept", RequestAnswer.Decline => "decline", _ => "ignore" };
-        return HookFiles.WriteRequest(pid, HookContract.Requests.Answer, verb, token, mid, subject, allHandles ? "1" : "0");
+        return HookFiles.WriteRequest(pid, HookContract.Requests.Answer, verb, token, mid, subject, "");
     }
 
     public static bool Search(int pid, string token, FriendSearchKind kind, string value) =>

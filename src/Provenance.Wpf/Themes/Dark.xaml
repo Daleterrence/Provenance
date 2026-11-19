@@ -40,10 +40,7 @@
     <SolidColorBrush x:Key="State.Down"     Color="#FF5C64" />
 
     <SolidColorBrush x:Key="Badge.Neutral"     Color="#2A3A4A" />
-    <SolidColorBrush x:Key="Badge.Alert"       Color="#5A2A2E" />
     <SolidColorBrush x:Key="Badge.Maintenance" Color="#4E4120" />
-    <SolidColorBrush x:Key="Badge.Event"       Color="#1E3D66" />
-    <SolidColorBrush x:Key="Badge.Update"      Color="#24452E" />
 
     <SolidColorBrush x:Key="Chip.Neutral"     Color="#5B6877" />
     <SolidColorBrush x:Key="Chip.Alert"       Color="#C62828" />

@@ -66,7 +66,7 @@ internal sealed class WindowerStart
     internal void PutValuesBack()
     {
         if (Volatile.Read(ref _play) is not { } values) return;
-        try { Log.Information("Windower's game settings for {Profile} written again before Play ({Keys})", values.Profile.Name, values.Apply().Count); }
+        try { Log.Information("Windower's game settings for {Profile} written again before Play ({Keys})", values.Profile.Name.Length > 0 ? values.Profile.Name : "Default (no name)", values.Apply().Count); }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
             Log.Warning(ex, "Could not write Windower's game settings again before Play");

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.Win32;
 
 namespace Provenance.Wpf.Controls;
@@ -19,6 +20,22 @@ internal static class TaskbarFlash
             w.Closed += OnBroughtUp;
         }
         Flash(w, true, 3 | 0x0C);   // FLASHW_ALL | FLASHW_TIMERNOFG
+    }
+
+    public static void StartIfBehind(Window w)
+    {
+        if (!w.IsVisible || w.WindowState == WindowState.Minimized || WindowOwner.Active() is not null) return;
+        Start(w);
+    }
+
+    public static void StopWhenAppActivated(Window w)
+    {
+        EventHandler stop = (_, _) => StopIfFlashing(w);
+#pragma warning disable RS0030
+        if (Application.Current is not { } app) return;
+        app.Activated += stop;
+        w.Closed += (_, _) => app.Activated -= stop;
+#pragma warning restore RS0030
     }
 
     public static void StopIfFlashing(Window w)

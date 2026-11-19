@@ -30,7 +30,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
 
     private PolRegion Region => MirrorLayout.RegionOf(region);
 
-    public Func<PatchProduct, CancellationToken, string> ServerVersion { get; init; } = (p, ct) => new PolUpdater(p).Check(ct).Server;
+    public Func<PatchProduct, CancellationToken, string> ServerVersion { get; init; } = (p, ct) => new PolUpdater(p).Check(PatchVer.ReadOrEmpty(p), ct).Server;
 
     public Func<GameProduct, string?> RegisteredFolder { get; init; } = product => PolPaths.TryGetInstallFolder(MirrorLayout.RegionOf(region), product);
 
@@ -123,7 +123,7 @@ public sealed class InstallFromMirror(MirrorClient client, string region, string
         SkipReason = null;
         progress?.Report(new InstallProgress(PrepareStage, PrepareText, -1, 0, 0));
         var pointer = await client.GetPointerAsync(region, ct);
-        if (pointer is null || pointer.Region != region) return Skip<InstallData>($"the mirror has no valid pointer for {region}");
+        if (pointer is null) return Skip<InstallData>($"the mirror has no valid pointer for {region}");
         if (!pointer.Versions.TryGetValue(InstallSlug, out var installVersion))
             return Skip<InstallData>("the mirror pointer names no install data");
         var installIndex = await client.GetIndexAsync(region, InstallSlug, installVersion, ct);

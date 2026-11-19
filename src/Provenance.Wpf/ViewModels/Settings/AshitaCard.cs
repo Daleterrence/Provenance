@@ -14,7 +14,9 @@ public partial class AshitaCard : ObservableObject
     private const string NoScript = "None";
 
     private readonly IProfileHost _hook;
+    private readonly CardWork _work = new();
     private bool _loadingCard;
+    private int _loads;
 
     public AshitaCard(IProfileHost hook)
     {
@@ -23,6 +25,10 @@ public partial class AshitaCard : ObservableObject
     }
 
     internal event Action? Renamed;
+
+    internal Task Pending { get; private set; } = Task.CompletedTask;
+
+    internal CardWork Work => _work;
 
     public ObservableCollection<string> AshitaScripts { get; } = new();
     [ObservableProperty] private string _ashitaName = "";
@@ -35,6 +41,7 @@ public partial class AshitaCard : ObservableObject
 
     private void Load()
     {
+        int mine = ++_loads;
         _loadingCard = true;
         try
         {
@@ -44,14 +51,36 @@ public partial class AshitaCard : ObservableObject
             AshitaName = "";
             AshitaScript = null;
             AshitaScriptArgs = "";
-            if (!_hook.IsAshita || AshitaFile is not { } path) return;
+        }
+        finally { _loadingCard = false; }
+        if (_hook.IsAshita && AshitaFile is { } path)
+        {
+            var dir = _hook.AshitaDir!;
+            bool example = AshitaBootFiles.IsShippedExample(_hook.AshitaBootConfig!.Name);
+            Pending = _work.Run(() => ReadBoot(dir, path), r => { if (mine == _loads) Show(r, example); });
+        }
+        _hook.NotifyProfilesChanged();
+    }
+
+    private sealed record BootRead(List<string> Scripts, BootConfig? Config, Exception? Failure);
+
+    private static BootRead ReadBoot(string dir, string path)
+    {
+        var scripts = Scripts(dir).ToList();
+        try { return new BootRead(scripts, BootConfig.Load(path), null); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return new BootRead(scripts, null, ex); }
+    }
+
+    private void Show(BootRead r, bool example)
+    {
+        _loadingCard = true;
+        try
+        {
             AshitaScripts.Add(NoScript);
-            foreach (var s in Scripts(_hook.AshitaDir!)) AshitaScripts.Add(s);
-            BootConfig cfg;
-            try { cfg = BootConfig.Load(path); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            foreach (var s in r.Scripts) AshitaScripts.Add(s);
+            if (r.Config is not { } cfg)
             {
-                Log.Warning(ex, "Could not read the boot configuration");
+                Log.Warning(r.Failure, "Could not read the boot configuration");
                 AshitaCardNote = "Provenance couldn't read this boot configuration.";
                 return;
             }
@@ -60,7 +89,6 @@ public partial class AshitaCard : ObservableObject
             if (!AshitaScripts.Contains(script)) AshitaScripts.Add(script);
             AshitaScript = script;
             AshitaScriptArgs = cfg.ScriptArgs ?? "";
-            bool example = AshitaBootFiles.IsShippedExample(_hook.AshitaBootConfig!.Name);
             AshitaCardEnabled = !example;
             if (example) AshitaCardNote = HookFailures.AshitaExampleCard;
         }
@@ -82,31 +110,41 @@ public partial class AshitaCard : ObservableObject
 
     partial void OnAshitaNameChanged(string value)
     {
-        if (_loadingCard || !SaveAshita(c => c.Name = value.Trim())) return;
-        _hook.RefreshThirdPartyHookLists();
-        Renamed?.Invoke();
+        if (_loadingCard) return;
+        SaveAshita(c => c.Name = value.Trim(), () =>
+        {
+            _hook.RefreshThirdPartyHookLists();
+            Renamed?.Invoke();
+        });
     }
 
     partial void OnAshitaScriptChanged(string? value) { if (!_loadingCard && value is not null) SaveAshita(c => c.Script = value == NoScript ? "" : value); }
     partial void OnAshitaScriptArgsChanged(string value) { if (!_loadingCard) SaveAshita(c => c.ScriptArgs = value.Trim()); }
 
-    private bool SaveAshita(Action<BootConfig> change)
+    private void SaveAshita(Action<BootConfig> change, Action? saved = null)
     {
-        if (!AshitaCardEnabled || AshitaFile is not { } path) return false;
-        try
+        if (!AshitaCardEnabled || AshitaFile is not { } path) return;
+        Pending = _work.Run(() =>
         {
-            var cfg = BootConfig.Load(path);
-            change(cfg);
-            if (cfg.Ini.Changed) cfg.Save(path);
-            _hook.ProfileStatus.Clear();
-            return true;
-        }
-        catch (Exception ex)
+            try
+            {
+                var cfg = BootConfig.Load(path);
+                change(cfg);
+                if (cfg.Ini.Changed) cfg.Save(path);
+                return null;
+            }
+            catch (Exception ex) { return ex; }
+        }, ex =>
         {
+            if (ex is null)
+            {
+                _hook.ProfileStatus.Clear();
+                saved?.Invoke();
+                return;
+            }
             Log.Warning(ex, "Could not save the boot configuration");
             _hook.ProfileStatus.Fail(ErrorText.Of(ex, "Provenance couldn't save that to the boot configuration."));
             Load();
-            return false;
-        }
+        });
     }
 }

@@ -117,7 +117,7 @@ internal sealed class EarlyStart
 
     private void Found(int pid)
     {
-        foreach (var name in new[] { HookContract.Files.Stop, HookContract.Files.Ended, HookContract.Files.Go }) HookFiles.Delete(pid, name);
+        HookFiles.ClearHandoverFiles(pid);
         if (ProcessStamp.Of(pid) is not { } stamp)
         {
             _failure = _noStartText;
@@ -125,8 +125,7 @@ internal sealed class EarlyStart
         }
         _pid = pid;
         _stamp = stamp;
-        try { File.WriteAllText(HookFiles.PathFor(pid, HookContract.Files.Prestart), stamp.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the early pol.exe for other copies"); }
+        HookFiles.NotePrestart(pid, stamp);
         _found(stamp);
         Log.Information("Started pol.exe (pid {Pid}) ahead of the PlayOnline Viewer check, waiting for the login", pid);
     }
@@ -169,8 +168,7 @@ internal sealed class EarlyStart
         bool closed = _chainClosed;
         if (_pid is { } pid)
         {
-            try { HookFiles.RequestStop(pid); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not ask the early pol.exe to stop"); }
+            HookFiles.TryRequestStop(pid);
             HookFiles.Delete(pid, HookContract.Files.Prestart);
             if (_stamp is { } stamp)
             {

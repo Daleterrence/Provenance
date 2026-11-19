@@ -394,11 +394,13 @@ static void hold_run(BYTE *b)
             }
         }
         /* only an admin can write in Provenance's folder, so a stop file there really is Provenance asking */
-        base_ipc_file(path, IPC_STOP);
-        if (ctl && GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) {
-            base_log("hold: stop file seen - logging out and exiting\r\n");
-            DeleteFileA(path);
-            hold_sign_out(b, spath);
+        if (ctl) {
+            base_ipc_file(path, IPC_STOP);
+            if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) {
+                base_log("hold: stop file seen - logging out and exiting\r\n");
+                DeleteFileA(path);
+                hold_sign_out(b, spath);
+            }
         }
         if (ctl && base_owner_gone()) {
             base_log("hold: Provenance ended - logging out and exiting\r\n");

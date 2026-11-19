@@ -274,7 +274,7 @@ static void chat_frame_parse(const WCHAR *w, DWORD lo, DWORD hi, int whisper)
     }
 }
 
-static void chat_frame_hello(BYTE *b, int type, WCHAR *w)
+static void chat_frame_hello(int type, WCHAR *w)
 {
     wsprintfW(w, L"%xz000000000000000z0z000z000z000z000z000z000z000z000z0000000z0000000z000000000000000z000000000000000z0",
               type);
@@ -282,7 +282,6 @@ static void chat_frame_hello(BYTE *b, int type, WCHAR *w)
     w[102] = L'0';
     w[103] = L'1';
     lstrcpynW(w + 104, g_cr_nick, CR_NAME_MAX + 1);
-    (void)b;
 }
 static void chat_frame_say(BYTE *b, const WCHAR *text, WCHAR *w, int cap)
 {

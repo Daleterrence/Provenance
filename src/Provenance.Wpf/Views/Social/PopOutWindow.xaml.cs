@@ -25,16 +25,11 @@ public partial class PopOutWindow : AppWindow
             ReportVisible();
             if (ShowActivated) Pane.FocusCompose();
         };
-#pragma warning disable RS0030
-        if (Application.Current is { } app) app.Activated += OnAppActivated;
-#pragma warning restore RS0030
+        TaskbarFlash.StopWhenAppActivated(this);
         Closed += (_, _) =>
         {
             conversation.PropertyChanged -= OnConversationChanged;
             social.MessageReceived -= OnMessageLanded;
-#pragma warning disable RS0030
-            if (Application.Current is { } a) a.Activated -= OnAppActivated;
-#pragma warning restore RS0030
             social.PopOutClosed(conversation);
         };
     }
@@ -53,11 +48,8 @@ public partial class PopOutWindow : AppWindow
     {
         if (!string.Equals(Conversation.Friend.Name, who, StringComparison.OrdinalIgnoreCase)) return;
         if (!Conversation.Messages.Social.Flashes(NoticeKind.Message)) return;
-        if (!IsVisible || WindowState == WindowState.Minimized || WindowOwner.Active() is not null) return;
-        TaskbarFlash.Start(this);
+        TaskbarFlash.StartIfBehind(this);
     }
-
-    private void OnAppActivated(object? sender, EventArgs e) => TaskbarFlash.StopIfFlashing(this);
 
     internal void PutBack() => Conversation.Messages.Social.PopIn(Conversation);
 }

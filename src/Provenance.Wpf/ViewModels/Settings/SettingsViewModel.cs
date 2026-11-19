@@ -315,7 +315,15 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         else _blockTimer?.Stop();
     }
 
-    private void OnBlockTick(object? sender, EventArgs e) => BlockTick();
+    private bool _blockTicking;
+
+    private async void OnBlockTick(object? sender, EventArgs e)
+    {
+        if (_blockTicking) return;
+        _blockTicking = true;
+        try { await Backups.RefreshRestoreNoteAsync(); }
+        finally { _blockTicking = false; }
+    }
 
     internal bool WatchingBlocks => _blockTimer is { IsEnabled: true };
 

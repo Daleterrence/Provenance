@@ -118,9 +118,13 @@ public partial class BackupSettings : ObservableObject
 
     internal Func<string, IReadOnlyList<BackupInfo>> ListBackups { get; set; } = GameSettingsBackup.List;
 
-    public void RefreshRestoreNote()
+    public void RefreshRestoreNote() => ApplyNotes(_context.GameRunning());
+
+    internal async Task RefreshRestoreNoteAsync() => ApplyNotes(await Task.Run(_context.GameRunning));
+
+    private void ApplyNotes(bool gameRunning)
     {
-        RestoreNote = RestoreBlocked();
+        RestoreNote = RestoreBlocked(gameRunning);
         BackUpNote = _context.MultiRunning() ? BackUpBlockedText : null;
     }
 
@@ -153,8 +157,10 @@ public partial class BackupSettings : ObservableObject
     }
 
     // the game writes its settings when a character logs out, so a restore under a running one wouldn't last
-    internal string? RestoreBlocked() =>
-        _context.GameRunning() ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
+    internal string? RestoreBlocked() => RestoreBlocked(_context.GameRunning());
+
+    private string? RestoreBlocked(bool gameRunning) =>
+        gameRunning ? "FINAL FANTASY XI is running, and it would write over the restored settings when you log out. Close the game, then restore the backup."
         : _context.LoggedIn() ? "You can restore a backup once you're logged out of PlayOnline."
         : _context.MultiRunning() ? "You can restore a backup once Provenance has finished starting your accounts."
         : null;
@@ -205,12 +211,12 @@ public partial class BackupSettings : ObservableObject
     internal Task Restoring { get; private set; } = Task.CompletedTask;
 
     [RelayCommand(CanExecute = nameof(CanRestore))]
-    private Task RestoreFrom(BackupRow? row) => Restoring = row is null ? Task.CompletedTask : RestoreBackupAsync(row.Info.Path, null);
+    private Task RestoreFrom(BackupRow? row) => Restoring = row is null ? Task.CompletedTask : RestoreBackupAsync(row.Info.Path);
 
     [RelayCommand(CanExecute = nameof(CanRestore))]
-    private Task RestoreFromFile() => Restoring = RestoreBackupAsync(null, null);
+    private Task RestoreFromFile() => Restoring = RestoreBackupAsync(null);
 
-    private async Task RestoreBackupAsync(string? zip, BackupInfo? info)
+    private async Task RestoreBackupAsync(string? zip)
     {
         if (RestoreBlocked() is { } blocked)
         {
@@ -230,22 +236,20 @@ public partial class BackupSettings : ObservableObject
             if (_dialogs.PickFile("Choose a backup to restore", $"Game settings backups|{GameSettingsBackup.NameStart}*.zip", folder) is not { } picked) return;
             zip = picked;
         }
-        if (info is null)
+        BackupInfo info;
+        try { info = GameSettingsBackup.Check(zip); }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException || !File.Exists(zip))
         {
-            try { info = GameSettingsBackup.Check(zip); }
-            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException || !File.Exists(zip))
-            {
-                Log.Warning(ex, "Restore: {Zip} has gone", zip);
-                _dialogs.Error(RestoreFailedTitle, GoneText);
-                await Reload();
-                return;
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Restore: {Zip} isn't a backup that can be restored", zip);
-                _dialogs.Error(RestoreFailedTitle, ex is NotABackupException ? GameBackupPolicy.NotOursText : "Windows couldn't open that file, so nothing was restored.");
-                return;
-            }
+            Log.Warning(ex, "Restore: {Zip} has gone", zip);
+            _dialogs.Error(RestoreFailedTitle, GoneText);
+            await Reload();
+            return;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Restore: {Zip} isn't a backup that can be restored", zip);
+            _dialogs.Error(RestoreFailedTitle, ex is NotABackupException ? GameBackupPolicy.NotOursText : "Windows couldn't open that file, so nothing was restored.");
+            return;
         }
         if (!_dialogs.Confirm(RestoreTitle,
                 $"Restore the backup made on {GameBackupPolicy.When(info)}? Every character in it gets the settings and macros from it back, over the " +

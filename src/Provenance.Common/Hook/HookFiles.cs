@@ -1,5 +1,7 @@
 using System.Globalization;
+using Provenance.Common.Game;
 using Provenance.Common.IO;
+using Serilog;
 
 namespace Provenance.Common.Hook;
 
@@ -72,6 +74,26 @@ public static class HookFiles
 
     public static void RequestStop(int pid) => File.WriteAllText(PathFor(pid, HookContract.Files.Stop), "stop");
 
+    public static void TryRequestStop(int pid)
+    {
+        try { RequestStop(pid); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not ask pol.exe {Pid} to stop", pid); }
+    }
+
+    public static void ClearHandoverFiles(int pid)
+    {
+        foreach (var name in new[] { HookContract.Files.Stop, HookContract.Files.Ended, HookContract.Files.Go }) Delete(pid, name);
+    }
+
+    public static void NotePrestart(int pid, ProcessStamp stamp)
+    {
+        try { File.WriteAllText(PathFor(pid, HookContract.Files.Prestart), stamp.StartUtcTicks.ToString(CultureInfo.InvariantCulture)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not note the early pol.exe {Pid} for other copies", pid); }
+    }
+
+    internal static void Transient(string path, string text) =>
+        AtomicFile.Build(path, tmp => AtomicFile.WriteNew(tmp, new System.Text.UTF8Encoding(false).GetBytes(text)));
+
     public static string NewToken() => ShortId.New(12);
 
     public readonly record struct RequestBody(string Text);
@@ -89,7 +111,7 @@ public static class HookFiles
                 IFormattable n => n.ToString(null, CultureInfo.InvariantCulture),
                 _ => Clean(f.ToString() ?? "", keepLineBreaks: false),
             });
-            AtomicFile.Write(PathFor(pid, name), string.Join("\n", lines));
+            Transient(PathFor(pid, name), string.Join("\n", lines));
             return true;
         }
         catch { return false; }

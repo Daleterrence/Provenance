@@ -135,7 +135,6 @@ static void *pc_dic_relocate(BYTE *b, void *dic, int size)
 PC_SVC3(int, pc_dic_has_word, SV_DIC_HAS_WORD, void *, dic, const WCHAR *, name, int, len)
 #define SV_MY_ID           0x558
 PC_SVC0(unsigned __int64, pc_my_id, SV_MY_ID)
-static unsigned __int64 pc_my_id_or(BYTE *b, unsigned __int64 none) { return pc_has(b, SV_MY_ID) ? pc_my_id(b) : none; }
 #define SV_FORMAT_POLID            0x584
 PC_SVC3_V(void, pc_format_polid, SV_FORMAT_POLID, unsigned, lo, unsigned, hi, char *, out)
 #define SV_FORMAT_HID              0x76c

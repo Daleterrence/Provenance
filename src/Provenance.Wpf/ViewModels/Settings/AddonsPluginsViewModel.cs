@@ -19,6 +19,8 @@ public delegate Task<WindowerInstallResult> WindowerInstaller(string windowerDir
 
 public sealed record AddonBadge(string Text, string Tip, bool Warn = false);
 
+internal sealed record PageWork(AddonsPage Page, string? Note = null, Exception? Failure = null);
+
 public partial class AddonsPluginsViewModel : ObservableObject
 {
     private const string SandboxText =
@@ -106,6 +108,21 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     internal Func<Func<AddonsScan?>, Task<AddonsScan?>> RunScanForTest { get; set; } = work => Task.Run(work);
 
+    internal Func<Func<PageWork>, Task<PageWork>> RunPageForTest { get; set; } = work => Task.Run(work);
+
+    internal Task Changing { get; private set; } = Task.CompletedTask;
+
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(UseGlobalEnabled))] private bool _busy;
+
+    public bool UseGlobalEnabled => CanChangeUseGlobal && !Busy;
+
+    partial void OnBusyChanged(bool value)
+    {
+        foreach (var r in Addons.Concat(Plugins).Concat(PolPlugins)) r.OwnerBusyChanged();
+    }
+
+    partial void OnCanChangeUseGlobalChanged(bool value) => OnPropertyChanged(nameof(UseGlobalEnabled));
+
     partial void OnSearchChanged(string value) => Filter();
 
     public void VisibleChanged(bool visible)
@@ -151,20 +168,51 @@ public partial class AddonsPluginsViewModel : ObservableObject
         }
         if (mine != _refreshes) return;
         (_shown, _scan) = (target, scan);
-        Reload();
+        await ReloadAsync(mine);
     }
 
-    private void Reload()
+    private async Task ReloadAsync(int mine)
     {
-        if (_shown is not { } target) return;
-        AddonsPage page;
-        try { page = AddonsPageBuilder.Build(target, Lists(), _settings.Current.WindowerSharedExtras?.Copy(), _scan); }
+        if (_shown is not { } target || Busy) return;
+        var scan = _scan;
+        var work = await RunPageForTest(() => new PageWork(BuildPage(target, scan)));
+        if (mine != _refreshes || Busy) return;
+        Apply(work.Page);
+    }
+
+    private AddonsPage BuildPage(AddonsTarget target, AddonsScan? scan)
+    {
+        try { return AddonsPageBuilder.Build(target, Lists(), _settings.Current.WindowerSharedExtras?.Copy(), scan); }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not read the addons and plugins in {Folder}", target.Folder);
-            page = AddonsPage.Empty(ErrorText.Of(ex, "Provenance couldn't read the addons and plugins in that folder."));
+            return AddonsPage.Empty(ErrorText.Of(ex, "Provenance couldn't read the addons and plugins in that folder."));
         }
-        Apply(page);
+    }
+
+    private async Task ChangeAsync(AddonsTarget target, Func<string?> change, Func<Exception, string> failure)
+    {
+        int mine = _refreshes;
+        var scan = _scan;
+        Status.Clear();
+        Busy = true;
+        PageWork done;
+        try
+        {
+            done = await RunPageForTest(() =>
+            {
+                string? note = null;
+                Exception? error = null;
+                try { note = change(); }
+                catch (Exception ex) { error = ex; }
+                return new PageWork(BuildPage(target, scan), note, error);
+            });
+        }
+        finally { Busy = false; }
+        if (done.Failure is { } ex) Status.Fail(failure(ex));
+        else if (done.Note is { } note) Status.Show(note);
+        if (mine == _refreshes && ReferenceEquals(scan, _scan)) Apply(done.Page);
+        else await ReloadAsync(_refreshes);
     }
 
     private Dictionary<string, WindowerAddonList> Lists() =>
@@ -265,37 +313,34 @@ public partial class AddonsPluginsViewModel : ObservableObject
         set
         {
             if (value == _useGlobal) return;
-            if (_shown is { Platform: ThirdPartyHook.Windower, Folder: { } dir } && _page is { } page)
+            if (!Busy && _shown is { Platform: ThirdPartyHook.Windower, Folder: { } dir } target && _page is { } page)
             {
-                Status.Clear();
-                try { AddonSwitches.SetUseGlobal(_settings, dir, page.Key, value); }
-                catch (Exception ex)
+                _useGlobal = value;
+                Changing = ChangeAsync(target, () => { AddonSwitches.SetUseGlobal(_settings, dir, page.Key, value); return null; }, ex =>
                 {
                     Log.Warning(ex, "Could not change whether {Profile} uses the shared list", page.Key);
-                    Status.Fail(ErrorText.Of(ex, "Provenance couldn't save that change."));
-                }
-                Reload();
+                    return ErrorText.Of(ex, "Provenance couldn't save that change.");
+                });
             }
             OnPropertyChanged();
         }
     }
 
-    internal void Switch(AddonRow row, bool on)
+    internal bool Switch(AddonRow row, bool on)
     {
-        if (_shown is not { Folder: { } dir } target || _page is not { } page) return;
-        Status.Clear();
-        try
+        if (Busy || _shown is not { Folder: { } dir } target || _page is not { } page) return false;
+        var offered = (_scan as WindowerScan)?.Offered(row.Kind, row.Key);
+        Changing = ChangeAsync(target, () =>
         {
-            if (target.Platform == ThirdPartyHook.Windower) AddonSwitches.SwitchWindower(_settings, dir, page.Key, row.Kind, row.Key, on, (_scan as WindowerScan)?.Offered(row.Kind, row.Key));
-            else if (target.Platform == ThirdPartyHook.Ashita && AddonSwitches.SwitchAshita(dir, target.Profile, row.Kind, row.Key, row.Name, on) is { } note)
-                Status.Show(note);
-        }
-        catch (Exception ex)
+            if (target.Platform == ThirdPartyHook.Windower) AddonSwitches.SwitchWindower(_settings, dir, page.Key, row.Kind, row.Key, on, offered);
+            else if (target.Platform == ThirdPartyHook.Ashita) return AddonSwitches.SwitchAshita(dir, target.Profile, row.Kind, row.Key, row.Name, on);
+            return null;
+        }, ex =>
         {
             Log.Warning(ex, "Could not turn {Name} {State}", row.Key, on ? "on" : "off");
-            Status.Fail(ErrorText.Of(ex, "Provenance couldn't save that change. If the file is open in another program, close it and try again."));
-        }
-        Reload();
+            return ErrorText.Of(ex, "Provenance couldn't save that change. If the file is open in another program, close it and try again.");
+        });
+        return true;
     }
 
     [RelayCommand]

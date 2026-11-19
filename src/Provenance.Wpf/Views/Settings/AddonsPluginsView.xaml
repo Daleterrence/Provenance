@@ -116,7 +116,7 @@
                                 <TextBlock Style="{StaticResource Help}" Margin="0,2,0,0"
                                            Text="By default, Windower loads the same addons and plugins for every profile. Disable this to instead load different ones for each of your profiles." />
                             </StackPanel>
-                            <ToggleButton Grid.Column="1" Margin="16,0,0,0" Style="{StaticResource Switch}" IsChecked="{Binding UseGlobal}" IsEnabled="{Binding CanChangeUseGlobal}"
+                            <ToggleButton Grid.Column="1" Margin="16,0,0,0" Style="{StaticResource Switch}" IsChecked="{Binding UseGlobal}" IsEnabled="{Binding UseGlobalEnabled}"
                                           AutomationProperties.Name="Use the same addons/plugins for every profile" />
                         </Grid>
                     </Border>

@@ -17,8 +17,10 @@ public partial class InstallWindow : AppWindow
     {
         var grow = RegionChoice.ActualHeight;
         if (grow <= 0) return;
-        Height += grow;
-        Top -= grow / 2;
+        var area = WindowFrame.WorkAreaOf(this);
+        var height = Math.Min(Math.Min(Height + grow, MaxHeight), area.Height);
+        Top = Math.Clamp(Top - (height - Height) / 2, area.Top, Math.Max(area.Top, area.Bottom - height));
+        Height = height;
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)

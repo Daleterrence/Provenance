@@ -14,7 +14,7 @@ public static class MirrorDownloads
 
     private const int Attempts = 3;
     private const long ReportStep = 4 * 1024 * 1024;
-    private static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ReportInterval = TimeSpan.FromMilliseconds(250);
 
     public static TimeSpan RoundWait { get; set; } = TimeSpan.FromSeconds(2);

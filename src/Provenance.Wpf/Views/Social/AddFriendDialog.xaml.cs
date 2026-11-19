@@ -20,6 +20,7 @@ public partial class AddFriendDialog : AppWindow
         InitializeComponent();
         _social = vm;
         DataContext = vm.Search;
+        Search.ClearResults();
         Loaded += (_, _) => NameBox.Focus();
         Closed += (_, _) => Search.Cancel();
         if (handleName != null)

@@ -116,6 +116,13 @@ public sealed partial class SocialSearch : ObservableObject
         Note.Fail(HookFailures.RequestWriteFailed);
     }
 
+    public void ClearResults()
+    {
+        if (Writing) return;
+        Hits.Clear();
+        Note.Clear();
+    }
+
     public void Cancel()
     {
         if (!_login.Search.Running) return;
@@ -208,7 +215,7 @@ public sealed partial class SocialSearch : ObservableObject
         var subject = answer == RequestAnswer.Accept
             ? _social.Viewer.Text(0x46d0, "Friend registration accepted")
             : _social.Viewer.Text(0x46d1, "Friend registration declined");
-        if (SocialRequests.AnswerRequest(pid, answer, token, f.RequestMid, subject, allHandles: false)) return;
+        if (SocialRequests.AnswerRequest(pid, answer, token, f.RequestMid, subject)) return;
         _login.Answer.Forget();
         _login.AnswerFor = null;
         _social.AnswerFailed(f.RequestMid);

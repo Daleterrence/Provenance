@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Win32;
 using Provenance.Common.IO;
 using Provenance.Common.Patcher;
+using Serilog;
 
 namespace Provenance.Common.PolFormat;
 
@@ -53,6 +54,16 @@ public static class PatchVer
         return Decode(blob, SeededKey(product))
                ?? Decode(blob, Key(product.Id, null))
                ?? throw new InvalidDataException($"The {product.Name} version file (patch.ver) could not be read.");
+    }
+
+    public static string ReadOrEmpty(PatchProduct product)
+    {
+        try { return Read(product); }
+        catch (InvalidDataException e)
+        {
+            Log.Warning(e, "Treating the {Product} patch.ver as no version, the update check rewrites it", product.Name);
+            return "";
+        }
     }
 
     public static string? ReadSeeded(PatchProduct product)

@@ -9,7 +9,6 @@ public sealed record FriendItem(string Name, string Playing, string Comment, str
     public PolStatus Status { get; init; }
     public bool HasStatus => StatusLabel.Length > 0;
     public string SectionTitle => Section.Title();
-    public string PlayingShort { get; init; } = "";
     public PartyState Party { get; init; }
     public string PartyIconFile => PartyIcons.For(Party);
     public bool HasPartyIcon => PartyIconFile.Length > 0;

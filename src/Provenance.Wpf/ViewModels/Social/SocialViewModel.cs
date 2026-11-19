@@ -112,7 +112,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     [ObservableProperty] private string _myComment = "";
     [ObservableProperty] private bool _hasBlocked;
     [ObservableProperty] private string? _accountNotice;
-    [ObservableProperty] private bool _messagesUnavailable;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanPlay))] private string? _playBlockedReason;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasUnread), nameof(NotificationCount))]
     private int _unreadCount;
@@ -230,12 +229,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         {
             if (_rebuilding && !_settling && value is null) return;
             if (!SetProperty(ref _selectedFriend, value)) return;
-            OnPropertyChanged(nameof(HasSelection));
-            OnSelectedFriendChanged(value);
+            PaneChanged();
         }
     }
-
-    public bool HasSelection => SelectedFriend != null;
 
     private readonly List<PoppedConversation> _popped = new();
     public IReadOnlyList<PoppedConversation> PoppedOut => _popped;
@@ -486,6 +482,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     {
         _login.Chat?.Flush();
         var chat = new ChatStore(profileId, storeRoot);
+        chat.Saved += () => PostToUi?.Invoke(() => AckKept(chat));
         _login = new SocialSession { Chat = chat, Remembered = new AnsweredRequests(profileId, storeRoot, Now) };
         GroupChat.SetLog(new GroupChatLog(profileId, storeRoot));
         chat.ExpireSending(TimeSpan.FromMinutes(3));
@@ -514,7 +511,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         AccountName = "PlayOnline";
         Avatar = null;
         AccountNotice = PlayBlockedReason = null;
-        MessagesUnavailable = false;
         _goingOnline = false;
         OnlineFailed = false;
         RefreshPop();
@@ -563,7 +559,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         timer?.Lap("jobs, profile and characters");
         Groups.Rebuild(snap);
         timer?.Lap("groups");
-        MessagesUnavailable = snap.Mail == "failed";
         RebuildFriends(snap);
         timer?.Lap("friends");
         NoticeComingOnline(snap);
@@ -639,10 +634,26 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 case ChatNewsKind.FriendRequest: FriendRequestReceived?.Invoke(n.From, n.Mid); break;
                 default: MessageReceived?.Invoke(n.From, n.Text); break;
             }
-        if (!r.Kept || (r.ToAck.Count > 0 && _pol.Pid is { } pid && !SocialRequests.Ack(pid, r.ToAck.ToList())))
-            _login.Sync.Unack(r.ToAck);
+        Ack(r.ToAck);
         FlushReads();
         return r.Changed;
+    }
+
+    private void Ack(IReadOnlyList<int> mids)
+    {
+        if (mids.Count > 0 && _pol.Pid is { } pid && !SocialRequests.Ack(pid, mids.ToList())) _login.Sync.Unack(mids);
+    }
+
+    private void AckKept(ChatStore chat)
+    {
+        if (_login.Chat == chat) Ack(_login.Sync.TakeKept(chat, _pol.Pid));
+    }
+
+    internal void SaveChat()
+    {
+        if (_login.Chat is not { } chat) return;
+        chat.Flush();
+        AckKept(chat);
     }
 
     internal void FlushReads()
@@ -689,14 +700,14 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             if (!Friends.Any(f => IdOf(f.Key, f.Name) == id && IsOpenConversation(f))) _login.Held.Remove(id);
         var items = snap.Friends.Select(f =>
         {
-            var (playing, playingShort) = Playing(f);
+            var playing = Playing(f);
             int unread = _login.Chat?.UnreadFrom(f.Name, f.Key) ?? 0;
             var (section, newest) = Place(f.Pending ? FriendSection.RequestsSent : f.Online ? FriendSection.Online : FriendSection.Offline, f.Key, f.Name, unread);
             return new FriendItem(
                 f.Name, playing, f.Pending ? "" : _viewer.Filtered(f.Comment),
                 f.Pending ? "Friend request sent" : f.Online ? f.StatusLabel : "Offline", f.Online && !f.Pending, f.Row,
                 _avatars.ProfilePicture(f.ProfilePictureId), unread, section)
-            { Key = f.Key, Status = f.Status, Pending = f.Pending, IsMe = f.IsMe, PlayingShort = playingShort, Party = PartyOf(f), InGame = f.Online && !f.Pending && f.Game is not null, NewestUnread = newest };
+            { Key = f.Key, Status = f.Status, Pending = f.Pending, IsMe = f.IsMe, Party = PartyOf(f), InGame = f.Online && !f.Pending && f.Game is not null, NewestUnread = newest };
         }).ToList();
         // invitations are kind 0xe, requests kind 1
         foreach (var m in snap.Messages.Where(m => m.HasBody && m.Mid > 0 && !_login.Answered.Contains(m.Mid)))
@@ -772,11 +783,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         a.Is(b) && (a.Section == b.Section ||
                     (a.Section is FriendSection.Online or FriendSection.Offline or FriendSection.Unread
                      && b.Section is FriendSection.Online or FriendSection.Offline or FriendSection.Unread));
-
-    private void OnSelectedFriendChanged(FriendItem? value)
-    {
-        PaneChanged();
-    }
 
     private void PaneChanged()
     {
@@ -1076,13 +1082,13 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private PartyState PartyOf(PolFriend f) =>
         f.Online && !f.Pending && f.Game is { } game && ZoneSearch is { } search && !search.IsAnon(game) ? search.Party(game) : PartyState.None;
 
-    private (string Long, string Short) Playing(PolFriend f)
+    private string Playing(PolFriend f)
     {
-        if (!f.Online || f.Pending || f.Game is not { } game) return ("", "");
-        if (ZoneSearch?.IsAnon(game) == true) return PlayingText.For("", FfxiWorlds.Name(game.World));
+        if (!f.Online || f.Pending || f.Game is not { } game) return "";
+        if (ZoneSearch?.IsAnon(game) == true) return PlayingText.For("", FfxiWorlds.Name(game.World)).Long;
         var name = CharacterNames.Get(game.Character.Key)?.Name ?? "";
         var zone = ZoneSearch?.Area(game) is { } area ? FfxiNames.Area(area) : null;
-        return PlayingText.For(name.Length > 0 ? _viewer.Filtered(name) : "", FfxiWorlds.Name(game.World), zone ?? Lookups.Zone(game.Character.Key));
+        return PlayingText.For(name.Length > 0 ? _viewer.Filtered(name) : "", FfxiWorlds.Name(game.World), zone ?? Lookups.Zone(game.Character.Key)).Long;
     }
 
     public void AddFriend() => _windows.AddFriend(this);
@@ -1094,22 +1100,6 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     {
         if (_session.Phase == SessionPhase.InGame) return;
         if (!_windows.CloseIfShown(SecondWindow.ProfileEditor)) _windows.EditProfile(this);
-    }
-
-    public void AnswerRow(FriendItem f)
-    {
-        if (!CanEdit) return;
-        if (f.IsGroupInvite)
-        {
-            if (_dialogs.Choose("Group invitation from " + f.Name, f.Comment, "ANSWER",
-                                "Accept: join the group", "Decline") is { } answer)
-                Groups.AnswerInvite(f, answer == 0);
-            return;
-        }
-        if (_dialogs.Choose("Friend request from " + f.Name,
-                $"{f.Name} would like to be your friend on PlayOnline.", "ANSWER",
-                "Accept: add " + f.Name + " to your friend list", "Decline", ConfirmStyle.Destructive) is { } pick)
-            Search.AnswerRequest(f, pick == 0 ? RequestAnswer.Accept : RequestAnswer.Decline);
     }
 
     public static string IgnoreQuestion(string name) =>

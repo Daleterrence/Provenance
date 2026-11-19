@@ -221,7 +221,7 @@ public sealed partial class GroupsViewModel : ObservableObject
     {
         if (!invite.IsGroupInvite || !_social.CanEdit) return;
         var subject = accept ? _social.Viewer.Text(0x46d6, "Group registration accepted")
-                             : _social.Viewer.Text(0x46d1, "Friend registration declined");
+                             : _social.Viewer.Text(0x46d8, "Group registration declined");
         _login.InviteAccepted = accept;
         BeginGroup((pid, token) => SocialRequests.AnswerGroupInvite(pid, token, accept, invite.RequestMid, subject),
                    accept ? "You accepted the group invitation." : "You declined the group invitation.",
@@ -328,7 +328,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         }));
         if (g.CanInvite)
         {
-            var invite = _social.Friends.Where(f => f.IsFriend && !f.Pending && !g.Members.Any(m => m.Key.Length > 0 && m.Key == f.Key))
+            var invite = _social.Friends.Where(f => f.IsFriend && !f.IsMe && !f.Pending && !g.Members.Any(m => m.Key.Length > 0 && m.Key == f.Key))
                                 .Select(f => new MenuAction(f.Name, can, () => Invite(g, f))).ToList();
             menu.Add(new("Invite a friend", can && invite.Count > 0) { Items = invite });
         }

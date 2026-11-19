@@ -11,27 +11,11 @@ public sealed class AshitaBootConfig(AshitaIniFile ini)
     internal static readonly IReadOnlyList<string> GameValues =
         [.. FfxiValues.All.Where(v => v.Ashita && v is not OpaqueValue).Select(v => v.Name)];
 
-    private static readonly IReadOnlyList<string> TextValues =
-        [.. FfxiValues.All.Where(v => v.Ashita && v is TextValue or PadValue or OpaqueValue).Select(v => v.Name)];
-
     public AshitaIniFile Ini { get; } = ini;
 
     public static AshitaBootConfig Load(string path) => new(AshitaIniFile.Load(path));
 
     public void Save(string path) => Ini.Save(path);
-
-    public IReadOnlyList<string> Warnings
-    {
-        get
-        {
-            var w = Ini.Warnings.ToList();
-            var blank = TextValues.Where(n => string.IsNullOrEmpty(Ini.Get(Registry, n))).ToList();
-            if (blank.Count > 0)
-                w.Add($"[ffxi.registry] doesn't set {string.Join(", ", blank)}, so Ashita gives the game empty values for "
-                      + "them instead of your Windows settings. Saving this profile's game settings fills them in.");
-            return w;
-        }
-    }
 
     public string? Name { get => Ini.Get(Launcher, "name"); set => SetText(Launcher, "name", value); }
     public string? Script { get => Ini.Get(Boot, "script"); set => SetText(Boot, "script", value); }

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Provenance.Common.Game;
-using Provenance.Common.IO;
+using Provenance.Common.Hook;
 using Provenance.Common.Security;
 
 namespace Provenance.Common.Login;
@@ -33,7 +33,7 @@ internal static class SessionStore
     internal static void WriteRecord(string path, ProcessStamp game, string? profileId, bool played = false)
     {
         var me = ProcessStamp.Of(Environment.ProcessId) ?? new ProcessStamp(Environment.ProcessId, 0);
-        AtomicFile.Write(path, JsonSerializer.Serialize(
+        HookFiles.Transient(path, JsonSerializer.Serialize(
             new SessionFile(game.Pid, game.StartUtcTicks, profileId, me.Pid, me.StartUtcTicks, played)));
     }
 

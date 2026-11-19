@@ -102,14 +102,19 @@ public sealed class PolUpdater(PatchProduct product, Func<string, bool>? only = 
         {
             long total = workIdx.Sum(i => decisions[i].Bytes);
             long need = total + work.Sum(f => f.Last.Sig.Length) + (64L << 20);
-            long free = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(Dir))!).AvailableFreeSpace;
-            if (free < need)
+            if (FreeSpace() is { } free && free < need)
                 throw Shown.Mark(new IOException($"The {product.Name} update needs about {ByteText.Mb(need, "N0")} MB of free space on the drive, but there's only {ByteText.Mb(free, "N0")} MB free. Free up some space, then try again."));
             Download(session, workIdx.Select(i => (manifest[i], decisions[i].Bytes)).ToList(), local, total, progress, ct);
         }
 
         progress?.Report(new PatchProgress(PatchPhase.Apply, $"Updating {product.Name}...", -1));
         return Apply(manifest, local, server);
+    }
+
+    private long? FreeSpace()
+    {
+        try { return new DriveInfo(Path.GetPathRoot(Path.GetFullPath(Dir))!).AvailableFreeSpace; }
+        catch (Exception e) when (e is ArgumentException or IOException) { return null; }
     }
 
     public static bool IsPolHost(string host)

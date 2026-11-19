@@ -303,9 +303,6 @@ public static class SelfUpdate
         }
     }
 
-    private static UpdateManager Manager() =>
-        new(new ChannelSource(UpdateServer, VelopackLocator.Current.CurrentlyInstalledVersion, feedRead: NoteFeed));
-
     private static Updater Open()
     {
         var locator = VelopackLocator.Current;
@@ -354,7 +351,7 @@ public static class SelfUpdate
                 await ReadFeedAsync(timeout ?? CheckTimeout);
                 return false;
             }
-            var updates = (manager ?? Manager)();
+            var updates = (manager ?? (() => Open().Updates))();
             if (!updates.IsInstalled) return false;
             var check = Task.Run(() => updates.CheckForUpdatesAsync());
             if (await Task.WhenAny(check, Task.Delay(timeout ?? CheckTimeout)) != check)

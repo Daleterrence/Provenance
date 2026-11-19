@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.Unicode;
 using Provenance.Common.IO;
 using Provenance.Common.Security;
 using Provenance.Common.Win32;
@@ -46,17 +45,15 @@ public sealed class AshitaIniFile
     private readonly Encoding ansi;
     private readonly Encoding encoding;
     private readonly string newline;
-    private readonly bool looksUtf8;
     private bool utf8Bom;
 
-    private AshitaIniFile(List<Line> lines, Encoding ansi, bool utf16, bool utf8Bom, bool looksUtf8)
+    private AshitaIniFile(List<Line> lines, Encoding ansi, bool utf16, bool utf8Bom)
     {
         this.lines = lines;
         this.ansi = ansi;
         encoding = utf16 ? Encoding.Unicode : ansi;
         IsUtf16 = utf16;
         this.utf8Bom = utf8Bom;
-        this.looksUtf8 = looksUtf8;
         Changed = utf8Bom;
         newline = new[] { "\r\n", "\n", "\r" }.MaxBy(e => lines.Count(l => l.Ending == e))!;
     }
@@ -101,9 +98,7 @@ public sealed class AshitaIniFile
             var raw = data[from..];
             lines.Add(new Line(enc.GetString(raw), "", raw));
         }
-        var body = data.AsSpan(start);
-        bool looksUtf8 = !utf16 && ansi.CodePage != 65001 && body.ContainsAnyInRange((byte)0x80, (byte)0xFF) && Utf8.IsValid(body);
-        return new AshitaIniFile(lines, ansi, utf16, utf8Bom, looksUtf8);
+        return new AshitaIniFile(lines, ansi, utf16, utf8Bom);
     }
 
     public static AshitaIniFile FromText(string text, int codePage = 0)
@@ -196,8 +191,6 @@ public sealed class AshitaIniFile
         Blocks(p, section) is [var first, ..] ? first : null;
 
     private string Value(int i, Parsed p) => lines[i].Text[p.ValueStart..p.ValueEnd];
-
-    public IReadOnlyList<string> Sections => Scan().Where(p => p.Kind == Kind.Section).Select(p => p.Name).ToList();
 
     public string? Get(string section, string key)
     {
@@ -323,67 +316,6 @@ public sealed class AshitaIniFile
         LinesIn(null).Where(i => KeyOf(lines[i].Text) is { } k && Same(k.Key, "command"))
                      .Concat(LinesIn("ashita.polplugins.args"))
                      .Select(i => KeyOf(lines[i].Text)?.Value).OfType<string>().Where(v => v.Length > 0).ToHashSet();
-
-    // Ashita.dll looks names up by their exact bytes, so it never sees [Ashita.Boot]
-    private static bool NeedsLowercase(Parsed p, string? section)
-    {
-        static bool Ashitas(string s) => s.StartsWith("ashita.", StringComparison.OrdinalIgnoreCase)
-                                         || s.StartsWith("ffxi.", StringComparison.OrdinalIgnoreCase)
-                                         || s.StartsWith("sandbox.", StringComparison.OrdinalIgnoreCase) || Same(s, "import");
-        bool upper = p.Name.Any(char.IsUpper);
-        return p.Kind switch
-        {
-            Kind.Section => upper && Ashitas(p.Name),
-            Kind.Key => upper && section is not null && Ashitas(section) && !p.Name.StartsWith('#')
-                        && !Same(section, "ashita.polplugins") && !Same(section, "ashita.polplugins.args"),
-            _ => false,
-        };
-    }
-
-    // never quotes a value, a boot config can hold a password
-    public IReadOnlyList<string> Warnings
-    {
-        get
-        {
-            var w = new List<string>();
-            if (utf8Bom) w.Add("This file starts with a UTF-8 marker that hides its first section from Ashita. Provenance takes it out when it saves.");
-            if (looksUtf8) w.Add($"This file has UTF-8 text in it, but Ashita reads it as {ansi.WebName}, so accented and non-English characters come out wrong.");
-            var p = Scan();
-            var sections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var keys = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            string? section = null;
-            bool first = false;
-            for (int i = 0; i < p.Length; i++)
-            {
-                int n = i + 1;
-                var name = p[i].Name;
-                if (p[i].Kind == Kind.Section)
-                {
-                    section = name;
-                    first = sections.Add(name);
-                    keys.Clear();
-                    if (!first) w.Add($"Line {n}: [{name}] is in this file more than once. Ashita only reads the first one, so that's the one Provenance edits.");
-                }
-                if (NeedsLowercase(p[i], section))
-                    w.Add($"Line {n}: Ashita won't see {(p[i].Kind == Kind.Section ? $"[{name}]" : name)} unless it's written in lowercase.");
-                if (IsUtf16 && p[i].Kind is Kind.Key or Kind.Section && !Fits(ansi, lines[i].Text))
-                    w.Add($"Line {n}: {name} has characters Ashita can't read with this PC's language for non-Unicode programs, so they come out wrong.");
-                if (p[i].Kind == Kind.Key && section is not null)
-                {
-                    var value = Value(i, p[i]);
-                    if (name.StartsWith('#')) w.Add($"Line {n}: # doesn't start a comment in a boot configuration, use ; instead.");
-                    else if (first && !keys.TryAdd(name, n))
-                        w.Add($"Line {n}: {name} is set more than once in [{section}]. Provenance keeps the first one when it changes {name}.");
-                    if (value.Length >= 2 && value[0] is '"' or '\'' && value[^1] == value[0])
-                        w.Add($"Line {n}: Ashita keeps the quotes around {name}'s value, so they become part of it.");
-                    if (value.Contains(" ;") || value.Contains("\t;"))
-                        w.Add($"Line {n}: Ashita doesn't allow comments after a value, so everything after the ; is part of {name}.");
-                }
-                if (ansi.GetByteCount(lines[i].Text) > MaxLine) w.Add($"Line {n} is too long for Ashita to read.");
-            }
-            return w;
-        }
-    }
 
     private void Replace(int i, string text)
     {

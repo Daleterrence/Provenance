@@ -1,6 +1,7 @@
 using System.Text;
 using Provenance.Common.Hook;
 using Provenance.Common.IO;
+using Serilog;
 
 namespace Provenance.Common.Social;
 
@@ -10,10 +11,9 @@ public sealed class ChatStore
     private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
     // the game's message store is read again at every login, so without these a deleted line would come back
     private readonly Dictionary<string, long> _deleted = new(StringComparer.Ordinal);
-    private bool _deletedDirty;
     public const int KeepDeleted = 5000;
     internal int DeletedCount => _deleted.Count;
-    private int _version;
+    private int _version, _deletedVersion;
     private Stats? _stats;
 
     // format constant, never change it or every old log stops opening
@@ -44,8 +44,8 @@ public sealed class ChatStore
 
     public IReadOnlyList<ChatEntry> Entries => _entries;
 
-    private bool _dirty, _closed;
-    public bool Dirty { get => _dirty; private set => _dirty = value && !_closed; }
+    private volatile bool _closed;
+    public bool Dirty => !_closed && (_version != SavedVersion || _deletedVersion != Volatile.Read(ref _savedDeletedVersion));
     public string ProfileId { get; } = "";
 
     public bool MergeIncoming(PolMessage m) => m.HasBody && m.IsChat && AddOnce(m, m.Subject, m.Text, "received");
@@ -83,7 +83,7 @@ public sealed class ChatStore
     {
         Add(new ChatEntry("note:" + ShortId.New(12), peer, true, "", text,
                           DateTimeOffset.UtcNow.ToUnixTimeSeconds(), true, "notice") { PeerKey = peerKey });
-        Save();
+        SaveSoon();
     }
 
     public ChatEntry AddOutgoing(string peer, string peerKey, string text, string token)
@@ -91,7 +91,7 @@ public sealed class ChatStore
         var e = new ChatEntry("out:" + token, peer, true, "", text, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), true, "sending")
                 { PeerKey = peerKey };
         Add(e);
-        Save();
+        SaveSoon();
         return e;
     }
 
@@ -105,7 +105,7 @@ public sealed class ChatStore
             Edit(i, e => e with { State = state });
             changed = true;
         }
-        if (changed) Save();
+        if (changed) SaveSoon();
         return changed;
     }
 
@@ -118,7 +118,6 @@ public sealed class ChatStore
         bool stamp = state == "sent" && time > 0 && (cur.Time != time || cur.Seq != seq);
         if (cur.State == state && !stamp) return false;
         Edit(i, e => stamp ? e with { State = state, Time = time, Seq = seq } : e with { State = state });
-        Changed();
         return true;
     }
 
@@ -147,8 +146,8 @@ public sealed class ChatStore
         var old = _deleted.Where(kv => kv.Value < olderThan).Select(kv => kv.Key).ToList();
         if (old.Count == 0) return;
         foreach (var k in old) _deleted.Remove(k);
-        _deletedDirty = true;
-        SaveDeleted();
+        _deletedVersion++;
+        SaveSoon();
     }
 
     private int DeleteWhere(Func<ChatEntry, bool> match)
@@ -165,26 +164,22 @@ public sealed class ChatStore
         if (_deleted.Count > KeepDeleted)
             foreach (var k in _deleted.OrderBy(kv => kv.Value).Take(_deleted.Count - KeepDeleted).Select(kv => kv.Key).ToList())
                 _deleted.Remove(k);
-        _deletedDirty = true;
+        _deletedVersion++;
         var keys = gone.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
         _entries.RemoveAll(e => keys.Contains(e.Key) && CanDelete(e));
-        foreach (var k in keys) if (!_entries.Any(e => e.Key == k)) _keys.Remove(k);
+        var left = _entries.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+        _keys.ExceptWith(keys.Where(k => !left.Contains(k)));
         _version++;
-        Dirty = true;
-        SaveDeleted();
-        Save();
+        SaveSoon();
         return gone.Count;
-    }
-
-    private void SaveDeleted()
-    {
-        if (!_closed && _deletedFile?.Save(_deleted) == true) _deletedDirty = false;
     }
 
     public void Discard()
     {
         _closed = true;
-        _dirty = _deletedDirty = false;
+        lock (_gate) _next = null;
+        // a write that's already started has to finish before the files can be deleted
+        lock (_io) { }
     }
 
     public bool SetSentFrom(string token, int fromSlot, bool toOther)
@@ -213,7 +208,6 @@ public sealed class ChatStore
         _entries.RemoveAt(i);
         if (!_entries.Any(e => e.Key == key)) _keys.Remove(key);
         _version++;
-        Changed();
         return true;
     }
 
@@ -225,11 +219,8 @@ public sealed class ChatStore
     {
         if (Stat().Waiting == 0) return false;
         long cutoff = DateTimeOffset.UtcNow.Add(-maxAge).ToUnixTimeSeconds();
-        bool changed = EditWhere(e => e.Outgoing && e.State is "sending" or "queued" && e.Time < cutoff &&
-                                      keep?.Contains(e.Key) != true,
-                                 e => e with { State = "failed:timeout" });
-        if (changed) Changed();
-        return changed;
+        return EditWhere(e => e.Outgoing && e.State is "sending" or "queued" && e.Time < cutoff && keep?.Contains(e.Key) != true,
+                         e => e with { State = "failed:timeout" });
     }
 
     public bool Adopt(string name, string key)
@@ -292,17 +283,21 @@ public sealed class ChatStore
             turned.Add(e.Key);
             return true;
         }
-        if (EditWhere(Match, e => e with { Read = true })) Changed();
+        EditWhere(Match, e => e with { Read = true });
         return turned;
     }
 
     public bool IsReadChat(string key) => Stat().ReadKeys.Contains(key);
 
-    public bool HasSentLine(long time, long seq, int fromSlot) =>
-        time > 0 && fromSlot >= 0 &&
-        (_deleted.ContainsKey(StoredSentKey(time, seq, fromSlot)) ||
-         _entries.Any(e => e.Outgoing && e.Time == time && e.Seq == seq && e.FromSlot == fromSlot &&
-                           e.Key.StartsWith("out:", StringComparison.Ordinal)));
+    public Func<long, long, int, bool> SentLines()
+    {
+        var sent = _entries.Where(e => e.Outgoing && e.Key.StartsWith("out:", StringComparison.Ordinal))
+                           .Select(e => (e.Time, e.Seq, e.FromSlot)).ToHashSet();
+        return (time, seq, fromSlot) => time > 0 && fromSlot >= 0 &&
+            (_deleted.ContainsKey(StoredSentKey(time, seq, fromSlot)) || sent.Contains((time, seq, fromSlot)));
+    }
+
+    public bool HasKeyless => Stat().KeylessNames.Count > 0;
 
     private static string StoredSentKey(long time, long seq, int fromSlot) => $"stored-sent:{time}|{seq}|{fromSlot}";
 
@@ -311,14 +306,12 @@ public sealed class ChatStore
         _entries.Add(e);
         _keys.Add(e.Key);
         _version++;
-        Dirty = true;
     }
 
     private void Edit(int i, Func<ChatEntry, ChatEntry> change)
     {
         _entries[i] = change(_entries[i]);
         _version++;
-        Dirty = true;
     }
 
     private bool EditWhere(Func<ChatEntry, bool> match, Func<ChatEntry, ChatEntry> change)
@@ -330,11 +323,7 @@ public sealed class ChatStore
                 _entries[i] = change(_entries[i]);
                 changed = true;
             }
-        if (changed)
-        {
-            _version++;
-            Dirty = true;
-        }
+        if (changed) _version++;
         return changed;
     }
 
@@ -407,30 +396,110 @@ public sealed class ChatStore
         return _stats = s;
     }
 
-    private void Changed() => Dirty = true;
-
     public static readonly TimeSpan SaveRetry = TimeSpan.FromSeconds(30);
-    private DateTime _failedAt;
+    public static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(250);
+
+    // ChatEntry is immutable, so a copy of the list is safe to serialise on the writer's thread
+    private sealed record Pending(List<ChatEntry>? Entries, int Version, Dictionary<string, long>? Deleted, int DeletedVersion);
+
+    private readonly object _gate = new(), _io = new();
+    private Pending? _next;
+    private bool _writing;
+    private (int, int) _queued;
+    private int _savedVersion, _savedDeletedVersion;
+    private volatile bool _failed;
+    private DateTime _triedAt;
     internal int SaveCount { get; private set; }
 
-    public bool SaveIfDue(DateTime now)
+    public event Action? Saved;
+
+    internal int Version => _version;
+    internal int SavedVersion => Volatile.Read(ref _savedVersion);
+
+    public void SaveIfDue(DateTime now)
     {
-        if (!Dirty) return true;
-        if (now - _failedAt < SaveRetry) return false;
-        if (Save()) return true;
-        _failedAt = now;
-        return false;
+        if (!Dirty) return;
+        if (_failed ? now - _triedAt < SaveRetry : _queued == (_version, _deletedVersion)) return;
+        _triedAt = now;
+        SaveSoon();
     }
 
-    public bool Flush() => !Dirty || Save();
+    private void SaveSoon()
+    {
+        if (_file is null || !Dirty) return;
+        var job = Snapshot(force: false);
+        _queued = (job.Version, job.DeletedVersion);
+        lock (_gate)
+        {
+            _next = job;
+            if (_writing) return;
+            _writing = true;
+        }
+        _ = Task.Run(WriteLoop);
+    }
 
-    public bool Save()
+    // the wait first, so a burst of lines goes out as one write
+    private async Task WriteLoop()
+    {
+        while (true)
+        {
+            await Task.Delay(SaveDelay).ConfigureAwait(false);
+            Pending? job;
+            lock (_gate)
+            {
+                (job, _next) = (_next, null);
+                if (job is null)
+                {
+                    _writing = false;
+                    return;
+                }
+            }
+            Write(job, force: false);
+        }
+    }
+
+    private Pending Snapshot(bool force) => new(
+        force || _version != SavedVersion ? new List<ChatEntry>(_entries) : null, _version,
+        _deletedVersion != Volatile.Read(ref _savedDeletedVersion) ? new Dictionary<string, long>(_deleted, StringComparer.Ordinal) : null,
+        _deletedVersion);
+
+    private void Write(Pending job, bool force)
+    {
+        bool saved = false;
+        lock (_io)
+        {
+            if (_closed) return;
+            bool tried = false, failed = false;
+            // the deleted keys go first, or a line deleted here could come back from the game's store
+            if (job.Deleted is { } deleted && job.DeletedVersion > _savedDeletedVersion)
+            {
+                tried = true;
+                if (_deletedFile!.Save(deleted)) Volatile.Write(ref _savedDeletedVersion, job.DeletedVersion);
+                else failed = true;
+            }
+            if (job.Entries is { } entries && (force || job.Version > _savedVersion))
+            {
+                tried = true;
+                SaveCount++;
+                saved = _file!.Save(entries);
+                if (saved) Volatile.Write(ref _savedVersion, job.Version);
+                else failed = true;
+            }
+            if (tried) _failed = failed;
+        }
+        if (!saved) return;
+        try { Saved?.Invoke(); }
+        catch (Exception e) { Log.Warning(e, "Messages: the log was saved, but passing that on failed"); }
+    }
+
+    public bool Flush() => !Dirty || Save(force: false);
+
+    public bool Save() => Save(force: true);
+
+    private bool Save(bool force)
     {
         if (_file is null || _closed) return false;
-        if (_deletedDirty) SaveDeleted();
-        SaveCount++;
-        if (!_file.Save(_entries)) return false;
-        Dirty = false;
-        return true;
+        Write(Snapshot(force), force);
+        return !Dirty;
     }
 }

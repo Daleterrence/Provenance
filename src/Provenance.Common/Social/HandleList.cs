@@ -126,7 +126,7 @@ public static class HandleList
         "failed:busy" => HookFailures.Busy,
         "failed:already active" => HookFailures.Handles.AlreadyActive,
         "failed:handle full" or "failed:-7169" => LimitText,
-        "failed:list changed" or "failed:not linked" or "failed:already linked" or "failed:not active" or "failed:-7172"
+        "failed:list changed" or "failed:already linked" or "failed:not active" or "failed:-7172"
             or "failed:-7173" or "failed:-7174" => HookFailures.Handles.ListChanged,
         "failed:-7168" => HookFailures.Handles.AlreadyLinked,
         "failed:reloaded" => HookFailures.Handles.Reloaded,

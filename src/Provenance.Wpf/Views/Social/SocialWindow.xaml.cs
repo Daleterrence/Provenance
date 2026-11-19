@@ -42,9 +42,7 @@ public partial class SocialWindow : AppWindow
         StateChanged += (_, _) => ReportVisible();
         Activated += (_, _) => Vm?.RefreshTimes();
         SizeChanged += OnSized;
-#pragma warning disable RS0030
-        if (Application.Current is { } app) app.Activated += OnAppActivated;
-#pragma warning restore RS0030
+        TaskbarFlash.StopWhenAppActivated(this);
         // the view model outlives the window, so a closed one lets go
         Closing += (_, _) =>
         {
@@ -57,9 +55,6 @@ public partial class SocialWindow : AppWindow
                 vm.HidePane();
                 Detach(vm);
             }
-#pragma warning disable RS0030
-            if (Application.Current is { } a) a.Activated -= OnAppActivated;
-#pragma warning restore RS0030
         };
     }
 
@@ -111,12 +106,8 @@ public partial class SocialWindow : AppWindow
 
     private void FlashIfBehind(NoticeKind kind)
     {
-        if (Vm?.Flashes(kind) != true || !IsVisible || WindowState == WindowState.Minimized) return;
-        if (WindowOwner.Active() is not null) return;
-        TaskbarFlash.Start(this);
+        if (Vm?.Flashes(kind) == true) TaskbarFlash.StartIfBehind(this);
     }
-
-    private void OnAppActivated(object? sender, EventArgs e) => TaskbarFlash.StopIfFlashing(this);
 
     private void ReportVisible()
     {

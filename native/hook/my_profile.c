@@ -9,8 +9,6 @@
 #define FS_E_ITEM     (-0x7f09)
 #define FS_E_CANCELLED (-0x7f0a)
 
-#define FS_STRICT_PNUM  1
-
 #define P8(a, i) a[i], a[(i)+1], a[(i)+2], a[(i)+3], a[(i)+4], a[(i)+5], a[(i)+6], a[(i)+7]
 
 #define PE_MAXF 32
@@ -171,6 +169,18 @@ static int my_profile_handle_ngword(BYTE *b, const WCHAR *name)
     return pc_dic_has_word(b, g_hr_dic, name, lstrlenW(name)) != 0;
 }
 
+static int my_profile_handle_name_check(BYTE *b, const WCHAR *w, char sj[64], int *len)
+{
+    int r;
+    *len = pc_wide_to_sjis(b, NULL, w, SJIS_GETA);
+    if (*len < 1 || *len > 15) return HR_E_NAME;
+    memset(sj, 0, 64);
+    pc_wide_to_sjis(b, sj, w, SJIS_GETA);
+    if (!peers_ascii_name_ok(sj)) return HR_E_NAME;
+    r = my_profile_handle_ngword(b, w);
+    return r < 0 ? r : r ? HR_E_NGWORD : 0;
+}
+
 enum { HR_IDLE, HR_UP_START, HR_UP_POLL, HR_RL_START, HR_RL_POLL };
 static struct { int st, slot, job, err; char want[16], old[16]; } g_hr = { HR_IDLE, -1, -1, 0, {0}, {0} };
 
@@ -191,14 +201,8 @@ static int my_profile_handle_rename(BYTE *b, int slot, const WCHAR *newName)
         char sj[64];
         int  len;
         if (slot < 0 || slot > 63 || !newName) return FS_E_ARGS;
-        len = pc_wide_to_sjis(b, NULL, newName, SJIS_GETA);
-        if (len < 1 || len > 15) return HR_E_NAME;
-        memset(sj, 0, sizeof sj);
-        pc_wide_to_sjis(b, sj, newName, SJIS_GETA);
-        if (!peers_ascii_name_ok(sj)) return HR_E_NAME;
-        r = my_profile_handle_ngword(b, newName);
-        if (r < 0) return r;
-        if (r) return HR_E_NGWORD;
+        r = my_profile_handle_name_check(b, newName, sj, &len);
+        if (r) return r;
         if (!handle_get(b, slot, &h) || (int)((h.hi >> 13) & 0x3f) != slot) return FS_E_HANDLE;
         memcpy(g_hr.old, h.name, 16);
         memset(h.name, 0, sizeof h.name);
@@ -617,7 +621,7 @@ static void my_profile_pump(BYTE *b, int ctl)
         it = profile_db_get(b, g_profile_db_pib, "z_hid", ME_REC);
         if (!it || it->v.u64 != g_me_hid) { my_profile_done("failed:mismatch"); return; }
         it = profile_db_get(b, g_profile_db_pib, "z_pnum", ME_REC);
-        if (FS_STRICT_PNUM && it && (it->flags & 1) && it->v.bytes.p && *(BYTE *)it->v.bytes.p != (BYTE)g_my_slot) {
+        if (it && (it->flags & 1) && it->v.bytes.p && *(BYTE *)it->v.bytes.p != (BYTE)g_my_slot) {
             my_profile_done("failed:mismatch");
             return;
         }
@@ -740,7 +744,7 @@ static void my_profile_pic_loaded(BYTE *b)
     it = pc_pdb_find(b, s, "z_hid", PIC_REC);
     if (!it || it->v.u64 != g_pic_hid) { my_profile_pic_fail(FS_E_MISMATCH, "record z_hid differs"); return; }
     it = pc_pdb_find(b, s, "z_pnum", PIC_REC);
-    if (FS_STRICT_PNUM && it && (it->flags & 1) && it->v.bytes.p && *(BYTE *)it->v.bytes.p != (BYTE)g_pic_slot) {
+    if (it && (it->flags & 1) && it->v.bytes.p && *(BYTE *)it->v.bytes.p != (BYTE)g_pic_slot) {
         my_profile_pic_fail(FS_E_MISMATCH, "record z_pnum differs from slot");
         return;
     }

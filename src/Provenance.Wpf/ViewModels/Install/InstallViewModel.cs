@@ -139,8 +139,9 @@ public partial class InstallViewModel : ObservableObject
 
     private void UpdateSpace()
     {
-        if (InstallFolder is not { } install || DownloadFolder is not { } download ||
-            !Path.IsPathFullyQualified(install) || !Path.IsPathFullyQualified(download))
+        var install = InstallFolder;
+        var download = DownloadFolder;
+        if (!Path.IsPathFullyQualified(install) || !Path.IsPathFullyQualified(download))
         {
             EnoughSpace = false;
             FreeSpaceText = "Choose full folder paths, such as C:\\Program Files (x86)\\PlayOnline.";
@@ -148,17 +149,17 @@ public partial class InstallViewModel : ObservableObject
         }
         try
         {
-            var root = Path.GetPathRoot(Path.GetFullPath(install));
-            if (root != null && root.StartsWith(@"\\", StringComparison.Ordinal))
+            var root = Path.GetPathRoot(Path.GetFullPath(install))!;
+            if (root.StartsWith(@"\\", StringComparison.Ordinal))
             {
                 EnoughSpace = true;
                 FreeSpaceText = "Provenance can't check the free space on a network folder.";
             }
-            else if (root != null)
+            else
             {
                 var d = new DriveInfo(root);
-                var dlRoot = string.IsNullOrWhiteSpace(download) ? null : Path.GetPathRoot(Path.GetFullPath(download));
-                bool split = dlRoot != null && !dlRoot.StartsWith(@"\\", StringComparison.Ordinal) &&
+                var dlRoot = Path.GetPathRoot(Path.GetFullPath(download))!;
+                bool split = !dlRoot.StartsWith(@"\\", StringComparison.Ordinal) &&
                              !string.Equals(dlRoot, root, StringComparison.OrdinalIgnoreCase);
                 if (!split)
                 {
@@ -167,7 +168,7 @@ public partial class InstallViewModel : ObservableObject
                 }
                 else
                 {
-                    long dlFree = new DriveInfo(dlRoot!).AvailableFreeSpace;
+                    long dlFree = new DriveInfo(dlRoot).AvailableFreeSpace;
                     EnoughSpace = d.AvailableFreeSpace >= GameDriveBytes && dlFree >= DownloadDriveBytes;
                     FreeSpaceText = $"There's {ByteText.Gb(d.AvailableFreeSpace)} free on {root} for the game, which needs about {ByteText.Gb(GameDriveBytes)}. " +
                                     $"There's {ByteText.Gb(dlFree)} free on {dlRoot} for the download, which needs about {ByteText.Gb(DownloadDriveBytes)}.";

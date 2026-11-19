@@ -31,14 +31,13 @@ internal sealed class SearchRefresh(Func<int, bool> hasServer)
             if (!f.Online || f.Pending || f.Game is not { } game || !hasServer(game.World)) continue;
             var who = f.Key.Length > 0 ? f.Key : f.Name;
             now[who] = game.Character.Key;
-            if (!_seen.TryGetValue(who, out var was) || was != game.Character.Key) WorldFor(game.World).Dirty = true;
+            var w = WorldFor(game.World);
+            if (!_seen.TryGetValue(who, out var was) || was != game.Character.Key) w.Dirty = true;
             if (!onWorld.TryGetValue(game.World, out var list)) onWorld[game.World] = list = new Dictionary<string, CharacterId>();
             list[game.Character.Key] = game.Character;
         }
         _seen = now;
         foreach (var (id, w) in _worlds) w.Characters = onWorld.TryGetValue(id, out var here) ? [.. here.Values] : [];
-        foreach (var (id, here) in onWorld)
-            if (!_worlds.ContainsKey(id)) WorldFor(id).Characters = [.. here.Values];
     }
 
     private World WorldFor(int id)

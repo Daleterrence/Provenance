@@ -16,7 +16,7 @@ static void request_fail_group(const char *why) { group_fail(why); }
 static void request_fail_pic(const char *why) { pic_fail(why); }
 static void request_refuse_chatjoin(const char *l1, const char *l2, const char *l3) { (void)l2; chat_room_join_refused_switching(l1, l3); }
 static void request_refuse_chatsend(const char *l1, const char *l2, const char *l3) { (void)l2; (void)l3; chat_room_send_refused_switching(l1); }
-static void request_refuse_chatcreate(const char *l1, const char *l2, const char *l3) { (void)l3; chat_room_create_refused(l1, l2); }
+static void request_refuse_chatcreate(const char *l1, const char *l2, const char *l3) { (void)l3; chat_room_join_refused_switching(l1, l2); }
 static void request_refuse_chatmaster(const char *l1, const char *l2, const char *l3) { (void)l3; chat_room_master_refused_switching(l1, l2); }
 static void request_refuse_gjoin(const char *l1, const char *l2, const char *l3) { (void)l2; (void)l3; group_chat_join_refused(l1, SWITCHING); }
 static void request_refuse_gsend(const char *l1, const char *l2, const char *l3) { (void)l2; (void)l3; group_chat_send_refused(l1, SWITCHING); }

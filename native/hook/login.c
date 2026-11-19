@@ -563,7 +563,7 @@ static void log_in(HMODULE pc)
 static void fake_session(void)
 {
     HMODULE pc = viewer_polcore_module();
-    if (!pc) { base_log("pol_hook: polcore.dll not loaded at menu time?!\r\n"); return; }
+    if (!pc) { base_log("pol_hook: polcore.dll not loaded at menu time?!\r\n"); base_end_pol(NOT_HOOKED_EXIT); }
     addr_require(IN_POLCORE, viewer_region()->polcore, (BYTE *)pc, (DWORD)(ULONG_PTR)pc);
     /* not a VEH, that'd catch IsBadReadPtr's first-chance probes and recurse through base_log */
     SetUnhandledExceptionFilter(crash_filter);

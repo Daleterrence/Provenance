@@ -88,7 +88,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     public event Action? UnreadChanged;
     public event Action? TickNeeded;
 
-    public bool NeedsTick => Open || !_gate.CanSend || _log is { Dirty: true };
+    public bool NeedsTick => Joining || !_gate.CanSend || _log is { Dirty: true };
 
     private void WakeTick()
     {
@@ -154,6 +154,12 @@ public sealed partial class GroupChatViewModel : ObservableObject
     {
         Lines.Clear();
         foreach (var e in _log?.Lines(GroupId) ?? []) Lines.Add(Item(e));
+        TrimLines();
+    }
+
+    private void TrimLines()
+    {
+        while (Lines.Count > 500) Lines.RemoveAt(0);
     }
 
     internal void Tell(string text) => _dialogs.Info(DialogTitle, text);
@@ -412,6 +418,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
         WakeTick();
         var shown = entries.Select(Item).ToList();
         foreach (var e in shown) Lines.Add(e);
+        TrimLines();
         var theirs = shown.Where(e => !e.Me).ToList();
         if (theirs.Count == 0 || WindowActive) return;
         _unread[GroupId] = _unread.GetValueOrDefault(GroupId) + theirs.Count;
@@ -432,6 +439,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
             _log?.Add(GroupId, [e]);
             WakeTick();
             Lines.Add(Item(e));
+            TrimLines();
         }
         else if (done != "sent")
         {

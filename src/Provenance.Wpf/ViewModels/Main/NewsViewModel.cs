@@ -88,6 +88,7 @@ public partial class NewsViewModel : ObservableObject
     {
         bool was = WindowShown;
         WindowShown = shown;
+        RestartSlides();
         if (shown && !was) _ = RefreshIfStaleAsync();
     }
 
@@ -165,7 +166,7 @@ public partial class NewsViewModel : ObservableObject
             FeedsFailed = !FeedsLoaded;
             OnPropertyChanged(nameof(ShowLoadingHint));
             OnPropertyChanged(nameof(FeedsHint));
-            if (NewsItems.Count > 1) _slideTimer.Start();
+            RestartSlides();
         }
         catch (Exception ex)
         {
@@ -199,7 +200,7 @@ public partial class NewsViewModel : ObservableObject
         RaiseSlid(value);
         if (value < 0 || value >= NewsItems.Count) return;   // the ListBox pushes -1 while the list's rebuilt
         CurrentNews = NewsItems[value];
-        if (NewsItems.Count > 1) { _slideTimer.Stop(); _slideTimer.Start(); }
+        RestartSlides();
     }
 
     [RelayCommand]
@@ -216,8 +217,16 @@ public partial class NewsViewModel : ObservableObject
 
     public void HoldSlides(bool hold)
     {
-        if (hold) _slideTimer.Stop();
-        else if (NewsItems.Count > 1) _slideTimer.Start();
+        _slidesHeld = hold;
+        RestartSlides();
+    }
+
+    private bool _slidesHeld;
+
+    private void RestartSlides()
+    {
+        _slideTimer.Stop();
+        if (!_slidesHeld && WindowShown && NewsItems.Count > 1) _slideTimer.Start();
     }
 
     public void BannerFailed()

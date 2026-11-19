@@ -44,7 +44,7 @@ public sealed class MirrorCheck
     {
         var product = updater.Product;
         product.CheckStream();
-        var local = PatchVer.Read(product);
+        var local = PatchVer.ReadOrEmpty(product);
         if (Answer(product, local, ct) is { } mirror)
         {
             Log.Information("{Product} version check: the mirror answered {Version}", product.Name, mirror.Server);
@@ -62,7 +62,7 @@ public sealed class MirrorCheck
         var fetching = Fetching(folder);
         if (!fetching.Wait(WaitLimit, ct)) return null;
         var pointer = fetching.Result;
-        return pointer is not null && pointer.Region == folder && pointer.Versions.TryGetValue(product.Game.Slug, out var named)
+        return pointer is not null && pointer.Versions.TryGetValue(product.Game.Slug, out var named)
                && string.Equals(named, local, StringComparison.Ordinal)
             ? VersionCheck.Mirror(local) : null;
     }

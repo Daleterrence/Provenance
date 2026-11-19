@@ -16,7 +16,7 @@ public static class GameUpdate
         var mirrorRegion = MirrorLayout.RegionFolder(installed);
         var updater = new PolUpdater(product) { KeepLargeAddressAware = true, Connector = connector ?? DirectPatchConnector.Instance };
         if (known is null) progress?.Report(new PatchProgress(PatchPhase.Check, $"Checking for {product.Name} updates...", -1));
-        var check = known ?? (mirror is null ? updater.Check(ct) : mirror.Check(updater, ct));
+        var check = known ?? (mirror is null ? updater.Check(PatchVer.ReadOrEmpty(product), ct) : mirror.Check(updater, ct));
         if (check.UpToDate) return PatchResult.UpToDate;
 
         bool changed = false;
@@ -34,7 +34,7 @@ public static class GameUpdate
         }
         catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {
-            Log.Information("Update {Product}: mirror unreachable ({Reason})", product.Name, ex.Message);
+            Log.Information("Update {Product}: {Reason}, using PlayOnline", product.Name, ex is OperationCanceledException ? "the mirror timed out" : ex.Message);
             outcome = new MirrorOutcome(false, [], 0);
         }
 

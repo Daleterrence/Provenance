@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
@@ -10,12 +11,15 @@ namespace Provenance.Common.Patcher;
 
 // pointers and indexes only come back once their signature checks out, and a download only replaces its target once size and SHA-256 match
 public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, ECDsa> trusted, string baseUrl = MirrorLayout.BaseUrl,
-                                 MirrorSeen? seen = null)
+                                 MirrorSeen? seen = null, TimeSpan? idleTimeout = null, TimeSpan? blobCeiling = null)
 {
     internal const long MaxSignedBytes = 16 * 1024 * 1024;
 
+    // 10 minutes lets a 3.4MB list through at 6KB/s, and the 16MB cap at 27KB/s
+    internal static readonly TimeSpan DefaultBlobCeiling = TimeSpan.FromMinutes(10);
+
 #pragma warning disable RS0030
-    public static MirrorClient Shared { get; } =
+    public static MirrorClient Shared { get; internal set; } =
         new(Named(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }), MirrorKeys.Trusted, MirrorLayout.BaseUrl, MirrorSeen.Shared);
 #pragma warning restore RS0030
 
@@ -29,32 +33,52 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
 
     public async Task<MirrorPointer?> GetPointerAsync(string region, CancellationToken ct)
     {
-        var payload = await GetSignedAsync(MirrorLayout.PointerKey(region), ct);
+        var key = MirrorLayout.PointerKey(region);
+        var payload = await GetSignedAsync(key, "pointer", ct);
         if (payload is null) return null;
         MirrorPointer pointer;
         try { pointer = MirrorPointer.FromBytes(payload); }
-        catch (InvalidDataException) { return null; }
-        if (seen is null || pointer.Region != region || seen.Accept(region, pointer.Published)) return pointer;
+        catch (InvalidDataException)
+        {
+            Log.Warning("The mirror's {Key} didn't parse", key);
+            return null;
+        }
+        if (pointer.Region != region)
+        {
+            Log.Warning("The mirror's {Key} is for region {Other}, not {Region}", key, pointer.Region, region);
+            return null;
+        }
+        if (seen is null || seen.Accept(region, pointer.Published)) return pointer;
         Log.Warning("The mirror's pointer for {Region} is older than one already seen ({Published:u})", region, pointer.Published);
         return null;
     }
 
     public async Task<MirrorIndex?> GetIndexAsync(string region, string product, string version, CancellationToken ct)
     {
-        var payload = await GetSignedAsync(MirrorLayout.PackedIndexKey(region, product, version), ct);
+        var key = MirrorLayout.PackedIndexKey(region, product, version);
+        var payload = await GetSignedAsync(key, "file list", ct);
         if (payload is null) return null;
         try
         {
             var idx = MirrorIndex.FromBytes(payload);
-            return idx.Format == MirrorIndex.PackedFormat && idx.Region == region && idx.Product == product && idx.Version == version ? idx : null;
+            if (idx.Format == MirrorIndex.PackedFormat && idx.Region == region && idx.Product == product && idx.Version == version) return idx;
+            Log.Warning("The mirror's {Key} is for another region, product or version than the one asked for", key);
+            return null;
         }
-        catch (InvalidDataException) { return null; }
+        catch (InvalidDataException)
+        {
+            Log.Warning("The mirror's {Key} didn't parse", key);
+            return null;
+        }
     }
 
     public async Task<(MirrorBuilds List, byte[] Blob)?> GetBuildsAsync(CancellationToken ct)
     {
-        var blob = await GetBlobAsync(MirrorLayout.BuildsKey, ct);
-        return blob is not null && MirrorBuilds.FromSigned(blob, trusted) is { } list ? (list, blob) : null;
+        var blob = await GetBlobAsync(MirrorLayout.BuildsKey, "build list", ct);
+        if (blob is null) return null;
+        if (MirrorBuilds.FromSigned(blob, trusted) is { } list) return (list, blob);
+        Log.Warning("The mirror's {Key} failed its signature check or didn't parse", MirrorLayout.BuildsKey);
+        return null;
     }
 
     public async Task<Stream> OpenSpanAsync(string region, string pack, long start, long length, CancellationToken ct, Action<int>? received = null)
@@ -202,37 +226,85 @@ public sealed class MirrorClient(HttpClient http, IReadOnlyDictionary<string, EC
         catch (InvalidOperationException ex) { throw new InvalidDataException("mirror object is not valid compressed data", ex); }
     }
 
-    private async Task<byte[]?> GetSignedAsync(string key, CancellationToken ct)
+    private async Task<byte[]?> GetSignedAsync(string key, string noun, CancellationToken ct)
     {
-        var blob = await GetBlobAsync(key, ct);
-        return blob is not null && SignedBlob.TryOpen(blob, trusted, out var payload) ? payload : null;
+        var blob = await GetBlobAsync(key, noun, ct);
+        if (blob is null) return null;
+        if (SignedBlob.TryOpen(blob, trusted, out var payload)) return payload;
+        Log.Warning("The mirror's {Key} failed its signature check", key);
+        return null;
     }
 
-    private async Task<byte[]?> GetBlobAsync(string key, CancellationToken ct)
+    private static byte[]? TooBig(string key)
     {
-        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        limit.CancelAfter(TimeSpan.FromSeconds(60));
-        ct = limit.Token;
-        using var resp = await http.GetAsync(new Uri(_base, key), HttpCompletionOption.ResponseHeadersRead, ct);
-        if (resp.StatusCode == HttpStatusCode.NotFound) return null;
-        resp.EnsureSuccessStatusCode();
-        if (resp.Content.Headers.ContentLength > MaxSignedBytes) return null;
-        using var ms = new MemoryStream();
+        Log.Warning("The mirror's {Key} is over {Max} bytes", key, MaxSignedBytes);
+        return null;
+    }
+
+    private async Task<byte[]?> GetBlobAsync(string key, string noun, CancellationToken ct)
+    {
+        var idle = idleTimeout ?? MirrorDownloads.DefaultIdleTimeout;
+        using var ceiling = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        ceiling.CancelAfter(blobCeiling ?? DefaultBlobCeiling);
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(ceiling.Token);
+        stall.CancelAfter(idle);
+        long got = 0;
+        long? total = null;
+        var answered = false;
         try
         {
-            await using var body = await resp.Content.ReadAsStreamAsync(ct);
+            using var resp = await http.GetAsync(new Uri(_base, key), HttpCompletionOption.ResponseHeadersRead, stall.Token);
+            answered = true;
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+            {
+                Log.Information("The mirror has no {Key} yet", key);
+                return null;
+            }
+            if (!resp.IsSuccessStatusCode)
+                throw new HttpRequestException($"the mirror answered {(int)resp.StatusCode} for its {noun} ({key})", null, resp.StatusCode);
+            total = resp.Content.Headers.ContentLength;
+            if (total > MaxSignedBytes) return TooBig(key);
+            stall.CancelAfter(idle);
+            using var ms = new MemoryStream();
+            await using var body = await resp.Content.ReadAsStreamAsync(stall.Token);
             var buf = new byte[81920];
             int n;
-            while ((n = await body.ReadAsync(buf, ct)) > 0)
+            while ((n = await body.ReadAsync(buf, stall.Token)) > 0)
             {
-                if (ms.Length + n > MaxSignedBytes) return null;
+                stall.CancelAfter(idle);
+                got += n;
+                if (ms.Length + n > MaxSignedBytes) return TooBig(key);
                 ms.Write(buf, 0, n);
             }
+            return ms.ToArray();
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            var how = ceiling.IsCancellationRequested
+                ? $"took too long ({Progress(got, total)} after {Seconds(blobCeiling ?? DefaultBlobCeiling)}, gave up, {key})"
+                : !answered
+                    ? $"didn't answer in {Seconds(idle)} ({key})"
+                    : $"stalled ({Progress(got, total)} after {Seconds(idle)} with nothing new, {key})";
+            throw new HttpRequestException(HttpRequestError.ConnectionError, $"the mirror's {noun} {how}");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode is null && !answered)
+        {
+            var why = ex.InnerException?.Message ?? ex.Message;
+            var what = ex.HttpRequestError == HttpRequestError.NameResolutionError ? "DNS lookup for the mirror failed" : "couldn't connect to the mirror";
+            throw new HttpRequestException(ex.HttpRequestError, $"{what} for its {noun} ({key}): {why}", ex);
         }
         catch (IOException ex)
         {
-            throw new HttpRequestException(HttpRequestError.ResponseEnded, $"the connection dropped while reading {key}: {ex.Message}", ex);
+            throw new HttpRequestException(HttpRequestError.ResponseEnded,
+                $"the connection dropped mid-file in the mirror's {noun} ({Progress(got, total)}, {key}): {ex.Message}", ex);
         }
-        return ms.ToArray();
     }
+
+    private static string Progress(long got, long? total) => total is { } t ? $"{Size(got)} of {Size(t)}" : Size(got);
+
+    private static string Seconds(TimeSpan span) => span.TotalSeconds >= 10 ? $"{span.TotalSeconds:0}s" : $"{span.TotalSeconds:0.#}s";
+
+    private static string Size(long bytes) => bytes < 1024 * 1024
+        ? string.Create(CultureInfo.InvariantCulture, $"{bytes / 1024.0:0.#} KB")
+        : string.Create(CultureInfo.InvariantCulture, $"{bytes / (1024.0 * 1024):0.0} MB");
 }

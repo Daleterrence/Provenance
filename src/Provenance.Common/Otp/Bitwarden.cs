@@ -71,7 +71,11 @@ public static class Bitwarden
     private static async Task<string> StatusAsync(string bw, IDictionary<string, string>? env, CancellationToken ct)
     {
         var s = await ToolProcess.RunAsync(bw, ["status", "--nointeraction"], env, TimeSpan.FromSeconds(30), ct);
-        try { return JsonDocument.Parse(s.Out).RootElement.GetProperty("status").GetString() ?? ""; }
+        try
+        {
+            using var doc = JsonDocument.Parse(s.Out);
+            return doc.RootElement.GetProperty("status").GetString() ?? "";
+        }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { return ""; }
     }
 

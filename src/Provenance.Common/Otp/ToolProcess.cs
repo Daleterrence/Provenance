@@ -58,7 +58,9 @@ internal static class ToolProcess
             if (ct.IsCancellationRequested) throw;
             throw new TimeoutException($"{Path.GetFileNameWithoutExtension(exe)} didn't answer within {timeout.TotalSeconds:0} seconds.");
         }
-        return new RunResult(p.ExitCode, await o, await e);
+        try { await Task.WhenAll(o, e).WaitAsync(TimeSpan.FromSeconds(5), ct); }
+        catch (TimeoutException) { }
+        return new RunResult(p.ExitCode, o.IsCompletedSuccessfully ? o.Result : "", e.IsCompletedSuccessfully ? e.Result : "");
     }
 
     internal static void LockedEnvironment(IDictionary<string, string?> env)

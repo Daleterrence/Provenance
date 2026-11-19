@@ -544,8 +544,7 @@ public sealed partial class PolSession : IDisposable
             if (Pid is { } pid)
             {
                 var stamp = _polStamp;
-                try { HookFiles.RequestStop(pid); }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                HookFiles.TryRequestStop(pid);
                 if (stamp is { } game && _pol.End(game, (int)StopGrace.TotalMilliseconds, afterMs: 2000))
                     Log.Warning("pol.exe {Pid} hadn't logged out {Seconds}s after its stop file, so it was ended", pid,
                                 (int)StopGrace.TotalSeconds);

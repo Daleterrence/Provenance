@@ -9,6 +9,7 @@ internal sealed class SnapshotWatcher
     private readonly Action<PolSocialSnapshot> _publish;
     private FileSystemWatcher? _watcher;
     private Timer? _debounce;
+    private readonly object _readGate = new();
 
     public SnapshotWatcher(Func<int?> pid, Action<PolSocialSnapshot> publish)
     {
@@ -48,8 +49,11 @@ internal sealed class SnapshotWatcher
 
     internal void Read()
     {
-        if (_pid() is not { } pid) return;
-        if (SocialSnapshotFiles.TryRead(pid) is { } snap)
-            _publish(snap with { Stored = SocialSnapshotFiles.TryReadStore(pid) });
+        lock (_readGate)
+        {
+            if (_pid() is not { } pid) return;
+            if (SocialSnapshotFiles.TryRead(pid) is { } snap)
+                _publish(snap with { Stored = SocialSnapshotFiles.TryReadStore(pid) });
+        }
     }
 }
