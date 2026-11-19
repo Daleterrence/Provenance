@@ -100,8 +100,7 @@ static void requests_sweep(void)
         DeleteFileA(p);
     }
 }
-/* during a switch a write is taken and answered as not done, it'd go from the new handle otherwise.
-   A chat enter already waiting is called off the same way */
+/* during a switch a write is refused, it'd go from the new handle otherwise. A chat enter already waiting is called off too */
 static void handles_writes_refuse(void)
 {
     char buf[512], *p, *l1, *l2, *l3;

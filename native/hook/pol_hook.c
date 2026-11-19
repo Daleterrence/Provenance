@@ -133,8 +133,7 @@ static void pol_hook_install(void)
     base_log("pol_hook: menu session detoured -> %08x\r\n", (unsigned)(ULONG_PTR)pol_hook_menu_stub);
 }
 
-/* PROVENANCE_LAUNCH_ID ends up in a file name in base_ipc_dir, so only what Provenance makes gets through: 1 to 32
-   characters of 0-9 a-f (n = what GetEnvironmentVariableA returned) */
+/* PROVENANCE_LAUNCH_ID ends up in a file name in base_ipc_dir, so only what Provenance makes gets through: 1 to 32 characters of 0-9 a-f */
 static int pol_hook_launch_id_ok(const char *id, DWORD n)
 {
     if (n < 1 || n > 32) return 0;

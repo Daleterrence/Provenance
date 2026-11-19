@@ -3,7 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace Provenance.Common.Feeds;
 
-// "Oct. 12, 2026 22:00 to 23:30 (PDT)" style article times -> local time
 public static class ArticleTimes
 {
     private static readonly Dictionary<string, int> ZoneMinutes = new(StringComparer.OrdinalIgnoreCase)

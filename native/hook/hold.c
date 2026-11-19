@@ -30,8 +30,7 @@ static int hold_status_wanted(void)
         return sv[0] - '0';
     return 0;
 }
-/* the hold counts on g_my_slot being a handle in use, and login_handle_bootstrap left the account one, so none by now
-   logs out */
+/* the hold needs g_my_slot to be a handle in use, none by now means log out */
 static const char *hold_handle_pick(BYTE *b)
 {
     const char *why;
@@ -158,14 +157,13 @@ static int hold_ctl_due(ULONGLONG now, ULONGLONG *last, int woke)
     return 1;
 }
 
-/* one turn of the requests and jobs. Nothing new starts mid-switch, it'd go under whichever handle polcore has by then,
-   and chat waits it out completely */
+/* nothing new starts mid-switch or it'd go under whichever handle polcore has by then */
 static void hold_turn(BYTE *b, int ctl)
 {
     char sv[8];
     int wctl, want, was = handles_switching();
     handles_pump(b, ctl);
-    /* every turn, the one it finishes on too, so nothing written while it ran is taken after under the new handle */
+    /* refuse every turn including the last, or a write made during the switch goes out under the new handle */
     if (was || handles_switching()) handles_writes_refuse();
     wctl = ctl && !handles_switching();
     mail_send_pump(b);
@@ -251,7 +249,7 @@ static void hold_sign_out(BYTE *b, const char *spath)
     base_end_pol(0);
 }
 
-/* status then groups is the viewer's order for those two */
+/* viewer loads status then groups, same here */
 static void hold_go_full(BYTE *b, const char *spath)
 {
     struct pending_load run[2] = {
@@ -337,8 +335,7 @@ static void hold_run(BYTE *b)
     login_groups_go();
     for (;;) {
         ctl = hold_ctl_due(GetTickCount64(), &lastCtl, woke);
-        /* a dropped session (another login of this POL ID, KILL, a ban push, the server hanging up) ends the hold,
-           so Play never boots FFXI on a dead one */
+        /* a dropped session ends the hold, so Play never boots FFXI on a dead one */
         idle = pc_pump_once(b);
         reason = *pc_session_ready(b);
         if (idle < 0 || reason < 0 || *pc_session_alive(b) == 0) {

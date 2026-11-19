@@ -7,7 +7,7 @@ public sealed class FfxiSettings
 {
     public int DrawDistanceMip;        // 0 = Draw Distance on (full textures far away), 1 = MIP mapping
     public int Width, Height;
-    public int BgWidth, BgHeight;      // drawing precision (3D render resolution)
+    public int BgWidth, BgHeight;      // 3D render resolution
     public int Sound;
     public int Vegetation;             // 0 off, 1 normal, 2 smooth
     public int EnhancedShading;

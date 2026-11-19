@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 
 namespace Provenance.Common.PolFormat;
 
-// zero-key file cipher: a count at +4, 0x124-byte records from +8, a product's wire tag at +0x120 (0 W20 on JP, 1 W2U elsewhere)
+// sqpolcts.bin, zero-key cipher: one record per content id, and its byte at +0x120 is 0 for W20 (JP) or 1 for W2U (everywhere else)
 public static class PolContents
 {
     private const int RecordSize = 0x124;

@@ -5,7 +5,7 @@ using Provenance.Common.Win32;
 
 namespace Provenance.Common.Game;
 
-// a process as its pid plus the kernel's UTC start time, since Windows reuses pids
+// pid plus start time, since Windows reuses pids
 public readonly record struct ProcessStamp(int Pid, long StartUtcTicks)
 {
     public enum Ending { NotThat, ExitedOnItsOwn, Ended }

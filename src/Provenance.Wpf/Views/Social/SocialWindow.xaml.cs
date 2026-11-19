@@ -43,7 +43,6 @@ public partial class SocialWindow : AppWindow
         Activated += (_, _) => Vm?.RefreshTimes();
         SizeChanged += OnSized;
         TaskbarFlash.StopWhenAppActivated(this);
-        // the view model outlives the window, so a closed one lets go
         Closing += (_, _) =>
         {
             if (_paneAsked != PaneWidth) PaneWidthChanged?.Invoke(PaneWidth);

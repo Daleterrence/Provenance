@@ -104,7 +104,6 @@ static void prune(HKEY root, wchar_t *key)
         slash = wcsrchr(key, L'\\');
         if (!slash) return;
         *slash = 0;
-        /* never climb into the shared roots */
         if (shared_root(key)) return;
     }
 }
@@ -742,7 +741,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show)
         MessageBoxW(NULL, L"The uninstall information was not found.", TITLE, MB_ICONERROR);
         return 1;
     }
-    /* nothing in the record is read before it's known only admins can change it, so its name isn't known yet */
+    /* the record isn't read until it's known only admins can change it, so there's no name to show yet */
     if (unprotected(argv[1])) {
         if (!quiet) MessageBoxW(NULL, UNPROTECTED_NO_NAME, TITLE, MB_ICONERROR);
         return 4;

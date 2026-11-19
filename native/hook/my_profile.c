@@ -16,7 +16,7 @@
 typedef struct pe_field {
     const char *name;
     DWORD       v;                  /* z_area is the 32-bit location code */
-    const char *str;                /* z_mail, SJIS */
+    const char *str;                /* SJIS */
 } pe_field;
 
 typedef struct pe_req {

@@ -25,7 +25,6 @@ jobs:
   build:
     if: github.repository == 'Daleterrence/Provenance' && github.event_name != 'release' && !inputs.tag
     runs-on: windows-latest
-    # the draft release is the only thing it writes
     permissions:
       contents: write
     # any new warning fails the build, see Directory.Build.props
@@ -76,8 +75,7 @@ jobs:
           "prerelease=$(if ($committed.Suffix) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
           "out=$out" >> $env:GITHUB_OUTPUT
 
-      # a plain push only proves it builds and packs, nothing's kept. A tag makes a draft, and nothing goes out until
-      # that's published by hand
+      # a push only builds and packs, a tag makes a draft
       - name: Draft release
         if: github.ref_type == 'tag'
         shell: pwsh
@@ -89,8 +87,7 @@ jobs:
           if ('${{ steps.pack.outputs.prerelease }}' -eq 'true') { $a += '--prerelease' }
           gh release create @a
 
-  # Publishing a release puts its statement and then its files on the update server. Run by hand with a tag, it puts
-  # just the statement up for a release that's already published, and vpk never runs
+  # Run by hand with a tag it only puts the statement up and vpk never runs
   upload:
     if: github.repository == 'Daleterrence/Provenance' && (github.event_name == 'release' || inputs.tag)
     runs-on: windows-latest
@@ -176,7 +173,6 @@ jobs:
           foreach ($name in 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY') {
             if (-not [Environment]::GetEnvironmentVariable($name)) { throw "The repository secret $name isn't set." }
           }
-          # keeps the last 5 versions on each channel, older packages get deleted
           vpk --skip-updates upload s3 --outputDir $env:DIR --channel $env:CHANNEL --bucket provenance-updates --region auto `
             --endpoint "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com" --keyId $env:R2_ACCESS_KEY_ID `
             --secret $env:R2_SECRET_ACCESS_KEY --keepMaxReleases 5

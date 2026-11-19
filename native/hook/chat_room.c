@@ -72,8 +72,7 @@ static int chat_room_part(BYTE *b)
     if (r > 0) g_s.cr_joined = g_s.cr_open = 0;
     return r;
 }
-/* MODE: 0xb 'n', 8 'k' (arg password), 9 'l' (arg limit as text), 4 'b' and 0xc 'o' on a member (lo, hi).
-   polcore answers a no-change one at once */
+/* MODE: 0xb 'n', 8 'k' (arg password), 9 'l' (arg limit as text), 4 'b' and 0xc 'o' on a member (lo, hi) */
 static int chat_room_mode(BYTE *b, int mode, DWORD lo, DWORD hi, const char *arg, int on)
 {
     int s = chat_frame_session(b);
@@ -319,7 +318,7 @@ static void chat_room_frame_tail(BYTE *b, int type, const WCHAR *tail)
     chat_room_msg_start(b, type);
 }
 
-/* chat names go out in every frame: 1-15 Shift-JIS bytes, no tab or control characters, not all blanks */
+/* the nick goes out in every frame, hence the strict checks */
 static int chat_room_nick_ok(BYTE *b, const char *u8)
 {
     WCHAR w[64];

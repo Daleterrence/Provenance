@@ -16,7 +16,7 @@ public static class AshitaLauncher
     public const string AccountBootFileProblem =
         "The Ashita boot configuration chosen for this account has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Multi-account.";
 
-    // credentials only travel as Credential Manager target names in the environment, never on a command line
+    // credentials go in the environment as Credential Manager target names, never on a command line
     internal static int? StartViaAshita(ISettingsService settings, Watcher watcher, ProcessStartInfo launchPsi,
                                         string polExe, string launchId, string? profile, IProgress<LaunchProgress>? progress,
                                         CancellationToken ct, Action<ProcessStamp>? hookStarted = null, Action? polStarted = null,

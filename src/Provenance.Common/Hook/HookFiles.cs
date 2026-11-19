@@ -120,7 +120,7 @@ public static class HookFiles
     private static string Clean(string s, bool keepLineBreaks) =>
         new(s.Replace("\r", "").Select(c => c < ' ' && !(keepLineBreaks && c == '\n') ? ' ' : c).ToArray());
 
-    // the hook caps the store at 3MB, the others are well under
+    // the app's own limits, the hook caps the store itself at 3MB
     public static class MaxBytes
     {
         public const int Social = 8 * 1024 * 1024;

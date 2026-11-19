@@ -57,7 +57,7 @@ static int peers_friend_ffxi(const pol_friend *f, DWORD *ctsid, DWORD *ctLo, DWO
     return 1;
 }
 
-/* ids are masked per session and names change, so conversations are keyed on HMAC-SHA256("<my POL ID>/<peer POL ID>/<slot>"), 8 bytes in hex */
+/* keyed on HMAC-SHA256("<my POL ID>/<peer POL ID>/<slot>"), 8 bytes in hex, ids are masked per session and names change */
 static char g_my_polid[64];
 static BYTE g_peer_secret[32];
 static int g_peer_secret_ok;

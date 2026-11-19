@@ -37,7 +37,7 @@ public static class ToolInstaller
         _ => false,
     };
 
-    // there's no ARM64 build, the 32-bit one runs on both ARM Windows
+    // there's no ARM64 build, the 32-bit one runs on ARM Windows
     private static string? OnePasswordArch() => RuntimeInformation.OSArchitecture switch
     {
         Architecture.X64 => "amd64",

@@ -1,6 +1,6 @@
 namespace Provenance.Common.PolFormat;
 
-// 4x2 cells at 64x96, so pic F is sheet F/8, cell F%8
+// 4x2 cells at 64x96, so profile picture F is sheet F/8, cell F%8
 public static class ProfilePictureSheets
 {
     public const int CellWidth = 64, CellHeight = 96, Columns = 4, Rows = 2, PerSheet = Columns * Rows;

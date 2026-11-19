@@ -430,7 +430,7 @@ static void login_groups_cancel(BYTE *b)
 }
 #define AUTH_CHAT_LOGIN 23
 #define AUTH_BURST 4
-/* until the chat connection's up a refused connect is retried each step, so that stays at one step and Sleep(16) */
+/* a refused connect gets retried every step until chat's connected, so one step and Sleep(16) */
 static void login_auth_turn(BYTE *b, unsigned sm)
 {
     for (int k = 0; k < AUTH_BURST; k++) {

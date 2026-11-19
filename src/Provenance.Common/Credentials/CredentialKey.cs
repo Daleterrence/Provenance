@@ -6,7 +6,7 @@ using Serilog;
 
 namespace Provenance.Common.Credentials;
 
-// DPAPI entropy, so a non-admin program only ever gets ciphertext
+// the key is used as DPAPI entropy, so a non-admin program only ever gets ciphertext
 public static class CredentialKey
 {
     public const int Length = 32;

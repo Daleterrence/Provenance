@@ -15,7 +15,7 @@ public static class ChatLook
     public static uint? Argb(int colourChar) =>
         colourChar is >= 0 and < 17 && Table[colourChar] != Table[0] ? Table[colourChar] : null;
 
-    // the picker's 12, each the char 5 on from its place
+    // the picker's 12 colours sit 5 on in the table
     public static uint PickerArgb(int pick) => Table[pick + 5];
 
     private static readonly string[] Names =

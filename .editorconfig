@@ -14,7 +14,7 @@ indent_size = 2
 [*.md]
 trim_trailing_whitespace = false
 
-# house rules (BannedSymbols.txt): the folders and files that own what's banned elsewhere
+# RS0030 is off where the banned calls get wrapped
 [src/**/Win32/*.cs]
 dotnet_diagnostic.RS0030.severity = none
 

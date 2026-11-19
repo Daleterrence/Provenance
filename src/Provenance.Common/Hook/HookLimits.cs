@@ -4,14 +4,14 @@ public static class HookLimits
 {
     // polcore fails any job 100s after its slot started
     public static readonly TimeSpan PolcoreJob = TimeSpan.FromSeconds(100);
-    // JOB_TIMEOUT_MS
+    // matches JOB_TIMEOUT_MS in the hook
     public static readonly TimeSpan HookSlotWait = TimeSpan.FromSeconds(120);
     public static readonly TimeSpan HookRename = 2 * HookSlotWait;
-    // CR_WAIT_MS
+    // matches CR_WAIT_MS in the hook
     public static readonly TimeSpan HookChatAnswer = TimeSpan.FromSeconds(360);
-    // GC_GIVE_UP_MS and GC_SEND_MS
+    // matches GC_GIVE_UP_MS and GC_SEND_MS in the hook
     public static readonly TimeSpan HookGroupChat = TimeSpan.FromSeconds(30);
-    // hold_db_free
+    // the gap the hook leaves after hold_db_free
     public static readonly TimeSpan ProfileServerGap = TimeSpan.FromSeconds(3);
 
     public static readonly TimeSpan FriendEdit = PolcoreJob + TimeSpan.FromSeconds(10);

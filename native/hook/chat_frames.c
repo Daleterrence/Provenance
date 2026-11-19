@@ -1,5 +1,5 @@
 #define CR_LINES 256
-#define CR_RAW 128            /* the viewer's ring, a busy room's 3s all land in one pump */
+#define CR_RAW 128            /* matches the viewer's ring size, a busy room can land 3s of lines in one pump */
 #define CR_PEOPLE 128
 
 #define CR_REPLIES 8

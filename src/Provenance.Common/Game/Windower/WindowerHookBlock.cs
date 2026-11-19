@@ -4,7 +4,7 @@ using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Game.Windower;
 
-// the 42180 bytes Hook.dll copies out of the WindowerMMFSettingsHandler mapping, no version or size field so the offsets stay where Windower.exe 4.7.9.3 puts them
+// the 42180 bytes Hook.dll copies out of the WindowerMMFSettingsHandler mapping, offsets as Windower.exe 4.7.9.3 puts them
 public sealed record WindowerHookBlock(byte[] Bytes, string InitCommand, string InitPlugins, string InitAddons,
                                        WindowerSizes Sizes, IReadOnlyList<string> Warnings)
 {

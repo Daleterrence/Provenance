@@ -7,7 +7,7 @@ using Provenance.Common.Security;
 
 namespace Provenance.Common.Install;
 
-// applies an MSI straight from its tables, skipping Windows Installer and its 61,353 components (ugh)
+// applies an MSI straight from its tables, skipping Windows Installer and its MANY MANY components (lmao)
 public sealed class MsiPackage : IDisposable
 {
     private static readonly Regex TokenRx = new(@"\[(\\.|[^\[\]]*)\]");

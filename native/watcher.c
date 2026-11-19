@@ -104,7 +104,6 @@ static int hook_and_resume(PROCESS_INFORMATION *pi, const void *dll, DWORD size,
     printf("watcher: injected, %s -> %08x\n", how, code);
     if (!code || code == STILL_ACTIVE) die("hook dll was refused or failed to load in target");
     remote_call(pi->hProcess, set_error_mode, (void *)(UINT_PTR)errmode, "restoring the error mode timed out");
-    /* PROVENANCE_WATCHER_NORESUME=1 loads the hook, then ends pol.exe unresumed */
     if (GetEnvironmentVariableA("PROVENANCE_WATCHER_NORESUME", noresume, sizeof noresume) && noresume[0] == '1') {
         printf("watcher: hook loaded; PROVENANCE_WATCHER_NORESUME set, pol.exe ended unresumed\n");
         TerminateProcess(pi->hProcess, 0);

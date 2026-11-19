@@ -74,7 +74,7 @@ internal static class WindowFrame
         catch (Exception) { return SystemParameters.WorkArea; }
     }
 
-    // a maximised borderless window covers the taskbar too, which took me far too long to notice
+    // a maximised borderless window covers the taskbar too, which I somehow missed more than once, confirmed blind
     private const int WM_GETMINMAXINFO = 0x0024;
     private const uint MonitorDefaultToNearest = 2;
 

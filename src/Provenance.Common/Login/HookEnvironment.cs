@@ -26,7 +26,7 @@ internal static class HookEnvironment
         if (ScreenSaver.AtStart is { } saver) env[HookContract.Env.Screensaver] = saver;
     }
 
-    // POL_IPC_DIR, POL_CRED_KEYFILE and POL_OWNER have to go in here, the go file never carries them
+    // POL_IPC_DIR, POL_CRED_KEYFILE and POL_OWNER come from SetBase, the go file never carries them
     internal static void SetPrestart(IDictionary<string, string?> env, bool loginComing = false)
     {
         SetBase(env);

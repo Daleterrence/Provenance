@@ -12,7 +12,7 @@ public sealed class Account
 
     public string? HandleKey { get; set; }
 
-    // the JSON name has to stay, saved accounts find their pics by it
+    // the JSON name has to stay, saved accounts find their profile pictures by it
     [JsonPropertyName("FaceId")]
     public int ProfilePictureId { get; set; }
 

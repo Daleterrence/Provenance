@@ -67,7 +67,7 @@ public sealed class WindowerHttp : IDisposable
         ConnectCallback = ConnectAsync,
     };
 
-    // .NET Framework sends Connection: Keep-Alive on a connection's first request only (a lot of faff for one header)
+    // .NET Framework sends Connection: Keep-Alive on a connection's first request only (a lot of nonsense for one header)
     private static async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext context, CancellationToken ct)
     {
         var connection = context.InitialRequestMessage.Headers.Connection;

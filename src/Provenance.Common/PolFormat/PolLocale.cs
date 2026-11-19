@@ -10,7 +10,7 @@ public static class PolLocale
         "AD", "AL", "AT", "AX", "BA", "BE", "BG", "BY", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FO", "FR",
         "GB", "GG", "GI", "GR", "HR", "HU", "IE", "IM", "IS", "IT", "JE", "LI", "LT", "LU", "LV", "MC", "MD", "ME",
         "MK", "MT", "NL", "NO", "PL", "PT", "RO", "RS", "RU", "SE", "SI", "SJ", "SK", "SM", "TR", "UA", "VA", "XK",
-        // Oceania, the US territories out there stay North American
+        // Oceania gets the EU version too, bar the US territories there
         "AU", "CC", "CK", "CX", "FJ", "FM", "HM", "KI", "MH", "NC", "NF", "NR", "NU", "NZ", "PF", "PG", "PN", "PW",
         "SB", "TK", "TO", "TV", "VU", "WF", "WS",
     };

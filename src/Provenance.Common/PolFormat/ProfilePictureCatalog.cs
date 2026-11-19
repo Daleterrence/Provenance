@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Provenance.Common.PolFormat;
 
-// both are XORed with their own file name as a repeating ASCII key, then UTF-16LE
+// each is XORed with its own file name as a repeating ASCII key, then UTF-16LE
 public static class ProfilePictureCatalog
 {
     public sealed record Category(string Name, string Key, int RegionMask);

@@ -237,8 +237,6 @@ public static class AshitaBootFiles
 
         """.ReplaceLineEndings("\r\n");
 
-    // the user's boot config with the real pol.exe, one plain command line, and the takeover plugins off with their
-    // arguments gone
     public static string WriteLaunchCopy(string ashitaDir, string? source, string polExe, int playOnline)
     {
         if (source is { Length: > 0 } && !FileNames.IsPlainFileName(source))

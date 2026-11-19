@@ -1,4 +1,3 @@
-/* JP's hive has no suffix, the other two are PlayOnlineUS and PlayOnlineEU */
 #ifndef POL_REGIONS_H
 #define POL_REGIONS_H
 

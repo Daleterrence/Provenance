@@ -12,7 +12,7 @@
         Style="{StaticResource AppWindow}">
 
     <Window.Resources>
-        <!-- never a floating hint, it draws a dark chip on this background and I've lost that fight before -->
+        <!-- never a floating hint, it's stupidly messy and I don't want to talk about how I learned that kthx -->
         <Style TargetType="ComboBox" BasedOn="{StaticResource FieldCombo}" />
 
         <Style x:Key="NavPage" TargetType="ListBoxItem" BasedOn="{StaticResource NavItem}">

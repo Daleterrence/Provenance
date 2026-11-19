@@ -13,7 +13,7 @@ public static class ProtectedFolders
     private static string? _dir;
     private static string? _rootForTest;
 
-    // Administrators' whatever the PC's policy says, "object creator" would make it the user's
+    // new files are owned by Administrators whatever the PC's policy says, "object creator" would make it the user's
     public static bool OwnNewFilesAsAdministrators() => SetTokenOwner(Admins);
 
     internal static bool SetTokenOwner(SecurityIdentifier owner)

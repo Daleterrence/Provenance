@@ -15,7 +15,7 @@ enum hook_address {
     AT_SPLASH_CLOSE,
     AT_REGION_INDEX,        /* int, 0 JP, 1 US, 2 EU, set from env.dat before a polcore loads */
     AT_DX_CHECK,
-    AT_SERVICES,            /* the service table, function pointers indexed by byte offset */
+    AT_SERVICES,            /* function pointers indexed by byte offset */
     AT_SHA1_INIT,
     AT_SHA1_UPDATE,
     AT_SHA1_FINAL,
@@ -55,9 +55,9 @@ struct hook_addr {
     BYTE module, code, required;
     DWORD at;
     int hits;
-    int shows_op;             /* with shows: the match's byte holding an address, whose bytes have to be shows */
+    int shows_op;             /* with shows: the match's byte holding an address, whose target bytes must equal shows */
     const char *shows;
-    int calls_op;             /* with calls: the match's rel32 of a call, whose target has to start with calls */
+    int calls_op;             /* with calls: the match's rel32 of a call, whose target has to start with the calls bytes */
     const char *calls;
 };
 static struct hook_addr g_addr[ADDRESS_COUNT];
@@ -297,9 +297,9 @@ PC_SVC5(int, pc_mail_body, SV_MAIL_BODY, const char *, subject, const char *, te
 PC_SVC2(int, pc_mail_decode_header, SV_MAIL_DECODE_HEADER, void *, hdr, const char *, file)
 #define SV_MAIL_PATH_UNREAD        0x470   /* r\b path from a header, out is 0x200 */
 PC_SVC2_V(void, pc_mail_path_unread, SV_MAIL_PATH_UNREAD, void *, hdr, char *, out)
-#define SV_MAIL_PATH_READ          0x474   /* r\a */
+#define SV_MAIL_PATH_READ          0x474
 PC_SVC2_V(void, pc_mail_path_read, SV_MAIL_PATH_READ, void *, hdr, char *, out)
-#define SV_MAIL_PATH_SENT          0x47c   /* s\a */
+#define SV_MAIL_PATH_SENT          0x47c
 PC_SVC2_V(void, pc_mail_path_sent, SV_MAIL_PATH_SENT, void *, hdr, char *, out)
 #define SV_JOB_SLOTS               0xff4
 PC_SVC2_V(void, pc_job_slots, SV_JOB_SLOTS, int *, used, int *, total)
@@ -444,7 +444,7 @@ PC_SVC4_V(void, pc_chat_zone_text, SV_CHAT_ZONE_TEXT, const void *, v, char *, o
 #define SV_CHAT_CHANGED            0x146c
 PC_SVC1(int, pc_chat_changed, SV_CHAT_CHANGED, int, s)
 
-#define SV_PUSH_DEFAULT            0x538   /* polcore's own handler for the push the list leaves to it */
+#define SV_PUSH_DEFAULT            0x538   /* polcore's default handler for the push, called when the list passes on it */
 #define SV_ROOM_NOTICE             0x644   /* polcore's room NOTICE handler, mine asks it first */
 
 #define SV_SET_REGION      0xf14

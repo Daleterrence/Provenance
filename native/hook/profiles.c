@@ -109,7 +109,6 @@ static void profiles_search_request(BYTE *b)
     if (k == 3) { profiles_search_done("failed:bad request"); return; }
     if (k == SK_HANDLE) {
         if (!peers_ascii_name_ok(val)) { profiles_search_done("failed:bad name"); return; }
-        /* a name with a ' (or 0x04) never goes out in a handle search */
         if (strchr(val, '\'')) { profiles_search_done("failed:quote"); return; }
     } else if (k == SK_HID) {
         if (!profiles_hid_parse(val, &hid)) { profiles_search_done("failed:bad hid"); return; }
@@ -152,7 +151,7 @@ static void profiles_search_pump(BYTE *b, int ctl)
         r = pc_pdb_search_hits(b, j->job, out);
         if (db_job_pending(b, j, r, 0)) return;
         j->job = -1;
-        if (r == NOTHING_FOUND) { profiles_search_done("done"); return; }   /* "No matching results were found." */
+        if (r == NOTHING_FOUND) { profiles_search_done("done"); return; }
         if (r < 0) { profiles_search_done(requests_failed(r)); return; }
         if ((int)out[0] < 0) { profiles_search_done("done"); return; }
         base_log("friends: search %d hits%s\r\n", (int)out[1], out[2] ? " (too many)" : "");
@@ -546,7 +545,6 @@ static void ffxi_read_pump(BYTE *b, ffxi_read *r, int ctl, void (*request)(BYTE 
     rc = pc_pdb_load_check(b, j->job);
     if (db_job_pending(b, j, rc, 0)) return;
     j->job = -1;
-    /* "Selected profile is hidden." */
     if (rc == NOTHING_FOUND && r->hidden) { j->done("failed:hidden"); return; }
     if (rc < 0) { j->done(requests_failed(rc)); return; }
     if (!((pdb_rec *)j->rec)->items) { j->done("failed:no profile"); return; }

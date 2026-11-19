@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 
 namespace Provenance.Common.Mirror;
 
-// a retired key goes in Revoked so its id is never used again
 public static class MirrorKeys
 {
     public static IReadOnlyList<(string Id, string PublicKey)> BuiltIn { get; } =

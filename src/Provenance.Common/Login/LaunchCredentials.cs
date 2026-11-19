@@ -162,7 +162,7 @@ public sealed class LaunchCredentials
         keys.Clear();
     }
 
-    // User is the enter's token, so it only works for that one
+    // the token belongs to the launch that made it, so the password only works for that one
     public bool SaveChatPassword(string token, string password)
     {
         if (LaunchId is not { } id) return false;

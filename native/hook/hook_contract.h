@@ -30,7 +30,7 @@
 #define LIST_LOAD_EXIT 10
 #define DETAILS_UNREADABLE_EXIT 11
 #define IPC_DIR_EXIT 12
-#define MUTEX_EXIT 13       /* no secret or HMAC: end pol.exe, never fall back to the stock names */
+#define MUTEX_EXIT 13       /* no secret or HMAC means no safe mutex name, so end pol.exe rather than use the stock ones */
 #define GAME_START_EXIT 15
 #define NO_ENV_EXIT 16
 #define NOT_HOOKED_EXIT 17

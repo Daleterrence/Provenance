@@ -37,7 +37,6 @@ static int json_cut(WCHAR *w, int n, int max, int (*len)(WCHAR *w, int k, BYTE *
         int mid = (lo + hi + 1) / 2;
         if (len(w, mid, b) <= max) lo = mid; else hi = mid - 1;
     }
-    /* never between the halves of a surrogate pair */
     if (lo > 0 && lo < n && w[lo - 1] >= 0xd800 && w[lo - 1] < 0xdc00 && w[lo] >= 0xdc00 && w[lo] < 0xe000) lo--;
     return lo;
 }
@@ -249,7 +248,7 @@ static void jw_splice(jw *w, const char *s, int n)
     jw_key(w, NULL);
     jw_put(w, s, n);
 }
-/* cap is the most the string form can take up, 0 for all of it. Keys are never escaped */
+/* keys are never escaped */
 static void jw_str(jw *w, const char *key, const char *s, int cap)
 {
     char *o;

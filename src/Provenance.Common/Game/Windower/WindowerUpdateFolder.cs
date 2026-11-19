@@ -5,7 +5,7 @@ using Serilog;
 
 namespace Provenance.Common.Game.Windower;
 
-// Windower's way of replacing a file: old one renamed into updates\temp\<guid> (works on a loaded DLL or EXE), new one moved in
+// Windower replaces a file by renaming the old one into updates\temp\<guid> (works on a loaded DLL or EXE), then moving the new one in
 internal sealed class WindowerUpdateFolder : IDisposable
 {
     // ERROR_REPARSE_POINT_ENCOUNTERED, so a refusal isn't retried like a sharing violation
@@ -200,7 +200,7 @@ internal sealed class WindowerUpdateFolder : IDisposable
         DeleteTree(Pins, TempDir);
     }
 
-    // never through a link, everything goes through FolderPins.DeleteEntry
+    // never through a link
     private static void DeleteTree(FolderPins parent, string dir)
     {
         using (var pins = FolderPins.HoldExact(dir, dir))

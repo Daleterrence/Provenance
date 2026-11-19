@@ -1,8 +1,3 @@
-<#
-.SYNOPSIS
-    Looks up the version, the assets folder, Velopack's version and the C++ tools for every build script and CI. Dot-source it.
-#>
-
 $HookLibs = 'user32.lib advapi32.lib crypt32.lib bcrypt.lib'
 $UninstallLibs = 'user32.lib advapi32.lib ole32.lib oleaut32.lib shell32.lib ntdll.lib'
 

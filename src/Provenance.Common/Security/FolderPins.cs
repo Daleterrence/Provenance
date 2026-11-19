@@ -144,7 +144,6 @@ public sealed class FolderPins : IDisposable
         return !SamePlace(FileHandles.FinalPath(h, allowUnc: true), Expected(given));
     }
 
-    // a third-party reparse point (OneDrive's) is fine, the same as for the Windower updater
     public static bool Linked(string dir)
     {
         try { return ThroughLink(dir); }

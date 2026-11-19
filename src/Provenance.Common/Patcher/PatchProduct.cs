@@ -18,7 +18,7 @@ public sealed record PatchProduct(GameProduct Game, string Host, string TagWire,
     public static PatchProduct For(GameProduct game, string dir, string viewerDir, PolRegion region) =>
         game == GameProduct.Viewer ? Viewer(dir, region) : Ffxi(dir, viewerDir, region);
 
-    // pt004 and pt008 are one server, the viewer's wire tag is what gets JP its own stream
+    // pt004 and pt008 are the same server, JP only gets its own stream through the viewer's tag
     public static PatchProduct Viewer(string viewerDir, PolRegion region = PolRegion.UnitedStates) =>
         new(GameProduct.Viewer, ViewerHost(viewerDir, region), Streams(region).Tag, Streams(region).Tag, viewerDir, viewerDir, PolPaths.Hive(region))
         { Region = region };

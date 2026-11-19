@@ -73,7 +73,6 @@ public sealed class WindowerAddonList
             if (addons.FirstOrDefault(a => a.Listing.Key.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Listing.Key);
             else skipped.Add($"{n} (addon not installed)");
 
-        // required plugins always go, the addons need LuaCore before init.txt runs
         var loads = ScriptLoads.Read(windowerDir, profile.InitCommand);
         string? Already(string name, Dictionary<string, string> loaded) =>
             loaded.TryGetValue(name, out var where) && where != ScriptLoads.InitCommand ? $"{name} (already loaded by {where})" : null;

@@ -1,4 +1,3 @@
-# the C# rules, every project gets them through Directory.Build.props
 is_global = true
 
 csharp_style_namespace_declarations = file_scoped:warning

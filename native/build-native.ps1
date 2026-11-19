@@ -1,10 +1,3 @@
-<#
-.SYNOPSIS
-    Builds the hook DLL, the watcher and the uninstallers into native\bin, or into -OutDir.
-
-.EXAMPLE
-    pwsh native/build-native.ps1
-#>
 [CmdletBinding()]
 param(
     [string]$OutDir = (Join-Path $PSScriptRoot 'bin')

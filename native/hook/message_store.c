@@ -284,7 +284,7 @@ static int message_store_file_name(BYTE *b, int which, void *hdr, char *name)
     lstrcpyA(name, out + n - 96);
     return message_store_name_ok(name);
 }
-/* state bits to 1, 0x4000 off, rename r\b to r\a. The old name has to build back from the header or nothing moves */
+/* the old name has to build back from the header or nothing moves */
 static int message_store_delete_file(const char *dir, const char *name);
 static int message_store_move_read_ex(BYTE *b, const BYTE *hdr, const char *name, int home, int read)
 {

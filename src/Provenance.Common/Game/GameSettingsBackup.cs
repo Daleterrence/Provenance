@@ -34,7 +34,7 @@ public sealed class RestoredPartlyException(BackupOutcome before, Exception inne
     public BackupOutcome Before { get; } = before;
 }
 
-// the game rewrites these in place unlocked, so each copy's checked for a write mid-read
+// the game rewrites these in place unlocked, so each copy is checked for a write mid-read
 public static partial class GameSettingsBackup
 {
     public const int Kept = 5;
@@ -391,7 +391,7 @@ public static partial class GameSettingsBackup
         }
     }
 
-    // where the folder really is, when nothing at or below its own name is a link
+    // nothing at or below the folder's own name can be a link
     private static string? Place(string? root, string what, List<string> leftOut)
     {
         if (root is null || !Directory.Exists(root)) return null;

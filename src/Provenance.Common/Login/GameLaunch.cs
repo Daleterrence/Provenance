@@ -119,7 +119,6 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         catch (Exception ex) { return new(null, ex); }
     }
 
-    // the game mustn't start while Windower's update is still writing in its folder
     public async Task<string?> FinishWindowerUpdateAsync(Action<string>? saying, CancellationToken ct = default)
     {
         if (FinishWindowerUpdateSeam is { } seam) return await seam(saying, ct);
@@ -147,7 +146,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
             Read = read,
         }.RunAsync();
 
-    // SE's installer only writes 3 of the game settings
+    // SE's installer only writes 3 of the game settings, so the rest are filled in here
     public void WriteOptions(string? profileId)
     {
         if (WriteOptionsSeam is { } seam)

@@ -47,7 +47,7 @@ public static class WindowerGameRegistry
         return string.Join(",", fields);
     }
 
-    // a float times the size, then .NET's Convert.ToInt32 (ties go to even)
+    // matches Windower: float times the size, then Convert.ToInt32 (ties go to even)
     internal static int Scaled(int size, float superSampling)
     {
         float f = Math.Max(1f, size * superSampling);

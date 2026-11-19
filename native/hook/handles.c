@@ -103,7 +103,7 @@ static void handles_switched(BYTE *b)
 
 static int handles_writes_asked(void) { return requests_listed(RQ_ASKED); }
 
-/* the viewer's link before a game (app.dll 0x100235d5) */
+/* app.dll 0x100235d5 */
 static void handles_linkall(BYTE *b, int slot, const pol_handle *h, char *ix, char *ck, char *p)
 {
     char k[17];

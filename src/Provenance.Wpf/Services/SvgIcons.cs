@@ -319,7 +319,7 @@ public static partial class SvgIcons
             if (Text(file) is not { } svg) return null;
             if (currentColour is { } c) svg = svg.Replace("currentColor", $"#{c.R:X2}{c.G:X2}{c.B:X2}", StringComparison.Ordinal);
             if (edit is not null) svg = edit(svg);
-            // left alone the renderer shoves the search icon's clipped rectangle at -8 down and right
+            // EnsureViewboxPosition off, otherwise the search icon clip rect gets shoved -8 down and right
             var settings = new WpfDrawingSettings
             {
                 IncludeRuntime = false,
