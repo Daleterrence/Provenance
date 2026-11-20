@@ -24,6 +24,8 @@ public partial class AccountDialog : AppWindow
             SquareEnixPasswordBox.Clear();
             Form.Close();
         };
+        PolPasswordBox.PasswordChanged += (_, _) => Form.PolPasswordTyped = PolPasswordBox.SecurePassword.Length > 0;
+        SquareEnixPasswordBox.PasswordChanged += (_, _) => Form.SquareEnixPasswordTyped = SquareEnixPasswordBox.SecurePassword.Length > 0;
         Form.FocusRequested += field => FieldBox(field).Focus();
         Form.BitwardenUrlFocusRequested += () => BwServerUrlBox.Focus();
         Loaded += (_, _) => (polId.Length == 0 ? (Control)PolIdBox : PolPasswordBox).Focus();

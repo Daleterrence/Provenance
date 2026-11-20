@@ -37,11 +37,17 @@ public sealed partial class AccountFormViewModel : ObservableObject
 
     public string Header { get; }
     public bool AgainVisible { get; }
-    public bool KeepHintVisible { get; }
+    public bool DetailsSaved { get; }
+    public string PolIdHint => Hint("PlayOnline ID", PolId.Length > 0);
+    public string PolPasswordHint => Hint("PlayOnline password", PolPasswordTyped);
+    public string SquareEnixIdHint => Hint("Square Enix ID", SquareEnixId.Length > 0);
+    public string SquareEnixPasswordHint => Hint("Square Enix password", SquareEnixPasswordTyped);
     public ObservableCollection<AccountChoice> Accounts { get; } = [];
 
-    [ObservableProperty] private string _polId;
-    [ObservableProperty] private string _squareEnixId;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(PolIdHint))] private string _polId;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(SquareEnixIdHint))] private string _squareEnixId;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(PolPasswordHint))] private bool _polPasswordTyped;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(SquareEnixPasswordHint))] private bool _squareEnixPasswordTyped;
     [ObservableProperty] private bool _useOtp;
     [ObservableProperty] private string _otpSource;
     [ObservableProperty] private string _otpItem;
@@ -80,7 +86,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
                : string.IsNullOrWhiteSpace(accountName) || accountName.StartsWith("New account", StringComparison.Ordinal)
                    ? "Edit account" : $"Edit {accountName}";
         AgainVisible = requireAll;
-        KeepHintVisible = edit && !requireAll;
+        DetailsSaved = edit && !requireAll;
         _useOtp = useOtp;
         _otpSource = Sources.Contains(otpSource) ? otpSource : "";
         _otpItem = otpItem ?? "";
@@ -89,6 +95,8 @@ public sealed partial class AccountFormViewModel : ObservableObject
         (_otpItemHint, _otpSourceHelp) = OtpSources.Describe(_otpSource);
         _tool = ToolFacts.ForSource(_otpSource);
     }
+
+    private string Hint(string detail, bool typed) => DetailsSaved && !typed ? detail + " (saved)" : detail;
 
     internal void Start() => _ = LookForToolAsync();
 

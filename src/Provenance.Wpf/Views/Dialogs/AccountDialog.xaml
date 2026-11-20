@@ -13,27 +13,35 @@
                 <TextBlock x:Name="HeaderText" Text="{Binding Header}" FontSize="18" FontWeight="SemiBold" />
                 <TextBlock x:Name="AgainText" Visibility="{Binding AgainVisible, Converter={StaticResource BoolToVis}}" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="13"
                            Text="Provenance needs this account's login details again." />
-                <TextBlock Margin="0,6,0,16" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
+                <TextBlock x:Name="KeptText" Margin="0,6,0,16" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text.2}"
+                           Visibility="{Binding DetailsSaved, Converter={StaticResource InvertBoolToVis}}"
                            Text="Your IDs and passwords are kept in Windows Credential Manager, and Provenance never shows them again. Once you've logged in, the main screen shows your PlayOnline handle and picture instead." />
+                <Grid x:Name="SavedLine" Margin="0,12,0,16" ColumnDefinitions="Auto,*"
+                      Visibility="{Binding DetailsSaved, Converter={StaticResource BoolToVis}}">
+                    <controls:SvgIcon Glyph="ok" Flat="True" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Top"
+                                      Foreground="{DynamicResource State.Online}" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock x:Name="SavedText" FontSize="13" TextWrapping="Wrap" Text="This account's login details are saved." />
+                        <TextBlock Margin="0,2,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource Text.2}"
+                                   Text="Only fill in what you want to change." />
+                    </StackPanel>
+                </Grid>
 
                 <TextBox AutomationProperties.Name="PlayOnline ID" x:Name="PolIdBox" Margin="0,0,0,10" MaxLength="8" CharacterCasing="Upper"
                          Text="{Binding PolId, UpdateSourceTrigger=PropertyChanged}"
-                         materialDesign:HintAssist.Hint="PlayOnline ID"
+                         materialDesign:HintAssist.Hint="{Binding PolIdHint}"
                          materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                          Style="{DynamicResource DialogTextBox}" />
                 <PasswordBox AutomationProperties.Name="PlayOnline password" x:Name="PolPasswordBox" Margin="0,0,0,10"
-                             materialDesign:HintAssist.Hint="PlayOnline password"
+                             materialDesign:HintAssist.Hint="{Binding PolPasswordHint}"
                              Style="{DynamicResource DialogRevealPasswordBox}" />
                 <TextBox AutomationProperties.Name="Square Enix ID" x:Name="SquareEnixIdBox" Margin="0,0,0,10"
                          Text="{Binding SquareEnixId, UpdateSourceTrigger=PropertyChanged}"
-                         materialDesign:HintAssist.Hint="Square Enix ID"
+                         materialDesign:HintAssist.Hint="{Binding SquareEnixIdHint}"
                          Style="{DynamicResource DialogTextBox}" />
                 <PasswordBox AutomationProperties.Name="Square Enix password" x:Name="SquareEnixPasswordBox" Margin="0,0,0,8"
-                             materialDesign:HintAssist.Hint="Square Enix password"
+                             materialDesign:HintAssist.Hint="{Binding SquareEnixPasswordHint}"
                              Style="{DynamicResource DialogRevealPasswordBox}" />
-                <TextBlock x:Name="KeepHint" Visibility="{Binding KeepHintVisible, Converter={StaticResource BoolToVis}}" Margin="0,0,0,8" FontSize="11"
-                           Foreground="{DynamicResource Text.3}"
-                           Text="Leave a field empty to keep what's already saved." />
 
                 <CheckBox x:Name="OtpBox" Content="This account uses a one-time password" IsChecked="{Binding UseOtp}"
                           Foreground="{DynamicResource Text.2}" Margin="0,4,0,0" />
