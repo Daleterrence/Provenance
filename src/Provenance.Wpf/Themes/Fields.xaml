@@ -33,6 +33,7 @@
         <Setter Property="TextSearch.TextPath" Value="Label" />
         <Setter Property="ItemContainerStyle" Value="{StaticResource ComboItem}" />
         <Setter Property="behaviours:TightPopup.Template" Value="{StaticResource Combo.List}" />
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
         <Setter Property="ItemTemplate">
             <Setter.Value>
                 <DataTemplate>
@@ -46,6 +47,12 @@
         </Setter>
     </Style>
 
+    <Style TargetType="ComboBox" BasedOn="{StaticResource MaterialDesignComboBox}">
+        <Setter Property="ItemContainerStyle" Value="{StaticResource ComboItem}" />
+        <Setter Property="behaviours:TightPopup.Template" Value="{StaticResource Combo.List}" />
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+    </Style>
+
     <Style x:Key="OutlinedField" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
         <Setter Property="materialDesign:HintAssist.HintOpacity" Value="{DynamicResource Field.HintOpacity}" />
     </Style>
@@ -56,6 +63,7 @@
         <Setter Property="materialDesign:HintAssist.HintOpacity" Value="{DynamicResource Field.HintOpacity}" />
         <Setter Property="ItemContainerStyle" Value="{StaticResource ComboItem}" />
         <Setter Property="behaviours:TightPopup.Template" Value="{StaticResource Combo.List}" />
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
     </Style>
 
     <Style x:Key="FieldText" TargetType="TextBox" BasedOn="{StaticResource OutlinedField}">

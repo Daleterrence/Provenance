@@ -23,7 +23,11 @@ namespace Provenance.Wpf;
 
 public partial class App : Application
 {
-    static App() => FocusLook.Install();
+    static App()
+    {
+        FocusLook.Install();
+        DropdownLists.Install();
+    }
 
     private PolSession? _pol;
     private MainViewModel? _main;
