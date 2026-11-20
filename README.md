@@ -1,20 +1,22 @@
 # Provenance
 
-Provenance is a launcher for FINAL FANTASY XI that replaces the PlayOnline Viewer, speeding up game login, patching and improving the friends and messaging systems.
+Provenance is a launcher for FINAL FANTASY XI that replaces the PlayOnline Viewer. It speeds up logging in and patching, and improves the friends and messaging systems.
 
-- Saves your account details securely, logs in with one click, and provides integration for your one-time password from Bitwarden, 1Password or KeePassXC
+- Saves your account details securely, logs in with one click, and can get your one-time password from Bitwarden, 1Password or KeePassXC
 - Works alongside Windower 4 and Ashita v4
-- Your friend list, messages and profile, without opening POL
-- Installs, patches and repairs the game for you, speeding up the process on the whole
+- Your friend list, messages and profile, without opening the PlayOnline Viewer
+- Installs, patches and repairs the game for you, and speeds the whole process up
 - Multi-account mode for multiboxers, making logging in across many accounts easier than ever
 
 ## Installation
 
-Download the Setup.exe file from the latest release on the [releases](https://github.com/Daleterrence/Provenance/releases) page (it's Provenance-beta-Setup.exe during the beta) and run it. The app will keep itself up to date for you after that!
+Download `Provenance-setup.exe` from [provenancexi.app](https://provenancexi.app) or from the latest release on the [releases](https://github.com/Daleterrence/Provenance/releases) page, and run it. The app will keep itself up to date for you after that!
+
+You'll need Windows 10 or 11.
 
 ## Need help?
 
-Have a look at the [FAQ](https://provenancexi.app/faq).
+Have a look at the [FAQ](https://provenancexi.app/faq), or join the [Discord server](https://discord.gg/pFtdzeJ6p4).
 
 ## Licence
 
