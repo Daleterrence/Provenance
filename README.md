@@ -12,11 +12,6 @@ Provenance is a launcher for FINAL FANTASY XI that replaces the PlayOnline Viewe
 
 Download the Setup.exe file from the latest release on the [releases](https://github.com/Daleterrence/Provenance/releases) page (it's Provenance-beta-Setup.exe during the beta) and run it. The app will keep itself up to date for you after that!
 
-## Build
-
-Provenance's images (the icon, logo, background and installer pictures) aren't in this repo, so it can't be built from
-here on its own.
-
 ## Need help?
 
 Have a look at the [FAQ](https://provenancexi.app/faq).
