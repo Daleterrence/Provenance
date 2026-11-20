@@ -20,6 +20,7 @@ public static class AppPaths
     public static string CommonAppData => Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
     public static string LocalAppData => Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     public static string Documents => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+    public static string UserProfile => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     public static string ExplorerExe => Path.Combine(Windows, "explorer.exe");
 
