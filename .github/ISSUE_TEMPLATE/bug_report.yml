@@ -32,7 +32,7 @@ body:
     attributes:
       label: Windower or Ashita
       options:
-        - None
+        - Neither
         - Windower 4
         - Ashita v4
     validations:
