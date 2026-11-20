@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and help
+    url: https://discord.gg/pFtdzeJ6p4
+    about: Ask on the Discord server. The FAQ at provenancexi.app/faq might have your answer already.
+  - name: Security problems
+    url: https://github.com/Daleterrence/Provenance/security/advisories/new
+    about: Please report these privately, not as an issue.

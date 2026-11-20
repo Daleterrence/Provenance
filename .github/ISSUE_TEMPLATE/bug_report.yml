@@ -1,0 +1,44 @@
+name: Bug report
+description: Something in Provenance isn't working the way it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead. Screenshots are welcome.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Provenance version
+      description: It's in the main window's title bar, and at the bottom of the General page in Settings.
+      placeholder: 1.0.0-pb.1.1
+    validations:
+      required: true
+  - type: dropdown
+    id: game
+    attributes:
+      label: Game version
+      options:
+        - North American
+        - European
+        - Japanese
+    validations:
+      required: true
+  - type: dropdown
+    id: loader
+    attributes:
+      label: Windower or Ashita
+      options:
+        - None
+        - Windower 4
+        - Ashita v4
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log file
+      description: Drag in the log from the day it happened. They're in `C:\ProgramData\Provenance\logs`, named `launcher-` and the date. Give it a quick read first, it has your Windows user name in folder paths.

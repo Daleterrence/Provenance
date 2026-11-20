@@ -18,6 +18,8 @@ You'll need Windows 10 or 11.
 
 Have a look at the [FAQ](https://provenancexi.app/faq), or join the [Discord server](https://discord.gg/pFtdzeJ6p4).
 
+Found a bug? Open an [issue](https://github.com/Daleterrence/Provenance/issues).
+
 ## Licence
 
 Provenance is licensed under the GNU General Public License v3.0, see [LICENSE](LICENSE). The open source software it
