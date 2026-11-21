@@ -239,6 +239,8 @@ static int lb_answer(int kind, ULONGLONG now)
     }
     if (!lb_picking_on()) return 0;
     if (kind == LB_LOBBY || kind == LB_LIST) {
+        /* the list's in front again for a moment as the confirm box closes */
+        if (kind == LB_LIST && g_lb.stage == LB_AWAIT_WORLD) return 0;
         if (g_lb.stage != LB_PICKING) {
             lb_finish("the player went back");
             return 0;
