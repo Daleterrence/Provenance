@@ -286,13 +286,11 @@ static int message_store_file_name(BYTE *b, int which, void *hdr, char *name)
 }
 /* the old name has to build back from the header or nothing moves */
 static int message_store_delete_file(const char *dir, const char *name);
-static int message_store_move_read_ex(BYTE *b, const BYTE *hdr, const char *name, int home, int read)
+static int message_store_move_name(BYTE *b, const BYTE *hdr, const char *name, int home, int read, char *now)
 {
     __declspec(align(8)) BYTE h[sizeof(pol_mail)];
-    char was[100], now[100], from[MAX_PATH + 160], to[MAX_PATH + 160], dir[MAX_PATH + 160], fdir[MAX_PATH + 160];
+    char was[100];
     const char *what = read ? "a read message" : "the answered request";
-    HANDLE f, d;
-    int ok;
     if (!g_viewer[0] || home < 0 || !message_store_name_ok(name) || !pc_has(b, SV_MAIL_PATH_UNREAD) ||
         !pc_has(b, SV_MAIL_PATH_READ)) {
         base_log("store: %s isn't moved, no way to build its new name\r\n", what);
@@ -308,6 +306,18 @@ static int message_store_move_read_ex(BYTE *b, const BYTE *hdr, const char *name
     MAIL(h)->seen = (WORD)((MAIL(h)->seen & 0xf3ff) | 0x400);
     if (!message_store_file_name(b, 1, h, now)) {
         base_log("store: %s isn't moved, no name for r\\a\r\n", what);
+        return 0;
+    }
+    return 1;
+}
+static int message_store_move_file(const char *name, const char *now, int home, int read)
+{
+    char from[MAX_PATH + 160], to[MAX_PATH + 160], dir[MAX_PATH + 160], fdir[MAX_PATH + 160];
+    const char *what = read ? "a read message" : "the answered request";
+    HANDLE f, d;
+    int ok;
+    if (!g_viewer[0] || home < 0 || !message_store_name_ok(name) || !message_store_name_ok(now)) {
+        base_log("store: %s isn't moved, its name isn't one the store uses\r\n", what);
         return 0;
     }
     message_store_dir(from, home, 1);
@@ -352,6 +362,11 @@ static int message_store_move_read_ex(BYTE *b, const BYTE *hdr, const char *name
     CloseHandle(f);
     if (ok && read) message_store_secure_add(now);
     return ok;
+}
+static int message_store_move_read_ex(BYTE *b, const BYTE *hdr, const char *name, int home, int read)
+{
+    char now[100];
+    return message_store_move_name(b, hdr, name, home, read, now) && message_store_move_file(name, now, home, read);
 }
 static int message_store_move_read(BYTE *b, const BYTE *hdr, const char *name, int home)
 {

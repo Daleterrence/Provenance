@@ -108,6 +108,7 @@ public static class HookContract
         public const string Taking = ".taking";
         public const string Name = "pol_hook.{0}.{1}";
         public const string PidFile = "provenance.{0}.pid";
+        public const string Quiet = "provenance.quiet";
         public const string PlayEvent = "provenance_play.{0}";
     }
 

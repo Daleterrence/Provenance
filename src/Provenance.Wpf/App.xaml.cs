@@ -133,6 +133,7 @@ public partial class App : Application
             if (uiThread is null) Log.Warning("The settings were built with no UI thread to hand changes to");
             credentials = new CredentialService();
             settings = new SettingsService(SettingsService.DefaultPath, uiThread);
+            HookFiles.SetGameSound(settings.Current.GameMessageSound);
             pol = _pol = new PolSession(settings);
             return true;
         }

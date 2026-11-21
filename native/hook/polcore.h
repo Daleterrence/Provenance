@@ -46,6 +46,17 @@ enum hook_address {
     AT_STATUS_ANSWERS,      /* a pointer for each job 0-3, POLCORE_STATUS_STRIDE apart: LOAD_MY_STATUS's answer */
     AT_GCHAT_LINE_HELD,
     AT_POLL_CALLBACK,
+    AT_FX_COUNT_CALL,
+    AT_FX_SOUND_ON,
+    AT_FX_SOUND,
+    AT_FX_MARK_CALL,
+    AT_FX_LOOKUP_CALL,
+    AT_FX_EXPANDED,
+    AT_FX_ADD_LINE,
+    AT_FX_CHAT_LOG,
+    AT_FX_WORD_FILTER,
+    AT_FX_AT_OBJECT,
+    AT_FX_EXPANDER,
     ADDRESS_COUNT
 };
 
@@ -53,7 +64,7 @@ struct hook_addr {
     const char *name, *sig;   /* sig: hex bytes of code at or near it, ?? where a build can differ */
     DWORD usual, sig_at;
     int operand;              /* the match's byte holding the address (less the module's base), or ADDR_MATCH */
-    BYTE module, code, required;
+    BYTE module, code, required, rel;   /* rel: operand is a call's rel32 and the address is its target */
     DWORD at;
     int hits;
     int shows_op;             /* with shows: the match's byte holding an address, whose target bytes must equal shows */
@@ -146,7 +157,7 @@ PC_SVC2(int, pc_mail_address_ok, SV_MAIL_ADDRESS_OK, const char *, sjis, int, le
 #define SV_MY_STATUS       0x338
 PC_SVC0(int, pc_my_status, SV_MY_STATUS)
 static int pc_my_status_or(BYTE *b, int none) { return pc_has(b, SV_MY_STATUS) ? pc_my_status(b) : none; }
-#define SV_GAME_TAG        0x2f4   /* the game slot polcore has for me, 0 or more in the world and -1 outside it */
+#define SV_GAME_TAG        0x2f4   /* the game slot polcore has for me, 0 or more from the character select on and -1 outside FFXI */
 PC_SVC0(int, pc_game_tag, SV_GAME_TAG)
 #define SV_CURRENT_HANDLE  0x2f8
 PC_SVC0(int, pc_current_handle, SV_CURRENT_HANDLE)

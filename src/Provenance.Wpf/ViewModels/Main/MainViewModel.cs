@@ -485,7 +485,6 @@ public partial class MainViewModel : ObservableObject
     public bool ShowLaunchCard => IsLaunching && !GameUp;
 
     public bool GameOpen => Session.Phase == SessionPhase.InGame;
-    // the friends list and its window are usable in the game only while the hook's sampler is keeping them up to date
     public bool FriendsLocked => GameOpen && !Social.GameFeedLive;
     public const string GameLockedBanner = "You cannot use any PlayOnline or social features of Provenance whilst logged into the game.";
     public const string GameFriendsBanner =

@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Provenance.Common.Hook;
 using Provenance.Common.Settings;
 
 namespace Provenance.Wpf.ViewModels.Settings;
@@ -31,12 +32,15 @@ public sealed partial class NoticeRow : ObservableObject
     partial void OnFlashesChanged(bool value) => _settings.SaveChange(s => s.SetFlashes(_kind, value));
 }
 
-public sealed class NotificationSettings
+public sealed partial class NotificationSettings : ObservableObject
 {
     public const string IntroText = "Choose which notices Provenance shows, and which ones flash its taskbar button.";
+    private readonly ISettingsService _settings;
 
     internal NotificationSettings(ISettingsService settings)
     {
+        _settings = settings;
+        _gameSound = settings.Current.GameMessageSound;
         Rows =
         [
             new(settings, NoticeKind.FriendOnline, "A friend comes online", "A quiet notice. Not shown while you're in the game."),
@@ -49,4 +53,12 @@ public sealed class NotificationSettings
     }
 
     public IReadOnlyList<NoticeRow> Rows { get; }
+
+    [ObservableProperty] private bool _gameSound;
+
+    partial void OnGameSoundChanged(bool value)
+    {
+        _settings.SaveChange(s => s.GameMessageSound = value);
+        HookFiles.SetGameSound(value);
+    }
 }

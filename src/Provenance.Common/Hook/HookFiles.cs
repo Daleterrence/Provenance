@@ -34,6 +34,19 @@ public static class HookFiles
         return [path, path + HookContract.Files.Taking];
     }
 
+    // the hook plays the game's message sound for a message that arrives in the game unless this file's there
+    public static void SetGameSound(bool on)
+    {
+        if (_dir is null) return;
+        try
+        {
+            var path = Path.Combine(RequiredDir, HookContract.Files.Quiet);
+            if (on) File.Delete(path);
+            else if (!File.Exists(path)) File.WriteAllBytes(path, []);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not change the game's message sound"); }
+    }
+
     public static void Discard(int pid, string name)
     {
         foreach (var p in RequestPaths(pid, name))

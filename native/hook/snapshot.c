@@ -4,7 +4,6 @@ enum { SNAPSHOT_NAME_CAP = 64, SNAPSHOT_STATE_CAP = 110, SNAPSHOT_GROUP_CAP = 96
 static char *g_snap_kept;
 static int g_snap_kept_n;
 static char g_snap_kept_path[MAX_PATH + 64];
-/* 0 when the file couldn't be put in place */
 static int snapshot_write(const jw *w)
 {
     char path[MAX_PATH + 64];
@@ -54,7 +53,6 @@ static void snapshot_blocked(BYTE *b, jw *w, const pol_friend *rows)
     jw_end(w);
 }
 
-/* mine is my POL ID as text, for the row that's me */
 static void snapshot_friends(BYTE *b, jw *w, const pol_friend *rows, const pol_friend_extra *extras, const char *mine)
 {
     char sk[17];
@@ -67,7 +65,6 @@ static void snapshot_friends(BYTE *b, jw *w, const pol_friend *rows, const pol_f
         DWORD cs, cl, chi;
         if (IsBadReadPtr(a, sizeof *a) || IsBadReadPtr(bn, sizeof *bn)) break;
         if (!pc_friend_valid(a)) continue;   /* polcore.dll 0x10024d30 */
-        /* the comment's UTF-16 while the names are SJIS */
         memcpy(fw, bn->comment, 0x32 * sizeof(WCHAR));
         WideCharToMultiByte(CP_UTF8, 0, fw, -1, combuf, (int)sizeof combuf - 1, NULL, NULL);
         peers_friend_key(b, a, sk);

@@ -1,5 +1,5 @@
 /* keeps the friends list up to date while the game runs. POLL's callback copies polcore's rows (microseconds, on the
-   game's thread) and a worker writes them out. It only reads, and any fault switches it off for the rest of the game. */
+   game's thread) and a worker writes them out. Any fault switches it off for the rest of the game. */
 enum { IG_FRIENDS = 200, IG_IGNORES = 100, IG_SAMPLE_MS = 500, IG_BEAT_MS = 5000, IG_RETRY_MS = 250 };
 
 typedef struct ig_copy {
@@ -12,6 +12,15 @@ typedef struct ig_copy {
 } ig_copy;
 
 typedef void (__cdecl *ig_poll_fn)(int);
+
+static void fx_polled(void);
+static void fx_session_up(void);
+static void fx_game_tick(BYTE *b);
+static void fx_poll(BYTE *b);
+static void fx_worker(BYTE *b);
+static int fx_wait(HANDLE wake, DWORD ms);
+static void fx_stop(void);
+static void fx_reset(void);
 
 static struct {
     BYTE *b;
@@ -98,6 +107,7 @@ static void ig_write_off(void)
 static void ig_fault(const char *where)
 {
     if (InterlockedExchange(&g_ig.off, 1)) return;
+    fx_stop();
     ig_disarm();
     if (g_ig.thread) SetEvent(g_ig.wake);
     else ig_write_off();
@@ -110,15 +120,19 @@ static void ig_tick(void)
     LONG changed;
     if (now < g_ig.next) return;
     g_ig.next = now + IG_SAMPLE_MS;
-    /* one line each, the first time the game's thread gets here and the first time it's in the world */
+    /* one line each, the first time the game's thread gets here and the first time FFXI's session is up */
     if (!(g_ig.said & 1)) {
         g_ig.said |= 1;
         base_log("ingame: the POLL callback is running on the game's thread\r\n");
+        fx_polled();
     }
+    fx_game_tick(g_ig.b);
     if (pc_game_tag(g_ig.b) < 0) return;
     if (!(g_ig.said & 2)) {
         g_ig.said |= 2;
-        base_log("ingame: in the world, copying the friends list from here\r\n");
+        base_log("ingame: FFXI's session is up, copying the friends list from here\r\n");
+        fx_session_up();
+        SetEvent(g_ig.wake);
     }
     ig_read(g_ig.b, &g_ig.scratch);
     /* the worker only holds this to copy, so a frame that finds it taken tries again on the next */
@@ -141,6 +155,7 @@ static void __cdecl ig_poll(int unused)
     } __except (ig_filter(GetExceptionInformation())) {
         ig_fault("game thread");
     }
+    fx_poll(g_ig.b);
 }
 
 /* 0 when the file didn't go in, the worker tries again soon */
@@ -154,17 +169,23 @@ static int ig_flush(void)
 
 static DWORD WINAPI ig_worker(void *unused)
 {
-    int ok = 1;
+    int ok = 1, messages;
+    ULONGLONG flushed = 0;
     (void)unused;
     while (!g_ig.stop) {
-        WaitForSingleObject(g_ig.wake, ok ? IG_BEAT_MS : IG_RETRY_MS);
+        messages = fx_wait(g_ig.wake, ok ? IG_BEAT_MS : IG_RETRY_MS);
         if (g_ig.stop) break;
         if (!g_ig.off) {
-            __try {
-                ok = ig_flush();
-            } __except (ig_filter(GetExceptionInformation())) {
-                ig_fault("worker");
+            /* r\b changing on its own is no reason to write the friends out again, unless the beat's due */
+            if (!messages || !ok || GetTickCount64() - flushed >= IG_BEAT_MS) {
+                flushed = GetTickCount64();
+                __try {
+                    ok = ig_flush();
+                } __except (ig_filter(GetExceptionInformation())) {
+                    ig_fault("worker");
+                }
             }
+            fx_worker(g_ig.b);
         }
         if (g_ig.off) {
             __try {
@@ -210,6 +231,7 @@ static void ingame_start(BYTE *b)
 {
     void *cur;
     memset(&g_ig, 0, sizeof g_ig);
+    fx_reset();
     InitializeCriticalSection(&g_ig.cs);
     g_ig.b = b;
     g_ig.slot = (void **)pc_addr_of(b, AT_POLL_CALLBACK);

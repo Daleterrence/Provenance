@@ -31,6 +31,16 @@
                     </ItemsControl>
                 </StackPanel>
             </Border>
+
+            <TextBlock Text="In the game" Style="{StaticResource Section}" />
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <HeaderedContentControl Header="Message sound"
+                                            Tag="Uses the game's own sound and settings.">
+                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GameSound}" AutomationProperties.Name="Message sound in the game" />
+                    </HeaderedContentControl>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

@@ -1,5 +1,6 @@
 #define IN_EXE 0
 #define IN_POLCORE 1
+#define IN_FFXI 2
 #define IS_DATA 0
 #define IS_CODE 1
 #define SKIPPABLE 0
@@ -8,6 +9,13 @@
 
 #define SIG_STAMPS "8b 44 24 04 85 c0 b8 ?? ?? ?? ?? 75 05 b8 ?? ?? ?? ?? 8b 4c 24 08 85 c9 74 02 89 08"
 #define SIG_SPLASH "6a 00 68 ?? ?? ?? ?? 6a 00 6a 67 ff 35 ?? ?? ?? ?? ff 15 ?? ?? ?? ??"
+#define SIG_FX_NETSTAT "8d 7e 1c e8 ?? ?? ?? ?? 25 ff ff 00 00 8b cf 50 e8 ?? ?? ?? ?? e8 ?? ?? ?? ?? 25 ff ff 00 00 8b cf 50 e8 ?? ?? ?? ??"
+#define SIG_FX_SETTER "8b 44 24 04 56 8b f1 8b 4e 08 89 06 3b c1 7e 25 6a 48 e8 ?? ?? ?? ?? 83 c4 04 85 c0 74 0e e8 ?? ?? ?? ??"
+#define SIG_FX_LOOKUP "8b 15 ?? ?? ?? ?? c7 05 ?? ?? ?? ?? 00 00 00 00 8b 02 50 68 ?? ?? ?? ?? e8 ?? ?? ?? ?? 8b f0 83 c4 08 85 f6 " \
+    "0f 84 ?? ?? ?? ?? 0f bf 7e 14 85 ff 0f 84 ?? ?? ?? ?? f6 46 17 20 74 12 68 ?? ?? ?? ?? 68"
+#define SIG_FX_FROM_LINE "c6 44 24 0c 12 8b 46 08 c6 44 24 0d 00 50 68 ?? ?? ?? ?? 51 c6 44 24 1a 00 e8 ?? ?? ?? ?? 8b 0d ?? ?? ?? ?? " \
+    "83 c4 0c 8d 54 24 0c 8d 44 24 14 6a 00 6a 01 6a 00 52 50 e8 ?? ?? ?? ??"
+#define SIG_FX_EXPAND "8b fe 83 c9 ff 33 c0 6a 00 f2 ae f7 d1 49 6a 01 51 8b 0d ?? ?? ?? ?? 56 8d 54 24 64 68 00 08 00 00 52 e8 ?? ?? ?? ??"
 
 static struct hook_addr g_addr[ADDRESS_COUNT] = {
     /* starts on the push ebp, a detour past the frame setup leaves the stub's stack a dword off */
@@ -143,6 +151,34 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
     [AT_POLL_CALLBACK] = { .name = "POLL callback", .module = IN_POLCORE, .code = IS_DATA, .required = SKIPPABLE,
         .usual = 0x435528, .sig_at = 0x45750, .operand = 9,
         .sig = "56 e8 ?? ?? ?? ?? 8b f0 a1 ?? ?? ?? ?? 85 c0 74 07 6a 00 ff d0 83 c4 04 8b c6 5e c3" },
+
+    /* FFXiMain is packed on disk, so these are only looked for once the game's up */
+    [AT_FX_COUNT_CALL] = { .name = "unread count call", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x201579, .sig_at = 0x201576, .operand = ADDR_MATCH, .sig = SIG_FX_NETSTAT },
+    [AT_FX_SOUND_ON] = { .name = "message sound setting", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x193860, .sig_at = 0x2010b0, .operand = 19, .rel = 1, .sig = SIG_FX_SETTER },
+    [AT_FX_SOUND] = { .name = "message sound", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x38020, .sig_at = 0x2010b0, .operand = 31, .rel = 1, .sig = SIG_FX_SETTER },
+    [AT_FX_MARK_CALL] = { .name = "friend mark call", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x1eb2ef, .sig_at = 0x1eb2ee, .operand = ADDR_MATCH,
+        .sig = "55 e8 ?? ?? ?? ?? 83 c4 04 85 c0 74 22 8b 96 84 00 00 00 8b 4c 24 10 68 80 80 80 80 52 6a 0e 6a 00 e8" },
+    /* the table's first entry is /ver */
+    [AT_FX_LOOKUP_CALL] = { .name = "command lookup call", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x8102e, .sig_at = 0x81016, .operand = ADDR_MATCH, .sig = SIG_FX_LOOKUP,
+        .shows_op = 20, .shows = "2f 76 65 72 00" },
+    [AT_FX_EXPANDED] = { .name = "expanded line", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x354df0, .sig_at = 0x81016, .operand = 61, .sig = SIG_FX_LOOKUP },
+    [AT_FX_ADD_LINE] = { .name = "chat add-line", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x127c10, .sig_at = 0x200e4f, .operand = 56, .rel = 1, .sig = SIG_FX_FROM_LINE },
+    [AT_FX_CHAT_LOG] = { .name = "chat log", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x578198, .sig_at = 0x200e4f, .operand = 32, .sig = SIG_FX_FROM_LINE },
+    [AT_FX_WORD_FILTER] = { .name = "word filter", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x1ba210, .sig_at = 0x200ebf, .operand = 17, .rel = 1,
+        .sig = "68 ?? ?? ?? ?? 52 e8 ?? ?? ?? ?? 8d 44 24 20 50 e8 ?? ?? ?? ?? 83 c4 10" },
+    [AT_FX_AT_OBJECT] = { .name = "auto-translate object", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x630260, .sig_at = 0x127cef, .operand = 19, .sig = SIG_FX_EXPAND },
+    [AT_FX_EXPANDER] = { .name = "auto-translate expander", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x1b7270, .sig_at = 0x127cef, .operand = 35, .rel = 1, .sig = SIG_FX_EXPAND },
 };
 
 typedef struct {
@@ -264,7 +300,8 @@ static int addr_matches(const struct hook_addr *e, const addr_module *m, DWORD o
 static DWORD addr_from(const struct hook_addr *e, const addr_module *m, DWORD off)
 {
     DWORD a = e->operand == ADDR_MATCH ? off + (e->usual - e->sig_at)
-                                       : *(DWORD *)(m->image + off + e->operand) - m->opbase;
+            : e->rel ? off + e->operand + 4 + *(DWORD *)(m->image + off + e->operand)
+                     : *(DWORD *)(m->image + off + e->operand) - m->opbase;
     if (e->code) return a >= m->text && a < m->text_end ? a : 0;
     return addr_in_data(m, a) ? a : 0;
 }
