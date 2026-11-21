@@ -34,9 +34,10 @@ public partial class MainViewModel : ObservableObject
     private readonly AvatarService _avatars;
     private readonly FeedService _feeds;
     private readonly GameLaunch _launch;
-    private readonly DispatcherTimer _socialPoll, _elapsedTimer;
+    private readonly DispatcherTimer _socialPoll, _elapsedTimer, _picksPoll;
 
     internal bool SocialPolling { get => _socialPoll.IsEnabled; set => _socialPoll.IsEnabled = value; }
+    internal bool PicksPolling => _picksPoll.IsEnabled;
     internal bool ClockRunning { get => _elapsedTimer.IsEnabled; set => _elapsedTimer.IsEnabled = value; }
 
     public event Action? RequestHide;
@@ -82,6 +83,12 @@ public partial class MainViewModel : ObservableObject
         Accounts.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AccountsViewModel.HasProfile)) RefreshSetupCard(); };
         _socialPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _socialPoll.Tick += (_, _) => _pol.Poll();
+        _picksPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _picksPoll.Tick += (_, _) =>
+        {
+            if (LobbyPicks.Waiting(settings)) LobbyPicks.Take(settings);
+            else _picksPoll.Stop();
+        };
         GameStart = new GameStart(dialogs, windows, settings, pol, _launch, this,
             new GameStartLinks(SetPhase, BeginCancellable, EndCancellable, ResetProgress, OnProgress, () => OpenSettingsAt(SettingsTab.Handles),
                                () => RequestHide?.Invoke(), () => RequestShow?.Invoke(), () => RequestExit?.Invoke()));
@@ -205,6 +212,7 @@ public partial class MainViewModel : ObservableObject
         if (next is SessionPhase.LoggingOut or SessionPhase.MultiRun) _windows.CloseSessionWindows();
         if (next == SessionPhase.LoggingOut) Social.GroupChat.CloseQuietly();
         Session.Set(next);
+        if (next is SessionPhase.InGame or SessionPhase.MultiRun) _picksPoll.Start();
         switch (next)
         {
             case SessionPhase.LoggedIn:

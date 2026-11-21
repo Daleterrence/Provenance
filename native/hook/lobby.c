@@ -4,7 +4,7 @@ enum { LB_NONE, LB_LICENCE, LB_LOBBY, LB_LIST, LB_CONFIRM, LB_OK };
 enum { LB_PICKING, LB_AWAIT_CONFIRM, LB_AWAIT_WORLD, LB_FINISHED };
 
 static struct {
-    int licence, picking, slot, stage, answered, tried, picks, retries;
+    int licence, picking, slot, told, stage, answered, tried, picks, retries;
     int licence_off, picking_off;
     char name[LB_NAME], world[LB_NAME];
     ULONGLONG started_at, next_look, picked_at, list_at, confirmed_at, error_at;
@@ -153,6 +153,24 @@ static int lb_same_world(const char *entry, const char *want)
     }
 }
 
+/* which character a slot turned out to be, for the app. The name never goes in the log */
+static void lb_tell_pick(const BYTE *e)
+{
+    char path[MAX_PATH + 64], text[2 * LB_NAME + 2];
+    DWORD wrote = 0;
+    HANDLE f;
+    int n = 0, i;
+    for (i = 0; i < LB_NAME && e[0x10 + i]; i++) text[n++] = (char)e[0x10 + i];
+    text[n++] = '\n';
+    for (i = 0; i < LB_NAME && e[0x20 + i]; i++) text[n++] = (char)e[0x20 + i];
+    text[n++] = '\n';
+    base_ipc_file(path, IPC_PICKED);
+    f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) return;
+    WriteFile(f, text, (DWORD)n, &wrote, NULL);
+    CloseHandle(f);
+}
+
 static int lb_entry_usable(const BYTE *e)
 {
     return *(const int *)(e + 0x34) == 1 && *(const int *)(e + 0x5c) == 0 && *(const int *)(e + 0x64) == 0;
@@ -190,6 +208,10 @@ static int lb_pick(ULONGLONG now)
         g_lb.stage = LB_AWAIT_CONFIRM;
         g_lb.picked_at = now;
         base_log(g_lb.picks++ ? "lobby: the game cleared that, picked the character again\r\n" : "lobby: picked a character in the list\r\n");
+        if (g_lb.slot && !g_lb.told) {
+            g_lb.told = 1;
+            lb_tell_pick(m + 0x34 + LB_STRIDE * at);
+        }
         return 1;
     }
     g_lb.stage = LB_FINISHED;

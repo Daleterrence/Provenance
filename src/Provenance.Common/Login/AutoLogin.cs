@@ -56,6 +56,24 @@ public static class AutoLogin
         key.Length >= 8 && uint.TryParse(key.AsSpan(0, 8), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var id)
             ? FfxiWorlds.Name((int)(id >> 16 & 0xff)) : null;
 
+    // which of the account's characters the hook found in the slot that's chosen. None when it isn't one the account has yet
+    public static AccountCharacter? PickFor(Account account, string? name, string? world)
+    {
+        if (account.AutoLoginCharacter is not null || !IsSlot(account.AutoLoginSlot) || !IsName(name?.Trim())) return null;
+        var named = account.Characters.Where(c => string.Equals(c.Name, name!.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        return named.Count == 1 ? named[0] : named.FirstOrDefault(c => SameWorld(c.World, world));
+    }
+
+    public static bool Picked(Account account, string? name, string? world)
+    {
+        if (PickFor(account, name, world) is not { } pick) return false;
+        (account.AutoLoginCharacter, account.AutoLoginWorld, account.AutoLoginSlot) = (pick.Name, pick.World, null);
+        return true;
+    }
+
+    private static bool SameWorld(string? a, string? b) =>
+        string.Equals(a?.Replace(" ", ""), b?.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
+
     public static bool Chosen(Account account, AccountCharacter c) =>
         string.Equals(c.Name, account.AutoLoginCharacter, StringComparison.OrdinalIgnoreCase)
         && string.Equals(c.World, account.AutoLoginWorld, StringComparison.OrdinalIgnoreCase);

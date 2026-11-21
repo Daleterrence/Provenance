@@ -94,7 +94,7 @@ public static class HookFiles
     public static void ClearFor(int pid)
     {
         foreach (var name in new[] { HookContract.Files.Social, HookContract.Files.Store, HookContract.Files.ChatRoom,
-                                     HookContract.Files.GroupChat, HookContract.Files.Lobby })
+                                     HookContract.Files.GroupChat, HookContract.Files.Lobby, HookContract.Files.Picked })
             Delete(pid, name);
         foreach (var name in HookContract.Requests.All)
             Discard(pid, name);
