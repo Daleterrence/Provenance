@@ -22,6 +22,11 @@ public sealed class ChatStore
 
     private readonly EncryptedJsonFile<List<ChatEntry>>? _file;
     private readonly EncryptedJsonFile<Dictionary<string, long>>? _deletedFile;
+    private readonly ChatJournal? _journal;
+    // what the log and its journal hold between them
+    private List<ChatEntry> _onDisk = [];
+    private Dictionary<string, long>? _olderDeleted;
+    private List<ChatEntry>? _older;
 
     public ChatStore(string profileId, string? root = null)
     {
@@ -33,10 +38,13 @@ public sealed class ChatStore
         }
         var path = Path.Combine(root, profileId + ".dat");
         _file = new(path, Entropy, "Messages");
+        _journal = new(path[..^4] + ".journal.dat");
         _deletedFile = new(path[..^4] + ".deleted.dat", DeletedEntropy, "Messages", setAsideUnreadable: false);
         if (_deletedFile.Load() is { } keys)
             foreach (var (k, t) in keys) _deleted[k] = t;
         if (_file.Load() is not { } loaded) return;
+        _journal.Replay(_file.Hash!, loaded);
+        _onDisk = loaded;
         var kept = loaded.Where(e => !_deleted.ContainsKey(e.Key)).ToList();
         _entries.AddRange(kept);
         foreach (var e in kept) _keys.Add(e.Key);
@@ -418,7 +426,15 @@ public sealed class ChatStore
 
     public void SaveIfDue(DateTime now)
     {
-        if (!Dirty) return;
+        if (!Dirty)
+        {
+            if (_journal is { Leftover: true } && !_closed && now - _triedAt >= SaveRetry)
+            {
+                _triedAt = now;
+                lock (_io) _journal.Tidy();
+            }
+            return;
+        }
         if (_failed ? now - _triedAt < SaveRetry : _queued == (_version, _deletedVersion)) return;
         _triedAt = now;
         SaveSoon();
@@ -474,14 +490,14 @@ public sealed class ChatStore
             if (job.Deleted is { } deleted && job.DeletedVersion > _savedDeletedVersion)
             {
                 tried = true;
-                if (_deletedFile!.Save(deleted)) Volatile.Write(ref _savedDeletedVersion, job.DeletedVersion);
+                if (WithOlderDeleted(deleted) && _deletedFile!.Save(deleted)) Volatile.Write(ref _savedDeletedVersion, job.DeletedVersion);
                 else failed = true;
             }
             if (job.Entries is { } entries && (force || job.Version > _savedVersion))
             {
                 tried = true;
                 SaveCount++;
-                saved = _file!.Save(entries);
+                saved = Store(entries, whole: force);
                 if (saved) Volatile.Write(ref _savedVersion, job.Version);
                 else failed = true;
             }
@@ -490,6 +506,61 @@ public sealed class ChatStore
         if (!saved) return;
         try { Saved?.Invoke(); }
         catch (Exception e) { Log.Warning(e, "Messages: the log was saved, but passing that on failed"); }
+    }
+
+    // keys in a file that couldn't be read when the log was opened are read now, or saving over it would bring those lines back
+    private bool WithOlderDeleted(Dictionary<string, long> deleted)
+    {
+        if (_deletedFile!.Unread)
+        {
+            if (_deletedFile.Load(wait: false) is { } older) _olderDeleted = older;
+            else if (_deletedFile.Unread) return false;
+        }
+        if (_olderDeleted is not null)
+            foreach (var (k, t) in _olderDeleted) deleted.TryAdd(k, t);
+        return true;
+    }
+
+    private bool Store(List<ChatEntry> entries, bool whole)
+    {
+        // a log that couldn't be read when it was opened gets another go, and its lines go in front of this session's
+        if (_file!.Unread && _file.Load(wait: false) is { } late)
+        {
+            _journal!.Replay(_file.Hash!, late);
+            _onDisk = late;
+            _older = [.. late];
+        }
+        if (_older is not null)
+        {
+            // once the session has a line of its own it speaks for it, or deleting it here would bring the old copy back
+            var mine = entries.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+            _older.RemoveAll(e => mine.Contains(e.Key));
+            entries = [.. _older, .. entries];
+        }
+        bool added = !whole && Changes(entries) is { } batch && (batch.Changed.Count + batch.Added.Count == 0 || _journal!.Append(batch));
+        if (!added)
+        {
+            // an unread journal goes aside before the new log's written, or the next open would bin it as stale
+            if (!_file!.MakeWay() || !_journal!.MakeWay() || !_file.Save(entries)) return false;
+            _journal.Reset();
+        }
+        _onDisk = entries;
+        return true;
+    }
+
+    // null when the whole log has to be written
+    private ChatJournal.Batch? Changes(List<ChatEntry> entries)
+    {
+        if (_file!.Hash is not { } hash || _journal!.Full || entries.Count < _onDisk.Count) return null;
+        var changed = new Dictionary<int, ChatEntry>();
+        for (int i = 0; i < _onDisk.Count; i++)
+        {
+            if (entries[i] == _onDisk[i]) continue;
+            // a line's been taken out, and a journal on top would leave it sat in the log
+            if (entries[i].Key != _onDisk[i].Key) return null;
+            changed[i] = entries[i];
+        }
+        return new(hash, _onDisk.Count, changed, entries.GetRange(_onDisk.Count, entries.Count - _onDisk.Count));
     }
 
     public bool Flush() => !Dirty || Save(force: false);

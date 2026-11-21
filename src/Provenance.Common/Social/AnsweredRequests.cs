@@ -36,8 +36,18 @@ public sealed class AnsweredRequests
     {
         if (m.FromKey.Length == 0) return;
         _seen[Identity(m)] = new DateTimeOffset(now, TimeSpan.Zero).ToUnixTimeSeconds();
+        if (!ReadLate()) return;
         Prune(now);
         _file?.Save(_seen);
+    }
+
+    // false whilst a file that couldn't be read at the start still can't be, so its answers aren't written over
+    private bool ReadLate()
+    {
+        if (_file is not { Unread: true }) return true;
+        if (_file.Load(wait: false) is { } older)
+            foreach (var (k, t) in older) _seen.TryAdd(k, t);
+        return !_file.Unread;
     }
 
     private void Prune(DateTime now)

@@ -11,4 +11,20 @@ public static class SharedFile
         using var reader = new StreamReader(fs);
         return reader.ReadToEnd();
     }
+
+    // half a second for whatever else has the file open to let go of it
+    public static byte[] ReadAllBytes(string path, int tries = 10)
+    {
+        for (int i = 1; ; i++)
+        {
+            try
+            {
+                using var fs = OpenRead(path);
+                var bytes = new byte[fs.Length];
+                fs.ReadExactly(bytes);
+                return bytes;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException && i < tries && File.Exists(path)) { Thread.Sleep(50); }
+        }
+    }
 }
