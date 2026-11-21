@@ -125,10 +125,12 @@ public partial class AccountsViewModel : ObservableObject
 
     internal string? SessionProfileId { get; set; }
 
-    internal void LearnIdentity(PolSocialSnapshot snap)
+    internal void LearnIdentity(PolSocialSnapshot snap) => LearnIdentity(SessionProfileId, snap);
+
+    internal void LearnIdentity(string? profileId, PolSocialSnapshot snap)
     {
-        if (string.IsNullOrWhiteSpace(snap.MyHandle) || SessionProfileId is null) return;
-        if (Profiles.FirstOrDefault(p => p.Id == SessionProfileId) is not { } prof) return;
+        if (string.IsNullOrWhiteSpace(snap.MyHandle) || profileId is null) return;
+        if (Profiles.FirstOrDefault(p => p.Id == profileId) is not { } prof) return;
         var key = snap.Handles.FirstOrDefault(h => h.Active)?.Key;
         if (prof.DisplayName == snap.MyHandle && prof.HandleName == snap.MyHandle &&
             (snap.MyProfilePictureId < 0 || prof.ProfilePictureId == snap.MyProfilePictureId) &&

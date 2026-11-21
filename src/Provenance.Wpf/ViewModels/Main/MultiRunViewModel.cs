@@ -342,7 +342,10 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         }
         SetRunStatus($"{account.Name} is logged in. Starting the game {step}...");
 
-        var snap = RunSnapshot ?? (_pol.Pid is { } pid ? SocialSnapshotFiles.TryRead(pid) : null);
+        var read = _pol.Pid is { } pid ? SocialSnapshotFiles.TryRead(pid) : null;
+        var snap = RunSnapshot ?? read;
+        // this pol.exe's own file first, so it can't be the account before's
+        if ((read ?? snap) is { } own) _accounts.LearnIdentity(profile.Id, own);
         if (AccountRules.PlayGateFailure(snap) is { } gate) return await LetGo(gate.Kind, gate.Text);
         if (token.IsCancellationRequested) return await Stopped();
 
