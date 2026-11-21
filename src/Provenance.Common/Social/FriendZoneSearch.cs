@@ -14,6 +14,7 @@ public sealed class FriendZoneSearch
     private readonly Dictionary<(int World, uint Id), Seen> _areas = new();
     private readonly Dictionary<(int World, uint Id), string> _anon = new();
     private readonly Dictionary<(int World, uint Id), string> _owners = new();
+    private readonly Dictionary<(int World, uint Id), string> _names = new();
     private bool _troubled;
     private readonly HashSet<int> _failing = new();
     private int _generation;
@@ -48,6 +49,7 @@ public sealed class FriendZoneSearch
                 _rule.Seen(friends);
                 var playing = _rule.Playing();
                 foreach (var key in _areas.Keys.Where(k => !playing.Contains(k)).ToList()) _areas.Remove(key);
+                foreach (var key in _names.Keys.Where(k => !playing.Contains(k)).ToList()) _names.Remove(key);
                 Remember(friends);
             }
             due = _rule.Due(Now);
@@ -79,6 +81,12 @@ public sealed class FriendZoneSearch
     {
         lock (_gate)
             return _areas.TryGetValue(Key(game), out var seen) ? seen.Party : PartyState.None;
+    }
+
+    public string? Name(PolFriendGame game)
+    {
+        lock (_gate)
+            return _names.GetValueOrDefault(Key(game));
     }
 
     public bool IsAnon(PolFriendGame game)
@@ -114,6 +122,7 @@ public sealed class FriendZoneSearch
             _generation++;
             _rule.Reset();
             _areas.Clear();
+            _names.Clear();
         }
     }
 
@@ -124,6 +133,7 @@ public sealed class FriendZoneSearch
         bool answered = false, moved = false;
         string why = "something went wrong";
         var got = new HashSet<uint>();
+        var listed = new HashSet<uint>();
         var wait = TimeSpan.Zero;
         try
         {
@@ -143,6 +153,7 @@ public sealed class FriendZoneSearch
                         if (generation == _generation) moved |= Keep(batch.World, chunk, answer.Entries);
                     }
                     got.UnionWith(chunk);
+                    listed.UnionWith(answer.Entries.Select(e => e.Id));
                     Log.Debug("Friend zones: {World} ({Address}) listed {Found} of {Asked}", world, at?.Host, answer.Entries.Count, chunk.Count);
                     foreach (var e in answer.Entries)
                         Log.Debug("Friend zones: {World} entry flags1 {Flags1:X4} flags2 {Flags2:X8} language {Language:X4}", world, e.Flags1, e.Flags2, e.Language);
@@ -157,7 +168,7 @@ public sealed class FriendZoneSearch
         }
         finally
         {
-            var done = Finish(batch.World, answered, generation, got);
+            var done = Finish(batch.World, answered, generation, got, [.. batch.Characters.Where(c => !listed.Contains(SearchServers.Id(c)))]);
             moved |= done.Moved;
             wait = done.Wait;
         }
@@ -167,12 +178,12 @@ public sealed class FriendZoneSearch
         catch (Exception ex) { Log.Warning(ex, "Friend zones: a change handler threw"); }
     }
 
-    private (bool Moved, TimeSpan Wait) Finish(int world, bool answered, int generation, HashSet<uint> got)
+    private (bool Moved, TimeSpan Wait) Finish(int world, bool answered, int generation, HashSet<uint> got, List<CharacterId> unlisted)
     {
         lock (_gate)
         {
             bool moved = generation == _generation && !answered && Drop(world, got);
-            _rule.Finished(world, answered, Now);
+            _rule.Finished(world, answered, Now, unlisted);
             moved |= _rule.Troubled != _troubled;
             _troubled = _rule.Troubled;
             return (moved, _rule.BackoffOf(world));
@@ -203,6 +214,11 @@ public sealed class FriendZoneSearch
             bool had = _areas.TryGetValue((world, id), out var was);
             if (listed.TryGetValue(id, out var entry))
             {
+                if (entry.Name.Length > 0 && _names.GetValueOrDefault((world, id)) != entry.Name)
+                {
+                    _names[(world, id)] = entry.Name;
+                    moved = true;
+                }
                 bool anon = (entry.Flags1 & SearchFlags.Anon) != 0;
                 moved |= anon ? _anon.TryAdd((world, id), _owners.GetValueOrDefault((world, id), "")) : _anon.Remove((world, id));
                 if (!anon && playing.Contains((world, id)))

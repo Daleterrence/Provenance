@@ -6,6 +6,7 @@ internal sealed class SearchRefresh(Func<int, bool> hasServer)
 {
     public static readonly TimeSpan NewPlayerGap = TimeSpan.FromSeconds(10);
     public static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan StillArriving = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan FirstBackoff = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan TroubleBackoff = TimeSpan.FromMinutes(2);
@@ -17,6 +18,7 @@ internal sealed class SearchRefresh(Func<int, bool> hasServer)
         public DateTime Until;
         public TimeSpan Backoff;
         public bool Dirty, InFlight;
+        public Dictionary<string, DateTime> Unlisted = new(StringComparer.Ordinal);
     }
 
     private readonly Dictionary<int, World> _worlds = new();
@@ -62,7 +64,7 @@ internal sealed class SearchRefresh(Func<int, bool> hasServer)
         return due;
     }
 
-    public void Finished(int world, bool answered, DateTime now)
+    public void Finished(int world, bool answered, DateTime now, IReadOnlyCollection<CharacterId>? unlisted = null)
     {
         if (!_worlds.TryGetValue(world, out var w)) return;
         w.InFlight = false;
@@ -70,11 +72,21 @@ internal sealed class SearchRefresh(Func<int, bool> hasServer)
         {
             w.Backoff = TimeSpan.Zero;
             w.Until = DateTime.MinValue;
+            w.Dirty |= StillArrivingIn(w, unlisted ?? [], now);
             return;
         }
         w.Backoff = w.Backoff == TimeSpan.Zero ? FirstBackoff : TimeSpan.FromTicks(Math.Min(w.Backoff.Ticks * 2, MaxBackoff.Ticks));
         w.Until = now + w.Backoff;
         w.Dirty = true;
+    }
+
+    // playing but not listed is usually someone still loading in, so they get a few sooner asks
+    private static bool StillArrivingIn(World w, IReadOnlyCollection<CharacterId> unlisted, DateTime now)
+    {
+        var keys = unlisted.Select(c => c.Key).ToHashSet(StringComparer.Ordinal);
+        foreach (var listed in w.Unlisted.Keys.Where(k => !keys.Contains(k)).ToList()) w.Unlisted.Remove(listed);
+        foreach (var key in keys) w.Unlisted.TryAdd(key, now);
+        return w.Unlisted.Values.Any(first => now - first < StillArriving);
     }
 
     public bool Troubled => _worlds.Values.Any(w => w.Backoff >= TroubleBackoff && w.Characters.Count > 0);

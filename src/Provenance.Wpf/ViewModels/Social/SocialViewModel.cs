@@ -1156,8 +1156,16 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private void OnZonesChanged() => PostToUi?.Invoke(() =>
     {
         RefreshZoneTrouble();
+        LearnListedNames();
         RebuildFriends();
     });
+
+    private void LearnListedNames()
+    {
+        if (ZoneSearch is not { } search) return;
+        foreach (var f in _login.Last.Friends)
+            if (f.Online && !f.Pending && f.Game is { } game) CharacterNames.Learn(game.Character.Key, search.Name(game));
+    }
 
     private void ApplyCharacters(PolSocialSnapshot snap)
     {

@@ -8,7 +8,8 @@ using Serilog;
 
 namespace Provenance.Common.Social;
 
-public sealed record KnownCharacter(string Name, string Why = "");
+// Heard is a name from the search server for a character whose profile gives none. Only the game's chat lines use it
+public sealed record KnownCharacter(string Name, string Why = "", string Heard = "");
 
 public sealed class CharacterNames
 {
@@ -48,7 +49,8 @@ public sealed class CharacterNames
         foreach (var (key, c) in known)
         {
             var parts = key.Split(':');
-            if (parts.Length != 2 || !uint.TryParse(parts[0], out var ctsid) || !ulong.TryParse(parts[1], out var ctid) || c?.Name is not { } name || !Plain.IsMatch(name)) continue;
+            if (parts.Length != 2 || !uint.TryParse(parts[0], out var ctsid) || !ulong.TryParse(parts[1], out var ctid)) continue;
+            if ((c?.Name is { Length: > 0 } shown ? shown : c?.Heard) is not { } name || !Plain.IsMatch(name)) continue;
             if (++written > 5000) break;
             text.Append($"c {ctsid:x8} {(uint)ctid:x8} {(uint)(ctid >> 32):x8} {name}\n");
         }
@@ -73,6 +75,15 @@ public sealed class CharacterNames
     {
         _known[key] = c;
         Save();
+    }
+
+    public bool Learn(string key, string? name)
+    {
+        if (name is null || !Plain.IsMatch(name)) return false;
+        var known = Get(key);
+        if (known is { Name.Length: > 0 } || known?.Heard == name) return false;
+        Remember(key, known is null ? new KnownCharacter(name) : known with { Heard = name });
+        return true;
     }
 
     public void Refresh()
@@ -115,7 +126,7 @@ public sealed class CharacterNames
             var saved = JsonSerializer.Deserialize<Saved>(File.ReadAllText(path));
             if (saved is not { Version: Version }) return new();
             return saved.Characters.Where(kv => kv.Value is not null)
-                                   .ToDictionary(kv => kv.Key, kv => kv.Value with { Name = kv.Value.Name ?? "", Why = kv.Value.Why ?? "" },
+                                   .ToDictionary(kv => kv.Key, kv => kv.Value with { Name = kv.Value.Name ?? "", Why = kv.Value.Why ?? "", Heard = kv.Value.Heard ?? "" },
                                                  StringComparer.Ordinal);
         }
         catch { return new(); }

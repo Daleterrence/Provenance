@@ -8,7 +8,7 @@ enum { FX_IN, FX_NOTE, FX_BOUNCE, FX_MOVE, FX_FRIEND, FX_PLAYING };
 enum { FX_ICON_NONE, FX_ICON_POL, FX_ICON_AWAY, FX_ICON_FFXI, FX_ICON_INFO };
 enum { FX_CMD_NONE, FX_CMD_M, FX_CMD_RM };
 enum { FX_SENDS = 4, FX_SEND_GAP_MS = 5000, FX_LINE_IN = 150, FX_PLAIN = 0x800, FX_SENT_IDS = 64, FX_COPIES = 4, FX_FRIEND_LINES = 4, FX_FRIEND_RING = 8, FX_FRIEND_BURST = 4 };
-enum { FX_CMD_FR = FX_CMD_RM + 1, FX_WAITING = 16, FX_ANSWER_MS = 30000, FX_NAMES_MAX = 0x40000, FX_STOP_GRACE_MS = 10000,
+enum { FX_CMD_FR = FX_CMD_RM + 1, FX_WAITING = 16, FX_ANSWER_MS = 30000, FX_NAMES_MAX = 0x40000, FX_STOP_GRACE_MS = 10000, FX_NAME_WAIT_MS = 25000,
        FX_ICON_OFF_MS = 30000, FX_ICON_FAULTS = 3, FX_LIST_MAX = 4096, FX_PIECES_MAX = 16 };
 enum { FX_ANS_NONE, FX_ANS_WANTED, FX_ANS_RUNNING };
 enum { FX_REQ_NO, FX_REQ_NEW, FX_REQ_DONE, FX_REQ_KEPT };
@@ -53,7 +53,7 @@ typedef struct {
 
 typedef struct { DWORD seq, time, lo, hi; int slot, used; char name[FX_NAME]; } fx_request;
 typedef struct { char name[100]; DWORD from_lo, from_hi, seq, time, first, gen; int slot, done, req; } fx_seen_rec;
-typedef struct { DWORD lo, hi, ctsid, ct_lo, ct_hi; int slot, on, row, changed, game, game_changed; ULONGLONG stop_at; } fx_presence;
+typedef struct { DWORD lo, hi, ctsid, ct_lo, ct_hi; int slot, on, row, changed, game, game_changed; ULONGLONG stop_at, start_at; } fx_presence;
 
 static struct {
     volatile LONG found, resolved, first_poll, world, off, patched, watching, in_world, dirty, moved, nsent_ids, worker_dead, at_select;
@@ -1212,6 +1212,15 @@ static int fx_known_name(const char *key, char *out, int cap)
     return 0;
 }
 
+/* the app finds a new character's name a few seconds after they start. No file, no app to wait for */
+static int fx_name_coming(const fx_presence *p)
+{
+    char key[40], who[16];
+    if (!g_fx.names[0] || GetFileAttributesA(g_fx.names) == INVALID_FILE_ATTRIBUTES) return 0;
+    wsprintfA(key, "c %08x %08x %08x ", p->ctsid, p->ct_lo, p->ct_hi);
+    return !fx_known_name(key, who, sizeof who);
+}
+
 static void fx_playing_as(const fx_presence *p, char *text, int cap)
 {
     char key[40], who[16], world[16];
@@ -1255,6 +1264,7 @@ static void fx_friend_lines(void)
             p->game_changed = was->game != p->game ||
                               (p->game && (was->ctsid != p->ctsid || was->ct_lo != p->ct_lo || was->ct_hi != p->ct_hi));
             p->stop_at = was->stop_at;
+            p->start_at = was->start_at;
             break;
         }
         changes += p->changed || p->game_changed;
@@ -1266,18 +1276,26 @@ static void fx_friend_lines(void)
     game_lines = !fx_switched_off(g_fx.no_playing_lines);
     for (i = 0; i < n; i++) {
         fx_presence *p = &now[i];
-        int kind = NONE;
+        int kind = NONE, unsaid = p->start_at != 0;
+        if (!p->on || !p->game) p->start_at = 0;
         if (!p->on || p->game) p->stop_at = 0;
         /* straight from offline into the game is the one line. Leaving it waits a moment, they're usually going offline too */
-        if (p->game_changed && p->on && p->game) kind = show && game_lines ? STARTED : NONE;
-        else if (p->game_changed && p->on && !p->changed) p->stop_at = show && game_lines ? tick : 0;
+        if (p->game_changed && p->on && p->game) {
+            p->start_at = show && game_lines && fx_name_coming(p) ? tick : 0;
+            kind = show && game_lines && !p->start_at ? STARTED : NONE;
+        } else if (p->game_changed && p->on && !p->changed) p->stop_at = show && game_lines && !unsaid ? tick : 0;
+        if (!kind && p->start_at && (tick - p->start_at >= FX_NAME_WAIT_MS || !fx_name_coming(p))) {
+            if (live && game_lines) kind = STARTED;
+            else p->start_at = 0;
+        }
         if (!kind && p->stop_at && tick - p->stop_at >= FX_STOP_GRACE_MS) {
             if (live && game_lines) kind = STOPPED;
             else p->stop_at = 0;
         }
-        if (!kind && on_lines && p->changed) kind = PRESENCE;
+        if (!kind && on_lines && p->changed && !p->start_at) kind = PRESENCE;
         if (!kind || !fx_friend_room()) continue;
         if (kind == STOPPED) p->stop_at = 0;
+        if (kind == STARTED) p->start_at = 0;
         fx_clean((const BYTE *)g_ig.written.friends[p->row].name, 16, name, sizeof name);
         if (!name[0]) continue;
         lstrcpyA(text, g_fx_name);
