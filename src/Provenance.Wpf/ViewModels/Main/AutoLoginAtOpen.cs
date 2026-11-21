@@ -7,7 +7,11 @@ namespace Provenance.Wpf.ViewModels.Main;
 
 internal static class AutoLoginAtOpen
 {
-    internal static void TurnOffForShift(ISettingsService settings) => settings.SaveChange(s => s.AutoLogin = false);
+    internal static void TurnOffForShift(ISettingsService settings) => settings.SaveChange(s =>
+    {
+        s.AutoLogin = false;
+        s.MultiStartAtOpen = false;
+    });
 
     internal static bool ShiftAtStart(bool heldAtStart, Func<bool> shiftDown, ISettingsService settings)
     {
@@ -28,6 +32,7 @@ internal static class AutoLoginAtOpen
         try
         {
             var s = settings.Current;
+            if (MultiAccountRules.StartsAtOpen(s, suppressed)) return null;
             var profile = AccountsViewModel.ProfileAtStart(s);
             if (profile is null || !MainViewModel.LoginAtStart(s.AutoLogin, suppressed, AccountsViewModel.SavedDetails(credentials, profile))) return null;
             if (MainViewModel.SetupCardWaits(s.SetupPending, MainViewModel.GameInstalledIn(settings.DetectedRegion), true)) return null;

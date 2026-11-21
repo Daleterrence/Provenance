@@ -29,6 +29,11 @@
                             <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding MultiCloseWhenFinished}"
                                           AutomationProperties.Name="Close Provenance when finished" />
                         </HeaderedContentControl>
+                        <HeaderedContentControl Header="Start all accounts when Provenance opens"
+                                                Tag="Starts the accounts turned on below as soon as Provenance opens, as if you'd pressed Start all accounts. Hold Shift while it opens to turn this off.">
+                            <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding MultiStartAtOpen}"
+                                          AutomationProperties.Name="Start all accounts when Provenance opens" />
+                        </HeaderedContentControl>
                     </StackPanel>
                 </Border>
                 <TextBlock Text="You haven't added any accounts yet. Press ADD ACCOUNT on the main window to add one."

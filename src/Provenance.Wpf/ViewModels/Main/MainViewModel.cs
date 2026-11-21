@@ -549,12 +549,22 @@ public partial class MainViewModel : ObservableObject
 
     internal static bool SetupCardWaits(bool pending, bool gameInstalled, bool hasProfile) => pending && gameInstalled && hasProfile;
 
-    internal bool StartsLean(bool suppressed) => LogsInAtStart(suppressed) && Accounts.SelectedProfile is not null && !ShowSetupCard && Lean.Wanted;
+    private bool StartsAllAtOpen(bool suppressed) => !ShowSetupCard && MultiAccountRules.StartsAtOpen(_settings.Current, suppressed);
+
+    internal bool StartsLean(bool suppressed) =>
+        !StartsAllAtOpen(suppressed) && LogsInAtStart(suppressed) && Accounts.SelectedProfile is not null && !ShowSetupCard && Lean.Wanted;
 
     public void Startup(bool autoLoginSuppressed)
     {
         _pol.Records.EndOrphans();
         _pol.Prestarter.Prestart();
+        if (StartsAllAtOpen(autoLoginSuppressed))
+        {
+            _launch.DropAhead();
+            Log.Information("Starting all accounts automatically");
+            Multi.StartAllAccountsCommand.Execute(null);
+            return;
+        }
         if (!LogsInAtStart(autoLoginSuppressed))
         {
             _launch.DropAhead();

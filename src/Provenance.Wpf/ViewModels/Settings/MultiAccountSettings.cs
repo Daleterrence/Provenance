@@ -36,10 +36,12 @@ public partial class MultiAccountSettings : ObservableObject
 
     [ObservableProperty] private bool _multiContinueOnError;
     [ObservableProperty] private bool _multiCloseWhenFinished;
+    [ObservableProperty] private bool _multiStartAtOpen;
 
     partial void OnMultiContinueOnErrorChanged(bool value) => SaveUnlessLoading(s => s.MultiContinueOnError = value);
     partial void OnMultiCloseWhenFinishedChanged(bool value) =>
         SaveUnlessLoading(s => s.MultiCloseWhenFinished = value);
+    partial void OnMultiStartAtOpenChanged(bool value) => SaveUnlessLoading(s => s.MultiStartAtOpen = value);
     private void SaveUnlessLoading(Action<LauncherSettings> change) { if (!_loadingMulti) _settings.SaveChange(change); }
 
     public void RunChanged()
@@ -60,6 +62,7 @@ public partial class MultiAccountSettings : ObservableObject
         RememberMulti(s.MultiAccounts);
         MultiContinueOnError = s.MultiContinueOnError;
         MultiCloseWhenFinished = s.MultiCloseWhenFinished;
+        MultiStartAtOpen = s.MultiStartAtOpen;
         var byId = s.Profiles.ToDictionary(p => p.Id);
         var ids = s.MultiAccounts.Select(e => e.ProfileId).Where(byId.ContainsKey).Distinct()
                    .Concat(s.Profiles.Select(p => p.Id)).Distinct().ToList();

@@ -66,6 +66,8 @@ public sealed class LauncherSettings
 
     public bool MultiCloseWhenFinished { get; set; } = true;
 
+    public bool MultiStartAtOpen { get; set; }
+
     // SE's patches can put a plain pol.exe back, so the bit goes on again before every start
     public bool LargeAddressAware { get; set; } = true;
 

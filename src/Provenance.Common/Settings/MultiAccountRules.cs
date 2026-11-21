@@ -14,6 +14,10 @@ public static class MultiAccountRules
                      .ToList();
     }
 
+    public static bool StartsAtOpen(LauncherSettings s, bool suppressed) =>
+        s.MultiStartAtOpen && !suppressed && s.ThirdPartyHookPlatform is ThirdPartyHook.Windower or ThirdPartyHook.Ashita
+        && RunEntries(s.MultiAccounts, s.Profiles.Select(p => p.Id)).Count > 0;
+
     public static readonly TimeSpan GameUpLimit = TimeSpan.FromSeconds(15);
 
     // a Windower profile's game settings go in the one registry key every game reads as it starts, so the next
