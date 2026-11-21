@@ -474,7 +474,11 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     internal void StopKeeping(string profileId)
     {
-        if (_login.Chat?.ProfileId == profileId) _login.Chat.Discard();
+        if (_login.Chat?.ProfileId == profileId)
+        {
+            _login.Chat.Discard();
+            _login.Remembered?.Discard();
+        }
         GroupChat.DiscardLog(profileId);
     }
 

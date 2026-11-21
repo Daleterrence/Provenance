@@ -7,7 +7,7 @@ namespace Provenance.Wpf.ViewModels.Main;
 
 internal static partial class AccountMessages
 {
-    [GeneratedRegex(@"^(dat|journal\.dat|deleted\.dat|groups\.dat)(\.\d{14}\.unreadable|\.[0-9a-f]{32}\.tmp)?$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^(dat|journal\.dat|deleted\.dat|answered\.dat|groups\.dat)(\.\d{14}\.unreadable|\.[0-9a-f]{32}\.tmp)?$", RegexOptions.IgnoreCase)]
     private static partial Regex Kept();
 
     internal static string? Folder => AppPaths.UserData is { } userData ? Path.Combine(userData, "messages") : null;

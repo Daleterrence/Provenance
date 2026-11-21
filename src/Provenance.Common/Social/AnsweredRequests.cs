@@ -11,6 +11,7 @@ public sealed class AnsweredRequests
 
     private readonly EncryptedJsonFile<Dictionary<string, long>>? _file;
     private readonly Dictionary<string, long> _seen = new(StringComparer.Ordinal);
+    private bool _closed;
 
     public AnsweredRequests(string profileId, string? root, DateTime now)
     {
@@ -27,6 +28,8 @@ public sealed class AnsweredRequests
 
     public int Count => _seen.Count;
 
+    public void Discard() => _closed = true;
+
     public static string Identity(PolMessage m) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{m.FromKey}|{m.FromSlot}|{m.Seq}|{m.Time}|{m.ToKey}")))[..32];
 
@@ -36,7 +39,7 @@ public sealed class AnsweredRequests
     {
         if (m.FromKey.Length == 0) return;
         _seen[Identity(m)] = new DateTimeOffset(now, TimeSpan.Zero).ToUnixTimeSeconds();
-        if (!ReadLate()) return;
+        if (_closed || !ReadLate()) return;
         Prune(now);
         _file?.Save(_seen);
     }
