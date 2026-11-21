@@ -1,9 +1,10 @@
-enum { LB_NAME = 16, LB_ENTRIES = 16, LB_STRIDE = 0xb0, LB_PICK_MS = 10000, LB_LIST_MS = 5000 };
+enum { LB_NAME = 16, LB_ENTRIES = 16, LB_STRIDE = 0xb0, LB_PICK_MS = 10000, LB_LIST_MS = 5000, LB_SETTLE_MS = 500, LB_REPICK_MS = 500,
+       LB_PICK_TRIES = 4 };
 enum { LB_NONE, LB_LICENCE, LB_LOBBY, LB_LIST, LB_CONFIRM };
 enum { LB_PICKING, LB_AWAIT_CONFIRM, LB_FINISHED };
 
 static struct {
-    int licence, picking, stage, answered, tried;
+    int licence, picking, stage, answered, tried, picks;
     int licence_off, picking_off;
     char name[LB_NAME], world[LB_NAME];
     ULONGLONG started_at, next_look, picked_at, list_at;
@@ -159,6 +160,7 @@ static int lb_pick(ULONGLONG now)
     }
     if (!g_lb.list_at) g_lb.list_at = now;
     if (!used && now - g_lb.list_at < LB_LIST_MS) return 0;
+    if (now - g_lb.list_at < LB_SETTLE_MS) return 0;
     if (hits == 1 && lb_entry_usable(m + 0x34 + LB_STRIDE * at)) {
         *(int *)pc_addr_of(g_fx.base, AT_FX_CHAR_INDEX) = at;
         *(int *)(m + 0x14) = at;
@@ -166,7 +168,7 @@ static int lb_pick(ULONGLONG now)
         *(int *)(m + 0x1c) = 1;
         g_lb.stage = LB_AWAIT_CONFIRM;
         g_lb.picked_at = now;
-        base_log("lobby: picked a character in the list\r\n");
+        base_log(g_lb.picks++ ? "lobby: the game cleared that, picked the character again\r\n" : "lobby: picked a character in the list\r\n");
         return 1;
     }
     g_lb.stage = LB_FINISHED;
@@ -174,6 +176,14 @@ static int lb_pick(ULONGLONG now)
              : hits ? "lobby: that character can't be logged in to, the pick's left to the player\r\n"
                     : "lobby: that character isn't in the list, the pick's left to the player\r\n");
     return 1;
+}
+
+/* the game zeroes the list's answer once the list has faded in, so one written before that never counted */
+static int lb_pick_lost(ULONGLONG now)
+{
+    BYTE *m = lb_menu(AT_FX_CHAR_LIST_MENU);
+    return g_lb.stage == LB_AWAIT_CONFIRM && g_lb.answered == LB_LIST && g_lb.picks < LB_PICK_TRIES &&
+           now - g_lb.picked_at >= LB_REPICK_MS && m && !*(int *)(m + 0x1c);
 }
 
 static void lb_finish(const char *why)
@@ -248,6 +258,10 @@ static void lb_step(void)
     if (lb_picking_on() && g_lb.stage == LB_AWAIT_CONFIRM && now - g_lb.picked_at > LB_PICK_MS) lb_finish("no confirm box came");
     if (!lb_licence_on() && !lb_picking_on()) return;
     kind = fx_menu_name(name) ? lb_kind(name) : LB_NONE;
+    if (kind == LB_LIST && lb_picking_on() && lb_pick_lost(now)) {
+        g_lb.stage = LB_PICKING;
+        g_lb.answered = LB_NONE;
+    }
     if (kind == g_lb.answered && kind != LB_NONE) return;
     g_lb.answered = LB_NONE;
     if (kind != LB_LIST) g_lb.list_at = 0;
