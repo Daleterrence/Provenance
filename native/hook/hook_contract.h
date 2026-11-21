@@ -86,6 +86,8 @@
 #define IPC_PID_FILE "provenance.%s.pid"
 #define IPC_QUIET "provenance.quiet"
 #define IPC_NO_FRIEND_LINES "provenance.nofriendlines"
+#define IPC_NO_PLAYING_LINES "provenance.noplayinglines"
+#define IPC_CHARACTERS "provenance.characters"
 #define IPC_PLAY_EVENT "provenance_play.%u"
 
 #define LOG_FIRST_LINE "pol_hook: highest user address"

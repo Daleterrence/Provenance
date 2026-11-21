@@ -26,6 +26,11 @@
 #define SIG_FX_CHAR_INDEX "a1 ?? ?? ?? ?? 8d 0c 80 8d 14 48 a1 ?? ?? ?? ?? c1 e2 04 8d 4c 02 44"
 #define SIG_FX_OK_BOX "56 e8 ?? ?? ?? ?? 8b 35 ?? ?? ?? ?? 8b 46 14 c6 86 58 02 00 00 00 85 c0 75 1e 6a 00 8d 8e 4c 02 00 00 " \
     "c7 86 5c 02 00 00 00 00 00 00"
+#define SIG_FX_ICON_WIDTH "81 fe 15 21 00 00 72 ?? 81 fe 43 21 00 00 77 ?? a1 ?? ?? ?? ?? 85 c0 75 ?? 68 ?? ?? ?? ?? b9 ?? ?? ?? ?? " \
+    "e8 ?? ?? ?? ?? a3 ?? ?? ?? ?? 8b 00 8b 8c b0 ac 7b ff ff 5e 0f bf 41 22 0f bf 49 20 2b c1"
+#define SIG_FX_ICON_BIND "83 ec 14 53 56 8b f1 57 8d 7e 32 57 e8 ?? ?? ?? ?? 83 c4 04 8d 4c 24 10 57 e8 ?? ?? ?? ?? 8b 0d ?? ?? ?? ?? " \
+    "8d 44 24 10 50 e8 ?? ?? ?? ?? 33 db 89 46 4c 3b c3 75 09 5f 5e 32 c0 5b 83 c4 14 c3 0f bf 7e 0c 33 c9 33 d2 " \
+    "66 8b 48 24 66 8b 50 26 8a 46 1c"
 #define SIG_FX_DECLINE "8b 0d ?? ?? ?? ?? 85 c9 75 06 b8 02 00 00 00 c3 8b 44 24 20 8b 54 24 1c 50 8b 44 24 1c 52 8b 54 24 1c " \
     "6a 00 6a 00 50 52 6a 0a 6a 00 8d 44 24 24 6a 00 50 e8 ?? ?? ?? ?? c3"
 #define SIG_FX_ACCEPT "8b 0d ?? ?? ?? ?? 85 c9 75 06 b8 02 00 00 00 c3 8b 44 24 24 8b 54 24 20 50 8b 44 24 20 52 8b 54 24 20 " \
@@ -208,6 +213,10 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .usual = 0x6365ac, .sig_at = 0x243e8d, .operand = 1, .sig = SIG_FX_CHAR_INDEX },
     [AT_FX_OK_MENU] = { .name = "OK box", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
         .usual = 0x636518, .sig_at = 0x23e0b0, .operand = 8, .sig = SIG_FX_OK_BOX },
+    [AT_FX_ICON_SHEETS] = { .name = "icon sheets", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x4e1c38, .sig_at = 0x11cf18, .operand = 31, .sig = SIG_FX_ICON_WIDTH },
+    [AT_FX_ICON_BIND] = { .name = "icon bind", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0x11e6e0, .sig_at = 0x11e6e0, .operand = ADDR_MATCH, .sig = SIG_FX_ICON_BIND },
     [AT_FX_FRIEND_DECLINE] = { .name = "friend request decline", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
         .usual = 0xf72c0, .sig_at = 0xf72c0, .operand = ADDR_MATCH, .sig = SIG_FX_DECLINE },
     [AT_FX_FRIEND_ACCEPT] = { .name = "friend request accept", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
