@@ -95,7 +95,7 @@ public sealed partial class PolSession : IDisposable
         if (Volatile.Read(ref _played))
             throw Shown.Mark(new InvalidOperationException("Provenance is still finishing your last game. Close Provenance and open it again, then log in."));
         LastRefusalReason = null;
-        var launch = request with { Options = ForLaunch(request.Options) };
+        var launch = request with { Options = ForLaunch(request.Options, request.ProfileId) };
         int rc = LoginCodes.LauncherFailed;
         try
         {
@@ -105,12 +105,12 @@ public sealed partial class PolSession : IDisposable
         finally { if (rc != 0) Records.ReleaseClaim(); }
     }
 
-    internal SessionOptions ForLaunch(SessionOptions? options) =>
-        (options ?? new SessionOptions(false, null)) with
+    internal SessionOptions ForLaunch(SessionOptions? options, string? profileId = null) =>
+        AutoLogin.Apply((options ?? new SessionOptions(false, null)) with
         {
             WindowerLists = WindowerLauncher.Snapshot(_settings.Current.WindowerAddonLists),
             WindowerShared = _settings.Current.WindowerSharedExtras?.Copy(),
-        };
+        }, _settings.Current.Profiles.FirstOrDefault(a => a.Id == profileId), _settings.Current);
 
     private int ConnectCore(LoginRequest request, CancellationToken ct)
     {
@@ -299,7 +299,7 @@ public sealed partial class PolSession : IDisposable
         if (platform == ThirdPartyHook.Ashita)
         {
             return AshitaLauncher.StartViaAshita(_settings, _watcher, psi, polExe, launchId, options.ThirdPartyHookProfile,
-                                                 progress, ct, hookStarted: HookTracker.Track);
+                                                 progress, ct, hookStarted: HookTracker.Track, leaveOut: options.AshitaLeaveOut);
         }
         if (platform == ThirdPartyHook.Windower)
             return Windower.Start(psi, polExe, launchId, options, progress, ct, answers);

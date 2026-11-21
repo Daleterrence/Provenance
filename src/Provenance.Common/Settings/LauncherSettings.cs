@@ -70,6 +70,8 @@ public sealed class LauncherSettings
 
     public bool MultiStartAtOpen { get; set; }
 
+    public bool AcceptLicenceAgreement { get; set; } = true;
+
     // SE's patches can put a plain pol.exe back, so the bit goes on again before every start
     public bool LargeAddressAware { get; set; } = true;
 

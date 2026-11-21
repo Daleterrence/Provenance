@@ -35,7 +35,7 @@ internal sealed class WindowerStart
         WindowerLauncher windower;
         try
         {
-            var setup = _setup(polExe, options.ThirdPartyHookProfile, options.WindowerLists, options.WindowerShared);
+            var setup = _setup(polExe, options.ThirdPartyHookProfile, options.WindowerLists, options.WindowerShared) with { LeaveOut = options.WindowerLeaveOut };
             windower = WindowerLauncher.Prepare(answers?.Value is { } known ? setup with { KnownUpdate = known } : setup, progress, ct);
             if (answers is not null) answers.Value ??= windower.UpdateAnswer;
             Volatile.Write(ref _update, windower.Background);

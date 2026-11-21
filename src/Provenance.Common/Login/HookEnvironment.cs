@@ -49,6 +49,17 @@ internal static class HookEnvironment
         if (HomeSlots.Valid(options.HomeSlot))
             env[HookContract.Env.Home] = options.HomeSlot.ToString(System.Globalization.CultureInfo.InvariantCulture);
         SetHandle(env, options.HandleKey);
+        SetAutoLogin(env, options);
+    }
+
+    internal static void SetAutoLogin(IDictionary<string, string?> env, SessionOptions options)
+    {
+        if (options.AcceptLicence) env[HookContract.Env.AcceptLicence] = "1";
+        if (AutoLogin.IsName(options.Character))
+        {
+            env[HookContract.Env.Character] = options.Character;
+            if (AutoLogin.IsWorld(options.CharacterWorld)) env[HookContract.Env.CharacterWorld] = options.CharacterWorld;
+        }
     }
 
     internal static void SetHandle(IDictionary<string, string?> env, string? key)

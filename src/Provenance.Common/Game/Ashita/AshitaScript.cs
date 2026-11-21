@@ -67,14 +67,14 @@ public sealed partial class AshitaScript
 
     public void Save() => Save(FilePath ?? throw new InvalidOperationException("This script has no file to save to."));
 
-    public void Save(string path)
+    public void Save(string path, bool backup = true)
     {
         var full = Path.GetFullPath(path);
         var dir = Path.GetDirectoryName(full)!;
         try
         {
             SafeWrite.Replace(full, ToBytes(), Top(dir), refuse: FoldersTo(full),
-                              backup: real => File.Exists(real + ".bak") ? SafeWrite.Backup.None : SafeWrite.Backup.Keep);
+                              backup: backup ? real => File.Exists(real + ".bak") ? SafeWrite.Backup.None : SafeWrite.Backup.Keep : null);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -157,6 +157,8 @@ public sealed partial class AshitaScript
         }
         throw Shown.Mark(new IOException($"Provenance couldn't find a free script name for {bootName}."));
     }
+
+    public static string LaunchCopyName(string? bootName) => "provenance." + SafeStem(bootName ?? "") + ".txt";
 
     private static string BootStem(string boot)
     {

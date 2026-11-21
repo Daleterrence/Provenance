@@ -28,7 +28,8 @@ public sealed partial class PolSession
 
         internal bool Matches(string? otherProfile, ThirdPartyHook otherPlatform, SessionOptions other) =>
             profileId == otherProfile && platform == otherPlatform && Request.Options.ThirdPartyHookProfile == other.ThirdPartyHookProfile
-            && SameLists(Request.Options.WindowerLists, other.WindowerLists) && SameList(Request.Options.WindowerShared, other.WindowerShared);
+            && SameLists(Request.Options.WindowerLists, other.WindowerLists) && SameList(Request.Options.WindowerShared, other.WindowerShared)
+            && Request.Options.TakesOver == other.TakesOver;
 
         internal void Clear(Task result)
         {
@@ -68,7 +69,7 @@ public sealed partial class PolSession
     public void StartAhead(string? profileId, SessionOptions? options)
     {
         if (Volatile.Read(ref _played) || Pid is not null) return;
-        var launch = ForLaunch(options);
+        var launch = ForLaunch(options, profileId);
         var platform = Platform;
         AheadLogin? replaced = null;
         lock (_aheadGate)

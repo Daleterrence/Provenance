@@ -1,0 +1,44 @@
+<UserControl x:Class="Provenance.Wpf.Views.Settings.AutoLoginPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:behaviours="clr-namespace:Provenance.Wpf.Controls.Behaviours">
+    <ScrollViewer VerticalScrollBarVisibility="Visible">
+        <StackPanel Margin="28,22">
+            <TextBlock Text="Auto-login" Style="{StaticResource Section}" />
+            <TextBlock Style="{StaticResource IntroText}" Margin="0,0,0,14"
+                       Text="Choose a character for each account and Provenance logs in to it once the game starts." />
+            <Border Style="{StaticResource Card}">
+                <HeaderedContentControl Header="Accept the licence agreement"
+                                        Tag="Accepts the licence agreement window when the game shows it, for every account.">
+                    <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding AcceptLicence}"
+                                  AutomationProperties.Name="Accept the licence agreement" />
+                </HeaderedContentControl>
+            </Border>
+            <TextBlock Text="Characters" Style="{StaticResource Section}" />
+            <TextBlock Text="You haven't added any accounts yet. Press ADD ACCOUNT on the main window to add one."
+                       Style="{StaticResource ShowWhenZero}" behaviours:State.Count="{Binding Rows.Count}" />
+            <ItemsControl ItemsSource="{Binding Rows}" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,8" Padding="12,8" CornerRadius="{StaticResource Radius.Panel}" Background="{DynamicResource Surface.1}"
+                                BorderBrush="{DynamicResource Border.Hair}" BorderThickness="1">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" FontSize="14" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="Its characters appear here after it has logged in once." FontSize="11" TextWrapping="Wrap"
+                                               Style="{StaticResource Help}"
+                                               Visibility="{Binding HasCharacters, Converter={StaticResource InvertBoolToVis}}" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Width="220" Margin="0" Padding="10,6" ItemsSource="{Binding Choices}"
+                                          SelectedIndex="{Binding Index}" IsEnabled="{Binding HasCharacters}"
+                                          AutomationProperties.Name="{Binding DropdownName}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Style="{StaticResource Help}" Margin="0,6,0,0" TextWrapping="Wrap"
+                       Text="Windower's autoenterkey addon and Ashita's autologin addon are left out whenever Auto-login is doing their job." />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

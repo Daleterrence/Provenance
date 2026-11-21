@@ -49,7 +49,8 @@ public sealed class WindowerAddonList
     }
 
     public static WindowerLaunchLists ForLaunch(string windowerDir, WindowerProfile profile, WindowerAddonList effective,
-                                                IReadOnlyList<WindowerPluginInfo>? plugins = null, IReadOnlyList<WindowerAddonInfo>? addons = null)
+                                                IReadOnlyList<WindowerPluginInfo>? plugins = null, IReadOnlyList<WindowerAddonInfo>? addons = null,
+                                                IReadOnlyCollection<string>? leaveOut = null)
     {
         plugins ??= WindowerPlugins.Scan(windowerDir);
         var skipped = new List<string>();
@@ -70,7 +71,8 @@ public sealed class WindowerAddonList
         addons ??= WindowerAddons.Scan(windowerDir);
         var sendAddons = new List<string>();
         foreach (var n in wantedAddons)
-            if (addons.FirstOrDefault(a => a.Listing.Key.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Listing.Key);
+            if (leaveOut?.Contains(n, StringComparer.OrdinalIgnoreCase) == true) skipped.Add($"{n} (Auto-login is on)");
+            else if (addons.FirstOrDefault(a => a.Listing.Key.Equals(n, StringComparison.OrdinalIgnoreCase)) is { } a) sendAddons.Add(a.Listing.Key);
             else skipped.Add($"{n} (addon not installed)");
 
         var loads = ScriptLoads.Read(windowerDir, profile.InitCommand);

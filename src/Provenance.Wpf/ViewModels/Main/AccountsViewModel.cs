@@ -129,6 +129,7 @@ public partial class AccountsViewModel : ObservableObject
 
     internal void LearnIdentity(string? profileId, PolSocialSnapshot snap)
     {
+        LearnCharacters(profileId, snap);
         if (string.IsNullOrWhiteSpace(snap.MyHandle) || profileId is null) return;
         if (Profiles.FirstOrDefault(p => p.Id == profileId) is not { } prof) return;
         var key = snap.Handles.FirstOrDefault(h => h.Active)?.Key;

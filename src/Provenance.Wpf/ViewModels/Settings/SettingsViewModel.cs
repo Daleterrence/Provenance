@@ -51,6 +51,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         Windower = new WindowerCard(Hooks, settings, dialogs, windowerUpdater);
         Ashita = new AshitaCard(Hooks);
         Multi = new MultiAccountSettings(Hooks, settings, _context);
+        CharacterLogin = new AutoLoginSettings(settings);
         Hooks.Saved += SyncGame;
         Hooks.ProfileEdited += RetargetGameAfterEdit;
         Ashita.Renamed += AshitaRenamed;
@@ -113,6 +114,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     public WindowerCard Windower { get; }
     public AshitaCard Ashita { get; }
     public MultiAccountSettings Multi { get; }
+    public AutoLoginSettings CharacterLogin { get; }
     public GameSettingsViewModel Game { get; }
     public AddonsPluginsViewModel Addons { get; }
     public BackupSettings Backups { get; }
@@ -334,6 +336,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         if (tab == SettingsTab.Game && !ShowingGame()) PickGameProfile();
         Refresh(tab);
         if (tab == SettingsTab.WindowerAshita) Hooks.ReloadCards();
+        if (tab == SettingsTab.AutoLogin) CharacterLogin.Load();
     }
 
     public void WindowActivated() => Refresh(ShownTab);

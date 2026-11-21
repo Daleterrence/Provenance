@@ -13,6 +13,7 @@ public sealed record WindowerLaunchSetup
     public string? FfxiDir { get; init; }
     public IReadOnlyDictionary<string, WindowerAddonList>? Lists { get; init; }
     public WindowerAddonList? SharedExtras { get; init; }
+    public IReadOnlyList<string> LeaveOut { get; init; } = [];
     public RegistryKey? RegistryRoot { get; init; }
     public Func<string, string, WindowerUpdater>? NewUpdater { get; init; }
     public TimeSpan UpdateLimit { get; init; } = WindowerLauncher.UpdateLimit;

@@ -1,4 +1,5 @@
 using Provenance.Common.IO;
+using Serilog;
 using Provenance.Common.PolFormat;
 using Provenance.Common.Security;
 using Provenance.Common.Win32;
@@ -237,7 +238,7 @@ public static class AshitaBootFiles
 
         """.ReplaceLineEndings("\r\n");
 
-    public static string WriteLaunchCopy(string ashitaDir, string? source, string polExe, int playOnline)
+    public static string WriteLaunchCopy(string ashitaDir, string? source, string polExe, int playOnline, IReadOnlyList<string>? leaveOut = null)
     {
         if (source is { Length: > 0 } && !FileNames.IsPlainFileName(source))
             throw new ArgumentException("The boot configuration has to be a file in Ashita's config\\boot folder.", nameof(source));
@@ -270,6 +271,7 @@ public static class AshitaBootFiles
             ini.Scrub("ashita.polplugins.args", plugin);
         }
         using var pins = Hold(ashitaDir);
+        if (leaveOut is { Count: > 0 }) LeaveOutAddons(ashitaDir, ini, source, leaveOut);
         ini.Save(target, backup: false);
 
         if (!ReadsRight(target, polExe))
@@ -279,6 +281,34 @@ public static class AshitaBootFiles
                 $"Provenance couldn't make a copy of {source ?? "its boot configuration"} that Ashita reads the way it should, so it won't start Ashita with it. Check the file for odd line breaks or characters."));
         }
         return target;
+    }
+
+    // the player's script stays as it is, the launch copy runs a copy of it with those loads commented out
+    private static void LeaveOutAddons(string ashitaDir, AshitaIniFile ini, string? bootName, IReadOnlyList<string> names)
+    {
+        try
+        {
+            var name = ini.Get("ashita.boot", "script");
+            if (string.IsNullOrWhiteSpace(name) || AshitaScript.Open(ashitaDir, name) is not { } script) return;
+            foreach (var addon in names)
+                switch (script.Addon(addon))
+                {
+                    case AshitaLoad.On:
+                        script.SetAddon(addon, false);
+                        break;
+                    case AshitaLoad.ByScript:
+                        Log.Warning("Ashita's {Addon} is loaded by a script Provenance can't change, so it still loads", addon);
+                        break;
+                }
+            if (!script.Changed) return;
+            var copy = AshitaScript.LaunchCopyName(bootName);
+            script.Save(AshitaScript.PathFor(ashitaDir, copy)!, backup: false);
+            ini.Set("ashita.boot", "script", copy);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(e, "Could not keep Ashita's addon from loading, the boot configuration's own script runs");
+        }
     }
 
     // read back by Windows itself, the way Ashita-cli and Ashita.dll will, in case a line fooled the editor

@@ -20,11 +20,11 @@ public static class AshitaLauncher
     internal static int? StartViaAshita(ISettingsService settings, Watcher watcher, ProcessStartInfo launchPsi,
                                         string polExe, string launchId, string? profile, IProgress<LaunchProgress>? progress,
                                         CancellationToken ct, Action<ProcessStamp>? hookStarted = null, Action? polStarted = null,
-                                        LaunchLimits? limits = null)
+                                        LaunchLimits? limits = null, IReadOnlyList<string>? leaveOut = null)
     {
         var (outcome, started, text) = watcher.Retrying(
             () => Attempt(settings, watcher, launchPsi, polExe, launchId, profile, progress, ct,
-                          hookStarted, polStarted, limits ?? LaunchLimits.Default),
+                          hookStarted, polStarted, limits ?? LaunchLimits.Default, leaveOut),
             progress, ct, checkLog: false);
         switch (outcome)
         {
@@ -41,7 +41,8 @@ public static class AshitaLauncher
 
     private static (Watcher.LaunchOutcome Outcome, (int Pid, bool Closed) Value, string Failure) Attempt(
         ISettingsService settings, Watcher watcher, ProcessStartInfo launchPsi, string polExe, string launchId, string? profile,
-        IProgress<LaunchProgress>? progress, CancellationToken ct, Action<ProcessStamp>? hookStarted, Action? polStarted, LaunchLimits limit)
+        IProgress<LaunchProgress>? progress, CancellationToken ct, Action<ProcessStamp>? hookStarted, Action? polStarted, LaunchLimits limit,
+        IReadOnlyList<string>? leaveOut)
     {
         const string name = "Ashita";
         (Watcher.LaunchOutcome, (int, bool), string) Fail(string text) => (Watcher.LaunchOutcome.Failed, default, text);
@@ -55,7 +56,7 @@ public static class AshitaLauncher
             return Fail(target.FromAccount ? AccountBootFileProblem
                 : "The Ashita boot configuration has to be a file in Ashita's config\\boot folder. Choose it again in Settings, under Windower/Ashita.");
         string bootFile;
-        try { bootFile = Path.GetFileName(AshitaInstall.WriteBoot(dir, boot, polExe)); }
+        try { bootFile = Path.GetFileName(AshitaInstall.WriteBoot(dir, boot, polExe, leaveOut)); }
         catch (Exception ex)
         {
             Log.Error(ex, "Could not write the Ashita boot configuration");

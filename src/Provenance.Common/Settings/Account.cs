@@ -25,4 +25,12 @@ public sealed class Account
     public int HomeSlot { get; set; }
 
     public string OtpAccount { get; set; } = "";
+
+    public List<AccountCharacter> Characters { get; set; } = [];
+
+    public string? AutoLoginCharacter { get; set; }
+
+    public string? AutoLoginWorld { get; set; }
 }
+
+public sealed record AccountCharacter(string Name, string? World);

@@ -44,6 +44,6 @@ public static class AshitaInstall
         return null;
     }
 
-    public static string WriteBoot(string ashitaDir, string? sourceName, string polExe) =>
-        AshitaBootFiles.WriteLaunchCopy(ashitaDir, sourceName, polExe, AshitaBootFiles.LanguageCodeFor(polExe));
+    public static string WriteBoot(string ashitaDir, string? sourceName, string polExe, IReadOnlyList<string>? leaveOut = null) =>
+        AshitaBootFiles.WriteLaunchCopy(ashitaDir, sourceName, polExe, AshitaBootFiles.LanguageCodeFor(polExe), leaveOut);
 }

@@ -22,6 +22,7 @@ public static class SettingsPages
         new SettingsPage(SettingsTab.AddonsPlugins, "Game", "Addons and plugins", new MaterialIcon("PowerPlugOutline"), vm => new AddonsPluginsView { DataContext = vm.Addons }),
         new SettingsPage(SettingsTab.Backups, "Game", "Backups", new MaterialIcon("BackupRestore"), vm => new BackupsPage { DataContext = vm.Backups }),
         new SettingsPage(SettingsTab.MultiAccount, "Accounts", "Multi-account", new GlyphIcon("accounts"), vm => new MultiAccountPage { DataContext = vm.Multi }),
+        new SettingsPage(SettingsTab.AutoLogin, "Accounts", "Auto-login", new MaterialIcon("Login"), vm => new AutoLoginPage { DataContext = vm.CharacterLogin }),
         new SettingsPage(SettingsTab.Handles, "Accounts", "Handles", new GlyphIcon("person"), vm => new HandlesPage { DataContext = vm.Handles }),
     ];
 }

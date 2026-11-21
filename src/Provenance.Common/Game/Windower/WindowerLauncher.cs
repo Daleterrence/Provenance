@@ -327,7 +327,7 @@ public sealed class WindowerLauncher : IDisposable
         var ffxi = _setup.FfxiDir
                    ?? throw Shown.Mark(new DirectoryNotFoundException("Provenance couldn't find the FINAL FANTASY XI folder, so it can't start the game through Windower."));
         var scan = WindowerLaunchScan.Run(dir, Profile, WindowerAddonList.Effective(file, _setup.Lists, Profile.Name, _setup.SharedExtras),
-                                          _setup.ScanCache ?? WindowerScanCaches.For(dir));
+                                          _setup.ScanCache ?? WindowerScanCaches.For(dir), _setup.LeaveOut);
         Lists = scan.Lists;
         var sent = Profile.Clone();
         // fast login swaps in Windower's own POL proxy and the other two patch pol.exe, all of which fight the hook

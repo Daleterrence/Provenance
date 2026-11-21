@@ -58,7 +58,8 @@ public sealed partial class PolSession
             bool ashita = owner.Platform == ThirdPartyHook.Ashita;
             EarlyStart.Chain chain = owner.EarlyChain ?? (ashita
                 ? (progress, token, hookStarted) => AshitaLauncher.StartViaAshita(owner._settings, owner._watcher, psi, polExe, launchId,
-                                                                                  options.ThirdPartyHookProfile, progress, token, hookStarted)
+                                                                                  options.ThirdPartyHookProfile, progress, token, hookStarted,
+                                                                                  leaveOut: options.AshitaLeaveOut)
                 : (progress, token, _) => owner.Windower.Start(psi, polExe, launchId, options, progress, token, _answers));
             Action<ProcessStamp> record = ahead ? owner.Records.Park : stamp => owner.Records.Save(stamp, request.ProfileId);
             _current = new EarlyStart(chain, _voice, owner._pol, record, owner.Records.Clear,
