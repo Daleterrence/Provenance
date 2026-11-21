@@ -1,5 +1,5 @@
 enum {
-    FX_LOOK_AFTER_MS = 20000, FX_RETRY_MS = 30000, FX_TRIES = 5,
+    FX_LOOK_AFTER_MS = 20000, FX_RETRY_MS = 30000, FX_TRIES = 5, FX_LOBBY_LOOK_MS = 3000, FX_LOBBY_RETRY_MS = 5000,
     FX_RING = 16, FX_NAME = 48, FX_TEXT = 640, FX_SEEN = 1024, FX_GIVE_UP_MS = 30000, FX_MOVE_AFTER_MS = 3000,
     FX_MOVE_RETRY_MS = 2000, FX_MOVE_TRIES = 5, FX_SCAN_MS = 5000, FX_PRINTS = 3, FX_WORLD_MS = 5000,
 };
@@ -1347,6 +1347,8 @@ static int fx_wait(HANDLE wake, DWORD ms)
     return 1;
 }
 
+static int lb_wanted(void);
+
 static void fx_worker(BYTE *b)
 {
     ULONGLONG now = GetTickCount64();
@@ -1361,10 +1363,11 @@ static void fx_worker(BYTE *b)
                 g_fx.world = 2;
                 g_fx.next_look = 0;
             }
-            if (!g_fx.world && now - g_fx.polled_at < FX_LOOK_AFTER_MS) return;
+            /* the licence window is up within seconds, so a game the lobby has work in is looked at sooner */
+            if (!g_fx.world && now - g_fx.polled_at < (ULONGLONG)(lb_wanted() ? FX_LOBBY_LOOK_MS : FX_LOOK_AFTER_MS)) return;
             if (now < g_fx.next_look) return;
             g_fx.tries++;
-            g_fx.next_look = now + FX_RETRY_MS;
+            g_fx.next_look = now + (lb_wanted() && g_fx.tries <= 2 ? FX_LOBBY_RETRY_MS : FX_RETRY_MS);
             fx_look();
             return;
         }

@@ -79,6 +79,7 @@
 #define IPC_MYPROFILE "myprofile.json"
 #define IPC_ENDED "ended"
 #define IPC_GO "go"
+#define IPC_LOBBY "lobby"
 #define IPC_STOP "stop"
 #define IPC_TAKING ".taking"
 #define IPC_NAME "pol_hook.%u.%s"

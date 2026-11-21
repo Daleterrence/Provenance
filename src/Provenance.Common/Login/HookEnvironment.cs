@@ -62,6 +62,15 @@ internal static class HookEnvironment
         }
     }
 
+    // every key's in it, empty when it isn't asked for, so the hook drops what the login said
+    internal static string LobbyFile(SessionOptions options)
+    {
+        var env = new Dictionary<string, string?>();
+        SetAutoLogin(env, options);
+        return string.Join("\n", new[] { HookContract.Env.AcceptLicence, HookContract.Env.Character, HookContract.Env.CharacterWorld }
+            .Select(k => $"{k}={env.GetValueOrDefault(k)}"));
+    }
+
     internal static void SetHandle(IDictionary<string, string?> env, string? key)
     {
         if (key is { Length: 11 } && key.All(char.IsAsciiHexDigit)) env[HookContract.Env.Handle] = key;

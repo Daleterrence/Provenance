@@ -21,13 +21,38 @@ static int lb_name_ok(const char *s)
     return 1;
 }
 
-/* at Play: what's asked for, from the login's environment. 1 when the callback has to be there for it */
+/* written as Play's pressed, so a character picked after the login still counts. An empty value switches one off */
+static void lb_play_file(void)
+{
+    static const char *allowed[] = { ENV_ACCEPT_LICENCE, ENV_CHARACTER, ENV_CHARACTER_WORLD };
+    char path[MAX_PATH + 64], buf[512], *p, *line, *eq;
+    DWORD got = 0;
+    HANDLE f;
+    int k;
+    base_ipc_file(path, IPC_LOBBY);
+    f = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return;
+    ReadFile(f, buf, sizeof buf - 1, &got, NULL);
+    CloseHandle(f);
+    DeleteFileA(path);
+    buf[got] = 0;
+    for (p = buf; *p; ) {
+        line = requests_line(&p);
+        if (!(eq = strchr(line, '='))) continue;
+        *eq = 0;
+        for (k = 0; k < 3; k++)
+            if (!lstrcmpA(line, allowed[k])) SetEnvironmentVariableA(line, eq[1] ? eq + 1 : NULL);
+    }
+}
+
+/* at Play: what's asked for. 1 when the callback has to be there for it */
 static int lb_ready(BYTE *b)
 {
     char v[8], name[32];
     DWORD n;
     (void)b;
     memset(&g_lb, 0, sizeof g_lb);
+    lb_play_file();
     g_lb.licence = GetEnvironmentVariableA(ENV_ACCEPT_LICENCE, v, sizeof v) == 1 && v[0] == '1';
     n = GetEnvironmentVariableA(ENV_CHARACTER, name, sizeof name);
     if (n >= sizeof name || (n && !lb_name_ok(name))) {
@@ -50,6 +75,7 @@ static int lb_ready(BYTE *b)
 
 static int lb_licence_on(void) { return g_lb.licence && !g_lb.licence_off; }
 static int lb_picking_on(void) { return g_lb.picking && !g_lb.picking_off && g_lb.stage != LB_FINISHED; }
+static int lb_wanted(void) { return lb_licence_on() || lb_picking_on(); }
 
 static int lb_have(const int *ids, int n)
 {
@@ -62,9 +88,9 @@ static int lb_have(const int *ids, int n)
 static void lb_look(ULONGLONG now)
 {
     if (!g_lb.started_at) g_lb.started_at = now;
-    if (now - g_lb.started_at < FX_LOOK_AFTER_MS || now < g_lb.next_look) return;
+    if (now - g_lb.started_at < FX_LOBBY_LOOK_MS || now < g_lb.next_look) return;
     g_lb.tried++;
-    g_lb.next_look = now + FX_RETRY_MS;
+    g_lb.next_look = now + (g_lb.tried <= 2 ? FX_LOBBY_RETRY_MS : FX_RETRY_MS);
     fx_resolve();
     if (g_fx.resolved && g_lb.tried < FX_TRIES &&
         ((lb_licence_on() && !lb_have(g_lb_licence_needs, 2)) || (lb_picking_on() && !lb_have(g_lb_pick_needs, 5))))

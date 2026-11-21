@@ -106,6 +106,7 @@ public static class HookContract
         public const string MyProfile = "myprofile.json";
         public const string Ended = "ended";
         public const string Go = "go";
+        public const string Lobby = "lobby";
         public const string Stop = "stop";
         public const string Prestart = "prestart";
         public const string Taking = ".taking";

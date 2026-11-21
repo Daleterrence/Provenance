@@ -521,11 +521,25 @@ public sealed partial class PolSession : IDisposable
         if (Pid is { } pid)
             try { LogOf(pid).ReadNewLines(); } catch (Exception ex) { Log.Warning(ex, "Could not read the hook log before Play"); }
         Windower.PutValuesBack();
+        if (Pid is { } game) WriteLobbyFile(game);
         Credentials.SavePlay();
         if (Pid is { } playing) NudgeHold(playing);
         _played = true;
         _snapshots.Stop();
         if (Pid is not null) Records.MarkPlayed();
+    }
+
+    // read by the hook as it takes Play, so what's chosen in Settings after the login still counts
+    private void WriteLobbyFile(int pid)
+    {
+        try
+        {
+            HookFiles.Transient(HookFiles.PathFor(pid, HookContract.Files.Lobby), HookEnvironment.LobbyFile(ForLaunch(null, Records.Profile)));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Log.Warning(e, "Could not write the lobby choices for Play, the ones from the login are used");
+        }
     }
 
     private static void NudgeHold(int pid)
