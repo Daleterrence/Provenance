@@ -96,13 +96,15 @@ static void ig_disarm(void)
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
+/* nothing's written after this, so one the app had open at that moment is tried again for a second. Never the game's thread */
 static void ig_write_off(void)
 {
     jw w = {0};
+    int tries;
     jw_obj(&w, NULL);
     jw_lit(&w, "sampler", "off");
     jw_end(&w);
-    if (!w.fail) snapshot_write(&w);
+    for (tries = 0; !w.fail && !snapshot_write(&w) && tries < 40; tries++) Sleep(25);
     jw_free(&w);
 }
 
