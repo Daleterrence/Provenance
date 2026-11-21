@@ -11,6 +11,8 @@ enum { FX_SENDS = 4, FX_SEND_GAP_MS = 5000, FX_LINE_IN = 150, FX_PLAIN = 0x800, 
 /* 0x1f and a chat mode gives the rest of the line that mode's colour. 0xdb's is blue, 0x7b's the red of the game's own refusals */
 static const char g_fx_blue[] = "\x1f\xdb", g_fx_red[] = "\x1f\x7b";
 static const char g_fx_not_sent[] = "This message was not sent. Please try again.";
+static const char g_fx_no_friend[] = " wasn't found on your friend list, check the spelling and try again.";
+static const char g_fx_no_reply[] = "Nobody has sent you a message yet to reply to.";
 
 typedef unsigned (__cdecl *fx_count_fn)(void);
 typedef int (__cdecl *fx_mark_fn)(void *);
@@ -338,7 +340,11 @@ static void fx_command(BYTE *b)
     }
     for (raw = s->text; *raw == ' '; raw++) {}
     if (!s->name[0] || !*raw) {
-        fx_print(g_fx_red, g_fx_not_sent, "", "");
+        if (!s->name[0] && kind == FX_CMD_RM) fx_print(g_fx_red, g_fx_no_reply, "", "");
+        else if (!s->name[0] && *who) {
+            fx_clean((const BYTE *)who, lstrlenA(who), name, FX_NAME);
+            fx_print(g_fx_red, name, g_fx_no_friend, "");
+        } else fx_print(g_fx_red, g_fx_not_sent, "", "");
         base_log("ffxi: a %s didn't go, %s\r\n", kind == FX_CMD_M ? "/m" : "/rm",
                  !s->name[0] ? (kind == FX_CMD_M ? "no friend by that name" : "nobody to reply to yet") : "nothing to send");
         return;
@@ -738,11 +744,11 @@ static int fx_take(const char *name, const BYTE *hdr)
     /* a bounce can be addressed to the friend it was for, so this goes before the owned check */
     if (kind == 0 && !pc_mail_receipt(hdr) && fx_bounced(hdr)) return fx_queue(FX_BOUNCE, "", "", NULL, NULL, 0) ? 1 : 2;
     if (!message_store_owned(hdr, 1, g_ig.written.me) || pc_mail_receipt(hdr) || fx_ignored(hdr)) return 1;
-    /* requests and invitations stay in r\b for Provenance to answer, they just get a line */
-    if (kind == 1 || (kind == 0xe && pc_mail_att_type(hdr) == 10)) {
+    /* a friend request stays in r\b for Provenance to answer, it just gets a line. Anything about groups gets none */
+    if (kind == 1) {
         fx_sender(hdr, who);
         lstrcpynA(text, who, sizeof text);
-        fx_append(text, sizeof text, kind == 1 ? " sent you a friend request." : " invited you to a friend group.");
+        fx_append(text, sizeof text, " sent you a friend request.");
         return fx_queue(FX_NOTE, who, text, NULL, NULL, 0) ? 1 : 2;
     }
     if (kind != 0) return 1;
