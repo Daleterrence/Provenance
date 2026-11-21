@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common;
 using Provenance.Common.Credentials;
+using Provenance.Common.Game;
 using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
@@ -395,11 +397,26 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             return await LetGo(AccountRules.PlayFailureKind(playFailed), playFailed);
         }
 
+        await HoldForGameAsync(account, token);
         var exited = _pol.WaitForExitAsync();
         _pol.ReleasePlayedSession();
         _ = NoteGameEndAsync(account, exited);
         Log.Information("Multi-account mode: {Account} is in the game", account.ProfileId);
         return null;
+    }
+
+    internal Func<int, TimeSpan, CancellationToken, Task<bool>> GameUp { get; set; } = GameWindow.WaitUntilUpAsync;
+
+    private async Task HoldForGameAsync(MultiRunAccount account, CancellationToken token)
+    {
+        IReadOnlyDictionary<string, string?> profiles = _pol.Platform == _runPlatform ? _runHookProfiles : new Dictionary<string, string?>();
+        if (_pol.Pid is not { } game ||
+            !MultiAccountRules.NextWaitsForGame(_pol.Platform, _runAccounts, account.ProfileId, profiles, SessionRecords.GameRunningFor))
+            return;
+        var held = Stopwatch.StartNew();
+        bool up = await GameUp(game, MultiAccountRules.GameUpLimit, token);
+        Log.Information("Multi-account mode: the next account waited {Ms}ms for {Account}'s game to take its Windower settings (window up: {Up})",
+                        held.ElapsedMilliseconds, account.ProfileId, up);
     }
 
     internal async Task<bool> BackUpForRunAsync(string? accountBoot)

@@ -36,6 +36,21 @@ public static class GameWindow
         return false;
     }
 
+    public static Task<bool> WaitUntilUpAsync(int pid, TimeSpan limit, CancellationToken ct) =>
+        WaitUntilAsync(() => Find(pid) != IntPtr.Zero, () => ProcessStamp.PidRunning(pid), limit, ct);
+
+    internal static async Task<bool> WaitUntilAsync(Func<bool> up, Func<bool> alive, TimeSpan limit, CancellationToken ct)
+    {
+        var until = DateTime.UtcNow + limit;
+        while (DateTime.UtcNow < until && !ct.IsCancellationRequested && alive())
+        {
+            if (up()) return true;
+            try { await Task.Delay(50, ct); }
+            catch (OperationCanceledException) { return false; }
+        }
+        return false;
+    }
+
     public static int AskToClose(int pid)
     {
         int asked = 0;

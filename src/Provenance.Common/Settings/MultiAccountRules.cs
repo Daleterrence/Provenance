@@ -1,4 +1,5 @@
 using Provenance.Common.Game.ThirdParty;
+using Provenance.Common.Login;
 
 namespace Provenance.Common.Settings;
 
@@ -11,6 +12,19 @@ public static class MultiAccountRules
         return stored.Where(e => e.Enabled && !e.CredentialsRefused && known.Contains(e.ProfileId))
                      .DistinctBy(e => e.ProfileId)
                      .ToList();
+    }
+
+    public static readonly TimeSpan GameUpLimit = TimeSpan.FromSeconds(15);
+
+    // a Windower profile's game settings go in the one registry key every game reads as it starts, so the next
+    // account's can't go in until the game in front has read its own
+    public static bool NextWaitsForGame(ThirdPartyHook platform, IReadOnlyList<MultiRunAccount> run, string profileId,
+                                        IReadOnlyDictionary<string, string?> profiles, Func<string, bool> inGame)
+    {
+        if (platform != ThirdPartyHook.Windower) return false;
+        int at = run.ToList().FindIndex(a => a.ProfileId == profileId);
+        var next = at < 0 ? null : run.Skip(at + 1).FirstOrDefault(a => !inGame(a.ProfileId));
+        return next is not null && (profiles.GetValueOrDefault(profileId) ?? "") != (profiles.GetValueOrDefault(next.ProfileId) ?? "");
     }
 
     public static List<MultiAccountEntry> WithoutProfile(IEnumerable<MultiAccountEntry> runEntries) =>
