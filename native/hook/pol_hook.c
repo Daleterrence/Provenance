@@ -39,6 +39,7 @@
 #include "snapshot.c"
 #include "ingame.c"
 #include "ffxi.c"
+#include "lobby.c"
 #include "hold.c"
 
 /* add-ons and game plugins are already unloaded in FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins

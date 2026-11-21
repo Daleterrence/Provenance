@@ -54,7 +54,7 @@ typedef struct { char name[100]; DWORD from_lo, from_hi, seq, time, first, gen; 
 typedef struct { DWORD lo, hi; int slot, on, row, changed; } fx_presence;
 
 static struct {
-    volatile LONG found, first_poll, world, off, patched, watching, in_world, dirty, moved, nsent_ids, worker_dead, at_select;
+    volatile LONG found, resolved, first_poll, world, off, patched, watching, in_world, dirty, moved, nsent_ids, worker_dead, at_select;
     volatile DWORD netstat;
     BYTE *base;
     DWORD size, gen, old_time;
@@ -826,20 +826,28 @@ static void fx_game_tick(BYTE *b)
     if (g_fx.off) fx_unpatch();
 }
 
-static void fx_look(void)
+/* finds FFXiMain and looks for every address in it, 0 when it isn't loaded yet */
+static int fx_resolve(void)
 {
     HMODULE m = GetModuleHandleA("FFXiMain.dll");
     const IMAGE_NT_HEADERS32 *nt;
-    const BYTE *add;
-    int missing;
     if (!m) {
         base_log("ffxi: FFXiMain.dll isn't loaded yet\r\n");
-        return;
+        return 0;
     }
     g_fx.base = (BYTE *)m;
     nt = (const IMAGE_NT_HEADERS32 *)(g_fx.base + ((const IMAGE_DOS_HEADER *)m)->e_lfanew);
     g_fx.size = nt->OptionalHeader.SizeOfImage;
     addr_resolve(IN_FFXI, "FFXiMain.dll", g_fx.base, (DWORD)(ULONG_PTR)m);
+    InterlockedExchange(&g_fx.resolved, 1);
+    return 1;
+}
+
+static void fx_look(void)
+{
+    const BYTE *add;
+    int missing;
+    if (!fx_resolve()) return;
     missing = fx_missing();
     if (pc_addr_found(AT_FX_ADD_LINE)) {
         /* 81 ec 44 08 00 00 is its own start, an e9 is Windower or Ashita's detour. Anything else isn't called */

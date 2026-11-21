@@ -14,6 +14,8 @@ typedef struct ig_copy {
 typedef void (__cdecl *ig_poll_fn)(int);
 
 static void fx_polled(void);
+static int lb_ready(BYTE *b);
+static void lb_tick(BYTE *b);
 static void fx_session_up(void);
 static void fx_game_tick(BYTE *b);
 static void fx_poll(BYTE *b);
@@ -33,7 +35,7 @@ static struct {
     ig_copy shared, scratch, written;
     DWORD beat;
     DWORD code, at;
-    int said;
+    int said, lobby_only;
 } g_ig;
 
 static void ig_copy_read(BYTE *b, ig_copy *c)
@@ -110,7 +112,7 @@ static void ig_fault(const char *where)
     fx_stop();
     ig_disarm();
     if (g_ig.thread) SetEvent(g_ig.wake);
-    else ig_write_off();
+    else if (!g_ig.lobby_only) ig_write_off();
     base_log("ingame: fault %08x at %08x in the %s, friends stop updating for the rest of this game\r\n", g_ig.code, g_ig.at, where);
 }
 
@@ -127,7 +129,8 @@ static void ig_tick(void)
         fx_polled();
     }
     fx_game_tick(g_ig.b);
-    if (pc_game_tag(g_ig.b) < 0) return;
+    lb_tick(g_ig.b);
+    if (g_ig.lobby_only || pc_game_tag(g_ig.b) < 0) return;
     if (!(g_ig.said & 2)) {
         g_ig.said |= 2;
         base_log("ingame: FFXI's session is up, copying the friends list from here\r\n");
@@ -226,11 +229,14 @@ static int ingame_ready(BYTE *b)
     return 1;
 }
 
-/* once Play has drained and the game's about to boot, on the thread that pumped polcore */
+/* once Play has drained and the game's about to boot, on the thread that pumped polcore. With no friends list to keep it
+   only answers the lobby's menus */
 static void ingame_start(BYTE *b)
 {
     void *cur;
+    int friends = ingame_can(b);
     memset(&g_ig, 0, sizeof g_ig);
+    g_ig.lobby_only = !friends;
     fx_reset();
     InitializeCriticalSection(&g_ig.cs);
     g_ig.b = b;
@@ -242,11 +248,12 @@ static void ingame_start(BYTE *b)
         if (InterlockedCompareExchangePointer((PVOID volatile *)g_ig.slot, (PVOID)ig_poll, cur) != cur) {
             g_ig.slot = NULL;
             base_log("ingame: something else set the POLL callback just now, friends won't update in the game\r\n");
-            ig_write_off();
+            if (friends) ig_write_off();
             return;
         }
         g_ig.on = 1;
         if (cur) base_log("ingame: the POLL callback was already set, so it's called first\r\n");
+        if (!friends) return;
         /* the first copy's from the hold's own thread, the one that pumped polcore till now */
         ig_read(b, &g_ig.shared);
         ig_flush();
